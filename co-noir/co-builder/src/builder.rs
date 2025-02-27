@@ -8,15 +8,17 @@ use crate::{
     },
     polynomials::polynomial_types::PrecomputedEntities,
     types::{
-        plookup::{BasicTableId, MultiTableId, Plookup},
+        field_ct::FieldCT,
+        plookup::{BasicTableId, ColumnIdx, MultiTableId, Plookup, PlookupBasicTable, ReadData},
         poseidon2::Poseidon2CT,
+        rom_ram::{
+            RamAccessType, RamRecord, RamTable, RamTranscript, RomRecord, RomTable, RomTranscript,
+        },
         types::{
             AddQuad, AddTriple, AggregationObjectIndices, AggregationObjectPubInputIndices,
             AuxSelectors, BlockConstraint, BlockType, CachedPartialNonNativeFieldMultiplication,
-            ColumnIdx, FieldCT, LogicConstraint, MulQuad, PlookupBasicTable, PolyTriple,
-            Poseidon2Constraint, Poseidon2ExternalGate, Poseidon2InternalGate, RamAccessType,
-            RamRecord, RamTable, RamTranscript, RangeList, ReadData, RomRecord, RomTable,
-            RomTranscript, UltraTraceBlock, UltraTraceBlocks, NUM_WIRES,
+            LogicConstraint, MulQuad, PolyTriple, Poseidon2Constraint, Poseidon2ExternalGate,
+            Poseidon2InternalGate, RangeList, UltraTraceBlock, UltraTraceBlocks, NUM_WIRES,
         },
     },
     utils::Utils,

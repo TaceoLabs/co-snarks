@@ -1,13 +1,16 @@
 use self::utils::Utils;
+use super::field_ct::FieldCT;
 use crate::{builder::GenericUltraCircuitBuilder, utils};
 use ark_ec::pairing::Pairing;
-use ark_ff::PrimeField;
+use ark_ff::{PrimeField, Zero};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use itertools::izip;
 use num_bigint::BigUint;
 use std::array::from_fn;
+use std::collections::HashMap;
+use std::ops::{Index, IndexMut};
 
-use super::types::{ColumnIdx, FieldCT, LookupEntry, PlookupMultiTable, ReadData};
-
+#[expect(dead_code)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum BasicTableId {
     Xor,
@@ -116,6 +119,8 @@ impl BasicTableId {
 }
 
 struct FixedBaseParams {}
+
+#[expect(dead_code)]
 impl FixedBaseParams {
     const BITS_PER_TABLE: usize = 9;
     const BITS_ON_CURVE: usize = 254;
@@ -165,6 +170,7 @@ impl FixedBaseParams {
         Self::NUM_BASIC_TABLES_PER_BASE_POINT * Self::NUM_POINTS;
 }
 
+#[expect(dead_code)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum MultiTableId {
     Sha256ChInput,
@@ -638,4 +644,362 @@ impl<F: PrimeField> Plookup<F> {
         let lookup = Self::get_lookup_accumulators_ct(builder, driver, id, key_a, key_b, true)?;
         Ok(lookup[ColumnIdx::C3][0].clone())
     }
+}
+
+#[derive(Clone)]
+pub(crate) struct LookupEntry<F: Clone> {
+    pub(crate) key: [F; 2],
+    pub(crate) value: [F; 2],
+}
+
+#[expect(dead_code)]
+impl<F: PrimeField> LookupEntry<F> {
+    pub(crate) fn to_table_components(&self, use_two_key: bool) -> [F; 3] {
+        [
+            self.key[0],
+            if use_two_key {
+                self.key[1]
+            } else {
+                self.value[0]
+            },
+            if use_two_key {
+                self.value[0]
+            } else {
+                self.value[1]
+            },
+        ]
+    }
+}
+
+impl<C: Clone> LookupEntry<C> {
+    pub(crate) fn calculate_table_index<
+        F: PrimeField,
+        T: NoirWitnessExtensionProtocol<F, AcvmType = C>,
+    >(
+        &self,
+        driver: &mut T,
+        use_two_key: bool,
+        base: F,
+    ) -> C {
+        let mut index_b = self.key[0].to_owned();
+        if use_two_key {
+            index_b = driver.mul_with_public(base, index_b);
+            driver.add_assign(&mut index_b, self.key[1].to_owned());
+        }
+        index_b
+    }
+}
+
+pub(crate) struct PlookupBasicTable<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
+    pub(crate) id: BasicTableId,
+    pub(crate) table_index: usize,
+    pub(crate) use_twin_keys: bool,
+    pub(crate) column_1_step_size: P::ScalarField,
+    pub(crate) column_2_step_size: P::ScalarField,
+    pub(crate) column_3_step_size: P::ScalarField,
+    pub(crate) column_1: Vec<P::ScalarField>,
+    pub(crate) column_2: Vec<P::ScalarField>,
+    pub(crate) column_3: Vec<P::ScalarField>,
+    pub(crate) lookup_gates: Vec<LookupEntry<T::AcvmType>>,
+    pub(crate) index_map: LookupHashMap<P::ScalarField>,
+    pub(crate) get_values_from_key: fn([u64; 2]) -> [P::ScalarField; 2],
+}
+
+impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> Default
+    for PlookupBasicTable<P, T>
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> PlookupBasicTable<P, T> {
+    fn new() -> Self {
+        Self {
+            id: BasicTableId::HonkDummyBasic1,
+            table_index: 0,
+            use_twin_keys: false,
+            column_1_step_size: P::ScalarField::zero(),
+            column_2_step_size: P::ScalarField::zero(),
+            column_3_step_size: P::ScalarField::zero(),
+            column_1: Vec::new(),
+            column_2: Vec::new(),
+            column_3: Vec::new(),
+            lookup_gates: Vec::new(),
+            index_map: LookupHashMap::default(),
+            get_values_from_key: BasicTableId::get_value_from_key::<
+                P::ScalarField,
+                { BasicTableId::HonkDummyBasic1 as u64 },
+            >,
+        }
+    }
+}
+
+impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> PlookupBasicTable<P, T> {
+    pub(crate) fn len(&self) -> usize {
+        assert_eq!(self.column_1.len(), self.column_2.len());
+        assert_eq!(self.column_1.len(), self.column_3.len());
+        self.column_1.len()
+    }
+
+    fn generate_honk_dummy_table<const ID: u64>(
+        id: BasicTableId,
+        table_index: usize,
+    ) -> PlookupBasicTable<P, T> {
+        // We do the assertion, since this function is templated, but the general API for these functions contains the id,
+        // too. This helps us ensure that the correct instantion is used for a particular BasicTableId
+        assert_eq!(ID, usize::from(id.to_owned()) as u64);
+        let base = 1 << 1; // Probably has to be a power of 2
+        let mut table = PlookupBasicTable::new();
+        table.id = id;
+        table.table_index = table_index;
+        table.use_twin_keys = true;
+        for i in 0..base {
+            for j in 0..base {
+                table.column_1.push(P::ScalarField::from(i));
+                table.column_2.push(P::ScalarField::from(j));
+                table
+                    .column_3
+                    .push(P::ScalarField::from(i * 3 + j * 4 + ID * 0x1337));
+            }
+        }
+
+        table.get_values_from_key = BasicTableId::get_value_from_key::<P::ScalarField, ID>;
+        let base = P::ScalarField::from(base);
+        table.column_1_step_size = base;
+        table.column_2_step_size = base;
+        table.column_3_step_size = base;
+
+        table
+    }
+
+    fn generate_and_rotate_table<const BITS_PER_SLICE: u64, const NUM_ROTATED_OUTPUT_BITS: u64>(
+        id: BasicTableId,
+        table_index: usize,
+    ) -> PlookupBasicTable<P, T> {
+        let base = 1 << BITS_PER_SLICE;
+        let mut table = PlookupBasicTable::new();
+
+        table.id = id;
+        table.table_index = table_index;
+        table.use_twin_keys = true;
+
+        for i in 0..base {
+            for j in 0..base {
+                table.column_1.push(P::ScalarField::from(i));
+                table.column_2.push(P::ScalarField::from(j));
+                table.column_3.push(P::ScalarField::from(Utils::rotate64(
+                    i & j,
+                    NUM_ROTATED_OUTPUT_BITS,
+                )));
+            }
+        }
+
+        table.get_values_from_key =
+            BasicTableId::get_and_rotate_values_from_key::<P::ScalarField, NUM_ROTATED_OUTPUT_BITS>;
+        let base = P::ScalarField::from(base);
+        table.column_1_step_size = base;
+        table.column_2_step_size = base;
+        table.column_3_step_size = base;
+
+        table
+    }
+
+    fn generate_xor_rotate_table<const BITS_PER_SLICE: u64, const NUM_ROTATED_OUTPUT_BITS: u64>(
+        id: BasicTableId,
+        table_index: usize,
+    ) -> PlookupBasicTable<P, T> {
+        let base = 1 << BITS_PER_SLICE;
+        let mut table = PlookupBasicTable::new();
+
+        table.id = id;
+        table.table_index = table_index;
+        table.use_twin_keys = true;
+
+        for i in 0..base {
+            for j in 0..base {
+                table.column_1.push(P::ScalarField::from(i));
+                table.column_2.push(P::ScalarField::from(j));
+                table.column_3.push(P::ScalarField::from(Utils::rotate64(
+                    i ^ j,
+                    NUM_ROTATED_OUTPUT_BITS,
+                )));
+            }
+        }
+
+        table.get_values_from_key =
+            BasicTableId::get_xor_rotate_values_from_key::<P::ScalarField, NUM_ROTATED_OUTPUT_BITS>;
+        let base = P::ScalarField::from(base);
+        table.column_1_step_size = base;
+        table.column_2_step_size = base;
+        table.column_3_step_size = base;
+
+        table
+    }
+
+    pub(crate) fn create_basic_table(id: BasicTableId, index: usize) -> Self {
+        // TACEO TODO this is a dummy implementation
+        assert!(
+            matches!(
+                id,
+                BasicTableId::HonkDummyBasic1
+                    | BasicTableId::HonkDummyBasic2
+                    | BasicTableId::UintAndRotate0
+                    | BasicTableId::UintXorRotate0
+            ),
+            "Create Basic Table for {:?} not implemented",
+            id
+        );
+
+        match id {
+            BasicTableId::HonkDummyBasic1 => Self::generate_honk_dummy_table::<
+                { BasicTableId::HonkDummyBasic1 as u64 },
+            >(id, index),
+            BasicTableId::HonkDummyBasic2 => Self::generate_honk_dummy_table::<
+                { BasicTableId::HonkDummyBasic2 as u64 },
+            >(id, index),
+            BasicTableId::UintAndRotate0 => Self::generate_and_rotate_table::<6, 0>(id, index),
+            BasicTableId::UintXorRotate0 => Self::generate_xor_rotate_table::<6, 0>(id, index),
+            _ => {
+                todo!("Create other tables")
+            }
+        }
+    }
+
+    #[expect(dead_code)]
+    pub(crate) fn initialize_index_map(&mut self) {
+        for (i, (c1, c2, c3)) in izip!(
+            self.column_1.iter().cloned(),
+            self.column_2.iter().cloned(),
+            self.column_3.iter().cloned()
+        )
+        .enumerate()
+        {
+            self.index_map.index_map.insert([c1, c2, c3], i);
+        }
+    }
+}
+
+#[derive(Default)]
+pub(crate) struct LookupHashMap<F: PrimeField> {
+    pub(crate) index_map: HashMap<[F; 3], usize>,
+}
+
+impl<F: PrimeField> Index<[F; 3]> for LookupHashMap<F> {
+    type Output = usize;
+
+    fn index(&self, index: [F; 3]) -> &Self::Output {
+        self.index_map.index(&index)
+    }
+}
+
+pub(crate) struct PlookupMultiTable<F: PrimeField> {
+    pub(crate) column_1_coefficients: Vec<F>,
+    pub(crate) column_2_coefficients: Vec<F>,
+    pub(crate) column_3_coefficients: Vec<F>,
+    pub(crate) id: MultiTableId,
+    pub(crate) basic_table_ids: Vec<BasicTableId>,
+    pub(crate) slice_sizes: Vec<u64>,
+    pub(crate) column_1_step_sizes: Vec<F>,
+    pub(crate) column_2_step_sizes: Vec<F>,
+    pub(crate) column_3_step_sizes: Vec<F>,
+    pub(crate) get_table_values: Vec<fn([u64; 2]) -> [F; 2]>,
+}
+
+impl<F: PrimeField> Default for PlookupMultiTable<F> {
+    fn default() -> Self {
+        Self {
+            column_1_coefficients: Vec::new(),
+            column_2_coefficients: Vec::new(),
+            column_3_coefficients: Vec::new(),
+            id: MultiTableId::HonkDummyMulti,
+            basic_table_ids: Vec::new(),
+            slice_sizes: Vec::new(),
+            column_1_step_sizes: Vec::new(),
+            column_2_step_sizes: Vec::new(),
+            column_3_step_sizes: Vec::new(),
+            get_table_values: Vec::new(),
+        }
+    }
+}
+
+impl<F: PrimeField> PlookupMultiTable<F> {
+    pub(crate) fn new(
+        col1_repeated_coeff: F,
+        col2_repeated_coeff: F,
+        col3_repeated_coeff: F,
+        num_lookups: usize,
+    ) -> Self {
+        let mut column_1_coefficients = Vec::with_capacity(num_lookups + 1);
+        let mut column_2_coefficients = Vec::with_capacity(num_lookups + 1);
+        let mut column_3_coefficients = Vec::with_capacity(num_lookups + 1);
+
+        column_1_coefficients.push(F::one());
+        column_2_coefficients.push(F::one());
+        column_3_coefficients.push(F::one());
+
+        for _ in 0..num_lookups {
+            column_1_coefficients.push(col1_repeated_coeff * column_1_coefficients.last().unwrap());
+            column_2_coefficients.push(col2_repeated_coeff * column_2_coefficients.last().unwrap());
+            column_3_coefficients.push(col3_repeated_coeff * column_3_coefficients.last().unwrap());
+        }
+
+        let mut res = Self {
+            column_1_coefficients,
+            column_2_coefficients,
+            column_3_coefficients,
+            ..Default::default()
+        };
+        res.init_step_sizes();
+        res
+    }
+
+    fn init_step_sizes(&mut self) {
+        let num_lookups = self.column_1_coefficients.len();
+        self.column_1_step_sizes.push(F::one());
+        self.column_2_step_sizes.push(F::one());
+        self.column_3_step_sizes.push(F::one());
+
+        let mut coefficient_inverses = self.column_1_coefficients.clone();
+        coefficient_inverses.extend(&self.column_2_coefficients);
+        coefficient_inverses.extend(&self.column_3_coefficients);
+
+        Utils::batch_invert(&mut coefficient_inverses);
+
+        for i in 1..num_lookups {
+            self.column_1_step_sizes
+                .push(self.column_1_coefficients[i] * coefficient_inverses[i - 1]);
+            self.column_2_step_sizes
+                .push(self.column_2_coefficients[i] * coefficient_inverses[num_lookups + i - 1]);
+            self.column_3_step_sizes.push(
+                self.column_3_coefficients[i] * coefficient_inverses[2 * num_lookups + i - 1],
+            );
+        }
+    }
+}
+
+#[derive(Default)]
+pub(crate) struct ReadData<F: Clone> {
+    pub(crate) lookup_entries: Vec<LookupEntry<F>>,
+    pub(crate) columns: [Vec<F>; 3],
+}
+
+impl<F: Clone> Index<ColumnIdx> for ReadData<F> {
+    type Output = Vec<F>;
+
+    fn index(&self, index: ColumnIdx) -> &Self::Output {
+        self.columns.index(index as usize)
+    }
+}
+
+impl<F: Clone> IndexMut<ColumnIdx> for ReadData<F> {
+    fn index_mut(&mut self, index: ColumnIdx) -> &mut Self::Output {
+        self.columns.index_mut(index as usize)
+    }
+}
+
+pub(crate) enum ColumnIdx {
+    C1,
+    C2,
+    C3,
 }
