@@ -3,6 +3,7 @@ use co_builder::prelude::PrecomputedEntities;
 use crate::types::{ShiftedWitnessEntities, WitnessEntities};
 
 const WITNESS_ENTITIES_SIZE: usize = 8;
+#[derive(Default)]
 pub struct WitnessEntitiesBatch<T> {
     pub(crate) elements: [Vec<T>; WITNESS_ENTITIES_SIZE],
 }

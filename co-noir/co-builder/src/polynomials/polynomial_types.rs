@@ -32,7 +32,7 @@ pub struct ProverWitnessEntities<T: Default> {
 }
 
 pub const PRECOMPUTED_ENTITIES_SIZE: usize = 27;
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Default, Clone, Serialize, Deserialize)]
 pub struct PrecomputedEntities<T: Default> {
     pub elements: [T; PRECOMPUTED_ENTITIES_SIZE],
 }

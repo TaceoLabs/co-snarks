@@ -19,7 +19,7 @@ use crate::{
     },
     mpc::NoirUltraHonkProver,
     types::AllEntities,
-    types_batch::AllEntitiesBatch,
+    types_batch::{AllEntitiesBatch, AllEntitiesBatchRelations},
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
@@ -156,71 +156,70 @@ impl SumcheckRound {
     >(
         driver: &mut T,
         univariate_accumulators: &mut AllRelationAcc<T, P>,
-        extended_edges: &ProverUnivariatesBatch<T, P>,
+        sum_check_data: &AllEntitiesBatchRelations<T, P>,
         relation_parameters: &RelationParameters<P::ScalarField>,
-        scaling_factors: &[P::ScalarField],
     ) -> HonkProofResult<()> {
         tracing::trace!("Accumulate relations");
         Self::accumulate_one_relation_univariates_batch::<_, _, UltraArithmeticRelation>(
             driver,
             &mut univariate_accumulators.r_arith,
-            extended_edges,
+            &sum_check_data.ultra_arith.all_entites,
             relation_parameters,
-            scaling_factors,
+            &sum_check_data.ultra_arith.scaling_factors,
         )?;
 
         Self::accumulate_one_relation_univariates_batch::<_, _, UltraPermutationRelation>(
             driver,
             &mut univariate_accumulators.r_perm,
-            extended_edges,
+            &sum_check_data.not_skippable.all_entites,
             relation_parameters,
-            scaling_factors,
+            &sum_check_data.not_skippable.scaling_factors,
         )?;
 
         Self::accumulate_one_relation_univariates_batch::<_, _, DeltaRangeConstraintRelation>(
             driver,
             &mut univariate_accumulators.r_delta,
-            extended_edges,
+            &sum_check_data.delta_range.all_entites,
             relation_parameters,
-            scaling_factors,
+            &sum_check_data.delta_range.scaling_factors,
         )?;
 
         Self::accumulate_one_relation_univariates_batch::<_, _, EllipticRelation>(
             driver,
             &mut univariate_accumulators.r_elliptic,
-            extended_edges,
+            &sum_check_data.elliptic.all_entites,
             relation_parameters,
-            scaling_factors,
+            &sum_check_data.elliptic.scaling_factors,
         )?;
 
         Self::accumulate_one_relation_univariates_batch::<_, _, AuxiliaryRelation>(
             driver,
             &mut univariate_accumulators.r_aux,
-            extended_edges,
+            &sum_check_data.auxiliary.all_entites,
             relation_parameters,
-            scaling_factors,
+            &sum_check_data.auxiliary.scaling_factors,
         )?;
 
         Self::accumulate_one_relation_univariates_batch::<_, _, LogDerivLookupRelation>(
             driver,
             &mut univariate_accumulators.r_lookup,
-            extended_edges,
+            &sum_check_data.not_skippable.all_entites,
             relation_parameters,
-            scaling_factors,
+            &sum_check_data.not_skippable.scaling_factors,
         )?;
         Self::accumulate_one_relation_univariates_batch::<_, _, Poseidon2ExternalRelation>(
             driver,
             &mut univariate_accumulators.r_pos_ext,
-            extended_edges,
+            &sum_check_data.poseidon_ext.all_entites,
             relation_parameters,
-            scaling_factors,
+            &sum_check_data.poseidon_ext.scaling_factors,
         )?;
         Self::accumulate_one_relation_univariates_batch::<_, _, Poseidon2InternalRelation>(
             driver,
             &mut univariate_accumulators.r_pos_int,
-            extended_edges,
+            &sum_check_data.poseidon_int.all_entites,
             relation_parameters,
-            scaling_factors,
+            &sum_check_data.poseidon_int.scaling_factors,
         )?;
         Ok(())
     }
@@ -340,15 +339,13 @@ impl SumcheckRound {
         // Accumulate the contribution from each sub-relation accross each edge of the hyper-cube
         // Construct extended edge containers
         // TODO Franco - this can be done nicer but for time being
-        let mut batch = AllEntitiesBatch::reserve_round_size(self.round_size);
-        let mut scaling_factors = vec![];
+        let mut all_entites = AllEntitiesBatchRelations::new();
         for edge_idx in (0..self.round_size).step_by(2) {
             let mut extended_edges = ProverUnivariates::<T, P>::default();
             Self::extend_edges(&mut extended_edges, polynomials, edge_idx);
-            batch = batch.fold(extended_edges);
             let scaling_factor =
                 gate_sparators.beta_products[(edge_idx >> 1) * gate_sparators.periodicity];
-            scaling_factors.extend(vec![scaling_factor; MAX_PARTIAL_RELATION_LENGTH]);
+            all_entites.fold_and_filter(extended_edges, scaling_factor);
         }
 
         let mut univariate_accumulators = AllRelationAcc::<T, P>::default();
@@ -356,9 +353,8 @@ impl SumcheckRound {
         Self::accumulate_relation_univariates_batch(
             driver,
             &mut univariate_accumulators,
-            &batch,
+            &all_entites,
             relation_parameters,
-            &scaling_factors,
         )?;
 
         let res = Self::batch_over_relations_univariates(

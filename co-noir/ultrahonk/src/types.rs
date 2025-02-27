@@ -66,13 +66,13 @@ impl<T: Default + Clone> AllEntities<Vec<T>> {
 }
 
 const WITNESS_ENTITIES_SIZE: usize = 8;
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct WitnessEntities<T: Default> {
     pub(crate) elements: [T; WITNESS_ENTITIES_SIZE],
 }
 
 const SHIFTED_WITNESS_ENTITIES_SIZE: usize = 5;
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct ShiftedWitnessEntities<T: Default> {
     pub(crate) elements: [T; SHIFTED_WITNESS_ENTITIES_SIZE],
 }
