@@ -34,7 +34,7 @@ where
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub(crate) struct AllEntities<Shared: Default, Public: Default> {
     pub(crate) witness: WitnessEntities<Shared>,
     pub(crate) precomputed: PrecomputedEntities<Public>,

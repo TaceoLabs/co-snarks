@@ -90,7 +90,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
     for Poseidon2InternalRelation
 {
     type Acc = Poseidon2InternalRelationAcc<T, P>;
-    const SKIPPABLE: bool = false;
+    const SKIPPABLE: bool = true;
 
     fn skip(input: &ProverUnivariates<T, P>) -> bool {
         <Self as Relation<T, P>>::check_skippable();
