@@ -68,7 +68,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
     for EllipticRelation
 {
     type Acc = EllipticRelationAcc<T, P>;
-    const SKIPPABLE: bool = false;
+    const SKIPPABLE: bool = true;
 
     fn skip(input: &ProverUnivariates<T, P>) -> bool {
         <Self as Relation<T, P>>::check_skippable();

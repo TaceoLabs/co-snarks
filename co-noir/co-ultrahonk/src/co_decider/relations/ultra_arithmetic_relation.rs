@@ -11,6 +11,7 @@ use ark_ff::{Field, ToConstraintField};
 use ark_ff::{PrimeField, Zero};
 use co_builder::prelude::HonkCurve;
 use co_builder::HonkProofResult;
+use itertools::Itertools as _;
 use mpc_core::protocols::bridges::network;
 use ultrahonk::prelude::{TranscriptFieldType, Univariate};
 
