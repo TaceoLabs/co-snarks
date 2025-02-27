@@ -403,6 +403,7 @@ pub(crate) fn point_addition<F: PrimeField, N: Rep3Network>(
     let mut diff_x = b_x - a_x;
     let diff_y = b_y - a_y;
 
+    // TODO Is the test for infinity even correct?
     let zero_share = Rep3PrimeFieldShare::default();
     let is_zero = arithmetic::eq(zero_share, diff_x, io_context)?;
     diff_x += arithmetic::mul(
