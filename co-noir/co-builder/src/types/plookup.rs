@@ -10,6 +10,7 @@ use std::array::from_fn;
 use std::collections::HashMap;
 use std::ops::{Index, IndexMut};
 
+#[expect(dead_code)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum BasicTableId {
     Xor,
@@ -118,6 +119,8 @@ impl BasicTableId {
 }
 
 struct FixedBaseParams {}
+
+#[expect(dead_code)]
 impl FixedBaseParams {
     const BITS_PER_TABLE: usize = 9;
     const BITS_ON_CURVE: usize = 254;
@@ -167,6 +170,7 @@ impl FixedBaseParams {
         Self::NUM_BASIC_TABLES_PER_BASE_POINT * Self::NUM_POINTS;
 }
 
+#[expect(dead_code)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum MultiTableId {
     Sha256ChInput,
@@ -648,6 +652,7 @@ pub(crate) struct LookupEntry<F: Clone> {
     pub(crate) value: [F; 2],
 }
 
+#[expect(dead_code)]
 impl<F: PrimeField> LookupEntry<F> {
     pub(crate) fn to_table_components(&self, use_two_key: bool) -> [F; 3] {
         [
@@ -861,6 +866,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> PlookupBasicTa
         }
     }
 
+    #[expect(dead_code)]
     pub(crate) fn initialize_index_map(&mut self) {
         for (i, (c1, c2, c3)) in izip!(
             self.column_1.iter().cloned(),

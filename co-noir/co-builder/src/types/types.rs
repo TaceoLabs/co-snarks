@@ -421,6 +421,7 @@ impl<F: PrimeField> LogicConstraint<F> {
     }
 }
 
+#[expect(dead_code)]
 pub(crate) struct RecursionConstraint {
     // An aggregation state is represented by two G1 affine elements. Each G1 point has
     // two field element coordinates (x, y). Thus, four field elements
@@ -432,6 +433,7 @@ pub(crate) struct RecursionConstraint {
 }
 
 impl RecursionConstraint {
+    #[expect(dead_code)]
     const NUM_AGGREGATION_ELEMENTS: usize = 4;
 }
 
@@ -439,6 +441,7 @@ pub const AGGREGATION_OBJECT_SIZE: usize = 16;
 pub(crate) type AggregationObjectIndices = [u32; AGGREGATION_OBJECT_SIZE];
 pub type AggregationObjectPubInputIndices = [u32; AGGREGATION_OBJECT_SIZE];
 
+#[expect(dead_code)]
 #[derive(PartialEq, Eq)]
 pub(crate) enum AuxSelectors {
     None,
@@ -707,6 +710,7 @@ impl<F: PrimeField> WitnessOrConstant<F> {
         }
     }
 
+    #[expect(dead_code)]
     pub(crate) fn is_constant(&self) -> bool {
         self.is_constant
     }
