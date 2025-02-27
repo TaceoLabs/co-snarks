@@ -2204,13 +2204,14 @@ mod field_share {
 }
 
 mod curve_share {
-    use std::{sync::mpsc, thread};
-
+    use ark_ec::{AffineRepr, CurveGroup};
+    use ark_ff::{PrimeField, Zero};
     use ark_std::UniformRand;
     use itertools::izip;
-
-    use mpc_core::protocols::rep3::{self, pointshare};
+    use mpc_core::protocols::rep3::{self, conversion, network::IoContext, pointshare};
     use rand::thread_rng;
+    use std::{sync::mpsc, thread};
+    use tests::rep3_network::Rep3TestNetwork;
 
     #[test]
     fn rep3_add() {
@@ -2300,5 +2301,51 @@ mod curve_share {
         let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_curve_point(result1, result2, result3);
         assert_eq!(is_result, should_result);
+    }
+
+    fn to_fieldshares<C: CurveGroup>(point: C)
+    where
+        C::BaseField: PrimeField,
+    {
+        let mut rng = thread_rng();
+        let point_shares = rep3::share_curve_point(point, &mut rng);
+
+        let test_network = Rep3TestNetwork::default();
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        let (should_result_x, should_result_y) = point.into_affine().xy().unwrap_or_default();
+
+        for (net, tx, point) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            point_shares
+        ) {
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+                tx.send(conversion::point_share_to_fieldshares(point, &mut rep3).unwrap())
+            });
+        }
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result_x = rep3::combine_field_element(result1.0, result2.0, result3.0);
+        let is_result_y = rep3::combine_field_element(result1.1, result2.1, result3.1);
+
+        assert_eq!(is_result_x, should_result_x, "x");
+        assert_eq!(is_result_y, should_result_y, "y");
+    }
+
+    #[test]
+    fn bn254_to_fieldshares() {
+        to_fieldshares(ark_bn254::G1Projective::zero());
+        to_fieldshares(ark_bn254::G1Projective::rand(&mut thread_rng()));
+    }
+
+    #[test]
+    fn grumpkin_to_fieldshares() {
+        to_fieldshares(ark_grumpkin::Projective::zero());
+        to_fieldshares(ark_grumpkin::Projective::rand(&mut thread_rng()));
     }
 }
