@@ -513,4 +513,14 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     fn equal(&mut self, a: &Self::AcvmType, b: &Self::AcvmType) -> std::io::Result<Self::AcvmType> {
         Ok(Self::ArithmeticShare::from(a == b))
     }
+
+    fn multi_scalar_mul(
+        &mut self,
+        points: &[Self::AcvmType],
+        scalars_lo: &[Self::AcvmType],
+        scalars_hi: &[Self::AcvmType],
+        pedantic_solving: bool,
+    ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
+        todo!()
+    }
 }
