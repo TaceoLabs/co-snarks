@@ -1,9 +1,6 @@
-use ark_ec::CurveGroup;
-use ark_ff::Zero;
-
-use crate::protocols::rep3::Rep3PrimeFieldShare;
-
 use super::types::Rep3PointShare;
+use crate::protocols::rep3::Rep3PrimeFieldShare;
+use ark_ec::CurveGroup;
 
 impl<C: CurveGroup> std::ops::Add for Rep3PointShare<C> {
     type Output = Self;

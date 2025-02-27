@@ -15,7 +15,7 @@ use super::{
     PartyID, Rep3BigUintShare, Rep3PointShare, Rep3PrimeFieldShare,
 };
 use ark_ec::{AffineRepr, CurveGroup};
-use ark_ff::{PrimeField, Zero};
+use ark_ff::PrimeField;
 use fancy_garbling::{BinaryBundle, WireMod2};
 use itertools::{izip, Itertools as _};
 use num_bigint::BigUint;
