@@ -1,5 +1,4 @@
 use super::arithmetic;
-use super::arithmetic::cmux;
 use super::binary;
 use super::conversion;
 use super::network::IoContext;
