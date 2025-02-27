@@ -20,7 +20,9 @@ pub const PROOF_TYPE_OINK: u32 = 2;
 pub const PROOF_TYPE_PG: u32 = 3;
 pub const PROOF_TYPE_AVM: u32 = 4;
 pub const _PROOF_TYPE_ROLLUP_HONK: u32 = 5; //keep for reference
-pub const _PROOF_TYPE_ROOT_ROLLUP_HONK: u32 = 6; //keep for reference#[expect(dead_code)]
+pub const _PROOF_TYPE_ROOT_ROLLUP_HONK: u32 = 6; //keep for reference
+
+#[expect(dead_code)]
 pub struct ProgramMetadata {
     // An IVC instance; needed to construct a circuit from IVC recursion constraints
     // ivc: Option<std::sync::Arc<ClientIVC>>,

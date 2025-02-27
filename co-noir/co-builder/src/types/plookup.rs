@@ -636,6 +636,6 @@ impl<F: PrimeField> Plookup<F> {
         key_b: FieldCT<F>,
     ) -> std::io::Result<FieldCT<F>> {
         let lookup = Self::get_lookup_accumulators_ct(builder, driver, id, key_a, key_b, true)?;
-        Ok(lookup[ColumnIdx::C3][0].clone())
+        Ok(lookup[ColumnIdx::C3][0])
     }
 }

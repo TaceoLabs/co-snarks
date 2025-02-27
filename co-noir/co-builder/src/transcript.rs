@@ -6,12 +6,9 @@ use crate::types::{
     types::FieldCT,
 };
 use ark_ec::pairing::Pairing;
-use ark_ec::AffineRepr;
-use ark_ff::{One, PrimeField, Zero};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use num_bigint::BigUint;
 use std::{collections::BTreeMap, ops::Index};
-use {crate::prelude::HonkCurve, crate::HonkProofError, crate::HonkProofResult};
+use {crate::HonkProofError, crate::HonkProofResult};
 
 pub type TranscriptFieldType = ark_bn254::Fr;
 pub type Poseidon2Sponge =

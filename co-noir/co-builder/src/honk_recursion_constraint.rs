@@ -1,7 +1,7 @@
 use crate::{
     acir_format::PROOF_TYPE_HONK,
     builder::GenericUltraCircuitBuilder,
-    prelude::{HonkCurve, PAIRING_POINT_ACCUMULATOR_SIZE},
+    prelude::PAIRING_POINT_ACCUMULATOR_SIZE,
     types::types::{
         AggregationState, FieldCT, PairingPointAccumulatorIndices, RecursionConstraint,
     },
@@ -69,9 +69,184 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         _key_fields: &mut [FieldCT<P::ScalarField>],
         _proof_fields: &mut [FieldCT<P::ScalarField>],
     ) {
-        todo!(
-            "create_dummy_vkey_and_proof not yet implemented, use the vk from bb in the meanwhile"
-        )
+        // Set vkey->circuit_size correctly based on the proof size
+        assert_eq!(proof_size, Flavor::PROOF_LENGTH_WITHOUT_PUB_INPUTS);
+        // Note: this computation should always result in log_circuit_size = CONST_PROOF_SIZE_LOG_N
+        let log_circuit_size = CONST_PROOF_SIZE_LOG_N;
+        // First key field is circuit size
+        self.assert_equal(
+            self.add_variable(1 << log_circuit_size),
+            key_fields[0].witness_index,
+        );
+        // Second key field is number of public inputs
+        self.assert_equal(
+            self.add_variable(public_inputs_size as u32),
+            key_fields[1].witness_index,
+        );
+        // Third key field is the pub inputs offset
+        self.assert_equal(
+            self.add_variable(if Flavor::has_zero_row { 1 } else { 0 }),
+            key_fields[2].witness_index,
+        );
+        // Fourth key field is the whether the proof contains an aggregation object.
+        self.assert_equal(self.add_variable(1), key_fields[3].witness_index);
+        let mut offset = 4;
+        let mut num_inner_public_inputs = public_inputs_size - PAIRING_POINT_ACCUMULATOR_SIZE;
+
+        // We are making the assumption that the pairing point object is behind all the inner public inputs
+        for i in 0..PAIRING_POINT_ACCUMULATOR_SIZE {
+            self.assert_equal(
+                self.add_variable((num_inner_public_inputs + i) as u32),
+                key_fields[offset].witness_index,
+            );
+            offset += 1;
+        }
+
+        for _ in 0..Flavor::NUM_PRECOMPUTED_ENTITIES {
+            let comm = P::G1::prime_subgroup_generator() * P::ScalarField::rand();
+            let frs = field_conversion::convert_to_bn254_frs(comm);
+            self.assert_equal(self.add_variable(frs[0]), key_fields[offset].witness_index);
+            self.assert_equal(
+                self.add_variable(frs[1]),
+                key_fields[offset + 1].witness_index,
+            );
+            self.assert_equal(
+                self.add_variable(frs[2]),
+                key_fields[offset + 2].witness_index,
+            );
+            self.assert_equal(
+                self.add_variable(frs[3]),
+                key_fields[offset + 3].witness_index,
+            );
+            offset += 4;
+        }
+
+        offset = HONK_PROOF_PUBLIC_INPUT_OFFSET as usize;
+        // first 3 things
+        self.assert_equal(
+            self.add_variable(1 << log_circuit_size),
+            proof_fields[0].witness_index,
+        );
+        self.assert_equal(
+            self.add_variable(public_inputs_size as u32),
+            proof_fields[1].witness_index,
+        );
+        self.assert_equal(
+            self.add_variable(if Flavor::has_zero_row { 1 } else { 0 }),
+            proof_fields[2].witness_index,
+        );
+
+        // the inner public inputs
+        for _ in 0..num_inner_public_inputs {
+            self.assert_equal(
+                self.add_variable(P::ScalarField::rand()),
+                proof_fields[offset].witness_index,
+            );
+            offset += 1;
+        }
+        // The aggregation object
+        let agg_obj = stdlib::recursion::init_default_agg_obj_indices(self);
+        for idx in agg_obj {
+            self.assert_equal(idx, proof_fields[offset].witness_index);
+            offset += 1;
+        }
+
+        // first 8 witness commitments
+        for _ in 0..Flavor::NUM_WITNESS_ENTITIES {
+            let comm = P::G1::prime_subgroup_generator() * P::ScalarField::rand();
+            let frs = field_conversion::convert_to_bn254_frs(comm);
+            self.assert_equal(
+                self.add_variable(frs[0]),
+                proof_fields[offset].witness_index,
+            );
+            self.assert_equal(
+                self.add_variable(frs[1]),
+                proof_fields[offset + 1].witness_index,
+            );
+            self.assert_equal(
+                self.add_variable(frs[2]),
+                proof_fields[offset + 2].witness_index,
+            );
+            self.assert_equal(
+                self.add_variable(frs[3]),
+                proof_fields[offset + 3].witness_index,
+            );
+            offset += 4;
+        }
+
+        // now the univariates, which can just be 0s (8*CONST_PROOF_SIZE_LOG_N Frs, where 8 is the maximum relation
+        // degree)
+        for _ in 0..CONST_PROOF_SIZE_LOG_N * Flavor::BATCHED_RELATION_PARTIAL_LENGTH {
+            self.assert_equal(
+                self.add_variable(P::ScalarField::rand()),
+                proof_fields[offset].witness_index,
+            );
+            offset += 1;
+        }
+
+        // now the sumcheck evaluations, which is just 44 0s
+        for _ in 0..Flavor::NUM_ALL_ENTITIES {
+            self.assert_equal(
+                self.add_variable(P::ScalarField::rand()),
+                proof_fields[offset].witness_index,
+            );
+            offset += 1;
+        }
+
+        // now the gemini fold commitments which are CONST_PROOF_SIZE_LOG_N - 1
+        for _ in 1..CONST_PROOF_SIZE_LOG_N {
+            let comm = P::G1::prime_subgroup_generator() * P::ScalarField::rand();
+            let frs = field_conversion::convert_to_bn254_frs(comm);
+            self.assert_equal(
+                self.add_variable(frs[0]),
+                proof_fields[offset].witness_index,
+            );
+            self.assert_equal(
+                self.add_variable(frs[1]),
+                proof_fields[offset + 1].witness_index,
+            );
+            self.assert_equal(
+                self.add_variable(frs[2]),
+                proof_fields[offset + 2].witness_index,
+            );
+            self.assert_equal(
+                self.add_variable(frs[3]),
+                proof_fields[offset + 3].witness_index,
+            );
+            offset += 4;
+        }
+
+        // the gemini fold evaluations which are also CONST_PROOF_SIZE_LOG_N
+        for _ in 1..=CONST_PROOF_SIZE_LOG_N {
+            self.assert_equal(
+                self.add_variable(P::ScalarField::rand()),
+                proof_fields[offset].witness_index,
+            );
+            offset += 1;
+        }
+
+        // lastly the shplonk batched quotient commitment and kzg quotient commitment
+        for _ in 0..2 {
+            let comm = P::G1::prime_subgroup_generator() * P::ScalarField::rand();
+            let frs = field_conversion::convert_to_bn254_frs(comm);
+            self.assert_equal(
+                self.add_variable(frs[0]),
+                proof_fields[offset].witness_index,
+            );
+            self.assert_equal(
+                self.add_variable(frs[1]),
+                proof_fields[offset + 1].witness_index,
+            );
+            self.assert_equal(
+                self.add_variable(frs[2]),
+                proof_fields[offset + 2].witness_index,
+            );
+            self.assert_equal(
+                self.add_variable(frs[3]),
+                proof_fields[offset + 3].witness_index,
+            );
+            offset += 4;
+        }
     }
     fn convert_witness_indices_to_agg_obj(
         &mut self,
@@ -80,18 +255,10 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         let mut aggregation_elements = [<P as Pairing>::BaseField::default(); 4];
         for i in 0..4 {
             aggregation_elements[i] = self.construct_from_limbs(
-                FieldCT::<P::ScalarField>::from_witness_index(
-                    witness_indices[4 * i].try_into().unwrap(),
-                ),
-                FieldCT::<P::ScalarField>::from_witness_index(
-                    witness_indices[4 * i + 1].try_into().unwrap(),
-                ),
-                FieldCT::<P::ScalarField>::from_witness_index(
-                    witness_indices[4 * i + 2].try_into().unwrap(),
-                ),
-                FieldCT::<P::ScalarField>::from_witness_index(
-                    witness_indices[4 * i + 3].try_into().unwrap(),
-                ),
+                FieldCT::<P::ScalarField>::from_witness_index(witness_indices[4 * i]),
+                FieldCT::<P::ScalarField>::from_witness_index(witness_indices[4 * i + 1]),
+                FieldCT::<P::ScalarField>::from_witness_index(witness_indices[4 * i + 2]),
+                FieldCT::<P::ScalarField>::from_witness_index(witness_indices[4 * i + 3]),
                 false,
             );
             // TACEO TODO aggregation_elements[i].assert_is_in_field();

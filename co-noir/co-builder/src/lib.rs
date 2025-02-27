@@ -11,6 +11,7 @@ pub mod prelude;
 pub(crate) mod serialize;
 pub(crate) mod transcript;
 pub(crate) mod types;
+pub(crate) mod ultra_recursive_verifier;
 pub(crate) mod utils;
 
 pub type TranscriptFieldType = ark_bn254::Fr;

@@ -1252,14 +1252,14 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         }
 
         // RecursionConstraints
-        self.process_plonk_recursion_constraints(&constraint_system, has_valid_witness_assignments);
+        self.process_plonk_recursion_constraints(constraint_system, has_valid_witness_assignments);
         let mut current_aggregation_object = self.init_default_agg_obj_indices();
         current_aggregation_object = self.process_honk_recursion_constraints(
             constraint_system,
             has_valid_witness_assignments,
             current_aggregation_object,
         );
-        self.process_avm_recursion_constraints(&constraint_system, has_valid_witness_assignments);
+        self.process_avm_recursion_constraints(constraint_system, has_valid_witness_assignments);
         // If the circuit has either honk or avm recursion constraints, add the aggregation object. Otherwise, add a
         // default one if the circuit is recursive and honk_recursion is true.
         if !constraint_system.honk_recursion_constraints.is_empty()
@@ -1310,11 +1310,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
     ) -> PairingPointAccumulatorIndices {
         // Add recursion constraints
         let mut current_aggregation_object = current_aggregation_object;
-        for (idx, constraint) in constraint_system
-            .honk_recursion_constraints
-            .iter()
-            .enumerate()
-        {
+        for constraint in constraint_system.honk_recursion_constraints.iter() {
             current_aggregation_object = self.create_honk_recursion_constraints(
                 constraint,
                 current_aggregation_object,
