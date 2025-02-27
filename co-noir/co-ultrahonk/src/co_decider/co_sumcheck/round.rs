@@ -192,6 +192,36 @@ impl SumcheckRound {
             relation_parameters,
             scaling_factors,
         )?;
+
+        //Self::accumulate_one_relation_univariates_batch::<_, _, AuxiliaryRelation>(
+        //    driver,
+        //    &mut univariate_accumulators.r_aux,
+        //    extended_edges,
+        //    relation_parameters,
+        //    scaling_factors,
+        //)?;
+
+        Self::accumulate_one_relation_univariates_batch::<_, _, LogDerivLookupRelation>(
+            driver,
+            &mut univariate_accumulators.r_lookup,
+            extended_edges,
+            relation_parameters,
+            scaling_factors,
+        )?;
+        //Self::accumulate_one_relation_univariates_batch::<_, _, Poseidon2ExternalRelation>(
+        //    driver,
+        //    &mut univariate_accumulators.r_pos_ext,
+        //    extended_edges,
+        //    relation_parameters,
+        //    scaling_factors,
+        //)?;
+        //Self::accumulate_one_relation_univariates_batch::<_, _, Poseidon2InternalRelation>(
+        //    driver,
+        //    &mut univariate_accumulators.r_pos_int,
+        //    extended_edges,
+        //    relation_parameters,
+        //    scaling_factors,
+        //)?;
         Ok(())
     }
 
@@ -344,6 +374,9 @@ impl SumcheckRound {
         let r_elliptic_0 = univariate_accumulators.r_elliptic.r0.evaluations;
         let r_elliptic_1 = univariate_accumulators.r_elliptic.r1.evaluations;
 
+        let r_lookup_0 = univariate_accumulators.r_lookup.r0.evaluations;
+        let r_lookup_1 = univariate_accumulators.r_lookup.r1.evaluations;
+
         tracing::info!("starting batch");
         tracing::info!("==============");
         // TODO Franco - this can be done nicer but for time being
@@ -382,6 +415,9 @@ impl SumcheckRound {
         let r_elliptic_0_batch = univariate_accumulators_batch.r_elliptic.r0.evaluations;
         let r_elliptic_1_batch = univariate_accumulators_batch.r_elliptic.r1.evaluations;
 
+        let r_lookup_0_batch = univariate_accumulators_batch.r_lookup.r0.evaluations;
+        let r_lookup_1_batch = univariate_accumulators_batch.r_lookup.r1.evaluations;
+
         assert_eq!(r_arith_0, r_arith_0_batch);
         assert_eq!(r_arith_1, r_arith_1_batch);
 
@@ -395,6 +431,9 @@ impl SumcheckRound {
 
         assert_eq!(r_elliptic_0, r_elliptic_0_batch);
         assert_eq!(r_elliptic_1, r_elliptic_1_batch);
+
+        assert_eq!(r_lookup_0, r_lookup_0_batch);
+        assert_eq!(r_lookup_1, r_lookup_1_batch);
 
         let res = Self::batch_over_relations_univariates(
             univariate_accumulators,

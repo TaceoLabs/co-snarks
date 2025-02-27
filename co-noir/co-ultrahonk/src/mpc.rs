@@ -101,6 +101,13 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
     /// Negates a shared value: \[b\] = -\[a\].
     fn neg(a: Self::ArithmeticShare) -> Self::ArithmeticShare;
 
+    /// Negates a shared value: \[b\] = -\[a\].
+    fn neg_many(a: &mut [Self::ArithmeticShare]) {
+        for a in a.iter_mut() {
+            *a = Self::neg(*a);
+        }
+    }
+
     /// Multiply a share b by a public value a: c = a * \[b\].
     fn mul_with_public(
         public: P::ScalarField,
@@ -155,6 +162,18 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
             .iter()
             .map(|share| Self::add_with_public(scalar, *share, id))
             .collect()
+    }
+
+    /// Multiply a share b by a public value a: c = a * \[b\].
+    /// FRANCO TODO use rayon?
+    fn add_scalar_in_place(
+        shared: &mut [Self::ArithmeticShare],
+        scalar: P::ScalarField,
+        id: Self::PartyID,
+    ) {
+        for x in shared.iter_mut() {
+            Self::add_assign_public(x, scalar, id);
+        }
     }
 
     /// Multiply two shares: \[c\] = \[a\] * \[b\]. Requires network communication.

@@ -120,7 +120,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
     for AuxiliaryRelation
 {
     type Acc = AuxiliaryRelationAcc<T, P>;
-    const SKIPPABLE: bool = true;
+    const SKIPPABLE: bool = false;
 
     fn skip(input: &ProverUnivariates<T, P>) -> bool {
         <Self as Relation<T, P>>::check_skippable();
