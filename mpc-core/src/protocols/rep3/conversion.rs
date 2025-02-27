@@ -15,12 +15,11 @@ use super::{
     PartyID, Rep3BigUintShare, Rep3PointShare, Rep3PrimeFieldShare,
 };
 use ark_ec::{AffineRepr, CurveGroup};
-use ark_ff::PrimeField;
+use ark_ff::{PrimeField, Zero};
 use fancy_garbling::{BinaryBundle, WireMod2};
 use itertools::{izip, Itertools as _};
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
-use std::any::TypeId;
 
 /// This enum defines which arithmetic-to-binary (and vice-versa) implementation of [ABY3](https://eprint.iacr.org/2018/403.pdf) is used.
 #[derive(
@@ -638,8 +637,8 @@ where
         PartyID::ID1 => {
             let val = x.a + x.b;
             if let Some((x, y)) = val.into_affine().xy() {
-                x2_x.b = x + r_x;
-                x2_y.b = y + r_y;
+                x01_x.a = x + r_x;
+                x01_y.a = y + r_y;
             }
         }
         PartyID::ID2 => {
@@ -666,13 +665,5 @@ where
     x01_x.b = local_b[0];
     x01_y.b = local_b[1];
 
-    let a = if TypeId::of::<C>() == TypeId::of::<ark_bn254::G1Projective>() {
-        C::BaseField::from(3)
-    } else if TypeId::of::<C>() == TypeId::of::<ark_grumpkin::Projective>() {
-        -C::BaseField::from(17)
-    } else {
-        panic!("Curve not supported atm.")
-    };
-
-    detail::point_addition(x01_x, x01_y, x2_x, x2_y, a)
+    detail::point_addition(x01_x, x01_y, x2_x, x2_y, io_context)
 }

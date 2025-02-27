@@ -1,17 +1,16 @@
+use super::arithmetic;
+use super::arithmetic::BinaryShare;
+use super::binary;
+use super::conversion;
+use super::network::IoContext;
+use crate::protocols::rep3::{network::Rep3Network, Rep3BigUintShare, Rep3PrimeFieldShare};
+use crate::IoResult;
 use ark_ff::One;
 use ark_ff::PrimeField;
 use ark_ff::Zero;
 use itertools::izip;
 use itertools::Itertools as _;
 use num_bigint::BigUint;
-
-use crate::protocols::rep3::{network::Rep3Network, Rep3BigUintShare, Rep3PrimeFieldShare};
-use crate::IoResult;
-
-use super::arithmetic::BinaryShare;
-use super::binary;
-use super::conversion;
-use super::network::IoContext;
 
 pub(super) fn low_depth_binary_add_mod_p_many<F: PrimeField, N: Rep3Network>(
     x1: &[BinaryShare<F>],
@@ -388,13 +387,23 @@ fn low_depth_binary_sub_from_const<F: PrimeField, N: Rep3Network>(
     Ok(res)
 }
 
-/// For curves of the form y^2 = x^3 + b, computes the addition of two points.
-pub(crate) fn point_addition<F: PrimeField>(
+/// For curves of the form y^2 = x^3 + ax +  b, computes the addition of two points.
+/// Note: Ignores the fact that two points might have the same x-coordinate!
+pub(crate) fn point_addition<F: PrimeField, N: Rep3Network>(
     a_x: Rep3PrimeFieldShare<F>,
     a_y: Rep3PrimeFieldShare<F>,
     b_x: Rep3PrimeFieldShare<F>,
     b_y: Rep3PrimeFieldShare<F>,
-    a: F,
+    io_context: &mut IoContext<N>,
 ) -> IoResult<(Rep3PrimeFieldShare<F>, Rep3PrimeFieldShare<F>)> {
-    todo!()
+    let diff_x = b_x - a_x;
+    let diff_y = b_y - a_y;
+    let inv = arithmetic::inv(diff_x, io_context)?;
+
+    let lambda = arithmetic::mul(diff_y, inv, io_context)?;
+    let lambda_square = arithmetic::mul(lambda, lambda, io_context)?;
+    let x = lambda_square - a_x - b_x;
+    let y = arithmetic::mul(lambda, a_x - x, io_context)? - a_y;
+
+    Ok((x, y))
 }
