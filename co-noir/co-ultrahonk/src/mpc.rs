@@ -145,7 +145,7 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
 
     /// Multiply a share b by a public value a: c = a * \[b\].
     /// FRANCO TODO use rayon?
-    fn scale_in_place(shared: &mut [Self::ArithmeticShare], scale: P::ScalarField) {
+    fn scale_many_in_place(shared: &mut [Self::ArithmeticShare], scale: P::ScalarField) {
         for shared in shared.iter_mut() {
             Self::mul_assign_with_public(scale, shared);
         }

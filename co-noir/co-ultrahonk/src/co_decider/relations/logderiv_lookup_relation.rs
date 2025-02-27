@@ -135,8 +135,8 @@ impl LogDerivLookupRelation {
 
         // (w_1 + \gamma q_2*w_1_shift) + η(w_2 + q_m*w_2_shift) + η₂(w_3 + q_c*w_3_shift) + η₃q_index.
         // deg 2 or 3
-        T::scale_in_place(&mut derived_table_entry_2, *eta_1);
-        T::scale_in_place(&mut derived_table_entry_3, *eta_2);
+        T::scale_many_in_place(&mut derived_table_entry_2, *eta_1);
+        T::scale_many_in_place(&mut derived_table_entry_3, *eta_2);
 
         T::add_assign_many(&mut derived_table_entry_1, &derived_table_entry_2);
         T::add_assign_many(&mut derived_table_entry_1, &derived_table_entry_3);

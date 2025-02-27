@@ -193,13 +193,13 @@ impl SumcheckRound {
             scaling_factors,
         )?;
 
-        //Self::accumulate_one_relation_univariates_batch::<_, _, AuxiliaryRelation>(
-        //    driver,
-        //    &mut univariate_accumulators.r_aux,
-        //    extended_edges,
-        //    relation_parameters,
-        //    scaling_factors,
-        //)?;
+        Self::accumulate_one_relation_univariates_batch::<_, _, AuxiliaryRelation>(
+            driver,
+            &mut univariate_accumulators.r_aux,
+            extended_edges,
+            relation_parameters,
+            scaling_factors,
+        )?;
 
         Self::accumulate_one_relation_univariates_batch::<_, _, LogDerivLookupRelation>(
             driver,
@@ -208,20 +208,20 @@ impl SumcheckRound {
             relation_parameters,
             scaling_factors,
         )?;
-        //Self::accumulate_one_relation_univariates_batch::<_, _, Poseidon2ExternalRelation>(
-        //    driver,
-        //    &mut univariate_accumulators.r_pos_ext,
-        //    extended_edges,
-        //    relation_parameters,
-        //    scaling_factors,
-        //)?;
-        //Self::accumulate_one_relation_univariates_batch::<_, _, Poseidon2InternalRelation>(
-        //    driver,
-        //    &mut univariate_accumulators.r_pos_int,
-        //    extended_edges,
-        //    relation_parameters,
-        //    scaling_factors,
-        //)?;
+        Self::accumulate_one_relation_univariates_batch::<_, _, Poseidon2ExternalRelation>(
+            driver,
+            &mut univariate_accumulators.r_pos_ext,
+            extended_edges,
+            relation_parameters,
+            scaling_factors,
+        )?;
+        Self::accumulate_one_relation_univariates_batch::<_, _, Poseidon2InternalRelation>(
+            driver,
+            &mut univariate_accumulators.r_pos_int,
+            extended_edges,
+            relation_parameters,
+            scaling_factors,
+        )?;
         Ok(())
     }
 
@@ -377,6 +377,23 @@ impl SumcheckRound {
         let r_lookup_0 = univariate_accumulators.r_lookup.r0.evaluations;
         let r_lookup_1 = univariate_accumulators.r_lookup.r1.evaluations;
 
+        let r_aux_0 = univariate_accumulators.r_aux.r0.evaluations;
+        let r_aux_1 = univariate_accumulators.r_aux.r1.evaluations;
+        let r_aux_2 = univariate_accumulators.r_aux.r2.evaluations;
+        let r_aux_3 = univariate_accumulators.r_aux.r3.evaluations;
+        let r_aux_4 = univariate_accumulators.r_aux.r4.evaluations;
+        let r_aux_5 = univariate_accumulators.r_aux.r5.evaluations;
+
+        let r_pos_ex_0 = univariate_accumulators.r_pos_ext.r0.evaluations;
+        let r_pos_ex_1 = univariate_accumulators.r_pos_ext.r1.evaluations;
+        let r_pos_ex_2 = univariate_accumulators.r_pos_ext.r2.evaluations;
+        let r_pos_ex_3 = univariate_accumulators.r_pos_ext.r3.evaluations;
+
+        let r_pos_in_0 = univariate_accumulators.r_pos_int.r0.evaluations;
+        let r_pos_in_1 = univariate_accumulators.r_pos_int.r1.evaluations;
+        let r_pos_in_2 = univariate_accumulators.r_pos_int.r2.evaluations;
+        let r_pos_in_3 = univariate_accumulators.r_pos_int.r3.evaluations;
+
         tracing::info!("starting batch");
         tracing::info!("==============");
         // TODO Franco - this can be done nicer but for time being
@@ -393,6 +410,8 @@ impl SumcheckRound {
             scaling_factors.extend(vec![scaling_factor; MAX_PARTIAL_RELATION_LENGTH]);
         }
 
+        let mut univariate_accumulators_batch = AllRelationAcc::<T, P>::default();
+
         Self::accumulate_relation_univariates_batch(
             driver,
             &mut univariate_accumulators_batch,
@@ -407,6 +426,9 @@ impl SumcheckRound {
         let r_perm_0_batch = univariate_accumulators_batch.r_perm.r0.evaluations;
         let r_perm_1_batch = univariate_accumulators_batch.r_perm.r1.evaluations;
 
+        let r_lookup_0_batch = univariate_accumulators_batch.r_lookup.r0.evaluations;
+        let r_lookup_1_batch = univariate_accumulators_batch.r_lookup.r1.evaluations;
+
         let r_delta_0_batch = univariate_accumulators_batch.r_delta.r0.evaluations;
         let r_delta_1_batch = univariate_accumulators_batch.r_delta.r1.evaluations;
         let r_delta_2_batch = univariate_accumulators_batch.r_delta.r2.evaluations;
@@ -415,25 +437,56 @@ impl SumcheckRound {
         let r_elliptic_0_batch = univariate_accumulators_batch.r_elliptic.r0.evaluations;
         let r_elliptic_1_batch = univariate_accumulators_batch.r_elliptic.r1.evaluations;
 
-        let r_lookup_0_batch = univariate_accumulators_batch.r_lookup.r0.evaluations;
-        let r_lookup_1_batch = univariate_accumulators_batch.r_lookup.r1.evaluations;
+        let r_aux_0_batch = univariate_accumulators_batch.r_aux.r0.evaluations;
+        let r_aux_1_batch = univariate_accumulators_batch.r_aux.r1.evaluations;
+        let r_aux_2_batch = univariate_accumulators_batch.r_aux.r2.evaluations;
+        let r_aux_3_batch = univariate_accumulators_batch.r_aux.r3.evaluations;
+        let r_aux_4_batch = univariate_accumulators_batch.r_aux.r4.evaluations;
+        let r_aux_5_batch = univariate_accumulators_batch.r_aux.r5.evaluations;
 
-        assert_eq!(r_arith_0, r_arith_0_batch);
-        assert_eq!(r_arith_1, r_arith_1_batch);
+        let r_pos_ex_0_batch = univariate_accumulators_batch.r_pos_ext.r0.evaluations;
+        let r_pos_ex_1_batch = univariate_accumulators_batch.r_pos_ext.r1.evaluations;
+        let r_pos_ex_2_batch = univariate_accumulators_batch.r_pos_ext.r2.evaluations;
+        let r_pos_ex_3_batch = univariate_accumulators_batch.r_pos_ext.r3.evaluations;
 
-        assert_eq!(r_perm_0, r_perm_0_batch);
-        assert_eq!(r_perm_1, r_perm_1_batch);
+        let r_pos_in_0_batch = univariate_accumulators_batch.r_pos_int.r0.evaluations;
+        let r_pos_in_1_batch = univariate_accumulators_batch.r_pos_int.r1.evaluations;
+        let r_pos_in_2_batch = univariate_accumulators_batch.r_pos_int.r2.evaluations;
+        let r_pos_in_3_batch = univariate_accumulators_batch.r_pos_int.r3.evaluations;
 
-        assert_eq!(r_delta_0, r_delta_0_batch);
-        assert_eq!(r_delta_1, r_delta_1_batch);
-        assert_eq!(r_delta_2, r_delta_2_batch);
-        assert_eq!(r_delta_3, r_delta_3_batch);
+        assert_eq!(r_arith_0_batch, r_arith_0);
+        assert_eq!(r_arith_1_batch, r_arith_1);
 
-        assert_eq!(r_elliptic_0, r_elliptic_0_batch);
-        assert_eq!(r_elliptic_1, r_elliptic_1_batch);
+        assert_eq!(r_perm_0_batch, r_perm_0);
+        assert_eq!(r_perm_1_batch, r_perm_1);
 
-        assert_eq!(r_lookup_0, r_lookup_0_batch);
-        assert_eq!(r_lookup_1, r_lookup_1_batch);
+        assert_eq!(r_lookup_0_batch, r_lookup_0);
+        assert_eq!(r_lookup_1_batch, r_lookup_1);
+
+        assert_eq!(r_delta_0_batch, r_delta_0);
+        assert_eq!(r_delta_1_batch, r_delta_1);
+        assert_eq!(r_delta_2_batch, r_delta_2);
+        assert_eq!(r_delta_3_batch, r_delta_3);
+
+        assert_eq!(r_elliptic_0_batch, r_elliptic_0);
+        assert_eq!(r_elliptic_1_batch, r_elliptic_1);
+
+        assert_eq!(r_aux_0_batch, r_aux_0);
+        assert_eq!(r_aux_1_batch, r_aux_1);
+        assert_eq!(r_aux_2_batch, r_aux_2);
+        assert_eq!(r_aux_3_batch, r_aux_3);
+        assert_eq!(r_aux_4_batch, r_aux_4);
+        assert_eq!(r_aux_5_batch, r_aux_5);
+
+        assert_eq!(r_pos_ex_0_batch, r_pos_ex_0);
+        assert_eq!(r_pos_ex_1_batch, r_pos_ex_1);
+        assert_eq!(r_pos_ex_2_batch, r_pos_ex_2);
+        assert_eq!(r_pos_ex_3_batch, r_pos_ex_3);
+
+        assert_eq!(r_pos_in_0_batch, r_pos_in_0);
+        assert_eq!(r_pos_in_1_batch, r_pos_in_1);
+        assert_eq!(r_pos_in_2_batch, r_pos_in_2);
+        assert_eq!(r_pos_in_3_batch, r_pos_in_3);
 
         let res = Self::batch_over_relations_univariates(
             univariate_accumulators,

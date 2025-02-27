@@ -231,7 +231,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
             .map(|q| *q - P::ScalarField::from(3_u64))
             .collect::<Vec<_>>();
         T::mul_assign_with_public_many(&mut tmp, &q_arith_neg_3);
-        T::scale_in_place(&mut tmp, neg_half);
+        T::scale_many_in_place(&mut tmp, neg_half);
         let party_id = driver.get_party_id();
         let tmp_l = T::mul_with_public_many(q_l, w_l);
         let tmp_r = T::mul_with_public_many(q_r, w_r);

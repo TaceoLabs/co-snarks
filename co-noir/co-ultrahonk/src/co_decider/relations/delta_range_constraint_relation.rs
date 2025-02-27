@@ -205,7 +205,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         driver: &mut T,
         univariate_accumulator: &mut Self::Acc,
         input: &super::ProverUnivariatesBatch<T, P>,
-        relation_parameters: &RelationParameters<<P>::ScalarField>,
+        _relation_parameters: &RelationParameters<<P>::ScalarField>,
         scaling_factors: &[<P>::ScalarField],
     ) -> HonkProofResult<()> {
         let party_id = driver.get_party_id();
