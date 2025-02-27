@@ -387,3 +387,14 @@ fn low_depth_binary_sub_from_const<F: PrimeField, N: Rep3Network>(
     let res = binary::xor_public(&res, &BigUint::one(), io_context.id);
     Ok(res)
 }
+
+/// For curves of the form y^2 = x^3 + b, computes the addition of two points.
+pub(crate) fn point_addition<F: PrimeField>(
+    a_x: Rep3PrimeFieldShare<F>,
+    a_y: Rep3PrimeFieldShare<F>,
+    b_x: Rep3PrimeFieldShare<F>,
+    b_y: Rep3PrimeFieldShare<F>,
+    a: F,
+) -> IoResult<(Rep3PrimeFieldShare<F>, Rep3PrimeFieldShare<F>)> {
+    todo!()
+}

@@ -1,4 +1,5 @@
 use ark_ec::CurveGroup;
+use ark_ff::Zero;
 
 use crate::protocols::rep3::Rep3PrimeFieldShare;
 

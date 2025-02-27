@@ -12,13 +12,15 @@ use super::{
         streaming_evaluator::StreamingRep3Evaluator, streaming_garbler::StreamingRep3Garbler,
         GCUtils,
     },
-    PartyID, Rep3BigUintShare, Rep3PrimeFieldShare,
+    PartyID, Rep3BigUintShare, Rep3PointShare, Rep3PrimeFieldShare,
 };
+use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::PrimeField;
 use fancy_garbling::{BinaryBundle, WireMod2};
 use itertools::{izip, Itertools as _};
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
+use std::any::TypeId;
 
 /// This enum defines which arithmetic-to-binary (and vice-versa) implementation of [ABY3](https://eprint.iacr.org/2018/403.pdf) is used.
 #[derive(
@@ -603,4 +605,74 @@ pub fn b2y2a_streaming<F: PrimeField, N: Rep3Network>(
     let delta = io_context.rngs.generate_random_garbler_delta(io_context.id);
     let y = b2y(x, delta, io_context)?;
     y2a_streaming(y, delta, io_context)
+}
+
+// (0,0) at the output will represent the infinity point
+pub fn point_share_to_fieldshares<C: CurveGroup, N: Rep3Network>(
+    x: Rep3PointShare<C>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<(
+    Rep3PrimeFieldShare<C::BaseField>,
+    Rep3PrimeFieldShare<C::BaseField>,
+)>
+where
+    C::BaseField: PrimeField,
+{
+    let mut x01_x = Rep3PrimeFieldShare::zero_share();
+    let mut x01_y = Rep3PrimeFieldShare::zero_share();
+    let mut x2_x = Rep3PrimeFieldShare::zero_share();
+    let mut x2_y = Rep3PrimeFieldShare::zero_share();
+
+    let r_x = io_context.rngs.rand.masking_field_element::<C::BaseField>();
+    let r_y = io_context.rngs.rand.masking_field_element::<C::BaseField>();
+
+    match io_context.id {
+        PartyID::ID0 => {
+            x01_x.a = r_x;
+            x01_y.a = r_y;
+            if let Some((x, y)) = x.b.into_affine().xy() {
+                x2_x.b = x;
+                x2_y.b = y;
+            }
+        }
+        PartyID::ID1 => {
+            let val = x.a + x.b;
+            if let Some((x, y)) = val.into_affine().xy() {
+                x2_x.b = x + r_x;
+                x2_y.b = y + r_y;
+            }
+        }
+        PartyID::ID2 => {
+            x01_x.a = r_x;
+            x01_y.a = r_y;
+            if let Some((x, y)) = x.a.into_affine().xy() {
+                x2_x.a = x;
+                x2_y.a = y;
+            }
+        }
+    }
+
+    // reshare x01
+    io_context
+        .network
+        .send_next_many(&[x01_x.a.to_owned(), x01_y.a.to_owned()])?;
+    let local_b = io_context.network.recv_prev_many()?;
+    if local_b.len() != 2 {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Expected 2 elements",
+        ))?;
+    }
+    x01_x.b = local_b[0];
+    x01_y.b = local_b[1];
+
+    let a = if TypeId::of::<C>() == TypeId::of::<ark_bn254::G1Projective>() {
+        C::BaseField::from(3)
+    } else if TypeId::of::<C>() == TypeId::of::<ark_grumpkin::Projective>() {
+        -C::BaseField::from(17)
+    } else {
+        panic!("Curve not supported atm.")
+    };
+
+    detail::point_addition(x01_x, x01_y, x2_x, x2_y, a)
 }
