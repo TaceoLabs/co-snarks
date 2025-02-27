@@ -141,7 +141,7 @@ pub(crate) struct AcirFormatOriginalOpcodeIndices {
     // pub(crate) pedersen_constraints: Vec<usize>,
     // pub(crate) pedersen_hash_constraints: Vec<usize>,
     pub(crate) poseidon2_constraints: Vec<usize>,
-    // pub(crate) multi_scalar_mul_constraints: Vec<usize>,
+    pub(crate) multi_scalar_mul_constraints: Vec<usize>,
     // pub(crate) ec_add_constraints: Vec<usize>,
     // pub(crate) recursion_constraints: Vec<usize>,
     // pub(crate) honk_recursion_constraints: Vec<usize>,
@@ -387,6 +387,14 @@ pub(crate) struct Poseidon2Constraint<F: PrimeField> {
     pub(crate) state: Vec<WitnessOrConstant<F>>,
     pub(crate) result: Vec<u32>,
     pub(crate) len: u32,
+}
+
+pub(crate) struct MultiScalarMul<F: PrimeField> {
+    pub(crate) points: Vec<WitnessOrConstant<F>>,
+    pub(crate) scalars: Vec<WitnessOrConstant<F>>,
+    pub(crate) out_point_x: u32,
+    pub(crate) out_point_y: u32,
+    pub(crate) out_point_is_infinite: u32,
 }
 
 pub(crate) struct LogicConstraint<F: PrimeField> {

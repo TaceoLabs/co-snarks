@@ -12,7 +12,8 @@ use std::collections::{BTreeMap, HashSet};
 
 use crate::types::types::{
     AcirFormatOriginalOpcodeIndices, BlockConstraint, BlockType, LogicConstraint, MulQuad,
-    PolyTriple, Poseidon2Constraint, RangeConstraint, RecursionConstraint, WitnessOrConstant,
+    MultiScalarMul, PolyTriple, Poseidon2Constraint, RangeConstraint, RecursionConstraint,
+    WitnessOrConstant,
 };
 #[expect(dead_code)]
 pub struct ProgramMetadata {
@@ -62,7 +63,7 @@ pub struct AcirFormat<F: PrimeField> {
     //  std::vector<PedersenConstraint> pedersen_constraints;
     //  std::vector<PedersenHashConstraint> pedersen_hash_constraints;
     pub(crate) poseidon2_constraints: Vec<Poseidon2Constraint<F>>,
-    //  std::vector<MultiScalarMul> multi_scalar_mul_constraints;
+    pub(crate) multi_scalar_mul_constraints: Vec<MultiScalarMul<F>>,
     //  std::vector<EcAdd> ec_add_constraints;
     pub(crate) recursion_constraints: Vec<RecursionConstraint>,
     pub(crate) honk_recursion_constraints: Vec<RecursionConstraint>,
@@ -703,10 +704,24 @@ impl<F: PrimeField> AcirFormat<F> {
                 output: _,
             } => todo!("BlackBoxFuncCall::EcdsaSecp256r1"),
             BlackBoxFuncCall::MultiScalarMul {
-                points: _,
-                scalars: _,
-                outputs: _,
-            } => todo!("BlackBoxFuncCall::MultiScalarMul"),
+                points,
+                scalars,
+                outputs,
+            } => {
+                af.multi_scalar_mul_constraints.push(MultiScalarMul {
+                    points: points.into_iter().map(|e| Self::parse_input(e)).collect(),
+                    scalars: scalars.into_iter().map(|e| Self::parse_input(e)).collect(),
+                    out_point_x: outputs.0.witness_index(),
+                    out_point_y: outputs.1.witness_index(),
+                    out_point_is_infinite: outputs.2.witness_index(),
+                });
+                af.constrained_witness.insert(outputs.0.witness_index());
+                af.constrained_witness.insert(outputs.1.witness_index());
+                af.constrained_witness.insert(outputs.2.witness_index());
+                af.original_opcode_indices
+                    .multi_scalar_mul_constraints
+                    .push(opcode_index);
+            }
             BlackBoxFuncCall::EmbeddedCurveAdd {
                 input1: _,
                 input2: _,
