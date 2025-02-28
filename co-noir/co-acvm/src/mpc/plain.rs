@@ -48,7 +48,7 @@ impl<F: PrimeField> PlainAcvmSolver<F> {
         Ok(point)
     }
 
-    fn bn254_fr_to_u128(inp: ark_bn254::Fr) -> std::io::Result<u128> {
+    pub(crate) fn bn254_fr_to_u128(inp: ark_bn254::Fr) -> std::io::Result<u128> {
         let inp_bigint = inp.into_bigint();
         if inp_bigint.0[2] != 0 || inp_bigint.0[3] != 0 {
             return Err(std::io::Error::new(
