@@ -624,7 +624,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
             let out_x = unsafe { *(&out_x as *const ark_bn254::Fr as *const F) };
             // Safety: We checked that the types match
             let out_y = unsafe { *(&out_y as *const ark_bn254::Fr as *const F) };
-            Ok((out_x, out_y, F::from(output_point.is_zero())))
+            Ok((out_x, out_y, F::zero()))
         } else {
             Ok((F::zero(), F::zero(), F::one()))
         }
