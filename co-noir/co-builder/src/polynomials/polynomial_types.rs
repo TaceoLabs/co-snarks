@@ -32,9 +32,23 @@ pub struct ProverWitnessEntities<T: Default> {
 }
 
 pub const PRECOMPUTED_ENTITIES_SIZE: usize = 27;
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Default, Clone, Serialize, Deserialize)]
 pub struct PrecomputedEntities<T: Default> {
     pub elements: [T; PRECOMPUTED_ENTITIES_SIZE],
+}
+
+impl<T: Default> PrecomputedEntities<Vec<T>> {
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            elements: std::array::from_fn(|_| Vec::with_capacity(capacity)),
+        }
+    }
+
+    pub fn add(&mut self, precomputed_entities: PrecomputedEntities<T>) {
+        for (src, dst) in precomputed_entities.into_iter().zip(self.iter_mut()) {
+            dst.push(src);
+        }
+    }
 }
 
 impl<T: Default> IntoIterator for PrecomputedEntities<T> {

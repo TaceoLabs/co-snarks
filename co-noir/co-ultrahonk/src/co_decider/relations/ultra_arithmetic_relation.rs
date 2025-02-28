@@ -1,17 +1,17 @@
-use super::Relation;
+use super::{ProverUnivariatesBatch, Relation};
 use crate::{
     co_decider::{
-        types::{ProverUnivariates, RelationParameters},
+        relations::fold_accumulator,
+        types::{RelationParameters, MAX_PARTIAL_RELATION_LENGTH},
         univariates::SharedUnivariate,
     },
     mpc::NoirUltraHonkProver,
 };
 use ark_ec::pairing::Pairing;
-use ark_ff::{Field, Zero};
-use co_builder::prelude::HonkCurve;
+use ark_ff::Field;
 use co_builder::HonkProofResult;
-use ultrahonk::prelude::{TranscriptFieldType, Univariate};
-
+use co_builder::{prelude::HonkCurve, TranscriptFieldType};
+use ultrahonk::prelude::Univariate;
 #[derive(Clone, Debug)]
 pub(crate) struct UltraArithmeticRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing> {
     pub(crate) r0: SharedUnivariate<T, P, 6>,
@@ -28,21 +28,19 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for UltraArithmeticRelationA
 }
 
 impl<T: NoirUltraHonkProver<P>, P: Pairing> UltraArithmeticRelationAcc<T, P> {
-    pub(crate) fn scale(&mut self, driver: &mut T, elements: &[P::ScalarField]) {
+    pub(crate) fn scale(&mut self, elements: &[P::ScalarField]) {
         assert!(elements.len() == UltraArithmeticRelation::NUM_RELATIONS);
-        self.r0.scale_inplace(driver, elements[0]);
-        self.r1.scale_inplace(driver, elements[1]);
+        self.r0.scale_inplace(elements[0]);
+        self.r1.scale_inplace(elements[1]);
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(
         &self,
-        driver: &mut T,
         result: &mut SharedUnivariate<T, P, SIZE>,
         extended_random_poly: &Univariate<P::ScalarField, SIZE>,
         partial_evaluation_result: &P::ScalarField,
     ) {
         self.r0.extend_and_batch_univariates(
-            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
@@ -50,7 +48,6 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> UltraArithmeticRelationAcc<T, P> {
         );
 
         self.r1.extend_and_batch_univariates(
-            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
@@ -70,12 +67,6 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
     for UltraArithmeticRelation
 {
     type Acc = UltraArithmeticRelationAcc<T, P>;
-    const SKIPPABLE: bool = true;
-
-    fn skip(input: &ProverUnivariates<T, P>) -> bool {
-        <Self as Relation<T, P>>::check_skippable();
-        input.precomputed.q_arith().is_zero()
-    }
 
     /**
      * @brief Expression for the Ultra Arithmetic gate.
@@ -131,9 +122,9 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
     fn accumulate(
         driver: &mut T,
         univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariates<T, P>,
-        _relation_parameters: &RelationParameters<P::ScalarField>,
-        scaling_factor: &P::ScalarField,
+        input: &ProverUnivariatesBatch<T, P>,
+        _relation_parameters: &RelationParameters<<P>::ScalarField>,
+        scaling_factors: &[P::ScalarField],
     ) -> HonkProofResult<()> {
         tracing::trace!("Accumulate UltraArithmeticRelation");
 
@@ -153,49 +144,54 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
 
         let neg_half = -P::ScalarField::from(2u64).inverse().unwrap();
 
-        let mul = driver.mul_many(w_r.as_ref(), w_l.as_ref())?;
-        let mul = SharedUnivariate::from_vec(&mul);
+        let mul = driver.mul_many(w_l, w_r)?;
+        //   let mul = SharedUnivariate::from_vec(&mul);
+        let mut tmp = T::mul_with_public_many(q_m, &mul);
+        let q_arith_neg_3 = q_arith
+            .iter()
+            .map(|q| *q - P::ScalarField::from(3_u64))
+            .collect::<Vec<_>>();
+        T::mul_assign_with_public_many(&mut tmp, &q_arith_neg_3);
+        T::scale_many_in_place(&mut tmp, neg_half);
+        let party_id = driver.get_party_id();
+        let tmp_l = T::mul_with_public_many(q_l, w_l);
+        let tmp_r = T::mul_with_public_many(q_r, w_r);
+        let tmp_o = T::mul_with_public_many(q_o, w_o);
+        let tmp_4 = T::mul_with_public_many(q_4, w_4);
 
-        let mut tmp = mul
-            .mul_public(driver, q_m)
-            .mul_public(driver, &(q_arith.to_owned() - 3));
-        tmp.scale_inplace(driver, neg_half);
+        T::add_assign_many(&mut tmp, &tmp_l);
+        T::add_assign_many(&mut tmp, &tmp_r);
+        T::add_assign_many(&mut tmp, &tmp_o);
+        T::add_assign_many(&mut tmp, &tmp_4);
+        T::add_assign_public_many(&mut tmp, q_c, party_id);
 
-        let tmp_l = w_l.mul_public(driver, q_l);
-        let tmp_r = w_r.mul_public(driver, q_r);
-        let tmp_o = w_o.mul_public(driver, q_o);
-        let tmp_4 = w_4.mul_public(driver, q_4);
-        let tmp = tmp
-            .add(driver, &tmp_l)
-            .add(driver, &tmp_r)
-            .add(driver, &tmp_o)
-            .add(driver, &tmp_4)
-            .add_public(driver, q_c);
+        let q_arith_neg_1 = q_arith
+            .iter()
+            .map(|q| *q - P::ScalarField::from(1_u64))
+            .collect::<Vec<_>>();
 
-        let tmp_arith = w_4_shift.mul_public(driver, &(q_arith.to_owned() - 1));
-        let mut tmp = tmp.add(driver, &tmp_arith).mul_public(driver, q_arith);
-        tmp.scale_inplace(driver, *scaling_factor);
+        let q_arith_neg_2 = q_arith
+            .iter()
+            .map(|q| *q - P::ScalarField::from(2_u64))
+            .collect::<Vec<_>>();
 
-        for i in 0..univariate_accumulator.r0.evaluations.len() {
-            univariate_accumulator.r0.evaluations[i] =
-                driver.add(univariate_accumulator.r0.evaluations[i], tmp.evaluations[i]);
-        }
+        let tmp_arith = T::mul_with_public_many(&q_arith_neg_1, w_4_shift);
+        T::add_assign_many(&mut tmp, &tmp_arith);
+        T::mul_assign_with_public_many(&mut tmp, q_arith);
 
-        ///////////////////////////////////////////////////////////////////////
+        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
 
-        let tmp = w_l
-            .add(driver, w_4)
-            .sub(driver, w_l_shift)
-            .add_public(driver, q_m)
-            .mul_public(driver, &(q_arith.to_owned() - 2))
-            .mul_public(driver, &(q_arith.to_owned() - 1))
-            .mul_public(driver, q_arith)
-            .scale(driver, *scaling_factor);
+        fold_accumulator!(univariate_accumulator.r0, tmp);
 
-        for i in 0..univariate_accumulator.r1.evaluations.len() {
-            univariate_accumulator.r1.evaluations[i] =
-                driver.add(univariate_accumulator.r1.evaluations[i], tmp.evaluations[i]);
-        }
+        let mut tmp = T::add_many(w_l, w_4);
+        T::sub_assign_many(&mut tmp, w_l_shift);
+        T::add_assign_public_many(&mut tmp, q_m, party_id);
+        T::mul_assign_with_public_many(&mut tmp, &q_arith_neg_2);
+        T::mul_assign_with_public_many(&mut tmp, &q_arith_neg_1);
+        T::mul_assign_with_public_many(&mut tmp, q_arith);
+        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
+
+        fold_accumulator!(univariate_accumulator.r1, tmp);
 
         Ok(())
     }

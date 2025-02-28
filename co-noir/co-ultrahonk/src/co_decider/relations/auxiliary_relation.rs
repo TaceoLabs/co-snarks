@@ -1,15 +1,17 @@
-use super::Relation;
+use super::{ProverUnivariatesBatch, Relation};
 use crate::{
     co_decider::{
-        types::{ProverUnivariates, RelationParameters},
+        relations::fold_accumulator,
+        types::{RelationParameters, MAX_PARTIAL_RELATION_LENGTH},
         univariates::SharedUnivariate,
     },
     mpc::NoirUltraHonkProver,
 };
 use ark_ec::pairing::Pairing;
-use ark_ff::{One, Zero};
+use ark_ff::One;
 use co_builder::prelude::HonkCurve;
 use co_builder::HonkProofResult;
+use itertools::Itertools as _;
 use num_bigint::BigUint;
 use ultrahonk::prelude::{TranscriptFieldType, Univariate};
 
@@ -49,25 +51,23 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for AuxiliaryRelationAcc<T, 
 }
 
 impl<T: NoirUltraHonkProver<P>, P: Pairing> AuxiliaryRelationAcc<T, P> {
-    pub(crate) fn scale(&mut self, driver: &mut T, elements: &[P::ScalarField]) {
+    pub(crate) fn scale(&mut self, elements: &[P::ScalarField]) {
         assert!(elements.len() == AuxiliaryRelation::NUM_RELATIONS);
-        self.r0.scale_inplace(driver, elements[0]);
-        self.r1.scale_inplace(driver, elements[1]);
-        self.r2.scale_inplace(driver, elements[2]);
-        self.r3.scale_inplace(driver, elements[3]);
-        self.r4.scale_inplace(driver, elements[4]);
-        self.r5.scale_inplace(driver, elements[5]);
+        self.r0.scale_inplace(elements[0]);
+        self.r1.scale_inplace(elements[1]);
+        self.r2.scale_inplace(elements[2]);
+        self.r3.scale_inplace(elements[3]);
+        self.r4.scale_inplace(elements[4]);
+        self.r5.scale_inplace(elements[5]);
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(
         &self,
-        driver: &mut T,
         result: &mut SharedUnivariate<T, P, SIZE>,
         extended_random_poly: &Univariate<P::ScalarField, SIZE>,
         partial_evaluation_result: &P::ScalarField,
     ) {
         self.r0.extend_and_batch_univariates(
-            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
@@ -75,7 +75,6 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> AuxiliaryRelationAcc<T, P> {
         );
 
         self.r1.extend_and_batch_univariates(
-            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
@@ -83,7 +82,6 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> AuxiliaryRelationAcc<T, P> {
         );
 
         self.r2.extend_and_batch_univariates(
-            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
@@ -91,7 +89,6 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> AuxiliaryRelationAcc<T, P> {
         );
 
         self.r3.extend_and_batch_univariates(
-            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
@@ -99,7 +96,6 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> AuxiliaryRelationAcc<T, P> {
         );
 
         self.r4.extend_and_batch_univariates(
-            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
@@ -107,7 +103,6 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> AuxiliaryRelationAcc<T, P> {
         );
 
         self.r5.extend_and_batch_univariates(
-            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
@@ -127,12 +122,6 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
     for AuxiliaryRelation
 {
     type Acc = AuxiliaryRelationAcc<T, P>;
-    const SKIPPABLE: bool = true;
-
-    fn skip(input: &ProverUnivariates<T, P>) -> bool {
-        <Self as Relation<T, P>>::check_skippable();
-        input.precomputed.q_aux().is_zero()
-    }
 
     /**
      * @brief Expression for the generalized permutation sort gate.
@@ -171,11 +160,12 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
     fn accumulate(
         driver: &mut T,
         univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariates<T, P>,
-        relation_parameters: &RelationParameters<P::ScalarField>,
-        scaling_factor: &P::ScalarField,
+        input: &ProverUnivariatesBatch<T, P>,
+        relation_parameters: &RelationParameters<<P>::ScalarField>,
+        scaling_factors: &[P::ScalarField],
     ) -> HonkProofResult<()> {
-        tracing::trace!("Accumulate AuxiliaryRelation");
+        let party_id = driver.get_party_id();
+        // this method expects
 
         let eta = &relation_parameters.eta_1;
         let eta_two = &relation_parameters.eta_2;
@@ -213,84 +203,80 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
          *
          **/
 
-        let lhs = SharedUnivariate::univariates_to_vec(&[
-            w_1.to_owned(),
-            w_2.to_owned(),
-            w_1.to_owned(),
-            w_2.to_owned(),
-            w_1_shift.to_owned(),
-        ]);
-        let rhs = SharedUnivariate::univariates_to_vec(&[
-            w_2_shift.to_owned(),
-            w_1_shift.to_owned(),
-            w_4.to_owned(),
-            w_3.to_owned(),
-            w_2_shift.to_owned(),
-        ]);
+        let mut lhs =
+            Vec::with_capacity(w_1.len() + w_2.len() + w_1.len() + w_2.len() + w_1_shift.len());
+        lhs.extend(w_1);
+        lhs.extend(w_2);
+        lhs.extend(w_1);
+        lhs.extend(w_2);
+        lhs.extend(w_1_shift);
+        let mut rhs = Vec::with_capacity(lhs.len());
+        rhs.extend(w_2_shift);
+        rhs.extend(w_1_shift);
+        rhs.extend(w_4);
+        rhs.extend(w_3);
+        rhs.extend(w_2_shift);
         let mul = driver.mul_many(&lhs, &rhs)?;
-        let mul = SharedUnivariate::vec_to_univariates(&mul);
+        let mul = mul.chunks_exact(mul.len() / 5).collect_vec();
+        debug_assert_eq!(mul.len(), 5);
 
-        let mut limb_subproduct = mul[0].add(driver, &mul[1]);
-        let tmp = mul[2].add(driver, &mul[3]);
-        let mut non_native_field_gate_2 = tmp.sub(driver, w_3_shift);
-        non_native_field_gate_2.scale_inplace(driver, limb_size);
-        let non_native_field_gate_2 = non_native_field_gate_2
-            .sub(driver, w_4_shift)
-            .add(driver, &limb_subproduct)
-            .mul_public(driver, q_4);
+        let mut limb_subproduct = T::add_many(mul[0], mul[1]);
+        let mut non_native_field_gate_2 = T::add_many(mul[2], mul[3]);
+        T::sub_assign_many(&mut non_native_field_gate_2, w_3_shift);
+        T::scale_many_in_place(&mut non_native_field_gate_2, limb_size);
+        T::sub_assign_many(&mut non_native_field_gate_2, w_4_shift);
+        T::add_assign_many(&mut non_native_field_gate_2, &limb_subproduct);
+        T::mul_assign_with_public_many(&mut non_native_field_gate_2, q_4);
 
-        limb_subproduct.scale_inplace(driver, limb_size);
-        let limb_subproduct = limb_subproduct.add(driver, &mul[4]);
-        let non_native_field_gate_1 = limb_subproduct
-            .sub(driver, w_3)
-            .sub(driver, w_4)
-            .mul_public(driver, q_3);
+        T::scale_many_in_place(&mut limb_subproduct, limb_size);
+        T::add_assign_many(&mut limb_subproduct, mul[4]);
+        let mut non_native_field_gate_1 = T::sub_many(&limb_subproduct, w_3);
+        T::sub_assign_many(&mut non_native_field_gate_1, w_4);
+        T::mul_assign_with_public_many(&mut non_native_field_gate_1, q_3);
 
-        let non_native_field_gate_3 = limb_subproduct
-            .add(driver, w_4)
-            .sub(driver, w_3_shift)
-            .sub(driver, w_4_shift)
-            .mul_public(driver, q_m);
+        let mut non_native_field_gate_3 = limb_subproduct;
+        T::add_assign_many(&mut non_native_field_gate_3, w_4);
+        T::sub_assign_many(&mut non_native_field_gate_3, w_3_shift);
+        T::sub_assign_many(&mut non_native_field_gate_3, w_4_shift);
+        T::mul_assign_with_public_many(&mut non_native_field_gate_3, q_m);
 
-        let non_native_field_identity = non_native_field_gate_1
-            .add(driver, &non_native_field_gate_2)
-            .add(driver, &non_native_field_gate_3)
-            .mul_public(driver, q_2);
+        let mut non_native_field_identity = non_native_field_gate_1;
+        T::add_assign_many(&mut non_native_field_identity, &non_native_field_gate_2);
+        T::add_assign_many(&mut non_native_field_identity, &non_native_field_gate_3);
+        T::mul_assign_with_public_many(&mut non_native_field_identity, q_2);
 
         // ((((w2' * 2^14 + w1') * 2^14 + w3) * 2^14 + w2) * 2^14 + w1 - w4) * qm
         // deg 2
 
-        let mut limb_accumulator_1 = w_2_shift
-            .scale(driver, sublimb_shift)
-            .add(driver, w_1_shift);
-        limb_accumulator_1.scale_inplace(driver, sublimb_shift);
-        let mut limb_accumulator_1 = limb_accumulator_1.add(driver, w_3);
-        limb_accumulator_1.scale_inplace(driver, sublimb_shift);
-        let mut limb_accumulator_1 = limb_accumulator_1.add(driver, w_2);
-        limb_accumulator_1.scale_inplace(driver, sublimb_shift);
-        let limb_accumulator_1 = limb_accumulator_1
-            .add(driver, w_1)
-            .sub(driver, w_4)
-            .mul_public(driver, q_4);
+        let mut limb_accumulator_1 = w_2_shift.to_owned();
+        T::scale_many_in_place(&mut limb_accumulator_1, sublimb_shift);
+        T::add_assign_many(&mut limb_accumulator_1, w_1_shift);
+        T::scale_many_in_place(&mut limb_accumulator_1, sublimb_shift);
+        T::add_assign_many(&mut limb_accumulator_1, w_3);
+        T::scale_many_in_place(&mut limb_accumulator_1, sublimb_shift);
+        T::add_assign_many(&mut limb_accumulator_1, w_2);
+        T::scale_many_in_place(&mut limb_accumulator_1, sublimb_shift);
+        T::add_assign_many(&mut limb_accumulator_1, w_1);
+        T::sub_assign_many(&mut limb_accumulator_1, w_4);
+        T::mul_assign_with_public_many(&mut limb_accumulator_1, q_4);
 
         // ((((w3' * 2^14 + w2') * 2^14 + w1') * 2^14 + w4) * 2^14 + w3 - w4') * qm
         // deg 2
-        let mut limb_accumulator_2 = w_3_shift
-            .scale(driver, sublimb_shift)
-            .add(driver, w_2_shift);
-        limb_accumulator_2.scale_inplace(driver, sublimb_shift);
-        let mut limb_accumulator_2 = limb_accumulator_2.add(driver, w_1_shift);
-        limb_accumulator_2.scale_inplace(driver, sublimb_shift);
-        let mut limb_accumulator_2 = limb_accumulator_2.add(driver, w_4);
-        limb_accumulator_2.scale_inplace(driver, sublimb_shift);
-        let limb_accumulator_2 = limb_accumulator_2
-            .add(driver, w_3)
-            .sub(driver, w_4_shift)
-            .mul_public(driver, q_m);
+        let mut limb_accumulator_2 = w_3_shift.to_owned();
+        T::scale_many_in_place(&mut limb_accumulator_2, sublimb_shift);
+        T::add_assign_many(&mut limb_accumulator_2, w_2_shift);
+        T::scale_many_in_place(&mut limb_accumulator_2, sublimb_shift);
+        T::add_assign_many(&mut limb_accumulator_2, w_1_shift);
+        T::scale_many_in_place(&mut limb_accumulator_2, sublimb_shift);
+        T::add_assign_many(&mut limb_accumulator_2, w_4);
+        T::scale_many_in_place(&mut limb_accumulator_2, sublimb_shift);
+        T::add_assign_many(&mut limb_accumulator_2, w_3);
+        T::sub_assign_many(&mut limb_accumulator_2, w_4_shift);
+        T::mul_assign_with_public_many(&mut limb_accumulator_2, q_m);
 
-        let limb_accumulator_identity = limb_accumulator_1
-            .add(driver, &limb_accumulator_2)
-            .mul_public(driver, q_3); // deg 3
+        let mut limb_accumulator_identity = limb_accumulator_1;
+        T::add_assign_many(&mut limb_accumulator_identity, &limb_accumulator_2);
+        T::mul_assign_with_public_many(&mut limb_accumulator_identity, q_3);
 
         /*
          * MEMORY
@@ -332,15 +318,17 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
          *
          * For ROM gates, qc = 0
          */
-        let tmp1 = w_2.scale(driver, *eta_two);
-        let tmp2 = w_1.scale(driver, *eta);
-        let memory_record_check = w_3
-            .scale(driver, *eta_three)
-            .add(driver, &tmp1)
-            .add(driver, &tmp2)
-            .add_public(driver, q_c);
-        let partial_record_check = memory_record_check.to_owned(); // used in RAM consistency check; deg 1 or 2
-        let memory_record_check = memory_record_check.sub(driver, w_4);
+        let mut tmp1 = w_2.to_owned();
+        let mut tmp2 = w_1.to_owned();
+        let mut memory_record_check = w_3.to_owned();
+        T::scale_many_in_place(&mut tmp1, *eta_two);
+        T::scale_many_in_place(&mut tmp2, *eta);
+        T::scale_many_in_place(&mut memory_record_check, *eta_three);
+        T::add_assign_many(&mut memory_record_check, &tmp1);
+        T::add_assign_many(&mut memory_record_check, &tmp2);
+        T::add_assign_public_many(&mut memory_record_check, q_c, party_id);
+        let partial_record_check = memory_record_check.clone();
+        let mut memory_record_check = T::sub_many(&partial_record_check, w_4);
 
         /*
          * ROM Consistency Check
@@ -357,12 +345,12 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
          * 3. if, at gate i, index_i == index_{i + 1}, then value1_i == value1_{i + 1} and value2_i == value2_{i + 1}
          *
          */
-        let index_delta = w_1_shift.sub(driver, w_1);
-        let record_delta = w_4_shift.sub(driver, w_4);
+        let index_delta = T::sub_many(w_1_shift, w_1);
+        let record_delta = T::sub_many(w_4_shift, w_4);
 
-        let index_delta_one = index_delta
-            .neg(driver)
-            .add_scalar(driver, P::ScalarField::one());
+        let mut index_delta_one = index_delta.clone();
+        T::neg_many(&mut index_delta_one);
+        T::add_scalar_in_place(&mut index_delta_one, P::ScalarField::one(), party_id);
 
         /*
          * RAM Consistency Check
@@ -382,81 +370,92 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
          * N.B. it is the responsibility of the circuit writer to ensure that every RAM cell is initialized
          * with a WRITE operation.
          */
-        let access_type = w_4.sub(driver, &partial_record_check); // deg 1 or 2
+        let access_type = T::sub_many(w_4, &partial_record_check); // deg 1 or 2
+        let value_delta = T::sub_many(w_3_shift, w_3);
+        let mut lhs = Vec::with_capacity(
+            index_delta_one.len() + record_delta.len() + access_type.len() + value_delta.len(),
+        );
+        lhs.extend(index_delta.clone());
+        lhs.extend(record_delta);
+        lhs.extend(access_type.clone());
+        lhs.extend(value_delta);
 
-        let value_delta = w_3_shift.sub(driver, w_3);
+        let mut rhs = Vec::with_capacity(lhs.len());
+        rhs.extend(index_delta.clone());
+        rhs.extend(index_delta_one.clone());
+        rhs.extend(access_type.clone());
+        rhs.extend(index_delta_one.clone());
 
-        let lhs = SharedUnivariate::univariates_to_vec(&[
-            index_delta.to_owned(),
-            record_delta,
-            access_type.to_owned(),
-            value_delta,
-        ]);
-        let rhs = SharedUnivariate::univariates_to_vec(&[
-            index_delta.to_owned(),
-            index_delta_one.to_owned(),
-            access_type.to_owned(),
-            index_delta_one.to_owned(),
-        ]);
         let mul = driver.mul_many(&lhs, &rhs)?;
-        let mul = SharedUnivariate::vec_to_univariates(&mul);
-
-        let index_is_monotonically_increasing = mul[0].sub(driver, &index_delta); // deg 2
+        let mul = mul.chunks_exact(mul.len() / 4).collect_vec();
+        debug_assert_eq!(mul.len(), 4);
+        let index_is_monotonically_increasing = T::sub_many(mul[0], &index_delta); // deg 2
         let adjacent_values_match_if_adjacent_indices_match = &mul[1]; // deg 2
+        let q_aux_by_scaling = q_aux
+            .iter()
+            .zip_eq(scaling_factors)
+            .map(|(a, b)| *a * *b)
+            .collect_vec();
 
-        let q_aux_by_scaling = q_aux.to_owned() * scaling_factor;
-        let q_one_by_two = q_1.to_owned() * q_2;
-        let q_one_by_two_by_aux_by_scaling = q_one_by_two.to_owned() * &q_aux_by_scaling;
+        let q_one_by_two = q_1.iter().zip_eq(q_2).map(|(a, b)| *a * *b).collect_vec();
+        let q_one_by_two_by_aux_by_scaling = q_one_by_two
+            .iter()
+            .zip_eq(q_aux_by_scaling.iter())
+            .map(|(a, b)| *a * *b)
+            .collect_vec();
 
-        let tmp = adjacent_values_match_if_adjacent_indices_match
-            .mul_public(driver, &q_one_by_two_by_aux_by_scaling); // deg 5
-        for i in 0..univariate_accumulator.r1.evaluations.len() {
-            univariate_accumulator.r1.evaluations[i] =
-                driver.add(univariate_accumulator.r1.evaluations[i], tmp.evaluations[i]);
-        }
+        let tmp = T::mul_with_public_many(
+            &q_one_by_two_by_aux_by_scaling,
+            adjacent_values_match_if_adjacent_indices_match,
+        ); // deg 5
 
-        let tmp =
-            index_is_monotonically_increasing.mul_public(driver, &q_one_by_two_by_aux_by_scaling); // deg 5
-        for i in 0..univariate_accumulator.r2.evaluations.len() {
-            univariate_accumulator.r2.evaluations[i] =
-                driver.add(univariate_accumulator.r2.evaluations[i], tmp.evaluations[i]);
-        }
+        fold_accumulator!(univariate_accumulator.r1, tmp);
 
-        let rom_consistency_check_identity = memory_record_check.mul_public(driver, &q_one_by_two); // deg 3 or 4
+        let tmp = T::mul_with_public_many(
+            &q_one_by_two_by_aux_by_scaling,
+            &index_is_monotonically_increasing,
+        ); // deg 5
+
+        fold_accumulator!(univariate_accumulator.r2, tmp);
+
+        let rom_consistency_check_identity =
+            T::mul_with_public_many(&q_one_by_two, &memory_record_check); // deg 3 or 4
 
         // Continue with RAM access check
 
-        let access_check = &mul[2].sub(driver, &access_type); // check value is 0 or 1; deg 2 or 4
+        let mut ram_consistency_check_identity = T::sub_many(mul[2], &access_type); // check value is 0 or 1; deg 2 or 4
 
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/757): If we sorted in
         // reverse order we could re-use `partial_record_check`  1 -  (w3' * eta_three + w2' * eta_two + w1' *
         // eta) deg 1 or 2
-        let tmp1 = w_2_shift.scale(driver, *eta_two);
-        let tmp2 = w_1_shift.scale(driver, *eta);
-        let next_gate_access_type = w_3_shift
-            .scale(driver, *eta_three)
-            .add(driver, &tmp1)
-            .add(driver, &tmp2);
-        let next_gate_access_type = w_4_shift.sub(driver, &next_gate_access_type);
+        let mut tmp1 = w_2_shift.to_owned();
+        let mut tmp2 = w_1_shift.to_owned();
+        T::scale_many_in_place(&mut tmp1, *eta_two);
+        T::scale_many_in_place(&mut tmp2, *eta);
+        let mut next_gate_access_type = w_3_shift.to_owned();
+        T::scale_many_in_place(&mut next_gate_access_type, *eta_three);
+        T::add_assign_many(&mut next_gate_access_type, &tmp1);
+        T::add_assign_many(&mut next_gate_access_type, &tmp2);
+        let next_gate_access_type = T::sub_many(w_4_shift, &next_gate_access_type);
+        let mut tmp = next_gate_access_type.clone();
+        T::neg_many(&mut tmp);
+        T::add_scalar_in_place(&mut tmp, P::ScalarField::one(), party_id);
 
-        let tmp = next_gate_access_type
-            .neg(driver)
-            .add_scalar(driver, P::ScalarField::one()); // deg 3 or 4
+        let timestamp_delta = T::sub_many(w_2_shift, w_2);
+        let mut lhs =
+            Vec::with_capacity(mul[3].len() + next_gate_access_type.len() + index_delta_one.len());
+        lhs.extend(mul[3]);
+        lhs.extend(next_gate_access_type.to_owned());
+        lhs.extend(index_delta_one);
 
-        let timestamp_delta = w_2_shift.sub(driver, w_2);
+        let mut rhs = Vec::with_capacity(lhs.len());
+        rhs.extend(tmp);
+        rhs.extend(next_gate_access_type.clone());
+        rhs.extend(timestamp_delta);
 
-        let lhs = SharedUnivariate::univariates_to_vec(&[
-            mul[3].to_owned(),
-            next_gate_access_type.to_owned(),
-            index_delta_one,
-        ]);
-        let rhs = SharedUnivariate::univariates_to_vec(&[
-            tmp,
-            next_gate_access_type.to_owned(),
-            timestamp_delta,
-        ]);
         let mul = driver.mul_many(&lhs, &rhs)?;
-        let mul = SharedUnivariate::vec_to_univariates(&mul);
+        let mul = mul.chunks_exact(mul.len() / 3).collect_vec();
+        debug_assert_eq!(mul.len(), 3);
 
         let adjacent_values_match_if_adjacent_indices_match_and_next_access_is_a_read_operation =
             &mul[0];
@@ -466,33 +465,36 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         // do  with an arithmetic gate because of the  `eta` factors. We need to check that the *next* gate's access
         // type is  correct, to cover this edge case
         // deg 2 or 4
-        let next_gate_access_type_is_boolean = mul[1].sub(driver, &next_gate_access_type);
+        let next_gate_access_type_is_boolean = T::sub_many(mul[1], &next_gate_access_type);
+        let q_arith_by_aux_and_scaling = q_arith
+            .iter()
+            .zip_eq(q_aux_by_scaling.iter())
+            .map(|(a, b)| *a * *b)
+            .collect_vec();
+        let tmp = T::mul_with_public_many(
+            &q_arith_by_aux_and_scaling,
+            adjacent_values_match_if_adjacent_indices_match_and_next_access_is_a_read_operation,
+        );
 
-        let q_arith_by_aux_and_scaling = q_arith.to_owned() * &q_aux_by_scaling;
         // Putting it all together...
 
-        let tmp =
-            adjacent_values_match_if_adjacent_indices_match_and_next_access_is_a_read_operation
-                .mul_public(driver, &q_arith_by_aux_and_scaling); // deg 5 or 6
-        for i in 0..univariate_accumulator.r3.evaluations.len() {
-            univariate_accumulator.r3.evaluations[i] =
-                driver.add(univariate_accumulator.r3.evaluations[i], tmp.evaluations[i]);
-        }
+        fold_accumulator!(univariate_accumulator.r3, tmp);
 
-        let tmp = index_is_monotonically_increasing.mul_public(driver, &q_arith_by_aux_and_scaling); // deg 4
-        for i in 0..univariate_accumulator.r4.evaluations.len() {
-            univariate_accumulator.r4.evaluations[i] =
-                driver.add(univariate_accumulator.r4.evaluations[i], tmp.evaluations[i]);
-        }
+        let tmp = T::mul_with_public_many(
+            &q_arith_by_aux_and_scaling,
+            &index_is_monotonically_increasing,
+        );
 
-        let tmp = next_gate_access_type_is_boolean.mul_public(driver, &q_arith_by_aux_and_scaling); // deg 4 or 6
-        for i in 0..univariate_accumulator.r5.evaluations.len() {
-            univariate_accumulator.r5.evaluations[i] =
-                driver.add(univariate_accumulator.r5.evaluations[i], tmp.evaluations[i]);
-        }
+        fold_accumulator!(univariate_accumulator.r4, tmp);
 
-        let ram_consistency_check_identity = access_check.mul_public(driver, q_arith); // deg 3 or 5
+        let tmp = T::mul_with_public_many(
+            &q_arith_by_aux_and_scaling,
+            &next_gate_access_type_is_boolean,
+        );
 
+        fold_accumulator!(univariate_accumulator.r5, tmp);
+
+        T::mul_assign_with_public_many(&mut ram_consistency_check_identity, q_arith);
         /*
          * RAM Timestamp Consistency Check
          *
@@ -504,32 +506,36 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
          * Iff delta_index == 0, timestamp_check = timestamp_{i + 1} - timestamp_i
          * Else timestamp_check = 0
          */
-        let ram_timestamp_check_identity = &mul[2].sub(driver, w_3); // deg 3
+        let mut ram_timestamp_check_identity = T::sub_many(mul[2], w_3); // deg 3
 
         /*
          * The complete RAM/ROM memory identity
          * Partial degree:
          */
-        let tmp1 = ram_timestamp_check_identity.mul_public(driver, &(q_4.to_owned() * q_1));
-        let tmp2 = memory_record_check.mul_public(driver, &(q_m.to_owned() * q_1));
-        let memory_identity = rom_consistency_check_identity // deg 3 or 4
-            .add(driver, &tmp1) // deg_4
-            .add(driver, &tmp2) // deg 3 or 4
-            .add(driver, &ram_consistency_check_identity); // deg 3 or 5
+        let q_4_q_1 = q_4
+            .iter()
+            .zip_eq(q_1.iter())
+            .map(|(a, b)| *a * *b)
+            .collect_vec();
 
+        let q_m_q_1 = q_m
+            .iter()
+            .zip_eq(q_1.iter())
+            .map(|(a, b)| *a * *b)
+            .collect_vec();
+        T::mul_assign_with_public_many(&mut ram_timestamp_check_identity, &q_4_q_1);
+        T::mul_assign_with_public_many(&mut memory_record_check, &q_m_q_1);
         // (deg 3 or 5) + (deg 4) + (deg 3)
-        let tmp = memory_identity.add(driver, &non_native_field_identity);
-        let auxiliary_identity = tmp
-            .add(driver, &limb_accumulator_identity)
-            .mul_public(driver, &q_aux_by_scaling); // deg 5 or 6
+        let mut memory_identity = rom_consistency_check_identity;
+        T::add_assign_many(&mut memory_identity, &ram_timestamp_check_identity);
+        T::add_assign_many(&mut memory_identity, &memory_record_check);
+        T::add_assign_many(&mut memory_identity, &ram_consistency_check_identity);
 
-        for i in 0..univariate_accumulator.r0.evaluations.len() {
-            univariate_accumulator.r0.evaluations[i] = driver.add(
-                univariate_accumulator.r0.evaluations[i],
-                auxiliary_identity.evaluations[i],
-            );
-        }
+        T::add_assign_many(&mut memory_identity, &non_native_field_identity);
+        T::add_assign_many(&mut memory_identity, &limb_accumulator_identity);
+        T::mul_assign_with_public_many(&mut memory_identity, &q_aux_by_scaling);
 
+        fold_accumulator!(univariate_accumulator.r0, memory_identity);
         Ok(())
     }
 }

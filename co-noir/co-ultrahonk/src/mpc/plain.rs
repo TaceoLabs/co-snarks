@@ -24,24 +24,46 @@ impl<P: Pairing> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         0
     }
 
-    fn sub(&self, a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare {
+    fn sub(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare {
         a - b
     }
 
-    fn add(&self, a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare {
+    fn sub_assign_many(a: &mut [Self::ArithmeticShare], b: &[Self::ArithmeticShare]) {
+        debug_assert_eq!(a.len(), b.len());
+        for (a, b) in a.iter_mut().zip(b.iter()) {
+            *a -= b;
+        }
+    }
+
+    fn add(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare {
         a + b
     }
 
-    fn neg(&mut self, a: Self::ArithmeticShare) -> Self::ArithmeticShare {
+    fn add_assign(a: &mut Self::ArithmeticShare, b: Self::ArithmeticShare) {
+        *a += b;
+    }
+
+    fn add_assign_public(
+        a: &mut Self::ArithmeticShare,
+        b: <P as Pairing>::ScalarField,
+        _id: Self::PartyID,
+    ) {
+        *a += b;
+    }
+
+    fn neg(a: Self::ArithmeticShare) -> Self::ArithmeticShare {
         -a
     }
 
     fn mul_with_public(
-        &self,
         public: <P as Pairing>::ScalarField,
         shared: Self::ArithmeticShare,
     ) -> Self::ArithmeticShare {
         shared * public
+    }
+
+    fn mul_assign_with_public(shared: &mut Self::ArithmeticShare, public: P::ScalarField) {
+        *shared *= public;
     }
 
     fn mul_many(
@@ -49,13 +71,14 @@ impl<P: Pairing> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
     ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
+        debug_assert_eq!(a.len(), b.len());
         Ok(a.iter().zip(b.iter()).map(|(a, b)| *a * b).collect())
     }
 
     fn add_with_public(
-        &self,
         public: <P as Pairing>::ScalarField,
         shared: Self::ArithmeticShare,
+        _id: Self::PartyID,
     ) -> Self::ArithmeticShare {
         shared + public
     }
@@ -97,6 +120,7 @@ impl<P: Pairing> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
     ) -> std::io::Result<Vec<<P as Pairing>::ScalarField>> {
+        debug_assert_eq!(a.len(), b.len());
         Ok(a.iter().zip(b.iter()).map(|(a, b)| *a * b).collect())
     }
 
@@ -119,18 +143,6 @@ impl<P: Pairing> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         Ok(res)
     }
 
-    fn inv_many_in_place_leaking_zeros(
-        &mut self,
-        a: &mut [Self::ArithmeticShare],
-    ) -> std::io::Result<()> {
-        for a in a.iter_mut() {
-            if !a.is_zero() {
-                a.inverse_in_place().unwrap();
-            }
-        }
-        Ok(())
-    }
-
     fn inv_many_in_place(&mut self, a: &mut [Self::ArithmeticShare]) -> std::io::Result<()> {
         for a in a.iter_mut() {
             if a.is_zero() {
@@ -144,6 +156,18 @@ impl<P: Pairing> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         Ok(())
     }
 
+    fn inv_many_in_place_leaking_zeros(
+        &mut self,
+        a: &mut [Self::ArithmeticShare],
+    ) -> std::io::Result<()> {
+        for a in a.iter_mut() {
+            if !a.is_zero() {
+                a.inverse_in_place().unwrap();
+            }
+        }
+        Ok(())
+    }
+
     fn msm_public_points(
         points: &[<P as Pairing>::G1Affine],
         scalars: &[Self::ArithmeticShare],
@@ -151,11 +175,7 @@ impl<P: Pairing> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         P::G1::msm_unchecked(points, scalars)
     }
 
-    fn eval_poly(
-        &mut self,
-        coeffs: &[Self::ArithmeticShare],
-        point: P::ScalarField,
-    ) -> Self::ArithmeticShare {
+    fn eval_poly(coeffs: &[Self::ArithmeticShare], point: P::ScalarField) -> Self::ArithmeticShare {
         // TACEO TODO: here we clone...
         let poly = DensePolynomial::from_coefficients_slice(coeffs);
         poly.evaluate(&point)

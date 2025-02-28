@@ -18,6 +18,7 @@ use crate::{
     },
     mpc::NoirUltraHonkProver,
     types::AllEntities,
+    types_batch::{AllEntitiesBatchRelations, SumCheckDataForRelation},
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
@@ -39,7 +40,6 @@ impl SumcheckRound {
     }
 
     fn extend_edges<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>(
-        driver: &mut T,
         extended_edges: &mut ProverUnivariates<T, P>,
         multivariates: &AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>>,
         edge_index: usize,
@@ -51,11 +51,12 @@ impl SumcheckRound {
         {
             des.extend_from(&src[edge_index..edge_index + 2]);
         }
+
         for (src, des) in multivariates
             .shared_iter()
             .zip(extended_edges.shared_iter_mut())
         {
-            des.extend_from(driver, &src[edge_index..edge_index + 2]);
+            des.extend_from(&src[edge_index..edge_index + 2]);
         }
     }
 
@@ -73,7 +74,6 @@ impl SumcheckRound {
      * @param gate_sparators Round \f$pow_{\beta}\f$-factor  \f$ ( (1−X_i) + X_i\cdot \beta_i )\f$.
      */
     fn extend_and_batch_univariates<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize>(
-        driver: &mut T,
         result: &mut SumcheckRoundOutput<T, P, SIZE>,
         univariate_accumulators: AllRelationAcc<T, P>,
         gate_sparators: &GateSeparatorPolynomial<P::ScalarField>,
@@ -84,7 +84,6 @@ impl SumcheckRound {
         extended_random_polynomial.extend_from(&random_polynomial);
 
         univariate_accumulators.extend_and_batch_univariates(
-            driver,
             result,
             &extended_random_polynomial,
             &gate_sparators.partial_evaluation_result,
@@ -112,7 +111,6 @@ impl SumcheckRound {
         P: Pairing,
         const SIZE: usize,
     >(
-        driver: &mut T,
         mut univariate_accumulators: AllRelationAcc<T, P>,
         alphas: &[P::ScalarField; crate::NUM_ALPHAS],
         gate_sparators: &GateSeparatorPolynomial<P::ScalarField>,
@@ -120,110 +118,99 @@ impl SumcheckRound {
         tracing::trace!("batch over relations");
 
         let running_challenge = P::ScalarField::one();
-        univariate_accumulators.scale(driver, running_challenge, alphas);
+        univariate_accumulators.scale(running_challenge, alphas);
 
         let mut res = SumcheckRoundOutput::default();
-        Self::extend_and_batch_univariates(
-            driver,
-            &mut res,
-            univariate_accumulators,
-            gate_sparators,
-        );
+        Self::extend_and_batch_univariates(&mut res, univariate_accumulators, gate_sparators);
         res
     }
 
-    fn accumulate_one_relation_univariates<
+    fn accumulate_relation_univariates_batch<
+        T: NoirUltraHonkProver<P>,
+        P: HonkCurve<TranscriptFieldType>,
+    >(
+        driver: &mut T,
+        univariate_accumulators: &mut AllRelationAcc<T, P>,
+        sum_check_data: &AllEntitiesBatchRelations<T, P>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
+    ) -> HonkProofResult<()> {
+        tracing::trace!("Accumulate relations");
+        Self::accumulate_one_relation_univariates_batch::<_, _, UltraArithmeticRelation>(
+            driver,
+            &mut univariate_accumulators.r_arith,
+            relation_parameters,
+            &sum_check_data.ultra_arith,
+        )?;
+
+        Self::accumulate_one_relation_univariates_batch::<_, _, UltraPermutationRelation>(
+            driver,
+            &mut univariate_accumulators.r_perm,
+            relation_parameters,
+            &sum_check_data.not_skippable,
+        )?;
+
+        Self::accumulate_one_relation_univariates_batch::<_, _, DeltaRangeConstraintRelation>(
+            driver,
+            &mut univariate_accumulators.r_delta,
+            relation_parameters,
+            &sum_check_data.delta_range,
+        )?;
+
+        Self::accumulate_one_relation_univariates_batch::<_, _, EllipticRelation>(
+            driver,
+            &mut univariate_accumulators.r_elliptic,
+            relation_parameters,
+            &sum_check_data.elliptic,
+        )?;
+
+        Self::accumulate_one_relation_univariates_batch::<_, _, AuxiliaryRelation>(
+            driver,
+            &mut univariate_accumulators.r_aux,
+            relation_parameters,
+            &sum_check_data.auxiliary,
+        )?;
+
+        Self::accumulate_one_relation_univariates_batch::<_, _, LogDerivLookupRelation>(
+            driver,
+            &mut univariate_accumulators.r_lookup,
+            relation_parameters,
+            &sum_check_data.not_skippable,
+        )?;
+        Self::accumulate_one_relation_univariates_batch::<_, _, Poseidon2ExternalRelation>(
+            driver,
+            &mut univariate_accumulators.r_pos_ext,
+            relation_parameters,
+            &sum_check_data.poseidon_ext,
+        )?;
+        Self::accumulate_one_relation_univariates_batch::<_, _, Poseidon2InternalRelation>(
+            driver,
+            &mut univariate_accumulators.r_pos_int,
+            relation_parameters,
+            &sum_check_data.poseidon_int,
+        )?;
+        Ok(())
+    }
+
+    fn accumulate_one_relation_univariates_batch<
         T: NoirUltraHonkProver<P>,
         P: HonkCurve<TranscriptFieldType>,
         R: Relation<T, P>,
     >(
         driver: &mut T,
         univariate_accumulator: &mut R::Acc,
-        extended_edges: &ProverUnivariates<T, P>,
         relation_parameters: &RelationParameters<P::ScalarField>,
-        scaling_factor: &P::ScalarField,
+        sum_check_data: &SumCheckDataForRelation<T, P>,
     ) -> HonkProofResult<()> {
-        if R::SKIPPABLE && R::skip(extended_edges) {
+        if sum_check_data.can_skip {
             return Ok(());
         }
-
         R::accumulate(
             driver,
             univariate_accumulator,
-            extended_edges,
+            &sum_check_data.all_entites,
             relation_parameters,
-            scaling_factor,
+            &sum_check_data.scaling_factors,
         )
-    }
-
-    fn accumulate_relation_univariates<
-        T: NoirUltraHonkProver<P>,
-        P: HonkCurve<TranscriptFieldType>,
-    >(
-        driver: &mut T,
-        univariate_accumulators: &mut AllRelationAcc<T, P>,
-        extended_edges: &ProverUnivariates<T, P>,
-        relation_parameters: &RelationParameters<P::ScalarField>,
-        scaling_factor: &P::ScalarField,
-    ) -> HonkProofResult<()> {
-        tracing::trace!("Accumulate relations");
-        Self::accumulate_one_relation_univariates::<_, _, UltraArithmeticRelation>(
-            driver,
-            &mut univariate_accumulators.r_arith,
-            extended_edges,
-            relation_parameters,
-            scaling_factor,
-        )?;
-        Self::accumulate_one_relation_univariates::<_, _, UltraPermutationRelation>(
-            driver,
-            &mut univariate_accumulators.r_perm,
-            extended_edges,
-            relation_parameters,
-            scaling_factor,
-        )?;
-        Self::accumulate_one_relation_univariates::<_, _, DeltaRangeConstraintRelation>(
-            driver,
-            &mut univariate_accumulators.r_delta,
-            extended_edges,
-            relation_parameters,
-            scaling_factor,
-        )?;
-        Self::accumulate_one_relation_univariates::<_, _, EllipticRelation>(
-            driver,
-            &mut univariate_accumulators.r_elliptic,
-            extended_edges,
-            relation_parameters,
-            scaling_factor,
-        )?;
-        Self::accumulate_one_relation_univariates::<_, _, AuxiliaryRelation>(
-            driver,
-            &mut univariate_accumulators.r_aux,
-            extended_edges,
-            relation_parameters,
-            scaling_factor,
-        )?;
-        Self::accumulate_one_relation_univariates::<_, _, LogDerivLookupRelation>(
-            driver,
-            &mut univariate_accumulators.r_lookup,
-            extended_edges,
-            relation_parameters,
-            scaling_factor,
-        )?;
-        Self::accumulate_one_relation_univariates::<_, _, Poseidon2ExternalRelation>(
-            driver,
-            &mut univariate_accumulators.r_pos_ext,
-            extended_edges,
-            relation_parameters,
-            scaling_factor,
-        )?;
-        Self::accumulate_one_relation_univariates::<_, _, Poseidon2InternalRelation>(
-            driver,
-            &mut univariate_accumulators.r_pos_int,
-            extended_edges,
-            relation_parameters,
-            scaling_factor,
-        )?;
-        Ok(())
     }
 
     pub(crate) fn compute_univariate_inner<
@@ -240,28 +227,30 @@ impl SumcheckRound {
         // Barretenberg uses multithreading here
 
         // Construct extended edge containers
-        let mut extended_edge = ProverUnivariates::default();
+
+        // we have the round size and then reduce it by power of two steps
+        // what can we mt here?
+        // Accumulate the contribution from each sub-relation accross each edge of the hyper-cube
+        // Construct extended edge containers
+        let mut all_entites = AllEntitiesBatchRelations::new();
+        for edge_idx in (0..self.round_size).step_by(2) {
+            let mut extended_edges = ProverUnivariates::<T, P>::default();
+            Self::extend_edges(&mut extended_edges, polynomials, edge_idx);
+            let scaling_factor =
+                gate_sparators.beta_products[(edge_idx >> 1) * gate_sparators.periodicity];
+            all_entites.fold_and_filter(extended_edges, scaling_factor);
+        }
 
         let mut univariate_accumulators = AllRelationAcc::<T, P>::default();
 
-        // Accumulate the contribution from each sub-relation accross each edge of the hyper-cube
-        for edge_idx in (0..self.round_size).step_by(2) {
-            Self::extend_edges(driver, &mut extended_edge, polynomials, edge_idx);
-            // Compute the \f$ \ell \f$-th edge's univariate contribution,
-            // scale it by the corresponding \f$ pow_{\beta} \f$ contribution and add it to the accumulators for \f$
-            // \tilde{S}^i(X_i) \f$. If \f$ \ell \f$'s binary representation is given by \f$ (\ell_{i+1},\ldots,
-            // \ell_{d-1})\f$, the \f$ pow_{\beta}\f$-contribution is \f$\beta_{i+1}^{\ell_{i+1}} \cdot \ldots \cdot
-            // \beta_{d-1}^{\ell_{d-1}}\f$.
-            Self::accumulate_relation_univariates(
-                driver,
-                &mut univariate_accumulators,
-                &extended_edge,
-                relation_parameters,
-                &gate_sparators.beta_products[(edge_idx >> 1) * gate_sparators.periodicity],
-            )?;
-        }
-        let res = Self::batch_over_relations_univariates(
+        Self::accumulate_relation_univariates_batch(
             driver,
+            &mut univariate_accumulators,
+            &all_entites,
+            relation_parameters,
+        )?;
+
+        let res = Self::batch_over_relations_univariates(
             univariate_accumulators,
             &relation_parameters.alphas,
             gate_sparators,
@@ -324,10 +313,10 @@ impl SumcheckRound {
         )?;
 
         let libra_round_univariate =
-            Self::compute_libra_round_univariate(zk_sumcheck_data, round_index, driver);
+            Self::compute_libra_round_univariate(zk_sumcheck_data, round_index);
 
-        let sub = libra_round_univariate.sub(driver, &contribution_from_disabled_rows);
-        Ok(round_univariate.add(driver, &sub))
+        let sub = libra_round_univariate.sub(&contribution_from_disabled_rows);
+        Ok(round_univariate.add(&sub))
     }
 
     fn compute_libra_round_univariate<
@@ -336,7 +325,6 @@ impl SumcheckRound {
     >(
         zk_sumcheck_data: &SharedZKSumcheckData<T, P>,
         round_idx: usize,
-        driver: &mut T,
     ) -> SumcheckRoundOutput<T, P, BATCHED_RELATION_PARTIAL_LENGTH_ZK> {
         let mut libra_round_univariate =
             SharedUnivariate::<T, P, BATCHED_RELATION_PARTIAL_LENGTH_ZK>::default();
@@ -347,12 +335,11 @@ impl SumcheckRound {
         // corrected by the Libra running sum
         for idx in 0..P::LIBRA_UNIVARIATES_LENGTH {
             let eval = T::eval_poly(
-                driver,
                 &current_column.coefficients,
                 P::ScalarField::from(idx as u64),
             );
             libra_round_univariate.evaluations[idx] =
-                T::add(driver, eval, zk_sumcheck_data.libra_running_sum);
+                T::add(eval, zk_sumcheck_data.libra_running_sum);
         }
 
         if BATCHED_RELATION_PARTIAL_LENGTH_ZK == P::LIBRA_UNIVARIATES_LENGTH {
@@ -361,8 +348,7 @@ impl SumcheckRound {
             // Note: Currently not happening
             let mut libra_round_univariate_extended =
                 SharedUnivariate::<T, P, BATCHED_RELATION_PARTIAL_LENGTH_ZK>::default();
-            libra_round_univariate_extended
-                .extend_from(driver, &libra_round_univariate.evaluations);
+            libra_round_univariate_extended.extend_from(&libra_round_univariate.evaluations);
             libra_round_univariate_extended
         }
     }
@@ -379,12 +365,6 @@ impl SumcheckRound {
         round_idx: usize,
         row_disabling_polynomial: &RowDisablingPolynomial<P::ScalarField>,
     ) -> HonkProofResult<SumcheckRoundOutput<T, P, BATCHED_RELATION_PARTIAL_LENGTH_ZK>> {
-        // Barretenberg uses multithreading here
-        let mut univariate_accumulators = AllRelationAcc::<T, P>::default();
-
-        // Construct extended edge containers
-        let mut extended_edges = ProverUnivariates::<T, P>::default();
-
         // In Round 0, we have to compute the contribution from 2 edges: n - 1 = (1,1,...,1) and n-4 = (0,1,...,1).
         let start_edge_idx = if round_idx == 0 {
             round_size - 4
@@ -392,18 +372,24 @@ impl SumcheckRound {
             round_size - 2
         };
 
+        let mut all_entites = AllEntitiesBatchRelations::new();
         for edge_idx in (start_edge_idx..round_size).step_by(2) {
-            Self::extend_edges(driver, &mut extended_edges, polynomials, edge_idx);
-            Self::accumulate_relation_univariates::<T, P>(
-                driver,
-                &mut univariate_accumulators,
-                &extended_edges,
-                relation_parameters,
-                &gate_sparators.beta_products[(edge_idx >> 1) * gate_sparators.periodicity],
-            )?;
+            let mut extended_edges = ProverUnivariates::<T, P>::default();
+            Self::extend_edges(&mut extended_edges, polynomials, edge_idx);
+            let scaling_factor =
+                gate_sparators.beta_products[(edge_idx >> 1) * gate_sparators.periodicity];
+            all_entites.fold_and_filter(extended_edges, scaling_factor);
         }
-        let mut result = Self::batch_over_relations_univariates(
+
+        let mut univariate_accumulators = AllRelationAcc::<T, P>::default();
+
+        Self::accumulate_relation_univariates_batch(
             driver,
+            &mut univariate_accumulators,
+            &all_entites,
+            relation_parameters,
+        )?;
+        let mut result = Self::batch_over_relations_univariates(
             univariate_accumulators,
             &relation_parameters.alphas,
             gate_sparators,
@@ -415,7 +401,7 @@ impl SumcheckRound {
             row_disabling_polynomial.eval_at_0,
             row_disabling_polynomial.eval_at_1,
         ]);
-        result = result.mul_public(driver, &row_disabling_factor);
+        result = result.mul_public(&row_disabling_factor);
 
         Ok(result)
     }

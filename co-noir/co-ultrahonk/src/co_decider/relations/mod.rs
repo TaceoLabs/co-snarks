@@ -8,7 +8,7 @@ pub(crate) mod poseidon2_internal_relation;
 pub(crate) mod ultra_arithmetic_relation;
 
 use super::{
-    types::{ProverUnivariates, RelationParameters},
+    types::{ProverUnivariatesBatch, RelationParameters},
     univariates::SharedUnivariate,
 };
 use crate::mpc::NoirUltraHonkProver;
@@ -27,24 +27,28 @@ use poseidon2_internal_relation::{Poseidon2InternalRelation, Poseidon2InternalRe
 use ultra_arithmetic_relation::{UltraArithmeticRelation, UltraArithmeticRelationAcc};
 use ultrahonk::prelude::{TranscriptFieldType, Univariate};
 
+macro_rules! fold_accumulator {
+    ($acc: expr, $elements: expr) => {
+        let evaluations_len = $acc.evaluations.len();
+        let mut acc = [T::ArithmeticShare::default(); MAX_PARTIAL_RELATION_LENGTH];
+        for (idx, b) in $elements.iter().enumerate() {
+            let a = &mut acc[idx % MAX_PARTIAL_RELATION_LENGTH];
+            T::add_assign(a, *b);
+        }
+        $acc.evaluations.clone_from_slice(&acc[..evaluations_len]);
+    };
+}
+pub(crate) use fold_accumulator;
+
 pub(crate) trait Relation<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> {
     type Acc: Default;
-    const SKIPPABLE: bool;
-
-    fn check_skippable() {
-        if !Self::SKIPPABLE {
-            panic!("Cannot skip this relation");
-        }
-    }
-
-    fn skip(input: &ProverUnivariates<T, P>) -> bool;
 
     fn accumulate(
         driver: &mut T,
         univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariates<T, P>,
+        input: &ProverUnivariatesBatch<T, P>,
         relation_parameters: &RelationParameters<P::ScalarField>,
-        scaling_factor: &P::ScalarField,
+        scaling_factors: &[P::ScalarField],
     ) -> HonkProofResult<()>;
 }
 
@@ -93,74 +97,60 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for AllRelationAcc<T, P> {
 }
 
 impl<T: NoirUltraHonkProver<P>, P: Pairing> AllRelationAcc<T, P> {
-    pub(crate) fn scale(
-        &mut self,
-        driver: &mut T,
-        first_scalar: P::ScalarField,
-        elements: &[P::ScalarField],
-    ) {
+    pub(crate) fn scale(&mut self, first_scalar: P::ScalarField, elements: &[P::ScalarField]) {
         assert!(elements.len() == NUM_SUBRELATIONS - 1);
-        self.r_arith.scale(driver, &[first_scalar, elements[0]]);
-        self.r_perm.scale(driver, &elements[1..3]);
-        self.r_lookup.scale(driver, &elements[3..5]);
-        self.r_delta.scale(driver, &elements[5..9]);
-        self.r_elliptic.scale(driver, &elements[9..11]);
-        self.r_aux.scale(driver, &elements[11..17]);
-        self.r_pos_ext.scale(driver, &elements[17..21]);
-        self.r_pos_int.scale(driver, &elements[21..]);
+        self.r_arith.scale(&[first_scalar, elements[0]]);
+        self.r_perm.scale(&elements[1..3]);
+        self.r_lookup.scale(&elements[3..5]);
+        self.r_delta.scale(&elements[5..9]);
+        self.r_elliptic.scale(&elements[9..11]);
+        self.r_aux.scale(&elements[11..17]);
+        self.r_pos_ext.scale(&elements[17..21]);
+        self.r_pos_int.scale(&elements[21..]);
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(
         &self,
-        driver: &mut T,
         result: &mut SharedUnivariate<T, P, SIZE>,
         extended_random_poly: &Univariate<P::ScalarField, SIZE>,
         partial_evaluation_result: &P::ScalarField,
     ) {
         self.r_arith.extend_and_batch_univariates(
-            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
         );
         self.r_perm.extend_and_batch_univariates(
-            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
         );
         self.r_lookup.extend_and_batch_univariates(
-            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
         );
         self.r_delta.extend_and_batch_univariates(
-            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
         );
         self.r_elliptic.extend_and_batch_univariates(
-            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
         );
         self.r_aux.extend_and_batch_univariates(
-            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
         );
         self.r_pos_ext.extend_and_batch_univariates(
-            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
         );
         self.r_pos_int.extend_and_batch_univariates(
-            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
