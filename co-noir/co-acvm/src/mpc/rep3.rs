@@ -1,4 +1,4 @@
-use ark_ec::CurveGroup;
+use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{MontConfig, One, PrimeField, Zero};
 use co_brillig::mpc::{Rep3BrilligDriver, Rep3BrilligType};
 use itertools::{izip, Itertools};
@@ -1176,10 +1176,6 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         let scalars_hi = unsafe {
             std::mem::transmute::<&[Self::AcvmType], &[Rep3AcvmType<ark_bn254::Fr>]>(scalars_hi)
         };
-        // Safety: We checked that the types match
-        // let self_ = unsafe {
-        //     &mut *(self as *mut Rep3AcvmSolver<F, N> as *mut Rep3AcvmSolver<ark_bn254::Fr, N>)
-        // };
 
         if points.len() != 3 * scalars_lo.len() || scalars_lo.len() != scalars_hi.len() {
             return Err(std::io::Error::new(
@@ -1216,6 +1212,40 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             );
         }
 
-        todo!("Translate point back to acvm type")
+        let res = match output_point {
+            Rep3AcvmPoint::Public(output_point) => {
+                if let Some((out_x, out_y)) = ark_grumpkin::Affine::from(output_point).xy() {
+                    // Safety: We checked that the types match
+                    let out_x = unsafe { *(&out_x as *const ark_bn254::Fr as *const F) };
+                    // Safety: We checked that the types match
+                    let out_y = unsafe { *(&out_y as *const ark_bn254::Fr as *const F) };
+
+                    (out_x.into(), out_y.into(), F::zero().into())
+                } else {
+                    (F::zero().into(), F::zero().into(), F::one().into())
+                }
+            }
+            Rep3AcvmPoint::Shared(output_point) => {
+                let (x, y, i) =
+                    conversion::point_share_to_fieldshares(output_point, &mut self.io_context0)?;
+                // Safety: We checked that the types match
+                let out_x = unsafe {
+                    *(&x as *const Rep3PrimeFieldShare<ark_bn254::Fr>
+                        as *const Rep3PrimeFieldShare<F>)
+                };
+                // Safety: We checked that the types match
+                let out_y = unsafe {
+                    *(&y as *const Rep3PrimeFieldShare<ark_bn254::Fr>
+                        as *const Rep3PrimeFieldShare<F>)
+                };
+                // Safety: We checked that the types match
+                let out_i = unsafe {
+                    *(&i as *const Rep3PrimeFieldShare<ark_bn254::Fr>
+                        as *const Rep3PrimeFieldShare<F>)
+                };
+                (out_x.into(), out_y.into(), out_i.into())
+            }
+        };
+        Ok(res)
     }
 }
