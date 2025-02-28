@@ -86,12 +86,40 @@ impl<T: Default> IntoIterator for WitnessEntities<T> {
     }
 }
 
+impl<T: Default> WitnessEntities<Vec<T>> {
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            elements: std::array::from_fn(|_| Vec::with_capacity(capacity)),
+        }
+    }
+
+    pub fn add(&mut self, witness_entity: WitnessEntities<T>) {
+        for (src, dst) in witness_entity.into_iter().zip(self.iter_mut()) {
+            dst.push(src);
+        }
+    }
+}
+
 impl<T: Default> IntoIterator for ShiftedWitnessEntities<T> {
     type Item = T;
     type IntoIter = std::array::IntoIter<T, SHIFTED_WITNESS_ENTITIES_SIZE>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.elements.into_iter()
+    }
+}
+
+impl<T: Default> ShiftedWitnessEntities<Vec<T>> {
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            elements: std::array::from_fn(|_| Vec::with_capacity(capacity)),
+        }
+    }
+
+    pub fn add(&mut self, shifted_witness_entities: ShiftedWitnessEntities<T>) {
+        for (src, dst) in shifted_witness_entities.into_iter().zip(self.iter_mut()) {
+            dst.push(src);
+        }
     }
 }
 
