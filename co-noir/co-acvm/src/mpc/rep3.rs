@@ -182,6 +182,26 @@ impl<F: PrimeField, N: Rep3Network> Rep3AcvmSolver<F, N> {
         };
         Ok(result)
     }
+
+    fn add_assign_point<C: CurveGroup>(
+        mut inout: &mut Rep3AcvmPoint<C>,
+        other: Rep3AcvmPoint<C>,
+        io_context: &mut IoContext<N>,
+    ) {
+        match (&mut inout, other) {
+            (Rep3AcvmPoint::Public(inout), Rep3AcvmPoint::Public(other)) => *inout += other,
+            (Rep3AcvmPoint::Shared(inout), Rep3AcvmPoint::Shared(other)) => {
+                pointshare::add_assign(inout, &other)
+            }
+            (Rep3AcvmPoint::Public(inout_), Rep3AcvmPoint::Shared(mut other)) => {
+                pointshare::add_assign_public(&mut other, inout_, io_context.id);
+                *inout = Rep3AcvmPoint::Shared(other);
+            }
+            (Rep3AcvmPoint::Shared(inout), Rep3AcvmPoint::Public(other)) => {
+                pointshare::add_assign_public(inout, &other, io_context.id);
+            }
+        }
+    }
 }
 
 // For some intermediate representations
@@ -1146,6 +1166,8 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             ));
         }
 
+        let mut output_point = Rep3AcvmPoint::Public(ark_grumpkin::Projective::zero());
+
         // TODO parallelize all points?
         for i in (0..points.len()).step_by(3) {
             let (point, grumpkin_integer) = join!(
@@ -1165,9 +1187,13 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             );
             let iteration_output_point =
                 Self::scalar_point_mul(grumpkin_integer?, point?, &mut self.io_context0)?;
-            todo!()
+            Self::add_assign_point(
+                &mut output_point,
+                iteration_output_point,
+                &mut self.io_context0,
+            );
         }
 
-        todo!()
+        todo!("Translate point back to acvm type")
     }
 }
