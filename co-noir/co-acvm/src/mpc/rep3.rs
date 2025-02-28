@@ -158,8 +158,30 @@ impl<F: PrimeField, N: Rep3Network> Rep3AcvmSolver<F, N> {
             if is_infinity.is_one() {
                 return Ok(Rep3AcvmPoint::Public(ark_grumpkin::Projective::zero()));
             }
+            if let (Rep3AcvmType::Public(x), Rep3AcvmType::Public(y)) = (x, y) {
+                return Ok(Rep3AcvmPoint::Public(
+                    PlainAcvmSolver::<F>::create_grumpkin_point(*x, *y, false)?.into(),
+                ));
+            }
         }
-        todo!()
+
+        // At least one part is shared, convert and calculate
+        let x = match x {
+            Rep3AcvmType::Public(x) => arithmetic::promote_to_trivial_share(io_context.id, *x),
+            Rep3AcvmType::Shared(x) => *x,
+        };
+        let y = match y {
+            Rep3AcvmType::Public(y) => arithmetic::promote_to_trivial_share(io_context.id, *y),
+            Rep3AcvmType::Shared(y) => *y,
+        };
+        let is_infinity = match is_infinity {
+            Rep3AcvmType::Public(is_infinity) => {
+                arithmetic::promote_to_trivial_share(io_context.id, *is_infinity)
+            }
+            Rep3AcvmType::Shared(is_infinity) => *is_infinity,
+        };
+        let res = conversion::fieldshares_to_pointshare(x, y, is_infinity, io_context)?;
+        Ok(Rep3AcvmPoint::Shared(res))
     }
 
     fn scalar_point_mul<C: CurveGroup>(
