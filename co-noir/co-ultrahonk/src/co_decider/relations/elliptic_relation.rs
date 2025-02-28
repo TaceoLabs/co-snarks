@@ -101,6 +101,12 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let y_3 = input.shifted_witness.w_o();
         let x_3 = input.shifted_witness.w_r();
 
+        debug_assert_eq!(x_1.len(), y_1.len());
+        debug_assert_eq!(x_2.len(), y_2.len());
+        debug_assert_eq!(y_2.len(), y_3.len());
+        debug_assert_eq!(x_1.len(), x_2.len());
+        debug_assert_eq!(x_2.len(), x_3.len());
+
         let q_sign = input.precomputed.q_l();
         let q_elliptic = input.precomputed.q_elliptic();
         let q_is_double = input.precomputed.q_m();
