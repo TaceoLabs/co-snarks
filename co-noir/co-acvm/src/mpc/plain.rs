@@ -24,7 +24,7 @@ impl<F: PrimeField> PlainAcvmSolver<F> {
         }
     }
 
-    fn create_grumpkin_point(
+    pub(crate) fn create_grumpkin_point(
         x: ark_bn254::Fr,
         y: ark_bn254::Fr,
         is_infinite: bool,

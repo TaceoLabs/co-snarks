@@ -15,6 +15,7 @@ use mpc_core::{
 use num_bigint::BigUint;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::any::TypeId;
 use std::array;
 use std::marker::PhantomData;
 
@@ -61,6 +62,14 @@ impl<F: PrimeField, N: Rep3Network> Rep3AcvmSolver<F, N> {
 
     pub fn into_network(self) -> N {
         self.io_context0.network
+    }
+
+    fn create_grumpkin_point(
+        x: &Rep3AcvmType<ark_bn254::Fr>,
+        y: &Rep3AcvmType<ark_bn254::Fr>,
+        is_infinite: &Rep3AcvmType<ark_bn254::Fr>,
+    ) -> std::io::Result<ark_grumpkin::Affine> {
+        todo!()
     }
 }
 
@@ -986,8 +995,46 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         points: &[Self::AcvmType],
         scalars_lo: &[Self::AcvmType],
         scalars_hi: &[Self::AcvmType],
-        pedantic_solving: bool,
+        _pedantic_solving: bool, // Cannot check values
     ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
+        // This is very hardcoded to the grumpkin curve
+        if TypeId::of::<F>() != TypeId::of::<ark_bn254::Fr>() {
+            panic!("Only BN254 is supported");
+        }
+
+        // We transmute since we only support one curve
+
+        // Safety: We checked that the types match
+        let points = unsafe {
+            std::mem::transmute::<&[Self::AcvmType], &[Rep3AcvmType<ark_bn254::Fr>]>(points)
+        };
+        // Safety: We checked that the types match
+        let scalars_lo = unsafe {
+            std::mem::transmute::<&[Self::AcvmType], &[Rep3AcvmType<ark_bn254::Fr>]>(scalars_lo)
+        };
+        // Safety: We checked that the types match
+        let scalars_hi = unsafe {
+            std::mem::transmute::<&[Self::AcvmType], &[Rep3AcvmType<ark_bn254::Fr>]>(scalars_hi)
+        };
+        // Safety: We checked that the types match
+        let self_ = unsafe {
+            &mut *(self as *mut Rep3AcvmSolver<F, N> as *mut Rep3AcvmSolver<ark_bn254::Fr, N>)
+        };
+
+        if points.len() != 3 * scalars_lo.len() || scalars_lo.len() != scalars_hi.len() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Points and scalars must have the same length",
+            ));
+        }
+
+        let scale = ark_bn254::Fr::from(BigUint::one() << 128);
+        for i in (0..points.len()).step_by(3) {
+            // We cannot check check the scalars for being of correct size
+            let mul = self_.mul_with_public(scale, scalars_hi[i / 3].to_owned());
+            let grumpkin_integer = self_.add(mul, scalars_lo[i / 3].to_owned());
+        }
+
         todo!()
     }
 }
