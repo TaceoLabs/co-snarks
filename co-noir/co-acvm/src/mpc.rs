@@ -297,7 +297,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         poseidon2: &Poseidon2<F, T, D>,
     ) -> std::io::Result<()>;
 
-    /// Performs multi scalar multiplication of points with scalars.
+    /// Performs multi scalar multiplications.
     fn multi_scalar_mul(
         &mut self,
         points: &[Self::AcvmType],
