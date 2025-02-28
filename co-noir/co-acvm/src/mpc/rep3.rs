@@ -1228,14 +1228,20 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             Rep3AcvmPoint::Shared(output_point) => {
                 let (x, y, i) =
                     conversion::point_share_to_fieldshares(output_point, &mut self.io_context0)?;
+                // Set x,y to 0 of infinity is one.
+                // TODO is this even necesary?
+                let mul =
+                    arithmetic::sub_public_by_shared(ark_bn254::Fr::one(), i, self.io_context0.id);
+                let res = arithmetic::mul_vec(&[x, y], &[mul, mul], &mut self.io_context0)?;
+
                 // Safety: We checked that the types match
                 let out_x = unsafe {
-                    *(&x as *const Rep3PrimeFieldShare<ark_bn254::Fr>
+                    *(&res[0] as *const Rep3PrimeFieldShare<ark_bn254::Fr>
                         as *const Rep3PrimeFieldShare<F>)
                 };
                 // Safety: We checked that the types match
                 let out_y = unsafe {
-                    *(&y as *const Rep3PrimeFieldShare<ark_bn254::Fr>
+                    *(&res[1] as *const Rep3PrimeFieldShare<ark_bn254::Fr>
                         as *const Rep3PrimeFieldShare<F>)
                 };
                 // Safety: We checked that the types match
