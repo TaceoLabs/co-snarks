@@ -1,8 +1,9 @@
-use ark_ff::{One, PrimeField};
+use ark_ec::CurveGroup;
+use ark_ff::{One, PrimeField, Zero};
 use co_brillig::mpc::{Rep3BrilligDriver, Rep3BrilligType};
 use itertools::{izip, Itertools};
 use mpc_core::gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations};
-use mpc_core::protocols::rep3::{arithmetic, binary, conversion, yao};
+use mpc_core::protocols::rep3::{arithmetic, binary, conversion, yao, Rep3PointShare};
 use mpc_core::protocols::rep3_ring::gadgets::sort::{radix_sort_fields, radix_sort_fields_vec_by};
 use mpc_core::{
     lut::LookupTableProvider,
@@ -64,13 +65,56 @@ impl<F: PrimeField, N: Rep3Network> Rep3AcvmSolver<F, N> {
         self.io_context0.network
     }
 
+    fn create_grumpkin_field(
+        low: &Rep3AcvmType<ark_bn254::Fr>,
+        high: &Rep3AcvmType<ark_bn254::Fr>,
+        io_context: &mut IoContext<N>,
+        pedantic_solving: bool,
+    ) -> std::io::Result<Rep3AcvmType<ark_bn254::Fr>> {
+        let scale = ark_bn254::Fr::from(BigUint::one() << 128);
+        let res = match (low, high) {
+            (Rep3AcvmType::Public(low), Rep3AcvmType::Public(high)) => todo!(),
+            (Rep3AcvmType::Public(low), Rep3AcvmType::Shared(high)) => todo!(),
+            (Rep3AcvmType::Shared(low), Rep3AcvmType::Public(high)) => {
+                let res = arithmetic::add_public(*low, high * &scale, io_context.id);
+                // TODO check
+                Rep3AcvmType::Shared(res)
+            }
+            (Rep3AcvmType::Shared(low), Rep3AcvmType::Shared(high)) => {
+                let res = high * scale + *low;
+                Rep3AcvmType::Shared(res)
+            }
+        };
+        Ok(res)
+    }
+
     fn create_grumpkin_point(
         x: &Rep3AcvmType<ark_bn254::Fr>,
         y: &Rep3AcvmType<ark_bn254::Fr>,
-        is_infinite: &Rep3AcvmType<ark_bn254::Fr>,
-    ) -> std::io::Result<ark_grumpkin::Affine> {
+        is_infinity: &Rep3AcvmType<ark_bn254::Fr>,
+        pedantic_solving: bool,
+    ) -> std::io::Result<Rep3AcvmPoint<ark_grumpkin::Projective>> {
+        if let Rep3AcvmType::Public(is_infinity) = is_infinity {
+            if pedantic_solving && is_infinity > &ark_bn254::Fr::one() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "--pedantic-solving: is_infinity expected to be a bool, but found to be > 1",
+                ));
+            }
+
+            if is_infinity.is_one() {
+                return Ok(Rep3AcvmPoint::Public(ark_grumpkin::Projective::zero()));
+            }
+        }
         todo!()
     }
+}
+
+// For some intermediate representations
+#[derive(Clone)]
+pub enum Rep3AcvmPoint<C: CurveGroup> {
+    Public(C),
+    Shared(Rep3PointShare<C>),
 }
 
 // TODO maybe we want to merge that with the Rep3VmType?? Atm we do not need
@@ -1028,11 +1072,10 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             ));
         }
 
-        let scale = ark_bn254::Fr::from(BigUint::one() << 128);
         for i in (0..points.len()).step_by(3) {
             // We cannot check check the scalars for being of correct size
-            let mul = self_.mul_with_public(scale, scalars_hi[i / 3].to_owned());
-            let grumpkin_integer = self_.add(mul, scalars_lo[i / 3].to_owned());
+            // let mul = self_.mul_with_public(scale, scalars_hi[i / 3].to_owned());
+            // let grumpkin_integer = self_.add(mul, scalars_lo[i / 3].to_owned());
         }
 
         todo!()
