@@ -90,7 +90,7 @@ where
         let scaling_factors = vec![scaling_factor; MAX_PARTIAL_RELATION_LENGTH];
         // check if we can skip arith
         if !entity.precomputed.q_arith().is_zero() {
-            self.ultra_arith.all_entites.fold(entity.clone());
+            self.ultra_arith.all_entites.add(entity.clone());
             self.ultra_arith
                 .scaling_factors
                 .extend(scaling_factors.clone());
@@ -98,7 +98,7 @@ where
 
         // check if we can skip delta range
         if !entity.precomputed.q_delta_range().is_zero() {
-            self.delta_range.all_entites.fold(entity.clone());
+            self.delta_range.all_entites.add(entity.clone());
             self.delta_range
                 .scaling_factors
                 .extend(scaling_factors.clone());
@@ -106,7 +106,7 @@ where
 
         // check if we can skip elliptic
         if !entity.precomputed.q_elliptic().is_zero() {
-            self.elliptic.all_entites.fold(entity.clone());
+            self.elliptic.all_entites.add(entity.clone());
             self.elliptic
                 .scaling_factors
                 .extend(scaling_factors.clone());
@@ -114,7 +114,7 @@ where
 
         // check if we can skip aux
         if !entity.precomputed.q_aux().is_zero() {
-            self.auxiliary.all_entites.fold(entity.clone());
+            self.auxiliary.all_entites.add(entity.clone());
             self.auxiliary
                 .scaling_factors
                 .extend(scaling_factors.clone());
@@ -122,7 +122,7 @@ where
 
         // check if we can skip poseidon external
         if !entity.precomputed.q_poseidon2_external().is_zero() {
-            self.poseidon_ext.all_entites.fold(entity.clone());
+            self.poseidon_ext.all_entites.add(entity.clone());
             self.poseidon_ext
                 .scaling_factors
                 .extend(scaling_factors.clone());
@@ -130,7 +130,7 @@ where
 
         // check if we can skip poseidon internal
         if !entity.precomputed.q_poseidon2_internal().is_zero() {
-            self.poseidon_int.all_entites.fold(entity.clone());
+            self.poseidon_int.all_entites.add(entity.clone());
             self.poseidon_int
                 .scaling_factors
                 .extend(scaling_factors.clone());
@@ -138,7 +138,7 @@ where
 
         // NOT SKIPABLE LogDeriveLookupRelation
         // NOT SKIPPABLE UltraPermutationRelation
-        self.not_skippable.all_entites.fold(entity);
+        self.not_skippable.all_entites.add(entity);
         self.not_skippable.scaling_factors.extend(scaling_factors);
     }
 }
@@ -161,7 +161,7 @@ where
         }
     }
 
-    pub fn fold(&mut self, entity: AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add(&mut self, entity: AllEntities<Shared<T, P>, Public<P>>) {
         for (src, des) in izip!(entity.witness.into_iter(), self.witness.iter_mut()) {
             des.extend(src.evaluations);
         }
