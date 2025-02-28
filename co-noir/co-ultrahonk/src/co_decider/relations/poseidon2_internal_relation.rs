@@ -1,13 +1,12 @@
-use super::Relation;
+use super::{fold_accumulator, Relation};
 use crate::{
     co_decider::{
-        types::{ProverUnivariates, RelationParameters, MAX_PARTIAL_RELATION_LENGTH},
+        types::{RelationParameters, MAX_PARTIAL_RELATION_LENGTH},
         univariates::SharedUnivariate,
     },
     mpc::NoirUltraHonkProver,
 };
 use ark_ec::pairing::Pairing;
-use ark_ff::Zero;
 use co_builder::prelude::HonkCurve;
 use co_builder::HonkProofResult;
 use itertools::Itertools as _;
@@ -90,12 +89,6 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
     for Poseidon2InternalRelation
 {
     type Acc = Poseidon2InternalRelationAcc<T, P>;
-    const SKIPPABLE: bool = true;
-
-    fn skip(input: &ProverUnivariates<T, P>) -> bool {
-        <Self as Relation<T, P>>::check_skippable();
-        input.precomputed.q_poseidon2_internal().is_zero()
-    }
 
     /**
      * @brief Expression for the poseidon2 internal round relation, based on I_i in Section 6 of
@@ -119,103 +112,8 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
     fn accumulate(
         driver: &mut T,
         univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariates<T, P>,
-        _relation_parameters: &RelationParameters<P::ScalarField>,
-        scaling_factor: &P::ScalarField,
-    ) -> HonkProofResult<()> {
-        tracing::trace!("Accumulate Poseidon2InternalRelation");
-
-        let w_l = input.witness.w_l();
-        let w_r = input.witness.w_r();
-        let w_o = input.witness.w_o();
-        let w_4 = input.witness.w_4();
-        let w_l_shift = input.shifted_witness.w_l();
-        let w_r_shift = input.shifted_witness.w_r();
-        let w_o_shift = input.shifted_witness.w_o();
-        let w_4_shift = input.shifted_witness.w_4();
-        let q_l = input.precomputed.q_l();
-        let q_poseidon2_internal = input.precomputed.q_poseidon2_internal();
-
-        // add round constants
-        let s1 = w_l.add_public(q_l, driver.get_party_id());
-
-        // apply s-box round
-        let u1 = driver.mul_many(s1.as_ref(), s1.as_ref())?;
-        let u1 = driver.mul_many(u1.as_ref(), u1.as_ref())?;
-        let u1 = driver.mul_many(u1.as_ref(), s1.as_ref())?;
-        let mut u2 = w_r.to_owned();
-        let mut u3 = w_o.to_owned();
-        let mut u4 = w_4.to_owned();
-        let mut u1 = SharedUnivariate::from_vec(&u1);
-
-        // matrix mul with v = M_I * u 4 muls and 7 additions
-        let sum = u1.add(&u2).add(&u3).add(&u4);
-
-        let q_pos_by_scaling = q_poseidon2_internal.to_owned() * scaling_factor;
-
-        // TACEO TODO this poseidon instance is very hardcoded to the bn254 curve
-        let internal_matrix_diag_0 = P::ScalarField::from(BigUint::from(
-            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[0],
-        ));
-        let internal_matrix_diag_1 = P::ScalarField::from(BigUint::from(
-            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[1],
-        ));
-        let internal_matrix_diag_2 = P::ScalarField::from(BigUint::from(
-            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[2],
-        ));
-        let internal_matrix_diag_3 = P::ScalarField::from(BigUint::from(
-            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[3],
-        ));
-
-        u1.scale_inplace(internal_matrix_diag_0);
-        let v1 = u1.add(&sum);
-        let tmp = v1.sub(w_l_shift).mul_public(&q_pos_by_scaling);
-
-        for i in 0..univariate_accumulator.r0.evaluations.len() {
-            univariate_accumulator.r0.evaluations[i] =
-                T::add(univariate_accumulator.r0.evaluations[i], tmp.evaluations[i]);
-        }
-
-        ///////////////////////////////////////////////////////////////////////
-
-        u2.scale_inplace(internal_matrix_diag_1);
-        let v2 = u2.add(&sum);
-        let tmp = v2.sub(w_r_shift).mul_public(&q_pos_by_scaling);
-
-        for i in 0..univariate_accumulator.r1.evaluations.len() {
-            univariate_accumulator.r1.evaluations[i] =
-                T::add(univariate_accumulator.r1.evaluations[i], tmp.evaluations[i]);
-        }
-
-        ///////////////////////////////////////////////////////////////////////
-
-        u3.scale_inplace(internal_matrix_diag_2);
-        let v3 = u3.add(&sum);
-        let tmp = v3.sub(w_o_shift).mul_public(&q_pos_by_scaling);
-
-        for i in 0..univariate_accumulator.r2.evaluations.len() {
-            univariate_accumulator.r2.evaluations[i] =
-                T::add(univariate_accumulator.r2.evaluations[i], tmp.evaluations[i]);
-        }
-
-        ///////////////////////////////////////////////////////////////////////
-        u4.scale_inplace(internal_matrix_diag_3);
-        let v4 = u4.add(&sum);
-        let tmp = v4.sub(w_4_shift).mul_public(&q_pos_by_scaling);
-
-        for i in 0..univariate_accumulator.r3.evaluations.len() {
-            univariate_accumulator.r3.evaluations[i] =
-                T::add(univariate_accumulator.r3.evaluations[i], tmp.evaluations[i]);
-        }
-
-        Ok(())
-    }
-
-    fn accumulate_batch(
-        driver: &mut T,
-        univariate_accumulator: &mut Self::Acc,
         input: &super::ProverUnivariatesBatch<T, P>,
-        relation_parameters: &RelationParameters<<P>::ScalarField>,
+        _relation_parameters: &RelationParameters<<P>::ScalarField>,
         scaling_factors: &[<P>::ScalarField],
     ) -> HonkProofResult<()> {
         let w_l = input.witness.w_l();
@@ -242,6 +140,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let mut u3 = w_o.to_owned();
         let mut u4 = w_4.to_owned();
 
+        // matrix mul with v = M_I * u 4 muls and 7 additions
         let mut sum = T::add_many(&u1, &u2);
         T::add_assign_many(&mut sum, &u3);
         T::add_assign_many(&mut sum, &u4);
@@ -271,16 +170,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         T::sub_assign_many(&mut u1, w_l_shift);
         T::mul_assign_with_public_many(&mut u1, &q_pos_by_scaling);
 
-        let evaluations_len = univariate_accumulator.r0.evaluations.len();
-        let mut acc = [T::ArithmeticShare::default(); MAX_PARTIAL_RELATION_LENGTH];
-        for (idx, b) in u1.iter().enumerate() {
-            let a = &mut acc[idx % MAX_PARTIAL_RELATION_LENGTH];
-            T::add_assign(a, *b);
-        }
-        univariate_accumulator
-            .r0
-            .evaluations
-            .clone_from_slice(&acc[..evaluations_len]);
+        fold_accumulator!(univariate_accumulator.r0, u1);
 
         ///////////////////////////////////////////////////////////////////////
         T::scale_many_in_place(&mut u2, internal_matrix_diag_1);
@@ -288,16 +178,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         T::sub_assign_many(&mut u2, w_r_shift);
         T::mul_assign_with_public_many(&mut u2, &q_pos_by_scaling);
 
-        let evaluations_len = univariate_accumulator.r1.evaluations.len();
-        let mut acc = [T::ArithmeticShare::default(); MAX_PARTIAL_RELATION_LENGTH];
-        for (idx, b) in u2.iter().enumerate() {
-            let a = &mut acc[idx % MAX_PARTIAL_RELATION_LENGTH];
-            T::add_assign(a, *b);
-        }
-        univariate_accumulator
-            .r1
-            .evaluations
-            .clone_from_slice(&acc[..evaluations_len]);
+        fold_accumulator!(univariate_accumulator.r1, u2);
 
         ///////////////////////////////////////////////////////////////////////
 
@@ -306,16 +187,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         T::sub_assign_many(&mut u3, w_o_shift);
         T::mul_assign_with_public_many(&mut u3, &q_pos_by_scaling);
 
-        let evaluations_len = univariate_accumulator.r2.evaluations.len();
-        let mut acc = [T::ArithmeticShare::default(); MAX_PARTIAL_RELATION_LENGTH];
-        for (idx, b) in u3.iter().enumerate() {
-            let a = &mut acc[idx % MAX_PARTIAL_RELATION_LENGTH];
-            T::add_assign(a, *b);
-        }
-        univariate_accumulator
-            .r2
-            .evaluations
-            .clone_from_slice(&acc[..evaluations_len]);
+        fold_accumulator!(univariate_accumulator.r2, u3);
 
         ///////////////////////////////////////////////////////////////////////
 
@@ -324,16 +196,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         T::sub_assign_many(&mut u4, w_4_shift);
         T::mul_assign_with_public_many(&mut u4, &q_pos_by_scaling);
 
-        let evaluations_len = univariate_accumulator.r3.evaluations.len();
-        let mut acc = [T::ArithmeticShare::default(); MAX_PARTIAL_RELATION_LENGTH];
-        for (idx, b) in u4.iter().enumerate() {
-            let a = &mut acc[idx % MAX_PARTIAL_RELATION_LENGTH];
-            T::add_assign(a, *b);
-        }
-        univariate_accumulator
-            .r3
-            .evaluations
-            .clone_from_slice(&acc[..evaluations_len]);
+        fold_accumulator!(univariate_accumulator.r3, u4);
 
         ///////////////////////////////////////////////////////////////////////
         Ok(())

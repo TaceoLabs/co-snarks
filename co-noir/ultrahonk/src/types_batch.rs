@@ -106,10 +106,6 @@ impl<T: Default> WitnessEntitiesBatch<T> {
         self.elements.iter_mut()
     }
 
-    pub(crate) fn to_be_shifted(&self) -> &[Vec<T>] {
-        &self.elements[Self::W_L..=Self::Z_PERM]
-    }
-
     pub fn to_be_shifted_mut(&mut self) -> &mut [Vec<T>] {
         &mut self.elements[Self::W_L..=Self::Z_PERM]
     }
@@ -144,26 +140,6 @@ impl<T: Default> WitnessEntitiesBatch<T> {
 
     pub fn lookup_read_tags(&self) -> &[T] {
         &self.elements[Self::LOOKUP_READ_TAGS]
-    }
-
-    pub(crate) fn w_l_mut(&mut self) -> &mut [T] {
-        &mut self.elements[Self::W_L]
-    }
-
-    pub(crate) fn w_r_mut(&mut self) -> &mut [T] {
-        &mut self.elements[Self::W_R]
-    }
-
-    pub(crate) fn w_o_mut(&mut self) -> &mut [T] {
-        &mut self.elements[Self::W_O]
-    }
-
-    pub(crate) fn w_4_mut(&mut self) -> &mut [T] {
-        &mut self.elements[Self::W_4]
-    }
-
-    pub(crate) fn z_perm_mut(&mut self) -> &mut [T] {
-        &mut self.elements[Self::Z_PERM]
     }
 
     pub fn lookup_inverses_mut(&mut self) -> &mut [T] {

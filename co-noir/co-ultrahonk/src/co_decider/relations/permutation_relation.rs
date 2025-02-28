@@ -1,7 +1,8 @@
 use super::{ProverUnivariatesBatch, Relation};
 use crate::{
     co_decider::{
-        types::{ProverUnivariates, RelationParameters, MAX_PARTIAL_RELATION_LENGTH},
+        relations::fold_accumulator,
+        types::{RelationParameters, MAX_PARTIAL_RELATION_LENGTH},
         univariates::SharedUnivariate,
     },
     mpc::NoirUltraHonkProver,
@@ -9,7 +10,6 @@ use crate::{
 use ark_ec::pairing::Pairing;
 use co_builder::prelude::HonkCurve;
 use co_builder::HonkProofResult;
-use itertools::Itertools as _;
 use ultrahonk::prelude::{TranscriptFieldType, Univariate};
 
 #[derive(Clone, Debug)]
@@ -64,54 +64,6 @@ impl UltraPermutationRelation {
 }
 
 impl UltraPermutationRelation {
-    fn compute_grand_product_numerator_and_denominator<T: NoirUltraHonkProver<P>, P: Pairing>(
-        driver: &mut T,
-        input: &ProverUnivariates<T, P>,
-        relation_parameters: &RelationParameters<P::ScalarField>,
-    ) -> HonkProofResult<Vec<T::ArithmeticShare>> {
-        let w_1 = input.witness.w_l();
-        let w_2 = input.witness.w_r();
-        let w_3 = input.witness.w_o();
-        let w_4 = input.witness.w_4();
-        let id_1 = input.precomputed.id_1();
-        let id_2 = input.precomputed.id_2();
-        let id_3 = input.precomputed.id_3();
-        let id_4 = input.precomputed.id_4();
-        let sigma_1 = input.precomputed.sigma_1();
-        let sigma_2 = input.precomputed.sigma_2();
-        let sigma_3 = input.precomputed.sigma_3();
-        let sigma_4 = input.precomputed.sigma_4();
-
-        let beta = &relation_parameters.beta;
-        let gamma = &relation_parameters.gamma;
-
-        let party_id = driver.get_party_id();
-        // witness degree 4; full degree 8
-        let wid1 = w_1.add_public(&(id_1.to_owned() * beta + gamma), party_id);
-        let wid2 = w_2.add_public(&(id_2.to_owned() * beta + gamma), party_id);
-        let wid3 = w_3.add_public(&(id_3.to_owned() * beta + gamma), party_id);
-        let wid4 = w_4.add_public(&(id_4.to_owned() * beta + gamma), party_id);
-
-        let wsigma1 = w_1.add_public(&(sigma_1.to_owned() * beta + gamma), party_id);
-        let wsigma2 = w_2.add_public(&(sigma_2.to_owned() * beta + gamma), party_id);
-        let wsigma3 = w_3.add_public(&(sigma_3.to_owned() * beta + gamma), party_id);
-        let wsigma4 = w_4.add_public(&(sigma_4.to_owned() * beta + gamma), party_id);
-
-        let lhs = SharedUnivariate::univariates_to_vec(&[wid1, wsigma1, wid3, wsigma3]);
-        let rhs = SharedUnivariate::univariates_to_vec(&[wid2, wsigma2, wid4, wsigma4]);
-
-        let mul1 = driver.mul_many(&lhs, &rhs)?;
-
-        let (lhs, rhs) = mul1.split_at(mul1.len() >> 1);
-        let mul2 = driver.mul_many(lhs, rhs)?;
-        // We need the result as input to the mul operations
-        // let (num, den) = mul2.split_at(mul2.len() >> 1);
-        // let num = SharedUnivariate::from_vec(num);
-        // let den = SharedUnivariate::from_vec(den);
-        // Ok((num, den))
-        Ok(mul2)
-    }
-
     fn compute_grand_product_numerator_and_denominator_batch<
         T: NoirUltraHonkProver<P>,
         P: Pairing,
@@ -201,13 +153,6 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
     for UltraPermutationRelation
 {
     type Acc = UltraPermutationRelationAcc<T, P>;
-    const SKIPPABLE: bool = false;
-
-    fn skip(_input: &ProverUnivariates<T, P>) -> bool {
-        <Self as Relation<T, P>>::check_skippable();
-        // Cannot skip because z_perm and z_perm_shift are secret-shared
-        false
-    }
 
     /**
     * @brief Compute contribution of the permutation relation for a given edge (internal function)
@@ -228,101 +173,9 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
     fn accumulate(
         driver: &mut T,
         univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariates<T, P>,
-        relation_parameters: &RelationParameters<P::ScalarField>,
-        scaling_factor: &P::ScalarField,
-    ) -> HonkProofResult<()> {
-        tracing::trace!("Accumulate UltraPermutationRelation");
-
-        let w_1 = input.witness.w_l();
-        let w_2 = input.witness.w_r();
-        let w_3 = input.witness.w_o();
-        let w_4 = input.witness.w_4();
-        let id_1 = input.precomputed.id_1();
-        let id_2 = input.precomputed.id_2();
-        let id_3 = input.precomputed.id_3();
-        let id_4 = input.precomputed.id_4();
-        let sigma_1 = input.precomputed.sigma_1();
-        let sigma_2 = input.precomputed.sigma_2();
-        let sigma_3 = input.precomputed.sigma_3();
-        let sigma_4 = input.precomputed.sigma_4();
-
-        let beta = &relation_parameters.beta;
-        let gamma = &relation_parameters.gamma;
-
-        let public_input_delta = &relation_parameters.public_input_delta;
-        let z_perm = input.witness.z_perm();
-        let z_perm_shift = input.shifted_witness.z_perm();
-        let lagrange_first = input.precomputed.lagrange_first();
-        let lagrange_last = input.precomputed.lagrange_last();
-
-        let party_id = driver.get_party_id();
-
-        let w_1_plus_gamma = w_1.add_scalar(*gamma, party_id);
-        let w_2_plus_gamma = w_2.add_scalar(*gamma, party_id);
-        let w_3_plus_gamma = w_3.add_scalar(*gamma, party_id);
-        let w_4_plus_gamma = w_4.add_scalar(*gamma, party_id);
-
-        let mut t1 = w_1_plus_gamma.add_public(&(id_1.to_owned() * beta), party_id);
-        t1.scale_inplace(*scaling_factor);
-        let t2 = w_2_plus_gamma.add_public(&(id_2.to_owned() * beta), party_id);
-        let t3 = w_3_plus_gamma.add_public(&(id_3.to_owned() * beta), party_id);
-        let t4 = w_4_plus_gamma.add_public(&(id_4.to_owned() * beta), party_id);
-
-        let mut t5 = w_1_plus_gamma.add_public(&(sigma_1.to_owned() * beta), party_id);
-        t5.scale_inplace(*scaling_factor);
-        let t6 = w_2_plus_gamma.add_public(&(sigma_2.to_owned() * beta), party_id);
-        let t7 = w_3_plus_gamma.add_public(&(sigma_3.to_owned() * beta), party_id);
-        let t8 = w_4_plus_gamma.add_public(&(sigma_4.to_owned() * beta), party_id);
-
-        let lhs = SharedUnivariate::univariates_to_vec(&[t1, t5, t3, t7]);
-        let rhs = SharedUnivariate::univariates_to_vec(&[t2, t6, t4, t8]);
-        let mul = driver.mul_many(&lhs, &rhs)?;
-        let (lhs, rhs) = mul.split_at(mul.len() >> 1);
-        let num_den = driver.mul_many(lhs, rhs)?;
-
-        let public_input_term =
-            z_perm_shift.add_public(&(lagrange_last.to_owned() * public_input_delta), party_id);
-
-        // witness degree: deg 5 - deg 5 = deg 5
-        // total degree: deg 9 - deg 10 = deg 10
-
-        let tmp_lhs = z_perm.add_public(lagrange_first, party_id);
-        let lhs = num_den;
-        let rhs = SharedUnivariate::univariates_to_vec(&[tmp_lhs, public_input_term]);
-
-        let mul = driver.mul_many(&lhs, &rhs)?;
-        let (lhs, rhs) = mul.split_at(mul.len() >> 1);
-        let lhs = SharedUnivariate::<T, P, MAX_PARTIAL_RELATION_LENGTH>::from_vec(lhs);
-        let rhs = SharedUnivariate::<T, P, MAX_PARTIAL_RELATION_LENGTH>::from_vec(rhs);
-
-        let tmp = lhs.sub(&rhs);
-
-        for i in 0..univariate_accumulator.r0.evaluations.len() {
-            univariate_accumulator.r0.evaluations[i] =
-                T::add(univariate_accumulator.r0.evaluations[i], tmp.evaluations[i]);
-        }
-
-        ///////////////////////////////////////////////////////////////////////
-
-        let tmp = z_perm_shift
-            .mul_public(lagrange_last)
-            .scale(*scaling_factor);
-
-        for i in 0..univariate_accumulator.r1.evaluations.len() {
-            univariate_accumulator.r1.evaluations[i] =
-                T::add(univariate_accumulator.r1.evaluations[i], tmp.evaluations[i]);
-        }
-
-        Ok(())
-    }
-
-    fn accumulate_batch(
-        driver: &mut T,
-        univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesBatch<T, P>,
-        relation_parameters: &RelationParameters<<P>::ScalarField>,
-        scaling_factors: &[<P>::ScalarField],
+        relation_parameters: &RelationParameters<P::ScalarField>,
+        scaling_factors: &[P::ScalarField],
     ) -> HonkProofResult<()> {
         let public_input_delta = &relation_parameters.public_input_delta;
         let z_perm = input.witness.z_perm();
@@ -354,30 +207,13 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         T::sub_assign_many(&mut tmp, rhs);
         T::mul_assign_with_public_many(&mut tmp, scaling_factors);
 
-        let evaluations_len = univariate_accumulator.r0.evaluations.len();
-        let mut acc = [T::ArithmeticShare::default(); MAX_PARTIAL_RELATION_LENGTH];
-        for (idx, b) in tmp.iter().enumerate() {
-            let a = &mut acc[idx % MAX_PARTIAL_RELATION_LENGTH];
-            T::add_assign(a, *b);
-        }
-        univariate_accumulator
-            .r0
-            .evaluations
-            .clone_from_slice(&acc[..evaluations_len]);
+        fold_accumulator!(univariate_accumulator.r0, tmp);
 
         let mut tmp = T::mul_with_public_many(lagrange_last, z_perm_shift);
         T::mul_assign_with_public_many(&mut tmp, scaling_factors);
 
-        let evaluations_len = univariate_accumulator.r1.evaluations.len();
-        let mut acc = [T::ArithmeticShare::default(); MAX_PARTIAL_RELATION_LENGTH];
-        for (idx, b) in tmp.iter().enumerate() {
-            let a = &mut acc[idx % MAX_PARTIAL_RELATION_LENGTH];
-            T::add_assign(a, *b);
-        }
-        univariate_accumulator
-            .r1
-            .evaluations
-            .clone_from_slice(&acc[..evaluations_len]);
+        fold_accumulator!(univariate_accumulator.r1, tmp);
+
         Ok(())
     }
 }

@@ -56,10 +56,9 @@ where
     T: NoirUltraHonkProver<P>,
     P: Pairing,
 {
-    // FRANCO TODO nicer new
     fn new() -> Self {
         Self {
-            all_entites: AllEntitiesBatch::reserve_round_size(4),
+            all_entites: AllEntitiesBatch::new(),
             scaling_factors: vec![],
         }
     }
@@ -87,6 +86,14 @@ where
         entity: AllEntities<Shared<T, P>, Public<P>>,
         scaling_factor: P::ScalarField,
     ) {
+        // FRANCO TODO - for all (?) accumulator we don't need all 7 elements. Can we remove
+        // somehow skip those to decrease work even further?
+        // e.g. UltraArith only has
+        //
+        // pub(crate) r0: SharedUnivariate<T, P, 6>,
+        // pub(crate) r1: SharedUnivariate<T, P, 5>,
+        //
+        // Can we somehow only add 5/6 elements?
         let scaling_factors = vec![scaling_factor; MAX_PARTIAL_RELATION_LENGTH];
         // check if we can skip arith
         if !entity.precomputed.q_arith().is_zero() {
@@ -148,12 +155,14 @@ where
     P: Pairing,
     T: NoirUltraHonkProver<P>,
 {
-    pub fn reserve_round_size(round_size: usize) -> Self {
-        let round_size = round_size / 2;
-        let witness = WitnessEntitiesBatch::<T::ArithmeticShare>::with_capacity(round_size);
-        let precomputed = PrecomputedEntitiesBatch::<P::ScalarField>::with_capacity(round_size);
+    pub fn new() -> Self {
+        // rather arbitary size of 1024 capacity - we dont want to reserver full round size
+        // as this would hit the RAM quite hard, but 1024 should always be fine and smaller
+        // circuits won't need to move the vecs in memory around
+        let witness = WitnessEntitiesBatch::<T::ArithmeticShare>::with_capacity(1024);
+        let precomputed = PrecomputedEntitiesBatch::<P::ScalarField>::with_capacity(1024);
         let shifted_witness =
-            ShiftedWitnessEntitiesBatch::<T::ArithmeticShare>::with_capacity(round_size);
+            ShiftedWitnessEntitiesBatch::<T::ArithmeticShare>::with_capacity(1024);
         Self {
             witness,
             precomputed,

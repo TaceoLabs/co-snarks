@@ -1,13 +1,13 @@
-use super::Relation;
+use super::{fold_accumulator, Relation};
 use crate::{
     co_decider::{
-        types::{ProverUnivariates, RelationParameters, MAX_PARTIAL_RELATION_LENGTH},
+        types::{RelationParameters, MAX_PARTIAL_RELATION_LENGTH},
         univariates::SharedUnivariate,
     },
     mpc::NoirUltraHonkProver,
 };
 use ark_ec::pairing::Pairing;
-use ark_ff::{One, Zero};
+use ark_ff::One;
 use co_builder::prelude::HonkCurve;
 use co_builder::HonkProofResult;
 use itertools::Itertools as _;
@@ -88,12 +88,6 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
     for DeltaRangeConstraintRelation
 {
     type Acc = DeltaRangeConstraintRelationAcc<T, P>;
-    const SKIPPABLE: bool = true;
-
-    fn skip(input: &ProverUnivariates<T, P>) -> bool {
-        <Self as Relation<T, P>>::check_skippable();
-        input.precomputed.q_delta_range().is_zero()
-    }
 
     /**
      * @brief Expression for the generalized permutation sort gate.
@@ -111,97 +105,6 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
      * @param scaling_factor optional term to scale the evaluation before adding to evals.
      */
     fn accumulate(
-        driver: &mut T,
-        univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariates<T, P>,
-        _relation_parameters: &RelationParameters<P::ScalarField>,
-        scaling_factor: &P::ScalarField,
-    ) -> HonkProofResult<()> {
-        tracing::trace!("Accumulate DeltaRangeConstraintRelation");
-        let party_id = driver.get_party_id();
-
-        let w_1 = input.witness.w_l();
-        let w_2 = input.witness.w_r();
-        let w_3 = input.witness.w_o();
-        let w_4 = input.witness.w_4();
-        let w_1_shift = input.shifted_witness.w_l();
-        let q_delta_range = input.precomputed.q_delta_range();
-        let minus_one = -P::ScalarField::one();
-        let minus_two = -P::ScalarField::from(2u64);
-
-        // Compute wire differences
-        let delta_1 = w_2.sub(w_1);
-        let delta_2 = w_3.sub(w_2);
-        let delta_3 = w_4.sub(w_3);
-        let delta_4 = w_1_shift.sub(w_4);
-
-        let tmp_1 = delta_1.add_scalar(minus_one, party_id);
-        let tmp_2 = delta_2.add_scalar(minus_one, party_id);
-        let tmp_3 = delta_3.add_scalar(minus_one, party_id);
-        let tmp_4 = delta_4.add_scalar(minus_one, party_id);
-        let tmp_1_2 = delta_1.add_scalar(minus_two, party_id);
-        let tmp_2_2 = delta_2.add_scalar(minus_two, party_id);
-        let tmp_3_2 = delta_3.add_scalar(minus_two, party_id);
-        let tmp_4_2 = delta_4.add_scalar(minus_two, party_id);
-
-        let lhs = SharedUnivariate::univariates_to_vec(&[
-            tmp_1, tmp_2, tmp_3, tmp_4, tmp_1_2, tmp_2_2, tmp_3_2, tmp_4_2,
-        ]);
-        let mut sqr = driver.mul_many(&lhs, &lhs)?;
-
-        for el in sqr.iter_mut() {
-            *el = T::add_with_public(minus_one, *el, party_id);
-        }
-
-        let (lhs, rhs) = sqr.split_at(sqr.len() >> 1);
-        let mul = driver.mul_many(lhs, rhs)?;
-
-        let mul = SharedUnivariate::<T, P, MAX_PARTIAL_RELATION_LENGTH>::vec_to_univariates(&mul);
-
-        // Contribution (1)
-
-        let mut tmp = mul[0].mul_public(q_delta_range);
-        tmp.scale_inplace(*scaling_factor);
-
-        for i in 0..univariate_accumulator.r0.evaluations.len() {
-            univariate_accumulator.r0.evaluations[i] =
-                T::add(univariate_accumulator.r0.evaluations[i], tmp.evaluations[i]);
-        }
-
-        ///////////////////////////////////////////////////////////////////////
-        // Contribution (2)
-        let mut tmp = mul[1].mul_public(q_delta_range);
-        tmp.scale_inplace(*scaling_factor);
-
-        for i in 0..univariate_accumulator.r1.evaluations.len() {
-            univariate_accumulator.r1.evaluations[i] =
-                T::add(univariate_accumulator.r1.evaluations[i], tmp.evaluations[i]);
-        }
-
-        ///////////////////////////////////////////////////////////////////////
-        // Contribution (3)
-        let mut tmp = mul[2].mul_public(q_delta_range);
-        tmp.scale_inplace(*scaling_factor);
-
-        for i in 0..univariate_accumulator.r2.evaluations.len() {
-            univariate_accumulator.r2.evaluations[i] =
-                T::add(univariate_accumulator.r2.evaluations[i], tmp.evaluations[i]);
-        }
-
-        ///////////////////////////////////////////////////////////////////////
-        // Contribution (4)
-        let mut tmp = mul[3].mul_public(q_delta_range);
-        tmp.scale_inplace(*scaling_factor);
-
-        for i in 0..univariate_accumulator.r3.evaluations.len() {
-            univariate_accumulator.r3.evaluations[i] =
-                T::add(univariate_accumulator.r3.evaluations[i], tmp.evaluations[i]);
-        }
-
-        Ok(())
-    }
-
-    fn accumulate_batch(
         driver: &mut T,
         univariate_accumulator: &mut Self::Acc,
         input: &super::ProverUnivariatesBatch<T, P>,
@@ -285,49 +188,10 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let (contribution0, contribution1) = lhs.split_at(lhs.len() >> 1);
         let (contribution2, contribution3) = rhs.split_at(rhs.len() >> 1);
 
-        let evaluations_len = univariate_accumulator.r0.evaluations.len();
-        let mut acc = [T::ArithmeticShare::default(); MAX_PARTIAL_RELATION_LENGTH];
-        for (idx, b) in contribution0.iter().enumerate() {
-            let a = &mut acc[idx % MAX_PARTIAL_RELATION_LENGTH];
-            T::add_assign(a, *b);
-        }
-        univariate_accumulator
-            .r0
-            .evaluations
-            .clone_from_slice(&acc[..evaluations_len]);
-
-        let evaluations_len = univariate_accumulator.r1.evaluations.len();
-        let mut acc = [T::ArithmeticShare::default(); MAX_PARTIAL_RELATION_LENGTH];
-        for (idx, b) in contribution1.iter().enumerate() {
-            let a = &mut acc[idx % MAX_PARTIAL_RELATION_LENGTH];
-            T::add_assign(a, *b);
-        }
-        univariate_accumulator
-            .r1
-            .evaluations
-            .clone_from_slice(&acc[..evaluations_len]);
-
-        let evaluations_len = univariate_accumulator.r2.evaluations.len();
-        let mut acc = [T::ArithmeticShare::default(); MAX_PARTIAL_RELATION_LENGTH];
-        for (idx, b) in contribution2.iter().enumerate() {
-            let a = &mut acc[idx % MAX_PARTIAL_RELATION_LENGTH];
-            T::add_assign(a, *b);
-        }
-        univariate_accumulator
-            .r2
-            .evaluations
-            .clone_from_slice(&acc[..evaluations_len]);
-
-        let evaluations_len = univariate_accumulator.r3.evaluations.len();
-        let mut acc = [T::ArithmeticShare::default(); MAX_PARTIAL_RELATION_LENGTH];
-        for (idx, b) in contribution3.iter().enumerate() {
-            let a = &mut acc[idx % MAX_PARTIAL_RELATION_LENGTH];
-            T::add_assign(a, *b);
-        }
-        univariate_accumulator
-            .r3
-            .evaluations
-            .clone_from_slice(&acc[..evaluations_len]);
+        fold_accumulator!(univariate_accumulator.r0, contribution0);
+        fold_accumulator!(univariate_accumulator.r1, contribution1);
+        fold_accumulator!(univariate_accumulator.r2, contribution2);
+        fold_accumulator!(univariate_accumulator.r3, contribution3);
 
         Ok(())
     }

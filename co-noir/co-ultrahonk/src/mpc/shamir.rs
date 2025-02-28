@@ -40,10 +40,6 @@ impl<P: Pairing, N: ShamirNetwork> NoirUltraHonkProver<P>
     type PointShare = ShamirPointShare<P::G1>;
     type PartyID = usize;
 
-    fn debug(x: Self::ArithmeticShare) -> String {
-        todo!()
-    }
-
     fn rand(&mut self) -> std::io::Result<Self::ArithmeticShare> {
         self.protocol0.rand()
     }
@@ -87,10 +83,7 @@ impl<P: Pairing, N: ShamirNetwork> NoirUltraHonkProver<P>
         arithmetic::mul_public(shared, public)
     }
 
-    fn mul_assign_with_public(
-        public: <P as Pairing>::ScalarField,
-        shared: &mut Self::ArithmeticShare,
-    ) {
+    fn mul_assign_with_public(shared: &mut Self::ArithmeticShare, public: P::ScalarField) {
         arithmetic::mul_assign_public(shared, public)
     }
 
