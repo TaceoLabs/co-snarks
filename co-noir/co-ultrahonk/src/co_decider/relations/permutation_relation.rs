@@ -138,29 +138,50 @@ impl UltraPermutationRelation {
 
         let party_id = driver.get_party_id();
         // witness degree 4; full degree 8
-        // FRANCO TODO it is not necessary to collect here
-        let id_1 = id_1.iter().map(|x| *x * beta + gamma).collect_vec();
-        let id_2 = id_2.iter().map(|x| *x * beta + gamma).collect_vec();
-        let id_3 = id_3.iter().map(|x| *x * beta + gamma).collect_vec();
-        let id_4 = id_4.iter().map(|x| *x * beta + gamma).collect_vec();
+        let id_1 = id_1.iter().map(|x| *x * beta + gamma);
+        let id_2 = id_2.iter().map(|x| *x * beta + gamma);
+        let id_3 = id_3.iter().map(|x| *x * beta + gamma);
+        let id_4 = id_4.iter().map(|x| *x * beta + gamma);
 
-        let sigma_1 = sigma_1.iter().map(|x| *x * beta + gamma).collect_vec();
-        let sigma_2 = sigma_2.iter().map(|x| *x * beta + gamma).collect_vec();
-        let sigma_3 = sigma_3.iter().map(|x| *x * beta + gamma).collect_vec();
-        let sigma_4 = sigma_4.iter().map(|x| *x * beta + gamma).collect_vec();
+        let sigma_1 = sigma_1.iter().map(|x| *x * beta + gamma);
+        let sigma_2 = sigma_2.iter().map(|x| *x * beta + gamma);
+        let sigma_3 = sigma_3.iter().map(|x| *x * beta + gamma);
+        let sigma_4 = sigma_4.iter().map(|x| *x * beta + gamma);
 
-        let wid1 = T::add_with_public_many(&id_1, w_1, party_id);
-        let wid2 = T::add_with_public_many(&id_2, w_2, party_id);
-        let wid3 = T::add_with_public_many(&id_3, w_3, party_id);
-        let wid4 = T::add_with_public_many(&id_4, w_4, party_id);
+        let mut wid1 = None;
+        let mut wid2 = None;
+        let mut wid3 = None;
+        let mut wid4 = None;
 
-        let wsigma1 = T::add_with_public_many(&sigma_1, w_1, party_id);
-        let wsigma2 = T::add_with_public_many(&sigma_2, w_2, party_id);
-        let wsigma3 = T::add_with_public_many(&sigma_3, w_3, party_id);
-        let wsigma4 = T::add_with_public_many(&sigma_4, w_4, party_id);
+        let mut wsigma1 = None;
+        let mut wsigma2 = None;
+        let mut wsigma3 = None;
+        let mut wsigma4 = None;
+
+        rayon::scope(|scope| {
+            scope.spawn(|_| wid1 = Some(T::add_with_public_many_iter(id_1, w_1, party_id)));
+            scope.spawn(|_| wid2 = Some(T::add_with_public_many_iter(id_2, w_2, party_id)));
+            scope.spawn(|_| wid3 = Some(T::add_with_public_many_iter(id_3, w_3, party_id)));
+            scope.spawn(|_| wid4 = Some(T::add_with_public_many_iter(id_4, w_4, party_id)));
+            scope.spawn(|_| wsigma1 = Some(T::add_with_public_many_iter(sigma_1, w_1, party_id)));
+            scope.spawn(|_| wsigma2 = Some(T::add_with_public_many_iter(sigma_2, w_2, party_id)));
+            scope.spawn(|_| wsigma3 = Some(T::add_with_public_many_iter(sigma_3, w_3, party_id)));
+            scope.spawn(|_| wsigma4 = Some(T::add_with_public_many_iter(sigma_4, w_4, party_id)));
+        });
+        // we can unwrap here because rayon scope cannot fail
+        // and therefore we have Some values for sures
+        let wid1 = wid1.unwrap();
+        let wid2 = wid2.unwrap();
+        let wid3 = wid3.unwrap();
+        let wid4 = wid4.unwrap();
+
+        let wsigma1 = wsigma1.unwrap();
+        let wsigma2 = wsigma2.unwrap();
+        let wsigma3 = wsigma3.unwrap();
+        let wsigma4 = wsigma4.unwrap();
 
         let mut lhs = Vec::with_capacity(wid1.len() + wsigma1.len() + wid3.len() + wsigma3.len());
-        let mut rhs = Vec::with_capacity(wid2.len() + wsigma2.len() + wid4.len() + wsigma4.len());
+        let mut rhs = Vec::with_capacity(lhs.len());
         lhs.extend(wid1);
         lhs.extend(wsigma1);
         lhs.extend(wid3);
@@ -171,7 +192,6 @@ impl UltraPermutationRelation {
         rhs.extend(wid4);
         rhs.extend(wsigma4);
         let mul1 = driver.mul_many(&lhs, &rhs)?;
-
         let (lhs, rhs) = mul1.split_at(mul1.len() >> 1);
         Ok(driver.mul_many(lhs, rhs)?)
     }
@@ -321,11 +341,8 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
 
         let party_id = driver.get_party_id();
         let tmp_lhs = T::add_with_public_many(lagrange_first, z_perm, party_id);
-        let lagrange_last_delta = lagrange_last
-            .iter()
-            .map(|x| *x * *public_input_delta)
-            .collect_vec();
-        let tmp_rhs = T::add_with_public_many(&lagrange_last_delta, z_perm_shift, party_id);
+        let lagrange_last_delta = lagrange_last.iter().map(|x| *x * *public_input_delta);
+        let tmp_rhs = T::add_with_public_many_iter(lagrange_last_delta, z_perm_shift, party_id);
 
         let lhs = num_den;
         let mut rhs = Vec::with_capacity(tmp_lhs.len() + tmp_lhs.len());
