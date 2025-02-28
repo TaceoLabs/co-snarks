@@ -6,12 +6,14 @@ use super::network::IoContext;
 use super::Rep3BigUintShare;
 use super::Rep3PrimeFieldShare;
 use crate::protocols::rep3::network::Rep3Network;
+use ark_ec::CurveGroup;
 use ark_ff::One;
 use ark_ff::PrimeField;
 use ark_ff::Zero;
 use itertools::izip;
 use itertools::Itertools;
 use num_bigint::BigUint;
+use std::any::TypeId;
 use std::marker::PhantomData;
 
 type IoResult<T> = std::io::Result<T>;
@@ -441,4 +443,44 @@ pub(crate) fn point_addition<F: PrimeField, N: Rep3Network>(
     let y = arithmetic::mul(lambda, a_x - x, io_context)? - a_y;
 
     Ok((x, y, is_zero))
+}
+
+// This function is necessary, since CurveGroup does not expose any way to create a point from x, y directly.
+pub(crate) fn point_from_xy<C: CurveGroup>(
+    x: C::BaseField,
+    y: C::BaseField,
+    is_infinity: C::BaseField,
+) -> std::io::Result<C> {
+    if is_infinity > C::BaseField::one() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Invalid is_infinity",
+        ));
+    }
+    if is_infinity.is_one() {
+        return Ok(C::zero());
+    }
+
+    let point = if TypeId::of::<C>() == TypeId::of::<ark_bn254::G1Projective>() {
+        let (x, y) = unsafe {
+            (
+                *(&x as *const C::BaseField as *const ark_bn254::Fq),
+                *(&y as *const C::BaseField as *const ark_bn254::Fq),
+            )
+        };
+        let result: ark_bn254::G1Projective = ark_bn254::G1Affine::new(x, y).into();
+        unsafe { *(&result as *const ark_bn254::G1Projective as *const C) }
+    } else if TypeId::of::<C>() == TypeId::of::<ark_grumpkin::Projective>() {
+        let (x, y) = unsafe {
+            (
+                *(&x as *const C::BaseField as *const ark_grumpkin::Fq),
+                *(&y as *const C::BaseField as *const ark_grumpkin::Fq),
+            )
+        };
+        let result: ark_grumpkin::Projective = ark_grumpkin::Affine::new(x, y).into();
+        unsafe { *(&result as *const ark_grumpkin::Projective as *const C) }
+    } else {
+        panic!("Unsupported curve {}", std::any::type_name::<C>());
+    };
+    Ok(point)
 }
