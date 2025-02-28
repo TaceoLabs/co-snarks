@@ -11,14 +11,14 @@ use crate::{
             ultra_arithmetic_relation::UltraArithmeticRelation, AllRelationAcc, Relation,
         },
         types::{
-            ProverUnivariates, ProverUnivariatesBatch, RelationParameters,
-            BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK,
+            ProverUnivariates, RelationParameters, BATCHED_RELATION_PARTIAL_LENGTH,
+            BATCHED_RELATION_PARTIAL_LENGTH_ZK,
         },
         univariates::SharedUnivariate,
     },
     mpc::NoirUltraHonkProver,
     types::AllEntities,
-    types_batch::AllEntitiesBatchRelations,
+    types_batch::{AllEntitiesBatchRelations, SumCheckDataForRelation},
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
@@ -138,63 +138,55 @@ impl SumcheckRound {
         Self::accumulate_one_relation_univariates_batch::<_, _, UltraArithmeticRelation>(
             driver,
             &mut univariate_accumulators.r_arith,
-            &sum_check_data.ultra_arith.all_entites,
             relation_parameters,
-            &sum_check_data.ultra_arith.scaling_factors,
+            &sum_check_data.ultra_arith,
         )?;
 
         Self::accumulate_one_relation_univariates_batch::<_, _, UltraPermutationRelation>(
             driver,
             &mut univariate_accumulators.r_perm,
-            &sum_check_data.not_skippable.all_entites,
             relation_parameters,
-            &sum_check_data.not_skippable.scaling_factors,
+            &sum_check_data.not_skippable,
         )?;
 
         Self::accumulate_one_relation_univariates_batch::<_, _, DeltaRangeConstraintRelation>(
             driver,
             &mut univariate_accumulators.r_delta,
-            &sum_check_data.delta_range.all_entites,
             relation_parameters,
-            &sum_check_data.delta_range.scaling_factors,
+            &sum_check_data.delta_range,
         )?;
 
         Self::accumulate_one_relation_univariates_batch::<_, _, EllipticRelation>(
             driver,
             &mut univariate_accumulators.r_elliptic,
-            &sum_check_data.elliptic.all_entites,
             relation_parameters,
-            &sum_check_data.elliptic.scaling_factors,
+            &sum_check_data.elliptic,
         )?;
 
         Self::accumulate_one_relation_univariates_batch::<_, _, AuxiliaryRelation>(
             driver,
             &mut univariate_accumulators.r_aux,
-            &sum_check_data.auxiliary.all_entites,
             relation_parameters,
-            &sum_check_data.auxiliary.scaling_factors,
+            &sum_check_data.auxiliary,
         )?;
 
         Self::accumulate_one_relation_univariates_batch::<_, _, LogDerivLookupRelation>(
             driver,
             &mut univariate_accumulators.r_lookup,
-            &sum_check_data.not_skippable.all_entites,
             relation_parameters,
-            &sum_check_data.not_skippable.scaling_factors,
+            &sum_check_data.not_skippable,
         )?;
         Self::accumulate_one_relation_univariates_batch::<_, _, Poseidon2ExternalRelation>(
             driver,
             &mut univariate_accumulators.r_pos_ext,
-            &sum_check_data.poseidon_ext.all_entites,
             relation_parameters,
-            &sum_check_data.poseidon_ext.scaling_factors,
+            &sum_check_data.poseidon_ext,
         )?;
         Self::accumulate_one_relation_univariates_batch::<_, _, Poseidon2InternalRelation>(
             driver,
             &mut univariate_accumulators.r_pos_int,
-            &sum_check_data.poseidon_int.all_entites,
             relation_parameters,
-            &sum_check_data.poseidon_int.scaling_factors,
+            &sum_check_data.poseidon_int,
         )?;
         Ok(())
     }
@@ -206,16 +198,18 @@ impl SumcheckRound {
     >(
         driver: &mut T,
         univariate_accumulator: &mut R::Acc,
-        extended_edges: &ProverUnivariatesBatch<T, P>,
         relation_parameters: &RelationParameters<P::ScalarField>,
-        scaling_factors: &[P::ScalarField],
+        sum_check_data: &SumCheckDataForRelation<T, P>,
     ) -> HonkProofResult<()> {
+        if sum_check_data.can_skip {
+            return Ok(());
+        }
         R::accumulate(
             driver,
             univariate_accumulator,
-            extended_edges,
+            &sum_check_data.all_entites,
             relation_parameters,
-            scaling_factors,
+            &sum_check_data.scaling_factors,
         )
     }
 
