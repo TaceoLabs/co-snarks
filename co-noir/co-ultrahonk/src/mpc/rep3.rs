@@ -36,10 +36,6 @@ impl<P: Pairing, N: Rep3Network> NoirUltraHonkProver<P> for Rep3UltraHonkDriver<
     type PointShare = Rep3PointShare<P::G1>;
     type PartyID = PartyID;
 
-    fn debug(x: Self::ArithmeticShare) -> String {
-        todo!()
-    }
-
     fn rand(&mut self) -> std::io::Result<Self::ArithmeticShare> {
         Ok(Self::ArithmeticShare::rand(&mut self.io_context0))
     }
@@ -84,10 +80,7 @@ impl<P: Pairing, N: Rep3Network> NoirUltraHonkProver<P> for Rep3UltraHonkDriver<
         arithmetic::mul_public(shared, public)
     }
 
-    fn mul_assign_with_public(
-        public: <P as Pairing>::ScalarField,
-        shared: &mut Self::ArithmeticShare,
-    ) {
+    fn mul_assign_with_public(shared: &mut Self::ArithmeticShare, public: P::ScalarField) {
         arithmetic::mul_assign_public(shared, public);
     }
 
