@@ -387,8 +387,10 @@ fn low_depth_binary_sub_from_const<F: PrimeField, N: Rep3Network>(
     Ok(res)
 }
 
-/// For curves of the form y^2 = x^3 + ax +  b, computes the addition of two points.
-/// Note: Counts the fact of x being 0 as infinity
+/// For curves of the form y^2 = x^3 + ax + b, computes the addition of two points.
+/// Note: This implementation assumes that at least one point is randomly chosen (as is e.g., the case for point_share_to_fieldshares). Thus, the special case that the x-coordinate of the two points are equal is only considered to be able to happen if the sum is infinity (as is the case when translating a share of the infinity point to fieldshares). Thus, we count the fact of the x coordinates being equal as infinity.
+///
+// The output will be (x, y, is_infinity). Thereby no statement is made on x, y if is_infinity is true.
 pub(crate) fn point_addition<F: PrimeField, N: Rep3Network>(
     a_x: Rep3PrimeFieldShare<F>,
     a_y: Rep3PrimeFieldShare<F>,
@@ -403,7 +405,6 @@ pub(crate) fn point_addition<F: PrimeField, N: Rep3Network>(
     let mut diff_x = b_x - a_x;
     let diff_y = b_y - a_y;
 
-    // TODO Is the test for infinity even correct?
     let zero_share = Rep3PrimeFieldShare::default();
     let is_zero = arithmetic::eq(zero_share, diff_x, io_context)?;
     diff_x += arithmetic::mul(
