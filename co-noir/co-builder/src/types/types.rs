@@ -738,6 +738,19 @@ impl<F: PrimeField> WitnessOrConstant<F> {
             FieldCT::from_witness_index(self.index)
         }
     }
+
+    pub(crate) fn to_grumpkin_point(
+        input_x: &Self,
+        input_y: &Self,
+        input_infinity: &Self,
+        has_valid_witness_assignments: bool,
+    ) {
+        let x = input_x.to_field_ct();
+        let y = input_y.to_field_ct();
+        let infinity = input_infinity.to_field_ct().to_bool_ct();
+
+        // (x, y)
+    }
 }
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct ActiveRegionData {
