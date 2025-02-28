@@ -34,6 +34,7 @@ where
     T: NoirUltraHonkProver<P>,
     P: Pairing,
 {
+    pub(crate) can_skip: bool,
     pub(crate) all_entites: AllEntitiesBatch<T, P>,
     pub(crate) scaling_factors: Vec<P::ScalarField>,
 }
@@ -61,9 +62,21 @@ where
 {
     fn new() -> Self {
         Self {
+            can_skip: true,
             all_entites: AllEntitiesBatch::new(),
             scaling_factors: vec![],
         }
+    }
+
+    fn add(
+        &mut self,
+        entity: &AllEntities<Shared<T, P>, Public<P>>,
+        scaling_factor: P::ScalarField,
+    ) {
+        let scaling_factors = vec![scaling_factor; MAX_PARTIAL_RELATION_LENGTH];
+        self.can_skip = false;
+        self.all_entites.add(entity.clone());
+        self.scaling_factors.extend(scaling_factors);
     }
 }
 
@@ -97,59 +110,39 @@ where
         // pub(crate) r1: SharedUnivariate<T, P, 5>,
         //
         // Can we somehow only add 5/6 elements?
-        let scaling_factors = vec![scaling_factor; MAX_PARTIAL_RELATION_LENGTH];
         // check if we can skip arith
         if !entity.precomputed.q_arith().is_zero() {
-            self.ultra_arith.all_entites.add(entity.clone());
-            self.ultra_arith
-                .scaling_factors
-                .extend(scaling_factors.clone());
+            self.ultra_arith.add(&entity, scaling_factor)
         }
 
         // check if we can skip delta range
         if !entity.precomputed.q_delta_range().is_zero() {
-            self.delta_range.all_entites.add(entity.clone());
-            self.delta_range
-                .scaling_factors
-                .extend(scaling_factors.clone());
+            self.delta_range.add(&entity, scaling_factor)
         }
 
         // check if we can skip elliptic
         if !entity.precomputed.q_elliptic().is_zero() {
-            self.elliptic.all_entites.add(entity.clone());
-            self.elliptic
-                .scaling_factors
-                .extend(scaling_factors.clone());
+            self.elliptic.add(&entity, scaling_factor)
         }
 
         // check if we can skip aux
         if !entity.precomputed.q_aux().is_zero() {
-            self.auxiliary.all_entites.add(entity.clone());
-            self.auxiliary
-                .scaling_factors
-                .extend(scaling_factors.clone());
+            self.auxiliary.add(&entity, scaling_factor)
         }
 
         // check if we can skip poseidon external
         if !entity.precomputed.q_poseidon2_external().is_zero() {
-            self.poseidon_ext.all_entites.add(entity.clone());
-            self.poseidon_ext
-                .scaling_factors
-                .extend(scaling_factors.clone());
+            self.poseidon_ext.add(&entity, scaling_factor)
         }
 
         // check if we can skip poseidon internal
         if !entity.precomputed.q_poseidon2_internal().is_zero() {
-            self.poseidon_int.all_entites.add(entity.clone());
-            self.poseidon_int
-                .scaling_factors
-                .extend(scaling_factors.clone());
+            self.poseidon_int.add(&entity, scaling_factor)
         }
 
         // NOT SKIPABLE LogDeriveLookupRelation
         // NOT SKIPPABLE UltraPermutationRelation
-        self.not_skippable.all_entites.add(entity);
-        self.not_skippable.scaling_factors.extend(scaling_factors);
+        self.not_skippable.add(&entity, scaling_factor);
     }
 }
 

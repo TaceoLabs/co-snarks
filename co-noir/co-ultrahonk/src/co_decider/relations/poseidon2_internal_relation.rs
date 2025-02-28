@@ -1,4 +1,4 @@
-use super::{fold_accumulator, Relation};
+use super::{fold_accumulator, ProverUnivariatesBatch, Relation};
 use crate::{
     co_decider::{
         types::{RelationParameters, MAX_PARTIAL_RELATION_LENGTH},
@@ -112,9 +112,9 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
     fn accumulate(
         driver: &mut T,
         univariate_accumulator: &mut Self::Acc,
-        input: &super::ProverUnivariatesBatch<T, P>,
+        input: &ProverUnivariatesBatch<T, P>,
         _relation_parameters: &RelationParameters<<P>::ScalarField>,
-        scaling_factors: &[<P>::ScalarField],
+        scaling_factors: &[P::ScalarField],
     ) -> HonkProofResult<()> {
         let w_l = input.witness.w_l();
         let w_r = input.witness.w_r();
@@ -127,6 +127,9 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let q_l = input.precomputed.q_l();
         let q_poseidon2_internal = input.precomputed.q_poseidon2_internal();
 
+        if w_l.is_empty() {
+            return Ok(());
+        }
         // add round constants
         let s1 = T::add_with_public_many(q_l, w_l, driver.get_party_id());
 

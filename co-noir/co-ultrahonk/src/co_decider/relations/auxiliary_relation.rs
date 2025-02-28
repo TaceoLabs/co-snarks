@@ -1,4 +1,4 @@
-use super::Relation;
+use super::{ProverUnivariatesBatch, Relation};
 use crate::{
     co_decider::{
         relations::fold_accumulator,
@@ -160,11 +160,12 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
     fn accumulate(
         driver: &mut T,
         univariate_accumulator: &mut Self::Acc,
-        input: &super::ProverUnivariatesBatch<T, P>,
+        input: &ProverUnivariatesBatch<T, P>,
         relation_parameters: &RelationParameters<<P>::ScalarField>,
-        scaling_factors: &[<P>::ScalarField],
+        scaling_factors: &[P::ScalarField],
     ) -> HonkProofResult<()> {
         let party_id = driver.get_party_id();
+        // this method expects
 
         let eta = &relation_parameters.eta_1;
         let eta_two = &relation_parameters.eta_2;
