@@ -14,7 +14,7 @@ use super::{
     IoResult, Rep3BigUintShare, Rep3PointShare, Rep3PrimeFieldShare,
 };
 use ark_ec::{AffineRepr, CurveGroup};
-use ark_ff::{One, PrimeField, Zero};
+use ark_ff::PrimeField;
 use fancy_garbling::{BinaryBundle, WireMod2};
 use itertools::izip;
 use num_bigint::BigUint;
@@ -696,21 +696,11 @@ where
                     "Expected 3 elements",
                 ))?;
             }
-            let is_infinity = z_a[2] + z_b[2] + rcv[2];
-            if is_infinity > C::BaseField::one() {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "Invalid is_infinity",
-                ));
-            }
-            if is_infinity.is_zero() {
-                let x = z_a[0] + z_b[0] + rcv[0];
-                let y = z_a[1] + z_b[1] + rcv[1];
-                todo!();
-                // res.a = C::Affine::from_xy(x, y);
-            } else {
-                res.a = C::zero();
-            }
+            res.a = detail::point_from_xy(
+                z_a[0] + z_b[0] + rcv[0],
+                z_a[1] + z_b[1] + rcv[1],
+                z_a[2] + z_b[2] + rcv[2],
+            )?;
         }
         PartyID::ID1 => {
             let rcv = io_context.network.recv_prev_many::<C::BaseField>()?;
@@ -720,21 +710,11 @@ where
                     "Expected 3 elements",
                 ))?;
             }
-            let is_infinity = z_a[2] + z_b[2] + rcv[2];
-            if is_infinity > C::BaseField::one() {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "Invalid is_infinity",
-                ));
-            }
-            if is_infinity.is_zero() {
-                let x = z_a[0] + z_b[0] + rcv[0];
-                let y = z_a[1] + z_b[1] + rcv[1];
-                todo!();
-                // res.a = C::Affine::from_xy(x, y);
-            } else {
-                res.a = C::zero();
-            }
+            res.b = detail::point_from_xy(
+                z_a[0] + z_b[0] + rcv[0],
+                z_a[1] + z_b[1] + rcv[1],
+                z_a[2] + z_b[2] + rcv[2],
+            )?;
         }
         PartyID::ID2 => {
             io_context.network.send_next_many(&z_b)?;
