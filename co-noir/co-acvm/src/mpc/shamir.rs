@@ -643,11 +643,11 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
 
     fn multi_scalar_mul(
         &mut self,
-        points: &[Self::AcvmType],
-        scalars_lo: &[Self::AcvmType],
-        scalars_hi: &[Self::AcvmType],
-        pedantic_solving: bool,
+        _points: &[Self::AcvmType],
+        _scalars_lo: &[Self::AcvmType],
+        _scalars_hi: &[Self::AcvmType],
+        _pedantic_solving: bool,
     ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
-        todo!()
+        panic!("functionality multi_scalar_mul not feasible for Shamir")
     }
 }
