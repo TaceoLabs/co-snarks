@@ -2424,14 +2424,18 @@ mod curve_share {
 
     #[test]
     fn bn254_to_fieldshares() {
-        to_fieldshares(ark_bn254::G1Projective::zero());
-        to_fieldshares(ark_bn254::G1Projective::rand(&mut thread_rng()));
+        for _ in 0..10 {
+            to_fieldshares(ark_bn254::G1Projective::zero());
+            to_fieldshares(ark_bn254::G1Projective::rand(&mut thread_rng()));
+        }
     }
 
     #[test]
     fn grumpkin_to_fieldshares() {
-        to_fieldshares(ark_grumpkin::Projective::zero());
-        to_fieldshares(ark_grumpkin::Projective::rand(&mut thread_rng()));
+        for _ in 0..10 {
+            to_fieldshares(ark_grumpkin::Projective::zero());
+            to_fieldshares(ark_grumpkin::Projective::rand(&mut thread_rng()));
+        }
     }
 
     fn from_fieldshares<C: CurveGroup>(point: C)
@@ -2475,13 +2479,17 @@ mod curve_share {
 
     #[test]
     fn bn254_from_fieldshares() {
-        from_fieldshares(ark_bn254::G1Projective::zero());
-        from_fieldshares(ark_bn254::G1Projective::rand(&mut thread_rng()));
+        for _ in 0..10 {
+            from_fieldshares(ark_bn254::G1Projective::zero());
+            from_fieldshares(ark_bn254::G1Projective::rand(&mut thread_rng()));
+        }
     }
 
     #[test]
     fn grumpkin_from_fieldshares() {
-        from_fieldshares(ark_grumpkin::Projective::zero());
-        from_fieldshares(ark_grumpkin::Projective::rand(&mut thread_rng()));
+        for _ in 0..10 {
+            from_fieldshares(ark_grumpkin::Projective::zero());
+            from_fieldshares(ark_grumpkin::Projective::rand(&mut thread_rng()));
+        }
     }
 }
