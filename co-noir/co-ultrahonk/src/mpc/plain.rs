@@ -15,14 +15,6 @@ impl<P: Pairing> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
     type PointShare = P::G1;
     type PartyID = usize;
 
-    fn debug(x: Self::ArithmeticShare) -> String {
-        if x.is_zero() {
-            "0".to_string()
-        } else {
-            format!("{x}")
-        }
-    }
-
     fn rand(&mut self) -> std::io::Result<Self::ArithmeticShare> {
         let mut rng = thread_rng();
         Ok(Self::ArithmeticShare::rand(&mut rng))
@@ -70,10 +62,7 @@ impl<P: Pairing> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         shared * public
     }
 
-    fn mul_assign_with_public(
-        public: <P as Pairing>::ScalarField,
-        shared: &mut Self::ArithmeticShare,
-    ) {
+    fn mul_assign_with_public(shared: &mut Self::ArithmeticShare, public: P::ScalarField) {
         *shared *= public;
     }
 

@@ -1,20 +1,17 @@
 use super::{ProverUnivariatesBatch, Relation};
 use crate::{
     co_decider::{
-        types::{ProverUnivariates, RelationParameters, MAX_PARTIAL_RELATION_LENGTH},
+        relations::fold_accumulator,
+        types::{RelationParameters, MAX_PARTIAL_RELATION_LENGTH},
         univariates::SharedUnivariate,
     },
     mpc::NoirUltraHonkProver,
 };
 use ark_ec::pairing::Pairing;
-use ark_ff::{Field, ToConstraintField};
-use ark_ff::{PrimeField, Zero};
-use co_builder::prelude::HonkCurve;
+use ark_ff::Field;
 use co_builder::HonkProofResult;
-use itertools::Itertools as _;
-use mpc_core::protocols::bridges::network;
-use ultrahonk::prelude::{TranscriptFieldType, Univariate};
-
+use co_builder::{prelude::HonkCurve, TranscriptFieldType};
+use ultrahonk::prelude::Univariate;
 #[derive(Clone, Debug)]
 pub(crate) struct UltraArithmeticRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing> {
     pub(crate) r0: SharedUnivariate<T, P, 6>,
@@ -70,12 +67,6 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
     for UltraArithmeticRelation
 {
     type Acc = UltraArithmeticRelationAcc<T, P>;
-    const SKIPPABLE: bool = false;
-
-    fn skip(input: &ProverUnivariates<T, P>) -> bool {
-        <Self as Relation<T, P>>::check_skippable();
-        input.precomputed.q_arith().is_zero()
-    }
 
     /**
      * @brief Expression for the Ultra Arithmetic gate.
@@ -129,77 +120,6 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
      * @param scaling_factor optional term to scale the evaluation before adding to evals.
      */
     fn accumulate(
-        driver: &mut T,
-        univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariates<T, P>,
-        _relation_parameters: &RelationParameters<P::ScalarField>,
-        scaling_factor: &P::ScalarField,
-    ) -> HonkProofResult<()> {
-        tracing::trace!("Accumulate UltraArithmeticRelation");
-
-        let w_l = input.witness.w_l();
-        let w_r = input.witness.w_r();
-        let w_o = input.witness.w_o();
-        let w_4 = input.witness.w_4();
-        let w_4_shift = input.shifted_witness.w_4();
-        let q_m = input.precomputed.q_m();
-        let q_l = input.precomputed.q_l();
-        let q_r = input.precomputed.q_r();
-        let q_o = input.precomputed.q_o();
-        let q_4 = input.precomputed.q_4();
-        let q_c = input.precomputed.q_c();
-        let q_arith = input.precomputed.q_arith();
-        let w_l_shift = input.shifted_witness.w_l();
-
-        let neg_half = -P::ScalarField::from(2u64).inverse().unwrap();
-
-        let mul = driver.mul_many(w_r.as_ref(), w_l.as_ref())?;
-        let mul = SharedUnivariate::from_vec(&mul);
-
-        let mut tmp = mul.mul_public(q_m).mul_public(&(q_arith.to_owned() - 3));
-        tmp.scale_inplace(neg_half);
-        let party_id = driver.get_party_id();
-        let tmp_l = w_l.mul_public(q_l);
-        let tmp_r = w_r.mul_public(q_r);
-        let tmp_o = w_o.mul_public(q_o);
-        let tmp_4 = w_4.mul_public(q_4);
-        let tmp = tmp
-            .add(&tmp_l)
-            .add(&tmp_r)
-            .add(&tmp_o)
-            .add(&tmp_4)
-            .add_public(q_c, party_id);
-        //works up to here
-        let tmp_arith = w_4_shift.mul_public(&(q_arith.to_owned() - 1));
-        let mut tmp = tmp.add(&tmp_arith).mul_public(q_arith);
-
-        tmp.scale_inplace(*scaling_factor);
-
-        for i in 0..univariate_accumulator.r0.evaluations.len() {
-            univariate_accumulator.r0.evaluations[i] =
-                T::add(univariate_accumulator.r0.evaluations[i], tmp.evaluations[i]);
-        }
-
-        ///////////////////////////////////////////////////////////////////////
-
-        let tmp = w_l
-            .add(w_4)
-            .sub(w_l_shift)
-            .add_public(q_m, party_id)
-            .mul_public(&(q_arith.to_owned() - 2))
-            .mul_public(&(q_arith.to_owned() - 1))
-            .mul_public(q_arith)
-            .scale(*scaling_factor);
-
-        for i in 0..univariate_accumulator.r1.evaluations.len() {
-            univariate_accumulator.r1.evaluations[i] =
-                T::add(univariate_accumulator.r1.evaluations[i], tmp.evaluations[i]);
-        }
-
-        Ok(())
-    }
-
-    fn accumulate_batch(
         driver: &mut T,
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesBatch<T, P>,
@@ -261,16 +181,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
 
         T::mul_assign_with_public_many(&mut tmp, scaling_factors);
 
-        let evaluations_len = univariate_accumulator.r0.evaluations.len();
-        let mut acc = [T::ArithmeticShare::default(); MAX_PARTIAL_RELATION_LENGTH];
-        for (idx, b) in tmp.iter().enumerate() {
-            let a = &mut acc[idx % MAX_PARTIAL_RELATION_LENGTH];
-            T::add_assign(a, *b);
-        }
-        univariate_accumulator
-            .r0
-            .evaluations
-            .clone_from_slice(&acc[..evaluations_len]);
+        fold_accumulator!(univariate_accumulator.r0, tmp);
 
         let mut tmp = T::add_many(w_l, w_4);
         T::sub_assign_many(&mut tmp, w_l_shift);
@@ -280,16 +191,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         T::mul_assign_with_public_many(&mut tmp, q_arith);
         T::mul_assign_with_public_many(&mut tmp, scaling_factors);
 
-        let evaluations_len = univariate_accumulator.r1.evaluations.len();
-        let mut acc = [T::ArithmeticShare::default(); MAX_PARTIAL_RELATION_LENGTH];
-        for (idx, b) in tmp.iter().enumerate() {
-            let a = &mut acc[idx % MAX_PARTIAL_RELATION_LENGTH];
-            T::add_assign(a, *b);
-        }
-        univariate_accumulator
-            .r1
-            .evaluations
-            .clone_from_slice(&acc[..evaluations_len]);
+        fold_accumulator!(univariate_accumulator.r1, tmp);
 
         Ok(())
     }

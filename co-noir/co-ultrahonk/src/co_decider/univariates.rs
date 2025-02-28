@@ -10,52 +10,6 @@ pub(crate) struct SharedUnivariate<T: NoirUltraHonkProver<P>, P: Pairing, const 
 }
 
 impl<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> SharedUnivariate<T, P, SIZE> {
-    pub(crate) fn from_vec(vec: &[T::ArithmeticShare]) -> Self {
-        assert_eq!(vec.len(), SIZE);
-        let mut res = Self::default();
-        res.evaluations.clone_from_slice(vec);
-        res
-    }
-
-    pub(crate) fn scale_inplace(&mut self, rhs: P::ScalarField) {
-        for i in 0..SIZE {
-            self.evaluations[i] = T::mul_with_public(rhs, self.evaluations[i]);
-        }
-    }
-
-    pub(crate) fn neg(&self) -> Self {
-        let mut result = Self::default();
-        for i in 0..SIZE {
-            result.evaluations[i] = T::neg(self.evaluations[i]);
-        }
-        result
-    }
-
-    pub(crate) fn scale(&self, rhs: P::ScalarField) -> Self {
-        let mut result = Self::default();
-        for i in 0..SIZE {
-            result.evaluations[i] = T::mul_with_public(rhs, self.evaluations[i]);
-        }
-        result
-    }
-
-    pub(crate) fn add_scalar(&self, rhs: P::ScalarField, id: T::PartyID) -> Self {
-        let mut result = Self::default();
-        for i in 0..SIZE {
-            result.evaluations[i] = T::add_with_public(rhs, self.evaluations[i], id);
-        }
-        result
-    }
-
-    pub(crate) fn sub_scalar(&self, rhs: P::ScalarField, id: T::PartyID) -> Self {
-        let neg = -rhs;
-        let mut result = Self::default();
-        for i in 0..SIZE {
-            result.evaluations[i] = T::add_with_public(neg, self.evaluations[i], id);
-        }
-        result
-    }
-
     pub(crate) fn add(&self, rhs: &Self) -> Self {
         let mut result = Self::default();
         for i in 0..SIZE {
@@ -71,31 +25,10 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> SharedUnivariate<
         }
         result
     }
-
-    pub(crate) fn add_public(
-        &self,
-        rhs: &Univariate<P::ScalarField, SIZE>,
-        id: T::PartyID,
-    ) -> Self {
-        let mut result = Self::default();
+    pub(crate) fn scale_inplace(&mut self, rhs: P::ScalarField) {
         for i in 0..SIZE {
-            result.evaluations[i] = T::add_with_public(rhs.evaluations[i], self.evaluations[i], id);
+            self.evaluations[i] = T::mul_with_public(rhs, self.evaluations[i]);
         }
-        result
-    }
-
-    #[expect(unused)]
-    pub(crate) fn sub_public(
-        &self,
-        rhs: &Univariate<P::ScalarField, SIZE>,
-        id: T::PartyID,
-    ) -> Self {
-        let mut result = Self::default();
-        for i in 0..SIZE {
-            result.evaluations[i] =
-                T::add_with_public(-rhs.evaluations[i], self.evaluations[i], id);
-        }
-        result
     }
 
     pub(crate) fn add_assign(&mut self, rhs: &Self) {
@@ -110,24 +43,6 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> SharedUnivariate<
             result.evaluations[i] = T::mul_with_public(rhs.evaluations[i], self.evaluations[i]);
         }
         result
-    }
-
-    pub(crate) fn vec_to_univariates(vec: &[T::ArithmeticShare]) -> Vec<Self> {
-        assert_eq!(vec.len() % SIZE, 0);
-        vec.chunks(SIZE)
-            .map(|chunk| {
-                let mut evaluations = array::from_fn(|_| T::ArithmeticShare::default());
-                evaluations.clone_from_slice(chunk);
-                Self { evaluations }
-            })
-            .collect()
-    }
-
-    pub(crate) fn univariates_to_vec(univariates: &[Self]) -> Vec<T::ArithmeticShare> {
-        univariates
-            .iter()
-            .flat_map(|univariate| univariate.evaluations.to_owned())
-            .collect()
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE2: usize>(

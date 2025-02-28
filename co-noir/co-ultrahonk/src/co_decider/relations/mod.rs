@@ -8,7 +8,7 @@ pub(crate) mod poseidon2_internal_relation;
 pub(crate) mod ultra_arithmetic_relation;
 
 use super::{
-    types::{ProverUnivariates, ProverUnivariatesBatch, RelationParameters},
+    types::{ProverUnivariatesBatch, RelationParameters},
     univariates::SharedUnivariate,
 };
 use crate::mpc::NoirUltraHonkProver;
@@ -27,27 +27,23 @@ use poseidon2_internal_relation::{Poseidon2InternalRelation, Poseidon2InternalRe
 use ultra_arithmetic_relation::{UltraArithmeticRelation, UltraArithmeticRelationAcc};
 use ultrahonk::prelude::{TranscriptFieldType, Univariate};
 
+macro_rules! fold_accumulator {
+    ($acc: expr, $elements: expr) => {
+        let evaluations_len = $acc.evaluations.len();
+        let mut acc = [T::ArithmeticShare::default(); MAX_PARTIAL_RELATION_LENGTH];
+        for (idx, b) in $elements.iter().enumerate() {
+            let a = &mut acc[idx % MAX_PARTIAL_RELATION_LENGTH];
+            T::add_assign(a, *b);
+        }
+        $acc.evaluations.clone_from_slice(&acc[..evaluations_len]);
+    };
+}
+pub(crate) use fold_accumulator;
+
 pub(crate) trait Relation<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> {
     type Acc: Default;
-    const SKIPPABLE: bool;
-
-    fn check_skippable() {
-        if !Self::SKIPPABLE {
-            panic!("Cannot skip this relation");
-        }
-    }
-
-    fn skip(input: &ProverUnivariates<T, P>) -> bool;
 
     fn accumulate(
-        driver: &mut T,
-        univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariates<T, P>,
-        relation_parameters: &RelationParameters<P::ScalarField>,
-        scaling_factor: &P::ScalarField,
-    ) -> HonkProofResult<()>;
-
-    fn accumulate_batch(
         driver: &mut T,
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesBatch<T, P>,
