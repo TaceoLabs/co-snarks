@@ -3,7 +3,9 @@ use ark_ff::{MontConfig, One, PrimeField, Zero};
 use co_brillig::mpc::{Rep3BrilligDriver, Rep3BrilligType};
 use itertools::{izip, Itertools};
 use mpc_core::gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations};
-use mpc_core::protocols::rep3::{arithmetic, binary, conversion, pointshare, yao, Rep3PointShare};
+use mpc_core::protocols::rep3::{
+    arithmetic, binary, conversion, pointshare, yao, Rep3BigUintShare, Rep3PointShare,
+};
 use mpc_core::protocols::rep3_ring::gadgets::sort::{radix_sort_fields, radix_sort_fields_vec_by};
 use mpc_core::{
     lut::LookupTableProvider,
@@ -71,61 +73,71 @@ impl<F: PrimeField, N: Rep3Network> Rep3AcvmSolver<F, N> {
         io_context: &mut IoContext<N>,
         pedantic_solving: bool,
     ) -> std::io::Result<Rep3AcvmType<ark_grumpkin::Fr>> {
-        // let scale = ark_bn254::Fr::from(BigUint::one() << 128);
-        // let res = match (low, high) {
-        //     (Rep3AcvmType::Public(low), Rep3AcvmType::Public(high)) => {
-        //         if low >= &scale {
-        //             return Err(std::io::Error::new(
-        //                 std::io::ErrorKind::InvalidInput,
-        //                 format!("Scalar {} is not less than 2^128", low),
-        //             ));
-        //         }
-        //         if high >= &scale {
-        //             return Err(std::io::Error::new(
-        //                 std::io::ErrorKind::InvalidInput,
-        //                 format!("Scalar {} is not less than 2^128", high),
-        //             ));
-        //         }
-        //         let res = high * &scale + low;
-        //         // Check if this is smaller than the grumpkin modulus
-        //         if pedantic_solving && res >= ark_grumpkin::FrConfig::MODULUS.into() {
-        //             return Err(std::io::Error::new(
-        //                 std::io::ErrorKind::InvalidInput,
-        //                 format!(
-        //                     "{} is not a valid grumpkin scalar",
-        //                     BigUint::from(res).to_str_radix(16)
-        //                 ),
-        //             ));
-        //         }
-        //         Rep3AcvmType::Public(res)
-        //     }
-        //     (Rep3AcvmType::Public(low), Rep3AcvmType::Shared(high)) => {
-        //         if low >= &scale {
-        //             return Err(std::io::Error::new(
-        //                 std::io::ErrorKind::InvalidInput,
-        //                 format!("Scalar {} is not less than 2^128", low),
-        //             ));
-        //         }
-        //         let res = arithmetic::add_public(high * scale, *low, io_context.id);
-        //         Rep3AcvmType::Shared(res)
-        //     }
-        //     (Rep3AcvmType::Shared(low), Rep3AcvmType::Public(high)) => {
-        //         if high >= &scale {
-        //             return Err(std::io::Error::new(
-        //                 std::io::ErrorKind::InvalidInput,
-        //                 format!("Scalar {} is not less than 2^128", high),
-        //             ));
-        //         }
-        //         let res = arithmetic::add_public(*low, high * &scale, io_context.id);
-        //         Rep3AcvmType::Shared(res)
-        //     }
-        //     (Rep3AcvmType::Shared(low), Rep3AcvmType::Shared(high)) => {
-        //         let res = high * scale + *low;
-        //         Rep3AcvmType::Shared(res)
-        //     }
-        // };
-        // Ok(res)
-        todo!()
+        let scale = ark_grumpkin::Fr::from(BigUint::one() << 128);
+        let res = match (low, high) {
+            (Rep3AcvmType::Public(low), Rep3AcvmType::Public(high)) => {
+                let scalar_low = PlainAcvmSolver::<F>::bn254_fr_to_u128(*low)?;
+                let scalar_high = PlainAcvmSolver::<F>::bn254_fr_to_u128(*high)?;
+                let grumpkin_integer: BigUint = (BigUint::from(scalar_high) << 128) + scalar_low;
+
+                // Check if this is smaller than the grumpkin modulus
+                if pedantic_solving && grumpkin_integer >= ark_grumpkin::FrConfig::MODULUS.into() {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        format!(
+                            "{} is not a valid grumpkin scalar",
+                            grumpkin_integer.to_str_radix(16)
+                        ),
+                    ));
+                }
+                Rep3AcvmType::Public(ark_grumpkin::Fr::from(grumpkin_integer))
+            }
+            (Rep3AcvmType::Public(low), Rep3AcvmType::Shared(high)) => {
+                let scalar_low = PlainAcvmSolver::<F>::bn254_fr_to_u128(*low)?;
+                // Change the sharing field
+                let scalar_high = conversion::a2b(*high, io_context)?;
+                let scalar_high =
+                    Rep3BigUintShare::<ark_grumpkin::Fr>::new(scalar_high.a, scalar_high.b);
+                let scalar_high = conversion::b2a(&scalar_high, io_context)?;
+
+                let res =
+                    arithmetic::add_public(scalar_high * scale, scalar_low.into(), io_context.id);
+                Rep3AcvmType::Shared(res)
+            }
+            (Rep3AcvmType::Shared(low), Rep3AcvmType::Public(high)) => {
+                let scalar_high = PlainAcvmSolver::<F>::bn254_fr_to_u128(*high)?;
+                // Change the sharing field
+                let scalar_low = conversion::a2b(*low, io_context)?;
+                let scalar_low =
+                    Rep3BigUintShare::<ark_grumpkin::Fr>::new(scalar_low.a, scalar_low.b);
+                let scalar_low = conversion::b2a(&scalar_low, io_context)?;
+
+                let res = arithmetic::add_public(
+                    scalar_low,
+                    scale * ark_grumpkin::Fr::from(scalar_high),
+                    io_context.id,
+                );
+                Rep3AcvmType::Shared(res)
+            }
+            (Rep3AcvmType::Shared(low), Rep3AcvmType::Shared(high)) => {
+                // Change the sharing field
+
+                // TODO parallelize these
+                let scalar_low = conversion::a2b(*low, io_context)?;
+                let scalar_low =
+                    Rep3BigUintShare::<ark_grumpkin::Fr>::new(scalar_low.a, scalar_low.b);
+                let scalar_low = conversion::b2a(&scalar_low, io_context)?;
+
+                let scalar_high = conversion::a2b(*high, io_context)?;
+                let scalar_high =
+                    Rep3BigUintShare::<ark_grumpkin::Fr>::new(scalar_high.a, scalar_high.b);
+                let scalar_high = conversion::b2a(&scalar_high, io_context)?;
+
+                let res = scalar_high * scale + scalar_low;
+                Rep3AcvmType::Shared(res)
+            }
+        };
+        Ok(res)
     }
 
     fn create_grumpkin_point(
@@ -1134,6 +1146,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             ));
         }
 
+        // TODO parallelize all points?
         for i in (0..points.len()).step_by(3) {
             let (point, grumpkin_integer) = join!(
                 Self::create_grumpkin_point(
