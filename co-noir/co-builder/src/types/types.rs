@@ -394,7 +394,7 @@ pub(crate) struct MultiScalarMul<F: PrimeField> {
     pub(crate) scalars: Vec<WitnessOrConstant<F>>,
     pub(crate) out_point_x: u32,
     pub(crate) out_point_y: u32,
-    pub(crate) out_point_is_infinite: u32,
+    pub(crate) out_point_is_infinity: u32,
 }
 
 pub(crate) struct LogicConstraint<F: PrimeField> {
