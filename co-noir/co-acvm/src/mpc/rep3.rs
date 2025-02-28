@@ -1,9 +1,9 @@
 use ark_ec::CurveGroup;
-use ark_ff::{One, PrimeField, Zero};
+use ark_ff::{MontConfig, One, PrimeField, Zero};
 use co_brillig::mpc::{Rep3BrilligDriver, Rep3BrilligType};
 use itertools::{izip, Itertools};
 use mpc_core::gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations};
-use mpc_core::protocols::rep3::{arithmetic, binary, conversion, yao, Rep3PointShare};
+use mpc_core::protocols::rep3::{arithmetic, binary, conversion, pointshare, yao, Rep3PointShare};
 use mpc_core::protocols::rep3_ring::gadgets::sort::{radix_sort_fields, radix_sort_fields_vec_by};
 use mpc_core::{
     lut::LookupTableProvider,
@@ -65,33 +65,74 @@ impl<F: PrimeField, N: Rep3Network> Rep3AcvmSolver<F, N> {
         self.io_context0.network
     }
 
-    fn create_grumpkin_field(
+    fn combine_grumpkin_scalar_field_limbs(
         low: &Rep3AcvmType<ark_bn254::Fr>,
         high: &Rep3AcvmType<ark_bn254::Fr>,
         io_context: &mut IoContext<N>,
         pedantic_solving: bool,
-    ) -> std::io::Result<Rep3AcvmType<ark_bn254::Fr>> {
-        let scale = ark_bn254::Fr::from(BigUint::one() << 128);
-        let res = match (low, high) {
-            (Rep3AcvmType::Public(low), Rep3AcvmType::Public(high)) => todo!(),
-            (Rep3AcvmType::Public(low), Rep3AcvmType::Shared(high)) => todo!(),
-            (Rep3AcvmType::Shared(low), Rep3AcvmType::Public(high)) => {
-                let res = arithmetic::add_public(*low, high * &scale, io_context.id);
-                // TODO check
-                Rep3AcvmType::Shared(res)
-            }
-            (Rep3AcvmType::Shared(low), Rep3AcvmType::Shared(high)) => {
-                let res = high * scale + *low;
-                Rep3AcvmType::Shared(res)
-            }
-        };
-        Ok(res)
+    ) -> std::io::Result<Rep3AcvmType<ark_grumpkin::Fr>> {
+        // let scale = ark_bn254::Fr::from(BigUint::one() << 128);
+        // let res = match (low, high) {
+        //     (Rep3AcvmType::Public(low), Rep3AcvmType::Public(high)) => {
+        //         if low >= &scale {
+        //             return Err(std::io::Error::new(
+        //                 std::io::ErrorKind::InvalidInput,
+        //                 format!("Scalar {} is not less than 2^128", low),
+        //             ));
+        //         }
+        //         if high >= &scale {
+        //             return Err(std::io::Error::new(
+        //                 std::io::ErrorKind::InvalidInput,
+        //                 format!("Scalar {} is not less than 2^128", high),
+        //             ));
+        //         }
+        //         let res = high * &scale + low;
+        //         // Check if this is smaller than the grumpkin modulus
+        //         if pedantic_solving && res >= ark_grumpkin::FrConfig::MODULUS.into() {
+        //             return Err(std::io::Error::new(
+        //                 std::io::ErrorKind::InvalidInput,
+        //                 format!(
+        //                     "{} is not a valid grumpkin scalar",
+        //                     BigUint::from(res).to_str_radix(16)
+        //                 ),
+        //             ));
+        //         }
+        //         Rep3AcvmType::Public(res)
+        //     }
+        //     (Rep3AcvmType::Public(low), Rep3AcvmType::Shared(high)) => {
+        //         if low >= &scale {
+        //             return Err(std::io::Error::new(
+        //                 std::io::ErrorKind::InvalidInput,
+        //                 format!("Scalar {} is not less than 2^128", low),
+        //             ));
+        //         }
+        //         let res = arithmetic::add_public(high * scale, *low, io_context.id);
+        //         Rep3AcvmType::Shared(res)
+        //     }
+        //     (Rep3AcvmType::Shared(low), Rep3AcvmType::Public(high)) => {
+        //         if high >= &scale {
+        //             return Err(std::io::Error::new(
+        //                 std::io::ErrorKind::InvalidInput,
+        //                 format!("Scalar {} is not less than 2^128", high),
+        //             ));
+        //         }
+        //         let res = arithmetic::add_public(*low, high * &scale, io_context.id);
+        //         Rep3AcvmType::Shared(res)
+        //     }
+        //     (Rep3AcvmType::Shared(low), Rep3AcvmType::Shared(high)) => {
+        //         let res = high * scale + *low;
+        //         Rep3AcvmType::Shared(res)
+        //     }
+        // };
+        // Ok(res)
+        todo!()
     }
 
     fn create_grumpkin_point(
         x: &Rep3AcvmType<ark_bn254::Fr>,
         y: &Rep3AcvmType<ark_bn254::Fr>,
         is_infinity: &Rep3AcvmType<ark_bn254::Fr>,
+        io_context: &mut IoContext<N>,
         pedantic_solving: bool,
     ) -> std::io::Result<Rep3AcvmPoint<ark_grumpkin::Projective>> {
         if let Rep3AcvmType::Public(is_infinity) = is_infinity {
@@ -107,6 +148,27 @@ impl<F: PrimeField, N: Rep3Network> Rep3AcvmSolver<F, N> {
             }
         }
         todo!()
+    }
+
+    fn scalar_point_mul<C: CurveGroup>(
+        a: Rep3AcvmType<C::ScalarField>,
+        b: Rep3AcvmPoint<C>,
+        io_context: &mut IoContext<N>,
+    ) -> std::io::Result<Rep3AcvmPoint<C>> {
+        let result = match (a, b) {
+            (Rep3AcvmType::Public(a), Rep3AcvmPoint::Public(b)) => Rep3AcvmPoint::Public(b * a),
+            (Rep3AcvmType::Public(a), Rep3AcvmPoint::Shared(b)) => {
+                Rep3AcvmPoint::Shared(pointshare::scalar_mul_public_scalar(&b, a))
+            }
+            (Rep3AcvmType::Shared(a), Rep3AcvmPoint::Public(b)) => {
+                Rep3AcvmPoint::Shared(pointshare::scalar_mul_public_point(&b, a))
+            }
+            (Rep3AcvmType::Shared(a), Rep3AcvmPoint::Shared(b)) => {
+                let result = pointshare::scalar_mul(&b, a, io_context)?;
+                Rep3AcvmPoint::Shared(result)
+            }
+        };
+        Ok(result)
     }
 }
 
@@ -1039,7 +1101,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         points: &[Self::AcvmType],
         scalars_lo: &[Self::AcvmType],
         scalars_hi: &[Self::AcvmType],
-        _pedantic_solving: bool, // Cannot check values
+        pedantic_solving: bool, // Cannot check values
     ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
         // This is very hardcoded to the grumpkin curve
         if TypeId::of::<F>() != TypeId::of::<ark_bn254::Fr>() {
@@ -1061,9 +1123,9 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             std::mem::transmute::<&[Self::AcvmType], &[Rep3AcvmType<ark_bn254::Fr>]>(scalars_hi)
         };
         // Safety: We checked that the types match
-        let self_ = unsafe {
-            &mut *(self as *mut Rep3AcvmSolver<F, N> as *mut Rep3AcvmSolver<ark_bn254::Fr, N>)
-        };
+        // let self_ = unsafe {
+        //     &mut *(self as *mut Rep3AcvmSolver<F, N> as *mut Rep3AcvmSolver<ark_bn254::Fr, N>)
+        // };
 
         if points.len() != 3 * scalars_lo.len() || scalars_lo.len() != scalars_hi.len() {
             return Err(std::io::Error::new(
@@ -1073,9 +1135,24 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
 
         for i in (0..points.len()).step_by(3) {
-            // We cannot check check the scalars for being of correct size
-            // let mul = self_.mul_with_public(scale, scalars_hi[i / 3].to_owned());
-            // let grumpkin_integer = self_.add(mul, scalars_lo[i / 3].to_owned());
+            let (point, grumpkin_integer) = join!(
+                Self::create_grumpkin_point(
+                    &points[i],
+                    &points[i + 1],
+                    &points[i + 2],
+                    &mut self.io_context0,
+                    pedantic_solving,
+                ),
+                Self::combine_grumpkin_scalar_field_limbs(
+                    &scalars_lo[i / 3],
+                    &scalars_hi[i / 3],
+                    &mut self.io_context1,
+                    pedantic_solving,
+                )
+            );
+            let iteration_output_point =
+                Self::scalar_point_mul(grumpkin_integer?, point?, &mut self.io_context0)?;
+            todo!()
         }
 
         todo!()
