@@ -600,11 +600,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
 
             let scalar_low = Self::bn254_fr_to_u128(scalars_lo[i / 3])?;
             let scalar_high = Self::bn254_fr_to_u128(scalars_hi[i / 3])?;
-
-            let mut bytes = scalar_high.to_be_bytes().to_vec();
-            bytes.extend_from_slice(&scalar_low.to_be_bytes());
-
-            let grumpkin_integer = BigUint::from_bytes_be(&bytes);
+            let grumpkin_integer: BigUint = (BigUint::from(scalar_high) << 128) + scalar_low;
 
             // Check if this is smaller than the grumpkin modulus
             if pedantic_solving && grumpkin_integer >= ark_grumpkin::FrConfig::MODULUS.into() {
