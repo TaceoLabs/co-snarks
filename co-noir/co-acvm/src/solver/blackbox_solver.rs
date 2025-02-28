@@ -278,13 +278,13 @@ where
             }
         }
         // Call the backend's multi-scalar multiplication function
-        let (res_x, res_y, is_infinite) =
+        let (res_x, res_y, is_infinity) =
             driver.multi_scalar_mul(&points, &scalars_lo, &scalars_hi, pedantic_solving)?;
 
         // Insert the resulting point into the witness map
         Self::insert_value(&outputs.0, res_x, initial_witness)?;
         Self::insert_value(&outputs.1, res_y, initial_witness)?;
-        Self::insert_value(&outputs.2, is_infinite, initial_witness)?;
+        Self::insert_value(&outputs.2, is_infinity, initial_witness)?;
         Ok(())
     }
 

@@ -27,9 +27,9 @@ impl<F: PrimeField> PlainAcvmSolver<F> {
     pub(crate) fn create_grumpkin_point(
         x: ark_bn254::Fr,
         y: ark_bn254::Fr,
-        is_infinite: bool,
+        is_infinity: bool,
     ) -> std::io::Result<ark_grumpkin::Affine> {
-        if is_infinite {
+        if is_infinity {
             return Ok(ark_grumpkin::Affine::zero());
         }
         let point = ark_grumpkin::Affine::new_unchecked(x, y);
