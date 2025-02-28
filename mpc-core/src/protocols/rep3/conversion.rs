@@ -739,8 +739,12 @@ where
     y_y.b = local_b[1];
 
     let z = detail::point_addition(x, y, y_x, y_y, io_context)?;
-    let z_a = [z.0.a, z.1.a, z.2.a];
-    let z_b = [z.0.b, z.1.b, z.2.b];
+    // If infinity then z should be y
+    let cmux = arithmetic::cmux_vec(is_infinity, &[y_x, y_y], &[z.0, z.1], io_context)?;
+    // Since y is randomly chosen, it is very unlikely that the x-coordinate matches the x-coodrinate of x. Thus z.2 is already 0
+
+    let z_a = [cmux[0].a, cmux[1].a, z.2.a];
+    let z_b = [cmux[0].b, cmux[1].b, z.2.b];
 
     match io_context.id {
         PartyID::ID0 => {
@@ -777,6 +781,5 @@ where
         }
     }
 
-    // TODO maybe multiply with !is_ifinity?
     Ok(res)
 }

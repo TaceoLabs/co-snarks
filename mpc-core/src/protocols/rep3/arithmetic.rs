@@ -291,6 +291,23 @@ pub fn cmux<F: PrimeField, N: Rep3Network>(
     Ok(add(falsy, d))
 }
 
+/// Computes a CMUX: If cond is 1, returns truthy, otherwise returns falsy.
+/// Implementations should not overwrite this method.
+pub fn cmux_vec<F: PrimeField, N: Rep3Network>(
+    cond: FieldShare<F>,
+    truthy: &[FieldShare<F>],
+    falsy: &[FieldShare<F>],
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<FieldShare<F>>> {
+    debug_assert_eq!(truthy.len(), falsy.len());
+    let result_a = truthy
+        .iter()
+        .zip(falsy.iter())
+        .map(|(t, f)| sub(*t, *f) * cond + f.a + io_context.rngs.rand.masking_field_element::<F>())
+        .collect_vec();
+    io_mul_vec(result_a, io_context)
+}
+
 /// Convenience method for \[a\] + \[b\] * c
 pub fn add_mul_public<F: PrimeField>(a: FieldShare<F>, b: FieldShare<F>, c: F) -> FieldShare<F> {
     add(a, mul_public(b, c))
