@@ -8,7 +8,6 @@ pub(crate) mod prover;
 pub(crate) mod sponge_hasher;
 mod transcript;
 pub(crate) mod types;
-pub(crate) mod types_batch;
 pub(crate) mod verifier;
 
 use acir::{native_types::WitnessStack, FieldElement};

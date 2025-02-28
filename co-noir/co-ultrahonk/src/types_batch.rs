@@ -1,9 +1,12 @@
 use ark_ec::pairing::Pairing;
 use ark_ff::Zero;
+use co_builder::prelude::PrecomputedEntities;
 use itertools::izip;
-use ultrahonk::prelude::{
-    PrecomputedEntitiesBatch, ShiftedWitnessEntitiesBatch, Univariate, WitnessEntitiesBatch,
-};
+use ultrahonk::prelude::{ShiftedWitnessEntities, Univariate, WitnessEntities};
+
+pub(crate) type WitnessEntitiesBatch<T> = WitnessEntities<Vec<T>>;
+pub(crate) type PrecomputedEntitiesBatch<T> = PrecomputedEntities<Vec<T>>;
+pub(crate) type ShiftedWitnessEntitiesBatch<T> = ShiftedWitnessEntities<Vec<T>>;
 
 use crate::{
     co_decider::{types::MAX_PARTIAL_RELATION_LENGTH, univariates::SharedUnivariate},
