@@ -10,7 +10,3 @@ pub use co_builder::prelude::PlainAcvmSolver;
 pub use co_builder::prelude::VerifyingKeyBarretenberg;
 pub use co_builder::prelude::{ProvingKey, UltraCircuitBuilder, ZeroKnowledge};
 pub use co_builder::TranscriptFieldType;
-
-pub use crate::types_batch::PrecomputedEntitiesBatch;
-pub use crate::types_batch::ShiftedWitnessEntitiesBatch;
-pub use crate::types_batch::WitnessEntitiesBatch;
