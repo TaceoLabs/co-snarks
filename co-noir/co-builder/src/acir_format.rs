@@ -713,7 +713,7 @@ impl<F: PrimeField> AcirFormat<F> {
                     scalars: scalars.into_iter().map(|e| Self::parse_input(e)).collect(),
                     out_point_x: outputs.0.witness_index(),
                     out_point_y: outputs.1.witness_index(),
-                    out_point_is_infinite: outputs.2.witness_index(),
+                    out_point_is_infinity: outputs.2.witness_index(),
                 });
                 af.constrained_witness.insert(outputs.0.witness_index());
                 af.constrained_witness.insert(outputs.1.witness_index());
