@@ -21,7 +21,7 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
     /// The G1 point share type
     type PointShare: std::fmt::Debug + Send + 'static;
     /// The party id type
-    type PartyID: Copy;
+    type PartyID: Copy + Send + Sync + std::fmt::Debug;
 
     fn debug(x: Self::ArithmeticShare) -> String;
 
@@ -95,6 +95,17 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
             .iter()
             .zip(shared.iter())
             .map(|(a, b)| Self::add_with_public(*a, *b, id))
+            .collect()
+    }
+
+    fn add_with_public_many_iter(
+        public: impl Iterator<Item = P::ScalarField>,
+        shared: &[Self::ArithmeticShare],
+        id: Self::PartyID,
+    ) -> Vec<Self::ArithmeticShare> {
+        public
+            .zip(shared.iter())
+            .map(|(a, b)| Self::add_with_public(a, *b, id))
             .collect()
     }
 
