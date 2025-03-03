@@ -383,6 +383,13 @@ impl<F: PrimeField> FieldCT<F> {
         *self = self.add(other, builder, driver);
     }
 
+    pub(crate) fn neg(&self) -> Self {
+        let mut result = self.to_owned();
+        result.additive_constant = -result.additive_constant;
+        result.multiplicative_constant = -result.multiplicative_constant;
+        result
+    }
+
     pub(crate) fn sub<
         P: Pairing<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
@@ -392,10 +399,7 @@ impl<F: PrimeField> FieldCT<F> {
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> Self {
-        let mut rhs = other.to_owned();
-        rhs.additive_constant = -rhs.additive_constant;
-        rhs.multiplicative_constant = -rhs.multiplicative_constant;
-
+        let rhs = other.neg();
         self.add(&rhs, builder, driver)
     }
 
@@ -851,6 +855,8 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupCT<P
             scalar.validate_scalar_is_in_field();
         }
 
+        let num_bits_not_full_field_size = num_bits != CycleScalarCT::<P::ScalarField>::NUM_BITS;
+
         todo!("Implement batch_mul")
     }
 }
@@ -907,9 +913,16 @@ impl<F: PrimeField> CycleScalarCT<F> {
         (lo, hi)
     }
 
-    fn validate_scalar_is_in_field(&self) {
+    fn validate_scalar_is_in_field<
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        &self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> std::io::Result<()> {
         if self.is_constant() || self.skip_primality_test() {
-            return;
+            return Ok(());
         }
         // if !self.is_constant() && !self.skip_primality_test() {
         let cycle_group_modulus = if self.use_bn254_scalar_field_for_primality_test() {
@@ -918,6 +931,38 @@ impl<F: PrimeField> CycleScalarCT<F> {
             F::MODULUS.into()
         };
         let (r_lo, r_hi) = Self::slice(cycle_group_modulus);
-        todo!("Implement validate_scalar_is_in_field")
+
+        todo!("Implement validate_scalar_is_in_field");
+
+        let borrow = FieldCT::zero(); // TODO remove
+
+        // directly call `create_new_range_constraint` to avoid creating an arithmetic gate
+        if !self.lo.is_constant() {
+            // We have a ultra builder
+            builder.create_new_range_constraint(borrow.get_witness_index(), 1);
+        }
+
+        // Hi range check = r_hi - y_hi - borrow
+        // Lo range check = r_lo - y_lo + borrow * 2^{126}
+        let borrow_scaled = borrow.multiply(
+            &FieldCT::from(P::ScalarField::from(BigUint::one() << Self::LO_BITS)),
+            builder,
+            driver,
+        )?;
+        let hi_diff = self
+            .hi
+            .neg()
+            .add(&FieldCT::from(P::ScalarField::from(r_hi)), builder, driver)
+            .sub(&borrow, builder, driver);
+        let lo_diff = self
+            .lo
+            .neg()
+            .add(&FieldCT::from(P::ScalarField::from(r_lo)), builder, driver)
+            .add(&borrow_scaled, builder, driver);
+
+        hi_diff.create_range_constraint(Self::HI_BITS, builder, driver);
+        lo_diff.create_range_constraint(Self::LO_BITS, builder, driver);
+
+        Ok(())
     }
 }
