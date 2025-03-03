@@ -418,7 +418,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         self.num_gates += 1;
     }
 
-    fn create_big_mul_gate(&mut self, inp: &MulQuad<P::ScalarField>) {
+    pub(crate) fn create_big_mul_gate(&mut self, inp: &MulQuad<P::ScalarField>) {
         self.assert_valid_variables(&[inp.a, inp.b, inp.c, inp.d]);
 
         self.blocks
