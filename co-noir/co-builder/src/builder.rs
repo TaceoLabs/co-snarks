@@ -2732,8 +2732,8 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             scalars.push(scalar);
         }
 
-        let output_point =
-            CycleGroupCT::batch_mul(points, scalars)?.get_standard_form(self, driver)?;
+        let output_point = CycleGroupCT::batch_mul(points, scalars, self, driver)?
+            .get_standard_form(self, driver)?;
 
         // Add the constraints and handle constant values
         if output_point.is_point_at_infinity().is_constant() {
