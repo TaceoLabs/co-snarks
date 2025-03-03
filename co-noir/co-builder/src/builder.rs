@@ -1,5 +1,4 @@
 use crate::acir_format::{HonkRecursion, ProgramMetadata};
-use crate::builder;
 use crate::types::field_ct::{CycleGroupCT, CycleScalarCT};
 use crate::types::types::{MultiScalarMul, WitnessOrConstant};
 use crate::{
