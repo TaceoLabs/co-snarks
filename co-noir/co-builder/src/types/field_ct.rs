@@ -123,10 +123,10 @@ impl<F: PrimeField> FieldCT<F> {
         &self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> BoolCT {
+    ) -> BoolCT<P, T> {
         if self.is_constant() {
             return BoolCT {
-                witness_bool: self.additive_constant == F::one(),
+                witness_bool: self.additive_constant.into(), // == F::one(),
                 witness_inverted: false,
                 witness_index: Self::IS_CONSTANT,
             };
@@ -140,16 +140,27 @@ impl<F: PrimeField> FieldCT<F> {
         if (!add_constant_check || !mul_constant_check) && !inverted_check {
             let normalized_element = self.normalize(builder, driver);
             let witness = builder.get_variable(normalized_element.get_witness_index() as usize);
-            // ASSERT((witness == bb::fr::zero()) || (witness == bb::fr::one()));
-            // bool_t<Builder> result(context);
-            // result.witness_bool = (witness == bb::fr::one());
-            // result.witness_inverted = false;
-            // result.witness_index = normalized_element.get_witness_index();
-            // context->create_bool_gate(normalized_element.get_witness_index());
-            // return result;
+            if let Some(witness) = T::get_public(&witness) {
+                assert!(witness == F::zero() || witness == F::one());
+            }
+            builder.create_bool_gate(normalized_element.get_witness_index());
+            return BoolCT {
+                witness_bool: witness, // == F::one(),
+                witness_inverted: false,
+                witness_index: normalized_element.get_witness_index(),
+            };
         }
 
-        todo!()
+        let witness = builder.get_variable(self.witness_index as usize);
+        if let Some(witness) = T::get_public(&witness) {
+            assert!(witness == F::zero() || witness == F::one());
+        }
+        builder.create_bool_gate(self.witness_index);
+        BoolCT {
+            witness_bool: witness, // == F::one(),
+            witness_inverted: false,
+            witness_index: self.witness_index,
+        };
     }
 
     pub(crate) fn normalize<
@@ -568,8 +579,8 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> WitnessCT<P, T
     }
 }
 
-pub(crate) struct BoolCT {
-    pub(crate) witness_bool: bool,
+pub(crate) struct BoolCT<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
+    pub(crate) witness_bool: T::AcvmType,
     pub(crate) witness_inverted: bool,
     pub(crate) witness_index: u32,
 }

@@ -4051,7 +4051,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         });
     }
 
-    fn create_bool_gate(&mut self, variable_index: u32) {
+    pub(crate) fn create_bool_gate(&mut self, variable_index: u32) {
         self.is_valid_variable(variable_index as usize);
 
         self.blocks.arithmetic.populate_wires(
