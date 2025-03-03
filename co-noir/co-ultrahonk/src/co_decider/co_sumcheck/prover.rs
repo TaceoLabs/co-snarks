@@ -186,6 +186,7 @@ impl<
 
         for round_idx in 1..multivariate_d as usize {
             // Write the round univariate to the transcript
+            tracing::trace!("Sumcheck prove round {}", round_idx);
 
             let round_univariate = sum_check_round.compute_univariate::<T, P>(
                 &mut self.driver,

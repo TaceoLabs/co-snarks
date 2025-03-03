@@ -184,7 +184,6 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         T::add_assign_many(&mut x_add_identity, &y1y2);
         T::add_assign_many(&mut x_add_identity, &y1y2);
 
-        //T::mul_assign_with_public_many(&mut tmp, scaling_factors);
         let q_elliptic_by_scaling = q_elliptic
             .iter()
             .zip_eq(scaling_factors)
