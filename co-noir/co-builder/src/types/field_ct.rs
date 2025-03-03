@@ -160,7 +160,7 @@ impl<F: PrimeField> FieldCT<F> {
             witness_bool: witness, // == F::one(),
             witness_inverted: false,
             witness_index: self.witness_index,
-        };
+        }
     }
 
     pub(crate) fn normalize<
