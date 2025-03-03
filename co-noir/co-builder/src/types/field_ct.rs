@@ -749,7 +749,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T> {
         self.witness_index == FieldCT::<P::ScalarField>::IS_CONSTANT
     }
 
-    fn get_value(&self, driver: &mut T) -> T::AcvmType {
+    pub(crate) fn get_value(&self, driver: &mut T) -> T::AcvmType {
         let mut result = self.witness_bool.to_owned();
 
         if self.witness_inverted {
@@ -833,6 +833,13 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupCT<P
 
     pub(crate) fn is_point_at_infinity(&self) -> &BoolCT<P, T> {
         &self.is_infinity
+    }
+
+    pub(crate) fn batch_mul(
+        base_points: Vec<Self>,
+        scalars: Vec<CycleScalarCT<P::ScalarField>>,
+    ) -> std::io::Result<Self> {
+        todo!("Implement batch_mul")
     }
 }
 
