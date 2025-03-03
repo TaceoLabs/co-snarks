@@ -1,6 +1,6 @@
 use crate::acir_format::{HonkRecursion, ProgramMetadata};
 use crate::polynomials::polynomial::MASKING_OFFSET;
-use crate::types::field_ct::CycleScalarCT;
+use crate::types::field_ct::{CycleGroupCT, CycleScalarCT};
 use crate::types::types::{MultiScalarMul, WitnessOrConstant};
 use crate::{
     acir_format::AcirFormat,
@@ -2732,7 +2732,49 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             scalars.push(scalar);
         }
 
-        todo!("Multi scalar mul constraint");
+        let output_point =
+            CycleGroupCT::batch_mul(points, scalars)?.get_standard_form(self, driver)?;
+
+        // Add the constraints and handle constant values
+        if output_point.is_point_at_infinity().is_constant() {
+            let value = output_point.is_point_at_infinity().get_value(driver);
+            self.fix_witness(
+                constraint.out_point_is_infinity,
+                T::get_public(&value).expect("Constants should be public"),
+            );
+        } else {
+            self.assert_equal(
+                output_point.is_point_at_infinity().witness_index as usize,
+                constraint.out_point_is_infinity as usize,
+            );
+        }
+
+        if output_point.x.is_constant() {
+            let value = output_point.x.get_value(self, driver);
+            self.fix_witness(
+                constraint.out_point_x,
+                T::get_public(&value).expect("Constants should be public"),
+            );
+        } else {
+            self.assert_equal(
+                output_point.x.get_witness_index() as usize,
+                constraint.out_point_x as usize,
+            );
+        }
+
+        if output_point.y.is_constant() {
+            let value = output_point.y.get_value(self, driver);
+            self.fix_witness(
+                constraint.out_point_y,
+                T::get_public(&value).expect("Constants should be public"),
+            );
+        } else {
+            self.assert_equal(
+                output_point.y.get_witness_index() as usize,
+                constraint.out_point_y as usize,
+            );
+        }
+
         Ok(())
     }
 
