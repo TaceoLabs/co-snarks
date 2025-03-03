@@ -727,10 +727,21 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> WitnessCT<P, T
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct BoolCT<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
     pub(crate) witness_bool: T::AcvmType,
     pub(crate) witness_inverted: bool,
     pub(crate) witness_index: u32,
+}
+
+impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> Clone for BoolCT<P, T> {
+    fn clone(&self) -> Self {
+        Self {
+            witness_bool: self.witness_bool.to_owned(),
+            witness_inverted: self.witness_inverted,
+            witness_index: self.witness_index,
+        }
+    }
 }
 
 impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T> {
@@ -803,6 +814,25 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupCT<P
             is_infinity,
             is_constant,
         }
+    }
+
+    pub(crate) fn get_standard_form(
+        &self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> std::io::Result<Self> {
+        let zero = FieldCT::zero();
+        Ok(Self::new(
+            FieldCT::conditional_assign(&self.is_infinity, &zero, &self.x, builder, driver)?,
+            FieldCT::conditional_assign(&self.is_infinity, &zero, &self.y, builder, driver)?,
+            self.is_infinity.to_owned(),
+            builder,
+            driver,
+        ))
+    }
+
+    pub(crate) fn is_point_at_infinity(&self) -> &BoolCT<P, T> {
+        &self.is_infinity
     }
 }
 
