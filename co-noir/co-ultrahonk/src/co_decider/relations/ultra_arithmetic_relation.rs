@@ -145,7 +145,6 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let neg_half = -P::ScalarField::from(2u64).inverse().unwrap();
 
         let mul = driver.mul_many(w_l, w_r)?;
-        //   let mul = SharedUnivariate::from_vec(&mul);
         let mut tmp = T::mul_with_public_many(q_m, &mul);
         let q_arith_neg_3 = q_arith
             .iter()

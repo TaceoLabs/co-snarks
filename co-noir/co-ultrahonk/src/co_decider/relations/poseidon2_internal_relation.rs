@@ -127,9 +127,6 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let q_l = input.precomputed.q_l();
         let q_poseidon2_internal = input.precomputed.q_poseidon2_internal();
 
-        if w_l.is_empty() {
-            return Ok(());
-        }
         // add round constants
         let s1 = T::add_with_public_many(q_l, w_l, driver.get_party_id());
 

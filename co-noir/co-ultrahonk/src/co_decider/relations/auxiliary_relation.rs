@@ -165,7 +165,6 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         scaling_factors: &[P::ScalarField],
     ) -> HonkProofResult<()> {
         let party_id = driver.get_party_id();
-        // this method expects
 
         let eta = &relation_parameters.eta_1;
         let eta_two = &relation_parameters.eta_2;

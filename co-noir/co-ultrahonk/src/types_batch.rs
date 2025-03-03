@@ -75,7 +75,7 @@ where
     ) {
         let scaling_factors = vec![scaling_factor; MAX_PARTIAL_RELATION_LENGTH];
         self.can_skip = false;
-        self.all_entites.add(entity.clone());
+        self.all_entites.add(entity);
         self.scaling_factors.extend(scaling_factors);
     }
 }
@@ -110,6 +110,7 @@ where
         // pub(crate) r1: SharedUnivariate<T, P, 5>,
         //
         // Can we somehow only add 5/6 elements?
+
         // check if we can skip arith
         if !entity.precomputed.q_arith().is_zero() {
             self.ultra_arith.add(&entity, scaling_factor)
@@ -152,13 +153,14 @@ where
     T: NoirUltraHonkProver<P>,
 {
     pub fn new() -> Self {
-        // rather arbitary size of 1024 capacity - we dont want to reserver full round size
+        // rather arbitary size of 1024 capacity - we dont want to reserve full round size
         // as this would hit the RAM quite hard, but 1024 should always be fine and smaller
         // circuits won't need to move the vecs in memory around
-        let witness = WitnessEntitiesBatch::<T::ArithmeticShare>::with_capacity(1024);
-        let precomputed = PrecomputedEntitiesBatch::<P::ScalarField>::with_capacity(1024);
+        const CAPACITY: usize = 1024;
+        let witness = WitnessEntitiesBatch::<T::ArithmeticShare>::with_capacity(CAPACITY);
+        let precomputed = PrecomputedEntitiesBatch::<P::ScalarField>::with_capacity(CAPACITY);
         let shifted_witness =
-            ShiftedWitnessEntitiesBatch::<T::ArithmeticShare>::with_capacity(1024);
+            ShiftedWitnessEntitiesBatch::<T::ArithmeticShare>::with_capacity(CAPACITY);
         Self {
             witness,
             precomputed,
@@ -166,17 +168,17 @@ where
         }
     }
 
-    pub fn add(&mut self, entity: AllEntities<Shared<T, P>, Public<P>>) {
-        for (src, des) in izip!(entity.witness.into_iter(), self.witness.iter_mut()) {
+    pub fn add(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+        for (src, des) in izip!(entity.witness.iter(), self.witness.iter_mut()) {
             des.extend(src.evaluations);
         }
 
-        for (src, des) in izip!(entity.precomputed.into_iter(), self.precomputed.iter_mut()) {
+        for (src, des) in izip!(entity.precomputed.iter(), self.precomputed.iter_mut()) {
             des.extend(src.evaluations);
         }
 
         for (src, des) in izip!(
-            entity.shifted_witness.into_iter(),
+            entity.shifted_witness.iter(),
             self.shifted_witness.iter_mut()
         ) {
             des.extend(src.evaluations);
