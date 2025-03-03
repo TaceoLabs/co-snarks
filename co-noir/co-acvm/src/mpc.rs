@@ -305,4 +305,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         scalars_hi: &[Self::AcvmType],
         pedantic_solving: bool,
     ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)>;
+
+    /// Compute the greater than operation: a > b. Outputs 1 if a > b, 0 otherwise.
+    fn gt(&mut self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> io::Result<Self::AcvmType>;
 }

@@ -629,4 +629,8 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
             Ok((F::zero(), F::zero(), F::one()))
         }
     }
+
+    fn gt(&mut self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> std::io::Result<Self::AcvmType> {
+        Ok(F::from((lhs > rhs) as u64))
+    }
 }
