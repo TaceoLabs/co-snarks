@@ -650,4 +650,12 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
     ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
         panic!("functionality multi_scalar_mul not feasible for Shamir")
     }
+
+    fn gt(
+        &mut self,
+        _lhs: Self::AcvmType,
+        _rhs: Self::AcvmType,
+    ) -> std::io::Result<Self::AcvmType> {
+        panic!("functionality gt not feasible for Shamir")
+    }
 }

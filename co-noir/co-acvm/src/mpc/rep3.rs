@@ -1254,4 +1254,21 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         };
         Ok(res)
     }
+
+    fn gt(&mut self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> std::io::Result<Self::AcvmType> {
+        match (lhs, rhs) {
+            (Rep3AcvmType::Public(a), Rep3AcvmType::Public(b)) => {
+                Ok(F::from((a > b) as u64).into())
+            }
+            (Rep3AcvmType::Public(a), Rep3AcvmType::Shared(b)) => {
+                Ok(arithmetic::lt_public(b, a, &mut self.io_context0)?.into())
+            }
+            (Rep3AcvmType::Shared(a), Rep3AcvmType::Public(b)) => {
+                Ok(arithmetic::ge_public(a, b, &mut self.io_context0)?.into())
+            }
+            (Rep3AcvmType::Shared(a), Rep3AcvmType::Shared(b)) => {
+                Ok(arithmetic::ge(a, b, &mut self.io_context0)?.into())
+            }
+        }
+    }
 }

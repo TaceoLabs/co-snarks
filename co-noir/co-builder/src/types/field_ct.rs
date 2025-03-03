@@ -859,6 +859,12 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupCT<P
 
         let num_bits_not_full_field_size = num_bits != CycleScalarCT::<P::ScalarField>::NUM_BITS;
 
+        // When calling `_variable_base_batch_mul_internal`, we can unconditionally add iff all of the input points
+        // are fixed-base points
+        // (i.e. we are ULTRA Builder and we are doing fixed-base mul over points not present in our plookup tables)
+        let can_unconditional_add = true;
+        let has_non_constant_component = false;
+
         todo!("Implement batch_mul")
     }
 }
@@ -943,8 +949,7 @@ impl<F: PrimeField> CycleScalarCT<F> {
             FieldCT::from(P::ScalarField::from(need_borrow as u64))
         } else {
             let need_borrow = if T::is_shared(&lo_value) {
-                let lo_value = T::get_shared(&lo_value).expect("Already checked it is shared");
-                todo!("Implement gt for shared")
+                driver.gt(lo_value, F::from(r_lo.to_owned()).into())?
             } else {
                 let lo_value: BigUint = T::get_public(&lo_value)
                     .expect("Already checked it is public")
