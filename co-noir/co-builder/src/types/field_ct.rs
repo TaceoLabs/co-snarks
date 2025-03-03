@@ -1,8 +1,9 @@
+use super::types::MulQuad;
 use crate::builder::GenericUltraCircuitBuilder;
 use crate::types::types::{AddTriple, PolyTriple};
 use ark_ec::pairing::Pairing;
-use ark_ff::One;
 use ark_ff::PrimeField;
+use ark_ff::{One, Zero};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use num_bigint::BigUint;
 
@@ -382,6 +383,122 @@ impl<F: PrimeField> FieldCT<F> {
         *self = self.add(other, builder, driver);
     }
 
+    pub(crate) fn sub<
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        &self,
+        other: &Self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> Self {
+        let mut rhs = other.to_owned();
+        rhs.additive_constant = -rhs.additive_constant;
+        rhs.multiplicative_constant = -rhs.multiplicative_constant;
+
+        self.add(&rhs, builder, driver)
+    }
+
+    // this * to_mul + to_add
+    pub(crate) fn madd<
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        &self,
+        to_mul: &Self,
+        to_add: &Self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> std::io::Result<Self> {
+        if to_mul.is_constant() && to_add.is_constant() && self.is_constant() {
+            let mut mul = self.multiply(to_mul, builder, driver)?;
+            mul.add_assign(to_add, builder, driver);
+            return Ok(mul);
+        }
+
+        // Let:
+        //    a = this;
+        //    b = to_mul;
+        //    c = to_add;
+        //    a.v = ctx->variables[this.witness_index];
+        //    b.v = ctx->variables[to_mul.witness_index];
+        //    c.v = ctx->variables[to_add.witness_index];
+        //    .mul = .multiplicative_constant;
+        //    .add = .additive_constant.
+        //
+        // result = a * b + c
+        //   = (a.v * a.mul + a.add) * (b.v * b.mul + b.add) + (c.v * c.mul + c.add)
+        //   = a.v * b.v * [a.mul * b.mul] + a.v * [a.mul * b.add] + b.v * [b.mul + a.add] + c.v * [c.mul] +
+        //     [a.add * b.add + c.add]
+        //   = a.v * b.v * [     q_m     ] + a.v * [     q_1     ] + b.v * [     q_2     ] + c.v * [ q_3 ] + [ q_c ]
+
+        let q_m = self.multiplicative_constant * to_mul.multiplicative_constant;
+        let q_1 = self.multiplicative_constant * to_mul.additive_constant;
+        let q_2 = to_mul.multiplicative_constant * self.additive_constant;
+        let q_3 = to_add.multiplicative_constant;
+        let q_c = self.additive_constant * to_mul.additive_constant + to_add.additive_constant;
+
+        // Note: the value of a constant field_t is wholly tracked by the field_t's `additive_constant` member, which is
+        // accounted for in the above-calculated selectors (`q_`'s). Therefore no witness (`variables[witness_index]`)
+        // exists for constants, and so the field_t's corresponding wire value is set to `0` in the gate equation.
+
+        let a = if self.is_constant() {
+            T::public_zero()
+        } else {
+            builder.get_variable(self.witness_index as usize)
+        };
+        let b = if to_mul.is_constant() {
+            T::public_zero()
+        } else {
+            builder.get_variable(to_mul.witness_index as usize)
+        };
+        let c = if to_add.is_constant() {
+            T::public_zero()
+        } else {
+            builder.get_variable(to_add.witness_index as usize)
+        };
+
+        let mult_tmp = driver.mul(a.to_owned(), b.to_owned())?;
+        let a_tmp = driver.mul_with_public(q_1, a);
+        let b_tmp = driver.mul_with_public(q_2, b);
+        let c_tmp = driver.mul_with_public(q_3, c);
+
+        let mut out = mult_tmp;
+        driver.add_assign(&mut out, a_tmp);
+        driver.add_assign(&mut out, b_tmp);
+        driver.add_assign(&mut out, c_tmp);
+        driver.add_assign_with_public(q_c, &mut out);
+
+        let result = Self::from_witness_index(builder.add_variable(out));
+
+        builder.create_big_mul_gate(&MulQuad {
+            a: if self.is_constant() {
+                builder.zero_idx
+            } else {
+                self.witness_index
+            },
+            b: if to_mul.is_constant() {
+                builder.zero_idx
+            } else {
+                to_mul.witness_index
+            },
+            c: if to_add.is_constant() {
+                builder.zero_idx
+            } else {
+                to_add.witness_index
+            },
+            d: result.witness_index,
+            mul_scaling: q_m,
+            a_scaling: q_1,
+            b_scaling: q_2,
+            c_scaling: q_3,
+            d_scaling: -F::one(),
+            const_scaling: q_c,
+        });
+
+        Ok(result)
+    }
+
     // Slices a `field_ct` at given indices (msb, lsb) both included in the slice,
     // returns three parts: [low, slice, high].
     pub(crate) fn slice<
@@ -520,6 +637,37 @@ impl<F: PrimeField> FieldCT<F> {
             q_c: self.additive_constant,
         });
     }
+
+    // if predicate == true then return lhs, else return rhs
+    fn conditional_assign<
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        predicate: &BoolCT<P, T>,
+        lhs: &Self,
+        rhs: &Self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> std::io::Result<Self> {
+        if predicate.is_constant() {
+            let val = T::get_public(&predicate.get_value(driver)).expect("Constants are public");
+            if val.is_zero() {
+                return Ok(rhs.to_owned());
+            } else {
+                return Ok(lhs.to_owned());
+            }
+        }
+        // if lhs and rhs are the same witness, just return it!
+        if lhs.get_witness_index() == rhs.get_witness_index()
+            && (lhs.additive_constant == rhs.additive_constant)
+            && (lhs.multiplicative_constant == rhs.multiplicative_constant)
+        {
+            return Ok(lhs.to_owned());
+        }
+
+        let diff = lhs.sub(rhs, builder, driver);
+        diff.madd(&predicate.to_field_ct(driver), rhs, builder, driver)
+    }
 }
 
 impl<F: PrimeField> From<F> for FieldCT<F> {
@@ -588,6 +736,45 @@ pub(crate) struct BoolCT<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarFi
 impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T> {
     pub(crate) fn is_constant(&self) -> bool {
         self.witness_index == FieldCT::<P::ScalarField>::IS_CONSTANT
+    }
+
+    fn get_value(&self, driver: &mut T) -> T::AcvmType {
+        let mut result = self.witness_bool.to_owned();
+
+        if self.witness_inverted {
+            driver.negate_inplace(&mut result);
+            driver.add_assign_with_public(P::ScalarField::one(), &mut result);
+        }
+        result
+    }
+
+    fn to_field_ct(&self, driver: &mut T) -> FieldCT<P::ScalarField> {
+        if self.is_constant() {
+            let value = T::get_public(&self.get_value(driver)).expect("Constants are public");
+            let additive_constant = if self.witness_inverted {
+                P::ScalarField::one() - value
+            } else {
+                value
+            };
+            let multiplicative_constant = P::ScalarField::one();
+            FieldCT {
+                additive_constant,
+                multiplicative_constant,
+                witness_index: FieldCT::<P::ScalarField>::IS_CONSTANT,
+            }
+        } else if self.witness_inverted {
+            FieldCT {
+                additive_constant: P::ScalarField::one(),
+                multiplicative_constant: -P::ScalarField::one(),
+                witness_index: self.witness_index,
+            }
+        } else {
+            FieldCT {
+                additive_constant: P::ScalarField::zero(),
+                multiplicative_constant: P::ScalarField::one(),
+                witness_index: self.witness_index,
+            }
+        }
     }
 }
 
