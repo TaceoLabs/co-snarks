@@ -49,9 +49,9 @@ impl<
         let mut quotient = opening_claim.polynomial;
         let pair = opening_claim.opening_pair;
 
-        quotient[0] = driver.sub(quotient[0], pair.evaluation);
+        quotient[0] = T::sub(quotient[0], pair.evaluation);
         // Computes the coefficients for the quotient polynomial q(X) = (p(X) - v) / (X - r) through an FFT
-        quotient.factor_roots(driver, &pair.challenge);
+        quotient.factor_roots(&pair.challenge);
         let quotient_commitment = CoUtils::commit::<T, P>(&quotient.coefficients, crs);
         // AZTEC TODO(#479): for now we compute the KZG commitment directly to unify the KZG and IPA interfaces but in the
         // future we might need to adjust this to use the incoming alternative to work queue (i.e. variation of

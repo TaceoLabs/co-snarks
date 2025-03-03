@@ -23,6 +23,7 @@ use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use co_builder::prelude::{HonkCurve, RowDisablingPolynomial};
 use co_builder::HonkProofResult;
+use std::time::Instant;
 use ultrahonk::prelude::{GateSeparatorPolynomial, TranscriptFieldType, Univariate};
 
 pub(crate) type SumcheckRoundOutput<T, P, const U: usize> = SharedUnivariate<T, P, U>;
@@ -39,7 +40,6 @@ impl SumcheckRound {
     }
 
     fn extend_edges<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>(
-        driver: &mut T,
         extended_edges: &mut ProverUnivariates<T, P>,
         multivariates: &AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>>,
         edge_index: usize,
@@ -51,11 +51,12 @@ impl SumcheckRound {
         {
             des.extend_from(&src[edge_index..edge_index + 2]);
         }
+
         for (src, des) in multivariates
             .shared_iter()
             .zip(extended_edges.shared_iter_mut())
         {
-            des.extend_from(driver, &src[edge_index..edge_index + 2]);
+            des.extend_from(&src[edge_index..edge_index + 2]);
         }
     }
 
@@ -73,7 +74,6 @@ impl SumcheckRound {
      * @param gate_sparators Round \f$pow_{\beta}\f$-factor  \f$ ( (1−X_i) + X_i\cdot \beta_i )\f$.
      */
     fn extend_and_batch_univariates<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize>(
-        driver: &mut T,
         result: &mut SumcheckRoundOutput<T, P, SIZE>,
         univariate_accumulators: AllRelationAcc<T, P>,
         gate_sparators: &GateSeparatorPolynomial<P::ScalarField>,
@@ -84,7 +84,6 @@ impl SumcheckRound {
         extended_random_polynomial.extend_from(&random_polynomial);
 
         univariate_accumulators.extend_and_batch_univariates(
-            driver,
             result,
             &extended_random_polynomial,
             &gate_sparators.partial_evaluation_result,
@@ -112,7 +111,6 @@ impl SumcheckRound {
         P: Pairing,
         const SIZE: usize,
     >(
-        driver: &mut T,
         mut univariate_accumulators: AllRelationAcc<T, P>,
         alphas: &[P::ScalarField; crate::NUM_ALPHAS],
         gate_sparators: &GateSeparatorPolynomial<P::ScalarField>,
@@ -120,15 +118,10 @@ impl SumcheckRound {
         tracing::trace!("batch over relations");
 
         let running_challenge = P::ScalarField::one();
-        univariate_accumulators.scale(driver, running_challenge, alphas);
+        univariate_accumulators.scale(running_challenge, alphas);
 
         let mut res = SumcheckRoundOutput::default();
-        Self::extend_and_batch_univariates(
-            driver,
-            &mut res,
-            univariate_accumulators,
-            gate_sparators,
-        );
+        Self::extend_and_batch_univariates(&mut res, univariate_accumulators, gate_sparators);
         res
     }
 
@@ -244,14 +237,20 @@ impl SumcheckRound {
 
         let mut univariate_accumulators = AllRelationAcc::<T, P>::default();
 
+        tracing::info!("round size: {}", self.round_size);
+        let time = Instant::now();
+        // TODO FRANCO This loop is the bulk of the time
+        // we have the round size and then reduce it by power of two steps
+        // what can we mt here?
         // Accumulate the contribution from each sub-relation accross each edge of the hyper-cube
         for edge_idx in (0..self.round_size).step_by(2) {
-            Self::extend_edges(driver, &mut extended_edge, polynomials, edge_idx);
+            Self::extend_edges(&mut extended_edge, polynomials, edge_idx);
             // Compute the \f$ \ell \f$-th edge's univariate contribution,
             // scale it by the corresponding \f$ pow_{\beta} \f$ contribution and add it to the accumulators for \f$
             // \tilde{S}^i(X_i) \f$. If \f$ \ell \f$'s binary representation is given by \f$ (\ell_{i+1},\ldots,
             // \ell_{d-1})\f$, the \f$ pow_{\beta}\f$-contribution is \f$\beta_{i+1}^{\ell_{i+1}} \cdot \ldots \cdot
             // \beta_{d-1}^{\ell_{d-1}}\f$.
+
             Self::accumulate_relation_univariates(
                 driver,
                 &mut univariate_accumulators,
@@ -260,11 +259,23 @@ impl SumcheckRound {
                 &gate_sparators.beta_products[(edge_idx >> 1) * gate_sparators.periodicity],
             )?;
         }
+        let elapsed = time.elapsed();
+        tracing::info!(
+            "Took first part (extend edges, acc) {}.{}",
+            elapsed.as_secs(),
+            elapsed.subsec_nanos()
+        );
+        let time = Instant::now();
         let res = Self::batch_over_relations_univariates(
-            driver,
             univariate_accumulators,
             &relation_parameters.alphas,
             gate_sparators,
+        );
+        let elapsed = time.elapsed();
+        tracing::info!(
+            "Took batch_over_relations_univariates {}.{}",
+            elapsed.as_secs(),
+            elapsed.subsec_nanos()
         );
         Ok(res)
     }
@@ -324,10 +335,10 @@ impl SumcheckRound {
         )?;
 
         let libra_round_univariate =
-            Self::compute_libra_round_univariate(zk_sumcheck_data, round_index, driver);
+            Self::compute_libra_round_univariate(zk_sumcheck_data, round_index);
 
-        let sub = libra_round_univariate.sub(driver, &contribution_from_disabled_rows);
-        Ok(round_univariate.add(driver, &sub))
+        let sub = libra_round_univariate.sub(&contribution_from_disabled_rows);
+        Ok(round_univariate.add(&sub))
     }
 
     fn compute_libra_round_univariate<
@@ -336,7 +347,6 @@ impl SumcheckRound {
     >(
         zk_sumcheck_data: &SharedZKSumcheckData<T, P>,
         round_idx: usize,
-        driver: &mut T,
     ) -> SumcheckRoundOutput<T, P, BATCHED_RELATION_PARTIAL_LENGTH_ZK> {
         let mut libra_round_univariate =
             SharedUnivariate::<T, P, BATCHED_RELATION_PARTIAL_LENGTH_ZK>::default();
@@ -347,12 +357,11 @@ impl SumcheckRound {
         // corrected by the Libra running sum
         for idx in 0..P::LIBRA_UNIVARIATES_LENGTH {
             let eval = T::eval_poly(
-                driver,
                 &current_column.coefficients,
                 P::ScalarField::from(idx as u64),
             );
             libra_round_univariate.evaluations[idx] =
-                T::add(driver, eval, zk_sumcheck_data.libra_running_sum);
+                T::add(eval, zk_sumcheck_data.libra_running_sum);
         }
 
         if BATCHED_RELATION_PARTIAL_LENGTH_ZK == P::LIBRA_UNIVARIATES_LENGTH {
@@ -361,8 +370,7 @@ impl SumcheckRound {
             // Note: Currently not happening
             let mut libra_round_univariate_extended =
                 SharedUnivariate::<T, P, BATCHED_RELATION_PARTIAL_LENGTH_ZK>::default();
-            libra_round_univariate_extended
-                .extend_from(driver, &libra_round_univariate.evaluations);
+            libra_round_univariate_extended.extend_from(&libra_round_univariate.evaluations);
             libra_round_univariate_extended
         }
     }
@@ -393,7 +401,7 @@ impl SumcheckRound {
         };
 
         for edge_idx in (start_edge_idx..round_size).step_by(2) {
-            Self::extend_edges(driver, &mut extended_edges, polynomials, edge_idx);
+            Self::extend_edges(&mut extended_edges, polynomials, edge_idx);
             Self::accumulate_relation_univariates::<T, P>(
                 driver,
                 &mut univariate_accumulators,
@@ -403,7 +411,6 @@ impl SumcheckRound {
             )?;
         }
         let mut result = Self::batch_over_relations_univariates(
-            driver,
             univariate_accumulators,
             &relation_parameters.alphas,
             gate_sparators,
@@ -415,7 +422,7 @@ impl SumcheckRound {
             row_disabling_polynomial.eval_at_0,
             row_disabling_polynomial.eval_at_1,
         ]);
-        result = result.mul_public(driver, &row_disabling_factor);
+        result = result.mul_public(&row_disabling_factor);
 
         Ok(result)
     }

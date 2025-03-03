@@ -68,7 +68,7 @@ impl<
             // In the provers, the size of multilinear_challenge is CONST_PROOF_SIZE_LOG_N, but we need to evaluate the
             // hiding polynomial as multilinear in log_n variables
             let masking_poly_eval_shared =
-                batched_unshifted.evaluate_mle(&multilinear_challenge[0..log_n], &mut self.driver);
+                batched_unshifted.evaluate_mle(&multilinear_challenge[0..log_n]);
             let (masking_poly_comm, masking_poly_eval) = T::open_point_and_field(
                 &mut self.driver,
                 masking_poly_comm_shared,
@@ -104,7 +104,11 @@ impl<
         if has_zk == ZeroKnowledge::Yes {
             // Precomputed part of batched_unshifted
             for f_poly in f_polynomials.precomputed.iter() {
-                batched_unshifted.add_scaled_slice_public(&mut self.driver, f_poly, &rho_challenge);
+                batched_unshifted.add_scaled_slice_public(
+                    self.driver.get_party_id(),
+                    f_poly,
+                    &rho_challenge,
+                );
                 rho_challenge *= rho;
             }
         } else {
@@ -120,9 +124,8 @@ impl<
             batched_unshifted =
                 SharedPolynomial::<T, P>::promote_poly(&self.driver, batched_unshifted_plain);
         }
-
         for f_poly in f_polynomials.witness.iter() {
-            batched_unshifted.add_scaled_slice(&mut self.driver, f_poly, &rho_challenge);
+            batched_unshifted.add_scaled_slice(f_poly, &rho_challenge);
             rho_challenge *= rho;
         }
 
@@ -130,7 +133,7 @@ impl<
         let mut batched_to_be_shifted = SharedPolynomial::<T, P>::new_zero(n); // batched to-be-shifted polynomials
 
         for g_poly in g_polynomials.iter() {
-            batched_to_be_shifted.add_scaled_slice(&mut self.driver, g_poly, &rho_challenge);
+            batched_to_be_shifted.add_scaled_slice(g_poly, &rho_challenge);
             rho_challenge *= rho;
         }
 
@@ -196,7 +199,7 @@ impl<
 
         // Construct the batched polynomial A₀(X) = F(X) + G↺(X) = F(X) + G(X)/X
         let mut a_0 = batched_unshifted.to_owned();
-        a_0.add_assign_slice(&mut self.driver, batched_to_be_shifted.shifted());
+        a_0.add_assign_slice(batched_to_be_shifted.shifted());
 
         // Construct the d-1 Gemini foldings of A₀(X)
         let fold_polynomials = self.compute_fold_polynomials(log_n, multilinear_challenge, a_0);
@@ -290,11 +293,10 @@ impl<
                 // fold(Aₗ)[j] = (1-uₗ)⋅even(Aₗ)[j] + uₗ⋅odd(Aₗ)[j]
                 //            = (1-uₗ)⋅Aₗ[2j]      + uₗ⋅Aₗ[2j+1]
                 //            = Aₗ₊₁[j]
-                let a_l_neg = self.driver.neg(a_l[j << 1]);
-                a_l_fold[j] = self.driver.add(
+                let a_l_neg = T::neg(a_l[j << 1]);
+                a_l_fold[j] = T::add(
                     a_l[j << 1],
-                    self.driver
-                        .mul_with_public(u_l, self.driver.add(a_l[(j << 1) + 1], a_l_neg)),
+                    T::mul_with_public(u_l, T::add(a_l[(j << 1) + 1], a_l_neg)),
                 );
             }
 
@@ -323,11 +325,11 @@ impl<
         // Compute G/r
         let r_inv = r_challenge.inverse().unwrap();
         batched_g.coefficients.iter_mut().for_each(|x| {
-            *x = self.driver.mul_with_public(r_inv, *x);
+            *x = T::mul_with_public(r_inv, *x);
         });
 
-        a_0_pos.add_assign_slice(&mut self.driver, batched_g.as_ref()); // A₀₊ = F + G/r
-        a_0_neg.sub_assign_slice(&mut self.driver, batched_g.as_ref()); // A₀₋ = F - G/r
+        a_0_pos.add_assign_slice(batched_g.as_ref()); // A₀₊ = F + G/r
+        a_0_neg.sub_assign_slice(batched_g.as_ref()); // A₀₋ = F - G/r
 
         (a_0_pos, a_0_neg)
     }
@@ -374,7 +376,7 @@ impl<
         let mut claims = Vec::with_capacity(log_n + 1);
 
         // Compute evaluation of partially evaluated batch polynomial (positive) A₀₊(r)
-        let evaluation = self.driver.eval_poly(a_0_pos.as_ref(), r_challenge);
+        let evaluation = T::eval_poly(a_0_pos.as_ref(), r_challenge);
         claims.push(ShpleminiOpeningClaim {
             polynomial: a_0_pos,
             opening_pair: OpeningPair {
@@ -383,7 +385,7 @@ impl<
             },
         });
         // Compute evaluation of partially evaluated batch polynomial (negative) A₀₋(-r)
-        let evaluation = self.driver.eval_poly(a_0_neg.as_ref(), -r_challenge);
+        let evaluation = T::eval_poly(a_0_neg.as_ref(), -r_challenge);
         claims.push(ShpleminiOpeningClaim {
             polynomial: a_0_neg,
             opening_pair: OpeningPair {
@@ -398,7 +400,7 @@ impl<
         // Compute the remaining m opening pairs {−r^{2ˡ}, Aₗ(−r^{2ˡ})}, l = 1, ..., m-1.
 
         for (r_square, fold_poly) in r_squares.into_iter().skip(1).zip(fold_polynomials) {
-            let evaluation = self.driver.eval_poly(fold_poly.as_ref(), -r_square);
+            let evaluation = T::eval_poly(fold_poly.as_ref(), -r_square);
             claims.push(ShpleminiOpeningClaim {
                 polynomial: fold_poly,
                 opening_pair: OpeningPair {
@@ -429,12 +431,8 @@ impl<
     ) -> HonkProofResult<ShpleminiOpeningClaim<T, P>> {
         tracing::trace!("Shplonk prove");
         let nu = transcript.get_challenge::<P>("Shplonk:nu".to_string());
-        let batched_quotient = Self::compute_batched_quotient(
-            &mut self.driver,
-            &opening_claims,
-            nu,
-            &libra_opening_claims,
-        );
+        let batched_quotient =
+            Self::compute_batched_quotient(&opening_claims, nu, &libra_opening_claims);
         let batched_quotient_commitment =
             CoUtils::commit::<T, P>(batched_quotient.as_ref(), commitment_key);
         let batched_quotient_commitment = self.driver.open_point(batched_quotient_commitment)?;
@@ -536,11 +534,11 @@ impl<
         let mut idx = 0;
         for claim in opening_claims.into_iter() {
             let mut tmp = claim.polynomial;
-            let claim_neg = self.driver.neg(claim.opening_pair.evaluation);
-            tmp[0] = self.driver.add(tmp[0], claim_neg);
+            let claim_neg = T::neg(claim.opening_pair.evaluation);
+            tmp[0] = T::add(tmp[0], claim_neg);
             let scaling_factor = current_nu * inverse_vanishing_evals[idx];
 
-            g.add_scaled(&mut self.driver, &tmp, &-scaling_factor);
+            g.add_scaled(&tmp, &-scaling_factor);
 
             current_nu *= nu_challenge;
             idx += 1;
@@ -555,11 +553,11 @@ impl<
             for claim in libra_opening_claims.expect("Has ZK").into_iter() {
                 // Compute individual claim quotient tmp = ( fⱼ(X) − vⱼ) / ( X − xⱼ )
                 let mut tmp = claim.polynomial;
-                tmp[0] = T::sub(&self.driver, tmp[0], claim.opening_pair.evaluation);
+                tmp[0] = T::sub(tmp[0], claim.opening_pair.evaluation);
                 let scaling_factor = current_nu * inverse_vanishing_evals[idx]; // = νʲ / (z − xⱼ )
 
                 // Add the claim quotient to the batched quotient polynomial
-                g.add_scaled(&mut self.driver, &tmp, &-scaling_factor);
+                g.add_scaled(&tmp, &-scaling_factor);
                 current_nu *= nu_challenge;
                 idx += 1;
             }
@@ -582,7 +580,6 @@ impl<
      * @return Polynomial Q(X)
      */
     pub(crate) fn compute_batched_quotient(
-        driver: &mut T,
         opening_claims: &Vec<ShpleminiOpeningClaim<T, P>>,
         nu_challenge: P::ScalarField,
         libra_opening_claims: &Option<Vec<ShpleminiOpeningClaim<T, P>>>,
@@ -610,12 +607,12 @@ impl<
         for claim in opening_claims {
             // Compute individual claim quotient tmp = ( fⱼ(X) − vⱼ) / ( X − xⱼ )
             let mut tmp = claim.polynomial.clone();
-            let claim_neg = driver.neg(claim.opening_pair.evaluation);
-            tmp[0] = driver.add(tmp[0], claim_neg);
-            tmp.factor_roots(driver, &claim.opening_pair.challenge);
+            let claim_neg = T::neg(claim.opening_pair.evaluation);
+            tmp[0] = T::add(tmp[0], claim_neg);
+            tmp.factor_roots(&claim.opening_pair.challenge);
 
             // Add the claim quotient to the batched quotient polynomial
-            q.add_scaled(driver, &tmp, &current_nu);
+            q.add_scaled(&tmp, &current_nu);
 
             current_nu *= nu_challenge;
         }
@@ -630,11 +627,11 @@ impl<
                 for claim in libra_claims.iter() {
                     // Compute individual claim quotient tmp = ( fⱼ(X) − vⱼ) / ( X − xⱼ )
                     let mut tmp = claim.polynomial.clone();
-                    tmp[0] = T::sub(driver, tmp[0], claim.opening_pair.evaluation);
-                    tmp.factor_roots(driver, &claim.opening_pair.challenge);
+                    tmp[0] = T::sub(tmp[0], claim.opening_pair.evaluation);
+                    tmp.factor_roots(&claim.opening_pair.challenge);
 
                     // Add the claim quotient to the batched quotient polynomial
-                    q.add_scaled(driver, &tmp, &current_nu);
+                    q.add_scaled(&tmp, &current_nu);
                     current_nu *= nu_challenge;
                 }
             }
@@ -668,7 +665,7 @@ impl<
 
         let mut to_open = Vec::with_capacity(libra_eval_labels.len());
         for (poly, point) in izip!(libra_polynomials, evaluation_points) {
-            let eval = T::eval_poly(driver, &poly.coefficients, point);
+            let eval = T::eval_poly(&poly.coefficients, point);
 
             let new_claim = ShpleminiOpeningClaim {
                 polynomial: poly,

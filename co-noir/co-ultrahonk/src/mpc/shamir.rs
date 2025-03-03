@@ -48,20 +48,19 @@ impl<P: Pairing, N: ShamirNetwork> NoirUltraHonkProver<P>
         self.protocol0.network.get_id()
     }
 
-    fn sub(&self, a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare {
+    fn sub(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare {
         arithmetic::sub(a, b)
     }
 
-    fn add(&self, a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare {
+    fn add(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare {
         arithmetic::add(a, b)
     }
 
-    fn neg(&mut self, a: Self::ArithmeticShare) -> Self::ArithmeticShare {
+    fn neg(a: Self::ArithmeticShare) -> Self::ArithmeticShare {
         arithmetic::neg(a)
     }
 
     fn mul_with_public(
-        &self,
         public: P::ScalarField,
         shared: Self::ArithmeticShare,
     ) -> Self::ArithmeticShare {
@@ -77,9 +76,9 @@ impl<P: Pairing, N: ShamirNetwork> NoirUltraHonkProver<P>
     }
 
     fn add_with_public(
-        &self,
         public: P::ScalarField,
         shared: Self::ArithmeticShare,
+        _id: Self::PartyID,
     ) -> Self::ArithmeticShare {
         arithmetic::add_public(shared, public)
     }
@@ -186,7 +185,6 @@ impl<P: Pairing, N: ShamirNetwork> NoirUltraHonkProver<P>
     }
 
     fn eval_poly(
-        &mut self,
         coeffs: &[Self::ArithmeticShare],
         point: <P as Pairing>::ScalarField,
     ) -> Self::ArithmeticShare {

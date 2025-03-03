@@ -32,23 +32,21 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for DeltaRangeConstraintRela
 }
 
 impl<T: NoirUltraHonkProver<P>, P: Pairing> DeltaRangeConstraintRelationAcc<T, P> {
-    pub(crate) fn scale(&mut self, driver: &mut T, elements: &[P::ScalarField]) {
+    pub(crate) fn scale(&mut self, elements: &[P::ScalarField]) {
         assert!(elements.len() == DeltaRangeConstraintRelation::NUM_RELATIONS);
-        self.r0.scale_inplace(driver, elements[0]);
-        self.r1.scale_inplace(driver, elements[1]);
-        self.r2.scale_inplace(driver, elements[2]);
-        self.r3.scale_inplace(driver, elements[3]);
+        self.r0.scale_inplace(elements[0]);
+        self.r1.scale_inplace(elements[1]);
+        self.r2.scale_inplace(elements[2]);
+        self.r3.scale_inplace(elements[3]);
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(
         &self,
-        driver: &mut T,
         result: &mut SharedUnivariate<T, P, SIZE>,
         extended_random_poly: &Univariate<P::ScalarField, SIZE>,
         partial_evaluation_result: &P::ScalarField,
     ) {
         self.r0.extend_and_batch_univariates(
-            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
@@ -56,7 +54,6 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> DeltaRangeConstraintRelationAcc<T, P
         );
 
         self.r1.extend_and_batch_univariates(
-            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
@@ -64,7 +61,6 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> DeltaRangeConstraintRelationAcc<T, P
         );
 
         self.r2.extend_and_batch_univariates(
-            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
@@ -72,7 +68,6 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> DeltaRangeConstraintRelationAcc<T, P
         );
 
         self.r3.extend_and_batch_univariates(
-            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
@@ -122,6 +117,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         scaling_factor: &P::ScalarField,
     ) -> HonkProofResult<()> {
         tracing::trace!("Accumulate DeltaRangeConstraintRelation");
+        let party_id = driver.get_party_id();
 
         let w_1 = input.witness.w_l();
         let w_2 = input.witness.w_r();
@@ -133,19 +129,19 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let minus_two = -P::ScalarField::from(2u64);
 
         // Compute wire differences
-        let delta_1 = w_2.sub(driver, w_1);
-        let delta_2 = w_3.sub(driver, w_2);
-        let delta_3 = w_4.sub(driver, w_3);
-        let delta_4 = w_1_shift.sub(driver, w_4);
+        let delta_1 = w_2.sub(w_1);
+        let delta_2 = w_3.sub(w_2);
+        let delta_3 = w_4.sub(w_3);
+        let delta_4 = w_1_shift.sub(w_4);
 
-        let tmp_1 = delta_1.add_scalar(driver, minus_one);
-        let tmp_2 = delta_2.add_scalar(driver, minus_one);
-        let tmp_3 = delta_3.add_scalar(driver, minus_one);
-        let tmp_4 = delta_4.add_scalar(driver, minus_one);
-        let tmp_1_2 = delta_1.add_scalar(driver, minus_two);
-        let tmp_2_2 = delta_2.add_scalar(driver, minus_two);
-        let tmp_3_2 = delta_3.add_scalar(driver, minus_two);
-        let tmp_4_2 = delta_4.add_scalar(driver, minus_two);
+        let tmp_1 = delta_1.add_scalar(minus_one, party_id);
+        let tmp_2 = delta_2.add_scalar(minus_one, party_id);
+        let tmp_3 = delta_3.add_scalar(minus_one, party_id);
+        let tmp_4 = delta_4.add_scalar(minus_one, party_id);
+        let tmp_1_2 = delta_1.add_scalar(minus_two, party_id);
+        let tmp_2_2 = delta_2.add_scalar(minus_two, party_id);
+        let tmp_3_2 = delta_3.add_scalar(minus_two, party_id);
+        let tmp_4_2 = delta_4.add_scalar(minus_two, party_id);
 
         let lhs = SharedUnivariate::univariates_to_vec(&[
             tmp_1, tmp_2, tmp_3, tmp_4, tmp_1_2, tmp_2_2, tmp_3_2, tmp_4_2,
@@ -153,7 +149,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let mut sqr = driver.mul_many(&lhs, &lhs)?;
 
         for el in sqr.iter_mut() {
-            *el = driver.add_with_public(minus_one, *el);
+            *el = T::add_with_public(minus_one, *el, party_id);
         }
 
         let (lhs, rhs) = sqr.split_at(sqr.len() >> 1);
@@ -161,42 +157,42 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let mul = SharedUnivariate::<T, P, MAX_PARTIAL_RELATION_LENGTH>::vec_to_univariates(&mul);
 
         // Contribution (1)
-        let mut tmp = mul[0].mul_public(driver, q_delta_range);
-        tmp.scale_inplace(driver, *scaling_factor);
+        let mut tmp = mul[0].mul_public(q_delta_range);
+        tmp.scale_inplace(*scaling_factor);
 
         for i in 0..univariate_accumulator.r0.evaluations.len() {
             univariate_accumulator.r0.evaluations[i] =
-                driver.add(univariate_accumulator.r0.evaluations[i], tmp.evaluations[i]);
+                T::add(univariate_accumulator.r0.evaluations[i], tmp.evaluations[i]);
         }
 
         ///////////////////////////////////////////////////////////////////////
         // Contribution (2)
-        let mut tmp = mul[1].mul_public(driver, q_delta_range);
-        tmp.scale_inplace(driver, *scaling_factor);
+        let mut tmp = mul[1].mul_public(q_delta_range);
+        tmp.scale_inplace(*scaling_factor);
 
         for i in 0..univariate_accumulator.r1.evaluations.len() {
             univariate_accumulator.r1.evaluations[i] =
-                driver.add(univariate_accumulator.r1.evaluations[i], tmp.evaluations[i]);
+                T::add(univariate_accumulator.r1.evaluations[i], tmp.evaluations[i]);
         }
 
         ///////////////////////////////////////////////////////////////////////
         // Contribution (3)
-        let mut tmp = mul[2].mul_public(driver, q_delta_range);
-        tmp.scale_inplace(driver, *scaling_factor);
+        let mut tmp = mul[2].mul_public(q_delta_range);
+        tmp.scale_inplace(*scaling_factor);
 
         for i in 0..univariate_accumulator.r2.evaluations.len() {
             univariate_accumulator.r2.evaluations[i] =
-                driver.add(univariate_accumulator.r2.evaluations[i], tmp.evaluations[i]);
+                T::add(univariate_accumulator.r2.evaluations[i], tmp.evaluations[i]);
         }
 
         ///////////////////////////////////////////////////////////////////////
         // Contribution (4)
-        let mut tmp = mul[3].mul_public(driver, q_delta_range);
-        tmp.scale_inplace(driver, *scaling_factor);
+        let mut tmp = mul[3].mul_public(q_delta_range);
+        tmp.scale_inplace(*scaling_factor);
 
         for i in 0..univariate_accumulator.r3.evaluations.len() {
             univariate_accumulator.r3.evaluations[i] =
-                driver.add(univariate_accumulator.r3.evaluations[i], tmp.evaluations[i]);
+                T::add(univariate_accumulator.r3.evaluations[i], tmp.evaluations[i]);
         }
 
         Ok(())
