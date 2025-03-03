@@ -842,6 +842,8 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupCT<P
     pub(crate) fn batch_mul(
         base_points: Vec<Self>,
         scalars: Vec<CycleScalarCT<P::ScalarField>>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
     ) -> std::io::Result<Self> {
         debug_assert_eq!(base_points.len(), scalars.len());
 
@@ -852,7 +854,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupCT<P
             // Note: is this the best place to put `validate_is_in_field`? Should it not be part of the constructor?
             // Note note: validate_scalar_is_in_field does not apply range checks to the hi/lo slices, this is performed
             // implicitly via the scalar mul algorithm
-            scalar.validate_scalar_is_in_field();
+            scalar.validate_scalar_is_in_field(builder, driver)?;
         }
 
         let num_bits_not_full_field_size = num_bits != CycleScalarCT::<P::ScalarField>::NUM_BITS;
@@ -932,9 +934,26 @@ impl<F: PrimeField> CycleScalarCT<F> {
         };
         let (r_lo, r_hi) = Self::slice(cycle_group_modulus);
 
-        todo!("Implement validate_scalar_is_in_field");
-
-        let borrow = FieldCT::zero(); // TODO remove
+        let lo_value = self.lo.get_value(builder, driver);
+        let borrow = if self.lo.is_constant() {
+            let lo_value: BigUint = T::get_public(&lo_value)
+                .expect("Constants are public")
+                .into();
+            let need_borrow = lo_value > r_lo;
+            FieldCT::from(P::ScalarField::from(need_borrow as u64))
+        } else {
+            let need_borrow = if T::is_shared(&lo_value) {
+                let lo_value = T::get_shared(&lo_value).expect("Already checked it is shared");
+                todo!("Implement gt for shared")
+            } else {
+                let lo_value: BigUint = T::get_public(&lo_value)
+                    .expect("Already checked it is public")
+                    .into();
+                let need_borrow = lo_value > r_lo;
+                P::ScalarField::from(need_borrow as u64).into()
+            };
+            FieldCT::from_witness(need_borrow, builder)
+        };
 
         // directly call `create_new_range_constraint` to avoid creating an arithmetic gate
         if !self.lo.is_constant() {
@@ -960,8 +979,8 @@ impl<F: PrimeField> CycleScalarCT<F> {
             .add(&FieldCT::from(P::ScalarField::from(r_lo)), builder, driver)
             .add(&borrow_scaled, builder, driver);
 
-        hi_diff.create_range_constraint(Self::HI_BITS, builder, driver);
-        lo_diff.create_range_constraint(Self::LO_BITS, builder, driver);
+        hi_diff.create_range_constraint(Self::HI_BITS, builder, driver)?;
+        lo_diff.create_range_constraint(Self::LO_BITS, builder, driver)?;
 
         Ok(())
     }
