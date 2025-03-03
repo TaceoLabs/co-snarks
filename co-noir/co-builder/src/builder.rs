@@ -3655,7 +3655,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         Ok(())
     }
 
-    fn create_new_range_constraint(&mut self, variable_index: u32, target_range: u64) {
+    pub(crate) fn create_new_range_constraint(&mut self, variable_index: u32, target_range: u64) {
         // We ignore this check because it is definitely more expensive in MPC, the proof will just not verify if this constraint is not given
         // if (uint256_t(self.get_variable(variable_index)).data[0] > target_range) {
         //     if (!self.failed()) {
