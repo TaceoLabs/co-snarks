@@ -1,8 +1,8 @@
-use criterion::{criterion_group, criterion_main, Criterion, black_box};
-use mpc_core::protocols::shamir::share_field_elements;
 use ark_bn254::Fr;
 use ark_std::rand::thread_rng;
 use ark_std::UniformRand;
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use mpc_core::protocols::shamir::share_field_elements;
 
 fn generate_test_values(n: usize) -> Vec<Fr> {
     let mut rng = thread_rng();

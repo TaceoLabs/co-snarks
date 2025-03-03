@@ -5,8 +5,8 @@
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use itertools::izip;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use network::{ShamirMpcNet, ShamirNetwork};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use rngs::ShamirRng;
 use std::time::Instant;
 
@@ -74,14 +74,12 @@ pub fn share_field_elements<F: PrimeField, R: Rng + CryptoRng>(
 ) -> Vec<Vec<ShamirShare<F>>> {
     let mut result = vec![Vec::with_capacity(vals.len()); num_parties];
 
-    let shares_vec: Vec<Vec<ShamirShare<F>>> = vals.into_par_iter()
-        .map_init(
-            || rand::thread_rng(),
-            |mut rng, val| {
-                let shares = core::share(*val, num_parties, degree, &mut rng);
-                ShamirShare::convert_vec_rev(shares)
-            },
-        )
+    let shares_vec: Vec<Vec<ShamirShare<F>>> = vals
+        .into_par_iter()
+        .map_init(rand::thread_rng, |mut rng, val| {
+            let shares = core::share(*val, num_parties, degree, &mut rng);
+            ShamirShare::convert_vec_rev(shares)
+        })
         .collect();
 
     for shares in shares_vec {
