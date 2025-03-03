@@ -1,4 +1,4 @@
-use super::field_ct::FieldCT;
+use super::field_ct::{CycleGroupCT, FieldCT};
 use crate::builder::UltraCircuitBuilder;
 use crate::keys::proving_key::ProvingKey;
 use crate::polynomials::polynomial::Polynomial;
@@ -751,7 +751,7 @@ impl<F: PrimeField> WitnessOrConstant<F> {
         has_valid_witness_assignments: bool,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) {
+    ) -> CycleGroupCT<P, T> {
         let point_x = input_x.to_field_ct();
         let point_y = input_y.to_field_ct();
         let infinity = input_infinity.to_field_ct().to_bool_ct(builder, driver);
@@ -773,9 +773,7 @@ impl<F: PrimeField> WitnessOrConstant<F> {
                 builder.variables[input_y.index as usize] = g1_y.into();
             }
         }
-        todo!();
-        // cycle_group<Builder> input_point(point_x, point_y, infinite);
-        // return input_point
+        CycleGroupCT::new(point_x, point_y, infinity, builder, driver)
     }
 }
 

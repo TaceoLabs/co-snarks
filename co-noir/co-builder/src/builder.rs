@@ -1,6 +1,7 @@
 use crate::acir_format::{HonkRecursion, ProgramMetadata};
 use crate::polynomials::polynomial::MASKING_OFFSET;
-use crate::types::types::MultiScalarMul;
+use crate::types::field_ct::CycleScalarCT;
+use crate::types::types::{MultiScalarMul, WitnessOrConstant};
 use crate::{
     acir_format::AcirFormat,
     crs::ProverCrs,
@@ -1201,7 +1202,11 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
         // Add multi scalar mul constraints
         for constraint in constraint_system.multi_scalar_mul_constraints.iter() {
-            self.create_multi_scalar_mul_constraint(constraint, driver)?;
+            self.create_multi_scalar_mul_constraint(
+                constraint,
+                has_valid_witness_assignments,
+                driver,
+            )?;
         }
 
         // for (i, constraint) in constraint_system.pedersen_hash_constraints.iter().enumerate() {
@@ -2694,10 +2699,37 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
     fn create_multi_scalar_mul_constraint(
         &mut self,
         constraint: &MultiScalarMul<P::ScalarField>,
+        has_valid_witness_assignments: bool,
         driver: &mut T,
     ) -> std::io::Result<()> {
-        for points in constraint.points.chunks_exact(3) {
+        let len = constraint.points.len() / 3;
+        debug_assert_eq!(len * 3, constraint.points.len());
+        debug_assert_eq!(len * 2, constraint.scalars.len());
+
+        let mut points = Vec::with_capacity(len);
+        let mut scalars = Vec::with_capacity(len);
+
+        for (p, s) in constraint
+            .points
+            .chunks_exact(3)
+            .zip(constraint.scalars.chunks_exact(2))
+        {
             // Instantiate the input point/variable base as `cycle_group_ct`
+            let input_point = WitnessOrConstant::to_grumpkin_point(
+                &p[0],
+                &p[1],
+                &p[2],
+                has_valid_witness_assignments,
+                self,
+                driver,
+            );
+
+            //  Reconstruct the scalar from the low and high limbs
+            let scalar_low_as_field = s[0].to_field_ct();
+            let scalar_high_as_field = s[1].to_field_ct();
+            let scalar = CycleScalarCT::new(scalar_low_as_field, scalar_high_as_field);
+            points.push(input_point);
+            scalars.push(scalar);
         }
 
         // for (size_t i = 0; i < input.points.size(); i += 3) {
