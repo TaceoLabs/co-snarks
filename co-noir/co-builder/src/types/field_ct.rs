@@ -839,6 +839,18 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupCT<P
         base_points: Vec<Self>,
         scalars: Vec<CycleScalarCT<P::ScalarField>>,
     ) -> std::io::Result<Self> {
+        debug_assert_eq!(base_points.len(), scalars.len());
+
+        let mut num_bits = 0;
+        for scalar in scalars.iter() {
+            num_bits = std::cmp::max(num_bits, scalar.num_bits());
+
+            // Note: is this the best place to put `validate_is_in_field`? Should it not be part of the constructor?
+            // Note note: validate_scalar_is_in_field does not apply range checks to the hi/lo slices, this is performed
+            // implicitly via the scalar mul algorithm
+            scalar.validate_scalar_is_in_field();
+        }
+
         todo!("Implement batch_mul")
     }
 }
@@ -849,7 +861,63 @@ pub(crate) struct CycleScalarCT<F: PrimeField> {
 }
 
 impl<F: PrimeField> CycleScalarCT<F> {
+    const NUM_BITS: usize = F::MODULUS_BIT_SIZE as usize;
+    const SKIP_PRIMALITY_TEST: bool = false;
+    const USE_BN254_SCALAR_FIELD_FOR_PRIMALITY_TEST: bool = false;
+    const MAX_BITS_PER_ENDOMORPHISM_SCALAR: usize = 128;
+    const LO_BITS: usize = Self::MAX_BITS_PER_ENDOMORPHISM_SCALAR;
+    const HI_BITS: usize = Self::NUM_BITS - Self::LO_BITS;
+
     pub(crate) fn new(lo: FieldCT<F>, hi: FieldCT<F>) -> Self {
         Self { lo, hi }
+    }
+
+    fn is_constant(&self) -> bool {
+        self.lo.is_constant() && self.hi.is_constant()
+    }
+
+    const fn skip_primality_test(&self) -> bool {
+        Self::SKIP_PRIMALITY_TEST
+    }
+
+    const fn use_bn254_scalar_field_for_primality_test(&self) -> bool {
+        Self::USE_BN254_SCALAR_FIELD_FOR_PRIMALITY_TEST
+    }
+
+    const fn num_bits(&self) -> usize {
+        Self::NUM_BITS
+    }
+
+    fn slice(inp: BigUint) -> (BigUint, BigUint) {
+        // Hardcoded for these value
+        debug_assert_eq!(Self::LO_BITS, 128);
+        debug_assert!(Self::HI_BITS < 128);
+        let digits = inp.to_u64_digits();
+        let mut lo = BigUint::zero();
+        let mut hi = BigUint::zero();
+        for digit in digits.iter().take(2) {
+            lo <<= 64;
+            lo += *digit;
+        }
+        for digit in digits.iter().skip(2).take(2) {
+            hi <<= 64;
+            hi += *digit;
+        }
+        debug_assert!(hi.bits() as usize <= Self::HI_BITS);
+        (lo, hi)
+    }
+
+    fn validate_scalar_is_in_field(&self) {
+        if self.is_constant() || self.skip_primality_test() {
+            return;
+        }
+        // if !self.is_constant() && !self.skip_primality_test() {
+        let cycle_group_modulus = if self.use_bn254_scalar_field_for_primality_test() {
+            BigUint::from(ark_bn254::Fr::MODULUS)
+        } else {
+            F::MODULUS.into()
+        };
+        let (r_lo, r_hi) = Self::slice(cycle_group_modulus);
+        todo!("Implement validate_scalar_is_in_field")
     }
 }
