@@ -17,69 +17,69 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> SharedUnivariate<
         res
     }
 
-    pub(crate) fn scale_inplace(&mut self, driver: &mut T, rhs: P::ScalarField) {
+    pub(crate) fn scale_inplace(&mut self, rhs: P::ScalarField) {
         for i in 0..SIZE {
-            self.evaluations[i] = driver.mul_with_public(rhs, self.evaluations[i]);
+            self.evaluations[i] = T::mul_with_public(rhs, self.evaluations[i]);
         }
     }
 
-    pub(crate) fn neg(&self, driver: &mut T) -> Self {
+    pub(crate) fn neg(&self) -> Self {
         let mut result = Self::default();
         for i in 0..SIZE {
-            result.evaluations[i] = driver.neg(self.evaluations[i]);
+            result.evaluations[i] = T::neg(self.evaluations[i]);
         }
         result
     }
 
-    pub(crate) fn scale(&self, driver: &mut T, rhs: P::ScalarField) -> Self {
+    pub(crate) fn scale(&self, rhs: P::ScalarField) -> Self {
         let mut result = Self::default();
         for i in 0..SIZE {
-            result.evaluations[i] = driver.mul_with_public(rhs, self.evaluations[i]);
+            result.evaluations[i] = T::mul_with_public(rhs, self.evaluations[i]);
         }
         result
     }
 
-    pub(crate) fn add_scalar(&self, driver: &mut T, rhs: P::ScalarField) -> Self {
+    pub(crate) fn add_scalar(&self, rhs: P::ScalarField, id: T::PartyID) -> Self {
         let mut result = Self::default();
         for i in 0..SIZE {
-            result.evaluations[i] = driver.add_with_public(rhs, self.evaluations[i]);
+            result.evaluations[i] = T::add_with_public(rhs, self.evaluations[i], id);
         }
         result
     }
 
-    pub(crate) fn sub_scalar(&self, driver: &mut T, rhs: P::ScalarField) -> Self {
+    pub(crate) fn sub_scalar(&self, rhs: P::ScalarField, id: T::PartyID) -> Self {
         let neg = -rhs;
         let mut result = Self::default();
         for i in 0..SIZE {
-            result.evaluations[i] = driver.add_with_public(neg, self.evaluations[i]);
+            result.evaluations[i] = T::add_with_public(neg, self.evaluations[i], id);
         }
         result
     }
 
-    pub(crate) fn add(&self, driver: &mut T, rhs: &Self) -> Self {
+    pub(crate) fn add(&self, rhs: &Self) -> Self {
         let mut result = Self::default();
         for i in 0..SIZE {
-            result.evaluations[i] = driver.add(self.evaluations[i], rhs.evaluations[i]);
+            result.evaluations[i] = T::add(self.evaluations[i], rhs.evaluations[i]);
         }
         result
     }
 
-    pub(crate) fn sub(&self, driver: &mut T, rhs: &Self) -> Self {
+    pub(crate) fn sub(&self, rhs: &Self) -> Self {
         let mut result = Self::default();
         for i in 0..SIZE {
-            result.evaluations[i] = driver.sub(self.evaluations[i], rhs.evaluations[i]);
+            result.evaluations[i] = T::sub(self.evaluations[i], rhs.evaluations[i]);
         }
         result
     }
 
     pub(crate) fn add_public(
         &self,
-        driver: &mut T,
         rhs: &Univariate<P::ScalarField, SIZE>,
+        id: T::PartyID,
     ) -> Self {
         let mut result = Self::default();
         for i in 0..SIZE {
-            result.evaluations[i] = driver.add_with_public(rhs.evaluations[i], self.evaluations[i]);
+            result.evaluations[i] = T::add_with_public(rhs.evaluations[i], self.evaluations[i], id);
         }
         result
     }
@@ -87,31 +87,27 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> SharedUnivariate<
     #[expect(unused)]
     pub(crate) fn sub_public(
         &self,
-        driver: &mut T,
         rhs: &Univariate<P::ScalarField, SIZE>,
+        id: T::PartyID,
     ) -> Self {
         let mut result = Self::default();
         for i in 0..SIZE {
             result.evaluations[i] =
-                driver.add_with_public(-rhs.evaluations[i], self.evaluations[i]);
+                T::add_with_public(-rhs.evaluations[i], self.evaluations[i], id);
         }
         result
     }
 
-    pub(crate) fn add_assign(&mut self, driver: &mut T, rhs: &Self) {
+    pub(crate) fn add_assign(&mut self, rhs: &Self) {
         for i in 0..SIZE {
-            self.evaluations[i] = driver.add(self.evaluations[i], rhs.evaluations[i]);
+            self.evaluations[i] = T::add(self.evaluations[i], rhs.evaluations[i]);
         }
     }
 
-    pub(crate) fn mul_public(
-        &self,
-        driver: &mut T,
-        rhs: &Univariate<P::ScalarField, SIZE>,
-    ) -> Self {
+    pub(crate) fn mul_public(&self, rhs: &Univariate<P::ScalarField, SIZE>) -> Self {
         let mut result = Self::default();
         for i in 0..SIZE {
-            result.evaluations[i] = driver.mul_with_public(rhs.evaluations[i], self.evaluations[i]);
+            result.evaluations[i] = T::mul_with_public(rhs.evaluations[i], self.evaluations[i]);
         }
         result
     }
@@ -136,21 +132,20 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> SharedUnivariate<
 
     pub(crate) fn extend_and_batch_univariates<const SIZE2: usize>(
         &self,
-        driver: &mut T,
         result: &mut SharedUnivariate<T, P, SIZE2>,
         extended_random_poly: &Univariate<P::ScalarField, SIZE2>,
         partial_evaluation_result: &P::ScalarField,
         linear_independent: bool,
     ) {
         let mut extended = SharedUnivariate::<T, P, SIZE2>::default();
-        extended.extend_from(driver, &self.evaluations);
+        extended.extend_from(&self.evaluations);
 
         if linear_independent {
             let tmp = extended_random_poly.to_owned() * partial_evaluation_result;
-            let tmp = extended.mul_public(driver, &tmp);
-            result.add_assign(driver, &tmp);
+            let tmp = extended.mul_public(&tmp);
+            result.add_assign(&tmp);
         } else {
-            result.add_assign(driver, &extended);
+            result.add_assign(&extended);
         }
     }
 
@@ -180,7 +175,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> SharedUnivariate<
      * = f(2) + Δ...
      *
      */
-    pub fn extend_from(&mut self, driver: &mut T, poly: &[T::ArithmeticShare]) {
+    pub fn extend_from(&mut self, poly: &[T::ArithmeticShare]) {
         let length = poly.len();
         let extended_length = SIZE;
 
@@ -190,32 +185,32 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> SharedUnivariate<
         self.evaluations[..length].clone_from_slice(poly);
 
         if length == 2 {
-            let delta = driver.sub(poly[1], poly[0]);
+            let delta = T::sub(poly[1], poly[0]);
             for i in length..extended_length {
-                self.evaluations[i] = driver.add(self.evaluations[i - 1], delta);
+                self.evaluations[i] = T::add(self.evaluations[i - 1], delta);
             }
         } else if length == 3 {
             // Based off https://hackmd.io/@aztec-network/SyR45cmOq?type=view
             // The technique used here is the same as the length == 3 case below.
             let inverse_two = P::ScalarField::from(2u64).inverse().unwrap();
-            let tmp = driver.add(poly[0], poly[2]);
-            let tmp = driver.mul_with_public(inverse_two, tmp);
-            let a = driver.sub(tmp, poly[1]);
+            let tmp = T::add(poly[0], poly[2]);
+            let tmp = T::mul_with_public(inverse_two, tmp);
+            let a = T::sub(tmp, poly[1]);
 
-            let tmp = driver.sub(poly[1], poly[0]);
-            let b = driver.sub(tmp, a);
+            let tmp = T::sub(poly[1], poly[0]);
+            let b = T::sub(tmp, a);
 
-            let a2 = driver.add(a, a);
+            let a2 = T::add(a, a);
             let mut a_mul = a2.to_owned();
             for _ in 0..length - 2 {
-                a_mul = driver.add(a_mul, a2);
+                a_mul = T::add(a_mul, a2);
             }
 
-            let tmp = driver.add(a_mul, a);
-            let mut extra = driver.add(tmp, b);
+            let tmp = T::add(a_mul, a);
+            let mut extra = T::add(tmp, b);
             for i in length..extended_length {
-                self.evaluations[i] = driver.add(self.evaluations[i - 1], extra);
-                extra = driver.add(extra, a2);
+                self.evaluations[i] = T::add(self.evaluations[i - 1], extra);
+                extra = T::add(extra, a2);
             }
         } else if length == 4 {
             // To compute a barycentric extension, we can compute the coefficients of the univariate.
@@ -241,73 +236,72 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> SharedUnivariate<
             // muls to compute a, b, c, and d.
             let inverse_six = P::ScalarField::from(6u64).inverse().unwrap();
 
-            let zero_times_2 = driver.add(poly[0], poly[0]);
-            let zero_times_3 = driver.add(zero_times_2, poly[0]);
-            let zero_times_6 = driver.add(zero_times_3, zero_times_3);
-            let zero_times_12 = driver.add(zero_times_6, zero_times_6);
+            let zero_times_2 = T::add(poly[0], poly[0]);
+            let zero_times_3 = T::add(zero_times_2, poly[0]);
+            let zero_times_6 = T::add(zero_times_3, zero_times_3);
+            let zero_times_12 = T::add(zero_times_6, zero_times_6);
 
-            let one_times_2 = driver.add(poly[1], poly[1]);
-            let one_times_3 = driver.add(one_times_2, poly[1]);
-            let one_times_6 = driver.add(one_times_3, one_times_3);
+            let one_times_2 = T::add(poly[1], poly[1]);
+            let one_times_3 = T::add(one_times_2, poly[1]);
+            let one_times_6 = T::add(one_times_3, one_times_3);
 
-            let two_times_2 = driver.add(poly[2], poly[2]);
-            let two_times_3 = driver.add(two_times_2, poly[2]);
+            let two_times_2 = T::add(poly[2], poly[2]);
+            let two_times_3 = T::add(two_times_2, poly[2]);
 
-            let three_times_2 = driver.add(poly[3], poly[3]);
-            let three_times_3 = driver.add(three_times_2, poly[3]);
+            let three_times_2 = T::add(poly[3], poly[3]);
+            let three_times_3 = T::add(three_times_2, poly[3]);
 
-            let one_minus_two_times_3 = driver.sub(one_times_3, two_times_3);
-            let one_minus_two_times_6 = driver.add(one_minus_two_times_3, one_minus_two_times_3);
-            let one_minus_two_times_12 = driver.add(one_minus_two_times_6, one_minus_two_times_6);
+            let one_minus_two_times_3 = T::sub(one_times_3, two_times_3);
+            let one_minus_two_times_6 = T::add(one_minus_two_times_3, one_minus_two_times_3);
+            let one_minus_two_times_12 = T::add(one_minus_two_times_6, one_minus_two_times_6);
 
-            let tmp = driver.add(one_minus_two_times_3, poly[3]);
-            let tmp = driver.sub(tmp, poly[0]);
-            let a = driver.mul_with_public(inverse_six, tmp); // compute a in 1 muls and 4 adds
+            let tmp = T::add(one_minus_two_times_3, poly[3]);
+            let tmp = T::sub(tmp, poly[0]);
+            let a = T::mul_with_public(inverse_six, tmp); // compute a in 1 muls and 4 adds
 
-            let tmp = driver.sub(zero_times_6, one_minus_two_times_12);
-            let tmp = driver.sub(tmp, one_times_3);
-            let tmp = driver.sub(tmp, three_times_3);
-            let b = driver.mul_with_public(inverse_six, tmp);
+            let tmp = T::sub(zero_times_6, one_minus_two_times_12);
+            let tmp = T::sub(tmp, one_times_3);
+            let tmp = T::sub(tmp, three_times_3);
+            let b = T::mul_with_public(inverse_six, tmp);
 
-            let tmp = driver.sub(poly[0], zero_times_12);
-            let tmp = driver.add(tmp, one_minus_two_times_12);
-            let tmp = driver.add(tmp, one_times_6);
-            let tmp = driver.add(tmp, two_times_3);
-            let tmp = driver.add(tmp, three_times_2);
-            let c = driver.mul_with_public(inverse_six, tmp);
+            let tmp = T::sub(poly[0], zero_times_12);
+            let tmp = T::add(tmp, one_minus_two_times_12);
+            let tmp = T::add(tmp, one_times_6);
+            let tmp = T::add(tmp, two_times_3);
+            let tmp = T::add(tmp, three_times_2);
+            let c = T::mul_with_public(inverse_six, tmp);
 
             // Then, outside of the a, b, c, d computation, we need to do some extra precomputation
             // This work is 3 field muls, 8 adds
-            let a_plus_b = driver.add(a, b);
-            let a_plus_b_times_2 = driver.add(a_plus_b, a_plus_b);
+            let a_plus_b = T::add(a, b);
+            let a_plus_b_times_2 = T::add(a_plus_b, a_plus_b);
             let start_idx_sqr = (length - 1) * (length - 1);
             let idx_sqr_three = start_idx_sqr + start_idx_sqr + start_idx_sqr;
             let mut idx_sqr_three_times_a =
-                driver.mul_with_public(P::ScalarField::from(idx_sqr_three as u64), a);
-            let mut x_a_term =
-                driver.mul_with_public(P::ScalarField::from(6 * (length - 1) as u64), a);
-            let two_a = driver.add(a, a);
-            let three_a = driver.add(two_a, a);
-            let six_a = driver.add(three_a, three_a);
+                T::mul_with_public(P::ScalarField::from(idx_sqr_three as u64), a);
+            let mut x_a_term = T::mul_with_public(P::ScalarField::from(6 * (length - 1) as u64), a);
+            let two_a = T::add(a, a);
+            let three_a = T::add(two_a, a);
+            let six_a = T::add(three_a, three_a);
 
-            let three_a_plus_two_b = driver.add(a_plus_b_times_2, a);
+            let three_a_plus_two_b = T::add(a_plus_b_times_2, a);
 
             let tmp =
-                driver.mul_with_public(P::ScalarField::from(length as u64 - 1), three_a_plus_two_b);
-            let tmp = driver.add(tmp, a_plus_b);
-            let mut linear_term = driver.add(tmp, c);
+                T::mul_with_public(P::ScalarField::from(length as u64 - 1), three_a_plus_two_b);
+            let tmp = T::add(tmp, a_plus_b);
+            let mut linear_term = T::add(tmp, c);
 
             // For each new evaluation, we do only 6 field additions and 0 muls.
             for i in length..extended_length {
-                let tmp = driver.add(idx_sqr_three_times_a, linear_term);
-                self.evaluations[i] = driver.add(self.evaluations[i - 1], tmp);
+                let tmp = T::add(idx_sqr_three_times_a, linear_term);
+                self.evaluations[i] = T::add(self.evaluations[i - 1], tmp);
 
-                idx_sqr_three_times_a = driver.add(idx_sqr_three_times_a, x_a_term);
-                idx_sqr_three_times_a = driver.add(idx_sqr_three_times_a, three_a);
+                idx_sqr_three_times_a = T::add(idx_sqr_three_times_a, x_a_term);
+                idx_sqr_three_times_a = T::add(idx_sqr_three_times_a, three_a);
 
-                x_a_term = driver.add(x_a_term, six_a);
+                x_a_term = T::add(x_a_term, six_a);
 
-                linear_term = driver.add(linear_term, three_a_plus_two_b);
+                linear_term = T::add(linear_term, three_a_plus_two_b);
             }
         } else {
             let big_domain = Barycentric::construct_big_domain(length, extended_length);
@@ -326,12 +320,12 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> SharedUnivariate<
 
                 // compute each term v_j / (d_j*(x-x_j)) of the sum
                 for (j, term) in poly.iter().cloned().enumerate() {
-                    let term = driver.mul_with_public(dominator_inverses[length * k + j], term);
-                    self.evaluations[k] = driver.add(self.evaluations[k], term);
+                    let term = T::mul_with_public(dominator_inverses[length * k + j], term);
+                    self.evaluations[k] = T::add(self.evaluations[k], term);
                 }
                 // scale the sum by the value of of B(x)
                 self.evaluations[k] =
-                    driver.mul_with_public(full_numerator_values[k], self.evaluations[k]);
+                    T::mul_with_public(full_numerator_values[k], self.evaluations[k]);
             }
         }
     }

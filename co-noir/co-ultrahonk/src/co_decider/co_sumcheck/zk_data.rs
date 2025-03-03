@@ -74,7 +74,6 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> SharedZKSumch
             &data.libra_univariates,
             &mut data.libra_scaling_factor,
             data.constant_term,
-            driver,
         );
         // Send the Libra total sum to the transcript
         data.libra_total_sum = T::open_many(driver, &[libra_total_sum])?[0];
@@ -85,7 +84,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> SharedZKSumch
             driver.get_party_id(),
             data.libra_total_sum * data.libra_challenge,
         );
-        data.setup_auxiliary_data(driver);
+        data.setup_auxiliary_data();
 
         Ok(data)
     }
@@ -118,25 +117,23 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> SharedZKSumch
         libra_univariates: &[SharedPolynomial<T, P>],
         scaling_factor: &mut P::ScalarField,
         constant_term: T::ArithmeticShare,
-        driver: &mut T,
     ) -> T::ArithmeticShare {
         let mut total_sum = T::ArithmeticShare::default();
         let two_inv = P::ScalarField::from(2).inverse().expect("non-zero");
         *scaling_factor *= two_inv;
 
         for univariate in libra_univariates {
-            let eval = driver.eval_poly(&univariate.coefficients, P::ScalarField::one());
-            let tmp = T::add(driver, univariate.coefficients[0], eval);
-            total_sum = T::add(driver, total_sum, tmp);
+            let eval = T::eval_poly(&univariate.coefficients, P::ScalarField::one());
+            let tmp = T::add(univariate.coefficients[0], eval);
+            total_sum = T::add(total_sum, tmp);
             *scaling_factor += *scaling_factor;
         }
-        total_sum = T::mul_with_public(driver, *scaling_factor, total_sum);
+        total_sum = T::mul_with_public(*scaling_factor, total_sum);
         let mul = T::mul_with_public(
-            driver,
             P::ScalarField::from(1 << libra_univariates.len()),
             constant_term,
         );
-        T::add(driver, total_sum, mul)
+        T::add(total_sum, mul)
     }
 
     /**
@@ -151,19 +148,19 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> SharedZKSumch
      * @param libra_round_factor
      * @param libra_challenge
      */
-    fn setup_auxiliary_data(&mut self, driver: &mut T) {
+    fn setup_auxiliary_data(&mut self) {
         let two_inv = P::ScalarField::from(2).inverse().expect("non-zero");
         self.libra_scaling_factor *= self.libra_challenge;
         for univariate in &mut self.libra_univariates {
-            univariate.mul_assign(self.libra_scaling_factor, driver);
+            univariate.mul_assign(self.libra_scaling_factor);
         }
-        let eval = driver.eval_poly(
+        let eval = T::eval_poly(
             &self.libra_univariates[0].coefficients,
             P::ScalarField::one(),
         );
-        let sub = T::add(driver, eval, self.libra_univariates[0].coefficients[0]);
-        self.libra_running_sum = T::sub(driver, self.libra_running_sum, sub);
-        self.libra_running_sum = T::mul_with_public(driver, two_inv, self.libra_running_sum);
+        let sub = T::add(eval, self.libra_univariates[0].coefficients[0]);
+        self.libra_running_sum = T::sub(self.libra_running_sum, sub);
+        self.libra_running_sum = T::mul_with_public(two_inv, self.libra_running_sum);
     }
 
     /**
@@ -218,12 +215,10 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> SharedZKSumch
 
         for idx in 0..masking_scalars.evaluations.len() {
             self.libra_concatenated_monomial_form.coefficients[idx] = T::sub(
-                driver,
                 self.libra_concatenated_monomial_form.coefficients[idx],
                 masking_scalars.evaluations[idx],
             );
             self.libra_concatenated_monomial_form.coefficients[P::SUBGROUP_SIZE + idx] = T::add(
-                driver,
                 self.libra_concatenated_monomial_form.coefficients[P::SUBGROUP_SIZE + idx],
                 masking_scalars.evaluations[idx],
             );
@@ -260,49 +255,44 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> SharedZKSumch
         &mut self,
         round_challenge: P::ScalarField,
         round_idx: usize,
-        driver: &mut T,
     ) {
         let two_inv = P::ScalarField::from(2).inverse().expect("non-zero");
         // when round_idx = d - 1, the update is not needed
         if round_idx < self.log_circuit_size - 1 {
             for univariate in &mut self.libra_univariates {
-                univariate.mul_assign(two_inv, driver);
+                univariate.mul_assign(two_inv);
             }
             // compute the evaluation \f$ \rho \cdot 2^{d-2-i} \çdot g_i(u_i) \f$
-            let libra_evaluation = driver.eval_poly(
+            let libra_evaluation = T::eval_poly(
                 &self.libra_univariates[round_idx].coefficients,
                 round_challenge,
             );
             let next_libra_univariate = &self.libra_univariates[round_idx + 1];
             // update the running sum by adding g_i(u_i) and subtracting (g_i(0) + g_i(1))
-            let eval = driver.eval_poly(&next_libra_univariate.coefficients, P::ScalarField::one());
-            let add = T::add(driver, next_libra_univariate.coefficients[0], eval);
-            self.libra_running_sum = T::sub(driver, self.libra_running_sum, add);
-            self.libra_running_sum = T::mul_with_public(driver, two_inv, self.libra_running_sum);
+            let eval = T::eval_poly(&next_libra_univariate.coefficients, P::ScalarField::one());
+            let add = T::add(next_libra_univariate.coefficients[0], eval);
+            self.libra_running_sum = T::sub(self.libra_running_sum, add);
+            self.libra_running_sum = T::mul_with_public(two_inv, self.libra_running_sum);
 
-            self.libra_running_sum = T::add(driver, self.libra_running_sum, libra_evaluation);
+            self.libra_running_sum = T::add(self.libra_running_sum, libra_evaluation);
             self.libra_scaling_factor *= two_inv;
 
             self.libra_evaluations.push(T::mul_with_public(
-                driver,
                 self.libra_scaling_factor.inverse().expect("non-zero"),
                 libra_evaluation,
             ));
         } else {
             // compute the evaluation of the last Libra univariate at the challenge u_{d-1}
-            let eval = driver.eval_poly(
+            let eval = T::eval_poly(
                 &self.libra_univariates[round_idx].coefficients,
                 round_challenge,
             );
-            let libra_evaluation = T::mul_with_public(
-                driver,
-                self.libra_scaling_factor.inverse().expect("non-zero"),
-                eval,
-            );
+            let libra_evaluation =
+                T::mul_with_public(self.libra_scaling_factor.inverse().expect("non-zero"), eval);
             // place the evalution into the vector of Libra evaluations
             self.libra_evaluations.push(libra_evaluation);
             for univariate in &mut self.libra_univariates {
-                univariate.mul_assign(self.libra_challenge.inverse().expect("non-zero"), driver);
+                univariate.mul_assign(self.libra_challenge.inverse().expect("non-zero"));
             }
         }
     }

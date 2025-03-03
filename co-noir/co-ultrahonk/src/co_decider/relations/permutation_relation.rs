@@ -27,21 +27,19 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for UltraPermutationRelation
 }
 
 impl<T: NoirUltraHonkProver<P>, P: Pairing> UltraPermutationRelationAcc<T, P> {
-    pub(crate) fn scale(&mut self, driver: &mut T, elements: &[P::ScalarField]) {
+    pub(crate) fn scale(&mut self, elements: &[P::ScalarField]) {
         assert!(elements.len() == UltraPermutationRelation::NUM_RELATIONS);
-        self.r0.scale_inplace(driver, elements[0]);
-        self.r1.scale_inplace(driver, elements[1]);
+        self.r0.scale_inplace(elements[0]);
+        self.r1.scale_inplace(elements[1]);
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(
         &self,
-        driver: &mut T,
         result: &mut SharedUnivariate<T, P, SIZE>,
         extended_random_poly: &Univariate<P::ScalarField, SIZE>,
         partial_evaluation_result: &P::ScalarField,
     ) {
         self.r0.extend_and_batch_univariates(
-            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
@@ -49,7 +47,6 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> UltraPermutationRelationAcc<T, P> {
         );
 
         self.r1.extend_and_batch_univariates(
-            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
@@ -124,22 +121,24 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let lagrange_first = input.precomputed.lagrange_first();
         let lagrange_last = input.precomputed.lagrange_last();
 
-        let w_1_plus_gamma = w_1.add_scalar(driver, *gamma);
-        let w_2_plus_gamma = w_2.add_scalar(driver, *gamma);
-        let w_3_plus_gamma = w_3.add_scalar(driver, *gamma);
-        let w_4_plus_gamma = w_4.add_scalar(driver, *gamma);
+        let party_id = driver.get_party_id();
 
-        let mut t1 = w_1_plus_gamma.add_public(driver, &(id_1.to_owned() * beta));
-        t1.scale_inplace(driver, *scaling_factor);
-        let t2 = w_2_plus_gamma.add_public(driver, &(id_2.to_owned() * beta));
-        let t3 = w_3_plus_gamma.add_public(driver, &(id_3.to_owned() * beta));
-        let t4 = w_4_plus_gamma.add_public(driver, &(id_4.to_owned() * beta));
+        let w_1_plus_gamma = w_1.add_scalar(*gamma, party_id);
+        let w_2_plus_gamma = w_2.add_scalar(*gamma, party_id);
+        let w_3_plus_gamma = w_3.add_scalar(*gamma, party_id);
+        let w_4_plus_gamma = w_4.add_scalar(*gamma, party_id);
 
-        let mut t5 = w_1_plus_gamma.add_public(driver, &(sigma_1.to_owned() * beta));
-        t5.scale_inplace(driver, *scaling_factor);
-        let t6 = w_2_plus_gamma.add_public(driver, &(sigma_2.to_owned() * beta));
-        let t7 = w_3_plus_gamma.add_public(driver, &(sigma_3.to_owned() * beta));
-        let t8 = w_4_plus_gamma.add_public(driver, &(sigma_4.to_owned() * beta));
+        let mut t1 = w_1_plus_gamma.add_public(&(id_1.to_owned() * beta), party_id);
+        t1.scale_inplace(*scaling_factor);
+        let t2 = w_2_plus_gamma.add_public(&(id_2.to_owned() * beta), party_id);
+        let t3 = w_3_plus_gamma.add_public(&(id_3.to_owned() * beta), party_id);
+        let t4 = w_4_plus_gamma.add_public(&(id_4.to_owned() * beta), party_id);
+
+        let mut t5 = w_1_plus_gamma.add_public(&(sigma_1.to_owned() * beta), party_id);
+        t5.scale_inplace(*scaling_factor);
+        let t6 = w_2_plus_gamma.add_public(&(sigma_2.to_owned() * beta), party_id);
+        let t7 = w_3_plus_gamma.add_public(&(sigma_3.to_owned() * beta), party_id);
+        let t8 = w_4_plus_gamma.add_public(&(sigma_4.to_owned() * beta), party_id);
 
         let lhs = SharedUnivariate::univariates_to_vec(&[t1, t5, t3, t7]);
         let rhs = SharedUnivariate::univariates_to_vec(&[t2, t6, t4, t8]);
@@ -148,12 +147,12 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let num_den = driver.mul_many(lhs, rhs)?;
 
         let public_input_term =
-            z_perm_shift.add_public(driver, &(lagrange_last.to_owned() * public_input_delta));
+            z_perm_shift.add_public(&(lagrange_last.to_owned() * public_input_delta), party_id);
 
         // witness degree: deg 5 - deg 5 = deg 5
         // total degree: deg 9 - deg 10 = deg 10
 
-        let tmp_lhs = z_perm.add_public(driver, lagrange_first);
+        let tmp_lhs = z_perm.add_public(lagrange_first, party_id);
         let lhs = num_den;
         let rhs = SharedUnivariate::univariates_to_vec(&[tmp_lhs, public_input_term]);
 
@@ -162,22 +161,22 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let lhs = SharedUnivariate::<T, P, MAX_PARTIAL_RELATION_LENGTH>::from_vec(lhs);
         let rhs = SharedUnivariate::<T, P, MAX_PARTIAL_RELATION_LENGTH>::from_vec(rhs);
 
-        let tmp = lhs.sub(driver, &rhs);
+        let tmp = lhs.sub(&rhs);
 
         for i in 0..univariate_accumulator.r0.evaluations.len() {
             univariate_accumulator.r0.evaluations[i] =
-                driver.add(univariate_accumulator.r0.evaluations[i], tmp.evaluations[i]);
+                T::add(univariate_accumulator.r0.evaluations[i], tmp.evaluations[i]);
         }
 
         ///////////////////////////////////////////////////////////////////////
 
         let tmp = z_perm_shift
-            .mul_public(driver, lagrange_last)
-            .scale(driver, *scaling_factor);
+            .mul_public(lagrange_last)
+            .scale(*scaling_factor);
 
         for i in 0..univariate_accumulator.r1.evaluations.len() {
             univariate_accumulator.r1.evaluations[i] =
-                driver.add(univariate_accumulator.r1.evaluations[i], tmp.evaluations[i]);
+                T::add(univariate_accumulator.r1.evaluations[i], tmp.evaluations[i]);
         }
 
         Ok(())

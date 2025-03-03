@@ -77,7 +77,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
         );
 
         prover.compute_batched_polynomial(claimed_ipa_eval, driver);
-        prover.compute_batched_quotient(driver);
+        prover.compute_batched_quotient();
 
         let libra_quotient_commitment_shared = CoUtils::commit::<T, P>(
             prover.batched_quotient.coefficients.as_ref(),
@@ -173,12 +173,10 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
         for idx in 1..Self::SUBGROUP_SIZE {
             let prev_idx = idx - 1;
             let mul = T::mul_with_public(
-                driver,
                 self.challenge_polynomial_lagrange.coefficients[prev_idx],
                 self.libra_concatenated_lagrange_form.coefficients[prev_idx],
             );
-            self.big_sum_lagrange_coeffs[idx] =
-                T::add(driver, mul, self.big_sum_lagrange_coeffs[prev_idx]);
+            self.big_sum_lagrange_coeffs[idx] = T::add(mul, self.big_sum_lagrange_coeffs[prev_idx]);
         }
 
         //  Get the coefficients in the monomial basis
@@ -190,16 +188,14 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
         //  Generate random masking_term of degree 2, add Z_H(X) * masking_term
         let masking_term = SharedUnivariate::<T, P, 3>::get_random(driver)?;
         self.big_sum_polynomial
-            .add_assign_slice(driver, &self.big_sum_polynomial_unmasked.coefficients);
+            .add_assign_slice(&self.big_sum_polynomial_unmasked.coefficients);
 
         for idx in 0..masking_term.evaluations.len() {
             self.big_sum_polynomial.coefficients[idx] = T::sub(
-                driver,
                 self.big_sum_polynomial.coefficients[idx],
                 masking_term.evaluations[idx],
             );
             self.big_sum_polynomial.coefficients[idx + Self::SUBGROUP_SIZE] = T::add(
-                driver,
                 self.big_sum_polynomial.coefficients[idx + Self::SUBGROUP_SIZE],
                 masking_term.evaluations[idx],
             );
@@ -218,7 +214,6 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
 
         for idx in 0..(Self::SUBGROUP_SIZE + 3) {
             shifted_big_sum.coefficients[idx] = T::mul_with_public(
-                driver,
                 self.interpolation_domain[idx % Self::SUBGROUP_SIZE],
                 self.big_sum_polynomial.coefficients[idx],
             );
@@ -230,24 +225,22 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
         for i in 0..self.concatenated_polynomial.coefficients.len() {
             for j in 0..self.challenge_polynomial.coefficients.len() {
                 let mul = T::mul_with_public(
-                    driver,
                     self.challenge_polynomial.coefficients[j],
                     self.concatenated_polynomial.coefficients[i],
                 );
                 self.batched_polynomial.coefficients[i + j] =
-                    T::sub(driver, self.batched_polynomial.coefficients[i + j], mul);
+                    T::sub(self.batched_polynomial.coefficients[i + j], mul);
             }
         }
 
         // Compute - F(X) * G(X) + A(gX) - A(X)
         for idx in 0..shifted_big_sum.coefficients.len() {
             let sub = T::sub(
-                driver,
                 shifted_big_sum.coefficients[idx],
                 self.big_sum_polynomial.coefficients[idx],
             );
             self.batched_polynomial.coefficients[idx] =
-                T::add(driver, self.batched_polynomial.coefficients[idx], sub);
+                T::add(self.batched_polynomial.coefficients[idx], sub);
         }
 
         // Mutiply - F(X) * G(X) + A(gX) - A(X) by X-g:
@@ -261,41 +254,37 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
         // 2. Subtract  1/g(A(gX) - A(X) - F(X) * G(X))
         for idx in 0..self.batched_polynomial.coefficients.len() - 1 {
             let tmp = self.batched_polynomial.coefficients[idx + 1];
-            let mul = T::mul_with_public(
-                driver,
-                self.interpolation_domain[Self::SUBGROUP_SIZE - 1],
-                tmp,
-            );
+            let mul = T::mul_with_public(self.interpolation_domain[Self::SUBGROUP_SIZE - 1], tmp);
             self.batched_polynomial.coefficients[idx] =
-                T::sub(driver, self.batched_polynomial.coefficients[idx], mul);
+                T::sub(self.batched_polynomial.coefficients[idx], mul);
         }
 
         // Add (L_1 + L_{|H|}) * A(X) to the result
         for i in 0..self.big_sum_polynomial.coefficients.len() {
             for j in 0..Self::SUBGROUP_SIZE {
                 let mul = T::mul_with_public(
-                    driver,
                     lagrange_first.coefficients[j] + lagrange_last.coefficients[j],
                     self.big_sum_polynomial.coefficients[i],
                 );
                 self.batched_polynomial.coefficients[i + j] =
-                    T::add(driver, self.batched_polynomial.coefficients[i + j], mul);
+                    T::add(self.batched_polynomial.coefficients[i + j], mul);
             }
         }
+        let party_id = driver.get_party_id();
 
         // Subtract L_{|H|} * s
         for idx in 0..Self::SUBGROUP_SIZE {
             self.batched_polynomial.coefficients[idx] = T::add_with_public(
-                driver,
                 -lagrange_last.coefficients[idx] * claimed_evaluation,
                 self.batched_polynomial.coefficients[idx],
+                party_id,
             );
         }
     }
 
     /** @brief Efficiently compute the quotient of batched_polynomial by Z_H = X ^ { | H | } - 1
      */
-    fn compute_batched_quotient(&mut self, driver: &mut T) {
+    fn compute_batched_quotient(&mut self) {
         let mut remainder = self.batched_polynomial.clone();
         for idx in (Self::SUBGROUP_SIZE..Self::BATCHED_POLYNOMIAL_LENGTH).rev() {
             self.batched_quotient.coefficients[idx - Self::SUBGROUP_SIZE] =
@@ -303,11 +292,8 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
 
             let tmp = remainder.coefficients[idx];
 
-            remainder.coefficients[idx - Self::SUBGROUP_SIZE] = T::add(
-                driver,
-                tmp,
-                remainder.coefficients[idx - Self::SUBGROUP_SIZE],
-            );
+            remainder.coefficients[idx - Self::SUBGROUP_SIZE] =
+                T::add(tmp, remainder.coefficients[idx - Self::SUBGROUP_SIZE]);
         }
         self.batched_polynomial = remainder;
     }

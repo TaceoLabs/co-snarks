@@ -62,22 +62,22 @@ impl<
     fn compute_w4_inner(&mut self, proving_key: &ProvingKey<T, P>, gate_idx: usize) {
         let target = &mut self.memory.w_4[gate_idx];
 
-        let mul1 = self.driver.mul_with_public(
+        let mul1 = T::mul_with_public(
             self.memory.challenges.eta_1,
             proving_key.polynomials.witness.w_l()[gate_idx],
         );
-        let mul2 = self.driver.mul_with_public(
+        let mul2 = T::mul_with_public(
             self.memory.challenges.eta_2,
             proving_key.polynomials.witness.w_r()[gate_idx],
         );
-        let mul3 = self.driver.mul_with_public(
+        let mul3 = T::mul_with_public(
             self.memory.challenges.eta_3,
             proving_key.polynomials.witness.w_o()[gate_idx],
         );
         // TACEO TODO add_assign?
-        *target = self.driver.add(*target, mul1);
-        *target = self.driver.add(*target, mul2);
-        *target = self.driver.add(*target, mul3);
+        *target = T::add(*target, mul1);
+        *target = T::add(*target, mul2);
+        *target = T::add(*target, mul3);
     }
 
     fn compute_w4(&mut self, proving_key: &ProvingKey<T, P>) {
@@ -110,7 +110,8 @@ impl<
             let gate_idx = *gate_idx as usize;
             self.compute_w4_inner(proving_key, gate_idx);
             let target = &mut self.memory.w_4[gate_idx];
-            *target = self.driver.add_with_public(P::ScalarField::one(), *target);
+            *target =
+                T::add_with_public(P::ScalarField::one(), *target, self.driver.get_party_id());
         }
 
         // This computes the values for cases where the type (r/w) of the record is a secret share of 0/1 and adds this share
@@ -118,7 +119,7 @@ impl<
             let gate_idx = *gate_idx as usize;
             self.compute_w4_inner(proving_key, gate_idx);
             let target = &mut self.memory.w_4[gate_idx];
-            *target = self.driver.add(*type_share, *target);
+            *target = T::add(*type_share, *target);
         }
     }
 
@@ -147,31 +148,26 @@ impl<
         // The wire values for lookup gates are accumulators structured in such a way that the differences w_i -
         // step_size*w_i_shift result in values present in column i of a corresponding table. See the documentation in
         // method get_lookup_accumulators() in  for a detailed explanation.
+        let party_id = self.driver.get_party_id();
 
-        let mul = self
-            .driver
-            .mul_with_public(negative_column_1_step_size, w_1_shift);
-        let add = self.driver.add_with_public(gamma, mul);
-        let derived_table_entry_1 = self.driver.add(w_1, add);
+        let mul = T::mul_with_public(negative_column_1_step_size, w_1_shift);
+        let add = T::add_with_public(gamma, mul, party_id);
+        let derived_table_entry_1 = T::add(w_1, add);
 
-        let mul = self
-            .driver
-            .mul_with_public(negative_column_2_step_size, w_2_shift);
-        let derived_table_entry_2 = self.driver.add(w_2, mul);
+        let mul = T::mul_with_public(negative_column_2_step_size, w_2_shift);
+        let derived_table_entry_2 = T::add(w_2, mul);
 
-        let mul = self
-            .driver
-            .mul_with_public(negative_column_3_step_size, w_3_shift);
-        let derived_table_entry_3 = self.driver.add(w_3, mul);
+        let mul = T::mul_with_public(negative_column_3_step_size, w_3_shift);
+        let derived_table_entry_3 = T::add(w_3, mul);
 
         // (w_1 + \gamma q_2*w_1_shift) + η(w_2 + q_m*w_2_shift) + η₂(w_3 + q_c*w_3_shift) + η₃q_index.
         // deg 2 or 3
         // TACEO TODO add_assign?
-        let mul = self.driver.mul_with_public(eta_1, derived_table_entry_2);
-        let res = self.driver.add(derived_table_entry_1, mul);
-        let mul = self.driver.mul_with_public(eta_2, derived_table_entry_3);
-        let res = self.driver.add(res, mul);
-        self.driver.add_with_public(table_index * eta_3, res)
+        let mul = T::mul_with_public(eta_1, derived_table_entry_2);
+        let res = T::add(derived_table_entry_1, mul);
+        let mul = T::mul_with_public(eta_2, derived_table_entry_3);
+        let res = T::add(res, mul);
+        T::add_with_public(table_index * eta_3, res, party_id)
     }
 
     // Compute table_1 + gamma + table_2 * eta + table_3 * eta_2 + table_4 * eta_3
@@ -225,15 +221,18 @@ impl<
             //     continue;
             // }
             debug_assert!(q_lookup.is_one() || q_lookup.is_zero());
-            let mul = self
-                .driver
-                .mul_with_public(P::ScalarField::one() - q_lookup, lookup_read_tag.to_owned());
-            q_lookup_mul_read_tag.push(self.driver.add_with_public(q_lookup.to_owned(), mul));
+            let mul =
+                T::mul_with_public(P::ScalarField::one() - q_lookup, lookup_read_tag.to_owned());
+            q_lookup_mul_read_tag.push(T::add_with_public(
+                q_lookup.to_owned(),
+                mul,
+                self.driver.get_party_id(),
+            ));
 
             // READ_TERMS and WRITE_TERMS are 1, so we skip the loop
             let read_term = self.compute_read_term(proving_key, i);
             let write_term = self.compute_write_term(proving_key, i);
-            self.memory.lookup_inverses[i] = self.driver.mul_with_public(write_term, read_term);
+            self.memory.lookup_inverses[i] = T::mul_with_public(write_term, read_term);
         }
         self.memory.lookup_inverses = Polynomial::new(
             self.driver
@@ -323,9 +322,10 @@ impl<
             } else {
                 i
             };
+            let paryty_id = driver.get_party_id();
 
-            let m1 = driver.add_with_public(pub1[idx] * beta + gamma, shared1[idx]);
-            let m2 = driver.add_with_public(pub2[idx] * beta + gamma, shared2[idx]);
+            let m1 = T::add_with_public(pub1[idx] * beta + gamma, shared1[idx], paryty_id);
+            let m2 = T::add_with_public(pub2[idx] * beta + gamma, shared2[idx], paryty_id);
             mul1.push(m1);
             mul2.push(m2);
         }
@@ -357,7 +357,7 @@ impl<
         }
 
         for (unblind, open) in unblind.iter_mut().zip(open.iter()) {
-            *unblind = self.driver.mul_with_public(*open, *unblind);
+            *unblind = T::mul_with_public(*open, *unblind);
         }
         Ok(unblind)
     }

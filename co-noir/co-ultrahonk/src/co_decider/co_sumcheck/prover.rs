@@ -1,4 +1,5 @@
 use super::{zk_data::SharedZKSumcheckData, SumcheckOutput};
+
 use crate::{
     co_decider::{
         co_sumcheck::round::SumcheckRound,
@@ -14,6 +15,7 @@ use crate::{
 };
 use co_builder::prelude::{HonkCurve, RowDisablingPolynomial};
 use co_builder::HonkProofResult;
+use std::time::Instant;
 use ultrahonk::{
     prelude::{
         GateSeparatorPolynomial, Transcript, TranscriptFieldType, TranscriptHasher, Univariate,
@@ -29,7 +31,6 @@ impl<
     > CoDecider<T, P, H>
 {
     pub(crate) fn partially_evaluate_init(
-        driver: &mut T,
         partially_evaluated_poly: &mut PartiallyEvaluatePolys<T, P>,
         polys: &AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>>,
         round_size: usize,
@@ -53,15 +54,14 @@ impl<
             .zip(partially_evaluated_poly.shared_iter_mut())
         {
             for i in (0..round_size).step_by(2) {
-                let tmp = driver.sub(poly_src[i + 1], poly_src[i]);
-                let tmp = driver.mul_with_public(*round_challenge, tmp);
-                poly_des[i >> 1] = driver.add(poly_src[i], tmp);
+                let tmp = T::sub(poly_src[i + 1], poly_src[i]);
+                let tmp = T::mul_with_public(*round_challenge, tmp);
+                poly_des[i >> 1] = T::add(poly_src[i], tmp);
             }
         }
     }
 
     pub(crate) fn partially_evaluate_inplace(
-        driver: &mut T,
         partially_evaluated_poly: &mut PartiallyEvaluatePolys<T, P>,
         round_size: usize,
         round_challenge: &P::ScalarField,
@@ -78,9 +78,9 @@ impl<
 
         for poly in partially_evaluated_poly.shared_iter_mut() {
             for i in (0..round_size).step_by(2) {
-                let tmp = driver.sub(poly[i + 1], poly[i]);
-                let tmp = driver.mul_with_public(*round_challenge, tmp);
-                poly[i >> 1] = driver.add(poly[i], tmp);
+                let tmp = T::sub(poly[i + 1], poly[i]);
+                let tmp = T::mul_with_public(*round_challenge, tmp);
+                poly[i >> 1] = T::add(poly[i], tmp);
             }
         }
     }
@@ -133,15 +133,30 @@ impl<
         circuit_size: u32,
     ) -> HonkProofResult<SumcheckOutput<P::ScalarField>> {
         tracing::trace!("Sumcheck prove");
+        tracing::info!("circuit size: {circuit_size}");
 
         let multivariate_n = circuit_size;
         let multivariate_d = Utils::get_msb64(multivariate_n as u64);
 
+        let time = Instant::now();
         let mut sum_check_round = SumcheckRound::new(multivariate_n as usize);
+        let elapsed = time.elapsed();
+        tracing::info!(
+            "SumcheckRound::new took {}.{}",
+            elapsed.as_secs(),
+            elapsed.subsec_nanos()
+        );
 
+        let time = Instant::now();
         let mut gate_separators = GateSeparatorPolynomial::new(
             self.memory.relation_parameters.gate_challenges.to_owned(),
             multivariate_d as usize,
+        );
+        let elapsed = time.elapsed();
+        tracing::info!(
+            "SumcheckRound::new took {}.{}",
+            elapsed.as_secs(),
+            elapsed.subsec_nanos()
         );
 
         let mut multivariate_challenge = Vec::with_capacity(multivariate_d as usize);
@@ -149,6 +164,8 @@ impl<
 
         tracing::trace!("Sumcheck prove round {}", round_idx);
 
+        let time = Instant::now();
+        // FRANCO TODO - this takes most of the time
         // In the first round, we compute the first univariate polynomial and populate the book-keeping table of
         // #partially_evaluated_polynomials, which has \f$ n/2 \f$ rows and \f$ N \f$ columns. When the Flavor has ZK,
         // compute_univariate also takes into account the zk_sumcheck_data.
@@ -159,8 +176,15 @@ impl<
             &gate_separators,
             &self.memory.polys,
         )?;
+        let elapsed = time.elapsed();
+        tracing::info!(
+            "sum_check_round.compute_univariate took {}.{}",
+            elapsed.as_secs(),
+            elapsed.subsec_nanos()
+        );
         let round_univariate = self.driver.open_many(&round_univariate.evaluations)?;
 
+        let time = Instant::now();
         // Place the evaluations of the round univariate into transcript.
         transcript.send_fr_iter_to_verifier::<P, _>(
             "Sumcheck:univariate_0".to_string(),
@@ -168,26 +192,50 @@ impl<
         );
         let round_challenge = transcript.get_challenge::<P>("Sumcheck:u_0".to_string());
         multivariate_challenge.push(round_challenge);
+        let elapsed = time.elapsed();
+        tracing::info!(
+            "transcipt challenge took {}.{}",
+            elapsed.as_secs(),
+            elapsed.subsec_nanos()
+        );
 
+        let time = Instant::now();
         // Prepare sumcheck book-keeping table for the next round
         let mut partially_evaluated_polys =
             PartiallyEvaluatePolys::<T, P>::new(multivariate_n as usize >> 1);
         Self::partially_evaluate_init(
-            &mut self.driver,
             &mut partially_evaluated_polys,
             &self.memory.polys,
             multivariate_n as usize,
             &round_challenge,
         );
+
+        let elapsed = time.elapsed();
+        tracing::info!(
+            "partially_evaluate_init took {}.{}",
+            elapsed.as_secs(),
+            elapsed.subsec_nanos()
+        );
+
+        let time = Instant::now();
         gate_separators.partially_evaluate(round_challenge);
+
+        let elapsed = time.elapsed();
+        tracing::info!(
+            "partially_evaluate took {}.{}",
+            elapsed.as_secs(),
+            elapsed.subsec_nanos()
+        );
+
         sum_check_round.round_size >>= 1; // AZTEC TODO(#224)(Cody): Maybe partially_evaluate should do this and
                                           // release memory?        // All but final round
                                           // We operate on partially_evaluated_polynomials in place.
 
         for round_idx in 1..multivariate_d as usize {
-            tracing::trace!("Sumcheck prove round {}", round_idx);
+            tracing::info!("Sumcheck prove round {}", round_idx);
             // Write the round univariate to the transcript
 
+            let time = Instant::now();
             let round_univariate = sum_check_round.compute_univariate::<T, P>(
                 &mut self.driver,
                 round_idx,
@@ -195,8 +243,16 @@ impl<
                 &gate_separators,
                 &partially_evaluated_polys,
             )?;
+
+            let elapsed = time.elapsed();
+            tracing::info!(
+                "compute_univariate ({round_idx}) took {}.{}",
+                elapsed.as_secs(),
+                elapsed.subsec_nanos()
+            );
             let round_univariate = self.driver.open_many(&round_univariate.evaluations)?;
 
+            let time = Instant::now();
             // Place the evaluations of the round univariate into transcript.
             transcript.send_fr_iter_to_verifier::<P, _>(
                 format!("Sumcheck:univariate_{}", round_idx),
@@ -205,15 +261,36 @@ impl<
             let round_challenge =
                 transcript.get_challenge::<P>(format!("Sumcheck:u_{}", round_idx));
             multivariate_challenge.push(round_challenge);
+
+            let elapsed = time.elapsed();
+            tracing::info!(
+                "round challeneg ({round_idx}) took {}.{}",
+                elapsed.as_secs(),
+                elapsed.subsec_nanos()
+            );
+            let time = Instant::now();
             // Prepare sumcheck book-keeping table for the next round
             Self::partially_evaluate_inplace(
-                &mut self.driver,
                 &mut partially_evaluated_polys,
                 sum_check_round.round_size,
                 &round_challenge,
             );
+            let elapsed = time.elapsed();
+            tracing::info!(
+                "partially_evaluate_inplace ({round_idx}) took {}.{}",
+                elapsed.as_secs(),
+                elapsed.subsec_nanos()
+            );
+            let time = Instant::now();
             gate_separators.partially_evaluate(round_challenge);
             sum_check_round.round_size >>= 1;
+
+            let elapsed = time.elapsed();
+            tracing::info!(
+                "partially_evaluate ({round_idx}) took {}.{}",
+                elapsed.as_secs(),
+                elapsed.subsec_nanos()
+            );
         }
 
         // Zero univariates are used to pad the proof to the fixed size CONST_PROOF_SIZE_LOG_N.
@@ -295,13 +372,12 @@ impl<
         let mut partially_evaluated_polys =
             PartiallyEvaluatePolys::<T, P>::new(multivariate_n as usize >> 1);
         Self::partially_evaluate_init(
-            &mut self.driver,
             &mut partially_evaluated_polys,
             &self.memory.polys,
             multivariate_n as usize,
             &round_challenge,
         );
-        zk_sumcheck_data.update_zk_sumcheck_data(round_challenge, round_idx, &mut self.driver);
+        zk_sumcheck_data.update_zk_sumcheck_data(round_challenge, round_idx);
 
         row_disabling_polynomial.update_evaluations(round_challenge, round_idx);
 
@@ -334,13 +410,12 @@ impl<
             multivariate_challenge.push(round_challenge);
             // Prepare sumcheck book-keeping table for the next round
             Self::partially_evaluate_inplace(
-                &mut self.driver,
                 &mut partially_evaluated_polys,
                 sum_check_round.round_size,
                 &round_challenge,
             );
             // Prepare evaluation masking and libra structures for the next round (for ZK Flavors)
-            zk_sumcheck_data.update_zk_sumcheck_data(round_challenge, round_idx, &mut self.driver);
+            zk_sumcheck_data.update_zk_sumcheck_data(round_challenge, round_idx);
             row_disabling_polynomial.update_evaluations(round_challenge, round_idx);
 
             gate_separators.partially_evaluate(round_challenge);
@@ -370,7 +445,7 @@ impl<
         // transcript.
         let mut libra_evaluation = zk_sumcheck_data.constant_term;
         for libra_eval in &zk_sumcheck_data.libra_evaluations {
-            libra_evaluation = T::add(&self.driver, libra_evaluation, *libra_eval);
+            libra_evaluation = T::add(libra_evaluation, *libra_eval);
         }
         let libra_evaluation = T::open_many(&mut self.driver, &[libra_evaluation])?[0];
         transcript
