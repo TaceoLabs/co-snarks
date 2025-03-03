@@ -584,3 +584,48 @@ pub(crate) struct BoolCT<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarFi
     pub(crate) witness_inverted: bool,
     pub(crate) witness_index: u32,
 }
+
+impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T> {
+    pub(crate) fn is_constant(&self) -> bool {
+        self.witness_index == FieldCT::<P::ScalarField>::IS_CONSTANT
+    }
+}
+
+pub(crate) struct CycleGroupCT<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
+    pub(crate) x: FieldCT<P::ScalarField>,
+    pub(crate) y: FieldCT<P::ScalarField>,
+    pub(crate) is_infinity: BoolCT<P, T>,
+    pub(crate) is_constant: bool,
+}
+
+impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupCT<P, T> {
+    pub(crate) fn new(
+        x: FieldCT<P::ScalarField>,
+        y: FieldCT<P::ScalarField>,
+        is_infinity: BoolCT<P, T>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> Self {
+        let x_ = x.normalize(builder, driver);
+        let y_ = y.normalize(builder, driver);
+        let is_constant = x.is_constant() && y.is_constant() && is_infinity.is_constant();
+
+        Self {
+            x: x_,
+            y: y_,
+            is_infinity,
+            is_constant,
+        }
+    }
+}
+
+pub(crate) struct CycleScalarCT<F: PrimeField> {
+    pub(crate) lo: FieldCT<F>,
+    pub(crate) hi: FieldCT<F>,
+}
+
+impl<F: PrimeField> CycleScalarCT<F> {
+    pub(crate) fn new(lo: FieldCT<F>, hi: FieldCT<F>) -> Self {
+        Self { lo, hi }
+    }
+}
