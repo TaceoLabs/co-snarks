@@ -29,4 +29,9 @@ rayon.workspace = true
 serde.workspace = true
 
 [dev-dependencies]
+criterion.workspace = true
 sha3.workspace = true
+
+[[bench]]
+name = "add_mul_many"
+harness = false
