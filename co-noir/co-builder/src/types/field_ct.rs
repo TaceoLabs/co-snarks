@@ -1026,6 +1026,47 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T> {
 
         Ok(result)
     }
+
+    fn not(&self) -> Self {
+        let mut result = self.to_owned();
+        result.witness_inverted = !result.witness_inverted;
+        result
+    }
+
+    fn normalize(&self, builder: &mut GenericUltraCircuitBuilder<P, T>, driver: &mut T) -> Self {
+        if self.is_constant() || !self.witness_inverted {
+            return self.to_owned();
+        }
+
+        let value = self.get_value(driver);
+        let new_witness = builder.add_variable(value.to_owned());
+        let new_value = value;
+
+        let (q_l, q_c) = if self.witness_inverted {
+            (-P::ScalarField::one(), P::ScalarField::one())
+        } else {
+            (P::ScalarField::one(), P::ScalarField::zero())
+        };
+        let q_o = -P::ScalarField::one();
+        let q_m = P::ScalarField::zero();
+        let q_r = P::ScalarField::zero();
+        builder.create_poly_gate(&PolyTriple {
+            a: self.witness_index,
+            b: self.witness_index,
+            c: new_witness,
+            q_m,
+            q_l,
+            q_r,
+            q_o,
+            q_c,
+        });
+
+        Self {
+            witness_bool: new_value,
+            witness_inverted: false,
+            witness_index: new_witness,
+        }
+    }
 }
 
 pub(crate) struct CycleGroupCT<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
@@ -1348,6 +1389,12 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
     ) -> std::io::Result<Self> {
         let x_coordinates_match = self.x.equals(&other.x, builder, driver)?;
         let y_coordinates_match = self.y.equals(&other.y, builder, driver)?;
+        let double_predicate = x_coordinates_match
+            .and(&y_coordinates_match.not(), builder, driver)?
+            .normalize(builder, driver);
+        let infinity_predicate = x_coordinates_match
+            .and(&y_coordinates_match, builder, driver)?
+            .normalize(builder, driver);
         todo!("sub")
     }
 }
