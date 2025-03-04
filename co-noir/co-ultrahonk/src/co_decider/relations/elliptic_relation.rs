@@ -8,6 +8,7 @@ use crate::{
     mpc::NoirUltraHonkProver,
 };
 use ark_ec::pairing::Pairing;
+use ark_ff::Zero;
 use co_builder::prelude::HonkCurve;
 use co_builder::HonkProofResult;
 use itertools::Itertools as _;
@@ -69,6 +70,27 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
 {
     type Acc = EllipticRelationAcc<T, P>;
 
+    fn can_skip(entity: &super::ProverUnivariates<T, P>) -> bool {
+        entity.precomputed.q_elliptic().is_zero()
+    }
+
+    fn add_entites(
+        entity: &super::ProverUnivariates<T, P>,
+        batch: &mut super::ProverUnivariatesBatch<T, P>,
+    ) {
+        batch.add_w_r(entity);
+        batch.add_w_o(entity);
+
+        batch.add_shifted_w_l(entity);
+        batch.add_shifted_w_r(entity);
+        batch.add_shifted_w_o(entity);
+        batch.add_shifted_w_4(entity);
+
+        batch.add_q_l(entity);
+        batch.add_q_m(entity);
+        batch.add_q_elliptic(entity);
+    }
+
     /**
      * @brief Expression for the Ultra Arithmetic gate.
      * @details The relation is defined as C(in(X)...) =
@@ -101,15 +123,15 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let y_3 = input.shifted_witness.w_o();
         let x_3 = input.shifted_witness.w_r();
 
+        let q_sign = input.precomputed.q_l();
+        let q_elliptic = input.precomputed.q_elliptic();
+        let q_is_double = input.precomputed.q_m();
+
         debug_assert_eq!(x_1.len(), y_1.len());
         debug_assert_eq!(x_2.len(), y_2.len());
         debug_assert_eq!(y_2.len(), y_3.len());
         debug_assert_eq!(x_1.len(), x_2.len());
         debug_assert_eq!(x_2.len(), x_3.len());
-
-        let q_sign = input.precomputed.q_l();
-        let q_elliptic = input.precomputed.q_elliptic();
-        let q_is_double = input.precomputed.q_m();
 
         // First round of multiplications
         let x_diff = T::sub_many(x_2, x_1);

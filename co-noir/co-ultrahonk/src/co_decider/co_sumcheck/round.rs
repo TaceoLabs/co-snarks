@@ -146,7 +146,7 @@ impl SumcheckRound {
             driver,
             &mut univariate_accumulators.r_perm,
             relation_parameters,
-            &sum_check_data.not_skippable,
+            &sum_check_data.ultra_perm,
         )?;
 
         Self::accumulate_one_relation_univariates_batch::<_, _, DeltaRangeConstraintRelation>(
@@ -174,7 +174,7 @@ impl SumcheckRound {
             driver,
             &mut univariate_accumulators.r_lookup,
             relation_parameters,
-            &sum_check_data.not_skippable,
+            &sum_check_data.log_lookup,
         )?;
         Self::accumulate_one_relation_univariates_batch::<_, _, Poseidon2ExternalRelation>(
             driver,

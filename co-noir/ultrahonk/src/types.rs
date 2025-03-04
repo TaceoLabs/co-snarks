@@ -87,9 +87,9 @@ impl<T: Default> IntoIterator for WitnessEntities<T> {
 }
 
 impl<T: Default> WitnessEntities<Vec<T>> {
-    pub fn with_capacity(capacity: usize) -> Self {
+    pub fn new() -> Self {
         Self {
-            elements: std::array::from_fn(|_| Vec::with_capacity(capacity)),
+            elements: std::array::from_fn(|_| Vec::new()),
         }
     }
 
@@ -110,9 +110,9 @@ impl<T: Default> IntoIterator for ShiftedWitnessEntities<T> {
 }
 
 impl<T: Default> ShiftedWitnessEntities<Vec<T>> {
-    pub fn with_capacity(capacity: usize) -> Self {
+    pub fn new() -> Self {
         Self {
-            elements: std::array::from_fn(|_| Vec::with_capacity(capacity)),
+            elements: std::array::from_fn(|_| Vec::new()),
         }
     }
 
@@ -207,23 +207,23 @@ impl<T: Default> WitnessEntities<T> {
         &self.elements[Self::LOOKUP_READ_TAGS]
     }
 
-    pub(crate) fn w_l_mut(&mut self) -> &mut T {
+    pub fn w_l_mut(&mut self) -> &mut T {
         &mut self.elements[Self::W_L]
     }
 
-    pub(crate) fn w_r_mut(&mut self) -> &mut T {
+    pub fn w_r_mut(&mut self) -> &mut T {
         &mut self.elements[Self::W_R]
     }
 
-    pub(crate) fn w_o_mut(&mut self) -> &mut T {
+    pub fn w_o_mut(&mut self) -> &mut T {
         &mut self.elements[Self::W_O]
     }
 
-    pub(crate) fn w_4_mut(&mut self) -> &mut T {
+    pub fn w_4_mut(&mut self) -> &mut T {
         &mut self.elements[Self::W_4]
     }
 
-    pub(crate) fn z_perm_mut(&mut self) -> &mut T {
+    pub fn z_perm_mut(&mut self) -> &mut T {
         &mut self.elements[Self::Z_PERM]
     }
 
@@ -279,4 +279,25 @@ impl<T: Default> ShiftedWitnessEntities<T> {
     pub fn z_perm(&self) -> &T {
         &self.elements[Self::Z_PERM]
     }
+
+    pub fn w_l_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::W_L]
+    }
+
+    pub fn w_r_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::W_R]
+    }
+
+    pub fn w_o_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::W_O]
+    }
+
+    pub fn w_4_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::W_4]
+    }
+
+    pub fn z_perm_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::Z_PERM]
+    }
+
 }

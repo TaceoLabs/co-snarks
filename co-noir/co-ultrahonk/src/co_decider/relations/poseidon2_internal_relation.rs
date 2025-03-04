@@ -7,6 +7,7 @@ use crate::{
     mpc::NoirUltraHonkProver,
 };
 use ark_ec::pairing::Pairing;
+use ark_ff::Zero;
 use co_builder::prelude::HonkCurve;
 use co_builder::HonkProofResult;
 use itertools::Itertools as _;
@@ -89,6 +90,29 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
     for Poseidon2InternalRelation
 {
     type Acc = Poseidon2InternalRelationAcc<T, P>;
+
+    fn can_skip(entity: &super::ProverUnivariates<T, P>) -> bool {
+        entity.precomputed.q_poseidon2_internal().is_zero()
+    }
+
+    fn add_entites(
+        entity: &super::ProverUnivariates<T, P>,
+        batch: &mut ProverUnivariatesBatch<T, P>,
+    ) {
+        batch.add_w_l(entity);
+        batch.add_w_r(entity);
+        batch.add_w_o(entity);
+        batch.add_w_4(entity);
+
+        batch.add_shifted_w_l(entity);
+        batch.add_shifted_w_r(entity);
+        batch.add_shifted_w_o(entity);
+        batch.add_shifted_w_4(entity);
+
+        batch.add_q_l(entity);
+
+        batch.add_q_poseidon2_internal(entity);
+    }
 
     /**
      * @brief Expression for the poseidon2 internal round relation, based on I_i in Section 6 of

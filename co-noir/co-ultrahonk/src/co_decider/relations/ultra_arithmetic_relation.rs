@@ -9,6 +9,7 @@ use crate::{
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::Field;
+use ark_ff::Zero;
 use co_builder::HonkProofResult;
 use co_builder::{prelude::HonkCurve, TranscriptFieldType};
 use ultrahonk::prelude::Univariate;
@@ -67,6 +68,31 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
     for UltraArithmeticRelation
 {
     type Acc = UltraArithmeticRelationAcc<T, P>;
+
+    fn can_skip(entity: &super::ProverUnivariates<T, P>) -> bool {
+        entity.precomputed.q_arith().is_zero()
+    }
+
+    fn add_entites(
+        entity: &super::ProverUnivariates<T, P>,
+        batch: &mut ProverUnivariatesBatch<T, P>,
+    ) {
+        batch.add_w_l(entity);
+        batch.add_w_r(entity);
+        batch.add_w_o(entity);
+        batch.add_w_4(entity);
+
+        batch.add_q_m(entity);
+        batch.add_q_l(entity);
+        batch.add_q_r(entity);
+        batch.add_q_o(entity);
+        batch.add_q_4(entity);
+        batch.add_q_c(entity);
+        batch.add_q_arith(entity);
+
+        batch.add_shifted_w_l(entity);
+        batch.add_shifted_w_4(entity);
+    }
 
     /**
      * @brief Expression for the Ultra Arithmetic gate.
@@ -132,7 +158,6 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let w_r = input.witness.w_r();
         let w_o = input.witness.w_o();
         let w_4 = input.witness.w_4();
-        let w_4_shift = input.shifted_witness.w_4();
         let q_m = input.precomputed.q_m();
         let q_l = input.precomputed.q_l();
         let q_r = input.precomputed.q_r();
@@ -140,6 +165,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let q_4 = input.precomputed.q_4();
         let q_c = input.precomputed.q_c();
         let q_arith = input.precomputed.q_arith();
+        let w_4_shift = input.shifted_witness.w_4();
         let w_l_shift = input.shifted_witness.w_l();
 
         let neg_half = -P::ScalarField::from(2u64).inverse().unwrap();
