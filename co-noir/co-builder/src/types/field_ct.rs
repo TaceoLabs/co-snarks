@@ -397,7 +397,49 @@ impl<F: PrimeField> FieldCT<F> {
                 });
             }
         } else {
-            todo!("Shared by shared div")
+            // TODO SHOULD WE CARE ABOUT IF THE DIVISOR IS ZERO?
+            let left = builder.get_variable(self.witness_index as usize);
+            let right = builder.get_variable(other.witness_index as usize);
+
+            // even if LHS is constant, if divisor is not constant we need a gate to compute the inverse
+            // bb::fr witness_multiplier = other.witness.invert();
+            // m1.x1 + a1 / (m2.x2 + a2) = x3
+            let mut t0 = driver.mul_with_public(self.multiplicative_constant, left);
+            driver.add_assign_with_public(self.additive_constant, &mut t0);
+            let mut t1 = driver.mul_with_public(other.multiplicative_constant, right);
+            driver.add_assign_with_public(other.additive_constant, &mut t1);
+
+            // if t1 == 0 ? 0 : t1^-1
+            let t1 = Self::zero_or_inverse::<P, T>(t1, driver)?;
+            let out = driver.mul(t0, t1)?;
+            result.witness_index = builder.add_variable(out);
+
+            // m2.x2.x3 + a2.x3 = m1.x1 + a1
+            // m2.x2.x3 + a2.x3 - m1.x1 - a1 = 0
+            // left = x3
+            // right = x2
+            // out = x1
+            // qm = m2
+            // ql = a2
+            // qr = 0
+            // qo = -m1
+            // qc = -a1
+            let q_m = other.multiplicative_constant;
+            let q_l = other.additive_constant;
+            let q_r = F::zero();
+            let q_o = -self.multiplicative_constant;
+            let q_c = -self.additive_constant;
+
+            builder.create_poly_gate(&PolyTriple {
+                a: result.witness_index,
+                b: other.witness_index,
+                c: self.witness_index,
+                q_m,
+                q_l,
+                q_r,
+                q_o,
+                q_c,
+            });
         }
 
         Ok(result)
@@ -725,6 +767,20 @@ impl<F: PrimeField> FieldCT<F> {
         });
     }
 
+    // if val == 0 ? 0 : val^-1
+    fn zero_or_inverse<
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        val: T::AcvmType,
+        driver: &mut T,
+    ) -> std::io::Result<T::AcvmType> {
+        let is_zero = driver.equal(&val, &F::zero().into())?;
+        let to_invert = driver.cmux(is_zero.to_owned(), F::one().into(), val)?;
+        let inverse = driver.invert(to_invert)?;
+        driver.cmux(is_zero, F::zero().into(), inverse)
+    }
+
     fn assert_is_not_zero<
         P: Pairing<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
@@ -738,7 +794,7 @@ impl<F: PrimeField> FieldCT<F> {
             return Ok(());
         }
 
-        let var: <T as NoirWitnessExtensionProtocol<F>>::AcvmType = self.get_value(builder, driver);
+        let var = self.get_value(builder, driver);
         if !T::is_shared(&var) {
             // Sanity check
             let value = T::get_public(&var).expect("Already checked it is public");
@@ -746,10 +802,7 @@ impl<F: PrimeField> FieldCT<F> {
         }
 
         // if val == 0 ? 0 : val^-1
-        let is_zero = driver.equal(&var, &F::zero().into())?;
-        let to_invert = driver.cmux(is_zero.to_owned(), F::one().into(), var)?;
-        let inverse = driver.invert(to_invert)?;
-        let inverse = driver.cmux(is_zero, F::zero().into(), inverse)?;
+        let inverse = Self::zero_or_inverse::<P, T>(var, driver)?;
 
         let inverse = FieldCT::from_witness(inverse, builder);
 
