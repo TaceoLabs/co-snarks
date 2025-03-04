@@ -108,6 +108,14 @@ pub(crate) struct EccAddGate<F: PrimeField> {
     pub(crate) sign_coefficient: F,
 }
 
+#[derive(Default, PartialEq, Eq)]
+pub(crate) struct EccDblGate {
+    pub(crate) x1: u32,
+    pub(crate) y1: u32,
+    pub(crate) x3: u32,
+    pub(crate) y3: u32,
+}
+
 pub(crate) struct MemOp<F: PrimeField> {
     pub(crate) access_type: u8,
     pub(crate) index: PolyTriple<F>,

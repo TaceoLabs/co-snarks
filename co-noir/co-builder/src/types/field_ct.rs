@@ -1,4 +1,4 @@
-use super::types::MulQuad;
+use super::types::{EccDblGate, MulQuad};
 use crate::builder::GenericUltraCircuitBuilder;
 use crate::prelude::HonkCurve;
 use crate::types::types::{AddTriple, EccAddGate, PolyTriple};
@@ -1757,14 +1757,14 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             );
         }
 
-        todo!("gate");
+        let y = modified_y.normalize(builder, driver);
 
-        // context->create_ecc_dbl_gate(bb::ecc_dbl_gate_<FF>{
-        //     .x1 = x.get_witness_index(),
-        //     .y1 = modified_y.normalize().get_witness_index(),
-        //     .x3 = result.x.get_witness_index(),
-        //     .y3 = result.y.get_witness_index(),
-        // });
+        builder.create_ecc_dbl_gate(&EccDblGate {
+            x1: self.x.get_witness_index(),
+            y1: y.get_witness_index(),
+            x3: result.x.get_witness_index(),
+            y3: result.y.get_witness_index(),
+        });
 
         Ok(result)
     }
