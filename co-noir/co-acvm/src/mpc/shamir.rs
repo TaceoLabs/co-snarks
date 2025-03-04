@@ -1,4 +1,5 @@
 use super::{plain::PlainAcvmSolver, NoirWitnessExtensionProtocol};
+use ark_ec::CurveGroup;
 use ark_ff::{One, PrimeField};
 use co_brillig::mpc::{ShamirBrilligDriver, ShamirBrilligType};
 use mpc_core::{
@@ -6,7 +7,10 @@ use mpc_core::{
     protocols::{
         rep3::network::Rep3MpcNet,
         rep3_ring::lut::Rep3LookupTable,
-        shamir::{arithmetic, network::ShamirNetwork, ShamirPrimeFieldShare, ShamirProtocol},
+        shamir::{
+            arithmetic, network::ShamirNetwork, ShamirPointShare, ShamirPrimeFieldShare,
+            ShamirProtocol,
+        },
     },
 };
 use num_bigint::BigUint;
@@ -32,6 +36,13 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirAcvmSolver<F, N> {
     pub fn into_network(self) -> N {
         self.protocol.network
     }
+}
+
+// For some intermediate representations
+#[derive(Clone)]
+pub enum ShamirAcvmPoint<C: CurveGroup> {
+    Public(C),
+    Shared(ShamirPointShare<C>),
 }
 
 #[derive(Clone, Serialize, Deserialize, PartialEq)]
@@ -114,6 +125,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
     type ArithmeticShare = ShamirPrimeFieldShare<F>;
 
     type AcvmType = ShamirAcvmType<F>;
+    type AcvmPoint<C: CurveGroup<BaseField = F>> = ShamirAcvmPoint<C>;
 
     type BrilligDriver = ShamirBrilligDriver<F, N>;
 
@@ -649,6 +661,15 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         _pedantic_solving: bool,
     ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
         panic!("functionality multi_scalar_mul not feasible for Shamir")
+    }
+
+    fn field_shares_to_pointshare<C: CurveGroup<BaseField = F>>(
+        &mut self,
+        _x: Self::AcvmType,
+        _y: Self::AcvmType,
+        _is_infinity: Self::AcvmType,
+    ) -> std::io::Result<Self::AcvmPoint<C>> {
+        panic!("functionality field_share_to_pointshare not feasible for Shamir")
     }
 
     fn gt(

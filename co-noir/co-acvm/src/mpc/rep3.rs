@@ -322,6 +322,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     type ArithmeticShare = Rep3PrimeFieldShare<F>;
 
     type AcvmType = Rep3AcvmType<F>;
+    type AcvmPoint<C: CurveGroup<BaseField = F>> = Rep3AcvmPoint<C>;
 
     type BrilligDriver = Rep3BrilligDriver<F, N>;
 
@@ -1253,6 +1254,15 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             }
         };
         Ok(res)
+    }
+
+    fn field_shares_to_pointshare<C: CurveGroup<BaseField = F>>(
+        &mut self,
+        x: Self::AcvmType,
+        y: Self::AcvmType,
+        is_infinity: Self::AcvmType,
+    ) -> std::io::Result<Self::AcvmPoint<C>> {
+        todo!("Implement field_shares_to_pointshare")
     }
 
     fn gt(&mut self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> std::io::Result<Self::AcvmType> {
