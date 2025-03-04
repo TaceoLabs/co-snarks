@@ -159,6 +159,9 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     /// Returns the value if the value is public
     fn get_public(a: &Self::AcvmType) -> Option<F>;
 
+    /// Returns the value if the point is public
+    fn get_public_point<C: CurveGroup<BaseField = F>>(a: &Self::AcvmPoint<C>) -> Option<C>;
+
     /// Checks if two shared values are equal. The result is a shared value that has value 1 if the two shared values are equal and 0 otherwise.
     fn equal(&mut self, a: &Self::AcvmType, b: &Self::AcvmType) -> std::io::Result<Self::AcvmType>;
 
