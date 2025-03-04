@@ -869,6 +869,9 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
     ) -> std::io::Result<Self> {
         debug_assert_eq!(base_points.len(), scalars.len());
 
+        let mut variable_base_scalars = Vec::new();
+        let mut variable_base_points = Vec::new();
+
         let mut num_bits = 0;
         for scalar in scalars.iter() {
             num_bits = std::cmp::max(num_bits, scalar.num_bits());
@@ -884,14 +887,29 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         // When calling `_variable_base_batch_mul_internal`, we can unconditionally add iff all of the input points
         // are fixed-base points
         // (i.e. we are ULTRA Builder and we are doing fixed-base mul over points not present in our plookup tables)
-        let can_unconditional_add = true;
-        let has_non_constant_component = false;
+        let mut can_unconditional_add = true;
+        let mut has_non_constant_component = false;
 
         for (point, scalar) in base_points.iter().zip(scalars.iter()) {
             let scalar_constant = scalar.is_constant();
             let point_constant = point.is_constant();
+
+            let scalar_val = scalar.get_value(builder, driver);
+            let point_val = point.get_value(builder, driver);
+
             if scalar_constant && point_constant {
+                let scalar_val = T::get_public(&scalar_val).expect("Constants are public");
+                todo!();
+                // let point_val = T::get_public_point(&point_val).expect("Constants are public");
                 // constant_acc += point.get_value() * scalar.get_value(builder, driver);
+            } else if !scalar_constant && point_constant {
+                todo!();
+            } else {
+                variable_base_scalars.push(scalar);
+                variable_base_points.push(point);
+                can_unconditional_add = false;
+                has_non_constant_component = true;
+                // variable base
             }
         }
 
