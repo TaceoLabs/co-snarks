@@ -823,8 +823,7 @@ impl<F: PrimeField> FieldCT<F> {
             q_o: P::ScalarField::zero(),       // c * 0
             q_c: -P::ScalarField::one(),       // -1
         });
-
-        todo!()
+        Ok(())
     }
 
     // if predicate == true then return lhs, else return rhs
