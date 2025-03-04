@@ -299,5 +299,4 @@ impl<T: Default> ShiftedWitnessEntities<T> {
     pub fn z_perm_mut(&mut self) -> &mut T {
         &mut self.elements[Self::Z_PERM]
     }
-
 }
