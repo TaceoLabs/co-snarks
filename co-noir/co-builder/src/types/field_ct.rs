@@ -4,7 +4,7 @@ use crate::prelude::HonkCurve;
 use crate::types::types::{AddTriple, PolyTriple};
 use crate::TranscriptFieldType;
 use ark_ec::pairing::Pairing;
-use ark_ec::{CurveConfig, CurveGroup};
+use ark_ec::{AffineRepr, CurveConfig, CurveGroup};
 use ark_ff::PrimeField;
 use ark_ff::{One, Zero};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
@@ -751,6 +751,16 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> Clone for Bool
     }
 }
 
+impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> From<bool> for BoolCT<P, T> {
+    fn from(val: bool) -> Self {
+        Self {
+            witness_bool: P::ScalarField::from(val as u64).into(),
+            witness_inverted: false,
+            witness_index: FieldCT::<P::ScalarField>::IS_CONSTANT,
+        }
+    }
+}
+
 impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T> {
     pub(crate) fn is_constant(&self) -> bool {
         self.witness_index == FieldCT::<P::ScalarField>::IS_CONSTANT
@@ -850,6 +860,23 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupCT<P
 impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::ScalarField>>
     CycleGroupCT<P, T>
 {
+    fn from_group_element(value: P::CycleGroup) -> Self {
+        match value.into_affine().xy() {
+            Some((x, y)) => Self {
+                x: FieldCT::from(x),
+                y: FieldCT::from(y),
+                is_infinity: BoolCT::from(false),
+                is_constant: true,
+            },
+            None => Self {
+                x: FieldCT::zero(),
+                y: FieldCT::zero(),
+                is_infinity: BoolCT::from(true),
+                is_constant: true,
+            },
+        }
+    }
+
     fn get_value(
         &self,
         builder: &GenericUltraCircuitBuilder<P, T>,
@@ -932,6 +959,24 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                 // variable base
             }
         }
+
+        // If all inputs are constant, return the computed constant component and call it a day.
+        if !has_non_constant_component {
+            let result = CycleGroupCT::from_group_element(constant_acc);
+            return Ok(result);
+        }
+
+        // add the constant component into our offset accumulator
+        // (we'll subtract `offset_accumulator` from the MSM output i.e. we negate here to counter the future negation)
+        let offset_accumulator = -constant_acc;
+        let has_variable_points = !variable_base_points.is_empty();
+        let has_fixed_points = !fixed_base_points.is_empty();
+
+        // Compute all required offset generators.
+        let num_offset_generators = variable_base_points.len()
+            + fixed_base_points.len()
+            + has_variable_points as usize
+            + has_fixed_points as usize;
 
         todo!("Implement batch_mul")
     }
