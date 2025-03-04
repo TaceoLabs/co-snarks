@@ -427,6 +427,13 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         }
     }
 
+    fn get_public_point<C: CurveGroup<BaseField = F>>(a: &Self::AcvmPoint<C>) -> Option<C> {
+        match a {
+            ShamirAcvmPoint::Public(public) => Some(*public),
+            _ => None,
+        }
+    }
+
     fn open_many(&mut self, a: &[Self::ArithmeticShare]) -> std::io::Result<Vec<F>> {
         arithmetic::open_vec(a, &mut self.protocol)
     }

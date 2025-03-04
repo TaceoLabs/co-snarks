@@ -749,6 +749,13 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
     }
 
+    fn get_public_point<C: CurveGroup<BaseField = F>>(a: &Self::AcvmPoint<C>) -> Option<C> {
+        match a {
+            Rep3AcvmPoint::Public(public) => Some(*public),
+            _ => None,
+        }
+    }
+
     fn open_many(&mut self, a: &[Self::ArithmeticShare]) -> std::io::Result<Vec<F>> {
         let bs = a.iter().map(|x| x.b).collect_vec();
         self.io_context0.network.send_next(bs)?;
