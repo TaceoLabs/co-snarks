@@ -1260,7 +1260,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T> {
             //     result.witness_inverted = false;
             //     result.witness_index = IS_CONSTANT;
             // }
-        } else if self.is_constant() && other.is_constant() {
+        } else if self.is_constant() && !other.is_constant() {
             let left = T::get_public(&left).expect("Constants are public");
             if left.is_one() {
                 result = other.to_owned();
@@ -1288,7 +1288,45 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T> {
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> std::io::Result<Self> {
-        todo!("Or gate not implemented yet")
+        let mut result = BoolCT::default();
+
+        let left = self.get_value(driver);
+        let right = other.get_value(driver);
+
+        // Or = a + b - a*b
+        let mul = driver.mul(left.to_owned(), right.to_owned())?;
+        let add = driver.add(left.to_owned(), right.to_owned());
+        let value = driver.sub(add, mul);
+
+        result.witness_bool = value;
+        // result.witness_inverted = false;
+
+        if !self.is_constant() && !other.is_constant() {
+            todo!("Or gate not implemented yet");
+        } else if !self.is_constant() && other.is_constant() {
+            let right = T::get_public(&right).expect("Constants are public");
+            if right.is_zero() {
+                result = self.to_owned();
+            } else {
+                result.witness_bool = P::ScalarField::one().into();
+                // result.witness_inverted = false;
+                // result.witness_index = IS_CONSTANT;
+            }
+        } else if self.is_constant() && !other.is_constant() {
+            let left = T::get_public(&left).expect("Constants are public");
+            if left.is_zero() {
+                result = other.to_owned();
+            } else {
+                result.witness_bool = P::ScalarField::one().into();
+                // result.witness_inverted = false;
+                // result.witness_index = IS_CONSTANT;
+            }
+        } else {
+            // result.witness_index = IS_CONSTANT;
+            // result.witness_inverted = false;
+        }
+
+        Ok(result)
     }
 
     fn not(&self) -> Self {
