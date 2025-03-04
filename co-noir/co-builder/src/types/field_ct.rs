@@ -1568,6 +1568,16 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         Ok(result)
     }
 
+    // Evaluates a doubling. Uses Ultra double gate
+    fn dbl(
+        &self,
+        hint: Option<P::CycleGroup>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> std::io::Result<Self> {
+        todo!("dbl")
+    }
+
     fn unconditional_add(
         &self,
         other: &Self,
@@ -1636,6 +1646,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         Ok(result)
     }
 
+    #[expect(clippy::field_reassign_with_default)]
     fn sub(
         &self,
         other: &Self,
@@ -1667,9 +1678,57 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             .divide(&x_diff, builder, driver)?;
         let x3 = lambda.madd(&lambda, &x2.add(x1, builder, driver).neg(), builder, driver)?;
         let y3 = lambda.madd(&x1.sub(&x3, builder, driver), &y1.neg(), builder, driver)?;
-        let add_result = CycleGroupCT::new(x3, y3, infinity_predicate, builder, driver);
+        let add_result = CycleGroupCT::new(x3, y3, infinity_predicate.to_owned(), builder, driver);
 
-        todo!("sub")
+        let dbl_result = self.dbl(None, builder, driver)?;
+
+        // dbl if x_match, !y_match
+        // infinity if x_match, y_match
+        let mut result = CycleGroupCT::default();
+        result.x = FieldCT::conditional_assign(
+            &double_predicate,
+            &dbl_result.x,
+            &add_result.x,
+            builder,
+            driver,
+        )?;
+        result.y = FieldCT::conditional_assign(
+            &double_predicate,
+            &dbl_result.y,
+            &add_result.y,
+            builder,
+            driver,
+        )?;
+
+        let lhs_infinity = self.is_point_at_infinity();
+        let rhs_infinity = other.is_point_at_infinity();
+        // if lhs infinity, return -rhs
+        result.x = FieldCT::conditional_assign(lhs_infinity, &other.x, &result.x, builder, driver)?;
+        result.y = FieldCT::conditional_assign(
+            lhs_infinity,
+            &other.y.neg().normalize(builder, driver),
+            &result.y,
+            builder,
+            driver,
+        )?;
+
+        // if rhs infinity, return lhs
+        result.x = FieldCT::conditional_assign(rhs_infinity, &self.x, &result.x, builder, driver)?;
+        result.y = FieldCT::conditional_assign(rhs_infinity, &self.y, &result.y, builder, driver)?;
+
+        // is result point at infinity?
+        // yes = infinity_predicate && !lhs_infinity && !rhs_infinity
+        // yes = lhs_infinity && rhs_infinity
+        // n.b. can likely optimize this
+        let result_is_infinity = infinity_predicate.and(
+            &lhs_infinity
+                .not()
+                .and(&rhs_infinity.not(), builder, driver)?,
+            builder,
+            driver,
+        )?;
+        todo!("sub");
+        Ok(result)
     }
 }
 
