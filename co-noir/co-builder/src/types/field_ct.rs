@@ -692,7 +692,8 @@ impl<F: PrimeField> FieldCT<F> {
             let val_b = T::get_public(&b.get_value(builder, driver)).expect("Constants are public");
             let val_c = T::get_public(&c.get_value(builder, driver)).expect("Constants are public");
             let val_d = T::get_public(&d.get_value(builder, driver)).expect("Constants are public");
-            let result = val_a * val_b + val_c + va_d;
+            let result = val_a * val_b + val_c + val_d;
+            assert!(result.is_zero());
             return;
         }
 
@@ -750,12 +751,12 @@ impl<F: PrimeField> FieldCT<F> {
             return Ok(BoolCT::from(val1 == val2));
         }
 
-        let fd = driver.sub(fa, fb);
         let is_equal = driver.equal(&fa, &fb)?;
-        let to_invert = driver.cmux(equal, F::one().into(), fd)?;
-        let fc = driver.invert(&to_invert)?;
+        let fd = driver.sub(fa, fb);
+        let to_invert = driver.cmux(is_equal.to_owned(), F::one().into(), fd)?;
+        let fc = driver.invert(to_invert)?;
 
-        let result_witness = WitnessCT::from_acvm_type(is_equal, builder);
+        let result_witness = WitnessCT::from_acvm_type(is_equal.to_owned(), builder);
         let result = BoolCT {
             witness_bool: is_equal,
             witness_inverted: false,
@@ -766,18 +767,18 @@ impl<F: PrimeField> FieldCT<F> {
         let diff = self.sub(other, builder, driver);
         // these constraints ensure that result is a boolean
         let result_ct = result.to_field_ct(driver);
-        let zero_ct = FieldCt::from(F::zero());
+        let zero_ct = FieldCT::from(F::zero());
         Self::evaluate_polynomial_identity(
             &diff,
             &x,
             &result_ct,
-            FieldCt::from(F::one()).neg(),
+            &FieldCT::from(F::one()).neg(),
             builder,
             driver,
         );
         Self::evaluate_polynomial_identity(&diff, &result_ct, &zero_ct, &zero_ct, builder, driver);
 
-        return Ok(result);
+        Ok(result)
     }
 }
 
@@ -845,6 +846,16 @@ pub(crate) struct BoolCT<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarFi
     pub(crate) witness_index: u32,
 }
 
+impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> Default for BoolCT<P, T> {
+    fn default() -> Self {
+        Self {
+            witness_bool: T::public_zero(),
+            witness_inverted: false,
+            witness_index: FieldCT::<P::ScalarField>::IS_CONSTANT,
+        }
+    }
+}
+
 impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> Clone for BoolCT<P, T> {
     fn clone(&self) -> Self {
         Self {
@@ -907,6 +918,113 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T> {
                 witness_index: self.witness_index,
             }
         }
+    }
+
+    fn and(
+        &self,
+        other: &Self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> std::io::Result<Self> {
+        let mut result = BoolCT::default();
+
+        let left = self.get_value(driver);
+        let right = other.get_value(driver);
+
+        if !self.is_constant() && !other.is_constant() {
+            let value = driver.mul(left, right)?;
+            result.witness_bool = value.to_owned();
+            result.witness_index = builder.add_variable(value);
+            // result.witness_inverted = false;
+
+            //      /**
+            //  * A bool can be represented by a witness value `w` and an 'inverted' flag `i`
+            //  *
+            //  * A bool's value is defined via the equation:
+            //  *      w + i - 2.i.w
+            //  *
+            //  * | w | i | w + i - 2.i.w |
+            //  * | - | - | ------------- |
+            //  * | 0 | 0 |       0       |
+            //  * | 0 | 1 |       1       |
+            //  * | 1 | 0 |       1       |
+            //  * | 1 | 1 |       0       |
+            //  *
+            //  * For two bools (w_a, i_a), (w_b, i_b), the & operation is expressed as:
+            //  *
+            //  *   (w_a + i_a - 2.i_a.w_a).(w_b + i_b - 2.i_b.w_b)
+            //  *
+            //  * This can be rearranged to:
+            //  *
+            //  *      w_a.w_b.(1 - 2.i_b - 2.i_a + 4.i_a.i_b)     -> q_m coefficient
+            //  *    + w_a.(i_b.(1 - 2.i_a))                       -> q_1 coefficient
+            //  *    + w_b.(i_a.(1 - 2.i_b))                       -> q_2 coefficient
+            //  *    + i_a.i_b                                     -> q_c coefficient
+            //  *
+            //  **/
+            let i_a = self.witness_inverted as i32;
+            let i_b = other.witness_inverted as i32;
+
+            let qm = 1 - 2 * i_b - 2 * i_a + 4 * i_a * i_b;
+            let qm = if qm < 0 {
+                -P::ScalarField::from(-qm)
+            } else {
+                P::ScalarField::from(qm)
+            };
+            let q1 = i_b * (1 - 2 * i_a);
+            let q1 = if q1 < 0 {
+                -P::ScalarField::from(-q1)
+            } else {
+                P::ScalarField::from(q1)
+            };
+            let q2 = i_a * (1 - 2 * i_b);
+            let q2 = if q2 < 0 {
+                -P::ScalarField::from(-q2)
+            } else {
+                P::ScalarField::from(q2)
+            };
+            let q3 = -P::ScalarField::one();
+            let qc = P::ScalarField::from(i_a * i_b);
+            builder.create_poly_gate(&PolyTriple {
+                a: self.witness_index,
+                b: other.witness_index,
+                c: result.witness_index,
+                q_m: qm,
+                q_l: q1,
+                q_r: q2,
+                q_o: q3,
+                q_c: qc,
+            });
+        } else if !self.is_constant() && other.is_constant() {
+            let right = T::get_public(&right).expect("Constants are public");
+            if right.is_one() {
+                result = self.to_owned();
+            }
+            // else {
+            //     result.witness_bool = false;
+            //     result.witness_inverted = false;
+            //     result.witness_index = IS_CONSTANT;
+            // }
+        } else if self.is_constant() && other.is_constant() {
+            let left = T::get_public(&left).expect("Constants are public");
+            if left.is_one() {
+                result = other.to_owned();
+            }
+            // else {
+            //     result.witness_bool = false;
+            //     result.witness_inverted = false;
+            //     result.witness_index = IS_CONSTANT;
+            // }
+        } else {
+            let val1 = T::get_public(&left).expect("Constants are public");
+            let val2 = T::get_public(&right).expect("Constants are public");
+            let value = T::AcvmType::from(val1 * val2);
+            result.witness_bool = value;
+            // result.witness_index = IS_CONSTANT;
+            // result.witness_inverted = false;
+        }
+
+        Ok(result)
     }
 }
 
