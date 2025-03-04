@@ -323,6 +323,32 @@ impl<F: PrimeField> FieldCT<F> {
         Ok(result)
     }
 
+    pub(crate) fn divide<
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        &self,
+        other: &Self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> std::io::Result<Self> {
+        other.assert_is_not_zero(builder, driver);
+        self.divide_no_zero_check(other, builder, driver)
+    }
+
+    fn divide_no_zero_check<
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        &self,
+        other: &Self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> std::io::Result<Self> {
+        let mut result = Self::default();
+        todo!()
+    }
+
     pub(crate) fn add<
         P: Pairing<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
@@ -643,6 +669,55 @@ impl<F: PrimeField> FieldCT<F> {
             q_o: P::ScalarField::zero(),
             q_c: self.additive_constant,
         });
+    }
+
+    fn assert_is_not_zero<
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        &self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> std::io::Result<()> {
+        if self.is_constant() {
+            assert!(!self.additive_constant.is_zero());
+            return Ok(());
+        }
+
+        let var: <T as NoirWitnessExtensionProtocol<F>>::AcvmType = self.get_value(builder, driver);
+        if !T::is_shared(&var) {
+            // Sanity check
+            let value = T::get_public(&var).expect("Already checked it is public");
+            assert!(!value.is_zero())
+        }
+
+        // if val == 0 ? 0 : val^-1
+        let is_zero = driver.equal(&var, &F::zero().into())?;
+        let to_invert = driver.cmux(is_zero.to_owned(), F::one().into(), var)?;
+        let inverse = driver.invert(to_invert)?;
+        let inverse = driver.cmux(is_zero, F::zero().into(), inverse)?;
+
+        let inverse = FieldCT::from_witness(inverse, builder);
+
+        // Aim of new gate: `this` has an inverse (hence is not zero).
+        // I.e.:
+        //     (this.v * this.mul + this.add) * inverse.v == 1;
+        // <=> this.v * inverse.v * [this.mul] + this.v * [ 0 ] + inverse.v * [this.add] + 0 * [ 0 ] + [ -1] == 0
+        // <=> this.v * inverse.v * [   q_m  ] + this.v * [q_l] + inverse.v * [   q_r  ] + 0 * [q_o] + [q_c] == 0
+
+        // (a * mul_const + add_const) * b - 1 = 0
+        builder.create_poly_gate(&PolyTriple {
+            a: self.witness_index,             // input value
+            b: inverse.witness_index,          // inverse
+            c: builder.zero_idx,               // no output
+            q_m: self.multiplicative_constant, // a * b * mul_const
+            q_l: P::ScalarField::zero(),       // a * 0
+            q_r: self.additive_constant,       // b * mul_const
+            q_o: P::ScalarField::zero(),       // c * 0
+            q_c: -P::ScalarField::one(),       // -1
+        });
+
+        todo!()
     }
 
     // if predicate == true then return lhs, else return rhs
@@ -1473,6 +1548,12 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         let y1 = &self.y;
         let x2 = &other.x;
         let y2 = &other.y;
+        let x_diff = x2.add_two(
+            &x1.neg(),
+            &x_coordinates_match.to_field_ct(driver),
+            builder,
+            driver,
+        );
 
         todo!("sub")
     }
