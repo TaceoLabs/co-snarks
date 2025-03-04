@@ -1282,6 +1282,15 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T> {
         Ok(result)
     }
 
+    fn or(
+        &self,
+        other: &Self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> std::io::Result<Self> {
+        todo!("Or gate not implemented yet")
+    }
+
     fn not(&self) -> Self {
         let mut result = self.to_owned();
         result.witness_inverted = !result.witness_inverted;
@@ -1731,8 +1740,8 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             builder,
             driver,
         )?;
-        todo!("sub");
-        // result_is_infinity = result_is_infinity || (lhs_infinity && rhs_infinity);
+        let both_infinity = lhs_infinity.and(rhs_infinity, builder, driver)?;
+        let result_is_infinity = result_is_infinity.or(&both_infinity, builder, driver)?;
         result.set_point_at_infinity(result_is_infinity);
         Ok(result)
     }
