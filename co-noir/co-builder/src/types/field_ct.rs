@@ -1298,11 +1298,59 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T> {
         let add = driver.add(left.to_owned(), right.to_owned());
         let value = driver.sub(add, mul);
 
-        result.witness_bool = value;
+        result.witness_bool = value.to_owned();
         // result.witness_inverted = false;
 
         if !self.is_constant() && !other.is_constant() {
-            todo!("Or gate not implemented yet");
+            result.witness_index = builder.add_variable(value);
+            // result = A + B - AB, where A,B are the "real" values of the variables. But according to whether
+            // witness_inverted flag is true, we need to invert the input. Hence, we look at four cases, and compute the
+            // relevent coefficients of the selector q_1,q_2,q_m,q_c in each case
+            let multiplicative_coefficient;
+            let left_coefficient;
+            let right_coefficient;
+            let constant_coefficient;
+            // a inverted: (1-a) + b - (1-a)b = 1-a+ab
+            // ==> q_1=-1,q_2=0,q_m=1,q_c=1
+            if self.witness_inverted && !other.witness_inverted {
+                multiplicative_coefficient = P::ScalarField::one();
+                left_coefficient = -P::ScalarField::one();
+                right_coefficient = P::ScalarField::zero();
+                constant_coefficient = P::ScalarField::one();
+            }
+            // b inverted: a + (1-b) - a(1-b) = 1-b+ab
+            // ==> q_1=0,q_2=-1,q_m=1,q_c=1
+            else if !self.witness_inverted && other.witness_inverted {
+                multiplicative_coefficient = P::ScalarField::one();
+                left_coefficient = P::ScalarField::zero();
+                right_coefficient = -P::ScalarField::one();
+                constant_coefficient = P::ScalarField::one();
+            }
+            // Both inverted: (1 - a) + (1 - b) - (1 - a)(1 - b) = 2 - a - b - (1 -a -b +ab) = 1 - ab
+            // ==> q_m=-1,q_1=0,q_2=0,q_c=1
+            else if self.witness_inverted && other.witness_inverted {
+                multiplicative_coefficient = -P::ScalarField::one();
+                left_coefficient = P::ScalarField::zero();
+                right_coefficient = P::ScalarField::zero();
+                constant_coefficient = P::ScalarField::one();
+            }
+            // No inversions: a + b - ab ==> q_m=-1,q_1=1,q_2=1,q_c=0
+            else {
+                multiplicative_coefficient = -P::ScalarField::one();
+                left_coefficient = P::ScalarField::one();
+                right_coefficient = P::ScalarField::one();
+                constant_coefficient = P::ScalarField::zero();
+            }
+            builder.create_poly_gate(&PolyTriple {
+                a: self.witness_index,
+                b: other.witness_index,
+                c: result.witness_index,
+                q_m: multiplicative_coefficient,
+                q_l: left_coefficient,
+                q_r: right_coefficient,
+                q_o: -P::ScalarField::one(),
+                q_c: constant_coefficient,
+            });
         } else if !self.is_constant() && other.is_constant() {
             let right = T::get_public(&right).expect("Constants are public");
             if right.is_zero() {
