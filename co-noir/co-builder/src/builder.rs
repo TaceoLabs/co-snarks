@@ -1,7 +1,9 @@
 use crate::acir_format::{HonkRecursion, ProgramMetadata};
 use crate::polynomials::polynomial::MASKING_OFFSET;
+use crate::prelude::HonkCurve;
 use crate::types::field_ct::{CycleGroupCT, CycleScalarCT};
 use crate::types::types::{MultiScalarMul, WitnessOrConstant};
+use crate::TranscriptFieldType;
 use crate::{
     acir_format::AcirFormat,
     crs::ProverCrs,
@@ -203,70 +205,6 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
     pub(crate) const DEFAULT_PLOOKUP_RANGE_STEP_SIZE: usize = 3;
     // number of gates created per non-native field operation in process_non_native_field_multiplications
     pub(crate) const GATES_PER_NON_NATIVE_FIELD_MULTIPLICATION_ARITHMETIC: usize = 7;
-
-    pub fn create_circuit(
-        constraint_system: &AcirFormat<P::ScalarField>,
-        recursive: bool,
-        size_hint: usize,
-        witness: Vec<T::AcvmType>,
-        honk_recursion: HonkRecursion, // 1 for ultrahonk
-        driver: &mut T,
-    ) -> std::io::Result<Self> {
-        tracing::trace!("Builder create circuit");
-
-        let has_valid_witness_assignments = !witness.is_empty();
-
-        let mut builder = Self::init(
-            size_hint,
-            witness,
-            constraint_system.public_inputs.to_owned(),
-            constraint_system.varnum as usize,
-            recursive,
-        );
-        let metadata = ProgramMetadata {
-            recursive,
-            honk_recursion,
-            size_hint,
-        };
-        builder.build_constraints(
-            driver,
-            constraint_system,
-            has_valid_witness_assignments,
-            &metadata,
-        )?;
-
-        builder.finalize_circuit(true, driver)?;
-
-        Ok(builder)
-    }
-
-    pub fn circuit_size(
-        constraint_system: &AcirFormat<P::ScalarField>,
-        recursive: bool,
-        size_hint: usize,
-        honk_recursion: HonkRecursion, // 1 for ultrahonk
-        driver: &mut T,
-    ) -> eyre::Result<usize> {
-        tracing::trace!("Builder create circuit");
-
-        let mut builder = Self::init(
-            size_hint,
-            vec![],
-            constraint_system.public_inputs.to_owned(),
-            constraint_system.varnum as usize,
-            recursive,
-        );
-        let metadata = ProgramMetadata {
-            recursive,
-            honk_recursion,
-            size_hint,
-        };
-        builder.build_constraints(driver, constraint_system, false, &metadata)?;
-
-        builder.finalize_circuit(true, driver)?;
-
-        Ok(builder.compute_dyadic_size())
-    }
 
     fn new(size_hint: usize) -> Self {
         tracing::trace!("Builder new");
@@ -1054,225 +992,6 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             )?);
         }
         Ok((bits_locations, decomposed, decompose_indices))
-    }
-
-    fn build_constraints(
-        &mut self,
-        driver: &mut T,
-        constraint_system: &AcirFormat<P::ScalarField>,
-        has_valid_witness_assignments: bool,
-        metadata: &ProgramMetadata,
-    ) -> std::io::Result<()> {
-        tracing::trace!("Builder build constraints");
-
-        // Add arithmetic gates
-        for constraint in constraint_system.poly_triple_constraints.iter() {
-            self.create_poly_gate(constraint);
-        }
-        for constraint in constraint_system.quad_constraints.iter() {
-            self.create_big_mul_gate(constraint);
-        }
-
-        // Oversize gates are a vector of mul_quad gates.
-        for constraint in constraint_system.big_quad_constraints.iter() {
-            let mut next_w4_wire_value = T::AcvmType::default();
-            // Define the 4th wire of these mul_quad gates, which is implicitly used by the previous gate.
-            let constraint_size = constraint.len();
-            for (j, small_constraint) in constraint.iter().enumerate().take(constraint_size - 1) {
-                let mut small_constraint = small_constraint.clone();
-                if j == 0 {
-                    next_w4_wire_value = self.get_variable(small_constraint.d.try_into().unwrap());
-                } else {
-                    let next_w4_wire = self.add_variable(next_w4_wire_value.to_owned());
-                    small_constraint.d = next_w4_wire;
-                    small_constraint.d_scaling = -P::ScalarField::one();
-                }
-
-                self.create_big_mul_add_gate(&small_constraint, true);
-
-                let var_a = self.get_variable(small_constraint.a.try_into().unwrap());
-                let var_b = self.get_variable(small_constraint.b.try_into().unwrap());
-                let var_c = self.get_variable(small_constraint.c.try_into().unwrap());
-
-                let term1 = driver.mul(var_a.to_owned(), var_b.to_owned())?;
-                let term1 = driver.mul_with_public(small_constraint.mul_scaling, term1);
-                let term2 = driver.mul_with_public(small_constraint.a_scaling, var_a);
-                let term3 = driver.mul_with_public(small_constraint.b_scaling, var_b);
-                let term4 = driver.mul_with_public(small_constraint.c_scaling, var_c);
-                let term5 = driver.mul_with_public(small_constraint.d_scaling, next_w4_wire_value);
-                next_w4_wire_value = small_constraint.const_scaling.into();
-                driver.add_assign(&mut next_w4_wire_value, term1);
-                driver.add_assign(&mut next_w4_wire_value, term2);
-                driver.add_assign(&mut next_w4_wire_value, term3);
-                driver.add_assign(&mut next_w4_wire_value, term4);
-                driver.add_assign(&mut next_w4_wire_value, term5);
-
-                driver.negate_inplace(&mut next_w4_wire_value);
-            }
-
-            let next_w4_wire = self.add_variable(next_w4_wire_value);
-
-            let mut last_constraint = constraint.last().unwrap().clone();
-            last_constraint.d = next_w4_wire;
-            last_constraint.d_scaling = -P::ScalarField::one();
-
-            self.create_big_mul_add_gate(&last_constraint, false);
-        }
-
-        // Add logic constraint
-        for constraint in constraint_system.logic_constraints.iter() {
-            self.create_logic_constraint(driver, constraint)?;
-        }
-
-        // Add range constraints
-        // We want to decompose all shared elements in parallel
-        let (bits_locations, decomposed, decompose_indices) =
-            self.prepare_for_range_decompose(driver, constraint_system)?;
-
-        for (i, constraint) in constraint_system.range_constraints.iter().enumerate() {
-            let mut range = constraint.num_bits;
-            if let Some(r) = constraint_system.minimal_range.get(&constraint.witness) {
-                range = *r;
-            }
-
-            let idx_option = bits_locations.get(&range);
-            if idx_option.is_some() && decompose_indices[i].0 {
-                // Already decomposed
-                let idx = idx_option.unwrap().to_owned();
-                self.decompose_into_default_range(
-                    driver,
-                    constraint.witness,
-                    range as u64,
-                    Some(&decomposed[idx][decompose_indices[i].1]),
-                    Self::DEFAULT_PLOOKUP_RANGE_BITNUM as u64,
-                )?;
-            } else {
-                // Either we do not have to decompose or the value is public
-                self.create_range_constraint(driver, constraint.witness, range)?;
-            }
-        }
-
-        // Add aes128 constraints
-        // for (i, constraint) in constraint_system.aes128_constraints.iter().enumerate() {
-        //     todo!("aes128 gates");
-        // }
-
-        // Add sha256 constraints
-        // for (i, constraint) in constraint_system.sha256_constraints.iter().enumerate() {
-        //     todo!("sha256 gates");
-        // }
-
-        // for (i, constraint) in constraint_system.sha256_compression.iter().enumerate() {
-        //     todo!("sha256 compression gates");
-        // }
-
-        // Add schnorr constraints
-        // for (i, constraint) in constraint_system.schnorr_constraints.iter().enumerate() {
-        //     todo!("schnorr gates");
-        // }
-
-        // Add ECDSA k1 constraints
-        // for (i, constraint) in constraint_system.ecdsa_k1_constraints.iter().enumerate() {
-        //     todo!("ecdsa k1 gates");
-        // }
-
-        // Add ECDSA r1 constraints
-        // for (i, constraint) in constraint_system.ecdsa_r1_constraints.iter().enumerate() {
-        //     todo!("ecdsa r1 gates");
-        // }
-
-        // Add blake2s constraints
-        // for (i, constraint) in constraint_system.blake2s_constraints.iter().enumerate() {
-        //     todo!("blake2s gates");
-        // }
-
-        // Add blake3 constraints
-        // for (i, constraint) in constraint_system.blake3_constraints.iter().enumerate() {
-        //     todo!("blake3 gates");
-        // }
-
-        // Add keccak constraints
-        // for (i, constraint) in constraint_system.keccak_constraints.iter().enumerate() {
-        //     todo!("keccak gates");
-        // }
-
-        // for (i, constraint) in constraint_system.keccak_permutations.iter().enumerate() {
-        //     todo!("keccak permutation gates");
-        // }
-
-        // Add multi scalar mul constraints
-        for constraint in constraint_system.multi_scalar_mul_constraints.iter() {
-            self.create_multi_scalar_mul_constraint(
-                constraint,
-                has_valid_witness_assignments,
-                driver,
-            )?;
-        }
-
-        // for (i, constraint) in constraint_system.pedersen_hash_constraints.iter().enumerate() {
-        //     todo!("pedersen hash gates");
-        // }
-
-        // Add poseidon2 constraints
-        for constraint in constraint_system.poseidon2_constraints.iter() {
-            self.create_poseidon2_permutations(constraint, driver)?;
-        }
-
-        // Add multi scalar mul constraints
-        // for (i, constraint) in constraint_system.multi_scalar_mul_constraints.iter().enumerate() {
-        //     todo!("multi scalar mul gates");
-        // }
-
-        // Add ec add constraints
-        // for (i, constraint) in constraint_system.ec_add_constraints.iter().enumerate() {
-        //     todo!("ec add gates");
-        // }
-
-        // Add block constraints
-        for constraint in constraint_system.block_constraints.iter() {
-            self.create_block_constraints(constraint, has_valid_witness_assignments, driver)?;
-        }
-
-        // Add big_int constraints
-        // for (i, constraint) in constraint_system.bigint_from_le_bytes_constraints.iter().enumerate() {
-        //     todo!("bigint from le bytes gates");
-        // }
-
-        // for (i, constraint) in constraint_system.bigint_operations.iter().enumerate() {
-        //     todo!("bigint operations gates");
-        // }
-
-        // for (i, constraint) in constraint_system.bigint_to_le_bytes_constraints.iter().enumerate() {
-        //     todo!("bigint to le bytes gates");
-        // }
-
-        // assert equals
-        for constraint in constraint_system.assert_equalities.iter() {
-            self.assert_equal(
-                constraint.a.try_into().unwrap(),
-                constraint.b.try_into().unwrap(),
-            );
-        }
-
-        // RecursionConstraints
-        self.process_plonk_recursion_constraints(constraint_system, has_valid_witness_assignments);
-        let current_aggregation_object = self.init_default_agg_obj_indices();
-        self.process_honk_recursion_constraints(constraint_system, has_valid_witness_assignments);
-        self.process_avm_recursion_constraints(constraint_system, has_valid_witness_assignments);
-        // If the circuit has either honk or avm recursion constraints, add the aggregation object. Otherwise, add a
-        // default one if the circuit is recursive and honk_recursion is true.
-        if !constraint_system.honk_recursion_constraints.is_empty()
-            || !constraint_system.avm_recursion_constraints.is_empty()
-        {
-            assert!(metadata.honk_recursion != HonkRecursion::NotHonk);
-            self.add_pairing_point_accumulator(current_aggregation_object);
-        } else if metadata.honk_recursion != HonkRecursion::NotHonk && self.is_recursive_circuit {
-            // Make sure the verification key records the public input indices of the
-            // final recursion output.
-            self.add_pairing_point_accumulator(current_aggregation_object);
-        }
-
-        Ok(())
     }
 
     fn add_pairing_point_accumulator(
@@ -2696,88 +2415,6 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         read_data
     }
 
-    fn create_multi_scalar_mul_constraint(
-        &mut self,
-        constraint: &MultiScalarMul<P::ScalarField>,
-        has_valid_witness_assignments: bool,
-        driver: &mut T,
-    ) -> std::io::Result<()> {
-        let len = constraint.points.len() / 3;
-        debug_assert_eq!(len * 3, constraint.points.len());
-        debug_assert_eq!(len * 2, constraint.scalars.len());
-
-        let mut points = Vec::with_capacity(len);
-        let mut scalars = Vec::with_capacity(len);
-
-        for (p, s) in constraint
-            .points
-            .chunks_exact(3)
-            .zip(constraint.scalars.chunks_exact(2))
-        {
-            // Instantiate the input point/variable base as `cycle_group_ct`
-            let input_point = WitnessOrConstant::to_grumpkin_point(
-                &p[0],
-                &p[1],
-                &p[2],
-                has_valid_witness_assignments,
-                self,
-                driver,
-            );
-
-            //  Reconstruct the scalar from the low and high limbs
-            let scalar_low_as_field = s[0].to_field_ct();
-            let scalar_high_as_field = s[1].to_field_ct();
-            let scalar = CycleScalarCT::new(scalar_low_as_field, scalar_high_as_field);
-            points.push(input_point);
-            scalars.push(scalar);
-        }
-
-        let output_point = CycleGroupCT::batch_mul(points, scalars, self, driver)?
-            .get_standard_form(self, driver)?;
-
-        // Add the constraints and handle constant values
-        if output_point.is_point_at_infinity().is_constant() {
-            let value = output_point.is_point_at_infinity().get_value(driver);
-            self.fix_witness(
-                constraint.out_point_is_infinity,
-                T::get_public(&value).expect("Constants should be public"),
-            );
-        } else {
-            self.assert_equal(
-                output_point.is_point_at_infinity().witness_index as usize,
-                constraint.out_point_is_infinity as usize,
-            );
-        }
-
-        if output_point.x.is_constant() {
-            let value = output_point.x.get_value(self, driver);
-            self.fix_witness(
-                constraint.out_point_x,
-                T::get_public(&value).expect("Constants should be public"),
-            );
-        } else {
-            self.assert_equal(
-                output_point.x.get_witness_index() as usize,
-                constraint.out_point_x as usize,
-            );
-        }
-
-        if output_point.y.is_constant() {
-            let value = output_point.y.get_value(self, driver);
-            self.fix_witness(
-                constraint.out_point_y,
-                T::get_public(&value).expect("Constants should be public"),
-            );
-        } else {
-            self.assert_equal(
-                output_point.y.get_witness_index() as usize,
-                constraint.out_point_y as usize,
-            );
-        }
-
-        Ok(())
-    }
-
     fn create_poseidon2_permutations(
         &mut self,
         constraint: &Poseidon2Constraint<P::ScalarField>,
@@ -4163,5 +3800,374 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         let num_gates_post = builder.get_num_gates(); // accounts for finalization gates
 
         num_gates_post - num_gates_prior
+    }
+}
+
+impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::ScalarField>>
+    GenericUltraCircuitBuilder<P, T>
+{
+    pub fn create_circuit(
+        constraint_system: &AcirFormat<P::ScalarField>,
+        recursive: bool,
+        size_hint: usize,
+        witness: Vec<T::AcvmType>,
+        honk_recursion: HonkRecursion, // 1 for ultrahonk
+        driver: &mut T,
+    ) -> std::io::Result<Self> {
+        tracing::trace!("Builder create circuit");
+
+        let has_valid_witness_assignments = !witness.is_empty();
+
+        let mut builder = Self::init(
+            size_hint,
+            witness,
+            constraint_system.public_inputs.to_owned(),
+            constraint_system.varnum as usize,
+            recursive,
+        );
+        let metadata = ProgramMetadata {
+            recursive,
+            honk_recursion,
+            size_hint,
+        };
+        builder.build_constraints(
+            driver,
+            constraint_system,
+            has_valid_witness_assignments,
+            &metadata,
+        )?;
+
+        builder.finalize_circuit(true, driver)?;
+
+        Ok(builder)
+    }
+
+    pub fn circuit_size(
+        constraint_system: &AcirFormat<P::ScalarField>,
+        recursive: bool,
+        size_hint: usize,
+        honk_recursion: HonkRecursion, // 1 for ultrahonk
+        driver: &mut T,
+    ) -> eyre::Result<usize> {
+        tracing::trace!("Builder create circuit");
+
+        let mut builder = Self::init(
+            size_hint,
+            vec![],
+            constraint_system.public_inputs.to_owned(),
+            constraint_system.varnum as usize,
+            recursive,
+        );
+        let metadata = ProgramMetadata {
+            recursive,
+            honk_recursion,
+            size_hint,
+        };
+        builder.build_constraints(driver, constraint_system, false, &metadata)?;
+
+        builder.finalize_circuit(true, driver)?;
+
+        Ok(builder.compute_dyadic_size())
+    }
+
+    fn build_constraints(
+        &mut self,
+        driver: &mut T,
+        constraint_system: &AcirFormat<P::ScalarField>,
+        has_valid_witness_assignments: bool,
+        metadata: &ProgramMetadata,
+    ) -> std::io::Result<()> {
+        tracing::trace!("Builder build constraints");
+
+        // Add arithmetic gates
+        for constraint in constraint_system.poly_triple_constraints.iter() {
+            self.create_poly_gate(constraint);
+        }
+        for constraint in constraint_system.quad_constraints.iter() {
+            self.create_big_mul_gate(constraint);
+        }
+
+        // Oversize gates are a vector of mul_quad gates.
+        for constraint in constraint_system.big_quad_constraints.iter() {
+            let mut next_w4_wire_value = T::AcvmType::default();
+            // Define the 4th wire of these mul_quad gates, which is implicitly used by the previous gate.
+            let constraint_size = constraint.len();
+            for (j, small_constraint) in constraint.iter().enumerate().take(constraint_size - 1) {
+                let mut small_constraint = small_constraint.clone();
+                if j == 0 {
+                    next_w4_wire_value = self.get_variable(small_constraint.d.try_into().unwrap());
+                } else {
+                    let next_w4_wire = self.add_variable(next_w4_wire_value.to_owned());
+                    small_constraint.d = next_w4_wire;
+                    small_constraint.d_scaling = -P::ScalarField::one();
+                }
+
+                self.create_big_mul_add_gate(&small_constraint, true);
+
+                let var_a = self.get_variable(small_constraint.a.try_into().unwrap());
+                let var_b = self.get_variable(small_constraint.b.try_into().unwrap());
+                let var_c = self.get_variable(small_constraint.c.try_into().unwrap());
+
+                let term1 = driver.mul(var_a.to_owned(), var_b.to_owned())?;
+                let term1 = driver.mul_with_public(small_constraint.mul_scaling, term1);
+                let term2 = driver.mul_with_public(small_constraint.a_scaling, var_a);
+                let term3 = driver.mul_with_public(small_constraint.b_scaling, var_b);
+                let term4 = driver.mul_with_public(small_constraint.c_scaling, var_c);
+                let term5 = driver.mul_with_public(small_constraint.d_scaling, next_w4_wire_value);
+                next_w4_wire_value = small_constraint.const_scaling.into();
+                driver.add_assign(&mut next_w4_wire_value, term1);
+                driver.add_assign(&mut next_w4_wire_value, term2);
+                driver.add_assign(&mut next_w4_wire_value, term3);
+                driver.add_assign(&mut next_w4_wire_value, term4);
+                driver.add_assign(&mut next_w4_wire_value, term5);
+
+                driver.negate_inplace(&mut next_w4_wire_value);
+            }
+
+            let next_w4_wire = self.add_variable(next_w4_wire_value);
+
+            let mut last_constraint = constraint.last().unwrap().clone();
+            last_constraint.d = next_w4_wire;
+            last_constraint.d_scaling = -P::ScalarField::one();
+
+            self.create_big_mul_add_gate(&last_constraint, false);
+        }
+
+        // Add logic constraint
+        for constraint in constraint_system.logic_constraints.iter() {
+            self.create_logic_constraint(driver, constraint)?;
+        }
+
+        // Add range constraints
+        // We want to decompose all shared elements in parallel
+        let (bits_locations, decomposed, decompose_indices) =
+            self.prepare_for_range_decompose(driver, constraint_system)?;
+
+        for (i, constraint) in constraint_system.range_constraints.iter().enumerate() {
+            let mut range = constraint.num_bits;
+            if let Some(r) = constraint_system.minimal_range.get(&constraint.witness) {
+                range = *r;
+            }
+
+            let idx_option = bits_locations.get(&range);
+            if idx_option.is_some() && decompose_indices[i].0 {
+                // Already decomposed
+                let idx = idx_option.unwrap().to_owned();
+                self.decompose_into_default_range(
+                    driver,
+                    constraint.witness,
+                    range as u64,
+                    Some(&decomposed[idx][decompose_indices[i].1]),
+                    Self::DEFAULT_PLOOKUP_RANGE_BITNUM as u64,
+                )?;
+            } else {
+                // Either we do not have to decompose or the value is public
+                self.create_range_constraint(driver, constraint.witness, range)?;
+            }
+        }
+
+        // Add aes128 constraints
+        // for (i, constraint) in constraint_system.aes128_constraints.iter().enumerate() {
+        //     todo!("aes128 gates");
+        // }
+
+        // Add sha256 constraints
+        // for (i, constraint) in constraint_system.sha256_constraints.iter().enumerate() {
+        //     todo!("sha256 gates");
+        // }
+
+        // for (i, constraint) in constraint_system.sha256_compression.iter().enumerate() {
+        //     todo!("sha256 compression gates");
+        // }
+
+        // Add schnorr constraints
+        // for (i, constraint) in constraint_system.schnorr_constraints.iter().enumerate() {
+        //     todo!("schnorr gates");
+        // }
+
+        // Add ECDSA k1 constraints
+        // for (i, constraint) in constraint_system.ecdsa_k1_constraints.iter().enumerate() {
+        //     todo!("ecdsa k1 gates");
+        // }
+
+        // Add ECDSA r1 constraints
+        // for (i, constraint) in constraint_system.ecdsa_r1_constraints.iter().enumerate() {
+        //     todo!("ecdsa r1 gates");
+        // }
+
+        // Add blake2s constraints
+        // for (i, constraint) in constraint_system.blake2s_constraints.iter().enumerate() {
+        //     todo!("blake2s gates");
+        // }
+
+        // Add blake3 constraints
+        // for (i, constraint) in constraint_system.blake3_constraints.iter().enumerate() {
+        //     todo!("blake3 gates");
+        // }
+
+        // Add keccak constraints
+        // for (i, constraint) in constraint_system.keccak_constraints.iter().enumerate() {
+        //     todo!("keccak gates");
+        // }
+
+        // for (i, constraint) in constraint_system.keccak_permutations.iter().enumerate() {
+        //     todo!("keccak permutation gates");
+        // }
+
+        // Add multi scalar mul constraints
+        for constraint in constraint_system.multi_scalar_mul_constraints.iter() {
+            self.create_multi_scalar_mul_constraint(
+                constraint,
+                has_valid_witness_assignments,
+                driver,
+            )?;
+        }
+
+        // for (i, constraint) in constraint_system.pedersen_hash_constraints.iter().enumerate() {
+        //     todo!("pedersen hash gates");
+        // }
+
+        // Add poseidon2 constraints
+        for constraint in constraint_system.poseidon2_constraints.iter() {
+            self.create_poseidon2_permutations(constraint, driver)?;
+        }
+
+        // Add multi scalar mul constraints
+        // for (i, constraint) in constraint_system.multi_scalar_mul_constraints.iter().enumerate() {
+        //     todo!("multi scalar mul gates");
+        // }
+
+        // Add ec add constraints
+        // for (i, constraint) in constraint_system.ec_add_constraints.iter().enumerate() {
+        //     todo!("ec add gates");
+        // }
+
+        // Add block constraints
+        for constraint in constraint_system.block_constraints.iter() {
+            self.create_block_constraints(constraint, has_valid_witness_assignments, driver)?;
+        }
+
+        // Add big_int constraints
+        // for (i, constraint) in constraint_system.bigint_from_le_bytes_constraints.iter().enumerate() {
+        //     todo!("bigint from le bytes gates");
+        // }
+
+        // for (i, constraint) in constraint_system.bigint_operations.iter().enumerate() {
+        //     todo!("bigint operations gates");
+        // }
+
+        // for (i, constraint) in constraint_system.bigint_to_le_bytes_constraints.iter().enumerate() {
+        //     todo!("bigint to le bytes gates");
+        // }
+
+        // assert equals
+        for constraint in constraint_system.assert_equalities.iter() {
+            self.assert_equal(
+                constraint.a.try_into().unwrap(),
+                constraint.b.try_into().unwrap(),
+            );
+        }
+
+        // RecursionConstraints
+        self.process_plonk_recursion_constraints(constraint_system, has_valid_witness_assignments);
+        let current_aggregation_object = self.init_default_agg_obj_indices();
+        self.process_honk_recursion_constraints(constraint_system, has_valid_witness_assignments);
+        self.process_avm_recursion_constraints(constraint_system, has_valid_witness_assignments);
+        // If the circuit has either honk or avm recursion constraints, add the aggregation object. Otherwise, add a
+        // default one if the circuit is recursive and honk_recursion is true.
+        if !constraint_system.honk_recursion_constraints.is_empty()
+            || !constraint_system.avm_recursion_constraints.is_empty()
+        {
+            assert!(metadata.honk_recursion != HonkRecursion::NotHonk);
+            self.add_pairing_point_accumulator(current_aggregation_object);
+        } else if metadata.honk_recursion != HonkRecursion::NotHonk && self.is_recursive_circuit {
+            // Make sure the verification key records the public input indices of the
+            // final recursion output.
+            self.add_pairing_point_accumulator(current_aggregation_object);
+        }
+
+        Ok(())
+    }
+
+    fn create_multi_scalar_mul_constraint(
+        &mut self,
+        constraint: &MultiScalarMul<P::ScalarField>,
+        has_valid_witness_assignments: bool,
+        driver: &mut T,
+    ) -> std::io::Result<()> {
+        let len = constraint.points.len() / 3;
+        debug_assert_eq!(len * 3, constraint.points.len());
+        debug_assert_eq!(len * 2, constraint.scalars.len());
+
+        let mut points = Vec::with_capacity(len);
+        let mut scalars = Vec::with_capacity(len);
+
+        for (p, s) in constraint
+            .points
+            .chunks_exact(3)
+            .zip(constraint.scalars.chunks_exact(2))
+        {
+            // Instantiate the input point/variable base as `cycle_group_ct`
+            let input_point = WitnessOrConstant::to_grumpkin_point(
+                &p[0],
+                &p[1],
+                &p[2],
+                has_valid_witness_assignments,
+                self,
+                driver,
+            );
+
+            //  Reconstruct the scalar from the low and high limbs
+            let scalar_low_as_field = s[0].to_field_ct();
+            let scalar_high_as_field = s[1].to_field_ct();
+            let scalar = CycleScalarCT::new(scalar_low_as_field, scalar_high_as_field);
+            points.push(input_point);
+            scalars.push(scalar);
+        }
+
+        let output_point = CycleGroupCT::batch_mul(points, scalars, self, driver)?
+            .get_standard_form(self, driver)?;
+
+        // Add the constraints and handle constant values
+        if output_point.is_point_at_infinity().is_constant() {
+            let value = output_point.is_point_at_infinity().get_value(driver);
+            self.fix_witness(
+                constraint.out_point_is_infinity,
+                T::get_public(&value).expect("Constants should be public"),
+            );
+        } else {
+            self.assert_equal(
+                output_point.is_point_at_infinity().witness_index as usize,
+                constraint.out_point_is_infinity as usize,
+            );
+        }
+
+        if output_point.x.is_constant() {
+            let value = output_point.x.get_value(self, driver);
+            self.fix_witness(
+                constraint.out_point_x,
+                T::get_public(&value).expect("Constants should be public"),
+            );
+        } else {
+            self.assert_equal(
+                output_point.x.get_witness_index() as usize,
+                constraint.out_point_x as usize,
+            );
+        }
+
+        if output_point.y.is_constant() {
+            let value = output_point.y.get_value(self, driver);
+            self.fix_witness(
+                constraint.out_point_y,
+                T::get_public(&value).expect("Constants should be public"),
+            );
+        } else {
+            self.assert_equal(
+                output_point.y.get_witness_index() as usize,
+                constraint.out_point_y as usize,
+            );
+        }
+
+        Ok(())
     }
 }

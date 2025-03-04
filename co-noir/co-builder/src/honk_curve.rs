@@ -1,10 +1,12 @@
-use ark_ec::pairing::Pairing;
+use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::{BigInt, Field, One, PrimeField};
 use num_bigint::BigUint;
 use std::str::FromStr;
 
 // Des describes the PrimeField used for the Transcript
 pub trait HonkCurve<Des: PrimeField>: Pairing {
+    type CycleGroup: CurveGroup<BaseField = Self::ScalarField>;
+
     const NUM_BASEFIELD_ELEMENTS: usize;
     const NUM_SCALARFIELD_ELEMENTS: usize;
     const SUBGROUP_SIZE: usize;
@@ -33,6 +35,8 @@ pub trait HonkCurve<Des: PrimeField>: Pairing {
 }
 
 impl HonkCurve<ark_bn254::Fr> for ark_bn254::Bn254 {
+    type CycleGroup = ark_grumpkin::Projective;
+
     const NUM_BASEFIELD_ELEMENTS: usize = 2;
     const NUM_SCALARFIELD_ELEMENTS: usize = 1;
     const SUBGROUP_SIZE: usize = 256;

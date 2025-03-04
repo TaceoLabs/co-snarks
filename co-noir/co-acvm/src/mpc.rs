@@ -1,3 +1,4 @@
+use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_brillig::mpc::BrilligDriver;
 use mpc_core::{
@@ -24,6 +25,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         + From<F>
         + PartialEq
         + Into<<Self::BrilligDriver as BrilligDriver<F>>::BrilligType>;
+    type AcvmPoint<C: CurveGroup<BaseField = F>>;
 
     type BrilligDriver: BrilligDriver<F>;
 
@@ -305,6 +307,13 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         scalars_hi: &[Self::AcvmType],
         pedantic_solving: bool,
     ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)>;
+
+    fn field_shares_to_pointshare<C: CurveGroup<BaseField = F>>(
+        &mut self,
+        x: Self::AcvmType,
+        y: Self::AcvmType,
+        is_infinity: Self::AcvmType,
+    ) -> io::Result<Self::AcvmPoint<C>>;
 
     /// Compute the greater than operation: a > b. Outputs 1 if a > b, 0 otherwise.
     fn gt(&mut self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> io::Result<Self::AcvmType>;
