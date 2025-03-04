@@ -857,6 +857,17 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupCT<P
     }
 }
 
+impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> Default for CycleGroupCT<P, T> {
+    fn default() -> Self {
+        Self {
+            x: FieldCT::zero(),
+            y: FieldCT::zero(),
+            is_infinity: BoolCT::from(true),
+            is_constant: true,
+        }
+    }
+}
+
 impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::ScalarField>>
     CycleGroupCT<P, T>
 {
@@ -875,6 +886,24 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                 is_constant: true,
             },
         }
+    }
+
+    fn from_constant_witness(
+        inp: P::CycleGroup,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> Self {
+        let (x, y) = inp.into_affine().xy().unwrap_or_default();
+        let result = Self {
+            x: FieldCT::from_witness(x.into(), builder),
+            y: FieldCT::from_witness(y.into(), builder),
+            is_infinity: BoolCT::from(inp.is_zero()),
+            is_constant: false,
+        };
+
+        result.x.assert_equal(&FieldCT::from(x), builder, driver);
+        result.y.assert_equal(&FieldCT::from(y), builder, driver);
+        result
     }
 
     fn get_value(
@@ -977,8 +1006,116 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             + fixed_base_points.len()
             + has_variable_points as usize
             + has_fixed_points as usize;
+        todo!("Generators");
 
-        todo!("Implement batch_mul")
+        let mut result = CycleGroupCT::default();
+
+        todo!("Implement batch_mul");
+
+        // Update `result` to remove the offset generator terms, and add in any constant terms from `constant_acc`.
+        // We have two potential modes here:
+        // 1. All inputs are fixed-base and we constant_acc is not the point at infinity
+        // 2. Everything else.
+        // Case 1 is a special case, as we *know* we cannot hit incomplete addition edge cases,
+        // under the assumption that all input points are linearly independent of one another.
+        // Because constant_acc is not the point at infnity we know that at least 1 input scalar was not zero,
+        // i.e. the output will not be the point at infinity. We also know under case 1, we won't trigger the
+        // doubling formula either, as every point is lienarly independent of every other point (including offset
+        // generators).
+        if !constant_acc.is_zero() && can_unconditional_add {
+            result = result.unconditional_add(
+                &CycleGroupCT::from_group_element(-offset_accumulator),
+                None,
+                builder,
+                driver,
+            )?;
+        } else {
+            // For case 2, we must use a full subtraction operation that handles all possible edge cases, as the output
+            // point may be the point at infinity.
+            // TODO(@zac-williamson) We can probably optimize this a bit actually. We might hit the point at infinity,
+            // but an honest prover won't trigger the doubling edge case.
+            // (doubling edge case implies input points are also the offset generator points,
+            // which we can assume an honest Prover will not do if we make this case produce unsatisfiable constraints)
+            // We could do the following:
+            // 1. If x-coords match, assert y-coords do not match
+            // 2. If x-coords match, return point at infinity, else return result - offset_accumulator.
+            // This would be slightly cheaper than operator- as we do not have to evaluate the double edge case.
+            result = result.sub(
+                &CycleGroupCT::from_group_element(offset_accumulator),
+                builder,
+                driver,
+            );
+        }
+
+        Ok(result)
+    }
+
+    fn unconditional_add(
+        &self,
+        other: &Self,
+        hint: Option<P::CycleGroup>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> std::io::Result<Self> {
+        let lhs_constant = self.is_constant();
+        let rhs_constant = other.is_constant();
+        if lhs_constant && !rhs_constant {
+            let value = self.get_value(builder, driver)?;
+            let value = T::get_public_point(&value).expect("Constants are public");
+            let lhs = CycleGroupCT::from_constant_witness(value, builder, driver);
+            return lhs.unconditional_add(other, hint, builder, driver);
+        }
+        if !lhs_constant && rhs_constant {
+            let value = other.get_value(builder, driver)?;
+            let value = T::get_public_point(&value).expect("Constants are public");
+            let rhs = CycleGroupCT::from_constant_witness(value, builder, driver);
+            return self.unconditional_add(&rhs, hint, builder, driver);
+        }
+
+        let mut result = CycleGroupCT::default();
+
+        if let Some(hint) = hint {
+            let (x3, y3) = hint.into_affine().xy().unwrap_or_default();
+            if lhs_constant && rhs_constant {
+                return Ok(CycleGroupCT::new(
+                    FieldCT::from(x3),
+                    FieldCT::from(y3),
+                    BoolCT::from(false),
+                    builder,
+                    driver,
+                ));
+            }
+            let x = FieldCT::from_witness(x3.into(), builder);
+            let y = FieldCT::from_witness(y3.into(), builder);
+            result = CycleGroupCT::new(x, y, BoolCT::from(false), builder, driver);
+        } else {
+            let p1 = self.get_value(builder, driver)?;
+            let p2 = other.get_value(builder, driver)?;
+            let p3 = driver.add_points(p1, p2);
+
+            if lhs_constant && rhs_constant {
+                let p3 = T::get_public_point(&p3).expect("Constants are public");
+                let result = CycleGroupCT::from_group_element(p3);
+                return Ok(result);
+            }
+            let (x, y, _) = driver.pointshare_to_field_shares(p3)?;
+            let r_x = FieldCT::from_witness(x, builder);
+            let r_y = FieldCT::from_witness(y, builder);
+            result = CycleGroupCT::new(r_x, r_y, BoolCT::from(false), builder, driver);
+        }
+
+        todo!("unconditional_add");
+
+        Ok(result)
+    }
+
+    fn sub(
+        &self,
+        other: &Self,
+        builder: &GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> Self {
+        todo!("sub")
     }
 }
 

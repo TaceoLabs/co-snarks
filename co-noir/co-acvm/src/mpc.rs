@@ -64,6 +64,13 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     /// Adds to acvm types. Both can either be public or shared
     fn add(&self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> Self::AcvmType;
 
+    /// Adds to acvm points. Both can either be public or shared
+    fn add_points<C: CurveGroup<BaseField = F>>(
+        &self,
+        lhs: Self::AcvmPoint<C>,
+        rhs: Self::AcvmPoint<C>,
+    ) -> Self::AcvmPoint<C>;
+
     /// Subtracts two ACVM-type values: secret - secret
     fn sub(&mut self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType;
 
@@ -311,12 +318,19 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         pedantic_solving: bool,
     ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)>;
 
+    /// Translates a share of the coordinates to a shared point
     fn field_shares_to_pointshare<C: CurveGroup<BaseField = F>>(
         &mut self,
         x: Self::AcvmType,
         y: Self::AcvmType,
         is_infinity: Self::AcvmType,
     ) -> io::Result<Self::AcvmPoint<C>>;
+
+    /// Translates a share of the point to a share of its coordinates
+    fn pointshare_to_field_shares<C: CurveGroup<BaseField = F>>(
+        &mut self,
+        point: Self::AcvmPoint<C>,
+    ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)>;
 
     /// Compute the greater than operation: a > b. Outputs 1 if a > b, 0 otherwise.
     fn gt(&mut self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> io::Result<Self::AcvmType>;

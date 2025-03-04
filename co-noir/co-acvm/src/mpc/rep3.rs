@@ -418,6 +418,27 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
     }
 
+    fn add_points<C: CurveGroup<BaseField = F>>(
+        &self,
+        lhs: Self::AcvmPoint<C>,
+        rhs: Self::AcvmPoint<C>,
+    ) -> Self::AcvmPoint<C> {
+        match (lhs, rhs) {
+            (Rep3AcvmPoint::Public(lhs), Rep3AcvmPoint::Public(rhs)) => {
+                Rep3AcvmPoint::Public(lhs + rhs)
+            }
+            (Rep3AcvmPoint::Public(public), Rep3AcvmPoint::Shared(mut shared))
+            | (Rep3AcvmPoint::Shared(mut shared), Rep3AcvmPoint::Public(public)) => {
+                pointshare::add_assign_public(&mut shared, &public, self.io_context0.id);
+                Rep3AcvmPoint::Shared(shared)
+            }
+            (Rep3AcvmPoint::Shared(lhs), Rep3AcvmPoint::Shared(rhs)) => {
+                let result = pointshare::add(&lhs, &rhs);
+                Rep3AcvmPoint::Shared(result)
+            }
+        }
+    }
+
     fn sub(&mut self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType {
         let id = self.io_context0.id;
 
@@ -1270,6 +1291,13 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         is_infinity: Self::AcvmType,
     ) -> std::io::Result<Self::AcvmPoint<C>> {
         todo!("Implement field_shares_to_pointshare")
+    }
+
+    fn pointshare_to_field_shares<C: CurveGroup<BaseField = F>>(
+        &mut self,
+        point: Self::AcvmPoint<C>,
+    ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
+        todo!("Implement pointshare_to_field_shares")
     }
 
     fn gt(&mut self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> std::io::Result<Self::AcvmType> {
