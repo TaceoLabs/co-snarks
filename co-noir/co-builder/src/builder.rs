@@ -679,48 +679,75 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         //  * we can chain successive ecc_add_gates if x3 y3 of previous gate equals x1 y1 of current gate
         //  **/
         self.assert_valid_variables(&[inp.x1, inp.x2, inp.x3, inp.y1, inp.y2, inp.y3]);
-        todo!("Add ECC add gate");
 
-        // auto& block = blocks.elliptic;
+        let size = self.blocks.elliptic.len();
+        let previous_elliptic_gate_exists = size > 0;
+        let mut can_fuse_into_previous_gate = previous_elliptic_gate_exists;
+        if can_fuse_into_previous_gate {
+            can_fuse_into_previous_gate =
+                can_fuse_into_previous_gate && (self.blocks.elliptic.w_r()[size - 1] == inp.x1);
+            can_fuse_into_previous_gate =
+                can_fuse_into_previous_gate && (self.blocks.elliptic.w_o()[size - 1] == inp.y1);
+            can_fuse_into_previous_gate =
+                can_fuse_into_previous_gate && (self.blocks.elliptic.q_3()[size - 1].is_zero());
+            can_fuse_into_previous_gate =
+                can_fuse_into_previous_gate && (self.blocks.elliptic.q_4()[size - 1].is_zero());
+            can_fuse_into_previous_gate =
+                can_fuse_into_previous_gate && (self.blocks.elliptic.q_1()[size - 1].is_zero());
+            can_fuse_into_previous_gate =
+                can_fuse_into_previous_gate && (self.blocks.elliptic.q_arith()[size - 1].is_zero());
+            can_fuse_into_previous_gate =
+                can_fuse_into_previous_gate && (self.blocks.elliptic.q_m()[size - 1].is_zero());
+        }
 
-        // bool previous_elliptic_gate_exists = block.size() > 0;
-        // bool can_fuse_into_previous_gate = previous_elliptic_gate_exists;
-        // if (can_fuse_into_previous_gate) {
-        //     can_fuse_into_previous_gate = can_fuse_into_previous_gate && (block.w_r()[block.size() - 1] == in.x1);
-        //     can_fuse_into_previous_gate = can_fuse_into_previous_gate && (block.w_o()[block.size() - 1] == in.y1);
-        //     can_fuse_into_previous_gate = can_fuse_into_previous_gate && (block.q_3()[block.size() - 1] == 0);
-        //     can_fuse_into_previous_gate = can_fuse_into_previous_gate && (block.q_4()[block.size() - 1] == 0);
-        //     can_fuse_into_previous_gate = can_fuse_into_previous_gate && (block.q_1()[block.size() - 1] == 0);
-        //     can_fuse_into_previous_gate = can_fuse_into_previous_gate && (block.q_arith()[block.size() - 1] == 0);
-        //     can_fuse_into_previous_gate = can_fuse_into_previous_gate && (block.q_m()[block.size() - 1] == 0);
-        // }
+        if can_fuse_into_previous_gate {
+            self.blocks.elliptic.q_1()[size - 1] = inp.sign_coefficient;
+            self.blocks.elliptic.q_elliptic()[size - 1] = P::ScalarField::one();
+        } else {
+            self.blocks
+                .elliptic
+                .populate_wires(self.zero_idx, inp.x1, inp.y1, self.zero_idx);
+            self.blocks.elliptic.q_3().push(P::ScalarField::zero());
+            self.blocks.elliptic.q_4().push(P::ScalarField::zero());
+            self.blocks.elliptic.q_1().push(inp.sign_coefficient);
 
-        // if (can_fuse_into_previous_gate) {
-        //     block.q_1()[block.size() - 1] = in.sign_coefficient;
-        //     block.q_elliptic()[block.size() - 1] = 1;
-        // } else {
-        //     block.populate_wires(this->zero_idx, in.x1, in.y1, this->zero_idx);
-        //     block.q_3().emplace_back(0);
-        //     block.q_4().emplace_back(0);
-        //     block.q_1().emplace_back(in.sign_coefficient);
+            self.blocks.elliptic.q_arith().push(P::ScalarField::zero());
+            self.blocks.elliptic.q_2().push(P::ScalarField::zero());
+            self.blocks.elliptic.q_m().push(P::ScalarField::zero());
+            self.blocks.elliptic.q_c().push(P::ScalarField::zero());
+            self.blocks
+                .elliptic
+                .q_delta_range()
+                .push(P::ScalarField::zero());
+            self.blocks
+                .elliptic
+                .q_lookup_type()
+                .push(P::ScalarField::zero());
+            self.blocks
+                .elliptic
+                .q_elliptic()
+                .push(P::ScalarField::one());
+            self.blocks.elliptic.q_aux().push(P::ScalarField::zero());
+            self.blocks
+                .elliptic
+                .q_poseidon2_external()
+                .push(P::ScalarField::zero());
+            self.blocks
+                .elliptic
+                .q_poseidon2_internal()
+                .push(P::ScalarField::zero());
 
-        //     block.q_arith().emplace_back(0);
-        //     block.q_2().emplace_back(0);
-        //     block.q_m().emplace_back(0);
-        //     block.q_c().emplace_back(0);
-        //     block.q_delta_range().emplace_back(0);
-        //     block.q_lookup_type().emplace_back(0);
-        //     block.q_elliptic().emplace_back(1);
-        //     block.q_aux().emplace_back(0);
-        //     block.q_poseidon2_external().emplace_back(0);
-        //     block.q_poseidon2_internal().emplace_back(0);
-        //     if constexpr (HasAdditionalSelectors<ExecutionTrace>) {
-        //         block.pad_additional();
-        //     }
-        //     check_selector_length_consistency();
-        //     ++this->num_gates;
-        // }
-        // create_dummy_gate(block, in.x2, in.x3, in.y3, in.y2);
+            self.check_selector_length_consistency();
+            self.num_gates += 1;
+        }
+        create_dummy_gate!(
+            self,
+            &mut self.blocks.elliptic,
+            inp.x2,
+            inp.x3,
+            inp.y3,
+            inp.y2
+        );
     }
 
     fn create_logic_constraint(
