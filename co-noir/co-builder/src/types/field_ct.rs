@@ -4,6 +4,7 @@ use crate::prelude::HonkCurve;
 use crate::types::types::{AddTriple, PolyTriple};
 use crate::TranscriptFieldType;
 use ark_ec::pairing::Pairing;
+use ark_ec::{CurveConfig, CurveGroup};
 use ark_ff::PrimeField;
 use ark_ff::{One, Zero};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
@@ -871,6 +872,8 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 
         let mut variable_base_scalars = Vec::new();
         let mut variable_base_points = Vec::new();
+        let mut fixed_base_scalars = Vec::new();
+        let mut fixed_base_points = Vec::new();
 
         let mut num_bits = 0;
         for scalar in scalars.iter() {
@@ -890,20 +893,37 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         let mut can_unconditional_add = true;
         let mut has_non_constant_component = false;
 
+        let mut constant_acc = P::CycleGroup::zero();
         for (point, scalar) in base_points.iter().zip(scalars.iter()) {
             let scalar_constant = scalar.is_constant();
             let point_constant = point.is_constant();
 
-            let scalar_val = scalar.get_value(builder, driver);
-            let point_val = point.get_value(builder, driver);
-
             if scalar_constant && point_constant {
-                let scalar_val = T::get_public(&scalar_val).expect("Constants are public");
-                todo!();
-                // let point_val = T::get_public_point(&point_val).expect("Constants are public");
-                // constant_acc += point.get_value() * scalar.get_value(builder, driver);
+                let scalar_val = scalar.get_constant_value(builder, driver);
+                let point_val = point.get_value(builder, driver)?;
+
+                let point_val = T::get_public_point(&point_val).expect("Constants are public");
+                constant_acc += point_val * scalar_val;
             } else if !scalar_constant && point_constant {
-                todo!();
+                let point_val = point.get_value(builder, driver)?;
+                let point_val = T::get_public_point(&point_val).expect("Constants are public");
+                if point_val.is_zero() {
+                    // oi mate, why are you creating a circuit that multiplies a known point at infinity?
+                    continue;
+                }
+                // We are a UltraCircuit
+                if !num_bits_not_full_field_size
+                // && plookup::fixed_base::table::lookup_table_exists_for_point(point_val)
+                {
+                    todo!("plookup stuff");
+                    fixed_base_scalars.push(scalar);
+                    fixed_base_points.push(point_val);
+                } else {
+                    // womp womp. We have lookup tables at home. ROM tables.
+                    variable_base_scalars.push(scalar);
+                    variable_base_points.push(point);
+                }
+                has_non_constant_component = true;
             } else {
                 variable_base_scalars.push(scalar);
                 variable_base_points.push(point);
@@ -950,17 +970,20 @@ impl<F: PrimeField> CycleScalarCT<F> {
         Self::NUM_BITS
     }
 
-    fn get_value<P: Pairing<ScalarField = F>, T: NoirWitnessExtensionProtocol<P::ScalarField>>(
+    fn get_constant_value<
+        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
         &self,
         builder: &GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> T::AcvmType {
+    ) -> <<P::CycleGroup as CurveGroup>::Config as CurveConfig>::ScalarField {
         let lo = self.lo.get_value(builder, driver);
         let hi = self.hi.get_value(builder, driver);
-        let scale = F::from(BigUint::one() << Self::LO_BITS);
-        let mut hi = driver.mul_with_public(scale, hi);
-        driver.add_assign(&mut hi, lo);
-        hi
+        let mut lo: BigUint = T::get_public(&lo).expect("Constants are public").into();
+        let hi: BigUint = T::get_public(&hi).expect("Constants are public").into();
+        lo += hi << Self::LO_BITS;
+        lo.into()
     }
 
     fn slice(inp: BigUint) -> (BigUint, BigUint) {
