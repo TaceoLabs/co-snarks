@@ -1684,7 +1684,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         )?
         .normalize(builder, driver);
 
-        let mut result = CycleGroupCT::default();
+        let result;
 
         if let Some(hint) = hint {
             let (x3, y3) = hint.into_affine().xy().unwrap_or_default();
@@ -1791,7 +1791,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             return self.unconditional_add(&rhs, hint, builder, driver);
         }
 
-        let mut result = CycleGroupCT::default();
+        let result;
 
         if let Some(hint) = hint {
             let (x3, y3) = hint.into_affine().xy().unwrap_or_default();
