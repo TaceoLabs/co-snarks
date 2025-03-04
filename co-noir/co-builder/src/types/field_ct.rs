@@ -332,7 +332,7 @@ impl<F: PrimeField> FieldCT<F> {
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> std::io::Result<Self> {
-        other.assert_is_not_zero(builder, driver);
+        other.assert_is_not_zero(builder, driver)?;
         self.divide_no_zero_check(other, builder, driver)
     }
 
@@ -346,7 +346,61 @@ impl<F: PrimeField> FieldCT<F> {
         driver: &mut T,
     ) -> std::io::Result<Self> {
         let mut result = Self::default();
-        todo!()
+
+        let mut additive_multiplier = F::one();
+
+        if self.is_constant() && other.is_constant() {
+            // both inputs are constant - don't add a gate
+            if !other.additive_constant.is_zero() {
+                additive_multiplier = other
+                    .additive_constant
+                    .inverse()
+                    .expect("Non-zero constant");
+            }
+            result.additive_constant = self.additive_constant * additive_multiplier;
+        } else if !self.is_constant() && other.is_constant() {
+            // one input is constant - don't add a gate, but update scaling factors
+            if !other.additive_constant.is_zero() {
+                additive_multiplier = other
+                    .additive_constant
+                    .inverse()
+                    .expect("Non-zero constant");
+            }
+            result.additive_constant = self.additive_constant * additive_multiplier;
+            result.multiplicative_constant = self.multiplicative_constant * additive_multiplier;
+            result.witness_index = self.witness_index;
+        } else if self.is_constant() && !other.is_constant() {
+            let val = self.get_value(builder, driver);
+            let val = T::get_public(&val).expect("Already checked it is public");
+            // numerator 0?
+            if val.is_zero() {
+                result.additive_constant = F::zero();
+                result.multiplicative_constant = F::one();
+                result.witness_index = Self::IS_CONSTANT;
+            } else {
+                let q_m = other.multiplicative_constant;
+                let q_l = other.additive_constant;
+                let q_c = -val;
+                let other_val = other.get_value(builder, driver);
+                let inverse = driver.invert(other_val)?;
+                let out_value = driver.mul_with_public(val, inverse);
+                result.witness_index = builder.add_variable(out_value);
+                builder.create_poly_gate(&PolyTriple {
+                    a: result.witness_index,
+                    b: other.witness_index,
+                    c: result.witness_index,
+                    q_m,
+                    q_l,
+                    q_r: F::zero(),
+                    q_o: F::zero(),
+                    q_c,
+                });
+            }
+        } else {
+            todo!("Shared by shared div")
+        }
+
+        Ok(result)
     }
 
     pub(crate) fn add<
