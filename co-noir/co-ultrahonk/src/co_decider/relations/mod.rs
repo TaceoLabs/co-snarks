@@ -8,10 +8,12 @@ pub(crate) mod poseidon2_internal_relation;
 pub(crate) mod ultra_arithmetic_relation;
 
 use super::{
-    types::{ProverUnivariatesBatch, RelationParameters},
+    types::{
+        ProverUnivariates, ProverUnivariatesBatch, RelationParameters, MAX_PARTIAL_RELATION_LENGTH,
+    },
     univariates::SharedUnivariate,
 };
-use crate::mpc::NoirUltraHonkProver;
+use crate::{mpc::NoirUltraHonkProver, types_batch::SumCheckDataForRelation};
 use ark_ec::pairing::Pairing;
 use auxiliary_relation::{AuxiliaryRelation, AuxiliaryRelationAcc};
 use co_builder::prelude::HonkCurve;
@@ -42,6 +44,23 @@ pub(crate) use fold_accumulator;
 
 pub(crate) trait Relation<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> {
     type Acc: Default;
+
+    fn add_edge(
+        entity: &ProverUnivariates<T, P>,
+        scaling_factor: P::ScalarField,
+        data: &mut SumCheckDataForRelation<T, P>,
+    ) {
+        if !Self::can_skip(entity) {
+            let scaling_factors = vec![scaling_factor; MAX_PARTIAL_RELATION_LENGTH];
+            data.can_skip = false;
+            Self::add_entites(entity, &mut data.all_entites);
+            data.scaling_factors.extend(scaling_factors);
+        }
+    }
+
+    fn can_skip(entity: &ProverUnivariates<T, P>) -> bool;
+
+    fn add_entites(entity: &ProverUnivariates<T, P>, batch: &mut ProverUnivariatesBatch<T, P>);
 
     fn accumulate(
         driver: &mut T,

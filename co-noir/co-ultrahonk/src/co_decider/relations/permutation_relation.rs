@@ -154,6 +154,34 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
 {
     type Acc = UltraPermutationRelationAcc<T, P>;
 
+    fn can_skip(_: &super::ProverUnivariates<T, P>) -> bool {
+        false
+    }
+
+    fn add_entites(
+        entity: &super::ProverUnivariates<T, P>,
+        batch: &mut ProverUnivariatesBatch<T, P>,
+    ) {
+        batch.add_w_l(entity);
+        batch.add_w_r(entity);
+        batch.add_w_o(entity);
+        batch.add_w_4(entity);
+
+        batch.add_id_1(entity);
+        batch.add_id_2(entity);
+        batch.add_id_3(entity);
+        batch.add_id_4(entity);
+
+        batch.add_sigma_1(entity);
+        batch.add_sigma_2(entity);
+        batch.add_sigma_3(entity);
+        batch.add_sigma_4(entity);
+
+        batch.add_z_perm(entity);
+        batch.add_shifted_z_perm(entity);
+        batch.add_lagrange_first(entity);
+        batch.add_lagrange_last(entity);
+    }
     /**
     * @brief Compute contribution of the permutation relation for a given edge (internal function)
     *

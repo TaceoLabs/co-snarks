@@ -165,6 +165,37 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
 {
     type Acc = LogDerivLookupRelationAcc<T, P>;
 
+    fn can_skip(_: &super::ProverUnivariates<T, P>) -> bool {
+        false
+    }
+
+    fn add_entites(
+        entity: &super::ProverUnivariates<T, P>,
+        batch: &mut ProverUnivariatesBatch<T, P>,
+    ) {
+        batch.add_w_l(entity);
+        batch.add_w_r(entity);
+        batch.add_w_o(entity);
+
+        batch.add_shifted_w_l(entity);
+        batch.add_shifted_w_r(entity);
+        batch.add_shifted_w_o(entity);
+
+        batch.add_q_r(entity);
+        batch.add_q_o(entity);
+        batch.add_q_c(entity);
+        batch.add_q_m(entity);
+
+        batch.add_table_1(entity);
+        batch.add_table_2(entity);
+        batch.add_table_3(entity);
+        batch.add_table_4(entity);
+
+        batch.add_lookup_read_tags(entity);
+        batch.add_lookup_inverses(entity);
+        batch.add_lookup_read_counts(entity);
+        batch.add_q_lookup(entity);
+    }
     /**
      * @brief Log-derivative style lookup argument for conventional lookups form tables with 3 or fewer columns
      * @details The identity to be checked is of the form

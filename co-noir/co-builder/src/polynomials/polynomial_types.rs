@@ -38,9 +38,9 @@ pub struct PrecomputedEntities<T: Default> {
 }
 
 impl<T: Default> PrecomputedEntities<Vec<T>> {
-    pub fn with_capacity(capacity: usize) -> Self {
+    pub fn new() -> Self {
         Self {
-            elements: std::array::from_fn(|_| Vec::with_capacity(capacity)),
+            elements: std::array::from_fn(|_| Vec::new()),
         }
     }
 
@@ -339,5 +339,105 @@ impl<T: Default> PrecomputedEntities<T> {
 
     pub fn lagrange_last_mut(&mut self) -> &mut T {
         &mut self.elements[Self::LAGRANGE_LAST]
+    }
+
+    pub fn q_m_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::Q_M]
+    }
+
+    pub fn q_c_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::Q_C]
+    }
+
+    pub fn q_l_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::Q_L]
+    }
+
+    pub fn q_r_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::Q_R]
+    }
+
+    pub fn q_o_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::Q_O]
+    }
+
+    pub fn q_4_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::Q_4]
+    }
+
+    pub fn q_arith_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::Q_ARITH]
+    }
+
+    pub fn q_delta_range_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::Q_DELTA_RANGE]
+    }
+
+    pub fn q_elliptic_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::Q_ELLIPTIC]
+    }
+
+    pub fn q_aux_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::Q_AUX]
+    }
+
+    pub fn q_lookup_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::Q_LOOKUP]
+    }
+
+    pub fn q_poseidon2_external_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::Q_POSEIDON2_EXTERNAL]
+    }
+
+    pub fn q_poseidon2_internal_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::Q_POSEIDON2_INTERNAL]
+    }
+
+    pub fn table_1_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::TABLE_1]
+    }
+
+    pub fn table_2_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::TABLE_2]
+    }
+
+    pub fn table_3_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::TABLE_3]
+    }
+
+    pub fn table_4_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::TABLE_4]
+    }
+
+    pub fn sigma_1_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::SIGMA_1]
+    }
+
+    pub fn sigma_2_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::SIGMA_2]
+    }
+
+    pub fn sigma_3_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::SIGMA_3]
+    }
+
+    pub fn sigma_4_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::SIGMA_4]
+    }
+
+    pub fn id_1_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::ID_1]
+    }
+
+    pub fn id_2_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::ID_2]
+    }
+
+    pub fn id_3_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::ID_3]
+    }
+
+    pub fn id_4_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::ID_4]
     }
 }
