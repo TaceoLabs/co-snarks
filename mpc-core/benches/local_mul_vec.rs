@@ -67,7 +67,7 @@ fn current_main_local_mul_vec(c: &mut Criterion) {
         network: Dummy {},
         rng: rand_chacha::ChaCha12Rng::from_entropy(),
     };
-    let size = 1024 * 128 * 32 * 48;
+    let size = 1024 * 128 * 128 * 48;
     let vec_a: Vec<FieldShareType> = (0..size)
         .map(|_| FieldShare::rand(&mut io_context))
         .collect();

@@ -172,7 +172,7 @@ pub fn local_mul_vec_no_multi<F: PrimeField>(
     lhs.par_iter()
         .zip_eq(rhs.par_iter())
         .zip_eq(masking_fes.par_iter())
-        .with_min_len(1024 * 128 * 32 * 48)
+        .with_min_len(1024 * 128 * 128 * 48)
         .map(|((lhs, rhs), masking)| lhs * rhs + masking)
         .collect()
 }
@@ -189,7 +189,7 @@ pub fn local_mul_vec_big<F: PrimeField>(
     lhs.par_iter()
         .zip_eq(rhs.par_iter())
         .zip_eq(masking_fes.par_iter())
-        .with_min_len(1024 * 128 * 32)
+        .with_min_len(1024 * 128 * 128)
         .map(|((lhs, rhs), masking)| lhs * rhs + masking)
         .collect()
 }
