@@ -1673,7 +1673,100 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> std::io::Result<Self> {
-        todo!("dbl")
+        // ensure we use a value of y that is not zero. (only happens if point at infinity)
+        // this costs 0 gates if `is_infinity` is a circuit constant
+        let modified_y = FieldCT::conditional_assign(
+            self.is_point_at_infinity(),
+            &FieldCT::zero_with_additive(P::ScalarField::one()),
+            &self.y,
+            builder,
+            driver,
+        )?
+        .normalize(builder, driver);
+
+        let mut result = CycleGroupCT::default();
+
+        if let Some(hint) = hint {
+            let (x3, y3) = hint.into_affine().xy().unwrap_or_default();
+            if self.is_constant() {
+                result = CycleGroupCT::new(
+                    FieldCT::from(x3),
+                    FieldCT::from(y3),
+                    self.is_point_at_infinity().to_owned(),
+                    builder,
+                    driver,
+                );
+                return Ok(result);
+            }
+
+            let x = FieldCT::from_witness(x3.into(), builder);
+            let y = FieldCT::from_witness(y3.into(), builder);
+            result = CycleGroupCT::new(
+                x,
+                y,
+                self.is_point_at_infinity().to_owned(),
+                builder,
+                driver,
+            );
+        } else {
+            let x1 = self.x.get_value(builder, driver);
+            let y1 = modified_y.get_value(builder, driver);
+
+            // N.B. the formula to derive the witness value for x3 mirrors the formula in elliptic_relation.hpp
+            // Specifically, we derive x^4 via the Short Weierstrass curve formula `y^2 = x^3 + b`
+            // i.e. x^4 = x * (y^2 - b)
+            // We must follow this pattern exactly to support the edge-case where the input is the point at infinity.
+            let y_pow_2 = driver.mul(y1.to_owned(), y1.to_owned())?;
+            let sub = driver.sub(y_pow_2, P::get_curve_b().into());
+            let x_pow_4 = driver.mul(x1.to_owned(), sub)?;
+            let tmp1 = driver.mul_with_public(P::ScalarField::from(9), x_pow_4);
+            let tmp2 = driver.mul_with_public(P::ScalarField::from(4), x1.to_owned());
+            let inv = driver.invert(tmp2)?;
+            let lambda_squared = driver.mul(tmp1, inv)?;
+            let y2_2 = driver.add(y1.to_owned(), y1.to_owned());
+            let y2_2_inv = driver.invert(y2_2)?;
+            let x_square = driver.mul(x1.to_owned(), x1.to_owned())?;
+            let x_square_3 = driver.mul_with_public(P::ScalarField::from(3), x_square);
+            let lambda = driver.mul(x_square_3, y2_2_inv)?;
+            let x3 = driver.sub(lambda_squared, x1.to_owned());
+            let x3 = driver.sub(x3, x1.to_owned());
+            let diff = driver.sub(x1, x3.to_owned());
+            let y3 = driver.mul(lambda, diff)?;
+            let y3 = driver.sub(y3, y1);
+
+            if self.is_constant() {
+                let x3 = T::get_public(&x3).expect("Constants are public");
+                let y3 = T::get_public(&y3).expect("Constants are public");
+                let inf_value = self.is_point_at_infinity().get_value(driver);
+                let inf_value = T::get_public(&inf_value).expect("Constants are public");
+                let result = CycleGroupCT::new(
+                    FieldCT::from(x3),
+                    FieldCT::from(y3),
+                    BoolCT::from(inf_value.is_one()),
+                    builder,
+                    driver,
+                );
+                return Ok(result);
+            }
+            result = CycleGroupCT::new(
+                FieldCT::from_witness(x3, builder),
+                FieldCT::from_witness(y3, builder),
+                self.is_point_at_infinity().to_owned(),
+                builder,
+                driver,
+            );
+        }
+
+        todo!("gate");
+
+        // context->create_ecc_dbl_gate(bb::ecc_dbl_gate_<FF>{
+        //     .x1 = x.get_witness_index(),
+        //     .y1 = modified_y.normalize().get_witness_index(),
+        //     .x3 = result.x.get_witness_index(),
+        //     .y3 = result.y.get_witness_index(),
+        // });
+
+        Ok(result)
     }
 
     fn unconditional_add(
