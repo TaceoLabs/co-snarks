@@ -33,6 +33,7 @@ macro_rules! fold_accumulator {
     ($acc: expr, $elements: expr) => {
         let evaluations_len = $acc.evaluations.len();
         let mut acc = [T::ArithmeticShare::default(); MAX_PARTIAL_RELATION_LENGTH];
+        acc[..evaluations_len].clone_from_slice(&$acc.evaluations);
         for (idx, b) in $elements.iter().enumerate() {
             let a = &mut acc[idx % MAX_PARTIAL_RELATION_LENGTH];
             T::add_assign(a, *b);

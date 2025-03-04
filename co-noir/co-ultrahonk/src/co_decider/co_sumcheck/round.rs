@@ -26,6 +26,8 @@ use co_builder::prelude::{HonkCurve, RowDisablingPolynomial};
 use co_builder::HonkProofResult;
 use ultrahonk::prelude::{GateSeparatorPolynomial, TranscriptFieldType, Univariate};
 
+const MAX_ROUND_SIZE_PER_BATCH: usize = 1 << 20;
+
 pub(crate) type SumcheckRoundOutput<T, P, const U: usize> = SharedUnivariate<T, P, U>;
 
 pub(crate) struct SumcheckRound {
@@ -232,23 +234,29 @@ impl SumcheckRound {
         // what can we mt here?
         // Accumulate the contribution from each sub-relation accross each edge of the hyper-cube
         // Construct extended edge containers
-        let mut all_entites = AllEntitiesBatchRelations::new();
-        for edge_idx in (0..self.round_size).step_by(2) {
-            let mut extended_edges = ProverUnivariates::<T, P>::default();
-            Self::extend_edges(&mut extended_edges, polynomials, edge_idx);
-            let scaling_factor =
-                gate_sparators.beta_products[(edge_idx >> 1) * gate_sparators.periodicity];
-            all_entites.fold_and_filter(extended_edges, scaling_factor);
-        }
 
+        //
+        let batch_size = MAX_ROUND_SIZE_PER_BATCH;
+        let mut start = 0;
         let mut univariate_accumulators = AllRelationAcc::<T, P>::default();
-
-        Self::accumulate_relation_univariates_batch(
-            driver,
-            &mut univariate_accumulators,
-            &all_entites,
-            relation_parameters,
-        )?;
+        while start < self.round_size {
+            let end = (start + batch_size).min(self.round_size);
+            let mut all_entites = AllEntitiesBatchRelations::new();
+            for edge_idx in (start..end).step_by(2) {
+                let mut extended_edges = ProverUnivariates::<T, P>::default();
+                Self::extend_edges(&mut extended_edges, polynomials, edge_idx);
+                let scaling_factor =
+                    gate_sparators.beta_products[(edge_idx >> 1) * gate_sparators.periodicity];
+                all_entites.fold_and_filter(extended_edges, scaling_factor);
+            }
+            Self::accumulate_relation_univariates_batch(
+                driver,
+                &mut univariate_accumulators,
+                &all_entites,
+                relation_parameters,
+            )?;
+            start = end;
+        }
 
         let res = Self::batch_over_relations_univariates(
             univariate_accumulators,
