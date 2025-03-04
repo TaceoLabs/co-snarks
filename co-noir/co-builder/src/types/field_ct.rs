@@ -675,6 +675,110 @@ impl<F: PrimeField> FieldCT<F> {
         let diff = lhs.sub(rhs, builder, driver);
         diff.madd(&predicate.to_field_ct(driver), rhs, builder, driver)
     }
+
+    fn evaluate_polynomial_identity<
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        a: &Self,
+        b: &Self,
+        c: &Self,
+        d: &Self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) {
+        if a.is_constant() && b.is_constant() && c.is_constant() && d.is_constant() {
+            let val_a = T::get_public(&a.get_value(builder, driver)).expect("Constants are public");
+            let val_b = T::get_public(&b.get_value(builder, driver)).expect("Constants are public");
+            let val_c = T::get_public(&c.get_value(builder, driver)).expect("Constants are public");
+            let val_d = T::get_public(&d.get_value(builder, driver)).expect("Constants are public");
+            let result = val_a * val_b + val_c + va_d;
+            return;
+        }
+
+        // validate that a * b + c + d = 0
+        let q_m = a.multiplicative_constant * b.multiplicative_constant;
+        let q_1 = a.multiplicative_constant * b.additive_constant;
+        let q_2 = b.multiplicative_constant * a.additive_constant;
+        let q_3 = c.multiplicative_constant;
+        let q_4 = d.multiplicative_constant;
+        let q_c =
+            a.additive_constant * b.additive_constant + c.additive_constant + d.additive_constant;
+
+        builder.create_big_mul_gate(&MulQuad {
+            a: if a.is_constant() {
+                builder.zero_idx
+            } else {
+                a.witness_index
+            },
+            b: if b.is_constant() {
+                builder.zero_idx
+            } else {
+                b.witness_index
+            },
+            c: if c.is_constant() {
+                builder.zero_idx
+            } else {
+                c.witness_index
+            },
+            d: if d.is_constant() {
+                builder.zero_idx
+            } else {
+                d.witness_index
+            },
+            mul_scaling: q_m,
+            a_scaling: q_1,
+            b_scaling: q_2,
+            c_scaling: q_3,
+            d_scaling: q_4,
+            const_scaling: q_c,
+        });
+    }
+
+    fn equals<P: Pairing<ScalarField = F>, T: NoirWitnessExtensionProtocol<P::ScalarField>>(
+        &self,
+        other: &Self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> std::io::Result<BoolCT<P, T>> {
+        let fa = self.get_value(builder, driver);
+        let fb = other.get_value(builder, driver);
+
+        if self.is_constant() && other.is_constant() {
+            let val1 = T::get_public(&fa).expect("Constants are public");
+            let val2 = T::get_public(&fb).expect("Constants are public");
+            return Ok(BoolCT::from(val1 == val2));
+        }
+
+        let fd = driver.sub(fa, fb);
+        let is_equal = driver.equal(&fa, &fb)?;
+        let to_invert = driver.cmux(equal, F::one().into(), fd)?;
+        let fc = driver.invert(&to_invert)?;
+
+        let result_witness = WitnessCT::from_acvm_type(is_equal, builder);
+        let result = BoolCT {
+            witness_bool: is_equal,
+            witness_inverted: false,
+            witness_index: result_witness.witness_index,
+        };
+
+        let x = FieldCT::from_witness(fc, builder);
+        let diff = self.sub(other, builder, driver);
+        // these constraints ensure that result is a boolean
+        let result_ct = result.to_field_ct(driver);
+        let zero_ct = FieldCt::from(F::zero());
+        Self::evaluate_polynomial_identity(
+            &diff,
+            &x,
+            &result_ct,
+            FieldCt::from(F::one()).neg(),
+            builder,
+            driver,
+        );
+        Self::evaluate_polynomial_identity(&diff, &result_ct, &zero_ct, &zero_ct, builder, driver);
+
+        return Ok(result);
+    }
 }
 
 impl<F: PrimeField> From<F> for FieldCT<F> {
@@ -1044,7 +1148,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                 &CycleGroupCT::from_group_element(offset_accumulator),
                 builder,
                 driver,
-            );
+            )?;
         }
 
         Ok(result)
@@ -1121,9 +1225,11 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
     fn sub(
         &self,
         other: &Self,
-        builder: &GenericUltraCircuitBuilder<P, T>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> Self {
+    ) -> std::io::Result<Self> {
+        let x_coordinates_match = self.x.equals(&other.x, builder, driver)?;
+        let y_coordinates_match = self.y.equals(&other.y, builder, driver)?;
         todo!("sub")
     }
 }

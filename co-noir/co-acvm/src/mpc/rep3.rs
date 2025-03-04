@@ -490,6 +490,21 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
     }
 
+    fn invert(&mut self, secret: Self::AcvmType) -> std::io::Result<Self::AcvmType> {
+        match secret {
+            Rep3AcvmType::Public(secret) => {
+                let inv = secret.inverse().ok_or_else(|| {
+                    std::io::Error::new(std::io::ErrorKind::InvalidInput, "Cannot invert zero")
+                })?;
+                Ok(Rep3AcvmType::Public(inv))
+            }
+            Rep3AcvmType::Shared(secret) => {
+                let inv = arithmetic::inv(secret, &mut self.io_context0)?;
+                Ok(Rep3AcvmType::Shared(inv))
+            }
+        }
+    }
+
     fn negate_inplace(&mut self, a: &mut Self::AcvmType) {
         match a {
             Rep3AcvmType::Public(public) => {

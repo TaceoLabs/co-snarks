@@ -144,6 +144,12 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Ok(secret_1 * secret_2)
     }
 
+    fn invert(&mut self, secret: Self::AcvmType) -> io::Result<Self::AcvmType> {
+        secret
+            .inverse()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "Cannot invert zero"))
+    }
+
     fn negate_inplace(&mut self, a: &mut Self::AcvmType) {
         a.neg_in_place();
     }

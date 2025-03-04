@@ -291,6 +291,21 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         }
     }
 
+    fn invert(&mut self, secret: Self::AcvmType) -> std::io::Result<Self::AcvmType> {
+        match secret {
+            ShamirAcvmType::Public(secret) => {
+                let inv = secret.inverse().ok_or_else(|| {
+                    std::io::Error::new(std::io::ErrorKind::InvalidInput, "Cannot invert zero")
+                })?;
+                Ok(ShamirAcvmType::Public(inv))
+            }
+            ShamirAcvmType::Shared(secret) => {
+                let inv = arithmetic::inv(secret, &mut self.protocol)?;
+                Ok(ShamirAcvmType::Shared(inv))
+            }
+        }
+    }
+
     fn negate_inplace(&mut self, a: &mut Self::AcvmType) {
         match a {
             ShamirAcvmType::Public(public) => {

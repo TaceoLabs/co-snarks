@@ -84,6 +84,9 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         secret_2: Self::AcvmType,
     ) -> io::Result<Self::AcvmType>;
 
+    /// Inverts an ACVM-type: \[c\] = \[secret\]^(-1).
+    fn invert(&mut self, secret: Self::AcvmType) -> io::Result<Self::AcvmType>;
+
     /// Negates an ACVM-type inplace: \[a\] = -\[a\].
     fn negate_inplace(&mut self, a: &mut Self::AcvmType);
 
