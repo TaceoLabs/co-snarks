@@ -1370,6 +1370,10 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupCT<P
         &self.is_infinity
     }
 
+    pub(crate) fn set_point_at_infinity(&mut self, is_infinity: BoolCT<P, T>) {
+        self.is_infinity = is_infinity;
+    }
+
     pub(crate) fn is_constant(&self) -> bool {
         self.is_constant
     }
@@ -1728,6 +1732,8 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             driver,
         )?;
         todo!("sub");
+        // result_is_infinity = result_is_infinity || (lhs_infinity && rhs_infinity);
+        result.set_point_at_infinity(result_is_infinity);
         Ok(result)
     }
 }
