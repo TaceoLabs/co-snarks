@@ -1661,6 +1661,13 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             builder,
             driver,
         );
+        let lambda = y2
+            .neg()
+            .sub(y1, builder, driver)
+            .divide(&x_diff, builder, driver)?;
+        let x3 = lambda.madd(&lambda, &x2.add(x1, builder, driver).neg(), builder, driver)?;
+        let y3 = lambda.madd(&x1.sub(&x3, builder, driver), &y1.neg(), builder, driver)?;
+        let add_result = CycleGroupCT::new(x3, y3, infinity_predicate, builder, driver);
 
         todo!("sub")
     }
