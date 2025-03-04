@@ -2590,6 +2590,7 @@ dependencies = [
  "ark-serialize",
  "ark-std",
  "bytes",
+ "criterion",
  "eyre",
  "fancy-garbling",
  "itertools 0.14.0",
