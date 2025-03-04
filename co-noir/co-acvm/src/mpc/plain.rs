@@ -1,5 +1,5 @@
 use super::NoirWitnessExtensionProtocol;
-use ark_ec::AffineRepr;
+use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{MontConfig, One, PrimeField};
 use co_brillig::mpc::{PlainBrilligDriver, PlainBrilligType};
 use core::panic;
@@ -71,6 +71,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     type Lookup = PlainLookupTableProvider<F>;
     type ArithmeticShare = F;
     type AcvmType = F;
+    type AcvmPoint<C: CurveGroup<BaseField = F>> = C;
 
     type BrilligDriver = PlainBrilligDriver<F>;
 
@@ -628,6 +629,35 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         } else {
             Ok((F::zero(), F::zero(), F::one()))
         }
+    }
+
+    fn field_shares_to_pointshare<C: CurveGroup<BaseField = F>>(
+        &mut self,
+        x: Self::AcvmType,
+        y: Self::AcvmType,
+        is_infinity: Self::AcvmType,
+    ) -> io::Result<Self::AcvmPoint<C>> {
+        // This is very hardcoded to the grumpkin curve
+        if TypeId::of::<F>() != TypeId::of::<ark_bn254::Fr>() {
+            panic!("Only BN254 is supported");
+        }
+
+        if is_infinity > F::one() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "--pedantic-solving: is_infinity expected to be a bool, but found to be > 1",
+            ));
+        }
+
+        // Safety: We checked that the types match
+        let x = unsafe { *(&x as *const F as *const ark_bn254::Fr) };
+        // Safety: We checked that the types match
+        let y = unsafe { *(&y as *const F as *const ark_bn254::Fr) };
+        let point = Self::create_grumpkin_point(x, y, is_infinity == F::one())?;
+        // Safety: We checked that the types match
+        let y = unsafe { *(&point as *const ark_grumpkin::Affine as *const C::Affine) };
+
+        Ok(C::from(y))
     }
 
     fn gt(&mut self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> std::io::Result<Self::AcvmType> {

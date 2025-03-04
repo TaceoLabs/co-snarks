@@ -1029,6 +1029,7 @@ dependencies = [
  "ark-bn254",
  "ark-ec",
  "ark-ff",
+ "ark-grumpkin",
  "ark-poly",
  "ark-serialize",
  "co-acvm",

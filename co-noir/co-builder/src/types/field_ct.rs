@@ -1,6 +1,8 @@
 use super::types::MulQuad;
 use crate::builder::GenericUltraCircuitBuilder;
+use crate::prelude::HonkCurve;
 use crate::types::types::{AddTriple, PolyTriple};
+use crate::TranscriptFieldType;
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use ark_ff::{One, Zero};
@@ -839,6 +841,26 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupCT<P
         &self.is_infinity
     }
 
+    pub(crate) fn is_constant(&self) -> bool {
+        self.is_constant
+    }
+}
+
+impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::ScalarField>>
+    CycleGroupCT<P, T>
+{
+    fn get_value(
+        &self,
+        builder: &GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> std::io::Result<T::AcvmPoint<P::CycleGroup>> {
+        let x = self.x.get_value(builder, driver);
+        let y = self.y.get_value(builder, driver);
+        let is_infinity = self.is_infinity.get_value(driver);
+
+        driver.field_shares_to_pointshare::<P::CycleGroup>(x, y, is_infinity)
+    }
+
     pub(crate) fn batch_mul(
         base_points: Vec<Self>,
         scalars: Vec<CycleScalarCT<P::ScalarField>>,
@@ -864,6 +886,14 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupCT<P
         // (i.e. we are ULTRA Builder and we are doing fixed-base mul over points not present in our plookup tables)
         let can_unconditional_add = true;
         let has_non_constant_component = false;
+
+        for (point, scalar) in base_points.iter().zip(scalars.iter()) {
+            let scalar_constant = scalar.is_constant();
+            let point_constant = point.is_constant();
+            if scalar_constant && point_constant {
+                // constant_acc += point.get_value() * scalar.get_value(builder, driver);
+            }
+        }
 
         todo!("Implement batch_mul")
     }
@@ -900,6 +930,19 @@ impl<F: PrimeField> CycleScalarCT<F> {
 
     const fn num_bits(&self) -> usize {
         Self::NUM_BITS
+    }
+
+    fn get_value<P: Pairing<ScalarField = F>, T: NoirWitnessExtensionProtocol<P::ScalarField>>(
+        &self,
+        builder: &GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> T::AcvmType {
+        let lo = self.lo.get_value(builder, driver);
+        let hi = self.hi.get_value(builder, driver);
+        let scale = F::from(BigUint::one() << Self::LO_BITS);
+        let mut hi = driver.mul_with_public(scale, hi);
+        driver.add_assign(&mut hi, lo);
+        hi
     }
 
     fn slice(inp: BigUint) -> (BigUint, BigUint) {
