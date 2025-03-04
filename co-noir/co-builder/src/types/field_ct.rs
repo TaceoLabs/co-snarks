@@ -780,6 +780,79 @@ impl<F: PrimeField> FieldCT<F> {
 
         Ok(result)
     }
+
+    fn add_two<P: Pairing<ScalarField = F>, T: NoirWitnessExtensionProtocol<P::ScalarField>>(
+        &self,
+        add_a: &Self,
+        add_b: &Self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> Self {
+        if add_a.is_constant() && add_b.is_constant() && self.is_constant() {
+            return self
+                .add(add_a, builder, driver)
+                .add(add_b, builder, driver)
+                .normalize(builder, driver);
+        }
+
+        let q_1 = self.multiplicative_constant;
+        let q_2 = add_a.multiplicative_constant;
+        let q_3 = add_b.multiplicative_constant;
+        let q_c = self.additive_constant + add_a.additive_constant + add_b.additive_constant;
+
+        let a = if self.is_constant() {
+            T::public_zero()
+        } else {
+            builder.get_variable(self.witness_index as usize)
+        };
+        let b = if add_a.is_constant() {
+            T::public_zero()
+        } else {
+            builder.get_variable(add_a.witness_index as usize)
+        };
+        let c = if add_b.is_constant() {
+            T::public_zero()
+        } else {
+            builder.get_variable(add_b.witness_index as usize)
+        };
+
+        let mut out = driver.mul_with_public(q_1, a);
+        let t0 = driver.mul_with_public(q_2, b);
+        let t1 = driver.mul_with_public(q_3, c);
+        driver.add_assign(&mut out, t0);
+        driver.add_assign(&mut out, t1);
+        driver.add_assign_with_public(q_c, &mut out);
+
+        let index = builder.add_variable(out);
+        let result = Self::from_witness_index(index);
+
+        builder.create_big_mul_gate(&MulQuad {
+            a: if self.is_constant() {
+                builder.zero_idx
+            } else {
+                self.witness_index
+            },
+            b: if add_a.is_constant() {
+                builder.zero_idx
+            } else {
+                add_a.witness_index
+            },
+            c: if add_b.is_constant() {
+                builder.zero_idx
+            } else {
+                add_b.witness_index
+            },
+            d: result.witness_index,
+            mul_scaling: F::zero(),
+            a_scaling: q_1,
+            b_scaling: q_2,
+            c_scaling: q_3,
+            d_scaling: -F::one(),
+            const_scaling: q_c,
+        });
+
+        result
+    }
 }
 
 impl<F: PrimeField> From<F> for FieldCT<F> {
@@ -1395,6 +1468,12 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         let infinity_predicate = x_coordinates_match
             .and(&y_coordinates_match, builder, driver)?
             .normalize(builder, driver);
+
+        let x1 = &self.x;
+        let y1 = &self.y;
+        let x2 = &other.x;
+        let y2 = &other.y;
+
         todo!("sub")
     }
 }
