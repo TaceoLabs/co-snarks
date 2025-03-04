@@ -22,8 +22,9 @@ use crate::{
         types::{
             AddQuad, AddTriple, AggregationObjectIndices, AggregationObjectPubInputIndices,
             AuxSelectors, BlockConstraint, BlockType, CachedPartialNonNativeFieldMultiplication,
-            LogicConstraint, MulQuad, PolyTriple, Poseidon2Constraint, Poseidon2ExternalGate,
-            Poseidon2InternalGate, RangeList, UltraTraceBlock, UltraTraceBlocks, NUM_WIRES,
+            EccDblGate, LogicConstraint, MulQuad, PolyTriple, Poseidon2Constraint,
+            Poseidon2ExternalGate, Poseidon2InternalGate, RangeList, UltraTraceBlock,
+            UltraTraceBlocks, NUM_WIRES,
         },
     },
     utils::Utils,
@@ -747,6 +748,80 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             inp.x3,
             inp.y3,
             inp.y2
+        );
+    }
+
+    pub(crate) fn create_ecc_dbl_gate(&mut self, inp: &EccDblGate) {
+        // /**
+        //  * gate structure:
+        //  * | 1  | 2  | 3  | 4  |
+        //  * | -  | x1 | y1 | -  |
+        //  * | -  | x3 | y3 | -  |
+        //  * we can chain an ecc_add_gate + an ecc_dbl_gate if x3 y3 of previous add_gate equals x1 y1 of current gate
+        //  * can also chain double gates together
+        //  **/
+        let size = self.blocks.elliptic.len();
+        let previous_elliptic_gate_exists = size > 0;
+        let mut can_fuse_into_previous_gate = previous_elliptic_gate_exists;
+        if can_fuse_into_previous_gate {
+            can_fuse_into_previous_gate =
+                can_fuse_into_previous_gate && (self.blocks.elliptic.w_r()[size - 1] == inp.x1);
+            can_fuse_into_previous_gate =
+                can_fuse_into_previous_gate && (self.blocks.elliptic.w_o()[size - 1] == inp.y1);
+            can_fuse_into_previous_gate =
+                can_fuse_into_previous_gate && (self.blocks.elliptic.q_arith()[size - 1].is_zero());
+            can_fuse_into_previous_gate = can_fuse_into_previous_gate
+                && (self.blocks.elliptic.q_lookup_type()[size - 1].is_zero());
+            can_fuse_into_previous_gate =
+                can_fuse_into_previous_gate && (self.blocks.elliptic.q_aux()[size - 1].is_zero());
+        }
+
+        if can_fuse_into_previous_gate {
+            self.blocks.elliptic.q_elliptic()[size - 1] = P::ScalarField::one();
+            self.blocks.elliptic.q_m()[size - 1] = P::ScalarField::one();
+        } else {
+            self.blocks
+                .elliptic
+                .populate_wires(self.zero_idx, inp.x1, inp.y1, self.zero_idx);
+            self.blocks
+                .elliptic
+                .q_elliptic()
+                .push(P::ScalarField::one());
+            self.blocks.elliptic.q_m().push(P::ScalarField::one());
+            self.blocks.elliptic.q_1().push(P::ScalarField::zero());
+            self.blocks.elliptic.q_2().push(P::ScalarField::zero());
+            self.blocks.elliptic.q_3().push(P::ScalarField::zero());
+            self.blocks.elliptic.q_c().push(P::ScalarField::zero());
+            self.blocks.elliptic.q_arith().push(P::ScalarField::zero());
+            self.blocks.elliptic.q_4().push(P::ScalarField::zero());
+            self.blocks
+                .elliptic
+                .q_delta_range()
+                .push(P::ScalarField::zero());
+            self.blocks
+                .elliptic
+                .q_lookup_type()
+                .push(P::ScalarField::zero());
+            self.blocks.elliptic.q_aux().push(P::ScalarField::zero());
+            self.blocks
+                .elliptic
+                .q_poseidon2_external()
+                .push(P::ScalarField::zero());
+            self.blocks
+                .elliptic
+                .q_poseidon2_internal()
+                .push(P::ScalarField::zero());
+
+            self.check_selector_length_consistency();
+            self.num_gates += 1;
+        }
+        create_dummy_gate!(
+            self,
+            &mut self.blocks.elliptic,
+            self.zero_idx,
+            inp.x3,
+            inp.y3,
+            self.zero_idx
         );
     }
 
