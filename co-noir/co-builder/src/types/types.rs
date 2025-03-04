@@ -97,6 +97,17 @@ pub(crate) struct Poseidon2InternalGate {
     pub(crate) round_idx: usize,
 }
 
+#[derive(Default, PartialEq, Eq)]
+pub(crate) struct EccAddGate<F: PrimeField> {
+    pub(crate) x1: u32,
+    pub(crate) y1: u32,
+    pub(crate) x2: u32,
+    pub(crate) y2: u32,
+    pub(crate) x3: u32,
+    pub(crate) y3: u32,
+    pub(crate) sign_coefficient: F,
+}
+
 pub(crate) struct MemOp<F: PrimeField> {
     pub(crate) access_type: u8,
     pub(crate) index: PolyTriple<F>,

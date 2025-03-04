@@ -1,7 +1,7 @@
 use super::types::MulQuad;
 use crate::builder::GenericUltraCircuitBuilder;
 use crate::prelude::HonkCurve;
-use crate::types::types::{AddTriple, PolyTriple};
+use crate::types::types::{AddTriple, EccAddGate, PolyTriple};
 use crate::TranscriptFieldType;
 use ark_ec::pairing::Pairing;
 use ark_ec::{AffineRepr, CurveConfig, CurveGroup};
@@ -1104,7 +1104,16 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             result = CycleGroupCT::new(r_x, r_y, BoolCT::from(false), builder, driver);
         }
 
-        todo!("unconditional_add");
+        let add_gate = EccAddGate {
+            x1: self.x.get_witness_index(),
+            y1: self.y.get_witness_index(),
+            x2: other.x.get_witness_index(),
+            y2: other.y.get_witness_index(),
+            x3: result.x.get_witness_index(),
+            y3: result.y.get_witness_index(),
+            sign_coefficient: P::ScalarField::one(),
+        };
+        builder.create_ecc_add_gate(&add_gate);
 
         Ok(result)
     }
