@@ -1,5 +1,5 @@
 pub use ark_ec::pairing::Pairing;
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::*;
 use mpc_core::protocols::rep3::{
     arithmetic::{self, FieldShare},
     id::PartyID,
@@ -67,7 +67,7 @@ fn current_main_local_mul_vec(c: &mut Criterion) {
         network: Dummy {},
         rng: rand_chacha::ChaCha12Rng::from_entropy(),
     };
-    let size = 1024 * 128 * 48;
+    let size = 1024 * 128 * 32 * 48;
     let vec_a: Vec<FieldShareType> = (0..size)
         .map(|_| FieldShare::rand(&mut io_context))
         .collect();
@@ -75,53 +75,86 @@ fn current_main_local_mul_vec(c: &mut Criterion) {
         .map(|_| FieldShare::rand(&mut io_context))
         .collect();
 
-    c.bench_function("current main", |b| {
+    let mut group = c.benchmark_group("throughput 0");
+    group.throughput(Throughput::Elements(vec_a.len() as u64));
+    group.bench_function("current main", |b| {
         b.iter(|| {
             let _ = arithmetic::local_mul_vec(&vec_a, &vec_b, &mut io_context.rngs);
         })
     });
+    group.finish();
 
-    c.bench_function("primitive rayon", |b| {
+    let mut group = c.benchmark_group("throughput 1");
+    group.throughput(Throughput::Elements(vec_a.len() as u64));
+    group.bench_function("no rayon, just iter", |b| {
+        b.iter(|| {
+            let _ = arithmetic::local_mul_vec_no_rayon(&vec_a, &vec_b, &mut io_context.rngs);
+        })
+    });
+    group.finish();
+
+    let mut group = c.benchmark_group("throughput 2");
+    group.throughput(Throughput::Elements(vec_a.len() as u64));
+    group.bench_function("primitive rayon", |b| {
         b.iter(|| {
             let _ = arithmetic::local_mul_vec_simple(&vec_a, &vec_b, &mut io_context.rngs);
         })
     });
+    group.finish();
 
-    c.bench_function("local_mul_vec_no_multi", |b| {
+    let mut group = c.benchmark_group("throughput 3");
+    group.throughput(Throughput::Elements(vec_a.len() as u64));
+    group.bench_function("local_mul_vec_no_multi", |b| {
         b.iter(|| {
             let _ = arithmetic::local_mul_vec_no_multi(&vec_a, &vec_b, &mut io_context.rngs);
         })
     });
+    group.finish();
 
-    c.bench_function("with_min_len 2", |b| {
+    let mut group = c.benchmark_group("throughput 4");
+    group.throughput(Throughput::Elements(vec_a.len() as u64));
+    group.bench_function("with_min_len 2", |b| {
         b.iter(|| {
             let _ = arithmetic::local_mul_vec_2(&vec_a, &vec_b, &mut io_context.rngs);
         })
     });
+    group.finish();
 
-    c.bench_function("with_min_len 4", |b| {
+    let mut group = c.benchmark_group("throughput 5");
+    group.throughput(Throughput::Elements(vec_a.len() as u64));
+    group.bench_function("with_min_len 4", |b| {
         b.iter(|| {
             let _ = arithmetic::local_mul_vec_4(&vec_a, &vec_b, &mut io_context.rngs);
         })
     });
+    group.finish();
 
-    c.bench_function("with_min_len 8", |b| {
+    let mut group = c.benchmark_group("throughput 6");
+    group.throughput(Throughput::Elements(vec_a.len() as u64));
+    group.bench_function("with_min_len 8", |b| {
         b.iter(|| {
             let _ = arithmetic::local_mul_vec_8(&vec_a, &vec_b, &mut io_context.rngs);
         })
     });
+    group.finish();
 
-    c.bench_function("with_min_len 16", |b| {
+    let mut group = c.benchmark_group("throughput 7");
+    group.throughput(Throughput::Elements(vec_a.len() as u64));
+    group.bench_function("with_min_len 16", |b| {
         b.iter(|| {
             let _ = arithmetic::local_mul_vec_16(&vec_a, &vec_b, &mut io_context.rngs);
         })
     });
+    group.finish();
 
-    c.bench_function("with_min_len 1024 * 128", |b| {
+    let mut group = c.benchmark_group("throughput 8");
+    group.throughput(Throughput::Elements(vec_a.len() as u64));
+    group.bench_function("local_mul_vec_big", |b| {
         b.iter(|| {
             let _ = arithmetic::local_mul_vec_big(&vec_a, &vec_b, &mut io_context.rngs);
         })
     });
+    group.finish();
 }
 
 criterion_group!(benches, current_main_local_mul_vec,);

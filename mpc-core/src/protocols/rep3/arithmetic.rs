@@ -145,6 +145,22 @@ pub fn local_mul_vec<F: PrimeField>(
 }
 
 /// ..
+pub fn local_mul_vec_no_rayon<F: PrimeField>(
+    lhs: &[FieldShare<F>],
+    rhs: &[FieldShare<F>],
+    rngs: &mut Rep3CorrelatedRng,
+) -> Vec<F> {
+    //squeeze all random elements at once in beginning for determinismus
+    let masking_fes = rngs.rand.masking_field_elements_vec::<F>(lhs.len());
+
+    lhs.iter()
+        .zip_eq(rhs.iter())
+        .zip_eq(masking_fes.iter())
+        .map(|((lhs, rhs), masking)| lhs * rhs + masking)
+        .collect()
+}
+
+/// ..
 pub fn local_mul_vec_no_multi<F: PrimeField>(
     lhs: &[FieldShare<F>],
     rhs: &[FieldShare<F>],
@@ -156,7 +172,7 @@ pub fn local_mul_vec_no_multi<F: PrimeField>(
     lhs.par_iter()
         .zip_eq(rhs.par_iter())
         .zip_eq(masking_fes.par_iter())
-        .with_min_len(1024 * 128 * 48)
+        .with_min_len(1024 * 128 * 32 * 48)
         .map(|((lhs, rhs), masking)| lhs * rhs + masking)
         .collect()
 }
@@ -173,7 +189,7 @@ pub fn local_mul_vec_big<F: PrimeField>(
     lhs.par_iter()
         .zip_eq(rhs.par_iter())
         .zip_eq(masking_fes.par_iter())
-        .with_min_len(1024 * 128)
+        .with_min_len(1024 * 128 * 32)
         .map(|((lhs, rhs), masking)| lhs * rhs + masking)
         .collect()
 }
