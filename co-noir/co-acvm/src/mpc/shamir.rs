@@ -8,8 +8,8 @@ use mpc_core::{
         rep3::network::Rep3MpcNet,
         rep3_ring::lut::Rep3LookupTable,
         shamir::{
-            arithmetic, network::ShamirNetwork, ShamirPointShare, ShamirPrimeFieldShare,
-            ShamirProtocol,
+            arithmetic, network::ShamirNetwork, pointshare, ShamirPointShare,
+            ShamirPrimeFieldShare, ShamirProtocol,
         },
     },
 };
@@ -217,6 +217,27 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
             (ShamirAcvmType::Shared(lhs), ShamirAcvmType::Shared(rhs)) => {
                 let result = arithmetic::add(lhs, rhs);
                 ShamirAcvmType::Shared(result)
+            }
+        }
+    }
+
+    fn add_points<C: CurveGroup<BaseField = F>>(
+        &self,
+        lhs: Self::AcvmPoint<C>,
+        rhs: Self::AcvmPoint<C>,
+    ) -> Self::AcvmPoint<C> {
+        match (lhs, rhs) {
+            (ShamirAcvmPoint::Public(lhs), ShamirAcvmPoint::Public(rhs)) => {
+                ShamirAcvmPoint::Public(lhs + rhs)
+            }
+            (ShamirAcvmPoint::Public(public), ShamirAcvmPoint::Shared(mut shared))
+            | (ShamirAcvmPoint::Shared(mut shared), ShamirAcvmPoint::Public(public)) => {
+                pointshare::add_assign_public(&mut shared, &public);
+                ShamirAcvmPoint::Shared(shared)
+            }
+            (ShamirAcvmPoint::Shared(lhs), ShamirAcvmPoint::Shared(rhs)) => {
+                let result = pointshare::add(&lhs, &rhs);
+                ShamirAcvmPoint::Shared(result)
             }
         }
     }
@@ -677,6 +698,13 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         _is_infinity: Self::AcvmType,
     ) -> std::io::Result<Self::AcvmPoint<C>> {
         panic!("functionality field_share_to_pointshare not feasible for Shamir")
+    }
+
+    fn pointshare_to_field_shares<C: CurveGroup<BaseField = F>>(
+        &mut self,
+        _point: Self::AcvmPoint<C>,
+    ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
+        panic!("functionality pointshare_to_field_shares not feasible for Shamir")
     }
 
     fn gt(

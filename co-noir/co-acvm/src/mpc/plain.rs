@@ -116,6 +116,14 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         lhs + rhs
     }
 
+    fn add_points<C: CurveGroup<BaseField = F>>(
+        &self,
+        lhs: Self::AcvmPoint<C>,
+        rhs: Self::AcvmPoint<C>,
+    ) -> Self::AcvmPoint<C> {
+        lhs + rhs
+    }
+
     fn add_assign_with_public(&mut self, public: F, secret: &mut Self::AcvmType) {
         *secret += public;
     }
@@ -662,6 +670,13 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         let y = unsafe { *(&point as *const ark_grumpkin::Affine as *const C::Affine) };
 
         Ok(C::from(y))
+    }
+
+    fn pointshare_to_field_shares<C: CurveGroup<BaseField = F>>(
+        &mut self,
+        point: Self::AcvmPoint<C>,
+    ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
+        todo!("Implement pointshare_to_field_shares")
     }
 
     fn gt(&mut self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> std::io::Result<Self::AcvmType> {
