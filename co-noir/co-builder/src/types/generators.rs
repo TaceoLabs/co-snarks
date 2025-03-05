@@ -1,4 +1,4 @@
-use std::{any::TypeId, default, sync::OnceLock};
+use std::{any::TypeId, sync::OnceLock};
 
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{BigInteger, Field, PrimeField};
@@ -6,15 +6,25 @@ use ark_ff::{BigInteger, Field, PrimeField};
 pub(crate) const DEFAULT_DOMAIN_SEPARATOR: &[u8] = "DEFAULT_DOMAIN_SEPARATOR".as_bytes();
 const NUM_DEFAULT_GENERATORS: usize = 8;
 
-fn default_generators<C: CurveGroup>() -> &'static [C::Affine; NUM_DEFAULT_GENERATORS] {
+pub(crate) fn default_generators<C: CurveGroup>() -> &'static [C::Affine; NUM_DEFAULT_GENERATORS] {
     if TypeId::of::<C>() != TypeId::of::<ark_bn254::G1Projective>() {
         let gens = default_generators_bn254();
         // Safety: We checked that the types match
-        unsafe { std::mem::transmute(gens) }
+        unsafe {
+            std::mem::transmute::<
+                &[ark_bn254::G1Affine; NUM_DEFAULT_GENERATORS],
+                &[C::Affine; NUM_DEFAULT_GENERATORS],
+            >(gens)
+        }
     } else if TypeId::of::<C>() != TypeId::of::<ark_grumpkin::Projective>() {
         let gens = default_generators_grumpkin();
         // Safety: We checked that the types match
-        unsafe { std::mem::transmute(gens) }
+        unsafe {
+            std::mem::transmute::<
+                &[ark_grumpkin::Affine; NUM_DEFAULT_GENERATORS],
+                &[C::Affine; NUM_DEFAULT_GENERATORS],
+            >(gens)
+        }
     } else {
         panic!("Unsupported curve {}", std::any::type_name::<C>())
     }
