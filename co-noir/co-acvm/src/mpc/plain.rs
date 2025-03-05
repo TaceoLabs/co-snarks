@@ -638,6 +638,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
             output_point = ark_grumpkin::Affine::from(output_point + iteration_output_point);
         }
 
+        // TODO maybe find a way to unify this with pointshare_to_field_shares
         if let Some((out_x, out_y)) = output_point.xy() {
             // Safety: We checked that the types match
             let out_x = unsafe { *(&out_x as *const ark_bn254::Fr as *const F) };
