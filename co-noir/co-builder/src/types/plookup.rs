@@ -392,6 +392,21 @@ impl<F: PrimeField> Plookup<F> {
         }
     }
 
+    pub(crate) fn get_generator_offset_for_table_id<
+        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
+    >(
+        id: MultiTableId,
+    ) -> Option<P::CycleGroup> {
+        todo!("Implement get_generator_offset_for_table_id");
+        match id {
+            // MultiTableId::FixedBaseLeftLo => Some(0),
+            // MultiTableId::FixedBaseLeftHi => Some(1),
+            // MultiTableId::FixedBaseRightLo => Some(2),
+            // MultiTableId::FixedBaseRightHi => Some(3),
+            _ => None,
+        }
+    }
+
     #[expect(clippy::type_complexity)]
     fn slice_and_get_values<P: Pairing<ScalarField = F>, T: NoirWitnessExtensionProtocol<F>>(
         builder: &mut GenericUltraCircuitBuilder<P, T>,
@@ -656,7 +671,7 @@ impl<F: PrimeField> Plookup<F> {
         } else {
             let mut lhs_index = key_a.witness_index;
             let mut rhs_index = key_b.witness_index;
-            // If only one lookup key is constant, we need to instantiate it as a real witness  lookup_data[ColumnIdx::C1][i]
+            // If only one lookup key is constant, we need to instantiate it as a real witness lookup_data[ColumnIdx::C1][i]
             if is_key_a_constant {
                 lhs_index = builder
                     .put_constant_variable(T::get_public(&a).expect("Constant should be public"));
