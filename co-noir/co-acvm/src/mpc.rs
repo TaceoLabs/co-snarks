@@ -25,7 +25,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         + From<F>
         + PartialEq
         + Into<<Self::BrilligDriver as BrilligDriver<F>>::BrilligType>;
-    type AcvmPoint<C: CurveGroup<BaseField = F>>;
+    type AcvmPoint<C: CurveGroup<BaseField = F>>: Clone + fmt::Debug + fmt::Display;
 
     type BrilligDriver: BrilligDriver<F>;
 

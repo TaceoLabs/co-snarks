@@ -1798,7 +1798,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         for point in lookup_points.iter().skip(1) {
             let point = point.get_value(builder, driver)?;
             accumulator = driver.add_points(accumulator, point);
-            operation_transcript.push(accumulator);
+            operation_transcript.push(accumulator.to_owned());
         }
 
         todo!("fixed_base_batch_mul_internal")
