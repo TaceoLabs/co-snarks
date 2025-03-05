@@ -1306,7 +1306,32 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         y: Self::AcvmType,
         is_infinity: Self::AcvmType,
     ) -> std::io::Result<Self::AcvmPoint<C>> {
-        todo!("Implement field_shares_to_pointshare")
+        // This is very hardcoded to the grumpkin curve
+        if TypeId::of::<F>() != TypeId::of::<ark_bn254::Fr>() {
+            panic!("Only BN254 is supported");
+        }
+
+        // Safety: We checked that the types match
+        let x =
+            unsafe { std::mem::transmute::<&Rep3AcvmType<F>, &Rep3AcvmType<ark_bn254::Fr>>(&x) };
+        // Safety: We checked that the types match
+        let y =
+            unsafe { std::mem::transmute::<&Rep3AcvmType<F>, &Rep3AcvmType<ark_bn254::Fr>>(&y) };
+        // Safety: We checked that the types match
+        let is_infinity = unsafe {
+            std::mem::transmute::<&Rep3AcvmType<F>, &Rep3AcvmType<ark_bn254::Fr>>(&is_infinity)
+        };
+
+        let point = Self::create_grumpkin_point(x, y, is_infinity, &mut self.io_context0, true)?;
+
+        // Safety: We checked that the types match
+        let y = unsafe {
+            let val =
+                &point as *const Rep3AcvmPoint<ark_grumpkin::Projective> as *const Rep3AcvmPoint<C>;
+            (*val).to_owned()
+        };
+
+        Ok(y)
     }
 
     fn pointshare_to_field_shares<C: CurveGroup<BaseField = F>>(
