@@ -1758,10 +1758,10 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
     }
 
     fn variable_base_batch_mul_internal(
-        _scalars: &[CycleScalarCT<P::ScalarField>],
-        _base_points: &[CycleGroupCT<P, T>],
-        _offset_generators: &[<P::CycleGroup as CurveGroup>::Affine],
-        _unconditional_add: bool,
+        scalars: &[CycleScalarCT<P::ScalarField>],
+        base_points: &[CycleGroupCT<P, T>],
+        offset_generators: &[<P::CycleGroup as CurveGroup>::Affine],
+        unconditional_add: bool,
     ) -> (CycleGroupCT<P, T>, P::CycleGroup) {
         todo!("Implement variable_base_batch_mul_internal")
     }
