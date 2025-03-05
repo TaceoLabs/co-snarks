@@ -1,7 +1,10 @@
 use self::utils::Utils;
 use super::field_ct::FieldCT;
+use super::generators;
+use crate::prelude::HonkCurve;
+use crate::TranscriptFieldType;
 use crate::{builder::GenericUltraCircuitBuilder, utils};
-use ark_ec::pairing::Pairing;
+use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::{PrimeField, Zero};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use itertools::izip;
@@ -360,6 +363,33 @@ impl<F: PrimeField> Plookup<F> {
             target /= bases[i];
         }
         slices
+    }
+
+    pub(crate) fn lookup_table_exists_for_point<
+        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
+    >(
+        point: <P::CycleGroup as CurveGroup>::Affine,
+    ) -> bool {
+        let generators = generators::default_generators::<P::CycleGroup>();
+        point == generators[0] || point == generators[1]
+    }
+
+    pub(crate) fn get_lookup_table_ids_for_point<
+        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
+    >(
+        point: <P::CycleGroup as CurveGroup>::Affine,
+    ) -> Option<(MultiTableId, MultiTableId)> {
+        let generators = generators::default_generators::<P::CycleGroup>();
+        if point == generators[0] {
+            Some((MultiTableId::FixedBaseLeftLo, MultiTableId::FixedBaseLeftHi))
+        } else if point == generators[1] {
+            Some((
+                MultiTableId::FixedBaseRightLo,
+                MultiTableId::FixedBaseRightHi,
+            ))
+        } else {
+            None
+        }
     }
 
     #[expect(clippy::type_complexity)]

@@ -1,9 +1,11 @@
 use super::types::{EccDblGate, MulQuad};
 use crate::builder::GenericUltraCircuitBuilder;
 use crate::prelude::HonkCurve;
-use crate::types::generators;
+use crate::types::plookup::Plookup;
 use crate::types::types::{AddTriple, EccAddGate, PolyTriple};
+use crate::types::{generators, plookup};
 use crate::TranscriptFieldType;
+use ark_bn254::Config;
 use ark_ec::pairing::Pairing;
 use ark_ec::{AffineRepr, CurveConfig, CurveGroup};
 use ark_ff::PrimeField;
@@ -1553,11 +1555,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         driver.field_shares_to_pointshare::<P::CycleGroup>(x, y, is_infinity)
     }
 
-    fn lookup_table_exists_for_point(point: <P::CycleGroup as CurveGroup>::Affine) -> bool {
-        let generators = generators::default_generators::<P::CycleGroup>();
-        point == generators[0] || point == generators[1]
-    }
-
     pub(crate) fn batch_mul(
         base_points: Vec<Self>,
         scalars: Vec<CycleScalarCT<P::ScalarField>>,
@@ -1609,7 +1606,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                 }
                 // We are a UltraCircuit
                 if !num_bits_not_full_field_size
-                    && Self::lookup_table_exists_for_point(point_val.into())
+                    && Plookup::lookup_table_exists_for_point::<P>(point_val.into())
                 {
                     fixed_base_scalars.push(scalar.to_owned());
                     fixed_base_points.push(point_val);
@@ -1734,16 +1731,39 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         base_points: &[P::CycleGroup],
         offset_generators: &[<P::CycleGroup as CurveGroup>::Affine],
     ) -> (CycleGroupCT<P, T>, P::CycleGroup) {
+        debug_assert_eq!(scalars.len(), base_points.len());
+
+        let num_points = base_points.len();
+        let mut plookup_table_ids = Vec::with_capacity(num_points * 2);
+        let mut plookup_base_points = Vec::with_capacity(num_points * 2);
+        let mut plookup_scalars = Vec::with_capacity(num_points * 2);
+
+        for (scalar, point) in scalars.iter().zip(base_points.iter()) {
+            // Merge all tags of scalars (we don't have to account for CircuitSimulator in cycle_group yet, because it breaks)
+            let table_id = Plookup::get_lookup_table_ids_for_point::<P>(point.to_owned().into())
+                .expect("This function is only called when these exist");
+            plookup_table_ids.push(table_id.0);
+            plookup_table_ids.push(table_id.1);
+            plookup_base_points.push(point.to_owned());
+            let point2 = *point
+                * <<P::CycleGroup as CurveGroup>::Config as CurveConfig>::ScalarField::from(
+                    BigUint::one() << CycleScalarCT::<P::ScalarField>::LO_BITS,
+                );
+            plookup_base_points.push(point2);
+            plookup_scalars.push(scalar.lo.to_owned());
+            plookup_scalars.push(scalar.hi.to_owned());
+        }
+
         todo!("fixed_base_batch_mul_internal")
     }
 
     fn variable_base_batch_mul_internal(
-        scalars: &[CycleScalarCT<P::ScalarField>],
-        base_points: &[CycleGroupCT<P, T>],
-        offset_generators: &[<P::CycleGroup as CurveGroup>::Affine],
-        unconditional_add: bool,
+        _scalars: &[CycleScalarCT<P::ScalarField>],
+        _base_points: &[CycleGroupCT<P, T>],
+        _offset_generators: &[<P::CycleGroup as CurveGroup>::Affine],
+        _unconditional_add: bool,
     ) -> (CycleGroupCT<P, T>, P::CycleGroup) {
-        todo!("variable_base_batch_mul_internal")
+        todo!("Implement variable_base_batch_mul_internal")
     }
 
     // Evaluates a doubling. Uses Ultra double gate
