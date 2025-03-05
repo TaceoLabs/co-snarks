@@ -1504,7 +1504,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         T::read_lut_by_acvm_type(driver, corrected_index, &lut)
     }
 
-    fn update_variable(&mut self, index: usize, value: T::AcvmType) {
+    pub(crate) fn update_variable(&mut self, index: usize, value: T::AcvmType) {
         assert!(self.variables.len() > index);
         self.variables[self.real_variable_index[index] as usize] = value;
     }

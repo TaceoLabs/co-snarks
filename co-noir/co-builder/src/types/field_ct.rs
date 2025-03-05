@@ -754,6 +754,10 @@ impl<F: PrimeField> FieldCT<F> {
             // Sanity check
             let value = T::get_public(&var).expect("Already checked it is public");
             assert!((value * self.multiplicative_constant + self.additive_constant).is_zero())
+        } else {
+            // We set the share to a public value since we are asserting it is zero.
+            let val = -self.additive_constant / self.multiplicative_constant;
+            builder.update_variable(self.witness_index as usize, val.into());
         }
 
         builder.create_poly_gate(&PolyTriple {
