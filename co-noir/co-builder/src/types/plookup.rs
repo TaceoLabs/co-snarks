@@ -4,8 +4,8 @@ use super::generators;
 use crate::prelude::HonkCurve;
 use crate::TranscriptFieldType;
 use crate::{builder::GenericUltraCircuitBuilder, utils};
-use ark_ec::{pairing::Pairing, CurveGroup};
-use ark_ff::{PrimeField, Zero};
+use ark_ec::{pairing::Pairing, AffineRepr, CurveConfig, CurveGroup};
+use ark_ff::{One, PrimeField, Zero};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use itertools::izip;
 use num_bigint::BigUint;
@@ -205,11 +205,44 @@ impl BasicTableId {
         assert!(MULTITABLE_INDEX < FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES);
         assert!(TABLE_INDEX < FixedBaseParams::get_num_bits_of_multi_table(MULTITABLE_INDEX));
 
-        // const auto& basic_table = fixed_base_tables[multitable_index][table_index];
-        // const auto index = static_cast<size_t>(key[0]);
-        // return { basic_table[index].x, basic_table[index].y };
+        let basic_table = match MULTITABLE_INDEX {
+            0 => {
+                let point = generators::default_generators::<C>()[0];
+                &generators::generate_tables::<C, { FixedBaseParams::BITS_PER_LO_SCALAR }, 0>(point)
+                    [TABLE_INDEX]
+            }
+            1 => {
+                let point = generators::default_generators::<C>()[0];
+                let point = point
+                    * <C::Config as CurveConfig>::ScalarField::from(
+                        BigUint::one() << FixedBaseParams::BITS_PER_LO_SCALAR,
+                    );
+                &generators::generate_tables::<C, { FixedBaseParams::BITS_PER_HI_SCALAR }, 0>(
+                    point.into(),
+                )[TABLE_INDEX]
+            }
+            2 => {
+                let point = generators::default_generators::<C>()[1];
+                &generators::generate_tables::<C, { FixedBaseParams::BITS_PER_LO_SCALAR }, 1>(point)
+                    [TABLE_INDEX]
+            }
+            3 => {
+                let point = generators::default_generators::<C>()[1];
+                let point = point
+                    * <C::Config as CurveConfig>::ScalarField::from(
+                        BigUint::one() << FixedBaseParams::BITS_PER_LO_SCALAR,
+                    );
+                &generators::generate_tables::<C, { FixedBaseParams::BITS_PER_HI_SCALAR }, 1>(
+                    point.into(),
+                )[TABLE_INDEX]
+            }
+            _ => unreachable!(),
+        };
 
-        todo!("get_basic_fixed_base_table_values")
+        let index = key[0] as usize;
+        let point = &basic_table[index];
+        let (x, y) = point.xy().unwrap_or_default();
+        [x, y]
     }
 }
 
