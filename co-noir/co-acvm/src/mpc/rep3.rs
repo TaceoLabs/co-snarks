@@ -1256,6 +1256,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             );
         }
 
+        // TODO maybe find a way to unify this with pointshare_to_field_shares
         let res = match output_point {
             Rep3AcvmPoint::Public(output_point) => {
                 if let Some((out_x, out_y)) = ark_grumpkin::Affine::from(output_point).xy() {
@@ -1312,7 +1313,26 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         &mut self,
         point: Self::AcvmPoint<C>,
     ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
-        todo!("Implement pointshare_to_field_shares")
+        let res = match point {
+            Rep3AcvmPoint::Public(point) => {
+                if let Some((out_x, out_y)) = point.into_affine().xy() {
+                    (out_x.into(), out_y.into(), F::zero().into())
+                } else {
+                    (F::zero().into(), F::zero().into(), F::one().into())
+                }
+            }
+            Rep3AcvmPoint::Shared(point) => {
+                let (x, y, i) =
+                    conversion::point_share_to_fieldshares(point, &mut self.io_context0)?;
+                // Set x,y to 0 of infinity is one.
+                // TODO is this even necesary?
+                let mul = arithmetic::sub_public_by_shared(F::one(), i, self.io_context0.id);
+                let res = arithmetic::mul_vec(&[x, y], &[mul, mul], &mut self.io_context0)?;
+
+                (res[0].into(), res[1].into(), i.into())
+            }
+        };
+        Ok(res)
     }
 
     fn gt(&mut self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> std::io::Result<Self::AcvmType> {
