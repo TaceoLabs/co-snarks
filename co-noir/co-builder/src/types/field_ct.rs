@@ -1,6 +1,7 @@
 use super::types::{EccDblGate, MulQuad};
 use crate::builder::GenericUltraCircuitBuilder;
 use crate::prelude::HonkCurve;
+use crate::types::generators;
 use crate::types::types::{AddTriple, EccAddGate, PolyTriple};
 use crate::TranscriptFieldType;
 use ark_ec::pairing::Pairing;
@@ -1487,6 +1488,8 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> Default for Cy
 impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::ScalarField>>
     CycleGroupCT<P, T>
 {
+    const OFFSET_GENERATOR_DOMAIN_SEPARATOR: &[u8] = "cycle_group_offset_generator".as_bytes();
+
     fn from_group_element(value: P::CycleGroup) -> Self {
         match value.into_affine().xy() {
             Some((x, y)) => Self {
@@ -1532,6 +1535,11 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         let is_infinity = self.is_infinity.get_value(driver);
 
         driver.field_shares_to_pointshare::<P::CycleGroup>(x, y, is_infinity)
+    }
+
+    fn lookup_table_exists_for_point(point: <P::CycleGroup as CurveGroup>::Affine) -> bool {
+        let generators = generators::default_generators::<P::CycleGroup>();
+        point == generators[0] || point == generators[1]
     }
 
     pub(crate) fn batch_mul(
@@ -1585,9 +1593,8 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                 }
                 // We are a UltraCircuit
                 if !num_bits_not_full_field_size
-                // && plookup::fixed_base::table::lookup_table_exists_for_point(point_val)
+                    && Self::lookup_table_exists_for_point(point_val.into())
                 {
-                    todo!("plookup stuff");
                     fixed_base_scalars.push(scalar);
                     fixed_base_points.push(point_val);
                 } else {
@@ -1622,7 +1629,11 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             + fixed_base_points.len()
             + has_variable_points as usize
             + has_fixed_points as usize;
-        todo!("Generators");
+        let offset_generators = generators::derive_generators::<P::CycleGroup>(
+            Self::OFFSET_GENERATOR_DOMAIN_SEPARATOR,
+            num_offset_generators,
+            0,
+        );
 
         let mut result = CycleGroupCT::default();
 
