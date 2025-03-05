@@ -193,7 +193,23 @@ fn hash_to_curve_bn254(seed: &[u8], attempt_count: u8) -> ark_bn254::G1Affine {
     }
 }
 
-fn generate_tables_grumpkin<const NUM_BITS: usize>(
+// We need the instance to allow for multiple precomputed for the same NUM_BITS
+pub(crate) fn generate_tables<C: CurveGroup, const NUM_BITS: usize, const INSTANCE: usize>(
+    input: C::Affine,
+) -> &'static [Vec<C::Affine>] {
+    if TypeId::of::<C>() != TypeId::of::<ark_grumpkin::Projective>() {
+        // Safety: We checked that the types match
+        let input = unsafe { *(&input as *const C::Affine as *const ark_grumpkin::Affine) };
+        let output = generate_tables_grumpkin::<NUM_BITS, INSTANCE>(input);
+        // Safety: We checked that the types match
+        unsafe { std::mem::transmute::<&[Vec<ark_grumpkin::Affine>], &[Vec<C::Affine>]>(output) }
+    } else {
+        panic!("Unsupported curve {}", std::any::type_name::<C>())
+    }
+}
+
+// We need the instance to allow for multiple precomputed for the same NUM_BITS
+fn generate_tables_grumpkin<const NUM_BITS: usize, const INSTANCE: usize>(
     input: ark_grumpkin::Affine,
 ) -> &'static [Vec<ark_grumpkin::Affine>] {
     static INSTANCE: OnceLock<Vec<Vec<ark_grumpkin::Affine>>> = OnceLock::new();
@@ -224,7 +240,7 @@ fn generate_tables_grumpkin<const NUM_BITS: usize>(
             //     accumulator,
             //     offset_generators[i],
             // ));
-            todo!("here");
+            todo!("generate_single_lookup_table");
             for j in 0..FixedBaseParams::BITS_PER_TABLE {
                 accumulator = accumulator + accumulator;
             }
