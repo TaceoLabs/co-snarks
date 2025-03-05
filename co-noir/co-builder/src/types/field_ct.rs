@@ -1653,7 +1653,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             let (fixed_accumulator, offset_generator_delta) = Self::fixed_base_batch_mul_internal(
                 &fixed_base_scalars,
                 &fixed_base_points,
-                &offset_generators,
+                // &offset_generators,
                 builder,
                 driver,
             )?;
@@ -1730,7 +1730,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
     fn fixed_base_batch_mul_internal(
         scalars: &[CycleScalarCT<P::ScalarField>],
         base_points: &[P::CycleGroup],
-        offset_generators: &[<P::CycleGroup as CurveGroup>::Affine],
+        // offset_generators: &[<P::CycleGroup as CurveGroup>::Affine],
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> std::io::Result<(CycleGroupCT<P, T>, P::CycleGroup)> {
