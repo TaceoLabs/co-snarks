@@ -1419,11 +1419,23 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T> {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct CycleGroupCT<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
     pub(crate) x: FieldCT<P::ScalarField>,
     pub(crate) y: FieldCT<P::ScalarField>,
     pub(crate) is_infinity: BoolCT<P, T>,
     pub(crate) is_constant: bool,
+}
+
+impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> Clone for CycleGroupCT<P, T> {
+    fn clone(&self) -> Self {
+        Self {
+            x: self.x.clone(),
+            y: self.y.clone(),
+            is_infinity: self.is_infinity.clone(),
+            is_constant: self.is_constant,
+        }
+    }
 }
 
 impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupCT<P, T> {
@@ -1595,17 +1607,17 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                 if !num_bits_not_full_field_size
                     && Self::lookup_table_exists_for_point(point_val.into())
                 {
-                    fixed_base_scalars.push(scalar);
+                    fixed_base_scalars.push(scalar.to_owned());
                     fixed_base_points.push(point_val);
                 } else {
                     // womp womp. We have lookup tables at home. ROM tables.
-                    variable_base_scalars.push(scalar);
-                    variable_base_points.push(point);
+                    variable_base_scalars.push(scalar.to_owned());
+                    variable_base_points.push(point.to_owned());
                 }
                 has_non_constant_component = true;
             } else {
-                variable_base_scalars.push(scalar);
-                variable_base_points.push(point);
+                variable_base_scalars.push(scalar.to_owned());
+                variable_base_points.push(point.to_owned());
                 can_unconditional_add = false;
                 has_non_constant_component = true;
                 // variable base
@@ -1620,7 +1632,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 
         // add the constant component into our offset accumulator
         // (we'll subtract `offset_accumulator` from the MSM output i.e. we negate here to counter the future negation)
-        let offset_accumulator = -constant_acc;
+        let mut offset_accumulator = -constant_acc;
         let has_variable_points = !variable_base_points.is_empty();
         let has_fixed_points = !fixed_base_points.is_empty();
 
@@ -1637,7 +1649,43 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 
         let mut result = CycleGroupCT::default();
 
-        todo!("Implement batch_mul");
+        if has_fixed_points {
+            let (fixed_accumulator, offset_generator_delta) = Self::fixed_base_batch_mul_internal(
+                &fixed_base_scalars,
+                &fixed_base_points,
+                &offset_generators,
+            );
+            offset_accumulator += offset_generator_delta;
+            result = fixed_accumulator;
+        }
+
+        if has_variable_points {
+            let offset_generators_for_variable_base_batch_mul = &offset_generators
+                [fixed_base_points.len()..offset_generators.len() - fixed_base_points.len()];
+
+            let (variable_accumulator, offset_generator_delta) =
+                Self::variable_base_batch_mul_internal(
+                    &variable_base_scalars,
+                    &variable_base_points,
+                    offset_generators_for_variable_base_batch_mul,
+                    can_unconditional_add,
+                );
+            offset_accumulator += offset_generator_delta;
+            if has_fixed_points {
+                result = if can_unconditional_add {
+                    result.unconditional_add(&variable_accumulator, None, builder, driver)?
+                } else {
+                    result.checked_unconditional_add(
+                        &variable_accumulator,
+                        None,
+                        builder,
+                        driver,
+                    )?
+                };
+            } else {
+                result = variable_accumulator;
+            }
+        }
 
         // Update `result` to remove the offset generator terms, and add in any constant terms from `constant_acc`.
         // We have two potential modes here:
@@ -1675,6 +1723,23 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         }
 
         Ok(result)
+    }
+
+    fn fixed_base_batch_mul_internal(
+        scalars: &[CycleScalarCT<P::ScalarField>],
+        base_points: &[P::CycleGroup],
+        offset_generators: &[<P::CycleGroup as CurveGroup>::Affine],
+    ) -> (CycleGroupCT<P, T>, P::CycleGroup) {
+        todo!("fixed_base_batch_mul_internal")
+    }
+
+    fn variable_base_batch_mul_internal(
+        scalars: &[CycleScalarCT<P::ScalarField>],
+        base_points: &[CycleGroupCT<P, T>],
+        offset_generators: &[<P::CycleGroup as CurveGroup>::Affine],
+        unconditional_add: bool,
+    ) -> (CycleGroupCT<P, T>, P::CycleGroup) {
+        todo!("variable_base_batch_mul_internal")
     }
 
     // Evaluates a doubling. Uses Ultra double gate
@@ -1778,6 +1843,18 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         });
 
         Ok(result)
+    }
+
+    fn checked_unconditional_add(
+        &self,
+        other: &Self,
+        hint: Option<P::CycleGroup>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> std::io::Result<Self> {
+        let x_delta = self.x.sub(&other.x, builder, driver);
+        x_delta.assert_is_not_zero(builder, driver)?;
+        self.unconditional_add(other, hint, builder, driver)
     }
 
     fn unconditional_add(
@@ -1936,6 +2013,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
     }
 }
 
+#[derive(Clone, Debug)]
 pub(crate) struct CycleScalarCT<F: PrimeField> {
     pub(crate) lo: FieldCT<F>,
     pub(crate) hi: FieldCT<F>,
