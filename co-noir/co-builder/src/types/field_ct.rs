@@ -1,7 +1,7 @@
 use super::types::{EccDblGate, MulQuad};
 use crate::builder::GenericUltraCircuitBuilder;
 use crate::prelude::HonkCurve;
-use crate::types::plookup::Plookup;
+use crate::types::plookup::{ColumnIdx, Plookup};
 use crate::types::types::{AddTriple, EccAddGate, PolyTriple};
 use crate::types::{generators, plookup};
 use crate::TranscriptFieldType;
@@ -1655,7 +1655,9 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                 &fixed_base_scalars,
                 &fixed_base_points,
                 &offset_generators,
-            );
+                builder,
+                driver,
+            )?;
             offset_accumulator += offset_generator_delta;
             result = fixed_accumulator;
         }
@@ -1730,7 +1732,9 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         scalars: &[CycleScalarCT<P::ScalarField>],
         base_points: &[P::CycleGroup],
         offset_generators: &[<P::CycleGroup as CurveGroup>::Affine],
-    ) -> (CycleGroupCT<P, T>, P::CycleGroup) {
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> std::io::Result<(CycleGroupCT<P, T>, P::CycleGroup)> {
         debug_assert_eq!(scalars.len(), base_points.len());
 
         let num_points = base_points.len();
@@ -1754,14 +1758,57 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             plookup_scalars.push(scalar.hi.to_owned());
         }
 
+        let mut lookup_points = Vec::new();
+        let mut offset_generator_accumulator = P::CycleGroup::zero();
+        let zero_ct = FieldCT::zero();
+        for (id, scalar) in plookup_table_ids.into_iter().zip(plookup_scalars) {
+            let lookup_data = Plookup::get_lookup_accumulators_ct(
+                builder,
+                driver,
+                id.to_owned(),
+                scalar,
+                zero_ct.to_owned(),
+                false,
+            )?;
+            for j in 0..lookup_data[ColumnIdx::C2].len() {
+                let x = lookup_data[ColumnIdx::C2][j].to_owned();
+                let y = lookup_data[ColumnIdx::C3][j].to_owned();
+                lookup_points.push(CycleGroupCT::new(
+                    x,
+                    y,
+                    BoolCT::from(false),
+                    builder,
+                    driver,
+                ));
+            }
+
+            let offset_1 =
+                Plookup::get_generator_offset_for_table_id::<P>(id).expect("Must have a value");
+            offset_generator_accumulator += offset_1;
+        }
+
+        // /**
+        //  * Compute the witness values of the batch_mul algorithm natively, as Element types with a Z-coordinate.
+        //  * We then batch-convert to AffineElement types, and feed these points as "hints" into the cycle_group methods.
+        //  * This avoids the need to compute modular inversions for every group operation, which dramatically reduces witness
+        //  * generation times
+        //  */
+        let mut operation_transcript = Vec::with_capacity(lookup_points.len() - 1);
+        let mut accumulator = lookup_points[0].get_value(builder, driver)?;
+        for point in lookup_points.iter().skip(1) {
+            let point = point.get_value(builder, driver)?;
+            accumulator = driver.add_points(accumulator, point);
+            operation_transcript.push(accumulator);
+        }
+
         todo!("fixed_base_batch_mul_internal")
     }
 
     fn variable_base_batch_mul_internal(
-        scalars: &[CycleScalarCT<P::ScalarField>],
-        base_points: &[CycleGroupCT<P, T>],
-        offset_generators: &[<P::CycleGroup as CurveGroup>::Affine],
-        unconditional_add: bool,
+        _scalars: &[CycleScalarCT<P::ScalarField>],
+        _base_points: &[CycleGroupCT<P, T>],
+        _offset_generators: &[<P::CycleGroup as CurveGroup>::Affine],
+        _unconditional_add: bool,
     ) -> (CycleGroupCT<P, T>, P::CycleGroup) {
         todo!("Implement variable_base_batch_mul_internal")
     }
