@@ -1,11 +1,10 @@
 use super::types::{EccDblGate, MulQuad};
 use crate::builder::GenericUltraCircuitBuilder;
 use crate::prelude::HonkCurve;
+use crate::types::generators;
 use crate::types::plookup::{ColumnIdx, Plookup};
 use crate::types::types::{AddTriple, EccAddGate, PolyTriple};
-use crate::types::{generators, plookup};
 use crate::TranscriptFieldType;
-use ark_bn254::Config;
 use ark_ec::pairing::Pairing;
 use ark_ec::{AffineRepr, CurveConfig, CurveGroup};
 use ark_ff::PrimeField;
@@ -1801,7 +1800,22 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             operation_transcript.push(accumulator.to_owned());
         }
 
-        todo!("fixed_base_batch_mul_internal")
+        // BB batch normalizes all
+        let operation_hints = operation_transcript;
+
+        let mut accumulator = lookup_points[0].to_owned();
+        // Perform all point additions sequentially. The Ultra ecc_addition relation costs 1 gate iff additions are chained
+        // and output point of previous addition = input point of current addition.
+        // If this condition is not met, the addition relation costs 2 gates. So it's good to do these sequentially!
+        for (point, hint) in lookup_points.into_iter().skip(1).zip(operation_hints) {
+            accumulator = accumulator.unconditional_add(&point, Some(hint), builder, driver)?;
+        }
+        // /**
+        //  * offset_generator_accumulator represents the sum of all the offset generator terms present in `accumulator`.
+        //  * We don't subtract off yet, as we may be able to combine `offset_generator_accumulator` with other constant terms
+        //  * in `batch_mul` before performing the subtraction.
+        //  */
+        Ok((accumulator, offset_generator_accumulator))
     }
 
     fn variable_base_batch_mul_internal(
@@ -1816,7 +1830,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
     // Evaluates a doubling. Uses Ultra double gate
     fn dbl(
         &self,
-        hint: Option<P::CycleGroup>,
+        hint: Option<T::AcvmPoint<P::CycleGroup>>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> std::io::Result<Self> {
@@ -1834,8 +1848,10 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         let result;
 
         if let Some(hint) = hint {
-            let (x3, y3) = hint.into_affine().xy().unwrap_or_default();
+            let (x3, y3, _) = driver.pointshare_to_field_shares(hint)?;
             if self.is_constant() {
+                let x3 = T::get_public(&x3).expect("Constants are public");
+                let y3 = T::get_public(&y3).expect("Constants are public");
                 result = CycleGroupCT::new(
                     FieldCT::from(x3),
                     FieldCT::from(y3),
@@ -1846,8 +1862,8 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                 return Ok(result);
             }
 
-            let x = FieldCT::from_witness(x3.into(), builder);
-            let y = FieldCT::from_witness(y3.into(), builder);
+            let x = FieldCT::from_witness(x3, builder);
+            let y = FieldCT::from_witness(y3, builder);
             result = CycleGroupCT::new(
                 x,
                 y,
@@ -1919,7 +1935,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
     fn checked_unconditional_add(
         &self,
         other: &Self,
-        hint: Option<P::CycleGroup>,
+        hint: Option<T::AcvmPoint<P::CycleGroup>>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> std::io::Result<Self> {
@@ -1931,7 +1947,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
     fn unconditional_add(
         &self,
         other: &Self,
-        hint: Option<P::CycleGroup>,
+        hint: Option<T::AcvmPoint<P::CycleGroup>>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> std::io::Result<Self> {
@@ -1953,8 +1969,10 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         let result;
 
         if let Some(hint) = hint {
-            let (x3, y3) = hint.into_affine().xy().unwrap_or_default();
+            let (x3, y3, _) = driver.pointshare_to_field_shares(hint)?;
             if lhs_constant && rhs_constant {
+                let x3 = T::get_public(&x3).expect("Constants are public");
+                let y3 = T::get_public(&y3).expect("Constants are public");
                 return Ok(CycleGroupCT::new(
                     FieldCT::from(x3),
                     FieldCT::from(y3),
@@ -1963,8 +1981,8 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                     driver,
                 ));
             }
-            let x = FieldCT::from_witness(x3.into(), builder);
-            let y = FieldCT::from_witness(y3.into(), builder);
+            let x = FieldCT::from_witness(x3, builder);
+            let y = FieldCT::from_witness(y3, builder);
             result = CycleGroupCT::new(x, y, BoolCT::from(false), builder, driver);
         } else {
             let p1 = self.get_value(builder, driver)?;
