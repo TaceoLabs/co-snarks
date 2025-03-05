@@ -207,94 +207,6 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
     // number of gates created per non-native field operation in process_non_native_field_multiplications
     pub(crate) const GATES_PER_NON_NATIVE_FIELD_MULTIPLICATION_ARITHMETIC: usize = 7;
 
-    fn new(size_hint: usize) -> Self {
-        tracing::trace!("Builder new");
-        let variables = Vec::with_capacity(size_hint * 3);
-        // let _variable_names = BTreeMap::with_capacity(size_hint * 3);
-        let next_var_index = Vec::with_capacity(size_hint * 3);
-        let prev_var_index = Vec::with_capacity(size_hint * 3);
-        let real_variable_index = Vec::with_capacity(size_hint * 3);
-        let real_variable_tags = Vec::with_capacity(size_hint * 3);
-
-        Self {
-            variables,
-            _variable_names: BTreeMap::new(),
-            next_var_index,
-            prev_var_index,
-            real_variable_index,
-            real_variable_tags,
-            public_inputs: Vec::new(),
-            is_recursive_circuit: false,
-            tau: BTreeMap::new(),
-            constant_variable_indices: BTreeMap::new(),
-            zero_idx: 0,
-            one_idx: 1,
-            blocks: GateBlocks::default(),
-            num_gates: 0,
-            circuit_finalized: false,
-            contains_pairing_point_accumulator: false,
-            pairing_point_accumulator_public_input_indices: Default::default(),
-            rom_arrays: Vec::new(),
-            ram_arrays: Vec::new(),
-            lookup_tables: Vec::new(),
-            plookup: Default::default(),
-            range_lists: BTreeMap::new(),
-            cached_partial_non_native_field_multiplications: Vec::new(),
-            memory_read_records: Vec::new(),
-            memory_write_records: Vec::new(),
-            memory_records_shared: BTreeMap::new(),
-            current_tag: 0,
-        }
-    }
-
-    /**
-     * @brief Constructor from data generated from ACIR
-     *
-     * @param size_hint
-     * @param witness_values witnesses values known to acir
-     * @param public_inputs indices of public inputs in witness array
-     * @param varnum number of known witness
-     *
-     * @note The size of witness_values may be less than varnum. The former is the set of actual witness values known at
-     * the time of acir generation. The latter may be larger and essentially acounts for placeholders for witnesses that
-     * we know will exist but whose values are not known during acir generation. Both are in general less than the total
-     * number of variables/witnesses that might be present for a circuit generated from acir, since many gates will
-     * depend on the details of the bberg implementation (or more generally on the backend used to process acir).
-     */
-    fn init(
-        size_hint: usize,
-        witness_values: Vec<T::AcvmType>,
-        public_inputs: Vec<u32>,
-        varnum: usize,
-        recursive: bool,
-    ) -> Self {
-        tracing::trace!("Builder init");
-        let mut builder = Self::new(size_hint);
-
-        // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/870): reserve space in blocks here somehow?
-        let len = witness_values.len();
-        for witness in witness_values.into_iter().take(varnum) {
-            builder.add_variable(witness);
-        }
-
-        // Zeros are added for variables whose existence is known but whose values are not yet known. The values may
-        // be "set" later on via the assert_equal mechanism.
-        for _ in len..varnum {
-            builder.add_variable(T::public_zero());
-        }
-
-        // Add the public_inputs from acir
-        builder.public_inputs = public_inputs;
-
-        // Add the const zero variable after the acir witness has been
-        // incorporated into variables.
-        builder.zero_idx = builder.put_constant_variable(P::ScalarField::zero());
-        builder.tau.insert(Self::DUMMY_TAG, Self::DUMMY_TAG); // AZTEC TODO(luke): explain this
-
-        builder.is_recursive_circuit = recursive;
-        builder
-    }
-
     pub(crate) fn add_variable(&mut self, value: T::AcvmType) -> u32 {
         let idx = self.variables.len() as u32;
         self.variables.push(value);
@@ -3947,7 +3859,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
     }
 }
 
-impl<P: Pairing> UltraCircuitBuilder<P> {
+impl<P: HonkCurve<TranscriptFieldType>> UltraCircuitBuilder<P> {
     pub fn get_num_gates_added_to_ensure_nonzero_polynomials() -> usize {
         let mut builder = Self::new(0);
         let num_gates_prior = builder.get_num_gates();
@@ -3961,6 +3873,94 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
 impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::ScalarField>>
     GenericUltraCircuitBuilder<P, T>
 {
+    /**
+     * @brief Constructor from data generated from ACIR
+     *
+     * @param size_hint
+     * @param witness_values witnesses values known to acir
+     * @param public_inputs indices of public inputs in witness array
+     * @param varnum number of known witness
+     *
+     * @note The size of witness_values may be less than varnum. The former is the set of actual witness values known at
+     * the time of acir generation. The latter may be larger and essentially acounts for placeholders for witnesses that
+     * we know will exist but whose values are not known during acir generation. Both are in general less than the total
+     * number of variables/witnesses that might be present for a circuit generated from acir, since many gates will
+     * depend on the details of the bberg implementation (or more generally on the backend used to process acir).
+     */
+    fn init(
+        size_hint: usize,
+        witness_values: Vec<T::AcvmType>,
+        public_inputs: Vec<u32>,
+        varnum: usize,
+        recursive: bool,
+    ) -> Self {
+        tracing::trace!("Builder init");
+        let mut builder = Self::new(size_hint);
+
+        // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/870): reserve space in blocks here somehow?
+        let len = witness_values.len();
+        for witness in witness_values.into_iter().take(varnum) {
+            builder.add_variable(witness);
+        }
+
+        // Zeros are added for variables whose existence is known but whose values are not yet known. The values may
+        // be "set" later on via the assert_equal mechanism.
+        for _ in len..varnum {
+            builder.add_variable(T::public_zero());
+        }
+
+        // Add the public_inputs from acir
+        builder.public_inputs = public_inputs;
+
+        // Add the const zero variable after the acir witness has been
+        // incorporated into variables.
+        builder.zero_idx = builder.put_constant_variable(P::ScalarField::zero());
+        builder.tau.insert(Self::DUMMY_TAG, Self::DUMMY_TAG); // AZTEC TODO(luke): explain this
+
+        builder.is_recursive_circuit = recursive;
+        builder
+    }
+
+    fn new(size_hint: usize) -> Self {
+        tracing::trace!("Builder new");
+        let variables = Vec::with_capacity(size_hint * 3);
+        // let _variable_names = BTreeMap::with_capacity(size_hint * 3);
+        let next_var_index = Vec::with_capacity(size_hint * 3);
+        let prev_var_index = Vec::with_capacity(size_hint * 3);
+        let real_variable_index = Vec::with_capacity(size_hint * 3);
+        let real_variable_tags = Vec::with_capacity(size_hint * 3);
+
+        Self {
+            variables,
+            _variable_names: BTreeMap::new(),
+            next_var_index,
+            prev_var_index,
+            real_variable_index,
+            real_variable_tags,
+            public_inputs: Vec::new(),
+            is_recursive_circuit: false,
+            tau: BTreeMap::new(),
+            constant_variable_indices: BTreeMap::new(),
+            zero_idx: 0,
+            one_idx: 1,
+            blocks: GateBlocks::default(),
+            num_gates: 0,
+            circuit_finalized: false,
+            contains_pairing_point_accumulator: false,
+            pairing_point_accumulator_public_input_indices: Default::default(),
+            rom_arrays: Vec::new(),
+            ram_arrays: Vec::new(),
+            lookup_tables: Vec::new(),
+            plookup: Plookup::new::<P>(),
+            range_lists: BTreeMap::new(),
+            cached_partial_non_native_field_multiplications: Vec::new(),
+            memory_read_records: Vec::new(),
+            memory_write_records: Vec::new(),
+            memory_records_shared: BTreeMap::new(),
+            current_tag: 0,
+        }
+    }
+
     pub fn create_circuit(
         constraint_system: &AcirFormat<P::ScalarField>,
         recursive: bool,

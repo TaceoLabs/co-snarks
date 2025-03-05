@@ -9,7 +9,7 @@ use ark_ff::{PrimeField, Zero};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use itertools::izip;
 use num_bigint::BigUint;
-use std::array::{self, from_fn};
+use std::array::from_fn;
 use std::collections::HashMap;
 use std::ops::{Index, IndexMut};
 
@@ -196,12 +196,12 @@ impl BasicTableId {
     }
 
     pub(crate) fn get_basic_fixed_base_table_values<
-        F: PrimeField,
+        C: CurveGroup,
         const MULTITABLE_INDEX: usize,
         const TABLE_INDEX: usize,
     >(
         key: [u64; 2],
-    ) -> [F; 2] {
+    ) -> [C::BaseField; 2] {
         assert!(MULTITABLE_INDEX < FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES);
         assert!(TABLE_INDEX < FixedBaseParams::get_num_bits_of_multi_table(MULTITABLE_INDEX));
 
@@ -213,11 +213,11 @@ impl BasicTableId {
     }
 }
 
-struct FixedBaseParams {}
+pub(crate) struct FixedBaseParams {}
 
 #[expect(dead_code)]
 impl FixedBaseParams {
-    const BITS_PER_TABLE: usize = 9;
+    pub(crate) const BITS_PER_TABLE: usize = 9;
     const BITS_ON_CURVE: usize = 254;
 
     // We split 1 254-bit scalar mul into two scalar muls of size BITS_PER_LO_SCALAR, BITS_PER_HI_SCALAR.
@@ -264,7 +264,7 @@ impl FixedBaseParams {
     const NUM_FIXED_BASE_BASIC_TABLES: usize =
         Self::NUM_BASIC_TABLES_PER_BASE_POINT * Self::NUM_POINTS;
 
-    const fn get_num_tables_per_multi_table<const NUM_BITS: usize>() -> usize {
+    pub(crate) const fn get_num_tables_per_multi_table<const NUM_BITS: usize>() -> usize {
         (NUM_BITS / Self::BITS_PER_TABLE)
             + if NUM_BITS % Self::BITS_PER_TABLE == 0 {
                 0
@@ -343,15 +343,13 @@ pub(crate) struct Plookup<F: PrimeField> {
     pub(crate) multi_tables: [PlookupMultiTable<F>; MultiTableId::NumMultiTables as usize],
 }
 
-impl<F: PrimeField> Default for Plookup<F> {
-    fn default() -> Self {
+impl<F: PrimeField> Plookup<F> {
+    pub(crate) fn new<P: HonkCurve<TranscriptFieldType, ScalarField = F>>() -> Self {
         Self {
-            multi_tables: Self::init_multi_tables(),
+            multi_tables: Self::init_multi_tables::<P>(),
         }
     }
-}
 
-impl<F: PrimeField> Plookup<F> {
     fn get_honk_dummy_multitable() -> PlookupMultiTable<F> {
         let id = MultiTableId::HonkDummyMulti;
         let number_of_elements_in_argument = 1 << 1; // Probably has to be a power of 2
@@ -443,28 +441,34 @@ impl<F: PrimeField> Plookup<F> {
         table
     }
 
-    fn make_fixed_base_function_pointer_table<const MULTITABLE_INDEX: usize>(
-    ) -> [fn([u64; 2]) -> [F; 2]; FixedBaseParams::MAX_NUM_TABLES_IN_MULTITABLE] {
+    fn make_fixed_base_function_pointer_table<
+        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
+        const MULTITABLE_INDEX: usize,
+    >() -> [fn([u64; 2]) -> [F; 2]; FixedBaseParams::MAX_NUM_TABLES_IN_MULTITABLE] {
         [
-            BasicTableId::get_basic_fixed_base_table_values::<F, MULTITABLE_INDEX, 0>,
-            BasicTableId::get_basic_fixed_base_table_values::<F, MULTITABLE_INDEX, 1>,
-            BasicTableId::get_basic_fixed_base_table_values::<F, MULTITABLE_INDEX, 2>,
-            BasicTableId::get_basic_fixed_base_table_values::<F, MULTITABLE_INDEX, 3>,
-            BasicTableId::get_basic_fixed_base_table_values::<F, MULTITABLE_INDEX, 4>,
-            BasicTableId::get_basic_fixed_base_table_values::<F, MULTITABLE_INDEX, 5>,
-            BasicTableId::get_basic_fixed_base_table_values::<F, MULTITABLE_INDEX, 6>,
-            BasicTableId::get_basic_fixed_base_table_values::<F, MULTITABLE_INDEX, 7>,
-            BasicTableId::get_basic_fixed_base_table_values::<F, MULTITABLE_INDEX, 8>,
-            BasicTableId::get_basic_fixed_base_table_values::<F, MULTITABLE_INDEX, 9>,
-            BasicTableId::get_basic_fixed_base_table_values::<F, MULTITABLE_INDEX, 10>,
-            BasicTableId::get_basic_fixed_base_table_values::<F, MULTITABLE_INDEX, 11>,
-            BasicTableId::get_basic_fixed_base_table_values::<F, MULTITABLE_INDEX, 12>,
-            BasicTableId::get_basic_fixed_base_table_values::<F, MULTITABLE_INDEX, 13>,
-            BasicTableId::get_basic_fixed_base_table_values::<F, MULTITABLE_INDEX, 14>,
+            BasicTableId::get_basic_fixed_base_table_values::<P::CycleGroup, MULTITABLE_INDEX, 0>,
+            BasicTableId::get_basic_fixed_base_table_values::<P::CycleGroup, MULTITABLE_INDEX, 1>,
+            BasicTableId::get_basic_fixed_base_table_values::<P::CycleGroup, MULTITABLE_INDEX, 2>,
+            BasicTableId::get_basic_fixed_base_table_values::<P::CycleGroup, MULTITABLE_INDEX, 3>,
+            BasicTableId::get_basic_fixed_base_table_values::<P::CycleGroup, MULTITABLE_INDEX, 4>,
+            BasicTableId::get_basic_fixed_base_table_values::<P::CycleGroup, MULTITABLE_INDEX, 5>,
+            BasicTableId::get_basic_fixed_base_table_values::<P::CycleGroup, MULTITABLE_INDEX, 6>,
+            BasicTableId::get_basic_fixed_base_table_values::<P::CycleGroup, MULTITABLE_INDEX, 7>,
+            BasicTableId::get_basic_fixed_base_table_values::<P::CycleGroup, MULTITABLE_INDEX, 8>,
+            BasicTableId::get_basic_fixed_base_table_values::<P::CycleGroup, MULTITABLE_INDEX, 9>,
+            BasicTableId::get_basic_fixed_base_table_values::<P::CycleGroup, MULTITABLE_INDEX, 10>,
+            BasicTableId::get_basic_fixed_base_table_values::<P::CycleGroup, MULTITABLE_INDEX, 11>,
+            BasicTableId::get_basic_fixed_base_table_values::<P::CycleGroup, MULTITABLE_INDEX, 12>,
+            BasicTableId::get_basic_fixed_base_table_values::<P::CycleGroup, MULTITABLE_INDEX, 13>,
+            BasicTableId::get_basic_fixed_base_table_values::<P::CycleGroup, MULTITABLE_INDEX, 14>,
         ]
     }
 
-    fn get_fixed_base_table<const MULTITABLE_INDEX: usize, const NUM_BITS: usize>(
+    fn get_fixed_base_table<
+        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
+        const MULTITABLE_INDEX: usize,
+        const NUM_BITS: usize,
+    >(
         id: MultiTableId,
     ) -> PlookupMultiTable<F> {
         assert!(
@@ -481,7 +485,7 @@ impl<F: PrimeField> Plookup<F> {
         ];
         // constexpr function_ptr_table get_values_from_key_table = make_function_pointer_table();
         let get_values_from_key_table =
-            Self::make_fixed_base_function_pointer_table::<MULTITABLE_INDEX>();
+            Self::make_fixed_base_function_pointer_table::<P, MULTITABLE_INDEX>();
 
         let mut table = PlookupMultiTable::new(
             F::from(FixedBaseParams::MAX_TABLE_SIZE as u64),
@@ -506,20 +510,21 @@ impl<F: PrimeField> Plookup<F> {
         table
     }
 
-    fn init_multi_tables() -> [PlookupMultiTable<F>; MultiTableId::NumMultiTables as usize] {
+    fn init_multi_tables<P: HonkCurve<TranscriptFieldType, ScalarField = F>>(
+    ) -> [PlookupMultiTable<F>; MultiTableId::NumMultiTables as usize] {
         // TACEO TODO not all are initialized here!
         let mut multi_tables = from_fn(|_| PlookupMultiTable::default());
         multi_tables[usize::from(MultiTableId::HonkDummyMulti)] = Self::get_honk_dummy_multitable();
         multi_tables[usize::from(MultiTableId::Uint32And)] = Self::get_uint32_and_table();
         multi_tables[usize::from(MultiTableId::Uint32Xor)] = Self::get_uint32_xor_table();
         multi_tables[usize::from(MultiTableId::FixedBaseLeftLo)] =
-            Self::get_fixed_base_table::<0, 128>(MultiTableId::FixedBaseLeftLo);
+            Self::get_fixed_base_table::<P, 0, 128>(MultiTableId::FixedBaseLeftLo);
         multi_tables[usize::from(MultiTableId::FixedBaseLeftHi)] =
-            Self::get_fixed_base_table::<1, 126>(MultiTableId::FixedBaseLeftHi);
+            Self::get_fixed_base_table::<P, 1, 126>(MultiTableId::FixedBaseLeftHi);
         multi_tables[usize::from(MultiTableId::FixedBaseRightLo)] =
-            Self::get_fixed_base_table::<2, 128>(MultiTableId::FixedBaseRightLo);
+            Self::get_fixed_base_table::<P, 2, 128>(MultiTableId::FixedBaseRightLo);
         multi_tables[usize::from(MultiTableId::FixedBaseRightHi)] =
-            Self::get_fixed_base_table::<3, 126>(MultiTableId::FixedBaseRightHi);
+            Self::get_fixed_base_table::<P, 3, 126>(MultiTableId::FixedBaseRightHi);
         multi_tables
     }
 
