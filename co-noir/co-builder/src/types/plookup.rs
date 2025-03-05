@@ -9,7 +9,7 @@ use ark_ff::{PrimeField, Zero};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use itertools::izip;
 use num_bigint::BigUint;
-use std::array::from_fn;
+use std::array::{self, from_fn};
 use std::collections::HashMap;
 use std::ops::{Index, IndexMut};
 
@@ -194,6 +194,23 @@ impl BasicTableId {
             F::zero(),
         ]
     }
+
+    pub(crate) fn get_basic_fixed_base_table_values<
+        F: PrimeField,
+        const MULTITABLE_INDEX: usize,
+        const TABLE_INDEX: usize,
+    >(
+        key: [u64; 2],
+    ) -> [F; 2] {
+        assert!(MULTITABLE_INDEX < FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES);
+        assert!(TABLE_INDEX < FixedBaseParams::get_num_bits_of_multi_table(MULTITABLE_INDEX));
+
+        // const auto& basic_table = fixed_base_tables[multitable_index][table_index];
+        // const auto index = static_cast<size_t>(key[0]);
+        // return { basic_table[index].x, basic_table[index].y };
+
+        todo!("get_basic_fixed_base_table_values")
+    }
 }
 
 struct FixedBaseParams {}
@@ -247,13 +264,24 @@ impl FixedBaseParams {
     const NUM_FIXED_BASE_BASIC_TABLES: usize =
         Self::NUM_BASIC_TABLES_PER_BASE_POINT * Self::NUM_POINTS;
 
-    fn get_num_tables_per_multi_table<const NUM_BITS: usize>() -> usize {
+    const fn get_num_tables_per_multi_table<const NUM_BITS: usize>() -> usize {
         (NUM_BITS / Self::BITS_PER_TABLE)
             + if NUM_BITS % Self::BITS_PER_TABLE == 0 {
                 0
             } else {
                 1
             }
+    }
+
+    const fn get_num_bits_of_multi_table(multitable_index: usize) -> usize {
+        assert!(multitable_index < Self::NUM_FIXED_BASE_MULTI_TABLES);
+        match multitable_index {
+            0 => Self::BITS_PER_LO_SCALAR,
+            1 => Self::BITS_PER_HI_SCALAR,
+            2 => Self::BITS_PER_LO_SCALAR,
+            3 => Self::BITS_PER_HI_SCALAR,
+            _ => unreachable!(),
+        }
     }
 }
 
@@ -415,7 +443,28 @@ impl<F: PrimeField> Plookup<F> {
         table
     }
 
-    fn get_fixed_base_table<const INDEX: usize, const NUM_BITS: usize>(
+    fn make_fixed_base_function_pointer_table<const MULTITABLE_INDEX: usize>(
+    ) -> [fn([u64; 2]) -> [F; 2]; FixedBaseParams::MAX_NUM_TABLES_IN_MULTITABLE] {
+        [
+            BasicTableId::get_basic_fixed_base_table_values::<F, MULTITABLE_INDEX, 0>,
+            BasicTableId::get_basic_fixed_base_table_values::<F, MULTITABLE_INDEX, 1>,
+            BasicTableId::get_basic_fixed_base_table_values::<F, MULTITABLE_INDEX, 2>,
+            BasicTableId::get_basic_fixed_base_table_values::<F, MULTITABLE_INDEX, 3>,
+            BasicTableId::get_basic_fixed_base_table_values::<F, MULTITABLE_INDEX, 4>,
+            BasicTableId::get_basic_fixed_base_table_values::<F, MULTITABLE_INDEX, 5>,
+            BasicTableId::get_basic_fixed_base_table_values::<F, MULTITABLE_INDEX, 6>,
+            BasicTableId::get_basic_fixed_base_table_values::<F, MULTITABLE_INDEX, 7>,
+            BasicTableId::get_basic_fixed_base_table_values::<F, MULTITABLE_INDEX, 8>,
+            BasicTableId::get_basic_fixed_base_table_values::<F, MULTITABLE_INDEX, 9>,
+            BasicTableId::get_basic_fixed_base_table_values::<F, MULTITABLE_INDEX, 10>,
+            BasicTableId::get_basic_fixed_base_table_values::<F, MULTITABLE_INDEX, 11>,
+            BasicTableId::get_basic_fixed_base_table_values::<F, MULTITABLE_INDEX, 12>,
+            BasicTableId::get_basic_fixed_base_table_values::<F, MULTITABLE_INDEX, 13>,
+            BasicTableId::get_basic_fixed_base_table_values::<F, MULTITABLE_INDEX, 14>,
+        ]
+    }
+
+    fn get_fixed_base_table<const MULTITABLE_INDEX: usize, const NUM_BITS: usize>(
         id: MultiTableId,
     ) -> PlookupMultiTable<F> {
         assert!(
@@ -424,7 +473,6 @@ impl<F: PrimeField> Plookup<F> {
         );
         let num_tables = FixedBaseParams::get_num_tables_per_multi_table::<NUM_BITS>();
 
-        // constexpr std::array<BasicTableId, NUM_FIXED_BASE_MULTI_TABLES>
         let basic_table_ids = [
             BasicTableId::FixedBase0_0,
             BasicTableId::FixedBase1_0,
@@ -432,6 +480,8 @@ impl<F: PrimeField> Plookup<F> {
             BasicTableId::FixedBase3_0,
         ];
         // constexpr function_ptr_table get_values_from_key_table = make_function_pointer_table();
+        let get_values_from_key_table =
+            Self::make_fixed_base_function_pointer_table::<MULTITABLE_INDEX>();
 
         let mut table = PlookupMultiTable::new(
             F::from(FixedBaseParams::MAX_TABLE_SIZE as u64),
@@ -440,14 +490,14 @@ impl<F: PrimeField> Plookup<F> {
             num_tables,
         );
         table.id = id;
+        #[expect(clippy::needless_range_loop)]
         for i in 0..num_tables {
             table
                 .slice_sizes
                 .push(FixedBaseParams::MAX_TABLE_SIZE as u64);
-            // table.get_table_values[i] = get_values_from_key_table[multitable_index][i];
-            todo!("get_fiexed_base_table");
-            assert!(INDEX < FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES);
-            let idx = i + usize::from(basic_table_ids[INDEX].clone());
+            table.get_table_values.push(get_values_from_key_table[i]);
+            assert!(MULTITABLE_INDEX < FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES);
+            let idx = i + usize::from(basic_table_ids[MULTITABLE_INDEX].clone());
             table
                 .basic_table_ids
                 .push(idx.try_into().expect("Invalid BasicTableId"));
