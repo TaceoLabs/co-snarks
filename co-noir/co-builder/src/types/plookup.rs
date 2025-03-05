@@ -14,6 +14,7 @@ use std::collections::HashMap;
 use std::ops::{Index, IndexMut};
 
 #[expect(dead_code)]
+#[repr(usize)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum BasicTableId {
     Xor,
@@ -63,14 +64,72 @@ pub(crate) enum BasicTableId {
     BlakeXorRotate2,
     BlakeXorRotate4,
     FixedBase0_0,
-    FixedBase1_0 = BasicTableId::FixedBase0_0 as isize
-        + FixedBaseParams::NUM_TABLES_PER_LO_MULTITABLE as isize,
-    FixedBase2_0 = BasicTableId::FixedBase1_0 as isize
-        + FixedBaseParams::NUM_TABLES_PER_HI_MULTITABLE as isize,
-    FixedBase3_0 = BasicTableId::FixedBase2_0 as isize
-        + FixedBaseParams::NUM_TABLES_PER_LO_MULTITABLE as isize,
-    HonkDummyBasic1 = BasicTableId::FixedBase3_0 as isize
-        + FixedBaseParams::NUM_TABLES_PER_HI_MULTITABLE as isize,
+    FixedBase0_1,
+    FixedBase0_2,
+    FixedBase0_3,
+    FixexBase0_4,
+    FixedBase0_5,
+    FixedBase0_6,
+    FixedBase0_7,
+    FixedBase0_8,
+    FixedBase0_9,
+    FixedBase0_10,
+    FixedBase0_11,
+    FixedBase0_12,
+    FixedBase0_13,
+    FixedBase0_14,
+    // FixedBase1_0 = BasicTableId::FixedBase0_0 as usize
+    // + FixedBaseParams::NUM_TABLES_PER_LO_MULTITABLE,
+    FixedBase1_0,
+    FixedBase1_1,
+    FixedBase1_2,
+    FixedBase1_3,
+    FixexBase1_4,
+    FixedBase1_5,
+    FixedBase1_6,
+    FixedBase1_7,
+    FixedBase1_8,
+    FixedBase1_9,
+    FixedBase1_10,
+    FixedBase1_11,
+    FixedBase1_12,
+    FixedBase1_13,
+    // FixedBase2_0 = BasicTableId::FixedBase1_0 as usize
+    //     + FixedBaseParams::NUM_TABLES_PER_HI_MULTITABLE,
+    FixedBase2_0,
+    FixedBase2_1,
+    FixedBase2_2,
+    FixedBase2_3,
+    FixexBase2_4,
+    FixedBase2_5,
+    FixedBase2_6,
+    FixedBase2_7,
+    FixedBase2_8,
+    FixedBase2_9,
+    FixedBase2_10,
+    FixedBase2_11,
+    FixedBase2_12,
+    FixedBase2_13,
+    FixedBase2_14,
+    // FixedBase3_0 = BasicTableId::FixedBase2_0 as usize
+    //     + FixedBaseParams::NUM_TABLES_PER_LO_MULTITABLE,
+    FixedBase3_0,
+    FixedBase3_1,
+    FixedBase3_2,
+    FixedBase3_3,
+    FixexBase3_4,
+    FixedBase3_5,
+    FixedBase3_6,
+    FixedBase3_7,
+    FixedBase3_8,
+    FixedBase3_9,
+    FixedBase3_10,
+    FixedBase3_11,
+    FixedBase3_12,
+    FixedBase3_13,
+    // HonkDummyBasic1 = BasicTableId::FixedBase3_0 as usize
+    //     + FixedBaseParams::NUM_TABLES_PER_HI_MULTITABLE,
+    HonkDummyBasic1,
     HonkDummyBasic2,
     KeccakInput,
     KeccakTheta,
@@ -91,6 +150,21 @@ pub(crate) enum BasicTableId {
 impl From<BasicTableId> for usize {
     fn from(id: BasicTableId) -> usize {
         id as usize
+    }
+}
+
+impl TryFrom<usize> for BasicTableId {
+    type Error = std::io::Error;
+
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        if value > BasicTableId::KeccakRho9 as usize {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Invalid BasicTableId: {}", value),
+            ))
+        } else {
+            Ok(unsafe { std::mem::transmute::<usize, BasicTableId>(value) })
+        }
     }
 }
 
@@ -172,6 +246,15 @@ impl FixedBaseParams {
     // points.
     const NUM_FIXED_BASE_BASIC_TABLES: usize =
         Self::NUM_BASIC_TABLES_PER_BASE_POINT * Self::NUM_POINTS;
+
+    fn get_num_tables_per_multi_table<const NUM_BITS: usize>() -> usize {
+        (NUM_BITS / Self::BITS_PER_TABLE)
+            + if NUM_BITS % Self::BITS_PER_TABLE == 0 {
+                0
+            } else {
+                1
+            }
+    }
 }
 
 #[expect(dead_code)]
@@ -335,7 +418,42 @@ impl<F: PrimeField> Plookup<F> {
     fn get_fixed_base_table<const INDEX: usize, const NUM_BITS: usize>(
         id: MultiTableId,
     ) -> PlookupMultiTable<F> {
-        todo!("get_fiexed_base_table")
+        assert!(
+            NUM_BITS == FixedBaseParams::BITS_PER_LO_SCALAR
+                || NUM_BITS == FixedBaseParams::BITS_PER_HI_SCALAR
+        );
+        let num_tables = FixedBaseParams::get_num_tables_per_multi_table::<NUM_BITS>();
+
+        // constexpr std::array<BasicTableId, NUM_FIXED_BASE_MULTI_TABLES>
+        let basic_table_ids = [
+            BasicTableId::FixedBase0_0,
+            BasicTableId::FixedBase1_0,
+            BasicTableId::FixedBase2_0,
+            BasicTableId::FixedBase3_0,
+        ];
+        // constexpr function_ptr_table get_values_from_key_table = make_function_pointer_table();
+
+        let mut table = PlookupMultiTable::new(
+            F::from(FixedBaseParams::MAX_TABLE_SIZE as u64),
+            F::zero(),
+            F::zero(),
+            num_tables,
+        );
+        table.id = id;
+        for i in 0..num_tables {
+            table
+                .slice_sizes
+                .push(FixedBaseParams::MAX_TABLE_SIZE as u64);
+            // table.get_table_values[i] = get_values_from_key_table[multitable_index][i];
+            todo!("get_fiexed_base_table");
+            assert!(INDEX < FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES);
+            let idx = i + usize::from(basic_table_ids[INDEX].clone());
+            table
+                .basic_table_ids
+                .push(idx.try_into().expect("Invalid BasicTableId"));
+        }
+
+        table
     }
 
     fn init_multi_tables() -> [PlookupMultiTable<F>; MultiTableId::NumMultiTables as usize] {
