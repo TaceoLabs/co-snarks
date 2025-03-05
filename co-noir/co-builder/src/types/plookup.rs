@@ -332,12 +332,26 @@ impl<F: PrimeField> Plookup<F> {
         table
     }
 
+    fn get_fixed_base_table<const INDEX: usize, const NUM_BITS: usize>(
+        id: MultiTableId,
+    ) -> PlookupMultiTable<F> {
+        todo!("get_fiexed_base_table")
+    }
+
     fn init_multi_tables() -> [PlookupMultiTable<F>; MultiTableId::NumMultiTables as usize] {
         // TACEO TODO not all are initialized here!
         let mut multi_tables = from_fn(|_| PlookupMultiTable::default());
         multi_tables[usize::from(MultiTableId::HonkDummyMulti)] = Self::get_honk_dummy_multitable();
         multi_tables[usize::from(MultiTableId::Uint32And)] = Self::get_uint32_and_table();
         multi_tables[usize::from(MultiTableId::Uint32Xor)] = Self::get_uint32_xor_table();
+        multi_tables[usize::from(MultiTableId::FixedBaseLeftLo)] =
+            Self::get_fixed_base_table::<0, 128>(MultiTableId::FixedBaseLeftLo);
+        multi_tables[usize::from(MultiTableId::FixedBaseLeftHi)] =
+            Self::get_fixed_base_table::<1, 126>(MultiTableId::FixedBaseLeftHi);
+        multi_tables[usize::from(MultiTableId::FixedBaseRightLo)] =
+            Self::get_fixed_base_table::<2, 128>(MultiTableId::FixedBaseRightLo);
+        multi_tables[usize::from(MultiTableId::FixedBaseRightHi)] =
+            Self::get_fixed_base_table::<3, 126>(MultiTableId::FixedBaseRightHi);
         multi_tables
     }
 
@@ -345,13 +359,20 @@ impl<F: PrimeField> Plookup<F> {
         assert!(
             matches!(
                 id,
-                MultiTableId::HonkDummyMulti | MultiTableId::Uint32And | MultiTableId::Uint32Xor
+                MultiTableId::HonkDummyMulti
+                    | MultiTableId::Uint32And
+                    | MultiTableId::Uint32Xor
+                    | MultiTableId::FixedBaseLeftLo
+                    | MultiTableId::FixedBaseLeftHi
+                    | MultiTableId::FixedBaseRightLo
+                    | MultiTableId::FixedBaseRightHi
             ),
             "Multitable for {:?} not implemented",
             id
         ); // The only ones implemented so far
         &self.multi_tables[usize::from(id)]
     }
+
     fn slice_input_using_variable_bases(input: BigUint, bases: &[u64]) -> Vec<u64> {
         let mut target = input;
         let mut slices = Vec::with_capacity(bases.len());
