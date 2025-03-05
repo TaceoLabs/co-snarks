@@ -1,7 +1,7 @@
-use std::{any::TypeId, sync::OnceLock};
-
+use crate::{prelude::Serialize, types::plookup::FixedBaseParams};
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{BigInteger, Field, PrimeField};
+use std::{any::TypeId, sync::OnceLock};
 
 pub(crate) const DEFAULT_DOMAIN_SEPARATOR: &[u8] = "DEFAULT_DOMAIN_SEPARATOR".as_bytes();
 const NUM_DEFAULT_GENERATORS: usize = 8;
@@ -191,4 +191,46 @@ fn hash_to_curve_bn254(seed: &[u8], attempt_count: u8) -> ark_bn254::G1Affine {
     } else {
         hash_to_curve_bn254(seed, attempt_count + 1)
     }
+}
+
+fn generate_tables_grumpkin<const NUM_BITS: usize>(
+    input: ark_grumpkin::Affine,
+) -> &'static [Vec<ark_grumpkin::Affine>] {
+    static INSTANCE: OnceLock<Vec<Vec<ark_grumpkin::Affine>>> = OnceLock::new();
+    INSTANCE.get_or_init(|| {
+        let num_tables = FixedBaseParams::get_num_tables_per_multi_table::<NUM_BITS>();
+        let mut result = Vec::with_capacity(num_tables);
+
+        // Serialize the input point
+        const NUM_64_LIMBS: u32 = ark_grumpkin::Fq::MODULUS_BIT_SIZE.div_ceil(64);
+        pub const FIELDSIZE_BYTES: u32 = NUM_64_LIMBS * 8;
+        let mut input_buf = Vec::with_capacity(FIELDSIZE_BYTES as usize * 2);
+
+        if let Some((x, y)) = input.xy() {
+            Serialize::write_field_element(&mut input_buf, x);
+            Serialize::write_field_element(&mut input_buf, y);
+        } else {
+            for _ in 0..FIELDSIZE_BYTES * 2 {
+                input_buf.push(255);
+            }
+        }
+
+        let offset_generators =
+            derive_generators::<ark_grumpkin::Projective>(&input_buf, num_tables, 0);
+
+        let mut accumulator: ark_grumpkin::Projective = input.into();
+        for i in 0..num_tables {
+            // result.push(generate_single_lookup_table(
+            //     accumulator,
+            //     offset_generators[i],
+            // ));
+            todo!("here");
+            for j in 0..FixedBaseParams::BITS_PER_TABLE {
+                accumulator = accumulator + accumulator;
+            }
+        }
+
+        todo!();
+        result
+    })
 }
