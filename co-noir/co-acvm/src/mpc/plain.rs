@@ -682,7 +682,11 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         &mut self,
         point: Self::AcvmPoint<C>,
     ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
-        todo!("Implement pointshare_to_field_shares")
+        if let Some((out_x, out_y)) = point.into_affine().xy() {
+            Ok((out_x, out_y, F::zero()))
+        } else {
+            Ok((F::zero(), F::zero(), F::one()))
+        }
     }
 
     fn gt(&mut self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> std::io::Result<Self::AcvmType> {
