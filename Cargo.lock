@@ -1030,6 +1030,7 @@ dependencies = [
  "ark-grumpkin",
  "ark-poly",
  "ark-serialize",
+ "blake3",
  "co-acvm",
  "eyre",
  "itertools 0.14.0",
