@@ -233,6 +233,27 @@ pub enum Rep3AcvmPoint<C: CurveGroup> {
     Shared(Rep3PointShare<C>),
 }
 
+impl<C: CurveGroup> std::fmt::Debug for Rep3AcvmPoint<C> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Public(point) => f.debug_tuple("Public").field(point).finish(),
+            Self::Shared(share) => f.debug_tuple("Arithmetic").field(share).finish(),
+        }
+    }
+}
+
+impl<C: CurveGroup> std::fmt::Display for Rep3AcvmPoint<C> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Public(point) => f.write_str(&format!("Public ({point})")),
+            Self::Shared(arithmetic) => {
+                let (a, b) = arithmetic.to_owned().ab();
+                f.write_str(&format!("Arithmetic (a: {}, b: {})", a, b))
+            }
+        }
+    }
+}
+
 // TODO maybe we want to merge that with the Rep3VmType?? Atm we do not need
 // binary shares so maybe it is ok..
 #[derive(Clone, Serialize, Deserialize, PartialEq)]

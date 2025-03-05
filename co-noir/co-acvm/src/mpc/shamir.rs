@@ -45,6 +45,26 @@ pub enum ShamirAcvmPoint<C: CurveGroup> {
     Shared(ShamirPointShare<C>),
 }
 
+impl<C: CurveGroup> std::fmt::Debug for ShamirAcvmPoint<C> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Public(point) => f.debug_tuple("Public").field(point).finish(),
+            Self::Shared(share) => f.debug_tuple("Arithmetic").field(share).finish(),
+        }
+    }
+}
+
+impl<C: CurveGroup> std::fmt::Display for ShamirAcvmPoint<C> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Public(point) => f.write_str(&format!("Public ({point})")),
+            Self::Shared(arithmetic) => {
+                f.write_str(&format!("Arithmetic ({})", arithmetic.to_owned().inner()))
+            }
+        }
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize, PartialEq)]
 pub enum ShamirAcvmType<F: PrimeField> {
     Public(
