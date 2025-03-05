@@ -7,7 +7,7 @@ pub(crate) const DEFAULT_DOMAIN_SEPARATOR: &[u8] = "DEFAULT_DOMAIN_SEPARATOR".as
 const NUM_DEFAULT_GENERATORS: usize = 8;
 
 pub(crate) fn default_generators<C: CurveGroup>() -> &'static [C::Affine; NUM_DEFAULT_GENERATORS] {
-    if TypeId::of::<C>() != TypeId::of::<ark_bn254::G1Projective>() {
+    if TypeId::of::<C>() == TypeId::of::<ark_bn254::G1Projective>() {
         let gens = default_generators_bn254();
         // Safety: We checked that the types match
         unsafe {
@@ -16,7 +16,7 @@ pub(crate) fn default_generators<C: CurveGroup>() -> &'static [C::Affine; NUM_DE
                 &[C::Affine; NUM_DEFAULT_GENERATORS],
             >(gens)
         }
-    } else if TypeId::of::<C>() != TypeId::of::<ark_grumpkin::Projective>() {
+    } else if TypeId::of::<C>() == TypeId::of::<ark_grumpkin::Projective>() {
         let gens = default_generators_grumpkin();
         // Safety: We checked that the types match
         unsafe {
@@ -114,11 +114,11 @@ fn _derive_generators<C: CurveGroup>(
 }
 
 fn hash_to_curve<C: CurveGroup>(seed: &[u8], attempt_count: u8) -> C::Affine {
-    if TypeId::of::<C>() != TypeId::of::<ark_bn254::G1Projective>() {
+    if TypeId::of::<C>() == TypeId::of::<ark_bn254::G1Projective>() {
         let point = hash_to_curve_bn254(seed, attempt_count);
         // Safety: We checked that the types match
         unsafe { *(&point as *const ark_bn254::G1Affine as *const C::Affine) }
-    } else if TypeId::of::<C>() != TypeId::of::<ark_grumpkin::Projective>() {
+    } else if TypeId::of::<C>() == TypeId::of::<ark_grumpkin::Projective>() {
         let point = hash_to_curve_grumpkin(seed, attempt_count);
         // Safety: We checked that the types match
         unsafe { *(&point as *const ark_grumpkin::Affine as *const C::Affine) }
@@ -197,7 +197,7 @@ fn hash_to_curve_bn254(seed: &[u8], attempt_count: u8) -> ark_bn254::G1Affine {
 pub(crate) fn generate_tables<C: CurveGroup, const NUM_BITS: usize, const INSTANCE: usize>(
     input: C::Affine,
 ) -> &'static [Vec<C::Affine>] {
-    if TypeId::of::<C>() != TypeId::of::<ark_grumpkin::Projective>() {
+    if TypeId::of::<C>() == TypeId::of::<ark_grumpkin::Projective>() {
         // Safety: We checked that the types match
         let input = unsafe { *(&input as *const C::Affine as *const ark_grumpkin::Affine) };
         let output = generate_tables_grumpkin::<NUM_BITS, INSTANCE>(input);
