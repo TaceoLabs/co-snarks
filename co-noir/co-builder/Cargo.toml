@@ -17,6 +17,7 @@ ark-ff.workspace = true
 ark-grumpkin.workspace = true
 ark-poly.workspace = true
 ark-serialize.workspace = true
+blake3.workspace = true
 co-acvm = { version = "0.6.0", path = "../co-acvm" }
 mpc-core = { version = "0.9.0", path = "../../mpc-core" }
 eyre.workspace = true
