@@ -1,3 +1,5 @@
+pub(crate) mod blake2s;
+pub(crate) mod blake_util;
 pub(crate) mod field_ct;
 pub(crate) mod generators;
 pub(crate) mod plookup;

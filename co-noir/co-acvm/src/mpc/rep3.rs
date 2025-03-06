@@ -1,5 +1,6 @@
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{MontConfig, One, PrimeField, Zero};
+use blake2::{Blake2s256, Digest};
 use co_brillig::mpc::{Rep3BrilligDriver, Rep3BrilligType};
 use itertools::{izip, Itertools};
 use mpc_core::gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations};
@@ -959,6 +960,24 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         Ok([res[0], res[1], res[2]])
     }
 
+    fn slice_once(
+        &mut self,
+        input: Self::ArithmeticShare,
+        msb: u8,
+        lsb: u8,
+        bitsize: usize,
+    ) -> std::io::Result<Self::ArithmeticShare> {
+        let res = yao::slice_arithmetic_once(
+            input,
+            &mut self.io_context0,
+            msb as usize,
+            lsb as usize,
+            bitsize,
+        )?;
+        debug_assert_eq!(res.len(), 1);
+        Ok(res[0])
+    }
+
     fn integer_bitwise_and(
         &mut self,
         lhs: Self::AcvmType,
@@ -1112,6 +1131,52 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         let rotation_values = result
             .into_iter()
             .skip(2 * size)
+            .map(|a| Rep3AcvmType::Shared(a))
+            .collect();
+
+        Ok((rotation_values, key_a_slices, key_b_slices))
+    }
+
+    fn slice_and_get_xor_rotate_values_with_filter(
+        &mut self,
+        input1: Self::ArithmeticShare,
+        input2: Self::ArithmeticShare,
+        basis_bits: &[u64],
+        rotation: &[usize],
+        filter: &[bool],
+    ) -> std::io::Result<(
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+    )> {
+        let result = yao::slice_xor_with_filter(
+            input1,
+            input2,
+            &mut self.io_context0,
+            basis_bits,
+            rotation,
+            filter,
+        )?;
+        let num_outputs = result.len();
+        let num_of_slices = basis_bits.len();
+        debug_assert_eq!(num_outputs % 3, 0);
+        let size = num_outputs / 3;
+
+        let key_a_slices: Vec<_> = result
+            .iter()
+            .take(num_of_slices)
+            .map(|a| Rep3AcvmType::Shared(*a))
+            .collect();
+        let key_b_slices: Vec<_> = result
+            .iter()
+            .skip(size)
+            .take(num_of_slices)
+            .map(|a| Rep3AcvmType::Shared(*a))
+            .collect();
+        let rotation_values: Vec<_> = result
+            .into_iter()
+            .skip(2 * size)
+            .take(num_of_slices)
             .map(|a| Rep3AcvmType::Shared(a))
             .collect();
 
@@ -1422,6 +1487,24 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
     }
 
+    fn right_shift(
+        &mut self,
+        input: Self::AcvmType,
+        shift: usize,
+    ) -> std::io::Result<Self::AcvmType> {
+        match input {
+            Rep3AcvmType::Public(a) => {
+                let x: BigUint = a.into();
+                Ok(Rep3AcvmType::Public(F::from(x >> shift)))
+            }
+            Rep3AcvmType::Shared(shared) => Ok(Rep3AcvmType::Shared(yao::field_int_div_power_2(
+                shared,
+                &mut self.io_context0,
+                shift,
+            )?)),
+        }
+    }
+
     fn set_point_to_value_if_zero<C: CurveGroup<BaseField = F>>(
         &mut self,
         point: Self::AcvmPoint<C>,
@@ -1645,5 +1728,58 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             .collect();
 
         Ok((key_values, key_a_slices, key_b_slices))
+    }
+
+    fn blake2s_hash(
+        &mut self,
+        message_input: Vec<Self::AcvmType>,
+        num_bits: &[usize],
+    ) -> std::io::Result<Vec<Self::AcvmType>> {
+        if message_input.iter().any(|v| Self::is_shared(v)) {
+            let message_input: Vec<_> = message_input
+                .iter()
+                .map(|y| match y {
+                    Rep3AcvmType::Public(public) => {
+                        arithmetic::promote_to_trivial_share(self.io_context0.id, *public)
+                    }
+                    Rep3AcvmType::Shared(shared) => *shared,
+                })
+                .collect();
+            let result = yao::blake2s(&message_input, &mut self.io_context0, num_bits)?;
+            result
+                .iter()
+                .map(|y| Ok(Rep3AcvmType::Shared(*y)))
+                .collect::<Result<Vec<_>, _>>()
+        } else {
+            let mut real_input = Vec::new();
+            let message_input: Vec<_> = message_input
+                .iter()
+                .map(|x| Self::get_public(x).expect("Already checked it is public"))
+                .collect();
+            for (inp, num_bits) in message_input.iter().zip(num_bits.iter()) {
+                let num_elements = num_bits.div_ceil(8);
+                let mut bytes = Vec::new();
+                inp.serialize_uncompressed(&mut bytes).unwrap();
+                real_input.extend(bytes[0..num_elements].to_vec());
+            }
+            let output_bytes: [u8; 32] = Blake2s256::digest(real_input)
+                .as_slice()
+                .try_into()
+                .map_err(|_| "blake2 digest should be 256 bits")
+                .map_err(|err| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!("Failed to convert blake2 digest to array: {}", err),
+                    )
+                })?;
+            let mut result = Vec::new();
+            for out in output_bytes.iter() {
+                result.push(F::from_be_bytes_mod_order(&[*out]));
+            }
+            result
+                .iter()
+                .map(|x| Ok(Rep3AcvmType::Public(*x)))
+                .collect()
+        }
     }
 }

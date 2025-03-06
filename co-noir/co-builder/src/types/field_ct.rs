@@ -4,6 +4,7 @@ use crate::prelude::HonkCurve;
 use crate::types::generators;
 use crate::types::plookup::{ColumnIdx, Plookup};
 use crate::types::types::{AddTriple, EccAddGate, PolyTriple};
+use crate::utils::Utils;
 use crate::TranscriptFieldType;
 use ark_ec::pairing::Pairing;
 use ark_ec::{AffineRepr, CurveConfig, CurveGroup, PrimeGroup};
@@ -517,6 +518,13 @@ impl<F: PrimeField> FieldCT<F> {
             result.multiplicative_constant = -result.multiplicative_constant;
         }
         result
+    }
+
+    pub(crate) fn neg_inplace(&mut self) {
+        self.additive_constant = -self.additive_constant;
+        if !self.is_constant() {
+            self.multiplicative_constant = -self.multiplicative_constant;
+        }
     }
 
     pub(crate) fn sub<
@@ -3170,5 +3178,180 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             builder,
             driver,
         ))
+    }
+}
+
+pub(crate) struct ByteArray<F: PrimeField> {
+    pub(crate) values: Vec<FieldCT<F>>,
+}
+
+impl<F: PrimeField> ByteArray<F> {
+    pub(crate) fn default_with_length(length: usize) -> Self {
+        Self {
+            values: vec![FieldCT::default(); length],
+        }
+    }
+
+    pub(crate) fn write(&mut self, other: &Self) {
+        self.values.extend_from_slice(&other.values);
+    }
+
+    pub(crate) fn new() -> Self {
+        Self { values: Vec::new() }
+    }
+    pub(crate) fn from_field_ct<
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        input: &FieldCT<F>,
+        num_bytes: usize,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> std::io::Result<Self> {
+        assert!(num_bytes <= 32);
+        let value = input.get_value(builder, driver);
+        let mut values = Vec::with_capacity(num_bytes);
+        if input.is_constant() {
+            for i in 0..num_bytes {
+                let byte_val = Utils::slice_u256(
+                    T::get_public(&value)
+                        .expect("Already checked it is public")
+                        .into(),
+                    (num_bytes - i - 1) as u64 * 8,
+                    (num_bytes - i) as u64 * 8,
+                );
+                values.push(FieldCT::from(F::from(byte_val)));
+            }
+        } else {
+            let byte_shift = F::from(256u64);
+            let mut validator = FieldCT::default();
+            let mut shifted_high_limb = FieldCT::default(); // will be set to 2^128v_hi if `i` reaches 15.
+            for i in 0..num_bytes {
+                let byte = if T::is_shared(&value) {
+                    let byte_val = driver.slice_once(
+                        T::get_shared(&value).expect("Already checked it is shared"),
+                        (num_bytes - i) as u8 * 8 - 1,
+                        (num_bytes - i - 1) as u8 * 8,
+                        254,
+                    )?;
+                    FieldCT::from_witness(byte_val.into(), builder)
+                } else {
+                    let byte_val = Utils::slice_u256(
+                        T::get_public(&value)
+                            .expect("Already checked it is public")
+                            .into(),
+                        (num_bytes - i - 1) as u64 * 8,
+                        (num_bytes - i) as u64 * 8,
+                    );
+                    FieldCT::from_witness(F::from(byte_val).into(), builder)
+                };
+                byte.create_range_constraint(8, builder, driver)?;
+                let scaling_factor_value = byte_shift.pow([(num_bytes - 1 - i) as u64]);
+                let scaling_factor = FieldCT::from(scaling_factor_value);
+                // AZTEC TODO: Addition could be optimized
+                let mul = scaling_factor.multiply(&byte, builder, driver)?;
+                validator = validator.add(&mul, builder, driver);
+                values.push(byte);
+                if i == 15 {
+                    shifted_high_limb = validator.clone();
+                }
+            }
+            validator.assert_equal(input, builder, driver);
+
+            // constrain validator to be < r
+            if num_bytes == 32 {
+                let modulus_minus_one: BigUint = (-F::one()).into(); //fr::modulus - 1;
+                let s_lo: F = Utils::slice_u256(modulus_minus_one.clone(), 0, 128).into();
+                let s_hi: F = Utils::slice_u256(modulus_minus_one, 128, 256).into();
+                let shift = F::from(BigUint::one() << 128);
+                validator.neg_inplace();
+                let y_lo = validator.add(&FieldCT::from(s_lo + shift), builder, driver);
+
+                // we have plookup
+                // carve out the 2 high bits from (y_lo + shifted_high_limb) and instantiate as y_overlap
+                let y_lo_value = y_lo.get_value(builder, driver);
+                let shifted_high_limb_val = shifted_high_limb.get_value(builder, driver);
+                let y_lo_value = T::add(driver, y_lo_value, shifted_high_limb_val);
+                let y_overlap_value = T::right_shift(driver, y_lo_value, 128)?;
+                let mut y_overlap = FieldCT::from_witness(y_overlap_value, builder);
+                y_overlap.create_range_constraint(2, builder, driver)?;
+                let y_overlap_mul = y_overlap.multiply(
+                    &FieldCT::from(F::from(BigUint::one() << 128)),
+                    builder,
+                    driver,
+                )?;
+                let y_remainder =
+                    y_lo.add_two(&shifted_high_limb, &y_overlap_mul.neg(), builder, driver);
+                y_remainder.create_range_constraint(128, builder, driver)?;
+                let y_overlap_neg = y_overlap.neg();
+                y_overlap = y_overlap_neg.add(&FieldCT::from(F::one()), builder, driver);
+
+                // define input_hi = shifted_high_limb/shift. We know input_hi is max 128 bits, and we're checking
+                // s_hi - (input_hi + borrow) is non-negative
+
+                let mul = shifted_high_limb.multiply(
+                    &FieldCT::from(shift.inverse().expect("non-zero")),
+                    builder,
+                    driver,
+                )?;
+                let mut y_hi = mul.add(&FieldCT::from(s_hi), builder, driver);
+                y_hi = y_hi.sub(&y_overlap, builder, driver);
+                y_hi.create_range_constraint(128, builder, driver)?;
+            }
+        }
+        Ok(Self { values })
+    }
+
+    /**
+     * @brief Slice `length` bytes from the byte array, starting at `offset`. Does not add any constraints
+     **/
+    pub(crate) fn slice(&self, offset: usize, length: usize) -> Self {
+        assert!(offset < self.values.len());
+        assert!(length <= self.values.len() - offset);
+        let start = offset;
+        let end = offset + length;
+        Self {
+            values: self.values[start..end].to_vec(),
+        }
+    }
+
+    pub(crate) fn slice_from_offset(&self, offset: usize) -> Self {
+        assert!(offset < self.values.len());
+        Self {
+            values: self.values[offset..].to_vec(),
+        }
+    }
+
+    /**
+     * @brief Convert a byte array into a field element.
+     *
+     * @details The byte array is represented as a big integer, that is then converted into a field element.
+     * The transformation is only injective if the byte array is < 32 bytes.
+     * Larger byte arrays can still be cast to a single field element, but the value will wrap around the circuit
+     *modulus
+     **/
+    pub(crate) fn to_field_ct<
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        &self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> std::io::Result<FieldCT<F>> {
+        let bytes = self.values.len();
+        let shift = F::from(256u64);
+        let mut result = FieldCT::default();
+        for (i, value) in self.values.iter().enumerate() {
+            let scaling_factor_value = shift.pow([(bytes - 1 - i) as u64]);
+            let scaling_factor = FieldCT::from(scaling_factor_value);
+            let mul = scaling_factor.multiply(value, builder, driver)?;
+            result = result.add(&mul, builder, driver);
+        }
+        Ok(result.normalize(builder, driver))
+    }
+
+    /// Reverse the bytes in the byte array
+    pub(crate) fn reverse(&mut self) {
+        self.values.reverse();
     }
 }

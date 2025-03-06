@@ -306,6 +306,7 @@ impl BasicTableId {
         }
         [F::from(accumulator), F::zero()]
     }
+
     pub(crate) fn get_sparse_normalization_values_wtns<F: PrimeField, const BASE: u64>(
         key: [u64; 2],
     ) -> [F; 2] {
@@ -314,15 +315,35 @@ impl BasicTableId {
             &Self::WITNESS_EXTENSION_NORMALIZATION_TABLE,
         )
     }
+
     pub(crate) fn get_sparse_normalization_values_choose<F: PrimeField, const BASE: u64>(
         key: [u64; 2],
     ) -> [F; 2] {
         Self::get_sparse_normalization_values::<F, BASE>(key, &Self::CHOOSE_NORMALIZATION_TABLE)
     }
+
     pub(crate) fn get_sparse_normalization_values_maj<F: PrimeField, const BASE: u64>(
         key: [u64; 2],
     ) -> [F; 2] {
         Self::get_sparse_normalization_values::<F, BASE>(key, &Self::MAJORITY_NORMALIZATION_TABLE)
+    }
+
+    pub(crate) fn get_xor_rotate_values_from_key_with_filter<
+        F: PrimeField,
+        const NUM_ROTATED_OUTPUT_BITS: u64,
+        const FILTER: bool,
+    >(
+        key: [u64; 2],
+    ) -> [F; 2] {
+        let filtered_key0 = if FILTER { key[0] & 3 } else { key[0] };
+        let filtered_key1 = if FILTER { key[1] & 3 } else { key[1] };
+        [
+            F::from(
+                ((filtered_key0 as u32) ^ (filtered_key1 as u32))
+                    .rotate_right(NUM_ROTATED_OUTPUT_BITS as u32),
+            ),
+            F::zero(),
+        ]
     }
 }
 
@@ -445,6 +466,8 @@ pub(crate) enum MultiTableId {
     KeccakNormalizeAndRotate,
     NumMultiTables = MultiTableId::KeccakNormalizeAndRotate as isize + 25,
 }
+const BITS_IN_LAST_SLICE: usize = 5;
+const SIZE_OF_LAST_SLICE: usize = 1 << BITS_IN_LAST_SLICE;
 
 impl From<MultiTableId> for usize {
     fn from(id: MultiTableId) -> usize {
@@ -469,12 +492,12 @@ impl<F: PrimeField> Plookup<F> {
         let number_of_elements_in_argument_f = F::from(number_of_elements_in_argument);
         let number_of_lookups = 2;
         let mut table = PlookupMultiTable::new(
+            id,
             number_of_elements_in_argument_f,
             number_of_elements_in_argument_f,
             number_of_elements_in_argument_f,
             number_of_lookups,
         );
-        table.id = id;
         table.slice_sizes.push(number_of_elements_in_argument);
         table.basic_table_ids.push(BasicTableId::HonkDummyBasic1);
         table
@@ -494,9 +517,8 @@ impl<F: PrimeField> Plookup<F> {
         let num_entries = 32 / TABLE_BIT_SIZE;
         let base = 1 << TABLE_BIT_SIZE;
         let mut table =
-            PlookupMultiTable::<F>::new(base.into(), base.into(), base.into(), num_entries);
+            PlookupMultiTable::<F>::new(id, base.into(), base.into(), base.into(), num_entries);
 
-        table.id = id;
         for _ in 0..num_entries {
             table.slice_sizes.push(base);
             table
@@ -527,9 +549,8 @@ impl<F: PrimeField> Plookup<F> {
         let num_entries = 32 / TABLE_BIT_SIZE;
         let base = 1 << TABLE_BIT_SIZE;
         let mut table =
-            PlookupMultiTable::<F>::new(base.into(), base.into(), base.into(), num_entries);
+            PlookupMultiTable::<F>::new(id, base.into(), base.into(), base.into(), num_entries);
 
-        table.id = id;
         for _ in 0..num_entries {
             table.slice_sizes.push(base);
             table
@@ -601,12 +622,12 @@ impl<F: PrimeField> Plookup<F> {
             Self::make_fixed_base_function_pointer_table::<P, MULTITABLE_INDEX>();
 
         let mut table = PlookupMultiTable::new(
+            id,
             F::from(FixedBaseParams::MAX_TABLE_SIZE as u64),
             F::zero(),
             F::zero(),
             num_tables,
         );
-        table.id = id;
         for (i, func) in get_values_from_key_table
             .into_iter()
             .take(num_tables)
@@ -696,9 +717,8 @@ impl<F: PrimeField> Plookup<F> {
         let num_entries = 11;
         let base = 16u64.pow(3);
         let mut table =
-            PlookupMultiTable::<F>::new(base.into(), (1 << 3).into(), F::zero(), num_entries);
+            PlookupMultiTable::<F>::new(id, base.into(), (1 << 3).into(), F::zero(), num_entries);
 
-        table.id = id;
         for _ in 0..num_entries {
             table.slice_sizes.push(base);
             table.basic_table_ids.push(BasicTableId::Sha256MajNormalize);
@@ -782,9 +802,8 @@ impl<F: PrimeField> Plookup<F> {
         let num_entries = 16;
         let base = 28u64.pow(2);
         let mut table =
-            PlookupMultiTable::<F>::new(base.into(), (1 << 2).into(), F::zero(), num_entries);
+            PlookupMultiTable::<F>::new(id, base.into(), (1 << 2).into(), F::zero(), num_entries);
 
-        table.id = id;
         for _ in 0..num_entries {
             table.slice_sizes.push(base);
             table.basic_table_ids.push(BasicTableId::Sha256ChNormalize);
@@ -835,9 +854,8 @@ impl<F: PrimeField> Plookup<F> {
         let num_entries = 11;
         let base = 16u64.pow(3);
         let mut table =
-            PlookupMultiTable::<F>::new(base.into(), (1 << 3).into(), F::zero(), num_entries);
+            PlookupMultiTable::<F>::new(id, base.into(), (1 << 3).into(), F::zero(), num_entries);
 
-        table.id = id;
         for _ in 0..num_entries {
             table.slice_sizes.push(base);
             table
@@ -850,6 +868,218 @@ impl<F: PrimeField> Plookup<F> {
                 )
             });
         }
+        table
+    }
+
+    fn get_blake2s_xor_table() -> PlookupMultiTable<F> {
+        let id = MultiTableId::BlakeXor;
+        let num_entries = (32 + 2) / 6 + 1;
+        let base = 1 << 6;
+        let mut table =
+            PlookupMultiTable::<F>::new(id, base.into(), base.into(), base.into(), num_entries);
+
+        for _ in 0..num_entries - 1 {
+            table.slice_sizes.push(base);
+            table.basic_table_ids.push(BasicTableId::BlakeXorRotate0);
+            table
+                .get_table_values
+                .push(BasicTableId::get_xor_rotate_values_from_key_with_filter::<F, 0, false>);
+        }
+
+        table.slice_sizes.push(SIZE_OF_LAST_SLICE as u64);
+        table
+            .basic_table_ids
+            .push(BasicTableId::BlakeXorRotate0Slice5Mod4);
+        table
+            .get_table_values
+            .push(BasicTableId::get_xor_rotate_values_from_key_with_filter::<F, 0, true>);
+
+        table
+    }
+
+    fn get_blake2s_xor_rotate_16_table() -> PlookupMultiTable<F> {
+        let id = MultiTableId::BlakeXorRotate16;
+        let base = 1 << 6;
+        let coefficient_16 = F::from(1u64) / F::from(1u64 << 16);
+
+        let column_1_coefficients = [
+            F::one(),
+            F::from(1u64 << 6),
+            F::from(1u64 << 12),
+            F::from(1u64 << 18),
+            F::from(1u64 << 24),
+            F::from(1u64 << 30),
+        ];
+
+        let column_3_coefficients = [
+            F::one(),
+            F::from(1u64 << 6),
+            coefficient_16,
+            coefficient_16 * F::from(1u64 << 2),
+            coefficient_16 * F::from(1u64 << 8),
+            coefficient_16 * F::from(1u64 << 14),
+        ];
+
+        let mut table = PlookupMultiTable::new_from_vec(
+            id,
+            column_1_coefficients.to_vec(),
+            column_1_coefficients.to_vec(),
+            column_3_coefficients.to_vec(),
+        );
+
+        table.slice_sizes = vec![base, base, base, base, base, SIZE_OF_LAST_SLICE as u64];
+        table.basic_table_ids = vec![
+            BasicTableId::BlakeXorRotate0,
+            BasicTableId::BlakeXorRotate0,
+            BasicTableId::BlakeXorRotate4,
+            BasicTableId::BlakeXorRotate0,
+            BasicTableId::BlakeXorRotate0,
+            BasicTableId::BlakeXorRotate0Slice5Mod4,
+        ];
+
+        table
+            .get_table_values
+            .push(BasicTableId::get_xor_rotate_values_from_key_with_filter::<F, 0, false>);
+        table
+            .get_table_values
+            .push(BasicTableId::get_xor_rotate_values_from_key_with_filter::<F, 0, false>);
+        table
+            .get_table_values
+            .push(BasicTableId::get_xor_rotate_values_from_key_with_filter::<F, 4, false>);
+        table
+            .get_table_values
+            .push(BasicTableId::get_xor_rotate_values_from_key_with_filter::<F, 0, false>);
+        table
+            .get_table_values
+            .push(BasicTableId::get_xor_rotate_values_from_key_with_filter::<F, 0, false>);
+        table
+            .get_table_values
+            .push(BasicTableId::get_xor_rotate_values_from_key_with_filter::<F, 0, true>);
+
+        table
+    }
+
+    fn get_blake2s_xor_rotate_8_table() -> PlookupMultiTable<F> {
+        let id = MultiTableId::BlakeXorRotate8;
+        let base = 1 << 6;
+        let coefficient_24 = F::from(1u64) / F::from(1u64 << 24);
+
+        let column_1_coefficients = [
+            F::one(),
+            F::from(1u64 << 6),
+            F::from(1u64 << 12),
+            F::from(1u64 << 18),
+            F::from(1u64 << 24),
+            F::from(1u64 << 30),
+        ];
+
+        let column_3_coefficients = [
+            F::one(),
+            coefficient_24,
+            coefficient_24 * F::from(1u64 << 4),
+            coefficient_24 * F::from(1u64 << (4 + 6)),
+            coefficient_24 * F::from(1u64 << (4 + 12)),
+            coefficient_24 * F::from(1u64 << (4 + 18)),
+        ];
+
+        let mut table = PlookupMultiTable::new_from_vec(
+            id,
+            column_1_coefficients.to_vec(),
+            column_1_coefficients.to_vec(),
+            column_3_coefficients.to_vec(),
+        );
+
+        table.slice_sizes = vec![base, base, base, base, base, SIZE_OF_LAST_SLICE as u64];
+        table.basic_table_ids = vec![
+            BasicTableId::BlakeXorRotate0,
+            BasicTableId::BlakeXorRotate2,
+            BasicTableId::BlakeXorRotate0,
+            BasicTableId::BlakeXorRotate0,
+            BasicTableId::BlakeXorRotate0,
+            BasicTableId::BlakeXorRotate0Slice5Mod4,
+        ];
+
+        table
+            .get_table_values
+            .push(BasicTableId::get_xor_rotate_values_from_key_with_filter::<F, 0, false>);
+        table
+            .get_table_values
+            .push(BasicTableId::get_xor_rotate_values_from_key_with_filter::<F, 2, false>);
+        table
+            .get_table_values
+            .push(BasicTableId::get_xor_rotate_values_from_key_with_filter::<F, 0, false>);
+        table
+            .get_table_values
+            .push(BasicTableId::get_xor_rotate_values_from_key_with_filter::<F, 0, false>);
+        table
+            .get_table_values
+            .push(BasicTableId::get_xor_rotate_values_from_key_with_filter::<F, 0, false>);
+        table
+            .get_table_values
+            .push(BasicTableId::get_xor_rotate_values_from_key_with_filter::<F, 0, true>);
+
+        table
+    }
+
+    fn get_blake2s_xor_rotate_7_table() -> PlookupMultiTable<F> {
+        let id = MultiTableId::BlakeXorRotate7;
+        let base = 1 << 6;
+        let coefficient_25 = F::from(1u64) / F::from(1u64 << 25);
+
+        let column_1_coefficients = [
+            F::one(),
+            F::from(1u64 << 6),
+            F::from(1u64 << 12),
+            F::from(1u64 << 18),
+            F::from(1u64 << 24),
+            F::from(1u64 << 30),
+        ];
+
+        let column_3_coefficients = [
+            F::one(),
+            coefficient_25,
+            coefficient_25 * F::from(1u64 << 5),
+            coefficient_25 * F::from(1u64 << (5 + 6)),
+            coefficient_25 * F::from(1u64 << (5 + 12)),
+            coefficient_25 * F::from(1u64 << (5 + 18)),
+        ];
+
+        let mut table = PlookupMultiTable::new_from_vec(
+            id,
+            column_1_coefficients.to_vec(),
+            column_1_coefficients.to_vec(),
+            column_3_coefficients.to_vec(),
+        );
+
+        table.slice_sizes = vec![base, base, base, base, base, SIZE_OF_LAST_SLICE as u64];
+        table.basic_table_ids = vec![
+            BasicTableId::BlakeXorRotate0,
+            BasicTableId::BlakeXorRotate1,
+            BasicTableId::BlakeXorRotate0,
+            BasicTableId::BlakeXorRotate0,
+            BasicTableId::BlakeXorRotate0,
+            BasicTableId::BlakeXorRotate0Slice5Mod4,
+        ];
+
+        table
+            .get_table_values
+            .push(BasicTableId::get_xor_rotate_values_from_key_with_filter::<F, 0, false>);
+        table
+            .get_table_values
+            .push(BasicTableId::get_xor_rotate_values_from_key_with_filter::<F, 1, false>);
+        table
+            .get_table_values
+            .push(BasicTableId::get_xor_rotate_values_from_key_with_filter::<F, 0, false>);
+        table
+            .get_table_values
+            .push(BasicTableId::get_xor_rotate_values_from_key_with_filter::<F, 0, false>);
+        table
+            .get_table_values
+            .push(BasicTableId::get_xor_rotate_values_from_key_with_filter::<F, 0, false>);
+        table
+            .get_table_values
+            .push(BasicTableId::get_xor_rotate_values_from_key_with_filter::<F, 0, true>);
+
         table
     }
 
@@ -877,6 +1107,13 @@ impl<F: PrimeField> Plookup<F> {
             Self::get_witness_extension_input_table();
         multi_tables[usize::from(MultiTableId::Sha256WitnessOutput)] =
             Self::get_witness_extension_output_table();
+        multi_tables[usize::from(MultiTableId::BlakeXor)] = Self::get_blake2s_xor_table();
+        multi_tables[usize::from(MultiTableId::BlakeXorRotate16)] =
+            Self::get_blake2s_xor_rotate_16_table();
+        multi_tables[usize::from(MultiTableId::BlakeXorRotate8)] =
+            Self::get_blake2s_xor_rotate_8_table();
+        multi_tables[usize::from(MultiTableId::BlakeXorRotate7)] =
+            Self::get_blake2s_xor_rotate_7_table();
 
         multi_tables
     }
@@ -898,6 +1135,10 @@ impl<F: PrimeField> Plookup<F> {
                     | MultiTableId::Sha256ChOutput
                     | MultiTableId::Sha256WitnessInput
                     | MultiTableId::Sha256WitnessOutput
+                    | MultiTableId::BlakeXor
+                    | MultiTableId::BlakeXorRotate16
+                    | MultiTableId::BlakeXorRotate7
+                    | MultiTableId::BlakeXorRotate8
             ),
             "Multitable for {:?} not implemented",
             id
@@ -983,7 +1224,6 @@ impl<F: PrimeField> Plookup<F> {
         let mut key_a_slices = Vec::with_capacity(bases.len());
         let mut key_b_slices = Vec::with_capacity(bases.len());
         if !T::is_shared(&key_a) && !T::is_shared(&key_b) {
-            // Everything public
             let key_a_slice = Self::slice_input_using_variable_bases(
                 T::get_public(&key_a)
                     .expect("Already checked it is public")
@@ -1217,6 +1457,65 @@ impl<F: PrimeField> Plookup<F> {
                 key_a_slices.extend(values.1);
                 key_b_slices.extend(values.2);
             }
+
+            MultiTableId::BlakeXor => {
+                let len = multi_table.slice_sizes.len();
+                let filter = [false, false, false, false, false, true];
+                let values = T::slice_and_get_xor_rotate_values_with_filter(
+                    driver,
+                    key_a,
+                    key_b,
+                    bases,
+                    &vec![0; len],
+                    &filter,
+                )?;
+                results.reserve(values.0.len());
+                for val in values.0 {
+                    results.push((val, T::public_zero()))
+                }
+                key_a_slices.extend(values.1);
+                key_b_slices.extend(values.2);
+            }
+            MultiTableId::BlakeXorRotate16 => {
+                let filter = [false, false, false, false, false, true];
+                let rotation = [0, 0, 4, 0, 0, 0];
+                let values = T::slice_and_get_xor_rotate_values_with_filter(
+                    driver, key_a, key_b, bases, &rotation, &filter,
+                )?;
+                results.reserve(values.0.len());
+                for val in values.0 {
+                    results.push((val, T::public_zero()))
+                }
+                key_a_slices.extend(values.1);
+                key_b_slices.extend(values.2);
+            }
+            MultiTableId::BlakeXorRotate8 => {
+                let filter = [false, false, false, false, false, true];
+                let rotation = [0, 2, 0, 0, 0, 0];
+                let values = T::slice_and_get_xor_rotate_values_with_filter(
+                    driver, key_a, key_b, bases, &rotation, &filter,
+                )?;
+                results.reserve(values.0.len());
+                for val in values.0 {
+                    results.push((val, T::public_zero()))
+                }
+                key_a_slices.extend(values.1);
+                key_b_slices.extend(values.2);
+            }
+            MultiTableId::BlakeXorRotate7 => {
+                let filter = [false, false, false, false, false, true];
+                let rotation = [0, 1, 0, 0, 0, 0];
+                let values = T::slice_and_get_xor_rotate_values_with_filter(
+                    driver, key_a, key_b, bases, &rotation, &filter,
+                )?;
+                results.reserve(values.0.len());
+                for val in values.0 {
+                    results.push((val, T::public_zero()))
+                }
+                key_a_slices.extend(values.1);
+                key_b_slices.extend(values.2);
+            }
+
             _ => todo!("{:?} not yet implemented", multi_table.id),
         }
 
@@ -1386,6 +1685,7 @@ impl<F: PrimeField> Plookup<F> {
             lookup[ColumnIdx::C3][i - 1] =
                 T::add(driver, column_3_raw_values[i - 1].clone(), tmp_mul);
         }
+
         Ok(lookup)
     }
 
@@ -1405,6 +1705,7 @@ impl<F: PrimeField> Plookup<F> {
 
         let a = key_a.get_value(builder, driver);
         let b = key_b.get_value(builder, driver);
+
         let mut lookup = ReadData::default();
 
         let lookup_data = Self::get_lookup_accumulators(
@@ -1786,6 +2087,51 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> PlookupBasicTa
         table
     }
 
+    fn generate_xor_rotate_table_blake<
+        const BITS_PER_SLICE: u64,
+        const NUM_ROTATED_OUTPUT_BITS: u64,
+        const FILTER: bool,
+    >(
+        id: BasicTableId,
+        table_index: usize,
+    ) -> PlookupBasicTable<P, T> {
+        let base = 1 << BITS_PER_SLICE;
+        let mut table = PlookupBasicTable::new();
+
+        table.id = id;
+        table.table_index = table_index;
+        table.use_twin_keys = true;
+
+        for i in 0..base {
+            for j in 0..base {
+                table.column_1.push(P::ScalarField::from(i));
+                table.column_2.push(P::ScalarField::from(j));
+                let mut i_copy = i;
+                let mut j_copy = j;
+                if FILTER {
+                    i_copy &= 3;
+                    j_copy &= 3;
+                }
+                table.column_3.push(P::ScalarField::from(
+                    ((i_copy as u32) ^ (j_copy as u32))
+                        .rotate_right(NUM_ROTATED_OUTPUT_BITS as u32),
+                ));
+            }
+        }
+
+        table.get_values_from_key = BasicTableId::get_xor_rotate_values_from_key_with_filter::<
+            P::ScalarField,
+            NUM_ROTATED_OUTPUT_BITS,
+            FILTER,
+        >;
+        let base = P::ScalarField::from(base);
+        table.column_1_step_size = base;
+        table.column_2_step_size = base;
+        table.column_3_step_size = base;
+
+        table
+    }
+
     #[expect(dead_code)]
     pub(crate) fn initialize_index_map(&mut self) {
         for (i, (c1, c2, c3)) in izip!(
@@ -1899,6 +2245,11 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                     | BasicTableId::Sha256WitnessNormalize
                     | BasicTableId::Sha256ChNormalize
                     | BasicTableId::Sha256MajNormalize
+                    | BasicTableId::BlakeXorRotate0
+                    | BasicTableId::BlakeXorRotate1
+                    | BasicTableId::BlakeXorRotate2
+                    | BasicTableId::BlakeXorRotate4
+                    | BasicTableId::BlakeXorRotate0Slice5Mod4
             ),
             "Create Basic Table for {:?} not implemented",
             id
@@ -1977,6 +2328,21 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                 &BasicTableId::MAJORITY_NORMALIZATION_TABLE,
                 BasicTableId::get_sparse_normalization_values_maj::<P::ScalarField, 16>,
             ),
+            BasicTableId::BlakeXorRotate0 => {
+                Self::generate_xor_rotate_table_blake::<6, 0, false>(id, index)
+            }
+            BasicTableId::BlakeXorRotate1 => {
+                Self::generate_xor_rotate_table_blake::<6, 1, false>(id, index)
+            }
+            BasicTableId::BlakeXorRotate2 => {
+                Self::generate_xor_rotate_table_blake::<6, 2, false>(id, index)
+            }
+            BasicTableId::BlakeXorRotate4 => {
+                Self::generate_xor_rotate_table_blake::<6, 4, false>(id, index)
+            }
+            BasicTableId::BlakeXorRotate0Slice5Mod4 => {
+                Self::generate_xor_rotate_table_blake::<5, 0, true>(id, index)
+            }
             _ => {
                 todo!("Create other tables")
             }
@@ -2029,6 +2395,7 @@ impl<F: PrimeField> Default for PlookupMultiTable<F> {
 
 impl<F: PrimeField> PlookupMultiTable<F> {
     pub(crate) fn new(
+        id: MultiTableId,
         col1_repeated_coeff: F,
         col2_repeated_coeff: F,
         col3_repeated_coeff: F,
@@ -2049,6 +2416,7 @@ impl<F: PrimeField> PlookupMultiTable<F> {
         }
 
         let mut res = Self {
+            id,
             column_1_coefficients,
             column_2_coefficients,
             column_3_coefficients,
