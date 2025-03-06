@@ -289,6 +289,22 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Ok([lo, slice, hi])
     }
 
+    fn slice_once(
+        &mut self,
+        input: Self::ArithmeticShare,
+        msb: u8,
+        lsb: u8,
+        bitsize: usize,
+    ) -> std::io::Result<Self::ArithmeticShare> {
+        let big_mask = (BigUint::from(1u64) << bitsize) - BigUint::one();
+        let slice_mask = (BigUint::one() << ((msb - lsb) as u32 + 1)) - BigUint::one();
+
+        let mut x: BigUint = input.into();
+        x &= &big_mask;
+
+        Ok(F::from((x >> lsb) & slice_mask))
+    }
+
     fn integer_bitwise_and(
         &mut self,
         lhs: Self::AcvmType,
@@ -421,6 +437,72 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         ))
     }
 
+    fn slice_and_get_xor_rotate_values_with_filter(
+        &mut self,
+        input1: Self::ArithmeticShare,
+        input2: Self::ArithmeticShare,
+        basis_bits: &[u64],
+        total_bitsize: usize,
+        rotation: &[usize],
+        filter: &[bool],
+    ) -> std::io::Result<(
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+    )> {
+        let basis_bits = basis_bits[0];
+        let num_decomps_per_field = total_bitsize.div_ceil(basis_bits as usize);
+        let basis = BigUint::one() << basis_bits;
+
+        let mut target1: BigUint = input1.into();
+        let mut target2: BigUint = input2.into();
+        let mut slices1: Vec<u64> = Vec::with_capacity(num_decomps_per_field);
+        let mut slices2: Vec<u64> = Vec::with_capacity(num_decomps_per_field);
+        for i in 0..num_decomps_per_field {
+            if i == num_decomps_per_field - 1 && (target1 >= basis || target2 >= basis) {
+                panic!("Last key slice greater than {}", basis);
+            }
+            slices1.push(
+                (&target1 % &basis)
+                    .try_into()
+                    .expect("Conversion must work"),
+            );
+            slices2.push(
+                (&target2 % &basis)
+                    .try_into()
+                    .expect("Conversion must work"),
+            );
+            target1 /= &basis;
+            target2 /= &basis;
+        }
+        let mut results = Vec::with_capacity(num_decomps_per_field);
+        slices1
+            .iter()
+            .zip(slices2.iter())
+            .zip(filter.iter())
+            .zip(rotation.iter())
+            .for_each(|(((s1, s2), f), rot)| {
+                let mut key1 = *s1;
+                let mut key2 = *s2;
+                if *f {
+                    key1 &= 3u64;
+                    key2 &= 3u64;
+                }
+                let res = key1 as u32 ^ key2 as u32;
+                results.push(F::from(if *rot != 0 {
+                    (res >> rot) | (res << (32 - *rot as u32))
+                } else {
+                    res
+                }));
+            });
+
+        Ok((
+            results,
+            slices1.into_iter().map(F::from).collect(),
+            slices2.into_iter().map(F::from).collect(),
+        ))
+    }
+
     fn sort_vec_by(
         &mut self,
         key: &[Self::AcvmType],
@@ -512,5 +594,31 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
 
     fn equal(&mut self, a: &Self::AcvmType, b: &Self::AcvmType) -> std::io::Result<Self::AcvmType> {
         Ok(Self::ArithmeticShare::from(a == b))
+    }
+
+    fn right_shift(
+        &mut self,
+        input: Self::AcvmType,
+        shift: usize,
+    ) -> std::io::Result<Self::AcvmType> {
+        let x: BigUint = input.into();
+        Ok((x >> shift).into())
+    }
+
+    fn lt(&mut self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> std::io::Result<Self::AcvmType> {
+        Ok(Self::ArithmeticShare::from(lhs > rhs))
+    }
+
+    fn get_overflow_bit(
+        &mut self,
+        input: Self::ArithmeticShare,
+        _bit: usize,
+        max_bitsize: usize,
+    ) -> std::io::Result<Self::ArithmeticShare> {
+        let mut sum: BigUint = input.into();
+        let mask = (BigUint::from(1u64) << max_bitsize) - BigUint::one();
+        sum &= mask;
+        let normalized_sum = sum.to_u32_digits()[0];
+        Ok(Self::ArithmeticShare::from((sum - normalized_sum) >> 32))
     }
 }

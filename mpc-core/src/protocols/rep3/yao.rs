@@ -695,6 +695,19 @@ pub fn slice_arithmetic<F: PrimeField, N: Rep3Network>(
     slice_arithmetic_many(&[input], io_context, msb, lsb, bitsize)
 }
 
+/// Slices a shared field element at given indices from msb to lsb, both included in the slice.
+/// Only consideres bitsize bits.
+/// Result is thus slice, where slice has all bits from lsb to msb.
+pub fn slice_arithmetic_once<F: PrimeField, N: Rep3Network>(
+    input: Rep3PrimeFieldShare<F>,
+    io_context: &mut IoContext<N>,
+    msb: usize,
+    lsb: usize,
+    bitsize: usize,
+) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
+    slice_arithmetic_once_many(&[input], io_context, msb, lsb, bitsize)
+}
+
 /// Divides a vector of field elements by a power of 2, rounding down.
 pub fn field_int_div_power_2_many<F: PrimeField, N: Rep3Network>(
     inputs: &[Rep3PrimeFieldShare<F>],
@@ -968,6 +981,53 @@ pub fn slice_arithmetic_many<F: PrimeField, N: Rep3Network>(
         (msb, lsb, bitsize)
     )
 }
+/// Slices a shared field element at given indices from msb to lsb, both included in the slice.
+/// Only consideres bitsize bits.
+/// Result is thus slice, where slice has all bits from lsb to msb.
+pub fn slice_arithmetic_once_many<F: PrimeField, N: Rep3Network>(
+    inputs: &[Rep3PrimeFieldShare<F>],
+    io_context: &mut IoContext<N>,
+    msb: usize,
+    lsb: usize,
+    bitsize: usize,
+) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
+    let num_inputs = inputs.len();
+    let total_output_elements = num_inputs;
+    decompose_circuit_compose_blueprint!(
+        inputs,
+        io_context,
+        total_output_elements,
+        GarbledCircuits::slice_field_element_once_many::<_, F>,
+        (msb, lsb, bitsize)
+    )
+}
+
+/// Slices two vectors of field elements, does XOR on the slices and then rotates them. The rotation is done on 64-bit values. Base_bit is the size of the slice, rotation the the length of the rotation and total_output_bitlen_per_field is the amount of bits per input.
+pub fn slice_xor_with_filter_many<F: PrimeField, N: Rep3Network>(
+    input1: &[Rep3PrimeFieldShare<F>],
+    input2: &[Rep3PrimeFieldShare<F>],
+    io_context: &mut IoContext<N>,
+    base_bits: &[u64],
+    rotation: &[usize],
+    filter: &[bool],
+    total_output_bitlen_per_field: usize,
+) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
+    let num_inputs = input1.len();
+    debug_assert_eq!(num_inputs, input2.len());
+    let num_decomps_per_field = total_output_bitlen_per_field.div_ceil(base_bits.len());
+    let total_output_elements = 3 * num_decomps_per_field * num_inputs;
+    let mut combined_inputs = Vec::with_capacity(num_inputs + input2.len());
+    combined_inputs.extend_from_slice(input1);
+    combined_inputs.extend_from_slice(input2);
+
+    decompose_circuit_compose_blueprint!(
+        &combined_inputs,
+        io_context,
+        total_output_elements,
+        GarbledCircuits::slice_and_get_xor_rotate_values_from_key_with_filter_many::<_, F>,
+        (base_bits, rotation, filter, total_output_bitlen_per_field)
+    )
+}
 
 /// Slices two vectors of field elements, does XOR on the slices and then rotates them. The rotation is done on 64-bit values. Base_bit is the size of the slice, rotation the the length of the rotation and total_output_bitlen_per_field is the amount of bits per input.
 pub fn slice_xor_many<F: PrimeField, N: Rep3Network>(
@@ -1056,6 +1116,27 @@ pub fn slice_xor<F: PrimeField, N: Rep3Network>(
         io_context,
         base_bit,
         rotation,
+        total_output_bitlen_per_field,
+    )
+}
+
+/// Slices two field elements, does XOR on the slices and then rotates them. The rotation is done on 64-bit values. Base_bit is the size of the slice, rotation the the length of the rotation and total_output_bitlen_per_field is the amount of bits per input.
+pub fn slice_xor_with_filter<F: PrimeField, N: Rep3Network>(
+    input1: Rep3PrimeFieldShare<F>,
+    input2: Rep3PrimeFieldShare<F>,
+    io_context: &mut IoContext<N>,
+    base_bit: &[u64],
+    rotation: &[usize],
+    filter: &[bool],
+    total_output_bitlen_per_field: usize,
+) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
+    slice_xor_with_filter_many(
+        &[input1],
+        &[input2],
+        io_context,
+        base_bit,
+        rotation,
+        filter,
         total_output_bitlen_per_field,
     )
 }
