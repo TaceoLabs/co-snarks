@@ -100,7 +100,7 @@ impl<F: PrimeField> FieldCT<F> {
                 T::get_public(&self.get_value(builder, driver)).expect("Constant should be public");
             let right = T::get_public(&other.get_value(builder, driver))
                 .expect("Constant should be public");
-            assert_eq!(left, right);
+            builder.assert_if_has_witness(left == right);
         } else if self.is_constant() {
             let right = other.normalize(builder, driver);
             let left =
@@ -746,7 +746,7 @@ impl<F: PrimeField> FieldCT<F> {
         builder: &mut GenericUltraCircuitBuilder<P, T>,
     ) {
         if self.is_constant() {
-            assert!(self.additive_constant.is_zero());
+            builder.assert_if_has_witness(self.additive_constant.is_zero());
             return;
         }
 
@@ -754,7 +754,9 @@ impl<F: PrimeField> FieldCT<F> {
         if !T::is_shared(&var) {
             // Sanity check
             let value = T::get_public(&var).expect("Already checked it is public");
-            assert!((value * self.multiplicative_constant + self.additive_constant).is_zero())
+            builder.assert_if_has_witness(
+                (value * self.multiplicative_constant + self.additive_constant).is_zero(),
+            )
         } else {
             // We set the share to a public value since we are asserting it is zero.
             let val = -self.additive_constant / self.multiplicative_constant;
@@ -804,7 +806,7 @@ impl<F: PrimeField> FieldCT<F> {
         if !T::is_shared(&var) {
             // Sanity check
             let value = T::get_public(&var).expect("Already checked it is public");
-            assert!(!value.is_zero())
+            builder.assert_if_has_witness(!value.is_zero())
         }
 
         // if val == 0 ? 0 : val^-1
@@ -880,7 +882,7 @@ impl<F: PrimeField> FieldCT<F> {
             let val_c = T::get_public(&c.get_value(builder, driver)).expect("Constants are public");
             let val_d = T::get_public(&d.get_value(builder, driver)).expect("Constants are public");
             let result = val_a * val_b + val_c + val_d;
-            assert!(result.is_zero());
+            builder.assert_if_has_witness(result.is_zero());
             return;
         }
 
