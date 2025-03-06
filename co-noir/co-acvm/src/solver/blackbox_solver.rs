@@ -1,13 +1,14 @@
-use crate::mpc::NoirWitnessExtensionProtocol;
-
 use super::{CoAcvmResult, CoSolver};
+use crate::mpc::NoirWitnessExtensionProtocol;
 use acir::{
     acir_field::GenericFieldElement,
     circuit::opcodes::{BlackBoxFuncCall, ConstantOrWitnessEnum, FunctionInput},
     native_types::{Witness, WitnessMap},
     AcirField,
 };
+
 use ark_ff::PrimeField;
+
 use mpc_core::gadgets::poseidon2::Poseidon2;
 
 impl<T, F> CoSolver<T, F>
@@ -249,6 +250,40 @@ where
         Ok(())
     }
 
+    fn solve_blake2s_opcode(
+        driver: &mut T,
+        initial_witness: &mut WitnessMap<T::AcvmType>,
+        inputs: &[FunctionInput<GenericFieldElement<F>>],
+        outputs: &[Witness; 32],
+    ) -> CoAcvmResult<()> {
+        let (message_input, num_bits) = Self::get_hash_input(initial_witness, inputs)?;
+        let digest = T::blake2s_hash(driver, message_input, &num_bits)?;
+
+        for (output_witness, value) in outputs.iter().zip(digest.into_iter()) {
+            Self::insert_value(output_witness, value, initial_witness)?;
+        }
+
+        Ok(())
+    }
+    /// Reads the hash function input from a [`WitnessMap`].
+    fn get_hash_input(
+        initial_witness: &WitnessMap<T::AcvmType>,
+        inputs: &[FunctionInput<GenericFieldElement<F>>],
+        // message_size: Option<&FunctionInput<GenericFieldElement<F>>>,
+    ) -> CoAcvmResult<(Vec<T::AcvmType>, Vec<usize>)> {
+        // Read witness assignments.
+        let mut message_input = Vec::new();
+        let mut num_bits_vec = Vec::new();
+        for input in inputs.iter() {
+            let num_bits = input.num_bits() as usize;
+
+            let witness_assignment = Self::input_to_value(initial_witness, *input, false)?;
+            message_input.push(witness_assignment);
+            num_bits_vec.push(num_bits);
+            // Note: in Noir fetch_nearest_bytes gets called on witness_assignment, but we postpone this and do this in the computation of the hash
+        }
+        Ok((message_input, num_bits_vec))
+    }
     pub(super) fn solve_blackbox(
         &mut self,
         bb_func: &BlackBoxFuncCall<GenericFieldElement<F>>,
@@ -300,6 +335,9 @@ where
                 outputs,
                 *len,
             )?,
+            BlackBoxFuncCall::Blake2s { inputs, outputs } => {
+                Self::solve_blake2s_opcode(&mut self.driver, initial_witness, inputs, outputs)?
+            }
             _ => todo!("solve blackbox function {} not supported", bb_func.name()),
         }
 
