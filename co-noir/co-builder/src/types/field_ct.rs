@@ -2161,11 +2161,11 @@ impl<F: PrimeField> CycleScalarCT<F> {
         let digits = inp.to_u64_digits();
         let mut lo = BigUint::zero();
         let mut hi = BigUint::zero();
-        for digit in digits.iter().take(2) {
+        for digit in digits.iter().take(2).rev() {
             lo <<= 64;
             lo += *digit;
         }
-        for digit in digits.iter().skip(2).take(2) {
+        for digit in digits.iter().skip(2).take(2).rev() {
             hi <<= 64;
             hi += *digit;
         }
@@ -2188,7 +2188,7 @@ impl<F: PrimeField> CycleScalarCT<F> {
         let cycle_group_modulus = if self.use_bn254_scalar_field_for_primality_test() {
             BigUint::from(ark_bn254::Fr::MODULUS)
         } else {
-            F::MODULUS.into()
+            P::BaseField::MODULUS.into()
         };
         let (r_lo, r_hi) = Self::slice(cycle_group_modulus);
 
