@@ -183,6 +183,7 @@ pub struct GenericUltraCircuitBuilder<P: Pairing, T: NoirWitnessExtensionProtoco
     pub(crate) memory_write_records: Vec<u32>,
     // Stores gate index where Read/Write type is shared
     pub memory_records_shared: BTreeMap<u32, T::AcvmType>, // order does not matter
+    has_dummy_witnesses: bool,
 }
 
 // This workaround is required due to mutability issues
@@ -206,6 +207,13 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
     pub(crate) const DEFAULT_PLOOKUP_RANGE_STEP_SIZE: usize = 3;
     // number of gates created per non-native field operation in process_non_native_field_multiplications
     pub(crate) const GATES_PER_NON_NATIVE_FIELD_MULTIPLICATION_ARITHMETIC: usize = 7;
+
+    pub(crate) fn assert_if_has_witness(&self, input: bool) {
+        if self.has_dummy_witnesses {
+            return;
+        }
+        assert!(input)
+    }
 
     pub(crate) fn add_variable(&mut self, value: T::AcvmType) -> u32 {
         let idx = self.variables.len() as u32;
@@ -1244,7 +1252,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
     }
 
     pub(crate) fn assert_equal_constant(&mut self, a_idx: usize, b: P::ScalarField) {
-        assert_eq!(self.variables[a_idx], T::AcvmType::from(b));
+        self.assert_if_has_witness(self.variables[a_idx] == T::AcvmType::from(b));
         let b_idx = self.put_constant_variable(b);
         self.assert_equal(a_idx, b_idx as usize);
     }
@@ -1258,7 +1266,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
         match (a, b) {
             (Some(a), Some(b)) => {
-                assert_eq!(a, b);
+                self.assert_if_has_witness(a == b);
             }
 
             (Some(a), None) => {
@@ -1290,11 +1298,10 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         let a_start_idx = self.get_first_variable_in_class(a_idx);
         self.next_var_index[b_real_idx] = a_start_idx as u32;
         self.prev_var_index[a_start_idx] = b_real_idx as u32;
-        assert!(
-            self.real_variable_tags[a_real_idx] == Self::DUMMY_TAG
-                || self.real_variable_tags[b_real_idx] == Self::DUMMY_TAG
-                || self.real_variable_tags[a_real_idx] == self.real_variable_tags[b_real_idx]
-        );
+        let no_tag_clash = self.real_variable_tags[a_real_idx] == Self::DUMMY_TAG
+            || self.real_variable_tags[b_real_idx] == Self::DUMMY_TAG
+            || self.real_variable_tags[a_real_idx] == self.real_variable_tags[b_real_idx];
+        self.assert_if_has_witness(no_tag_clash);
 
         if self.real_variable_tags[a_real_idx] == Self::DUMMY_TAG {
             self.real_variable_tags[a_real_idx] = self.real_variable_tags[b_real_idx];
@@ -3188,6 +3195,8 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         tracing::trace!("Builder init");
         let mut builder = Self::new(size_hint);
 
+        builder.has_dummy_witnesses = witness_values.is_empty();
+
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/870): reserve space in blocks here somehow?
         let len = witness_values.len();
         for witness in witness_values.into_iter().take(varnum) {
@@ -3249,6 +3258,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             memory_write_records: Vec::new(),
             memory_records_shared: BTreeMap::new(),
             current_tag: 0,
+            has_dummy_witnesses: true,
         }
     }
 
