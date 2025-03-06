@@ -196,6 +196,21 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         self.plain_lut.get_from_lut(index, lut, &mut a, &mut b)
     }
 
+    fn read_from_public_luts(
+        &mut self,
+        index: Self::AcvmType,
+        luts: &[Vec<F>],
+    ) -> std::io::Result<Vec<Self::AcvmType>> {
+        let mut a = ();
+        let mut b = ();
+        let mut result = Vec::with_capacity(luts.len());
+        for lut in luts {
+            let res = self.plain_lut.get_from_lut(index, lut, &mut a, &mut b)?;
+            result.push(res);
+        }
+        Ok(result)
+    }
+
     fn write_lut_by_acvm_type(
         &mut self,
         index: Self::AcvmType,

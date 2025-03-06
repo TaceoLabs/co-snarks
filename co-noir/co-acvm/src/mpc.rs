@@ -126,6 +126,13 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         lut: &<Self::Lookup as LookupTableProvider<F>>::LutType,
     ) -> io::Result<Self::AcvmType>;
 
+    /// Reads from multiple public LUTs.
+    fn read_from_public_luts(
+        &mut self,
+        index: Self::AcvmType,
+        luts: &[Vec<F>],
+    ) -> io::Result<Vec<Self::AcvmType>>;
+
     /// Wrapper around writing a value to a LUT. The index and the value can be shared or public.
     fn write_lut_by_acvm_type(
         &mut self,
