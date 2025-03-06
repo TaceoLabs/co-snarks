@@ -3518,15 +3518,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         //     todo!("keccak permutation gates");
         // }
 
-        // Add multi scalar mul constraints
-        for constraint in constraint_system.multi_scalar_mul_constraints.iter() {
-            self.create_multi_scalar_mul_constraint(
-                constraint,
-                has_valid_witness_assignments,
-                driver,
-            )?;
-        }
-
         // for (i, constraint) in constraint_system.pedersen_hash_constraints.iter().enumerate() {
         //     todo!("pedersen hash gates");
         // }
@@ -3534,6 +3525,15 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         // Add poseidon2 constraints
         for constraint in constraint_system.poseidon2_constraints.iter() {
             self.create_poseidon2_permutations(constraint, driver)?;
+        }
+
+        // Add multi scalar mul constraints
+        for constraint in constraint_system.multi_scalar_mul_constraints.iter() {
+            self.create_multi_scalar_mul_constraint(
+                constraint,
+                has_valid_witness_assignments,
+                driver,
+            )?;
         }
 
         // Add multi scalar mul constraints
