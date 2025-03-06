@@ -165,6 +165,7 @@ pub fn local_mul_vec_no_multi<F: PrimeField>(
     lhs: &[FieldShare<F>],
     rhs: &[FieldShare<F>],
     rngs: &mut Rep3CorrelatedRng,
+    num_elements: usize,
 ) -> Vec<F> {
     //squeeze all random elements at once in beginning for determinismus
     let masking_fes = rngs.rand.masking_field_elements_vec::<F>(lhs.len());
@@ -172,7 +173,7 @@ pub fn local_mul_vec_no_multi<F: PrimeField>(
     lhs.par_iter()
         .zip_eq(rhs.par_iter())
         .zip_eq(masking_fes.par_iter())
-        .with_min_len(1024 * 128 * 128 * 48)
+        .with_min_len(num_elements)
         .map(|((lhs, rhs), masking)| lhs * rhs + masking)
         .collect()
 }
@@ -182,6 +183,8 @@ pub fn local_mul_vec_big<F: PrimeField>(
     lhs: &[FieldShare<F>],
     rhs: &[FieldShare<F>],
     rngs: &mut Rep3CorrelatedRng,
+    num_elements: usize,
+    num_cores: usize,
 ) -> Vec<F> {
     //squeeze all random elements at once in beginning for determinismus
     let masking_fes = rngs.rand.masking_field_elements_vec::<F>(lhs.len());
@@ -189,7 +192,7 @@ pub fn local_mul_vec_big<F: PrimeField>(
     lhs.par_iter()
         .zip_eq(rhs.par_iter())
         .zip_eq(masking_fes.par_iter())
-        .with_min_len(1024 * 128 * 128)
+        .with_min_len(num_elements / num_cores)
         .map(|((lhs, rhs), masking)| lhs * rhs + masking)
         .collect()
 }
