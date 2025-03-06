@@ -1,6 +1,7 @@
-use crate::{prelude::Serialize, serialize::SerializeC, types::plookup::FixedBaseParams};
+use crate::{serialize::SerializeC, types::plookup::FixedBaseParams};
 use ark_ec::{AffineRepr, CurveGroup};
-use ark_ff::{BigInteger, Field, PrimeField};
+use ark_ff::{BigInteger, Field, One, PrimeField};
+use num_bigint::BigUint;
 use std::{any::TypeId, sync::OnceLock};
 
 pub(crate) const DEFAULT_DOMAIN_SEPARATOR: &[u8] = "DEFAULT_DOMAIN_SEPARATOR".as_bytes();
@@ -192,52 +193,75 @@ fn hash_to_curve_bn254(seed: &[u8], attempt_count: u8) -> ark_bn254::G1Affine {
         hash_to_curve_bn254(seed, attempt_count + 1)
     }
 }
-
-// We need the instance to allow for multiple precomputed for the same NUM_BITS
-pub(crate) fn generate_tables<C: CurveGroup, const NUM_BITS: usize, const INSTANCE: usize>(
-    input: &C::Affine,
-) -> &'static [Vec<C::Affine>] {
+//
+pub(crate) fn generate_fixed_base_tables<C: CurveGroup>(
+) -> &'static [Vec<Vec<C::Affine>>; FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES] {
     if TypeId::of::<C>() == TypeId::of::<ark_grumpkin::Projective>() {
+        // Note: Cannot use C directly since I cannot use the `C` type as a const generic parameter for the OnceLock
+        static INSTANCE: OnceLock<
+            [Vec<Vec<ark_grumpkin::Affine>>; FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES],
+        > = OnceLock::new();
+
+        let res = INSTANCE.get_or_init(|| {
+            let gens = default_generators::<ark_grumpkin::Projective>();
+            let scale =
+                ark_grumpkin::Fr::from(BigUint::one() << FixedBaseParams::BITS_PER_LO_SCALAR);
+            let lhs_base_point_lo = &gens[0];
+            let lhs_base_point_hi = *lhs_base_point_lo * scale;
+            let rhs_base_point_lo = &gens[1];
+            let rhs_base_point_hi = *rhs_base_point_lo * scale;
+
+            let a = generate_table::<
+                ark_grumpkin::Projective,
+                { FixedBaseParams::BITS_PER_LO_SCALAR },
+            >(lhs_base_point_lo);
+            let b = generate_table::<
+                ark_grumpkin::Projective,
+                { FixedBaseParams::BITS_PER_HI_SCALAR },
+            >(&lhs_base_point_hi.into_affine());
+            let c = generate_table::<
+                ark_grumpkin::Projective,
+                { FixedBaseParams::BITS_PER_LO_SCALAR },
+            >(rhs_base_point_lo);
+            let d = generate_table::<
+                ark_grumpkin::Projective,
+                { FixedBaseParams::BITS_PER_HI_SCALAR },
+            >(&rhs_base_point_hi.into_affine());
+
+            [a, b, c, d]
+        });
+
         // Safety: We checked that the types match
-        let input = unsafe { std::mem::transmute::<&C::Affine, &ark_grumpkin::Affine>(input) };
-        let output = generate_tables_grumpkin::<NUM_BITS, INSTANCE>(input);
-        // Safety: We checked that the types match
-        unsafe { std::mem::transmute::<&[Vec<ark_grumpkin::Affine>], &[Vec<C::Affine>]>(output) }
+        let res = unsafe {
+            std::mem::transmute::<&[Vec<Vec<ark_grumpkin::Affine>>], &[Vec<Vec<C::Affine>>]>(res)
+        };
+
+        res.try_into()
+            .expect("Should generate `NUM_FIXED_BASE_MULTI_TABLES`")
     } else {
         panic!("Unsupported curve {}", std::any::type_name::<C>())
     }
 }
 
-// We need the instance to allow for multiple precomputed for the same NUM_BITS
-fn generate_tables_grumpkin<const NUM_BITS: usize, const INSTANCE: usize>(
-    input: &ark_grumpkin::Affine,
-) -> &'static [Vec<ark_grumpkin::Affine>] {
-    static INSTANCE: OnceLock<Vec<Vec<ark_grumpkin::Affine>>> = OnceLock::new();
-    INSTANCE.get_or_init(|| {
-        let num_tables = FixedBaseParams::get_num_tables_per_multi_table::<NUM_BITS>();
-        let mut result = Vec::with_capacity(num_tables);
+fn generate_table<C: CurveGroup, const NUM_BITS: usize>(input: &C::Affine) -> Vec<Vec<C::Affine>> {
+    let num_tables = FixedBaseParams::get_num_tables_per_multi_table::<NUM_BITS>();
+    let mut result = Vec::with_capacity(num_tables);
 
-        // Serialize the input point
-        let mut input_buf =
-            Vec::with_capacity(SerializeC::<ark_grumpkin::Projective>::GROUPSIZE_BYTES as usize);
-        SerializeC::<ark_grumpkin::Projective>::write_group_element(&mut input_buf, input, true);
+    // Serialize the input point
+    let mut input_buf = Vec::with_capacity(SerializeC::<C>::group_size());
+    SerializeC::<C>::write_group_element(&mut input_buf, input, true);
 
-        let offset_generators =
-            derive_generators::<ark_grumpkin::Projective>(&input_buf, num_tables, 0);
+    let offset_generators = derive_generators::<C>(&input_buf, num_tables, 0);
 
-        let mut accumulator: ark_grumpkin::Projective = input.to_owned().into();
-        for gen in offset_generators.iter().take(num_tables).cloned() {
-            result.push(generate_single_lookup_table::<ark_grumpkin::Projective>(
-                &accumulator,
-                gen.into(),
-            ));
-            for _ in 0..FixedBaseParams::BITS_PER_TABLE {
-                accumulator += accumulator;
-            }
+    let mut accumulator: C = input.to_owned().into();
+    for gen in offset_generators.iter().take(num_tables).cloned() {
+        result.push(generate_single_lookup_table::<C>(&accumulator, gen.into()));
+        for _ in 0..FixedBaseParams::BITS_PER_TABLE {
+            accumulator += accumulator;
         }
+    }
 
-        result
-    })
+    result
 }
 
 fn generate_single_lookup_table<C: CurveGroup>(
@@ -256,18 +280,22 @@ fn generate_single_lookup_table<C: CurveGroup>(
     table
 }
 
-// We need the instance to allow for multiple precomputed for the same NUM_BITS
-fn generate_generator_offset<C: CurveGroup, const NUM_BITS: usize, const INSTANCE: usize>(
-    input: &C::Affine,
-    offset_generator: &C::Affine,
-) -> C::Affine
-where
-    C::BaseField: PrimeField,
-{
+pub(crate) fn fixed_base_table_offset_generators(
+) -> &'static [ark_grumpkin::Projective; FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES] {
+    static INSTANCE: OnceLock<
+        [ark_grumpkin::Projective; FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES],
+    > = OnceLock::new();
+    INSTANCE.get_or_init(|| {
+        // let a = generators::generate_generator_offset()
+        todo!("here")
+    })
+}
+
+fn generate_generator_offset<C: CurveGroup, const NUM_BITS: usize>(input: &C::Affine) -> C {
     let num_tables = FixedBaseParams::get_num_tables_per_multi_table::<NUM_BITS>();
 
     // Serialize the input point
-    let mut input_buf = Vec::with_capacity(SerializeC::<C>::GROUPSIZE_BYTES as usize);
+    let mut input_buf = Vec::with_capacity(SerializeC::<C>::group_size());
     SerializeC::<C>::write_group_element(&mut input_buf, input, true);
 
     let offset_generators = derive_generators::<C>(&input_buf, num_tables, 0);
@@ -275,5 +303,5 @@ where
     for gen in offset_generators {
         acc += gen;
     }
-    acc.into()
+    acc
 }
