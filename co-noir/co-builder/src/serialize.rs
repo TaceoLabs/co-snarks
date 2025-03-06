@@ -1,13 +1,17 @@
 use crate::{prelude::HonkCurve, HonkProofError, HonkProofResult, TranscriptFieldType};
-use ark_ec::AffineRepr;
-use ark_ff::PrimeField;
+use ark_ec::{pairing::Pairing, AffineRepr, CurveConfig, CurveGroup};
+use ark_ff::{Field, PrimeField};
 use num_bigint::BigUint;
 
 pub struct Serialize<F: PrimeField> {
     phantom: std::marker::PhantomData<F>,
 }
 
-pub struct SerializeP<P: HonkCurve<TranscriptFieldType>> {
+pub struct SerializeC<C: CurveGroup> {
+    phantom: std::marker::PhantomData<C>,
+}
+
+pub struct SerializeP<P: Pairing> {
     phantom: std::marker::PhantomData<P>,
 }
 
@@ -121,6 +125,39 @@ impl<F: PrimeField> Serialize<F> {
         }
 
         F::from(bigint)
+    }
+}
+
+impl<C: CurveGroup> SerializeC<C>
+where
+    C::BaseField: PrimeField,
+{
+    const NUM_64_LIMBS: u32 =
+        <<C::Config as CurveConfig>::BaseField as Field>::BasePrimeField::MODULUS_BIT_SIZE
+            .div_ceil(64);
+    pub const FIELDSIZE_BYTES: u32 = Self::NUM_64_LIMBS * 8;
+    pub const GROUPSIZE_BYTES: u32 = Self::FIELDSIZE_BYTES * 2;
+
+    // TODO Cannot unify this with write_g1_element since P::G1::BaseField is not PrimeField
+    pub fn write_group_element(buf: &mut Vec<u8>, el: &C::Affine, write_x_first: bool) {
+        let prev_len = buf.len();
+
+        if el.is_zero() {
+            for _ in 0..Self::FIELDSIZE_BYTES * 2 {
+                buf.push(255);
+            }
+        } else {
+            let (x, y) = el.xy().unwrap_or_default();
+            if write_x_first {
+                Serialize::write_field_element(buf, x);
+                Serialize::write_field_element(buf, y);
+            } else {
+                Serialize::write_field_element(buf, y);
+                Serialize::write_field_element(buf, x);
+            }
+        }
+
+        debug_assert_eq!(buf.len() - prev_len, Self::FIELDSIZE_BYTES as usize * 2);
     }
 }
 
