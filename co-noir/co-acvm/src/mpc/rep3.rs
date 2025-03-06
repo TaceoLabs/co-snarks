@@ -687,7 +687,33 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         index: Self::AcvmType,
         luts: &[Vec<F>],
     ) -> std::io::Result<Vec<Self::AcvmType>> {
-        todo!("read_from_public_luts")
+        let mut result = Vec::with_capacity(luts.len());
+        match index {
+            Rep3AcvmType::Public(index) => {
+                let index: BigUint = index.into();
+                let index = usize::try_from(index).map_err(|_| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "Index can not be translated to usize",
+                    )
+                })?;
+                for lut in luts {
+                    result.push(Rep3AcvmType::Public(lut[index].to_owned()));
+                }
+            }
+            Rep3AcvmType::Shared(index) => {
+                let res = Rep3LookupTable::<N>::get_from_public_luts(
+                    index,
+                    luts,
+                    &mut self.io_context0,
+                    &mut self.io_context1,
+                )?;
+                for res in res {
+                    result.push(Rep3AcvmType::Shared(res));
+                }
+            }
+        }
+        Ok(result)
     }
 
     fn write_lut_by_acvm_type(

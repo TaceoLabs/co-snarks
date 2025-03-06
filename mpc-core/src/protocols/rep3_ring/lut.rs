@@ -76,6 +76,62 @@ impl<N: Rep3Network> Rep3LookupTable<N> {
         Self::default()
     }
 
+    /// This is on optimized protocol that takes multiple pulbic LUTs and looks them up with the same index. It only creates the OHV once.
+    pub fn get_from_public_luts<F: PrimeField>(
+        index: Rep3PrimeFieldShare<F>,
+        luts: &[Vec<F>],
+        network0: &mut IoContext<N>,
+        network1: &mut IoContext<N>,
+    ) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
+        let len = luts.iter().map(|l| l.len()).max().unwrap();
+        tracing::debug!("doing read on LUT-map of size {}", len);
+        let bits = rep3::conversion::a2b_selector(index, network0)?;
+        let k = len.next_power_of_two().ilog2() as usize;
+
+        let result = if k == 1 {
+            Self::get_from_public_luts_internal::<Bit, _>(bits, luts, network0, network1)?
+        } else if k <= 8 {
+            Self::get_from_public_luts_internal::<u8, _>(bits, luts, network0, network1)?
+        } else if k <= 16 {
+            Self::get_from_public_luts_internal::<u16, _>(bits, luts, network0, network1)?
+        } else if k <= 32 {
+            Self::get_from_public_luts_internal::<u32, _>(bits, luts, network0, network1)?
+        } else {
+            panic!("Table is too large")
+        };
+        tracing::debug!("got a result!");
+        Ok(result)
+    }
+
+    fn get_from_public_luts_internal<T: IntRing2k, F: PrimeField>(
+        index: Rep3BigUintShare<F>,
+        luts: &[Vec<F>],
+        network0: &mut IoContext<N>,
+        network1: &mut IoContext<N>,
+    ) -> IoResult<Vec<Rep3PrimeFieldShare<F>>>
+    where
+        Standard: Distribution<T>,
+    {
+        let a = T::cast_from_biguint(&index.a);
+        let b = T::cast_from_biguint(&index.b);
+        let share = Rep3RingShare::new(a, b);
+
+        let bins_a =
+            gadgets::lut::read_multiple_public_lut_low_depth(luts, share, network0, network1)?;
+        let bins_b = network0.network.reshare_many(&bins_a)?;
+
+        let mut result = Vec::with_capacity(luts.len());
+
+        // TODO parallelize this at some point
+        for (bin_a, bin_b) in bins_a.into_iter().zip(bins_b.into_iter()) {
+            let bin = Rep3BigUintShare::new(bin_a, bin_b);
+            let res = rep3::conversion::b2a_selector(&bin, network0)?;
+            result.push(res);
+        }
+
+        Ok(result)
+    }
+
     fn get_from_lut_internal<T: IntRing2k, F: PrimeField>(
         index: Rep3BigUintShare<F>,
         lut: &PublicPrivateLut<F>,
