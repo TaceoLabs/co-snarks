@@ -1182,22 +1182,26 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         if id_var >= BasicTableId::FixedBase0_0 as usize
             && id_var < BasicTableId::FixedBase1_0 as usize
         {
-            todo!("Create Fixed Base Table for {:?} not implemented", id);
+            let id_ = id_var - BasicTableId::FixedBase0_0 as usize;
+            return Self::generate_basic_fixed_base_table::<0>(id, index, id_);
         }
         if id_var >= BasicTableId::FixedBase1_0 as usize
             && id_var < BasicTableId::FixedBase2_0 as usize
         {
-            todo!("Create Fixed Base Table for {:?} not implemented", id);
+            let id_ = id_var - BasicTableId::FixedBase1_0 as usize;
+            return Self::generate_basic_fixed_base_table::<1>(id, index, id_);
         }
         if id_var >= BasicTableId::FixedBase2_0 as usize
             && id_var < BasicTableId::FixedBase3_0 as usize
         {
-            todo!("Create Fixed Base Table for {:?} not implemented", id);
+            let id_ = id_var - BasicTableId::FixedBase2_0 as usize;
+            return Self::generate_basic_fixed_base_table::<2>(id, index, id_);
         }
         if id_var >= BasicTableId::FixedBase3_0 as usize
             && id_var < BasicTableId::HonkDummyBasic1 as usize
         {
-            todo!("Create Fixed Base Table for {:?} not implemented", id);
+            let id_ = id_var - BasicTableId::FixedBase3_0 as usize;
+            return Self::generate_basic_fixed_base_table::<3>(id, index, id_);
         }
 
         assert!(
