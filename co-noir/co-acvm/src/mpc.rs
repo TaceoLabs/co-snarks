@@ -56,6 +56,9 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         falsy: Self::AcvmType,
     ) -> io::Result<Self::AcvmType>;
 
+    //Checks whether an ACVM-type is smaller than another one
+    fn lt(&mut self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> std::io::Result<Self::AcvmType>;
+
     /// Adds a public value to an ACVM-type in place: *\[target\] += public
     fn add_assign_with_public(&mut self, public: F, target: &mut Self::AcvmType);
 
@@ -213,6 +216,23 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         bitsize: usize,
     ) -> std::io::Result<[Self::ArithmeticShare; 3]>;
 
+    /// Slices a shared field element at given indices from msb to lsb, both included in the slice.
+    /// Only consideres bitsize bits.
+    /// Result is thus slice, where slice has all bits from lsb to msb.
+    fn slice_once(
+        &mut self,
+        input: Self::ArithmeticShare,
+        msb: u8,
+        lsb: u8,
+        bitsize: usize,
+    ) -> std::io::Result<Self::ArithmeticShare>;
+
+    fn right_shift(
+        &mut self,
+        input: Self::AcvmType,
+        shift: usize,
+    ) -> std::io::Result<Self::AcvmType>;
+
     /// bitwise AND operation for integer datatype (i.e., the result will be smaller than a field)
     fn integer_bitwise_and(
         &mut self,
@@ -259,6 +279,28 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         Vec<Self::AcvmType>,
     )>;
 
+    /// Slices input1 and input2 into a vector of basis_bits bits each, XORs all values and rotates the results by rotation. Thereby, in total only total_bitsize bits per input are considered.
+    #[expect(clippy::type_complexity)]
+    fn slice_and_get_xor_rotate_values_with_filter(
+        &mut self,
+        input1: Self::ArithmeticShare,
+        input2: Self::ArithmeticShare,
+        basis_bits: &[u64],
+        rotation: &[usize],
+        filter: &[bool],
+    ) -> std::io::Result<(
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+    )>;
+
+    fn get_overflow_bit(
+        &mut self,
+        input: Self::ArithmeticShare,
+        bit: usize,
+        max_bitsize: usize,
+    ) -> std::io::Result<Self::ArithmeticShare>;
+
     /// Computes the Poseidon2 permutation for the given input.
     fn poseidon2_permutation<const T: usize, const D: u64>(
         &mut self,
@@ -296,4 +338,10 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         precomp: &mut Poseidon2Precomputations<Self::ArithmeticShare>,
         poseidon2: &Poseidon2<F, T, D>,
     ) -> std::io::Result<()>;
+
+    fn blake2s_hash(
+        &mut self,
+        message_input: Vec<Self::AcvmType>,
+        num_bits: &[usize],
+    ) -> std::io::Result<Vec<Self::AcvmType>>;
 }

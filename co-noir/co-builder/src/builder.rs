@@ -1,5 +1,8 @@
 use crate::acir_format::{HonkRecursion, ProgramMetadata};
 use crate::polynomials::polynomial::MASKING_OFFSET;
+use crate::types::blake2s::Blake2s;
+use crate::types::field_ct::ByteArray;
+use crate::types::types::{Blake2sConstraint, WitnessOrConstant};
 use crate::{
     acir_format::AcirFormat,
     crs::ProverCrs,
@@ -178,6 +181,7 @@ pub struct GenericUltraCircuitBuilder<P: Pairing, T: NoirWitnessExtensionProtoco
     pub(crate) memory_write_records: Vec<u32>,
     // Stores gate index where Read/Write type is shared
     pub memory_records_shared: BTreeMap<u32, T::AcvmType>, // order does not matter
+    has_dummy_witnesses: bool,
 }
 
 // This workaround is required due to mutability issues
@@ -201,6 +205,13 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
     pub(crate) const DEFAULT_PLOOKUP_RANGE_STEP_SIZE: usize = 3;
     // number of gates created per non-native field operation in process_non_native_field_multiplications
     pub(crate) const GATES_PER_NON_NATIVE_FIELD_MULTIPLICATION_ARITHMETIC: usize = 7;
+
+    pub(crate) fn assert_if_has_witness(&self, input: bool) {
+        if self.has_dummy_witnesses {
+            return;
+        }
+        assert!(input)
+    }
 
     pub fn create_circuit(
         constraint_system: &AcirFormat<P::ScalarField>,
@@ -303,6 +314,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             memory_write_records: Vec::new(),
             memory_records_shared: BTreeMap::new(),
             current_tag: 0,
+            has_dummy_witnesses: true,
         }
     }
 
@@ -329,6 +341,8 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
     ) -> Self {
         tracing::trace!("Builder init");
         let mut builder = Self::new(size_hint);
+
+        builder.has_dummy_witnesses = witness_values.is_empty();
 
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/870): reserve space in blocks here somehow?
         let len = witness_values.len();
@@ -416,7 +430,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         self.num_gates += 1;
     }
 
-    fn create_big_mul_gate(&mut self, inp: &MulQuad<P::ScalarField>) {
+    pub(crate) fn create_big_mul_gate(&mut self, inp: &MulQuad<P::ScalarField>) {
         self.assert_valid_variables(&[inp.a, inp.b, inp.c, inp.d]);
 
         self.blocks
@@ -1180,9 +1194,9 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         // }
 
         // Add blake2s constraints
-        // for (i, constraint) in constraint_system.blake2s_constraints.iter().enumerate() {
-        //     todo!("blake2s gates");
-        // }
+        for constraint in constraint_system.blake2s_constraints.iter() {
+            self.create_blake2s_constraints(driver, constraint)?;
+        }
 
         // Add blake3 constraints
         // for (i, constraint) in constraint_system.blake3_constraints.iter().enumerate() {
@@ -1624,13 +1638,13 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         T::read_lut_by_acvm_type(driver, corrected_index, &lut)
     }
 
-    fn update_variable(&mut self, index: usize, value: T::AcvmType) {
+    pub(crate) fn update_variable(&mut self, index: usize, value: T::AcvmType) {
         assert!(self.variables.len() > index);
         self.variables[self.real_variable_index[index] as usize] = value;
     }
 
     pub(crate) fn assert_equal_constant(&mut self, a_idx: usize, b: P::ScalarField) {
-        assert_eq!(self.variables[a_idx], T::AcvmType::from(b));
+        self.assert_if_has_witness(self.variables[a_idx] == T::AcvmType::from(b));
         let b_idx = self.put_constant_variable(b);
         self.assert_equal(a_idx, b_idx as usize);
     }
@@ -1644,7 +1658,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
         match (a, b) {
             (Some(a), Some(b)) => {
-                assert_eq!(a, b);
+                self.assert_if_has_witness(a == b);
             }
 
             (Some(a), None) => {
@@ -1676,11 +1690,10 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         let a_start_idx = self.get_first_variable_in_class(a_idx);
         self.next_var_index[b_real_idx] = a_start_idx as u32;
         self.prev_var_index[a_start_idx] = b_real_idx as u32;
-        assert!(
-            self.real_variable_tags[a_real_idx] == Self::DUMMY_TAG
-                || self.real_variable_tags[b_real_idx] == Self::DUMMY_TAG
-                || self.real_variable_tags[a_real_idx] == self.real_variable_tags[b_real_idx]
-        );
+        let no_tag_clash = self.real_variable_tags[a_real_idx] == Self::DUMMY_TAG
+            || self.real_variable_tags[b_real_idx] == Self::DUMMY_TAG
+            || self.real_variable_tags[a_real_idx] == self.real_variable_tags[b_real_idx];
+        self.assert_if_has_witness(no_tag_clash);
 
         if self.real_variable_tags[a_real_idx] == Self::DUMMY_TAG {
             self.real_variable_tags[a_real_idx] = self.real_variable_tags[b_real_idx];
@@ -4064,6 +4077,41 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
         self.check_selector_length_consistency();
         self.num_gates += 1;
+    }
+
+    fn create_blake2s_constraints(
+        &mut self,
+        driver: &mut T,
+        constraint: &Blake2sConstraint<P::ScalarField>,
+    ) -> std::io::Result<()> {
+        // Create byte array struct
+        let mut arr = ByteArray::<P::ScalarField>::new();
+
+        // Get the witness assignment for each witness index
+        // Write the witness assignment to the byte_array
+        for witness_index_num_bits in &constraint.inputs {
+            let witness_index = &witness_index_num_bits.blackbox_input;
+            let num_bits = witness_index_num_bits.num_bits;
+
+            // XXX: The implementation requires us to truncate the element to the nearest byte and not bit
+            let num_bytes = Utils::round_to_nearest_byte(num_bits);
+            let element = WitnessOrConstant::to_field_ct(witness_index);
+            let element_bytes =
+                ByteArray::from_field_ct(&element, num_bytes as usize, self, driver)?;
+
+            arr.write(&element_bytes);
+        }
+        let output_bytes = Blake2s::blake2s_init(&arr, self, driver)?;
+
+        // Convert byte array to vector of field_t
+        let bytes = output_bytes.values;
+
+        for (i, byte) in bytes.iter().enumerate() {
+            let wtns_index = byte.normalize(self, driver).witness_index;
+            self.assert_equal(wtns_index as usize, constraint.result[i] as usize);
+        }
+
+        Ok(())
     }
 }
 
