@@ -208,8 +208,9 @@ impl BasicTableId {
         let basic_table = match MULTITABLE_INDEX {
             0 => {
                 let point = generators::default_generators::<C>()[0];
-                &generators::generate_tables::<C, { FixedBaseParams::BITS_PER_LO_SCALAR }, 0>(point)
-                    [TABLE_INDEX]
+                &generators::generate_tables::<C, { FixedBaseParams::BITS_PER_LO_SCALAR }, 0>(
+                    &point,
+                )[TABLE_INDEX]
             }
             1 => {
                 let point = generators::default_generators::<C>()[0];
@@ -218,13 +219,14 @@ impl BasicTableId {
                         BigUint::one() << FixedBaseParams::BITS_PER_LO_SCALAR,
                     );
                 &generators::generate_tables::<C, { FixedBaseParams::BITS_PER_HI_SCALAR }, 0>(
-                    point.into(),
+                    &point.into_affine(),
                 )[TABLE_INDEX]
             }
             2 => {
                 let point = generators::default_generators::<C>()[1];
-                &generators::generate_tables::<C, { FixedBaseParams::BITS_PER_LO_SCALAR }, 1>(point)
-                    [TABLE_INDEX]
+                &generators::generate_tables::<C, { FixedBaseParams::BITS_PER_LO_SCALAR }, 1>(
+                    &point,
+                )[TABLE_INDEX]
             }
             3 => {
                 let point = generators::default_generators::<C>()[1];
@@ -233,7 +235,7 @@ impl BasicTableId {
                         BigUint::one() << FixedBaseParams::BITS_PER_LO_SCALAR,
                     );
                 &generators::generate_tables::<C, { FixedBaseParams::BITS_PER_HI_SCALAR }, 1>(
-                    point.into(),
+                    &point.into(),
                 )[TABLE_INDEX]
             }
             _ => unreachable!(),
@@ -264,7 +266,7 @@ impl FixedBaseParams {
     const BITS_PER_HI_SCALAR: usize = Self::BITS_ON_CURVE - Self::BITS_PER_LO_SCALAR;
     // max table size because the last lookup table might be smaller (BITS_PER_TABLE does not neatly divide
     // BITS_PER_LO_SCALAR)
-    const MAX_TABLE_SIZE: usize = 1 << Self::BITS_PER_TABLE;
+    pub(crate) const MAX_TABLE_SIZE: usize = 1 << Self::BITS_PER_TABLE;
     // how many BITS_PER_TABLE lookup tables do we need to traverse BITS_PER_LO_SCALAR-amount of bits?
     // (we implicitly assume BITS_PER_LO_SCALAR > BITS_PER_HI_SCALAR)
     const MAX_NUM_TABLES_IN_MULTITABLE: usize = (Self::BITS_PER_LO_SCALAR / Self::BITS_PER_TABLE)
@@ -527,12 +529,15 @@ impl<F: PrimeField> Plookup<F> {
             num_tables,
         );
         table.id = id;
-        #[expect(clippy::needless_range_loop)]
-        for i in 0..num_tables {
+        for (i, func) in get_values_from_key_table
+            .into_iter()
+            .take(num_tables)
+            .enumerate()
+        {
             table
                 .slice_sizes
                 .push(FixedBaseParams::MAX_TABLE_SIZE as u64);
-            table.get_table_values.push(get_values_from_key_table[i]);
+            table.get_table_values.push(func);
             assert!(MULTITABLE_INDEX < FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES);
             let idx = i + usize::from(basic_table_ids[MULTITABLE_INDEX].clone());
             table
