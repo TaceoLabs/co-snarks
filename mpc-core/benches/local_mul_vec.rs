@@ -146,32 +146,32 @@ fn current_main_local_mul_vec(c: &mut Criterion) {
         });
         group.finish();
 
-        let mut group = c.benchmark_group(format!("group_4_threads_{}_size_{}", num_threads, size));
-        group.throughput(Throughput::Elements(vec_a.len() as u64));
-        group.bench_function("with_min_len 2", |b| {
-            b.iter(|| {
-                let _ = arithmetic::local_mul_vec_2(&vec_a, &vec_b, &mut io_context.rngs);
-            })
-        });
-        group.finish();
+        // let mut group = c.benchmark_group(format!("group_4_threads_{}_size_{}", num_threads, size));
+        // group.throughput(Throughput::Elements(vec_a.len() as u64));
+        // group.bench_function("with_min_len 2", |b| {
+        //     b.iter(|| {
+        //         let _ = arithmetic::local_mul_vec_2(&vec_a, &vec_b, &mut io_context.rngs);
+        //     })
+        // });
+        // group.finish();
 
-        let mut group = c.benchmark_group(format!("group_5_threads_{}_size_{}", num_threads, size));
-        group.throughput(Throughput::Elements(vec_a.len() as u64));
-        group.bench_function("with_min_len 4", |b| {
-            b.iter(|| {
-                let _ = arithmetic::local_mul_vec_4(&vec_a, &vec_b, &mut io_context.rngs);
-            })
-        });
-        group.finish();
+        // let mut group = c.benchmark_group(format!("group_5_threads_{}_size_{}", num_threads, size));
+        // group.throughput(Throughput::Elements(vec_a.len() as u64));
+        // group.bench_function("with_min_len 4", |b| {
+        //     b.iter(|| {
+        //         let _ = arithmetic::local_mul_vec_4(&vec_a, &vec_b, &mut io_context.rngs);
+        //     })
+        // });
+        // group.finish();
 
-        let mut group = c.benchmark_group(format!("group_6_threads_{}_size_{}", num_threads, size));
-        group.throughput(Throughput::Elements(vec_a.len() as u64));
-        group.bench_function("with_min_len 8", |b| {
-            b.iter(|| {
-                let _ = arithmetic::local_mul_vec_8(&vec_a, &vec_b, &mut io_context.rngs);
-            })
-        });
-        group.finish();
+        // let mut group = c.benchmark_group(format!("group_6_threads_{}_size_{}", num_threads, size));
+        // group.throughput(Throughput::Elements(vec_a.len() as u64));
+        // group.bench_function("with_min_len 8", |b| {
+        //     b.iter(|| {
+        //         let _ = arithmetic::local_mul_vec_8(&vec_a, &vec_b, &mut io_context.rngs);
+        //     })
+        // });
+        // group.finish();
 
         let mut group = c.benchmark_group(format!("group_7_threads_{}_size_{}", num_threads, size));
         group.throughput(Throughput::Elements(vec_a.len() as u64));
