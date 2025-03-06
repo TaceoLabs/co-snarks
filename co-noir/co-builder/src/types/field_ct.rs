@@ -1882,10 +1882,10 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             // i.e. x^4 = x * (y^2 - b)
             // We must follow this pattern exactly to support the edge-case where the input is the point at infinity.
             let y_pow_2 = driver.mul(y1.to_owned(), y1.to_owned())?;
-            let sub = driver.sub(y_pow_2, P::get_curve_b().into());
+            let sub = driver.sub(y_pow_2.to_owned(), P::get_curve_b().into());
             let x_pow_4 = driver.mul(x1.to_owned(), sub)?;
             let tmp1 = driver.mul_with_public(P::ScalarField::from(9), x_pow_4);
-            let tmp2 = driver.mul_with_public(P::ScalarField::from(4), x1.to_owned());
+            let tmp2 = driver.mul_with_public(P::ScalarField::from(4), y_pow_2);
             let inv = driver.invert(tmp2)?;
             let lambda_squared = driver.mul(tmp1, inv)?;
             let y2_2 = driver.add(y1.to_owned(), y1.to_owned());
