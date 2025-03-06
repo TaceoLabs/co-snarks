@@ -12,6 +12,7 @@ use num_bigint::BigUint;
 use std::array::from_fn;
 use std::collections::HashMap;
 use std::ops::{Index, IndexMut};
+use std::sync::OnceLock;
 
 #[expect(dead_code)]
 #[repr(usize)]
@@ -205,41 +206,8 @@ impl BasicTableId {
         assert!(MULTITABLE_INDEX < FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES);
         assert!(TABLE_INDEX < FixedBaseParams::get_num_bits_of_multi_table(MULTITABLE_INDEX));
 
-        let basic_table = match MULTITABLE_INDEX {
-            0 => {
-                let point = generators::default_generators::<C>()[0];
-                &generators::generate_tables::<C, { FixedBaseParams::BITS_PER_LO_SCALAR }, 0>(
-                    &point,
-                )[TABLE_INDEX]
-            }
-            1 => {
-                let point = generators::default_generators::<C>()[0];
-                let point = point
-                    * <C::Config as CurveConfig>::ScalarField::from(
-                        BigUint::one() << FixedBaseParams::BITS_PER_LO_SCALAR,
-                    );
-                &generators::generate_tables::<C, { FixedBaseParams::BITS_PER_HI_SCALAR }, 0>(
-                    &point.into_affine(),
-                )[TABLE_INDEX]
-            }
-            2 => {
-                let point = generators::default_generators::<C>()[1];
-                &generators::generate_tables::<C, { FixedBaseParams::BITS_PER_LO_SCALAR }, 1>(
-                    &point,
-                )[TABLE_INDEX]
-            }
-            3 => {
-                let point = generators::default_generators::<C>()[1];
-                let point = point
-                    * <C::Config as CurveConfig>::ScalarField::from(
-                        BigUint::one() << FixedBaseParams::BITS_PER_LO_SCALAR,
-                    );
-                &generators::generate_tables::<C, { FixedBaseParams::BITS_PER_HI_SCALAR }, 1>(
-                    &point.into(),
-                )[TABLE_INDEX]
-            }
-            _ => unreachable!(),
-        };
+        let tables = generators::generate_fixed_base_tables::<C>();
+        let basic_table = &tables[MULTITABLE_INDEX][TABLE_INDEX];
 
         let index = key[0] as usize;
         let point = &basic_table[index];
@@ -262,8 +230,8 @@ impl FixedBaseParams {
     // i.e. check that input scalar < prime modulus when evaluated over the integers
     // (the primality check requires us to split the input into high / low bit chunks so getting this for free as part
     // of the lookup algorithm is nice!)
-    const BITS_PER_LO_SCALAR: usize = 128;
-    const BITS_PER_HI_SCALAR: usize = Self::BITS_ON_CURVE - Self::BITS_PER_LO_SCALAR;
+    pub(crate) const BITS_PER_LO_SCALAR: usize = 128;
+    pub(crate) const BITS_PER_HI_SCALAR: usize = Self::BITS_ON_CURVE - Self::BITS_PER_LO_SCALAR;
     // max table size because the last lookup table might be smaller (BITS_PER_TABLE does not neatly divide
     // BITS_PER_LO_SCALAR)
     pub(crate) const MAX_TABLE_SIZE: usize = 1 << Self::BITS_PER_TABLE;
@@ -278,7 +246,7 @@ impl FixedBaseParams {
     const NUM_POINTS: usize = 2;
     // how many multitables are we creating? It's 4 because we want enough lookup tables to cover two field elements,
     // two field elements = 2 scalar muls = 4 scalar mul hi/lo slices = 4 multitables
-    const NUM_FIXED_BASE_MULTI_TABLES: usize = Self::NUM_POINTS * 2;
+    pub(crate) const NUM_FIXED_BASE_MULTI_TABLES: usize = Self::NUM_POINTS * 2;
     const NUM_TABLES_PER_LO_MULTITABLE: usize = (Self::BITS_PER_LO_SCALAR / Self::BITS_PER_TABLE)
         + (if Self::BITS_PER_LO_SCALAR % Self::BITS_PER_TABLE == 0 {
             0
