@@ -608,7 +608,10 @@ impl<F: PrimeField> Plookup<F> {
     }
 
     #[expect(clippy::type_complexity)]
-    fn slice_and_get_values<P: Pairing<ScalarField = F>, T: NoirWitnessExtensionProtocol<F>>(
+    fn slice_and_get_values<
+        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<F>,
+    >(
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
         id: MultiTableId,
@@ -672,7 +675,6 @@ impl<F: PrimeField> Plookup<F> {
                     32,
                     0,
                 )?;
-                results.reserve(values.0.len());
                 for val in values.0 {
                     results.push((val, T::public_zero()))
                 }
@@ -689,12 +691,39 @@ impl<F: PrimeField> Plookup<F> {
                     32,
                     0,
                 )?;
-                results.reserve(values.0.len());
                 for val in values.0 {
                     results.push((val, T::public_zero()))
                 }
                 key_a_slices.extend(values.1);
                 key_b_slices.extend(values.2);
+            }
+            MultiTableId::FixedBaseLeftLo => {
+                let bitsize = bases[0].ilog2() as usize;
+                let total_size = bitsize * bases.len();
+                let key_a_slices_ = driver.decompose_arithmetic(key_a, total_size, bitsize)?;
+                for slice in key_a_slices_ {
+                    key_a_slices.push(slice.into());
+                }
+                key_b_slices.resize(bases.len(), T::public_zero());
+
+                let tables = &generators::generate_fixed_base_tables::<P::CycleGroup>()[0];
+
+                for (key, table) in key_a_slices.iter().zip(tables.iter()) {
+                    // let ohv = driver.one_hot_vector_from_shared_index(key, table.len())?;
+
+                    // Create the tables since the table itself only stores points and not fields
+                    let mut lut1 = Vec::with_capacity(table.len());
+                    let mut lut2 = Vec::with_capacity(table.len());
+                    for point in table.iter() {
+                        let (x, y) = point.xy().unwrap_or_default();
+                        lut1.push(x);
+                        lut2.push(y);
+                    }
+
+                    let output = driver.read_from_public_luts(key.to_owned(), &[lut1, lut2])?;
+                    debug_assert_eq!(output.len(), 2);
+                    results.push((output[0].clone(), output[1].clone()));
+                }
             }
             _ => todo!("{:?} not yet implemented", multi_table.id),
         }
@@ -703,7 +732,7 @@ impl<F: PrimeField> Plookup<F> {
     }
 
     pub(crate) fn get_lookup_accumulators<
-        P: Pairing<ScalarField = F>,
+        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
         T: NoirWitnessExtensionProtocol<F>,
     >(
         builder: &mut GenericUltraCircuitBuilder<P, T>,
