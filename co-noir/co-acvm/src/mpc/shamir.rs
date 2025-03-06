@@ -433,6 +433,14 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         panic!("read_lut_by_acvm_type: Operation atm not supported")
     }
 
+    fn read_from_public_luts(
+        &mut self,
+        _index: Self::AcvmType,
+        _luts: &[Vec<F>],
+    ) -> std::io::Result<Vec<Self::AcvmType>> {
+        panic!("read_from_public_luts: Operation atm not supported")
+    }
+
     fn write_lut_by_acvm_type(
         &mut self,
         _index: Self::AcvmType,

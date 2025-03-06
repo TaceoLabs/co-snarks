@@ -682,6 +682,14 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         Ok(result)
     }
 
+    fn read_from_public_luts(
+        &mut self,
+        index: Self::AcvmType,
+        luts: &[Vec<F>],
+    ) -> std::io::Result<Vec<Self::AcvmType>> {
+        todo!("read_from_public_luts")
+    }
+
     fn write_lut_by_acvm_type(
         &mut self,
         index: Self::AcvmType,
