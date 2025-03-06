@@ -4,15 +4,14 @@ use super::generators;
 use crate::prelude::HonkCurve;
 use crate::TranscriptFieldType;
 use crate::{builder::GenericUltraCircuitBuilder, utils};
-use ark_ec::{pairing::Pairing, AffineRepr, CurveConfig, CurveGroup};
-use ark_ff::{One, PrimeField, Zero};
+use ark_ec::{pairing::Pairing, AffineRepr, CurveGroup};
+use ark_ff::{PrimeField, Zero};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use itertools::izip;
 use num_bigint::BigUint;
 use std::array::from_fn;
 use std::collections::HashMap;
 use std::ops::{Index, IndexMut};
-use std::sync::OnceLock;
 
 #[expect(dead_code)]
 #[repr(usize)]
@@ -597,12 +596,13 @@ impl<F: PrimeField> Plookup<F> {
     >(
         id: MultiTableId,
     ) -> Option<P::CycleGroup> {
-        todo!("Implement get_generator_offset_for_table_id");
+        let offsets_generators = generators::fixed_base_table_offset_generators::<P::CycleGroup>();
+
         match id {
-            // MultiTableId::FixedBaseLeftLo => Some(0),
-            // MultiTableId::FixedBaseLeftHi => Some(1),
-            // MultiTableId::FixedBaseRightLo => Some(2),
-            // MultiTableId::FixedBaseRightHi => Some(3),
+            MultiTableId::FixedBaseLeftLo => Some(offsets_generators[0].to_owned()),
+            MultiTableId::FixedBaseLeftHi => Some(offsets_generators[1].to_owned()),
+            MultiTableId::FixedBaseRightLo => Some(offsets_generators[2].to_owned()),
+            MultiTableId::FixedBaseRightHi => Some(offsets_generators[3].to_owned()),
             _ => None,
         }
     }

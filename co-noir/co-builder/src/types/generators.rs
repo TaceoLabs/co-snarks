@@ -8,17 +8,8 @@ pub(crate) const DEFAULT_DOMAIN_SEPARATOR: &[u8] = "DEFAULT_DOMAIN_SEPARATOR".as
 const NUM_DEFAULT_GENERATORS: usize = 8;
 
 pub(crate) fn default_generators<C: CurveGroup>() -> &'static [C::Affine; NUM_DEFAULT_GENERATORS] {
-    if TypeId::of::<C>() == TypeId::of::<ark_bn254::G1Projective>() {
-        let gens = default_generators_bn254();
-        // Safety: We checked that the types match
-        unsafe {
-            std::mem::transmute::<
-                &[ark_bn254::G1Affine; NUM_DEFAULT_GENERATORS],
-                &[C::Affine; NUM_DEFAULT_GENERATORS],
-            >(gens)
-        }
-    } else if TypeId::of::<C>() == TypeId::of::<ark_grumpkin::Projective>() {
-        let gens = default_generators_grumpkin();
+    if TypeId::of::<C>() == TypeId::of::<ark_grumpkin::Projective>() {
+        let gens = _default_generators_grumpkin();
         // Safety: We checked that the types match
         unsafe {
             std::mem::transmute::<
@@ -26,12 +17,21 @@ pub(crate) fn default_generators<C: CurveGroup>() -> &'static [C::Affine; NUM_DE
                 &[C::Affine; NUM_DEFAULT_GENERATORS],
             >(gens)
         }
+    // } else if TypeId::of::<C>() == TypeId::of::<ark_bn254::G1Projective>() {
+    //     let gens = _default_generators_bn254();
+    //     // Safety: We checked that the types match
+    //     unsafe {
+    //         std::mem::transmute::<
+    //             &[ark_bn254::G1Affine; NUM_DEFAULT_GENERATORS],
+    //             &[C::Affine; NUM_DEFAULT_GENERATORS],
+    //         >(gens)
+    //     }
     } else {
         panic!("Unsupported curve {}", std::any::type_name::<C>())
     }
 }
 
-fn default_generators_grumpkin() -> &'static [ark_grumpkin::Affine; NUM_DEFAULT_GENERATORS] {
+fn _default_generators_grumpkin() -> &'static [ark_grumpkin::Affine; NUM_DEFAULT_GENERATORS] {
     static INSTANCE: OnceLock<[ark_grumpkin::Affine; NUM_DEFAULT_GENERATORS]> = OnceLock::new();
     INSTANCE.get_or_init(|| {
         _derive_generators::<ark_grumpkin::Projective>(
@@ -44,7 +44,7 @@ fn default_generators_grumpkin() -> &'static [ark_grumpkin::Affine; NUM_DEFAULT_
     })
 }
 
-fn default_generators_bn254() -> &'static [ark_bn254::G1Affine; NUM_DEFAULT_GENERATORS] {
+fn _default_generators_bn254() -> &'static [ark_bn254::G1Affine; NUM_DEFAULT_GENERATORS] {
     static INSTANCE: OnceLock<[ark_bn254::G1Affine; NUM_DEFAULT_GENERATORS]> = OnceLock::new();
     INSTANCE.get_or_init(|| {
         _derive_generators::<ark_bn254::G1Projective>(
@@ -115,20 +115,20 @@ fn _derive_generators<C: CurveGroup>(
 }
 
 fn hash_to_curve<C: CurveGroup>(seed: &[u8], attempt_count: u8) -> C::Affine {
-    if TypeId::of::<C>() == TypeId::of::<ark_bn254::G1Projective>() {
-        let point = hash_to_curve_bn254(seed, attempt_count);
-        // Safety: We checked that the types match
-        unsafe { *(&point as *const ark_bn254::G1Affine as *const C::Affine) }
-    } else if TypeId::of::<C>() == TypeId::of::<ark_grumpkin::Projective>() {
-        let point = hash_to_curve_grumpkin(seed, attempt_count);
+    if TypeId::of::<C>() == TypeId::of::<ark_grumpkin::Projective>() {
+        let point = _hash_to_curve_grumpkin(seed, attempt_count);
         // Safety: We checked that the types match
         unsafe { *(&point as *const ark_grumpkin::Affine as *const C::Affine) }
+    // } else if TypeId::of::<C>() == TypeId::of::<ark_bn254::G1Projective>() {
+    //     let point = _hash_to_curve_bn254(seed, attempt_count);
+    //     // Safety: We checked that the types match
+    //     unsafe { *(&point as *const ark_bn254::G1Affine as *const C::Affine) }
     } else {
         panic!("Unsupported curve {}", std::any::type_name::<C>())
     }
 }
 
-fn hash_to_curve_grumpkin(seed: &[u8], attempt_count: u8) -> ark_grumpkin::Affine {
+fn _hash_to_curve_grumpkin(seed: &[u8], attempt_count: u8) -> ark_grumpkin::Affine {
     let seed_size = seed.len();
     // expand by 2 bytes to cover incremental hash attempts
     let mut target_seed = seed.to_vec();
@@ -157,11 +157,11 @@ fn hash_to_curve_grumpkin(seed: &[u8], attempt_count: u8) -> ark_grumpkin::Affin
             point
         }
     } else {
-        hash_to_curve_grumpkin(seed, attempt_count + 1)
+        _hash_to_curve_grumpkin(seed, attempt_count + 1)
     }
 }
 
-fn hash_to_curve_bn254(seed: &[u8], attempt_count: u8) -> ark_bn254::G1Affine {
+fn _hash_to_curve_bn254(seed: &[u8], attempt_count: u8) -> ark_bn254::G1Affine {
     let seed_size = seed.len();
     // expand by 2 bytes to cover incremental hash attempts
     let mut target_seed = seed.to_vec();
@@ -190,7 +190,7 @@ fn hash_to_curve_bn254(seed: &[u8], attempt_count: u8) -> ark_bn254::G1Affine {
             point
         }
     } else {
-        hash_to_curve_bn254(seed, attempt_count + 1)
+        _hash_to_curve_bn254(seed, attempt_count + 1)
     }
 }
 //
@@ -232,12 +232,12 @@ pub(crate) fn generate_fixed_base_tables<C: CurveGroup>(
         });
 
         // Safety: We checked that the types match
-        let res = unsafe {
-            std::mem::transmute::<&[Vec<Vec<ark_grumpkin::Affine>>], &[Vec<Vec<C::Affine>>]>(res)
-        };
-
-        res.try_into()
-            .expect("Should generate `NUM_FIXED_BASE_MULTI_TABLES`")
+        unsafe {
+            std::mem::transmute::<
+                &[Vec<Vec<ark_grumpkin::Affine>>; FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES],
+                &[Vec<Vec<C::Affine>>; FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES],
+            >(res)
+        }
     } else {
         panic!("Unsupported curve {}", std::any::type_name::<C>())
     }
@@ -280,15 +280,52 @@ fn generate_single_lookup_table<C: CurveGroup>(
     table
 }
 
-pub(crate) fn fixed_base_table_offset_generators(
-) -> &'static [ark_grumpkin::Projective; FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES] {
-    static INSTANCE: OnceLock<
-        [ark_grumpkin::Projective; FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES],
-    > = OnceLock::new();
-    INSTANCE.get_or_init(|| {
-        // let a = generators::generate_generator_offset()
-        todo!("here")
-    })
+pub(crate) fn fixed_base_table_offset_generators<C: CurveGroup>(
+) -> &'static [C; FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES] {
+    if TypeId::of::<C>() == TypeId::of::<ark_grumpkin::Projective>() {
+        // Note: Cannot use C directly since I cannot use the `C` type as a const generic parameter for the OnceLock
+        static INSTANCE: OnceLock<
+            [ark_grumpkin::Projective; FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES],
+        > = OnceLock::new();
+        let res = INSTANCE.get_or_init(|| {
+            let gens = default_generators::<ark_grumpkin::Projective>();
+            let scale =
+                ark_grumpkin::Fr::from(BigUint::one() << FixedBaseParams::BITS_PER_LO_SCALAR);
+            let lhs_base_point_lo = &gens[0];
+            let lhs_base_point_hi = *lhs_base_point_lo * scale;
+            let rhs_base_point_lo = &gens[1];
+            let rhs_base_point_hi = *rhs_base_point_lo * scale;
+
+            let a = generate_generator_offset::<
+                ark_grumpkin::Projective,
+                { FixedBaseParams::BITS_PER_LO_SCALAR },
+            >(lhs_base_point_lo);
+            let b = generate_generator_offset::<
+                ark_grumpkin::Projective,
+                { FixedBaseParams::BITS_PER_HI_SCALAR },
+            >(&lhs_base_point_hi.into_affine());
+            let c = generate_generator_offset::<
+                ark_grumpkin::Projective,
+                { FixedBaseParams::BITS_PER_LO_SCALAR },
+            >(rhs_base_point_lo);
+            let d = generate_generator_offset::<
+                ark_grumpkin::Projective,
+                { FixedBaseParams::BITS_PER_HI_SCALAR },
+            >(&rhs_base_point_hi.into_affine());
+
+            [a, b, c, d]
+        });
+
+        // Safety: We checked that the types match
+        unsafe {
+            std::mem::transmute::<
+                &[ark_grumpkin::Projective; FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES],
+                &[C; FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES],
+            >(res)
+        }
+    } else {
+        panic!("Unsupported curve {}", std::any::type_name::<C>())
+    }
 }
 
 fn generate_generator_offset<C: CurveGroup, const NUM_BITS: usize>(input: &C::Affine) -> C {
