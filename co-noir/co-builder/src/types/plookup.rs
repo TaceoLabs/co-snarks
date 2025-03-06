@@ -698,37 +698,99 @@ impl<F: PrimeField> Plookup<F> {
                 key_b_slices.extend(values.2);
             }
             MultiTableId::FixedBaseLeftLo => {
-                let bitsize = bases[0].ilog2() as usize;
-                let total_size = bitsize * bases.len();
-                let key_a_slices_ = driver.decompose_arithmetic(key_a, total_size, bitsize)?;
-                for slice in key_a_slices_ {
-                    key_a_slices.push(slice.into());
-                }
-                key_b_slices.resize(bases.len(), T::public_zero());
-
-                let tables = &generators::generate_fixed_base_tables::<P::CycleGroup>()[0];
-
-                for (key, table) in key_a_slices.iter().zip(tables.iter()) {
-                    // let ohv = driver.one_hot_vector_from_shared_index(key, table.len())?;
-
-                    // Create the tables since the table itself only stores points and not fields
-                    let mut lut1 = Vec::with_capacity(table.len());
-                    let mut lut2 = Vec::with_capacity(table.len());
-                    for point in table.iter() {
-                        let (x, y) = point.xy().unwrap_or_default();
-                        lut1.push(x);
-                        lut2.push(y);
-                    }
-
-                    let output = driver.read_from_public_luts(key.to_owned(), &[lut1, lut2])?;
-                    debug_assert_eq!(output.len(), 2);
-                    results.push((output[0].clone(), output[1].clone()));
-                }
+                Self::get_fixed_base_table_values::<P, T>(
+                    bases,
+                    key_a,
+                    key_b,
+                    0,
+                    &mut key_a_slices,
+                    &mut key_b_slices,
+                    &mut results,
+                    driver,
+                )?;
+            }
+            MultiTableId::FixedBaseLeftHi => {
+                Self::get_fixed_base_table_values::<P, T>(
+                    bases,
+                    key_a,
+                    key_b,
+                    1,
+                    &mut key_a_slices,
+                    &mut key_b_slices,
+                    &mut results,
+                    driver,
+                )?;
+            }
+            MultiTableId::FixedBaseRightLo => {
+                Self::get_fixed_base_table_values::<P, T>(
+                    bases,
+                    key_a,
+                    key_b,
+                    2,
+                    &mut key_a_slices,
+                    &mut key_b_slices,
+                    &mut results,
+                    driver,
+                )?;
+            }
+            MultiTableId::FixedBaseRightHi => {
+                Self::get_fixed_base_table_values::<P, T>(
+                    bases,
+                    key_a,
+                    key_b,
+                    3,
+                    &mut key_a_slices,
+                    &mut key_b_slices,
+                    &mut results,
+                    driver,
+                )?;
             }
             _ => todo!("{:?} not yet implemented", multi_table.id),
         }
 
         Ok((results, key_a_slices, key_b_slices))
+    }
+
+    fn get_fixed_base_table_values<
+        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<F>,
+    >(
+        bases: &[u64],
+        key_a: T::ArithmeticShare,
+        _key_b: T::ArithmeticShare,
+        multitable_index: usize,
+        key_a_slices: &mut Vec<T::AcvmType>,
+        key_b_slices: &mut Vec<T::AcvmType>,
+        results: &mut Vec<(T::AcvmType, T::AcvmType)>,
+        driver: &mut T,
+    ) -> std::io::Result<()> {
+        assert!(multitable_index < FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES);
+
+        let bitsize = bases[0].ilog2() as usize;
+        let total_size = bitsize * bases.len();
+        let key_a_slices_ = driver.decompose_arithmetic(key_a, total_size, bitsize)?;
+        for slice in key_a_slices_ {
+            key_a_slices.push(slice.into());
+        }
+        key_b_slices.resize(bases.len(), T::public_zero());
+
+        let tables = &generators::generate_fixed_base_tables::<P::CycleGroup>()[multitable_index];
+
+        for (key, table) in key_a_slices.iter().zip(tables.iter()) {
+            // Create the tables since the table itself only stores points and not fields
+            let mut lut1 = Vec::with_capacity(table.len());
+            let mut lut2 = Vec::with_capacity(table.len());
+            for point in table.iter() {
+                let (x, y) = point.xy().unwrap_or_default();
+                lut1.push(x);
+                lut2.push(y);
+            }
+
+            let output = driver.read_from_public_luts(key.to_owned(), &[lut1, lut2])?;
+            debug_assert_eq!(output.len(), 2);
+            results.push((output[0].clone(), output[1].clone()));
+        }
+        Ok(())
     }
 
     pub(crate) fn get_lookup_accumulators<
