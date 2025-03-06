@@ -737,184 +737,6 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         );
     }
 
-    fn create_logic_constraint(
-        &mut self,
-        driver: &mut T,
-        constraint: &LogicConstraint<P::ScalarField>,
-    ) -> std::io::Result<()> {
-        let left = constraint.a.to_field_ct();
-        let right = constraint.b.to_field_ct();
-
-        let res = self.create_logic_constraint_inner(
-            driver,
-            left,
-            right,
-            constraint.num_bits as usize,
-            constraint.is_xor_gate,
-        )?;
-        let our_res = FieldCT::from_witness_index(constraint.result);
-        res.assert_equal(&our_res, self, driver);
-        Ok(())
-    }
-
-    fn create_logic_constraint_inner(
-        &mut self,
-        driver: &mut T,
-        a: FieldCT<P::ScalarField>,
-        b: FieldCT<P::ScalarField>,
-        num_bits: usize,
-        is_xor_gate: bool,
-    ) -> std::io::Result<FieldCT<P::ScalarField>> {
-        // ensure the number of bits doesn't exceed field size and is not negative
-        assert!(num_bits < 254);
-        assert!(num_bits > 0);
-
-        assert!(!a.is_constant() || !b.is_constant());
-
-        if a.is_constant() && !b.is_constant() {
-            let a_native =
-                T::get_public(&a.get_value(self, driver)).expect("Constant should be public");
-            let a_witness =
-                FieldCT::<P::ScalarField>::from_witness_index(self.put_constant_variable(a_native));
-            return self.create_logic_constraint_inner(driver, a_witness, b, num_bits, is_xor_gate);
-        }
-
-        if !a.is_constant() && b.is_constant() {
-            let b_native =
-                T::get_public(&b.get_value(self, driver)).expect("Constant should be public");
-            let b_witness =
-                FieldCT::<P::ScalarField>::from_witness_index(self.put_constant_variable(b_native));
-            return self.create_logic_constraint_inner(driver, a, b_witness, num_bits, is_xor_gate);
-        }
-
-        // We have Plookup!
-        let num_chunks = (num_bits / 32) + if num_bits % 32 == 0 { 0 } else { 1 };
-        let left = a.get_value(self, driver);
-        let right = b.get_value(self, driver);
-
-        // Decompose the values
-        let mut decomp_left = Vec::new();
-        let mut decomp_right = Vec::new();
-        let mut to_mpc_decompose = Vec::new();
-
-        if !T::is_shared(&left) {
-            let sublimb_mask = (BigUint::one() << 32) - BigUint::one();
-            let mut left_: BigUint = T::get_public(&left)
-                .expect("Already checked it is public")
-                .into();
-
-            decomp_left = (0..num_chunks)
-                .map(|_| {
-                    let sublimb_value = P::ScalarField::from(&left_ & &sublimb_mask);
-                    left_ >>= 32;
-                    T::AcvmType::from(sublimb_value)
-                })
-                .collect();
-        } else {
-            to_mpc_decompose.push(T::get_shared(&left).expect("Already checked it is shared"))
-        }
-
-        if !T::is_shared(&right) {
-            let sublimb_mask = (BigUint::one() << 32) - BigUint::one();
-            let mut right_: BigUint = T::get_public(&right)
-                .expect("Already checked it is public")
-                .into();
-
-            decomp_right = (0..num_chunks)
-                .map(|_| {
-                    let sublimb_value = P::ScalarField::from(&right_ & &sublimb_mask);
-                    right_ >>= 32;
-                    T::AcvmType::from(sublimb_value)
-                })
-                .collect();
-        } else {
-            to_mpc_decompose.push(T::get_shared(&right).expect("Already checked it is shared"))
-        }
-
-        if !to_mpc_decompose.is_empty() {
-            // TACEO TODO can this be batched as well?
-            let decomp = T::decompose_arithmetic_many(driver, &to_mpc_decompose, num_bits, 32)?;
-            if T::is_shared(&left) {
-                decomp_left = decomp[0]
-                    .iter()
-                    .map(|val| T::AcvmType::from(val.to_owned()))
-                    .collect();
-            }
-            if T::is_shared(&right) {
-                decomp_right = decomp
-                    .last()
-                    .expect("Is there")
-                    .iter()
-                    .map(|val| T::AcvmType::from(val.to_owned()))
-                    .collect();
-            }
-        }
-
-        let mut a_accumulator = FieldCT::default();
-        let mut b_accumulator = FieldCT::default();
-        let mut res = FieldCT::zero();
-
-        for (i, (left_chunk, right_chunk)) in decomp_left.into_iter().zip(decomp_right).enumerate()
-        {
-            let chunk_size = if i != num_chunks - 1 {
-                32
-            } else {
-                num_bits - i * 32
-            };
-
-            let a_chunk = FieldCT::from_witness(left_chunk, self);
-            let b_chunk = FieldCT::from_witness(right_chunk, self);
-
-            let result_chunk = if is_xor_gate {
-                Plookup::read_from_2_to_1_table(
-                    self,
-                    driver,
-                    MultiTableId::Uint32Xor,
-                    a_chunk.to_owned(),
-                    b_chunk.to_owned(),
-                )?
-            } else {
-                Plookup::read_from_2_to_1_table(
-                    self,
-                    driver,
-                    MultiTableId::Uint32And,
-                    a_chunk.to_owned(),
-                    b_chunk.to_owned(),
-                )?
-            };
-
-            let scaling_factor = FieldCT::from(P::ScalarField::from(BigUint::one() << (32 * i)));
-            a_accumulator.add_assign(
-                &a_chunk.multiply(&scaling_factor, self, driver)?,
-                self,
-                driver,
-            );
-            b_accumulator.add_assign(
-                &b_chunk.multiply(&scaling_factor, self, driver)?,
-                self,
-                driver,
-            );
-            if chunk_size != 32 {
-                // TACEO TODO can the decompose in here be batched as well?
-                self.create_range_constraint(driver, a_chunk.witness_index, chunk_size as u32)?;
-                self.create_range_constraint(driver, b_chunk.witness_index, chunk_size as u32)?;
-            }
-
-            res.add_assign(
-                &result_chunk.multiply(&scaling_factor, self, driver)?,
-                self,
-                driver,
-            );
-        }
-
-        let a_slice = &a.slice((num_bits - 1) as u8, 0, num_bits, self, driver)?[1];
-        let b_slice = &b.slice((num_bits - 1) as u8, 0, num_bits, self, driver)?[1];
-        a_slice.assert_equal(&a_accumulator, self, driver);
-        b_slice.assert_equal(&b_accumulator, self, driver);
-
-        Ok(res)
-    }
-
     fn create_block_constraints(
         &mut self,
         constraint: &BlockConstraint<P::ScalarField>,
@@ -1985,379 +1807,6 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         // self.num_gates += 1;
     }
 
-    pub fn add_gates_to_ensure_all_polys_are_non_zero(&mut self, driver: &mut T) {
-        // q_m, q_1, q_2, q_3, q_4
-        self.blocks.arithmetic.populate_wires(
-            self.zero_idx,
-            self.zero_idx,
-            self.zero_idx,
-            self.zero_idx,
-        );
-        self.blocks.arithmetic.q_m().push(P::ScalarField::one());
-        self.blocks.arithmetic.q_1().push(P::ScalarField::one());
-        self.blocks.arithmetic.q_2().push(P::ScalarField::one());
-        self.blocks.arithmetic.q_3().push(P::ScalarField::one());
-        self.blocks.arithmetic.q_4().push(P::ScalarField::one());
-        self.blocks.arithmetic.q_c().push(P::ScalarField::zero());
-        self.blocks
-            .arithmetic
-            .q_delta_range()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .arithmetic
-            .q_arith()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .arithmetic
-            .q_lookup_type()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .arithmetic
-            .q_elliptic()
-            .push(P::ScalarField::zero());
-        self.blocks.arithmetic.q_aux().push(P::ScalarField::zero());
-        self.blocks
-            .arithmetic
-            .q_poseidon2_external()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .arithmetic
-            .q_poseidon2_internal()
-            .push(P::ScalarField::zero());
-
-        self.check_selector_length_consistency();
-        self.num_gates += 1;
-
-        // q_delta_range
-        self.blocks.delta_range.populate_wires(
-            self.zero_idx,
-            self.zero_idx,
-            self.zero_idx,
-            self.zero_idx,
-        );
-        self.blocks.delta_range.q_m().push(P::ScalarField::zero());
-        self.blocks.delta_range.q_1().push(P::ScalarField::zero());
-        self.blocks.delta_range.q_2().push(P::ScalarField::zero());
-        self.blocks.delta_range.q_3().push(P::ScalarField::zero());
-        self.blocks.delta_range.q_4().push(P::ScalarField::zero());
-        self.blocks.delta_range.q_c().push(P::ScalarField::zero());
-        self.blocks
-            .delta_range
-            .q_delta_range()
-            .push(P::ScalarField::one());
-        self.blocks
-            .delta_range
-            .q_arith()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .delta_range
-            .q_lookup_type()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .delta_range
-            .q_elliptic()
-            .push(P::ScalarField::zero());
-        self.blocks.delta_range.q_aux().push(P::ScalarField::zero());
-        self.blocks
-            .delta_range
-            .q_poseidon2_external()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .delta_range
-            .q_poseidon2_internal()
-            .push(P::ScalarField::zero());
-
-        self.check_selector_length_consistency();
-        self.num_gates += 1;
-
-        create_dummy_gate!(
-            self,
-            &mut self.blocks.delta_range,
-            self.zero_idx,
-            self.zero_idx,
-            self.zero_idx,
-            self.zero_idx
-        );
-
-        // q_elliptic
-        self.blocks.elliptic.populate_wires(
-            self.zero_idx,
-            self.zero_idx,
-            self.zero_idx,
-            self.zero_idx,
-        );
-        self.blocks.elliptic.q_m().push(P::ScalarField::zero());
-        self.blocks.elliptic.q_1().push(P::ScalarField::zero());
-        self.blocks.elliptic.q_2().push(P::ScalarField::zero());
-        self.blocks.elliptic.q_3().push(P::ScalarField::zero());
-        self.blocks.elliptic.q_4().push(P::ScalarField::zero());
-        self.blocks.elliptic.q_c().push(P::ScalarField::zero());
-        self.blocks
-            .elliptic
-            .q_delta_range()
-            .push(P::ScalarField::zero());
-        self.blocks.elliptic.q_arith().push(P::ScalarField::zero());
-        self.blocks
-            .elliptic
-            .q_lookup_type()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .elliptic
-            .q_elliptic()
-            .push(P::ScalarField::one());
-        self.blocks.elliptic.q_aux().push(P::ScalarField::zero());
-        self.blocks
-            .elliptic
-            .q_poseidon2_external()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .elliptic
-            .q_poseidon2_internal()
-            .push(P::ScalarField::zero());
-
-        self.check_selector_length_consistency();
-        self.num_gates += 1;
-
-        create_dummy_gate!(
-            self,
-            &mut self.blocks.elliptic,
-            self.zero_idx,
-            self.zero_idx,
-            self.zero_idx,
-            self.zero_idx
-        );
-
-        // q_aux
-        self.blocks
-            .aux
-            .populate_wires(self.zero_idx, self.zero_idx, self.zero_idx, self.zero_idx);
-        self.blocks.aux.q_m().push(P::ScalarField::zero());
-        self.blocks.aux.q_1().push(P::ScalarField::zero());
-        self.blocks.aux.q_2().push(P::ScalarField::zero());
-        self.blocks.aux.q_3().push(P::ScalarField::zero());
-        self.blocks.aux.q_4().push(P::ScalarField::zero());
-        self.blocks.aux.q_c().push(P::ScalarField::zero());
-        self.blocks.aux.q_delta_range().push(P::ScalarField::zero());
-        self.blocks.aux.q_arith().push(P::ScalarField::zero());
-        self.blocks.aux.q_lookup_type().push(P::ScalarField::zero());
-        self.blocks.aux.q_elliptic().push(P::ScalarField::zero());
-        self.blocks.aux.q_aux().push(P::ScalarField::one());
-        self.blocks
-            .aux
-            .q_poseidon2_external()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .aux
-            .q_poseidon2_internal()
-            .push(P::ScalarField::zero());
-
-        self.check_selector_length_consistency();
-        self.num_gates += 1;
-
-        create_dummy_gate!(
-            self,
-            &mut self.blocks.aux,
-            self.zero_idx,
-            self.zero_idx,
-            self.zero_idx,
-            self.zero_idx
-        );
-
-        // Add nonzero values in w_4 and q_c (q_4*w_4 + q_c --> 1*1 - 1 = 0)
-        self.one_idx = self.put_constant_variable(P::ScalarField::one());
-        self.create_big_add_gate(
-            &AddQuad {
-                a: self.zero_idx,
-                b: self.zero_idx,
-                c: self.zero_idx,
-                d: self.one_idx,
-                a_scaling: P::ScalarField::zero(),
-                b_scaling: P::ScalarField::zero(),
-                c_scaling: P::ScalarField::zero(),
-                d_scaling: P::ScalarField::one(),
-                const_scaling: -P::ScalarField::one(),
-            },
-            false,
-        );
-
-        // Take care of all polys related to lookups (q_lookup, tables, sorted, etc)
-        // by doing a dummy lookup with a special table.
-        // Note: the 4th table poly is the table index: this is not the value of the table
-        // type enum but rather the index of the table in the list of all tables utilized
-        // in the circuit. Therefore we naively need two different basic tables (indices 0, 1)
-        // to get a non-zero value in table_4.
-        // The multitable operates on 2-bit values, so the maximum is 3
-        let left_value = 3;
-        let right_value = 3;
-
-        let left_witness_value = T::AcvmType::from(P::ScalarField::from(left_value as u64));
-        let right_witness_value = T::AcvmType::from(P::ScalarField::from(right_value as u64));
-
-        let left_witness_index = self.add_variable(left_witness_value.to_owned());
-        let right_witness_index = self.add_variable(right_witness_value.to_owned());
-        let dummy_accumulators = Plookup::get_lookup_accumulators(
-            self,
-            driver,
-            MultiTableId::HonkDummyMulti,
-            left_witness_value,
-            right_witness_value,
-            true,
-        )
-        .expect("Values are public so no network needed");
-        self.create_gates_from_plookup_accumulators(
-            MultiTableId::HonkDummyMulti,
-            dummy_accumulators,
-            left_witness_index,
-            Some(right_witness_index),
-        );
-
-        // mock a poseidon external gate, with all zeros as input
-        self.blocks.poseidon2_external.populate_wires(
-            self.zero_idx,
-            self.zero_idx,
-            self.zero_idx,
-            self.zero_idx,
-        );
-        self.blocks
-            .poseidon2_external
-            .q_m()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .poseidon2_external
-            .q_1()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .poseidon2_external
-            .q_2()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .poseidon2_external
-            .q_3()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .poseidon2_external
-            .q_c()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .poseidon2_external
-            .q_arith()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .poseidon2_external
-            .q_4()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .poseidon2_external
-            .q_delta_range()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .poseidon2_external
-            .q_lookup_type()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .poseidon2_external
-            .q_elliptic()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .poseidon2_external
-            .q_aux()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .poseidon2_external
-            .q_poseidon2_external()
-            .push(P::ScalarField::one());
-        self.blocks
-            .poseidon2_external
-            .q_poseidon2_internal()
-            .push(P::ScalarField::zero());
-
-        self.check_selector_length_consistency();
-        self.num_gates += 1;
-
-        // dummy gate to be read into by previous poseidon external gate via shifts
-        create_dummy_gate!(
-            self,
-            &mut self.blocks.poseidon2_external,
-            self.zero_idx,
-            self.zero_idx,
-            self.zero_idx,
-            self.zero_idx
-        );
-
-        // mock a poseidon internal gate, with all zeros as input
-        self.blocks.poseidon2_internal.populate_wires(
-            self.zero_idx,
-            self.zero_idx,
-            self.zero_idx,
-            self.zero_idx,
-        );
-        self.blocks
-            .poseidon2_internal
-            .q_m()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .poseidon2_internal
-            .q_1()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .poseidon2_internal
-            .q_2()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .poseidon2_internal
-            .q_3()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .poseidon2_internal
-            .q_c()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .poseidon2_internal
-            .q_arith()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .poseidon2_internal
-            .q_4()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .poseidon2_internal
-            .q_delta_range()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .poseidon2_internal
-            .q_lookup_type()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .poseidon2_internal
-            .q_elliptic()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .poseidon2_internal
-            .q_aux()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .poseidon2_internal
-            .q_poseidon2_external()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .poseidon2_internal
-            .q_poseidon2_internal()
-            .push(P::ScalarField::one());
-
-        self.check_selector_length_consistency();
-        self.num_gates += 1;
-
-        // dummy gate to be read into by previous poseidon internal gate via shifts
-        create_dummy_gate!(
-            self,
-            &mut self.blocks.poseidon2_internal,
-            self.zero_idx,
-            self.zero_idx,
-            self.zero_idx,
-            self.zero_idx
-        );
-    }
-
     pub fn get_circuit_subgroup_size(num_gates: usize) -> usize {
         let mut log2_n = Utils::get_msb64(num_gates as u64);
         if (1 << log2_n) != num_gates {
@@ -2370,116 +1819,6 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         let minimum_circuit_size = self.get_tables_size() + self.get_lookups_size();
         let num_filled_gates = self.get_num_gates() + self.public_inputs.len();
         std::cmp::max(minimum_circuit_size, num_filled_gates) + Self::NUM_RESERVED_GATES
-    }
-
-    fn get_table(&mut self, id: BasicTableId) -> &mut PlookupBasicTable<P, T> {
-        let mut index = self.lookup_tables.len();
-        for (i, table) in self.lookup_tables.iter().enumerate() {
-            if table.id == id {
-                index = i;
-                break;
-            }
-        }
-
-        let len = self.lookup_tables.len();
-        if index == len {
-            // Table doesn't exist! So try to create it.
-            self.lookup_tables
-                .push(PlookupBasicTable::create_basic_table(id, len));
-            self.lookup_tables.last_mut().unwrap()
-        } else {
-            &mut self.lookup_tables[index]
-        }
-    }
-
-    pub(crate) fn create_gates_from_plookup_accumulators(
-        &mut self,
-        id: MultiTableId,
-        read_values: ReadData<T::AcvmType>,
-        key_a_index: u32,
-        key_b_index: Option<u32>,
-    ) -> ReadData<u32> {
-        let id_usize = id as usize;
-
-        let num_lookups = read_values[ColumnIdx::C1].len();
-        let mut read_data = ReadData::default();
-
-        for i in 0..num_lookups {
-            // get basic lookup table; construct and add to builder.lookup_tables if not already present
-
-            let basic_table_id = self.plookup.multi_tables[id_usize].basic_table_ids[i].clone();
-            let table = self.get_table(basic_table_id);
-
-            table
-                .lookup_gates
-                .push(read_values.lookup_entries[i].to_owned()); // used for constructing sorted polynomials
-            let table_index = table.table_index;
-
-            let first_idx = if i == 0 {
-                key_a_index
-            } else {
-                self.add_variable(read_values[ColumnIdx::C1][i].clone())
-            };
-            #[expect(clippy::unnecessary_unwrap)]
-            let second_idx = if i == 0 && (key_b_index.is_some()) {
-                key_b_index.unwrap()
-            } else {
-                self.add_variable(read_values[ColumnIdx::C2][i].clone())
-            };
-            let third_idx = self.add_variable(read_values[ColumnIdx::C3][i].clone());
-            read_data[ColumnIdx::C1].push(first_idx);
-            read_data[ColumnIdx::C2].push(second_idx);
-            read_data[ColumnIdx::C3].push(third_idx);
-            self.assert_valid_variables(&[first_idx, second_idx, third_idx]);
-
-            self.blocks
-                .lookup
-                .q_lookup_type()
-                .push(P::ScalarField::one());
-            self.blocks
-                .lookup
-                .q_3()
-                .push(P::ScalarField::from(table_index as u64));
-            self.blocks
-                .lookup
-                .populate_wires(first_idx, second_idx, third_idx, self.zero_idx);
-            self.blocks.lookup.q_1().push(P::ScalarField::zero());
-            self.blocks.lookup.q_2().push(if i == (num_lookups - 1) {
-                P::ScalarField::zero()
-            } else {
-                -self.plookup.multi_tables[id_usize].column_1_step_sizes[i + 1]
-            });
-            self.blocks.lookup.q_m().push(if i == (num_lookups - 1) {
-                P::ScalarField::zero()
-            } else {
-                -self.plookup.multi_tables[id_usize].column_2_step_sizes[i + 1]
-            });
-            self.blocks.lookup.q_c().push(if i == (num_lookups - 1) {
-                P::ScalarField::zero()
-            } else {
-                -self.plookup.multi_tables[id_usize].column_3_step_sizes[i + 1]
-            });
-            self.blocks.lookup.q_arith().push(P::ScalarField::zero());
-            self.blocks.lookup.q_4().push(P::ScalarField::zero());
-            self.blocks
-                .lookup
-                .q_delta_range()
-                .push(P::ScalarField::zero());
-            self.blocks.lookup.q_elliptic().push(P::ScalarField::zero());
-            self.blocks.lookup.q_aux().push(P::ScalarField::zero());
-            self.blocks
-                .lookup
-                .q_poseidon2_external()
-                .push(P::ScalarField::zero());
-            self.blocks
-                .lookup
-                .q_poseidon2_internal()
-                .push(P::ScalarField::zero());
-
-            self.check_selector_length_consistency();
-            self.num_gates += 1;
-        }
-        read_data
     }
 
     fn create_poseidon2_permutations(
@@ -2512,54 +1851,6 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 q_c: P::ScalarField::zero(),
             };
             self.create_poly_gate(&assert_equal);
-        }
-        Ok(())
-    }
-
-    pub fn finalize_circuit(
-        &mut self,
-        ensure_nonzero: bool,
-        driver: &mut T,
-    ) -> std::io::Result<()> {
-        // /**
-        //  * First of all, add the gates related to ROM arrays and range lists.
-        //  * Note that the total number of rows in an UltraPlonk program can be divided as following:
-        //  *  1. arithmetic gates:  n_computation (includes all computation gates)
-        //  *  2. rom/memory gates:  n_rom
-        //  *  3. range list gates:  n_range
-        //  *  4. public inputs:     n_pub
-        //  *
-        //  * Now we have two variables referred to as `n` in the code:
-        //  *  1. ComposerBase::n => refers to the size of the witness of a given program,
-        //  *  2. proving_key::n => the next power of two ≥ total witness size.
-        //  *
-        //  * In this case, we have composer.num_gates = n_computation before we execute the following two functions.
-        //  * After these functions are executed, the composer's `n` is incremented to include the ROM
-        //  * and range list gates. Therefore we have:
-        //  * composer.num_gates = n_computation + n_rom + n_range.
-        //  *
-        //  * Its necessary to include the (n_rom + n_range) gates at this point because if we already have a
-        //  * proving key, and we just return it without including these ROM and range list gates, the overall
-        //  * circuit size would not be correct (resulting in the code crashing while performing FFT
-        //  * operations).
-        //  *
-        //  * Therefore, we introduce a boolean flag `circuit_finalized` here. Once we add the rom and range gates,
-        //  * our circuit is finalized, and we must not to execute these functions again.
-        //  */
-        if self.circuit_finalized {
-            // Gates added after first call to finalize will not be processed since finalization is only performed once
-            tracing::warn!("WARNING: Redundant call to finalize_circuit(). Is this intentional?");
-        } else {
-            if ensure_nonzero {
-                self.add_gates_to_ensure_all_polys_are_non_zero(driver);
-            }
-
-            self.process_non_native_field_multiplications();
-            self.process_rom_arrays(driver)?;
-            self.process_ram_arrays(driver)?;
-            self.process_range_lists(driver)?;
-            self.populate_public_inputs_block();
-            self.circuit_finalized = true;
         }
         Ok(())
     }
@@ -4025,6 +3316,54 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         Ok(builder.compute_dyadic_size())
     }
 
+    pub fn finalize_circuit(
+        &mut self,
+        ensure_nonzero: bool,
+        driver: &mut T,
+    ) -> std::io::Result<()> {
+        // /**
+        //  * First of all, add the gates related to ROM arrays and range lists.
+        //  * Note that the total number of rows in an UltraPlonk program can be divided as following:
+        //  *  1. arithmetic gates:  n_computation (includes all computation gates)
+        //  *  2. rom/memory gates:  n_rom
+        //  *  3. range list gates:  n_range
+        //  *  4. public inputs:     n_pub
+        //  *
+        //  * Now we have two variables referred to as `n` in the code:
+        //  *  1. ComposerBase::n => refers to the size of the witness of a given program,
+        //  *  2. proving_key::n => the next power of two ≥ total witness size.
+        //  *
+        //  * In this case, we have composer.num_gates = n_computation before we execute the following two functions.
+        //  * After these functions are executed, the composer's `n` is incremented to include the ROM
+        //  * and range list gates. Therefore we have:
+        //  * composer.num_gates = n_computation + n_rom + n_range.
+        //  *
+        //  * Its necessary to include the (n_rom + n_range) gates at this point because if we already have a
+        //  * proving key, and we just return it without including these ROM and range list gates, the overall
+        //  * circuit size would not be correct (resulting in the code crashing while performing FFT
+        //  * operations).
+        //  *
+        //  * Therefore, we introduce a boolean flag `circuit_finalized` here. Once we add the rom and range gates,
+        //  * our circuit is finalized, and we must not to execute these functions again.
+        //  */
+        if self.circuit_finalized {
+            // Gates added after first call to finalize will not be processed since finalization is only performed once
+            tracing::warn!("WARNING: Redundant call to finalize_circuit(). Is this intentional?");
+        } else {
+            if ensure_nonzero {
+                self.add_gates_to_ensure_all_polys_are_non_zero(driver);
+            }
+
+            self.process_non_native_field_multiplications();
+            self.process_rom_arrays(driver)?;
+            self.process_ram_arrays(driver)?;
+            self.process_range_lists(driver)?;
+            self.populate_public_inputs_block();
+            self.circuit_finalized = true;
+        }
+        Ok(())
+    }
+
     fn build_constraints(
         &mut self,
         driver: &mut T,
@@ -4244,6 +3583,116 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         Ok(())
     }
 
+    fn get_table(&mut self, id: BasicTableId) -> &mut PlookupBasicTable<P, T> {
+        let mut index = self.lookup_tables.len();
+        for (i, table) in self.lookup_tables.iter().enumerate() {
+            if table.id == id {
+                index = i;
+                break;
+            }
+        }
+
+        let len = self.lookup_tables.len();
+        if index == len {
+            // Table doesn't exist! So try to create it.
+            self.lookup_tables
+                .push(PlookupBasicTable::create_basic_table(id, len));
+            self.lookup_tables.last_mut().unwrap()
+        } else {
+            &mut self.lookup_tables[index]
+        }
+    }
+
+    pub(crate) fn create_gates_from_plookup_accumulators(
+        &mut self,
+        id: MultiTableId,
+        read_values: ReadData<T::AcvmType>,
+        key_a_index: u32,
+        key_b_index: Option<u32>,
+    ) -> ReadData<u32> {
+        let id_usize = id as usize;
+
+        let num_lookups = read_values[ColumnIdx::C1].len();
+        let mut read_data = ReadData::default();
+
+        for i in 0..num_lookups {
+            // get basic lookup table; construct and add to builder.lookup_tables if not already present
+
+            let basic_table_id = self.plookup.multi_tables[id_usize].basic_table_ids[i].clone();
+            let table = self.get_table(basic_table_id);
+
+            table
+                .lookup_gates
+                .push(read_values.lookup_entries[i].to_owned()); // used for constructing sorted polynomials
+            let table_index = table.table_index;
+
+            let first_idx = if i == 0 {
+                key_a_index
+            } else {
+                self.add_variable(read_values[ColumnIdx::C1][i].clone())
+            };
+            #[expect(clippy::unnecessary_unwrap)]
+            let second_idx = if i == 0 && (key_b_index.is_some()) {
+                key_b_index.unwrap()
+            } else {
+                self.add_variable(read_values[ColumnIdx::C2][i].clone())
+            };
+            let third_idx = self.add_variable(read_values[ColumnIdx::C3][i].clone());
+            read_data[ColumnIdx::C1].push(first_idx);
+            read_data[ColumnIdx::C2].push(second_idx);
+            read_data[ColumnIdx::C3].push(third_idx);
+            self.assert_valid_variables(&[first_idx, second_idx, third_idx]);
+
+            self.blocks
+                .lookup
+                .q_lookup_type()
+                .push(P::ScalarField::one());
+            self.blocks
+                .lookup
+                .q_3()
+                .push(P::ScalarField::from(table_index as u64));
+            self.blocks
+                .lookup
+                .populate_wires(first_idx, second_idx, third_idx, self.zero_idx);
+            self.blocks.lookup.q_1().push(P::ScalarField::zero());
+            self.blocks.lookup.q_2().push(if i == (num_lookups - 1) {
+                P::ScalarField::zero()
+            } else {
+                -self.plookup.multi_tables[id_usize].column_1_step_sizes[i + 1]
+            });
+            self.blocks.lookup.q_m().push(if i == (num_lookups - 1) {
+                P::ScalarField::zero()
+            } else {
+                -self.plookup.multi_tables[id_usize].column_2_step_sizes[i + 1]
+            });
+            self.blocks.lookup.q_c().push(if i == (num_lookups - 1) {
+                P::ScalarField::zero()
+            } else {
+                -self.plookup.multi_tables[id_usize].column_3_step_sizes[i + 1]
+            });
+            self.blocks.lookup.q_arith().push(P::ScalarField::zero());
+            self.blocks.lookup.q_4().push(P::ScalarField::zero());
+            self.blocks
+                .lookup
+                .q_delta_range()
+                .push(P::ScalarField::zero());
+            self.blocks.lookup.q_elliptic().push(P::ScalarField::zero());
+            self.blocks.lookup.q_aux().push(P::ScalarField::zero());
+            self.blocks
+                .lookup
+                .q_poseidon2_external()
+                .push(P::ScalarField::zero());
+            self.blocks
+                .lookup
+                .q_poseidon2_internal()
+                .push(P::ScalarField::zero());
+
+            self.check_selector_length_consistency();
+            self.num_gates += 1;
+        }
+        read_data
+    }
+
     fn create_multi_scalar_mul_constraint(
         &mut self,
         constraint: &MultiScalarMul<P::ScalarField>,
@@ -4324,5 +3773,556 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         }
 
         Ok(())
+    }
+
+    fn create_logic_constraint(
+        &mut self,
+        driver: &mut T,
+        constraint: &LogicConstraint<P::ScalarField>,
+    ) -> std::io::Result<()> {
+        let left = constraint.a.to_field_ct();
+        let right = constraint.b.to_field_ct();
+
+        let res = self.create_logic_constraint_inner(
+            driver,
+            left,
+            right,
+            constraint.num_bits as usize,
+            constraint.is_xor_gate,
+        )?;
+        let our_res = FieldCT::from_witness_index(constraint.result);
+        res.assert_equal(&our_res, self, driver);
+        Ok(())
+    }
+
+    fn create_logic_constraint_inner(
+        &mut self,
+        driver: &mut T,
+        a: FieldCT<P::ScalarField>,
+        b: FieldCT<P::ScalarField>,
+        num_bits: usize,
+        is_xor_gate: bool,
+    ) -> std::io::Result<FieldCT<P::ScalarField>> {
+        // ensure the number of bits doesn't exceed field size and is not negative
+        assert!(num_bits < 254);
+        assert!(num_bits > 0);
+
+        assert!(!a.is_constant() || !b.is_constant());
+
+        if a.is_constant() && !b.is_constant() {
+            let a_native =
+                T::get_public(&a.get_value(self, driver)).expect("Constant should be public");
+            let a_witness =
+                FieldCT::<P::ScalarField>::from_witness_index(self.put_constant_variable(a_native));
+            return self.create_logic_constraint_inner(driver, a_witness, b, num_bits, is_xor_gate);
+        }
+
+        if !a.is_constant() && b.is_constant() {
+            let b_native =
+                T::get_public(&b.get_value(self, driver)).expect("Constant should be public");
+            let b_witness =
+                FieldCT::<P::ScalarField>::from_witness_index(self.put_constant_variable(b_native));
+            return self.create_logic_constraint_inner(driver, a, b_witness, num_bits, is_xor_gate);
+        }
+
+        // We have Plookup!
+        let num_chunks = (num_bits / 32) + if num_bits % 32 == 0 { 0 } else { 1 };
+        let left = a.get_value(self, driver);
+        let right = b.get_value(self, driver);
+
+        // Decompose the values
+        let mut decomp_left = Vec::new();
+        let mut decomp_right = Vec::new();
+        let mut to_mpc_decompose = Vec::new();
+
+        if !T::is_shared(&left) {
+            let sublimb_mask = (BigUint::one() << 32) - BigUint::one();
+            let mut left_: BigUint = T::get_public(&left)
+                .expect("Already checked it is public")
+                .into();
+
+            decomp_left = (0..num_chunks)
+                .map(|_| {
+                    let sublimb_value = P::ScalarField::from(&left_ & &sublimb_mask);
+                    left_ >>= 32;
+                    T::AcvmType::from(sublimb_value)
+                })
+                .collect();
+        } else {
+            to_mpc_decompose.push(T::get_shared(&left).expect("Already checked it is shared"))
+        }
+
+        if !T::is_shared(&right) {
+            let sublimb_mask = (BigUint::one() << 32) - BigUint::one();
+            let mut right_: BigUint = T::get_public(&right)
+                .expect("Already checked it is public")
+                .into();
+
+            decomp_right = (0..num_chunks)
+                .map(|_| {
+                    let sublimb_value = P::ScalarField::from(&right_ & &sublimb_mask);
+                    right_ >>= 32;
+                    T::AcvmType::from(sublimb_value)
+                })
+                .collect();
+        } else {
+            to_mpc_decompose.push(T::get_shared(&right).expect("Already checked it is shared"))
+        }
+
+        if !to_mpc_decompose.is_empty() {
+            // TACEO TODO can this be batched as well?
+            let decomp = T::decompose_arithmetic_many(driver, &to_mpc_decompose, num_bits, 32)?;
+            if T::is_shared(&left) {
+                decomp_left = decomp[0]
+                    .iter()
+                    .map(|val| T::AcvmType::from(val.to_owned()))
+                    .collect();
+            }
+            if T::is_shared(&right) {
+                decomp_right = decomp
+                    .last()
+                    .expect("Is there")
+                    .iter()
+                    .map(|val| T::AcvmType::from(val.to_owned()))
+                    .collect();
+            }
+        }
+
+        let mut a_accumulator = FieldCT::default();
+        let mut b_accumulator = FieldCT::default();
+        let mut res = FieldCT::zero();
+
+        for (i, (left_chunk, right_chunk)) in decomp_left.into_iter().zip(decomp_right).enumerate()
+        {
+            let chunk_size = if i != num_chunks - 1 {
+                32
+            } else {
+                num_bits - i * 32
+            };
+
+            let a_chunk = FieldCT::from_witness(left_chunk, self);
+            let b_chunk = FieldCT::from_witness(right_chunk, self);
+
+            let result_chunk = if is_xor_gate {
+                Plookup::read_from_2_to_1_table(
+                    self,
+                    driver,
+                    MultiTableId::Uint32Xor,
+                    a_chunk.to_owned(),
+                    b_chunk.to_owned(),
+                )?
+            } else {
+                Plookup::read_from_2_to_1_table(
+                    self,
+                    driver,
+                    MultiTableId::Uint32And,
+                    a_chunk.to_owned(),
+                    b_chunk.to_owned(),
+                )?
+            };
+
+            let scaling_factor = FieldCT::from(P::ScalarField::from(BigUint::one() << (32 * i)));
+            a_accumulator.add_assign(
+                &a_chunk.multiply(&scaling_factor, self, driver)?,
+                self,
+                driver,
+            );
+            b_accumulator.add_assign(
+                &b_chunk.multiply(&scaling_factor, self, driver)?,
+                self,
+                driver,
+            );
+            if chunk_size != 32 {
+                // TACEO TODO can the decompose in here be batched as well?
+                self.create_range_constraint(driver, a_chunk.witness_index, chunk_size as u32)?;
+                self.create_range_constraint(driver, b_chunk.witness_index, chunk_size as u32)?;
+            }
+
+            res.add_assign(
+                &result_chunk.multiply(&scaling_factor, self, driver)?,
+                self,
+                driver,
+            );
+        }
+
+        let a_slice = &a.slice((num_bits - 1) as u8, 0, num_bits, self, driver)?[1];
+        let b_slice = &b.slice((num_bits - 1) as u8, 0, num_bits, self, driver)?[1];
+        a_slice.assert_equal(&a_accumulator, self, driver);
+        b_slice.assert_equal(&b_accumulator, self, driver);
+
+        Ok(res)
+    }
+
+    pub fn add_gates_to_ensure_all_polys_are_non_zero(&mut self, driver: &mut T) {
+        // q_m, q_1, q_2, q_3, q_4
+        self.blocks.arithmetic.populate_wires(
+            self.zero_idx,
+            self.zero_idx,
+            self.zero_idx,
+            self.zero_idx,
+        );
+        self.blocks.arithmetic.q_m().push(P::ScalarField::one());
+        self.blocks.arithmetic.q_1().push(P::ScalarField::one());
+        self.blocks.arithmetic.q_2().push(P::ScalarField::one());
+        self.blocks.arithmetic.q_3().push(P::ScalarField::one());
+        self.blocks.arithmetic.q_4().push(P::ScalarField::one());
+        self.blocks.arithmetic.q_c().push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_delta_range()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_arith()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_lookup_type()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_elliptic()
+            .push(P::ScalarField::zero());
+        self.blocks.arithmetic.q_aux().push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_poseidon2_external()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_poseidon2_internal()
+            .push(P::ScalarField::zero());
+
+        self.check_selector_length_consistency();
+        self.num_gates += 1;
+
+        // q_delta_range
+        self.blocks.delta_range.populate_wires(
+            self.zero_idx,
+            self.zero_idx,
+            self.zero_idx,
+            self.zero_idx,
+        );
+        self.blocks.delta_range.q_m().push(P::ScalarField::zero());
+        self.blocks.delta_range.q_1().push(P::ScalarField::zero());
+        self.blocks.delta_range.q_2().push(P::ScalarField::zero());
+        self.blocks.delta_range.q_3().push(P::ScalarField::zero());
+        self.blocks.delta_range.q_4().push(P::ScalarField::zero());
+        self.blocks.delta_range.q_c().push(P::ScalarField::zero());
+        self.blocks
+            .delta_range
+            .q_delta_range()
+            .push(P::ScalarField::one());
+        self.blocks
+            .delta_range
+            .q_arith()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .delta_range
+            .q_lookup_type()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .delta_range
+            .q_elliptic()
+            .push(P::ScalarField::zero());
+        self.blocks.delta_range.q_aux().push(P::ScalarField::zero());
+        self.blocks
+            .delta_range
+            .q_poseidon2_external()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .delta_range
+            .q_poseidon2_internal()
+            .push(P::ScalarField::zero());
+
+        self.check_selector_length_consistency();
+        self.num_gates += 1;
+
+        create_dummy_gate!(
+            self,
+            &mut self.blocks.delta_range,
+            self.zero_idx,
+            self.zero_idx,
+            self.zero_idx,
+            self.zero_idx
+        );
+
+        // q_elliptic
+        self.blocks.elliptic.populate_wires(
+            self.zero_idx,
+            self.zero_idx,
+            self.zero_idx,
+            self.zero_idx,
+        );
+        self.blocks.elliptic.q_m().push(P::ScalarField::zero());
+        self.blocks.elliptic.q_1().push(P::ScalarField::zero());
+        self.blocks.elliptic.q_2().push(P::ScalarField::zero());
+        self.blocks.elliptic.q_3().push(P::ScalarField::zero());
+        self.blocks.elliptic.q_4().push(P::ScalarField::zero());
+        self.blocks.elliptic.q_c().push(P::ScalarField::zero());
+        self.blocks
+            .elliptic
+            .q_delta_range()
+            .push(P::ScalarField::zero());
+        self.blocks.elliptic.q_arith().push(P::ScalarField::zero());
+        self.blocks
+            .elliptic
+            .q_lookup_type()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .elliptic
+            .q_elliptic()
+            .push(P::ScalarField::one());
+        self.blocks.elliptic.q_aux().push(P::ScalarField::zero());
+        self.blocks
+            .elliptic
+            .q_poseidon2_external()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .elliptic
+            .q_poseidon2_internal()
+            .push(P::ScalarField::zero());
+
+        self.check_selector_length_consistency();
+        self.num_gates += 1;
+
+        create_dummy_gate!(
+            self,
+            &mut self.blocks.elliptic,
+            self.zero_idx,
+            self.zero_idx,
+            self.zero_idx,
+            self.zero_idx
+        );
+
+        // q_aux
+        self.blocks
+            .aux
+            .populate_wires(self.zero_idx, self.zero_idx, self.zero_idx, self.zero_idx);
+        self.blocks.aux.q_m().push(P::ScalarField::zero());
+        self.blocks.aux.q_1().push(P::ScalarField::zero());
+        self.blocks.aux.q_2().push(P::ScalarField::zero());
+        self.blocks.aux.q_3().push(P::ScalarField::zero());
+        self.blocks.aux.q_4().push(P::ScalarField::zero());
+        self.blocks.aux.q_c().push(P::ScalarField::zero());
+        self.blocks.aux.q_delta_range().push(P::ScalarField::zero());
+        self.blocks.aux.q_arith().push(P::ScalarField::zero());
+        self.blocks.aux.q_lookup_type().push(P::ScalarField::zero());
+        self.blocks.aux.q_elliptic().push(P::ScalarField::zero());
+        self.blocks.aux.q_aux().push(P::ScalarField::one());
+        self.blocks
+            .aux
+            .q_poseidon2_external()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .aux
+            .q_poseidon2_internal()
+            .push(P::ScalarField::zero());
+
+        self.check_selector_length_consistency();
+        self.num_gates += 1;
+
+        create_dummy_gate!(
+            self,
+            &mut self.blocks.aux,
+            self.zero_idx,
+            self.zero_idx,
+            self.zero_idx,
+            self.zero_idx
+        );
+
+        // Add nonzero values in w_4 and q_c (q_4*w_4 + q_c --> 1*1 - 1 = 0)
+        self.one_idx = self.put_constant_variable(P::ScalarField::one());
+        self.create_big_add_gate(
+            &AddQuad {
+                a: self.zero_idx,
+                b: self.zero_idx,
+                c: self.zero_idx,
+                d: self.one_idx,
+                a_scaling: P::ScalarField::zero(),
+                b_scaling: P::ScalarField::zero(),
+                c_scaling: P::ScalarField::zero(),
+                d_scaling: P::ScalarField::one(),
+                const_scaling: -P::ScalarField::one(),
+            },
+            false,
+        );
+
+        // Take care of all polys related to lookups (q_lookup, tables, sorted, etc)
+        // by doing a dummy lookup with a special table.
+        // Note: the 4th table poly is the table index: this is not the value of the table
+        // type enum but rather the index of the table in the list of all tables utilized
+        // in the circuit. Therefore we naively need two different basic tables (indices 0, 1)
+        // to get a non-zero value in table_4.
+        // The multitable operates on 2-bit values, so the maximum is 3
+        let left_value = 3;
+        let right_value = 3;
+
+        let left_witness_value = T::AcvmType::from(P::ScalarField::from(left_value as u64));
+        let right_witness_value = T::AcvmType::from(P::ScalarField::from(right_value as u64));
+
+        let left_witness_index = self.add_variable(left_witness_value.to_owned());
+        let right_witness_index = self.add_variable(right_witness_value.to_owned());
+        let dummy_accumulators = Plookup::get_lookup_accumulators(
+            self,
+            driver,
+            MultiTableId::HonkDummyMulti,
+            left_witness_value,
+            right_witness_value,
+            true,
+        )
+        .expect("Values are public so no network needed");
+        self.create_gates_from_plookup_accumulators(
+            MultiTableId::HonkDummyMulti,
+            dummy_accumulators,
+            left_witness_index,
+            Some(right_witness_index),
+        );
+
+        // mock a poseidon external gate, with all zeros as input
+        self.blocks.poseidon2_external.populate_wires(
+            self.zero_idx,
+            self.zero_idx,
+            self.zero_idx,
+            self.zero_idx,
+        );
+        self.blocks
+            .poseidon2_external
+            .q_m()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_external
+            .q_1()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_external
+            .q_2()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_external
+            .q_3()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_external
+            .q_c()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_external
+            .q_arith()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_external
+            .q_4()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_external
+            .q_delta_range()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_external
+            .q_lookup_type()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_external
+            .q_elliptic()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_external
+            .q_aux()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_external
+            .q_poseidon2_external()
+            .push(P::ScalarField::one());
+        self.blocks
+            .poseidon2_external
+            .q_poseidon2_internal()
+            .push(P::ScalarField::zero());
+
+        self.check_selector_length_consistency();
+        self.num_gates += 1;
+
+        // dummy gate to be read into by previous poseidon external gate via shifts
+        create_dummy_gate!(
+            self,
+            &mut self.blocks.poseidon2_external,
+            self.zero_idx,
+            self.zero_idx,
+            self.zero_idx,
+            self.zero_idx
+        );
+
+        // mock a poseidon internal gate, with all zeros as input
+        self.blocks.poseidon2_internal.populate_wires(
+            self.zero_idx,
+            self.zero_idx,
+            self.zero_idx,
+            self.zero_idx,
+        );
+        self.blocks
+            .poseidon2_internal
+            .q_m()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_internal
+            .q_1()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_internal
+            .q_2()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_internal
+            .q_3()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_internal
+            .q_c()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_internal
+            .q_arith()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_internal
+            .q_4()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_internal
+            .q_delta_range()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_internal
+            .q_lookup_type()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_internal
+            .q_elliptic()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_internal
+            .q_aux()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_internal
+            .q_poseidon2_external()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_internal
+            .q_poseidon2_internal()
+            .push(P::ScalarField::one());
+
+        self.check_selector_length_consistency();
+        self.num_gates += 1;
+
+        // dummy gate to be read into by previous poseidon internal gate via shifts
+        create_dummy_gate!(
+            self,
+            &mut self.blocks.poseidon2_internal,
+            self.zero_idx,
+            self.zero_idx,
+            self.zero_idx,
+            self.zero_idx
+        );
     }
 }
