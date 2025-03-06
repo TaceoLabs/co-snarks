@@ -751,6 +751,7 @@ impl<F: PrimeField> Plookup<F> {
         Ok((results, key_a_slices, key_b_slices))
     }
 
+    #[expect(clippy::too_many_arguments)]
     fn get_fixed_base_table_values<
         P: HonkCurve<TranscriptFieldType, ScalarField = F>,
         T: NoirWitnessExtensionProtocol<F>,
