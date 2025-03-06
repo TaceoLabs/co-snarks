@@ -230,7 +230,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     ) -> std::io::Result<Vec<Vec<Self::ArithmeticShare>>>;
 
     /// Slices a value at given indices (msb, lsb), both included in the slice.
-    /// Only consideres bitsize bits.
+    /// Only considers bitsize bits.
     /// Result is thus [lo, slice, hi], where slice has all bits from lsb to msb, lo all bits smaller than lsb, and hi all bits greater msb up to bitsize.
     fn slice(
         &mut self,
@@ -239,6 +239,24 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         lsb: u8,
         bitsize: usize,
     ) -> std::io::Result<[Self::ArithmeticShare; 3]>;
+
+    /// Slices a shared field element at given indices from msb to lsb, both included in the slice.
+    /// Only considers bitsize bits.
+    /// Result is thus slice, where slice has all bits from lsb to msb.
+    fn slice_once(
+        &mut self,
+        input: Self::ArithmeticShare,
+        msb: u8,
+        lsb: u8,
+        bitsize: usize,
+    ) -> std::io::Result<Self::ArithmeticShare>;
+
+    /// Shifts a shared field element to the right by shift bits.
+    fn right_shift(
+        &mut self,
+        input: Self::AcvmType,
+        shift: usize,
+    ) -> std::io::Result<Self::AcvmType>;
 
     /// bitwise AND operation for integer datatype (i.e., the result will be smaller than a field)
     fn integer_bitwise_and(
@@ -319,6 +337,21 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         Vec<Self::AcvmType>,
     )>;
 
+    /// Slices input1 and input2 into a vector of basis_bits bits each, XORs all values and rotates the results by rotation. Thereby, in total only total_bitsize bits per input are considered.
+    #[expect(clippy::type_complexity)]
+    fn slice_and_get_xor_rotate_values_with_filter(
+        &mut self,
+        input1: Self::ArithmeticShare,
+        input2: Self::ArithmeticShare,
+        basis_bits: &[u64],
+        rotation: &[usize],
+        filter: &[bool],
+    ) -> std::io::Result<(
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+    )>;
+
     /// Gets the overflow bits as used in the add_normalize function of the SHA256 compression
     fn sha256_get_overflow_bit(
         &mut self,
@@ -389,16 +422,29 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     /// Compute the greater than operation: a > b. Outputs 1 if a > b, 0 otherwise.
     fn gt(&mut self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> io::Result<Self::AcvmType>;
 
+    /// Compute the less than operation: a < b. Outputs 1 if a < b, 0 otherwise.
+    fn lt(&mut self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> std::io::Result<Self::AcvmType> {
+        self.gt(rhs, lhs)
+    }
+
     /// Computes: result = if point == 0 { value } else { point }
     fn set_point_to_value_if_zero<C: CurveGroup<BaseField = F>>(
         &mut self,
         point: Self::AcvmPoint<C>,
         value: Self::AcvmPoint<C>,
     ) -> std::io::Result<Self::AcvmPoint<C>>;
-    /// Computes the SHA256 compression from given state and message.
+
+    /// Computes the SHA256 compression from a given state and message.
     fn sha256_compression(
         &mut self,
         state: &[Self::AcvmType; 8],
         message: &[Self::AcvmType; 16],
+    ) -> std::io::Result<Vec<Self::AcvmType>>;
+
+    /// Computes the Blake2 hash function from a given message.
+    fn blake2s_hash(
+        &mut self,
+        message_input: Vec<Self::AcvmType>,
+        num_bits: &[usize],
     ) -> std::io::Result<Vec<Self::AcvmType>>;
 }

@@ -551,6 +551,24 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         panic!("functionality slice not feasible for Shamir")
     }
 
+    fn slice_once(
+        &mut self,
+        _input: Self::ArithmeticShare,
+        _msb: u8,
+        _lsb: u8,
+        _bitsize: usize,
+    ) -> std::io::Result<Self::ArithmeticShare> {
+        panic!("functionality slice_once not feasible for Shamir")
+    }
+
+    fn right_shift(
+        &mut self,
+        _input: Self::AcvmType,
+        _shift: usize,
+    ) -> std::io::Result<Self::AcvmType> {
+        panic!("functionality right_shift not feasible for Shamir")
+    }
+
     fn integer_bitwise_and(
         &mut self,
         lhs: Self::AcvmType,
@@ -619,6 +637,21 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         Vec<Self::AcvmType>,
     )> {
         panic!("functionality slice_and_get_xor_rotate_values not feasible for Shamir")
+    }
+
+    fn slice_and_get_xor_rotate_values_with_filter(
+        &mut self,
+        _input1: Self::ArithmeticShare,
+        _input2: Self::ArithmeticShare,
+        _basis_bits: &[u64],
+        _rotation: &[usize],
+        _filter: &[bool],
+    ) -> std::io::Result<(
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+    )> {
+        panic!("functionality slice_and_get_xor_rotate_values_with_filter not feasible for Shamir")
     }
 
     fn sort_vec_by(
@@ -820,5 +853,13 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         Vec<Self::AcvmType>,
     )> {
         panic!("functionality slice_and_get_sparse_normalization_values not feasible for Shamir")
+    }
+
+    fn blake2s_hash(
+        &mut self,
+        _message_input: Vec<Self::AcvmType>,
+        _num_bits: &[usize],
+    ) -> std::io::Result<Vec<Self::AcvmType>> {
+        panic!("functionality blake2s_hash not feasible for Shamir")
     }
 }

@@ -14,6 +14,7 @@ ark-ff = { workspace = true }
 ark-grumpkin = { workspace = true }
 ark-std = { workspace = true }
 ark-serialize = { workspace = true }
+blake2.workspace = true
 bytes = { workspace = true }
 circom-mpc-compiler = { version = "0.9.1", path = "../co-circom/circom-mpc-compiler" }
 circom-mpc-vm = { version = "0.8.0", path = "../co-circom/circom-mpc-vm" }

@@ -11,9 +11,9 @@ use ark_ff::{PrimeField, Zero};
 use std::collections::{BTreeMap, HashSet};
 
 use crate::types::types::{
-    AcirFormatOriginalOpcodeIndices, BlockConstraint, BlockType, LogicConstraint, MulQuad,
-    MultiScalarMul, PolyTriple, Poseidon2Constraint, RangeConstraint, RecursionConstraint,
-    Sha256Compression, WitnessOrConstant,
+    AcirFormatOriginalOpcodeIndices, Blake2sConstraint, Blake2sInput, BlockConstraint, BlockType,
+    LogicConstraint, MulQuad, MultiScalarMul, PolyTriple, Poseidon2Constraint, RangeConstraint,
+    RecursionConstraint, Sha256Compression, WitnessOrConstant,
 };
 #[expect(dead_code)]
 pub struct ProgramMetadata {
@@ -55,7 +55,7 @@ pub struct AcirFormat<F: PrimeField> {
     //  std::vector<SchnorrConstraint> schnorr_constraints;
     //  std::vector<EcdsaSecp256k1Constraint> ecdsa_k1_constraints;
     //  std::vector<EcdsaSecp256r1Constraint> ecdsa_r1_constraints;
-    //  std::vector<Blake2sConstraint> blake2s_constraints;
+    pub(crate) blake2s_constraints: Vec<Blake2sConstraint<F>>,
     //  std::vector<Blake3Constraint> blake3_constraints;
     //  std::vector<KeccakConstraint> keccak_constraints;
     //  std::vector<Keccakf1600> keccak_permutations;
@@ -680,10 +680,28 @@ impl<F: PrimeField> AcirFormat<F> {
                     af.minimal_range.insert(witness_input, input.num_bits());
                 }
             }
-            BlackBoxFuncCall::Blake2s {
-                inputs: _,
-                outputs: _,
-            } => todo!("BlackBoxFuncCall::Blake2s"),
+            BlackBoxFuncCall::Blake2s { inputs, outputs } => {
+                let constraint = Blake2sConstraint {
+                    inputs: inputs
+                        .into_iter()
+                        .map(|e| Blake2sInput {
+                            blackbox_input: Self::parse_input(e),
+                            num_bits: e.num_bits(),
+                        })
+                        .collect(),
+                    result: {
+                        let vec: Vec<u32> = outputs.into_iter().map(|e| e.0).collect();
+                        vec.try_into().expect("Expected a Vec of length 32")
+                    },
+                };
+                for output in &constraint.result {
+                    af.constrained_witness.insert(*output);
+                }
+                af.blake2s_constraints.push(constraint);
+                af.original_opcode_indices
+                    .blake2s_constraints
+                    .push(opcode_index);
+            }
             BlackBoxFuncCall::Blake3 {
                 inputs: _,
                 outputs: _,

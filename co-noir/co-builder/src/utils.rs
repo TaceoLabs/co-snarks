@@ -7,6 +7,7 @@ use eyre::Error;
 use mpc_core::gadgets;
 use num_bigint::BigUint;
 use std::array;
+
 pub struct Utils {}
 
 impl Utils {
@@ -77,5 +78,35 @@ impl Utils {
 
     pub fn downcast<A: 'static, B: 'static>(a: &A) -> Option<&B> {
         (a as &dyn Any).downcast_ref::<B>()
+    }
+
+    // Rounds a number to the nearest multiple of 8
+    pub fn round_to_nearest_mul_8(num_bits: u32) -> u32 {
+        let remainder = num_bits % 8;
+        if remainder == 0 {
+            return num_bits;
+        }
+
+        num_bits + 8 - remainder
+    }
+
+    // Rounds the number of bits to the nearest byte
+    pub fn round_to_nearest_byte(num_bits: u32) -> u32 {
+        Self::round_to_nearest_mul_8(num_bits) / 8
+    }
+
+    /**
+     * Viewing `this` u256 as a bit string, and counting bits from 0, slices a substring.
+     * @returns the u256 equal to the substring of bits from (and including) the `start`-th bit, to (but excluding) the
+     * `end`-th bit of `this`.
+     */
+    pub fn slice_u256(value: BigUint, start: u64, end: u64) -> BigUint {
+        let range = end - start;
+        let mask = if range == 256 {
+            (BigUint::from(1u64) << 256) - BigUint::one()
+        } else {
+            (BigUint::one() << range) - BigUint::one()
+        };
+        (value >> start) & mask
     }
 }

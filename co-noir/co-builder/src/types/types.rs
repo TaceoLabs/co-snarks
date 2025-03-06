@@ -155,7 +155,7 @@ pub(crate) struct AcirFormatOriginalOpcodeIndices {
     // pub(crate) schnorr_constraints: Vec<usize>,
     // pub(crate) ecdsa_k1_constraints: Vec<usize>,
     // pub(crate) ecdsa_r1_constraints: Vec<usize>,
-    // pub(crate) blake2s_constraints: Vec<usize>,
+    pub(crate) blake2s_constraints: Vec<usize>,
     // pub(crate) blake3_constraints: Vec<usize>,
     // pub(crate) keccak_constraints: Vec<usize>,
     // pub(crate) keccak_permutations: Vec<usize>,
@@ -478,6 +478,28 @@ pub(crate) struct RecursionConstraint {
 impl RecursionConstraint {
     #[expect(dead_code)]
     const NUM_AGGREGATION_ELEMENTS: usize = 4;
+}
+
+pub(crate) struct Blake2sInput<F: PrimeField> {
+    pub(crate) blackbox_input: WitnessOrConstant<F>,
+    pub(crate) num_bits: u32,
+}
+
+impl<F: PrimeField> PartialEq for Blake2sInput<F> {
+    fn eq(&self, other: &Self) -> bool {
+        self.blackbox_input == other.blackbox_input && self.num_bits == other.num_bits
+    }
+}
+
+pub(crate) struct Blake2sConstraint<F: PrimeField> {
+    pub(crate) inputs: Vec<Blake2sInput<F>>,
+    pub(crate) result: [u32; 32],
+}
+
+impl<F: PrimeField> PartialEq for Blake2sConstraint<F> {
+    fn eq(&self, other: &Self) -> bool {
+        self.inputs == other.inputs && self.result == other.result
+    }
 }
 
 pub const AGGREGATION_OBJECT_SIZE: usize = 16;
