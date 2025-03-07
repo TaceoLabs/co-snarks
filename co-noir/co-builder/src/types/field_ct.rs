@@ -1949,22 +1949,19 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                 }
             }
 
-            for
-                (
-                    scalar_sclice,
-                    native_straus_table_x,
-                    native_straus_table_y,
-                    native_straus_table_i,
-                    offset_generator,
-                ),
-             in izip!(
+            for (
+                scalar_sclice,
+                native_straus_table_x,
+                native_straus_table_y,
+                native_straus_table_i,
+                offset_generator,
+            ) in izip!(
                 scalar_slices.iter(),
                 native_straus_tables_x.iter(),
                 native_straus_tables_y.iter(),
                 native_straus_tables_i.iter(),
                 offset_generators.iter().skip(1)
-            )
-            {
+            ) {
                 let index = scalar_sclice.slices_native[num_rounds - i - 1].to_owned();
 
                 // TACEO TODO batch the reads
