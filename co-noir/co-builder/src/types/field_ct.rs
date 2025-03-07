@@ -2323,18 +2323,20 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
     ) -> std::io::Result<Self> {
         let x = FieldCT::conditional_assign(predicate, &lhs.x, &rhs.x, builder, driver)?;
         let y = FieldCT::conditional_assign(predicate, &lhs.y, &rhs.y, builder, driver)?;
-        let is_point_at_infinity = BoolCT::conditional_assign(
+        let is_infinity = BoolCT::conditional_assign(
             predicate,
-            &lhs.is_point_at_infinity(),
-            &rhs.is_point_at_infinity(),
+            lhs.is_point_at_infinity(),
+            rhs.is_point_at_infinity(),
             builder,
             driver,
         )?;
 
+        // Is this initializer list ok?
         Ok(Self {
             x,
             y,
-            is_point_at_infinity,
+            is_infinity,
+            is_constant: false,
         })
     }
 }
