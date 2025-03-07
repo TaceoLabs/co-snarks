@@ -130,7 +130,7 @@ pub(crate) struct AcirFormatOriginalOpcodeIndices {
     pub(crate) range_constraints: Vec<usize>,
     // pub(crate) aes128_constraints: Vec<usize>,
     // pub(crate) sha256_constraints: Vec<usize>,
-    // pub(crate) sha256_compression: Vec<usize>,
+    pub(crate) sha256_compression: Vec<usize>,
     // pub(crate) schnorr_constraints: Vec<usize>,
     // pub(crate) ecdsa_k1_constraints: Vec<usize>,
     // pub(crate) ecdsa_r1_constraints: Vec<usize>,
@@ -379,6 +379,12 @@ pub(crate) struct Poseidon2Constraint<F: PrimeField> {
     pub(crate) state: Vec<WitnessOrConstant<F>>,
     pub(crate) result: Vec<u32>,
     pub(crate) len: u32,
+}
+
+pub(crate) struct Sha256Compression<F: PrimeField> {
+    pub(crate) inputs: Vec<WitnessOrConstant<F>>,
+    pub(crate) hash_values: Vec<WitnessOrConstant<F>>,
+    pub(crate) result: Vec<u32>,
 }
 
 pub(crate) struct LogicConstraint<F: PrimeField> {

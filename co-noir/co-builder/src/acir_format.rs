@@ -13,7 +13,7 @@ use std::collections::{BTreeMap, HashSet};
 use crate::types::types::{
     AES128Constraint, AcirFormatOriginalOpcodeIndices, BlockConstraint, BlockType, LogicConstraint,
     MulQuad, PolyTriple, Poseidon2Constraint, RangeConstraint, RecursionConstraint,
-    WitnessOrConstant,
+    Sha256Compression, WitnessOrConstant,
 };
 #[expect(dead_code)]
 pub struct ProgramMetadata {
@@ -787,10 +787,25 @@ impl<F: PrimeField> AcirFormat<F> {
                     .push(opcode_index);
             }
             BlackBoxFuncCall::Sha256Compression {
-                inputs: _,
-                hash_values: _,
-                outputs: _,
-            } => todo!("BlackBoxFuncCall::Sha256Compression"),
+                inputs,
+                hash_values,
+                outputs,
+            } => {
+                let constraint = Sha256Compression {
+                    inputs: inputs.into_iter().map(|e| Self::parse_input(e)).collect(),
+                    hash_values: hash_values
+                        .into_iter()
+                        .map(|e| Self::parse_input(e))
+                        .collect(),
+                    result: outputs.into_iter().map(|e| e.0).collect(),
+                };
+                for output in constraint.result.iter() {
+                    af.constrained_witness.insert(*output);
+                }
+                af.original_opcode_indices
+                    .sha256_compression
+                    .push(opcode_index);
+            }
             BlackBoxFuncCall::RecursiveAggregation {
                 verification_key: _,
                 proof: _,
