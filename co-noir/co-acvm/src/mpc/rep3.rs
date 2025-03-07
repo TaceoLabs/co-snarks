@@ -254,6 +254,12 @@ impl<C: CurveGroup> std::fmt::Display for Rep3AcvmPoint<C> {
     }
 }
 
+impl<C: CurveGroup> From<C> for Rep3AcvmPoint<C> {
+    fn from(value: C) -> Self {
+        Self::Public(value)
+    }
+}
+
 // TODO maybe we want to merge that with the Rep3VmType?? Atm we do not need
 // binary shares so maybe it is ok..
 #[derive(Clone, Serialize, Deserialize, PartialEq)]

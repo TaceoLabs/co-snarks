@@ -6,10 +6,11 @@ use crate::types::plookup::{ColumnIdx, Plookup};
 use crate::types::types::{AddTriple, EccAddGate, PolyTriple};
 use crate::TranscriptFieldType;
 use ark_ec::pairing::Pairing;
-use ark_ec::{AffineRepr, CurveConfig, CurveGroup};
+use ark_ec::{AffineRepr, CurveConfig, CurveGroup, PrimeGroup};
 use ark_ff::PrimeField;
 use ark_ff::{One, Zero};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use itertools::izip;
 use num_bigint::BigUint;
 
 #[derive(Clone, Debug)]
@@ -323,6 +324,19 @@ impl<F: PrimeField> FieldCT<F> {
             });
         }
         Ok(result)
+    }
+
+    pub(crate) fn mul_assign<
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        &mut self,
+        other: &Self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> std::io::Result<()> {
+        *self = self.multiply(other, builder, driver)?;
+        Ok(())
     }
 
     pub(crate) fn divide<
@@ -1446,6 +1460,9 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> Clone for Cycl
 }
 
 impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupCT<P, T> {
+    const ULTRA_NUM_TABLE_BITS: usize = 4;
+    const TABLE_BITS: usize = Self::ULTRA_NUM_TABLE_BITS;
+
     pub(crate) fn new(
         x: FieldCT<P::ScalarField>,
         y: FieldCT<P::ScalarField>,
@@ -1673,7 +1690,9 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                     &variable_base_points,
                     offset_generators_for_variable_base_batch_mul,
                     can_unconditional_add,
-                );
+                    builder,
+                    driver,
+                )?;
             offset_accumulator += offset_generator_delta;
             if has_fixed_points {
                 result = if can_unconditional_add {
@@ -1821,12 +1840,175 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
     }
 
     fn variable_base_batch_mul_internal(
-        _scalars: &[CycleScalarCT<P::ScalarField>],
-        _base_points: &[CycleGroupCT<P, T>],
-        _offset_generators: &[<P::CycleGroup as CurveGroup>::Affine],
-        _unconditional_add: bool,
-    ) -> (CycleGroupCT<P, T>, P::CycleGroup) {
-        todo!("Implement variable_base_batch_mul_internal")
+        scalars: &[CycleScalarCT<P::ScalarField>],
+        base_points: &[CycleGroupCT<P, T>],
+        offset_generators: &[<P::CycleGroup as CurveGroup>::Affine],
+        unconditional_add: bool,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> std::io::Result<(CycleGroupCT<P, T>, P::CycleGroup)> {
+        debug_assert_eq!(scalars.len(), base_points.len());
+
+        let mut num_bits = 0;
+        for scalar in scalars.iter() {
+            num_bits = std::cmp::max(num_bits, scalar.num_bits());
+        }
+
+        let num_rounds = num_bits.div_ceil(Self::TABLE_BITS);
+        let num_points = base_points.len();
+        let table_size = (1 << Self::TABLE_BITS) as usize;
+
+        let mut scalar_slices = Vec::with_capacity(2 * num_points);
+
+        // /**
+        //  * Compute the witness values of the batch_mul algorithm natively, as Element types with a Z-coordinate.
+        //  * We then batch-convert to AffineElement types, and feed these points as "hints" into the cycle_group methods.
+        //  * This avoids the need to compute modular inversions for every group operation, which dramatically reduces witness
+        //  * generation times
+        //  */
+        let mut operation_transcript = Vec::new(); // TODO with capacity
+        let mut native_straus_tables = Vec::with_capacity(num_points);
+        let mut offset_generator_accumulator: P::CycleGroup =
+            offset_generators[0].to_owned().into();
+        for (point, offset_generator) in base_points.iter().zip(offset_generators.iter().skip(1)) {
+            let mut native_straus_table = Vec::with_capacity(table_size);
+            native_straus_table.push(T::AcvmPoint::from(offset_generator.to_owned().into()));
+            for j in 1..table_size {
+                let val = point.get_value(builder, driver)?;
+                let val = driver.add_points(val, native_straus_table[j - 1].to_owned());
+                native_straus_table.push(val);
+            }
+            native_straus_tables.push(native_straus_table);
+        }
+        for (scalar, point, offset_generator) in
+            izip!(scalars.iter(), base_points.iter(), offset_generators.iter())
+        {
+            scalar_slices.push(StrausScalarSlice::new(scalar, Self::TABLE_BITS));
+
+            let table_transcript = StrausLookupTable::<P, T>::compute_straus_lookup_table_hints(
+                point.get_value(builder, driver)?,
+                offset_generator.to_owned(),
+                Self::TABLE_BITS,
+                driver,
+            );
+            for hint in table_transcript.into_iter().skip(1) {
+                operation_transcript.push(hint);
+            }
+        }
+
+        let mut accumulator: P::CycleGroup = offset_generators[0].to_owned().into();
+        for i in 0..num_rounds {
+            if i != 0 {
+                for _ in 0..Self::TABLE_BITS {
+                    // offset_generator_accumulator is a regular Element, so dbl() won't add constraints
+                    accumulator += accumulator;
+                    operation_transcript.push(T::AcvmPoint::from(accumulator));
+                    offset_generator_accumulator += offset_generator_accumulator;
+                }
+            }
+
+            for j in 0..num_points {
+                todo!("Implement variable_base_batch_mul_internal")
+            }
+        }
+
+        // BB batch normalizes operation_transcript here
+        let operation_hints = operation_transcript;
+
+        let mut point_tables = Vec::new(); // TODO with capacity
+        let hints_per_table = table_size - 1;
+        for (i, (scalar, point, offset_generator)) in izip!(
+            scalars.iter(),
+            base_points.iter(),
+            offset_generators.iter().skip(1)
+        )
+        .enumerate()
+        {
+            let table_hints = &operation_hints[i * hints_per_table..(i + 1) * hints_per_table];
+            // scalar_slices.push(StrausScalarSlice::new(scalar, Self::TABLE_BITS));
+            scalar_slices.push(scalar_slices[i].to_owned()); // Already computed this
+            point_tables.push(StrausLookupTable::<P, T>::new(
+                point,
+                offset_generator,
+                Self::TABLE_BITS,
+            ));
+        }
+
+        // let hint_ptr = &operation_hints[num_points * hints_per_table];
+        let mut hint_ctr = num_points * hints_per_table;
+        let mut accumulator =
+            CycleGroupCT::from_group_element(offset_generators[0].to_owned().into());
+
+        // populate the set of points we are going to add into our accumulator, *before* we do any ECC operations
+        // this way we are able to fuse mutliple ecc add / ecc double operations and reduce total gate count.
+        // (ecc add/ecc double gates normally cost 2 UltraPlonk gates. However if we chain add->add, add->double,
+        // double->add, double->double, they only cost one)
+        let mut points_to_add = Vec::new(); // TODO with capacity
+        for i in 0..num_rounds {
+            for (scalar_slice, point_table) in scalar_slices.iter().zip(point_tables.iter()) {
+                let scalar_slice = scalar_slice.read(num_rounds - i - 1);
+                // if we are doing a batch mul over scalars of different bit-lengths, we may not have any scalar bits for a
+                // given round and a given scalar
+                if let Some(scalar_slice) = scalar_slice {
+                    let point = point_table.read(scalar_slice);
+                    points_to_add.push(point.expect("Must have a value"));
+                }
+            }
+        }
+
+        let mut x_coordinate_checks = Vec::new(); // TODO with capacity
+        let mut point_counter = 0;
+        for i in 0..num_rounds {
+            if i != 0 {
+                for _ in 0..Self::TABLE_BITS {
+                    let hint_ptr = &operation_hints[hint_ctr];
+                    accumulator.dbl(Some(hint_ptr.to_owned()), builder, driver)?;
+                    hint_ctr += 1;
+                }
+            }
+
+            for scalar_slice in scalar_slices.iter() {
+                let scalar_slice_ = scalar_slice.read(num_rounds - i - 1);
+                // if we are doing a batch mul over scalars of different bit-lengths, we may not have a bit slice
+                // for a given round and a given scalar
+                if let Some(scalar_slice_) = scalar_slice_ {
+                    if let Some(public) = T::get_public(&scalar_slice_.get_value(builder, driver)) {
+                        builder.assert_if_has_witness(
+                            public
+                                == P::ScalarField::from(
+                                    scalar_slice.slices_native[num_rounds - i - 1],
+                                ),
+                        );
+                    }
+                    // const auto& point = points_to_add[point_counter++];
+                    let point = &points_to_add[point_counter];
+                    point_counter += 1;
+                    if !unconditional_add {
+                        x_coordinate_checks.push((accumulator.x.clone(), point.x.clone()));
+                    }
+                    let hint_ptr = &operation_hints[hint_ctr];
+                    accumulator = accumulator.unconditional_add(
+                        point,
+                        Some(hint_ptr.to_owned()),
+                        builder,
+                        driver,
+                    )?;
+                    hint_ctr += 1;
+                }
+            }
+        }
+
+        // validate that none of the x-coordinate differences are zero
+        // we batch the x-coordinate checks together
+        // because `assert_is_not_zero` witness generation needs a modular inversion (expensive)
+        let mut coordinate_check_product = FieldCT::zero_with_additive(P::ScalarField::one());
+        for (x1, x2) in x_coordinate_checks {
+            let x_diff = x2.sub(&x1, builder, driver);
+            coordinate_check_product.mul_assign(&x_diff, builder, driver)?;
+        }
+        coordinate_check_product.assert_is_not_zero(builder, driver)?;
+
+        Ok((accumulator, offset_generator_accumulator))
     }
 
     // Evaluates a doubling. Uses Ultra double gate
@@ -2240,5 +2422,81 @@ impl<F: PrimeField> CycleScalarCT<F> {
         lo_diff.create_range_constraint(Self::LO_BITS, builder, driver)?;
 
         Ok(())
+    }
+}
+
+#[derive(Clone, Debug)]
+struct StrausScalarSlice<F: PrimeField> {
+    table_bits: usize,
+    slices: Vec<FieldCT<F>>,
+    slices_native: Vec<u64>,
+}
+
+impl<F: PrimeField> StrausScalarSlice<F> {
+    fn new(scalar: &CycleScalarCT<F>, table_bits: usize) -> Self {
+        let lo_bits = if scalar.num_bits() > CycleScalarCT::<F>::LO_BITS {
+            CycleScalarCT::<F>::LO_BITS
+        } else {
+            scalar.num_bits()
+        };
+        let hi_bits = if scalar.num_bits() > CycleScalarCT::<F>::LO_BITS {
+            scalar.num_bits() - CycleScalarCT::<F>::LO_BITS
+        } else {
+            0
+        };
+
+        todo!("StrausScalarSlice::new")
+    }
+
+    fn read(&self, index: usize) -> Option<FieldCT<F>> {
+        todo!("Implement StrausScalarSlice::read")
+    }
+}
+
+struct StrausLookupTable<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
+    table_bits: usize,
+    point_table: Vec<CycleGroupCT<P, T>>,
+    rom_id: usize,
+}
+
+impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::ScalarField>>
+    StrausLookupTable<P, T>
+{
+    fn new(
+        base_point: &CycleGroupCT<P, T>,
+        offset_generator: &<P::CycleGroup as CurveGroup>::Affine,
+        table_bits: usize,
+    ) -> Self {
+        todo!("Implement StrausLookupTable::new")
+    }
+
+    fn compute_straus_lookup_table_hints(
+        base_point: T::AcvmPoint<P::CycleGroup>,
+        offset_generator: <P::CycleGroup as CurveGroup>::Affine,
+        table_bits: usize,
+        driver: &mut T,
+    ) -> Vec<T::AcvmPoint<P::CycleGroup>> {
+        let tables_size = (1 << table_bits) as usize;
+        let base = if let Some(base_point) = T::get_public_point(&base_point) {
+            if base_point.is_zero() {
+                T::AcvmPoint::from(P::CycleGroup::generator())
+            } else {
+                T::AcvmPoint::from(base_point)
+            }
+        } else {
+            todo!("Check zero here!");
+            base_point
+        };
+
+        let mut hints = Vec::with_capacity(tables_size);
+        hints.push(T::AcvmPoint::from(offset_generator.into()));
+        for i in 1..tables_size {
+            hints.push(driver.add_points(hints[i - 1].to_owned(), base.to_owned()));
+        }
+        hints
+    }
+
+    fn read(&self, index: FieldCT<P::ScalarField>) -> Option<CycleGroupCT<P, T>> {
+        todo!("Implement StrausLookupTable::read")
     }
 }
