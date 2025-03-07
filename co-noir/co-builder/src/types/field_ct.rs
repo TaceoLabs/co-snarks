@@ -2301,6 +2301,30 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         result.set_point_at_infinity(result_is_infinity);
         Ok(result)
     }
+
+    fn conditional_assign(
+        predicate: &BoolCT<P, T>,
+        lhs: &Self,
+        rhs: &Self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> std::io::Result<Self> {
+        let x = FieldCT::conditional_assign(predicate, &lhs.x, &rhs.x, builder, driver)?;
+        let y = FieldCT::conditional_assign(predicate, &lhs.y, &rhs.y, builder, driver)?;
+        let is_point_at_infinity = BoolCT::conditional_assign(
+            predicate,
+            &lhs.is_point_at_infinity(),
+            &rhs.is_point_at_infinity(),
+            builder,
+            driver,
+        );
+
+        Ok(Self {
+            x,
+            y,
+            is_point_at_infinity,
+        })
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -2648,15 +2672,13 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             }
             coordinate_check_product.assert_is_not_zero(builder, driver)?;
 
-            todo!("Implement StrausLookupTable::new");
-
-            // for i in 1..table_size {
-            //     point_table[i] = Self::conditional_assign(
-            //         base_point.is_point_at_infinity(),
-            //         offset_generator,
-            //         point_table[i],
-            //     );
-            // }
+            for point in point_table.iter_mut().skip(1) {
+                *point = CycleGroupCT::conditional_assign(
+                    base_point.is_point_at_infinity(),
+                    offset_generator,
+                    point,
+                )?;
+            }
         }
 
         // We are Ultra, so we use ROM
