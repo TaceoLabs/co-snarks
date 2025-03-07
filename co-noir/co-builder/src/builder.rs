@@ -1555,6 +1555,61 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         Ok(value_witness)
     }
 
+    pub(crate) fn read_rom_array_pair(
+        &mut self,
+        rom_id: usize,
+        index_witness: u32,
+        driver: &mut T,
+    ) -> std::io::Result<[u32; 2]> {
+        assert!(self.rom_arrays.len() > rom_id);
+        let val = self.get_variable(index_witness as usize);
+
+        if !T::is_shared(&val) {
+            // Sanity check only doable in plain
+            let val: BigUint = T::get_public(&val)
+                .expect("Already checked it is public")
+                .into();
+            let index: usize = val.try_into().unwrap();
+            assert!(self.rom_arrays[rom_id].state.len() > index);
+            assert!(self.rom_arrays[rom_id].state[index][0] != Self::UNINITIALIZED_MEMORY_RECORD);
+            assert!(self.rom_arrays[rom_id].state[index][1] != Self::UNINITIALIZED_MEMORY_RECORD);
+        }
+
+        let fields1 = self.rom_arrays[rom_id]
+            .state
+            .iter()
+            .map(|x| self.get_variable(x[0] as usize))
+            .collect();
+        let fields2 = self.rom_arrays[rom_id]
+            .state
+            .iter()
+            .map(|x| self.get_variable(x[1] as usize))
+            .collect();
+
+        let lut1 = T::init_lut_by_acvm_type(driver, fields1);
+        let lut2 = T::init_lut_by_acvm_type(driver, fields2);
+        // TACEO TODO batch that
+        let value1 = T::read_lut_by_acvm_type(driver, val.to_owned(), &lut1)?;
+        let value2 = T::read_lut_by_acvm_type(driver, val.to_owned(), &lut2)?;
+
+        let value_witness1 = self.add_variable(value1);
+        let value_witness2 = self.add_variable(value2);
+
+        let mut new_record = RomRecord::<T::AcvmType> {
+            index_witness,
+            value_column1_witness: value_witness1,
+            value_column2_witness: value_witness2,
+            index: val,
+            record_witness: 0,
+            gate_index: 0,
+        };
+        self.create_rom_gate(&mut new_record);
+        self.rom_arrays[rom_id].records.push(new_record);
+
+        // create_read_gate
+        Ok([value_witness1, value_witness2])
+    }
+
     pub(crate) fn read_ram_array(
         &mut self,
         ram_id: usize,
