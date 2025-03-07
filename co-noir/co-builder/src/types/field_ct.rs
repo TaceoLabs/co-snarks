@@ -2625,7 +2625,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> StrausScalarSl
     }
 
     fn read(&self, index: usize) -> Option<FieldCT<P::ScalarField>> {
-        if index > self.slices.len() {
+        if index >= self.slices.len() {
             return None;
         }
         Some(self.slices[index].to_owned())
