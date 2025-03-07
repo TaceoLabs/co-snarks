@@ -2297,7 +2297,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             .divide(&x_diff, builder, driver)?;
         let x3 = lambda.madd(&lambda, &x2.add(x1, builder, driver).neg(), builder, driver)?;
         let y3 = lambda.madd(&x1.sub(&x3, builder, driver), &y1.neg(), builder, driver)?;
-        let add_result = CycleGroupCT::new(x3, y3, infinity_predicate.to_owned(), builder, driver);
+        let add_result = CycleGroupCT::new(x3, y3, x_coordinates_match.to_owned(), builder, driver);
 
         let dbl_result = self.dbl(None, builder, driver)?;
 
