@@ -1,3 +1,5 @@
+use std::num;
+
 use super::types::{EccDblGate, MulQuad};
 use crate::builder::GenericUltraCircuitBuilder;
 use crate::prelude::HonkCurve;
@@ -12,6 +14,7 @@ use ark_ff::{One, Zero};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use itertools::izip;
 use num_bigint::BigUint;
+use serde::de::value;
 
 #[derive(Clone, Debug)]
 pub(crate) struct FieldCT<F: PrimeField> {
@@ -1884,7 +1887,12 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         for (scalar, point, offset_generator) in
             izip!(scalars.iter(), base_points.iter(), offset_generators.iter())
         {
-            scalar_slices.push(StrausScalarSlice::new(scalar, Self::TABLE_BITS));
+            scalar_slices.push(StrausScalarSlice::new(
+                scalar,
+                Self::TABLE_BITS,
+                builder,
+                driver,
+            )?);
 
             let table_transcript = StrausLookupTable::<P, T>::compute_straus_lookup_table_hints(
                 point.get_value(builder, driver)?,
@@ -1976,14 +1984,14 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                 // if we are doing a batch mul over scalars of different bit-lengths, we may not have a bit slice
                 // for a given round and a given scalar
                 if let Some(scalar_slice_) = scalar_slice_ {
-                    if let Some(public) = T::get_public(&scalar_slice_.get_value(builder, driver)) {
-                        builder.assert_if_has_witness(
-                            public
-                                == P::ScalarField::from(
-                                    scalar_slice.slices_native[num_rounds - i - 1],
-                                ),
-                        );
-                    }
+                    // if let Some(public) = T::get_public(&scalar_slice_.get_value(builder, driver)) {
+                    //     builder.assert_if_has_witness(
+                    //         public
+                    //             == P::ScalarField::from(
+                    //                 scalar_slice.slices_native[num_rounds - i - 1],
+                    //             ),
+                    //     );
+                    // }
                     // const auto& point = points_to_add[point_counter++];
                     let point = &points_to_add[point_counter];
                     point_counter += 1;
@@ -2433,11 +2441,18 @@ impl<F: PrimeField> CycleScalarCT<F> {
 struct StrausScalarSlice<F: PrimeField> {
     table_bits: usize,
     slices: Vec<FieldCT<F>>,
-    slices_native: Vec<u64>,
+    // slices_native: Vec<u64>,
+    // Note: We ignore the native values for now
 }
 
 impl<F: PrimeField> StrausScalarSlice<F> {
-    fn new(scalar: &CycleScalarCT<F>, table_bits: usize) -> Self {
+    fn new<P: Pairing<ScalarField = F>, T: NoirWitnessExtensionProtocol<P::ScalarField>>(
+        scalar: &CycleScalarCT<F>,
+        table_bits: usize,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> std::io::Result<Self> {
+        // Note: We ignore the native values for now
         let lo_bits = if scalar.num_bits() > CycleScalarCT::<F>::LO_BITS {
             CycleScalarCT::<F>::LO_BITS
         } else {
@@ -2449,7 +2464,75 @@ impl<F: PrimeField> StrausScalarSlice<F> {
             0
         };
 
-        todo!("StrausScalarSlice::new")
+        let hi_slices = Self::slice_scalar(&scalar.hi, hi_bits, table_bits, builder, driver)?;
+        let lo_slices = Self::slice_scalar(&scalar.lo, lo_bits, table_bits, builder, driver)?;
+
+        let mut slices = lo_slices;
+        slices.extend(hi_slices);
+
+        // let mut slices_native = lo_slices.1;
+        // slices_native.extend(hi_slices.1);
+
+        Ok(Self {
+            table_bits,
+            slices,
+            // slices_native,
+        })
+    }
+
+    // convert an input cycle_scalar object into a vector of slices, each containing `table_bits` bits.
+    // this also performs an implicit range check on the input slices
+    fn slice_scalar<
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        scalar: &FieldCT<F>,
+        num_bits: usize,
+        table_bits: usize,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> std::io::Result<Vec<FieldCT<F>>> {
+        // Note: We ignore the native values for now
+
+        // we record the scalar slices both as field_t circuit elements and u64 values
+        // (u64 values are used to index arrays and we don't want to repeatedly cast a stdlib value to a numeric
+        // primitive as this gets expensive when repeated enough times)
+        let table_size = (1 << table_bits) as usize;
+        let mut result = Vec::with_capacity(table_size);
+        // let mut result_native = Vec::with_capacity(table_size);
+
+        if num_bits == 0 {
+            return Ok(result);
+        }
+
+        if scalar.is_constant() {
+            let num_slices = num_bits.div_ceil(table_bits);
+            let table_mask = table_size as u64 - 1;
+            let value = scalar.get_value(builder, driver);
+            let value = T::get_public(&value).expect("Constants are public");
+            let mut raw_value: BigUint = value.into();
+            for _ in 0..num_slices {
+                let slice_v = raw_value.iter_u64_digits().next().unwrap_or_default() & table_mask;
+                result.push(FieldCT::zero_with_additive(P::ScalarField::from(slice_v)));
+                raw_value >>= table_bits;
+            }
+            return Ok(result);
+        }
+
+        let scalar_ = scalar.normalize(builder, driver);
+        let slice_indices = builder.decompose_into_default_range(
+            driver,
+            scalar_.get_witness_index(),
+            num_bits as u64,
+            None,
+            table_bits as u64,
+        )?;
+
+        for slice in slice_indices {
+            result.push(FieldCT::from_witness_index(slice));
+        }
+
+        Ok(result)
     }
 
     fn read(&self, index: usize) -> Option<FieldCT<F>> {
