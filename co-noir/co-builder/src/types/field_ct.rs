@@ -1199,6 +1199,18 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T> {
         }
     }
 
+    fn conditional_assign(
+        predicate: &Self,
+        lhs: &Self,
+        rhs: &Self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> std::io::Result<Self> {
+        let l = predicate.and(lhs, builder, driver)?;
+        let r = predicate.not().and(rhs, builder, driver)?;
+        l.or(&r, builder, driver)
+    }
+
     fn and(
         &self,
         other: &Self,
@@ -2317,7 +2329,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             &rhs.is_point_at_infinity(),
             builder,
             driver,
-        );
+        )?;
 
         Ok(Self {
             x,
@@ -2675,8 +2687,10 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             for point in point_table.iter_mut().skip(1) {
                 *point = CycleGroupCT::conditional_assign(
                     base_point.is_point_at_infinity(),
-                    offset_generator,
+                    &offset_generator,
                     point,
+                    builder,
+                    driver,
                 )?;
             }
         }
