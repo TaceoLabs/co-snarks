@@ -1,7 +1,7 @@
 use std::num;
 
 use super::types::{EccDblGate, MulQuad};
-use crate::builder::GenericUltraCircuitBuilder;
+use crate::builder::{self, GenericUltraCircuitBuilder};
 use crate::prelude::HonkCurve;
 use crate::types::generators;
 use crate::types::plookup::{ColumnIdx, Plookup};
@@ -1958,8 +1958,8 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                 // if we are doing a batch mul over scalars of different bit-lengths, we may not have any scalar bits for a
                 // given round and a given scalar
                 if let Some(scalar_slice) = scalar_slice {
-                    let point = point_table.read(scalar_slice);
-                    points_to_add.push(point.expect("Must have a value"));
+                    let point = point_table.read(scalar_slice, builder, driver);
+                    points_to_add.push(point?);
                 }
             }
         }
@@ -1983,7 +1983,8 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                 let scalar_slice_ = scalar_slice.read(num_rounds - i - 1);
                 // if we are doing a batch mul over scalars of different bit-lengths, we may not have a bit slice
                 // for a given round and a given scalar
-                if let Some(scalar_slice_) = scalar_slice_ {
+                if let Some(_scalar_slice_) = scalar_slice_ {
+                    // Note: We ignore the native values for now
                     // if let Some(public) = T::get_public(&scalar_slice_.get_value(builder, driver)) {
                     //     builder.assert_if_has_witness(
                     //         public
@@ -1992,6 +1993,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                     //             ),
                     //     );
                     // }
+
                     // const auto& point = points_to_add[point_counter++];
                     let point = &points_to_add[point_counter];
                     point_counter += 1;
@@ -2536,7 +2538,10 @@ impl<F: PrimeField> StrausScalarSlice<F> {
     }
 
     fn read(&self, index: usize) -> Option<FieldCT<F>> {
-        todo!("Implement StrausScalarSlice::read")
+        if index > self.slices.len() {
+            return None;
+        }
+        Some(self.slices[index].to_owned())
     }
 }
 
@@ -2583,7 +2588,30 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         hints
     }
 
-    fn read(&self, index: FieldCT<P::ScalarField>) -> Option<CycleGroupCT<P, T>> {
-        todo!("Implement StrausLookupTable::read")
+    fn read(
+        &self,
+        mut index: FieldCT<P::ScalarField>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> std::io::Result<CycleGroupCT<P, T>> {
+        // We are Ultra, so we use ROM
+
+        if index.is_constant() {
+            let index_val = index.get_value(builder, driver);
+            let index_val_pub = T::get_public(&index_val).expect("Constants are public");
+            index = FieldCT::from_witness(index_val, builder);
+            index.assert_equal(&FieldCT::from(index_val_pub), builder, driver);
+        }
+        let output_indices =
+            builder.read_rom_array_pair(self.rom_id, index.get_witness_index(), driver)?;
+        let x = FieldCT::from_witness_index(output_indices[0]);
+        let y = FieldCT::from_witness_index(output_indices[1]);
+        Ok(CycleGroupCT::new(
+            x,
+            y,
+            BoolCT::from(false),
+            builder,
+            driver,
+        ))
     }
 }
