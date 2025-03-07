@@ -1917,18 +1917,57 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             }
         }
 
-        let mut accumulator: P::CycleGroup = offset_generators[0].to_owned().into();
+        // TACEO TODO this whole process could be batched
+        let mut native_straus_tables_x = Vec::with_capacity(native_straus_tables.len());
+        let mut native_straus_tables_y = Vec::with_capacity(native_straus_tables.len());
+        let mut native_straus_tables_i = Vec::with_capacity(native_straus_tables.len());
+        for native_straus_table in native_straus_tables.into_iter() {
+            let mut x_table = Vec::with_capacity(native_straus_table.len());
+            let mut y_table = Vec::with_capacity(native_straus_table.len());
+            let mut i_table = Vec::with_capacity(native_straus_table.len());
+            for val in native_straus_table.into_iter() {
+                let (x, y, i) = driver.pointshare_to_field_shares(val)?;
+                x_table.push(x);
+                y_table.push(y);
+                i_table.push(i);
+            }
+            native_straus_tables_x.push(driver.init_lut_by_acvm_type(x_table));
+            native_straus_tables_y.push(driver.init_lut_by_acvm_type(y_table));
+            native_straus_tables_i.push(driver.init_lut_by_acvm_type(i_table));
+        }
+
+        let accumulator: P::CycleGroup = offset_generators[0].to_owned().into();
+        let mut accumulator = T::AcvmPoint::from(accumulator);
         for i in 0..num_rounds {
             if i != 0 {
                 for _ in 0..Self::TABLE_BITS {
                     // offset_generator_accumulator is a regular Element, so dbl() won't add constraints
-                    accumulator += accumulator;
-                    operation_transcript.push(T::AcvmPoint::from(accumulator));
+                    accumulator = driver.add_points(accumulator.to_owned(), accumulator);
+                    operation_transcript.push(accumulator.to_owned());
                     offset_generator_accumulator += offset_generator_accumulator;
                 }
             }
 
-            for j in 0..num_points {
+            // TACEO TODO this whole process could be batched (translation and the lut themselves)
+            for (
+                scalar_sclice,
+                native_straus_table_x,
+                native_straus_table_y,
+                native_straus_table_i,
+            ) in izip!(
+                scalar_slices.iter(),
+                native_straus_tables_x.iter(),
+                native_straus_tables_y.iter(),
+                native_straus_tables_i.iter()
+            ) {
+                let index = T::public_zero(); // TODO
+
+                let x = driver.read_lut_by_acvm_type(index.to_owned(), native_straus_table_x)?;
+                let y: <T as NoirWitnessExtensionProtocol<<P as Pairing>::ScalarField>>::AcvmType =
+                    driver.read_lut_by_acvm_type(index.to_owned(), native_straus_table_y)?;
+                let i = driver.read_lut_by_acvm_type(index, native_straus_table_i)?;
+                let point = driver.field_shares_to_pointshare::<P::CycleGroup>(x, y, i)?;
+
                 todo!("Implement variable_base_batch_mul_internal")
             }
         }
