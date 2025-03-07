@@ -413,7 +413,7 @@ impl<F: PrimeField> FieldCT<F> {
                 });
             }
         } else {
-            // TODO SHOULD WE CARE ABOUT IF THE DIVISOR IS ZERO?
+            // AZTEC TODO SHOULD WE CARE ABOUT IF THE DIVISOR IS ZERO?
             let left = builder.get_variable(self.witness_index as usize);
             let right = builder.get_variable(other.witness_index as usize);
 
@@ -1866,7 +1866,8 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         //  * This avoids the need to compute modular inversions for every group operation, which dramatically reduces witness
         //  * generation times
         //  */
-        let mut operation_transcript = Vec::new(); // TODO with capacity
+        let mut operation_transcript =
+            Vec::with_capacity(Self::TABLE_BITS + num_rounds * num_points);
         let mut native_straus_tables = Vec::with_capacity(num_points);
         let mut offset_generator_accumulator: P::CycleGroup =
             offset_generators[0].to_owned().into();
@@ -1915,16 +1916,15 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         // BB batch normalizes operation_transcript here
         let operation_hints = operation_transcript;
 
-        let mut point_tables = Vec::new(); // TODO with capacity
+        let mut point_tables = Vec::with_capacity(num_points);
         let hints_per_table = table_size - 1;
-        for (i, (scalar, point, offset_generator)) in izip!(
-            scalars.iter(),
+        for (i, (point, offset_generator)) in izip!(
+            // scalars.iter(),
             base_points.iter(),
             offset_generators.iter().skip(1)
         )
         .enumerate()
         {
-            let table_hints = &operation_hints[i * hints_per_table..(i + 1) * hints_per_table];
             // scalar_slices.push(StrausScalarSlice::new(scalar, Self::TABLE_BITS));
             scalar_slices.push(scalar_slices[i].to_owned()); // Already computed this
             point_tables.push(StrausLookupTable::<P, T>::new(
@@ -1943,7 +1943,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         // this way we are able to fuse mutliple ecc add / ecc double operations and reduce total gate count.
         // (ecc add/ecc double gates normally cost 2 UltraPlonk gates. However if we chain add->add, add->double,
         // double->add, double->double, they only cost one)
-        let mut points_to_add = Vec::new(); // TODO with capacity
+        let mut points_to_add = Vec::with_capacity(num_rounds * num_points);
         for i in 0..num_rounds {
             for (scalar_slice, point_table) in scalar_slices.iter().zip(point_tables.iter()) {
                 let scalar_slice = scalar_slice.read(num_rounds - i - 1);
@@ -1956,7 +1956,11 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             }
         }
 
-        let mut x_coordinate_checks = Vec::new(); // TODO with capacity
+        let mut x_coordinate_checks = Vec::with_capacity(if !unconditional_add {
+            num_points * num_rounds
+        } else {
+            0
+        });
         let mut point_counter = 0;
         for i in 0..num_rounds {
             if i != 0 {
