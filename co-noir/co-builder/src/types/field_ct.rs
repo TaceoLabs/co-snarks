@@ -1965,8 +1965,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             )
             .enumerate()
             {
-                let index = T::public_zero();
-                todo!("Real index");
+                let index = scalar_sclice.slices_native[num_rounds - i - 1].to_owned();
 
                 // TACEO TODO batch the reads
                 let x = driver.read_lut_by_acvm_type(index.to_owned(), native_straus_table_x)?;
@@ -2580,6 +2579,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> StrausScalarSl
 
     // convert an input cycle_scalar object into a vector of slices, each containing `table_bits` bits.
     // this also performs an implicit range check on the input slices
+    #[expect(clippy::type_complexity)]
     fn slice_scalar(
         scalar: &FieldCT<P::ScalarField>,
         num_bits: usize,
