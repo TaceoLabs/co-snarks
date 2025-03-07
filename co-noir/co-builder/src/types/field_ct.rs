@@ -1,7 +1,5 @@
-use std::num;
-
 use super::types::{EccDblGate, MulQuad};
-use crate::builder::{self, GenericUltraCircuitBuilder};
+use crate::builder::GenericUltraCircuitBuilder;
 use crate::prelude::HonkCurve;
 use crate::types::generators;
 use crate::types::plookup::{ColumnIdx, Plookup};
@@ -14,7 +12,6 @@ use ark_ff::{One, Zero};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use itertools::izip;
 use num_bigint::BigUint;
-use serde::de::value;
 
 #[derive(Clone, Debug)]
 pub(crate) struct FieldCT<F: PrimeField> {
@@ -2607,10 +2604,10 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> StrausScalarSl
             for _ in 0..num_slices {
                 let slice_v = raw_value.iter_u64_digits().next().unwrap_or_default() & table_mask;
                 result.push(FieldCT::zero_with_additive(P::ScalarField::from(slice_v)));
+                result_native.push(P::ScalarField::from(slice_v).into());
                 raw_value >>= table_bits;
             }
-            todo!("HERE");
-            // return Ok(result);
+            return Ok((result, result_native));
         }
 
         let scalar_ = scalar.normalize(builder, driver);
@@ -2624,10 +2621,10 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> StrausScalarSl
 
         for slice in slice_indices {
             result.push(FieldCT::from_witness_index(slice));
+            result_native.push(builder.get_variable(slice as usize));
         }
 
-        todo!("HERE");
-        // Ok(result)
+        Ok((result, result_native))
     }
 
     fn read(&self, index: usize) -> Option<FieldCT<P::ScalarField>> {
@@ -2639,7 +2636,9 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> StrausScalarSl
 }
 
 struct StrausLookupTable<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
+    #[expect(dead_code)]
     table_bits: usize,
+    #[expect(dead_code)] // Is in ROM, so technically not needed anymore
     point_table: Vec<CycleGroupCT<P, T>>,
     rom_id: usize,
 }
