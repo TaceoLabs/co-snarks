@@ -65,6 +65,12 @@ impl<C: CurveGroup> std::fmt::Display for ShamirAcvmPoint<C> {
     }
 }
 
+impl<C: CurveGroup> From<C> for ShamirAcvmPoint<C> {
+    fn from(value: C) -> Self {
+        Self::Public(value)
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize, PartialEq)]
 pub enum ShamirAcvmType<F: PrimeField> {
     Public(
