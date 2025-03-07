@@ -1949,33 +1949,32 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                 }
             }
 
-            for (
-                j,
+            for
                 (
                     scalar_sclice,
                     native_straus_table_x,
                     native_straus_table_y,
                     native_straus_table_i,
+                    offset_generator,
                 ),
-            ) in izip!(
+             in izip!(
                 scalar_slices.iter(),
                 native_straus_tables_x.iter(),
                 native_straus_tables_y.iter(),
-                native_straus_tables_i.iter()
+                native_straus_tables_i.iter(),
+                offset_generators.iter().skip(1)
             )
-            .enumerate()
             {
                 let index = scalar_sclice.slices_native[num_rounds - i - 1].to_owned();
 
                 // TACEO TODO batch the reads
                 let x = driver.read_lut_by_acvm_type(index.to_owned(), native_straus_table_x)?;
-                let y: <T as NoirWitnessExtensionProtocol<<P as Pairing>::ScalarField>>::AcvmType =
-                    driver.read_lut_by_acvm_type(index.to_owned(), native_straus_table_y)?;
+                let y = driver.read_lut_by_acvm_type(index.to_owned(), native_straus_table_y)?;
                 let i = driver.read_lut_by_acvm_type(index, native_straus_table_i)?;
                 let point = driver.field_shares_to_pointshare::<P::CycleGroup>(x, y, i)?;
                 accumulator = driver.add_points(accumulator, point);
                 operation_transcript.push(accumulator.to_owned());
-                offset_generator_accumulator += offset_generators[j + 1];
+                offset_generator_accumulator += offset_generator;
             }
         }
 
