@@ -2,6 +2,7 @@
 //!
 //! This module contains operations with Yao's garbled circuits
 
+pub mod bristol_fashion;
 pub mod circuits;
 pub mod evaluator;
 pub mod garbler;
@@ -813,6 +814,38 @@ pub fn field_int_div_by_shared_many<F: PrimeField, N: Rep3Network>(
         num_inputs,
         GarbledCircuits::field_int_div_by_shared_many::<_, F>,
         (inputs_as_bits)
+    )
+}
+
+/// TODO
+pub fn aes_from_bristol<F: PrimeField, N: Rep3Network>(
+    plaintext: &[Rep3PrimeFieldShare<F>],
+    key: &[Rep3PrimeFieldShare<F>],
+    iv: &[Rep3PrimeFieldShare<F>],
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
+    const AES_BLOCK_SIZE: usize = 16;
+    const BIT_SIZE: usize = 8;
+    debug_assert_eq!(key.len(), AES_BLOCK_SIZE);
+    debug_assert_eq!(iv.len(), AES_BLOCK_SIZE);
+
+    let mut combined_inputs = Vec::with_capacity(key.len() + plaintext.len() + iv.len());
+    combined_inputs.extend_from_slice(plaintext);
+    combined_inputs.extend_from_slice(key);
+    combined_inputs.extend_from_slice(iv);
+
+    let total_output_elements = plaintext.len()
+        + if plaintext.len() % AES_BLOCK_SIZE == 0 {
+            0
+        } else {
+            AES_BLOCK_SIZE - (plaintext.len() % AES_BLOCK_SIZE)
+        };
+    decompose_circuit_compose_blueprint!(
+        &combined_inputs,
+        io_context,
+        total_output_elements,
+        GarbledCircuits::aes128::<_, F>,
+        (plaintext.len(), key.len(), BIT_SIZE)
     )
 }
 

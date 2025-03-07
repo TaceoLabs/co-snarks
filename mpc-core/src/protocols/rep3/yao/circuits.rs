@@ -2,12 +2,14 @@
 //!
 //! This module contains some garbled circuit implementations.
 
-use crate::protocols::rep3::yao::GCUtils;
+use crate::protocols::rep3::yao::{bristol_fashion::BristolFashionCircuit, GCUtils};
 use ark_ff::PrimeField;
-use fancy_garbling::{BinaryBundle, FancyBinary};
+use fancy_garbling::{BinaryBundle, FancyBinary, FancyError};
 use itertools::izip;
 use num_bigint::BigUint;
 use std::ops::Not;
+
+use super::bristol_fashion::BristolFashionEvaluator;
 
 /// This trait allows to lazily initialize the constants 0 and 1 for the garbled circuit, such that these constants are only send at most once each.
 pub trait FancyBinaryConstant: FancyBinary {
@@ -22,6 +24,21 @@ pub trait FancyBinaryConstant: FancyBinary {
 pub struct GarbledCircuits {}
 
 impl GarbledCircuits {
+    fn constant_bundle_from_usize<G: FancyBinary + FancyBinaryConstant>(
+        g: &mut G,
+        c: usize,
+        size: usize,
+    ) -> Result<Vec<G::Item>, G::Error> {
+        let mut result = Vec::with_capacity(size);
+        for i in 0..size {
+            result.push((c >> i) & 1 != 0);
+        }
+        Ok(result
+            .into_iter()
+            .map(|bit| if bit { g.const_one() } else { g.const_zero() })
+            .collect::<Result<Vec<G::Item>, G::Error>>()?[..size]
+            .to_vec())
+    }
     fn full_adder_const<G: FancyBinary>(
         g: &mut G,
         a: &G::Item,
@@ -2017,6 +2034,151 @@ impl GarbledCircuits {
             }
         }
         Ok(results)
+    }
+
+    /// todo    
+    pub(crate) fn aes128<
+        G: FancyBinary + FancyBinaryConstant + BristolFashionEvaluator<WireValue = G::Item>,
+        F: PrimeField,
+    >(
+        g: &mut G,
+        wires_x1: &BinaryBundle<G::Item>,
+        wires_x2: &BinaryBundle<G::Item>,
+        wires_c: &BinaryBundle<G::Item>,
+        pt_length: usize,
+        key_length: usize,
+        bitsize: usize,
+    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+        const AES_BLOCK_SIZE: usize = 16;
+        let input_bitlen = F::MODULUS_BIT_SIZE as usize;
+
+        // Reading the circuit from txt file
+        let circuit = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/protocols/rep3/yao/bristol_fashion/circuit_files/aes_128.txt"
+        ));
+        let circuit_read =
+            BristolFashionCircuit::from_reader(circuit.as_bytes()).expect("aes128 circuit works");
+
+        let mut plaintext = Vec::new();
+        let mut key = Vec::new();
+        let mut iv = Vec::new();
+
+        for (chunk_x1, chunk_x2) in izip!(
+            wires_x1.wires()[..pt_length * input_bitlen].chunks(input_bitlen),
+            wires_x2.wires()[..pt_length * input_bitlen].chunks(input_bitlen)
+        ) {
+            let mut plaintext_bits =
+                Self::adder_mod_p_with_output_size::<_, F>(g, chunk_x1, chunk_x2, bitsize)?;
+            plaintext_bits.reverse();
+            plaintext.extend(plaintext_bits);
+        }
+        for (chunk_y1, chunk_y2, chunk_z1, chunk_z2) in izip!(
+            wires_x1.wires()
+                [pt_length * input_bitlen..pt_length * input_bitlen + key_length * input_bitlen]
+                .chunks(input_bitlen),
+            wires_x2.wires()
+                [pt_length * input_bitlen..pt_length * input_bitlen + key_length * input_bitlen]
+                .chunks(input_bitlen),
+            wires_x1.wires()[pt_length * input_bitlen + key_length * input_bitlen..]
+                .chunks(input_bitlen),
+            wires_x2.wires()[pt_length * input_bitlen + key_length * input_bitlen..]
+                .chunks(input_bitlen),
+        ) {
+            let mut key_bits =
+                Self::adder_mod_p_with_output_size::<_, F>(g, chunk_y1, chunk_y2, bitsize)?;
+            key_bits.reverse();
+            let mut iv_bits =
+                Self::adder_mod_p_with_output_size::<_, F>(g, chunk_z1, chunk_z2, bitsize)?;
+            iv_bits.reverse();
+            key.extend(key_bits);
+            iv.extend(iv_bits);
+        }
+        // PKCS7 padding:
+        if pt_length % AES_BLOCK_SIZE != 0 {
+            let add = AES_BLOCK_SIZE - (pt_length % AES_BLOCK_SIZE);
+            let mut add_bundle = Self::constant_bundle_from_usize(g, add, bitsize)?;
+            add_bundle.reverse();
+            for _ in 0..add {
+                plaintext.extend(add_bundle.clone());
+            }
+        }
+        for block in plaintext.chunks_mut(bitsize * AES_BLOCK_SIZE) {
+            block.reverse();
+        }
+        key.reverse();
+        iv.reverse();
+
+        debug_assert_eq!(plaintext.len() % AES_BLOCK_SIZE, 0);
+
+        let mut my_iv = iv;
+        let mut rest = &mut plaintext[..];
+
+        while rest.len() >= AES_BLOCK_SIZE * bitsize {
+            let (block, remain) = rest.split_at_mut(AES_BLOCK_SIZE * bitsize);
+
+            block.iter_mut().zip(my_iv.iter()).try_for_each(|(x, y)| {
+                *x = fancy_garbling::FancyBinary::xor(g, x, y)?;
+                Ok::<(), G::Error>(())
+            })?;
+
+            block.clone_from_slice(&Self::aes128_block::<_>(g, &key, block, &circuit_read)?);
+
+            my_iv.clone_from_slice(block);
+            rest = remain;
+        }
+
+        let mut results = Vec::new();
+
+        // we need to reorder here, since we the input for the circuit is in reversed order
+        for res in plaintext.chunks_mut(bitsize * AES_BLOCK_SIZE) {
+            for i in 0..bitsize {
+                for j in 0..bitsize {
+                    res.swap(
+                        i * bitsize + j,
+                        AES_BLOCK_SIZE * bitsize - (i + 1) * bitsize + j,
+                    );
+                }
+            }
+        }
+
+        for (xs, ys) in izip!(
+            plaintext.chunks(bitsize),
+            wires_c.wires().chunks(input_bitlen),
+        ) {
+            let result = Self::compose_field_element::<_, F>(g, xs, ys)?;
+            results.extend(result);
+        }
+
+        Ok(BinaryBundle::new(results))
+    }
+
+    /// todo    
+    pub(crate) fn aes128_block<
+        G: FancyBinary + FancyBinaryConstant + BristolFashionEvaluator<WireValue = G::Item>,
+    >(
+        g: &mut G,
+        key: &[G::Item],
+        plaintext: &[G::Item],
+        circuit: &BristolFashionCircuit,
+    ) -> Result<Vec<G::Item>, G::Error> {
+        debug_assert_eq!(key.len(), 128);
+        debug_assert_eq!(plaintext.len(), 128);
+
+        let input = [key, plaintext];
+        let one = g.const_one()?;
+        let result = match circuit.evaluate_with_default::<G::Item>(&input, g, one) {
+            Ok(mut outputs) => match outputs.pop() {
+                Some(output) => output,
+                None => {
+                    return Err(G::Error::from(FancyError::InvalidArg(
+                        "No output found in circuit evaluation".to_string(),
+                    )))
+                }
+            },
+            Err(e) => return Err(G::Error::from(FancyError::from(e))),
+        };
+        Ok(result)
     }
 }
 
