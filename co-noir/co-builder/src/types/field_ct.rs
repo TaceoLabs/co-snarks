@@ -1693,8 +1693,8 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         }
 
         if has_variable_points {
-            let offset_generators_for_variable_base_batch_mul = &offset_generators
-                [fixed_base_points.len()..offset_generators.len() - fixed_base_points.len()];
+            let offset_generators_for_variable_base_batch_mul =
+                &offset_generators[fixed_base_points.len()..];
 
             let (variable_accumulator, offset_generator_delta) =
                 Self::variable_base_batch_mul_internal(
@@ -1867,7 +1867,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         }
 
         let num_rounds = num_bits.div_ceil(Self::TABLE_BITS);
-        let num_points = base_points.len();
+        let num_points = scalars.len();
         let table_size = (1 << Self::TABLE_BITS) as usize;
 
         let mut scalar_slices = Vec::with_capacity(2 * num_points);
@@ -1883,6 +1883,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         let mut native_straus_tables = Vec::with_capacity(num_points);
         let mut offset_generator_accumulator: P::CycleGroup =
             offset_generators[0].to_owned().into();
+
         for (point, offset_generator) in base_points.iter().zip(offset_generators.iter().skip(1)) {
             let mut native_straus_table = Vec::with_capacity(table_size);
             native_straus_table.push(T::AcvmPoint::from(offset_generator.to_owned().into()));
@@ -1893,9 +1894,11 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             }
             native_straus_tables.push(native_straus_table);
         }
-        for (scalar, point, offset_generator) in
-            izip!(scalars.iter(), base_points.iter(), offset_generators.iter())
-        {
+        for (scalar, point, offset_generator) in izip!(
+            scalars.iter(),
+            base_points.iter(),
+            offset_generators.iter().skip(1)
+        ) {
             scalar_slices.push(StrausScalarSlice::new(
                 scalar,
                 Self::TABLE_BITS,
@@ -1981,15 +1984,13 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 
         let mut point_tables = Vec::with_capacity(num_points);
         let hints_per_table = table_size - 1;
-        for (i, (point, offset_generator)) in izip!(
+        for (point, offset_generator) in izip!(
             // scalars.iter(),
             base_points.iter(),
             offset_generators.iter().skip(1)
-        )
-        .enumerate()
-        {
+        ) {
             // scalar_slices.push(StrausScalarSlice::new(scalar, Self::TABLE_BITS));
-            scalar_slices.push(scalar_slices[i].to_owned()); // Already computed this
+            // scalar_slices.push(scalar_slices[i].to_owned()); // Already computed this
             point_tables.push(StrausLookupTable::<P, T>::new(
                 point,
                 CycleGroupCT::from_group_element(offset_generator.to_owned().into()),
