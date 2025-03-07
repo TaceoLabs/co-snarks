@@ -30,6 +30,7 @@ pub(crate) const _CO_EXPRESSION_WIDTH: ExpressionWidth = ExpressionWidth::Bounde
 mod assert_zero_solver;
 mod blackbox_solver;
 mod brillig_call_solver;
+mod hash;
 mod memory_solver;
 pub mod partial_abi;
 

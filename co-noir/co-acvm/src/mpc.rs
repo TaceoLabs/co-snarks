@@ -339,4 +339,10 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         precomp: &mut Poseidon2Precomputations<Self::ArithmeticShare>,
         poseidon2: &Poseidon2<F, T, D>,
     ) -> std::io::Result<()>;
+
+    fn fetch_nearest_bytes(
+        &mut self,
+        input: Self::AcvmType,
+        num_bits: usize,
+    ) -> std::io::Result<(Self::AcvmType)>;
 }

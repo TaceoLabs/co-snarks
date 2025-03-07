@@ -621,4 +621,12 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         let normalized_sum = sum.to_u32_digits()[0];
         Ok(Self::ArithmeticShare::from((sum - normalized_sum) >> 32))
     }
+
+    fn fetch_nearest_bytes(
+        &mut self,
+        input: Self::AcvmType,
+        num_bits: usize,
+    ) -> std::io::Result<(Self::AcvmType)> {
+        todo!()
+    }
 }

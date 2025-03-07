@@ -1097,4 +1097,12 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
         conversion::b2a_selector(&result.clone(), &mut self.io_context0)
     }
+
+    fn fetch_nearest_bytes(
+        &mut self,
+        input: Self::AcvmType,
+        num_bits: usize,
+    ) -> std::io::Result<(Self::AcvmType)> {
+        todo!()
+    }
 }

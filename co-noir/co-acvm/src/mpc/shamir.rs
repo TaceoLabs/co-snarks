@@ -691,4 +691,12 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
     ) -> std::io::Result<Self::ArithmeticShare> {
         panic!("functionality get_overflow_bit feasible for Shamir")
     }
+
+    fn fetch_nearest_bytes(
+        &mut self,
+        input: Self::AcvmType,
+        num_bits: usize,
+    ) -> std::io::Result<(Self::AcvmType)> {
+        todo!()
+    }
 }
