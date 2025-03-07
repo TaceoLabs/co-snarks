@@ -608,7 +608,7 @@ impl<F: PrimeField> FieldCT<F> {
         let b_tmp = driver.mul_with_public(q_2, b);
         let c_tmp = driver.mul_with_public(q_3, c);
 
-        let mut out = mult_tmp;
+        let mut out = driver.mul_with_public(q_m, mult_tmp);
         driver.add_assign(&mut out, a_tmp);
         driver.add_assign(&mut out, b_tmp);
         driver.add_assign(&mut out, c_tmp);
