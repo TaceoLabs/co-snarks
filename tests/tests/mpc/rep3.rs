@@ -2,9 +2,11 @@ mod field_share {
     use ark_ff::Field;
     use ark_ff::One;
     use ark_ff::PrimeField;
+    use ark_serialize::CanonicalSerialize;
     use ark_std::{UniformRand, Zero};
     use itertools::izip;
     use itertools::Itertools;
+    use libaes::Cipher;
     use mpc_core::gadgets::poseidon2::Poseidon2;
     use mpc_core::protocols::rep3::conversion;
     use mpc_core::protocols::rep3::gadgets;
@@ -1668,6 +1670,101 @@ mod field_share {
         let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_field_elements(&result1, &result2, &result3);
         assert_eq!(is_result, should_result);
+    }
+
+    #[test]
+    fn rep3_aes() {
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let plaintext_size: usize = rng.gen::<u8>() as usize % 1024;
+        let key: Vec<u8> = (0..16).map(|_| rng.gen()).collect();
+        let iv: Vec<u8> = (0..16).map(|_| rng.gen()).collect();
+        let pt: Vec<u8> = (0..plaintext_size).map(|_| rng.gen()).collect();
+
+        let x = pt.iter().map(|&x| ark_bn254::Fr::from(x)).collect_vec();
+        let y = key.iter().map(|&x| ark_bn254::Fr::from(x)).collect_vec();
+        let z = iv.iter().map(|&x| ark_bn254::Fr::from(x)).collect_vec();
+
+        let x_shares = rep3::share_field_elements(&x, &mut rng);
+        let y_shares = rep3::share_field_elements(&y, &mut rng);
+        let z_shares = rep3::share_field_elements(&z, &mut rng);
+
+        let mut pt_to_be_bytes = Vec::new();
+        let mut iv_to_be_bytes = Vec::new();
+        let mut key_to_be_bytes = Vec::new();
+        for inp in x {
+            let mut bytes = Vec::new();
+            inp.serialize_uncompressed(&mut bytes).unwrap();
+            bytes.reverse();
+            let byte = bytes
+                .last()
+                .expect("Field element must be represented by non-zero amount of bytes");
+            pt_to_be_bytes.push(*byte);
+        }
+        for inp in y {
+            let mut bytes = Vec::new();
+            inp.serialize_uncompressed(&mut bytes).unwrap();
+            bytes.reverse();
+            let byte = bytes
+                .last()
+                .expect("Field element must be represented by non-zero amount of bytes");
+            key_to_be_bytes.push(*byte);
+        }
+        for inp in z {
+            let mut bytes = Vec::new();
+            inp.serialize_uncompressed(&mut bytes).unwrap();
+            bytes.reverse();
+            let byte = bytes
+                .last()
+                .expect("Field element must be represented by non-zero amount of bytes");
+            iv_to_be_bytes.push(*byte);
+        }
+        let cipher = Cipher::new_128(
+            key_to_be_bytes
+                .as_slice()
+                .try_into()
+                .expect("slice with incorrect length"),
+        );
+        let encrypted = cipher.cbc_encrypt(&iv_to_be_bytes, &pt_to_be_bytes);
+        let should_result: Vec<_> = encrypted
+            .iter()
+            .map(|x| ark_bn254::Fr::from(*x as u128))
+            .collect();
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx, x, y, z) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            x_shares.into_iter(),
+            y_shares.into_iter(),
+            z_shares.into_iter()
+        ) {
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+
+                let res = rep3::yao::aes_from_bristol(&x, &y, &z, &mut rep3).unwrap();
+                tx.send(res)
+            });
+        }
+
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+
+        let is_result = rep3::combine_field_elements(&result1, &result2, &result3);
+        assert_eq!(
+            is_result
+                .iter()
+                .map(|&x| ark_bn254::Fr::from(x))
+                .collect_vec(),
+            should_result
+                .iter()
+                .map(|&x| ark_bn254::Fr::from(x))
+                .collect_vec()
+        );
     }
 
     #[test]
