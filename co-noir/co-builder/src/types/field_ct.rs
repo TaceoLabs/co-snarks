@@ -1977,8 +1977,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                 accumulator = driver.add_points(accumulator, point);
                 operation_transcript.push(accumulator.to_owned());
                 offset_generator_accumulator += offset_generators[j + 1];
-
-                todo!("Implement variable_base_batch_mul_internal")
             }
         }
 
@@ -2047,16 +2045,14 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                 let scalar_slice_ = scalar_slice.read(num_rounds - i - 1);
                 // if we are doing a batch mul over scalars of different bit-lengths, we may not have a bit slice
                 // for a given round and a given scalar
-                if let Some(_scalar_slice_) = scalar_slice_ {
-                    // Note: We ignore the native values for now
-                    // if let Some(public) = T::get_public(&scalar_slice_.get_value(builder, driver)) {
-                    //     builder.assert_if_has_witness(
-                    //         public
-                    //             == P::ScalarField::from(
-                    //                 scalar_slice.slices_native[num_rounds - i - 1],
-                    //             ),
-                    //     );
-                    // }
+                if let Some(scalar_slice_) = scalar_slice_ {
+                    if let Some(public) = T::get_public(&scalar_slice_.get_value(builder, driver)) {
+                        builder.assert_if_has_witness(
+                            public
+                                == T::get_public(&scalar_slice.slices_native[num_rounds - i - 1])
+                                    .expect("Should also be public"),
+                        );
+                    }
 
                     // const auto& point = points_to_add[point_counter++];
                     let point = &points_to_add[point_counter];
@@ -2529,29 +2525,39 @@ impl<F: PrimeField> CycleScalarCT<F> {
     }
 }
 
-#[derive(Clone, Debug)]
-struct StrausScalarSlice<F: PrimeField> {
+#[derive(Debug)]
+struct StrausScalarSlice<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
     table_bits: usize,
-    slices: Vec<FieldCT<F>>,
-    // slices_native: Vec<u64>,
-    // Note: We ignore the native values for now
+    slices: Vec<FieldCT<P::ScalarField>>,
+    slices_native: Vec<T::AcvmType>,
 }
 
-impl<F: PrimeField> StrausScalarSlice<F> {
-    fn new<P: Pairing<ScalarField = F>, T: NoirWitnessExtensionProtocol<P::ScalarField>>(
-        scalar: &CycleScalarCT<F>,
+impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> Clone
+    for StrausScalarSlice<P, T>
+{
+    fn clone(&self) -> Self {
+        Self {
+            table_bits: self.table_bits,
+            slices: self.slices.clone(),
+            slices_native: self.slices_native.clone(),
+        }
+    }
+}
+
+impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> StrausScalarSlice<P, T> {
+    fn new(
+        scalar: &CycleScalarCT<P::ScalarField>,
         table_bits: usize,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> std::io::Result<Self> {
-        // Note: We ignore the native values for now
-        let lo_bits = if scalar.num_bits() > CycleScalarCT::<F>::LO_BITS {
-            CycleScalarCT::<F>::LO_BITS
+        let lo_bits = if scalar.num_bits() > CycleScalarCT::<P::ScalarField>::LO_BITS {
+            CycleScalarCT::<P::ScalarField>::LO_BITS
         } else {
             scalar.num_bits()
         };
-        let hi_bits = if scalar.num_bits() > CycleScalarCT::<F>::LO_BITS {
-            scalar.num_bits() - CycleScalarCT::<F>::LO_BITS
+        let hi_bits = if scalar.num_bits() > CycleScalarCT::<P::ScalarField>::LO_BITS {
+            scalar.num_bits() - CycleScalarCT::<P::ScalarField>::LO_BITS
         } else {
             0
         };
@@ -2559,42 +2565,37 @@ impl<F: PrimeField> StrausScalarSlice<F> {
         let hi_slices = Self::slice_scalar(&scalar.hi, hi_bits, table_bits, builder, driver)?;
         let lo_slices = Self::slice_scalar(&scalar.lo, lo_bits, table_bits, builder, driver)?;
 
-        let mut slices = lo_slices;
-        slices.extend(hi_slices);
+        let mut slices = lo_slices.0;
+        slices.extend(hi_slices.0);
 
-        // let mut slices_native = lo_slices.1;
-        // slices_native.extend(hi_slices.1);
+        let mut slices_native = lo_slices.1;
+        slices_native.extend(hi_slices.1);
 
         Ok(Self {
             table_bits,
             slices,
-            // slices_native,
+            slices_native,
         })
     }
 
     // convert an input cycle_scalar object into a vector of slices, each containing `table_bits` bits.
     // this also performs an implicit range check on the input slices
-    fn slice_scalar<
-        P: Pairing<ScalarField = F>,
-        T: NoirWitnessExtensionProtocol<P::ScalarField>,
-    >(
-        scalar: &FieldCT<F>,
+    fn slice_scalar(
+        scalar: &FieldCT<P::ScalarField>,
         num_bits: usize,
         table_bits: usize,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<Vec<FieldCT<F>>> {
-        // Note: We ignore the native values for now
-
+    ) -> std::io::Result<(Vec<FieldCT<P::ScalarField>>, Vec<T::AcvmType>)> {
         // we record the scalar slices both as field_t circuit elements and u64 values
         // (u64 values are used to index arrays and we don't want to repeatedly cast a stdlib value to a numeric
         // primitive as this gets expensive when repeated enough times)
         let table_size = (1 << table_bits) as usize;
         let mut result = Vec::with_capacity(table_size);
-        // let mut result_native = Vec::with_capacity(table_size);
+        let mut result_native = Vec::with_capacity(table_size);
 
         if num_bits == 0 {
-            return Ok(result);
+            return Ok((result, result_native));
         }
 
         if scalar.is_constant() {
@@ -2608,7 +2609,8 @@ impl<F: PrimeField> StrausScalarSlice<F> {
                 result.push(FieldCT::zero_with_additive(P::ScalarField::from(slice_v)));
                 raw_value >>= table_bits;
             }
-            return Ok(result);
+            todo!("HERE");
+            // return Ok(result);
         }
 
         let scalar_ = scalar.normalize(builder, driver);
@@ -2624,10 +2626,11 @@ impl<F: PrimeField> StrausScalarSlice<F> {
             result.push(FieldCT::from_witness_index(slice));
         }
 
-        Ok(result)
+        todo!("HERE");
+        // Ok(result)
     }
 
-    fn read(&self, index: usize) -> Option<FieldCT<F>> {
+    fn read(&self, index: usize) -> Option<FieldCT<P::ScalarField>> {
         if index > self.slices.len() {
             return None;
         }
