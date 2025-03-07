@@ -1937,9 +1937,12 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             scalar_slices.push(scalar_slices[i].to_owned()); // Already computed this
             point_tables.push(StrausLookupTable::<P, T>::new(
                 point,
-                offset_generator,
+                CycleGroupCT::from_group_element(offset_generator.to_owned().into()),
                 Self::TABLE_BITS,
-            ));
+                None,
+                builder,
+                driver,
+            )?);
         }
 
         // let hint_ptr = &operation_hints[num_points * hints_per_table];
@@ -2556,10 +2559,129 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 {
     fn new(
         base_point: &CycleGroupCT<P, T>,
-        offset_generator: &<P::CycleGroup as CurveGroup>::Affine,
+        offset_generator: CycleGroupCT<P, T>,
         table_bits: usize,
-    ) -> Self {
-        todo!("Implement StrausLookupTable::new")
+        hints: Option<Vec<T::AcvmPoint<P::CycleGroup>>>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> std::io::Result<Self> {
+        let table_size = (1 << table_bits) as usize;
+        let mut point_table = Vec::with_capacity(table_size);
+        point_table.push(offset_generator.to_owned());
+
+        // We want to support the case where input points are points at infinity.
+        // If base point is at infinity, we want every point in the table to just be `generator_point`.
+        // We achieve this via the following:
+        // 1: We create a "work_point" that is base_point if not at infinity, otherwise is just 1
+        // 2: When computing the point table, we use "work_point" in additions instead of the "base_point" (to prevent
+        //    x-coordinate collisions in honest case) 3: When assigning to the point table, we conditionally assign either
+        //    the output of the point addition (if not at infinity) or the generator point (if at infinity)
+        // Note: if `base_point.is_point_at_infinity()` is constant, these conditional assigns produce zero gate overhead
+
+        let fallback_point = CycleGroupCT::<P, T>::from_group_element(P::CycleGroup::generator());
+        let modded_x = FieldCT::conditional_assign(
+            base_point.is_point_at_infinity(),
+            &fallback_point.x,
+            &base_point.x,
+            builder,
+            driver,
+        )?;
+        let modded_y = FieldCT::conditional_assign(
+            base_point.is_point_at_infinity(),
+            &fallback_point.y,
+            &base_point.y,
+            builder,
+            driver,
+        )?;
+        let mut modded_base_point =
+            CycleGroupCT::new(modded_x, modded_y, BoolCT::from(false), builder, driver);
+
+        // if the input point is constant, it is cheaper to fix the point as a witness and then derive the table, than it is
+        // to derive the table and fix its witnesses to be constant! (due to group additions = 1 gate, and fixing x/y coords
+        // to be constant = 2 gates)
+
+        if modded_base_point.is_constant() {
+            let value = base_point.is_point_at_infinity().get_value(driver);
+            let value = T::get_public(&value).expect("Constants are public");
+            let is_infinity = value.is_one();
+            if !is_infinity {
+                let value = modded_base_point.get_value(builder, driver)?;
+                let value = T::get_public_point(&value).expect("Constants are public");
+                modded_base_point = CycleGroupCT::from_constant_witness(value, builder, driver);
+
+                let value = offset_generator.get_value(builder, driver)?;
+                let value = T::get_public_point(&value).expect("Constants are public");
+                point_table[0] = CycleGroupCT::from_constant_witness(value, builder, driver);
+                for i in 1..table_size {
+                    let hint = hints.as_ref().map(|hints| hints[i - 1].to_owned());
+                    point_table.push(point_table[i - 1].unconditional_add(
+                        &modded_base_point,
+                        hint,
+                        builder,
+                        driver,
+                    )?);
+                }
+            }
+        } else {
+            let mut x_coordinate_checks = Vec::with_capacity(table_size - 1);
+            // ensure all of the ecc add gates are lined up so that we can pay 1 gate per add and not 2
+            for i in 1..table_size {
+                let hint = hints.as_ref().map(|hints| hints[i - 1].to_owned());
+                x_coordinate_checks.push((
+                    point_table[i - 1].x.to_owned(),
+                    modded_base_point.x.to_owned(),
+                ));
+                point_table.push(point_table[i - 1].unconditional_add(
+                    &modded_base_point,
+                    hint,
+                    builder,
+                    driver,
+                )?);
+            }
+
+            // batch the x-coordinate checks together
+            // because `assert_is_not_zero` witness generation needs a modular inversion (expensive)
+            let mut coordinate_check_product = FieldCT::zero_with_additive(P::ScalarField::one());
+            for (x1, x2) in x_coordinate_checks {
+                let x_diff = x2.sub(&x1, builder, driver);
+                coordinate_check_product.mul_assign(&x_diff, builder, driver)?;
+            }
+            coordinate_check_product.assert_is_not_zero(builder, driver)?;
+
+            todo!("Implement StrausLookupTable::new");
+
+            // for i in 1..table_size {
+            //     point_table[i] = Self::conditional_assign(
+            //         base_point.is_point_at_infinity(),
+            //         offset_generator,
+            //         point_table[i],
+            //     );
+            // }
+        }
+
+        // We are Ultra, so we use ROM
+        let rom_id = builder.create_rom_array(table_size);
+        for (i, point) in point_table.iter_mut().enumerate() {
+            if point.is_constant() {
+                let element = point.get_value(builder, driver)?;
+                let element = T::get_public_point(&element).expect("Constants are public");
+                *point = CycleGroupCT::from_constant_witness(element, builder, driver);
+                let (x, y) = element.into_affine().xy().unwrap_or_default();
+                point.x.assert_equal(&FieldCT::from(x), builder, driver);
+                point.y.assert_equal(&FieldCT::from(y), builder, driver);
+            }
+            builder.set_rom_element_pair(
+                rom_id,
+                i,
+                [point.x.get_witness_index(), point.y.get_witness_index()],
+            );
+        }
+
+        Ok(Self {
+            table_bits,
+            point_table,
+            rom_id,
+        })
     }
 
     fn compute_straus_lookup_table_hints(

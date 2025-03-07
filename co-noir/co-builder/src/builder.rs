@@ -1390,7 +1390,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         self.rom_arrays[rom_id].records.push(new_record);
     }
 
-    fn set_rom_element_pair(
+    pub(crate) fn set_rom_element_pair(
         &mut self,
         rom_id: usize,
         index_value: usize,
