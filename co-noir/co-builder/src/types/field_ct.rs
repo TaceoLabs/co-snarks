@@ -2035,7 +2035,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             if i != 0 {
                 for _ in 0..Self::TABLE_BITS {
                     let hint_ptr = &operation_hints[hint_ctr];
-                    accumulator.dbl(Some(hint_ptr.to_owned()), builder, driver)?;
+                    accumulator = accumulator.dbl(Some(hint_ptr.to_owned()), builder, driver)?;
                     hint_ctr += 1;
                 }
             }
