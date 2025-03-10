@@ -305,7 +305,7 @@ pub fn cmux_vec<F: PrimeField, N: Rep3Network>(
         .zip(falsy.iter())
         .map(|(t, f)| sub(*t, *f) * cond + f.a + io_context.rngs.rand.masking_field_element::<F>())
         .collect_vec();
-    io_mul_vec(result_a, io_context)
+    reshare_vec(result_a, io_context)
 }
 
 /// Convenience method for \[a\] + \[b\] * c

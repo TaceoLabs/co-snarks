@@ -763,4 +763,12 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
     ) -> std::io::Result<Self::AcvmType> {
         panic!("functionality gt not feasible for Shamir")
     }
+
+    fn set_point_to_value_if_zero<C: CurveGroup<BaseField = F>>(
+        &mut self,
+        _point: Self::AcvmPoint<C>,
+        _value: Self::AcvmPoint<C>,
+    ) -> std::io::Result<Self::AcvmPoint<C>> {
+        panic!("functionality set_point_to_value_if_zero not feasible for Shamir")
+    }
 }

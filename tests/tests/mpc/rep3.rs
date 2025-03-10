@@ -2247,7 +2247,9 @@ mod curve_share {
     use ark_ff::{One, PrimeField, Zero};
     use ark_std::UniformRand;
     use itertools::{izip, Itertools};
-    use mpc_core::protocols::rep3::{self, conversion, network::IoContext, pointshare};
+    use mpc_core::protocols::rep3::{
+        self, conversion, network::IoContext, pointshare, Rep3BigUintShare,
+    };
     use num_bigint::BigUint;
     use rand::thread_rng;
     use std::{sync::mpsc, thread};
@@ -2529,6 +2531,61 @@ mod curve_share {
         for _ in 0..10 {
             from_fieldshares(ark_grumpkin::Projective::zero());
             from_fieldshares(ark_grumpkin::Projective::rand(&mut thread_rng()));
+        }
+    }
+
+    fn point_is_zero<C: CurveGroup>(point: C)
+    where
+        C::BaseField: PrimeField,
+    {
+        let mut rng = thread_rng();
+        let shares = rep3::share_curve_point(point, &mut rng);
+
+        let test_network = Rep3TestNetwork::default();
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx, x) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            shares.into_iter(),
+        ) {
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+                let res = pointshare::is_zero(x, &mut rep3).unwrap();
+                let res = Rep3BigUintShare::<C::ScalarField>::new(
+                    BigUint::from(res.0),
+                    BigUint::from(res.1),
+                );
+                tx.send(res)
+            });
+        }
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3::combine_binary_element(result1, result2, result3);
+        assert!(is_result <= BigUint::one());
+        if point.is_zero() {
+            assert_eq!(is_result, BigUint::one());
+        } else {
+            assert_eq!(is_result, BigUint::zero());
+        }
+    }
+
+    #[test]
+    fn bn254_point_is_zero() {
+        for _ in 0..10 {
+            point_is_zero(ark_bn254::G1Projective::zero());
+            point_is_zero(ark_bn254::G1Projective::rand(&mut thread_rng()));
+        }
+    }
+
+    #[test]
+    fn grumpkin_point_is_zero() {
+        for _ in 0..10 {
+            point_is_zero(ark_grumpkin::Projective::zero());
+            point_is_zero(ark_grumpkin::Projective::rand(&mut thread_rng()));
         }
     }
 }

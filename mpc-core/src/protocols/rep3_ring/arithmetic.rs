@@ -188,7 +188,7 @@ where
     // do not use local_mul_vec here!!! We are , this means we
     // run on a tokio runtime. local_mul_vec uses rayon and starves the
     // runtime. This method is for small multiplications of vecs.
-    // If you want a larger one use local_mul_vec and then io_mul_vec.
+    // If you want a larger one use local_mul_vec and then reshare_vec.
     debug_assert_eq!(lhs.len(), rhs.len());
     let local_a = izip!(lhs.iter(), rhs.iter())
         .map(|(lhs, rhs)| lhs * rhs + io_context.rngs.rand.masking_element::<RingElement<T>>())

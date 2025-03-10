@@ -606,13 +606,12 @@ pub fn b2y2a_streaming<F: PrimeField, N: Rep3Network>(
     y2a_streaming(y, delta, io_context)
 }
 
-/// Transforms a replicated point share to shares of its coordinates.
-/// The output will be (x, y, is_infinity). Thereby no statement is made on x, y if is_infinity is true.
 #[expect(clippy::type_complexity)]
-pub fn point_share_to_fieldshares<C: CurveGroup, N: Rep3Network>(
+pub(crate) fn point_share_to_fieldshares_pre<C: CurveGroup, N: Rep3Network>(
     x: Rep3PointShare<C>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<(
+    Rep3PrimeFieldShare<C::BaseField>,
     Rep3PrimeFieldShare<C::BaseField>,
     Rep3PrimeFieldShare<C::BaseField>,
     Rep3PrimeFieldShare<C::BaseField>,
@@ -671,6 +670,24 @@ where
     x01_x.b = local_b[0];
     x01_y.b = local_b[1];
 
+    Ok((x01_x, x01_y, x2_x, x2_y))
+}
+
+/// Transforms a replicated point share to shares of its coordinates.
+/// The output will be (x, y, is_infinity). Thereby no statement is made on x, y if is_infinity is true.
+#[expect(clippy::type_complexity)]
+pub fn point_share_to_fieldshares<C: CurveGroup, N: Rep3Network>(
+    x: Rep3PointShare<C>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<(
+    Rep3PrimeFieldShare<C::BaseField>,
+    Rep3PrimeFieldShare<C::BaseField>,
+    Rep3PrimeFieldShare<C::BaseField>,
+)>
+where
+    C::BaseField: PrimeField,
+{
+    let (x01_x, x01_y, x2_x, x2_y) = point_share_to_fieldshares_pre(x, io_context)?;
     detail::point_addition(x01_x, x01_y, x2_x, x2_y, io_context)
 }
 

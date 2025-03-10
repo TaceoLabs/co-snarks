@@ -1912,7 +1912,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                 offset_generator.to_owned(),
                 Self::TABLE_BITS,
                 driver,
-            );
+            )?;
             for hint in table_transcript.into_iter().skip(1) {
                 operation_transcript.push(hint);
             }
@@ -2785,25 +2785,21 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         offset_generator: <P::CycleGroup as CurveGroup>::Affine,
         table_bits: usize,
         driver: &mut T,
-    ) -> Vec<T::AcvmPoint<P::CycleGroup>> {
+    ) -> std::io::Result<Vec<T::AcvmPoint<P::CycleGroup>>> {
         let tables_size = (1 << table_bits) as usize;
-        let base = if let Some(base_point) = T::get_public_point(&base_point) {
-            if base_point.is_zero() {
-                T::AcvmPoint::from(P::CycleGroup::generator())
-            } else {
-                T::AcvmPoint::from(base_point)
-            }
-        } else {
-            todo!("Check zero here!");
-            base_point
-        };
+
+        // let base_point = if base_point == 0 {::CycleGroup::generator() else base_point;
+        let base_point = driver.set_point_to_value_if_zero(
+            base_point,
+            T::AcvmPoint::from(P::CycleGroup::generator()),
+        )?;
 
         let mut hints = Vec::with_capacity(tables_size);
         hints.push(T::AcvmPoint::from(offset_generator.into()));
         for i in 1..tables_size {
-            hints.push(driver.add_points(hints[i - 1].to_owned(), base.to_owned()));
+            hints.push(driver.add_points(hints[i - 1].to_owned(), base_point.to_owned()));
         }
-        hints
+        Ok(hints)
     }
 
     fn read(
