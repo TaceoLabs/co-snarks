@@ -1203,6 +1203,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T> {
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> std::io::Result<Self> {
+        // TACEO TODO: is this the correct order?
         let l = predicate.and(lhs, builder, driver)?;
         let r = predicate.not().and(rhs, builder, driver)?;
         l.or(&r, builder, driver)
@@ -2686,11 +2687,14 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         // to derive the table and fix its witnesses to be constant! (due to group additions = 1 gate, and fixing x/y coords
         // to be constant = 2 gates)
 
+        let mut else_branch = true;
+
         if modded_base_point.is_constant() {
             let value = base_point.is_point_at_infinity().get_value(driver);
             let value = T::get_public(&value).expect("Constants are public");
             let is_infinity = value.is_one();
             if !is_infinity {
+                else_branch = false;
                 let value = modded_base_point.get_value(builder, driver)?;
                 let value = T::get_public_point(&value).expect("Constants are public");
                 modded_base_point = CycleGroupCT::from_constant_witness(value, builder, driver);
@@ -2708,7 +2712,8 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                     )?);
                 }
             }
-        } else {
+        }
+        if else_branch {
             let mut x_coordinate_checks = Vec::with_capacity(table_size - 1);
             // ensure all of the ecc add gates are lined up so that we can pay 1 gate per add and not 2
             for i in 1..table_size {
