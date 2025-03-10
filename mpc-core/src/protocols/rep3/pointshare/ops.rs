@@ -100,3 +100,14 @@ impl<C: CurveGroup> std::ops::Mul<&Rep3PointShare<C>> for Rep3PrimeFieldShare<C:
         rhs.a * self.a + rhs.b * self.a + rhs.a * self.b
     }
 }
+
+impl<C: CurveGroup> std::ops::Neg for Rep3PointShare<C> {
+    type Output = Rep3PointShare<C>;
+
+    fn neg(self) -> Self::Output {
+        Rep3PointShare::<C> {
+            a: -self.a,
+            b: -self.b,
+        }
+    }
+}
