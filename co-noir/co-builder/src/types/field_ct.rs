@@ -1981,13 +1981,18 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 
         let mut point_tables = Vec::with_capacity(num_points);
         let hints_per_table = table_size - 1;
-        for (point, offset_generator) in izip!(
-            // scalars.iter(),
+        for (scalar_, point, offset_generator) in izip!(
+            scalars.iter(),
             base_points.iter(),
             offset_generators.iter().skip(1)
         ) {
-            // scalar_slices.push(StrausScalarSlice::new(scalar, Self::TABLE_BITS));
-            // scalar_slices.push(scalar_slices[i].to_owned()); // Already computed this
+            // TACEO TODO: In our opinion these add variables/gates but are not needed since they are never read
+            scalar_slices.push(StrausScalarSlice::new(
+                scalar_,
+                Self::TABLE_BITS,
+                builder,
+                driver,
+            )?);
             point_tables.push(StrausLookupTable::<P, T>::new(
                 point,
                 CycleGroupCT::from_group_element(offset_generator.to_owned().into()),
@@ -2035,7 +2040,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                 }
             }
 
-            for scalar_slice in scalar_slices.iter() {
+            for scalar_slice in scalar_slices.iter().take(num_points) {
                 let scalar_slice_ = scalar_slice.read(num_rounds - i - 1);
                 // if we are doing a batch mul over scalars of different bit-lengths, we may not have a bit slice
                 // for a given round and a given scalar
