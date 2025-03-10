@@ -708,4 +708,16 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     fn gt(&mut self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> std::io::Result<Self::AcvmType> {
         Ok(F::from((lhs > rhs) as u64))
     }
+
+    fn set_point_to_value_if_zero<C: CurveGroup<BaseField = F>>(
+        &mut self,
+        point: Self::AcvmPoint<C>,
+        value: Self::AcvmPoint<C>,
+    ) -> std::io::Result<Self::AcvmPoint<C>> {
+        if point.is_zero() {
+            Ok(value)
+        } else {
+            Ok(point)
+        }
+    }
 }

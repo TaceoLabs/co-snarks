@@ -1437,4 +1437,42 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             }
         }
     }
+
+    fn set_point_to_value_if_zero<C: CurveGroup<BaseField = F>>(
+        &mut self,
+        point: Self::AcvmPoint<C>,
+        value: Self::AcvmPoint<C>,
+    ) -> std::io::Result<Self::AcvmPoint<C>> {
+        match point {
+            Rep3AcvmPoint::Public(point) => {
+                if point.is_zero() {
+                    Ok(value)
+                } else {
+                    Ok(Rep3AcvmPoint::Public(point))
+                }
+            }
+            Rep3AcvmPoint::Shared(point) => {
+                let is_zero = pointshare::is_zero(point.to_owned(), &mut self.io_context0)?;
+                let is_zero = Rep3BigUintShare::<C::ScalarField>::new(
+                    BigUint::from(is_zero.0),
+                    BigUint::from(is_zero.1),
+                );
+                let is_zero = conversion::bit_inject(&is_zero, &mut self.io_context0)?;
+
+                let sub = match value {
+                    Rep3AcvmPoint::Public(value) => {
+                        let mut neg = -point.to_owned();
+                        pointshare::add_assign_public(&mut neg, &value, self.io_context0.id);
+                        neg
+                    }
+                    Rep3AcvmPoint::Shared(value) => pointshare::sub(&value, &point),
+                };
+
+                let mut res = pointshare::scalar_mul(&sub, is_zero, &mut self.io_context0)?;
+                pointshare::add_assign(&mut res, &point);
+
+                Ok(Rep3AcvmPoint::Shared(res))
+            }
+        }
+    }
 }

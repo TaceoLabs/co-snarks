@@ -344,4 +344,11 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
 
     /// Compute the greater than operation: a > b. Outputs 1 if a > b, 0 otherwise.
     fn gt(&mut self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> io::Result<Self::AcvmType>;
+
+    /// Computes: result = if point == 0 { value } else { point }
+    fn set_point_to_value_if_zero<C: CurveGroup<BaseField = F>>(
+        &mut self,
+        point: Self::AcvmPoint<C>,
+        value: Self::AcvmPoint<C>,
+    ) -> std::io::Result<Self::AcvmPoint<C>>;
 }
