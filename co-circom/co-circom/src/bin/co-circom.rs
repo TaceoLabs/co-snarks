@@ -3,19 +3,22 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use co_circom::{
     Bls12_381, Bn254, CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge,
     CoCircomCompiler, CompilerConfig, Compression, Groth16, Groth16JsonVerificationKey,
-    Groth16Proof, Groth16ZKey, Pairing, Plonk, PlonkJsonVerificationKey, PlonkProof, PlonkZKey,
-    Rep3CoGroth16, Rep3CoPlonk, Rep3MpcNet, Rep3SharedInput, ShamirCoGroth16, ShamirCoPlonk,
-    ShamirMpcNet, ShamirSharedWitness, SimplificationLevel, VMConfig, Witness, R1CS,
+    Groth16Proof, Groth16ZKey, Pairing, PlonkJsonVerificationKey, PlonkProof, PlonkZKey,
+    Rep3CoGroth16, Rep3CoPlonk, Rep3SharedInput, ShamirCoGroth16, ShamirCoPlonk,
+    ShamirSharedWitness, SimplificationLevel, VMConfig, Witness, R1CS,
 };
 use co_circom_snarks::{CompressedRep3SharedWitness, VerificationError};
+use co_plonk::Plonk;
 use color_eyre::eyre::{self, eyre, Context, ContextCompat};
 use figment::{
     providers::{Env, Format, Serialized, Toml},
     Figment,
 };
-use mpc_net::config::NetworkConfigFile;
+use mpc_engine::{MpcEngine, TcpNetwork, NUM_THREADS_CPU, NUM_THREADS_NET};
+use mpc_net::config::{NetworkConfig, NetworkConfigFile};
 use num_traits::Zero;
 use serde::{Deserialize, Serialize};
+use std::net::ToSocketAddrs;
 use std::{
     fs::File,
     io::{BufReader, BufWriter},
@@ -816,12 +819,23 @@ where
     }
 
     // connect to network
-    let network_config = config
+    let network_config: NetworkConfig = config
         .network
         .to_owned()
         .try_into()
         .context("while converting network config")?;
-    let mpc_net = Rep3MpcNet::new(network_config).context("while connecting to network")?;
+    let id = network_config.my_id;
+    let nets = TcpNetwork::networks(
+        network_config.my_id,
+        network_config.bind_addr,
+        &network_config
+            .parties
+            .iter()
+            .map(|p| p.dns_name.to_socket_addrs().unwrap().next().unwrap())
+            .collect::<Vec<_>>(),
+        8,
+    )?;
+    let engine = MpcEngine::new(id, NUM_THREADS_NET, NUM_THREADS_CPU, nets);
 
     // parse input shares
     let input_share_file =
@@ -836,12 +850,10 @@ where
     // Extend the witness
     tracing::info!("Starting witness generation...");
     let start = Instant::now();
-    let (result_witness_share, mpc_net) =
-        co_circom::generate_witness_rep3::<P>(circuit, input_share, mpc_net, config.vm)?;
+    let result_witness_share =
+        co_circom::generate_witness_rep3::<P, _>(&engine, circuit, input_share, config.vm)?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Generate witness took {duration_ms} ms");
-    // network is shutdown in drop, which can take seom time with quinn
-    drop(mpc_net);
 
     // write result to output file
     let out_file = BufWriter::new(std::fs::File::create(&out)?);
@@ -877,21 +889,30 @@ where
         bincode::deserialize_from(witness_file)?;
 
     // connect to network
-    let network_config = config
+    let network_config: NetworkConfig = config
         .network
         .to_owned()
         .try_into()
         .context("while converting network config")?;
-    let net = Rep3MpcNet::new(network_config).context("while connecting to network")?;
+    let id = network_config.my_id;
+    let nets = TcpNetwork::networks(
+        network_config.my_id,
+        network_config.bind_addr,
+        &network_config
+            .parties
+            .iter()
+            .map(|p| p.dns_name.to_socket_addrs().unwrap().next().unwrap())
+            .collect::<Vec<_>>(),
+        8,
+    )?;
+    let engine = MpcEngine::new(id, NUM_THREADS_NET, NUM_THREADS_CPU, nets);
 
     // Translate witness to shamir shares
     tracing::info!("Starting witness translation...");
     let start = Instant::now();
-    let (shamir_witness_share, mpc_net) = co_circom::translate_witness::<P>(witness_share, net)?;
+    let shamir_witness_share = co_circom::translate_witness::<P, _>(&engine, witness_share)?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Translate witness took {duration_ms} ms");
-    // network is shutdown in drop, which can take seom time with quinn
-    drop(mpc_net);
 
     // write result to output file
     let out_file = BufWriter::new(std::fs::File::create(&out)?);
@@ -928,11 +949,25 @@ where
     // parse Circom zkey file
     let zkey_file = File::open(zkey)?;
 
-    let network_config = config
+    let network_config: NetworkConfig = config
         .network
         .to_owned()
         .try_into()
         .context("while converting network config")?;
+    let id = network_config.my_id;
+    let nets = TcpNetwork::networks(
+        network_config.my_id,
+        network_config.bind_addr,
+        &network_config
+            .parties
+            .iter()
+            .map(|p| p.dns_name.to_socket_addrs().unwrap().next().unwrap())
+            .collect::<Vec<_>>(),
+        8,
+    )?;
+    let engine = MpcEngine::new(id, NUM_THREADS_NET, NUM_THREADS_CPU, nets);
+
+    let n = network_config.parties.len();
 
     tracing::info!("Starting proof generation...");
     let public_input = match proof_system {
@@ -946,34 +981,26 @@ where
                         return Err(eyre!("REP3 only allows the threshold to be 1"));
                     }
 
-                    let mut mpc_net = Rep3MpcNet::new(network_config)?;
                     let witness_share: CompressedRep3SharedWitness<P::ScalarField> =
                         bincode::deserialize_from(witness_file)?;
-                    let witness_share = witness_share.uncompress(&mut mpc_net)?;
+                    let witness_share = witness_share.uncompress(&engine)?;
                     let public_input = witness_share.public_inputs.clone();
 
                     let start = Instant::now();
-                    let (proof, mpc_net) = Rep3CoGroth16::prove(mpc_net, zkey, witness_share)?;
+                    let proof = Rep3CoGroth16::prove(&engine, zkey, witness_share)?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
-                    // network is shutdown in drop, which can take seom time with quinn
-                    drop(mpc_net);
-
                     (proof, public_input)
                 }
                 MPCProtocol::SHAMIR => {
-                    let mpc_net = ShamirMpcNet::new(network_config)?;
                     let witness_share: ShamirSharedWitness<P::ScalarField> =
                         bincode::deserialize_from(witness_file)?;
                     let public_input = witness_share.public_inputs.clone();
 
                     let start = Instant::now();
-                    let (proof, mpc_net) = ShamirCoGroth16::prove(mpc_net, t, zkey, witness_share)?;
+                    let proof = ShamirCoGroth16::prove(&engine, n, t, zkey, witness_share)?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
-                    // network is shutdown in drop, which can take seom time with quinn
-                    drop(mpc_net);
-
                     (proof, public_input)
                 }
             };
@@ -1001,34 +1028,26 @@ where
                         return Err(eyre!("REP3 only allows the threshold to be 1"));
                     }
 
-                    let mut mpc_net = Rep3MpcNet::new(network_config)?;
                     let witness_share: CompressedRep3SharedWitness<P::ScalarField> =
                         bincode::deserialize_from(witness_file)?;
-                    let witness_share = witness_share.uncompress(&mut mpc_net)?;
+                    let witness_share = witness_share.uncompress(&engine)?;
                     let public_input = witness_share.public_inputs.clone();
 
                     let start = Instant::now();
-                    let (proof, mpc_net) = Rep3CoPlonk::prove(mpc_net, zkey, witness_share)?;
+                    let proof = Rep3CoPlonk::prove(&engine, zkey, witness_share)?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
-                    // network is shutdown in drop, which can take seom time with quinn
-                    drop(mpc_net);
-
                     (proof, public_input)
                 }
                 MPCProtocol::SHAMIR => {
-                    let mpc_net = ShamirMpcNet::new(network_config)?;
                     let witness_share: ShamirSharedWitness<P::ScalarField> =
                         bincode::deserialize_from(witness_file)?;
                     let public_input = witness_share.public_inputs.clone();
 
                     let start = Instant::now();
-                    let (proof, mpc_net) = ShamirCoPlonk::prove(mpc_net, t, zkey, witness_share)?;
+                    let proof = ShamirCoPlonk::prove(&engine, n, t, zkey, witness_share)?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
-                    // network is shutdown in drop, which can take seom time with quinn
-                    drop(mpc_net);
-
                     (proof, public_input)
                 }
             };

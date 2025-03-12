@@ -36,6 +36,8 @@ rayon = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
 serde_json = { workspace = true }
+mpc-engine.workspace = true
+rand_chacha.workspace = true
 
 [dev-dependencies]
 serde_json = { workspace = true }

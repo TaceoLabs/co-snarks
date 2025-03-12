@@ -30,6 +30,7 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 serde_json = { workspace = true }
 ark-bn254 = { workspace = true }
+mpc-engine.workspace = true
 
 [dev-dependencies]
 ark-bls12-381 = { workspace = true }

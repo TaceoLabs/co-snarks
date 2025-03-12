@@ -8,28 +8,21 @@ use circom_types::groth16::{ConstraintMatrix, Groth16Proof, ZKey};
 use circom_types::traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge};
 use co_circom_snarks::{Rep3SharedWitness, ShamirSharedWitness, SharedWitness};
 use eyre::Result;
-use mpc_core::protocols::rep3::network::{IoContext, Rep3Network};
-use mpc_core::protocols::shamir::network::ShamirNetwork;
+use mpc_core::protocols::rep3::Rep3State;
 use mpc_core::protocols::shamir::{ShamirPreprocessing, ShamirProtocol};
+use mpc_core::Fork;
+use mpc_engine::{MpcEngine, Network};
 use num_traits::identities::One;
 use num_traits::ToPrimitive;
 use rayon::prelude::*;
 use std::marker::PhantomData;
 use std::sync::Arc;
-use tokio::sync::oneshot;
 use tracing::instrument;
 
 use crate::mpc::plain::PlainGroth16Driver;
 use crate::mpc::rep3::Rep3Groth16Driver;
 use crate::mpc::shamir::ShamirGroth16Driver;
 use crate::mpc::CircomGroth16Prover;
-
-macro_rules! rayon_join {
-    ($t1: expr, $t2: expr, $t3: expr) => {{
-        let ((x, y), z) = rayon::join(|| rayon::join(|| $t1, || $t2), || $t3);
-        (x, y, z)
-    }};
-}
 
 /// The plain [`Groth16`] type.
 ///
@@ -44,9 +37,9 @@ macro_rules! rayon_join {
 pub type Groth16<P> = CoGroth16<P, PlainGroth16Driver>;
 
 /// A type alias for a [CoGroth16] protocol using replicated secret sharing.
-pub type Rep3CoGroth16<P, N> = CoGroth16<P, Rep3Groth16Driver<N>>;
+pub type Rep3CoGroth16<P> = CoGroth16<P, Rep3Groth16Driver>;
 /// A type alias for a [CoGroth16] protocol using shamir secret sharing.
-pub type ShamirCoGroth16<P, N> = CoGroth16<P, ShamirGroth16Driver<<P as Pairing>::ScalarField, N>>;
+pub type ShamirCoGroth16<P> = CoGroth16<P, ShamirGroth16Driver>;
 
 /* old way of computing root of unity, does not work for bls12_381:
 let root_of_unity = {
@@ -85,8 +78,8 @@ fn root_of_unity_for_groth16<F: PrimeField + FftField>(
 
 /// A Groth16 proof protocol that uses a collaborative MPC protocol to generate the proof.
 pub struct CoGroth16<P: Pairing, T: CircomGroth16Prover<P>> {
-    pub(crate) driver: T,
-    phantom_data: PhantomData<P>,
+    phantom_data0: PhantomData<P>,
+    phantom_data1: PhantomData<T>,
 }
 
 impl<P: Pairing + CircomArkworksPairingBridge, T: CircomGroth16Prover<P>> CoGroth16<P, T>
@@ -94,22 +87,15 @@ where
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
-    /// Creates a new [CoGroth16] protocol with a given MPC driver.
-    pub fn new(driver: T) -> Self {
-        Self {
-            driver,
-            phantom_data: PhantomData,
-        }
-    }
-
     /// Execute the Groth16 prover using the internal MPC driver.
     /// This version takes the Circom-generated constraint matrices as input and does not re-calculate them.
     #[instrument(level = "debug", name = "Groth16 - Proof", skip_all)]
-    fn prove_inner(
-        mut self,
+    fn prove_inner<N: Network + 'static>(
+        engine: &MpcEngine<N>,
+        state: &mut T::State,
         zkey: Arc<ZKey<P>>,
         private_witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
-    ) -> Result<(Groth16Proof<P>, T)> {
+    ) -> Result<Groth16Proof<P>> {
         let public_inputs = Arc::new(private_witness.public_inputs);
         if public_inputs.len() != zkey.n_public + 1 {
             eyre::bail!(
@@ -120,10 +106,21 @@ where
         }
 
         let private_witness = Arc::new(private_witness.witness);
-        let h = self.witness_map_from_matrices(&zkey, &public_inputs, &private_witness)?;
-        let (r, s) = (self.driver.rand()?, self.driver.rand()?);
+        let h = Self::witness_map_from_matrices(
+            engine,
+            state,
+            &zkey,
+            &public_inputs,
+            &private_witness,
+        )?;
+        let (r, s) = (
+            engine.install_net(|net| T::rand(net, state))?,
+            engine.install_net(|net| T::rand(net, state))?,
+        );
 
-        self.create_proof_with_assignment(
+        Self::create_proof_with_assignment(
+            engine,
+            state,
             Arc::clone(&zkey),
             r,
             s,
@@ -134,7 +131,7 @@ where
     }
 
     fn evaluate_constraint(
-        party_id: T::PartyID,
+        party_id: usize,
         domain_size: usize,
         matrix: &ConstraintMatrix<P::ScalarField>,
         public_inputs: &[P::ScalarField],
@@ -150,8 +147,9 @@ where
     }
 
     #[instrument(level = "debug", name = "witness map from matrices", skip_all)]
-    fn witness_map_from_matrices(
-        &mut self,
+    fn witness_map_from_matrices<N: Network + 'static>(
+        engine: &MpcEngine<N>,
+        state: &mut T::State,
         zkey: &ZKey<P>,
         public_inputs: &[P::ScalarField],
         private_witness: &[T::ArithmeticShare],
@@ -163,11 +161,12 @@ where
             GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints + num_inputs)
                 .ok_or(eyre::eyre!("Polynomial Degree too large"))?;
         let domain_size = domain.size();
-        let party_id = self.driver.get_party_id();
+        let party_id = engine.id();
+
         let eval_constraint_span =
             tracing::debug_span!("evaluate constraints + root of unity computation").entered();
-        let (roots_to_power_domain, a, b) = rayon_join!(
-            {
+        let (roots_to_power_domain, a, b) = engine.join3_cpu(
+            || {
                 let root_of_unity_span =
                     tracing::debug_span!("root of unity computation").entered();
                 let root_of_unity = root_of_unity_for_groth16(power, &mut domain);
@@ -180,7 +179,7 @@ where
                 root_of_unity_span.exit();
                 Arc::new(roots)
             },
-            {
+            || {
                 let eval_constraint_span_a =
                     tracing::debug_span!("evaluate constraints - a").entered();
                 let mut result = Self::evaluate_constraint(
@@ -196,7 +195,7 @@ where
                 eval_constraint_span_a.exit();
                 result
             },
-            {
+            || {
                 let eval_constraint_span_b =
                     tracing::debug_span!("evaluate constraints - a").entered();
                 let result = Self::evaluate_constraint(
@@ -208,15 +207,12 @@ where
                 );
                 eval_constraint_span_b.exit();
                 result
-            }
+            },
         );
-
         eval_constraint_span.exit();
+
         let domain = Arc::new(domain);
 
-        let (a_tx, a_rx) = oneshot::channel();
-        let (b_tx, b_rx) = oneshot::channel();
-        let (c_tx, c_rx) = oneshot::channel();
         let a_domain = Arc::clone(&domain);
         let b_domain = Arc::clone(&domain);
         let c_domain = Arc::clone(&domain);
@@ -225,28 +221,30 @@ where
         let a_roots = Arc::clone(&roots_to_power_domain);
         let b_roots = Arc::clone(&roots_to_power_domain);
         let c_roots = Arc::clone(&roots_to_power_domain);
-        rayon::spawn(move || {
+
+        let a_a_roots = engine.spawn_cpu(move || {
             let a_span = tracing::debug_span!("a: distribute powers mul a (fft/ifft)").entered();
             a_domain.ifft_in_place(&mut a_result);
             T::distribute_powers_and_mul_by_const(&mut a_result, &a_roots);
             a_domain.fft_in_place(&mut a_result);
-            a_tx.send(a_result).expect("channel not droped");
             a_span.exit();
+            a_result
         });
 
-        rayon::spawn(move || {
+        let b_b_roots = engine.spawn_cpu(move || {
             let b_span = tracing::debug_span!("b: distribute powers mul b (fft/ifft)").entered();
             b_domain.ifft_in_place(&mut b_result);
             T::distribute_powers_and_mul_by_const(&mut b_result, &b_roots);
             b_domain.fft_in_place(&mut b_result);
-            b_tx.send(b_result).expect("channel not droped");
             b_span.exit();
+            b_result
         });
 
         let local_mul_vec_span = tracing::debug_span!("c: local_mul_vec").entered();
-        let mut ab = self.driver.local_mul_vec(a, b);
+        let mut ab = T::local_mul_vec(a, b, state);
         local_mul_vec_span.exit();
-        rayon::spawn(move || {
+
+        let c = engine.spawn_cpu(move || {
             let ifft_span = tracing::debug_span!("c: ifft in dist pows").entered();
             c_domain.ifft_in_place(&mut ab);
             ifft_span.exit();
@@ -261,30 +259,33 @@ where
             let fft_span = tracing::debug_span!("c: fft in dist pows").entered();
             c_domain.fft_in_place(&mut ab);
             fft_span.exit();
-            c_tx.send(ab).expect("channel not dropped");
+            ab
         });
 
-        let a = a_rx.blocking_recv()?;
-        let b = b_rx.blocking_recv()?;
+        let a = a_a_roots.join();
+        let b = b_b_roots.join();
 
         let compute_ab_span = tracing::debug_span!("compute ab").entered();
         let local_ab_span = tracing::debug_span!("local part (mul and sub)").entered();
         // same as above. No IO task is run at the moment.
-        let mut ab = self.driver.local_mul_vec(a, b);
+        let mut ab = T::local_mul_vec(a, b, state);
         local_ab_span.exit();
-        let c = c_rx.blocking_recv()?;
-        ab.par_iter_mut()
-            .zip_eq(c.par_iter())
-            .with_min_len(512)
-            .for_each(|(a, b)| {
-                *a -= b;
-            });
+        let c = c.join();
+        engine.install_cpu(|| {
+            ab.par_iter_mut()
+                .zip_eq(c.par_iter())
+                .with_min_len(512)
+                .for_each(|(a, b)| {
+                    *a -= b;
+                });
+        });
         compute_ab_span.exit();
+
         Ok(ab)
     }
 
     fn calculate_coeff<C>(
-        id: T::PartyID,
+        id: usize,
         initial: T::PointShare<C>,
         query: &[C::Affine],
         vk_param: C::Affine,
@@ -309,26 +310,23 @@ where
         res
     }
 
+    #[allow(clippy::too_many_arguments)]
     #[instrument(level = "debug", name = "create proof with assignment", skip_all)]
-    fn create_proof_with_assignment(
-        mut self,
+    fn create_proof_with_assignment<N: Network + 'static>(
+        engine: &MpcEngine<N>,
+        state: &mut T::State,
         zkey: Arc<ZKey<P>>,
         r: T::ArithmeticShare,
         s: T::ArithmeticShare,
         h: Vec<P::ScalarField>,
         input_assignment: Arc<Vec<P::ScalarField>>,
         aux_assignment: Arc<Vec<T::ArithmeticShare>>,
-    ) -> Result<(Groth16Proof<P>, T)> {
+    ) -> Result<Groth16Proof<P>> {
         let delta_g1 = zkey.delta_g1.into_group();
-        let (l_acc_tx, l_acc_rx) = oneshot::channel();
-        let (h_acc_tx, h_acc_rx) = oneshot::channel();
         let h_query = Arc::clone(&zkey);
         let l_query = Arc::clone(&zkey);
 
-        let party_id = self.driver.get_party_id();
-        let (r_g1_tx, r_g1_rx) = oneshot::channel();
-        let (s_g1_tx, s_g1_rx) = oneshot::channel();
-        let (s_g2_tx, s_g2_rx) = oneshot::channel();
+        let party_id = engine.id();
         let a_query = Arc::clone(&zkey);
         let b_g1_query = Arc::clone(&zkey);
         let b_g2_query = Arc::clone(&zkey);
@@ -344,7 +342,7 @@ where
         let beta_g2 = zkey.beta_g2;
         let delta_g2 = zkey.delta_g2.into_group();
 
-        rayon::spawn(move || {
+        let r_g1 = engine.spawn_cpu(move || {
             let compute_a =
                 tracing::debug_span!("compute A in create proof with assignment").entered();
             // Compute A
@@ -357,11 +355,11 @@ where
                 &input_assignment1[1..],
                 &aux_assignment1,
             );
-            r_g1_tx.send(r_g1).expect("not dropped");
             compute_a.exit();
+            r_g1
         });
 
-        rayon::spawn(move || {
+        let s_g1 = engine.spawn_cpu(move || {
             let compute_b =
                 tracing::debug_span!("compute B/G1 in create proof with assignment").entered();
             // Compute B in G1
@@ -375,11 +373,11 @@ where
                 &input_assignment2[1..],
                 &aux_assignment2,
             );
-            s_g1_tx.send(s_g1).expect("not dropped");
             compute_b.exit();
+            s_g1
         });
 
-        rayon::spawn(move || {
+        let s_g2 = engine.spawn_cpu(move || {
             let compute_b =
                 tracing::debug_span!("compute B/G2 in create proof with assignment").entered();
             // Compute B in G2
@@ -392,37 +390,44 @@ where
                 &input_assignment3[1..],
                 &aux_assignment3,
             );
-            s_g2_tx.send(s_g2).expect("not dropped");
             compute_b.exit();
+            s_g2
         });
 
-        rayon::spawn(move || {
+        let l_acc = engine.spawn_cpu(move || {
             let msm_l_query = tracing::debug_span!("msm l_query").entered();
             let result = T::msm_public_points(&l_query.l_query, &aux_assignment4);
-            l_acc_tx.send(result).expect("channel not dropped");
             msm_l_query.exit();
+            result
         });
 
-        rayon::spawn(move || {
+        let h_acc = engine.spawn_cpu(move || {
             let msm_h_query = tracing::debug_span!("msm h_query").entered();
             //perform the msm for h
             let result = P::G1::msm_unchecked(&h_query.h_query, &h);
-            h_acc_tx.send(result).expect("channel not dropped");
             msm_h_query.exit();
+            result
         });
 
         // TODO we should move this to seperate thread so that we not block here
         // we can do some additional work so we don't necessary need to block
         let rs_span = tracing::debug_span!("r*s with networking").entered();
-        let rs = self.driver.mul(r, s)?;
+        let rs = engine.install_net(|net| T::mul(r, s, net, state))?;
         let r_s_delta_g1 = T::scalar_mul_public_point(&delta_g1, rs);
         rs_span.exit();
 
-        let g_a = r_g1_rx.blocking_recv()?;
-        let g1_b = s_g1_rx.blocking_recv()?;
+        let g_a = r_g1.join();
+        let g1_b = s_g1.join();
 
         let network_round = tracing::debug_span!("network round after calc coeff").entered();
-        let (g_a_opened, r_g1_b) = self.driver.open_point_and_scalar_mul(&g_a, &g1_b, r)?;
+        let mut state0 = state.fork(0)?;
+        let mut state1 = state.fork(1)?;
+        let (g_a_opened, r_g1_b) = engine.join_net(
+            |net| T::open_point(&g_a, net, &mut state0),
+            |net| T::scalar_mul(&g1_b, r, net, &mut state1),
+        );
+        let g_a_opened = g_a_opened?;
+        let r_g1_b = r_g1_b?;
         network_round.exit();
 
         let last_round = tracing::debug_span!("finish - open two points and some adds").entered();
@@ -431,83 +436,76 @@ where
         let mut g_c = s_g_a;
         T::add_assign_points(&mut g_c, &r_g1_b);
         T::sub_assign_points(&mut g_c, &r_s_delta_g1);
-        let l_aux_acc = l_acc_rx.blocking_recv().expect("channel not dropped");
+        let l_aux_acc = l_acc.join();
         T::add_assign_points(&mut g_c, &l_aux_acc);
 
-        let h_acc = h_acc_rx.blocking_recv()?;
+        let h_acc = h_acc.join();
         let g_c = T::add_points_half_share(g_c, &h_acc);
+        let g2_b = s_g2.join();
 
-        let g2_b = s_g2_rx.blocking_recv()?;
-        let (g_c_opened, g2_b_opened) = self.driver.open_two_points(g_c, g2_b)?;
+        let mut state0 = state.fork(0)?;
+        let mut state1 = state.fork(0)?;
+        let (g_c_opened, g2_b_opened) = engine.join_net(
+            |net| T::open_half_point(g_c, net, &mut state0),
+            |net| T::open_point(&g2_b, net, &mut state1),
+        );
+        let g_c_opened = g_c_opened?;
+        let g2_b_opened = g2_b_opened?;
+
         last_round.exit();
 
-        Ok((
-            Groth16Proof {
-                pi_a: g_a_opened.into_affine(),
-                pi_b: g2_b_opened.into_affine(),
-                pi_c: g_c_opened.into_affine(),
-                protocol: "groth16".to_owned(),
-                curve: P::get_circom_name(),
-            },
-            self.driver,
-        ))
+        Ok(Groth16Proof {
+            pi_a: g_a_opened.into_affine(),
+            pi_b: g2_b_opened.into_affine(),
+            pi_c: g_c_opened.into_affine(),
+            protocol: "groth16".to_owned(),
+            curve: P::get_circom_name(),
+        })
     }
 }
 
-impl<P: Pairing, N: Rep3Network> Rep3CoGroth16<P, N>
+impl<P: Pairing> Rep3CoGroth16<P>
 where
     P: CircomArkworksPairingBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
     /// Create a [`Groth16Proof`].
-    pub fn prove(
-        net: N,
+    pub fn prove<N: Network + 'static>(
+        engine: &MpcEngine<N>,
         zkey: Arc<ZKey<P>>,
         witness: Rep3SharedWitness<P::ScalarField>,
-    ) -> Result<(Groth16Proof<P>, N)> {
-        let mut io_context0 = IoContext::init(net)?;
-        let io_context1 = io_context0.fork()?;
-        let driver = Rep3Groth16Driver::new(io_context0, io_context1);
-        let prover = CoGroth16 {
-            driver,
-            phantom_data: PhantomData,
-        };
+    ) -> Result<Groth16Proof<P>> {
+        let mut state = engine.install_net(|net| Rep3State::new(net))?;
         // execute prover in MPC
-        let (proof, driver) = prover.prove_inner(zkey, witness)?;
-        Ok((proof, driver.get_network()))
+        Self::prove_inner(engine, &mut state, zkey, witness)
     }
 }
 
-impl<P: Pairing, N: ShamirNetwork> ShamirCoGroth16<P, N>
+impl<P: Pairing> ShamirCoGroth16<P>
 where
     P: CircomArkworksPairingBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
     /// Create a [`Groth16Proof`].
-    pub fn prove(
-        net: N,
+    pub fn prove<N: Network + 'static>(
+        engine: &MpcEngine<N>,
+        num_parties: usize,
         threshold: usize,
         zkey: Arc<ZKey<P>>,
         witness: ShamirSharedWitness<P::ScalarField>,
-    ) -> Result<(Groth16Proof<P>, N)> {
+    ) -> eyre::Result<Groth16Proof<P>> {
         // we need 2 + 1 number of corr rand pairs. We need the values r/s (1 pair) and 2 muls (2
         // pairs)
         let num_pairs = 3;
-        let preprocessing = ShamirPreprocessing::new(threshold, net, num_pairs)?;
-        let mut protocol0 = ShamirProtocol::from(preprocessing);
+        let preprocessing = engine
+            .install_net(|net| ShamirPreprocessing::new(num_parties, threshold, num_pairs, net))?;
+        let mut protocol = ShamirProtocol::from(preprocessing);
         // the protocol1 is only used for scalar_mul and a field_mul which need 1 pair each (ergo 2
         // pairs)
-        let protocol1 = protocol0.fork_with_pairs(2)?;
-        let driver = ShamirGroth16Driver::new(protocol0, protocol1);
-        let prover = CoGroth16 {
-            driver,
-            phantom_data: PhantomData,
-        };
         // execute prover in MPC
-        let (proof, driver) = prover.prove_inner(zkey, witness)?;
-        Ok((proof, driver.get_network()))
+        Self::prove_inner(engine, &mut protocol, zkey, witness)
     }
 }
 
@@ -521,15 +519,11 @@ where
     /// initialized with the [`PlainGroth16Driver`].
     ///
     /// DOES NOT PERFORM ANY MPC. For a plain prover checkout the [Groth16 implementation of arkworks](https://docs.rs/ark-groth16/latest/ark_groth16/).
-    pub fn plain_prove(
+    pub fn plain_prove<N: Network + 'static>(
+        engine: &MpcEngine<N>,
         zkey: Arc<ZKey<P>>,
         private_witness: SharedWitness<P::ScalarField, P::ScalarField>,
     ) -> Result<Groth16Proof<P>> {
-        let prover = Self {
-            driver: PlainGroth16Driver,
-            phantom_data: PhantomData,
-        };
-        let (proof, _) = prover.prove_inner(zkey, private_witness)?;
-        Ok(proof)
+        Self::prove_inner(engine, &mut (), zkey, private_witness)
     }
 }

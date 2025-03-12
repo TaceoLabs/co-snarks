@@ -6,11 +6,9 @@ mod ops;
 pub(super) mod types;
 
 use ark_ec::CurveGroup;
+use mpc_engine::Network;
 
-use super::{
-    core, network::ShamirNetwork, IoResult, ShamirPointShare, ShamirPrimeFieldShare,
-    ShamirProtocol, ShamirShare,
-};
+use super::{core, network, ShamirPointShare, ShamirPrimeFieldShare, ShamirProtocol, ShamirShare};
 
 type FieldShare<C> = ShamirPrimeFieldShare<C>;
 type PointShare<C> = ShamirPointShare<C>;
@@ -80,37 +78,49 @@ pub fn scalar_mul_public_scalar<C: CurveGroup>(
 }
 
 /// Performs scalar multiplication between a point share and a field share.
-pub fn scalar_mul<C: CurveGroup, N: ShamirNetwork>(
+pub fn scalar_mul<C: CurveGroup, N: Network>(
     a: &PointShare<C>,
     b: ShamirShare<C::ScalarField>,
-    shamir: &mut ShamirProtocol<C::ScalarField, N>,
-) -> IoResult<PointShare<C>> {
+    net: &N,
+    state: &mut ShamirProtocol<C::ScalarField>,
+) -> eyre::Result<PointShare<C>> {
     let mul = (b * a).a;
-    shamir.degree_reduce_point(mul)
+    network::degree_reduce_point(net, state, mul)
 }
 
 /// Performs opening of a point share.
-pub fn open_point<C: CurveGroup, N: ShamirNetwork>(
+pub fn open_half_point<C: CurveGroup, N: Network>(
+    a: C,
+    net: &N,
+    state: &mut ShamirProtocol<C::ScalarField>,
+) -> eyre::Result<C> {
+    let rcv = network::broadcast_next(net, state.num_parties, state.threshold * 2 + 1, a)?;
+    let res = core::reconstruct_point(&rcv, &state.open_lagrange_2t);
+    Ok(res)
+}
+
+/// Performs opening of a point share.
+pub fn open_point<C: CurveGroup, N: Network>(
     a: &PointShare<C>,
-    shamir: &mut ShamirProtocol<C::ScalarField, N>,
-) -> IoResult<C> {
-    let rcv = shamir.network.broadcast_next(a.a, shamir.threshold + 1)?;
-    let res = core::reconstruct_point(&rcv, &shamir.open_lagrange_t);
+    net: &N,
+    state: &mut ShamirProtocol<C::ScalarField>,
+) -> eyre::Result<C> {
+    let rcv = network::broadcast_next(net, state.num_parties, state.threshold + 1, a.a)?;
+    let res = core::reconstruct_point(&rcv, &state.open_lagrange_t);
     Ok(res)
 }
 
 /// Performs opening of a vector of point shares.
-pub fn open_point_many<C: CurveGroup, N: ShamirNetwork>(
+pub fn open_point_many<C: CurveGroup, N: Network>(
     a: &[PointShare<C>],
-    shamir: &mut ShamirProtocol<C::ScalarField, N>,
-) -> IoResult<Vec<C>> {
+    net: &N,
+    state: &mut ShamirProtocol<C::ScalarField>,
+) -> eyre::Result<Vec<C>> {
     let a_a = ShamirPointShare::convert_slice(a);
 
-    let rcv = shamir
-        .network
-        .broadcast_next(a_a.to_owned(), shamir.threshold + 1)?;
+    let rcv = network::broadcast_next(net, state.num_parties, state.threshold + 1, a_a.to_owned())?;
 
-    let mut transposed = vec![vec![C::zero(); shamir.threshold + 1]; a.len()];
+    let mut transposed = vec![vec![C::zero(); state.threshold + 1]; a.len()];
 
     for (j, r) in rcv.into_iter().enumerate() {
         for (i, val) in r.into_iter().enumerate() {
@@ -120,7 +130,7 @@ pub fn open_point_many<C: CurveGroup, N: ShamirNetwork>(
 
     let res = transposed
         .into_iter()
-        .map(|r| core::reconstruct_point(&r, &shamir.open_lagrange_t))
+        .map(|r| core::reconstruct_point(&r, &state.open_lagrange_t))
         .collect();
     Ok(res)
 }

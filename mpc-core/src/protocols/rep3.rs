@@ -18,6 +18,8 @@ use std::marker::PhantomData;
 
 use ark_ec::CurveGroup;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use conversion::A2BType;
+use mpc_engine::Network;
 use num_bigint::BigUint;
 
 use ark_ff::{One, PrimeField};
@@ -26,7 +28,115 @@ use rand::{distributions::Standard, prelude::Distribution, CryptoRng, Rng, Seeda
 pub use arithmetic::types::Rep3PrimeFieldShare;
 pub use binary::types::Rep3BigUintShare;
 pub use pointshare::Rep3PointShare;
+use rngs::{Rep3CorrelatedRng, Rep3Rand, Rep3RandBitComp};
 use serde::{Deserialize, Serialize};
+
+use crate::{Fork, RngType};
+
+pub const PARTY_0: usize = 0;
+pub const PARTY_1: usize = 1;
+pub const PARTY_2: usize = 2;
+
+pub trait Rep3PartyId {
+    fn next(&self) -> usize;
+    fn prev(&self) -> usize;
+}
+
+impl Rep3PartyId for usize {
+    fn next(&self) -> usize {
+        match *self {
+            PARTY_0 => PARTY_1,
+            PARTY_1 => PARTY_2,
+            PARTY_2 => PARTY_0,
+            _ => unreachable!(),
+        }
+    }
+
+    fn prev(&self) -> usize {
+        match *self {
+            PARTY_0 => PARTY_2,
+            PARTY_1 => PARTY_0,
+            PARTY_2 => PARTY_1,
+            _ => unreachable!(),
+        }
+    }
+}
+
+pub struct Rep3State {
+    pub rngs: Rep3CorrelatedRng,
+    pub rng: RngType,
+    pub a2b_type: A2BType,
+}
+
+impl Rep3State {
+    pub fn new<N: Network>(net: &N) -> eyre::Result<Self> {
+        let mut rng = rand_chacha::ChaCha12Rng::from_entropy();
+        let mut rand = Self::setup_prf(net, &mut rng)?;
+        let bitcomps = Self::setup_bitcomp(net, &mut rand)?;
+        let rngs = Rep3CorrelatedRng::new(rand, bitcomps.0, bitcomps.1);
+
+        Ok(Rep3State {
+            rngs,
+            rng,
+            a2b_type: A2BType::default(),
+        })
+    }
+
+    fn setup_prf<N: Network, R: Rng + CryptoRng>(net: &N, rng: &mut R) -> eyre::Result<Rep3Rand> {
+        let seed1: [u8; crate::SEED_SIZE] = rng.gen();
+        let seed2: [u8; crate::SEED_SIZE] = network::reshare(net, seed1)?;
+
+        Ok(Rep3Rand::new(seed1, seed2))
+    }
+
+    fn setup_bitcomp<N: Network>(
+        net: &N,
+        rands: &mut Rep3Rand,
+    ) -> eyre::Result<(Rep3RandBitComp, Rep3RandBitComp)> {
+        let (k1a, k1c) = rands.random_seeds();
+        let (k2a, k2c) = rands.random_seeds();
+
+        match net.id() {
+            PARTY_0 => {
+                let k2b: [u8; crate::SEED_SIZE] =
+                    network::send_and_recv(net, PARTY_1, k1c, PARTY_2)?;
+                let bitcomp1 = Rep3RandBitComp::new_2keys(k1a, k1c);
+                let bitcomp2 = Rep3RandBitComp::new_3keys(k2a, k2b, k2c);
+                Ok((bitcomp1, bitcomp2))
+            }
+            PARTY_1 => {
+                network::send_next(net, (k1c, k2c))?;
+                let k1b: [u8; crate::SEED_SIZE] = network::recv_prev(net)?;
+                let bitcomp1 = Rep3RandBitComp::new_3keys(k1a, k1b, k1c);
+                let bitcomp2 = Rep3RandBitComp::new_2keys(k2a, k2c);
+                Ok((bitcomp1, bitcomp2))
+            }
+            PARTY_2 => {
+                network::send_next(net, k2c)?;
+                let (k1b, k2b): ([u8; crate::SEED_SIZE], [u8; crate::SEED_SIZE]) =
+                    network::recv_prev(net)?;
+                let bitcomp1 = Rep3RandBitComp::new_3keys(k1a, k1b, k1c);
+                let bitcomp2 = Rep3RandBitComp::new_3keys(k2a, k2b, k2c);
+                Ok((bitcomp1, bitcomp2))
+            }
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl Fork for Rep3State {
+    fn fork(&mut self, _: usize) -> eyre::Result<Self> {
+        let rngs = self.rngs.fork();
+        let rng = RngType::from_seed(self.rng.gen());
+        let a2b_type = self.a2b_type;
+
+        Ok(Self {
+            rngs,
+            rng,
+            a2b_type,
+        })
+    }
+}
 
 pub(crate) type IoResult<T> = std::io::Result<T>;
 
