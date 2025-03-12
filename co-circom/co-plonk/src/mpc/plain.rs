@@ -1,4 +1,3 @@
-use super::IoResult;
 use ark_ec::pairing::Pairing;
 use ark_ec::scalar_mul::variable_base::VariableBaseMSM;
 use ark_ff::Field;
@@ -6,6 +5,7 @@ use ark_ff::UniformRand;
 use ark_poly::univariate::DensePolynomial;
 use ark_poly::Polynomial;
 use itertools::izip;
+use mpc_engine::Network;
 use num_traits::Zero;
 
 use super::CircomPlonkProver;
@@ -21,20 +21,11 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
 
     type PointShareG2 = P::G2;
 
-    //doesn't matter
-    type PartyID = usize;
+    type State = ();
 
-    //doesn't matter
-    type IoContext = ();
-
-    fn rand(&mut self) -> IoResult<Self::ArithmeticShare> {
+    fn rand<N: Network>(_: &N, _: &mut Self::State) -> eyre::Result<Self::ArithmeticShare> {
         let mut rng = thread_rng();
         Ok(Self::ArithmeticShare::rand(&mut rng))
-    }
-
-    fn get_party_id(&self) -> Self::PartyID {
-        //doesn't matter
-        0
     }
 
     fn add(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare {
@@ -42,7 +33,7 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
     }
 
     fn add_with_public(
-        _: Self::PartyID,
+        _: usize,
         shared: Self::ArithmeticShare,
         public: P::ScalarField,
     ) -> Self::ArithmeticShare {
@@ -53,21 +44,25 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
         a - b
     }
 
-    fn neg_vec_in_place(&mut self, a: &mut [Self::ArithmeticShare]) {
+    fn neg_vec_in_place(a: &mut [Self::ArithmeticShare]) {
         for a in a.iter_mut() {
             *a = -*a;
         }
     }
 
     fn local_mul_vec(
-        &mut self,
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
+        _: &mut Self::State,
     ) -> Vec<P::ScalarField> {
         izip!(a, b).map(|(a, b)| *a * *b).collect()
     }
 
-    fn io_round_mul_vec(&mut self, a: Vec<P::ScalarField>) -> IoResult<Vec<Self::ArithmeticShare>> {
+    fn io_round_mul_vec<N: Network>(
+        a: Vec<P::ScalarField>,
+        _: &N,
+        _: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
         Ok(a)
     }
 
@@ -78,62 +73,68 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
         shared * public
     }
 
-    fn mul_vec(
-        &mut self,
+    fn mul_vec<N: Network>(
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
-    ) -> IoResult<Vec<Self::ArithmeticShare>> {
+        _: &N,
+        _: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
         Ok(izip!(a, b).map(|(a, b)| *a * *b).collect())
     }
 
-    fn mul_vecs(
-        &mut self,
+    fn mul_vecs<N: Network>(
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
         c: &[Self::ArithmeticShare],
-    ) -> IoResult<Vec<Self::ArithmeticShare>> {
+        _: &N,
+        _: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
         Ok(izip!(a, b, c).map(|(a, b, c)| *a * *b * *c).collect())
     }
 
-    fn add_mul_vec(
-        &mut self,
+    fn add_mul_vec<N: Network>(
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
         c: &[Self::ArithmeticShare],
-    ) -> IoResult<Vec<Self::ArithmeticShare>> {
+        _: &N,
+        _: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
         Ok(izip!(a, b, c).map(|(a, b, c)| *a + *b * *c).collect())
     }
 
-    fn mul_open_vec(
-        &mut self,
+    fn mul_open_vec<N: Network>(
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
-    ) -> IoResult<Vec<P::ScalarField>> {
+        _: &N,
+        _: &mut Self::State,
+    ) -> eyre::Result<Vec<P::ScalarField>> {
         Ok(izip!(a, b).map(|(a, b)| *a * *b).collect())
     }
 
-    fn open_vec(&mut self, a: &[Self::ArithmeticShare]) -> IoResult<Vec<P::ScalarField>> {
+    fn open_vec<N: Network>(
+        a: &[Self::ArithmeticShare],
+        _: &N,
+        _: &mut Self::State,
+    ) -> eyre::Result<Vec<P::ScalarField>> {
         Ok(a.to_vec())
     }
 
-    fn inv_vec(&mut self, a: &[Self::ArithmeticShare]) -> IoResult<Vec<Self::ArithmeticShare>> {
+    fn inv_vec<N: Network>(
+        a: &[Self::ArithmeticShare],
+        _: &N,
+        _: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
         let mut res = Vec::with_capacity(a.len());
         for a in a {
             if a.is_zero() {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    "Cannot invert zero",
-                ));
+                eyre::bail!("Cannot invert zero");
             }
             res.push(a.inverse().unwrap());
         }
         Ok(res)
     }
 
-    fn promote_to_trivial_share(
-        _: Self::PartyID,
-        public_value: P::ScalarField,
-    ) -> Self::ArithmeticShare {
+    fn promote_to_trivial_share(_: usize, public_value: P::ScalarField) -> Self::ArithmeticShare {
         public_value
     }
 
@@ -151,11 +152,19 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
         domain.ifft(data)
     }
 
-    fn open_point_g1(&mut self, a: Self::PointShareG1) -> IoResult<P::G1> {
+    fn open_point_g1<N: Network>(
+        a: Self::PointShareG1,
+        _: &N,
+        _: &mut Self::State,
+    ) -> eyre::Result<P::G1> {
         Ok(a)
     }
 
-    fn open_point_vec_g1(&mut self, a: &[Self::PointShareG1]) -> IoResult<Vec<P::G1>> {
+    fn open_point_vec_g1<N: Network>(
+        a: &[Self::PointShareG1],
+        _: &N,
+        _: &mut Self::State,
+    ) -> eyre::Result<Vec<P::G1>> {
         Ok(a.to_vec())
     }
 
@@ -175,21 +184,19 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
         (result, poly.coeffs)
     }
 
-    fn array_prod_mul(
-        _: &mut Self::IoContext,
+    fn array_prod_mul<N: Network>(
         inv: bool,
         arr1: &[Self::ArithmeticShare],
         arr2: &[Self::ArithmeticShare],
         arr3: &[Self::ArithmeticShare],
-    ) -> IoResult<Vec<Self::ArithmeticShare>> {
+        _: &N,
+        _: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
         let inv_vec = |a: &[Self::ArithmeticShare]| {
             let mut res = Vec::with_capacity(a.len());
             for a in a {
                 if a.is_zero() {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::InvalidInput,
-                        "Cannot invert zero",
-                    ));
+                    eyre::bail!("Cannot invert zero");
                 }
                 res.push(a.inverse().unwrap());
             }
@@ -233,23 +240,5 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
         } else {
             Ok(unblind)
         }
-    }
-
-    fn array_prod_mul2(
-        &mut self,
-        n1: &[Self::ArithmeticShare],
-        n2: &[Self::ArithmeticShare],
-        n3: &[Self::ArithmeticShare],
-        d1: &[Self::ArithmeticShare],
-        d2: &[Self::ArithmeticShare],
-        d3: &[Self::ArithmeticShare],
-    ) -> IoResult<(Vec<Self::ArithmeticShare>, Vec<Self::ArithmeticShare>)> {
-        let mut io_context0 = ();
-        let mut io_context1 = ();
-        let num =
-            <Self as CircomPlonkProver<P>>::array_prod_mul(&mut io_context0, false, n1, n2, n3)?;
-        let den =
-            <Self as CircomPlonkProver<P>>::array_prod_mul(&mut io_context1, true, d1, d2, d3)?;
-        Ok((num, den))
     }
 }

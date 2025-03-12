@@ -1,8 +1,11 @@
 use super::{Poseidon2, Poseidon2Precomputations};
 use crate::protocols::shamir::{
-    arithmetic, network::ShamirNetwork, ShamirPrimeFieldShare, ShamirProtocol,
+    arithmetic,
+    network::{self},
+    ShamirPrimeFieldShare, ShamirProtocol,
 };
 use ark_ff::PrimeField;
+use mpc_engine::Network;
 
 impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
     fn transmute_shamir_state(state: &mut [ShamirPrimeFieldShare<F>; T]) -> &mut [F; T] {
@@ -31,20 +34,21 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
     }
 
     /// Create Poseidon2Precomputations for the Shamir MPC protocol.
-    pub fn precompute_shamir<N: ShamirNetwork>(
+    pub fn precompute_shamir<N: Network>(
         &self,
         num_poseidon: usize,
-        driver: &mut ShamirProtocol<F, N>,
-    ) -> std::io::Result<Poseidon2Precomputations<ShamirPrimeFieldShare<F>>> {
+        net: &N,
+        state: &mut ShamirProtocol<F>,
+    ) -> eyre::Result<Poseidon2Precomputations<ShamirPrimeFieldShare<F>>> {
         assert_eq!(D, 5);
         let num_sbox = self.num_sbox() * num_poseidon;
 
         let mut r = Vec::with_capacity(num_sbox);
         for _ in 0..num_sbox {
-            r.push(driver.rand()?);
+            r.push(state.rand(net)?);
         }
-        let r2 = arithmetic::mul_vec(&r, &r, driver)?;
-        let r4 = arithmetic::mul_vec(&r2, &r2, driver)?;
+        let r2 = arithmetic::mul_vec(&r, &r, net, state)?;
+        let r4 = arithmetic::mul_vec(&r2, &r2, net, state)?;
 
         let mut lhs = Vec::with_capacity(num_sbox * 2);
         let mut rhs = Vec::with_capacity(num_sbox * 2);
@@ -57,7 +61,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
             rhs.push(r4);
         }
 
-        let mut r3 = arithmetic::mul_vec(&lhs, &rhs, driver)?;
+        let mut r3 = arithmetic::mul_vec(&lhs, &rhs, net, state)?;
         let r5 = r3.split_off(num_sbox);
 
         Ok(Poseidon2Precomputations {
@@ -70,17 +74,22 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         })
     }
 
-    fn sbox_shamir_precomp<N: ShamirNetwork>(
+    fn sbox_shamir_precomp<N: Network>(
         input: &mut [F],
-        driver: &mut ShamirProtocol<F, N>,
         precomp: &mut Poseidon2Precomputations<ShamirPrimeFieldShare<F>>,
-    ) -> std::io::Result<()> {
+        net: &N,
+        state: &mut ShamirProtocol<F>,
+    ) -> eyre::Result<()> {
         assert_eq!(D, 5);
         for (i, inp) in input.iter_mut().enumerate() {
             *inp -= &precomp.r[precomp.offset + i].a;
         }
 
-        let y = arithmetic::open_vec(ShamirPrimeFieldShare::convert_slice_rev(&*input), driver)?;
+        let y = arithmetic::open_vec(
+            ShamirPrimeFieldShare::convert_slice_rev(&*input),
+            net,
+            state,
+        )?;
 
         for (i, (inp, y)) in input.iter_mut().zip(y).enumerate() {
             let (r, r2, r3, r4, r5) = precomp.get(precomp.offset + i);
@@ -93,30 +102,32 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok(())
     }
 
-    fn single_sbox_shamir_precomp<N: ShamirNetwork>(
+    fn single_sbox_shamir_precomp<N: Network>(
         input: &mut F,
-        driver: &mut ShamirProtocol<F, N>,
         precomp: &mut Poseidon2Precomputations<ShamirPrimeFieldShare<F>>,
-    ) -> std::io::Result<()> {
+        net: &N,
+        state: &mut ShamirProtocol<F>,
+    ) -> eyre::Result<()> {
         assert_eq!(D, 5);
         let (r, r2, r3, r4, r5) = precomp.get(precomp.offset);
 
         *input -= &r.a;
-        let y = arithmetic::open(ShamirPrimeFieldShare::new(*input), driver)?;
+        let y = arithmetic::open(ShamirPrimeFieldShare::new(*input), net, state)?;
         *input = Self::sbox_shamir_precomp_post(&y, &r.a, &r2.a, &r3.a, &r4.a, &r5.a);
         precomp.offset += 1;
 
         Ok(())
     }
 
-    fn single_sbox_shamir_precomp_packed<N: ShamirNetwork>(
+    fn single_sbox_shamir_precomp_packed<N: Network>(
         input: &mut [F],
-        driver: &mut ShamirProtocol<F, N>,
         precomp: &mut Poseidon2Precomputations<ShamirPrimeFieldShare<F>>,
-    ) -> std::io::Result<()> {
+        net: &N,
+        state: &mut ShamirProtocol<F>,
+    ) -> eyre::Result<()> {
         debug_assert_eq!(input.len() % T, 0);
         let mut vec = input.iter().cloned().step_by(T).collect::<Vec<_>>();
-        Self::sbox_shamir_precomp(&mut vec, driver, precomp)?;
+        Self::sbox_shamir_precomp(&mut vec, precomp, net, state)?;
 
         for (inp, r) in input.iter_mut().step_by(T).zip(vec) {
             *inp = r;
@@ -143,115 +154,124 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         res
     }
 
-    fn sbox_shamir<N: ShamirNetwork>(
+    fn sbox_shamir<N: Network>(
         input: &mut [F; T],
-        driver: &mut ShamirProtocol<F, N>,
-    ) -> std::io::Result<()> {
+        net: &N,
+        state: &mut ShamirProtocol<F>,
+    ) -> eyre::Result<()> {
         assert_eq!(D, 5);
         // Square
         let inp = input.iter().map(|i| i.square()).collect();
-        let mut sq = ShamirPrimeFieldShare::convert_vec(driver.degree_reduce_vec(inp)?);
+        let mut sq =
+            ShamirPrimeFieldShare::convert_vec(network::degree_reduce_many(net, state, inp)?);
 
         // Quad
         sq.iter_mut().for_each(|x| {
             x.square_in_place();
         });
-        let mut qu = ShamirPrimeFieldShare::convert_vec(driver.degree_reduce_vec(sq)?);
+        let mut qu =
+            ShamirPrimeFieldShare::convert_vec(network::degree_reduce_many(net, state, sq)?);
 
         // Quint
         qu.iter_mut().zip(input.iter()).for_each(|(x, y)| *x *= y);
-        let res = ShamirPrimeFieldShare::convert_vec(driver.degree_reduce_vec(qu)?);
+        let res = ShamirPrimeFieldShare::convert_vec(network::degree_reduce_many(net, state, qu)?);
 
         input.clone_from_slice(&res);
         Ok(())
     }
 
-    fn single_sbox_shamir<N: ShamirNetwork>(
+    fn single_sbox_shamir<N: Network>(
         input: &mut F,
-        driver: &mut ShamirProtocol<F, N>,
-    ) -> std::io::Result<()> {
+        net: &N,
+        state: &mut ShamirProtocol<F>,
+    ) -> eyre::Result<()> {
         assert_eq!(D, 5);
         // Square
-        let mut sq = driver.degree_reduce(input.square())?.a;
+        let mut sq = network::degree_reduce(net, state, input.square())?.a;
 
         // Quad
         sq.square_in_place();
-        let mut qu = driver.degree_reduce(sq)?.a;
+        let mut qu = network::degree_reduce(net, state, sq)?.a;
 
         // Quint
         qu *= &*input;
-        *input = driver.degree_reduce(qu)?.a;
+        *input = network::degree_reduce(net, state, qu)?.a;
 
         Ok(())
     }
 
     /// One external round of the Poseidon2 permuation using Poseidon2Precomputations. Implemented for the Shamir MPC protocol.
     #[inline(always)]
-    pub fn shamir_external_round_precomp<N: ShamirNetwork>(
+    pub fn shamir_external_round_precomp<N: Network>(
         &self,
         state: &mut [ShamirPrimeFieldShare<F>; T],
         r: usize,
         precomp: &mut Poseidon2Precomputations<ShamirPrimeFieldShare<F>>,
-        driver: &mut ShamirProtocol<F, N>,
-    ) -> std::io::Result<()> {
+        net: &N,
+        shamir_state: &mut ShamirProtocol<F>,
+    ) -> eyre::Result<()> {
         let state = Self::transmute_shamir_state(state);
-        self.shamir_external_round_precomp_inner(state, r, precomp, driver)
+        self.shamir_external_round_precomp_inner(state, r, precomp, net, shamir_state)
     }
 
     /// One external round of the Poseidon2 permuation using Poseidon2Precomputations. Implemented for the Shamir MPC protocol.
-    fn shamir_external_round_precomp_inner<N: ShamirNetwork>(
+    fn shamir_external_round_precomp_inner<N: Network>(
         &self,
         state: &mut [F; T],
         r: usize,
         precomp: &mut Poseidon2Precomputations<ShamirPrimeFieldShare<F>>,
-        driver: &mut ShamirProtocol<F, N>,
-    ) -> std::io::Result<()> {
+        net: &N,
+        shamir_state: &mut ShamirProtocol<F>,
+    ) -> eyre::Result<()> {
         self.add_rc_external(state, r);
-        Self::sbox_shamir_precomp(state, driver, precomp)?;
+        Self::sbox_shamir_precomp(state, precomp, net, shamir_state)?;
         Self::matmul_external(state);
         Ok(())
     }
 
     /// One internal round of the Poseidon2 permuation using Poseidon2Precomputations. Implemented for the Shamir MPC protocol.
     #[inline(always)]
-    pub fn shamir_internal_round_precomp<N: ShamirNetwork>(
+    pub fn shamir_internal_round_precomp<N: Network>(
         &self,
         state: &mut [ShamirPrimeFieldShare<F>; T],
         r: usize,
         precomp: &mut Poseidon2Precomputations<ShamirPrimeFieldShare<F>>,
-        driver: &mut ShamirProtocol<F, N>,
-    ) -> std::io::Result<()> {
+        net: &N,
+        shamir_state: &mut ShamirProtocol<F>,
+    ) -> eyre::Result<()> {
         let state = Self::transmute_shamir_state(state);
-        self.shamir_internal_round_precomp_inner(state, r, precomp, driver)
+        self.shamir_internal_round_precomp_inner(state, r, precomp, net, shamir_state)
     }
 
     /// One internal round of the Poseidon2 permuation using Poseidon2Precomputations. Implemented for the Shamir MPC protocol.
-    fn shamir_internal_round_precomp_inner<N: ShamirNetwork>(
+    fn shamir_internal_round_precomp_inner<N: Network>(
         &self,
         state: &mut [F; T],
         r: usize,
         precomp: &mut Poseidon2Precomputations<ShamirPrimeFieldShare<F>>,
-        driver: &mut ShamirProtocol<F, N>,
-    ) -> std::io::Result<()> {
+        net: &N,
+        shamir_state: &mut ShamirProtocol<F>,
+    ) -> eyre::Result<()> {
         self.add_rc_internal(state, r);
-        Self::single_sbox_shamir_precomp(&mut state[0], driver, precomp)?;
+        Self::single_sbox_shamir_precomp(&mut state[0], precomp, net, shamir_state)?;
         self.matmul_internal(state);
         Ok(())
     }
 
     /// One external round of the Poseidon2 permuation using Poseidon2Precomputations. Implemented for the Shamir MPC protocol.
-    fn shamir_external_round_precomp_inner_packed<N: ShamirNetwork>(
+    fn shamir_external_round_precomp_inner_packed<N: Network>(
         &self,
         state: &mut [F],
         r: usize,
         precomp: &mut Poseidon2Precomputations<ShamirPrimeFieldShare<F>>,
-        driver: &mut ShamirProtocol<F, N>,
-    ) -> std::io::Result<()> {
+        net: &N,
+        shamir_state: &mut ShamirProtocol<F>,
+    ) -> eyre::Result<()> {
         debug_assert_eq!(state.len() % T, 0);
         for s in state.chunks_exact_mut(T) {
             self.add_rc_external(s.try_into().unwrap(), r);
         }
-        Self::sbox_shamir_precomp(state, driver, precomp)?;
+        Self::sbox_shamir_precomp(state, precomp, net, shamir_state)?;
         for s in state.chunks_exact_mut(T) {
             Self::matmul_external(s.try_into().unwrap());
         }
@@ -259,18 +279,19 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
     }
 
     /// One internal round of the Poseidon2 permuation using Poseidon2Precomputations. Implemented for the Shamir MPC protocol.
-    fn shamir_internal_round_precomp_inner_packed<N: ShamirNetwork>(
+    fn shamir_internal_round_precomp_inner_packed<N: Network>(
         &self,
         state: &mut [F],
         r: usize,
         precomp: &mut Poseidon2Precomputations<ShamirPrimeFieldShare<F>>,
-        driver: &mut ShamirProtocol<F, N>,
-    ) -> std::io::Result<()> {
+        net: &N,
+        shamir_state: &mut ShamirProtocol<F>,
+    ) -> eyre::Result<()> {
         debug_assert_eq!(state.len() % T, 0);
         for s in state.chunks_exact_mut(T) {
             self.add_rc_internal(s.try_into().unwrap(), r);
         }
-        Self::single_sbox_shamir_precomp_packed(state, driver, precomp)?;
+        Self::single_sbox_shamir_precomp_packed(state, precomp, net, shamir_state)?;
         for s in state.chunks_exact_mut(T) {
             self.matmul_internal(s.try_into().unwrap());
         }
@@ -278,38 +299,41 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
     }
 
     /// One external round of the Poseidon2 permuation. Implemented for the Shamir MPC protocol.
-    fn shamir_external_round<N: ShamirNetwork>(
+    fn shamir_external_round<N: Network>(
         &self,
         state: &mut [F; T],
         r: usize,
-        driver: &mut ShamirProtocol<F, N>,
-    ) -> std::io::Result<()> {
+        net: &N,
+        shamir_state: &mut ShamirProtocol<F>,
+    ) -> eyre::Result<()> {
         self.add_rc_external(state, r);
-        Self::sbox_shamir(state, driver)?;
+        Self::sbox_shamir(state, net, shamir_state)?;
         Self::matmul_external(state);
         Ok(())
     }
 
     /// One internal round of the Poseidon2 permuation. Implemented for the Shamir MPC protocol.
-    fn shamir_internal_round<N: ShamirNetwork>(
+    fn shamir_internal_round<N: Network>(
         &self,
         state: &mut [F; T],
         r: usize,
-        driver: &mut ShamirProtocol<F, N>,
-    ) -> std::io::Result<()> {
+        net: &N,
+        shamir_state: &mut ShamirProtocol<F>,
+    ) -> eyre::Result<()> {
         self.add_rc_internal(state, r);
-        Self::single_sbox_shamir(&mut state[0], driver)?;
+        Self::single_sbox_shamir(&mut state[0], net, shamir_state)?;
         self.matmul_internal(state);
         Ok(())
     }
 
     /// Computes multiple Poseidon2 permuations in parallel using the Shamir MPC protocol while overwriting the input. Thereby, a preprocessing technique is used to reduce the depth of the computation.
-    pub fn shamir_permutation_in_place_with_precomputation_packed<N: ShamirNetwork>(
+    pub fn shamir_permutation_in_place_with_precomputation_packed<N: Network>(
         &self,
         state: &mut [ShamirPrimeFieldShare<F>],
         precomp: &mut Poseidon2Precomputations<ShamirPrimeFieldShare<F>>,
-        driver: &mut ShamirProtocol<F, N>,
-    ) -> std::io::Result<()> {
+        net: &N,
+        shamir_state: &mut ShamirProtocol<F>,
+    ) -> eyre::Result<()> {
         assert_eq!(state.len() % T, 0);
 
         let num_poseidon = state.len() / T;
@@ -324,19 +348,19 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
 
         // First set of external rounds
         for r in 0..self.params.rounds_f_beginning {
-            self.shamir_external_round_precomp_inner_packed(state, r, precomp, driver)?;
+            self.shamir_external_round_precomp_inner_packed(state, r, precomp, net, shamir_state)?;
         }
 
         // Internal rounds
         for r in 0..self.params.rounds_p {
-            self.shamir_internal_round_precomp_inner_packed(state, r, precomp, driver)?;
+            self.shamir_internal_round_precomp_inner_packed(state, r, precomp, net, shamir_state)?;
         }
 
         // Remaining external rounds
         for r in self.params.rounds_f_beginning
             ..self.params.rounds_f_beginning + self.params.rounds_f_end
         {
-            self.shamir_external_round_precomp_inner_packed(state, r, precomp, driver)?;
+            self.shamir_external_round_precomp_inner_packed(state, r, precomp, net, shamir_state)?;
         }
 
         debug_assert_eq!(precomp.offset - offset, self.num_sbox() * num_poseidon);
@@ -344,12 +368,13 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
     }
 
     /// Computes the Poseidon2 permuation using the Shamir MPC protocol while overwriting the input. Thereby, a preprocessing technique is used to reduce the depth of the computation.
-    pub fn shamir_permutation_in_place_with_precomputation<N: ShamirNetwork>(
+    pub fn shamir_permutation_in_place_with_precomputation<N: Network>(
         &self,
         state: &mut [ShamirPrimeFieldShare<F>; T],
         precomp: &mut Poseidon2Precomputations<ShamirPrimeFieldShare<F>>,
-        driver: &mut ShamirProtocol<F, N>,
-    ) -> std::io::Result<()> {
+        net: &N,
+        shamir_state: &mut ShamirProtocol<F>,
+    ) -> eyre::Result<()> {
         let offset = precomp.offset;
         // let mut precomp = self.precompute_shamir(1, driver)?;
 
@@ -358,19 +383,19 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
 
         // First set of external rounds
         for r in 0..self.params.rounds_f_beginning {
-            self.shamir_external_round_precomp_inner(state, r, precomp, driver)?;
+            self.shamir_external_round_precomp_inner(state, r, precomp, net, shamir_state)?;
         }
 
         // Internal rounds
         for r in 0..self.params.rounds_p {
-            self.shamir_internal_round_precomp_inner(state, r, precomp, driver)?;
+            self.shamir_internal_round_precomp_inner(state, r, precomp, net, shamir_state)?;
         }
 
         // Remaining external rounds
         for r in self.params.rounds_f_beginning
             ..self.params.rounds_f_beginning + self.params.rounds_f_end
         {
-            self.shamir_external_round_precomp_inner(state, r, precomp, driver)?;
+            self.shamir_external_round_precomp_inner(state, r, precomp, net, shamir_state)?;
         }
 
         debug_assert_eq!(precomp.offset - offset, self.num_sbox());
@@ -378,66 +403,80 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
     }
 
     /// Computes the Poseidon2 permuation using the Shamir MPC protocol while overwriting the input.
-    pub fn shamir_permutation_in_place<N: ShamirNetwork>(
+    pub fn shamir_permutation_in_place<N: Network>(
         &self,
         state: &mut [ShamirPrimeFieldShare<F>; T],
-        driver: &mut ShamirProtocol<F, N>,
-    ) -> std::io::Result<()> {
+        net: &N,
+        shamir_state: &mut ShamirProtocol<F>,
+    ) -> eyre::Result<()> {
         // Linear layer at beginning
         let state = Self::matmul_external_shamir(state);
 
         // First set of external rounds
         for r in 0..self.params.rounds_f_beginning {
-            self.shamir_external_round(state, r, driver)?;
+            self.shamir_external_round(state, r, net, shamir_state)?;
         }
 
         // Internal rounds
         for r in 0..self.params.rounds_p {
-            self.shamir_internal_round(state, r, driver)?;
+            self.shamir_internal_round(state, r, net, shamir_state)?;
         }
 
         // Remaining external rounds
         for r in self.params.rounds_f_beginning
             ..self.params.rounds_f_beginning + self.params.rounds_f_end
         {
-            self.shamir_external_round(state, r, driver)?;
+            self.shamir_external_round(state, r, net, shamir_state)?;
         }
 
         Ok(())
     }
 
     /// Computes the Poseidon2 permuation using the Shamir MPC protocol.
-    pub fn shamir_permutation<N: ShamirNetwork>(
+    pub fn shamir_permutation<N: Network>(
         &self,
         state: &[ShamirPrimeFieldShare<F>; T],
-        driver: &mut ShamirProtocol<F, N>,
-    ) -> std::io::Result<[ShamirPrimeFieldShare<F>; T]> {
+        net: &N,
+        shamir_state: &mut ShamirProtocol<F>,
+    ) -> eyre::Result<[ShamirPrimeFieldShare<F>; T]> {
         let mut state = state.to_owned();
-        self.shamir_permutation_in_place(&mut state, driver)?;
+        self.shamir_permutation_in_place(&mut state, net, shamir_state)?;
         Ok(state)
     }
 
     /// Computes the Poseidon2 permuation using the Shamir MPC protocol. Thereby, a preprocessing technique is used to reduce the depth of the computation.
-    pub fn shamir_permutation_with_precomputation<N: ShamirNetwork>(
+    pub fn shamir_permutation_with_precomputation<N: Network>(
         &self,
         state: &[ShamirPrimeFieldShare<F>; T],
         precomp: &mut Poseidon2Precomputations<ShamirPrimeFieldShare<F>>,
-        driver: &mut ShamirProtocol<F, N>,
-    ) -> std::io::Result<[ShamirPrimeFieldShare<F>; T]> {
+        net: &N,
+        shamir_state: &mut ShamirProtocol<F>,
+    ) -> eyre::Result<[ShamirPrimeFieldShare<F>; T]> {
         let mut state = state.to_owned();
-        self.shamir_permutation_in_place_with_precomputation(&mut state, precomp, driver)?;
+        self.shamir_permutation_in_place_with_precomputation(
+            &mut state,
+            precomp,
+            net,
+            shamir_state,
+        )?;
         Ok(state)
     }
 
     /// Computes multiple Poseidon2 permuations in parallel using the Shamir MPC protocol. Thereby, a preprocessing technique is used to reduce the depth of the computation.
-    pub fn shamir_permutation_with_precomputation_packed<N: ShamirNetwork>(
+    pub fn shamir_permutation_with_precomputation_packed<N: Network>(
         &self,
         state: &[ShamirPrimeFieldShare<F>],
         precomp: &mut Poseidon2Precomputations<ShamirPrimeFieldShare<F>>,
-        driver: &mut ShamirProtocol<F, N>,
-    ) -> std::io::Result<Vec<ShamirPrimeFieldShare<F>>> {
+        net: &N,
+        shamir_state: &mut ShamirProtocol<F>,
+    ) -> eyre::Result<Vec<ShamirPrimeFieldShare<F>>> {
         let mut state = state.to_owned();
-        self.shamir_permutation_in_place_with_precomputation_packed(&mut state, precomp, driver)?;
+        self.shamir_permutation_in_place_with_precomputation_packed(
+            &mut state,
+            precomp,
+            net,
+            shamir_state,
+        )?;
         Ok(state)
     }
 }

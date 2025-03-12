@@ -15,9 +15,10 @@ use co_groth16::ShamirCoGroth16;
 use co_plonk::Plonk;
 use co_plonk::ShamirCoPlonk;
 use itertools::izip;
+use mpc_core::protocols::rep3::{PARTY_0, PARTY_1, PARTY_2};
+use mpc_engine::{MpcEngine, TestNetwork, NUM_THREADS_CPU, NUM_THREADS_NET};
 use rand::thread_rng;
 use std::{fs::File, thread};
-use tests::shamir_network::{PartyTestNetwork, ShamirTestNetwork};
 
 macro_rules! e2e_test {
     ($name: expr) => {
@@ -49,15 +50,17 @@ macro_rules! add_test_impl {
                 let mut rng = thread_rng();
                 let witness_shares =
                     SharedWitness::share_shamir(witness, r1cs.num_inputs, 1, 3, &mut rng);
-                let test_network = ShamirTestNetwork::new(3);
+                let nets = TestNetwork::networks(3, 8);
                 let mut threads = vec![];
-                for (net, x, zkey) in izip!(
-                    test_network.get_party_networks(),
+                for (party_id, nets, x, zkey) in izip!(
+                    [PARTY_0, PARTY_1, PARTY_2],
+                    nets,
                     witness_shares.into_iter(),
                     [zkey1, zkey2, zkey3].into_iter()
                 ) {
                     threads.push(thread::spawn(move || {
-                        [< ShamirCo $proof_system>]::<$curve, PartyTestNetwork>::prove(net, 1, zkey, x).unwrap().0
+                        let engine = MpcEngine::new(party_id, NUM_THREADS_NET, NUM_THREADS_CPU, nets);
+                        [< ShamirCo $proof_system>]::<$curve>::prove(&engine, 3, 1, zkey, x).unwrap()
                     }));
                 }
                 let result3 = threads.pop().unwrap().join().unwrap();

@@ -6,9 +6,9 @@ mod field_share {
         gadgets::poseidon2::Poseidon2,
         protocols::shamir::{self, arithmetic, ShamirPreprocessing},
     };
+    use mpc_engine::TestNetwork;
     use rand::thread_rng;
     use std::{str::FromStr, sync::mpsc, thread};
-    use tests::shamir_network::ShamirTestNetwork;
 
     fn shamir_add_inner(num_parties: usize, threshold: usize) {
         let mut rng = thread_rng();
@@ -87,7 +87,7 @@ mod field_share {
     }
 
     fn shamir_mul2_then_add_inner(num_parties: usize, threshold: usize) {
-        let test_network = ShamirTestNetwork::new(num_parties);
+        let nets = TestNetwork::party_networks(num_parties);
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let y = ark_bn254::Fr::rand(&mut rng);
@@ -103,11 +103,13 @@ mod field_share {
             rx.push(r);
         }
 
-        for (net, tx, x, y) in izip!(test_network.get_party_networks(), tx, x_shares, y_shares) {
+        for (net, tx, x, y) in izip!(nets, tx, x_shares, y_shares) {
             thread::spawn(move || {
-                let mut shamir = ShamirPreprocessing::new(threshold, net, 2).unwrap().into();
-                let mul = arithmetic::mul(x, y, &mut shamir).unwrap();
-                let mul = arithmetic::mul(mul, y, &mut shamir).unwrap();
+                let mut shamir = ShamirPreprocessing::new(num_parties, threshold, 2, &net)
+                    .unwrap()
+                    .into();
+                let mul = arithmetic::mul(x, y, &net, &mut shamir).unwrap();
+                let mul = arithmetic::mul(mul, y, &net, &mut shamir).unwrap();
                 tx.send(arithmetic::add(mul, x))
             });
         }
@@ -131,7 +133,7 @@ mod field_share {
     }
 
     fn shamir_mul_vec_bn_inner(num_parties: usize, threshold: usize) {
-        let test_network = ShamirTestNetwork::new(num_parties);
+        let nets = TestNetwork::party_networks(num_parties);
         let mut rng = thread_rng();
         let x = [
             ark_bn254::Fr::from_str(
@@ -199,12 +201,12 @@ mod field_share {
             rx.push(r);
         }
 
-        for (net, tx, x, y) in izip!(test_network.get_party_networks(), tx, x_shares, y_shares) {
+        for (net, tx, x, y) in izip!(nets, tx, x_shares, y_shares) {
             thread::spawn(move || {
-                let mut shamir = ShamirPreprocessing::new(threshold, net, x.len())
+                let mut shamir = ShamirPreprocessing::new(num_parties, threshold, x.len(), &net)
                     .unwrap()
                     .into();
-                let mul = arithmetic::mul_vec(&x, &y, &mut shamir).unwrap();
+                let mul = arithmetic::mul_vec(&x, &y, &net, &mut shamir).unwrap();
                 tx.send(mul)
             });
         }
@@ -228,7 +230,7 @@ mod field_share {
     }
 
     fn shamir_mul_vec_inner(num_parties: usize, threshold: usize) {
-        let test_network = ShamirTestNetwork::new(num_parties);
+        let nets = TestNetwork::party_networks(num_parties);
         let mut rng = thread_rng();
         let x = (0..1)
             .map(|_| ark_bn254::Fr::from_str("2").unwrap())
@@ -253,13 +255,14 @@ mod field_share {
             rx.push(r);
         }
 
-        for (net, tx, x, y) in izip!(test_network.get_party_networks(), tx, x_shares, y_shares) {
+        for (net, tx, x, y) in izip!(nets, tx, x_shares, y_shares) {
             thread::spawn(move || {
-                let mut shamir = ShamirPreprocessing::new(threshold, net, x.len() * 2)
-                    .unwrap()
-                    .into();
-                let mul = arithmetic::mul_vec(&x, &y, &mut shamir).unwrap();
-                let mul = arithmetic::mul_vec(&mul, &y, &mut shamir).unwrap();
+                let mut shamir =
+                    ShamirPreprocessing::new(num_parties, threshold, x.len() * 2, &net)
+                        .unwrap()
+                        .into();
+                let mul = arithmetic::mul_vec(&x, &y, &net, &mut shamir).unwrap();
+                let mul = arithmetic::mul_vec(&mul, &y, &net, &mut shamir).unwrap();
                 tx.send(mul)
             });
         }
@@ -319,7 +322,7 @@ mod field_share {
     }
 
     fn shamir_inv_inner(num_parties: usize, threshold: usize) {
-        let test_network = ShamirTestNetwork::new(num_parties);
+        let nets = TestNetwork::party_networks(num_parties);
         let mut rng = thread_rng();
         let mut x = ark_bn254::Fr::rand(&mut rng);
         while x.is_zero() {
@@ -336,10 +339,12 @@ mod field_share {
             rx.push(r);
         }
 
-        for (net, tx, x) in izip!(test_network.get_party_networks(), tx, x_shares) {
+        for (net, tx, x) in izip!(nets, tx, x_shares) {
             thread::spawn(move || {
-                let mut shamir = ShamirPreprocessing::new(threshold, net, 1).unwrap().into();
-                tx.send(arithmetic::inv(x, &mut shamir).unwrap())
+                let mut shamir = ShamirPreprocessing::new(num_parties, threshold, 1, &net)
+                    .unwrap()
+                    .into();
+                tx.send(arithmetic::inv(x, &net, &mut shamir).unwrap())
             });
         }
 
@@ -362,7 +367,7 @@ mod field_share {
     }
 
     fn shamir_poseidon2_gadget_kat1_inner(num_parties: usize, threshold: usize) {
-        let test_network = ShamirTestNetwork::new(num_parties);
+        let nets = TestNetwork::party_networks(num_parties);
         let mut rng = thread_rng();
         let input = [
             ark_bn254::Fr::from(0),
@@ -400,15 +405,19 @@ mod field_share {
             rx.push(r);
         }
 
-        for (net, tx, x) in izip!(test_network.get_party_networks(), tx, input_shares) {
+        for (net, tx, x) in izip!(nets, tx, input_shares) {
             thread::spawn(move || {
                 let poseidon = Poseidon2::<_, 4, 5>::default();
-                let mut shamir =
-                    ShamirPreprocessing::new(threshold, net, poseidon.rand_required(1, false))
-                        .unwrap()
-                        .into();
+                let mut shamir = ShamirPreprocessing::new(
+                    num_parties,
+                    threshold,
+                    poseidon.rand_required(1, false),
+                    &net,
+                )
+                .unwrap()
+                .into();
                 let output = poseidon
-                    .shamir_permutation(x.as_slice().try_into().unwrap(), &mut shamir)
+                    .shamir_permutation(x.as_slice().try_into().unwrap(), &net, &mut shamir)
                     .unwrap()
                     .to_vec();
 
@@ -435,7 +444,7 @@ mod field_share {
     }
 
     fn shamir_poseidon2_gadget_kat1_precomp_inner(num_parties: usize, threshold: usize) {
-        let test_network = ShamirTestNetwork::new(num_parties);
+        let nets = TestNetwork::party_networks(num_parties);
         let mut rng = thread_rng();
         let input = [
             ark_bn254::Fr::from(0),
@@ -473,18 +482,23 @@ mod field_share {
             rx.push(r);
         }
 
-        for (net, tx, x) in izip!(test_network.get_party_networks(), tx, input_shares) {
+        for (net, tx, x) in izip!(nets, tx, input_shares) {
             thread::spawn(move || {
                 let poseidon = Poseidon2::<_, 4, 5>::default();
-                let mut shamir =
-                    ShamirPreprocessing::new(threshold, net, poseidon.rand_required(1, true))
-                        .unwrap()
-                        .into();
-                let mut precomp = poseidon.precompute_shamir(1, &mut shamir).unwrap();
+                let mut shamir = ShamirPreprocessing::new(
+                    num_parties,
+                    threshold,
+                    poseidon.rand_required(1, true),
+                    &net,
+                )
+                .unwrap()
+                .into();
+                let mut precomp = poseidon.precompute_shamir(1, &net, &mut shamir).unwrap();
                 let output = poseidon
                     .shamir_permutation_with_precomputation(
                         x.as_slice().try_into().unwrap(),
                         &mut precomp,
+                        &net,
                         &mut shamir,
                     )
                     .unwrap()
@@ -515,7 +529,7 @@ mod field_share {
     fn shamir_poseidon2_gadget_kat1_precomp_packed_inner(num_parties: usize, threshold: usize) {
         const NUM_POSEIDON: usize = 10;
 
-        let test_network = ShamirTestNetwork::new(num_parties);
+        let nets = TestNetwork::party_networks(num_parties);
         let mut rng = thread_rng();
         let mut input = vec![ark_bn254::Fr::default(); NUM_POSEIDON * 4];
         for input in input.chunks_exact_mut(4) {
@@ -554,21 +568,27 @@ mod field_share {
             rx.push(r);
         }
 
-        for (net, tx, x) in izip!(test_network.get_party_networks(), tx, input_shares) {
+        for (net, tx, x) in izip!(nets, tx, input_shares) {
             thread::spawn(move || {
                 let poseidon = Poseidon2::<_, 4, 5>::default();
                 let mut shamir = ShamirPreprocessing::new(
+                    num_parties,
                     threshold,
-                    net,
                     poseidon.rand_required(NUM_POSEIDON, true),
+                    &net,
                 )
                 .unwrap()
                 .into();
                 let mut precomp = poseidon
-                    .precompute_shamir(NUM_POSEIDON, &mut shamir)
+                    .precompute_shamir(NUM_POSEIDON, &net, &mut shamir)
                     .unwrap();
                 let output = poseidon
-                    .shamir_permutation_with_precomputation_packed(&x, &mut precomp, &mut shamir)
+                    .shamir_permutation_with_precomputation_packed(
+                        &x,
+                        &mut precomp,
+                        &net,
+                        &mut shamir,
+                    )
                     .unwrap()
                     .to_vec();
 
@@ -599,7 +619,7 @@ mod field_share {
     fn shamir_poseidon2_merkle_tree_inner(num_parties: usize, threshold: usize) {
         const NUM_LEAVES: usize = 4usize.pow(3);
 
-        let test_network = ShamirTestNetwork::new(num_parties);
+        let nets = TestNetwork::party_networks(num_parties);
         let mut rng = thread_rng();
         let input = (0..NUM_LEAVES)
             .map(|_| ark_bn254::Fr::rand(&mut rng))
@@ -620,16 +640,18 @@ mod field_share {
             rx.push(r);
         }
 
-        for (net, tx, x) in izip!(test_network.get_party_networks(), tx, input_shares) {
+        for (net, tx, x) in izip!(nets, tx, input_shares) {
             thread::spawn(move || {
-                let mut shamir = ShamirPreprocessing::new(threshold, net, 0).unwrap().into();
+                let mut shamir = ShamirPreprocessing::new(num_parties, threshold, 0, &net)
+                    .unwrap()
+                    .into();
 
                 let poseidon = Poseidon2::<_, 4, 5>::default();
                 let output1 = poseidon
-                    .merkle_tree_sponge_shamir::<2, _>(x.clone(), &mut shamir)
+                    .merkle_tree_sponge_shamir::<2, _>(x.clone(), &net, &mut shamir)
                     .unwrap();
                 let output2 = poseidon
-                    .merkle_tree_compression_shamir::<4, _>(x, &mut shamir)
+                    .merkle_tree_compression_shamir::<4, _>(x, &net, &mut shamir)
                     .unwrap();
                 let output = vec![output1, output2];
 

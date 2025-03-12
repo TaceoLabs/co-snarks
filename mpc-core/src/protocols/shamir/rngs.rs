@@ -2,11 +2,12 @@ use std::cmp::Ordering;
 
 use ark_ff::PrimeField;
 use itertools::{izip, Itertools};
+use mpc_engine::Network;
 
 use crate::RngType;
 use rand::{Rng, SeedableRng};
 
-use super::network::ShamirNetwork;
+use super::network::{self};
 
 pub(super) struct ShamirRng<F> {
     pub(super) id: usize,
@@ -22,15 +23,15 @@ pub(super) struct ShamirRng<F> {
 }
 
 impl<F: PrimeField> ShamirRng<F> {
-    pub fn new<N: ShamirNetwork>(
+    pub fn new<N: Network>(
         seed: [u8; crate::SEED_SIZE],
+        num_parties: usize,
         threshold: usize,
-        network: &mut N,
-    ) -> std::io::Result<Self> {
+        net: &N,
+    ) -> eyre::Result<Self> {
         let mut rng = RngType::from_seed(seed);
-        let num_parties = network.get_num_parties();
 
-        let shared_rngs = Self::get_shared_rngs(network, &mut rng)?;
+        let shared_rngs = Self::get_shared_rngs(net, num_parties, &mut rng)?;
 
         // We use the DN07 Vandermonde matrix to create t+1 random double shares at once.
         // We do not use Atlas to create n shares at once, since only t+1 out of n shares would be uniformly random, thus the King server during multiplication would have to be rotated.
@@ -38,7 +39,7 @@ impl<F: PrimeField> ShamirRng<F> {
         // let atlas_dn_matrix = Self::generate_atlas_dn_matrix(num_parties, threshold);
         let matrix = Self::create_vandermonde_matrix(num_parties, threshold);
 
-        let id = network.get_id();
+        let id = net.id();
         let mut ids = Vec::with_capacity(threshold + 1);
         for i in 1..=threshold + 1 {
             let id_ = (id + i) % num_parties + 1;
@@ -90,13 +91,13 @@ impl<F: PrimeField> ShamirRng<F> {
         }
     }
 
-    fn get_shared_rngs<N: ShamirNetwork>(
-        network: &mut N,
+    fn get_shared_rngs<N: Network>(
+        net: &N,
+        num_parties: usize,
         rng: &mut RngType,
-    ) -> std::io::Result<Vec<RngType>> {
+    ) -> eyre::Result<Vec<RngType>> {
         type SeedType = [u8; crate::SEED_SIZE];
-        let id = network.get_id();
-        let num_parties = network.get_num_parties();
+        let id = net.id();
 
         let mut rngs = Vec::with_capacity(num_parties - 1);
         let mut seeds = vec![<SeedType>::default(); num_parties];
@@ -111,11 +112,11 @@ impl<F: PrimeField> ShamirRng<F> {
             let rcv_id = (id + id_off) % num_parties;
             let seed: SeedType = rng.gen();
             seeds[rcv_id] = seed;
-            network.send(rcv_id, seed)?;
+            network::send(net, rcv_id, seed)?;
         }
         for id_off in 1..=receive {
             let send_id = (id + num_parties - id_off) % num_parties;
-            let seed = network.recv(send_id)?;
+            let seed = network::recv(net, send_id)?;
             seeds[send_id] = seed;
         }
 
@@ -283,12 +284,12 @@ impl<F: PrimeField> ShamirRng<F> {
         }
     }
 
-    fn send_share_of_randomness<N: ShamirNetwork>(
+    fn send_share_of_randomness<N: Network>(
         &self,
         seeded: usize,
         polys: &[Vec<F>],
-        network: &mut N,
-    ) -> std::io::Result<()> {
+        net: &N,
+    ) -> eyre::Result<()> {
         let sending = self.num_parties - seeded - 1;
         if sending == 0 {
             return Ok(());
@@ -300,24 +301,24 @@ impl<F: PrimeField> ShamirRng<F> {
             for (des, p) in to_send.iter_mut().zip(polys.iter()) {
                 *des = super::core::evaluate_poly(p, rcv_id_f);
             }
-            network.send_many(rcv_id, &to_send)?;
+            network::send_many(net, rcv_id, &to_send)?;
         }
         Ok(())
     }
 
-    fn receive_share_of_randomness<N: ShamirNetwork>(
+    fn receive_share_of_randomness<N: Network>(
         &self,
         seeded: usize,
         output: &mut [Vec<F>],
-        network: &mut N,
-    ) -> std::io::Result<()> {
+        net: &N,
+    ) -> eyre::Result<()> {
         let receiving = self.num_parties - seeded - 1;
         if receiving == 0 {
             return Ok(());
         }
         for i in 1..=receiving {
             let send_id = (self.id + self.num_parties - seeded - i) % self.num_parties;
-            let shares = network.recv_many(send_id)?;
+            let shares = network::recv_many(net, send_id)?;
             for (r, s) in output.iter_mut().zip(shares.iter()) {
                 r[send_id] = *s;
             }
@@ -326,11 +327,11 @@ impl<F: PrimeField> ShamirRng<F> {
     }
 
     #[expect(clippy::type_complexity)]
-    fn random_double_share<N: ShamirNetwork>(
+    fn random_double_share<N: Network>(
         &mut self,
         amount: usize,
-        network: &mut N,
-    ) -> std::io::Result<(Vec<Vec<F>>, Vec<Vec<F>>)> {
+        net: &N,
+    ) -> eyre::Result<(Vec<Vec<F>>, Vec<Vec<F>>)> {
         let mut rcv_t = vec![vec![F::default(); self.num_parties]; amount];
         let mut rcv_2t = vec![vec![F::default(); self.num_parties]; amount];
 
@@ -381,13 +382,23 @@ impl<F: PrimeField> ShamirRng<F> {
         // Set my share
         self.set_my_share(&mut rcv_2t, &polys_2t);
 
-        // Send the share of my randomness
-        self.send_share_of_randomness(self.threshold + 1, &polys_t, network)?;
-        self.send_share_of_randomness(self.threshold * 2, &polys_2t, network)?;
+        let (send, recv) = rayon::join(
+            || {
+                // Send the share of my randomness
+                self.send_share_of_randomness(self.threshold + 1, &polys_t, net)?;
+                self.send_share_of_randomness(self.threshold * 2, &polys_2t, net)?;
+                eyre::Ok(())
+            },
+            || {
+                // Receive the remaining shares
+                self.receive_share_of_randomness(self.threshold + 1, &mut rcv_t, net)?;
+                self.receive_share_of_randomness(self.threshold * 2, &mut rcv_2t, net)?;
+                eyre::Ok(())
+            },
+        );
 
-        // Receive the remaining shares
-        self.receive_share_of_randomness(self.threshold + 1, &mut rcv_t, network)?;
-        self.receive_share_of_randomness(self.threshold * 2, &mut rcv_2t, network)?;
+        send?;
+        recv?;
 
         Ok((rcv_t, rcv_2t))
     }
@@ -396,12 +407,12 @@ impl<F: PrimeField> ShamirRng<F> {
     // We use DN07 to generate t+1 double shares from the randomness of the n parties.
     // With Atlas we would be able to expand this to n double shares, but only t+1 of them would be uniformly random.
     // Thus, with Atlas we would have to rotate the King server during multiplication.
-    pub(super) fn buffer_triples<N: ShamirNetwork>(
+    pub(super) fn buffer_triples<N: Network>(
         &mut self,
-        network: &mut N,
+        net: &N,
         amount: usize,
-    ) -> std::io::Result<()> {
-        let (rcv_rt, rcv_r2t) = self.random_double_share(amount, network)?;
+    ) -> eyre::Result<()> {
+        let (rcv_rt, rcv_r2t) = self.random_double_share(amount, net)?;
 
         // reserve buffer
         let size = self.matrix.len();
