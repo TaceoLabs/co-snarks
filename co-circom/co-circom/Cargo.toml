@@ -41,6 +41,7 @@ toml.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 tracing.workspace = true
 rustls.workspace = true
+mpc-engine.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true

@@ -6,13 +6,10 @@ use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use circom_types::Witness;
 use mpc_core::protocols::{
-    rep3::{
-        self,
-        network::{Rep3MpcNet, Rep3Network},
-        Rep3PrimeFieldShare, Rep3ShareVecType,
-    },
+    rep3::{self, Rep3PrimeFieldShare, Rep3ShareVecType},
     shamir::{self, ShamirPrimeFieldShare},
 };
+use mpc_engine::{MpcEngine, Network};
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -85,11 +82,11 @@ impl<F: PrimeField> From<CompressedRep3SharedWitness<F>> for SharedWitness<F, F>
     }
 }
 
-fn reshare_vec<F: PrimeField>(
+fn reshare_vec<N: Network + Sync + 'static, F: PrimeField>(
     vec: Vec<F>,
-    mpc_net: &mut Rep3MpcNet,
+    engine: &MpcEngine<N>,
 ) -> eyre::Result<Vec<Rep3PrimeFieldShare<F>>> {
-    let b: Vec<F> = mpc_net.reshare_many(&vec)?;
+    let b: Vec<F> = engine.install_net(|net| rep3::network::reshare_many(net, &vec))?;
 
     if vec.len() != b.len() {
         return Err(eyre::eyre!("reshare_vec: vec and b have different lengths"));
@@ -106,7 +103,10 @@ fn reshare_vec<F: PrimeField>(
 
 impl<F: PrimeField> CompressedRep3SharedWitness<F> {
     /// Uncompress into [`Rep3SharedWitness`].
-    pub fn uncompress(self, mpc_net: &mut Rep3MpcNet) -> eyre::Result<Rep3SharedWitness<F>> {
+    pub fn uncompress<N: Network + Sync + 'static>(
+        self,
+        engine: &MpcEngine<N>,
+    ) -> eyre::Result<Rep3SharedWitness<F>> {
         let public_inputs = self.public_inputs;
         let witness = self.witness;
         let witness = match witness {
@@ -114,9 +114,9 @@ impl<F: PrimeField> CompressedRep3SharedWitness<F> {
             Rep3ShareVecType::SeededReplicated(replicated_seed_type) => {
                 replicated_seed_type.expand_vec()?
             }
-            Rep3ShareVecType::Additive(vec) => reshare_vec(vec, mpc_net)?,
+            Rep3ShareVecType::Additive(vec) => reshare_vec(vec, engine)?,
             Rep3ShareVecType::SeededAdditive(seeded_type) => {
-                reshare_vec(seeded_type.expand_vec(), mpc_net)?
+                reshare_vec(seeded_type.expand_vec(), engine)?
             }
         };
 

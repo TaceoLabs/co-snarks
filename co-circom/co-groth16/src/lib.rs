@@ -22,6 +22,7 @@ mod tests {
         Witness,
     };
     use co_circom_snarks::SharedWitness;
+    use mpc_engine::{DummyNetwork, MpcEngine, NUM_THREADS_CPU, NUM_THREADS_NET};
     use std::{
         fs::{self, File},
         sync::Arc,
@@ -48,8 +49,10 @@ mod tests {
                 public_inputs: public_input.clone(),
                 witness: witness.values[zkey.n_public + 1..].to_vec(),
             };
-            let proof =
-                Groth16::<Bn254>::plain_prove(zkey, witness).expect("proof generation works");
+            let nets = DummyNetwork::networks(8);
+            let engine = MpcEngine::new(0, NUM_THREADS_NET, NUM_THREADS_CPU, nets);
+            let proof = Groth16::<Bn254>::plain_prove(&engine, zkey, witness)
+                .expect("proof generation works");
             let ser_proof = serde_json::to_string(&proof).unwrap();
             let der_proof = serde_json::from_str::<Groth16Proof<Bn254>>(&ser_proof).unwrap();
             Groth16::verify(&vk, &der_proof, &public_input[1..]).expect("can verify");
@@ -93,8 +96,10 @@ mod tests {
                 public_inputs: public_input.clone(),
                 witness: witness.values[zkey.n_public + 1..].to_vec(),
             };
-            let proof =
-                Groth16::<Bn254>::plain_prove(zkey, witness).expect("proof generation works");
+            let nets = DummyNetwork::networks(8);
+            let engine = MpcEngine::new(0, NUM_THREADS_NET, NUM_THREADS_CPU, nets);
+            let proof = Groth16::<Bn254>::plain_prove(&engine, zkey, witness)
+                .expect("proof generation works");
             let ser_proof = serde_json::to_string(&proof).unwrap();
             let der_proof = serde_json::from_str::<Groth16Proof<Bn254>>(&ser_proof).unwrap();
             Groth16::verify(&vk, &der_proof, &public_input[1..]).expect("can verify");
@@ -158,9 +163,10 @@ mod tests {
                 public_inputs: public_input.clone(),
                 witness: witness.values[zkey.n_public + 1..].to_vec(),
             };
-
-            let proof =
-                Groth16::<Bls12_381>::plain_prove(zkey, witness).expect("proof generation works");
+            let nets = DummyNetwork::networks(8);
+            let engine = MpcEngine::new(0, NUM_THREADS_NET, NUM_THREADS_CPU, nets);
+            let proof = Groth16::<Bls12_381>::plain_prove(&engine, zkey, witness)
+                .expect("proof generation works");
             Groth16::<Bls12_381>::verify(&vk, &proof, &public_input[1..]).expect("can verify");
             let ser_proof = serde_json::to_string(&proof).unwrap();
             let der_proof = serde_json::from_str::<Groth16Proof<Bls12_381>>(&ser_proof).unwrap();
@@ -186,9 +192,10 @@ mod tests {
                 public_inputs: public_input.clone(),
                 witness: witness.values[zkey.n_public + 1..].to_vec(),
             };
-
-            let proof =
-                Groth16::<Bn254>::plain_prove(zkey, witness).expect("proof generation works");
+            let nets = DummyNetwork::networks(8);
+            let engine = MpcEngine::new(0, NUM_THREADS_NET, NUM_THREADS_CPU, nets);
+            let proof = Groth16::<Bn254>::plain_prove(&engine, zkey, witness)
+                .expect("proof generation works");
             Groth16::<Bn254>::verify(&vk, &proof, &public_input[1..]).expect("can verify");
             let ser_proof = serde_json::to_string(&proof).unwrap();
             let der_proof = serde_json::from_str::<Groth16Proof<Bn254>>(&ser_proof).unwrap();

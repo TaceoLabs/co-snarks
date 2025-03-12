@@ -3,12 +3,11 @@
 //! This module contains operations with arithmetic shares
 
 use crate::protocols::rep3::{
-    id::PartyID,
-    network::{IoContext, Rep3Network},
-    rngs::Rep3CorrelatedRng,
-    IoResult,
+    network::{self},
+    Rep3State, PARTY_0, PARTY_1, PARTY_2,
 };
 use itertools::{izip, Itertools};
+use mpc_engine::Network;
 use num_traits::{One, Zero};
 use rand::{distributions::Standard, prelude::Distribution};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
@@ -39,13 +38,15 @@ pub fn add_assign<T: IntRing2k>(shared: &mut RingShare<T>, b: RingShare<T>) {
 pub fn add_public<T: IntRing2k>(
     shared: RingShare<T>,
     public: RingElement<T>,
-    id: PartyID,
+    id: usize,
 ) -> RingShare<T> {
     let mut res = shared;
     match id {
-        PartyID::ID0 => res.a += public,
-        PartyID::ID1 => res.b += public,
-        PartyID::ID2 => {}
+        PARTY_0 => res.a += public,
+        PARTY_1 => res.b += public,
+
+        PARTY_2 => {}
+        _ => unreachable!(),
     }
     res
 }
@@ -54,12 +55,13 @@ pub fn add_public<T: IntRing2k>(
 pub fn add_assign_public<T: IntRing2k>(
     shared: &mut RingShare<T>,
     public: RingElement<T>,
-    id: PartyID,
+    id: usize,
 ) {
     match id {
-        PartyID::ID0 => shared.a += public,
-        PartyID::ID1 => shared.b += public,
-        PartyID::ID2 => {}
+        PARTY_0 => shared.a += public,
+        PARTY_1 => shared.b += public,
+        PARTY_2 => {}
+        _ => unreachable!(),
     }
 }
 
@@ -91,7 +93,7 @@ pub fn sub_vec_assign<T: IntRing2k>(lhs: &mut [RingShare<T>], rhs: &[RingShare<T
 pub fn sub_shared_by_public<T: IntRing2k>(
     shared: RingShare<T>,
     public: RingElement<T>,
-    id: PartyID,
+    id: usize,
 ) -> RingShare<T> {
     add_public(shared, -public, id)
 }
@@ -100,22 +102,23 @@ pub fn sub_shared_by_public<T: IntRing2k>(
 pub fn sub_public_by_shared<T: IntRing2k>(
     public: RingElement<T>,
     shared: RingShare<T>,
-    id: PartyID,
+    id: usize,
 ) -> RingShare<T> {
     add_public(-shared, public, id)
 }
 
 /// Performs multiplication of two shared values.
-pub fn mul<T: IntRing2k, N: Rep3Network>(
+pub fn mul<T: IntRing2k, N: Network>(
     a: RingShare<T>,
     b: RingShare<T>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<RingShare<T>>
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<RingShare<T>>
 where
     Standard: Distribution<T>,
 {
-    let local_a = a * b + io_context.rngs.rand.masking_element::<RingElement<T>>();
-    let local_b = io_context.network.reshare(local_a)?;
+    let local_a = a * b + state.rngs.rand.masking_element::<RingElement<T>>();
+    let local_b = network::reshare(net, local_a)?;
     Ok(RingShare {
         a: local_a,
         b: local_b,
@@ -140,13 +143,16 @@ pub fn mul_assign_public<T: IntRing2k>(shared: &mut RingShare<T>, public: RingEl
 pub fn local_mul_vec<T: IntRing2k>(
     lhs: &[RingShare<T>],
     rhs: &[RingShare<T>],
-    rngs: &mut Rep3CorrelatedRng,
+    state: &mut Rep3State,
 ) -> Vec<RingElement<T>>
 where
     Standard: Distribution<T>,
 {
     //squeeze all random elements at once in beginning for determinismus
-    let masking_fes = rngs.rand.masking_elements_vec::<RingElement<T>>(lhs.len());
+    let masking_fes = state
+        .rngs
+        .rand
+        .masking_elements_vec::<RingElement<T>>(lhs.len());
 
     lhs.par_iter()
         .zip_eq(rhs.par_iter())
@@ -157,16 +163,13 @@ where
 }
 
 /// Performs a reshare on all shares in the vector.
-pub fn io_mul_vec<T: IntRing2k, N: Rep3Network>(
+pub fn io_mul_vec<T: IntRing2k, N: Network>(
     local_a: Vec<RingElement<T>>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<Vec<RingShare<T>>> {
-    let local_b = io_context.network.reshare_many(&local_a)?;
+    net: &N,
+) -> eyre::Result<Vec<RingShare<T>>> {
+    let local_b = network::reshare_many(net, &local_a)?;
     if local_b.len() != local_a.len() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "During execution of mul_vec in MPC: Invalid number of elements received",
-        ));
+        eyre::bail!("During execution of mul_vec in MPC: Invalid number of elements received");
     }
     Ok(izip!(local_a, local_b)
         .map(|(a, b)| RingShare::new_ring(a, b))
@@ -176,11 +179,12 @@ pub fn io_mul_vec<T: IntRing2k, N: Rep3Network>(
 /// Performs element-wise multiplication of two vectors of shared values.
 ///
 /// Use this function for small vecs. For large vecs see [`local_mul_vec`] and [`io_mul_vec`]
-pub fn mul_vec<T: IntRing2k, N: Rep3Network>(
+pub fn mul_vec<T: IntRing2k, N: Network>(
     lhs: &[RingShare<T>],
     rhs: &[RingShare<T>],
-    io_context: &mut IoContext<N>,
-) -> IoResult<Vec<RingShare<T>>>
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Vec<RingShare<T>>>
 where
     Standard: Distribution<T>,
 {
@@ -190,9 +194,9 @@ where
     // If you want a larger one use local_mul_vec and then io_mul_vec.
     debug_assert_eq!(lhs.len(), rhs.len());
     let local_a = izip!(lhs.iter(), rhs.iter())
-        .map(|(lhs, rhs)| lhs * rhs + io_context.rngs.rand.masking_element::<RingElement<T>>())
+        .map(|(lhs, rhs)| lhs * rhs + state.rngs.rand.masking_element::<RingElement<T>>())
         .collect_vec();
-    io_mul_vec(local_a, io_context)
+    io_mul_vec(local_a, net)
 }
 
 /// Negates a shared value.
@@ -201,28 +205,25 @@ pub fn neg<T: IntRing2k>(a: RingShare<T>) -> RingShare<T> {
 }
 
 /// Performs the opening of a shared value and returns the equivalent public value.
-pub fn open<T: IntRing2k, N: Rep3Network>(
-    a: RingShare<T>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<RingElement<T>> {
-    let c = io_context.network.reshare(a.b)?;
+pub fn open<T: IntRing2k, N: Network>(a: RingShare<T>, net: &N) -> eyre::Result<RingElement<T>> {
+    let c = network::reshare(net, a.b)?;
     Ok(a.a + a.b + c)
 }
 
 /// Performs the opening of a shared value and returns the equivalent public value.
-pub fn open_bit<T: IntRing2k, N: Rep3Network>(
+pub fn open_bit<T: IntRing2k, N: Network>(
     a: RingShare<T>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<RingElement<T>> {
-    let c = io_context.network.reshare(a.b.to_owned())?;
+    net: &N,
+) -> eyre::Result<RingElement<T>> {
+    let c = network::reshare(net, a.b.to_owned())?;
     Ok(a.a ^ a.b ^ c)
 }
 
 /// Performs the opening of a shared value and returns the equivalent public value.
-pub fn open_vec<T: IntRing2k, N: Rep3Network>(
+pub fn open_vec<T: IntRing2k, N: Network>(
     a: &[RingShare<T>],
-    io_context: &mut IoContext<N>,
-) -> IoResult<Vec<RingElement<T>>> {
+    net: &N,
+) -> eyre::Result<Vec<RingElement<T>>> {
     // TODO think about something better... it is not so bad
     // because we use it exactly once in PLONK where we do it for 4
     // shares..
@@ -230,23 +231,24 @@ pub fn open_vec<T: IntRing2k, N: Rep3Network>(
         .iter()
         .map(|share| (share.a, share.b))
         .collect::<(Vec<RingElement<T>>, Vec<RingElement<T>>)>();
-    let c = io_context.network.reshare_many(&b)?;
+    let c = network::reshare_many(net, &b)?;
     Ok(izip!(a, b, c).map(|(a, b, c)| a + b + c).collect_vec())
 }
 
 /// Computes a CMUX: If cond is 1, returns truthy, otherwise returns falsy.
 /// Implementations should not overwrite this method.
-pub fn cmux<T: IntRing2k, N: Rep3Network>(
+pub fn cmux<T: IntRing2k, N: Network>(
     cond: RingShare<T>,
     truthy: RingShare<T>,
     falsy: RingShare<T>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<RingShare<T>>
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<RingShare<T>>
 where
     Standard: Distribution<T>,
 {
     let b_min_a = sub(truthy, falsy);
-    let d = mul(cond, b_min_a, io_context)?;
+    let d = mul(cond, b_min_a, net, state)?;
     Ok(add(falsy, d))
 }
 
@@ -260,264 +262,282 @@ pub fn add_mul_public<T: IntRing2k>(
 }
 
 /// Convenience method for \[a\] + \[b\] * \[c\]
-pub fn add_mul<T: IntRing2k, N: Rep3Network>(
+pub fn add_mul<T: IntRing2k, N: Network>(
     a: RingShare<T>,
     b: RingShare<T>,
     c: RingShare<T>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<RingShare<T>>
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<RingShare<T>>
 where
     Standard: Distribution<T>,
 {
-    let mul = mul(c, b, io_context)?;
+    let mul = mul(c, b, net, state)?;
     Ok(add(a, mul))
 }
 
 /// Transforms a public value into a shared value: \[a\] = a.
 pub fn promote_to_trivial_share<T: IntRing2k>(
-    id: PartyID,
+    id: usize,
     public_value: RingElement<T>,
 ) -> RingShare<T> {
     match id {
-        PartyID::ID0 => Rep3RingShare::new_ring(public_value, RingElement::zero()),
-        PartyID::ID1 => Rep3RingShare::new_ring(RingElement::zero(), public_value),
-        PartyID::ID2 => Rep3RingShare::zero_share(),
+        PARTY_0 => Rep3RingShare::new_ring(public_value, RingElement::zero()),
+        PARTY_1 => Rep3RingShare::new_ring(RingElement::zero(), public_value),
+        PARTY_2 => Rep3RingShare::zero_share(),
+        _ => unreachable!(),
     }
 }
 
 /// This function performs a multiplication directly followed by an opening. This safes one round of communication in some MPC protocols compared to calling `mul` and `open` separately.
-pub fn mul_open<T: IntRing2k, N: Rep3Network>(
+pub fn mul_open<T: IntRing2k, N: Network>(
     a: RingShare<T>,
     b: RingShare<T>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<RingElement<T>>
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<RingElement<T>>
 where
     Standard: Distribution<T>,
 {
-    let a = a * b + io_context.rngs.rand.masking_element::<RingElement<T>>();
-    let (b, c) = io_context.network.broadcast(a)?;
+    let a = a * b + state.rngs.rand.masking_element::<RingElement<T>>();
+    let (b, c) = network::broadcast(net, a)?;
     Ok(a + b + c)
 }
 
 /// This function performs a multiplication directly followed by an opening. This safes one round of communication in some MPC protocols compared to calling `mul` and `open` separately.
-pub fn mul_open_vec<T: IntRing2k, N: Rep3Network>(
+pub fn mul_open_vec<T: IntRing2k, N: Network>(
     a: &[RingShare<T>],
     b: &[RingShare<T>],
-    io_context: &mut IoContext<N>,
-) -> IoResult<Vec<RingElement<T>>>
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Vec<RingElement<T>>>
 where
     Standard: Distribution<T>,
 {
     let mut a = izip!(a, b)
-        .map(|(a, b)| a * b + io_context.rngs.rand.masking_element::<RingElement<T>>())
+        .map(|(a, b)| a * b + state.rngs.rand.masking_element::<RingElement<T>>())
         .collect_vec();
-    let (b, c) = io_context.network.broadcast_many(&a)?;
+    let (b, c) = network::broadcast_many(net, &a)?;
     izip!(a.iter_mut(), b, c).for_each(|(a, b, c)| *a += b + c);
     Ok(a)
 }
 
 /// Generate a random [`RingShare`].
-pub fn rand<T: IntRing2k, N: Rep3Network>(io_context: &mut IoContext<N>) -> RingShare<T>
+pub fn rand<T: IntRing2k>(state: &mut Rep3State) -> RingShare<T>
 where
     Standard: Distribution<T>,
 {
-    let (a, b) = io_context.rngs.rand.random_elements();
+    let (a, b) = state.rngs.rand.random_elements();
     RingShare::new(a, b)
 }
 
 /// Performs a pow operation using a shared value as base and a public value as exponent.
-pub fn pow_public<T: IntRing2k, N: Rep3Network>(
+pub fn pow_public<T: IntRing2k, N: Network>(
     shared: RingShare<T>,
     mut public: RingElement<T>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<RingShare<T>>
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<RingShare<T>>
 where
     Standard: Distribution<T>,
 {
     // TODO: are negative exponents allowed in circom?
-    let mut res = promote_to_trivial_share(io_context.id, RingElement::one());
+    let mut res = promote_to_trivial_share(net.id(), RingElement::one());
     let mut shared: RingShare<T> = shared;
     while !public.is_zero() {
         if public.get_bit(0) == RingElement::one() {
             public -= RingElement::one();
-            res = mul(res, shared, io_context)?;
+            res = mul(res, shared, net, state)?;
         }
-        shared = mul(shared, shared, io_context)?;
+        shared = mul(shared, shared, net, state)?;
         public >>= 1;
     }
-    mul(res, shared, io_context)
+    mul(res, shared, net, state)
 }
 
 /// Returns 1 if lhs < rhs and 0 otherwise. Checks if one shared value is less than another shared value. The result is a shared value that has value 1 if the first shared value is less than the second shared value and 0 otherwise.
-pub fn lt<T: IntRing2k, N: Rep3Network>(
+pub fn lt<T: IntRing2k, N: Network>(
     lhs: RingShare<T>,
     rhs: RingShare<T>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<RingShare<Bit>>
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<RingShare<Bit>>
 where
     Standard: Distribution<T>,
 {
     // a < b is equivalent to !(a >= b)
-    let tmp = ge(lhs, rhs, io_context)?;
-    Ok(sub_public_by_shared(RingElement::one(), tmp, io_context.id))
+    let tmp = ge(lhs, rhs, net, state)?;
+    Ok(sub_public_by_shared(RingElement::one(), tmp, net.id()))
 }
 
 /// Returns 1 if lhs < rhs and 0 otherwise. Checks if a shared value is less than the public value. The result is a shared value that has value 1 if the shared value is less than the public value and 0 otherwise.
-pub fn lt_public<T: IntRing2k, N: Rep3Network>(
+pub fn lt_public<T: IntRing2k, N: Network>(
     lhs: RingShare<T>,
     rhs: RingElement<T>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<RingShare<Bit>>
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<RingShare<Bit>>
 where
     Standard: Distribution<T>,
 {
     // a < b is equivalent to !(a >= b)
-    let tmp = ge_public(lhs, rhs, io_context)?;
+    let tmp = ge_public(lhs, rhs, net, state)?;
     Ok(!tmp)
 }
 
 /// Returns 1 if lhs <= rhs and 0 otherwise. Checks if one shared value is less than or equal to another shared value. The result is a shared value that has value 1 if the first shared value is less than or equal to the second shared value and 0 otherwise.
-pub fn le<T: IntRing2k, N: Rep3Network>(
+pub fn le<T: IntRing2k, N: Network>(
     lhs: RingShare<T>,
     rhs: RingShare<T>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<RingShare<Bit>>
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<RingShare<Bit>>
 where
     Standard: Distribution<T>,
 {
     // a <= b is equivalent to b >= a
-    ge(rhs, lhs, io_context)
+    ge(rhs, lhs, net, state)
 }
 
 /// Returns 1 if lhs <= rhs and 0 otherwise. Checks if a shared value is less than or equal to a public value. The result is a shared value that has value 1 if the shared value is less than or equal to the public value and 0 otherwise.
-pub fn le_public<T: IntRing2k, N: Rep3Network>(
+pub fn le_public<T: IntRing2k, N: Network>(
     lhs: RingShare<T>,
     rhs: RingElement<T>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<RingShare<Bit>>
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<RingShare<Bit>>
 where
     Standard: Distribution<T>,
 {
-    detail::unsigned_ge_const_lhs(rhs, lhs, io_context)
+    detail::unsigned_ge_const_lhs(rhs, lhs, net, state)
 }
 
 /// Returns 1 if lhs > rhs and 0 otherwise. Checks if one shared value is greater than another shared value. The result is a shared value that has value 1 if the first shared value is greater than the second shared value and 0 otherwise.
-pub fn gt<T: IntRing2k, N: Rep3Network>(
+pub fn gt<T: IntRing2k, N: Network>(
     lhs: RingShare<T>,
     rhs: RingShare<T>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<RingShare<Bit>>
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<RingShare<Bit>>
 where
     Standard: Distribution<T>,
 {
     // a > b is equivalent to !(a <= b)
-    let tmp = le(lhs, rhs, io_context)?;
+    let tmp = le(lhs, rhs, net, state)?;
     Ok(!tmp)
 }
 
 /// Returns 1 if lhs > rhs and 0 otherwise. Checks if a shared value is greater than the public value. The result is a shared value that has value 1 if the shared value is greater than the public value and 0 otherwise.
-pub fn gt_public<T: IntRing2k, N: Rep3Network>(
+pub fn gt_public<T: IntRing2k, N: Network>(
     lhs: RingShare<T>,
     rhs: RingElement<T>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<RingShare<Bit>>
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<RingShare<Bit>>
 where
     Standard: Distribution<T>,
 {
     // a > b is equivalent to !(a <= b)
-    let tmp = le_public(lhs, rhs, io_context)?;
+    let tmp = le_public(lhs, rhs, net, state)?;
     Ok(!tmp)
 }
 
 /// Returns 1 if lhs >= rhs and 0 otherwise. Checks if one shared value is greater than or equal to another shared value. The result is a shared value that has value 1 if the first shared value is greater than or equal to the second shared value and 0 otherwise.
-pub fn ge<T: IntRing2k, N: Rep3Network>(
+pub fn ge<T: IntRing2k, N: Network>(
     lhs: RingShare<T>,
     rhs: RingShare<T>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<RingShare<Bit>>
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<RingShare<Bit>>
 where
     Standard: Distribution<T>,
 {
-    detail::unsigned_ge(lhs, rhs, io_context)
+    detail::unsigned_ge(lhs, rhs, net, state)
 }
 
 /// Returns 1 if lhs >= rhs and 0 otherwise. Checks if a shared value is greater than or equal to a public value. The result is a shared value that has value 1 if the shared value is greater than or equal to the public value and 0 otherwise.
-pub fn ge_public<T: IntRing2k, N: Rep3Network>(
+pub fn ge_public<T: IntRing2k, N: Network>(
     lhs: RingShare<T>,
     rhs: RingElement<T>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<RingShare<Bit>>
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<RingShare<Bit>>
 where
     Standard: Distribution<T>,
 {
-    detail::unsigned_ge_const_rhs(lhs, rhs, io_context)
+    detail::unsigned_ge_const_rhs(lhs, rhs, net, state)
 }
 
 /// Checks if a shared value is equal to a public value. The result is a shared value that has value 1 if the two values are equal and 0 otherwise.
-pub fn eq_public<T: IntRing2k, N: Rep3Network>(
+pub fn eq_public<T: IntRing2k, N: Network>(
     shared: RingShare<T>,
     public: RingElement<T>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<RingShare<Bit>>
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<RingShare<Bit>>
 where
     Standard: Distribution<T>,
 {
-    let public = promote_to_trivial_share(io_context.id, public);
-    eq(shared, public, io_context)
+    let public = promote_to_trivial_share(net.id(), public);
+    eq(shared, public, net, state)
 }
 
 /// Checks if two shared values are equal. The result is a shared value that has value 1 if the two shared values are equal and 0 otherwise.
-pub fn eq<T: IntRing2k, N: Rep3Network>(
+pub fn eq<T: IntRing2k, N: Network>(
     a: RingShare<T>,
     b: RingShare<T>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<RingShare<Bit>>
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<RingShare<Bit>>
 where
     Standard: Distribution<T>,
 {
     let diff = sub(a, b);
-    let bits = conversion::a2b_selector(diff, io_context)?;
-    let is_zero = binary::is_zero(&bits, io_context)?;
+    let bits = conversion::a2b_selector(diff, net, state)?;
+    let is_zero = binary::is_zero(&bits, net, state)?;
     Ok(is_zero)
 }
 
 /// Checks if two shared values are not equal. The result is a shared value that has value 1 if the two values are not equal and 0 otherwise.
-pub fn neq<T: IntRing2k, N: Rep3Network>(
+pub fn neq<T: IntRing2k, N: Network>(
     a: RingShare<T>,
     b: RingShare<T>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<RingShare<Bit>>
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<RingShare<Bit>>
 where
     Standard: Distribution<T>,
 {
-    let eq = eq(a, b, io_context)?;
+    let eq = eq(a, b, net, state)?;
     Ok(!eq)
 }
 
 /// Checks if a shared value is not equal to a public value. The result is a shared value that has value 1 if the two values are not equal and 0 otherwise.
-pub fn neq_public<T: IntRing2k, N: Rep3Network>(
+pub fn neq_public<T: IntRing2k, N: Network>(
     shared: RingShare<T>,
     public: RingElement<T>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<RingShare<Bit>>
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<RingShare<Bit>>
 where
     Standard: Distribution<T>,
 {
-    let public = promote_to_trivial_share(io_context.id, public);
-    neq(shared, public, io_context)
+    let public = promote_to_trivial_share(net.id(), public);
+    neq(shared, public, net, state)
 }
 
 /// Outputs whether a shared value is zero (true) or not (false).
-pub fn is_zero<T: IntRing2k, N: Rep3Network>(
+pub fn is_zero<T: IntRing2k, N: Network>(
     a: RingShare<T>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<bool>
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<bool>
 where
     Standard: Distribution<T>,
 {
     let zero_share = RingShare::default();
-    let res = eq(zero_share, a, io_context)?;
-    let x = open_bit(res, io_context)?;
+    let res = eq(zero_share, a, net, state)?;
+    let x = open_bit(res, net)?;
     Ok(x.0.convert())
 }
 
@@ -549,28 +569,30 @@ pub fn pow_2_public<T: IntRing2k>(shared: RingShare<T>, public: RingElement<T>) 
 }
 
 /// computes XOR using arithmetic operations, only valid when x and y are known to be 0 or 1.
-pub(crate) fn arithmetic_xor<T: IntRing2k, N: Rep3Network>(
+pub(crate) fn arithmetic_xor<T: IntRing2k, N: Network>(
     x: RingShare<T>,
     y: RingShare<T>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<RingShare<T>>
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<RingShare<T>>
 where
     Standard: Distribution<T>,
 {
-    let mut d = x * y + io_context.rngs.rand.masking_element::<RingElement<T>>();
+    let mut d = x * y + state.rngs.rand.masking_element::<RingElement<T>>();
     d <<= 1;
     let e = x.a + y.a;
     let res_a = e - d;
 
-    let res_b = io_context.network.reshare(res_a)?;
+    let res_b = network::reshare(net, res_a)?;
     Ok(RingShare { a: res_a, b: res_b })
 }
 
-pub(crate) fn arithmetic_xor_many<T: IntRing2k, N: Rep3Network>(
+pub(crate) fn arithmetic_xor_many<T: IntRing2k, N: Network>(
     x: &[RingShare<T>],
     y: &[RingShare<T>],
-    io_context: &mut IoContext<N>,
-) -> IoResult<Vec<RingShare<T>>>
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Vec<RingShare<T>>>
 where
     Standard: Distribution<T>,
 {
@@ -578,14 +600,14 @@ where
 
     let mut a = Vec::with_capacity(x.len());
     for (x, y) in x.iter().zip(y.iter()) {
-        let mut d = x * y + io_context.rngs.rand.masking_element::<RingElement<T>>();
+        let mut d = x * y + state.rngs.rand.masking_element::<RingElement<T>>();
         d <<= 1;
         let e = x.a + y.a;
         let res_a = e - d;
         a.push(res_a);
     }
 
-    let b = io_context.network.reshare_many(&a)?;
+    let b = network::reshare_many(net, &a)?;
     let res = a
         .into_iter()
         .zip(b)

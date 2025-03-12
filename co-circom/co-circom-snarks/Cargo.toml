@@ -21,5 +21,6 @@ mpc-core = { version = "0.8.0", path = "../../mpc-core" }
 num-traits = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
+mpc-engine.workspace = true
 
 [dev-dependencies]

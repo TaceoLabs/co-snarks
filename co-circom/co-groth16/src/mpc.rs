@@ -1,4 +1,3 @@
-use core::fmt;
 use std::fmt::Debug;
 
 use ark_ec::{pairing::Pairing, CurveGroup};
@@ -9,11 +8,11 @@ pub(crate) mod plain;
 pub(crate) mod rep3;
 pub(crate) mod shamir;
 
+use mpc_core::Fork;
+use mpc_engine::Network;
 pub use plain::PlainGroth16Driver;
 pub use rep3::Rep3Groth16Driver;
 pub use shamir::ShamirGroth16Driver;
-
-type IoResult<T> = std::io::Result<T>;
 
 /// This trait represents the operations used during Groth16 proof generation
 pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
@@ -28,21 +27,18 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
         + DomainCoeff<P::ScalarField>
         + 'static;
     /// The G1 point share type
-    type PointShare<C>: Debug + Send + 'static
+    type PointShare<C>: Debug + Send + Sync + 'static
     where
-        C: CurveGroup;
-    /// The party id type
-    type PartyID: Send + Sync + Copy + fmt::Display + 'static;
+        C: CurveGroup + Send;
+    /// Internal state of used MPC protocol
+    type State: Fork + Send;
 
     /// Generate a random arithemitc share
-    fn rand(&mut self) -> IoResult<Self::ArithmeticShare>;
-
-    /// Get the party id
-    fn get_party_id(&self) -> Self::PartyID;
+    fn rand<N: Network>(net: &N, state: &mut Self::State) -> eyre::Result<Self::ArithmeticShare>;
 
     /// Each value of lhs consists of a coefficient c and an index i. This function computes the sum of the coefficients times the corresponding public input or private witness. In other words, an accumulator a is initialized to 0, and for each (c, i) in lhs, a += c * public_inputs\[i\] is computed if i corresponds to a public input, or c * private_witness[i - public_inputs.len()] if i corresponds to a private witness.
     fn evaluate_constraint(
-        party_id: Self::PartyID,
+        party_id: usize,
         lhs: &[(P::ScalarField, usize)],
         public_inputs: &[P::ScalarField],
         private_witness: &[Self::ArithmeticShare],
@@ -50,7 +46,7 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
 
     /// Elementwise transformation of a vector of public values into a vector of shared values: \[a_i\] = a_i.
     fn promote_to_trivial_shares(
-        id: Self::PartyID,
+        id: usize,
         public_values: &[P::ScalarField],
     ) -> Vec<Self::ArithmeticShare>;
 
@@ -60,17 +56,18 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
     /// # Security
     /// You must *NOT* perform additional non-linear operations on the result of this function.
     fn local_mul_vec(
-        &mut self,
         a: Vec<Self::ArithmeticShare>,
         b: Vec<Self::ArithmeticShare>,
+        data: &mut Self::State,
     ) -> Vec<P::ScalarField>;
 
     /// Compute the msm of `h` and `h_query` and multiplication `r` * `s`.
-    fn mul(
-        &mut self,
+    fn mul<N: Network>(
         r: Self::ArithmeticShare,
         s: Self::ArithmeticShare,
-    ) -> IoResult<Self::ArithmeticShare>;
+        net: &N,
+        data: &mut Self::State,
+    ) -> eyre::Result<Self::ArithmeticShare>;
 
     /// Computes the \[coeffs_i\] *= c * g^i for the coefficients in 0 <= i < coeff.len()
     fn distribute_powers_and_mul_by_const(
@@ -101,39 +98,31 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
     fn add_points_half_share<C: CurveGroup>(a: Self::PointShare<C>, b: &C) -> C;
 
     /// Add a public point B in place to the shared point A
-    fn add_assign_points_public<C: CurveGroup>(
-        id: Self::PartyID,
-        a: &mut Self::PointShare<C>,
-        b: &C,
-    );
+    fn add_assign_points_public<C: CurveGroup>(id: usize, a: &mut Self::PointShare<C>, b: &C);
 
     /// Reconstructs a shared point: A = Open(\[A\]).
-    fn open_point<C>(&mut self, a: &Self::PointShare<C>) -> IoResult<C>
+    fn open_point<C, N: Network>(
+        a: &Self::PointShare<C>,
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<C>
     where
         C: CurveGroup<ScalarField = P::ScalarField>;
+
+    /// Reconstructs a shared point: A = Open(\[A\]).
+    fn open_half_point<N: Network>(
+        a: P::G1,
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<P::G1>;
 
     /// Multiplies a share b to the shared point A: \[A\] *= \[b\]. Requires network communication.
-    fn scalar_mul<C>(
-        &mut self,
+    fn scalar_mul<C, N: Network>(
         a: &Self::PointShare<C>,
         b: Self::ArithmeticShare,
-    ) -> IoResult<Self::PointShare<C>>
+        net: &N,
+        rngs: &mut Self::State,
+    ) -> eyre::Result<Self::PointShare<C>>
     where
         C: CurveGroup<ScalarField = P::ScalarField>;
-
-    /// Reconstructs a shared points: A = Open(\[A\]), B = Open(\[B\]).
-    fn open_two_points(
-        &mut self,
-        a: P::G1,
-        b: Self::PointShare<P::G2>,
-    ) -> std::io::Result<(P::G1, P::G2)>;
-
-    /// Reconstruct point G_a and perform scalar multiplication of G1_b and r concurrently
-    #[expect(clippy::type_complexity)]
-    fn open_point_and_scalar_mul(
-        &mut self,
-        g_a: &Self::PointShare<P::G1>,
-        g1_b: &Self::PointShare<P::G1>,
-        r: Self::ArithmeticShare,
-    ) -> std::io::Result<(P::G1, Self::PointShare<P::G1>)>;
 }

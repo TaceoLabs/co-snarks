@@ -9,12 +9,11 @@
 use std::{marker::PhantomData, sync::Arc};
 
 use ark_ff::PrimeField;
+use circom_mpc_vm::mpc_vm::{Rep3WitnessExtension, WitnessExtension};
 use co_circom_snarks::{CompressedRep3SharedWitness, SharedWitness};
 use color_eyre::eyre::{self, Context, ContextCompat};
-use mpc_core::protocols::{
-    bridges::network::RepToShamirNetwork,
-    shamir::{ShamirPreprocessing, ShamirProtocol},
-};
+use mpc_core::protocols::shamir::{ShamirPreprocessing, ShamirProtocol};
+use mpc_engine::{MpcEngine, Network};
 use num_bigint::BigUint;
 use num_traits::Num;
 
@@ -34,163 +33,160 @@ pub use circom_types::{
 pub use co_circom_snarks::{Compression, Rep3SharedInput, Rep3SharedWitness, ShamirSharedWitness};
 pub use co_groth16::{Groth16, Rep3CoGroth16, ShamirCoGroth16};
 pub use co_plonk::{Plonk, Rep3CoPlonk, ShamirCoPlonk};
-pub use mpc_core::protocols::{
-    rep3::{id::PartyID, network::Rep3MpcNet},
-    shamir::network::ShamirMpcNet,
-};
+pub use mpc_core::protocols::rep3::id::PartyID;
 pub use mpc_net::config::{Address, NetworkConfig, NetworkParty, ParseAddressError};
 pub use serde_json::Number;
 pub use serde_json::Value;
 
-/// State with a shamir shared witness
-pub struct ShamirSharedWitnessState<P>
-where
-    P: Pairing + CircomArkworksPairingBridge,
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-{
-    net: ShamirMpcNet,
-    threshold: usize,
-    /// The shared witness
-    pub witness: ShamirSharedWitness<P::ScalarField>,
-}
+// /// State with a shamir shared witness
+// pub struct ShamirSharedWitnessState<P>
+// where
+//     P: Pairing + CircomArkworksPairingBridge,
+//     P::BaseField: CircomArkworksPrimeFieldBridge,
+//     P::ScalarField: CircomArkworksPrimeFieldBridge,
+// {
+//     net: ShamirMpcNet,
+//     threshold: usize,
+//     /// The shared witness
+//     pub witness: ShamirSharedWitness<P::ScalarField>,
+// }
 
-impl<P> ShamirSharedWitnessState<P>
-where
-    P: Pairing + CircomArkworksPairingBridge,
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-{
-    /// Create a new [ShamirSharedWitnessState]
-    pub fn new(
-        net: ShamirMpcNet,
-        threshold: usize,
-        witness: ShamirSharedWitness<P::ScalarField>,
-    ) -> Self {
-        Self {
-            net,
-            threshold,
-            witness,
-        }
-    }
+// impl<P> ShamirSharedWitnessState<P>
+// where
+//     P: Pairing + CircomArkworksPairingBridge,
+//     P::BaseField: CircomArkworksPrimeFieldBridge,
+//     P::ScalarField: CircomArkworksPrimeFieldBridge,
+// {
+//     /// Create a new [ShamirSharedWitnessState]
+//     pub fn new(
+//         net: ShamirMpcNet,
+//         threshold: usize,
+//         witness: ShamirSharedWitness<P::ScalarField>,
+//     ) -> Self {
+//         Self {
+//             net,
+//             threshold,
+//             witness,
+//         }
+//     }
 
-    /// Create a Groth16 poof and return the public inputs
-    pub fn prove_groth16(
-        self,
-        zkey: Arc<Groth16ZKey<P>>,
-    ) -> eyre::Result<(Groth16Proof<P>, Vec<P::ScalarField>)> {
-        let public_inputs = self.witness.public_inputs[1..].to_vec();
-        let (proof, _net) = ShamirCoGroth16::prove(self.net, self.threshold, zkey, self.witness)?;
-        Ok((proof, public_inputs))
-    }
+//     /// Create a Groth16 poof and return the public inputs
+//     pub fn prove_groth16(
+//         self,
+//         zkey: Arc<Groth16ZKey<P>>,
+//     ) -> eyre::Result<(Groth16Proof<P>, Vec<P::ScalarField>)> {
+//         let public_inputs = self.witness.public_inputs[1..].to_vec();
+//         let (proof, _net) = ShamirCoGroth16::prove(self.net, self.threshold, zkey, self.witness)?;
+//         Ok((proof, public_inputs))
+//     }
 
-    /// Create a Plonk poof and return the public inputs
-    pub fn prove_plonk(
-        self,
-        zkey: Arc<PlonkZKey<P>>,
-    ) -> eyre::Result<(PlonkProof<P>, Vec<P::ScalarField>)> {
-        let public_inputs = self.witness.public_inputs[1..].to_vec();
-        let (proof, _net) = ShamirCoPlonk::prove(self.net, self.threshold, zkey, self.witness)?;
-        Ok((proof, public_inputs))
-    }
-}
+//     /// Create a Plonk poof and return the public inputs
+//     pub fn prove_plonk(
+//         self,
+//         zkey: Arc<PlonkZKey<P>>,
+//     ) -> eyre::Result<(PlonkProof<P>, Vec<P::ScalarField>)> {
+//         let public_inputs = self.witness.public_inputs[1..].to_vec();
+//         let (proof, _net) = ShamirCoPlonk::prove(self.net, self.threshold, zkey, self.witness)?;
+//         Ok((proof, public_inputs))
+//     }
+// }
 
-/// State with a rep3 shared witness
-pub struct Rep3SharedWitnessState<P>
-where
-    P: Pairing + CircomArkworksPairingBridge,
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-{
-    net: Rep3MpcNet,
-    /// The shared witness
-    pub witness: CompressedRep3SharedWitness<P::ScalarField>,
-}
+// /// State with a rep3 shared witness
+// pub struct Rep3SharedWitnessState<P>
+// where
+//     P: Pairing + CircomArkworksPairingBridge,
+//     P::BaseField: CircomArkworksPrimeFieldBridge,
+//     P::ScalarField: CircomArkworksPrimeFieldBridge,
+// {
+//     net: Rep3MpcNet,
+//     /// The shared witness
+//     pub witness: CompressedRep3SharedWitness<P::ScalarField>,
+// }
 
-impl<P> Rep3SharedWitnessState<P>
-where
-    P: Pairing + CircomArkworksPairingBridge,
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-{
-    /// Create a new [Rep3SharedWitnessState]
-    pub fn new(
-        net: Rep3MpcNet,
-        witness: impl Into<CompressedRep3SharedWitness<P::ScalarField>>,
-    ) -> Self {
-        Self {
-            net,
-            witness: witness.into(),
-        }
-    }
+// impl<P> Rep3SharedWitnessState<P>
+// where
+//     P: Pairing + CircomArkworksPairingBridge,
+//     P::BaseField: CircomArkworksPrimeFieldBridge,
+//     P::ScalarField: CircomArkworksPrimeFieldBridge,
+// {
+//     /// Create a new [Rep3SharedWitnessState]
+//     pub fn new(
+//         net: Rep3MpcNet,
+//         witness: impl Into<CompressedRep3SharedWitness<P::ScalarField>>,
+//     ) -> Self {
+//         Self {
+//             net,
+//             witness: witness.into(),
+//         }
+//     }
 
-    /// Translate the rep3 shared witness into a shamir shared witness
-    pub fn translate(self) -> eyre::Result<ShamirSharedWitnessState<P>> {
-        let (witness, net) = translate_witness::<P>(self.witness, self.net)?;
-        Ok(ShamirSharedWitnessState {
-            witness,
-            threshold: 1,
-            net,
-        })
-    }
+//     /// Translate the rep3 shared witness into a shamir shared witness
+//     pub fn translate(self) -> eyre::Result<ShamirSharedWitnessState<P>> {
+//         let (witness, net) = translate_witness::<P>(self.witness, self.net)?;
+//         Ok(ShamirSharedWitnessState {
+//             witness,
+//             threshold: 1,
+//             net,
+//         })
+//     }
 
-    /// Create a Groth16 poof and return the public inputs
-    pub fn prove_groth16(
-        mut self,
-        zkey: Arc<Groth16ZKey<P>>,
-    ) -> eyre::Result<(Groth16Proof<P>, Vec<P::ScalarField>)> {
-        let witness = self.witness.uncompress(&mut self.net)?;
-        let public_inputs = witness.public_inputs[1..].to_vec();
-        let (proof, _net) = Rep3CoGroth16::prove(self.net, zkey, witness)?;
-        Ok((proof, public_inputs))
-    }
+//     /// Create a Groth16 poof and return the public inputs
+//     pub fn prove_groth16(
+//         mut self,
+//         zkey: Arc<Groth16ZKey<P>>,
+//     ) -> eyre::Result<(Groth16Proof<P>, Vec<P::ScalarField>)> {
+//         let witness = self.witness.uncompress(&mut self.net)?;
+//         let public_inputs = witness.public_inputs[1..].to_vec();
+//         let (proof, _net) = Rep3CoGroth16::prove(self.net, zkey, witness)?;
+//         Ok((proof, public_inputs))
+//     }
 
-    /// Create a Plonk poof and return the public inputs
-    pub fn prove_plonk(
-        mut self,
-        zkey: Arc<PlonkZKey<P>>,
-    ) -> eyre::Result<(PlonkProof<P>, Vec<P::ScalarField>)> {
-        let witness = self.witness.uncompress(&mut self.net)?;
-        let public_inputs = witness.public_inputs[1..].to_vec();
-        let (proof, _net) = Rep3CoPlonk::prove(self.net, zkey, witness)?;
-        Ok((proof, public_inputs))
-    }
-}
+//     /// Create a Plonk poof and return the public inputs
+//     pub fn prove_plonk(
+//         mut self,
+//         zkey: Arc<PlonkZKey<P>>,
+//     ) -> eyre::Result<(PlonkProof<P>, Vec<P::ScalarField>)> {
+//         let witness = self.witness.uncompress(&mut self.net)?;
+//         let public_inputs = witness.public_inputs[1..].to_vec();
+//         let (proof, _net) = Rep3CoPlonk::prove(self.net, zkey, witness)?;
+//         Ok((proof, public_inputs))
+//     }
+// }
 
-/// Initial state for the type-state pattern
-pub struct CoCircomRep3<P> {
-    net: Rep3MpcNet,
-    phantom: PhantomData<P>,
-}
+// /// Initial state for the type-state pattern
+// pub struct CoCircomRep3<P> {
+//     net: Rep3MpcNet,
+//     phantom: PhantomData<P>,
+// }
 
-impl<P> CoCircomRep3<P>
-where
-    P: Pairing + CircomArkworksPairingBridge,
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-{
-    /// Create a new initial state
-    pub fn new(net: Rep3MpcNet) -> Self {
-        Self {
-            net,
-            phantom: PhantomData,
-        }
-    }
+// impl<P> CoCircomRep3<P>
+// where
+//     P: Pairing + CircomArkworksPairingBridge,
+//     P::BaseField: CircomArkworksPrimeFieldBridge,
+//     P::ScalarField: CircomArkworksPrimeFieldBridge,
+// {
+//     /// Create a new initial state
+//     pub fn new(net: Rep3MpcNet) -> Self {
+//         Self {
+//             net,
+//             phantom: PhantomData,
+//         }
+//     }
 
-    /// Perform the witness generation advance to the next state
-    pub fn generate_witness(
-        self,
-        circuit: CoCircomCompilerParsed<P::ScalarField>,
-        shared_input: Rep3SharedInput<P::ScalarField>,
-        config: VMConfig,
-    ) -> eyre::Result<Rep3SharedWitnessState<P>> {
-        let (witness, net) = generate_witness_rep3::<P>(circuit, shared_input, self.net, config)?;
-        Ok(Rep3SharedWitnessState {
-            net,
-            witness: witness.into(),
-        })
-    }
-}
+//     /// Perform the witness generation advance to the next state
+//     pub fn generate_witness(
+//         self,
+//         circuit: CoCircomCompilerParsed<P::ScalarField>,
+//         shared_input: Rep3SharedInput<P::ScalarField>,
+//         config: VMConfig,
+//     ) -> eyre::Result<Rep3SharedWitnessState<P>> {
+//         let (witness, net) = generate_witness_rep3::<P>(circuit, shared_input, self.net, config)?;
+//         Ok(Rep3SharedWitnessState {
+//             net,
+//             witness: witness.into(),
+//         })
+//     }
+// }
 
 /// A JSON map of input names and values
 pub type Input = serde_json::Map<String, serde_json::Value>;
@@ -300,10 +296,10 @@ pub fn split_witness_shamir<P: Pairing>(
 }
 
 /// Translate the REP3 shared witness into a shamir shared witness
-pub fn translate_witness<P>(
+pub fn translate_witness<P, N: Network + 'static>(
+    engine: &MpcEngine<N>,
     witness: CompressedRep3SharedWitness<P::ScalarField>,
-    net: Rep3MpcNet,
-) -> color_eyre::Result<(ShamirSharedWitness<P::ScalarField>, ShamirMpcNet)>
+) -> eyre::Result<ShamirSharedWitness<P::ScalarField>>
 where
     P: Pairing + CircomArkworksPairingBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
@@ -311,23 +307,23 @@ where
 {
     let witness = SharedWitness::from(witness);
     // init MPC protocol
+    let num_parties = 3;
     let threshold = 1;
     let num_pairs = witness.witness.len();
-    let preprocessing =
-        ShamirPreprocessing::<P::ScalarField, _>::new(threshold, net.to_shamir_net(), num_pairs)
-            .context("while shamir preprocessing")?;
+    let preprocessing = engine
+        .install_net(|net| ShamirPreprocessing::new(num_parties, threshold, num_pairs, net))
+        .context("while shamir preprocessing")?;
     let mut protocol = ShamirProtocol::from(preprocessing);
     // Translate witness to shamir shares
-    let translated_witness = protocol
-        .translate_primefield_addshare_vec(witness.witness)
+    let translated_witness = engine
+        .install_net(|net| protocol.translate_primefield_addshare_vec(witness.witness, net))
         .context("while translating witness")?;
     let shamir_witness_share: ShamirSharedWitness<P::ScalarField> = SharedWitness {
         public_inputs: witness.public_inputs,
         witness: translated_witness,
     };
 
-    let net = protocol.get_network();
-    Ok((shamir_witness_share, net))
+    Ok(shamir_witness_share)
 }
 
 /// Invoke the MPC witness generation process. It will return a [SharedWitness] if successful.
@@ -336,12 +332,12 @@ where
 /// 2. Compile the circuit to MPC VM bytecode.
 /// 3. Set up a network connection to the MPC network.
 /// 4. Execute the bytecode on the MPC VM to generate the witness.
-pub fn generate_witness_rep3<P>(
+pub fn generate_witness_rep3<P, N: Network + 'static>(
+    engine: &MpcEngine<N>,
     circuit: CoCircomCompilerParsed<P::ScalarField>,
     input: Rep3SharedInput<P::ScalarField>,
-    net: Rep3MpcNet,
     config: VMConfig,
-) -> color_eyre::Result<(Rep3SharedWitness<P::ScalarField>, Rep3MpcNet)>
+) -> color_eyre::Result<Rep3SharedWitness<P::ScalarField>>
 where
     P: Pairing + CircomArkworksPairingBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
@@ -352,16 +348,15 @@ where
     }
 
     // init MPC protocol
-    let rep3_vm = circuit
-        .to_rep3_vm_with_network(net, config)
-        .context("while constructing MPC VM")?;
+    let rep3_vm =
+        Rep3WitnessExtension::new(engine, circuit, config).context("while constructing MPC VM")?;
 
     // execute witness generation in MPC
-    let (witness_share, mpc_net) = rep3_vm
-        .run_and_return_network(input)
+    let witness_share = rep3_vm
+        .run(input)
         .context("while running witness generation")?;
 
-    Ok((witness_share.into_shared_witness(), mpc_net))
+    Ok(witness_share.into_shared_witness())
 }
 
 fn parse_field<F>(val: &serde_json::Value) -> eyre::Result<F>

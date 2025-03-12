@@ -13,12 +13,14 @@ use circom_types::{
     plonk::PlonkProof,
     traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
 };
+use mpc_engine::{MpcEngine, Network};
 use num_traits::One;
 use num_traits::Zero;
 
 // Round 5 of https://eprint.iacr.org/2019/953.pdf (page 30)
-pub(super) struct Round5<'a, P: Pairing, T: CircomPlonkProver<P>> {
-    pub(super) driver: T,
+pub(super) struct Round5<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network> {
+    pub(super) engine: &'a MpcEngine<N>,
+    pub(super) state: &'a mut T::State,
     pub(super) domains: Domains<P::ScalarField>,
     pub(super) challenges: Round4Challenges<P>,
     pub(super) proof: Round4Proof<P>,
@@ -74,7 +76,7 @@ where
 }
 
 // Round 5 of https://eprint.iacr.org/2019/953.pdf (page 30)
-impl<P: Pairing, T: CircomPlonkProver<P>> Round5<'_, P, T>
+impl<P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round5<'_, P, T, N>
 where
     P: CircomArkworksPairingBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
@@ -121,7 +123,7 @@ where
 
     // The linearisation polynomial R(X) (see https://eprint.iacr.org/2019/953.pdf)
     fn compute_r(
-        party_id: T::PartyID,
+        party_id: usize,
         domains: &Domains<P::ScalarField>,
         proof: &Round4Proof<P>,
         challenges: &Round5Challenges<P>,
@@ -214,7 +216,7 @@ where
 
     // The opening proof polynomial W_xi(X) (see https://eprint.iacr.org/2019/953.pdf)
     fn compute_wxi(
-        party_id: T::PartyID,
+        party_id: usize,
         proof: &Round4Proof<P>,
         challenges: &Round5Challenges<P>,
         data: &PlonkData<P, T>,
@@ -268,7 +270,7 @@ where
 
     // The opening proof polynomial W_xiw(X) (see https://eprint.iacr.org/2019/953.pdf)
     fn compute_wxiw(
-        driver: &mut T,
+        party_id: usize,
         domains: &Domains<P::ScalarField>,
         proof: &Round4Proof<P>,
         challenges: &Round5Challenges<P>,
@@ -278,7 +280,7 @@ where
         let xiw = challenges.xi * domains.root_of_unity_pow;
 
         let mut res = polys.z.poly.clone().into_iter().collect::<Vec<_>>();
-        res[0] = T::add_with_public(driver.get_party_id(), res[0], -proof.eval_zw);
+        res[0] = T::add_with_public(party_id, res[0], -proof.eval_zw);
         Self::div_by_zerofier(&mut res, 1, xiw);
 
         tracing::debug!("computing wxiw polynomial done!");
@@ -286,9 +288,10 @@ where
     }
 
     // Round 5 of https://eprint.iacr.org/2019/953.pdf (page 30)
-    pub(super) fn round5(self) -> PlonkProofResult<(PlonkProof<P>, T)> {
+    pub(super) fn round5(self) -> PlonkProofResult<PlonkProof<P>> {
         let Self {
-            mut driver,
+            engine,
+            state,
             domains,
             challenges,
             proof,
@@ -317,7 +320,7 @@ where
         tracing::debug!("v[3]: {}", v[3]);
         tracing::debug!("v[4]: {}", v[4]);
         let challenges = Round5Challenges::new(challenges, v);
-        let party_id = driver.get_party_id();
+        let party_id = engine.id();
 
         // STEP 5.2 Compute linearisation polynomial r(X)
         let r = Self::compute_r(party_id, &domains, &proof, &challenges, &data, &polys);
@@ -325,14 +328,15 @@ where
         let wxi = Self::compute_wxi(party_id, &proof, &challenges, &data, &polys, &r);
 
         //STEP 5.4 Compute opening proof polynomial Wxiw(X)
-        let wxiw = Self::compute_wxiw(&mut driver, &domains, &proof, &challenges, &polys);
+        let wxiw = Self::compute_wxiw(party_id, &domains, &proof, &challenges, &polys);
         // Fifth output of the prover is ([Wxi]_1, [Wxiw]_1)
 
         let p_tau = &data.zkey.p_tau;
         let commit_wxi = T::msm_public_points_g1(&p_tau[..wxi.len()], &wxi);
         let commit_wxiw = T::msm_public_points_g1(&p_tau[..wxiw.len()], &wxiw);
 
-        let opened = driver.open_point_vec_g1(&[commit_wxi, commit_wxiw])?;
+        let opened = engine
+            .install_net(|net| T::open_point_vec_g1(&[commit_wxi, commit_wxiw], net, state))?;
 
         let commit_wxi: P::G1 = opened[0];
         let commit_wxiw: P::G1 = opened[1];
@@ -341,7 +345,7 @@ where
             commit_wxi.into_affine(),
             commit_wxiw.into_affine()
         );
-        Ok((proof.into_final_proof(commit_wxi, commit_wxiw), driver))
+        Ok(proof.into_final_proof(commit_wxi, commit_wxiw))
     }
 }
 
@@ -354,6 +358,7 @@ pub mod tests {
     use circom_types::Witness;
     use circom_types::{plonk::ZKey, traits::CheckElement};
     use co_circom_snarks::SharedWitness;
+    use mpc_engine::{DummyNetwork, MpcEngine, NUM_THREADS_CPU, NUM_THREADS_NET};
 
     use crate::{
         mpc::plain::PlainPlonkDriver,
@@ -374,7 +379,6 @@ pub mod tests {
     #[test]
     fn test_round5_multiplier2() {
         for check in [CheckElement::Yes, CheckElement::No] {
-            let mut driver = PlainPlonkDriver;
             let mut reader = BufReader::new(
                 File::open("../../test_vectors/Plonk/bn254/multiplier2/circuit.zkey").unwrap(),
             );
@@ -388,14 +392,17 @@ pub mod tests {
                 witness: witness.values[zkey.n_public + 1..].to_vec(),
             };
 
-            let challenges = Round1Challenges::deterministic(&mut driver);
-            let mut round1 = Round1::init_round(driver, &zkey, witness).unwrap();
+            let nets = DummyNetwork::networks(8);
+            let engine = MpcEngine::new(0, NUM_THREADS_NET, NUM_THREADS_CPU, nets);
+            let challenges = Round1Challenges::<Bn254, PlainPlonkDriver>::deterministic();
+            let mut state = ();
+            let mut round1 = Round1::init_round(&engine, &mut state, &zkey, witness).unwrap();
             round1.challenges = challenges;
             let round2 = round1.round1().unwrap();
             let round3 = round2.round2().unwrap();
             let round4 = round3.round3().unwrap();
             let round5 = round4.round4().unwrap();
-            let (proof, _) = round5.round5().unwrap();
+            let proof = round5.round5().unwrap();
             assert_eq!(
                 proof.wxi,
                 g1_from_xy!(

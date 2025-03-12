@@ -9,12 +9,15 @@ use crate::{
 use ark_ec::pairing::Pairing;
 use ark_ec::CurveGroup;
 use circom_types::plonk::ZKey;
+use mpc_core::Fork;
+use mpc_engine::{MpcEngine, Network};
 use num_traits::One;
 use tracing::instrument;
 
 // Round 2 of https://eprint.iacr.org/2019/953.pdf (page 28)
-pub(super) struct Round2<'a, P: Pairing, T: CircomPlonkProver<P>> {
-    pub(super) driver: T,
+pub(super) struct Round2<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network> {
+    pub(super) engine: &'a MpcEngine<N>,
+    pub(super) state: &'a mut T::State,
     pub(super) domains: Domains<P::ScalarField>,
     pub(super) challenges: Round1Challenges<P, T>,
     pub(super) proof: Round1Proof<P>,
@@ -86,12 +89,13 @@ impl<P: Pairing, T: CircomPlonkProver<P>> Round2Polys<P, T> {
 }
 
 // Round 2 of https://eprint.iacr.org/2019/953.pdf (page 28)
-impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round2<'a, P, T> {
+impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round2<'a, P, T, N> {
     // Computes the permutation polynomial z(X) (see https://eprint.iacr.org/2019/953.pdf)
     // To reduce the number of communication rounds, we implement the array_prod_mul macro according to https://www.usenix.org/system/files/sec22-ozdemir.pdf, p11 first paragraph.
     #[instrument(level = "debug", name = "compute z", skip_all)]
     fn compute_z(
-        driver: &mut T,
+        engine: &MpcEngine<N>,
+        state: &mut T::State,
         zkey: &ZKey<P>,
         domains: &Domains<P::ScalarField>,
         challenges: &Round2Challenges<P, T>,
@@ -104,7 +108,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round2<'a, P, T> {
         let mut d1 = Vec::with_capacity(zkey.domain_size);
         let mut d2 = Vec::with_capacity(zkey.domain_size);
         let mut d3 = Vec::with_capacity(zkey.domain_size);
-        let party_id = driver.get_party_id();
+        let party_id = engine.id();
         let mut w = P::ScalarField::one();
         // TODO: multithread me - this is not so easy as other
         // parts as we go through the roots of unity but it is doable
@@ -165,8 +169,17 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round2<'a, P, T> {
         num_den_span.exit();
 
         let batched_mul_span = tracing::debug_span!("buffer z network round").entered();
-        let (num, den) = driver.array_prod_mul2(&n1, &n2, &n3, &d1, &d2, &d3)?;
-        let mut buffer_z = driver.mul_vec(&num, &den)?;
+        // TODO check and explain numbers
+        let mut state0 = state.fork(zkey.domain_size * 6 + 2)?;
+        let mut state1 = state.fork(zkey.domain_size * 7 + 2)?;
+        let (num, den) = engine.join_net(
+            |net| T::array_prod_mul(false, &n1, &n2, &n3, net, &mut state0),
+            |net| T::array_prod_mul(true, &d1, &d2, &d3, net, &mut state1),
+        );
+        let num = num?;
+        let den = den?;
+
+        let mut buffer_z = engine.install_net(|net| T::mul_vec(&num, &den, net, state))?;
         buffer_z.rotate_right(1); // Required by SNARKJs/Plonk
         batched_mul_span.exit();
 
@@ -193,9 +206,10 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round2<'a, P, T> {
 
     // Round 2 of https://eprint.iacr.org/2019/953.pdf (page 28)
     #[instrument(level = "debug", name = "Plonk - Round 2", skip_all)]
-    pub(super) fn round2(self) -> PlonkProofResult<Round3<'a, P, T>> {
+    pub(super) fn round2(self) -> PlonkProofResult<Round3<'a, P, T, N>> {
         let Self {
-            mut driver,
+            engine,
+            state,
             data,
             proof,
             challenges,
@@ -228,16 +242,17 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round2<'a, P, T> {
         let gamma = transcript.get_challenge();
         tracing::debug!("beta: {beta}, gamma: {gamma}");
         let challenges = Round2Challenges::new(challenges, beta, gamma);
-        let z = Self::compute_z(&mut driver, zkey, &domains, &challenges, &polys)?;
+        let z = Self::compute_z(engine, state, zkey, &domains, &challenges, &polys)?;
         // STEP 2.3 - Compute permutation [z]_1
 
         tracing::debug!("committing to poly z (MSMs)");
         let commit_z = T::msm_public_points_g1(&zkey.p_tau[..z.poly.len()], &z.poly);
-        let commit_z = driver.open_point_g1(commit_z)?;
+        let commit_z = engine.install_net(|net| T::open_point_g1(commit_z, net, state))?;
         let proof = Round2Proof::new(proof, commit_z);
         tracing::debug!("round2 result: {proof}");
         Ok(Round3 {
-            driver,
+            engine,
+            state,
             domains,
             challenges,
             proof,
@@ -256,6 +271,7 @@ pub mod tests {
     use circom_types::plonk::ZKey;
     use circom_types::Witness;
     use co_circom_snarks::SharedWitness;
+    use mpc_engine::{DummyNetwork, MpcEngine, NUM_THREADS_CPU, NUM_THREADS_NET};
 
     use crate::mpc::plain::PlainPlonkDriver;
     use crate::round1::Round1;
@@ -276,7 +292,6 @@ pub mod tests {
     #[test]
     fn test_round2_multiplier2() {
         for check in [CheckElement::Yes, CheckElement::No] {
-            let mut driver = PlainPlonkDriver;
             let mut reader = BufReader::new(
                 File::open("../../test_vectors/Plonk/bn254/multiplier2/circuit.zkey").unwrap(),
             );
@@ -290,8 +305,11 @@ pub mod tests {
                 witness: witness.values[zkey.n_public + 1..].to_vec(),
             };
 
-            let challenges = Round1Challenges::deterministic(&mut driver);
-            let mut round1 = Round1::init_round(driver, &zkey, witness).unwrap();
+            let nets = DummyNetwork::networks(8);
+            let engine = MpcEngine::new(0, NUM_THREADS_NET, NUM_THREADS_CPU, nets);
+            let challenges = Round1Challenges::<Bn254, PlainPlonkDriver>::deterministic();
+            let mut state = ();
+            let mut round1 = Round1::init_round(&engine, &mut state, &zkey, witness).unwrap();
             round1.challenges = challenges;
             let round2 = round1.round1().unwrap();
             let round3 = round2.round2().unwrap();

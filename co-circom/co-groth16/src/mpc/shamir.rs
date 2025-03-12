@@ -1,56 +1,28 @@
-use super::{CircomGroth16Prover, IoResult};
+use super::CircomGroth16Prover;
 use ark_ec::{pairing::Pairing, CurveGroup};
-use ark_ff::PrimeField;
 use mpc_core::protocols::shamir::{
-    arithmetic, core, network::ShamirNetwork, pointshare, ShamirPointShare, ShamirPrimeFieldShare,
-    ShamirProtocol,
+    arithmetic, pointshare, ShamirPointShare, ShamirPrimeFieldShare, ShamirProtocol,
 };
+use mpc_engine::Network;
 use rayon::prelude::*;
 
 /// A Groth16 dirver unsing shamir secret sharing
-///
-/// Contains two [`ShamirProtocol`]s, `protocol0` for the main execution and `protocol0` for parts that can run concurrently.
-pub struct ShamirGroth16Driver<F: PrimeField, N: ShamirNetwork> {
-    protocol0: ShamirProtocol<F, N>,
-    protocol1: ShamirProtocol<F, N>,
-}
+pub struct ShamirGroth16Driver;
 
-impl<F: PrimeField, N: ShamirNetwork> ShamirGroth16Driver<F, N> {
-    /// Create a new [`ShamirGroth16Driver`] with two [`ShamirProtocol`]s
-    pub fn new(protocol0: ShamirProtocol<F, N>, protocol1: ShamirProtocol<F, N>) -> Self {
-        Self {
-            protocol0,
-            protocol1,
-        }
-    }
-
-    /// Get the underlying network
-    pub fn get_network(self) -> N {
-        self.protocol0.network
-    }
-}
-
-impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
-    for ShamirGroth16Driver<P::ScalarField, N>
-{
+impl<P: Pairing> CircomGroth16Prover<P> for ShamirGroth16Driver {
     type ArithmeticShare = ShamirPrimeFieldShare<P::ScalarField>;
     type PointShare<C>
         = ShamirPointShare<C>
     where
         C: CurveGroup;
+    type State = ShamirProtocol<P::ScalarField>;
 
-    type PartyID = usize;
-
-    fn rand(&mut self) -> IoResult<Self::ArithmeticShare> {
-        self.protocol0.rand()
-    }
-
-    fn get_party_id(&self) -> Self::PartyID {
-        self.protocol0.network.get_id()
+    fn rand<N: Network>(net: &N, state: &mut Self::State) -> eyre::Result<Self::ArithmeticShare> {
+        state.rand(net)
     }
 
     fn evaluate_constraint(
-        _party_id: Self::PartyID,
+        _party_id: usize,
         lhs: &[(P::ScalarField, usize)],
         public_inputs: &[P::ScalarField],
         private_witness: &[Self::ArithmeticShare],
@@ -70,26 +42,27 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
     }
 
     fn promote_to_trivial_shares(
-        _id: Self::PartyID,
+        _id: usize,
         public_values: &[P::ScalarField],
     ) -> Vec<Self::ArithmeticShare> {
         arithmetic::promote_to_trivial_shares(public_values)
     }
 
     fn local_mul_vec(
-        &mut self,
         a: Vec<Self::ArithmeticShare>,
         b: Vec<Self::ArithmeticShare>,
+        _: &mut Self::State,
     ) -> Vec<P::ScalarField> {
         arithmetic::local_mul_vec(&a, &b)
     }
 
-    fn mul(
-        &mut self,
+    fn mul<N: Network>(
         r: Self::ArithmeticShare,
         s: Self::ArithmeticShare,
-    ) -> IoResult<Self::ArithmeticShare> {
-        arithmetic::mul(r, s, &mut self.protocol1)
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<Self::ArithmeticShare> {
+        arithmetic::mul(r, s, net, state)
     }
 
     fn distribute_powers_and_mul_by_const(
@@ -130,71 +103,42 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
         a.inner() + b
     }
 
-    fn add_assign_points_public<C: CurveGroup>(
-        _id: Self::PartyID,
-        a: &mut Self::PointShare<C>,
-        b: &C,
-    ) {
+    fn add_assign_points_public<C: CurveGroup>(_id: usize, a: &mut Self::PointShare<C>, b: &C) {
         pointshare::add_assign_public(a, b)
     }
 
-    fn open_point<C>(&mut self, a: &Self::PointShare<C>) -> IoResult<C>
+    fn open_point<C, N: Network>(
+        a: &Self::PointShare<C>,
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<C>
     where
         C: CurveGroup<ScalarField = P::ScalarField>,
     {
-        pointshare::open_point(a, &mut self.protocol0)
+        pointshare::open_point(a, net, state)
     }
 
-    fn scalar_mul<C>(
-        &mut self,
+    fn open_half_point<N: Network>(
+        a: P::G1,
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<<P as Pairing>::G1> {
+        pointshare::open_half_point(a, net, state)
+    }
+
+    fn scalar_mul<C, N: Network>(
         a: &Self::PointShare<C>,
         b: Self::ArithmeticShare,
-    ) -> IoResult<Self::PointShare<C>>
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<Self::PointShare<C>>
     where
         C: CurveGroup<ScalarField = P::ScalarField>,
     {
-        pointshare::scalar_mul(a, b, &mut self.protocol0)
+        pointshare::scalar_mul(a, b, net, state)
     }
 
     fn sub_assign_points<C: CurveGroup>(a: &mut Self::PointShare<C>, b: &Self::PointShare<C>) {
         pointshare::sub_assign(a, b);
-    }
-
-    fn open_two_points(
-        &mut self,
-        a: P::G1,
-        b: Self::PointShare<P::G2>,
-    ) -> std::io::Result<(P::G1, P::G2)> {
-        let s1 = a;
-        let s2 = b.a;
-        let (r1, r2) = std::thread::scope(|s| {
-            let r1 = s.spawn(|| {
-                self.protocol0
-                    .network
-                    .broadcast_next(s1, self.protocol0.threshold * 2 + 1)
-            });
-            let r2 = s.spawn(|| {
-                self.protocol1
-                    .network
-                    .broadcast_next(s2, self.protocol0.threshold + 1)
-            });
-            (r1.join().expect("can join"), r2.join().expect("can join"))
-        });
-        let r1 = core::reconstruct_point(&r1?, &self.protocol0.open_lagrange_2t);
-        let r2 = core::reconstruct_point(&r2?, &self.protocol0.open_lagrange_t);
-        Ok((r1, r2))
-    }
-
-    fn open_point_and_scalar_mul(
-        &mut self,
-        g_a: &Self::PointShare<P::G1>,
-        g1_b: &Self::PointShare<P::G1>,
-        r: Self::ArithmeticShare,
-    ) -> super::IoResult<(P::G1, Self::PointShare<P::G1>)> {
-        std::thread::scope(|s| {
-            let opened = s.spawn(|| pointshare::open_point(g_a, &mut self.protocol0));
-            let mul_result = pointshare::scalar_mul(g1_b, r, &mut self.protocol1)?;
-            Ok((opened.join().expect("can join")?, mul_result))
-        })
     }
 }

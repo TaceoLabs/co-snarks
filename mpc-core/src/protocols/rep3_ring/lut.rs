@@ -2,20 +2,15 @@
 //!
 //! This module contains implementation of a LUT
 
-use std::marker::PhantomData;
-
 use crate::{
     lut::LookupTableProvider,
     protocols::{
-        rep3::{
-            self, arithmetic,
-            network::{IoContext, Rep3Network},
-            IoResult, Rep3BigUintShare, Rep3PrimeFieldShare,
-        },
+        rep3::{self, arithmetic, network, Rep3BigUintShare, Rep3PrimeFieldShare, Rep3State},
         rep3_ring::{conversion, gadgets, ring::bit::Bit},
     },
 };
 use ark_ff::PrimeField;
+use mpc_engine::Network;
 use rand::{distributions::Standard, prelude::Distribution};
 
 use super::{ring::int_ring::IntRing2k, Rep3RingShare};
@@ -53,30 +48,17 @@ impl<F: PrimeField> PublicPrivateLut<F> {
 }
 
 /// Rep3 lookup table
-pub struct Rep3LookupTable<N: Rep3Network> {
-    phantom: PhantomData<N>,
-}
+pub struct Rep3LookupTable;
 
-impl<N: Rep3Network> Default for Rep3LookupTable<N> {
-    fn default() -> Self {
-        Self {
-            phantom: PhantomData,
-        }
-    }
-}
-
-impl<N: Rep3Network> Rep3LookupTable<N> {
-    /// Construct a new [`Rep3LookupTable`]
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    fn get_from_lut_internal<T: IntRing2k, F: PrimeField>(
+impl Rep3LookupTable {
+    fn get_from_lut_internal<T: IntRing2k, F: PrimeField, N: Network>(
         index: Rep3BigUintShare<F>,
         lut: &PublicPrivateLut<F>,
-        network0: &mut IoContext<N>,
-        network1: &mut IoContext<N>,
-    ) -> IoResult<Rep3PrimeFieldShare<F>>
+        net0: &N,
+        net1: &N,
+        state0: &mut Rep3State,
+        state1: &mut Rep3State,
+    ) -> eyre::Result<Rep3PrimeFieldShare<F>>
     where
         Standard: Distribution<T>,
     {
@@ -88,16 +70,18 @@ impl<N: Rep3Network> Rep3LookupTable<N> {
                 let bin_a = gadgets::lut::read_public_lut_low_depth(
                     vec.as_ref(),
                     share,
-                    network0,
-                    network1,
+                    net0,
+                    net1,
+                    state0,
+                    state1,
                 )?;
-                let bin_b = network0.network.reshare(bin_a.to_owned())?;
+                let bin_b = network::reshare(net0, bin_a.to_owned())?;
                 let bin = Rep3BigUintShare::new(bin_a, bin_b);
-                rep3::conversion::b2a_selector(&bin, network0)?
+                rep3::conversion::b2a_selector(&bin, net0, state0)?
             }
             PublicPrivateLut::Shared(vec) => {
-                let f_a = gadgets::lut::read_shared_lut(vec.as_ref(), share, network0)?;
-                let f_b = network0.network.reshare(f_a)?;
+                let f_a = gadgets::lut::read_shared_lut(vec.as_ref(), share, net0, state0)?;
+                let f_b = network::reshare(net0, f_a)?;
                 Rep3PrimeFieldShare::new(f_a, f_b)
             }
         };
@@ -105,13 +89,15 @@ impl<N: Rep3Network> Rep3LookupTable<N> {
         Ok(val)
     }
 
-    fn write_to_lut_internal<T: IntRing2k, F: PrimeField>(
+    fn write_to_lut_internal<T: IntRing2k, F: PrimeField, N: Network>(
         index: Rep3BigUintShare<F>,
         lut: &mut PublicPrivateLut<F>,
         value: &Rep3PrimeFieldShare<F>,
-        network0: &mut IoContext<N>,
-        _network1: &mut IoContext<N>,
-    ) -> IoResult<()>
+        net0: &N,
+        _net1: &N,
+        state0: &mut Rep3State,
+        _state1: &mut Rep3State,
+    ) -> eyre::Result<()>
     where
         Standard: Distribution<T>,
     {
@@ -121,72 +107,78 @@ impl<N: Rep3Network> Rep3LookupTable<N> {
         match lut {
             PublicPrivateLut::Public(vec) => {
                 // There is not really a performance difference (i.e., more multiplications) when both lut and value are secret shared compared to public lut and private value. Thus we promote
-                let id = network0.id;
+                let id = net0.id();
                 let mut shared = vec
                     .iter()
                     .map(|v| arithmetic::promote_to_trivial_share(id, *v))
                     .collect::<Vec<_>>();
-                gadgets::lut::write_lut(value, &mut shared, share, network0)?;
+                gadgets::lut::write_lut(value, &mut shared, share, net0, state0)?;
                 *lut = PublicPrivateLut::Shared(shared);
             }
             PublicPrivateLut::Shared(shared) => {
-                gadgets::lut::write_lut(value, shared, share, network0)?;
+                gadgets::lut::write_lut(value, shared, share, net0, state0)?;
             }
         }
         Ok(())
     }
 
-    fn ohv_from_index_internal<T: IntRing2k, F: PrimeField>(
+    fn ohv_from_index_internal<T: IntRing2k, F: PrimeField, N: Network>(
         index: Rep3BigUintShare<F>,
         k: usize,
-        network0: &mut IoContext<N>,
-        _network1: &mut IoContext<N>,
-    ) -> IoResult<Vec<Rep3RingShare<Bit>>> {
+        net0: &N,
+        _net1: &N,
+        state0: &mut Rep3State,
+        _state1: &mut Rep3State,
+    ) -> eyre::Result<Vec<Rep3RingShare<Bit>>> {
         let a = T::cast_from_biguint(&index.a);
         let b = T::cast_from_biguint(&index.b);
         let bits = Rep3RingShare::new(a, b);
 
-        gadgets::ohv::ohv(k, bits, network0)
+        gadgets::ohv::ohv(k, bits, net0, state0)
     }
 
     /// Creates a shared one-hot-encoded vector from a given shared index
-    pub fn ohv_from_index<F: PrimeField>(
+    pub fn ohv_from_index<F: PrimeField, N: Network>(
         &mut self,
         index: Rep3PrimeFieldShare<F>,
         len: usize,
-        network0: &mut IoContext<N>,
-        network1: &mut IoContext<N>,
-    ) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
-        let bits = rep3::conversion::a2b_selector(index, network0)?;
+        net0: &N,
+        net1: &N,
+        state0: &mut Rep3State,
+        state1: &mut Rep3State,
+    ) -> eyre::Result<Vec<Rep3PrimeFieldShare<F>>> {
+        let bits = rep3::conversion::a2b_selector(index, net0, state0)?;
         let k = len.next_power_of_two().ilog2() as usize;
 
         let e = if k == 1 {
-            Self::ohv_from_index_internal::<Bit, _>(bits, k, network0, network1)?
+            Self::ohv_from_index_internal::<Bit, _, _>(bits, k, net0, net1, state0, state1)?
         } else if k <= 8 {
-            Self::ohv_from_index_internal::<u8, _>(bits, k, network0, network1)?
+            Self::ohv_from_index_internal::<u8, _, _>(bits, k, net0, net1, state0, state1)?
         } else if k <= 16 {
-            Self::ohv_from_index_internal::<u16, _>(bits, k, network0, network1)?
+            Self::ohv_from_index_internal::<u16, _, _>(bits, k, net0, net1, state0, state1)?
         } else if k <= 32 {
-            Self::ohv_from_index_internal::<u32, _>(bits, k, network0, network1)?
+            Self::ohv_from_index_internal::<u32, _, _>(bits, k, net0, net1, state0, state1)?
         } else {
             panic!("Table is too large")
         };
 
-        conversion::bit_inject_from_bits_to_field_many::<F, _>(&e, network0)
+        conversion::bit_inject_from_bits_to_field_many::<F, _>(&e, net0, state0)
     }
 
     /// Writes to a shared lookup table with the index already being transformed into the shared one-hot-encoded vector
-    pub fn write_to_shared_lut_from_ohv<F: PrimeField>(
+    pub fn write_to_shared_lut_from_ohv<F: PrimeField, N: Network>(
         &mut self,
         ohv: &[Rep3PrimeFieldShare<F>],
         value: Rep3PrimeFieldShare<F>,
         lut: &mut [Rep3PrimeFieldShare<F>],
-        network0: &mut IoContext<N>,
-        _network1: &mut IoContext<N>,
-    ) -> IoResult<()> {
+        net0: &N,
+        _net1: &N,
+        state0: &mut Rep3State,
+        _state1: &mut Rep3State,
+    ) -> eyre::Result<()> {
         let len = lut.len();
         tracing::debug!("doing write on LUT-map of size {}", len);
-        gadgets::lut::write_lut_from_ohv(&value, lut, ohv, network0)?;
+        gadgets::lut::write_lut_from_ohv(&value, lut, ohv, net0, state0)?;
         tracing::debug!("we are done");
         Ok(())
     }
@@ -200,10 +192,9 @@ impl<N: Rep3Network> Rep3LookupTable<N> {
     }
 }
 
-impl<F: PrimeField, N: Rep3Network> LookupTableProvider<F> for Rep3LookupTable<N> {
+impl<F: PrimeField> LookupTableProvider<F> for Rep3LookupTable {
     type SecretShare = Rep3PrimeFieldShare<F>;
     type LutType = PublicPrivateLut<F>;
-    type NetworkProvider = IoContext<N>;
 
     fn init_private(&self, values: Vec<Self::SecretShare>) -> Self::LutType {
         tracing::debug!("initiating LUT-map (private)");
@@ -215,26 +206,28 @@ impl<F: PrimeField, N: Rep3Network> LookupTableProvider<F> for Rep3LookupTable<N
         PublicPrivateLut::Public(values)
     }
 
-    fn get_from_lut(
+    fn get_from_lut<N: Network>(
         &mut self,
         index: Self::SecretShare,
         lut: &Self::LutType,
-        network0: &mut Self::NetworkProvider,
-        network1: &mut Self::NetworkProvider,
-    ) -> IoResult<Self::SecretShare> {
+        net0: &N,
+        net1: &N,
+        state0: &mut Rep3State,
+        state1: &mut Rep3State,
+    ) -> eyre::Result<Self::SecretShare> {
         let len = lut.len();
         tracing::debug!("doing read on LUT-map of size {}", len);
-        let bits = rep3::conversion::a2b_selector(index, network0)?;
+        let bits = rep3::conversion::a2b_selector(index, net0, state0)?;
         let k = len.next_power_of_two().ilog2() as usize;
 
         let result = if k == 1 {
-            Self::get_from_lut_internal::<Bit, _>(bits, lut, network0, network1)?
+            Self::get_from_lut_internal::<Bit, _, _>(bits, lut, net0, net1, state0, state1)?
         } else if k <= 8 {
-            Self::get_from_lut_internal::<u8, _>(bits, lut, network0, network1)?
+            Self::get_from_lut_internal::<u8, _, _>(bits, lut, net0, net1, state0, state1)?
         } else if k <= 16 {
-            Self::get_from_lut_internal::<u16, _>(bits, lut, network0, network1)?
+            Self::get_from_lut_internal::<u16, _, _>(bits, lut, net0, net1, state0, state1)?
         } else if k <= 32 {
-            Self::get_from_lut_internal::<u32, _>(bits, lut, network0, network1)?
+            Self::get_from_lut_internal::<u32, _, _>(bits, lut, net0, net1, state0, state1)?
         } else {
             panic!("Table is too large")
         };
@@ -242,27 +235,29 @@ impl<F: PrimeField, N: Rep3Network> LookupTableProvider<F> for Rep3LookupTable<N
         Ok(result)
     }
 
-    fn write_to_lut(
+    fn write_to_lut<N: Network>(
         &mut self,
         index: Self::SecretShare,
         value: Self::SecretShare,
         lut: &mut Self::LutType,
-        network0: &mut Self::NetworkProvider,
-        network1: &mut Self::NetworkProvider,
-    ) -> IoResult<()> {
+        net0: &N,
+        net1: &N,
+        state0: &mut Rep3State,
+        state1: &mut Rep3State,
+    ) -> eyre::Result<()> {
         let len = lut.len();
         tracing::debug!("doing write on LUT-map of size {}", len);
-        let bits = rep3::conversion::a2b_selector(index, network0)?;
+        let bits = rep3::conversion::a2b_selector(index, net0, state0)?;
         let k = len.next_power_of_two().ilog2();
 
         if k == 1 {
-            Self::write_to_lut_internal::<Bit, _>(bits, lut, &value, network0, network1)?
+            Self::write_to_lut_internal::<Bit, _, _>(bits, lut, &value, net0, net1, state0, state1)?
         } else if k <= 8 {
-            Self::write_to_lut_internal::<u8, _>(bits, lut, &value, network0, network1)?
+            Self::write_to_lut_internal::<u8, _, _>(bits, lut, &value, net0, net1, state0, state1)?
         } else if k <= 16 {
-            Self::write_to_lut_internal::<u16, _>(bits, lut, &value, network0, network1)?
+            Self::write_to_lut_internal::<u16, _, _>(bits, lut, &value, net0, net1, state0, state1)?
         } else if k <= 32 {
-            Self::write_to_lut_internal::<u32, _>(bits, lut, &value, network0, network1)?
+            Self::write_to_lut_internal::<u32, _, _>(bits, lut, &value, net0, net1, state0, state1)?
         } else {
             panic!("Table is too large")
         };
@@ -278,13 +273,10 @@ impl<F: PrimeField, N: Rep3Network> LookupTableProvider<F> for Rep3LookupTable<N
         }
     }
 
-    fn get_public_lut(lut: &Self::LutType) -> std::io::Result<&Vec<F>> {
+    fn get_public_lut(lut: &Self::LutType) -> eyre::Result<&Vec<F>> {
         match lut {
             PublicPrivateLut::Public(items) => Ok(items),
-            PublicPrivateLut::Shared(_) => Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "Expected public LUT",
-            )),
+            PublicPrivateLut::Shared(_) => Err(eyre::eyre!("Expected public LUT")),
         }
     }
 }

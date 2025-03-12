@@ -8,19 +8,19 @@ mod types;
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use itertools::{izip, Itertools};
+use mpc_engine::Network;
 use rayon::prelude::*;
 pub use types::Rep3PointShare;
 
 use super::{
-    id::PartyID,
-    network::{IoContext, Rep3Network},
-    IoResult, Rep3PrimeFieldShare,
+    network::{self},
+    Rep3PrimeFieldShare, Rep3State, PARTY_0, PARTY_1, PARTY_2,
 };
 
 /// Type alias for a [`Rep3PrimeFieldShare`]
-type FieldShare<C> = Rep3PrimeFieldShare<C>;
+pub type FieldShare<C> = Rep3PrimeFieldShare<C>;
 /// Type alias for a [`Rep3PointShare`]
-type PointShare<C> = Rep3PointShare<C>;
+pub type PointShare<C> = Rep3PointShare<C>;
 
 /// Performs addition between two shared values.
 pub fn add<C: CurveGroup>(a: &PointShare<C>, b: &PointShare<C>) -> PointShare<C> {
@@ -43,20 +43,22 @@ pub fn sub_assign<C: CurveGroup>(a: &mut PointShare<C>, b: &PointShare<C>) {
 }
 
 /// Performs addition between a shared value and a public value in place.
-pub fn add_assign_public<C: CurveGroup>(a: &mut PointShare<C>, b: &C, id: PartyID) {
+pub fn add_assign_public<C: CurveGroup>(a: &mut PointShare<C>, b: &C, id: usize) {
     match id {
-        PartyID::ID0 => a.a += b,
-        PartyID::ID1 => a.b += b,
-        PartyID::ID2 => {}
+        PARTY_0 => a.a += b,
+        PARTY_1 => a.b += b,
+        PARTY_2 => {}
+        _ => unreachable!(),
     }
 }
 
 /// Performs subtraction between a shared value and a public value in place.
-pub fn sub_assign_public<C: CurveGroup>(a: &mut PointShare<C>, b: &C, id: PartyID) {
+pub fn sub_assign_public<C: CurveGroup>(a: &mut PointShare<C>, b: &C, id: usize) {
     match id {
-        PartyID::ID0 => a.a -= b,
-        PartyID::ID1 => a.b -= b,
-        PartyID::ID2 => {}
+        PARTY_0 => a.a -= b,
+        PARTY_1 => a.b -= b,
+        PARTY_2 => {}
+        _ => unreachable!(),
     }
 }
 
@@ -80,13 +82,14 @@ pub fn scalar_mul_public_scalar<C: CurveGroup>(
 }
 
 /// Perform scalar multiplication
-pub fn scalar_mul<C: CurveGroup, N: Rep3Network>(
+pub fn scalar_mul<C: CurveGroup, N: Network>(
     a: &PointShare<C>,
     b: FieldShare<C::ScalarField>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<PointShare<C>> {
-    let local_a = b * a + io_context.rngs.rand.masking_ec_element::<C>();
-    let local_b = io_context.network.reshare(local_a)?;
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<PointShare<C>> {
+    let local_a = b * a + state.rngs.rand.masking_ec_element::<C>();
+    let local_b = network::reshare(net, local_a)?;
     Ok(PointShare {
         a: local_a,
         b: local_b,
@@ -94,21 +97,24 @@ pub fn scalar_mul<C: CurveGroup, N: Rep3Network>(
 }
 
 /// Open the shared point
-pub fn open_point<C: CurveGroup, N: Rep3Network>(
-    a: &PointShare<C>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<C> {
-    let c = io_context.network.reshare(a.b)?;
+pub fn open_point<C: CurveGroup, N: Network>(a: &PointShare<C>, net: &N) -> eyre::Result<C> {
+    let c = network::reshare(net, a.b)?;
     Ok(a.a + a.b + c)
 }
 
+/// Open the shared point
+pub fn open_half_point<C: CurveGroup, N: Network>(a: C, net: &N) -> eyre::Result<C> {
+    let (b, c) = network::broadcast(net, a)?;
+    Ok(a + b + c)
+}
+
 /// Open the vector of [`Rep3PointShare`]s
-pub fn open_point_many<C: CurveGroup, N: Rep3Network>(
+pub fn open_point_many<C: CurveGroup, N: Network>(
     a: &[PointShare<C>],
-    io_context: &mut IoContext<N>,
-) -> IoResult<Vec<C>> {
+    net: &N,
+) -> eyre::Result<Vec<C>> {
     let bs = a.iter().map(|x| x.b).collect_vec();
-    let cs = io_context.network.reshare(bs)?;
+    let cs = network::reshare(net, bs)?;
     Ok(izip!(a, cs).map(|(x, c)| x.a + x.b + c).collect_vec())
 }
 

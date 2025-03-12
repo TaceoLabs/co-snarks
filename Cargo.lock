@@ -877,9 +877,12 @@ dependencies = [
  "eyre",
  "itertools 0.14.0",
  "mpc-core",
+ "mpc-engine",
  "mpc-net",
  "num-bigint 0.4.6",
  "num-traits",
+ "rand 0.8.5",
+ "rayon",
  "serde",
  "tracing",
 ]
@@ -1059,6 +1062,7 @@ dependencies = [
  "criterion",
  "figment",
  "mpc-core",
+ "mpc-engine",
  "mpc-net",
  "num-bigint 0.4.6",
  "num-traits",
@@ -1081,6 +1085,7 @@ dependencies = [
  "circom-types",
  "eyre",
  "mpc-core",
+ "mpc-engine",
  "num-traits",
  "rand 0.8.5",
  "serde",
@@ -1101,9 +1106,11 @@ dependencies = [
  "co-circom-snarks",
  "eyre",
  "mpc-core",
+ "mpc-engine",
  "mpc-net",
  "num-traits",
  "rand 0.8.5",
+ "rand_chacha 0.3.1",
  "rayon",
  "serde_json",
  "tokio",
@@ -1154,6 +1161,7 @@ dependencies = [
  "eyre",
  "itertools 0.14.0",
  "mpc-core",
+ "mpc-engine",
  "mpc-net",
  "num-traits",
  "rand 0.8.5",
@@ -2599,6 +2607,7 @@ dependencies = [
  "eyre",
  "fancy-garbling",
  "itertools 0.14.0",
+ "mpc-engine",
  "mpc-net",
  "num-bigint 0.4.6",
  "num-traits",
@@ -2611,6 +2620,20 @@ dependencies = [
  "sha3",
  "subtle",
  "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "mpc-engine"
+version = "0.1.0"
+source = "git+https://github.com/TaceoLabs/mpc-engine#df511865afdc17306c4d220fcd4fcb6b8d71dce6"
+dependencies = [
+ "byteorder",
+ "eyre",
+ "intmap",
+ "oneshot",
+ "parking_lot",
+ "rayon",
  "tracing",
 ]
 
@@ -2936,6 +2959,12 @@ name = "once_cell"
 version = "1.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cde51589ab56b20a6f686b2c68f7a0bd6add753d697abf720d63f8db3ab7b1ad"
+
+[[package]]
+name = "oneshot"
+version = "0.1.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b4ce411919553d3f9fa53a0880544cda985a112117a0444d5ff1e870a893d6ea"
 
 [[package]]
 name = "oorandom"
@@ -4306,20 +4335,19 @@ dependencies = [
  "circom-mpc-compiler",
  "circom-mpc-vm",
  "circom-types",
- "co-acvm",
  "co-circom-snarks",
  "co-groth16",
- "co-noir",
  "co-plonk",
- "co-ultrahonk",
  "itertools 0.14.0",
  "mpc-core",
+ "mpc-engine",
  "noirc_abi",
  "noirc_artifacts",
  "num-bigint 0.4.6",
  "num-traits",
  "paste",
  "rand 0.8.5",
+ "rayon",
  "serde_json",
  "sha3",
  "tracing-subscriber 0.3.19",
