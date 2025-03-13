@@ -1,4 +1,5 @@
 use super::{plain::PlainAcvmSolver, NoirWitnessExtensionProtocol};
+use ark_ec::CurveGroup;
 use ark_ff::{One, PrimeField};
 use co_brillig::mpc::{ShamirBrilligDriver, ShamirBrilligType};
 use mpc_core::{
@@ -6,7 +7,10 @@ use mpc_core::{
     protocols::{
         rep3::network::Rep3MpcNet,
         rep3_ring::lut::Rep3LookupTable,
-        shamir::{arithmetic, network::ShamirNetwork, ShamirPrimeFieldShare, ShamirProtocol},
+        shamir::{
+            arithmetic, network::ShamirNetwork, pointshare, ShamirPointShare,
+            ShamirPrimeFieldShare, ShamirProtocol,
+        },
     },
 };
 use num_bigint::BigUint;
@@ -31,6 +35,39 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirAcvmSolver<F, N> {
 
     pub fn into_network(self) -> N {
         self.protocol.network
+    }
+}
+
+// For some intermediate representations
+#[derive(Clone)]
+pub enum ShamirAcvmPoint<C: CurveGroup> {
+    Public(C),
+    Shared(ShamirPointShare<C>),
+}
+
+impl<C: CurveGroup> std::fmt::Debug for ShamirAcvmPoint<C> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Public(point) => f.debug_tuple("Public").field(point).finish(),
+            Self::Shared(share) => f.debug_tuple("Arithmetic").field(share).finish(),
+        }
+    }
+}
+
+impl<C: CurveGroup> std::fmt::Display for ShamirAcvmPoint<C> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Public(point) => f.write_str(&format!("Public ({point})")),
+            Self::Shared(arithmetic) => {
+                f.write_str(&format!("Arithmetic ({})", arithmetic.to_owned().inner()))
+            }
+        }
+    }
+}
+
+impl<C: CurveGroup> From<C> for ShamirAcvmPoint<C> {
+    fn from(value: C) -> Self {
+        Self::Public(value)
     }
 }
 
@@ -114,6 +151,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
     type ArithmeticShare = ShamirPrimeFieldShare<F>;
 
     type AcvmType = ShamirAcvmType<F>;
+    type AcvmPoint<C: CurveGroup<BaseField = F>> = ShamirAcvmPoint<C>;
 
     type BrilligDriver = ShamirBrilligDriver<F, N>;
 
@@ -209,6 +247,27 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         }
     }
 
+    fn add_points<C: CurveGroup<BaseField = F>>(
+        &self,
+        lhs: Self::AcvmPoint<C>,
+        rhs: Self::AcvmPoint<C>,
+    ) -> Self::AcvmPoint<C> {
+        match (lhs, rhs) {
+            (ShamirAcvmPoint::Public(lhs), ShamirAcvmPoint::Public(rhs)) => {
+                ShamirAcvmPoint::Public(lhs + rhs)
+            }
+            (ShamirAcvmPoint::Public(public), ShamirAcvmPoint::Shared(mut shared))
+            | (ShamirAcvmPoint::Shared(mut shared), ShamirAcvmPoint::Public(public)) => {
+                pointshare::add_assign_public(&mut shared, &public);
+                ShamirAcvmPoint::Shared(shared)
+            }
+            (ShamirAcvmPoint::Shared(lhs), ShamirAcvmPoint::Shared(rhs)) => {
+                let result = pointshare::add(&lhs, &rhs);
+                ShamirAcvmPoint::Shared(result)
+            }
+        }
+    }
+
     fn sub(&mut self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType {
         match (share_1, share_2) {
             (ShamirAcvmType::Public(share_1), ShamirAcvmType::Public(share_2)) => {
@@ -254,6 +313,21 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
             (ShamirAcvmType::Shared(secret_1), ShamirAcvmType::Shared(secret_2)) => {
                 let result = arithmetic::mul(secret_1, secret_2, &mut self.protocol)?;
                 Ok(ShamirAcvmType::Shared(result))
+            }
+        }
+    }
+
+    fn invert(&mut self, secret: Self::AcvmType) -> std::io::Result<Self::AcvmType> {
+        match secret {
+            ShamirAcvmType::Public(secret) => {
+                let inv = secret.inverse().ok_or_else(|| {
+                    std::io::Error::new(std::io::ErrorKind::InvalidInput, "Cannot invert zero")
+                })?;
+                Ok(ShamirAcvmType::Public(inv))
+            }
+            ShamirAcvmType::Shared(secret) => {
+                let inv = arithmetic::inv(secret, &mut self.protocol)?;
+                Ok(ShamirAcvmType::Shared(inv))
             }
         }
     }
@@ -365,6 +439,14 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         panic!("read_lut_by_acvm_type: Operation atm not supported")
     }
 
+    fn read_from_public_luts(
+        &mut self,
+        _index: Self::AcvmType,
+        _luts: &[Vec<F>],
+    ) -> std::io::Result<Vec<Self::AcvmType>> {
+        panic!("read_from_public_luts: Operation atm not supported")
+    }
+
     fn write_lut_by_acvm_type(
         &mut self,
         _index: Self::AcvmType,
@@ -411,6 +493,13 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
     fn get_public(a: &Self::AcvmType) -> Option<F> {
         match a {
             ShamirAcvmType::Public(public) => Some(*public),
+            _ => None,
+        }
+    }
+
+    fn get_public_point<C: CurveGroup<BaseField = F>>(a: &Self::AcvmPoint<C>) -> Option<C> {
+        match a {
+            ShamirAcvmPoint::Public(public) => Some(*public),
             _ => None,
         }
     }
@@ -639,5 +728,47 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         _b: &Self::AcvmType,
     ) -> std::io::Result<Self::AcvmType> {
         panic!("functionality equal not feasible for Shamir")
+    }
+
+    fn multi_scalar_mul(
+        &mut self,
+        _points: &[Self::AcvmType],
+        _scalars_lo: &[Self::AcvmType],
+        _scalars_hi: &[Self::AcvmType],
+        _pedantic_solving: bool,
+    ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
+        panic!("functionality multi_scalar_mul not feasible for Shamir")
+    }
+
+    fn field_shares_to_pointshare<C: CurveGroup<BaseField = F>>(
+        &mut self,
+        _x: Self::AcvmType,
+        _y: Self::AcvmType,
+        _is_infinity: Self::AcvmType,
+    ) -> std::io::Result<Self::AcvmPoint<C>> {
+        panic!("functionality field_share_to_pointshare not feasible for Shamir")
+    }
+
+    fn pointshare_to_field_shares<C: CurveGroup<BaseField = F>>(
+        &mut self,
+        _point: Self::AcvmPoint<C>,
+    ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
+        panic!("functionality pointshare_to_field_shares not feasible for Shamir")
+    }
+
+    fn gt(
+        &mut self,
+        _lhs: Self::AcvmType,
+        _rhs: Self::AcvmType,
+    ) -> std::io::Result<Self::AcvmType> {
+        panic!("functionality gt not feasible for Shamir")
+    }
+
+    fn set_point_to_value_if_zero<C: CurveGroup<BaseField = F>>(
+        &mut self,
+        _point: Self::AcvmPoint<C>,
+        _value: Self::AcvmPoint<C>,
+    ) -> std::io::Result<Self::AcvmPoint<C>> {
+        panic!("functionality set_point_to_value_if_zero not feasible for Shamir")
     }
 }

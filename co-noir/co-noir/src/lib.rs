@@ -417,7 +417,7 @@ pub fn translate_proving_key<
 }
 
 /// Compute the circuit size that is needed to load the prover crs
-pub fn compute_circuit_size<P: Pairing>(
+pub fn compute_circuit_size<P: HonkCurve<TranscriptFieldType>>(
     constraint_system: &AcirFormat<P::ScalarField>,
     recursive: bool,
 ) -> Result<usize> {
@@ -486,7 +486,7 @@ pub fn generate_proving_key_shamir<N: ShamirNetwork>(
 }
 
 /// Generate a plain proving key
-pub fn generate_proving_key_plain<P: Pairing>(
+pub fn generate_proving_key_plain<P: HonkCurve<TranscriptFieldType>>(
     constraint_system: &AcirFormat<P::ScalarField>,
     witness: Vec<P::ScalarField>,
     prover_crs: Arc<ProverCrs<P>>,
@@ -509,7 +509,7 @@ pub fn generate_proving_key_plain<P: Pairing>(
 }
 
 /// Generate a verification key
-pub fn generate_vk<P: Pairing>(
+pub fn generate_vk<P: HonkCurve<TranscriptFieldType>>(
     constraint_system: &AcirFormat<P::ScalarField>,
     prover_crs: Arc<ProverCrs<P>>,
     verifier_crs: P::G2Affine,
@@ -534,7 +534,7 @@ pub fn generate_vk<P: Pairing>(
 }
 
 /// Generate a barretenberg verification key
-pub fn generate_vk_barretenberg<P: Pairing>(
+pub fn generate_vk_barretenberg<P: HonkCurve<TranscriptFieldType>>(
     constraint_system: &AcirFormat<P::ScalarField>,
     prover_crs: Arc<ProverCrs<P>>,
     recursive: bool,
