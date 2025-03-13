@@ -10,6 +10,14 @@ pub(crate) struct SharedUnivariate<T: NoirUltraHonkProver<P>, P: Pairing, const 
 }
 
 impl<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> SharedUnivariate<T, P, SIZE> {
+    pub(crate) fn from_vec(evaluations: Vec<T::ArithmeticShare>) -> Self {
+        Self {
+            evaluations: evaluations
+                .try_into()
+                .unwrap_or_else(|_| panic!("vec must contain exactly {SIZE} elements")),
+        }
+    }
+
     pub(crate) fn add(&self, rhs: &Self) -> Self {
         let mut result = Self::default();
         for i in 0..SIZE {
