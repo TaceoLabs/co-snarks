@@ -1,5 +1,5 @@
 use circom_types::traits::CheckElement;
-use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap::{value_parser, Args, Parser, Subcommand, ValueEnum};
 use co_circom::{
     Bls12_381, Bn254, CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge,
     CoCircomCompiler, CompilerConfig, Compression, Groth16, Groth16JsonVerificationKey,
@@ -14,11 +14,11 @@ use figment::{
     providers::{Env, Format, Serialized, Toml},
     Figment,
 };
-use mpc_engine::{MpcEngine, TcpNetwork, NUM_THREADS_CPU, NUM_THREADS_NET};
-use mpc_net::config::{NetworkConfig, NetworkConfigFile};
+use mpc_engine::{Address, MpcEngine, TlsNetwork, NUM_THREADS_CPU, NUM_THREADS_NET};
 use num_traits::Zero;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use serde::{Deserialize, Serialize};
-use std::net::ToSocketAddrs;
+use std::net::SocketAddr;
 use std::{
     fs::File,
     io::{BufReader, BufWriter},
@@ -268,6 +268,26 @@ pub struct GenerateWitnessCli {
     /// The simplification level passed to the circom compiler (0-2)
     #[arg(short = 'O', default_value_t = 1, value_parser = clap::value_parser!(u8).range(0..3))]
     pub simplification_level: u8,
+    /// Our id in the network.
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub id: Option<usize>,
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    /// The [SocketAddr] we bind to.
+    pub bind_addr: Option<SocketAddr>,
+    #[arg(long, value_delimiter = ',', value_parser = value_parser!(Address))]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    /// Party addresses (including own and in order of id).
+    pub party_addrs: Option<Vec<Address>>,
+    #[arg(long, value_delimiter = ',')]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    /// Paths of the party certificates (including own and in order of id).
+    pub party_certs: Option<Vec<PathBuf>>,
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    /// Path to our private key.
+    pub key: Option<PathBuf>,
 }
 
 /// Config for `generate_witness`
@@ -289,8 +309,16 @@ pub struct GenerateWitnessConfig {
     /// MPC VM config
     #[serde(default)]
     pub vm: VMConfig,
-    /// Network config
-    pub network: NetworkConfigFile,
+    /// Our id in the network.
+    pub id: usize,
+    /// The [SocketAddr] we bind to.
+    pub bind_addr: SocketAddr,
+    /// Party addresses (including own and in order of id).
+    pub party_addrs: Vec<Address>,
+    /// Paths of the party certificates (including own and in order of id).
+    pub party_certs: Vec<PathBuf>,
+    /// Path to our private key.
+    pub key: PathBuf,
 }
 
 /// Cli arguments for `transalte_witness`
@@ -320,6 +348,26 @@ pub struct TranslateWitnessCli {
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
     pub out: Option<PathBuf>,
+    /// Our id in the network.
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub id: Option<usize>,
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    /// The [SocketAddr] we bind to.
+    pub bind_addr: Option<SocketAddr>,
+    #[arg(long, value_delimiter = ',', value_parser = value_parser!(Address))]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    /// Party addresses (including own and in order of id).
+    pub party_addrs: Option<Vec<Address>>,
+    #[arg(long, value_delimiter = ',')]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    /// Paths of the party certificates (including own and in order of id).
+    pub party_certs: Option<Vec<PathBuf>>,
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    /// Path to our private key.
+    pub key: Option<PathBuf>,
 }
 
 /// Config for `transalte_witness`
@@ -335,8 +383,16 @@ pub struct TranslateWitnessConfig {
     pub curve: Curve,
     /// The output file where the final witness share is written to
     pub out: PathBuf,
-    /// Network config
-    pub network: NetworkConfigFile,
+    /// Our id in the network.
+    pub id: usize,
+    /// The [SocketAddr] we bind to.
+    pub bind_addr: SocketAddr,
+    /// Party addresses (including own and in order of id).
+    pub party_addrs: Vec<Address>,
+    /// Paths of the party certificates (including own and in order of id).
+    pub party_certs: Vec<PathBuf>,
+    /// Path to our private key.
+    pub key: PathBuf,
 }
 
 /// Cli arguments for `generate_proof`
@@ -379,6 +435,26 @@ pub struct GenerateProofCli {
     /// The threshold of tolerated colluding parties
     #[arg(short, long, default_value_t = 1)]
     pub threshold: usize,
+    /// Our id in the network.
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub id: Option<usize>,
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    /// The [SocketAddr] we bind to.
+    pub bind_addr: Option<SocketAddr>,
+    #[arg(long, value_delimiter = ',', value_parser = value_parser!(Address))]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    /// Party addresses (including own and in order of id).
+    pub party_addrs: Option<Vec<Address>>,
+    #[arg(long, value_delimiter = ',')]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    /// Paths of the party certificates (including own and in order of id).
+    pub party_certs: Option<Vec<PathBuf>>,
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    /// Path to our private key.
+    pub key: Option<PathBuf>,
 }
 
 /// Config for `generate_proof`
@@ -402,8 +478,16 @@ pub struct GenerateProofConfig {
     pub public_input: Option<PathBuf>,
     /// The threshold of tolerated colluding parties
     pub threshold: usize,
-    /// Network config
-    pub network: NetworkConfigFile,
+    /// Our id in the network.
+    pub id: usize,
+    /// The [SocketAddr] we bind to.
+    pub bind_addr: SocketAddr,
+    /// Party addresses (including own and in order of id).
+    pub party_addrs: Vec<Address>,
+    /// Paths of the party certificates (including own and in order of id).
+    pub party_certs: Vec<PathBuf>,
+    /// Path to our private key.
+    pub key: PathBuf,
 }
 
 /// Cli arguments for `verify`
@@ -648,10 +732,10 @@ where
     match protocol {
         MPCProtocol::REP3 => {
             if t != 1 {
-                return Err(eyre!("REP3 only allows the threshold to be 1"));
+                eyre::bail!("REP3 only allows the threshold to be 1");
             }
             if n != 3 {
-                return Err(eyre!("REP3 only allows the number of parties to be 3"));
+                eyre::bail!("REP3 only allows the number of parties to be 3");
             }
             // create witness shares
             let start = Instant::now();
@@ -716,9 +800,7 @@ where
     let out_dir = config.out_dir;
 
     if protocol != MPCProtocol::REP3 {
-        return Err(eyre!(
-            "Only REP3 protocol is supported for splitting inputs"
-        ));
+        eyre::bail!("Only REP3 protocol is supported for splitting inputs");
     }
     let circuit_path = PathBuf::from(&circuit);
 
@@ -765,13 +847,11 @@ where
     let out = config.out;
 
     if protocol != MPCProtocol::REP3 {
-        return Err(eyre!(
-            "Only REP3 protocol is supported for merging input shares"
-        ));
+        eyre::bail!("Only REP3 protocol is supported for merging input shares");
     }
 
     if inputs.len() < 2 {
-        return Err(eyre!("Need at least two input shares to merge"));
+        eyre::bail!("Need at least two input shares to merge");
     }
 
     let input_shares = inputs
@@ -811,30 +891,23 @@ where
     let circuit = config.circuit;
     let protocol = config.protocol;
     let out = config.out;
+    let id = config.id;
+    let bind_addr = config.bind_addr;
+    let party_addrs = config.party_addrs;
+    let party_certs = config
+        .party_certs
+        .iter()
+        .map(|p| Ok(CertificateDer::from(std::fs::read(p)?).into_owned()))
+        .collect::<eyre::Result<Vec<_>>>()?;
+    let key =
+        PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(std::fs::read(config.key)?)).clone_key();
 
     if protocol != MPCProtocol::REP3 {
-        return Err(eyre!(
-            "Only REP3 protocol is supported for witness generation"
-        ));
+        eyre::bail!("Only REP3 protocol is supported for witness generation");
     }
 
     // connect to network
-    let network_config: NetworkConfig = config
-        .network
-        .to_owned()
-        .try_into()
-        .context("while converting network config")?;
-    let id = network_config.my_id;
-    let nets = TcpNetwork::networks(
-        network_config.my_id,
-        network_config.bind_addr,
-        &network_config
-            .parties
-            .iter()
-            .map(|p| p.dns_name.to_socket_addrs().unwrap().next().unwrap())
-            .collect::<Vec<_>>(),
-        8,
-    )?;
+    let nets = TlsNetwork::networks(id, bind_addr, &party_addrs, party_certs, key, 8)?;
     let engine = MpcEngine::new(id, NUM_THREADS_NET, NUM_THREADS_CPU, nets);
 
     // parse input shares
@@ -877,9 +950,19 @@ where
     let src_protocol = config.src_protocol;
     let target_protocol = config.target_protocol;
     let out = config.out;
+    let id = config.id;
+    let bind_addr = config.bind_addr;
+    let party_addrs = config.party_addrs;
+    let party_certs = config
+        .party_certs
+        .iter()
+        .map(|p| Ok(CertificateDer::from(std::fs::read(p)?).into_owned()))
+        .collect::<eyre::Result<Vec<_>>>()?;
+    let key =
+        PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(std::fs::read(config.key)?)).clone_key();
 
     if src_protocol != MPCProtocol::REP3 || target_protocol != MPCProtocol::SHAMIR {
-        return Err(eyre!("Only REP3 to SHAMIR translation is supported"));
+        eyre::bail!("Only REP3 to SHAMIR translation is supported");
     }
 
     // parse witness shares
@@ -889,22 +972,7 @@ where
         bincode::deserialize_from(witness_file)?;
 
     // connect to network
-    let network_config: NetworkConfig = config
-        .network
-        .to_owned()
-        .try_into()
-        .context("while converting network config")?;
-    let id = network_config.my_id;
-    let nets = TcpNetwork::networks(
-        network_config.my_id,
-        network_config.bind_addr,
-        &network_config
-            .parties
-            .iter()
-            .map(|p| p.dns_name.to_socket_addrs().unwrap().next().unwrap())
-            .collect::<Vec<_>>(),
-        8,
-    )?;
+    let nets = TlsNetwork::networks(id, bind_addr, &party_addrs, party_certs, key, 8)?;
     let engine = MpcEngine::new(id, NUM_THREADS_NET, NUM_THREADS_CPU, nets);
 
     // Translate witness to shamir shares
@@ -936,11 +1004,22 @@ where
     let out = config.out;
     let public_input_filename = config.public_input;
     let t = config.threshold;
+    let n = config.party_addrs.len();
     let check = if config.check_zkey {
         CheckElement::Yes
     } else {
         CheckElement::No
     };
+    let id = config.id;
+    let bind_addr = config.bind_addr;
+    let party_addrs = config.party_addrs;
+    let party_certs = config
+        .party_certs
+        .iter()
+        .map(|p| Ok(CertificateDer::from(std::fs::read(p)?).into_owned()))
+        .collect::<eyre::Result<Vec<_>>>()?;
+    let key =
+        PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(std::fs::read(config.key)?)).clone_key();
 
     // parse witness shares
     let witness_file =
@@ -949,25 +1028,9 @@ where
     // parse Circom zkey file
     let zkey_file = File::open(zkey)?;
 
-    let network_config: NetworkConfig = config
-        .network
-        .to_owned()
-        .try_into()
-        .context("while converting network config")?;
-    let id = network_config.my_id;
-    let nets = TcpNetwork::networks(
-        network_config.my_id,
-        network_config.bind_addr,
-        &network_config
-            .parties
-            .iter()
-            .map(|p| p.dns_name.to_socket_addrs().unwrap().next().unwrap())
-            .collect::<Vec<_>>(),
-        8,
-    )?;
+    // connect to network
+    let nets = TlsNetwork::networks(id, bind_addr, &party_addrs, party_certs, key, 8)?;
     let engine = MpcEngine::new(id, NUM_THREADS_NET, NUM_THREADS_CPU, nets);
-
-    let n = network_config.parties.len();
 
     tracing::info!("Starting proof generation...");
     let public_input = match proof_system {
@@ -978,7 +1041,7 @@ where
             let (proof, public_input) = match protocol {
                 MPCProtocol::REP3 => {
                     if t != 1 {
-                        return Err(eyre!("REP3 only allows the threshold to be 1"));
+                        eyre::bail!("REP3 only allows the threshold to be 1");
                     }
 
                     let witness_share: CompressedRep3SharedWitness<P::ScalarField> =
@@ -1025,7 +1088,7 @@ where
             let (proof, public_input) = match protocol {
                 MPCProtocol::REP3 => {
                     if t != 1 {
-                        return Err(eyre!("REP3 only allows the threshold to be 1"));
+                        eyre::bail!("REP3 only allows the threshold to be 1");
                     }
 
                     let witness_share: CompressedRep3SharedWitness<P::ScalarField> =
