@@ -1046,7 +1046,7 @@ where
 
                     let witness_share: CompressedRep3SharedWitness<P::ScalarField> =
                         bincode::deserialize_from(witness_file)?;
-                    let witness_share = witness_share.uncompress(&engine)?;
+                    let witness_share = engine.install_net(|net| witness_share.uncompress(net))?;
                     let public_input = witness_share.public_inputs.clone();
 
                     let start = Instant::now();
@@ -1093,7 +1093,7 @@ where
 
                     let witness_share: CompressedRep3SharedWitness<P::ScalarField> =
                         bincode::deserialize_from(witness_file)?;
-                    let witness_share = witness_share.uncompress(&engine)?;
+                    let witness_share = engine.install_net(|net| witness_share.uncompress(net))?;
                     let public_input = witness_share.public_inputs.clone();
 
                     let start = Instant::now();
