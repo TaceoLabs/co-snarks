@@ -77,6 +77,10 @@ impl<F: PrimeField> ShamirRng<F> {
         for rng in self.shared_rngs.iter_mut() {
             shared_rngs.push(RngType::from_seed(rng.gen()));
         }
+        // TODO return err? pass in net and generater more?
+        if amount > self.r_t.len() {
+            panic!("not enough corr rand pairs");
+        }
         Self {
             id: self.id,
             rng,
