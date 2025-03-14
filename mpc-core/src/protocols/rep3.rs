@@ -284,7 +284,7 @@ where
         let a = self.a.expand_vec();
         let b = self.b.expand_vec();
         if a.len() != b.len() {
-            return Err(eyre::eyre!("Lengths of shares do not match"));
+            eyre::bail!("Lengths of shares do not match");
         }
         Ok(a.into_iter()
             .zip(b)
@@ -297,7 +297,7 @@ where
         let a = self.a.length();
         let b = self.b.length();
         if a != b {
-            return Err(eyre::eyre!("Lengths of shares do not match"));
+            eyre::bail!("Lengths of shares do not match");
         }
         Ok(a)
     }

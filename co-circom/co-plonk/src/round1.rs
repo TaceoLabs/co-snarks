@@ -72,12 +72,12 @@ impl<P: Pairing> std::fmt::Display for Round1Proof<P> {
 
 impl<P: Pairing, T: CircomPlonkProver<P>> Round1Challenges<P, T> {
     pub(super) fn random<N: Network + 'static>(
-        engine: &MpcEngine<N>,
         state: &mut T::State,
+        net: &N,
     ) -> PlonkProofResult<Self> {
         let mut b = core::array::from_fn(|_| T::ArithmeticShare::default());
         for x in b.iter_mut() {
-            *x = engine.install_net(|net| T::rand(net, state))?;
+            *x = T::rand(net, state)?;
         }
         Ok(Self { b })
     }
@@ -190,11 +190,10 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round1<'a, P
     // Calculate the witnesses for the additions, since they are not part of the SharedWitness
     #[instrument(level = "debug", name = "calculate additions", skip_all)]
     fn calculate_additions(
-        engine: &MpcEngine<N>,
+        party_id: usize,
         witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
         zkey: &ZKey<P>,
     ) -> PlonkProofResult<PlonkWitness<P, T>> {
-        let party_id = engine.id();
         let mut witness = PlonkWitness::new(witness, zkey.n_additions);
         // This is hard to multithread as we have to add the results
         // to the vec as they are needed for the later steps.
@@ -229,9 +228,8 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round1<'a, P
         zkey: &'a ZKey<P>,
         private_witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
     ) -> PlonkProofResult<Self> {
-        let plonk_witness = Self::calculate_additions(engine, private_witness, zkey)?;
-        // TODO: we do not want that to be
-        let challenges = Round1Challenges::random(engine, state)?;
+        let plonk_witness = Self::calculate_additions(engine.id(), private_witness, zkey)?;
+        let challenges = engine.install_net(|net| Round1Challenges::random(state, net))?;
         let domains = Domains::new(zkey.domain_size)?;
         Ok(Self {
             engine,
@@ -269,9 +267,9 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round1<'a, P
             || T::msm_public_points_g1(&p_tau[..polys.b.poly.len()], &polys.b.poly),
             || T::msm_public_points_g1(&p_tau[..polys.c.poly.len()], &polys.c.poly),
         );
+        commit_span.exit();
 
         // network round
-        commit_span.exit();
         let opening_span = tracing::debug_span!("opening commits").entered();
         let opened = engine
             .install_net(|net| T::open_point_vec_g1(&[commit_a, commit_b, commit_c], net, state))?;

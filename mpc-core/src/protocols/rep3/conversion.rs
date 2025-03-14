@@ -256,7 +256,7 @@ pub fn a2y<F: PrimeField, N: Network>(
         PARTY_1 | PARTY_2 => {
             let delta = match delta {
                 Some(delta) => delta,
-                None => Err(eyre::eyre!("No delta provided"))?,
+                None => eyre::bail!("No delta provided"),
             };
             let mut garbler = Rep3Garbler::new_with_delta(net, state, delta);
             let res = GarbledCircuits::adder_mod_p::<_, F>(&mut garbler, &x01, &x2);
@@ -290,10 +290,7 @@ pub fn a2y_streaming<F: PrimeField, N: Network>(
         PARTY_1 | PARTY_2 => {
             let delta = match delta {
                 Some(delta) => delta,
-                None => Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    "No delta provided",
-                ))?,
+                None => eyre::bail!("No delta provided"),
             };
             let mut garbler = StreamingRep3Garbler::new_with_delta(net, state, delta);
             let res = GarbledCircuits::adder_mod_p::<_, F>(&mut garbler, &x01, &x2);
@@ -454,10 +451,7 @@ pub fn b2y<F: PrimeField, N: Network>(
             // There is no code difference between Rep3Garbler and StreamingRep3Garbler
             let delta = match delta {
                 Some(delta) => delta,
-                None => Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    "No delta provided",
-                ))?,
+                None => eyre::bail!("No delta provided"),
             };
             let mut garbler = Rep3Garbler::new_with_delta(net, state, delta);
             let res = GarbledCircuits::xor_many(&mut garbler, &x01, &x2);
