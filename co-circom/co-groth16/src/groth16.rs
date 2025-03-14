@@ -499,14 +499,11 @@ where
         zkey: Arc<ZKey<P>>,
         witness: ShamirSharedWitness<P::ScalarField>,
     ) -> eyre::Result<Groth16Proof<P>> {
-        // we need 2 + 1 number of corr rand pairs. We need the values r/s (1 pair) and 2 muls (2
-        // pairs)
-        let num_pairs = 3;
+        // we need 4 number of corr rand pairs. 2 for two rand calls, 1 for rs mul and 1 for scalar_mul
+        let num_pairs = 4;
         let preprocessing = engine
             .install_net(|net| ShamirPreprocessing::new(num_parties, threshold, num_pairs, net))?;
         let mut protocol = ShamirProtocol::from(preprocessing);
-        // the protocol1 is only used for scalar_mul and a field_mul which need 1 pair each (ergo 2
-        // pairs)
         // execute prover in MPC
         Self::prove_inner(engine, &mut protocol, zkey, witness)
     }
