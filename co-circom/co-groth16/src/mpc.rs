@@ -31,7 +31,7 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
     where
         C: CurveGroup + Send;
     /// Internal state of used MPC protocol
-    type State: Fork + Send;
+    type State: Fork + Send + 'static;
 
     /// Generate a random arithemitc share
     fn rand<N: Network>(net: &N, state: &mut Self::State) -> eyre::Result<Self::ArithmeticShare>;
