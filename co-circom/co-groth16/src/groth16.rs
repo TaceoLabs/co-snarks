@@ -409,12 +409,14 @@ where
             result
         });
 
-        // TODO we should move this to seperate thread so that we not block here
-        // we can do some additional work so we don't necessary need to block
-        let rs_span = tracing::debug_span!("r*s with networking").entered();
-        let rs = engine.install_net(|net| T::mul(r, s, net, state))?;
-        let r_s_delta_g1 = T::scalar_mul_public_point(&delta_g1, rs);
-        rs_span.exit();
+        let mut state0 = state.fork(1)?;
+        let r_s_delta_g1 = engine.spawn_net(move |net| {
+            let rs_span = tracing::debug_span!("r*s with networking").entered();
+            let rs = T::mul(r, s, net, &mut state0)?;
+            let r_s_delta_g1 = T::scalar_mul_public_point(&delta_g1, rs);
+            rs_span.exit();
+            eyre::Ok(r_s_delta_g1)
+        });
 
         let g_a = r_g1.join();
         let g1_b = s_g1.join();
@@ -435,6 +437,7 @@ where
 
         let mut g_c = s_g_a;
         T::add_assign_points(&mut g_c, &r_g1_b);
+        let r_s_delta_g1 = r_s_delta_g1.join()?;
         T::sub_assign_points(&mut g_c, &r_s_delta_g1);
         let l_aux_acc = l_acc.join();
         T::add_assign_points(&mut g_c, &l_aux_acc);
