@@ -1,7 +1,6 @@
 use ark_ff::PrimeField;
-use clap::Parser;
-use co_circom::NetworkConfig;
-use color_eyre::eyre::{eyre, Context};
+use clap::{value_parser, Parser};
+use color_eyre::eyre::{self, eyre, Context};
 use figment::{
     providers::{Env, Format, Serialized, Toml},
     Figment,
@@ -13,12 +12,11 @@ use mpc_core::{
         shamir::{self, ShamirPreprocessing, ShamirPrimeFieldShare, ShamirProtocol},
     },
 };
-use mpc_engine::{Network, TcpNetwork};
-use mpc_net::config::NetworkConfigFile;
+use mpc_engine::{Address, Network, TcpNetwork};
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
 use std::{
-    net::ToSocketAddrs,
+    net::SocketAddr,
     path::PathBuf,
     process::ExitCode,
     thread::sleep,
@@ -53,26 +51,33 @@ pub struct Cli {
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
     pub config: Option<PathBuf>,
-
     /// The number of testruns
     #[arg(short, long, default_value_t = 10)]
     pub runs: usize,
-
     /// The threshold of tolerated colluding parties
     #[arg(short, long, default_value_t = 1)]
     pub threshold: usize,
-
     /// The batch size for the number of poseidon elements in parallel in packed implementation
     #[arg(short, long, default_value_t = 10)]
     pub batch_size: usize,
-
     /// The number of leafs in the Merkle tree tree benchmarks
     #[arg(short, long, default_value_t = 1024)]
     pub merkle_size: usize,
-
     /// Statesize for the hash function
     #[arg(short, long, default_value_t = 3)]
     pub statesize: usize,
+    /// Our id in the network.
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub id: Option<usize>,
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    /// The [SocketAddr] we bind to.
+    pub bind_addr: Option<SocketAddr>,
+    #[arg(long, value_delimiter = ',', value_parser = value_parser!(Address))]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    /// Party addresses (including own and in order of id).
+    pub party_addrs: Option<Vec<Address>>,
 }
 
 /// Config
@@ -88,8 +93,12 @@ pub struct Config {
     pub merkle_size: usize,
     /// Statesize for the hash function
     pub statesize: usize,
-    /// Network config
-    pub network: NetworkConfigFile,
+    /// Our id in the network.
+    pub id: usize,
+    /// The [SocketAddr] we bind to.
+    pub bind_addr: SocketAddr,
+    /// Party addresses (including own and in order of id).
+    pub party_addrs: Vec<Address>,
 }
 
 /// Prefix for config env variables
@@ -140,7 +149,7 @@ fn main() -> color_eyre::Result<ExitCode> {
             benches::<F, 4, D, ARITY, COMPRESSION_MODE>(&config)?;
         }
         t => {
-            return Err(eyre!("Unsupported statesize: {}", t));
+            eyre::bail!("Unsupported statesize: {}", t);
         }
     }
 
@@ -181,7 +190,7 @@ where
     Poseidon2<F, T, D>: Default,
 {
     poseidon2_plain::<F, T, D>(config)?;
-    if config.network.parties.len() == 3 && config.threshold == 1 {
+    if config.party_addrs.len() == 3 && config.threshold == 1 {
         // poseidon2_rep3::<F, T, D>(config)?;
         poseidon2_rep3_with_precomp::<F, T, D>(config)?;
         // poseidon2_rep3_with_precomp_additive::<F, T, D>(config)?;
@@ -200,7 +209,7 @@ where
     Poseidon2<F, T, D>: Default,
 {
     poseidon2_plain_packed::<F, T, D>(config)?;
-    if config.network.parties.len() == 3 && config.threshold == 1 {
+    if config.party_addrs.len() == 3 && config.threshold == 1 {
         poseidon2_rep3_with_precomp_packed::<F, T, D>(config)?;
     }
     poseidon2_shamir_with_precomp_packed::<F, T, D>(config)?;
@@ -222,7 +231,7 @@ where
     Poseidon2<F, T, D>: Default,
 {
     poseidon2_mt_plain::<F, T, D, ARITY, COMPRESSION_MODE>(config)?;
-    if config.network.parties.len() == 3 && config.threshold == 1 {
+    if config.party_addrs.len() == 3 && config.threshold == 1 {
         poseidon2_mt_rep3::<F, T, D, ARITY, COMPRESSION_MODE>(config)?;
     }
     poseidon2_mt_shamir::<F, T, D, ARITY, COMPRESSION_MODE>(config)?;
@@ -272,7 +281,7 @@ where
         times.push(duration);
     }
 
-    print_runtimes(times, config.network.my_id, "Poseidon2 plain");
+    print_runtimes(times, config.id, "Poseidon2 plain");
     sleep(SLEEP);
 
     Ok(ExitCode::SUCCESS)
@@ -306,7 +315,7 @@ where
 
     print_runtimes(
         times,
-        config.network.my_id,
+        config.id,
         format!("Poseidon2 plain packed n={}", config.batch_size).as_str(),
     );
     sleep(SLEEP);
@@ -358,7 +367,7 @@ where
 
     print_runtimes(
         times,
-        config.network.my_id,
+        config.id,
         format!("Poseidon2 plain MT ({}:1, n={})", ARITY, config.merkle_size).as_str(),
     );
     sleep(SLEEP);
@@ -400,8 +409,12 @@ fn poseidon2_rep3<F: PrimeField, const T: usize, const D: u64>(
 where
     Poseidon2<F, T, D>: Default,
 {
+    let id = config.id;
+    let bind_addr = config.bind_addr;
+    let party_addrs = &config.party_addrs;
+
     if config.threshold != 1 {
-        return Err(color_eyre::Report::msg("Threshold must be 1 for rep3"));
+        eyre::bail!("Threshold must be 1 for rep3");
     }
 
     let mut rng = rand::thread_rng();
@@ -409,23 +422,9 @@ where
     let mut times = Vec::with_capacity(config.runs);
 
     // connect to network
-    let network_config: NetworkConfig = config
-        .network
-        .to_owned()
-        .try_into()
-        .context("while converting network config")?;
-    let net = TcpNetwork::networks(
-        network_config.my_id,
-        network_config.bind_addr,
-        &network_config
-            .parties
-            .iter()
-            .map(|p| p.dns_name.to_socket_addrs().unwrap().next().unwrap())
-            .collect::<Vec<_>>(),
-        1,
-    )?
-    .pop()
-    .unwrap();
+    let net = TcpNetwork::networks(id, bind_addr, party_addrs, 1)?
+        .pop()
+        .unwrap();
 
     let mut state = Rep3State::new(&net)?;
     for _ in 0..config.runs {
@@ -444,7 +443,7 @@ where
     }
 
     sleep(SLEEP);
-    print_runtimes(times, config.network.my_id, "Poseidon2 rep3");
+    print_runtimes(times, config.id, "Poseidon2 rep3");
 
     Ok(ExitCode::SUCCESS)
 }
@@ -456,8 +455,12 @@ fn poseidon2_rep3_with_precomp<F: PrimeField, const T: usize, const D: u64>(
 where
     Poseidon2<F, T, D>: Default,
 {
+    let id = config.id;
+    let bind_addr = config.bind_addr;
+    let party_addrs = &config.party_addrs;
+
     if config.threshold != 1 {
-        return Err(color_eyre::Report::msg("Threshold must be 1 for rep3"));
+        eyre::bail!("Threshold must be 1 for rep3");
     }
 
     let mut rng = rand::thread_rng();
@@ -465,23 +468,9 @@ where
     let mut times = Vec::with_capacity(config.runs);
 
     // connect to network
-    let network_config: NetworkConfig = config
-        .network
-        .to_owned()
-        .try_into()
-        .context("while converting network config")?;
-    let net = TcpNetwork::networks(
-        network_config.my_id,
-        network_config.bind_addr,
-        &network_config
-            .parties
-            .iter()
-            .map(|p| p.dns_name.to_socket_addrs().unwrap().next().unwrap())
-            .collect::<Vec<_>>(),
-        1,
-    )?
-    .pop()
-    .unwrap();
+    let net = TcpNetwork::networks(id, bind_addr, party_addrs, 1)?
+        .pop()
+        .unwrap();
 
     let mut state = Rep3State::new(&net)?;
 
@@ -502,7 +491,7 @@ where
     }
 
     sleep(SLEEP);
-    print_runtimes(times, config.network.my_id, "Poseidon2 rep3 with precomp");
+    print_runtimes(times, id, "Poseidon2 rep3 with precomp");
 
     Ok(ExitCode::SUCCESS)
 }
@@ -514,8 +503,12 @@ fn poseidon2_rep3_with_precomp_additive<F: PrimeField, const T: usize, const D: 
 where
     Poseidon2<F, T, D>: Default,
 {
+    let id = config.id;
+    let bind_addr = config.bind_addr;
+    let party_addrs = &config.party_addrs;
+
     if config.threshold != 1 {
-        return Err(color_eyre::Report::msg("Threshold must be 1 for rep3"));
+        eyre::bail!("Threshold must be 1 for rep3");
     }
 
     let mut rng = rand::thread_rng();
@@ -523,23 +516,9 @@ where
     let mut times = Vec::with_capacity(config.runs);
 
     // connect to network
-    let network_config: NetworkConfig = config
-        .network
-        .to_owned()
-        .try_into()
-        .context("while converting network config")?;
-    let net = TcpNetwork::networks(
-        network_config.my_id,
-        network_config.bind_addr,
-        &network_config
-            .parties
-            .iter()
-            .map(|p| p.dns_name.to_socket_addrs().unwrap().next().unwrap())
-            .collect::<Vec<_>>(),
-        1,
-    )?
-    .pop()
-    .unwrap();
+    let net = TcpNetwork::networks(id, bind_addr, party_addrs, 1)?
+        .pop()
+        .unwrap();
 
     let mut state = Rep3State::new(&net)?;
 
@@ -561,11 +540,7 @@ where
     }
 
     sleep(SLEEP);
-    print_runtimes(
-        times,
-        config.network.my_id,
-        "Poseidon2 rep3 with precomp (additive)",
-    );
+    print_runtimes(times, id, "Poseidon2 rep3 with precomp (additive)");
 
     Ok(ExitCode::SUCCESS)
 }
@@ -577,8 +552,13 @@ fn poseidon2_rep3_with_precomp_packed<F: PrimeField, const T: usize, const D: u6
 where
     Poseidon2<F, T, D>: Default,
 {
+    let batch_size = config.batch_size;
+    let id = config.id;
+    let bind_addr = config.bind_addr;
+    let party_addrs = &config.party_addrs;
+
     if config.threshold != 1 {
-        return Err(color_eyre::Report::msg("Threshold must be 1 for rep3"));
+        eyre::bail!("Threshold must be 1 for rep3");
     }
 
     let mut rng = rand::thread_rng();
@@ -586,34 +566,19 @@ where
     let mut times = Vec::with_capacity(config.runs);
 
     // connect to network
-    let network_config: NetworkConfig = config
-        .network
-        .to_owned()
-        .try_into()
-        .context("while converting network config")?;
-    let net = TcpNetwork::networks(
-        network_config.my_id,
-        network_config.bind_addr,
-        &network_config
-            .parties
-            .iter()
-            .map(|p| p.dns_name.to_socket_addrs().unwrap().next().unwrap())
-            .collect::<Vec<_>>(),
-        1,
-    )?
-    .pop()
-    .unwrap();
+    let net = TcpNetwork::networks(id, bind_addr, party_addrs, 1)?
+        .pop()
+        .unwrap();
 
     let mut state = Rep3State::new(&net)?;
 
     for _ in 0..config.runs {
-        let mut share =
-            share_random_input_rep3::<F, T, _, _>(config.batch_size * T, &mut rng, &net)?;
+        let mut share = share_random_input_rep3::<F, T, _, _>(batch_size * T, &mut rng, &net)?;
 
         let poseidon2 = Poseidon2::<F, T, D>::default();
 
         let start = Instant::now();
-        let mut precomp = poseidon2.precompute_rep3(config.batch_size, &net, &mut state)?;
+        let mut precomp = poseidon2.precompute_rep3(batch_size, &net, &mut state)?;
         poseidon2.rep3_permutation_in_place_with_precomputation_packed(
             &mut share,
             &mut precomp,
@@ -626,8 +591,8 @@ where
     sleep(SLEEP);
     print_runtimes(
         times,
-        config.network.my_id,
-        format!("Poseidon2 rep3 with precomp packed n={}", config.batch_size).as_str(),
+        id,
+        format!("Poseidon2 rep3 with precomp packed n={batch_size}").as_str(),
     );
 
     Ok(ExitCode::SUCCESS)
@@ -646,8 +611,12 @@ fn poseidon2_mt_rep3<
 where
     Poseidon2<F, T, D>: Default,
 {
+    let id = config.id;
+    let bind_addr = config.bind_addr;
+    let party_addrs = &config.party_addrs;
+
     if config.threshold != 1 {
-        return Err(color_eyre::Report::msg("Threshold must be 1 for rep3"));
+        eyre::bail!("Threshold must be 1 for rep3");
     }
 
     let mut rng = rand::thread_rng();
@@ -656,23 +625,9 @@ where
     let size = next_power_of_n(config.merkle_size, ARITY);
 
     // connect to network
-    let network_config: NetworkConfig = config
-        .network
-        .to_owned()
-        .try_into()
-        .context("while converting network config")?;
-    let net = TcpNetwork::networks(
-        network_config.my_id,
-        network_config.bind_addr,
-        &network_config
-            .parties
-            .iter()
-            .map(|p| p.dns_name.to_socket_addrs().unwrap().next().unwrap())
-            .collect::<Vec<_>>(),
-        1,
-    )?
-    .pop()
-    .unwrap();
+    let net = TcpNetwork::networks(id, bind_addr, party_addrs, 1)?
+        .pop()
+        .unwrap();
 
     let mut state = Rep3State::new(&net)?;
 
@@ -694,7 +649,7 @@ where
     sleep(SLEEP);
     print_runtimes(
         times,
-        config.network.my_id,
+        id,
         format!("Poseidon2 rep3 MT ({}:1, n={})", ARITY, config.merkle_size).as_str(),
     );
 
@@ -731,42 +686,31 @@ fn poseidon2_shamir<F: PrimeField, const T: usize, const D: u64>(
 where
     Poseidon2<F, T, D>: Default,
 {
+    let n = config.party_addrs.len();
+    let t = config.threshold;
+    let id = config.id;
+    let bind_addr = config.bind_addr;
+    let party_addrs = &config.party_addrs;
+
     let mut rng = rand::thread_rng();
 
     let mut times = Vec::with_capacity(config.runs);
     let mut preprocess_times = Vec::with_capacity(config.runs);
 
     // connect to network
-    let network_config: NetworkConfig = config
-        .network
-        .to_owned()
-        .try_into()
-        .context("while converting network config")?;
-    let net = TcpNetwork::networks(
-        network_config.my_id,
-        network_config.bind_addr,
-        &network_config
-            .parties
-            .iter()
-            .map(|p| p.dns_name.to_socket_addrs().unwrap().next().unwrap())
-            .collect::<Vec<_>>(),
-        1,
-    )?
-    .pop()
-    .unwrap();
-
-    let n = network_config.parties.len();
+    let net = TcpNetwork::networks(id, bind_addr, party_addrs, 1)?
+        .pop()
+        .unwrap();
 
     for _ in 0..config.runs {
-        let mut share =
-            share_random_input_shamir::<F, T, _, _>(n, config.threshold, T, &mut rng, &net)?;
+        let mut share = share_random_input_shamir::<F, T, _, _>(n, t, T, &mut rng, &net)?;
 
         let poseidon2 = Poseidon2::<F, T, D>::default();
 
         // init MPC protocol
         let num_pairs = poseidon2.rand_required(1, false);
         let start = Instant::now();
-        let preprocessing = ShamirPreprocessing::new(n, config.threshold, num_pairs, &net)?;
+        let preprocessing = ShamirPreprocessing::new(n, t, num_pairs, &net)?;
         let duration = start.elapsed().as_micros() as f64;
         preprocess_times.push(duration);
         let mut protocol = ShamirProtocol::from(preprocessing);
@@ -782,12 +726,8 @@ where
     }
 
     sleep(SLEEP);
-    print_runtimes(
-        preprocess_times,
-        config.network.my_id,
-        "Poseidon2 shamir-- rand_generation",
-    );
-    print_runtimes(times, config.network.my_id, "Poseidon2 shamir -- online");
+    print_runtimes(preprocess_times, id, "Poseidon2 shamir-- rand_generation");
+    print_runtimes(times, id, "Poseidon2 shamir -- online");
 
     Ok(ExitCode::SUCCESS)
 }
@@ -799,42 +739,31 @@ fn poseidon2_shamir_with_precomp<F: PrimeField, const T: usize, const D: u64>(
 where
     Poseidon2<F, T, D>: Default,
 {
+    let n = config.party_addrs.len();
+    let t = config.threshold;
+    let id = config.id;
+    let bind_addr = config.bind_addr;
+    let party_addrs = &config.party_addrs;
+
     let mut rng = rand::thread_rng();
 
     let mut times = Vec::with_capacity(config.runs);
     let mut preprocess_times = Vec::with_capacity(config.runs);
 
     // connect to network
-    let network_config: NetworkConfig = config
-        .network
-        .to_owned()
-        .try_into()
-        .context("while converting network config")?;
-    let net = TcpNetwork::networks(
-        network_config.my_id,
-        network_config.bind_addr,
-        &network_config
-            .parties
-            .iter()
-            .map(|p| p.dns_name.to_socket_addrs().unwrap().next().unwrap())
-            .collect::<Vec<_>>(),
-        1,
-    )?
-    .pop()
-    .unwrap();
-
-    let n = network_config.parties.len();
+    let net = TcpNetwork::networks(id, bind_addr, party_addrs, 1)?
+        .pop()
+        .unwrap();
 
     for _ in 0..config.runs {
-        let mut share =
-            share_random_input_shamir::<F, T, _, _>(n, config.threshold, T, &mut rng, &net)?;
+        let mut share = share_random_input_shamir::<F, T, _, _>(n, t, T, &mut rng, &net)?;
 
         let poseidon2 = Poseidon2::<F, T, D>::default();
 
         // init MPC protocol
         let num_pairs = poseidon2.rand_required(1, true);
         let start = Instant::now();
-        let preprocessing = ShamirPreprocessing::new(n, config.threshold, num_pairs, &net)?;
+        let preprocessing = ShamirPreprocessing::new(n, t, num_pairs, &net)?;
         let duration = start.elapsed().as_micros() as f64;
         preprocess_times.push(duration);
         let mut protocol = ShamirProtocol::from(preprocessing);
@@ -854,14 +783,10 @@ where
     sleep(SLEEP);
     print_runtimes(
         preprocess_times,
-        config.network.my_id,
+        id,
         "Poseidon2 shamir with precomp -- rand_generation",
     );
-    print_runtimes(
-        times,
-        config.network.my_id,
-        "Poseidon2 shamir with precomp -- online",
-    );
+    print_runtimes(times, id, "Poseidon2 shamir with precomp -- online");
 
     Ok(ExitCode::SUCCESS)
 }
@@ -873,53 +798,39 @@ fn poseidon2_shamir_with_precomp_packed<F: PrimeField, const T: usize, const D: 
 where
     Poseidon2<F, T, D>: Default,
 {
+    let n = config.party_addrs.len();
+    let t = config.threshold;
+    let batch_size = config.batch_size;
+    let id = config.id;
+    let bind_addr = config.bind_addr;
+    let party_addrs = &config.party_addrs;
+
     let mut rng = rand::thread_rng();
 
     let mut times = Vec::with_capacity(config.runs);
     let mut preprocess_times = Vec::with_capacity(config.runs);
 
     // connect to network
-    let network_config: NetworkConfig = config
-        .network
-        .to_owned()
-        .try_into()
-        .context("while converting network config")?;
-    let net = TcpNetwork::networks(
-        network_config.my_id,
-        network_config.bind_addr,
-        &network_config
-            .parties
-            .iter()
-            .map(|p| p.dns_name.to_socket_addrs().unwrap().next().unwrap())
-            .collect::<Vec<_>>(),
-        1,
-    )?
-    .pop()
-    .unwrap();
-
-    let n = network_config.parties.len();
+    let net = TcpNetwork::networks(id, bind_addr, party_addrs, 1)?
+        .pop()
+        .unwrap();
 
     for _ in 0..config.runs {
-        let mut share = share_random_input_shamir::<F, T, _, _>(
-            n,
-            config.threshold,
-            config.batch_size * T,
-            &mut rng,
-            &net,
-        )?;
+        let mut share =
+            share_random_input_shamir::<F, T, _, _>(n, t, batch_size * T, &mut rng, &net)?;
 
         let poseidon2 = Poseidon2::<F, T, D>::default();
 
         // init MPC protocol
-        let num_pairs = poseidon2.rand_required(config.batch_size, true);
+        let num_pairs = poseidon2.rand_required(batch_size, true);
         let start = Instant::now();
-        let preprocessing = ShamirPreprocessing::new(n, config.threshold, num_pairs, &net)?;
+        let preprocessing = ShamirPreprocessing::new(n, t, num_pairs, &net)?;
         let duration = start.elapsed().as_micros() as f64;
         preprocess_times.push(duration);
         let mut protocol = ShamirProtocol::from(preprocessing);
 
         let start = Instant::now();
-        let mut precomp = poseidon2.precompute_shamir(config.batch_size, &net, &mut protocol)?;
+        let mut precomp = poseidon2.precompute_shamir(batch_size, &net, &mut protocol)?;
         poseidon2.shamir_permutation_in_place_with_precomputation_packed(
             &mut share,
             &mut precomp,
@@ -933,21 +844,13 @@ where
     sleep(SLEEP);
     print_runtimes(
         preprocess_times,
-        config.network.my_id,
-        format!(
-            "Poseidon2 shamir with precomp packed n={} -- rand_generation",
-            config.batch_size
-        )
-        .as_str(),
+        id,
+        format!("Poseidon2 shamir with precomp packed n={batch_size} -- rand_generation").as_str(),
     );
     print_runtimes(
         times,
-        config.network.my_id,
-        format!(
-            "Poseidon2 shamir with precomp packed n={} -- online",
-            config.batch_size
-        )
-        .as_str(),
+        id,
+        format!("Poseidon2 shamir with precomp packed n={batch_size} -- online").as_str(),
     );
 
     Ok(ExitCode::SUCCESS)
@@ -966,6 +869,12 @@ fn poseidon2_mt_shamir<
 where
     Poseidon2<F, T, D>: Default,
 {
+    let n = config.party_addrs.len();
+    let t = config.threshold;
+    let id = config.id;
+    let bind_addr = config.bind_addr;
+    let party_addrs = &config.party_addrs;
+
     let mut rng = rand::thread_rng();
     let mut times = Vec::with_capacity(config.runs);
     let mut preprocess_times = Vec::with_capacity(config.runs);
@@ -974,36 +883,19 @@ where
     let num_hashes = (size - 1) / (ARITY - 1);
 
     // connect to network
-    let network_config: NetworkConfig = config
-        .network
-        .to_owned()
-        .try_into()
-        .context("while converting network config")?;
-    let net = TcpNetwork::networks(
-        network_config.my_id,
-        network_config.bind_addr,
-        &network_config
-            .parties
-            .iter()
-            .map(|p| p.dns_name.to_socket_addrs().unwrap().next().unwrap())
-            .collect::<Vec<_>>(),
-        1,
-    )?
-    .pop()
-    .unwrap();
-
-    let n = network_config.parties.len();
+    let net = TcpNetwork::networks(id, bind_addr, party_addrs, 1)?
+        .pop()
+        .unwrap();
 
     for _ in 0..config.runs {
-        let share =
-            share_random_input_shamir::<F, T, _, _>(n, config.threshold, size, &mut rng, &net)?;
+        let share = share_random_input_shamir::<F, T, _, _>(n, t, size, &mut rng, &net)?;
 
         let poseidon2 = Poseidon2::<F, T, D>::default();
 
         // init MPC protocol
         let num_pairs = poseidon2.rand_required(num_hashes, true);
         let start = Instant::now();
-        let preprocessing = ShamirPreprocessing::new(n, config.threshold, num_pairs, &net)?;
+        let preprocessing = ShamirPreprocessing::new(n, t, num_pairs, &net)?;
         let duration = start.elapsed().as_micros() as f64;
         preprocess_times.push(duration);
         let mut protocol = ShamirProtocol::from(preprocessing);
@@ -1021,7 +913,7 @@ where
     sleep(SLEEP);
     print_runtimes(
         preprocess_times,
-        config.network.my_id,
+        id,
         format!(
             "Poseidon2 shamir with MT ({}:1, n={}) -- rand_generation",
             ARITY, config.merkle_size
@@ -1030,7 +922,7 @@ where
     );
     print_runtimes(
         times,
-        config.network.my_id,
+        id,
         format!(
             "Poseidon2 shamir with MT ({}:1, n={}) -- online",
             ARITY, config.merkle_size
