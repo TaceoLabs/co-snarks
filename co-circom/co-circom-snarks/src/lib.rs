@@ -9,7 +9,7 @@ use mpc_core::protocols::{
     rep3::{self, Rep3PrimeFieldShare, Rep3ShareVecType},
     shamir::{self, ShamirPrimeFieldShare},
 };
-use mpc_engine::{MpcEngine, Network};
+use mpc_engine::Network;
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -84,12 +84,12 @@ impl<F: PrimeField> From<CompressedRep3SharedWitness<F>> for SharedWitness<F, F>
 
 fn reshare_vec<N: Network + Sync + 'static, F: PrimeField>(
     vec: Vec<F>,
-    engine: &MpcEngine<N>,
+    net: &N,
 ) -> eyre::Result<Vec<Rep3PrimeFieldShare<F>>> {
-    let b: Vec<F> = engine.install_net(|net| rep3::network::reshare_many(net, &vec))?;
+    let b: Vec<F> = rep3::network::reshare_many(net, &vec)?;
 
     if vec.len() != b.len() {
-        return Err(eyre::eyre!("reshare_vec: vec and b have different lengths"));
+        eyre::bail!("reshare_vec: vec and b have different lengths");
     }
 
     let shares = vec
@@ -105,7 +105,7 @@ impl<F: PrimeField> CompressedRep3SharedWitness<F> {
     /// Uncompress into [`Rep3SharedWitness`].
     pub fn uncompress<N: Network + Sync + 'static>(
         self,
-        engine: &MpcEngine<N>,
+        net: &N,
     ) -> eyre::Result<Rep3SharedWitness<F>> {
         let public_inputs = self.public_inputs;
         let witness = self.witness;
@@ -114,9 +114,9 @@ impl<F: PrimeField> CompressedRep3SharedWitness<F> {
             Rep3ShareVecType::SeededReplicated(replicated_seed_type) => {
                 replicated_seed_type.expand_vec()?
             }
-            Rep3ShareVecType::Additive(vec) => reshare_vec(vec, engine)?,
+            Rep3ShareVecType::Additive(vec) => reshare_vec(vec, net)?,
             Rep3ShareVecType::SeededAdditive(seeded_type) => {
-                reshare_vec(seeded_type.expand_vec(), engine)?
+                reshare_vec(seeded_type.expand_vec(), net)?
             }
         };
 
