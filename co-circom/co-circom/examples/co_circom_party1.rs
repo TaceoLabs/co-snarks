@@ -1,10 +1,10 @@
 use co_circom::{
-    Address, Bn254, CheckElement, CoCircomCompiler, CompilerConfig, Groth16,
-    Groth16JsonVerificationKey, Groth16ZKey, NetworkConfig, NetworkParty, PartyID, Rep3CoGroth16,
-    Rep3MpcNet, Rep3SharedInput, VMConfig,
+    Bn254, CheckElement, CoCircomCompiler, CompilerConfig, Groth16, Groth16JsonVerificationKey,
+    Groth16ZKey, Rep3CoGroth16, Rep3SharedInput, VMConfig,
 };
 use color_eyre::Result;
-use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
+use mpc_core::protocols::rep3::{PARTY_0, PARTY_1};
+use mpc_engine::{MpcEngine, Network, TcpNetwork, NUM_THREADS_CPU, NUM_THREADS_NET};
 use std::{path::PathBuf, sync::Arc};
 use tracing_subscriber::{
     fmt::{self, format::FmtSpan},
@@ -25,36 +25,13 @@ fn main() -> Result<()> {
         .with(fmt_layer)
         .init();
 
-    rustls::crypto::aws_lc_rs::default_provider()
-        .install_default()
-        .unwrap();
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples/data");
+    let id = PARTY_1;
+    let party_addrs = ["localhost:10000", "localhost:10001", "localhost:10002"]
+        .map(|addr| addr.parse().expect("valid address"));
 
     // connect to network
-    let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(std::fs::read(
-        dir.join("key1.der"),
-    )?))
-    .clone_key();
-    let parties = vec![
-        NetworkParty::new(
-            PartyID::ID0.into(),
-            Address::new("localhost".to_string(), 10000),
-            CertificateDer::from(std::fs::read(dir.join("cert0.der"))?).into_owned(),
-        ),
-        NetworkParty::new(
-            PartyID::ID1.into(),
-            Address::new("localhost".to_string(), 10001),
-            CertificateDer::from(std::fs::read(dir.join("cert1.der"))?).into_owned(),
-        ),
-        NetworkParty::new(
-            PartyID::ID2.into(),
-            Address::new("localhost".to_string(), 10002),
-            CertificateDer::from(std::fs::read(dir.join("cert2.der"))?).into_owned(),
-        ),
-    ];
-    let network_config =
-        NetworkConfig::new(PartyID::ID1.into(), "0.0.0.0:10001".parse()?, key, parties);
-    let mut net = Rep3MpcNet::new(network_config)?;
+    let nets = TcpNetwork::networks(id, "0.0.0.0:10001", &party_addrs, 8)?;
+    let engine = MpcEngine::new(id, NUM_THREADS_NET, NUM_THREADS_CPU, nets);
 
     let dir =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples/groth16/test_vectors/multiplier2");
@@ -71,15 +48,16 @@ fn main() -> Result<()> {
 
     // recv share from party 0, only needed for this demo for private-proof delegation and for PSS this is done separately,
     // because the party with the shares usually does not take part in the computation
-    let share: Rep3SharedInput<_> = bincode::deserialize(&net.recv_bytes(PartyID::ID0)?)?;
+    let share: Rep3SharedInput<_> =
+        bincode::deserialize(&engine.install_net(|net| net.recv(PARTY_0))?)?;
 
     // generate witness
-    let (witness, net) =
-        co_circom::generate_witness_rep3::<Bn254>(circuit, share, net, VMConfig::default())?;
+    let witness =
+        co_circom::generate_witness_rep3::<Bn254, _>(&engine, circuit, share, VMConfig::default())?;
     let public_inputs = witness.public_inputs_for_verify();
 
     // generate proof
-    let (proof, _) = Rep3CoGroth16::prove(net, zkey, witness)?;
+    let proof = Rep3CoGroth16::prove(&engine, zkey, witness)?;
 
     // verify proof
     let vk = Groth16JsonVerificationKey::<Bn254>::from_reader(
