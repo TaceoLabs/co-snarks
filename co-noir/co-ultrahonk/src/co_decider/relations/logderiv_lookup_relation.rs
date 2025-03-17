@@ -124,7 +124,7 @@ impl LogDerivLookupRelation {
 
         T::add_assign_many(&mut derived_table_entry_1, &derived_table_entry_2);
         T::add_assign_many(&mut derived_table_entry_1, &derived_table_entry_3);
-        // FRANCO TODO we dont need to collect this
+        // 0xThemis TODO we dont need to collect this
         let table_index = table_index.iter().map(|x| *x * *eta_3).collect_vec();
         T::add_assign_public_many(&mut derived_table_entry_1, &table_index, party_id);
         derived_table_entry_1

@@ -26,7 +26,9 @@ use logderiv_lookup_relation::{LogDerivLookupRelation, LogDerivLookupRelationAcc
 use permutation_relation::{UltraPermutationRelation, UltraPermutationRelationAcc};
 use poseidon2_external_relation::{Poseidon2ExternalRelation, Poseidon2ExternalRelationAcc};
 use poseidon2_internal_relation::{Poseidon2InternalRelation, Poseidon2InternalRelationAcc};
-use ultra_arithmetic_relation::{UltraArithmeticRelation, UltraArithmeticRelationAcc};
+use ultra_arithmetic_relation::{
+    UltraArithmeticRelation, UltraArithmeticRelationAcc, UltraArithmeticRelationAccHalfShared,
+};
 use ultrahonk::prelude::{TranscriptFieldType, Univariate};
 
 macro_rules! fold_accumulator {
@@ -41,7 +43,13 @@ macro_rules! fold_accumulator {
         $acc.evaluations.clone_from_slice(&acc[..evaluations_len]);
     };
 }
+
 pub(crate) use fold_accumulator;
+
+// This will be used inside the relations for with_min_len for rayons par_iter.
+// 0xThemis TODO We may want to have this configurable by environment or remove it as a whole.
+// We need bench marks for this when everything is done.
+const MIN_RAYON_ITER: usize = 1024;
 
 pub(crate) trait Relation<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> {
     type Acc: Default;
@@ -101,7 +109,52 @@ pub(crate) struct AllRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing> {
     pub(crate) r_pos_int: Poseidon2InternalRelationAcc<T, P>,
 }
 
+pub(crate) struct AllRelationAccHalfShared<T: NoirUltraHonkProver<P>, P: Pairing> {
+    pub(crate) r_arith: UltraArithmeticRelationAccHalfShared<T, P>,
+    pub(crate) r_perm: UltraPermutationRelationAcc<T, P>,
+    pub(crate) r_lookup: LogDerivLookupRelationAcc<T, P>,
+    pub(crate) r_delta: DeltaRangeConstraintRelationAcc<T, P>,
+    pub(crate) r_elliptic: EllipticRelationAcc<T, P>,
+    pub(crate) r_aux: AuxiliaryRelationAcc<T, P>,
+    pub(crate) r_pos_ext: Poseidon2ExternalRelationAcc<T, P>,
+    pub(crate) r_pos_int: Poseidon2InternalRelationAcc<T, P>,
+}
+
+impl<T: NoirUltraHonkProver<P>, P: Pairing> AllRelationAccHalfShared<T, P> {
+    pub(crate) fn reshare(self, driver: &mut T) -> HonkProofResult<AllRelationAcc<T, P>> {
+        let r_arith_r0 = driver.reshare(self.r_arith.r0.evaluations.to_vec())?;
+        Ok(AllRelationAcc {
+            r_arith: UltraArithmeticRelationAcc {
+                r0: SharedUnivariate::from_vec(r_arith_r0),
+                r1: self.r_arith.r1,
+            },
+            r_perm: self.r_perm,
+            r_lookup: self.r_lookup,
+            r_delta: self.r_delta,
+            r_elliptic: self.r_elliptic,
+            r_aux: self.r_aux,
+            r_pos_ext: self.r_pos_ext,
+            r_pos_int: self.r_pos_int,
+        })
+    }
+}
+
 impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for AllRelationAcc<T, P> {
+    fn default() -> Self {
+        Self {
+            r_arith: Default::default(),
+            r_perm: Default::default(),
+            r_lookup: Default::default(),
+            r_delta: Default::default(),
+            r_elliptic: Default::default(),
+            r_aux: Default::default(),
+            r_pos_ext: Default::default(),
+            r_pos_int: Default::default(),
+        }
+    }
+}
+
+impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for AllRelationAccHalfShared<T, P> {
     fn default() -> Self {
         Self {
             r_arith: Default::default(),

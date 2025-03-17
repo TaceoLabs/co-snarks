@@ -40,6 +40,21 @@ impl<P: Pairing, N: ShamirNetwork> NoirUltraHonkProver<P>
     type PointShare = ShamirPointShare<P::G1>;
     type PartyID = usize;
 
+    fn add_assign_public_half_share(
+        share: &mut P::ScalarField,
+        public: P::ScalarField,
+        _: Self::PartyID,
+    ) {
+        *share += public
+    }
+
+    fn mul_with_public_to_half_share(
+        public: P::ScalarField,
+        shared: Self::ArithmeticShare,
+    ) -> P::ScalarField {
+        public * shared.inner()
+    }
+
     fn rand(&mut self) -> std::io::Result<Self::ArithmeticShare> {
         self.protocol0.rand()
     }
@@ -85,6 +100,18 @@ impl<P: Pairing, N: ShamirNetwork> NoirUltraHonkProver<P>
 
     fn mul_assign_with_public(shared: &mut Self::ArithmeticShare, public: P::ScalarField) {
         arithmetic::mul_assign_public(shared, public)
+    }
+
+    fn local_mul_vec(
+        &mut self,
+        a: &[Self::ArithmeticShare],
+        b: &[Self::ArithmeticShare],
+    ) -> Vec<P::ScalarField> {
+        arithmetic::local_mul_vec(a, b)
+    }
+
+    fn reshare(&mut self, a: Vec<P::ScalarField>) -> std::io::Result<Vec<Self::ArithmeticShare>> {
+        self.protocol0.degree_reduce_vec(a)
     }
 
     fn mul_many(

@@ -1,6 +1,7 @@
 use ark_ec::pairing::Pairing;
 use ark_poly::EvaluationDomain;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use rayon::prelude::*;
 
 pub(crate) mod plain;
 pub(crate) mod rep3;
@@ -21,7 +22,11 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
     /// The G1 point share type
     type PointShare: std::fmt::Debug + Send + 'static;
     /// The party id type
-    type PartyID: Copy + Send + Sync + std::fmt::Debug;
+    type PartyID: Copy + Send + Sync + std::fmt::Debug + 'static;
+
+    fn debug(_: Self::ArithmeticShare) -> String {
+        panic!("not implemented for real protocol");
+    }
 
     /// Generate a share of a random value. The value is thereby unknown to anyone.
     fn rand(&mut self) -> std::io::Result<Self::ArithmeticShare>;
@@ -80,9 +85,9 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
         b: &[P::ScalarField],
         id: Self::PartyID,
     ) {
-        for (a, b) in a.iter_mut().zip(b.iter()) {
+        a.par_iter_mut().zip(b.par_iter()).for_each(|(a, b)| {
             Self::add_assign_public(a, *b, id);
-        }
+        })
     }
 
     /// Elementwise addition of a public value to a share: \[c\] = a + \[b\].
@@ -143,6 +148,17 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
             .collect()
     }
 
+    fn add_assign_public_half_share(
+        share: &mut P::ScalarField,
+        public: P::ScalarField,
+        id: Self::PartyID,
+    );
+
+    fn mul_with_public_to_half_share(
+        public: P::ScalarField,
+        shared: Self::ArithmeticShare,
+    ) -> P::ScalarField;
+
     /// Elementwise multiplication a share b by a public value a: c = \[a\] * b and stores the
     /// result in \[a\].
     fn mul_assign_with_public_many(
@@ -150,9 +166,12 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
         public: &[P::ScalarField],
     ) {
         debug_assert_eq!(public.len(), shared.len());
-        for (public, shared) in public.iter().zip(shared.iter_mut()) {
-            Self::mul_assign_with_public(shared, *public);
-        }
+        public
+            .par_iter()
+            .zip(shared.par_iter_mut())
+            .for_each(|(public, shared)| {
+                Self::mul_assign_with_public(shared, *public);
+            });
     }
 
     /// Scales all elements in-place in \[a\] by the provided scale, by multiplying every share with the
@@ -185,6 +204,15 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
             Self::add_assign_public(x, scalar, id);
         }
     }
+
+    fn local_mul_vec(
+        &mut self,
+        a: &[Self::ArithmeticShare],
+        b: &[Self::ArithmeticShare],
+    ) -> Vec<P::ScalarField>;
+
+    // TODO this name is not correct for shamir - we need a name for this sometime
+    fn reshare(&mut self, a: Vec<P::ScalarField>) -> std::io::Result<Vec<Self::ArithmeticShare>>;
 
     /// Multiply two shares: \[c\] = \[a\] * \[b\]. Requires network communication.
     fn mul_many(
@@ -272,4 +300,9 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
         data: &[Self::ArithmeticShare],
         domain: &D,
     ) -> Vec<Self::ArithmeticShare>;
+
+    // ============= half share methods ================
+    // we will need to go over the methods and see what we actually need
+    // as this some of the methods are duplicated then, but we'll see
+    //
 }

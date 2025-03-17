@@ -105,7 +105,7 @@ where
         entity: AllEntities<Shared<T, P>, Public<P>>,
         scaling_factor: P::ScalarField,
     ) {
-        // FRANCO TODO - for all (?) accumulator we don't need all 7 elements. Can we remove
+        // 0xThemis TODO - for all (?) accumulator we don't need all 7 elements. Can we remove
         // somehow skip those to decrease work even further?
         // e.g. UltraArith only has
         //

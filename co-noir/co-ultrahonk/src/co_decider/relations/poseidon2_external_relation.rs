@@ -173,7 +173,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         s.extend(s3);
         s.extend(s4);
         // apply s-box round
-        // FRANCO TODO better mul depth for x^5?
+        // 0xThemis TODO better mul depth for x^5?
         let u = driver.mul_many(&s, &s)?;
         let u = driver.mul_many(&u, &u)?;
         let u = driver.mul_many(&u, &s)?;

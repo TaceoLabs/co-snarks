@@ -155,7 +155,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let s1 = T::add_with_public_many(q_l, w_l, driver.get_party_id());
 
         // apply s-box round
-        // FRANCO TODO again can we do something better for x^5?
+        // 0xThemis TODO again can we do something better for x^5?
         let u1 = driver.mul_many(&s1, &s1)?;
         let u1 = driver.mul_many(&u1, &u1)?;
         let mut u1 = driver.mul_many(&u1, &s1)?;
