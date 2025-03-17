@@ -119,12 +119,12 @@ pub fn open_point_many<C: CurveGroup, N: Network>(
 }
 
 /// Opens a shared point and a shared field element together
-pub fn open_point_and_field<C: CurveGroup, N: Rep3Network>(
+pub fn open_point_and_field<C: CurveGroup, N: Network>(
     a: &PointShare<C>,
     b: &FieldShare<C::ScalarField>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<(C, C::ScalarField)> {
-    let c = io_context.network.reshare((a.b, b.b))?;
+    net: &N,
+) -> eyre::Result<(C, C::ScalarField)> {
+    let c = network::reshare(net, (a.b, b.b))?;
     Ok((a.a + a.b + c.0, b.a + b.b + c.1))
 }
 
