@@ -136,18 +136,16 @@ pub fn open_point_many<C: CurveGroup, N: Network>(
 }
 
 /// Opens a shared point and a shared field element together
-pub fn open_point_and_field<C: CurveGroup, N: ShamirNetwork>(
+pub fn open_point_and_field<C: CurveGroup, N: Network>(
     a: &PointShare<C>,
     b: &FieldShare<C::ScalarField>,
-    shamir: &mut ShamirProtocol<C::ScalarField, N>,
-) -> IoResult<(C, C::ScalarField)> {
-    let rcv = shamir
-        .network
-        .broadcast_next((a.a, b.a), shamir.threshold + 1)?;
+    net: &N,
+    state: &mut ShamirProtocol<C::ScalarField>,
+) -> eyre::Result<(C, C::ScalarField)> {
+    let rcv = network::broadcast_next(net, state.num_parties, state.threshold + 1, (a.a, b.a))?;
     let (points, fields): (Vec<_>, Vec<_>) = rcv.into_iter().unzip();
-    let res_point = core::reconstruct_point(&points, &shamir.open_lagrange_t);
-    let res_field = core::reconstruct(&fields, &shamir.open_lagrange_t);
-
+    let res_point = core::reconstruct_point(&points, &state.open_lagrange_t);
+    let res_field = core::reconstruct(&fields, &state.open_lagrange_t);
     Ok((res_point, res_field))
 }
 
