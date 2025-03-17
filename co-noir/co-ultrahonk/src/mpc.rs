@@ -211,7 +211,7 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
         b: &[Self::ArithmeticShare],
     ) -> Vec<P::ScalarField>;
 
-    // TODO this name is not correct for shamir - we need a name for this sometime
+    /// Restores the original sharing after doing a non-linear operation.
     fn reshare(&mut self, a: Vec<P::ScalarField>) -> std::io::Result<Vec<Self::ArithmeticShare>>;
 
     /// Multiply two shares: \[c\] = \[a\] * \[b\]. Requires network communication.
@@ -300,9 +300,4 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
         data: &[Self::ArithmeticShare],
         domain: &D,
     ) -> Vec<Self::ArithmeticShare>;
-
-    // ============= half share methods ================
-    // we will need to go over the methods and see what we actually need
-    // as this some of the methods are duplicated then, but we'll see
-    //
 }
