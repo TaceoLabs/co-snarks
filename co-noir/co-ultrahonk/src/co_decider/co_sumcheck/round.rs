@@ -8,7 +8,8 @@ use crate::{
             permutation_relation::UltraPermutationRelation,
             poseidon2_external_relation::Poseidon2ExternalRelation,
             poseidon2_internal_relation::Poseidon2InternalRelation,
-            ultra_arithmetic_relation::UltraArithmeticRelation, AllRelationAcc, Relation,
+            ultra_arithmetic_relation::UltraArithmeticRelation, AllRelationAcc,
+            AllRelationAccHalfShared, Relation,
         },
         types::{
             ProverUnivariates, RelationParameters, BATCHED_RELATION_PARTIAL_LENGTH,
@@ -132,7 +133,7 @@ impl SumcheckRound {
         P: HonkCurve<TranscriptFieldType>,
     >(
         driver: &mut T,
-        univariate_accumulators: &mut AllRelationAcc<T, P>,
+        univariate_accumulators: &mut AllRelationAccHalfShared<T, P>,
         sum_check_data: &AllEntitiesBatchRelations<T, P>,
         relation_parameters: &RelationParameters<P::ScalarField>,
     ) -> HonkProofResult<()> {
@@ -238,7 +239,7 @@ impl SumcheckRound {
         //
         let batch_size = MAX_ROUND_SIZE_PER_BATCH;
         let mut start = 0;
-        let mut univariate_accumulators = AllRelationAcc::<T, P>::default();
+        let mut univariate_accumulators = AllRelationAccHalfShared::<T, P>::default();
         while start < self.round_size {
             let end = (start + batch_size).min(self.round_size);
             let mut all_entites = AllEntitiesBatchRelations::new();
@@ -257,6 +258,7 @@ impl SumcheckRound {
             )?;
             start = end;
         }
+        let univariate_accumulators = univariate_accumulators.reshare(driver)?;
 
         let res = Self::batch_over_relations_univariates(
             univariate_accumulators,
@@ -389,7 +391,7 @@ impl SumcheckRound {
             all_entites.fold_and_filter(extended_edges, scaling_factor);
         }
 
-        let mut univariate_accumulators = AllRelationAcc::<T, P>::default();
+        let mut univariate_accumulators = AllRelationAccHalfShared::<T, P>::default();
 
         Self::accumulate_relation_univariates_batch(
             driver,
@@ -397,6 +399,7 @@ impl SumcheckRound {
             &all_entites,
             relation_parameters,
         )?;
+        let univariate_accumulators = univariate_accumulators.reshare(driver)?;
         let mut result = Self::batch_over_relations_univariates(
             univariate_accumulators,
             &relation_parameters.alphas,

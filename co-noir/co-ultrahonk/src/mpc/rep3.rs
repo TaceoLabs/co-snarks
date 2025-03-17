@@ -80,8 +80,37 @@ impl<P: Pairing, N: Rep3Network> NoirUltraHonkProver<P> for Rep3UltraHonkDriver<
         arithmetic::mul_public(shared, public)
     }
 
+    fn add_assign_public_half_share(
+        share: &mut P::ScalarField,
+        public: P::ScalarField,
+        id: Self::PartyID,
+    ) {
+        if matches!(id, PartyID::ID0) {
+            *share += public
+        }
+    }
+
+    fn mul_with_public_to_half_share(
+        public: P::ScalarField,
+        shared: Self::ArithmeticShare,
+    ) -> P::ScalarField {
+        public * shared.a
+    }
+
     fn mul_assign_with_public(shared: &mut Self::ArithmeticShare, public: P::ScalarField) {
         arithmetic::mul_assign_public(shared, public);
+    }
+
+    fn local_mul_vec(
+        &mut self,
+        a: &[Self::ArithmeticShare],
+        b: &[Self::ArithmeticShare],
+    ) -> Vec<P::ScalarField> {
+        arithmetic::local_mul_vec(a, b, &mut self.io_context0.rngs)
+    }
+
+    fn reshare(&mut self, a: Vec<P::ScalarField>) -> std::io::Result<Vec<Self::ArithmeticShare>> {
+        arithmetic::io_mul_vec(a, &mut self.io_context0)
     }
 
     fn mul_many(

@@ -1,7 +1,6 @@
-use super::{ProverUnivariatesBatch, Relation};
+use super::{ProverUnivariatesBatch, Relation, MIN_RAYON_ITER};
 use crate::{
     co_decider::{
-        relations::fold_accumulator,
         types::{RelationParameters, MAX_PARTIAL_RELATION_LENGTH},
         univariates::SharedUnivariate,
     },
@@ -12,14 +11,32 @@ use ark_ff::Field;
 use ark_ff::Zero;
 use co_builder::HonkProofResult;
 use co_builder::{prelude::HonkCurve, TranscriptFieldType};
+use itertools::izip;
+use rayon::prelude::*;
 use ultrahonk::prelude::Univariate;
+
 #[derive(Clone, Debug)]
 pub(crate) struct UltraArithmeticRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing> {
     pub(crate) r0: SharedUnivariate<T, P, 6>,
     pub(crate) r1: SharedUnivariate<T, P, 5>,
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct UltraArithmeticRelationAccHalfShared<T: NoirUltraHonkProver<P>, P: Pairing> {
+    pub(crate) r0: Univariate<P::ScalarField, 6>,
+    pub(crate) r1: SharedUnivariate<T, P, 5>,
+}
+
 impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for UltraArithmeticRelationAcc<T, P> {
+    fn default() -> Self {
+        Self {
+            r0: Default::default(),
+            r1: Default::default(),
+        }
+    }
+}
+
+impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for UltraArithmeticRelationAccHalfShared<T, P> {
     fn default() -> Self {
         Self {
             r0: Default::default(),
@@ -64,10 +81,165 @@ impl UltraArithmeticRelation {
     pub(crate) const CRAND_PAIRS_FACTOR: usize = 1;
 }
 
+impl UltraArithmeticRelation {
+    fn compute_r0<T, P>(
+        driver: &mut T,
+        r0: &mut Univariate<P::ScalarField, 6>,
+        input: &ProverUnivariatesBatch<T, P>,
+        scaling_factors: &[P::ScalarField],
+    ) where
+        T: NoirUltraHonkProver<P>,
+        P: HonkCurve<TranscriptFieldType>,
+    {
+        let w_l = input.witness.w_l();
+        let w_r = input.witness.w_r();
+        let w_o = input.witness.w_o();
+        let w_4 = input.witness.w_4();
+        let q_m = input.precomputed.q_m();
+        let q_l = input.precomputed.q_l();
+        let q_r = input.precomputed.q_r();
+        let q_o = input.precomputed.q_o();
+        let q_4 = input.precomputed.q_4();
+        let q_c = input.precomputed.q_c();
+        let q_arith = input.precomputed.q_arith();
+        let w_4_shift = input.shifted_witness.w_4();
+
+        let one = P::ScalarField::from(1_u64);
+        let neg_half = -P::ScalarField::from(2u64).inverse().unwrap();
+        let three = P::ScalarField::from(3_u64);
+
+        let mul = driver.local_mul_vec(w_l, w_r);
+        let party_id = driver.get_party_id();
+        let tmp_l = (w_l, q_l)
+            .into_par_iter()
+            .map(|(w_l, q_l)| T::mul_with_public_to_half_share(*q_l, *w_l));
+
+        let tmp_r = (w_r, q_r)
+            .into_par_iter()
+            .map(|(w_l, q_l)| T::mul_with_public_to_half_share(*q_l, *w_l));
+        let tmp_o = (w_o, q_o)
+            .into_par_iter()
+            .map(|(w_l, q_l)| T::mul_with_public_to_half_share(*q_l, *w_l));
+        let tmp_4 = (w_4, q_4)
+            .into_par_iter()
+            .map(|(w_l, q_l)| T::mul_with_public_to_half_share(*q_l, *w_l));
+
+        let acc = (
+            &mul,
+            tmp_l,
+            tmp_r,
+            tmp_o,
+            tmp_4,
+            q_c,
+            q_m,
+            q_arith,
+            w_4_shift,
+            scaling_factors,
+        )
+            .into_par_iter()
+            .map(
+                |(
+                    mul,
+                    tmp_l,
+                    tmp_r,
+                    tmp_o,
+                    tmp_4,
+                    q_c,
+                    q_m,
+                    q_arith,
+                    w_4_shift,
+                    scaling_factor,
+                )| {
+                    let mut tmp = *mul * q_m;
+                    tmp *= *q_arith - three;
+                    tmp *= neg_half;
+                    tmp += tmp_l + tmp_r + tmp_o + tmp_4;
+                    T::add_assign_public_half_share(&mut tmp, *q_c, party_id);
+
+                    let tmp_arith = T::mul_with_public_to_half_share(*q_arith - one, *w_4_shift);
+                    tmp += tmp_arith;
+                    tmp *= q_arith;
+                    tmp * scaling_factor
+                },
+            )
+            .enumerate()
+            .fold(
+                || [P::ScalarField::default(); MAX_PARTIAL_RELATION_LENGTH],
+                |mut acc, (idx, tmp)| {
+                    acc[idx % MAX_PARTIAL_RELATION_LENGTH] += tmp;
+                    acc
+                },
+            )
+            .reduce(
+                || [P::ScalarField::default(); MAX_PARTIAL_RELATION_LENGTH],
+                |mut acc, next| {
+                    for (acc, next) in izip!(acc.iter_mut(), next) {
+                        *acc += next;
+                    }
+                    acc
+                },
+            );
+
+        for (evaluations, new) in izip!(r0.evaluations.iter_mut(), acc) {
+            *evaluations += new;
+        }
+    }
+    fn compute_r1<T, P>(
+        party_id: T::PartyID,
+        r1: &mut SharedUnivariate<T, P, 5>,
+        input: &ProverUnivariatesBatch<T, P>,
+        scaling_factors: &[P::ScalarField],
+    ) where
+        T: NoirUltraHonkProver<P>,
+        P: HonkCurve<TranscriptFieldType>,
+    {
+        let w_l = input.witness.w_l();
+        let w_4 = input.witness.w_4();
+        let q_m = input.precomputed.q_m();
+        let q_arith = input.precomputed.q_arith();
+        let w_l_shift = input.shifted_witness.w_l();
+
+        let one = P::ScalarField::from(1_u64);
+        let two = P::ScalarField::from(2_u64);
+        let acc = (w_l, w_4, w_l_shift, q_m, q_arith, scaling_factors)
+            .into_par_iter()
+            .with_min_len(MIN_RAYON_ITER)
+            .map(|(w_l, w_4, w_l_shift, q_m, q_arith, scaling_factor)| {
+                let tmp = T::add(*w_l, *w_4);
+                let tmp = T::sub(tmp, *w_l_shift);
+                let tmp = T::add_with_public(*q_m, tmp, party_id);
+                let tmp = T::mul_with_public(*q_arith - two, tmp);
+                let tmp = T::mul_with_public(*q_arith - one, tmp);
+                let tmp = T::mul_with_public(*q_arith, tmp);
+                T::mul_with_public(*scaling_factor, tmp)
+            })
+            .enumerate()
+            .fold(
+                || [T::ArithmeticShare::default(); MAX_PARTIAL_RELATION_LENGTH],
+                |mut acc, (idx, tmp)| {
+                    T::add_assign(&mut acc[idx % MAX_PARTIAL_RELATION_LENGTH], tmp);
+                    acc
+                },
+            )
+            .reduce(
+                || [T::ArithmeticShare::default(); MAX_PARTIAL_RELATION_LENGTH],
+                |mut acc, next| {
+                    for (acc, next) in izip!(acc.iter_mut(), next) {
+                        T::add_assign(acc, next);
+                    }
+                    acc
+                },
+            );
+        for (evaluations, new) in izip!(r1.evaluations.iter_mut(), acc) {
+            T::add_assign(evaluations, new);
+        }
+    }
+}
+
 impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P>
     for UltraArithmeticRelation
 {
-    type Acc = UltraArithmeticRelationAcc<T, P>;
+    type Acc = UltraArithmeticRelationAccHalfShared<T, P>;
 
     fn can_skip(entity: &super::ProverUnivariates<T, P>) -> bool {
         entity.precomputed.q_arith().is_zero()
@@ -153,71 +325,25 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         scaling_factors: &[P::ScalarField],
     ) -> HonkProofResult<()> {
         tracing::trace!("Accumulate UltraArithmeticRelation");
-
-        let w_l = input.witness.w_l();
-        let w_r = input.witness.w_r();
-        let w_o = input.witness.w_o();
-        let w_4 = input.witness.w_4();
-        let q_m = input.precomputed.q_m();
-        let q_l = input.precomputed.q_l();
-        let q_r = input.precomputed.q_r();
-        let q_o = input.precomputed.q_o();
-        let q_4 = input.precomputed.q_4();
-        let q_c = input.precomputed.q_c();
-        let q_arith = input.precomputed.q_arith();
-        let w_4_shift = input.shifted_witness.w_4();
-        let w_l_shift = input.shifted_witness.w_l();
-
-        let neg_half = -P::ScalarField::from(2u64).inverse().unwrap();
-
-        let mul = driver.mul_many(w_l, w_r)?;
-        let mut tmp = T::mul_with_public_many(q_m, &mul);
-        let q_arith_neg_3 = q_arith
-            .iter()
-            .map(|q| *q - P::ScalarField::from(3_u64))
-            .collect::<Vec<_>>();
-        T::mul_assign_with_public_many(&mut tmp, &q_arith_neg_3);
-        T::scale_many_in_place(&mut tmp, neg_half);
         let party_id = driver.get_party_id();
-        let tmp_l = T::mul_with_public_many(q_l, w_l);
-        let tmp_r = T::mul_with_public_many(q_r, w_r);
-        let tmp_o = T::mul_with_public_many(q_o, w_o);
-        let tmp_4 = T::mul_with_public_many(q_4, w_4);
-
-        T::add_assign_many(&mut tmp, &tmp_l);
-        T::add_assign_many(&mut tmp, &tmp_r);
-        T::add_assign_many(&mut tmp, &tmp_o);
-        T::add_assign_many(&mut tmp, &tmp_4);
-        T::add_assign_public_many(&mut tmp, q_c, party_id);
-
-        let q_arith_neg_1 = q_arith
-            .iter()
-            .map(|q| *q - P::ScalarField::from(1_u64))
-            .collect::<Vec<_>>();
-
-        let q_arith_neg_2 = q_arith
-            .iter()
-            .map(|q| *q - P::ScalarField::from(2_u64))
-            .collect::<Vec<_>>();
-
-        let tmp_arith = T::mul_with_public_many(&q_arith_neg_1, w_4_shift);
-        T::add_assign_many(&mut tmp, &tmp_arith);
-        T::mul_assign_with_public_many(&mut tmp, q_arith);
-
-        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
-
-        fold_accumulator!(univariate_accumulator.r0, tmp);
-
-        let mut tmp = T::add_many(w_l, w_4);
-        T::sub_assign_many(&mut tmp, w_l_shift);
-        T::add_assign_public_many(&mut tmp, q_m, party_id);
-        T::mul_assign_with_public_many(&mut tmp, &q_arith_neg_2);
-        T::mul_assign_with_public_many(&mut tmp, &q_arith_neg_1);
-        T::mul_assign_with_public_many(&mut tmp, q_arith);
-        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
-
-        fold_accumulator!(univariate_accumulator.r1, tmp);
-
+        rayon::join(
+            || {
+                Self::compute_r0(
+                    driver,
+                    &mut univariate_accumulator.r0,
+                    input,
+                    scaling_factors,
+                )
+            },
+            || {
+                Self::compute_r1(
+                    party_id,
+                    &mut univariate_accumulator.r1,
+                    input,
+                    scaling_factors,
+                )
+            },
+        );
         Ok(())
     }
 }
