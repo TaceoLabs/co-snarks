@@ -1,203 +1,216 @@
 pub use ark_ec::pairing::Pairing;
+use ark_ff::PrimeField;
 use criterion::*;
-use mpc_core::protocols::rep3::{
-    arithmetic::{self, FieldShare},
-    id::PartyID,
-    network::{IoContext, Rep3Network},
-    rngs::{Rep3CorrelatedRng, Rep3Rand, Rep3RandBitComp},
-};
-use rand::SeedableRng;
+use mpc_core::protocols::rep3::{arithmetic::FieldShare, rngs::Rep3Rand};
+use rayon::prelude::*;
 
 type FieldShareType =
     FieldShare<<ark_ec::bn::Bn<ark_bn254::Config> as ark_ec::pairing::Pairing>::ScalarField>;
 
-struct Dummy;
-impl Rep3Network for Dummy {
-    fn get_id(&self) -> PartyID {
-        todo!()
-    }
-
-    fn reshare_many<F: ark_serialize::CanonicalSerialize + ark_serialize::CanonicalDeserialize>(
-        &mut self,
-        _: &[F],
-    ) -> std::io::Result<Vec<F>> {
-        todo!()
-    }
-
-    fn broadcast_many<
-        F: ark_serialize::CanonicalSerialize + ark_serialize::CanonicalDeserialize,
-    >(
-        &mut self,
-        _: &[F],
-    ) -> std::io::Result<(Vec<F>, Vec<F>)> {
-        todo!()
-    }
-
-    fn send_many<F: ark_serialize::CanonicalSerialize>(
-        &mut self,
-        _: PartyID,
-        _: &[F],
-    ) -> std::io::Result<()> {
-        todo!()
-    }
-
-    fn recv_many<F: ark_serialize::CanonicalDeserialize>(
-        &mut self,
-        _: PartyID,
-    ) -> std::io::Result<Vec<F>> {
-        todo!()
-    }
-
-    fn fork(&mut self) -> std::io::Result<Self>
-    where
-        Self: Sized,
-    {
-        todo!()
-    }
-}
-fn current_main_local_mul_vec(c: &mut Criterion) {
-    let mut io_context = IoContext::<Dummy> {
-        id: PartyID::ID0,
-        a2b_type: Default::default(),
-        rngs: Rep3CorrelatedRng::new(
-            Rep3Rand::new([0; 32], [0; 32]),
-            Rep3RandBitComp::new_2keys([0; 32], [0; 32]),
-            Rep3RandBitComp::new_2keys([0; 32], [0; 32]),
-        ),
-        network: Dummy {},
-        rng: rand_chacha::ChaCha12Rng::from_entropy(),
-    };
-
-    let num_threads = std::env::var("BENCHES_NUM_THREADS")
-        .unwrap()
-        .parse::<usize>()
-        .unwrap();
-
-    rayon::ThreadPoolBuilder::new()
+fn run_bench(c: &mut Criterion, num_threads: usize, todo_list: &[usize]) {
+    let thread_pool = rayon::ThreadPoolBuilder::new()
         .num_threads(num_threads)
-        .build_global()
+        .build()
         .unwrap();
+    let mut rep3_rand = Rep3Rand::new([1; 32], [2; 32]);
 
-    let sizes: Vec<usize> = vec![
-        // 4,
-        // 8,
-        // 16,
-        // 32,
-        // 64,
-        // 128,
-        256,
-        512,
-        1024,
-        1024 * 2,
-        1024 * 4,
-        1024 * 8,
-        1024 * 16,
-        1024 * 32,
-        // 1024 * 64,
-        // 1024 * 128,
-        // 1024 * 256,
-        // 1024 * 512,
-        // 1024 * 1024,
-        // 1024 * 1024 * 2,
-    ];
-
-    for size in sizes.into_iter() {
-        let vec_a: Vec<FieldShareType> = (0..size)
-            .map(|_| FieldShare::rand(&mut io_context))
+    for amount in todo_list.iter().copied() {
+        let vec_a: Vec<FieldShareType> = (0..amount)
+            .map(|_| {
+                let (a, b) = rep3_rand.random_fes();
+                FieldShare::new(a, b)
+            })
             .collect();
-        let vec_b: Vec<FieldShareType> = (0..size)
-            .map(|_| FieldShare::rand(&mut io_context))
+        let vec_b: Vec<FieldShareType> = (0..amount)
+            .map(|_| {
+                let (a, b) = rep3_rand.random_fes();
+                FieldShare::new(a, b)
+            })
             .collect();
 
-        let mut group = c.benchmark_group(format!("group_0_threads_{}_size_{}", num_threads, size));
-        group.throughput(Throughput::Elements(vec_a.len() as u64));
-        group.bench_function("current main min len 1024", |b| {
+        let mut group = c.benchmark_group(format!("# threads {}, size {}", num_threads, amount));
+        group.throughput(Throughput::Elements(amount as u64));
+        group.bench_function("current impl (with_min_len 1024)", |b| {
             b.iter(|| {
-                let _ = arithmetic::local_mul_vec(&vec_a, &vec_b, &mut io_context.rngs);
+                thread_pool.install(|| {
+                    black_box(local_mul_vec_current(&vec_a, &vec_b, &mut rep3_rand));
+                })
             })
         });
-        group.finish();
 
-        let mut group = c.benchmark_group(format!("group_1_threads_{}_size_{}", num_threads, size));
-        group.throughput(Throughput::Elements(vec_a.len() as u64));
+        group.throughput(Throughput::Elements(amount as u64));
         group.bench_function("no rayon, just iter", |b| {
             b.iter(|| {
-                let _ = arithmetic::local_mul_vec_no_rayon(&vec_a, &vec_b, &mut io_context.rngs);
+                thread_pool.install(|| {
+                    black_box(local_mul_vec_no_rayon(&vec_a, &vec_b, &mut rep3_rand));
+                });
             })
         });
-        group.finish();
 
-        let mut group = c.benchmark_group(format!("group_2_threads_{}_size_{}", num_threads, size));
-        group.throughput(Throughput::Elements(vec_a.len() as u64));
-        group.bench_function("primitive rayon no min len", |b| {
+        group.throughput(Throughput::Elements(amount as u64));
+        group.bench_function("no rayon, just iter/squeeze at beginning", |b| {
             b.iter(|| {
-                let _ = arithmetic::local_mul_vec_simple(&vec_a, &vec_b, &mut io_context.rngs);
+                thread_pool.install(|| {
+                    black_box(local_mul_vec_no_rayon_squeeze_at_beginning(
+                        &vec_a,
+                        &vec_b,
+                        &mut rep3_rand,
+                    ));
+                });
             })
         });
-        group.finish();
 
-        let mut group = c.benchmark_group(format!("group_3_threads_{}_size_{}", num_threads, size));
-        group.throughput(Throughput::Elements(vec_a.len() as u64));
-        group.bench_function("local_mul_vec min len is vec size", |b| {
+        group.throughput(Throughput::Elements(amount as u64));
+        group.bench_function("ordinary rayon no min_len", |b| {
             b.iter(|| {
-                let _ =
-                    arithmetic::local_mul_vec_no_multi(&vec_a, &vec_b, &mut io_context.rngs, size);
+                thread_pool.install(|| {
+                    black_box(local_mul_vec_no_min_len(&vec_a, &vec_b, &mut rep3_rand));
+                });
             })
         });
-        group.finish();
 
-        // let mut group = c.benchmark_group(format!("group_4_threads_{}_size_{}", num_threads, size));
-        // group.throughput(Throughput::Elements(vec_a.len() as u64));
-        // group.bench_function("with_min_len 2", |b| {
-        //     b.iter(|| {
-        //         let _ = arithmetic::local_mul_vec_2(&vec_a, &vec_b, &mut io_context.rngs);
-        //     })
-        // });
-        // group.finish();
-
-        // let mut group = c.benchmark_group(format!("group_5_threads_{}_size_{}", num_threads, size));
-        // group.throughput(Throughput::Elements(vec_a.len() as u64));
-        // group.bench_function("with_min_len 4", |b| {
-        //     b.iter(|| {
-        //         let _ = arithmetic::local_mul_vec_4(&vec_a, &vec_b, &mut io_context.rngs);
-        //     })
-        // });
-        // group.finish();
-
-        // let mut group = c.benchmark_group(format!("group_6_threads_{}_size_{}", num_threads, size));
-        // group.throughput(Throughput::Elements(vec_a.len() as u64));
-        // group.bench_function("with_min_len 8", |b| {
-        //     b.iter(|| {
-        //         let _ = arithmetic::local_mul_vec_8(&vec_a, &vec_b, &mut io_context.rngs);
-        //     })
-        // });
-        // group.finish();
-
-        let mut group = c.benchmark_group(format!("group_7_threads_{}_size_{}", num_threads, size));
-        group.throughput(Throughput::Elements(vec_a.len() as u64));
-        group.bench_function("with_min_len 16", |b| {
+        group.throughput(Throughput::Elements(amount as u64));
+        group.bench_function("local_mul_vec with min len(8)", |b| {
             b.iter(|| {
-                let _ = arithmetic::local_mul_vec_16(&vec_a, &vec_b, &mut io_context.rngs);
+                thread_pool.install(|| {
+                    black_box(local_mul_vec_rayon_min_lem(
+                        &vec_a,
+                        &vec_b,
+                        &mut rep3_rand,
+                        8,
+                    ));
+                });
             })
         });
-        group.finish();
 
-        let mut group = c.benchmark_group(format!("group_8_threads_{}_size_{}", num_threads, size));
-        group.throughput(Throughput::Elements(vec_a.len() as u64));
-        group.bench_function("local_mul_vec_big min len = vec.len()/threads", |b| {
+        group.throughput(Throughput::Elements(amount as u64));
+        group.bench_function("local_mul_vec with min len(256)", |b| {
             b.iter(|| {
-                let _ = arithmetic::local_mul_vec_big(
-                    &vec_a,
-                    &vec_b,
-                    &mut io_context.rngs,
-                    size,
-                    num_threads,
-                );
+                thread_pool.install(|| {
+                    black_box(local_mul_vec_rayon_min_lem(
+                        &vec_a,
+                        &vec_b,
+                        &mut rep3_rand,
+                        256,
+                    ));
+                });
             })
         });
+
+        group.throughput(Throughput::Elements(amount as u64));
+        group.bench_function("local_mul_vec with min len(4096)", |b| {
+            b.iter(|| {
+                thread_pool.install(|| {
+                    black_box(local_mul_vec_rayon_min_lem(
+                        &vec_a,
+                        &vec_b,
+                        &mut rep3_rand,
+                        4096,
+                    ));
+                });
+            })
+        });
+
+        group.throughput(Throughput::Elements(amount as u64));
+        group.bench_function("local_mul_vec with min len(vec.len()/threads)", |b| {
+            b.iter(|| {
+                thread_pool.install(|| {
+                    black_box(local_mul_vec_rayon_min_lem(
+                        &vec_a,
+                        &vec_b,
+                        &mut rep3_rand,
+                        amount / num_threads,
+                    ));
+                });
+            })
+        });
+
         group.finish();
     }
 }
 
-criterion_group!(benches, current_main_local_mul_vec,);
+fn local_mul_vec_current<F: PrimeField>(
+    lhs: &[FieldShare<F>],
+    rhs: &[FieldShare<F>],
+    rand: &mut Rep3Rand,
+) -> Vec<F> {
+    //squeeze all random elements at once in beginning for determinismus
+    let masking_fes = rand.masking_field_elements_vec::<F>(lhs.len());
+
+    lhs.par_iter()
+        .zip_eq(rhs.par_iter())
+        .zip_eq(masking_fes.par_iter())
+        .with_min_len(1024)
+        .map(|((lhs, rhs), masking)| lhs * rhs + masking)
+        .collect()
+}
+
+fn local_mul_vec_no_min_len<F: PrimeField>(
+    lhs: &[FieldShare<F>],
+    rhs: &[FieldShare<F>],
+    rand: &mut Rep3Rand,
+) -> Vec<F> {
+    //squeeze all random elements at once in beginning for determinismus
+    let masking_fes = rand.masking_field_elements_vec::<F>(lhs.len());
+
+    lhs.par_iter()
+        .zip_eq(rhs.par_iter())
+        .zip_eq(masking_fes.par_iter())
+        .map(|((lhs, rhs), masking)| lhs * rhs + masking)
+        .collect()
+}
+
+fn local_mul_vec_no_rayon_squeeze_at_beginning<F: PrimeField>(
+    lhs: &[FieldShare<F>],
+    rhs: &[FieldShare<F>],
+    rand: &mut Rep3Rand,
+) -> Vec<F> {
+    //squeeze all random elements at once in beginning for determinismus
+    let masking_fes = rand.masking_field_elements_vec::<F>(lhs.len());
+
+    lhs.iter()
+        .zip(rhs.iter())
+        .zip(masking_fes.iter())
+        .map(|((lhs, rhs), masking)| lhs * rhs + masking)
+        .collect()
+}
+
+fn local_mul_vec_no_rayon<F: PrimeField>(
+    lhs: &[FieldShare<F>],
+    rhs: &[FieldShare<F>],
+    rand: &mut Rep3Rand,
+) -> Vec<F> {
+    lhs.iter()
+        .zip(rhs.iter())
+        .map(|(lhs, rhs)| lhs * rhs + rand.masking_field_element::<F>())
+        .collect()
+}
+
+fn local_mul_vec_rayon_min_lem<F: PrimeField>(
+    lhs: &[FieldShare<F>],
+    rhs: &[FieldShare<F>],
+    rand: &mut Rep3Rand,
+    min_len: usize,
+) -> Vec<F> {
+    //squeeze all random elements at once in beginning for determinismus
+    let masking_fes = rand.masking_field_elements_vec::<F>(lhs.len());
+
+    lhs.par_iter()
+        .zip_eq(rhs.par_iter())
+        .zip_eq(masking_fes.par_iter())
+        .with_min_len(min_len)
+        .map(|((lhs, rhs), masking)| lhs * rhs + masking)
+        .collect()
+}
+
+fn local_mul_vec_bench(c: &mut Criterion) {
+    let todo_list = [1 << 8, 1 << 12, 1 << 16, 1 << 20];
+    let threads = [8, 16];
+
+    for num_threads in threads {
+        run_bench(c, num_threads, &todo_list);
+    }
+}
+
+criterion_group!(benches, local_mul_vec_bench);
 criterion_main!(benches);
