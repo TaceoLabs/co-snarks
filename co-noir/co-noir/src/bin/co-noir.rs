@@ -1746,11 +1746,10 @@ fn run_verify(config: VerifyConfig) -> color_eyre::Result<ExitCode> {
     tracing::info!("Starting proof verification...");
     let start = Instant::now();
     let res = match hasher {
-        TranscriptHash::POSEIDON => UltraHonk::<_, Poseidon2Sponge>::verify(proof, vk, has_zk)
+        TranscriptHash::POSEIDON => UltraHonk::<_, Poseidon2Sponge>::verify(proof, &vk, has_zk)
             .context("while verifying proof")?,
-        TranscriptHash::KECCAK => {
-            UltraHonk::<_, Keccak256>::verify(proof, vk, has_zk).context("while verifying proof")?
-        }
+        TranscriptHash::KECCAK => UltraHonk::<_, Keccak256>::verify(proof, &vk, has_zk)
+            .context("while verifying proof")?,
     };
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Verify took {} ms", duration_ms);
