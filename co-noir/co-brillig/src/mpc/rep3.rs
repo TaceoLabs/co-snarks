@@ -325,6 +325,16 @@ impl<F: PrimeField, N: Rep3Network> BrilligDriver<F> for Rep3BrilligDriver<F, N>
         }
     }
 
+    fn try_into_char(val: Self::BrilligType) -> eyre::Result<char> {
+        // for now we only support casting public values to chars
+        // we return an error if we call this on a shared value
+        if let Rep3BrilligType::Public(public) = val {
+            PlainBrilligDriver::try_into_char(public)
+        } else {
+            eyre::bail!("cannot convert shared value to char")
+        }
+    }
+
     fn try_into_bool(val: Self::BrilligType) -> Result<bool, Self::BrilligType> {
         match val {
             Rep3BrilligType::Public(Public::Int(val, IntegerBitSize::U1)) => Ok(val != 0),

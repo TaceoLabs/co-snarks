@@ -102,7 +102,9 @@ where
             }
         }
         let brillig_result = self.brillig.run(id, calldata)?;
-        if let CoBrilligResult::Success(brillig_result) = brillig_result {
+        if let CoBrilligResult::Success(brillig_result, persisted_state) = brillig_result {
+            self.value_store
+                .add_from_brillig(&mut self.driver, persisted_state)?;
             let brillig_result = self.driver.parse_brillig_result(brillig_result)?;
             let brillig_result = brillig_mask.mask(brillig_result, &mut self.driver)?;
             self.fill_output(brillig_result, outputs);
