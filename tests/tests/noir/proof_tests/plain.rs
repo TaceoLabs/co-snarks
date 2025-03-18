@@ -64,7 +64,7 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str, has_zk: Zero
     let proof =
         CoUltraHonk::<PlainUltraHonkDriver, _, H>::prove(proving_key, &prover_crs, has_zk).unwrap();
 
-    let is_valid = UltraHonk::<_, H>::verify(proof, verifying_key, has_zk).unwrap();
+    let is_valid = UltraHonk::<_, H>::verify(proof, &verifying_key, has_zk).unwrap();
     assert!(is_valid);
 }
 
@@ -104,7 +104,7 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     let proof =
         CoUltraHonk::<PlainUltraHonkDriver, _, H>::prove(proving_key, &prover_crs, has_zk).unwrap();
 
-    let is_valid = UltraHonk::<_, H>::verify(proof, verifying_key, has_zk).unwrap();
+    let is_valid = UltraHonk::<_, H>::verify(proof, &verifying_key, has_zk).unwrap();
     assert!(is_valid);
 }
 
