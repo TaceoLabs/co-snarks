@@ -19,9 +19,12 @@ use noirc_artifacts::program::ProgramArtifact;
 use partial_abi::PublicMarker;
 use std::{collections::BTreeMap, io, path::Path};
 
-use crate::mpc::{
-    plain::PlainAcvmSolver, rep3::Rep3AcvmSolver, shamir::ShamirAcvmSolver,
-    NoirWitnessExtensionProtocol,
+use crate::{
+    mpc::{
+        plain::PlainAcvmSolver, rep3::Rep3AcvmSolver, shamir::ShamirAcvmSolver,
+        NoirWitnessExtensionProtocol,
+    },
+    value_store::ValueStore,
 };
 
 /// The default expression width defined used by the ACVM.
@@ -78,6 +81,7 @@ where
     brillig: CoBrilligVM<T::BrilligDriver, F>,
     abi: Abi,
     functions: Vec<Circuit<GenericFieldElement<F>>>,
+    value_store: ValueStore<T, F>,
     // maybe this can be an array. lets see..
     witness_map: Vec<WitnessMap<T::AcvmType>>,
     // there will a more fields added as we add functionality
@@ -166,6 +170,7 @@ where
             brillig,
             driver,
             abi: compiled_program.abi,
+            value_store: ValueStore::new(),
             functions: compiled_program
                 .bytecode
                 .functions
@@ -197,6 +202,7 @@ where
             driver,
             brillig,
             abi: compiled_program.abi,
+            value_store: ValueStore::new(),
             functions: compiled_program
                 .bytecode
                 .functions
@@ -328,7 +334,10 @@ where
         &mut self.witness_map[self.function_index]
     }
 
-    fn open_results(&mut self, function: &Circuit<GenericFieldElement<F>>) -> CoAcvmResult<()> {
+    fn open_results(
+        &mut self,
+        function: &Circuit<GenericFieldElement<F>>,
+    ) -> CoAcvmResult<Vec<T::AcvmType>> {
         let witness_map = &mut self.witness_map[self.function_index];
 
         let mut vec = Vec::with_capacity(function.return_values.0.len());
@@ -339,17 +348,25 @@ where
             };
         }
         let mut opened = self.driver.open_many(&vec)?;
+        let mut result = Vec::with_capacity(function.return_values.0.len());
         for index in function.return_values.0.iter().rev() {
             let val = witness_map.get(index).expect("witness should be present");
             if T::is_shared(val) {
                 let opened_val = opened.pop().expect("opened value should be present");
-                witness_map.insert(*index, T::AcvmType::from(opened_val));
+                let opened_val = T::AcvmType::from(opened_val);
+                witness_map.insert(*index, opened_val.clone());
+                result.push(opened_val);
+            } else {
+                result.push(val.to_owned());
             }
         }
-        Ok(())
+        Ok(result)
     }
 
-    pub fn solve(mut self) -> CoAcvmResult<(WitnessStack<T::AcvmType>, T)> {
+    #[allow(clippy::type_complexity)]
+    pub fn solve_with_output(
+        mut self,
+    ) -> CoAcvmResult<(WitnessStack<T::AcvmType>, ValueStore<T, F>, T)> {
         let functions = std::mem::take(&mut self.functions);
 
         for opcode in functions[self.function_index].opcodes.iter() {
@@ -376,12 +393,21 @@ where
             }
         }
         tracing::trace!("we are done! Opening results...");
-        self.open_results(&functions[self.function_index])?;
+        let output = self.open_results(&functions[self.function_index])?;
+        self.value_store.set_output(output);
         tracing::trace!("Done! Wrap things up.");
+
+        // TODO here we need to store the output
+
         let mut witness_stack = WitnessStack::default();
         for (idx, witness) in self.witness_map.into_iter().rev().enumerate() {
             witness_stack.push(u32::try_from(idx).expect("usize fits into u32"), witness);
         }
-        Ok((witness_stack, self.driver))
+        Ok((witness_stack, self.value_store, self.driver))
+    }
+
+    pub fn solve(self) -> CoAcvmResult<(WitnessStack<T::AcvmType>, T)> {
+        let (witness_stack, _, driver) = self.solve_with_output()?;
+        Ok((witness_stack, driver))
     }
 }

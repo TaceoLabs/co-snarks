@@ -7,7 +7,7 @@ use num_bigint::BigUint;
 use num_traits::Zero;
 use rand::Rng;
 
-use super::{acir_field_utils, BrilligDriver};
+use super::{acir_field_utils, BrilligDriver, CHAR_BIT_SIZE};
 
 macro_rules! wrapping_op {
     ($lhs:expr, $op: tt, $rhs:expr, $bit_size:expr) => {
@@ -121,6 +121,23 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
                     Err(eyre::eyre!(
                         "Must be {} for addresses, but is {}",
                         MEMORY_ADDRESSING_BIT_SIZE,
+                        bit_size
+                    ))
+                }
+            }
+        }
+    }
+
+    fn try_into_char(val: Self::BrilligType) -> eyre::Result<char> {
+        match val {
+            PlainBrilligType::Field(_) => Err(eyre::eyre!("cannot convert field to char")),
+            PlainBrilligType::Int(int, bit_size) => {
+                if bit_size == CHAR_BIT_SIZE {
+                    Ok(char::from(u8::try_from(int).expect("u8 fits into char")))
+                } else {
+                    Err(eyre::eyre!(
+                        "Must be {} bits for charcters, but is {}",
+                        CHAR_BIT_SIZE,
                         bit_size
                     ))
                 }

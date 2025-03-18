@@ -21,6 +21,8 @@ pub use plain::PlainBrilligType;
 pub use rep3::Rep3BrilligType;
 pub use shamir::ShamirBrilligType;
 
+const CHAR_BIT_SIZE: IntegerBitSize = IntegerBitSize::U8;
+
 pub(super) mod acir_field_utils {
     use ark_ff::PrimeField;
 
@@ -64,6 +66,10 @@ pub trait BrilligDriver<F: PrimeField>: Sized {
     /// Tries to convert the provided value to a `usize`. Returns an error
     /// if it is not possible (e.g., is a shared value).
     fn try_into_usize(val: Self::BrilligType) -> eyre::Result<usize>;
+
+    /// Tries to convert the provided value to a `char`. Returns an error
+    /// if it is not possible (e.g., is a shared value).
+    fn try_into_char(val: Self::BrilligType) -> eyre::Result<char>;
 
     /// Tries to convert the provided value to a `bool`. Returns the value
     /// again, if it is not possible (e.g., is a shared value).
