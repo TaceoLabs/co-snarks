@@ -1,4 +1,4 @@
-use super::{ProverUnivariatesBatch, Relation, MIN_RAYON_ITER};
+use super::{relation_utils, ProverUnivariatesBatch, Relation, MIN_RAYON_ITER};
 use crate::{
     co_decider::{
         types::{RelationParameters, MAX_PARTIAL_RELATION_LENGTH},
@@ -137,6 +137,7 @@ impl UltraArithmeticRelation {
             scaling_factors,
         )
             .into_par_iter()
+            .with_min_len(MIN_RAYON_ITER)
             .map(
                 |(
                     mul,
@@ -161,28 +162,8 @@ impl UltraArithmeticRelation {
                     tmp *= q_arith;
                     tmp * scaling_factor
                 },
-            )
-            .enumerate()
-            .fold(
-                || [P::ScalarField::default(); MAX_PARTIAL_RELATION_LENGTH],
-                |mut acc, (idx, tmp)| {
-                    acc[idx % MAX_PARTIAL_RELATION_LENGTH] += tmp;
-                    acc
-                },
-            )
-            .reduce(
-                || [P::ScalarField::default(); MAX_PARTIAL_RELATION_LENGTH],
-                |mut acc, next| {
-                    for (acc, next) in izip!(acc.iter_mut(), next) {
-                        *acc += next;
-                    }
-                    acc
-                },
             );
-
-        for (evaluations, new) in izip!(r0.evaluations.iter_mut(), acc) {
-            *evaluations += new;
-        }
+        relation_utils::accumulate_half_share!(acc, r0);
     }
     fn compute_r1<T, P>(
         party_id: T::PartyID,
@@ -212,27 +193,9 @@ impl UltraArithmeticRelation {
                 let tmp = T::mul_with_public(*q_arith - one, tmp);
                 let tmp = T::mul_with_public(*q_arith, tmp);
                 T::mul_with_public(*scaling_factor, tmp)
-            })
-            .enumerate()
-            .fold(
-                || [T::ArithmeticShare::default(); MAX_PARTIAL_RELATION_LENGTH],
-                |mut acc, (idx, tmp)| {
-                    T::add_assign(&mut acc[idx % MAX_PARTIAL_RELATION_LENGTH], tmp);
-                    acc
-                },
-            )
-            .reduce(
-                || [T::ArithmeticShare::default(); MAX_PARTIAL_RELATION_LENGTH],
-                |mut acc, next| {
-                    for (acc, next) in izip!(acc.iter_mut(), next) {
-                        T::add_assign(acc, next);
-                    }
-                    acc
-                },
-            );
-        for (evaluations, new) in izip!(r1.evaluations.iter_mut(), acc) {
-            T::add_assign(evaluations, new);
-        }
+            });
+
+        relation_utils::accumulate!(acc, r1);
     }
 }
 

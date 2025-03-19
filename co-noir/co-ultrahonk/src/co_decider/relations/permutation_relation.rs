@@ -1,7 +1,12 @@
+use super::{
+    relation_utils::{self},
+    MIN_RAYON_ITER,
+};
+use itertools::izip;
+
 use super::{ProverUnivariatesBatch, Relation};
 use crate::{
     co_decider::{
-        relations::fold_accumulator,
         types::{RelationParameters, MAX_PARTIAL_RELATION_LENGTH},
         univariates::SharedUnivariate,
     },
@@ -10,6 +15,7 @@ use crate::{
 use ark_ec::pairing::Pairing;
 use co_builder::prelude::HonkCurve;
 use co_builder::HonkProofResult;
+use rayon::prelude::*;
 use ultrahonk::prelude::{TranscriptFieldType, Univariate};
 
 #[derive(Clone, Debug)]
@@ -18,7 +24,24 @@ pub(crate) struct UltraPermutationRelationAcc<T: NoirUltraHonkProver<P>, P: Pair
     pub(crate) r1: SharedUnivariate<T, P, 3>,
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct UltraPermutationRelationAccHalfShared<T: NoirUltraHonkProver<P>, P: Pairing> {
+    pub(crate) r0: Univariate<P::ScalarField, 6>,
+    pub(crate) r1: SharedUnivariate<T, P, 3>,
+}
+
 impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for UltraPermutationRelationAcc<T, P> {
+    fn default() -> Self {
+        Self {
+            r0: Default::default(),
+            r1: Default::default(),
+        }
+    }
+}
+
+impl<T: NoirUltraHonkProver<P>, P: Pairing> Default
+    for UltraPermutationRelationAccHalfShared<T, P>
+{
     fn default() -> Self {
         Self {
             r0: Default::default(),
@@ -68,10 +91,10 @@ impl UltraPermutationRelation {
         T: NoirUltraHonkProver<P>,
         P: Pairing,
     >(
-        driver: &mut T,
+        party_id: T::PartyID,
         input: &ProverUnivariatesBatch<T, P>,
         relation_parameters: &RelationParameters<P::ScalarField>,
-    ) -> HonkProofResult<Vec<T::ArithmeticShare>> {
+    ) -> (Vec<T::ArithmeticShare>, Vec<T::ArithmeticShare>) {
         let w_1 = input.witness.w_l();
         let w_2 = input.witness.w_r();
         let w_3 = input.witness.w_o();
@@ -88,18 +111,7 @@ impl UltraPermutationRelation {
         let beta = &relation_parameters.beta;
         let gamma = &relation_parameters.gamma;
 
-        let party_id = driver.get_party_id();
         // witness degree 4; full degree 8
-        let id_1 = id_1.iter().map(|x| *x * beta + gamma);
-        let id_2 = id_2.iter().map(|x| *x * beta + gamma);
-        let id_3 = id_3.iter().map(|x| *x * beta + gamma);
-        let id_4 = id_4.iter().map(|x| *x * beta + gamma);
-
-        let sigma_1 = sigma_1.iter().map(|x| *x * beta + gamma);
-        let sigma_2 = sigma_2.iter().map(|x| *x * beta + gamma);
-        let sigma_3 = sigma_3.iter().map(|x| *x * beta + gamma);
-        let sigma_4 = sigma_4.iter().map(|x| *x * beta + gamma);
-
         let mut wid1 = None;
         let mut wid2 = None;
         let mut wid3 = None;
@@ -110,15 +122,26 @@ impl UltraPermutationRelation {
         let mut wsigma3 = None;
         let mut wsigma4 = None;
 
+        macro_rules! add_with_beta_gamma {
+            ($pub: expr, $sh: expr) => {
+                Some(
+                    ($pub, $sh)
+                        .into_par_iter()
+                        .with_min_len(MIN_RAYON_ITER)
+                        .map(|(p, s)| T::add_with_public(*p * beta + gamma, *s, party_id))
+                        .collect::<Vec<_>>(),
+                )
+            };
+        }
         rayon::scope(|scope| {
-            scope.spawn(|_| wid1 = Some(T::add_with_public_many_iter(id_1, w_1, party_id)));
-            scope.spawn(|_| wid2 = Some(T::add_with_public_many_iter(id_2, w_2, party_id)));
-            scope.spawn(|_| wid3 = Some(T::add_with_public_many_iter(id_3, w_3, party_id)));
-            scope.spawn(|_| wid4 = Some(T::add_with_public_many_iter(id_4, w_4, party_id)));
-            scope.spawn(|_| wsigma1 = Some(T::add_with_public_many_iter(sigma_1, w_1, party_id)));
-            scope.spawn(|_| wsigma2 = Some(T::add_with_public_many_iter(sigma_2, w_2, party_id)));
-            scope.spawn(|_| wsigma3 = Some(T::add_with_public_many_iter(sigma_3, w_3, party_id)));
-            scope.spawn(|_| wsigma4 = Some(T::add_with_public_many_iter(sigma_4, w_4, party_id)));
+            scope.spawn(|_| wid1 = add_with_beta_gamma!(id_1, w_1));
+            scope.spawn(|_| wid2 = add_with_beta_gamma!(id_2, w_2));
+            scope.spawn(|_| wid3 = add_with_beta_gamma!(id_3, w_3));
+            scope.spawn(|_| wid4 = add_with_beta_gamma!(id_4, w_4));
+            scope.spawn(|_| wsigma1 = add_with_beta_gamma!(sigma_1, w_1));
+            scope.spawn(|_| wsigma2 = add_with_beta_gamma!(sigma_2, w_2));
+            scope.spawn(|_| wsigma3 = add_with_beta_gamma!(sigma_3, w_3));
+            scope.spawn(|_| wsigma4 = add_with_beta_gamma!(sigma_4, w_4));
         });
         // we can unwrap here because rayon scope cannot fail
         // and therefore we have Some values for sures
@@ -132,27 +155,54 @@ impl UltraPermutationRelation {
         let wsigma3 = wsigma3.unwrap();
         let wsigma4 = wsigma4.unwrap();
 
-        let mut lhs = Vec::with_capacity(wid1.len() + wsigma1.len() + wid3.len() + wsigma3.len());
-        let mut rhs = Vec::with_capacity(lhs.len());
-        lhs.extend(wid1);
-        lhs.extend(wsigma1);
-        lhs.extend(wid3);
-        lhs.extend(wsigma3);
+        let len = wid1.len() * 4;
 
-        rhs.extend(wid2);
-        rhs.extend(wsigma2);
-        rhs.extend(wid4);
-        rhs.extend(wsigma4);
-        let mul1 = driver.mul_many(&lhs, &rhs)?;
-        let (lhs, rhs) = mul1.split_at(mul1.len() >> 1);
-        Ok(driver.mul_many(lhs, rhs)?)
+        rayon::join(
+            || {
+                let mut lhs = Vec::with_capacity(len);
+
+                lhs.extend(wid1);
+                lhs.extend(wsigma1);
+                lhs.extend(wid3);
+                lhs.extend(wsigma3);
+                lhs
+            },
+            || {
+                let mut rhs = Vec::with_capacity(len);
+                rhs.extend(wid2);
+                rhs.extend(wsigma2);
+                rhs.extend(wid4);
+                rhs.extend(wsigma4);
+                rhs
+            },
+        )
+    }
+
+    fn compute_r1<T, P>(
+        r1: &mut SharedUnivariate<T, P, 3>,
+        input: &ProverUnivariatesBatch<T, P>,
+        scaling_factors: &[P::ScalarField],
+    ) where
+        T: NoirUltraHonkProver<P>,
+        P: HonkCurve<TranscriptFieldType>,
+    {
+        let lagrange_last = input.precomputed.lagrange_last();
+        let z_perm_shift = input.shifted_witness.z_perm();
+        let acc = (lagrange_last, z_perm_shift, scaling_factors)
+            .into_par_iter()
+            .with_min_len(MIN_RAYON_ITER)
+            .map(|(lagrange_last, z_perm_shift, scaling_factor)| {
+                let tmp = T::mul_with_public(*lagrange_last, *z_perm_shift);
+                T::mul_with_public(*scaling_factor, tmp)
+            });
+        relation_utils::accumulate!(acc, r1);
     }
 }
 
 impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P>
     for UltraPermutationRelation
 {
-    type Acc = UltraPermutationRelationAcc<T, P>;
+    type Acc = UltraPermutationRelationAccHalfShared<T, P>;
 
     fn can_skip(_: &super::ProverUnivariates<T, P>) -> bool {
         false
@@ -214,33 +264,50 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         // witness degree: deg 5 - deg 5 = deg 5
         // total degree: deg 9 - deg 10 = deg 10
 
-        let num_den = Self::compute_grand_product_numerator_and_denominator_batch(
-            driver,
-            input,
-            relation_parameters,
-        )?;
-
         let party_id = driver.get_party_id();
-        let tmp_lhs = T::add_with_public_many(lagrange_first, z_perm, party_id);
-        let lagrange_last_delta = lagrange_last.iter().map(|x| *x * *public_input_delta);
-        let tmp_rhs = T::add_with_public_many_iter(lagrange_last_delta, z_perm_shift, party_id);
+        let ((num_den_lhs, num_den_rhs), tmp_lhs, tmp_rhs, _) = relation_utils::rayon_multi_join!(
+            Self::compute_grand_product_numerator_and_denominator_batch(
+                party_id,
+                input,
+                relation_parameters,
+            ),
+            (lagrange_first, z_perm)
+                .into_par_iter()
+                .with_min_len(MIN_RAYON_ITER)
+                .map(|(lagrange_first, z_perm)| {
+                    T::add_with_public(*lagrange_first, *z_perm, party_id)
+                })
+                .collect::<Vec<_>>(),
+            (lagrange_last, z_perm_shift)
+                .into_par_iter()
+                .with_min_len(MIN_RAYON_ITER)
+                .map(|(lagrange_last, z_perm_shift)| {
+                    T::add_with_public(
+                        *lagrange_last * *public_input_delta,
+                        *z_perm_shift,
+                        party_id,
+                    )
+                })
+                .collect::<Vec<_>>(),
+            Self::compute_r1(&mut univariate_accumulator.r1, input, scaling_factors)
+        );
+        // 0xThemis TODO can we reduce mul depth here??
+        let mul1 = driver.mul_many(&num_den_lhs, &num_den_rhs)?;
+        let (lhs, rhs) = mul1.split_at(mul1.len() >> 1);
+        let lhs = driver.mul_many(lhs, rhs)?;
 
-        let lhs = num_den;
+        // 0xThemis TODO we dont have to copy all together - does it matter?
         let mut rhs = Vec::with_capacity(tmp_lhs.len() + tmp_lhs.len());
         rhs.extend(tmp_lhs);
         rhs.extend(tmp_rhs);
-        let mul1 = driver.mul_many(&lhs, &rhs)?;
+        let mul1 = driver.local_mul_vec(&lhs, &rhs);
         let (lhs, rhs) = mul1.split_at(mul1.len() >> 1);
-        let mut tmp = lhs.to_vec();
-        T::sub_assign_many(&mut tmp, rhs);
-        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
+        let acc = (lhs, rhs, scaling_factors)
+            .into_par_iter()
+            .with_min_len(MIN_RAYON_ITER)
+            .map(|(lhs, rhs, scaling_factor)| (*lhs - rhs) * scaling_factor);
 
-        fold_accumulator!(univariate_accumulator.r0, tmp);
-
-        let mut tmp = T::mul_with_public_many(lagrange_last, z_perm_shift);
-        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
-
-        fold_accumulator!(univariate_accumulator.r1, tmp);
+        relation_utils::accumulate_half_share!(acc, univariate_accumulator.r0);
 
         Ok(())
     }

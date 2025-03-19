@@ -1,4 +1,5 @@
 pub(crate) mod auxiliary_relation;
+
 pub(crate) mod delta_range_constraint_relation;
 pub(crate) mod elliptic_relation;
 pub(crate) mod logderiv_lookup_relation;
@@ -23,7 +24,9 @@ use delta_range_constraint_relation::{
 };
 use elliptic_relation::{EllipticRelation, EllipticRelationAcc};
 use logderiv_lookup_relation::{LogDerivLookupRelation, LogDerivLookupRelationAcc};
-use permutation_relation::{UltraPermutationRelation, UltraPermutationRelationAcc};
+use permutation_relation::{
+    UltraPermutationRelation, UltraPermutationRelationAcc, UltraPermutationRelationAccHalfShared,
+};
 use poseidon2_external_relation::{Poseidon2ExternalRelation, Poseidon2ExternalRelationAcc};
 use poseidon2_internal_relation::{Poseidon2InternalRelation, Poseidon2InternalRelationAcc};
 use ultra_arithmetic_relation::{
@@ -50,6 +53,82 @@ pub(crate) use fold_accumulator;
 // 0xThemis TODO We may want to have this configurable by environment or remove it as a whole.
 // We need bench marks for this when everything is done.
 const MIN_RAYON_ITER: usize = 1024;
+
+mod relation_utils {
+
+    macro_rules! accumulate_half_share {
+        ($iter: expr, $acc: expr) => {{
+            let acc = $iter
+                .enumerate()
+                .fold(
+                    || [P::ScalarField::default(); MAX_PARTIAL_RELATION_LENGTH],
+                    |mut acc, (idx, tmp)| {
+                        acc[idx % MAX_PARTIAL_RELATION_LENGTH] += tmp;
+                        acc
+                    },
+                )
+                .reduce(
+                    || [P::ScalarField::default(); MAX_PARTIAL_RELATION_LENGTH],
+                    |mut acc, next| {
+                        for (acc, next) in izip!(acc.iter_mut(), next) {
+                            *acc += next;
+                        }
+                        acc
+                    },
+                );
+
+            for (evaluations, new) in izip!($acc.evaluations.iter_mut(), acc) {
+                *evaluations += new;
+            }
+        }};
+    }
+
+    macro_rules! accumulate {
+        ($iter: expr, $acc: expr) => {{
+            let acc = $iter
+                .enumerate()
+                .fold(
+                    || [T::ArithmeticShare::default(); MAX_PARTIAL_RELATION_LENGTH],
+                    |mut acc, (idx, tmp)| {
+                        T::add_assign(&mut acc[idx % MAX_PARTIAL_RELATION_LENGTH], tmp);
+                        acc
+                    },
+                )
+                .reduce(
+                    || [T::ArithmeticShare::default(); MAX_PARTIAL_RELATION_LENGTH],
+                    |mut acc, next| {
+                        for (acc, next) in izip!(acc.iter_mut(), next) {
+                            T::add_assign(acc, next);
+                        }
+                        acc
+                    },
+                );
+            for (evaluations, new) in izip!($acc.evaluations.iter_mut(), acc) {
+                T::add_assign(evaluations, new);
+            }
+        }};
+    }
+
+    macro_rules! rayon_multi_join {
+        ($a: expr, $b: expr) => {
+            rayon::join(|| $a, || $b)
+        };
+
+        ($a: expr, $b: expr, $c: expr) => {{
+            let (a, (b, c)) = rayon::join(|| $a, || rayon::join(|| $b, || $c));
+            (a, b, c)
+        }};
+
+        ($a: expr, $b: expr, $c: expr, $d: expr) => {{
+            let ((a, b), (c, d)) =
+                rayon::join(|| rayon::join(|| $a, || $b), || rayon::join(|| $c, || $d));
+            (a, b, c, d)
+        }};
+    }
+    pub(crate) use accumulate;
+    pub(crate) use accumulate_half_share;
+    pub(crate) use rayon_multi_join;
+}
 
 pub(crate) trait Relation<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> {
     type Acc: Default;
@@ -111,7 +190,7 @@ pub(crate) struct AllRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing> {
 
 pub(crate) struct AllRelationAccHalfShared<T: NoirUltraHonkProver<P>, P: Pairing> {
     pub(crate) r_arith: UltraArithmeticRelationAccHalfShared<T, P>,
-    pub(crate) r_perm: UltraPermutationRelationAcc<T, P>,
+    pub(crate) r_perm: UltraPermutationRelationAccHalfShared<T, P>,
     pub(crate) r_lookup: LogDerivLookupRelationAcc<T, P>,
     pub(crate) r_delta: DeltaRangeConstraintRelationAcc<T, P>,
     pub(crate) r_elliptic: EllipticRelationAcc<T, P>,
@@ -122,13 +201,18 @@ pub(crate) struct AllRelationAccHalfShared<T: NoirUltraHonkProver<P>, P: Pairing
 
 impl<T: NoirUltraHonkProver<P>, P: Pairing> AllRelationAccHalfShared<T, P> {
     pub(crate) fn reshare(self, driver: &mut T) -> HonkProofResult<AllRelationAcc<T, P>> {
+        // 0xThemis TODO we want to do that in one round but for simplicity for now multiple
         let r_arith_r0 = driver.reshare(self.r_arith.r0.evaluations.to_vec())?;
+        let r_perm_r0 = driver.reshare(self.r_perm.r0.evaluations.to_vec())?;
         Ok(AllRelationAcc {
             r_arith: UltraArithmeticRelationAcc {
                 r0: SharedUnivariate::from_vec(r_arith_r0),
                 r1: self.r_arith.r1,
             },
-            r_perm: self.r_perm,
+            r_perm: UltraPermutationRelationAcc {
+                r0: SharedUnivariate::from_vec(r_perm_r0),
+                r1: self.r_perm.r1,
+            },
             r_lookup: self.r_lookup,
             r_delta: self.r_delta,
             r_elliptic: self.r_elliptic,
