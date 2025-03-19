@@ -148,7 +148,6 @@ pub fn send_and_recv_many<N: Network, F: CanonicalSerialize + CanonicalDeseriali
     data: &[F],
     from: usize,
 ) -> eyre::Result<Vec<F>> {
-    let (send, recv) = rayon::join(|| send_many(net, to, data), || recv_many(net, from));
-    send?;
-    recv
+    send_many(net, to, data)?;
+    recv_many(net, from)
 }
