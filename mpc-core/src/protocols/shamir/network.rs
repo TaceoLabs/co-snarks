@@ -64,26 +64,17 @@ pub fn broadcast<N: Network, F: CanonicalSerialize + CanonicalDeserialize + Clon
     (0..num_parties)
         .into_par_iter()
         .map(|other_id| {
-            let (send, recv) = rayon::join(
-                // Send
-                || {
-                    if other_id != net.id() {
-                        net.send(other_id, &ser_data)?;
-                    }
-                    eyre::Ok(())
-                },
-                // Receive
-                || {
-                    if other_id != net.id() {
-                        let data = net.recv(other_id)?;
-                        eyre::Ok(F::deserialize_uncompressed_unchecked(&data[..])?)
-                    } else {
-                        eyre::Ok(data.to_owned())
-                    }
-                },
-            );
-            send?;
-            recv
+            // Send
+            if other_id != net.id() {
+                net.send(other_id, &ser_data)?;
+            }
+            // Receive
+            if other_id != net.id() {
+                let data = net.recv(other_id)?;
+                eyre::Ok(F::deserialize_uncompressed_unchecked(&data[..])?)
+            } else {
+                eyre::Ok(data.to_owned())
+            }
         })
         .collect::<eyre::Result<Vec<_>>>()
 }
@@ -105,22 +96,13 @@ pub fn broadcast_next<N: Network, F: CanonicalSerialize + CanonicalDeserialize +
     let remaining = (1..num)
         .into_par_iter()
         .map(|i| {
-            let (send, recv) = rayon::join(
-                // Send
-                || {
-                    let other_id = (net.id() + i) % num_parties;
-                    net.send(other_id, &ser_data)?;
-                    eyre::Ok(())
-                },
-                // Receive
-                || {
-                    let other_id = (net.id() + num_parties - i) % num_parties;
-                    let data = net.recv(other_id)?;
-                    eyre::Ok(F::deserialize_uncompressed_unchecked(&data[..])?)
-                },
-            );
-            send?;
-            recv
+            // Send
+            let other_id = (net.id() + i) % num_parties;
+            net.send(other_id, &ser_data)?;
+            // Receive
+            let other_id = (net.id() + num_parties - i) % num_parties;
+            let data = net.recv(other_id)?;
+            eyre::Ok(F::deserialize_uncompressed_unchecked(&data[..])?)
         })
         .collect::<eyre::Result<Vec<_>>>()?;
 
@@ -321,7 +303,6 @@ pub fn send_and_recv_many<N: Network, F: CanonicalSerialize + CanonicalDeseriali
     data: &[F],
     from: usize,
 ) -> eyre::Result<Vec<F>> {
-    let (send, recv) = rayon::join(|| send_many(net, to, data), || recv_many(net, from));
-    send?;
-    recv
+    send_many(net, to, data)?;
+    recv_many(net, from)
 }

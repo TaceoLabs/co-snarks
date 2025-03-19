@@ -156,15 +156,11 @@ impl<'a, N: Network> Rep3Garbler<'a, N> {
         // Garbler's to evaluator
         self.output_evaluator(x)?;
 
-        let (send, recv) = rayon::join(
-            // Check consistency with the second garbled circuit before receiving the result
-            || self.send_circuit(),
-            // Evaluator to garbler
-            || self.output_garbler(x),
-        );
+        // Check consistency with the second garbled circuit before receiving the result
+        self.send_circuit()?;
 
-        send?;
-        recv
+        // Evaluator to garbler
+        self.output_garbler(x)
     }
 
     /// Outputs the value to parties ID0 and ID1
@@ -172,21 +168,15 @@ impl<'a, N: Network> Rep3Garbler<'a, N> {
         // Garbler's to evaluator
         self.output_evaluator(x)?;
 
-        let (send, recv) = rayon::join(
-            // Check consistency with the second garbled circuit before receiving the result
-            || self.send_circuit(),
-            // Evaluator to garbler
-            || {
-                if self.net.id() == PARTY_1 {
-                    Ok(Some(self.output_garbler(x)?))
-                } else {
-                    Ok(None)
-                }
-            },
-        );
+        // Check consistency with the second garbled circuit before receiving the result
+        self.send_circuit()?;
 
-        send?;
-        recv
+        // Evaluator to garbler
+        if self.net.id() == PARTY_1 {
+            Ok(Some(self.output_garbler(x)?))
+        } else {
+            Ok(None)
+        }
     }
 
     // Read `Block`s from the channel.

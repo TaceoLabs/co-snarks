@@ -112,15 +112,11 @@ impl<'a, N: Network> StreamingRep3Garbler<'a, N> {
         // Garbler's to evaluator
         self.output_evaluator(x)?;
 
-        let (send, recv) = rayon::join(
-            // Check consistency with the second garbled circuit before receiving the result
-            || self.send_hash(),
-            // Evaluator to garbler
-            || self.output_garbler(x),
-        );
+        // Check consistency with the second garbled circuit before receiving the result
+        self.send_hash()?;
 
-        send?;
-        recv
+        // Evaluator to garbler
+        self.output_garbler(x)
     }
 
     /// Outputs the value to parties ID0 and ID1
@@ -128,21 +124,15 @@ impl<'a, N: Network> StreamingRep3Garbler<'a, N> {
         // Garbler's to evaluator
         self.output_evaluator(x)?;
 
-        let (send, recv) = rayon::join(
-            // Check consistency with the second garbled circuit before receiving the result
-            || self.send_hash(),
-            // Evaluator to garbler
-            || {
-                if self.net.id() == PARTY_1 {
-                    Ok(Some(self.output_garbler(x)?))
-                } else {
-                    Ok(None)
-                }
-            },
-        );
+        // Check consistency with the second garbled circuit before receiving the result
+        self.send_hash()?;
 
-        send?;
-        recv
+        // Evaluator to garbler
+        if self.net.id() == PARTY_1 {
+            Ok(Some(self.output_garbler(x)?))
+        } else {
+            Ok(None)
+        }
     }
 
     /// As ID2, send a hash of the sended data to the evaluator.

@@ -386,23 +386,13 @@ impl<F: PrimeField> ShamirRng<F> {
         // Set my share
         self.set_my_share(&mut rcv_2t, &polys_2t);
 
-        let (send, recv) = rayon::join(
-            || {
-                // Send the share of my randomness
-                self.send_share_of_randomness(self.threshold + 1, &polys_t, net)?;
-                self.send_share_of_randomness(self.threshold * 2, &polys_2t, net)?;
-                eyre::Ok(())
-            },
-            || {
-                // Receive the remaining shares
-                self.receive_share_of_randomness(self.threshold + 1, &mut rcv_t, net)?;
-                self.receive_share_of_randomness(self.threshold * 2, &mut rcv_2t, net)?;
-                eyre::Ok(())
-            },
-        );
+        // Send the share of my randomness
+        self.send_share_of_randomness(self.threshold + 1, &polys_t, net)?;
+        self.send_share_of_randomness(self.threshold * 2, &polys_2t, net)?;
 
-        send?;
-        recv?;
+        // Receive the remaining shares
+        self.receive_share_of_randomness(self.threshold + 1, &mut rcv_t, net)?;
+        self.receive_share_of_randomness(self.threshold * 2, &mut rcv_2t, net)?;
 
         Ok((rcv_t, rcv_2t))
     }
