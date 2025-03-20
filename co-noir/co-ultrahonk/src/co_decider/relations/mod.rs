@@ -21,6 +21,7 @@ use co_builder::prelude::HonkCurve;
 use co_builder::HonkProofResult;
 use delta_range_constraint_relation::{
     DeltaRangeConstraintRelation, DeltaRangeConstraintRelationAcc,
+    DeltaRangeConstraintRelationAccHalfShared,
 };
 use elliptic_relation::{EllipticRelation, EllipticRelationAcc};
 use logderiv_lookup_relation::{LogDerivLookupRelation, LogDerivLookupRelationAcc};
@@ -58,6 +59,7 @@ mod relation_utils {
 
     macro_rules! accumulate_half_share {
         ($iter: expr, $acc: expr) => {{
+            use itertools::izip;
             let acc = $iter
                 .enumerate()
                 .fold(
@@ -115,13 +117,13 @@ mod relation_utils {
         };
 
         ($a: expr, $b: expr, $c: expr) => {{
-            let (a, (b, c)) = rayon::join(|| $a, || rayon::join(|| $b, || $c));
+            let ((a, b), c) = rayon::join(|| rayon::join(|| $a, || $b), || $c);
             (a, b, c)
         }};
 
         ($a: expr, $b: expr, $c: expr, $d: expr) => {{
-            let ((a, b), (c, d)) =
-                rayon::join(|| rayon::join(|| $a, || $b), || rayon::join(|| $c, || $d));
+            let (((a, b), c), d) =
+                rayon::join(|| rayon::join(|| rayon::join(|| $a, || $b), || $c), || $d);
             (a, b, c, d)
         }};
     }
@@ -192,7 +194,7 @@ pub(crate) struct AllRelationAccHalfShared<T: NoirUltraHonkProver<P>, P: Pairing
     pub(crate) r_arith: UltraArithmeticRelationAccHalfShared<T, P>,
     pub(crate) r_perm: UltraPermutationRelationAccHalfShared<T, P>,
     pub(crate) r_lookup: LogDerivLookupRelationAcc<T, P>,
-    pub(crate) r_delta: DeltaRangeConstraintRelationAcc<T, P>,
+    pub(crate) r_delta: DeltaRangeConstraintRelationAccHalfShared<P::ScalarField>,
     pub(crate) r_elliptic: EllipticRelationAcc<T, P>,
     pub(crate) r_aux: AuxiliaryRelationAcc<T, P>,
     pub(crate) r_pos_ext: Poseidon2ExternalRelationAcc<T, P>,
@@ -204,6 +206,11 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> AllRelationAccHalfShared<T, P> {
         // 0xThemis TODO we want to do that in one round but for simplicity for now multiple
         let r_arith_r0 = driver.reshare(self.r_arith.r0.evaluations.to_vec())?;
         let r_perm_r0 = driver.reshare(self.r_perm.r0.evaluations.to_vec())?;
+
+        let r_delta_r0 = driver.reshare(self.r_delta.r0.evaluations.to_vec())?;
+        let r_delta_r1 = driver.reshare(self.r_delta.r1.evaluations.to_vec())?;
+        let r_delta_r2 = driver.reshare(self.r_delta.r2.evaluations.to_vec())?;
+        let r_delta_r3 = driver.reshare(self.r_delta.r3.evaluations.to_vec())?;
         Ok(AllRelationAcc {
             r_arith: UltraArithmeticRelationAcc {
                 r0: SharedUnivariate::from_vec(r_arith_r0),
@@ -214,7 +221,12 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> AllRelationAccHalfShared<T, P> {
                 r1: self.r_perm.r1,
             },
             r_lookup: self.r_lookup,
-            r_delta: self.r_delta,
+            r_delta: DeltaRangeConstraintRelationAcc {
+                r0: SharedUnivariate::from_vec(r_delta_r0),
+                r1: SharedUnivariate::from_vec(r_delta_r1),
+                r2: SharedUnivariate::from_vec(r_delta_r2),
+                r3: SharedUnivariate::from_vec(r_delta_r3),
+            },
             r_elliptic: self.r_elliptic,
             r_aux: self.r_aux,
             r_pos_ext: self.r_pos_ext,

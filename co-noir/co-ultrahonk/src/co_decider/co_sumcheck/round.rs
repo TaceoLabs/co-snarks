@@ -138,6 +138,7 @@ impl SumcheckRound {
         relation_parameters: &RelationParameters<P::ScalarField>,
     ) -> HonkProofResult<()> {
         tracing::trace!("Accumulate relations");
+
         Self::accumulate_one_relation_univariates_batch::<_, _, UltraArithmeticRelation>(
             driver,
             &mut univariate_accumulators.r_arith,
