@@ -2,11 +2,9 @@ use ark_bn254::Bn254;
 use co_ultrahonk::prelude::{NoirUltraHonkProver, PlainUltraHonkDriver};
 use criterion::*;
 use itertools::izip;
-use mpc_core::protocols::rep3::arithmetic::FieldShare;
-use rand::{thread_rng, Rng, RngCore as _};
+use rand::{thread_rng, Rng};
 use rayon::prelude::*;
 
-type FieldShareType = FieldShare<FieldType>;
 type FieldType = ark_bn254::Fr;
 
 fn collect_poseidon(c: &mut Criterion, todo_list: &[usize], threads: &[usize]) {
