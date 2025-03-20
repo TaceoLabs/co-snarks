@@ -16,6 +16,7 @@ use circom_types::{
 use mpc_engine::{MpcEngine, Network};
 use num_traits::One;
 use num_traits::Zero;
+use tracing::instrument;
 
 // Round 5 of https://eprint.iacr.org/2019/953.pdf (page 30)
 pub(super) struct Round5<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network> {
@@ -279,7 +280,7 @@ where
         tracing::debug!("computing wxiw polynomial...");
         let xiw = challenges.xi * domains.root_of_unity_pow;
 
-        let mut res = polys.z.poly.clone().into_iter().collect::<Vec<_>>();
+        let mut res = polys.z.poly.clone();
         res[0] = T::add_with_public(party_id, res[0], -proof.eval_zw);
         Self::div_by_zerofier(&mut res, 1, xiw);
 
@@ -288,6 +289,7 @@ where
     }
 
     // Round 5 of https://eprint.iacr.org/2019/953.pdf (page 30)
+    #[instrument(level = "debug", name = "Plonk - Round 5", skip_all)]
     pub(super) fn round5(self) -> PlonkProofResult<PlonkProof<P>> {
         let Self {
             engine,
