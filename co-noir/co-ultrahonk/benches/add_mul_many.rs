@@ -4,7 +4,7 @@ use ark_bn254::Bn254 as B;
 use ark_ff::Zero as _;
 use co_ultrahonk::prelude::{NoirUltraHonkProver as P, PlainUltraHonkDriver as D};
 use itertools::izip;
-use rand::{thread_rng, RngCore};
+use rand::{thread_rng, Rng as _, RngCore};
 use rayon::prelude::*;
 
 type FieldType = ark_bn254::Fr;
@@ -32,22 +32,22 @@ fn add_mul_many(c: &mut Criterion, num_threads: usize, todo_list: &[usize]) {
 
     for num_elements in todo_list.iter().copied() {
         let w_l = (0..num_elements)
-            .map(|_| FieldType::from(rng.next_u64()))
+            .map(|_| rng.gen::<FieldType>())
             .collect::<Vec<_>>();
         let w_4 = (0..num_elements)
-            .map(|_| FieldType::from(rng.next_u64()))
+            .map(|_| rng.gen::<FieldType>())
             .collect::<Vec<_>>();
         let w_l_shift = (0..num_elements)
-            .map(|_| FieldType::from(rng.next_u64()))
+            .map(|_| rng.gen::<FieldType>())
             .collect::<Vec<_>>();
         let q_m = (0..num_elements)
-            .map(|_| FieldType::from(rng.next_u64()))
+            .map(|_| rng.gen::<FieldType>())
             .collect::<Vec<_>>();
         let q_arith = (0..num_elements)
-            .map(|_| FieldType::from(rng.next_u64()))
+            .map(|_| rng.gen::<FieldType>())
             .collect::<Vec<_>>();
         let scaling_factors = (0..num_elements)
-            .map(|_| FieldType::from(rng.next_u64()))
+            .map(|_| rng.gen::<FieldType>())
             .collect::<Vec<_>>();
 
         let q_arith_neg_1 = q_arith.iter().map(|q| *q - one).collect::<Vec<_>>();

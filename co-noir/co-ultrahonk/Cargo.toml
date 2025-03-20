@@ -35,3 +35,7 @@ sha3.workspace = true
 [[bench]]
 name = "add_mul_many"
 harness = false
+
+[[bench]]
+name = "vec_collect"
+harness = false

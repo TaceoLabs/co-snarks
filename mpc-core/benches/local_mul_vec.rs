@@ -4,9 +4,7 @@ use criterion::*;
 use mpc_core::protocols::rep3::{arithmetic::FieldShare, rngs::Rep3Rand};
 use rayon::prelude::*;
 
-type FieldShareType =
-    FieldShare<<ark_ec::bn::Bn<ark_bn254::Config> as ark_ec::pairing::Pairing>::ScalarField>;
-
+type FieldShareType = FieldShare<ark_bn254::Fr>;
 fn run_bench(c: &mut Criterion, num_threads: usize, todo_list: &[usize]) {
     let thread_pool = rayon::ThreadPoolBuilder::new()
         .num_threads(num_threads)
@@ -38,7 +36,6 @@ fn run_bench(c: &mut Criterion, num_threads: usize, todo_list: &[usize]) {
             })
         });
 
-        group.throughput(Throughput::Elements(amount as u64));
         group.bench_function("no rayon, just iter", |b| {
             b.iter(|| {
                 thread_pool.install(|| {
@@ -47,7 +44,6 @@ fn run_bench(c: &mut Criterion, num_threads: usize, todo_list: &[usize]) {
             })
         });
 
-        group.throughput(Throughput::Elements(amount as u64));
         group.bench_function("no rayon, just iter/squeeze at beginning", |b| {
             b.iter(|| {
                 thread_pool.install(|| {
@@ -60,7 +56,6 @@ fn run_bench(c: &mut Criterion, num_threads: usize, todo_list: &[usize]) {
             })
         });
 
-        group.throughput(Throughput::Elements(amount as u64));
         group.bench_function("ordinary rayon no min_len", |b| {
             b.iter(|| {
                 thread_pool.install(|| {
@@ -69,7 +64,6 @@ fn run_bench(c: &mut Criterion, num_threads: usize, todo_list: &[usize]) {
             })
         });
 
-        group.throughput(Throughput::Elements(amount as u64));
         group.bench_function("local_mul_vec with min len(8)", |b| {
             b.iter(|| {
                 thread_pool.install(|| {
@@ -83,7 +77,6 @@ fn run_bench(c: &mut Criterion, num_threads: usize, todo_list: &[usize]) {
             })
         });
 
-        group.throughput(Throughput::Elements(amount as u64));
         group.bench_function("local_mul_vec with min len(256)", |b| {
             b.iter(|| {
                 thread_pool.install(|| {
@@ -97,7 +90,6 @@ fn run_bench(c: &mut Criterion, num_threads: usize, todo_list: &[usize]) {
             })
         });
 
-        group.throughput(Throughput::Elements(amount as u64));
         group.bench_function("local_mul_vec with min len(4096)", |b| {
             b.iter(|| {
                 thread_pool.install(|| {
@@ -111,7 +103,6 @@ fn run_bench(c: &mut Criterion, num_threads: usize, todo_list: &[usize]) {
             })
         });
 
-        group.throughput(Throughput::Elements(amount as u64));
         group.bench_function("local_mul_vec with min len(vec.len()/threads)", |b| {
             b.iter(|| {
                 thread_pool.install(|| {
