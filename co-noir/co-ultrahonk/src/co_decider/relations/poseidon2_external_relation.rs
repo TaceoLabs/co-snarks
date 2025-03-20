@@ -409,12 +409,6 @@ impl Poseidon2ExternalRelation {
             *evaluations += new;
         }
 
-        //relation_utils::rayon_multi_join!(
-        //    relation_utils::accumulate_half_share!(r0.par_iter(), &mut univariate_accumulator.r0),
-        //    relation_utils::accumulate_half_share!(r1.par_iter(), &mut univariate_accumulator.r1),
-        //    relation_utils::accumulate_half_share!(r2.par_iter(), &mut univariate_accumulator.r2),
-        //    relation_utils::accumulate_half_share!(r3.par_iter(), &mut univariate_accumulator.r3)
-        //);
         Ok(())
     }
 }

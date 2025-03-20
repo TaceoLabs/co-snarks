@@ -1,4 +1,4 @@
-use super::{fold_accumulator, ProverUnivariatesBatch, Relation};
+use super::{ProverUnivariatesBatch, Relation, MIN_RAYON_ITER};
 use crate::{
     co_decider::{
         types::{RelationParameters, MAX_PARTIAL_RELATION_LENGTH},
@@ -7,12 +7,13 @@ use crate::{
     mpc::NoirUltraHonkProver,
 };
 use ark_ec::pairing::Pairing;
-use ark_ff::Zero;
+use ark_ff::{PrimeField, Zero};
 use co_builder::prelude::HonkCurve;
 use co_builder::HonkProofResult;
-use itertools::Itertools as _;
+use itertools::izip;
 use mpc_core::gadgets::poseidon2::POSEIDON2_BN254_T4_PARAMS;
 use num_bigint::BigUint;
+use rayon::prelude::*;
 use ultrahonk::prelude::{TranscriptFieldType, Univariate};
 
 #[derive(Clone, Debug)]
@@ -23,7 +24,26 @@ pub(crate) struct Poseidon2InternalRelationAcc<T: NoirUltraHonkProver<P>, P: Pai
     pub(crate) r3: SharedUnivariate<T, P, 7>,
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct Poseidon2InternalRelationAccHalfShared<F: PrimeField> {
+    pub(crate) r0: Univariate<F, 7>,
+    pub(crate) r1: Univariate<F, 7>,
+    pub(crate) r2: Univariate<F, 7>,
+    pub(crate) r3: Univariate<F, 7>,
+}
+
 impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for Poseidon2InternalRelationAcc<T, P> {
+    fn default() -> Self {
+        Self {
+            r0: Default::default(),
+            r1: Default::default(),
+            r2: Default::default(),
+            r3: Default::default(),
+        }
+    }
+}
+
+impl<F: PrimeField> Default for Poseidon2InternalRelationAccHalfShared<F> {
     fn default() -> Self {
         Self {
             r0: Default::default(),
@@ -81,6 +101,299 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> Poseidon2InternalRelationAcc<T, P> {
 
 pub(crate) struct Poseidon2InternalRelation {}
 
+#[derive(Default)]
+struct IntermediateAcc<F: PrimeField + Default> {
+    r0: [F; MAX_PARTIAL_RELATION_LENGTH],
+    r1: [F; MAX_PARTIAL_RELATION_LENGTH],
+    r2: [F; MAX_PARTIAL_RELATION_LENGTH],
+    r3: [F; MAX_PARTIAL_RELATION_LENGTH],
+}
+
+impl Poseidon2InternalRelation {
+    fn accumulate_multi_threaded<T, P>(
+        driver: &mut T,
+        univariate_accumulator: &mut Poseidon2InternalRelationAccHalfShared<P::ScalarField>,
+        input: &ProverUnivariatesBatch<T, P>,
+        scaling_factors: &[P::ScalarField],
+    ) -> HonkProofResult<()>
+    where
+        T: NoirUltraHonkProver<P>,
+        P: HonkCurve<TranscriptFieldType>,
+    {
+        let w_l = input.witness.w_l();
+        let w_r = input.witness.w_r();
+        let w_o = input.witness.w_o();
+        let w_4 = input.witness.w_4();
+        let w_l_shift = input.shifted_witness.w_l();
+        let w_r_shift = input.shifted_witness.w_r();
+        let w_o_shift = input.shifted_witness.w_o();
+        let w_4_shift = input.shifted_witness.w_4();
+        let q_l = input.precomputed.q_l();
+        let q_poseidon2_internal = input.precomputed.q_poseidon2_internal();
+
+        // TACEO TODO this poseidon instance is very hardcoded to the bn254 curve
+        let internal_matrix_diag_0 = P::ScalarField::from(BigUint::from(
+            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[0],
+        ));
+        let internal_matrix_diag_1 = P::ScalarField::from(BigUint::from(
+            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[1],
+        ));
+        let internal_matrix_diag_2 = P::ScalarField::from(BigUint::from(
+            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[2],
+        ));
+        let internal_matrix_diag_3 = P::ScalarField::from(BigUint::from(
+            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[3],
+        ));
+
+        let party_id = driver.get_party_id();
+        // add round constants
+        let s1 = (q_l, w_l)
+            .into_par_iter()
+            .with_min_len(MIN_RAYON_ITER)
+            .map(|(q_l, w_l)| T::add_with_public(*q_l, *w_l, party_id))
+            .collect::<Vec<_>>();
+        // apply s-box round
+        // FRANCO TODO again can we do something better for x^5?
+        let u1 = driver.mul_many(&s1, &s1)?;
+        let u1 = driver.mul_many(&u1, &u1)?;
+        let u1 = driver.local_mul_vec(&u1, &s1);
+        let intermediate_acc = (
+            &u1,
+            w_r,
+            w_o,
+            w_4,
+            q_poseidon2_internal,
+            scaling_factors,
+            w_l_shift,
+            w_r_shift,
+            w_o_shift,
+            w_4_shift,
+        )
+            .into_par_iter()
+            .with_min_len(MIN_RAYON_ITER)
+            .map(
+                |(
+                    u1,
+                    u2,
+                    u3,
+                    u4,
+                    q_poseidon2_internal,
+                    scaling_factor,
+                    w_l_shift,
+                    w_r_shift,
+                    w_o_shift,
+                    w_4_shift,
+                )| {
+                    let sum = T::add_to_half_share(*u1, *u2);
+                    let sum = T::add_to_half_share(sum, *u3);
+                    let sum = T::add_to_half_share(sum, *u4);
+                    let q_pos_by_scaling = *q_poseidon2_internal * scaling_factor;
+
+                    let u1 = *u1 * internal_matrix_diag_0;
+                    let u2 = T::mul_with_public_to_half_share(internal_matrix_diag_1, *u2);
+                    let u3 = T::mul_with_public_to_half_share(internal_matrix_diag_2, *u3);
+                    let u4 = T::mul_with_public_to_half_share(internal_matrix_diag_3, *u4);
+
+                    let mut u1 = T::sub_to_half_share(u1 + sum, *w_l_shift);
+                    let mut u2 = T::sub_to_half_share(u2 + sum, *w_r_shift);
+                    let mut u3 = T::sub_to_half_share(u3 + sum, *w_o_shift);
+                    let mut u4 = T::sub_to_half_share(u4 + sum, *w_4_shift);
+
+                    u1 *= q_pos_by_scaling;
+                    u2 *= q_pos_by_scaling;
+                    u3 *= q_pos_by_scaling;
+                    u4 *= q_pos_by_scaling;
+                    (u1, u2, u3, u4)
+                },
+            )
+            .enumerate()
+            .fold(
+                IntermediateAcc::<P::ScalarField>::default,
+                |mut acc, (idx, (r0, r1, r2, r3))| {
+                    acc.r0[idx % MAX_PARTIAL_RELATION_LENGTH] += r0;
+                    acc.r1[idx % MAX_PARTIAL_RELATION_LENGTH] += r1;
+                    acc.r2[idx % MAX_PARTIAL_RELATION_LENGTH] += r2;
+                    acc.r3[idx % MAX_PARTIAL_RELATION_LENGTH] += r3;
+                    acc
+                },
+            )
+            .reduce(
+                IntermediateAcc::<P::ScalarField>::default,
+                |mut acc, next| {
+                    for (acc, next) in izip!(acc.r0.iter_mut(), next.r0) {
+                        *acc += next;
+                    }
+                    for (acc, next) in izip!(acc.r1.iter_mut(), next.r1) {
+                        *acc += next;
+                    }
+                    for (acc, next) in izip!(acc.r2.iter_mut(), next.r2) {
+                        *acc += next;
+                    }
+                    for (acc, next) in izip!(acc.r3.iter_mut(), next.r3) {
+                        *acc += next;
+                    }
+                    acc
+                },
+            );
+
+        for (evaluations, new) in izip!(
+            univariate_accumulator.r0.evaluations.iter_mut(),
+            intermediate_acc.r0
+        ) {
+            *evaluations += new;
+        }
+
+        for (evaluations, new) in izip!(
+            univariate_accumulator.r1.evaluations.iter_mut(),
+            intermediate_acc.r1
+        ) {
+            *evaluations += new;
+        }
+
+        for (evaluations, new) in izip!(
+            univariate_accumulator.r2.evaluations.iter_mut(),
+            intermediate_acc.r2
+        ) {
+            *evaluations += new;
+        }
+
+        for (evaluations, new) in izip!(
+            univariate_accumulator.r3.evaluations.iter_mut(),
+            intermediate_acc.r3
+        ) {
+            *evaluations += new;
+        }
+        Ok(())
+    }
+    fn accumulate_small<T, P>(
+        driver: &mut T,
+        univariate_accumulator: &mut Poseidon2InternalRelationAccHalfShared<P::ScalarField>,
+        input: &ProverUnivariatesBatch<T, P>,
+        scaling_factors: &[P::ScalarField],
+    ) -> HonkProofResult<()>
+    where
+        T: NoirUltraHonkProver<P>,
+        P: HonkCurve<TranscriptFieldType>,
+    {
+        let w_l = input.witness.w_l();
+        let w_r = input.witness.w_r();
+        let w_o = input.witness.w_o();
+        let w_4 = input.witness.w_4();
+        let w_l_shift = input.shifted_witness.w_l();
+        let w_r_shift = input.shifted_witness.w_r();
+        let w_o_shift = input.shifted_witness.w_o();
+        let w_4_shift = input.shifted_witness.w_4();
+        let q_l = input.precomputed.q_l();
+        let q_poseidon2_internal = input.precomputed.q_poseidon2_internal();
+        // TACEO TODO this poseidon instance is very hardcoded to the bn254 curve
+        let internal_matrix_diag_0 = P::ScalarField::from(BigUint::from(
+            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[0],
+        ));
+        let internal_matrix_diag_1 = P::ScalarField::from(BigUint::from(
+            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[1],
+        ));
+        let internal_matrix_diag_2 = P::ScalarField::from(BigUint::from(
+            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[2],
+        ));
+        let internal_matrix_diag_3 = P::ScalarField::from(BigUint::from(
+            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[3],
+        ));
+
+        // add round constants
+        let s1 = T::add_with_public_many(q_l, w_l, driver.get_party_id());
+
+        // apply s-box round
+        // FRANCO TODO again can we do something better for x^5?
+        let u1 = driver.mul_many(&s1, &s1)?;
+        let u1 = driver.mul_many(&u1, &u1)?;
+        let u1 = driver.local_mul_vec(&u1, &s1);
+
+        let evaluations_len = univariate_accumulator.r0.evaluations.len();
+        let mut intermediate_acc = IntermediateAcc::default();
+        intermediate_acc.r0[..evaluations_len]
+            .clone_from_slice(&univariate_accumulator.r0.evaluations);
+        intermediate_acc.r1[..evaluations_len]
+            .clone_from_slice(&univariate_accumulator.r1.evaluations);
+        intermediate_acc.r2[..evaluations_len]
+            .clone_from_slice(&univariate_accumulator.r2.evaluations);
+        intermediate_acc.r3[..evaluations_len]
+            .clone_from_slice(&univariate_accumulator.r3.evaluations);
+        izip!(
+            &u1,
+            w_r,
+            w_o,
+            w_4,
+            q_poseidon2_internal,
+            scaling_factors,
+            w_l_shift,
+            w_r_shift,
+            w_o_shift,
+            w_4_shift,
+        )
+        .enumerate()
+        .for_each(
+            |(
+                idx,
+                (
+                    u1,
+                    u2,
+                    u3,
+                    u4,
+                    q_poseidon2_internal,
+                    scaling_factor,
+                    w_l_shift,
+                    w_r_shift,
+                    w_o_shift,
+                    w_4_shift,
+                ),
+            )| {
+                let sum = T::add_to_half_share(*u1, *u2);
+                let sum = T::add_to_half_share(sum, *u3);
+                let sum = T::add_to_half_share(sum, *u4);
+                let q_pos_by_scaling = *q_poseidon2_internal * scaling_factor;
+
+                let u1 = *u1 * internal_matrix_diag_0;
+                let u2 = T::mul_with_public_to_half_share(internal_matrix_diag_1, *u2);
+                let u3 = T::mul_with_public_to_half_share(internal_matrix_diag_2, *u3);
+                let u4 = T::mul_with_public_to_half_share(internal_matrix_diag_3, *u4);
+
+                let mut u1 = T::sub_to_half_share(u1 + sum, *w_l_shift);
+                let mut u2 = T::sub_to_half_share(u2 + sum, *w_r_shift);
+                let mut u3 = T::sub_to_half_share(u3 + sum, *w_o_shift);
+                let mut u4 = T::sub_to_half_share(u4 + sum, *w_4_shift);
+
+                u1 *= q_pos_by_scaling;
+                u2 *= q_pos_by_scaling;
+                u3 *= q_pos_by_scaling;
+                u4 *= q_pos_by_scaling;
+
+                intermediate_acc.r0[idx % MAX_PARTIAL_RELATION_LENGTH] += u1;
+                intermediate_acc.r1[idx % MAX_PARTIAL_RELATION_LENGTH] += u2;
+                intermediate_acc.r2[idx % MAX_PARTIAL_RELATION_LENGTH] += u3;
+                intermediate_acc.r3[idx % MAX_PARTIAL_RELATION_LENGTH] += u4;
+            },
+        );
+        univariate_accumulator
+            .r0
+            .evaluations
+            .clone_from_slice(&intermediate_acc.r0[..evaluations_len]);
+        univariate_accumulator
+            .r1
+            .evaluations
+            .clone_from_slice(&intermediate_acc.r1[..evaluations_len]);
+        univariate_accumulator
+            .r2
+            .evaluations
+            .clone_from_slice(&intermediate_acc.r2[..evaluations_len]);
+        univariate_accumulator
+            .r3
+            .evaluations
+            .clone_from_slice(&intermediate_acc.r3[..evaluations_len]);
+
+        Ok(())
+    }
+}
+
 impl Poseidon2InternalRelation {
     pub(crate) const NUM_RELATIONS: usize = 4;
     pub(crate) const CRAND_PAIRS_FACTOR: usize = 3;
@@ -89,7 +402,7 @@ impl Poseidon2InternalRelation {
 impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P>
     for Poseidon2InternalRelation
 {
-    type Acc = Poseidon2InternalRelationAcc<T, P>;
+    type Acc = Poseidon2InternalRelationAccHalfShared<P::ScalarField>;
 
     fn can_skip(entity: &super::ProverUnivariates<T, P>) -> bool {
         entity.precomputed.q_poseidon2_internal().is_zero()
@@ -140,89 +453,16 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         _relation_parameters: &RelationParameters<<P>::ScalarField>,
         scaling_factors: &[P::ScalarField],
     ) -> HonkProofResult<()> {
-        let w_l = input.witness.w_l();
-        let w_r = input.witness.w_r();
-        let w_o = input.witness.w_o();
-        let w_4 = input.witness.w_4();
-        let w_l_shift = input.shifted_witness.w_l();
-        let w_r_shift = input.shifted_witness.w_r();
-        let w_o_shift = input.shifted_witness.w_o();
-        let w_4_shift = input.shifted_witness.w_4();
-        let q_l = input.precomputed.q_l();
-        let q_poseidon2_internal = input.precomputed.q_poseidon2_internal();
-
-        // add round constants
-        let s1 = T::add_with_public_many(q_l, w_l, driver.get_party_id());
-
-        // apply s-box round
-        // 0xThemis TODO again can we do something better for x^5?
-        let u1 = driver.mul_many(&s1, &s1)?;
-        let u1 = driver.mul_many(&u1, &u1)?;
-        let mut u1 = driver.mul_many(&u1, &s1)?;
-
-        let mut u2 = w_r.to_owned();
-        let mut u3 = w_o.to_owned();
-        let mut u4 = w_4.to_owned();
-
-        // matrix mul with v = M_I * u 4 muls and 7 additions
-        let mut sum = T::add_many(&u1, &u2);
-        T::add_assign_many(&mut sum, &u3);
-        T::add_assign_many(&mut sum, &u4);
-
-        let q_pos_by_scaling = q_poseidon2_internal
-            .iter()
-            .zip_eq(scaling_factors)
-            .map(|(a, b)| *a * *b)
-            .collect_vec();
-
-        // TACEO TODO this poseidon instance is very hardcoded to the bn254 curve
-        let internal_matrix_diag_0 = P::ScalarField::from(BigUint::from(
-            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[0],
-        ));
-        let internal_matrix_diag_1 = P::ScalarField::from(BigUint::from(
-            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[1],
-        ));
-        let internal_matrix_diag_2 = P::ScalarField::from(BigUint::from(
-            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[2],
-        ));
-        let internal_matrix_diag_3 = P::ScalarField::from(BigUint::from(
-            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[3],
-        ));
-
-        T::scale_many_in_place(&mut u1, internal_matrix_diag_0);
-        T::add_assign_many(&mut u1, &sum);
-        T::sub_assign_many(&mut u1, w_l_shift);
-        T::mul_assign_with_public_many(&mut u1, &q_pos_by_scaling);
-
-        fold_accumulator!(univariate_accumulator.r0, u1);
-
-        ///////////////////////////////////////////////////////////////////////
-        T::scale_many_in_place(&mut u2, internal_matrix_diag_1);
-        T::add_assign_many(&mut u2, &sum);
-        T::sub_assign_many(&mut u2, w_r_shift);
-        T::mul_assign_with_public_many(&mut u2, &q_pos_by_scaling);
-
-        fold_accumulator!(univariate_accumulator.r1, u2);
-
-        ///////////////////////////////////////////////////////////////////////
-
-        T::scale_many_in_place(&mut u3, internal_matrix_diag_2);
-        T::add_assign_many(&mut u3, &sum);
-        T::sub_assign_many(&mut u3, w_o_shift);
-        T::mul_assign_with_public_many(&mut u3, &q_pos_by_scaling);
-
-        fold_accumulator!(univariate_accumulator.r2, u3);
-
-        ///////////////////////////////////////////////////////////////////////
-
-        T::scale_many_in_place(&mut u4, internal_matrix_diag_3);
-        T::add_assign_many(&mut u4, &sum);
-        T::sub_assign_many(&mut u4, w_4_shift);
-        T::mul_assign_with_public_many(&mut u4, &q_pos_by_scaling);
-
-        fold_accumulator!(univariate_accumulator.r3, u4);
-
-        ///////////////////////////////////////////////////////////////////////
+        if input.witness.w_l().len() > 1 << 14 {
+            Self::accumulate_multi_threaded::<T, P>(
+                driver,
+                univariate_accumulator,
+                input,
+                scaling_factors,
+            )?;
+        } else {
+            Self::accumulate_small::<T, P>(driver, univariate_accumulator, input, scaling_factors)?;
+        }
         Ok(())
     }
 }

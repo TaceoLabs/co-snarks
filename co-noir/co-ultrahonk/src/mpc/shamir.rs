@@ -62,6 +62,13 @@ impl<P: Pairing, N: ShamirNetwork> NoirUltraHonkProver<P>
         half_share - shared.inner()
     }
 
+    fn add_to_half_share(
+        half_share: P::ScalarField,
+        shared: Self::ArithmeticShare,
+    ) -> P::ScalarField {
+        half_share + shared.inner()
+    }
+
     fn rand(&mut self) -> std::io::Result<Self::ArithmeticShare> {
         self.protocol0.rand()
     }

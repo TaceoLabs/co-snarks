@@ -104,6 +104,13 @@ impl<P: Pairing, N: Rep3Network> NoirUltraHonkProver<P> for Rep3UltraHonkDriver<
         half_share - shared.a
     }
 
+    fn add_to_half_share(
+        half_share: P::ScalarField,
+        shared: Self::ArithmeticShare,
+    ) -> P::ScalarField {
+        half_share + shared.a
+    }
+
     fn mul_assign_with_public(shared: &mut Self::ArithmeticShare, public: P::ScalarField) {
         arithmetic::mul_assign_public(shared, public);
     }

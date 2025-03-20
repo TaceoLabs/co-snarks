@@ -31,7 +31,9 @@ use permutation_relation::{
 use poseidon2_external_relation::{
     Poseidon2ExternalRelation, Poseidon2ExternalRelationAcc, Poseidon2ExternalRelationAccHalfShared,
 };
-use poseidon2_internal_relation::{Poseidon2InternalRelation, Poseidon2InternalRelationAcc};
+use poseidon2_internal_relation::{
+    Poseidon2InternalRelation, Poseidon2InternalRelationAcc, Poseidon2InternalRelationAccHalfShared,
+};
 use ultra_arithmetic_relation::{
     UltraArithmeticRelation, UltraArithmeticRelationAcc, UltraArithmeticRelationAccHalfShared,
 };
@@ -200,7 +202,7 @@ pub(crate) struct AllRelationAccHalfShared<T: NoirUltraHonkProver<P>, P: Pairing
     pub(crate) r_elliptic: EllipticRelationAcc<T, P>,
     pub(crate) r_aux: AuxiliaryRelationAcc<T, P>,
     pub(crate) r_pos_ext: Poseidon2ExternalRelationAccHalfShared<P::ScalarField>,
-    pub(crate) r_pos_int: Poseidon2InternalRelationAcc<T, P>,
+    pub(crate) r_pos_int: Poseidon2InternalRelationAccHalfShared<P::ScalarField>,
 }
 
 impl<T: NoirUltraHonkProver<P>, P: Pairing> AllRelationAccHalfShared<T, P> {
@@ -218,6 +220,11 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> AllRelationAccHalfShared<T, P> {
         let r_pos_ex_r1 = driver.reshare(self.r_pos_ext.r1.evaluations.to_vec())?;
         let r_pos_ex_r2 = driver.reshare(self.r_pos_ext.r2.evaluations.to_vec())?;
         let r_pos_ex_r3 = driver.reshare(self.r_pos_ext.r3.evaluations.to_vec())?;
+
+        let r_pos_in_r0 = driver.reshare(self.r_pos_int.r0.evaluations.to_vec())?;
+        let r_pos_in_r1 = driver.reshare(self.r_pos_int.r1.evaluations.to_vec())?;
+        let r_pos_in_r2 = driver.reshare(self.r_pos_int.r2.evaluations.to_vec())?;
+        let r_pos_in_r3 = driver.reshare(self.r_pos_int.r3.evaluations.to_vec())?;
         Ok(AllRelationAcc {
             r_arith: UltraArithmeticRelationAcc {
                 r0: SharedUnivariate::from_vec(r_arith_r0),
@@ -242,7 +249,12 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> AllRelationAccHalfShared<T, P> {
                 r2: SharedUnivariate::from_vec(r_pos_ex_r2),
                 r3: SharedUnivariate::from_vec(r_pos_ex_r3),
             },
-            r_pos_int: self.r_pos_int,
+            r_pos_int: Poseidon2InternalRelationAcc {
+                r0: SharedUnivariate::from_vec(r_pos_in_r0),
+                r1: SharedUnivariate::from_vec(r_pos_in_r1),
+                r2: SharedUnivariate::from_vec(r_pos_in_r2),
+                r3: SharedUnivariate::from_vec(r_pos_in_r3),
+            },
         })
     }
 }
