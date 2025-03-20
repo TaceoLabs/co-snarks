@@ -1,5 +1,4 @@
-use itertools::{izip, Itertools as _};
-use std::time::Instant;
+use itertools::izip;
 
 use super::Relation;
 use crate::{

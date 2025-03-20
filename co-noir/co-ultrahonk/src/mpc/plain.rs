@@ -39,6 +39,13 @@ impl<P: Pairing> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         <Self as NoirUltraHonkProver<P>>::mul_with_public(public, shared)
     }
 
+    fn sub_to_half_share(
+        half_share: P::ScalarField,
+        shared: Self::ArithmeticShare,
+    ) -> P::ScalarField {
+        <Self as NoirUltraHonkProver<P>>::sub(half_share, shared)
+    }
+
     fn rand(&mut self) -> std::io::Result<Self::ArithmeticShare> {
         let mut rng = thread_rng();
         Ok(Self::ArithmeticShare::rand(&mut rng))

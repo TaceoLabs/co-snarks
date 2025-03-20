@@ -182,12 +182,15 @@ impl SumcheckRound {
             relation_parameters,
             &sum_check_data.log_lookup,
         )?;
+        let time = Instant::now();
         Self::accumulate_one_relation_univariates_batch::<_, _, Poseidon2ExternalRelation>(
             driver,
             &mut univariate_accumulators.r_pos_ext,
             relation_parameters,
             &sum_check_data.poseidon_ext,
         )?;
+        let took = time.elapsed();
+        println!("{}.{:0>9}", took.as_secs(), took.subsec_nanos());
         Self::accumulate_one_relation_univariates_batch::<_, _, Poseidon2InternalRelation>(
             driver,
             &mut univariate_accumulators.r_pos_int,

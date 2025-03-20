@@ -159,6 +159,11 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
         shared: Self::ArithmeticShare,
     ) -> P::ScalarField;
 
+    fn sub_to_half_share(
+        half_share: P::ScalarField,
+        shared: Self::ArithmeticShare,
+    ) -> P::ScalarField;
+
     /// Elementwise multiplication a share b by a public value a: c = \[a\] * b and stores the
     /// result in \[a\].
     fn mul_assign_with_public_many(

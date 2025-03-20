@@ -1,17 +1,19 @@
+use super::MIN_RAYON_ITER;
 use super::{ProverUnivariatesBatch, Relation};
 use crate::{
     co_decider::{
-        relations::fold_accumulator,
         types::{RelationParameters, MAX_PARTIAL_RELATION_LENGTH},
         univariates::SharedUnivariate,
     },
     mpc::NoirUltraHonkProver,
 };
 use ark_ec::pairing::Pairing;
-use ark_ff::Zero;
+use ark_ff::{PrimeField, Zero};
 use co_builder::prelude::HonkCurve;
 use co_builder::HonkProofResult;
+use itertools::izip;
 use itertools::Itertools as _;
+use rayon::prelude::*;
 use ultrahonk::prelude::{TranscriptFieldType, Univariate};
 
 #[derive(Clone, Debug)]
@@ -22,7 +24,26 @@ pub(crate) struct Poseidon2ExternalRelationAcc<T: NoirUltraHonkProver<P>, P: Pai
     pub(crate) r3: SharedUnivariate<T, P, 7>,
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct Poseidon2ExternalRelationAccHalfShared<F: PrimeField> {
+    pub(crate) r0: Univariate<F, 7>,
+    pub(crate) r1: Univariate<F, 7>,
+    pub(crate) r2: Univariate<F, 7>,
+    pub(crate) r3: Univariate<F, 7>,
+}
+
 impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for Poseidon2ExternalRelationAcc<T, P> {
+    fn default() -> Self {
+        Self {
+            r0: Default::default(),
+            r1: Default::default(),
+            r2: Default::default(),
+            r3: Default::default(),
+        }
+    }
+}
+
+impl<F: PrimeField> Default for Poseidon2ExternalRelationAccHalfShared<F> {
     fn default() -> Self {
         Self {
             r0: Default::default(),
@@ -80,15 +101,328 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> Poseidon2ExternalRelationAcc<T, P> {
 
 pub(crate) struct Poseidon2ExternalRelation {}
 
+#[derive(Default)]
+struct IntermediateAcc<F: PrimeField + Default> {
+    r0: [F; MAX_PARTIAL_RELATION_LENGTH],
+    r1: [F; MAX_PARTIAL_RELATION_LENGTH],
+    r2: [F; MAX_PARTIAL_RELATION_LENGTH],
+    r3: [F; MAX_PARTIAL_RELATION_LENGTH],
+}
+
 impl Poseidon2ExternalRelation {
     pub(crate) const NUM_RELATIONS: usize = 4;
     pub(crate) const CRAND_PAIRS_FACTOR: usize = 12;
 }
 
+impl Poseidon2ExternalRelation {
+    fn accumulate_small<T, P>(
+        driver: &mut T,
+        univariate_accumulator: &mut Poseidon2ExternalRelationAccHalfShared<P::ScalarField>,
+        input: &ProverUnivariatesBatch<T, P>,
+        scaling_factors: &[<P>::ScalarField],
+    ) -> HonkProofResult<()>
+    where
+        T: NoirUltraHonkProver<P>,
+        P: HonkCurve<TranscriptFieldType>,
+    {
+        let w_l = input.witness.w_l();
+        let w_r = input.witness.w_r();
+        let w_o = input.witness.w_o();
+        let w_4 = input.witness.w_4();
+        let w_l_shift = input.shifted_witness.w_l();
+        let w_r_shift = input.shifted_witness.w_r();
+        let w_o_shift = input.shifted_witness.w_o();
+        let w_4_shift = input.shifted_witness.w_4();
+        let q_l = input.precomputed.q_l();
+        let q_r = input.precomputed.q_r();
+        let q_o = input.precomputed.q_o();
+        let q_4 = input.precomputed.q_4();
+        let q_poseidon2_external = input.precomputed.q_poseidon2_external();
+
+        let party_id = driver.get_party_id();
+        macro_rules! add_round_constants {
+            ($lhs: expr, $rhs: expr) => {
+                izip!($lhs, $rhs).map(|(lhs, rhs)| T::add_with_public(*lhs, *rhs, party_id))
+            };
+        }
+        // add round constants which are loaded in selectors
+        let s1 = add_round_constants!(q_l, w_l);
+        let s2 = add_round_constants!(q_r, w_r);
+        let s3 = add_round_constants!(q_o, w_o);
+        let s4 = add_round_constants!(q_4, w_4);
+
+        let s = s1.chain(s2).chain(s3).chain(s4).collect::<Vec<_>>();
+
+        let u = driver.mul_many(&s, &s)?;
+        let u = driver.mul_many(&u, &u)?;
+        let u = driver.local_mul_vec(&u, &s);
+
+        let u = u.chunks_exact(u.len() / 4).collect_vec();
+
+        let evaluations_len = univariate_accumulator.r0.evaluations.len();
+        let mut acc_r0 = [P::ScalarField::default(); MAX_PARTIAL_RELATION_LENGTH];
+        let mut acc_r1 = [P::ScalarField::default(); MAX_PARTIAL_RELATION_LENGTH];
+        let mut acc_r2 = [P::ScalarField::default(); MAX_PARTIAL_RELATION_LENGTH];
+        let mut acc_r3 = [P::ScalarField::default(); MAX_PARTIAL_RELATION_LENGTH];
+        acc_r0[..evaluations_len].clone_from_slice(&univariate_accumulator.r0.evaluations);
+        acc_r1[..evaluations_len].clone_from_slice(&univariate_accumulator.r1.evaluations);
+        acc_r2[..evaluations_len].clone_from_slice(&univariate_accumulator.r2.evaluations);
+        acc_r3[..evaluations_len].clone_from_slice(&univariate_accumulator.r3.evaluations);
+        izip!(
+            u[0],
+            u[1],
+            u[2],
+            u[3],
+            q_poseidon2_external,
+            scaling_factors,
+            w_l_shift,
+            w_r_shift,
+            w_o_shift,
+            w_4_shift
+        )
+        .enumerate()
+        .for_each(
+            |(
+                idx,
+                (
+                    u0,
+                    u1,
+                    u2,
+                    u3,
+                    q_poseidon2_external,
+                    scaling_factor,
+                    w_l_shift,
+                    w_r_shift,
+                    w_o_shift,
+                    w_4_shift,
+                ),
+            )| {
+                //// matrix mul v = M_E * u with 14 additions
+
+                let t0 = *u0 + u1;
+                let t1 = *u2 + u3;
+                let mut t2 = *u1 + u1;
+                t2 += t1;
+                let mut t3 = *u3 + u3;
+                t3 += t0;
+
+                let mut v4 = t1 + t1;
+                v4 += v4;
+                v4 += t3;
+                let mut v2 = t0 + t0;
+                v2 += v2;
+                v2 += t2;
+                let v1 = t3 + v2;
+                let v3 = t2 + v4;
+
+                let q_pos_by_scaling = *q_poseidon2_external * scaling_factor;
+
+                let r0 = T::sub_to_half_share(v1, *w_l_shift) * q_pos_by_scaling;
+                let r1 = T::sub_to_half_share(v2, *w_r_shift) * q_pos_by_scaling;
+                let r2 = T::sub_to_half_share(v3, *w_o_shift) * q_pos_by_scaling;
+                let r3 = T::sub_to_half_share(v4, *w_4_shift) * q_pos_by_scaling;
+
+                acc_r0[idx % MAX_PARTIAL_RELATION_LENGTH] += r0;
+                acc_r1[idx % MAX_PARTIAL_RELATION_LENGTH] += r1;
+                acc_r2[idx % MAX_PARTIAL_RELATION_LENGTH] += r2;
+                acc_r3[idx % MAX_PARTIAL_RELATION_LENGTH] += r3;
+            },
+        );
+
+        univariate_accumulator
+            .r0
+            .evaluations
+            .clone_from_slice(&acc_r0[..evaluations_len]);
+        univariate_accumulator
+            .r1
+            .evaluations
+            .clone_from_slice(&acc_r1[..evaluations_len]);
+        univariate_accumulator
+            .r2
+            .evaluations
+            .clone_from_slice(&acc_r2[..evaluations_len]);
+        univariate_accumulator
+            .r3
+            .evaluations
+            .clone_from_slice(&acc_r3[..evaluations_len]);
+        Ok(())
+    }
+
+    fn accumulate_multithreaded<T, P>(
+        driver: &mut T,
+        univariate_accumulator: &mut Poseidon2ExternalRelationAccHalfShared<P::ScalarField>,
+        input: &ProverUnivariatesBatch<T, P>,
+        scaling_factors: &[<P>::ScalarField],
+    ) -> HonkProofResult<()>
+    where
+        T: NoirUltraHonkProver<P>,
+        P: HonkCurve<TranscriptFieldType>,
+    {
+        let w_l = input.witness.w_l();
+        let w_r = input.witness.w_r();
+        let w_o = input.witness.w_o();
+        let w_4 = input.witness.w_4();
+        let w_l_shift = input.shifted_witness.w_l();
+        let w_r_shift = input.shifted_witness.w_r();
+        let w_o_shift = input.shifted_witness.w_o();
+        let w_4_shift = input.shifted_witness.w_4();
+        let q_l = input.precomputed.q_l();
+        let q_r = input.precomputed.q_r();
+        let q_o = input.precomputed.q_o();
+        let q_4 = input.precomputed.q_4();
+        let q_poseidon2_external = input.precomputed.q_poseidon2_external();
+
+        let party_id = driver.get_party_id();
+        macro_rules! add_round_constants {
+            ($lhs: expr, $rhs: expr) => {
+                ($lhs, $rhs)
+                    .into_par_iter()
+                    .with_min_len(MIN_RAYON_ITER)
+                    .map(|(lhs, rhs)| T::add_with_public(*lhs, *rhs, party_id))
+            };
+        }
+        // add round constants which are loaded in selectors
+        let s1 = add_round_constants!(q_l, w_l);
+        let s2 = add_round_constants!(q_r, w_r);
+        let s3 = add_round_constants!(q_o, w_o);
+        let s4 = add_round_constants!(q_4, w_4);
+
+        let s = s1.chain(s2).chain(s3).chain(s4).collect::<Vec<_>>();
+
+        // apply s-box round
+        // 0xThemis TODO better mul depth for x^5?
+        let u = driver.mul_many(&s, &s)?;
+        let u = driver.mul_many(&u, &u)?;
+        let u = driver.local_mul_vec(&u, &s);
+
+        let u = u.chunks_exact(u.len() / 4).collect::<Vec<_>>();
+
+        let intermediate_acc = (
+            u[0],
+            u[1],
+            u[2],
+            u[3],
+            q_poseidon2_external,
+            scaling_factors,
+            w_l_shift,
+            w_r_shift,
+            w_o_shift,
+            w_4_shift,
+        )
+            .into_par_iter()
+            .with_min_len(MIN_RAYON_ITER)
+            .map(
+                |(
+                    u0,
+                    u1,
+                    u2,
+                    u3,
+                    q_poseidon2_external,
+                    scaling_factor,
+                    w_l_shift,
+                    w_r_shift,
+                    w_o_shift,
+                    w_4_shift,
+                )| {
+                    //// matrix mul v = M_E * u with 14 additions
+
+                    let t0 = *u0 + u1;
+                    let t1 = *u2 + u3;
+                    let mut t2 = *u1 + u1;
+                    t2 += t1;
+                    let mut t3 = *u3 + u3;
+                    t3 += t0;
+
+                    let mut v4 = t1 + t1;
+                    v4 += v4;
+                    v4 += t3;
+                    let mut v2 = t0 + t0;
+                    v2 += v2;
+                    v2 += t2;
+                    let v1 = t3 + v2;
+                    let v3 = t2 + v4;
+
+                    let q_pos_by_scaling = *q_poseidon2_external * scaling_factor;
+
+                    let r0 = T::sub_to_half_share(v1, *w_l_shift) * q_pos_by_scaling;
+                    let r1 = T::sub_to_half_share(v2, *w_r_shift) * q_pos_by_scaling;
+                    let r2 = T::sub_to_half_share(v3, *w_o_shift) * q_pos_by_scaling;
+                    let r3 = T::sub_to_half_share(v4, *w_4_shift) * q_pos_by_scaling;
+                    (r0, r1, r2, r3)
+                },
+            )
+            .enumerate()
+            .fold(
+                IntermediateAcc::<P::ScalarField>::default,
+                |mut acc, (idx, (r0, r1, r2, r3))| {
+                    acc.r0[idx % MAX_PARTIAL_RELATION_LENGTH] += r0;
+                    acc.r1[idx % MAX_PARTIAL_RELATION_LENGTH] += r1;
+                    acc.r2[idx % MAX_PARTIAL_RELATION_LENGTH] += r2;
+                    acc.r3[idx % MAX_PARTIAL_RELATION_LENGTH] += r3;
+                    acc
+                },
+            )
+            .reduce(
+                IntermediateAcc::<P::ScalarField>::default,
+                |mut acc, next| {
+                    for (acc, next) in izip!(acc.r0.iter_mut(), next.r0) {
+                        *acc += next;
+                    }
+                    for (acc, next) in izip!(acc.r1.iter_mut(), next.r1) {
+                        *acc += next;
+                    }
+                    for (acc, next) in izip!(acc.r2.iter_mut(), next.r2) {
+                        *acc += next;
+                    }
+                    for (acc, next) in izip!(acc.r3.iter_mut(), next.r3) {
+                        *acc += next;
+                    }
+                    acc
+                },
+            );
+
+        for (evaluations, new) in izip!(
+            univariate_accumulator.r0.evaluations.iter_mut(),
+            intermediate_acc.r0
+        ) {
+            *evaluations += new;
+        }
+
+        for (evaluations, new) in izip!(
+            univariate_accumulator.r1.evaluations.iter_mut(),
+            intermediate_acc.r1
+        ) {
+            *evaluations += new;
+        }
+
+        for (evaluations, new) in izip!(
+            univariate_accumulator.r2.evaluations.iter_mut(),
+            intermediate_acc.r2
+        ) {
+            *evaluations += new;
+        }
+
+        for (evaluations, new) in izip!(
+            univariate_accumulator.r3.evaluations.iter_mut(),
+            intermediate_acc.r3
+        ) {
+            *evaluations += new;
+        }
+
+        //relation_utils::rayon_multi_join!(
+        //    relation_utils::accumulate_half_share!(r0.par_iter(), &mut univariate_accumulator.r0),
+        //    relation_utils::accumulate_half_share!(r1.par_iter(), &mut univariate_accumulator.r1),
+        //    relation_utils::accumulate_half_share!(r2.par_iter(), &mut univariate_accumulator.r2),
+        //    relation_utils::accumulate_half_share!(r3.par_iter(), &mut univariate_accumulator.r3)
+        //);
+        Ok(())
+    }
+}
+
 impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P>
     for Poseidon2ExternalRelation
 {
-    type Acc = Poseidon2ExternalRelationAcc<T, P>;
+    type Acc = Poseidon2ExternalRelationAccHalfShared<P::ScalarField>;
 
     fn can_skip(entity: &super::ProverUnivariates<T, P>) -> bool {
         entity.precomputed.q_poseidon2_external().is_zero()
@@ -146,84 +480,11 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         _relation_parameters: &RelationParameters<<P>::ScalarField>,
         scaling_factors: &[<P>::ScalarField],
     ) -> HonkProofResult<()> {
-        let w_l = input.witness.w_l();
-        let w_r = input.witness.w_r();
-        let w_o = input.witness.w_o();
-        let w_4 = input.witness.w_4();
-        let w_l_shift = input.shifted_witness.w_l();
-        let w_r_shift = input.shifted_witness.w_r();
-        let w_o_shift = input.shifted_witness.w_o();
-        let w_4_shift = input.shifted_witness.w_4();
-        let q_l = input.precomputed.q_l();
-        let q_r = input.precomputed.q_r();
-        let q_o = input.precomputed.q_o();
-        let q_4 = input.precomputed.q_4();
-        let q_poseidon2_external = input.precomputed.q_poseidon2_external();
-
-        let id = driver.get_party_id();
-        // add round constants which are loaded in selectors
-        let s1 = T::add_with_public_many(q_l, w_l, id);
-        let s2 = T::add_with_public_many(q_r, w_r, id);
-        let s3 = T::add_with_public_many(q_o, w_o, id);
-        let s4 = T::add_with_public_many(q_4, w_4, id);
-
-        let mut s = Vec::with_capacity(s1.len() + s2.len() + s3.len() + s4.len());
-        s.extend(s1);
-        s.extend(s2);
-        s.extend(s3);
-        s.extend(s4);
-        // apply s-box round
-        // 0xThemis TODO better mul depth for x^5?
-        let u = driver.mul_many(&s, &s)?;
-        let u = driver.mul_many(&u, &u)?;
-        let u = driver.mul_many(&u, &s)?;
-
-        let u = u.chunks_exact(u.len() / 4).collect_vec();
-        // matrix mul v = M_E * u with 14 additions
-        let t0 = T::add_many(u[0], u[1]); // u_1 + u_2
-        let t1 = T::add_many(u[2], u[3]); // u_3 + u_4
-        let mut t2 = T::add_many(u[1], u[1]); // 2u_2
-        T::add_assign_many(&mut t2, &t1); // 2u_2 + u_3 + u_4
-        let mut t3 = T::add_many(u[3], u[3]); // 2u_4
-        T::add_assign_many(&mut t3, &t0); // u_1 + u_2 + 2u_4
-
-        let v4 = T::add_many(&t1, &t1);
-        let mut v4 = T::add_many(&v4, &v4);
-        T::add_assign_many(&mut v4, &t3); // u_1 + u_2 + 4u_3 + 6u_4
-        let v2 = T::add_many(&t0, &t0);
-        let mut v2 = T::add_many(&v2, &v2);
-        T::add_assign_many(&mut v2, &t2); // 4u_1 + 6u_2 + u_3 + u_4
-        let v1 = T::add_many(&t3, &v2); // 5u_1 + 7u_2 + u_3 + 3u_4
-        let v3 = T::add_many(&t2, &v4); // u_1 + 3u_2 + 5u_3 + 7u_4
-
-        let q_pos_by_scaling = q_poseidon2_external
-            .iter()
-            .zip_eq(scaling_factors)
-            .map(|(a, b)| *a * *b)
-            .collect_vec();
-        let mut tmp = T::sub_many(&v1, w_l_shift);
-        T::mul_assign_with_public_many(&mut tmp, &q_pos_by_scaling);
-
-        fold_accumulator!(univariate_accumulator.r0, tmp);
-
-        ///////////////////////////////////////////////////////////////////////
-
-        let mut tmp = T::sub_many(&v2, w_r_shift);
-        T::mul_assign_with_public_many(&mut tmp, &q_pos_by_scaling);
-
-        fold_accumulator!(univariate_accumulator.r1, tmp);
-
-        ///////////////////////////////////////////////////////////////////////
-        let mut tmp = T::sub_many(&v3, w_o_shift);
-        T::mul_assign_with_public_many(&mut tmp, &q_pos_by_scaling);
-
-        fold_accumulator!(univariate_accumulator.r2, tmp);
-
-        ///////////////////////////////////////////////////////////////////////
-        let mut tmp = T::sub_many(&v4, w_4_shift);
-        T::mul_assign_with_public_many(&mut tmp, &q_pos_by_scaling);
-
-        fold_accumulator!(univariate_accumulator.r3, tmp);
+        if input.witness.w_l().len() > 1 << 14 {
+            Self::accumulate_multithreaded(driver, univariate_accumulator, input, scaling_factors)?;
+        } else {
+            Self::accumulate_small(driver, univariate_accumulator, input, scaling_factors)?;
+        }
         Ok(())
     }
 }

@@ -28,7 +28,9 @@ use logderiv_lookup_relation::{LogDerivLookupRelation, LogDerivLookupRelationAcc
 use permutation_relation::{
     UltraPermutationRelation, UltraPermutationRelationAcc, UltraPermutationRelationAccHalfShared,
 };
-use poseidon2_external_relation::{Poseidon2ExternalRelation, Poseidon2ExternalRelationAcc};
+use poseidon2_external_relation::{
+    Poseidon2ExternalRelation, Poseidon2ExternalRelationAcc, Poseidon2ExternalRelationAccHalfShared,
+};
 use poseidon2_internal_relation::{Poseidon2InternalRelation, Poseidon2InternalRelationAcc};
 use ultra_arithmetic_relation::{
     UltraArithmeticRelation, UltraArithmeticRelationAcc, UltraArithmeticRelationAccHalfShared,
@@ -197,7 +199,7 @@ pub(crate) struct AllRelationAccHalfShared<T: NoirUltraHonkProver<P>, P: Pairing
     pub(crate) r_delta: DeltaRangeConstraintRelationAccHalfShared<P::ScalarField>,
     pub(crate) r_elliptic: EllipticRelationAcc<T, P>,
     pub(crate) r_aux: AuxiliaryRelationAcc<T, P>,
-    pub(crate) r_pos_ext: Poseidon2ExternalRelationAcc<T, P>,
+    pub(crate) r_pos_ext: Poseidon2ExternalRelationAccHalfShared<P::ScalarField>,
     pub(crate) r_pos_int: Poseidon2InternalRelationAcc<T, P>,
 }
 
@@ -211,6 +213,11 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> AllRelationAccHalfShared<T, P> {
         let r_delta_r1 = driver.reshare(self.r_delta.r1.evaluations.to_vec())?;
         let r_delta_r2 = driver.reshare(self.r_delta.r2.evaluations.to_vec())?;
         let r_delta_r3 = driver.reshare(self.r_delta.r3.evaluations.to_vec())?;
+
+        let r_pos_ex_r0 = driver.reshare(self.r_pos_ext.r0.evaluations.to_vec())?;
+        let r_pos_ex_r1 = driver.reshare(self.r_pos_ext.r1.evaluations.to_vec())?;
+        let r_pos_ex_r2 = driver.reshare(self.r_pos_ext.r2.evaluations.to_vec())?;
+        let r_pos_ex_r3 = driver.reshare(self.r_pos_ext.r3.evaluations.to_vec())?;
         Ok(AllRelationAcc {
             r_arith: UltraArithmeticRelationAcc {
                 r0: SharedUnivariate::from_vec(r_arith_r0),
@@ -229,7 +236,12 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> AllRelationAccHalfShared<T, P> {
             },
             r_elliptic: self.r_elliptic,
             r_aux: self.r_aux,
-            r_pos_ext: self.r_pos_ext,
+            r_pos_ext: Poseidon2ExternalRelationAcc {
+                r0: SharedUnivariate::from_vec(r_pos_ex_r0),
+                r1: SharedUnivariate::from_vec(r_pos_ex_r1),
+                r2: SharedUnivariate::from_vec(r_pos_ex_r2),
+                r3: SharedUnivariate::from_vec(r_pos_ex_r3),
+            },
             r_pos_int: self.r_pos_int,
         })
     }
