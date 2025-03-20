@@ -167,34 +167,24 @@ impl DeltaRangeConstraintRelation {
             };
         }
 
-        let (minus_one_iters, minus_two_iters) = rayon::join(
-            || {
-                relation_utils::rayon_multi_join!(
-                    minus_scalar!(w_2, w_1, minus_one),
-                    minus_scalar!(w_3, w_2, minus_one),
-                    minus_scalar!(w_4, w_3, minus_one),
-                    minus_scalar!(w_1_shift, w_4, minus_one)
-                )
-            },
-            || {
-                relation_utils::rayon_multi_join!(
-                    minus_scalar!(w_2, w_1, minus_two),
-                    minus_scalar!(w_3, w_2, minus_two),
-                    minus_scalar!(w_4, w_3, minus_two),
-                    minus_scalar!(w_1_shift, w_4, minus_two)
-                )
-            },
-        );
+        let tmp_1 = minus_scalar!(w_2, w_1, minus_one);
+        let tmp_2 = minus_scalar!(w_3, w_2, minus_one);
+        let tmp_3 = minus_scalar!(w_4, w_3, minus_one);
+        let tmp_4 = minus_scalar!(w_1_shift, w_4, minus_one);
+        let tmp_1_2 = minus_scalar!(w_2, w_1, minus_two);
+        let tmp_2_2 = minus_scalar!(w_3, w_2, minus_two);
+        let tmp_3_2 = minus_scalar!(w_4, w_3, minus_two);
+        let tmp_4_2 = minus_scalar!(w_1_shift, w_4, minus_two);
 
-        let lhs = minus_one_iters
-            .0
-            .chain(minus_one_iters.1)
-            .chain(minus_one_iters.2)
-            .chain(minus_one_iters.3)
-            .chain(minus_two_iters.0)
-            .chain(minus_two_iters.1)
-            .chain(minus_two_iters.2)
-            .chain(minus_two_iters.3)
+        let lhs = tmp_1
+            .chain(tmp_2)
+            .chain(tmp_3)
+            .chain(tmp_4)
+            .chain(tmp_1_2)
+            .chain(tmp_2_2)
+            .chain(tmp_3_2)
+            .chain(tmp_4_2)
+            .with_min_len(MIN_RAYON_ITER)
             .collect::<Vec<_>>();
 
         let mut sqr = driver.mul_many(&lhs, &lhs)?;
@@ -260,20 +250,25 @@ impl DeltaRangeConstraintRelation {
 
         let minus_one = -P::ScalarField::one();
         let minus_two = -P::ScalarField::from(2u64);
-        // Compute wire differences
-        let delta_1 = T::sub_many(w_2, w_1);
-        let delta_2 = T::sub_many(w_3, w_2);
-        let delta_3 = T::sub_many(w_4, w_3);
-        let delta_4 = T::sub_many(w_1_shift, w_4);
 
-        let tmp_1 = T::add_scalar(&delta_1, minus_one, party_id);
-        let tmp_2 = T::add_scalar(&delta_2, minus_one, party_id);
-        let tmp_3 = T::add_scalar(&delta_3, minus_one, party_id);
-        let tmp_4 = T::add_scalar(&delta_4, minus_one, party_id);
-        let tmp_1_2 = T::add_scalar(&delta_1, minus_two, party_id);
-        let tmp_2_2 = T::add_scalar(&delta_2, minus_two, party_id);
-        let tmp_3_2 = T::add_scalar(&delta_3, minus_two, party_id);
-        let tmp_4_2 = T::add_scalar(&delta_4, minus_two, party_id);
+        macro_rules! minus_scalar {
+            ($lhs: expr, $rhs: expr, $scalar: expr) => {
+                izip!($lhs, $rhs).map(|(lhs, rhs)| {
+                    let tmp = T::sub(*lhs, *rhs);
+                    T::add_with_public($scalar, tmp, party_id)
+                })
+            };
+        }
+
+        // Compute wire differences
+        let tmp_1 = minus_scalar!(w_2, w_1, minus_one);
+        let tmp_2 = minus_scalar!(w_3, w_2, minus_one);
+        let tmp_3 = minus_scalar!(w_4, w_3, minus_one);
+        let tmp_4 = minus_scalar!(w_1_shift, w_4, minus_one);
+        let tmp_1_2 = minus_scalar!(w_2, w_1, minus_two);
+        let tmp_2_2 = minus_scalar!(w_3, w_2, minus_two);
+        let tmp_3_2 = minus_scalar!(w_4, w_3, minus_two);
+        let tmp_4_2 = minus_scalar!(w_1_shift, w_4, minus_two);
 
         let mut lhs = Vec::with_capacity(tmp_1.len() * 8);
         lhs.extend(tmp_1);
