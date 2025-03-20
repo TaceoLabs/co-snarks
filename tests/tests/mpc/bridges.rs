@@ -7,7 +7,8 @@ mod translate_share {
     };
     use mpc_engine::TestNetwork;
     use rand::thread_rng;
-    use std::{sync::mpsc, thread};
+    use std::sync::mpsc;
+    use tests::spawn_pool;
 
     const VEC_SIZE: usize = 10;
 
@@ -25,11 +26,11 @@ mod translate_share {
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let preprocessing = ShamirPreprocessing::new(3, 1, 1, &net).unwrap();
                 let mut shamir = ShamirProtocol::from(preprocessing);
                 let share = shamir.translate_primefield_repshare(x, &net);
-                tx.send(share.unwrap())
+                tx.send(share.unwrap()).unwrap();
             });
         }
         let result1 = rx1.recv().unwrap();
@@ -59,11 +60,11 @@ mod translate_share {
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let preprecessing = ShamirPreprocessing::new(3, 1, x.len(), &net).unwrap();
                 let mut shamir = ShamirProtocol::from(preprecessing);
                 let share = shamir.translate_primefield_repshare_vec(x, &net);
-                tx.send(share.unwrap())
+                tx.send(share.unwrap()).unwrap();
             });
         }
         let result1 = rx1.recv().unwrap();
@@ -91,11 +92,11 @@ mod translate_share {
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let preprecessing = ShamirPreprocessing::new(3, 1, 1, &net).unwrap();
                 let mut shamir = ShamirProtocol::from(preprecessing);
                 let share = shamir.translate_point_repshare(x, &net);
-                tx.send(share.unwrap())
+                tx.send(share.unwrap()).unwrap();
             });
         }
         let result1 = rx1.recv().unwrap();

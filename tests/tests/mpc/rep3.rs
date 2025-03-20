@@ -28,9 +28,7 @@ mod field_share {
     use rand::Rng;
     use std::str::FromStr;
     use std::sync::mpsc;
-    use std::thread;
-
-    // TODO we dont need channels, we can just join
+    use tests::spawn_pool;
 
     #[test]
     fn rep3_add() {
@@ -44,7 +42,7 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
         for (tx, x, y) in izip!([tx1, tx2, tx3], x_shares.into_iter(), y_shares.into_iter()) {
-            thread::spawn(move || tx.send(arithmetic::add(x, y)));
+            spawn_pool(move || tx.send(arithmetic::add(x, y)).unwrap());
         }
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
@@ -65,7 +63,7 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
         for (tx, x, y) in izip!([tx1, tx2, tx3], x_shares.into_iter(), y_shares.into_iter()) {
-            thread::spawn(move || tx.send(arithmetic::sub(x, y)));
+            spawn_pool(move || tx.send(arithmetic::sub(x, y)).unwrap());
         }
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
@@ -89,7 +87,7 @@ mod field_share {
             x_shares.into_iter(),
             [PARTY_0, PARTY_1, PARTY_2]
         ) {
-            thread::spawn(move || tx.send(arithmetic::sub_shared_by_public(x, y, id)));
+            spawn_pool(move || tx.send(arithmetic::sub_shared_by_public(x, y, id)).unwrap());
         }
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
@@ -113,7 +111,7 @@ mod field_share {
             y_shares.into_iter(),
             [PARTY_0, PARTY_1, PARTY_2]
         ) {
-            thread::spawn(move || tx.send(arithmetic::sub_public_by_shared(x, y, id)));
+            spawn_pool(move || tx.send(arithmetic::sub_public_by_shared(x, y, id)).unwrap());
         }
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
@@ -140,7 +138,7 @@ mod field_share {
             x_shares.into_iter(),
             y_shares.into_iter()
         ) {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 let mul = arithmetic::mul(x, y, &net, &mut state).unwrap();
                 tx.send(mul).unwrap();
@@ -171,7 +169,7 @@ mod field_share {
             x_shares.into_iter(),
             y_shares.into_iter()
         ) {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 let mul = arithmetic::div(x, y, &net, &mut state).unwrap();
                 tx.send(mul).unwrap();
@@ -202,7 +200,7 @@ mod field_share {
             x_shares.into_iter(),
             y_shares.into_iter()
         ) {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 let mul = arithmetic::mul(x, y, &net, &mut state).unwrap();
                 let mul = arithmetic::mul(mul, y, &net, &mut state).unwrap();
@@ -287,7 +285,7 @@ mod field_share {
             x_shares.into_iter(),
             y_shares.into_iter()
         ) {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 let mul = arithmetic::mul_vec(&x, &y, &net, &mut state).unwrap();
                 tx.send(mul).unwrap();
@@ -328,7 +326,7 @@ mod field_share {
             x_shares.into_iter(),
             y_shares.into_iter()
         ) {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 let mul = arithmetic::mul_vec(&x, &y, &net, &mut state).unwrap();
                 let mul = arithmetic::mul_vec(&mul, &y, &net, &mut state).unwrap();
@@ -352,7 +350,7 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
         for (tx, x) in izip!([tx1, tx2, tx3], x_shares.into_iter()) {
-            thread::spawn(move || tx.send(arithmetic::neg(x)));
+            spawn_pool(move || tx.send(arithmetic::neg(x)).unwrap());
         }
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
@@ -379,7 +377,7 @@ mod field_share {
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 tx.send(arithmetic::inv(x, &net, &mut state).unwrap())
                     .unwrap();
@@ -403,7 +401,7 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
         for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares,) {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 tx.send(arithmetic::sqrt(x, &net, &mut state).unwrap())
                     .unwrap();
@@ -436,7 +434,7 @@ mod field_share {
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 tx.send(conversion::bit_inject(&x, &net, &mut state).unwrap())
                     .unwrap();
@@ -481,7 +479,7 @@ mod field_share {
             .zip([tx1, tx2, tx3])
             .zip([x0_shares, x1_shares, x2_shares].into_iter())
         {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 tx.send(conversion::bit_inject_many(&x, &net, &mut state).unwrap())
                     .unwrap();
@@ -522,7 +520,7 @@ mod field_share {
                             y_shares,
                             vec![compare; 3]
                         ) {
-                            thread::spawn(move || {
+                            spawn_pool(move || {
                                     let mut state = Rep3State::new(&net).unwrap();
                                     let shared_compare = arithmetic::$name(x, y, &net, &mut state).unwrap();
                                     let rhs_const =[< $name _public >](x, public, &net, &mut state).unwrap();
@@ -562,7 +560,7 @@ mod field_share {
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 tx.send(conversion::a2b(x, &net, &mut state).unwrap())
                     .unwrap();
@@ -593,7 +591,7 @@ mod field_share {
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 tx.send(conversion::a2y2b(x, &net, &mut state).unwrap())
                     .unwrap();
@@ -624,7 +622,7 @@ mod field_share {
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 tx.send(conversion::a2y2b_streaming(x, &net, &mut state).unwrap())
                     .unwrap();
@@ -655,7 +653,7 @@ mod field_share {
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 tx.send(conversion::a2b(x, &net, &mut state).unwrap())
                     .unwrap();
@@ -687,7 +685,7 @@ mod field_share {
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 tx.send(conversion::a2y2b(x, &net, &mut state).unwrap())
                     .unwrap();
@@ -719,7 +717,7 @@ mod field_share {
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 tx.send(conversion::a2y2b_streaming(x, &net, &mut state).unwrap())
                     .unwrap();
@@ -751,7 +749,7 @@ mod field_share {
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 tx.send(conversion::b2a(&x, &net, &mut state).unwrap())
                     .unwrap();
@@ -779,7 +777,7 @@ mod field_share {
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 tx.send(conversion::b2y2a(&x, &net, &mut state).unwrap())
                     .unwrap();
@@ -807,7 +805,7 @@ mod field_share {
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 tx.send(conversion::b2y2a_streaming(&x, &net, &mut state).unwrap())
                     .unwrap();
@@ -835,7 +833,7 @@ mod field_share {
 
         // Both Garblers
         for (net, tx) in izip!([net2, net3], [tx2, tx3]) {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 let mut garbler = Rep3Garbler::new(&net, &mut state);
                 let x_ = garbler.encode_field(x);
@@ -859,7 +857,7 @@ mod field_share {
         }
 
         // The evaluator (ID0)
-        thread::spawn(move || {
+        spawn_pool(move || {
             let _state = Rep3State::new(&net1).unwrap(); // DONT REMOVE
             let mut evaluator = Rep3Evaluator::new(&net1);
             let n_bits = ark_bn254::Fr::MODULUS_BIT_SIZE as usize;
@@ -902,7 +900,7 @@ mod field_share {
 
         // Both Garblers
         for (net, tx) in izip!([net2, net3], [tx2, tx3]) {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 let mut garbler = StreamingRep3Garbler::new(&net, &mut state);
                 let x_ = garbler.encode_field(x);
@@ -926,7 +924,7 @@ mod field_share {
         }
 
         // The evaluator (ID0)
-        thread::spawn(move || {
+        spawn_pool(move || {
             let _state = Rep3State::new(&net1).unwrap(); // DONT REMOVE
             let mut evaluator = StreamingRep3Evaluator::new(&net1);
             let n_bits = ark_bn254::Fr::MODULUS_BIT_SIZE as usize;
@@ -965,7 +963,7 @@ mod field_share {
         let (tx3, rx3) = mpsc::channel();
 
         for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter()) {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 let id = net.id();
                 let delta = state.rngs.generate_random_garbler_delta(id);
@@ -1011,7 +1009,7 @@ mod field_share {
         let (tx3, rx3) = mpsc::channel();
 
         for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter()) {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 let id = net.id();
                 let delta = state.rngs.generate_random_garbler_delta(id);
@@ -1062,7 +1060,7 @@ mod field_share {
         let (tx3, rx3) = mpsc::channel();
 
         for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter()) {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 let converted =
                     conversion::y2a::<ark_bn254::Fr, _>(x, Some(delta), &net, &mut state).unwrap();
@@ -1095,7 +1093,7 @@ mod field_share {
         let (tx3, rx3) = mpsc::channel();
 
         for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter()) {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 let converted =
                     conversion::y2a_streaming::<ark_bn254::Fr, _>(x, Some(delta), &net, &mut state)
@@ -1126,7 +1124,7 @@ mod field_share {
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 let id = net.id();
                 let delta = state.rngs.generate_random_garbler_delta(id);
@@ -1174,7 +1172,7 @@ mod field_share {
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 let id = net.id();
                 let delta = state.rngs.generate_random_garbler_delta(id);
@@ -1224,7 +1222,7 @@ mod field_share {
         let (tx3, rx3) = mpsc::channel();
 
         for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter()) {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 let converted = conversion::y2b::<ark_bn254::Fr, _>(x, &net, &mut state).unwrap();
                 tx.send(converted).unwrap();
@@ -1274,7 +1272,7 @@ mod field_share {
         let (tx3, rx3) = mpsc::channel();
 
         for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter()) {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 let decomposed = yao::decompose_arithmetic_many(
                     &x,
@@ -1329,7 +1327,7 @@ mod field_share {
         let (tx3, rx3) = mpsc::channel();
 
         for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter()) {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 let decomposed =
                     yao::slice_arithmetic_many(&x, &net, &mut state, msb, lsb, bitsize).unwrap();
@@ -1413,7 +1411,7 @@ mod field_share {
             x_shares.into_iter(),
             y_shares.into_iter()
         ) {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 let decomposed = yao::slice_and_many(
                     &x,
@@ -1497,7 +1495,7 @@ mod field_share {
             x_shares.into_iter(),
             y_shares.into_iter()
         ) {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 let decomposed = yao::slice_xor_many(
                     &x,
@@ -1545,7 +1543,7 @@ mod field_share {
         let (tx3, rx3) = mpsc::channel();
 
         for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter()) {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 let decomposed = gadgets::sort::batcher_odd_even_merge_sort_yao(
                     &x, &net, &mut state, CHUNK_SIZE,
@@ -1595,7 +1593,7 @@ mod field_share {
 
         for (net0, net1, tx, x_) in izip!(nets0, nets1, [tx1, tx2, tx3], x_shares.into_iter()) {
             let x_pub = x[VEC_SIZE / 2..].to_vec();
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state0 = Rep3State::new(&net0).unwrap();
                 let mut state1 = state0.fork(0).unwrap();
 
@@ -1645,7 +1643,7 @@ mod field_share {
         let (tx3, rx3) = mpsc::channel();
 
         for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter()) {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 let decomposed =
                     yao::field_int_div_power_2_many(&x, &net, &mut state, divisor_bit).unwrap();
@@ -1693,7 +1691,7 @@ mod field_share {
             x_shares.into_iter(),
             y_shares.into_iter()
         ) {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 let decomposed = yao::field_int_div_many(&x, &y, &net, &mut state).unwrap();
                 tx.send(decomposed).unwrap();
@@ -1734,7 +1732,7 @@ mod field_share {
 
         for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter(),) {
             let y_ = y.to_owned();
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 let decomposed =
                     yao::field_int_div_by_public_many(&x, &y_, &net, &mut state).unwrap();
@@ -1777,7 +1775,7 @@ mod field_share {
 
         for (net, tx, y_c) in izip!(nets, [tx1, tx2, tx3], y_shares.into_iter(),) {
             let x_ = x.to_owned();
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 let div = yao::field_int_div_by_shared_many(&x_, &y_c, &net, &mut state).unwrap();
                 tx.send(div).unwrap();
@@ -1803,7 +1801,7 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
         for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter()) {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 let decomposed = arithmetic::reshare_from_2_to_3_parties(
                     Some(x),
@@ -1867,7 +1865,7 @@ mod field_share {
         let (tx3, rx3) = mpsc::channel();
 
         for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], input_shares.into_iter()) {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 let poseidon = Poseidon2::<_, 4, 5>::default();
                 let output = poseidon
@@ -1922,7 +1920,7 @@ mod field_share {
         let (tx3, rx3) = mpsc::channel();
 
         for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], input_shares.into_iter()) {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 let poseidon = Poseidon2::<_, 4, 5>::default();
                 let mut precomp = poseidon.precompute_rep3(1, &net, &mut state).unwrap();
@@ -1985,7 +1983,7 @@ mod field_share {
         let (tx3, rx3) = mpsc::channel();
 
         for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], input_shares.into_iter()) {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 let poseidon = Poseidon2::<_, 4, 5>::default();
                 let mut precomp = poseidon
@@ -2045,7 +2043,7 @@ mod field_share {
         let (tx3, rx3) = mpsc::channel();
 
         for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], input_shares.into_iter()) {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 let poseidon = Poseidon2::<_, 4, 5>::default();
                 let mut precomp = poseidon
@@ -2093,7 +2091,7 @@ mod field_share {
         let (tx3, rx3) = mpsc::channel();
 
         for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], input_shares.into_iter()) {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
                 let poseidon = Poseidon2::<_, 4, 5>::default();
                 let output1 = poseidon
@@ -2138,7 +2136,7 @@ mod field_share {
 //         let (tx3, rx3) = mpsc::channel();
 
 //         for (tx, x, y) in izip!([tx1, tx2, tx3], x_shares.into_iter(), y_shares.into_iter()) {
-//             thread::spawn(move || tx.send(pointshare::add(&x, &y)));
+//             spawn_pool(move || tx.send(pointshare::add(&x, &y)));
 //         }
 //         let result1 = rx1.recv().unwrap();
 //         let result2 = rx2.recv().unwrap();
@@ -2159,7 +2157,7 @@ mod field_share {
 //         let (tx2, rx2) = mpsc::channel();
 //         let (tx3, rx3) = mpsc::channel();
 //         for (tx, x, y) in izip!([tx1, tx2, tx3], x_shares.into_iter(), y_shares.into_iter()) {
-//             thread::spawn(move || tx.send(pointshare::sub(&x, &y)));
+//             spawn_pool(move || tx.send(pointshare::sub(&x, &y)));
 //         }
 //         let result1 = rx1.recv().unwrap();
 //         let result2 = rx2.recv().unwrap();
@@ -2180,7 +2178,7 @@ mod field_share {
 //         let (tx3, rx3) = mpsc::channel();
 
 //         for (tx, scalar) in izip!([tx1, tx2, tx3], scalar_shares,) {
-//             thread::spawn(move || {
+//             spawn_pool(move || {
 //                 tx.send(pointshare::scalar_mul_public_point(&public_point, scalar))
 //             });
 //         }
@@ -2204,7 +2202,7 @@ mod field_share {
 //         let (tx3, rx3) = mpsc::channel();
 
 //         for (tx, point) in izip!([tx1, tx2, tx3], point_shares) {
-//             thread::spawn(move || {
+//             spawn_pool(move || {
 //                 tx.send(pointshare::scalar_mul_public_scalar(&point, public_scalar))
 //             });
 //         }
