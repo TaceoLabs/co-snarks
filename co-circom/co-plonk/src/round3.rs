@@ -14,31 +14,33 @@ use mpc_core::Fork;
 use mpc_engine::{MpcEngine, Network};
 use num_traits::One;
 use num_traits::Zero;
+use tracing::instrument;
 
 macro_rules! mul4vec {
     ($engine: expr, $state: expr, $a: expr,$b: expr,$c: expr,$d: expr,$ap: expr,$bp: expr,$cp: expr,$dp: expr, $len: expr) => {{
-        let mut state0 = $state.fork($len * 2)?;
-        let mut state1 = $state.fork($len * 2)?;
-        let mut state2 = $state.fork($len * 2)?;
-        let mut state3 = $state.fork($len * 2)?;
+        let mut state0 = $state.fork($len)?;
+        let mut state1 = $state.fork($len)?;
+        let mut state2 = $state.fork($len)?;
+        let mut state3 = $state.fork($len)?;
+        let mut state4 = $state.fork($len)?;
+        let mut state5 = $state.fork($len)?;
+        let mut state6 = $state.fork($len)?;
+        let mut state7 = $state.fork($len)?;
 
-        let (a_b, a_bp, ap_b, ap_bp) = $engine.join4_net(
+        let (a_b, a_bp, ap_b, ap_bp, c_d, c_dp, cp_d, cp_dp) = $engine.join8_net(
             |net| T::mul_vec($a, $b, net, &mut state0),
             |net| T::mul_vec($a, $bp, net, &mut state1),
             |net| T::mul_vec($ap, $b, net, &mut state2),
             |net| T::mul_vec($ap, $bp, net, &mut state3),
+            |net| T::mul_vec($c, $d, net, &mut state4),
+            |net| T::mul_vec($c, $dp, net, &mut state5),
+            |net| T::mul_vec($cp, $d, net, &mut state6),
+            |net| T::mul_vec($cp, $dp, net, &mut state7),
         );
         let a_b = a_b?;
         let a_bp = a_bp?;
         let ap_b = ap_b?;
         let ap_bp = ap_bp?;
-
-        let (c_d, c_dp, cp_d, cp_dp) = $engine.join4_net(
-            |net| T::mul_vec($c, $d, net, &mut state0),
-            |net| T::mul_vec($c, $dp, net, &mut state1),
-            |net| T::mul_vec($cp, $d, net, &mut state2),
-            |net| T::mul_vec($cp, $dp, net, &mut state3),
-        );
         let c_d = c_d?;
         let c_dp = c_dp?;
         let cp_d = cp_d?;
@@ -262,13 +264,16 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round3<'a, P
         let pow_root_of_unity = domains.root_of_unity_pow;
         let pow_plus2_root_of_unity = domains.root_of_unity_pow_2;
         // We do not want to have any network operation in here to reduce MPC rounds. To enforce this, we have a for_each loop here (Network operations require a result)
+        let w_product_span = tracing::debug_span!("first w product").entered();
         (0..len).for_each(|_| {
             ap.push(T::add_mul_public(challenges.b[1], challenges.b[0], w));
             bp.push(T::add_mul_public(challenges.b[3], challenges.b[2], w));
             cp.push(T::add_mul_public(challenges.b[5], challenges.b[4], w));
             w *= &pow_plus2_root_of_unity;
         });
+        w_product_span.exit();
 
+        let ab_span = tracing::debug_span!("a_b, a_bp, ap_b, ap_bp").entered();
         // TODO check and explain numbers
         let mut state0 = state.fork(len)?;
         let mut state1 = state.fork(len)?;
@@ -291,7 +296,9 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round3<'a, P
         let a_bp = a_bp?;
         let ap_b = ap_b?;
         let ap_bp = ap_bp?;
+        ab_span.exit();
 
+        let w_product_span = tracing::debug_span!("second w product").entered();
         // TODO keep RAM requirements in mind
         let mut e1 = Vec::with_capacity(len);
         let mut e1z = Vec::with_capacity(len);
@@ -409,13 +416,17 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round3<'a, P
             e3d.push(zw);
             w *= pow_plus2_root_of_unity;
         });
+        w_product_span.exit();
 
+        let mul4vec_span = tracing::debug_span!("mul4 vec").entered();
         let [e2, e2z_0, e2z_1, e2z_2, e2z_3] =
             mul4vec!(engine, state, &e2a, &e2b, &e2c, &e2d, &ap, &bp, &cp, &zp, len)?;
 
         let [e3, e3z_0, e3z_1, e3z_2, e3z_3] =
             mul4vec!(engine, state, &e3a, &e3b, &e3c, &e3d, &ap, &bp, &cp, &zwp, len)?;
+        mul4vec_span.exit();
 
+        let t_tz_span = tracing::debug_span!("t, tz").entered();
         let mut t_vec = Vec::with_capacity(len);
         let mut tz_vec = Vec::with_capacity(len);
         // We do not want to have any network operation in here to reduce MPC rounds. To enforce this, we have a for_each loop here (Network operations require a result)
@@ -483,11 +494,13 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round3<'a, P
         t2.push(challenges.b[10].to_owned());
 
         t3[0] = T::sub(t3[0], challenges.b[10]);
+        t_tz_span.exit();
         tracing::debug!("computing t polynomial done!");
         Ok([t1, t2, t3])
     }
 
     // Round 3 of https://eprint.iacr.org/2019/953.pdf (page 29)
+    #[instrument(level = "debug", name = "Plonk - Round 3", skip_all)]
     pub(super) fn round3(self) -> PlonkProofResult<Round4<'a, P, T, N>> {
         let Self {
             engine,
@@ -510,14 +523,20 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round3<'a, P
         tracing::debug!("alpha: {alpha}, alpha2: {alpha2}");
         let challenges = Round3Challenges::new(challenges, alpha, alpha2);
 
+        let t_span = tracing::debug_span!("compute t").entered();
         let [t1, t2, t3] =
             Self::compute_t(engine, state, &domains, &challenges, data.zkey, &polys)?;
+        t_span.exit();
 
         tracing::debug!("committing to poly t (MSMs)");
+        let commit_t_span = tracing::debug_span!("commit t").entered();
         // Compute [T1]_1, [T2]_1, [T3]_1
-        let commit_t1 = T::msm_public_points_g1(&data.zkey.p_tau[..t1.len()], &t1);
-        let commit_t2 = T::msm_public_points_g1(&data.zkey.p_tau[..t2.len()], &t2);
-        let commit_t3 = T::msm_public_points_g1(&data.zkey.p_tau[..t3.len()], &t3);
+        let (commit_t1, commit_t2, commit_t3) = engine.join3_cpu(
+            || T::msm_public_points_g1(&data.zkey.p_tau[..t1.len()], &t1),
+            || T::msm_public_points_g1(&data.zkey.p_tau[..t2.len()], &t2),
+            || T::msm_public_points_g1(&data.zkey.p_tau[..t3.len()], &t3),
+        );
+        commit_t_span.exit();
 
         let opened = engine.install_net(|net| {
             T::open_point_vec_g1(&[commit_t1, commit_t2, commit_t3], net, state)

@@ -7,6 +7,7 @@ use crate::{
 };
 use ark_ec::pairing::Pairing;
 use mpc_engine::{MpcEngine, Network};
+use tracing::instrument;
 
 // Round 4 of https://eprint.iacr.org/2019/953.pdf (page 29)
 pub(super) struct Round4<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network> {
@@ -100,6 +101,7 @@ impl<P: Pairing> Round4Proof<P> {
 // Round 4 of https://eprint.iacr.org/2019/953.pdf (page 29)
 impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round4<'a, P, T, N> {
     // Round 4 of https://eprint.iacr.org/2019/953.pdf (page 29)
+    #[instrument(level = "debug", name = "Plonk - Round 4", skip_all)]
     pub(super) fn round4(self) -> PlonkProofResult<Round5<'a, P, T, N>> {
         let Self {
             engine,
