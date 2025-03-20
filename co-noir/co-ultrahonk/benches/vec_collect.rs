@@ -1,6 +1,7 @@
 use ark_bn254::Bn254;
 use co_ultrahonk::prelude::{NoirUltraHonkProver, PlainUltraHonkDriver};
 use criterion::*;
+use itertools::izip;
 use mpc_core::protocols::rep3::arithmetic::FieldShare;
 use rand::{thread_rng, Rng, RngCore as _};
 use rayon::prelude::*;
@@ -64,6 +65,23 @@ fn collect_poseidon(c: &mut Criterion, todo_list: &[usize], threads: &[usize]) {
                             &q_4, &w_4, 0,
 
                         );
+                        let mut s = Vec::with_capacity(s1.len() + s2.len() + s3.len() + s4.len());
+                        s.extend(s1);
+                        s.extend(s2);
+                        s.extend(s3);
+                        s.extend(s4);
+                        black_box(s);
+                    })
+                })
+            });
+
+            group.bench_function("current impl no collect", |b| {
+                b.iter(|| {
+                    thread_pool.install(|| {
+                        let s1 = izip!(&q_l, &w_l).map(|(q_l, w_l)| q_l + w_l);
+                        let s2 = izip!(&q_r, &w_r).map(|(q_l, w_l)| q_l + w_l);
+                        let s3 = izip!(&q_o, &w_o).map(|(q_l, w_l)| q_l + w_l);
+                        let s4 = izip!(&q_4, &w_4).map(|(q_l, w_l)| q_l + w_l);
                         let mut s = Vec::with_capacity(s1.len() + s2.len() + s3.len() + s4.len());
                         s.extend(s1);
                         s.extend(s2);
