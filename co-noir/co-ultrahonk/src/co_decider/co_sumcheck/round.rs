@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use super::zk_data::SharedZKSumcheckData;
 use crate::{
     co_decider::{
@@ -153,12 +155,15 @@ impl SumcheckRound {
             &sum_check_data.ultra_perm,
         )?;
 
+        let time = Instant::now();
         Self::accumulate_one_relation_univariates_batch::<_, _, DeltaRangeConstraintRelation>(
             driver,
             &mut univariate_accumulators.r_delta,
             relation_parameters,
             &sum_check_data.delta_range,
         )?;
+        let elapsed = time.elapsed();
+        println!("{}.{:<09}", elapsed.as_secs(), elapsed.subsec_nanos());
 
         Self::accumulate_one_relation_univariates_batch::<_, _, EllipticRelation>(
             driver,

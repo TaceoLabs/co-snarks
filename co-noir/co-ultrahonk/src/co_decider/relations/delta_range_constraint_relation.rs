@@ -357,7 +357,6 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
     ) -> HonkProofResult<()> {
         // because this is rather smallish a lot of the times we make a check whether we
         // want to do multithreading
-        // THEMIS TODO check if this is really faster with large sizes
         if scaling_factors.len() > (1 << 14) {
             Self::accumulate_multithreaded(driver, univariate_accumulator, input, scaling_factors)?;
         } else {
