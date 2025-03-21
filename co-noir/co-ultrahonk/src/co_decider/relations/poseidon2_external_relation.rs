@@ -277,7 +277,6 @@ impl Poseidon2ExternalRelation {
             ($lhs: expr, $rhs: expr) => {
                 ($lhs, $rhs)
                     .into_par_iter()
-                    .with_min_len(MIN_RAYON_ITER)
                     .map(|(lhs, rhs)| T::add_with_public(*lhs, *rhs, party_id))
             };
         }
@@ -310,7 +309,6 @@ impl Poseidon2ExternalRelation {
             w_4_shift,
         )
             .into_par_iter()
-            .with_min_len(MIN_RAYON_ITER)
             .map(
                 |(
                     u0,
