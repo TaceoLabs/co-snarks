@@ -1,5 +1,5 @@
 use ark_ff::PrimeField;
-use brillig::{IntegerBitSize, MemoryAddress};
+use brillig::{HeapArray, IntegerBitSize, MemoryAddress};
 
 use crate::mpc::BrilligDriver;
 
@@ -60,6 +60,26 @@ where
             T::BrilligType::default()
         };
         Ok(value)
+    }
+
+    /// Reads the memory associated with the provided heap array. We returned an owned version
+    /// of the data. This differs from the original Brillig implementation's read_slice.
+    pub fn read_heap_array(&self, heap_array: HeapArray) -> eyre::Result<Vec<T::BrilligType>> {
+        let HeapArray { pointer, size } = heap_array;
+        if size == 0 {
+            return Ok(Vec::new());
+        }
+        let pointer = self.resolve(self.read_ref(pointer)?)?;
+        let mut array = Vec::with_capacity(size);
+        for offset in 0..size {
+            array.push(
+                self.inner
+                    .get(pointer + offset)
+                    .cloned()
+                    .unwrap_or_default(),
+            );
+        }
+        Ok(array)
     }
 
     pub fn try_read_usize(&self, ptr: MemoryAddress) -> eyre::Result<usize> {

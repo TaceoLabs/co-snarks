@@ -10,6 +10,7 @@ use acir::{
     FieldElement,
 };
 use ark_ff::PrimeField;
+use co_acvm::value_store::ValueStore;
 use co_acvm::{
     solver::{partial_abi::PublicMarker, Rep3CoSolver},
     PlainAcvmSolver, Rep3AcvmSolver, ShamirAcvmSolver,
@@ -290,12 +291,17 @@ pub fn split_witness_shamir<F: PrimeField, R: Rng + CryptoRng>(
     res
 }
 
-/// Generate a witness from REP3 input shares
-pub fn generate_witness_rep3<N: Rep3Network>(
+#[allow(clippy::type_complexity)]
+/// Executes the noir circuit with REP3 protocol
+pub fn execute_circuit_rep3<N: Rep3Network>(
     input_share: BTreeMap<String, Rep3AcvmType<ark_bn254::Fr>>,
     compiled_program: ProgramArtifact,
     net: N,
-) -> Result<(Vec<Rep3AcvmType<ark_bn254::Fr>>, N)> {
+) -> Result<(
+    Vec<Rep3AcvmType<ark_bn254::Fr>>,
+    ValueStore<Rep3AcvmSolver<ark_bn254::Fr, N>, ark_bn254::Fr>,
+    N,
+)> {
     let input_share = witness_to_witness_map(input_share, &compiled_program.abi)?;
 
     // init MPC protocol
@@ -303,14 +309,25 @@ pub fn generate_witness_rep3<N: Rep3Network>(
         .context("while creating VM")?;
 
     // execute witness generation in MPC
-    let (result_witness_share, driver) = rep3_vm
-        .solve()
+    let (result_witness_share, value_store, driver) = rep3_vm
+        .solve_with_output()
         .context("while running witness generation")?;
 
     Ok((
         witness_stack_to_vec_rep3(result_witness_share),
+        value_store,
         driver.into_network(),
     ))
+}
+
+/// Generate a witness from REP3 input shares
+pub fn generate_witness_rep3<N: Rep3Network>(
+    input_share: BTreeMap<String, Rep3AcvmType<ark_bn254::Fr>>,
+    compiled_program: ProgramArtifact,
+    net: N,
+) -> Result<(Vec<Rep3AcvmType<ark_bn254::Fr>>, N)> {
+    let (witness_stack, _, network) = execute_circuit_rep3(input_share, compiled_program, net)?;
+    Ok((witness_stack, network))
 }
 
 /// Translate a REP3 shared witness to a shamir shared witness

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::memory::Memory;
 use crate::mpc::BrilligDriver;
 use acir::{
@@ -5,7 +7,9 @@ use acir::{
     circuit::brillig::{BrilligBytecode, BrilligFunctionId},
 };
 use ark_ff::PrimeField;
-use brillig::{BitSize, HeapVector, Label, MemoryAddress, Opcode as BrilligOpcode};
+use brillig::{
+    BitSize, HeapValueType, HeapVector, Label, MemoryAddress, Opcode as BrilligOpcode, ValueOrArray,
+};
 
 /// The coBrillig-VM. It executes unconstrained functions for coNoir.
 ///
@@ -20,6 +24,7 @@ where
     pub(crate) memory: Memory<T, F>,
     pub(crate) driver: T,
     pub(crate) shared_ctx: Option<T::BrilligType>,
+    pub(crate) persistent_shared_state: HashMap<String, Vec<T::BrilligType>>,
     calldata: Vec<T::BrilligType>,
     unconstrained_functions: Vec<BrilligBytecode<GenericFieldElement<F>>>,
     call_stack: Vec<usize>,
@@ -40,7 +45,7 @@ where
 {
     /// Indicates that the run of the Brillig-VM was a sucess. Holds
     /// the computed values
-    Success(Vec<T::BrilligType>),
+    Success(Vec<T::BrilligType>, HashMap<String, Vec<T::BrilligType>>),
     /// Indicates that the run failed. At the moment, this only happens
     /// if we encounter a trap.
     Failed,
@@ -133,12 +138,18 @@ where
                 } => self.handle_indirect_const(*destination_pointer, *bit_size, *value)?,
                 BrilligOpcode::Return => self.handle_return()?,
                 BrilligOpcode::ForeignCall {
-                    function: _,
-                    destinations: _,
-                    destination_value_types: _,
-                    inputs: _,
-                    input_value_types: _,
-                } => todo!(),
+                    function,
+                    destinations,
+                    destination_value_types,
+                    inputs,
+                    input_value_types,
+                } => self.handle_foreign_call(
+                    function,
+                    destinations,
+                    destination_value_types,
+                    inputs,
+                    input_value_types,
+                )?,
                 BrilligOpcode::Mov {
                     destination,
                     source,
@@ -180,6 +191,7 @@ where
             unconstrained_functions,
             calldata: vec![],
             call_stack: vec![],
+            persistent_shared_state: HashMap::new(),
             memory: Memory::new(),
             ip: 0,
             shared_ctx: None,
@@ -276,15 +288,24 @@ where
                 let falsy_result = falsy.run_inner(id)?;
                 let (truthy_result, falsy_result) = match (truthy_result, falsy_result) {
                     (
-                        CoBrilligResult::Success(truthy_result),
-                        CoBrilligResult::Success(falsy_result),
+                        CoBrilligResult::Success(truthy_result, truthy_shared_state),
+                        CoBrilligResult::Success(falsy_result, falsy_shared_state),
                     ) => {
+                        if !truthy_shared_state.is_empty() || !falsy_shared_state.is_empty() {
+                            eyre::bail!("cannot have TACEO stores in shared if atm");
+                        }
                         if truthy_result.len() != falsy_result.len() {
                             eyre::bail!("truthy and falsy universe have different result lengths");
                         }
                         (truthy_result, falsy_result)
                     }
-                    (CoBrilligResult::Success(truthy_result), CoBrilligResult::Failed) => {
+                    (
+                        CoBrilligResult::Success(truthy_result, truthy_shared_state),
+                        CoBrilligResult::Failed,
+                    ) => {
+                        if !truthy_shared_state.is_empty() {
+                            eyre::bail!("cannot have TACEO stores in shared if atm");
+                        }
                         tracing::debug!("falsy universe failed. We set its result to ranodm noise");
                         let falsy_result = truthy_result
                             .iter()
@@ -292,7 +313,13 @@ where
                             .collect();
                         (truthy_result, falsy_result)
                     }
-                    (CoBrilligResult::Failed, CoBrilligResult::Success(falsy_result)) => {
+                    (
+                        CoBrilligResult::Failed,
+                        CoBrilligResult::Success(falsy_result, falsy_shared_state),
+                    ) => {
+                        if !falsy_shared_state.is_empty() {
+                            eyre::bail!("cannot have TACEO stores in shared if atm");
+                        }
                         tracing::debug!(
                             "truthy universe failed. We set its result to ranodm noise"
                         );
@@ -315,13 +342,35 @@ where
                     let result = self.driver.cmux(condition.clone(), truthy, falsy)?;
                     final_result.push(result);
                 }
-                Ok(Some(CoBrilligResult::Success(final_result)))
+                Ok(Some(CoBrilligResult::Success(final_result, HashMap::new())))
             }
         }
     }
 
     fn handle_jump(&mut self, location: Label) -> eyre::Result<()> {
         self.set_program_counter(location);
+        Ok(())
+    }
+
+    fn handle_foreign_call(
+        &mut self,
+        name: &str,
+        destinations: &[ValueOrArray],
+        destination_value_types: &[HeapValueType],
+        inputs: &[ValueOrArray],
+        input_value_type: &[HeapValueType],
+    ) -> eyre::Result<()> {
+        if name == "TACEO_store" {
+            self.taceo_store(
+                destinations,
+                destination_value_types,
+                inputs,
+                input_value_type,
+            )?;
+        } else {
+            eyre::bail!(format!("unsupported oracle function: {name}"))
+        }
+        self.increment_program_counter();
         Ok(())
     }
 
@@ -354,7 +403,11 @@ where
         } else {
             0
         };
-        Ok(CoBrilligResult::Success(self.take_result(offset, size)))
+        let persitent_shared_state = std::mem::take(&mut self.persistent_shared_state);
+        Ok(CoBrilligResult::Success(
+            self.take_result(offset, size),
+            persitent_shared_state,
+        ))
     }
 
     fn handle_load(
@@ -408,6 +461,7 @@ where
             driver: driver1,
             calldata: self.calldata.clone(),
             unconstrained_functions: self.unconstrained_functions.clone(),
+            persistent_shared_state: self.persistent_shared_state.clone(),
             call_stack: self.call_stack.clone(),
             ip: self.ip,
             shared_ctx: Some(condition.clone()),
@@ -419,6 +473,7 @@ where
             calldata: self.calldata.clone(),
             unconstrained_functions: self.unconstrained_functions.clone(),
             call_stack: self.call_stack.clone(),
+            persistent_shared_state: self.persistent_shared_state.clone(),
             ip: self.ip,
             shared_ctx: Some(self.driver.not(condition)?),
         };
