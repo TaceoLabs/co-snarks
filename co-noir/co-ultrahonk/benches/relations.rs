@@ -226,10 +226,10 @@ fn run_poseidon_external_relation(
             .num_threads(*num_threads)
             .build()
             .unwrap();
-        group.bench_function(format!("#{num_threads} thread"), |b| {
+        group.bench_function(format!("#{num_threads} threads"), |b| {
             b.iter(|| {
                 thread_pool.install(|| {
-                    black_box(Poseidon2ExternalRelation::accumulate_small(
+                    black_box(Poseidon2ExternalRelation::accumulate_multithreaded(
                         &mut driver,
                         black_box(&mut acc),
                         &sum_check_data.all_entites,
