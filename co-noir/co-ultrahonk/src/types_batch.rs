@@ -31,7 +31,7 @@ type Shared<T, P> = SharedUnivariate<T, P, MAX_PARTIAL_RELATION_LENGTH>;
 type Public<P> = Univariate<<P as Pairing>::ScalarField, MAX_PARTIAL_RELATION_LENGTH>;
 
 #[derive(Default)]
-pub(crate) struct AllEntitiesBatch<T, P>
+pub struct AllEntitiesBatch<T, P>
 where
     T: NoirUltraHonkProver<P>,
     P: Pairing,
@@ -42,30 +42,30 @@ where
 }
 
 #[derive(Default)]
-pub(crate) struct SumCheckDataForRelation<T, P>
+pub struct SumCheckDataForRelation<T, P>
 where
     T: NoirUltraHonkProver<P>,
     P: Pairing,
 {
     pub(crate) can_skip: bool,
-    pub(crate) all_entites: AllEntitiesBatch<T, P>,
-    pub(crate) scaling_factors: Vec<P::ScalarField>,
+    pub all_entites: AllEntitiesBatch<T, P>,
+    pub scaling_factors: Vec<P::ScalarField>,
 }
 
 #[derive(Default)]
-pub(crate) struct AllEntitiesBatchRelations<T, P>
+pub struct AllEntitiesBatchRelations<T, P>
 where
     T: NoirUltraHonkProver<P>,
     P: Pairing,
 {
-    pub(crate) ultra_arith: SumCheckDataForRelation<T, P>,
-    pub(crate) ultra_perm: SumCheckDataForRelation<T, P>,
-    pub(crate) delta_range: SumCheckDataForRelation<T, P>,
-    pub(crate) elliptic: SumCheckDataForRelation<T, P>,
-    pub(crate) auxiliary: SumCheckDataForRelation<T, P>,
-    pub(crate) log_lookup: SumCheckDataForRelation<T, P>,
-    pub(crate) poseidon_ext: SumCheckDataForRelation<T, P>,
-    pub(crate) poseidon_int: SumCheckDataForRelation<T, P>,
+    pub ultra_arith: SumCheckDataForRelation<T, P>,
+    pub ultra_perm: SumCheckDataForRelation<T, P>,
+    pub delta_range: SumCheckDataForRelation<T, P>,
+    pub elliptic: SumCheckDataForRelation<T, P>,
+    pub auxiliary: SumCheckDataForRelation<T, P>,
+    pub log_lookup: SumCheckDataForRelation<T, P>,
+    pub poseidon_ext: SumCheckDataForRelation<T, P>,
+    pub poseidon_int: SumCheckDataForRelation<T, P>,
 }
 
 impl<T, P> SumCheckDataForRelation<T, P>

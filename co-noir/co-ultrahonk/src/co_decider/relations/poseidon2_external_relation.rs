@@ -25,7 +25,7 @@ pub(crate) struct Poseidon2ExternalRelationAcc<T: NoirUltraHonkProver<P>, P: Pai
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct Poseidon2ExternalRelationAccHalfShared<F: PrimeField> {
+pub struct Poseidon2ExternalRelationAccHalfShared<F: PrimeField> {
     pub(crate) r0: Univariate<F, 7>,
     pub(crate) r1: Univariate<F, 7>,
     pub(crate) r2: Univariate<F, 7>,
@@ -99,7 +99,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> Poseidon2ExternalRelationAcc<T, P> {
     }
 }
 
-pub(crate) struct Poseidon2ExternalRelation {}
+pub struct Poseidon2ExternalRelation {}
 
 #[derive(Default)]
 struct IntermediateAcc<F: PrimeField + Default> {
@@ -115,7 +115,7 @@ impl Poseidon2ExternalRelation {
 }
 
 impl Poseidon2ExternalRelation {
-    fn accumulate_small<T, P>(
+    pub fn accumulate_small<T, P>(
         driver: &mut T,
         univariate_accumulator: &mut Poseidon2ExternalRelationAccHalfShared<P::ScalarField>,
         input: &ProverUnivariatesBatch<T, P>,
@@ -248,7 +248,7 @@ impl Poseidon2ExternalRelation {
         Ok(())
     }
 
-    fn accumulate_multithreaded<T, P>(
+    pub fn accumulate_multithreaded<T, P>(
         driver: &mut T,
         univariate_accumulator: &mut Poseidon2ExternalRelationAccHalfShared<P::ScalarField>,
         input: &ProverUnivariatesBatch<T, P>,

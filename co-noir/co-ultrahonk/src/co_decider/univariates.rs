@@ -5,8 +5,8 @@ use ultrahonk::prelude::{Barycentric, Univariate};
 
 use crate::mpc::NoirUltraHonkProver;
 
-pub(crate) struct SharedUnivariate<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> {
-    pub(crate) evaluations: [T::ArithmeticShare; SIZE],
+pub struct SharedUnivariate<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> {
+    pub evaluations: [T::ArithmeticShare; SIZE],
 }
 
 impl<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> SharedUnivariate<T, P, SIZE> {

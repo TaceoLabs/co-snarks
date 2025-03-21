@@ -20,7 +20,7 @@ pub(crate) const MAX_PARTIAL_RELATION_LENGTH: usize = 7;
 pub(crate) const BATCHED_RELATION_PARTIAL_LENGTH: usize = MAX_PARTIAL_RELATION_LENGTH + 1;
 pub(crate) const BATCHED_RELATION_PARTIAL_LENGTH_ZK: usize = BATCHED_RELATION_PARTIAL_LENGTH + 1;
 
-pub(crate) type ProverUnivariates<T, P> = AllEntities<
+pub type ProverUnivariates<T, P> = AllEntities<
     SharedUnivariate<T, P, MAX_PARTIAL_RELATION_LENGTH>,
     Univariate<<P as Pairing>::ScalarField, MAX_PARTIAL_RELATION_LENGTH>,
 >;

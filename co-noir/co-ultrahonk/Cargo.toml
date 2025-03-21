@@ -39,3 +39,7 @@ harness = false
 [[bench]]
 name = "vec_collect"
 harness = false
+
+[[bench]]
+name = "relations"
+harness = false

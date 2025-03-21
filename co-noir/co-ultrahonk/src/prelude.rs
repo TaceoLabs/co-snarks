@@ -24,3 +24,10 @@ pub use ultrahonk::prelude::UltraHonk;
 pub use ultrahonk::prelude::VerifyingKeyBarretenberg;
 pub use ultrahonk::prelude::ZeroKnowledge;
 pub use ultrahonk::Utils;
+
+pub use crate::co_decider::relations::poseidon2_external_relation::Poseidon2ExternalRelation;
+pub use crate::co_decider::relations::poseidon2_external_relation::Poseidon2ExternalRelationAccHalfShared;
+pub use crate::co_decider::types::ProverUnivariates;
+pub use crate::types_batch::AllEntitiesBatch;
+pub use crate::types_batch::AllEntitiesBatchRelations;
+pub use crate::types_batch::SumCheckDataForRelation;

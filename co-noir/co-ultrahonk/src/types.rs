@@ -1,4 +1,5 @@
 use co_builder::prelude::{Polynomial, PrecomputedEntities, ProverWitnessEntities};
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use ultrahonk::prelude::{ShiftedWitnessEntities, WitnessEntities};
 
@@ -35,10 +36,10 @@ where
 }
 
 #[derive(Default, Clone)]
-pub(crate) struct AllEntities<Shared: Default, Public: Default> {
-    pub(crate) witness: WitnessEntities<Shared>,
-    pub(crate) precomputed: PrecomputedEntities<Public>,
-    pub(crate) shifted_witness: ShiftedWitnessEntities<Shared>,
+pub struct AllEntities<Shared: Default, Public: Default> {
+    pub witness: WitnessEntities<Shared>,
+    pub precomputed: PrecomputedEntities<Public>,
+    pub shifted_witness: ShiftedWitnessEntities<Shared>,
 }
 
 impl<Shared: Default, Public: Default> AllEntities<Shared, Public> {

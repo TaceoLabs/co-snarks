@@ -162,12 +162,15 @@ impl SumcheckRound {
             &sum_check_data.delta_range,
         )?;
 
+        let time = Instant::now();
         Self::accumulate_one_relation_univariates_batch::<_, _, EllipticRelation>(
             driver,
             &mut univariate_accumulators.r_elliptic,
             relation_parameters,
             &sum_check_data.elliptic,
         )?;
+        let elapsed = time.elapsed();
+        tracing::info!("took: {}.{:0>9}", elapsed.as_secs(), elapsed.subsec_nanos());
 
         Self::accumulate_one_relation_univariates_batch::<_, _, AuxiliaryRelation>(
             driver,
@@ -188,15 +191,12 @@ impl SumcheckRound {
             relation_parameters,
             &sum_check_data.poseidon_ext,
         )?;
-        let time = Instant::now();
         Self::accumulate_one_relation_univariates_batch::<_, _, Poseidon2InternalRelation>(
             driver,
             &mut univariate_accumulators.r_pos_int,
             relation_parameters,
             &sum_check_data.poseidon_int,
         )?;
-        let elapsed = time.elapsed();
-        tracing::info!("took {}.{:0>9}", elapsed.as_secs(), elapsed.subsec_nanos());
         Ok(())
     }
 
