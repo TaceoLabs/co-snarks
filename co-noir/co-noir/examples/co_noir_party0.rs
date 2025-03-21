@@ -101,7 +101,7 @@ fn main() -> Result<()> {
     let (proof, _) = Rep3CoUltraHonk::<_, _, Poseidon2Sponge>::prove(net, pk, &prover_crs, has_zk)?;
 
     // verify proof
-    assert!(UltraHonk::<_, Poseidon2Sponge>::verify(proof, vk, has_zk)
+    assert!(UltraHonk::<_, Poseidon2Sponge>::verify(proof, &vk, has_zk)
         .context("while verifying proof")?);
 
     Ok(())

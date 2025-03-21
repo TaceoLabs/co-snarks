@@ -160,7 +160,7 @@ impl<P: Pairing> VerifierMemory<P> {
     #[expect(clippy::field_reassign_with_default)]
     pub(crate) fn from_memory_and_key(
         verifier_memory: crate::oink::types::VerifierMemory<P>,
-        vk: VerifyingKey<P>,
+        vk: &VerifyingKey<P>,
     ) -> Self {
         let relation_parameters = RelationParameters {
             eta_1: verifier_memory.challenges.eta_1,
@@ -175,7 +175,7 @@ impl<P: Pairing> VerifierMemory<P> {
 
         let mut memory = AllEntities::default();
         memory.witness = verifier_memory.witness_commitments;
-        memory.precomputed = vk.commitments;
+        memory.precomputed = vk.commitments.clone();
 
         // These copies are not required
         // for (des, src) in izip!(
