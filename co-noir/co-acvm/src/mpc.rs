@@ -303,4 +303,10 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         iv: Vec<Self::AcvmType>,
         key: Vec<Self::AcvmType>,
     ) -> io::Result<Vec<Self::AcvmType>>;
+
+    fn sha256_compression(
+        &mut self,
+        state: &[Self::AcvmType; 8],
+        message: &[Self::AcvmType; 16],
+    ) -> io::Result<Vec<Self::AcvmType>>;
 }

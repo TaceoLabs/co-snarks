@@ -649,4 +649,12 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
     ) -> std::io::Result<Vec<Self::AcvmType>> {
         panic!("functionality aes128_encrypt not feasible for Shamir")
     }
+
+    fn sha256_compression(
+        &mut self,
+        _state: &[Self::AcvmType; 8],
+        _message: &[Self::AcvmType; 16],
+    ) -> std::io::Result<Vec<Self::AcvmType>> {
+        panic!("functionality sha256_compression not feasible for Shamir")
+    }
 }

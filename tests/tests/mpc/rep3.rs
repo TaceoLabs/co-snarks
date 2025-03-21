@@ -23,6 +23,7 @@ mod field_share {
     use num_bigint::BigUint;
     use rand::thread_rng;
     use rand::Rng;
+    use sha3::digest::generic_array::GenericArray;
     use std::str::FromStr;
     use std::sync::mpsc;
     use std::thread;
@@ -1746,6 +1747,75 @@ mod field_share {
                 let mut rep3 = IoContext::init(net).unwrap();
 
                 let res = rep3::yao::aes_from_bristol(&x, &y, &z, &mut rep3).unwrap();
+                tx.send(res)
+            });
+        }
+
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+
+        let is_result = rep3::combine_field_elements(&result1, &result2, &result3);
+        assert_eq!(
+            is_result
+                .iter()
+                .map(|&x| ark_bn254::Fr::from(x))
+                .collect_vec(),
+            should_result
+                .iter()
+                .map(|&x| ark_bn254::Fr::from(x))
+                .collect_vec()
+        );
+    }
+
+    #[test]
+    fn rep3_sha() {
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let mut state: Vec<u32> = (0..8).map(|_| rng.gen()).collect();
+        let message: Vec<u32> = (0..16).map(|_| rng.gen()).collect();
+
+        let x = state.iter().map(|&x| ark_bn254::Fr::from(x)).collect_vec();
+        let y = message
+            .iter()
+            .map(|&x| ark_bn254::Fr::from(x))
+            .collect_vec();
+
+        let x_shares = rep3::share_field_elements(&x, &mut rng);
+        let y_shares = rep3::share_field_elements(&y, &mut rng);
+
+        let mut blocks = [0_u8; 64];
+        for (i, block) in message.iter().enumerate() {
+            let bytes = block.to_be_bytes();
+            blocks[i * 4..i * 4 + 4].copy_from_slice(&bytes);
+        }
+
+        let blocks: GenericArray<u8, sha2::digest::typenum::U64> = blocks.into();
+        sha2::compress256(state.as_mut_slice().try_into().unwrap(), &[blocks]);
+        let should_result: Vec<_> = state
+            .iter()
+            .map(|x| ark_bn254::Fr::from(*x as u128))
+            .collect();
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx, x, y) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            x_shares.into_iter(),
+            y_shares.into_iter(),
+        ) {
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+
+                let res = rep3::yao::sha_from_bristol(
+                    x.as_slice().try_into().expect("Expected slice of size 8"),
+                    y.as_slice().try_into().expect("Expected slice of size 16"),
+                    &mut rep3,
+                )
+                .unwrap();
                 tx.send(res)
             });
         }

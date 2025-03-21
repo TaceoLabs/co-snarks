@@ -849,6 +849,26 @@ pub fn aes_from_bristol<F: PrimeField, N: Rep3Network>(
     )
 }
 
+/// TODO
+pub fn sha_from_bristol<F: PrimeField, N: Rep3Network>(
+    state: &[Rep3PrimeFieldShare<F>; 8],
+    message: &[Rep3PrimeFieldShare<F>; 16],
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
+    let mut combined_inputs = Vec::with_capacity(state.len() + message.len());
+    combined_inputs.extend_from_slice(state);
+    combined_inputs.extend_from_slice(message);
+    let total_output_elements = state.len();
+
+    decompose_circuit_compose_blueprint!(
+        &combined_inputs,
+        io_context,
+        total_output_elements,
+        GarbledCircuits::sha256_compression::<_, F>,
+        (state.len())
+    )
+}
+
 /// Divides a field element by another, rounding down.
 pub fn field_int_div_by_shared<F: PrimeField, N: Rep3Network>(
     input: F,

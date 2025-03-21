@@ -42,7 +42,7 @@ echo "Using nargo version $NARGO_VERSION"
 echo "Using bb version $BARRETENBERG_VERSION"
 echo ""
 
-test_cases=("sha256")
+test_cases=("bb_sha256_compression")
 
 run_proof_verification() {
   local name=$1
