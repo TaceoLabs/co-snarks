@@ -111,9 +111,9 @@ fn run_ultra_arith_relation(
                         black_box(UltraArithmeticRelation::accumulate(
                             &mut driver,
                             black_box(&mut acc),
-                            &data.poseidon_ext.all_entites,
+                            &data.ultra_arith.all_entites,
                             params,
-                            &data.poseidon_ext.scaling_factors,
+                            &data.ultra_arith.scaling_factors,
                         ))
                         .unwrap();
                     })
@@ -149,9 +149,9 @@ fn run_ultra_permutation_relation(
                         black_box(UltraPermutationRelation::accumulate(
                             &mut driver,
                             black_box(&mut acc),
-                            &data.poseidon_ext.all_entites,
+                            &data.ultra_perm.all_entites,
                             params,
-                            &data.poseidon_ext.scaling_factors,
+                            &data.ultra_perm.scaling_factors,
                         ))
                         .unwrap();
                     })
