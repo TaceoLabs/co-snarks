@@ -25,7 +25,7 @@ pub(crate) struct Poseidon2InternalRelationAcc<T: NoirUltraHonkProver<P>, P: Pai
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct Poseidon2InternalRelationAccHalfShared<F: PrimeField> {
+pub struct Poseidon2InternalRelationAccHalfShared<F: PrimeField> {
     pub(crate) r0: Univariate<F, 7>,
     pub(crate) r1: Univariate<F, 7>,
     pub(crate) r2: Univariate<F, 7>,
@@ -99,7 +99,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> Poseidon2InternalRelationAcc<T, P> {
     }
 }
 
-pub(crate) struct Poseidon2InternalRelation {}
+pub struct Poseidon2InternalRelation {}
 
 #[derive(Default)]
 struct IntermediateAcc<F: PrimeField + Default> {
@@ -110,7 +110,7 @@ struct IntermediateAcc<F: PrimeField + Default> {
 }
 
 impl Poseidon2InternalRelation {
-    fn accumulate_multi_threaded<T, P>(
+    pub fn accumulate_multithreaded<T, P>(
         driver: &mut T,
         univariate_accumulator: &mut Poseidon2InternalRelationAccHalfShared<P::ScalarField>,
         input: &ProverUnivariatesBatch<T, P>,
@@ -265,7 +265,7 @@ impl Poseidon2InternalRelation {
         }
         Ok(())
     }
-    fn accumulate_small<T, P>(
+    pub fn accumulate_small<T, P>(
         driver: &mut T,
         univariate_accumulator: &mut Poseidon2InternalRelationAccHalfShared<P::ScalarField>,
         input: &ProverUnivariatesBatch<T, P>,
@@ -429,7 +429,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
 
     /**
      * @brief Expression for the poseidon2 internal round relation, based on I_i in Section 6 of
-     * https://eprint.iacr.org/2023/323.pdf.
+     * <https://eprint.iacr.org/2023/323.pdf.>
      * @details This relation is defined as C(in(X)...) :=
      * q_poseidon2_internal * ( (v1 - w_1_shift) + \alpha * (v2 - w_2_shift) +
      * \alpha^2 * (v3 - w_3_shift) + \alpha^3 * (v4 - w_4_shift) ) = 0 where:
@@ -454,7 +454,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         scaling_factors: &[P::ScalarField],
     ) -> HonkProofResult<()> {
         if input.witness.w_l().len() > 1 << 14 {
-            Self::accumulate_multi_threaded::<T, P>(
+            Self::accumulate_multithreaded::<T, P>(
                 driver,
                 univariate_accumulator,
                 input,

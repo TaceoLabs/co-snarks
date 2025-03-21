@@ -32,15 +32,15 @@ pub(crate) type PartiallyEvaluatePolys<T, P> = AllEntities<
 >;
 pub(crate) type ClaimedEvaluations<F> = AllEntities<F, F>;
 
-pub(crate) struct RelationParameters<F: PrimeField> {
-    pub(crate) eta_1: F,
-    pub(crate) eta_2: F,
-    pub(crate) eta_3: F,
-    pub(crate) beta: F,
-    pub(crate) gamma: F,
-    pub(crate) public_input_delta: F,
-    pub(crate) alphas: [F; NUM_ALPHAS],
-    pub(crate) gate_challenges: Vec<F>,
+pub struct RelationParameters<F: PrimeField> {
+    pub eta_1: F,
+    pub eta_2: F,
+    pub eta_3: F,
+    pub beta: F,
+    pub gamma: F,
+    pub public_input_delta: F,
+    pub alphas: [F; NUM_ALPHAS],
+    pub gate_challenges: Vec<F>,
 }
 
 impl<T: NoirUltraHonkProver<P>, P: Pairing> ProverMemory<T, P> {

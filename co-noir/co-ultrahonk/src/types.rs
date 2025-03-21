@@ -1,5 +1,4 @@
 use co_builder::prelude::{Polynomial, PrecomputedEntities, ProverWitnessEntities};
-use rand::Rng;
 use serde::{Deserialize, Serialize};
 use ultrahonk::prelude::{ShiftedWitnessEntities, WitnessEntities};
 

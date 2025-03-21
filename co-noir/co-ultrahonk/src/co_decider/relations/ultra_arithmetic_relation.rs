@@ -22,7 +22,7 @@ pub(crate) struct UltraArithmeticRelationAcc<T: NoirUltraHonkProver<P>, P: Pairi
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct UltraArithmeticRelationAccHalfShared<T: NoirUltraHonkProver<P>, P: Pairing> {
+pub struct UltraArithmeticRelationAccHalfShared<T: NoirUltraHonkProver<P>, P: Pairing> {
     pub(crate) r0: Univariate<P::ScalarField, 6>,
     pub(crate) r1: SharedUnivariate<T, P, 5>,
 }
@@ -74,7 +74,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> UltraArithmeticRelationAcc<T, P> {
     }
 }
 
-pub(crate) struct UltraArithmeticRelation {}
+pub struct UltraArithmeticRelation {}
 
 impl UltraArithmeticRelation {
     pub(crate) const NUM_RELATIONS: usize = 2;

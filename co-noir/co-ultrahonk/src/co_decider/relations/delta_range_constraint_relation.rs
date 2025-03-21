@@ -26,7 +26,7 @@ pub(crate) struct DeltaRangeConstraintRelationAcc<T: NoirUltraHonkProver<P>, P: 
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct DeltaRangeConstraintRelationAccHalfShared<F: PrimeField> {
+pub struct DeltaRangeConstraintRelationAccHalfShared<F: PrimeField> {
     pub(crate) r0: Univariate<F, 6>,
     pub(crate) r1: Univariate<F, 6>,
     pub(crate) r2: Univariate<F, 6>,
@@ -100,7 +100,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> DeltaRangeConstraintRelationAcc<T, P
     }
 }
 
-pub(crate) struct DeltaRangeConstraintRelation {}
+pub struct DeltaRangeConstraintRelation {}
 
 impl DeltaRangeConstraintRelation {
     pub(crate) const NUM_RELATIONS: usize = 4;
@@ -136,7 +136,7 @@ impl DeltaRangeConstraintRelation {
         acc.evaluations.clone_from_slice(&tmp[..evaluations_len]);
     }
 
-    fn accumulate_multithreaded<T, P>(
+    pub fn accumulate_multithreaded<T, P>(
         driver: &mut T,
         univariate_accumulator: &mut DeltaRangeConstraintRelationAccHalfShared<P::ScalarField>,
         input: &super::ProverUnivariatesBatch<T, P>,
@@ -228,7 +228,7 @@ impl DeltaRangeConstraintRelation {
         Ok(())
     }
 
-    fn accumulate_small<T, P>(
+    pub fn accumulate_small<T, P>(
         driver: &mut T,
         univariate_accumulator: &mut DeltaRangeConstraintRelationAccHalfShared<P::ScalarField>,
         input: &super::ProverUnivariatesBatch<T, P>,

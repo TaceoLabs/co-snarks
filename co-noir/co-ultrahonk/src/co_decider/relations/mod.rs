@@ -56,7 +56,7 @@ pub(crate) use fold_accumulator;
 // This will be used inside the relations for with_min_len for rayons par_iter.
 // 0xThemis TODO We may want to have this configurable by environment or remove it as a whole.
 // We need bench marks for this when everything is done.
-const MIN_RAYON_ITER: usize = 1024;
+const MIN_RAYON_ITER: usize = 16;
 
 mod relation_utils {
 
@@ -135,7 +135,7 @@ mod relation_utils {
     pub(crate) use rayon_multi_join;
 }
 
-pub(crate) trait Relation<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> {
+pub trait Relation<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> {
     type Acc: Default;
 
     fn add_edge(

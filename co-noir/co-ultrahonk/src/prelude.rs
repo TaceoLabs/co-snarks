@@ -25,9 +25,23 @@ pub use ultrahonk::prelude::VerifyingKeyBarretenberg;
 pub use ultrahonk::prelude::ZeroKnowledge;
 pub use ultrahonk::Utils;
 
+pub use crate::co_decider::relations::ultra_arithmetic_relation::UltraArithmeticRelation;
+pub use crate::co_decider::relations::ultra_arithmetic_relation::UltraArithmeticRelationAccHalfShared;
+
 pub use crate::co_decider::relations::poseidon2_external_relation::Poseidon2ExternalRelation;
 pub use crate::co_decider::relations::poseidon2_external_relation::Poseidon2ExternalRelationAccHalfShared;
+
+pub use crate::co_decider::relations::poseidon2_internal_relation::Poseidon2InternalRelation;
+pub use crate::co_decider::relations::poseidon2_internal_relation::Poseidon2InternalRelationAccHalfShared;
+
+pub use crate::co_decider::relations::delta_range_constraint_relation::DeltaRangeConstraintRelation;
+pub use crate::co_decider::relations::delta_range_constraint_relation::DeltaRangeConstraintRelationAccHalfShared;
+
+pub use crate::co_decider::relations::permutation_relation::UltraPermutationRelation;
+pub use crate::co_decider::relations::permutation_relation::UltraPermutationRelationAccHalfShared;
+pub use crate::co_decider::relations::Relation;
 pub use crate::co_decider::types::ProverUnivariates;
+pub use crate::co_decider::types::RelationParameters;
 pub use crate::types_batch::AllEntitiesBatch;
 pub use crate::types_batch::AllEntitiesBatchRelations;
 pub use crate::types_batch::SumCheckDataForRelation;
