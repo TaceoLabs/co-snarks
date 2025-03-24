@@ -7,10 +7,16 @@ PLAINDRIVER="../../../target/release/plaindriver"
 exit_code=0
 
 REMOVE_OUTPUT=1
+REMOVE_OUTPUT_BB=1
 PIPE=""
+PIPE_BB=""
 if [[ $REMOVE_OUTPUT -eq 1 ]];
 then
     PIPE=" > /dev/null 2>&1"
+fi
+if [[ $REMOVE_OUTPUT_BB -eq 1 ]];
+then
+    PIPE_BB=" > /dev/null 2>&1"
 fi
 
 # build the plaindriver binary

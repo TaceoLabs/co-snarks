@@ -2,6 +2,7 @@
 //!
 //! This module contains operations with Yao's garbled circuits
 
+pub mod bristol_fashion;
 pub mod circuits;
 pub mod evaluator;
 pub mod garbler;

@@ -2616,6 +2616,7 @@ dependencies = [
  "fancy-garbling",
  "itertools 0.14.0",
  "mpc-net",
+ "nom",
  "num-bigint 0.4.6",
  "num-traits",
  "paste",
@@ -2626,6 +2627,7 @@ dependencies = [
  "serde",
  "sha3",
  "subtle",
+ "thiserror 2.0.12",
  "tokio",
  "tracing",
 ]
