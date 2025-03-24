@@ -4,8 +4,10 @@ use co_brillig::mpc::{PlainBrilligDriver, PlainBrilligType};
 use mpc_core::{
     gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations},
     lut::{LookupTableProvider, PlainLookupTableProvider},
+    protocols::rep3::yao::circuits::SHA256Table,
 };
 use num_bigint::BigUint;
+use sha2::digest::generic_array::GenericArray;
 use std::io;
 use std::marker::PhantomData;
 
@@ -319,106 +321,108 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
 
     fn slice_and_get_and_rotate_values(
         &mut self,
-        input1: Self::ArithmeticShare,
-        input2: Self::ArithmeticShare,
-        basis_bits: usize,
-        total_bitsize: usize,
-        rotation: usize,
+        _input1: Self::ArithmeticShare,
+        _input2: Self::ArithmeticShare,
+        _basis_bits: usize,
+        _total_bitsize: usize,
+        _rotation: usize,
     ) -> std::io::Result<(
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
     )> {
-        let num_decomps_per_field = total_bitsize.div_ceil(basis_bits);
-        let basis = BigUint::one() << basis_bits;
+        panic!("slice_and_get_and_rotate_values not implemented for plaindriver and normally should not be called");
+        // let num_decomps_per_field = total_bitsize.div_ceil(basis_bits);
+        // let basis = BigUint::one() << basis_bits;
 
-        let mut target1: BigUint = input1.into();
-        let mut target2: BigUint = input2.into();
-        let mut slices1: Vec<u64> = Vec::with_capacity(num_decomps_per_field);
-        let mut slices2: Vec<u64> = Vec::with_capacity(num_decomps_per_field);
-        for i in 0..num_decomps_per_field {
-            if i == num_decomps_per_field - 1 && (target1 >= basis || target2 >= basis) {
-                panic!("Last key slice greater than {}", basis);
-            }
-            slices1.push(
-                (&target1 % &basis)
-                    .try_into()
-                    .expect("Conversion must work"),
-            );
-            slices2.push(
-                (&target2 % &basis)
-                    .try_into()
-                    .expect("Conversion must work"),
-            );
-            target1 /= &basis;
-            target2 /= &basis;
-        }
-        let mut results = Vec::with_capacity(num_decomps_per_field);
-        slices1.iter().zip(slices2.iter()).for_each(|(s1, s2)| {
-            let res = s1 & s2;
-            results.push(F::from(if rotation != 0 {
-                (res >> rotation) | (res << (64 - rotation))
-            } else {
-                res
-            }));
-        });
-        Ok((
-            results,
-            slices1.into_iter().map(F::from).collect(),
-            slices2.into_iter().map(F::from).collect(),
-        ))
+        // let mut target1: BigUint = input1.into();
+        // let mut target2: BigUint = input2.into();
+        // let mut slices1: Vec<u64> = Vec::with_capacity(num_decomps_per_field);
+        // let mut slices2: Vec<u64> = Vec::with_capacity(num_decomps_per_field);
+        // for i in 0..num_decomps_per_field {
+        //     if i == num_decomps_per_field - 1 && (target1 >= basis || target2 >= basis) {
+        //         panic!("Last key slice greater than {}", basis);
+        //     }
+        //     slices1.push(
+        //         (&target1 % &basis)
+        //             .try_into()
+        //             .expect("Conversion must work"),
+        //     );
+        //     slices2.push(
+        //         (&target2 % &basis)
+        //             .try_into()
+        //             .expect("Conversion must work"),
+        //     );
+        //     target1 /= &basis;
+        //     target2 /= &basis;
+        // }
+        // let mut results = Vec::with_capacity(num_decomps_per_field);
+        // slices1.iter().zip(slices2.iter()).for_each(|(s1, s2)| {
+        //     let res = s1 & s2;
+        //     results.push(F::from(if rotation != 0 {
+        //         (res >> rotation) | (res << (64 - rotation))
+        //     } else {
+        //         res
+        //     }));
+        // });
+        // Ok((
+        //     results,
+        //     slices1.into_iter().map(F::from).collect(),
+        //     slices2.into_iter().map(F::from).collect(),
+        // ))
     }
 
     fn slice_and_get_xor_rotate_values(
         &mut self,
-        input1: Self::ArithmeticShare,
-        input2: Self::ArithmeticShare,
-        basis_bits: usize,
-        total_bitsize: usize,
-        rotation: usize,
+        _input1: Self::ArithmeticShare,
+        _input2: Self::ArithmeticShare,
+        _basis_bits: usize,
+        _total_bitsize: usize,
+        _rotation: usize,
     ) -> std::io::Result<(
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
     )> {
-        let num_decomps_per_field = total_bitsize.div_ceil(basis_bits);
-        let basis = BigUint::one() << basis_bits;
+        panic!("slice_and_get_xor_rotate_values not implemented for plaindriver and normally should not be called");
+        // let num_decomps_per_field = total_bitsize.div_ceil(basis_bits);
+        // let basis = BigUint::one() << basis_bits;
 
-        let mut target1: BigUint = input1.into();
-        let mut target2: BigUint = input2.into();
-        let mut slices1: Vec<u64> = Vec::with_capacity(num_decomps_per_field);
-        let mut slices2: Vec<u64> = Vec::with_capacity(num_decomps_per_field);
-        for i in 0..num_decomps_per_field {
-            if i == num_decomps_per_field - 1 && (target1 >= basis || target2 >= basis) {
-                panic!("Last key slice greater than {}", basis);
-            }
-            slices1.push(
-                (&target1 % &basis)
-                    .try_into()
-                    .expect("Conversion must work"),
-            );
-            slices2.push(
-                (&target2 % &basis)
-                    .try_into()
-                    .expect("Conversion must work"),
-            );
-            target1 /= &basis;
-            target2 /= &basis;
-        }
-        let mut results = Vec::with_capacity(num_decomps_per_field);
-        slices1.iter().zip(slices2.iter()).for_each(|(s1, s2)| {
-            let res = s1 ^ s2;
-            results.push(F::from(if rotation != 0 {
-                (res >> rotation) | (res << (64 - rotation))
-            } else {
-                res
-            }));
-        });
-        Ok((
-            results,
-            slices1.into_iter().map(F::from).collect(),
-            slices2.into_iter().map(F::from).collect(),
-        ))
+        // let mut target1: BigUint = input1.into();
+        // let mut target2: BigUint = input2.into();
+        // let mut slices1: Vec<u64> = Vec::with_capacity(num_decomps_per_field);
+        // let mut slices2: Vec<u64> = Vec::with_capacity(num_decomps_per_field);
+        // for i in 0..num_decomps_per_field {
+        //     if i == num_decomps_per_field - 1 && (target1 >= basis || target2 >= basis) {
+        //         panic!("Last key slice greater than {}", basis);
+        //     }
+        //     slices1.push(
+        //         (&target1 % &basis)
+        //             .try_into()
+        //             .expect("Conversion must work"),
+        //     );
+        //     slices2.push(
+        //         (&target2 % &basis)
+        //             .try_into()
+        //             .expect("Conversion must work"),
+        //     );
+        //     target1 /= &basis;
+        //     target2 /= &basis;
+        // }
+        // let mut results = Vec::with_capacity(num_decomps_per_field);
+        // slices1.iter().zip(slices2.iter()).for_each(|(s1, s2)| {
+        //     let res = s1 ^ s2;
+        //     results.push(F::from(if rotation != 0 {
+        //         (res >> rotation) | (res << (64 - rotation))
+        //     } else {
+        //         res
+        //     }));
+        // });
+        // Ok((
+        //     results,
+        //     slices1.into_iter().map(F::from).collect(),
+        //     slices2.into_iter().map(F::from).collect(),
+        // ))
     }
 
     fn sort_vec_by(
@@ -512,5 +516,105 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
 
     fn equal(&mut self, a: &Self::AcvmType, b: &Self::AcvmType) -> std::io::Result<Self::AcvmType> {
         Ok(Self::ArithmeticShare::from(a == b))
+    }
+
+    fn sha256_compression(
+        &mut self,
+        state: &[Self::AcvmType; 8],
+        message: &[Self::AcvmType; 16],
+    ) -> io::Result<Vec<Self::AcvmType>> {
+        let mut state_as_u32 = [0u32; 8];
+        for (i, input) in state.iter().enumerate() {
+            let x: BigUint = (input.into_bigint()).into();
+            state_as_u32[i] = x.to_u32_digits()[0];
+        }
+        let mut message_as_u32 = Vec::with_capacity(16);
+        for input in message {
+            let x: BigUint = (input.into_bigint()).into();
+            message_as_u32.push(x.to_u32_digits()[0]);
+        }
+        let mut blocks = [0_u8; 64];
+        for (i, block) in message_as_u32.iter().enumerate() {
+            let bytes = block.to_be_bytes();
+            blocks[i * 4..i * 4 + 4].copy_from_slice(&bytes);
+        }
+
+        let blocks: GenericArray<u8, sha2::digest::typenum::U64> = blocks.into();
+        sha2::compress256(&mut state_as_u32, &[blocks]);
+        state_as_u32.iter().map(|x| Ok(F::from(*x))).collect()
+    }
+
+    fn get_overflow_bit(
+        &mut self,
+        input: Self::ArithmeticShare,
+        _bit: usize,
+        max_bitsize: usize,
+    ) -> std::io::Result<Self::ArithmeticShare> {
+        let mut sum: BigUint = input.into();
+        let mask = (BigUint::from(1u64) << max_bitsize) - BigUint::one();
+        sum &= mask;
+        let normalized_sum = sum.to_u32_digits()[0];
+        Ok(Self::ArithmeticShare::from((sum - normalized_sum) >> 32))
+    }
+
+    fn map_into_sparse_form(
+        &mut self,
+        base: u64,
+        input: Self::AcvmType,
+    ) -> std::io::Result<Self::AcvmType> {
+        let mask = (BigUint::from(1u64) << 64) - BigUint::one();
+        let mut inp: BigUint = input.into();
+        inp &= mask;
+        let inp: u64 = inp.to_u64_digits()[0];
+        let mut out = 0u128;
+        fn get_base_powers<const NUM_SLICES: usize>(base: u64) -> [u128; NUM_SLICES] {
+            let mut output = [0u128; NUM_SLICES];
+            output[0] = 1;
+            for i in 1..NUM_SLICES {
+                output[i] = output[i - 1] * base as u128;
+            }
+            output
+        }
+        let base_powers = get_base_powers::<32>(base);
+        for (i, &base_power) in base_powers.iter().enumerate() {
+            let sparse_bit = (inp >> i) & 1;
+            if sparse_bit != 0 {
+                out += base_power;
+            }
+        }
+        Ok(Self::ArithmeticShare::from(out))
+    }
+
+    fn slice_and_get_sparse_table_with_rotation_values(
+        &mut self,
+        _input1: Self::ArithmeticShare,
+        _input2: Self::ArithmeticShare,
+        _basis_bits: &[u64],
+        _rotation: &[u32],
+        _total_bitsize: usize,
+        _base: u64,
+    ) -> std::io::Result<(
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+    )> {
+        panic!("slice_and_get_sparse_table_with_rotation_values not implemented for plaindriver and normally should not be called");
+    }
+
+    fn slice_and_get_sparse_normalization_values(
+        &mut self,
+        _input1: Self::ArithmeticShare,
+        _input2: Self::ArithmeticShare,
+        _base_bits: &[u64],
+        _base: u64,
+        _total_output_bitlen_per_field: usize,
+        _table_type: &SHA256Table,
+    ) -> std::io::Result<(
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+    )> {
+        panic!("slice_and_get_sparse_normalization_values not implemented for plaindriver and normally should not be called");
     }
 }

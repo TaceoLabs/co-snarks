@@ -3,6 +3,7 @@ use co_brillig::mpc::BrilligDriver;
 use mpc_core::{
     gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations},
     lut::LookupTableProvider,
+    protocols::rep3::yao::circuits::SHA256Table,
 };
 use std::{fmt, io};
 
@@ -259,6 +260,46 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         Vec<Self::AcvmType>,
     )>;
 
+    /// TODO
+    #[expect(clippy::type_complexity)]
+    fn slice_and_get_sparse_table_with_rotation_values(
+        &mut self,
+        input1: Self::ArithmeticShare,
+        input2: Self::ArithmeticShare,
+        basis_bits: &[u64],
+        rotation: &[u32],
+        total_bitsize: usize,
+        base: u64,
+    ) -> std::io::Result<(
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+    )>;
+
+    /// TODO
+    #[expect(clippy::type_complexity)]
+    fn slice_and_get_sparse_normalization_values(
+        &mut self,
+        input1: Self::ArithmeticShare,
+        input2: Self::ArithmeticShare,
+        base_bits: &[u64],
+        base: u64,
+        total_output_bitlen_per_field: usize,
+        table_type: &SHA256Table,
+    ) -> std::io::Result<(
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+    )>;
+
+    fn get_overflow_bit(
+        &mut self,
+        input: Self::ArithmeticShare,
+        bit: usize,
+        max_bitsize: usize,
+    ) -> std::io::Result<Self::ArithmeticShare>;
+
     /// Computes the Poseidon2 permutation for the given input.
     fn poseidon2_permutation<const T: usize, const D: u64>(
         &mut self,
@@ -279,7 +320,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         poseidon2: &Poseidon2<F, T, D>,
     ) -> std::io::Result<Poseidon2Precomputations<Self::ArithmeticShare>>;
 
-    /// Computes the external round fo the Poseidon2 permutation for the given input.
+    /// Computes the external round for the Poseidon2 permutation for the given input.
     fn poseidon2_external_round_inplace_with_precomp<const T: usize, const D: u64>(
         &mut self,
         input: &mut [Self::ArithmeticShare; T],
@@ -288,7 +329,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         poseidon2: &Poseidon2<F, T, D>,
     ) -> std::io::Result<()>;
 
-    /// Computes the internal round fo the Poseidon2 permutation for the given input.
+    /// Computes the internal round for the Poseidon2 permutation for the given input.
     fn poseidon2_internal_round_inplace_with_precomp<const T: usize, const D: u64>(
         &mut self,
         input: &mut [Self::ArithmeticShare; T],
@@ -296,4 +337,17 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         precomp: &mut Poseidon2Precomputations<Self::ArithmeticShare>,
         poseidon2: &Poseidon2<F, T, D>,
     ) -> std::io::Result<()>;
+
+    /// Computes the SHA256 compression from given state and message.
+    fn sha256_compression(
+        &mut self,
+        state: &[Self::AcvmType; 8],
+        message: &[Self::AcvmType; 16],
+    ) -> std::io::Result<Vec<Self::AcvmType>>;
+
+    fn map_into_sparse_form(
+        &mut self,
+        base: u64,
+        input: Self::AcvmType,
+    ) -> std::io::Result<Self::AcvmType>;
 }
