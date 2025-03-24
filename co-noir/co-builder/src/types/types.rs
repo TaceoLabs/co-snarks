@@ -150,7 +150,7 @@ pub(crate) struct BlockConstraint<F: PrimeField> {
 pub(crate) struct AcirFormatOriginalOpcodeIndices {
     pub(crate) logic_constraints: Vec<usize>,
     pub(crate) range_constraints: Vec<usize>,
-    // pub(crate) aes128_constraints: Vec<usize>,
+    pub(crate) aes128_constraints: Vec<usize>,
     // pub(crate) sha256_constraints: Vec<usize>,
     pub(crate) sha256_compression: Vec<usize>,
     // pub(crate) schnorr_constraints: Vec<usize>,
@@ -443,6 +443,13 @@ pub(crate) struct LogicConstraint<F: PrimeField> {
     pub(crate) result: u32,
     pub(crate) num_bits: u32,
     pub(crate) is_xor_gate: bool,
+}
+
+pub(crate) struct AES128Constraint<F: PrimeField> {
+    pub(crate) inputs: Vec<WitnessOrConstant<F>>,
+    pub(crate) iv: Vec<WitnessOrConstant<F>>,
+    pub(crate) key: Vec<WitnessOrConstant<F>>,
+    pub(crate) outputs: Vec<u32>,
 }
 
 impl<F: PrimeField> LogicConstraint<F> {

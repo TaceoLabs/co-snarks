@@ -1,8 +1,11 @@
+use super::plain::PlainAcvmSolver;
+use super::{NoirWitnessExtensionProtocol, downcast};
 use ark_ec::{AffineRepr, CurveGroup};
-use ark_ff::{MontConfig, One, PrimeField, Zero};
+use ark_ff::{BigInteger, MontConfig, One, PrimeField, Zero};
 use blake2::{Blake2s256, Digest};
 use co_brillig::mpc::{Rep3BrilligDriver, Rep3BrilligType};
 use itertools::{Itertools, izip};
+use libaes::Cipher;
 use mpc_core::gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations};
 use mpc_core::protocols::rep3::yao::circuits::SHA256Table;
 use mpc_core::protocols::rep3::{
@@ -23,9 +26,8 @@ use serde::{Deserialize, Serialize};
 use std::any::TypeId;
 use std::array;
 use std::marker::PhantomData;
+use std::ops::BitXor;
 
-use super::plain::PlainAcvmSolver;
-use super::{NoirWitnessExtensionProtocol, downcast};
 type ArithmeticShare<F> = Rep3PrimeFieldShare<F>;
 
 macro_rules! join {
@@ -343,6 +345,16 @@ impl<F: PrimeField> Rep3AcvmType<F> {
             }
         }
     }
+}
+
+fn get_base_powers<const NUM_SLICES: usize>(base: u64) -> [BigUint; NUM_SLICES] {
+    let mut output: [BigUint; NUM_SLICES] = array::from_fn(|_| BigUint::one());
+    let mask: BigUint = (BigUint::from(1u64) << 256) - BigUint::one();
+    for i in 1..NUM_SLICES {
+        let tmp = &output[i - 1] * base;
+        output[i] = tmp & &mask;
+    }
+    output
 }
 
 impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3AcvmSolver<F, N> {
@@ -1299,6 +1311,87 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
     }
 
+    fn equal_many(
+        &mut self,
+        a: &[Self::AcvmType],
+        b: &[Self::AcvmType],
+    ) -> std::io::Result<Vec<Self::AcvmType>> {
+        // TODO: we probably want to compare public values directly if there happen to be any in the same index
+        let bool_a = a.iter().any(|v| Self::is_shared(v));
+        let bool_b = b.iter().any(|v| Self::is_shared(v));
+        if !bool_a && !bool_b {
+            Ok(a.iter()
+                .zip(b.iter())
+                .map(|(a, b)| Self::equal(self, a, b).unwrap())
+                .collect())
+        } else if bool_a && !bool_b {
+            let b = b
+                .iter()
+                .map(|v| Self::get_public(v).expect("Already checked it is public"))
+                .collect::<Vec<_>>();
+            let a: Vec<Self::ArithmeticShare> = a
+                .iter()
+                .map(|v| {
+                    if Self::is_shared(v) {
+                        Self::get_shared(v).expect("Already checked it is shared")
+                    } else {
+                        self.promote_to_trivial_share(
+                            Self::get_public(v).expect("Already checked it is public"),
+                        )
+                    }
+                })
+                .collect();
+            arithmetic::eq_public_many(&a, &b, &mut self.io_context0)
+                .map(|shares| shares.into_iter().map(Rep3AcvmType::Shared).collect())
+        } else if !bool_a && bool_b {
+            let a = a
+                .iter()
+                .map(|v| Self::get_public(v).expect("Already checked it is public"))
+                .collect::<Vec<_>>();
+            let b: Vec<Self::ArithmeticShare> = b
+                .iter()
+                .map(|v| {
+                    if Self::is_shared(v) {
+                        Self::get_shared(v).expect("Already checked it is shared")
+                    } else {
+                        self.promote_to_trivial_share(
+                            Self::get_public(v).expect("Already checked it is public"),
+                        )
+                    }
+                })
+                .collect();
+            arithmetic::eq_public_many(&b, &a, &mut self.io_context0)
+                .map(|shares| shares.into_iter().map(Rep3AcvmType::Shared).collect())
+        } else {
+            let a: Vec<Self::ArithmeticShare> = a
+                .iter()
+                .map(|v| {
+                    if Self::is_shared(v) {
+                        Self::get_shared(v).expect("Already checked it is shared")
+                    } else {
+                        self.promote_to_trivial_share(
+                            Self::get_public(v).expect("Already checked it is public"),
+                        )
+                    }
+                })
+                .collect();
+            let b: Vec<Self::ArithmeticShare> = b
+                .iter()
+                .map(|v| {
+                    if Self::is_shared(v) {
+                        Self::get_shared(v).expect("Already checked it is shared")
+                    } else {
+                        self.promote_to_trivial_share(
+                            Self::get_public(v).expect("Already checked it is public"),
+                        )
+                    }
+                })
+                .collect();
+            arithmetic::eq_many(&a, &b, &mut self.io_context0)
+                .map(|shares| shares.into_iter().map(Rep3AcvmType::Shared).collect())
+        }
+    }
+
     fn multi_scalar_mul(
         &mut self,
         points: &[Self::AcvmType],
@@ -1620,15 +1713,6 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             .map(|a| Rep3AcvmType::Shared(*a))
             .collect();
 
-        fn get_base_powers<const NUM_SLICES: usize>(base: u64) -> [BigUint; NUM_SLICES] {
-            let mut output: [BigUint; NUM_SLICES] = array::from_fn(|_| BigUint::one());
-            let mask: BigUint = (BigUint::from(1u64) << 256) - BigUint::one();
-            for i in 1..NUM_SLICES {
-                let tmp = output[i - 1].clone() * base;
-                output[i] = tmp & mask.clone();
-            }
-            output
-        }
         let rotation_values: Vec<_> = result
             .into_iter()
             .skip(2 * slices)
@@ -1733,8 +1817,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             for (inp, num_bits) in message_input.into_iter().zip(num_bits.iter()) {
                 let inp = Self::get_public(&inp).expect("Already checked it is public");
                 let num_elements = num_bits.div_ceil(8); // We need to round to the next byte
-                let mut bytes = Vec::new();
-                inp.serialize_uncompressed(&mut bytes).unwrap();
+                let bytes = inp.into_bigint().to_bytes_le();
                 real_input.extend_from_slice(&bytes[..num_elements])
             }
             let output_bytes: [u8; 32] = Blake2s256::digest(real_input).into();
@@ -1771,8 +1854,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             for (inp, num_bits) in message_input.into_iter().zip(num_bits.iter()) {
                 let inp = Self::get_public(&inp).expect("Already checked it is public");
                 let num_elements = num_bits.div_ceil(8); // We need to round to the next byte
-                let mut bytes = Vec::new();
-                inp.serialize_uncompressed(&mut bytes).unwrap();
+                let bytes = inp.into_bigint().to_bytes_le();
                 real_input.extend_from_slice(&bytes[..num_elements])
             }
             let output_bytes: [u8; 32] = blake3::hash(&real_input).into();
@@ -1858,5 +1940,270 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         let res = arithmetic::mul_vec(&[x, y], &[mul, mul], &mut self.io_context0)?;
 
         Ok((res[0].into(), res[1].into(), i.into()))
+    }
+
+    fn aes128_encrypt(
+        &mut self,
+        scalars: &[Self::AcvmType],
+        iv: Vec<Self::AcvmType>,
+        key: Vec<Self::AcvmType>,
+    ) -> std::io::Result<Vec<Self::AcvmType>> {
+        if scalars
+            .iter()
+            .zip(iv.iter().zip(key.iter()))
+            .all(|(scalar, (iv_elem, key_elem))| {
+                !Self::is_shared(scalar) && !Self::is_shared(iv_elem) && !Self::is_shared(key_elem)
+            })
+        {
+            let mut scalar_to_be_bytes = Vec::with_capacity(scalars.len());
+            let mut iv_to_be_bytes = Vec::with_capacity(iv.len());
+            let mut key_to_be_bytes = Vec::with_capacity(key.len());
+            for inp in scalars.iter() {
+                let inp = Self::get_public(inp).expect("Already checked it is public");
+                let byte = inp.into_bigint().as_ref()[0].to_le_bytes()[0];
+                scalar_to_be_bytes.push(byte);
+            }
+            for inp in iv {
+                let inp = Self::get_public(&inp).expect("Already checked it is public");
+                let byte = inp.into_bigint().as_ref()[0].to_le_bytes()[0];
+                iv_to_be_bytes.push(byte);
+            }
+            for inp in key {
+                let inp = Self::get_public(&inp).expect("Already checked it is public");
+                let byte = inp.into_bigint().as_ref()[0].to_le_bytes()[0];
+                key_to_be_bytes.push(byte);
+            }
+            let cipher = Cipher::new_128(
+                key_to_be_bytes
+                    .as_slice()
+                    .try_into()
+                    .expect("slice with incorrect length"),
+            );
+            let encrypted = cipher.cbc_encrypt(&iv_to_be_bytes, &scalar_to_be_bytes);
+            encrypted
+                .into_iter()
+                .map(|x| Ok(Rep3AcvmType::Public(F::from(x as u128))))
+                .collect()
+        } else {
+            let scalars: Vec<_> = scalars
+                .iter()
+                .map(|y| match y {
+                    Rep3AcvmType::Public(public) => {
+                        arithmetic::promote_to_trivial_share(self.io_context0.id, *public)
+                    }
+                    Rep3AcvmType::Shared(shared) => *shared,
+                })
+                .collect();
+            let iv: Vec<_> = iv
+                .iter()
+                .map(|y| match y {
+                    Rep3AcvmType::Public(public) => {
+                        arithmetic::promote_to_trivial_share(self.io_context0.id, *public)
+                    }
+                    Rep3AcvmType::Shared(shared) => *shared,
+                })
+                .collect();
+            let key: Vec<_> = key
+                .iter()
+                .map(|y| match y {
+                    Rep3AcvmType::Public(public) => {
+                        arithmetic::promote_to_trivial_share(self.io_context0.id, *public)
+                    }
+                    Rep3AcvmType::Shared(shared) => *shared,
+                })
+                .collect();
+            let result = yao::aes_from_bristol(&scalars, &key, &iv, &mut self.io_context0)?;
+
+            result
+                .iter()
+                .map(|y| Ok(Rep3AcvmType::Shared(*y)))
+                .collect::<Result<Vec<_>, _>>()
+        }
+    }
+
+    fn slice_and_get_aes_sparse_normalization_values_from_key(
+        &mut self,
+        input1: Self::ArithmeticShare,
+        input2: Self::ArithmeticShare,
+        base_bits: &[u64],
+        base: u64,
+    ) -> std::io::Result<(
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+    )> {
+        let bitsize = base_bits[0].ilog2() as usize;
+        let _total_size = bitsize * base_bits.len();
+        let results = yao::slice_and_map_from_sparse_form(
+            input1,
+            input2,
+            &mut self.io_context0,
+            base_bits,
+            base,
+            64,
+        )?;
+        let slices = base_bits.len();
+        let num_outputs = results.len();
+        debug_assert_eq!(num_outputs, 2 * slices + 64 * slices);
+        let key_a_slices: Vec<_> = results
+            .iter()
+            .take(slices)
+            .map(|a| Rep3AcvmType::Shared(*a))
+            .collect();
+        let key_b_slices: Vec<_> = results
+            .iter()
+            .skip(slices)
+            .take(slices)
+            .map(|a| Rep3AcvmType::Shared(*a))
+            .collect();
+
+        let sliced_bits: Vec<_> = results
+            .into_iter()
+            .skip(2 * slices)
+            .map(|a| Rep3AcvmType::Shared(a))
+            .collect();
+        let base_powers = get_base_powers::<32>(base);
+        let base_powers: [F; 32] = array::from_fn(|i| F::from(base_powers[i].clone()));
+        let mut res0 = Vec::with_capacity(sliced_bits.len() / 8);
+        for chunk in sliced_bits.chunks_exact(8) {
+            let vec_t0 = chunk.to_vec();
+            let mut sum_a = self.mul_with_public(base_powers[0], vec_t0[0].clone());
+
+            for (i, a) in vec_t0.iter().enumerate().skip(1).take(31) {
+                let tmp = self.mul_with_public(base_powers[i], a.clone());
+                sum_a = self.add(sum_a, tmp);
+            }
+
+            res0.push(sum_a);
+        }
+        Ok((res0, key_a_slices, key_b_slices))
+    }
+
+    fn slice_and_get_aes_sbox_values_from_key(
+        &mut self,
+        input1: Self::ArithmeticShare,
+        input2: Self::ArithmeticShare,
+        base_bits: &[u64],
+        base: u64,
+        sbox: &[u8],
+    ) -> std::io::Result<(
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+    )> {
+        let results = yao::slice_and_map_from_sparse_form_sbox(
+            input1,
+            input2,
+            &mut self.io_context0,
+            base_bits,
+            base,
+            64,
+        )?;
+        let slices = base_bits.len();
+        let num_outputs = results.len();
+        debug_assert_eq!(num_outputs, 3 * slices);
+        let key_a_slices: Vec<_> = results
+            .iter()
+            .take(slices)
+            .map(|a| Rep3AcvmType::Shared(*a))
+            .collect();
+        let key_b_slices: Vec<_> = results
+            .iter()
+            .skip(slices)
+            .take(slices)
+            .map(|a| Rep3AcvmType::Shared(*a))
+            .collect();
+
+        let res0 = conversion::a2b_many(&results[2 * slices..], &mut self.io_context0)?;
+
+        let sbox_lut = mpc_core::protocols::rep3_ring::lut::PublicPrivateLut::Public(
+            sbox.iter().map(|&value| F::from(value)).collect::<Vec<_>>(),
+        );
+        let base_powers = get_base_powers::<32>(base);
+        let base_powers: [F; 32] = array::from_fn(|i| F::from(base_powers[i].clone()));
+        let mut res1 = Vec::with_capacity(res0.len());
+        let mut res2 = Vec::with_capacity(res0.len());
+        for index_bits in res0 {
+            let sbox_value = Rep3LookupTable::get_from_public_lut_no_b2a_conversion::<u8, _>(
+                index_bits,
+                &sbox_lut,
+                &mut self.io_context0,
+                &mut self.io_context1,
+            )?;
+            let shift_1 = &sbox_value << 1;
+            let shift_2 = &sbox_value >> 7;
+            let and = shift_2 & BigUint::one();
+
+            // This is a multiplication by 0x1b in the binary domain
+            let mut and2a = &and << 4;
+            and2a = and2a.bitxor(&and << 3);
+            and2a = and2a.bitxor(&and << 1);
+            and2a = and2a.bitxor(and);
+
+            let swizzled = shift_1.bitxor(and2a);
+            let value = swizzled.bitxor(sbox_value.clone());
+            let mut a_bits_split = (0..8).map(|i| (&value >> i) & BigUint::one()).collect_vec();
+            a_bits_split.extend(
+                (0..8)
+                    .map(|i| (&sbox_value >> i) & BigUint::one())
+                    .collect_vec(),
+            );
+            let bin_share = mpc_core::protocols::rep3::conversion::bit_inject_many(
+                &a_bits_split,
+                &mut self.io_context0,
+            )?;
+            let (first_bin_share, second_bin_share) = bin_share.split_at(bin_share.len() / 2);
+            let mut sum_a = arithmetic::mul_public(first_bin_share[0], base_powers[0]);
+            let mut sum_b = arithmetic::mul_public(second_bin_share[0], base_powers[0]);
+            for (vec_t0_, vec_t1_, base_power) in izip!(
+                first_bin_share.iter().cloned(),
+                second_bin_share.iter().cloned(),
+                base_powers.iter()
+            )
+            .skip(1)
+            .take(31)
+            {
+                let tmp = arithmetic::mul_public(vec_t0_, *base_power);
+                sum_a = arithmetic::add(sum_a, tmp);
+                let tmp = arithmetic::mul_public(vec_t1_, *base_power);
+                sum_b = arithmetic::add(sum_b, tmp);
+            }
+            res1.push(Rep3AcvmType::Shared(sum_b));
+            res2.push(Rep3AcvmType::Shared(sum_a));
+        }
+
+        Ok((res1, res2, key_a_slices, key_b_slices))
+    }
+
+    fn accumulate_from_sparse_bytes(
+        &mut self,
+        inputs: &[Self::AcvmType],
+        base: u64,
+        input_bitsize: usize,
+        output_bitsize: usize,
+    ) -> std::io::Result<Self::AcvmType> {
+        let inputs: Vec<_> = inputs
+            .iter()
+            .map(|y| {
+                if Self::is_shared(y) {
+                    Self::get_shared(y).expect("Already checked it is shared")
+                } else {
+                    self.promote_to_trivial_share(
+                        Self::get_public(y).expect("Already checked it is public"),
+                    )
+                }
+            })
+            .collect();
+        let result = yao::accumulate_from_sparse_bytes(
+            &inputs,
+            &mut self.io_context0,
+            input_bitsize,
+            output_bitsize,
+            base,
+        )?;
+        let num_outputs = result.len();
+        debug_assert_eq!(num_outputs, 1);
+        Ok(Rep3AcvmType::Shared(result[0]))
     }
 }

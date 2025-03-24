@@ -3,11 +3,13 @@ use crate::acir_format::{HonkRecursion, ProgramMetadata};
 use crate::keys::verification_key::PublicComponentKey;
 use crate::polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK;
 use crate::prelude::HonkCurve;
+use crate::types::aes128;
 use crate::types::big_field::{BigField, BigGroup};
 use crate::types::blake2s::Blake2s;
 use crate::types::blake3::blake3s;
 use crate::types::field_ct::{CycleGroupCT, CycleScalarCT};
 use crate::types::sha_compression::SHA256;
+use crate::types::types::AES128Constraint;
 use crate::types::types::{
     AggregationState, EcAdd, EccAddGate, MultiScalarMul, Sha256Compression, WitnessOrConstant,
 };
@@ -3684,9 +3686,9 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         }
 
         // Add aes128 constraints
-        // for (i, constraint) in constraint_system.aes128_constraints.iter().enumerate() {
-        //     todo!("aes128 gates");
-        // }
+        for constraint in constraint_system.aes128_constraints.iter() {
+            self.create_aes128_constraints(driver, constraint)?;
+        }
 
         // Add sha256 constraints
         for constraint in constraint_system.sha256_compression.iter() {
@@ -3897,6 +3899,54 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             self.num_gates += 1;
         }
         read_data
+    }
+
+    fn create_aes128_constraints(
+        &mut self,
+        driver: &mut T,
+        constraint: &AES128Constraint<P::ScalarField>,
+    ) -> std::io::Result<()> {
+        let padding_size = 16 - (constraint.inputs.len() % 16);
+
+        // Perform the conversions from array of bytes to field elements
+        let mut converted_inputs = Vec::with_capacity(constraint.inputs.len().div_ceil(16));
+        for chunk in constraint.inputs.chunks(16) {
+            let to_add = if chunk.len() < 16 {
+                aes128::pack_input_bytes_into_field(chunk, padding_size, self, driver)?
+            } else {
+                aes128::pack_input_bytes_into_field(chunk, 0, self, driver)?
+            };
+            converted_inputs.push(to_add);
+        }
+
+        let mut converted_outputs = Vec::with_capacity(constraint.outputs.len() / 16);
+        for chunk in constraint.outputs.chunks(16) {
+            let outputs: [u32; 16] = chunk
+                .try_into()
+                .expect("Output chunk must have 16 elements");
+            converted_outputs.push(aes128::pack_output_bytes_into_field(
+                &outputs, self, driver,
+            )?);
+        }
+
+        let output_bytes = aes128::AES128::encrypt_buffer_cbc(
+            &converted_inputs,
+            &aes128::pack_input_bytes_into_field(&constraint.iv, 0, self, driver)?,
+            &aes128::pack_input_bytes_into_field(&constraint.key, 0, self, driver)?,
+            self,
+            driver,
+        )?;
+
+        for (i, output_byte) in output_bytes.iter().enumerate() {
+            let expected_output = converted_outputs[i].normalize(self, driver);
+            let actual_output = output_byte.normalize(self, driver);
+            self.assert_equal(
+                actual_output.witness_index as usize,
+                expected_output.witness_index as usize,
+            );
+        }
+
+        Ok(())
     }
 
     fn create_multi_scalar_mul_constraint(

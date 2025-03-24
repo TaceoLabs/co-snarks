@@ -1,16 +1,19 @@
 mod field_share {
+    use ark_ff::BigInteger;
     use ark_ff::Field;
     use ark_ff::One;
     use ark_ff::PrimeField;
-    use ark_serialize::CanonicalSerialize;
     use ark_std::{UniformRand, Zero};
     use blake2::{Blake2s256, Digest};
     use co_builder::prelude::Utils;
+    use co_builder::prelude::AES128_SBOX;
     use itertools::izip;
     use itertools::Itertools;
+    use libaes::Cipher;
     use mpc_core::gadgets::poseidon2::Poseidon2;
     use mpc_core::protocols::rep3::conversion;
     use mpc_core::protocols::rep3::gadgets;
+    use mpc_core::protocols::rep3::network::Rep3Network;
     use mpc_core::protocols::rep3::yao;
     use mpc_core::protocols::rep3::yao::circuits::GarbledCircuits;
     use mpc_core::protocols::rep3::yao::circuits::SHA256Table;
@@ -25,10 +28,27 @@ mod field_share {
     use num_bigint::BigUint;
     use rand::thread_rng;
     use rand::Rng;
+    use std::array;
+    use std::ops::BitXor;
     use std::str::FromStr;
     use std::sync::mpsc;
     use std::thread;
     use tests::rep3_network::Rep3TestNetwork;
+
+    // This is helpful for debugging
+    #[expect(dead_code)]
+    fn open_many<F: PrimeField>(
+        net: &mut IoContext<tests::rep3_network::PartyTestNetwork>,
+        a: Vec<crate::rep3::field_share::rep3::Rep3PrimeFieldShare<F>>,
+    ) -> std::io::Result<Vec<F>> {
+        let bs = a.iter().map(|x| x.b).collect_vec();
+        net.network.send_next(bs)?;
+        let mut cs = net.network.recv_prev::<Vec<F>>()?;
+
+        izip!(a, cs.iter_mut()).for_each(|(x, c)| *c += x.a + x.b);
+
+        Ok(cs)
+    }
 
     // TODO we dont need channels, we can just join
 
@@ -2006,6 +2026,441 @@ mod field_share {
         );
     }
 
+    fn slice_and_get_aes_sparse_normalization_values<const BASE: u64>(slice_sizes: Vec<u64>) {
+        const VEC_SIZE: usize = 3;
+        const TOTAL_BIT_SIZE: usize = 64;
+
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let mask: BigUint = (BigUint::one() << TOTAL_BIT_SIZE) - BigUint::one();
+        let keys_a = (0..VEC_SIZE)
+            .map(|_| {
+                let res = BigUint::from(ark_bn254::Fr::rand(&mut rng)) & &mask;
+                ark_bn254::Fr::from(res)
+            })
+            .collect_vec();
+        let keys_b = (0..VEC_SIZE)
+            .map(|_| {
+                let res = BigUint::from(ark_bn254::Fr::rand(&mut rng)) & &mask;
+                ark_bn254::Fr::from(res)
+            })
+            .collect_vec();
+        let x_shares = rep3::share_field_elements(&keys_a, &mut rng);
+        let y_shares = rep3::share_field_elements(&keys_b, &mut rng);
+
+        let mut should_result = Vec::new();
+        for (x, y) in keys_a.into_iter().zip(keys_b.into_iter()) {
+            let mut x: BigUint = x.into();
+            let mut y: BigUint = y.into();
+            let mut xs = Vec::with_capacity(slice_sizes.len());
+            let mut ys = Vec::with_capacity(slice_sizes.len());
+            let mut rs0 = Vec::with_capacity(slice_sizes.len());
+
+            for slice in slice_sizes.iter() {
+                let res1 = &x % slice;
+                xs.push(ark_bn254::Fr::from(res1.clone()));
+                rs0.push(ark_bn254::Fr::from(
+                    Utils::map_into_sparse_form::<{ BASE }>(
+                        Utils::map_from_sparse_form::<{ BASE }>(res1),
+                    ),
+                ));
+                x /= *slice;
+                let res2 = &y % slice;
+                ys.push(ark_bn254::Fr::from(res2.clone()));
+                y /= *slice;
+            }
+            should_result.extend(xs);
+            should_result.extend(ys);
+            should_result.extend(rs0);
+        }
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx, x, y) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            x_shares.into_iter(),
+            y_shares.into_iter(),
+        ) {
+            let base_bits = slice_sizes.clone();
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+
+                let res = rep3::yao::slice_and_map_from_sparse_form_many(
+                    &x,
+                    &y,
+                    &mut rep3,
+                    &base_bits,
+                    BASE,
+                    TOTAL_BIT_SIZE,
+                )
+                .unwrap();
+                tx.send(res)
+            });
+        }
+        let base_powers = Utils::get_base_powers::<BASE, 32>();
+        let base_powers = base_powers
+            .iter()
+            .map(|x| ark_bn254::Fr::from(x.clone()))
+            .collect_vec();
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let result_chunk = result3.len() / VEC_SIZE;
+        let is_result = rep3::combine_field_elements(&result1, &result2, &result3);
+        let mut result = Vec::new();
+        let slices_len = slice_sizes.len();
+
+        for res in is_result.chunks_exact(result_chunk) {
+            result.extend_from_slice(&res[..2 * slices_len]);
+            let mut res0 = Vec::with_capacity((res.len() - 2 * slices_len) / 8);
+            for chunk in res[2 * slices_len..].chunks_exact(8) {
+                let mut vec_t0 = chunk.to_vec();
+
+                for (a, b) in vec_t0.iter_mut().zip(base_powers.iter()) {
+                    *a *= b;
+                }
+
+                let sum_a = vec_t0.iter().sum::<ark_bn254::Fr>();
+                res0.push(sum_a);
+            }
+            result.extend(res0);
+        }
+
+        assert_eq!(result, should_result);
+    }
+
+    #[test]
+    fn test_slice_and_get_aes_sparse_normalization_values() {
+        slice_and_get_aes_sparse_normalization_values::<9>(vec![9u64.pow(4); 2]);
+    }
+
+    fn slice_and_get_aes_sbox_values<const BASE: u64>(slice_sizes: Vec<u64>) {
+        const VEC_SIZE: usize = 5;
+        const TOTAL_BIT_SIZE: usize = 64;
+        let s_box = AES128_SBOX;
+
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let mask: BigUint = (BigUint::one() << TOTAL_BIT_SIZE) - BigUint::one();
+        let keys_a = (0..VEC_SIZE)
+            .map(|_| {
+                let res = BigUint::from(ark_bn254::Fr::rand(&mut rng)) & &mask;
+                ark_bn254::Fr::from(res)
+            })
+            .collect_vec();
+        let keys_b = (0..VEC_SIZE)
+            .map(|_| {
+                let res = BigUint::from(ark_bn254::Fr::rand(&mut rng)) & &mask;
+                ark_bn254::Fr::from(res)
+            })
+            .collect_vec();
+        let x_shares = rep3::share_field_elements(&keys_a, &mut rng);
+        let y_shares = rep3::share_field_elements(&keys_b, &mut rng);
+
+        let mut should_result = Vec::new();
+        for (x, y) in keys_a.into_iter().zip(keys_b.into_iter()) {
+            let mut x: BigUint = x.into();
+            let mut y: BigUint = y.into();
+            let mut xs = Vec::with_capacity(slice_sizes.len());
+            let mut ys = Vec::with_capacity(slice_sizes.len());
+            let mut rs0 = Vec::with_capacity(slice_sizes.len());
+            let mut rs1 = Vec::with_capacity(slice_sizes.len());
+
+            for slice in slice_sizes.iter() {
+                let res1 = &x % slice;
+                xs.push(ark_bn254::Fr::from(res1.clone()));
+                let byte = Utils::map_from_sparse_form::<{ BASE }>(res1);
+                let sbox_value = AES128_SBOX[byte as usize];
+                let swizzled = (sbox_value << 1u8) ^ (((sbox_value >> 7u8) & 1u8) * 0x1b);
+                rs0.push(ark_bn254::Fr::from(
+                    Utils::map_into_sparse_form::<{ BASE }>(sbox_value as u64),
+                ));
+                rs1.push(ark_bn254::Fr::from(
+                    Utils::map_into_sparse_form::<{ BASE }>((sbox_value ^ swizzled) as u64),
+                ));
+                x /= *slice;
+                let res2 = &y % slice;
+                ys.push(ark_bn254::Fr::from(res2.clone()));
+                y /= *slice;
+            }
+            should_result.extend(xs);
+            should_result.extend(ys);
+            should_result.extend(rs0);
+            should_result.extend(rs1);
+        }
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx, x, y) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            x_shares.into_iter(),
+            y_shares.into_iter(),
+        ) {
+            let base_bits = slice_sizes.clone();
+            let slices = slice_sizes.len();
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+                let mut rep3_2 = rep3.fork().unwrap();
+                let res = rep3::yao::slice_and_map_from_sparse_form_many_sbox(
+                    &x,
+                    &y,
+                    &mut rep3,
+                    &base_bits,
+                    BASE,
+                    TOTAL_BIT_SIZE,
+                )
+                .unwrap();
+                let result_chunk = res.len() / VEC_SIZE;
+                let mut xs = Vec::new();
+                let mut ys = Vec::new();
+                let mut rs = Vec::new();
+                let mut rs0 = Vec::new();
+                let mut rs1 = Vec::new();
+                for val in res.chunks(result_chunk) {
+                    xs.extend_from_slice(&val[..slices]);
+                    ys.extend_from_slice(&val[slices..2 * slices]);
+                    rs.extend_from_slice(&val[2 * slices..]);
+                }
+
+                let sbox_lut = rep3_ring::lut::PublicPrivateLut::Public(
+                    s_box
+                        .iter()
+                        .map(|&value| ark_bn254::Fr::from(value))
+                        .collect::<Vec<_>>(),
+                );
+                let base_powers = Utils::get_base_powers::<BASE, 32>();
+                let base_powers: [ark_bn254::Fr; 32] =
+                    array::from_fn(|i| ark_bn254::Fr::from(base_powers[i].clone()));
+
+                let rs = conversion::a2b_many(&rs, &mut rep3).unwrap();
+                for key in rs {
+                    let sbox_value =
+                        rep3_ring::lut::Rep3LookupTable::get_from_public_lut_no_b2a_conversion::<
+                            u8,
+                            _,
+                        >(key, &sbox_lut, &mut rep3, &mut rep3_2)
+                        .unwrap();
+
+                    let shift_1 = sbox_value.clone() << 1;
+                    let shift_2 = sbox_value.clone() >> 7;
+                    let and = shift_2 & BigUint::one();
+
+                    // This is a multiplication by 0x1b in the binary domain
+                    let mut and2a = &and << 4;
+                    and2a = and2a.bitxor(&and << 3);
+                    and2a = and2a.bitxor(&and << 1);
+                    and2a = and2a.bitxor(and);
+
+                    let swizzled = shift_1.bitxor(and2a);
+                    let value = swizzled.bitxor(sbox_value.clone());
+                    let mut a_bits_split =
+                        (0..8).map(|i| (&value >> i) & BigUint::one()).collect_vec();
+                    a_bits_split.extend(
+                        (0..8)
+                            .map(|i| (&sbox_value >> i) & BigUint::one())
+                            .collect_vec(),
+                    );
+                    let bin_share =
+                        rep3::conversion::bit_inject_many(&a_bits_split, &mut rep3).unwrap();
+                    let (bin_share, second_bin_share) = bin_share.split_at(bin_share.len() / 2);
+                    let mut sum_a = arithmetic::mul_public(bin_share[0], base_powers[0]);
+                    let mut sum_b = arithmetic::mul_public(second_bin_share[0], base_powers[0]);
+                    for (vec_t0_, vec_t1_, base_power) in izip!(
+                        bin_share.iter().cloned(),
+                        second_bin_share.iter().cloned(),
+                        base_powers.iter()
+                    )
+                    .skip(1)
+                    .take(31)
+                    {
+                        let tmp = arithmetic::mul_public(vec_t0_, *base_power);
+                        sum_a = arithmetic::add(sum_a, tmp);
+                        let tmp = arithmetic::mul_public(vec_t1_, *base_power);
+                        sum_b = arithmetic::add(sum_b, tmp);
+                    }
+                    rs0.push(sum_b);
+                    rs1.push(sum_a);
+                }
+                let mut result: Vec<_> = Vec::new();
+                for (x, y, r0, r1) in izip!(
+                    xs.chunks(slices),
+                    ys.chunks(slices),
+                    rs0.chunks(slices),
+                    rs1.chunks(slices),
+                ) {
+                    result.extend(x);
+                    result.extend(y);
+                    result.extend(r0);
+                    result.extend(r1);
+                }
+                tx.send(result)
+            });
+        }
+
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+
+        let is_result = rep3::combine_field_elements(&result1, &result2, &result3);
+        assert_eq!(is_result, should_result);
+    }
+
+    #[test]
+    fn test_slice_and_get_aes_sbox_values() {
+        const NUM_RUNS: usize = 5;
+        for _ in 0..NUM_RUNS {
+            slice_and_get_aes_sbox_values::<9>(vec![9u64.pow(8); 1]);
+        }
+    }
+
+    fn accumulate_from_sparse_bytes<const BASE: u64>(input_bitsize: usize, output_bitsize: usize) {
+        const VEC_SIZE: usize = 16;
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let mask: BigUint = (BigUint::one() << input_bitsize) - BigUint::one();
+        let input = (0..VEC_SIZE)
+            .map(|_| {
+                let res = BigUint::from(ark_bn254::Fr::rand(&mut rng)) & &mask;
+                ark_bn254::Fr::from(res)
+            })
+            .collect_vec();
+
+        let x_shares = rep3::share_field_elements(&input, &mut rng);
+
+        let mut accumulator = BigUint::zero();
+        let byte_mask: BigUint = (BigUint::one() << output_bitsize) - BigUint::one();
+        for byte in input.iter() {
+            let mut sparse_byte = BigUint::from(*byte);
+            sparse_byte &= BigUint::from(u64::MAX);
+            let byte = Utils::map_from_sparse_form::<BASE>(sparse_byte);
+            accumulator <<= 8;
+            accumulator += BigUint::from(byte) & byte_mask.clone();
+        }
+        let should_result = ark_bn254::Fr::from(accumulator);
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx, x) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            x_shares.into_iter(),
+        ) {
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+
+                let res = rep3::yao::accumulate_from_sparse_bytes(
+                    &x,
+                    &mut rep3,
+                    input_bitsize,
+                    output_bitsize,
+                    BASE,
+                )
+                .unwrap();
+                tx.send(res)
+            });
+        }
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3::combine_field_elements(&result1, &result2, &result3);
+
+        assert_eq!(is_result[0], should_result);
+    }
+
+    #[test]
+    fn test_accumulate_from_sparse_bytes() {
+        const BASE: u64 = 9;
+        let input_bitsize = 64;
+        let output_bitsize = 8;
+        accumulate_from_sparse_bytes::<{ BASE }>(input_bitsize, output_bitsize);
+    }
+
+    #[test]
+    fn rep3_aes() {
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let plaintext_size: usize = rng.gen::<u8>() as usize % 1024;
+        let key: Vec<u8> = (0..16).map(|_| rng.gen()).collect();
+        let iv: Vec<u8> = (0..16).map(|_| rng.gen()).collect();
+        let pt: Vec<u8> = (0..plaintext_size).map(|_| rng.gen()).collect();
+
+        let x = pt.iter().map(|&x| ark_bn254::Fr::from(x)).collect_vec();
+        let y = key.iter().map(|&x| ark_bn254::Fr::from(x)).collect_vec();
+        let z = iv.iter().map(|&x| ark_bn254::Fr::from(x)).collect_vec();
+
+        let x_shares = rep3::share_field_elements(&x, &mut rng);
+        let y_shares = rep3::share_field_elements(&y, &mut rng);
+        let z_shares = rep3::share_field_elements(&z, &mut rng);
+
+        let mut pt_to_be_bytes = Vec::with_capacity(x.len());
+        let mut iv_to_be_bytes = Vec::with_capacity(y.len());
+        let mut key_to_be_bytes = Vec::with_capacity(z.len());
+        for inp in x {
+            let byte = inp.into_bigint().as_ref()[0].to_le_bytes()[0];
+            pt_to_be_bytes.push(byte);
+        }
+        for inp in y {
+            let byte = inp.into_bigint().as_ref()[0].to_le_bytes()[0];
+            key_to_be_bytes.push(byte);
+        }
+        for inp in z {
+            let byte = inp.into_bigint().as_ref()[0].to_le_bytes()[0];
+            iv_to_be_bytes.push(byte);
+        }
+        let cipher = Cipher::new_128(
+            key_to_be_bytes
+                .as_slice()
+                .try_into()
+                .expect("slice with incorrect length"),
+        );
+        let encrypted = cipher.cbc_encrypt(&iv_to_be_bytes, &pt_to_be_bytes);
+        let should_result: Vec<_> = encrypted
+            .iter()
+            .map(|x| ark_bn254::Fr::from(*x as u128))
+            .collect();
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+        for (net, tx, x, y, z) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            x_shares.into_iter(),
+            y_shares.into_iter(),
+            z_shares.into_iter()
+        ) {
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+                let res = rep3::yao::aes_from_bristol(&x, &y, &z, &mut rep3).unwrap();
+                tx.send(res)
+            });
+        }
+
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+
+        let is_result = rep3::combine_field_elements(&result1, &result2, &result3);
+        assert_eq!(
+            is_result
+                .iter()
+                .map(|&x| ark_bn254::Fr::from(x))
+                .collect_vec(),
+            should_result
+                .iter()
+                .map(|&x| ark_bn254::Fr::from(x))
+                .collect_vec()
+        );
+    }
+
     fn rep3_mod_red(a: u64, b: u64) {
         let test_network = Rep3TestNetwork::default();
         let should_result = ark_bn254::Fr::from(a % b);
@@ -2770,8 +3225,7 @@ mod field_share {
         let mut real_input = Vec::new();
         for (inp, num_bits) in x.into_iter().zip(num_bits.iter()) {
             let num_elements = (*num_bits as u32).div_ceil(8);
-            let mut bytes = Vec::new();
-            inp.serialize_uncompressed(&mut bytes).unwrap();
+            let bytes = inp.into_bigint().to_bytes_le();
             real_input.extend(bytes[0..num_elements as usize].to_vec());
         }
         let output_bytes: [u8; 32] = Blake2s256::digest(real_input).into();
@@ -2818,8 +3272,7 @@ mod field_share {
         let mut real_input = Vec::new();
         for (inp, num_bits) in x.into_iter().zip(num_bits.iter()) {
             let num_elements = (*num_bits as u32).div_ceil(8);
-            let mut bytes = Vec::new();
-            inp.serialize_uncompressed(&mut bytes).unwrap();
+            let bytes = inp.into_bigint().to_bytes_le();
             real_input.extend(bytes[0..num_elements as usize].to_vec());
         }
         let output_bytes: [u8; 32] = blake3::hash(&real_input).into();

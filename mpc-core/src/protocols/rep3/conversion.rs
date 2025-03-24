@@ -558,6 +558,59 @@ pub fn y2b<F: PrimeField, N: Rep3Network>(
     Ok(converted)
 }
 
+/// Transforms the shared values x from yao sharings to binary sharings. I.e., the sharing such that the garbler have keys (k_0, delta) for each bit of x, while the evaluator has k_x = k_0 xor delta * x gets transformed into x = x_1 xor x_2 xor x_3.
+pub fn y2b_many<F: PrimeField, N: Rep3Network>(
+    x: Vec<BinaryBundle<WireMod2>>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<Rep3BigUintShare<F>>> {
+    let mut collapsed = Vec::with_capacity(x.len());
+    let mut input_bitlengths = Vec::with_capacity(x.len());
+    for chunk in x.iter() {
+        input_bitlengths.push(chunk.size());
+    }
+    for chunk in x {
+        collapsed.push(GCUtils::collapse_bundle_to_lsb_bits_as_biguint(chunk));
+    }
+
+    let mut result = Vec::with_capacity(collapsed.len());
+    match io_context.id {
+        PartyID::ID0 => {
+            let mut r = Vec::with_capacity(collapsed.len());
+            let mut r_xor_x_xor_px = Vec::with_capacity(collapsed.len());
+
+            for (bitlen, x_xor_px) in izip!(input_bitlengths, collapsed) {
+                let r_ = io_context.rngs.rand.random_biguint_rng1(bitlen);
+                r_xor_x_xor_px.push(x_xor_px ^ &r_);
+                r.push(r_);
+            }
+
+            io_context
+                .network
+                .send_many(PartyID::ID2, &r_xor_x_xor_px)?;
+            for (r_xor_x_xor_px_, r_) in izip!(r_xor_x_xor_px, r) {
+                result.push(Rep3BigUintShare::new(r_xor_x_xor_px_, r_));
+            }
+        }
+        PartyID::ID1 => {
+            for (bitlen, px) in izip!(input_bitlengths, collapsed) {
+                result.push(Rep3BigUintShare::new(
+                    px,
+                    io_context.rngs.rand.random_biguint_rng2(bitlen),
+                ));
+            }
+        }
+        PartyID::ID2 => {
+            let r_xor_x_xor_px = io_context.network.recv_many(PartyID::ID0)?;
+
+            for (px, r_xor_x_xor_px_) in izip!(collapsed, r_xor_x_xor_px) {
+                result.push(Rep3BigUintShare::new(px, r_xor_x_xor_px_));
+            }
+        }
+    };
+
+    Ok(result)
+}
+
 /// Transforms the replicated shared value x from an arithmetic sharing to a binary sharing. I.e., x = x_1 + x_2 + x_3 gets transformed into x = x'_1 xor x'_2 xor x'_3.
 pub fn a2y2b<F: PrimeField, N: Rep3Network>(
     x: Rep3PrimeFieldShare<F>,

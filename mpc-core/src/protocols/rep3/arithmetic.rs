@@ -149,7 +149,7 @@ pub fn reshare_vec<F: PrimeField, N: Rep3Network>(
     if local_b.len() != local_a.len() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
-            "During execution of mul_vec in MPC: Invalid number of elements received",
+            "During execution of reshare_vec: Invalid number of elements received",
         ));
     }
     Ok(izip!(local_a, local_b)
@@ -387,7 +387,7 @@ pub fn sqrt<F: PrimeField, N: Rep3Network>(
     if c.len() != 2 {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
-            "During execution of square root in MPC: invalid number of elements received",
+            "During execution of square root: invalid number of elements received",
         ));
     }
     let y_sq = (mul[0].a + mul[0].b + c[0]).sqrt();
@@ -566,6 +566,27 @@ pub fn eq<F: PrimeField, N: Rep3Network>(
     conversion::bit_inject(&is_zero, io_context)
 }
 
+/// Checks if two slices of shared values are equal element-wise.
+/// Returns a vector of shared values, where each element is 1 if the corresponding elements are equal and 0 otherwise.
+pub fn eq_many<F: PrimeField, N: Rep3Network>(
+    a: &[FieldShare<F>],
+    b: &[FieldShare<F>],
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<FieldShare<F>>> {
+    if a.len() != b.len() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!(
+                "During execution of eq_many: Invalid number of elements received. Length of a : {} and length of b: {}",
+                a.len(),
+                b.len()
+            ),
+        ));
+    }
+    let is_zero = eq_bit_many(a, b, io_context)?;
+    conversion::bit_inject_many(&is_zero, io_context)
+}
+
 /// Checks if a shared value is equal to a public value. The result is a shared value that has value 1 if the two values are equal and 0 otherwise.
 pub fn eq_public<F: PrimeField, N: Rep3Network>(
     shared: FieldShare<F>,
@@ -574,6 +595,27 @@ pub fn eq_public<F: PrimeField, N: Rep3Network>(
 ) -> IoResult<FieldShare<F>> {
     let is_zero = eq_bit_public(shared, public, io_context)?;
     conversion::bit_inject(&is_zero, io_context)
+}
+
+/// Checks if a slice of shared values is equal to a slice of public values element-wise.
+/// Returns a vector of shared values, where each element is 1 if the corresponding elements are equal and 0 otherwise.
+pub fn eq_public_many<F: PrimeField, N: Rep3Network>(
+    shared: &[FieldShare<F>],
+    public: &[F],
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<FieldShare<F>>> {
+    if shared.len() != public.len() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!(
+                "During execution of eq_public_many: Invalid number of elements received. Length of shared : {} and length of public: {}",
+                shared.len(),
+                public.len()
+            ),
+        ));
+    }
+    let is_zero = eq_bit_public_many(shared, public, io_context)?;
+    conversion::bit_inject_many(&is_zero, io_context)
 }
 
 /// Same as eq_bit but without using bit_inject on the result. Checks if a shared value is equal to a public value. The result is a shared value that has value 1 if the two values are equal and 0 otherwise.
@@ -586,6 +628,30 @@ pub fn eq_bit_public<F: PrimeField, N: Rep3Network>(
     eq_bit(shared, public, io_context)
 }
 
+/// Same as eq_bit_many but without using bit_inject on the result. Checks if a slice of shared values is equal to a slice of public values element-wise.
+/// Returns a vector of shared values, where each element is 1 if the corresponding elements are equal and 0 otherwise.
+pub fn eq_bit_public_many<F: PrimeField, N: Rep3Network>(
+    shared: &[FieldShare<F>],
+    public: &[F],
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<BinaryShare<F>>> {
+    if shared.len() != public.len() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!(
+                "During execution of eq_bit_public_many: Invalid number of elements received. Length of shared : {} and length of public: {}",
+                shared.len(),
+                public.len()
+            ),
+        ));
+    }
+    let public = public
+        .iter()
+        .map(|&p| promote_to_trivial_share(io_context.id, p))
+        .collect::<Vec<_>>();
+    eq_bit_many(shared, &public, io_context)
+}
+
 /// Same as eq but without using bit_inject on the result. Checks whether two prime field shares are equal and return a binary share of 0 or 1. 1 means they are equal.
 pub fn eq_bit<F: PrimeField, N: Rep3Network>(
     a: FieldShare<F>,
@@ -595,6 +661,31 @@ pub fn eq_bit<F: PrimeField, N: Rep3Network>(
     let diff = sub(a, b);
     let bits = conversion::a2b_selector(diff, io_context)?;
     let is_zero = binary::is_zero(&bits, io_context)?;
+    Ok(is_zero)
+}
+
+/// Same as eq_many but without using bit_inject on the result. Checks whether two slice of prime field shares are equal and returns a Vec of binary shares of 0 or 1. 1 means they are equal.
+pub fn eq_bit_many<F: PrimeField, N: Rep3Network>(
+    a: &[FieldShare<F>],
+    b: &[FieldShare<F>],
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<BinaryShare<F>>> {
+    if a.len() != b.len() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!(
+                "During execution of eq_bit_many: Invalid number of elements received. Length of a : {} and length of b: {}",
+                a.len(),
+                b.len()
+            ),
+        ));
+    }
+    let mut diff = Vec::with_capacity(a.len());
+    for (a_, b_) in izip!(a.iter(), b.iter()) {
+        diff.push(sub(*a_, *b_));
+    }
+    let bits = conversion::a2b_many(&diff, io_context)?;
+    let is_zero = binary::is_zero_many(bits, io_context)?;
     Ok(is_zero)
 }
 
