@@ -9,6 +9,8 @@ use num_traits::cast::ToPrimitive;
 /// Transforms a field element into an usize if possible.
 macro_rules! to_usize {
     ($field: expr) => {{
+        use eyre::eyre;
+        use num_traits::cast::ToPrimitive;
         let a: BigUint = $field.into();
         usize::try_from(a.to_u64().ok_or(eyre!("Cannot convert var into usize"))?)?
     }};
@@ -69,6 +71,7 @@ impl<F: PrimeField> CircomPlainVmWitnessExtension<F> {
 }
 
 impl<F: PrimeField> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtension<F> {
+    type Public = F;
     type ArithmeticShare = F;
 
     type VmType = F;
@@ -89,12 +92,14 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtensio
         Ok(a * b)
     }
 
-    fn neg(&mut self, a: Self::VmType) -> Result<Self::VmType> {
-        Ok(-a)
-    }
-
     fn div(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         Ok(a / b)
+    }
+
+    fn int_div(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+        let lhs = to_bigint!(a);
+        let rhs = to_bigint!(b);
+        Ok(F::from(lhs / rhs))
     }
 
     fn pow(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
@@ -116,14 +121,8 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtensio
         }
     }
 
-    fn int_div(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
-        let lhs = to_bigint!(a);
-        let rhs = to_bigint!(b);
-        Ok(F::from(lhs / rhs))
-    }
-
-    fn is_zero(&mut self, a: Self::VmType, _: bool) -> Result<bool> {
-        Ok(a.is_zero())
+    fn neg(&mut self, a: Self::VmType) -> Result<Self::VmType> {
+        Ok(-a)
     }
 
     fn lt(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
@@ -174,6 +173,11 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtensio
         Ok(F::from(val << shift))
     }
 
+    fn bool_not(&mut self, a: Self::VmType) -> Result<Self::VmType> {
+        assert!(a.is_one() || a.is_zero());
+        Ok(F::one() - a)
+    }
+
     fn bool_and(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
         let lhs = to_usize!(a);
         let rhs = to_usize!(b);
@@ -198,44 +202,6 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtensio
         }
     }
 
-    fn bit_xor(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
-        let lhs = to_bigint!(a);
-        let rhs = to_bigint!(b);
-        Ok(F::from(lhs ^ rhs))
-    }
-
-    fn bit_or(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
-        let lhs = to_bigint!(a);
-        let rhs = to_bigint!(b);
-        Ok(F::from(lhs | rhs))
-    }
-
-    fn bit_and(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
-        let lhs = to_bigint!(a);
-        let rhs = to_bigint!(b);
-        Ok(F::from(lhs & rhs))
-    }
-
-    fn to_index(&mut self, a: Self::VmType) -> Result<usize> {
-        Ok(to_usize!(a))
-    }
-    fn open(&mut self, a: Self::VmType) -> Result<F> {
-        Ok(a)
-    }
-
-    fn to_share(&mut self, a: Self::VmType) -> Result<Self::ArithmeticShare> {
-        Ok(a)
-    }
-
-    fn is_shared(&mut self, _: &Self::VmType) -> Result<bool> {
-        Ok(false)
-    }
-
-    fn bool_not(&mut self, a: Self::VmType) -> Result<Self::VmType> {
-        assert!(a.is_one() || a.is_zero());
-        Ok(F::one() - a)
-    }
-
     fn cmux(
         &mut self,
         cond: Self::VmType,
@@ -248,6 +214,43 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtensio
         } else {
             Ok(falsy)
         }
+    }
+
+    fn bit_xor(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+        let lhs = to_bigint!(a);
+        let rhs = to_bigint!(b);
+        Ok(F::from(lhs ^ rhs))
+    }
+    fn bit_or(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+        let lhs = to_bigint!(a);
+        let rhs = to_bigint!(b);
+        Ok(F::from(lhs | rhs))
+    }
+
+    fn bit_and(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
+        let lhs = to_bigint!(a);
+        let rhs = to_bigint!(b);
+        Ok(F::from(lhs & rhs))
+    }
+
+    fn is_zero(&mut self, a: Self::VmType, _: bool) -> Result<bool> {
+        Ok(a.is_zero())
+    }
+
+    fn is_shared(&mut self, _: &Self::VmType) -> Result<bool> {
+        Ok(false)
+    }
+
+    fn to_index(&mut self, a: Self::VmType) -> Result<usize> {
+        Ok(to_usize!(a))
+    }
+
+    fn open(&mut self, a: Self::VmType) -> Result<F> {
+        Ok(a)
+    }
+
+    fn to_share(&mut self, a: Self::VmType) -> Result<Self::ArithmeticShare> {
+        Ok(a)
     }
 
     fn public_one(&self) -> Self::VmType {
@@ -292,5 +295,9 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtensio
         }
         res.reverse();
         Ok((res, carry))
+    }
+
+    fn log(&mut self, a: Self::VmType, _: bool) -> eyre::Result<String> {
+        Ok(a.to_string())
     }
 }
