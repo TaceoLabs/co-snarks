@@ -2,6 +2,7 @@ use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{MontConfig, One, PrimeField, Zero};
 use co_brillig::mpc::{Rep3BrilligDriver, Rep3BrilligType};
 use itertools::{izip, Itertools};
+use libaes::Cipher;
 use mpc_core::gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations};
 use mpc_core::protocols::rep3::yao::circuits::SHA256Table;
 use mpc_core::protocols::rep3::{
@@ -1645,5 +1646,107 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             .collect();
 
         Ok((key_values, key_a_slices, key_b_slices))
+    }
+    fn aes128_encrypt(
+        &mut self,
+        scalars: &[Self::AcvmType],
+        iv: Vec<Self::AcvmType>,
+        key: Vec<Self::AcvmType>,
+    ) -> std::io::Result<Vec<Self::AcvmType>> {
+        if scalars
+            .iter()
+            .zip(iv.iter().zip(key.iter()))
+            .all(|(scalar, (iv_elem, key_elem))| {
+                !Self::is_shared(scalar) && !Self::is_shared(iv_elem) && !Self::is_shared(key_elem)
+            })
+        {
+            let scalars: Vec<_> = scalars
+                .iter()
+                .map(|x| Self::get_public(x).expect("Already checked it is public"))
+                .collect();
+            let iv: Vec<_> = iv
+                .iter()
+                .map(|x| Self::get_public(x).expect("Already checked it is public"))
+                .collect();
+            let key: Vec<_> = key
+                .iter()
+                .map(|x| Self::get_public(x).expect("Already checked it is public"))
+                .collect();
+            let mut scalar_to_be_bytes = Vec::new();
+            let mut iv_to_be_bytes = Vec::new();
+            let mut key_to_be_bytes = Vec::new();
+            for inp in scalars {
+                let mut bytes = Vec::new();
+                inp.serialize_uncompressed(&mut bytes).unwrap();
+                bytes.reverse();
+                let byte = bytes
+                    .last()
+                    .expect("Field element must be represented by non-zero amount of bytes");
+                scalar_to_be_bytes.push(*byte);
+            }
+            for inp in iv {
+                let mut bytes = Vec::new();
+                inp.serialize_uncompressed(&mut bytes).unwrap();
+                bytes.reverse();
+                let byte = bytes
+                    .last()
+                    .expect("Field element must be represented by non-zero amount of bytes");
+                iv_to_be_bytes.push(*byte);
+            }
+            for inp in key {
+                let mut bytes = Vec::new();
+                inp.serialize_uncompressed(&mut bytes).unwrap();
+                bytes.reverse();
+                let byte = bytes
+                    .last()
+                    .expect("Field element must be represented by non-zero amount of bytes");
+                key_to_be_bytes.push(*byte);
+            }
+            let cipher = Cipher::new_128(
+                key_to_be_bytes
+                    .as_slice()
+                    .try_into()
+                    .expect("slice with incorrect length"),
+            );
+            let encrypted = cipher.cbc_encrypt(&iv_to_be_bytes, &scalar_to_be_bytes);
+            encrypted
+                .iter()
+                .map(|x| Ok(Rep3AcvmType::Public(F::from(*x as u128))))
+                .collect()
+        } else {
+            let scalars: Vec<_> = scalars
+                .iter()
+                .map(|y| match y {
+                    Rep3AcvmType::Public(public) => {
+                        arithmetic::promote_to_trivial_share(self.io_context0.id, *public)
+                    }
+                    Rep3AcvmType::Shared(shared) => *shared,
+                })
+                .collect();
+            let iv: Vec<_> = iv
+                .iter()
+                .map(|y| match y {
+                    Rep3AcvmType::Public(public) => {
+                        arithmetic::promote_to_trivial_share(self.io_context0.id, *public)
+                    }
+                    Rep3AcvmType::Shared(shared) => *shared,
+                })
+                .collect();
+            let key: Vec<_> = key
+                .iter()
+                .map(|y| match y {
+                    Rep3AcvmType::Public(public) => {
+                        arithmetic::promote_to_trivial_share(self.io_context0.id, *public)
+                    }
+                    Rep3AcvmType::Shared(shared) => *shared,
+                })
+                .collect();
+            let result = yao::aes_from_bristol(&scalars, &key, &iv, &mut self.io_context0)?;
+
+            result
+                .iter()
+                .map(|y| Ok(Rep3AcvmType::Shared(*y)))
+                .collect::<Result<Vec<_>, _>>()
+        }
     }
 }

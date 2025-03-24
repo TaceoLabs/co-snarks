@@ -395,10 +395,19 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         point: Self::AcvmPoint<C>,
         value: Self::AcvmPoint<C>,
     ) -> std::io::Result<Self::AcvmPoint<C>>;
+
     /// Computes the SHA256 compression from given state and message.
     fn sha256_compression(
         &mut self,
         state: &[Self::AcvmType; 8],
         message: &[Self::AcvmType; 16],
     ) -> std::io::Result<Vec<Self::AcvmType>>;
+
+    /// Computes an AES128 encryption of the given scalars using the given key and iv.
+    fn aes128_encrypt(
+        &mut self,
+        scalars: &[Self::AcvmType],
+        iv: Vec<Self::AcvmType>,
+        key: Vec<Self::AcvmType>,
+    ) -> io::Result<Vec<Self::AcvmType>>;
 }

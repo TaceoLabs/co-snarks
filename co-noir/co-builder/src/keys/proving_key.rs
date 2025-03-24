@@ -5,9 +5,12 @@ use crate::{
         polynomial::{Polynomial, MASKING_OFFSET},
         polynomial_types::{Polynomials, PrecomputedEntities},
     },
-    types::types::{
-        ActiveRegionData, AggregationObjectPubInputIndices, CyclicPermutation, Mapping,
-        PermutationMapping, TraceData, NUM_WIRES,
+    types::{
+        plookup::BasicTableId,
+        types::{
+            ActiveRegionData, AggregationObjectPubInputIndices, CyclicPermutation, Mapping,
+            PermutationMapping, TraceData, NUM_WIRES,
+        },
     },
     HonkProofResult,
 };
@@ -379,7 +382,10 @@ impl<P: Pairing> ProvingKey<P> {
         let mut table_offset = circuit.blocks.lookup.trace_offset as usize;
 
         for table in circuit.lookup_tables.iter_mut() {
-            // table.initialize_index_map(); // We calculate indices from keys
+            // we need the index_map hash table in this case
+            if table.id == BasicTableId::AesSboxMap {
+                table.initialize_index_map();
+            }
 
             for (i, gate_data) in table.lookup_gates.iter().enumerate() {
                 // convert lookup gate data to an array of three field elements, one for each of the 3 columns
@@ -435,8 +441,11 @@ impl<P: Pairing> ProvingKey<P> {
                     let index_in_table: BigUint = T::get_public(&index_in_table)
                         .expect("Already checked it is public")
                         .into();
-                    let index_in_table =
-                        usize::try_from(index_in_table).expect("index is too large for usize?");
+                    let index_in_table = if table.id == BasicTableId::AesSboxMap {
+                        table.index_map[index_in_table.into()]
+                    } else {
+                        usize::try_from(index_in_table).expect("index is too large for usize?")
+                    };
 
                     let index_in_poly = table_offset + index_in_table;
 

@@ -7,6 +7,7 @@ use eyre::Error;
 use mpc_core::gadgets;
 use num_bigint::BigUint;
 use std::array;
+
 pub struct Utils {}
 
 impl Utils {
@@ -77,5 +78,33 @@ impl Utils {
 
     pub fn downcast<A: 'static, B: 'static>(a: &A) -> Option<&B> {
         (a as &dyn Any).downcast_ref::<B>()
+    }
+
+    pub fn map_from_sparse_form<const BASE: u64>(input: BigUint) -> u64 {
+        let mut target = input;
+        let mut output = 0u64;
+
+        let bases = Self::get_base_powers::<BASE, 32>();
+
+        for i in 0..32 {
+            let base_power = &bases[31 - i];
+            let mut prev_threshold = BigUint::zero();
+            for j in 1..BASE + 1 {
+                let threshold = &prev_threshold + base_power;
+                if target < threshold {
+                    let bit = ((j - 1) & 1) != 0;
+                    if bit {
+                        output += 1 << (31 - i);
+                    }
+                    if j > 1 {
+                        target -= prev_threshold;
+                    }
+                    break;
+                }
+                prev_threshold = threshold;
+            }
+        }
+
+        output
     }
 }

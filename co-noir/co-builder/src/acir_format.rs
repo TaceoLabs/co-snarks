@@ -11,8 +11,8 @@ use ark_ff::{PrimeField, Zero};
 use std::collections::{BTreeMap, HashSet};
 
 use crate::types::types::{
-    AcirFormatOriginalOpcodeIndices, BlockConstraint, BlockType, LogicConstraint, MulQuad,
-    MultiScalarMul, PolyTriple, Poseidon2Constraint, RangeConstraint, RecursionConstraint,
+    AES128Constraint, AcirFormatOriginalOpcodeIndices, BlockConstraint, BlockType, LogicConstraint,
+    MulQuad, MultiScalarMul, PolyTriple, Poseidon2Constraint, RangeConstraint, RecursionConstraint,
     Sha256Compression, WitnessOrConstant,
 };
 #[expect(dead_code)]
@@ -52,7 +52,7 @@ pub struct AcirFormat<F: PrimeField> {
     pub(crate) logic_constraints: Vec<LogicConstraint<F>>,
     //  std::vector<AES128Constraint> aes128_constraints;
     pub(crate) sha256_compression: Vec<Sha256Compression<F>>,
-    //  std::vector<SchnorrConstraint> schnorr_constraints;
+    pub(crate) aes128_constraints: Vec<AES128Constraint<F>>,
     //  std::vector<EcdsaSecp256k1Constraint> ecdsa_k1_constraints;
     //  std::vector<EcdsaSecp256r1Constraint> ecdsa_r1_constraints;
     //  std::vector<Blake2sConstraint> blake2s_constraints;
@@ -629,11 +629,22 @@ impl<F: PrimeField> AcirFormat<F> {
     ) {
         match arg {
             BlackBoxFuncCall::AES128Encrypt {
-                inputs: _,
-                iv: _,
-                key: _,
-                outputs: _,
-            } => todo!("BlackBoxFuncCall::AES128Encrypt"),
+                inputs,
+                iv,
+                key,
+                outputs,
+            } => {
+                let constraint = AES128Constraint {
+                    inputs: inputs.into_iter().map(|e| Self::parse_input(e)).collect(),
+                    iv: iv.into_iter().map(|e| Self::parse_input(e)).collect(),
+                    key: key.into_iter().map(|e| Self::parse_input(e)).collect(),
+                    outputs: outputs.into_iter().map(|e| e.0).collect(),
+                };
+                for output in constraint.outputs.iter() {
+                    af.constrained_witness.insert(*output);
+                }
+                af.aes128_constraints.push(constraint);
+            }
             BlackBoxFuncCall::AND { lhs, rhs, output } => {
                 let lhs_input = Self::parse_input(lhs);
                 let rhs_input = Self::parse_input(rhs);

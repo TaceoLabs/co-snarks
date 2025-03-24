@@ -1,3 +1,4 @@
+pub(crate) mod aes128;
 pub(crate) mod field_ct;
 pub(crate) mod generators;
 pub(crate) mod plookup;
