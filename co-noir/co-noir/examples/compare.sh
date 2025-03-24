@@ -7,10 +7,16 @@ PLAINDRIVER="../../../target/release/plaindriver"
 exit_code=0
 
 REMOVE_OUTPUT=1
+REMOVE_OUTPUT_BB=1
 PIPE=""
+PIPE_BB=""
 if [[ $REMOVE_OUTPUT -eq 1 ]];
 then
     PIPE=" > /dev/null 2>&1"
+fi
+if [[ $REMOVE_OUTPUT_BB -eq 1 ]];
+then
+    PIPE_BB=" > /dev/null 2>&1"
 fi
 
 # build the plaindriver binary
@@ -58,7 +64,7 @@ run_proof_verification() {
 
   echo "comparing" $name "with bb and $algorithm transcript"
 
-  bash -c "$BARRETENBERG_BINARY $prove_command -b test_vectors/${name}/target/${name}.json -w test_vectors/${name}/target/${name}.gz -o test_vectors/${name}/${proof_file} $PIPE"
+  bash -c "$BARRETENBERG_BINARY $prove_command -b test_vectors/${name}/target/${name}.json -w test_vectors/${name}/target/${name}.gz -o test_vectors/${name}/${proof_file} $PIPE_BB"
 
   diff test_vectors/${name}/${proof_file} test_vectors/${name}/proof
   if [[ $? -ne 0 ]]; then
@@ -66,27 +72,27 @@ run_proof_verification() {
     echo "::error::$name diff check of proofs failed"
   fi
 
-  bash -c "$BARRETENBERG_BINARY $write_command -b test_vectors/${name}/target/${name}.json -o test_vectors/${name}/${vk_file} $PIPE"
+  bash -c "$BARRETENBERG_BINARY $write_command -b test_vectors/${name}/target/${name}.json -o test_vectors/${name}/${vk_file} $PIPE_BB"
 
-  bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/proof -k test_vectors/${name}/vk $PIPE"
+  bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/proof -k test_vectors/${name}/vk $PIPE_BB"
   if [[ $? -ne 0 ]]; then
     exit_code=1
     echo "::error::$name verifying with bb, our proof and our key failed"
   fi
 
-  bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/proof -k test_vectors/${name}/${vk_file} $PIPE"
+  bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/proof -k test_vectors/${name}/${vk_file} $PIPE_BB"
   if [[ $? -ne 0 ]]; then
     exit_code=1
     echo "::error::$name verifying with bb, our proof and their key failed"
   fi
 
-  bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/${proof_file} -k test_vectors/${name}/vk $PIPE"
+  bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/${proof_file} -k test_vectors/${name}/vk $PIPE_BB"
   if [[ $? -ne 0 ]]; then
     exit_code=1
     echo "::error::$name verifying with bb, their proof and our key failed"
   fi
 
-  bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/${proof_file} -k test_vectors/${name}/${vk_file} $PIPE"
+  bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/${proof_file} -k test_vectors/${name}/${vk_file} $PIPE_BB"
   if [[ $? -ne 0 ]]; then
     exit_code=1
     echo "::error::$name verifying with bb, their proof and their key failed"
