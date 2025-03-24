@@ -1,6 +1,7 @@
 use super::NoirWitnessExtensionProtocol;
 use ark_ff::{One, PrimeField};
 use co_brillig::mpc::{PlainBrilligDriver, PlainBrilligType};
+use libaes::Cipher;
 use mpc_core::{
     gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations},
     lut::{LookupTableProvider, PlainLookupTableProvider},
@@ -512,5 +513,54 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
 
     fn equal(&mut self, a: &Self::AcvmType, b: &Self::AcvmType) -> std::io::Result<Self::AcvmType> {
         Ok(Self::ArithmeticShare::from(a == b))
+    }
+
+    fn aes128_encrypt(
+        &mut self,
+        scalars: &[Self::AcvmType],
+        iv: Vec<Self::AcvmType>,
+        key: Vec<Self::AcvmType>,
+    ) -> io::Result<Vec<Self::AcvmType>> {
+        let mut scalar_to_be_bytes = Vec::new();
+        let mut iv_to_be_bytes = Vec::new();
+        let mut key_to_be_bytes = Vec::new();
+        for inp in scalars {
+            let mut bytes = Vec::new();
+            inp.serialize_uncompressed(&mut bytes).unwrap();
+            bytes.reverse();
+            let byte = bytes
+                .last()
+                .expect("Field element must be represented by non-zero amount of bytes");
+            scalar_to_be_bytes.push(*byte);
+        }
+        for inp in iv {
+            let mut bytes = Vec::new();
+            inp.serialize_uncompressed(&mut bytes).unwrap();
+            bytes.reverse();
+            let byte = bytes
+                .last()
+                .expect("Field element must be represented by non-zero amount of bytes");
+            iv_to_be_bytes.push(*byte);
+        }
+        for inp in key {
+            let mut bytes = Vec::new();
+            inp.serialize_uncompressed(&mut bytes).unwrap();
+            bytes.reverse();
+            let byte = bytes
+                .last()
+                .expect("Field element must be represented by non-zero amount of bytes");
+            key_to_be_bytes.push(*byte);
+        }
+        let cipher = Cipher::new_128(
+            key_to_be_bytes
+                .as_slice()
+                .try_into()
+                .expect("slice with incorrect length"),
+        );
+        let encrypted = cipher.cbc_encrypt(&iv_to_be_bytes, &scalar_to_be_bytes);
+        encrypted
+            .iter()
+            .map(|x| Ok(Self::AcvmType::from(*x as u128)))
+            .collect()
     }
 }

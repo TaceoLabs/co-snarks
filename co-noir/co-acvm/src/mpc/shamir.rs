@@ -640,4 +640,13 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
     ) -> std::io::Result<Self::AcvmType> {
         panic!("functionality equal not feasible for Shamir")
     }
+
+    fn aes128_encrypt(
+        &mut self,
+        _scalars: &[Self::AcvmType],
+        _iv: Vec<Self::AcvmType>,
+        _key: Vec<Self::AcvmType>,
+    ) -> std::io::Result<Vec<Self::AcvmType>> {
+        panic!("functionality aes128_encrypt not feasible for Shamir")
+    }
 }

@@ -296,4 +296,11 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         precomp: &mut Poseidon2Precomputations<Self::ArithmeticShare>,
         poseidon2: &Poseidon2<F, T, D>,
     ) -> std::io::Result<()>;
+
+    fn aes128_encrypt(
+        &mut self,
+        scalars: &[Self::AcvmType],
+        iv: Vec<Self::AcvmType>,
+        key: Vec<Self::AcvmType>,
+    ) -> io::Result<Vec<Self::AcvmType>>;
 }
