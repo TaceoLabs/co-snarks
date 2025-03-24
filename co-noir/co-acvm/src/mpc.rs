@@ -279,7 +279,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         poseidon2: &Poseidon2<F, T, D>,
     ) -> std::io::Result<Poseidon2Precomputations<Self::ArithmeticShare>>;
 
-    /// Computes the external round fo the Poseidon2 permutation for the given input.
+    /// Computes the external round for the Poseidon2 permutation for the given input.
     fn poseidon2_external_round_inplace_with_precomp<const T: usize, const D: u64>(
         &mut self,
         input: &mut [Self::ArithmeticShare; T],
@@ -288,7 +288,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         poseidon2: &Poseidon2<F, T, D>,
     ) -> std::io::Result<()>;
 
-    /// Computes the internal round fo the Poseidon2 permutation for the given input.
+    /// Computes the internal round for the Poseidon2 permutation for the given input.
     fn poseidon2_internal_round_inplace_with_precomp<const T: usize, const D: u64>(
         &mut self,
         input: &mut [Self::ArithmeticShare; T],
@@ -296,4 +296,11 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         precomp: &mut Poseidon2Precomputations<Self::ArithmeticShare>,
         poseidon2: &Poseidon2<F, T, D>,
     ) -> std::io::Result<()>;
+
+    /// Computes the SHA256 compression from given state and message.
+    fn sha256_compression(
+        &mut self,
+        state: &[Self::AcvmType; 8],
+        message: &[Self::AcvmType; 16],
+    ) -> io::Result<Vec<Self::AcvmType>>;
 }

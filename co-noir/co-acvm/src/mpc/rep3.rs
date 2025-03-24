@@ -15,6 +15,7 @@ use mpc_core::{
 use num_bigint::BigUint;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use sha2::digest::generic_array::GenericArray;
 use std::array;
 use std::marker::PhantomData;
 
@@ -978,6 +979,79 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             (Rep3AcvmType::Shared(a), Rep3AcvmType::Shared(b)) => Ok(Rep3AcvmType::Shared(
                 arithmetic::eq(*a, *b, &mut self.io_context0)?,
             )),
+        }
+    }
+
+    fn sha256_compression(
+        &mut self,
+        state: &[Self::AcvmType; 8],
+        message: &[Self::AcvmType; 16],
+    ) -> std::io::Result<Vec<Self::AcvmType>> {
+        if state.iter().any(|v| Self::is_shared(v)) || message.iter().any(|v| Self::is_shared(v)) {
+            let state: Vec<_> = state
+                .iter()
+                .map(|y| match y {
+                    Rep3AcvmType::Public(public) => {
+                        arithmetic::promote_to_trivial_share(self.io_context0.id, *public)
+                    }
+                    Rep3AcvmType::Shared(shared) => *shared,
+                })
+                .collect();
+            let message: Vec<_> = message
+                .iter()
+                .map(|y| match y {
+                    Rep3AcvmType::Public(public) => {
+                        arithmetic::promote_to_trivial_share(self.io_context0.id, *public)
+                    }
+                    Rep3AcvmType::Shared(shared) => *shared,
+                })
+                .collect();
+            let result = yao::sha_from_bristol(
+                &state
+                    .as_slice()
+                    .try_into()
+                    .expect("slice with incorrect length"),
+                &message
+                    .as_slice()
+                    .try_into()
+                    .expect("slice with incorrect length"),
+                &mut self.io_context0,
+            )?;
+            result
+                .iter()
+                .map(|y| Ok(Rep3AcvmType::Shared(*y)))
+                .collect::<Result<Vec<_>, _>>()
+        } else {
+            let state: Vec<_> = state
+                .iter()
+                .map(|x| Self::get_public(x).expect("Already checked it is public"))
+                .collect();
+            let message: Vec<_> = message
+                .iter()
+                .map(|x| Self::get_public(x).expect("Already checked it is public"))
+                .collect();
+            let mut state_as_u32 = [0u32; 8];
+            for (i, input) in state.iter().enumerate() {
+                let x: BigUint = (input.into_bigint()).into();
+                state_as_u32[i] = x.to_u32_digits()[0];
+            }
+            let mut message_as_u32 = Vec::with_capacity(16);
+            for input in message {
+                let x: BigUint = (input.into_bigint()).into();
+                message_as_u32.push(x.to_u32_digits()[0]);
+            }
+            let mut blocks = [0_u8; 64];
+            for (i, block) in message_as_u32.iter().enumerate() {
+                let bytes = block.to_be_bytes();
+                blocks[i * 4..i * 4 + 4].copy_from_slice(&bytes);
+            }
+
+            let blocks: GenericArray<u8, sha2::digest::typenum::U64> = blocks.into();
+            sha2::compress256(&mut state_as_u32, &[blocks]);
+            state_as_u32
+                .iter()
+                .map(|x| Ok(Rep3AcvmType::Public(F::from(*x))))
+                .collect()
         }
     }
 }

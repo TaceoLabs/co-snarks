@@ -1060,3 +1060,23 @@ pub fn slice_xor<F: PrimeField, N: Rep3Network>(
         total_output_bitlen_per_field,
     )
 }
+
+/// Computes the SHA256 compression function using a Bristol fashion garbled circuit.
+pub fn sha_from_bristol<F: PrimeField, N: Rep3Network>(
+    state: &[Rep3PrimeFieldShare<F>; 8],
+    message: &[Rep3PrimeFieldShare<F>; 16],
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
+    let mut combined_inputs = Vec::with_capacity(state.len() + message.len());
+    combined_inputs.extend_from_slice(state);
+    combined_inputs.extend_from_slice(message);
+    let total_output_elements = state.len();
+
+    decompose_circuit_compose_blueprint!(
+        &combined_inputs,
+        io_context,
+        total_output_elements,
+        GarbledCircuits::sha256_compression::<_, F>,
+        (state.len())
+    )
+}

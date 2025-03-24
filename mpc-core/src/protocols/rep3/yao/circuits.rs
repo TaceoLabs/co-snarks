@@ -2,9 +2,10 @@
 //!
 //! This module contains some garbled circuit implementations.
 
-use crate::protocols::rep3::yao::GCUtils;
+use super::bristol_fashion::BristolFashionEvaluator;
+use crate::protocols::rep3::yao::{bristol_fashion::BristolFashionCircuit, GCUtils};
 use ark_ff::PrimeField;
-use fancy_garbling::{BinaryBundle, FancyBinary};
+use fancy_garbling::{BinaryBundle, FancyBinary, FancyError};
 use itertools::izip;
 use num_bigint::BigUint;
 use std::ops::Not;
@@ -2017,6 +2018,82 @@ impl GarbledCircuits {
             }
         }
         Ok(results)
+    }
+
+    /// Computes the SHA256 compression using a Bristol fashion circuit which is first parsed from a .txt file. The field elements are represented as bitdecompositions x1s, x2s, y1s and y2s which need to be added first to get the two inputs. The output is composed using wires_c.     
+    pub(crate) fn sha256_compression<
+        G: FancyBinary + FancyBinaryConstant + BristolFashionEvaluator<WireValue = G::Item>,
+        F: PrimeField,
+    >(
+        g: &mut G,
+        wires_x1: &BinaryBundle<G::Item>,
+        wires_x2: &BinaryBundle<G::Item>,
+        wires_c: &BinaryBundle<G::Item>,
+        state_length: usize,
+    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+        let input_bitlen = F::MODULUS_BIT_SIZE as usize;
+
+        // Reading the circuit from txt file
+        let circuit = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/protocols/rep3/yao/bristol_fashion/circuit_files/sha256.txt"
+        ));
+        let circuit_read =
+            BristolFashionCircuit::from_reader(circuit.as_bytes()).expect("sha256 circuit works");
+
+        let mut state = Vec::new();
+        let mut message = Vec::new();
+
+        for (chunk_x1, chunk_x2) in izip!(
+            wires_x1.wires()[..state_length * input_bitlen].chunks(input_bitlen),
+            wires_x2.wires()[..state_length * input_bitlen].chunks(input_bitlen)
+        ) {
+            let mut state_bits =
+                Self::adder_mod_p_with_output_size::<_, F>(g, chunk_x1, chunk_x2, 32)?;
+            state_bits.reverse();
+            state.extend(state_bits);
+        }
+        for (chunk_y1, chunk_y2) in izip!(
+            wires_x1.wires()[state_length * input_bitlen..].chunks(input_bitlen),
+            wires_x2.wires()[state_length * input_bitlen..].chunks(input_bitlen),
+        ) {
+            let mut message_bits =
+                Self::adder_mod_p_with_output_size::<_, F>(g, chunk_y1, chunk_y2, 32)?;
+            message_bits.reverse();
+            message.extend(message_bits);
+        }
+
+        message.reverse();
+        state.reverse();
+
+        let input = [message, state];
+        let one = g.const_one()?;
+        let mut result = match circuit_read.evaluate_with_default::<G::Item>(&input, g, one) {
+            Ok(mut outputs) => match outputs.pop() {
+                Some(output) => output,
+                None => {
+                    return Err(G::Error::from(FancyError::InvalidArg(
+                        "No output found in circuit evaluation".to_string(),
+                    )))
+                }
+            },
+            Err(e) => return Err(G::Error::from(FancyError::from(e))),
+        };
+
+        let mut results = Vec::new();
+
+        // the input (and the output) for the bristol circuit is in reversed order
+        result.reverse();
+        for chunk in result.chunks_mut(32) {
+            chunk.reverse();
+        }
+
+        for (xs, ys) in izip!(result.chunks(32), wires_c.wires().chunks(input_bitlen),) {
+            let result = Self::compose_field_element::<_, F>(g, xs, ys)?;
+            results.extend(result);
+        }
+
+        Ok(BinaryBundle::new(results))
     }
 }
 

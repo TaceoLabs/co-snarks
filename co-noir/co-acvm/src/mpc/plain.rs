@@ -6,6 +6,7 @@ use mpc_core::{
     lut::{LookupTableProvider, PlainLookupTableProvider},
 };
 use num_bigint::BigUint;
+use sha2::digest::generic_array::GenericArray;
 use std::io;
 use std::marker::PhantomData;
 
@@ -512,5 +513,31 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
 
     fn equal(&mut self, a: &Self::AcvmType, b: &Self::AcvmType) -> std::io::Result<Self::AcvmType> {
         Ok(Self::ArithmeticShare::from(a == b))
+    }
+
+    fn sha256_compression(
+        &mut self,
+        state: &[Self::AcvmType; 8],
+        message: &[Self::AcvmType; 16],
+    ) -> io::Result<Vec<Self::AcvmType>> {
+        let mut state_as_u32 = [0u32; 8];
+        for (i, input) in state.iter().enumerate() {
+            let x: BigUint = (input.into_bigint()).into();
+            state_as_u32[i] = x.to_u32_digits()[0];
+        }
+        let mut message_as_u32 = Vec::with_capacity(16);
+        for input in message {
+            let x: BigUint = (input.into_bigint()).into();
+            message_as_u32.push(x.to_u32_digits()[0]);
+        }
+        let mut blocks = [0_u8; 64];
+        for (i, block) in message_as_u32.iter().enumerate() {
+            let bytes = block.to_be_bytes();
+            blocks[i * 4..i * 4 + 4].copy_from_slice(&bytes);
+        }
+
+        let blocks: GenericArray<u8, sha2::digest::typenum::U64> = blocks.into();
+        sha2::compress256(&mut state_as_u32, &[blocks]);
+        state_as_u32.iter().map(|x| Ok(F::from(*x))).collect()
     }
 }

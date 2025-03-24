@@ -996,6 +996,7 @@ dependencies = [
  "paste",
  "rayon",
  "serde",
+ "sha2",
  "thiserror 2.0.11",
  "toml 0.8.20",
  "tracing",
@@ -2594,6 +2595,7 @@ dependencies = [
  "fancy-garbling",
  "itertools 0.14.0",
  "mpc-net",
+ "nom",
  "num-bigint 0.4.6",
  "num-traits",
  "paste",
@@ -2604,6 +2606,7 @@ dependencies = [
  "serde",
  "sha3",
  "subtle",
+ "thiserror 2.0.11",
  "tokio",
  "tracing",
 ]
@@ -4302,6 +4305,7 @@ dependencies = [
  "paste",
  "rand 0.8.5",
  "serde_json",
+ "sha2",
  "sha3",
  "tracing-subscriber 0.3.19",
 ]
