@@ -1,8 +1,8 @@
 use super::Relation;
 use crate::{
     co_decider::{
-        relations::fold_accumulator,
-        types::{RelationParameters, MAX_PARTIAL_RELATION_LENGTH},
+        relations::{fold_accumulator, relation_utils, MIN_RAYON_ITER},
+        types::{ProverUnivariatesBatch, RelationParameters, MAX_PARTIAL_RELATION_LENGTH},
         univariates::SharedUnivariate,
     },
     mpc::NoirUltraHonkProver,
@@ -12,6 +12,7 @@ use ark_ff::Zero;
 use co_builder::prelude::HonkCurve;
 use co_builder::HonkProofResult;
 use itertools::Itertools as _;
+use rayon::prelude::*;
 use ultrahonk::prelude::{TranscriptFieldType, Univariate};
 
 #[derive(Clone, Debug)]
@@ -20,7 +21,22 @@ pub(crate) struct EllipticRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing> {
     pub(crate) r1: SharedUnivariate<T, P, 6>,
 }
 
+#[derive(Clone, Debug)]
+pub struct EllipticRelationAccHalfShared<T: NoirUltraHonkProver<P>, P: Pairing> {
+    pub(crate) r0: SharedUnivariate<T, P, 6>,
+    pub(crate) r1: SharedUnivariate<T, P, 6>,
+}
+
 impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for EllipticRelationAcc<T, P> {
+    fn default() -> Self {
+        Self {
+            r0: Default::default(),
+            r1: Default::default(),
+        }
+    }
+}
+
+impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for EllipticRelationAccHalfShared<T, P> {
     fn default() -> Self {
         Self {
             r0: Default::default(),
@@ -58,56 +74,22 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> EllipticRelationAcc<T, P> {
     }
 }
 
-pub(crate) struct EllipticRelation {}
+pub struct EllipticRelation {}
 
 impl EllipticRelation {
     pub(crate) const NUM_RELATIONS: usize = 2;
     pub(crate) const CRAND_PAIRS_FACTOR: usize = 12;
-}
 
-impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P>
-    for EllipticRelation
-{
-    type Acc = EllipticRelationAcc<T, P>;
-
-    fn can_skip(entity: &super::ProverUnivariates<T, P>) -> bool {
-        entity.precomputed.q_elliptic().is_zero()
-    }
-
-    fn add_entites(
-        entity: &super::ProverUnivariates<T, P>,
-        batch: &mut super::ProverUnivariatesBatch<T, P>,
-    ) {
-        batch.add_w_r(entity);
-        batch.add_w_o(entity);
-
-        batch.add_shifted_w_l(entity);
-        batch.add_shifted_w_r(entity);
-        batch.add_shifted_w_o(entity);
-        batch.add_shifted_w_4(entity);
-
-        batch.add_q_l(entity);
-        batch.add_q_m(entity);
-        batch.add_q_elliptic(entity);
-    }
-
-    /**
-     * @brief Expression for the Ultra Arithmetic gate.
-     * @details The relation is defined as C(in(X)...) =
-     *   AZTEC TODO(#429): steal description from elliptic_widget.hpp
-     *
-     * @param evals transformed to `evals + C(in(X)...)*scaling_factor`
-     * @param in an std::array containing the fully extended Univariate edges.
-     * @param parameters contains beta, gamma, and public_input_delta, ....
-     * @param scaling_factor optional term to scale the evaluation before adding to evals.
-     */
-    fn accumulate(
+    pub fn accumulate_small<T, P>(
         driver: &mut T,
-        univariate_accumulator: &mut Self::Acc,
-        input: &super::ProverUnivariatesBatch<T, P>,
-        _relation_parameters: &RelationParameters<<P>::ScalarField>,
+        univariate_accumulator: &mut EllipticRelationAccHalfShared<T, P>,
+        input: &ProverUnivariatesBatch<T, P>,
         scaling_factors: &[<P>::ScalarField],
-    ) -> HonkProofResult<()> {
+    ) -> HonkProofResult<()>
+    where
+        T: NoirUltraHonkProver<P>,
+        P: HonkCurve<TranscriptFieldType>,
+    {
         tracing::trace!("Accumulate EllipticRelation");
 
         // AZTEC TODO(@zac - williamson #2608 when Pedersen refactor is completed,
@@ -252,5 +234,234 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         fold_accumulator!(univariate_accumulator.r0, tmp_1);
         fold_accumulator!(univariate_accumulator.r1, tmp_2);
         Ok(())
+    }
+
+    pub fn accumulate_multithreaded<T, P>(
+        driver: &mut T,
+        univariate_accumulator: &mut EllipticRelationAccHalfShared<T, P>,
+        input: &ProverUnivariatesBatch<T, P>,
+        scaling_factors: &[<P>::ScalarField],
+    ) -> HonkProofResult<()>
+    where
+        T: NoirUltraHonkProver<P>,
+        P: HonkCurve<TranscriptFieldType>,
+    {
+        // AZTEC TODO(@zac - williamson #2608 when Pedersen refactor is completed,
+        // replace old addition relations with these ones and
+        // remove endomorphism coefficient in ecc add gate(not used))
+
+        let party_id = driver.get_party_id();
+        let x_1 = input.witness.w_r();
+        let y_1 = input.witness.w_o();
+
+        let x_2 = input.shifted_witness.w_l();
+        let y_2 = input.shifted_witness.w_4();
+        let y_3 = input.shifted_witness.w_o();
+        let x_3 = input.shifted_witness.w_r();
+
+        let q_sign = input.precomputed.q_l();
+        let q_elliptic = input.precomputed.q_elliptic();
+        let q_is_double = input.precomputed.q_m();
+
+        debug_assert_eq!(x_1.len(), y_1.len());
+        debug_assert_eq!(x_2.len(), y_2.len());
+        debug_assert_eq!(y_2.len(), y_3.len());
+        debug_assert_eq!(x_1.len(), x_2.len());
+        debug_assert_eq!(x_2.len(), x_3.len());
+        // First round of multiplications
+
+        let (x_diff, y1_plus_y3, y_diff, x1_mul_3) = relation_utils::rayon_multi_join!(
+            T::sub_many(x_2, x_1),
+            T::add_many(y_1, y_3),
+            (q_sign, y_2, y_1)
+                .into_par_iter()
+                .map(|(q_sign, y_2, y_1)| T::sub(T::mul_with_public(*q_sign, *y_2), *y_1))
+                .collect::<Vec<_>>(),
+            x_1.into_par_iter()
+                .map(|x_1| T::add(T::add(*x_1, *x_1), *x_1))
+                .collect::<Vec<_>>()
+        );
+
+        let len = y_1.len() * 7;
+        let (lhs, rhs) = rayon::join(
+            || {
+                let mut lhs = Vec::with_capacity(len);
+                lhs.extend(y_1);
+                lhs.extend(y_2);
+                lhs.extend(y_1);
+                lhs.extend(&x_diff);
+                lhs.extend(&y1_plus_y3);
+                lhs.extend(&y_diff);
+                lhs.extend(&x1_mul_3);
+                lhs
+            },
+            || {
+                let mut rhs = Vec::with_capacity(len);
+                rhs.extend(y_1);
+                rhs.extend(y_2);
+                rhs.extend(y_2);
+                rhs.extend(&x_diff);
+                rhs.extend(&x_diff);
+                rhs.extend(T::sub_many(x_3, x_1));
+                rhs.extend(x_1);
+                rhs
+            },
+        );
+        let mul1 = driver.mul_many(&lhs, &rhs)?;
+
+        // we need the different contributions again
+        let chunks1 = mul1.chunks_exact(mul1.len() / 7).collect_vec();
+        debug_assert_eq!(chunks1.len(), 7);
+
+        // Second round of multiplications
+        let curve_b = P::get_curve_b(); // here we need the extra constraint on the Curve
+        let y1_sqr = chunks1[0];
+        let x1_sqr_mul_3 = chunks1[6];
+
+        let len = 5 * chunks1[0].len();
+
+        let (lhs, rhs) = rayon::join(
+            || {
+                let mut lhs = Vec::with_capacity(len);
+                let (first, second, third) = relation_utils::rayon_multi_join!(
+                    (x_3, x_2, x_1)
+                        .into_par_iter()
+                        .with_min_len(MIN_RAYON_ITER)
+                        .map(|(x_3, x_2, x_1)| T::add(*x_3, T::add(*x_2, *x_1)))
+                        .collect::<Vec<_>>(),
+                    y1_sqr
+                        .into_par_iter()
+                        .with_min_len(MIN_RAYON_ITER)
+                        .map(|y1_sqr| T::add_with_public(-curve_b, *y1_sqr, party_id))
+                        .collect::<Vec<_>>(),
+                    T::add_many(y_1, y_1)
+                );
+                lhs.extend(&first);
+                lhs.extend(&second);
+                lhs.extend(&first);
+                lhs.extend(x1_sqr_mul_3);
+                lhs.extend(third);
+                lhs
+            },
+            || {
+                let mut rhs = Vec::with_capacity(len);
+                rhs.extend(chunks1[3]);
+                rhs.extend(&x1_mul_3);
+                rhs.extend(
+                    y1_sqr
+                        .into_par_iter()
+                        .map(|y1_sqr| {
+                            let tmp = T::add(*y1_sqr, *y1_sqr);
+                            T::add(tmp, tmp)
+                        })
+                        .collect::<Vec<_>>(),
+                );
+                rhs.extend(&y1_plus_y3);
+                rhs
+            },
+        );
+
+        let mul2 = driver.local_mul_vec(&lhs, &rhs);
+        let chunks2 = mul2.chunks_exact(mul2.len() / 5).collect_vec();
+        debug_assert_eq!(chunks2.len(), 5);
+
+        //  rayon::join(
+        //      || {
+        //          (q_elliptic, q_is_double, scaling_factors)
+        //              .into_par_iter()
+        //              .map(|(q_elliptic, q_is_double, scaling_factors)| {
+        //                  *q_elliptic * scaling_factors * q_is_double
+        //              })
+        //              .collect::<Vec<_>>();
+        //      },
+        //      || {},
+        //  );
+
+        // Contribution (1) point addition, x-coordinate check
+        // q_elliptic * (x3 + x2 + x1)(x2 - x1)(x2 - x1) - y2^2 - y1^2 + 2(y2y1)*q_sign = 0
+        let y2_sqr = chunks1[1];
+        let tmp_1 = (
+            y1_sqr,
+            y2_sqr,
+            chunks1[2],
+            chunks2[0],
+            q_sign,
+            q_elliptic,
+            q_is_double,
+            scaling_factors,
+        )
+            .into_par_iter()
+            .with_min_len(MIN_RAYON_ITER)
+            .map(
+                |(
+                    y1_sqr,
+                    y2_sqr,
+                    chunk1_2,
+                    chunk2_0,
+                    q_sign,
+                    q_elliptic,
+                    q_is_double,
+                    scaling_factor,
+                )| {
+                    let y1y2 = T::mul_with_public_to_half_share(*q_sign, *chunk1_2);
+                    let x_add_identity = T::add_to_half_share(*chunk2_0, *y2_sqr);
+                    let mut x_add_identity = T::add_to_half_share(x_add_identity, *y1_sqr);
+                    x_add_identity += y1y2 + y1y2;
+                    // Themis TODO is that faster than computing it once and ref?
+                    let q_elliptic_by_scaling = *q_elliptic * scaling_factor;
+                    let q_double = q_elliptic_by_scaling * q_is_double;
+                    let q_elliptic_not_double_scaling = q_elliptic_by_scaling - q_double;
+                    q_elliptic_not_double_scaling * x_add_identity
+                },
+            )
+            .collect::<Vec<_>>();
+        Ok(())
+    }
+}
+
+impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P>
+    for EllipticRelation
+{
+    type Acc = EllipticRelationAccHalfShared<T, P>;
+
+    fn can_skip(entity: &super::ProverUnivariates<T, P>) -> bool {
+        entity.precomputed.q_elliptic().is_zero()
+    }
+
+    fn add_entites(
+        entity: &super::ProverUnivariates<T, P>,
+        batch: &mut super::ProverUnivariatesBatch<T, P>,
+    ) {
+        batch.add_w_r(entity);
+        batch.add_w_o(entity);
+
+        batch.add_shifted_w_l(entity);
+        batch.add_shifted_w_r(entity);
+        batch.add_shifted_w_o(entity);
+        batch.add_shifted_w_4(entity);
+
+        batch.add_q_l(entity);
+        batch.add_q_m(entity);
+        batch.add_q_elliptic(entity);
+    }
+
+    /**
+     * @brief Expression for the Ultra Arithmetic gate.
+     * @details The relation is defined as C(in(X)...) =
+     *   AZTEC TODO(#429): steal description from elliptic_widget.hpp
+     *
+     * @param evals transformed to `evals + C(in(X)...)*scaling_factor`
+     * @param in an std::array containing the fully extended Univariate edges.
+     * @param parameters contains beta, gamma, and public_input_delta, ....
+     * @param scaling_factor optional term to scale the evaluation before adding to evals.
+     */
+    fn accumulate(
+        driver: &mut T,
+        univariate_accumulator: &mut Self::Acc,
+        input: &super::ProverUnivariatesBatch<T, P>,
+        _relation_parameters: &RelationParameters<<P>::ScalarField>,
+        scaling_factors: &[<P>::ScalarField],
+    ) -> HonkProofResult<()> {
+        Self::accumulate_small(driver, univariate_accumulator, input, scaling_factors)
     }
 }

@@ -37,6 +37,8 @@ pub use crate::co_decider::relations::poseidon2_internal_relation::Poseidon2Inte
 pub use crate::co_decider::relations::delta_range_constraint_relation::DeltaRangeConstraintRelation;
 pub use crate::co_decider::relations::delta_range_constraint_relation::DeltaRangeConstraintRelationAccHalfShared;
 
+pub use crate::co_decider::relations::elliptic_relation::EllipticRelation;
+pub use crate::co_decider::relations::elliptic_relation::EllipticRelationAccHalfShared;
 pub use crate::co_decider::relations::permutation_relation::UltraPermutationRelation;
 pub use crate::co_decider::relations::permutation_relation::UltraPermutationRelationAccHalfShared;
 pub use crate::co_decider::relations::Relation;

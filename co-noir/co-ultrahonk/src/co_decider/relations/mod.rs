@@ -22,7 +22,7 @@ use delta_range_constraint_relation::{
     DeltaRangeConstraintRelation, DeltaRangeConstraintRelationAcc,
     DeltaRangeConstraintRelationAccHalfShared,
 };
-use elliptic_relation::{EllipticRelation, EllipticRelationAcc};
+use elliptic_relation::{EllipticRelation, EllipticRelationAcc, EllipticRelationAccHalfShared};
 use logderiv_lookup_relation::{LogDerivLookupRelation, LogDerivLookupRelationAcc};
 use permutation_relation::{
     UltraPermutationRelation, UltraPermutationRelationAcc, UltraPermutationRelationAccHalfShared,
@@ -198,7 +198,7 @@ pub(crate) struct AllRelationAccHalfShared<T: NoirUltraHonkProver<P>, P: Pairing
     pub(crate) r_perm: UltraPermutationRelationAccHalfShared<T, P>,
     pub(crate) r_lookup: LogDerivLookupRelationAcc<T, P>,
     pub(crate) r_delta: DeltaRangeConstraintRelationAccHalfShared<P::ScalarField>,
-    pub(crate) r_elliptic: EllipticRelationAcc<T, P>,
+    pub(crate) r_elliptic: EllipticRelationAccHalfShared<T, P>,
     pub(crate) r_aux: AuxiliaryRelationAcc<T, P>,
     pub(crate) r_pos_ext: Poseidon2ExternalRelationAccHalfShared<P::ScalarField>,
     pub(crate) r_pos_int: Poseidon2InternalRelationAccHalfShared<P::ScalarField>,
@@ -240,7 +240,10 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> AllRelationAccHalfShared<T, P> {
                 r2: SharedUnivariate::from_vec(r_delta_r2),
                 r3: SharedUnivariate::from_vec(r_delta_r3),
             },
-            r_elliptic: self.r_elliptic,
+            r_elliptic: EllipticRelationAcc {
+                r0: self.r_elliptic.r0,
+                r1: self.r_elliptic.r1,
+            },
             r_aux: self.r_aux,
             r_pos_ext: Poseidon2ExternalRelationAcc {
                 r0: SharedUnivariate::from_vec(r_pos_ex_r0),

@@ -1,7 +1,7 @@
 use ark_bn254::Bn254;
 use co_ultrahonk::prelude::{
-    Relation as _, RelationParameters, UltraArithmeticRelation,
-    UltraArithmeticRelationAccHalfShared,
+    EllipticRelation, EllipticRelationAccHalfShared, Relation as _, RelationParameters,
+    UltraArithmeticRelation, UltraArithmeticRelationAccHalfShared,
 };
 
 use co_builder::prelude::PrecomputedEntities;
@@ -23,7 +23,6 @@ fn random_edge<R: Rng>(mut rng: R) -> ProverUnivariates<PlainUltraHonkDriver, Bn
         precomputed: PrecomputedEntities::default(),
         shifted_witness: ShiftedWitnessEntities::default(),
     };
-    // random evald
     for w in edge.witness.iter_mut() {
         w.evaluations = rng.gen();
     }
@@ -82,6 +81,51 @@ fn run_delta_range_constraint_relation(
                 })
             });
         }
+    }
+}
+
+fn run_elliptic_relation(
+    c: &mut Criterion,
+    threads_todo_list: &[usize],
+    sum_check_data: &[(
+        usize,
+        AllEntitiesBatchRelations<PlainUltraHonkDriver, Bn254>,
+    )],
+) {
+    let mut driver = PlainUltraHonkDriver {};
+    for (num_elements, data) in sum_check_data {
+        let mut group = c.benchmark_group(format!("Elliptic Relation/#{num_elements} elements"));
+        let mut acc = EllipticRelationAccHalfShared::default();
+        group.bench_function("single threaded", |b| {
+            b.iter(|| {
+                black_box(EllipticRelation::accumulate_small(
+                    &mut driver,
+                    black_box(&mut acc),
+                    &data.elliptic.all_entites,
+                    &data.elliptic.scaling_factors,
+                ))
+                .unwrap();
+            })
+        });
+        //for num_threads in threads_todo_list {
+        //    let thread_pool = ThreadPoolBuilder::new()
+        //        .num_threads(*num_threads)
+        //        .build()
+        //        .unwrap();
+        //    group.bench_function(format!("#{num_threads} threads"), |b| {
+        //        b.iter(|| {
+        //            thread_pool.install(|| {
+        //                black_box(EllipticRelation::accumulate_multithreaded(
+        //                    &mut driver,
+        //                    black_box(&mut acc),
+        //                    &data.delta_range.all_entites,
+        //                    &data.delta_range.scaling_factors,
+        //                ))
+        //                .unwrap();
+        //            })
+        //        })
+        //    });
+        //}
     }
 }
 
@@ -279,11 +323,12 @@ fn run_relations_bench(c: &mut Criterion) {
         gate_challenges: vec![],
     };
 
-    run_ultra_arith_relation(c, &threads, &params, &test_vecs);
-    run_ultra_permutation_relation(c, &threads, &params, &test_vecs);
-    run_delta_range_constraint_relation(c, &threads, &test_vecs);
-    run_poseidon_external_relation(c, &threads, &test_vecs);
-    run_poseidon_internal_relation(c, &threads, &test_vecs);
+    //run_ultra_arith_relation(c, &threads, &params, &test_vecs);
+    //run_ultra_permutation_relation(c, &threads, &params, &test_vecs);
+    //run_delta_range_constraint_relation(c, &threads, &test_vecs);
+    run_elliptic_relation(c, &threads, &test_vecs);
+    //run_poseidon_external_relation(c, &threads, &test_vecs);
+    //run_poseidon_internal_relation(c, &threads, &test_vecs);
 }
 
 criterion_group!(benches, run_relations_bench);
