@@ -1,9 +1,10 @@
 use super::{NoirWitnessExtensionProtocol, downcast};
 use ark_ec::{AffineRepr, CurveGroup};
-use ark_ff::{MontConfig, One, PrimeField};
+use ark_ff::{BigInteger, MontConfig, One, PrimeField};
 use blake2::{Blake2s256, Digest};
 use co_brillig::mpc::{PlainBrilligDriver, PlainBrilligType};
 use core::panic;
+use libaes::Cipher;
 use mpc_core::{
     gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations},
     lut::{LookupTableProvider, PlainLookupTableProvider},
@@ -532,6 +533,28 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Ok(Self::ArithmeticShare::from(a == b))
     }
 
+    fn equal_many(
+        &mut self,
+        a: &[Self::AcvmType],
+        b: &[Self::AcvmType],
+    ) -> std::io::Result<Vec<Self::AcvmType>> {
+        if a.len() != b.len() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!(
+                    "Vectors must have the same length. Length of a : {} and length of b: {}",
+                    a.len(),
+                    b.len()
+                ),
+            ));
+        }
+        let mut result = Vec::with_capacity(a.len());
+        for (a_i, b_i) in a.iter().zip(b.iter()) {
+            result.push(Self::ArithmeticShare::from(a_i == b_i));
+        }
+        Ok(result)
+    }
+
     fn multi_scalar_mul(
         &mut self,
         points: &[Self::AcvmType],
@@ -748,8 +771,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         let mut real_input = Vec::new();
         for (inp, num_bits) in message_input.iter().zip(num_bits.iter()) {
             let num_elements = num_bits.div_ceil(8); // We need to round to the next byte
-            let mut bytes = Vec::new();
-            inp.serialize_uncompressed(&mut bytes).unwrap();
+            let bytes = inp.into_bigint().to_bytes_le();
             real_input.extend_from_slice(&bytes[..num_elements])
         }
         let output_bytes: [u8; 32] = Blake2s256::digest(real_input).into();
@@ -765,8 +787,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         let mut real_input = Vec::new();
         for (inp, num_bits) in message_input.iter().zip(num_bits.iter()) {
             let num_elements = num_bits.div_ceil(8); // We need to round to the next byte
-            let mut bytes = Vec::new();
-            inp.serialize_uncompressed(&mut bytes).unwrap();
+            let bytes = inp.into_bigint().to_bytes_le();
             real_input.extend_from_slice(&bytes[..num_elements])
         }
         let output_bytes: [u8; 32] = blake3::hash(&real_input).into();
@@ -813,5 +834,86 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         } else {
             Ok((F::zero(), F::zero(), F::one()))
         }
+    }
+
+    fn aes128_encrypt(
+        &mut self,
+        scalars: &[Self::AcvmType],
+        iv: Vec<Self::AcvmType>,
+        key: Vec<Self::AcvmType>,
+    ) -> io::Result<Vec<Self::AcvmType>> {
+        let mut scalar_to_be_bytes = Vec::with_capacity(scalars.len());
+        let mut iv_to_be_bytes = Vec::with_capacity(iv.len());
+        let mut key_to_be_bytes = Vec::with_capacity(key.len());
+        for inp in scalars {
+            let byte = inp.into_bigint().as_ref()[0].to_le_bytes()[0];
+            scalar_to_be_bytes.push(byte);
+        }
+        for inp in iv {
+            let byte = inp.into_bigint().as_ref()[0].to_le_bytes()[0];
+            iv_to_be_bytes.push(byte);
+        }
+        for inp in key {
+            let byte = inp.into_bigint().as_ref()[0].to_le_bytes()[0];
+            key_to_be_bytes.push(byte);
+        }
+        let cipher = Cipher::new_128(
+            key_to_be_bytes
+                .as_slice()
+                .try_into()
+                .expect("slice with incorrect length"),
+        );
+        let encrypted = cipher.cbc_encrypt(&iv_to_be_bytes, &scalar_to_be_bytes);
+        encrypted
+            .into_iter()
+            .map(|x| Ok(Self::AcvmType::from(x as u128)))
+            .collect()
+    }
+
+    fn slice_and_get_aes_sparse_normalization_values_from_key(
+        &mut self,
+        _input1: Self::ArithmeticShare,
+        _input2: Self::ArithmeticShare,
+        _base_bits: &[u64],
+        _base: u64,
+    ) -> std::io::Result<(
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+    )> {
+        panic!(
+            "slice_and_get_aes_sparse_normalization_values_from_key not implemented for plaindriver and normally should not be called"
+        );
+    }
+
+    fn slice_and_get_aes_sbox_values_from_key(
+        &mut self,
+        _input1: Self::ArithmeticShare,
+        _input2: Self::ArithmeticShare,
+        _base_bits: &[u64],
+        _base: u64,
+        _sbox: &[u8],
+    ) -> std::io::Result<(
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+    )> {
+        panic!(
+            "slice_and_get_aes_sbox_values_from_key not implemented for plaindriver and normally should not be called"
+        );
+    }
+
+    // I know this is not so nice, but the map_from_sparse_form needed here lives in the builder in utils. Keep in mind for future refactor
+    fn accumulate_from_sparse_bytes(
+        &mut self,
+        _inputs: &[Self::AcvmType],
+        _base: u64,
+        _input_bitsize: usize,
+        _output_bitsize: usize,
+    ) -> io::Result<Self::AcvmType> {
+        panic!(
+            "accumulate_from_sparse_bytes not implemented for plaindriver and normally should not be called"
+        );
     }
 }

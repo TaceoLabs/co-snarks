@@ -395,6 +395,38 @@ where
         Ok((message_input, num_bits_vec))
     }
 
+    pub(super) fn solve_aes128_encryption_opcode(
+        driver: &mut T,
+        initial_witness: &mut WitnessMap<T::AcvmType>,
+        inputs: &[FunctionInput<GenericFieldElement<F>>],
+        iv: &[FunctionInput<GenericFieldElement<F>>; 16],
+        key: &[FunctionInput<GenericFieldElement<F>>; 16],
+        outputs: &[Witness],
+    ) -> CoAcvmResult<()> {
+        let mut scalars = Vec::with_capacity(inputs.len());
+        for inp in inputs {
+            let witness_value = Self::input_to_value(initial_witness, *inp, false)?;
+            scalars.push(witness_value);
+        }
+        let mut ivs = Vec::with_capacity(iv.len());
+        for inp in iv {
+            let witness_value = Self::input_to_value(initial_witness, *inp, false)?;
+            ivs.push(witness_value);
+        }
+        let mut keys = Vec::with_capacity(key.len());
+        for inp in key {
+            let witness_value = Self::input_to_value(initial_witness, *inp, false)?;
+            keys.push(witness_value);
+        }
+        let ciphertext = T::aes128_encrypt(driver, &scalars, ivs, keys)?;
+
+        // Write witness assignments
+        for (output_witness, value) in outputs.iter().zip(ciphertext.into_iter()) {
+            Self::insert_value(output_witness, value, initial_witness)?;
+        }
+        Ok(())
+    }
+
     pub(super) fn solve_blackbox(
         &mut self,
         bb_func: &BlackBoxFuncCall<GenericFieldElement<F>>,
@@ -408,7 +440,7 @@ where
 
         if !Self::contains_all_inputs(initial_witness, &inputs) {
             let unassigned_witness = Self::first_missing_assignment(initial_witness, &inputs)
-                .expect("Some assignments must be missing because it does not contains all inputs");
+                .expect("Some assignments must be missing because it does not contain all inputs");
             Err(eyre::eyre!(
                 "missing assignment for witness: {}",
                 unassigned_witness.0
@@ -482,6 +514,19 @@ where
             BlackBoxFuncCall::Blake3 { inputs, outputs } => {
                 Self::solve_blake3_opcode(&mut self.driver, initial_witness, inputs, outputs)?
             }
+            BlackBoxFuncCall::AES128Encrypt {
+                inputs,
+                iv,
+                key,
+                outputs,
+            } => Self::solve_aes128_encryption_opcode(
+                &mut self.driver,
+                initial_witness,
+                inputs,
+                iv,
+                key,
+                outputs,
+            )?,
             _ => todo!("solve blackbox function {} not supported", bb_func.name()),
         }
 

@@ -825,6 +825,38 @@ pub fn field_int_div_by_shared_many<F: PrimeField, N: Rep3Network>(
     )
 }
 
+/// Computes AES ciphertext from given plaintext, key and initialization vector using a bristol fashion circuit as a garbled circuit.
+pub fn aes_from_bristol<F: PrimeField, N: Rep3Network>(
+    plaintext: &[Rep3PrimeFieldShare<F>],
+    key: &[Rep3PrimeFieldShare<F>],
+    iv: &[Rep3PrimeFieldShare<F>],
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
+    const AES_BLOCK_SIZE: usize = 16;
+    const BIT_SIZE: usize = 8;
+    debug_assert_eq!(key.len(), AES_BLOCK_SIZE);
+    debug_assert_eq!(iv.len(), AES_BLOCK_SIZE);
+
+    let mut combined_inputs = Vec::with_capacity(key.len() + plaintext.len() + iv.len());
+    combined_inputs.extend_from_slice(plaintext);
+    combined_inputs.extend_from_slice(key);
+    combined_inputs.extend_from_slice(iv);
+
+    let total_output_elements = plaintext.len()
+        + if plaintext.len() % AES_BLOCK_SIZE == 0 {
+            0
+        } else {
+            AES_BLOCK_SIZE - (plaintext.len() % AES_BLOCK_SIZE)
+        };
+    decompose_circuit_compose_blueprint!(
+        &combined_inputs,
+        io_context,
+        total_output_elements,
+        GarbledCircuits::aes128::<_, F>,
+        (plaintext.len(), key.len(), BIT_SIZE)
+    )
+}
+
 /// Divides a field element by another, rounding down.
 pub fn field_int_div_by_shared<F: PrimeField, N: Rep3Network>(
     input: F,
@@ -933,6 +965,81 @@ macro_rules! decompose_circuit_compose_blueprint {
     }};
 }
 pub(crate) use decompose_circuit_compose_blueprint;
+
+// Returns the output as binary share
+#[expect(unused_macros)]
+macro_rules! decompose_circuit_compose_blueprint_to_binary {
+    ($inputs:expr, $io_context:expr, $output_size:expr, $circuit:expr, ($( $args:expr ),*)) => {{
+   use $crate::protocols::rep3::yao;
+        use mpc_types::protocols::rep3::{id::PartyID, };
+        use crate::protocols::rep3::conversion::y2b_many;
+
+        let delta = $io_context
+            .rngs
+            .generate_random_garbler_delta($io_context.id);
+
+        let [x01, x2] = yao::joint_input_arithmetic_added_many($inputs, delta, $io_context)?;
+
+      let res=  match $io_context.id {
+            PartyID::ID0 => {
+                // TODO this can be parallelized with joint_input_arithmetic_added_many
+                let x23 = yao::input_field_id2_many::<F, _>(None, None, $output_size, $io_context)?;
+
+                let mut evaluator = yao::evaluator::Rep3Evaluator::new($io_context);
+                evaluator.receive_circuit()?;
+
+                let x1 = $circuit(&mut evaluator, &x01, &x2, &x23, $($args),*);
+                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let mut x1_vec= Vec::new();
+                for chunk in x1.wires().chunks(F::MODULUS_BIT_SIZE as usize) {
+                    x1_vec.push(BinaryBundle::new(chunk.to_vec()));
+                }
+                 y2b_many(x1_vec,  $io_context)?
+            }
+            PartyID::ID1 => {
+                // TODO this can be parallelized with joint_input_arithmetic_added_many
+                let x23 = yao::input_field_id2_many::<F, _>(None, None, $output_size, $io_context)?;
+
+                let mut garbler =
+                    yao::garbler::Rep3Garbler::new_with_delta($io_context, delta.expect("Delta not provided"));
+
+                let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*);
+                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let mut x1_vec= Vec::new();
+                for chunk in x1.wires().chunks(F::MODULUS_BIT_SIZE as usize) {
+                    x1_vec.push(BinaryBundle::new(chunk.to_vec()));
+                }
+                y2b_many(x1_vec,  $io_context)?
+            }
+            PartyID::ID2 => {
+                let mut x23 = Vec::with_capacity($output_size);
+                for _ in 0..$output_size {
+                    let k2 = $io_context.rngs.bitcomp1.random_fes_3keys::<F>();
+                    let k3 = $io_context.rngs.bitcomp2.random_fes_3keys::<F>();
+                    let k2_comp = k2.0 + k2.1 + k2.2;
+                    let k3_comp = k3.0 + k3.1 + k3.2;
+                    x23.push(k2_comp + k3_comp);
+                }
+
+                // TODO this can be parallelized with joint_input_arithmetic_added_many
+                let x23 = yao::input_field_id2_many(Some(x23), delta, $output_size, $io_context)?;
+
+                let mut garbler =
+                   yao::garbler::Rep3Garbler::new_with_delta($io_context, delta.expect("Delta not provided"));
+
+                let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*);
+                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let mut x1_vec= Vec::new();
+                for chunk in x1.wires().chunks(F::MODULUS_BIT_SIZE as usize) {
+                    x1_vec.push(BinaryBundle::new(chunk.to_vec()));
+                }
+                y2b_many(x1_vec,  $io_context)?
+            }
+        };
+
+        Ok(res)
+    }};
+}
 
 // TODO implement with a2b/b2a as well
 
@@ -1253,5 +1360,126 @@ pub fn blake3<F: PrimeField, N: Rep3Network>(
         total_output_elements,
         GarbledCircuits::blake3::<_, F>,
         (num_inputs, num_bits)
+    )
+}
+
+/// Slices two vecs of field elements according to base_bits, and again slices these slices according to base. These slices are then returned as arithmetic shares of the binary representation for the AES normalization values.
+pub fn slice_and_map_from_sparse_form_many<F: PrimeField, N: Rep3Network>(
+    input1: &[Rep3PrimeFieldShare<F>],
+    input2: &[Rep3PrimeFieldShare<F>],
+    io_context: &mut IoContext<N>,
+    base_bits: &[u64],
+    base: u64,
+    total_input_bitlen_per_field: usize,
+) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
+    let num_inputs = input1.len() + input2.len();
+    debug_assert_eq!(input1.len(), input2.len());
+    let num_decomps_per_field = base_bits.len();
+    let total_output_elements =
+        num_inputs * num_decomps_per_field + 8 * (num_inputs / 2) * num_decomps_per_field;
+    let mut combined_inputs = Vec::with_capacity(num_inputs);
+    combined_inputs.extend_from_slice(input1);
+    combined_inputs.extend_from_slice(input2);
+
+    decompose_circuit_compose_blueprint!(
+        &combined_inputs,
+        io_context,
+        total_output_elements,
+        GarbledCircuits::slice_and_map_from_sparse_form_many::<_, F>,
+        (
+            base_bits,
+            base,
+            total_input_bitlen_per_field,
+            circuits::ReturnType::BinaryAsArithmetic
+        )
+    )
+}
+
+/// Slices two field elements according to base_bits, and again slices these slices according to base. These slices are then returned as arithmetic shares of the binary representation for the AES normalization values.
+pub fn slice_and_map_from_sparse_form<F: PrimeField, N: Rep3Network>(
+    input1: Rep3PrimeFieldShare<F>,
+    input2: Rep3PrimeFieldShare<F>,
+    io_context: &mut IoContext<N>,
+    base_bits: &[u64],
+    base: u64,
+    total_input_bitlen_per_field: usize,
+) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
+    slice_and_map_from_sparse_form_many(
+        &[input1],
+        &[input2],
+        io_context,
+        base_bits,
+        base,
+        total_input_bitlen_per_field,
+    )
+}
+
+/// Slices two vecs of field elements according to base_bits, and again slices these slices according to base. These slices are then used to compute the AES sbox values.
+pub fn slice_and_map_from_sparse_form_many_sbox<F: PrimeField, N: Rep3Network>(
+    input1: &[Rep3PrimeFieldShare<F>],
+    input2: &[Rep3PrimeFieldShare<F>],
+    io_context: &mut IoContext<N>,
+    base_bits: &[u64],
+    base: u64,
+    total_input_bitlen_per_field: usize,
+) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
+    let num_inputs = input1.len() + input2.len();
+    debug_assert_eq!(input1.len(), input2.len());
+    let num_decomps_per_field = base_bits.len();
+    let total_output_elements =
+        num_inputs * num_decomps_per_field + (num_inputs / 2) * num_decomps_per_field;
+    let mut combined_inputs = Vec::with_capacity(num_inputs);
+    combined_inputs.extend_from_slice(input1);
+    combined_inputs.extend_from_slice(input2);
+
+    decompose_circuit_compose_blueprint!(
+        &combined_inputs,
+        io_context,
+        total_output_elements,
+        GarbledCircuits::slice_and_map_from_sparse_form_many::<_, F>,
+        (
+            base_bits,
+            base,
+            total_input_bitlen_per_field,
+            circuits::ReturnType::Arithmetic
+        )
+    )
+}
+
+/// Slices two field elements according to base_bits, and again slices these slices according to base. These slices are then used to compute the AES sbox values.
+pub fn slice_and_map_from_sparse_form_sbox<F: PrimeField, N: Rep3Network>(
+    input1: Rep3PrimeFieldShare<F>,
+    input2: Rep3PrimeFieldShare<F>,
+    io_context: &mut IoContext<N>,
+    base_bits: &[u64],
+    base: u64,
+    total_input_bitlen_per_field: usize,
+) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
+    slice_and_map_from_sparse_form_many_sbox(
+        &[input1],
+        &[input2],
+        io_context,
+        base_bits,
+        base,
+        total_input_bitlen_per_field,
+    )
+}
+
+/// Slices a vector of field elements according to base and computes an accumulator necessary for the AES argument.
+pub fn accumulate_from_sparse_bytes<F: PrimeField, N: Rep3Network>(
+    input: &[Rep3PrimeFieldShare<F>],
+    io_context: &mut IoContext<N>,
+    input_bitsize: usize,
+    output_bitsize: usize,
+    base: u64,
+) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
+    let total_output_elements = 1;
+
+    decompose_circuit_compose_blueprint!(
+        &input,
+        io_context,
+        total_output_elements,
+        GarbledCircuits::accumulate_from_sparse_bytes::<_, F>,
+        (input_bitsize, output_bitsize, base)
     )
 }

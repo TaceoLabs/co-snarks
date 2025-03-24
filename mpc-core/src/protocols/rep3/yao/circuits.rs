@@ -5,6 +5,7 @@
 use super::bristol_fashion::BristolFashionEvaluator;
 use crate::protocols::rep3::yao::{GCUtils, bristol_fashion::BristolFashionCircuit};
 use ark_ff::PrimeField;
+use core::panic;
 use fancy_garbling::{BinaryBundle, FancyBinary, FancyError};
 use itertools::izip;
 use num_bigint::BigUint;
@@ -30,6 +31,12 @@ pub enum SHA256Table {
     WitnessExtension,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum ReturnType {
+    BinaryAsArithmetic,
+    Arithmetic,
+}
+
 /// This struct contains some predefined garbled circuits.
 pub struct GarbledCircuits {}
 
@@ -37,6 +44,14 @@ impl GarbledCircuits {
     fn constant_bundle_from_u32<G: FancyBinary + FancyBinaryConstant>(
         g: &mut G,
         c: u32,
+        size: usize,
+    ) -> Result<Vec<G::Item>, G::Error> {
+        Self::constant_bundle_from_usize(g, c as usize, size)
+    }
+
+    fn constant_bundle_from_usize<G: FancyBinary + FancyBinaryConstant>(
+        g: &mut G,
+        c: usize,
         size: usize,
     ) -> Result<Vec<G::Item>, G::Error> {
         let mut result = Vec::with_capacity(size);
@@ -52,7 +67,6 @@ impl GarbledCircuits {
 
         Ok(result)
     }
-
     fn full_adder_const<G: FancyBinary>(
         g: &mut G,
         a: &G::Item,
@@ -2499,8 +2513,10 @@ impl GarbledCircuits {
             Self::adder_mod_p_with_output_size::<_, F>(g, x1s, x2s, total_output_bitlen_per_field)?;
         let mut input_bits_2 =
             Self::adder_mod_p_with_output_size::<_, F>(g, y1s, y2s, total_output_bitlen_per_field)?;
-        input_bits_1.resize(base_bit_log * num_decomps_per_field, g.const_zero()?);
-        input_bits_2.resize(base_bit_log * num_decomps_per_field, g.const_zero()?);
+        if total_output_bitlen_per_field < base_bit_log * num_decomps_per_field {
+            input_bits_1.resize(base_bit_log * num_decomps_per_field, g.const_zero()?);
+            input_bits_2.resize(base_bit_log * num_decomps_per_field, g.const_zero()?);
+        }
         let mut results = Vec::with_capacity(input_bitlen * num_decomps_per_field);
         let mut rands = wires_c.chunks(input_bitlen);
 
@@ -2606,6 +2622,306 @@ impl GarbledCircuits {
         }
 
         Ok(results)
+    }
+
+    /// Slices field elements in chunks, then slices these again according to base, a specific circuit for the plookup accumulator in the builder. The field elements are represented as bitdecompositions x1s, x2s, y1s and y2s which need to be added first get the two inputs. The output is composed using wires_c. Base_bit is the size of the slice, rotation the the length of the rotation and total_output_bitlen_per_field is the amount of bits the output field elements have. return_type specifies whether it is then used as arithmetic shares of the binary representation or as one arithmetic share, depending on whether it is used for normalization or sbox.
+    #[expect(clippy::too_many_arguments)]
+    pub(crate) fn slice_and_map_from_sparse_form_many<
+        G: FancyBinary + FancyBinaryConstant,
+        F: PrimeField,
+    >(
+        g: &mut G,
+        wires_x1: &BinaryBundle<G::Item>,
+        wires_x2: &BinaryBundle<G::Item>,
+        wires_c: &BinaryBundle<G::Item>,
+        base_bits: &[u64],
+        base: u64,
+        total_output_bitlen_per_field: usize,
+        return_type: ReturnType,
+    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+        let input_bitlen = F::MODULUS_BIT_SIZE as usize;
+        debug_assert_eq!(wires_x1.size(), wires_x2.size());
+        let length = wires_x1.size();
+        debug_assert_eq!(length % 2, 0);
+        let num_decomps_per_field = base_bits.len();
+        let num_inputs = length / input_bitlen;
+
+        let total_output_elements = match return_type {
+            ReturnType::BinaryAsArithmetic => {
+                num_inputs * num_decomps_per_field + 8 * (num_inputs / 2) * num_decomps_per_field
+            }
+            ReturnType::Arithmetic => {
+                num_inputs * num_decomps_per_field + (num_inputs / 2) * num_decomps_per_field
+            }
+        };
+        debug_assert_eq!(wires_c.size(), total_output_elements * input_bitlen);
+        debug_assert_eq!(length % input_bitlen, 0);
+
+        let mut results = Vec::with_capacity(wires_c.size());
+        let chunk_size = match return_type {
+            ReturnType::BinaryAsArithmetic => (10 * num_decomps_per_field) * input_bitlen,
+            ReturnType::Arithmetic => (3 * num_decomps_per_field) * input_bitlen,
+        };
+        for (chunk_x1, chunk_x2, chunk_y1, chunk_y2, chunk_c) in izip!(
+            wires_x1.wires()[0..length / 2].chunks(input_bitlen),
+            wires_x2.wires()[0..length / 2].chunks(input_bitlen),
+            wires_x1.wires()[length / 2..].chunks(input_bitlen),
+            wires_x2.wires()[length / 2..].chunks(input_bitlen),
+            wires_c.wires().chunks(chunk_size),
+        ) {
+            let value = Self::slice_and_map_from_sparse_form::<G, F>(
+                g,
+                chunk_x1,
+                chunk_x2,
+                chunk_y1,
+                chunk_y2,
+                chunk_c,
+                base_bits,
+                base,
+                total_output_bitlen_per_field,
+                return_type,
+            )?;
+            results.extend(value);
+        }
+
+        Ok(BinaryBundle::new(results))
+    }
+
+    /// Slices field elements in chunks, then slices these again according to base, a specific circuit for the plookup accumulator in the builder. The field elements are represented as bitdecompositions x1s, x2s, y1s and y2s which need to be added first get the two inputs. The output is composed using wires_c. Base_bit is the size of the slice, rotation the the length of the rotation and total_output_bitlen_per_field is the amount of bits the output field elements have. return_type specifies whether it is then used as arithmetic shares of the binary representation or as one arithmetic share, depending on whether it is used for normalization or sbox.
+    #[expect(clippy::too_many_arguments)]
+    pub(crate) fn slice_and_map_from_sparse_form<
+        G: FancyBinary + FancyBinaryConstant,
+        F: PrimeField,
+    >(
+        g: &mut G,
+        x1s: &[G::Item],
+        x2s: &[G::Item],
+        y1s: &[G::Item],
+        y2s: &[G::Item],
+        wires_c: &[G::Item],
+        base_bits: &[u64],
+        base: u64,
+        total_output_bitlen_per_field: usize,
+        return_type: ReturnType,
+    ) -> Result<Vec<G::Item>, G::Error> {
+        let input_bitlen = F::MODULUS_BIT_SIZE as usize;
+        let base_bit = base_bits[0] as usize; // For AES all base_bits are the same
+        if !base_bits.iter().all(|&x| x as usize == base_bit) {
+            panic!("Base bits are not all the same");
+        }
+        let base_bit_log = base_bit.next_power_of_two().ilog2() as usize;
+        let base_log = base.next_power_of_two().ilog2() as usize;
+        let num_decomps_per_field = base_bits.len();
+
+        debug_assert_eq!(x1s.len(), input_bitlen);
+        debug_assert_eq!(x2s.len(), input_bitlen);
+        debug_assert_eq!(y1s.len(), input_bitlen);
+        debug_assert_eq!(y2s.len(), input_bitlen);
+        if return_type == ReturnType::BinaryAsArithmetic {
+            debug_assert_eq!(wires_c.len(), (10 * num_decomps_per_field) * input_bitlen);
+        } else {
+            debug_assert_eq!(wires_c.len(), (3 * num_decomps_per_field) * input_bitlen);
+        }
+
+        // Combine the inputs
+        let mut input_bits_1 =
+            Self::adder_mod_p_with_output_size::<_, F>(g, x1s, x2s, total_output_bitlen_per_field)?;
+        let mut input_bits_2 =
+            Self::adder_mod_p_with_output_size::<_, F>(g, y1s, y2s, total_output_bitlen_per_field)?;
+        if total_output_bitlen_per_field < base_bit_log * num_decomps_per_field {
+            input_bits_1.resize(base_bit_log * num_decomps_per_field, g.const_zero()?);
+            input_bits_2.resize(base_bit_log * num_decomps_per_field, g.const_zero()?);
+        }
+        let mut results = Vec::with_capacity(input_bitlen * num_decomps_per_field);
+        let mut rands = wires_c.chunks(input_bitlen);
+
+        // Compose the inputs
+        if base_bit.count_ones() == 1 {
+            for inp in input_bits_1.chunks(base_bit_log) {
+                results.extend(Self::compose_field_element::<_, F>(
+                    g,
+                    inp,
+                    rands.next().unwrap(),
+                )?);
+            }
+            for inp in input_bits_2.chunks(base_bit_log) {
+                results.extend(Self::compose_field_element::<_, F>(
+                    g,
+                    inp,
+                    rands.next().unwrap(),
+                )?);
+            }
+            let zero = g.const_zero()?;
+            if base.count_ones() == 1 {
+                for chunk in input_bits_1.chunks(base_bit_log) {
+                    let base = base.ilog2() as usize;
+                    let mut counter = 0;
+                    if return_type == ReturnType::BinaryAsArithmetic {
+                        for slice in chunk.chunks(base) {
+                            results.extend(Self::compose_field_element::<_, F>(
+                                g,
+                                &[slice[0].clone()],
+                                rands.next().unwrap(),
+                            )?);
+                            counter += 1;
+                        }
+                        for _ in 0..8 - counter {
+                            results.extend(Self::compose_field_element::<_, F>(
+                                g,
+                                &[zero.clone()],
+                                rands.next().unwrap(),
+                            )?);
+                        }
+                    } else {
+                        let mut result = Vec::with_capacity(chunk.len().div_ceil(base));
+                        for slice in chunk.chunks(base) {
+                            result.push(slice[0].clone());
+                        }
+
+                        results.extend(Self::compose_field_element::<_, F>(
+                            g,
+                            &result,
+                            rands.next().unwrap(),
+                        )?);
+                    }
+                }
+            } else {
+                for chunk in input_bits_1.chunks(base_bit_log) {
+                    let num_decomps = chunk.len().next_power_of_two().div_ceil(base_log);
+
+                    // TODO: we can optimize this slicing since we only need the first bit (by doing a modified subtraction and mul).
+                    let mut sliced_bits =
+                        Self::bin_slicing_using_arbitrary_base(g, chunk, base, num_decomps)?;
+                    if return_type == ReturnType::BinaryAsArithmetic {
+                        sliced_bits.resize(8, vec![g.const_zero()?]);
+
+                        for slice in sliced_bits {
+                            results.extend(Self::compose_field_element::<_, F>(
+                                g,
+                                &[slice[0].clone()],
+                                rands.next().unwrap(),
+                            )?);
+                        }
+                    } else {
+                        let result: Vec<_> =
+                            sliced_bits.iter().map(|slice| slice[0].clone()).collect();
+                        results.extend(Self::compose_field_element::<_, F>(
+                            g,
+                            &result,
+                            rands.next().unwrap(),
+                        )?);
+                    }
+                }
+            }
+        } else {
+            let slices_inp1 = Self::bin_slicing_using_arbitrary_base(
+                g,
+                &input_bits_1,
+                base_bit as u64,
+                num_decomps_per_field,
+            )?;
+            for slice in slices_inp1.iter() {
+                results.extend(Self::compose_field_element::<_, F>(
+                    g,
+                    slice,
+                    rands.next().unwrap(),
+                )?);
+            }
+
+            let slices_inp2 = Self::bin_slicing_using_arbitrary_base(
+                g,
+                &input_bits_2,
+                base_bit as u64,
+                num_decomps_per_field,
+            )?;
+
+            for slice in slices_inp2.iter() {
+                results.extend(Self::compose_field_element::<_, F>(
+                    g,
+                    slice,
+                    rands.next().unwrap(),
+                )?);
+            }
+
+            for chunk in slices_inp1 {
+                let num_decomps = chunk.len().next_power_of_two().div_ceil(base_log);
+
+                // TODO: we can optimize this slicing since we only need the first bit (by doing a modified subtraction and mul).
+                let mut sliced_bits =
+                    Self::bin_slicing_using_arbitrary_base(g, &chunk, base, num_decomps)?;
+                if return_type == ReturnType::BinaryAsArithmetic {
+                    sliced_bits.resize(8, vec![g.const_zero()?]);
+                    for slice in sliced_bits {
+                        results.extend(Self::compose_field_element::<_, F>(
+                            g,
+                            &[slice[0].clone()],
+                            rands.next().unwrap(),
+                        )?);
+                    }
+                } else {
+                    let result: Vec<_> = sliced_bits.iter().map(|slice| slice[0].clone()).collect();
+                    results.extend(Self::compose_field_element::<_, F>(
+                        g,
+                        &result,
+                        rands.next().unwrap(),
+                    )?);
+                }
+            }
+        }
+
+        Ok(results)
+    }
+
+    /// A custom circuit for the AES blackbox function. Slices the input in base chunks and then composes these together into one element.
+    pub(crate) fn accumulate_from_sparse_bytes<
+        G: FancyBinary + FancyBinaryConstant,
+        F: PrimeField,
+    >(
+        g: &mut G,
+        wires_x1: &BinaryBundle<G::Item>,
+        wires_x2: &BinaryBundle<G::Item>,
+        wires_c: &BinaryBundle<G::Item>,
+        input_bitsize: usize,
+        output_bitsize: usize,
+        base: u64,
+    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+        let input_bitlen = F::MODULUS_BIT_SIZE as usize;
+        debug_assert_eq!(wires_x1.size(), wires_x2.size());
+        let length = wires_x1.size();
+        let base_log = base.next_power_of_two().ilog2() as usize;
+        let num_decomps_per_field = input_bitsize.div_ceil(base_log);
+
+        let total_output_elements = 1;
+        debug_assert_eq!(wires_c.size(), total_output_elements * input_bitlen);
+        debug_assert_eq!(length % input_bitlen, 0);
+
+        let mut result = Vec::with_capacity(input_bitlen * num_decomps_per_field);
+        for (chunk_a, chunk_b) in izip!(
+            wires_x1.wires().chunks(input_bitlen),
+            wires_x2.wires().chunks(input_bitlen),
+        ) {
+            let input_bits =
+                Self::adder_mod_p_with_output_size::<_, F>(g, chunk_a, chunk_b, input_bitsize)?;
+
+            let mut value = Self::bin_slicing_using_arbitrary_base::<G>(
+                g,
+                &input_bits,
+                base,
+                num_decomps_per_field,
+            )?;
+
+            value.resize(output_bitsize, vec![g.const_zero()?]);
+            value.reverse();
+            for slice in value {
+                result.insert(0, slice[0].clone());
+            }
+        }
+
+        Ok(BinaryBundle::new(Self::compose_field_element::<_, F>(
+            g,
+            &result,
+            wires_c.wires(),
+        )?))
     }
 
     /// Slices a field element wrt to 'base' into 'num_decomps_per_field' many slices. Should be used for bases which are not powers of 2, because in that case you can just take the bits directly from the wire.
@@ -2785,7 +3101,7 @@ impl GarbledCircuits {
             chunk.reverse();
         }
 
-        for (xs, ys) in izip!(result.chunks(32), wires_c.wires().chunks(input_bitlen),) {
+        for (xs, ys) in izip!(result.chunks(32), wires_c.wires().chunks(input_bitlen)) {
             let result = Self::compose_field_element::<_, F>(g, xs, ys)?;
             results.extend(result);
         }
@@ -3410,6 +3726,151 @@ impl GarbledCircuits {
         [9, 14, 11, 5, 8, 12, 15, 1, 13, 3, 0, 10, 2, 6, 4, 7],
         [11, 15, 5, 0, 1, 9, 8, 6, 14, 10, 2, 12, 3, 4, 7, 13],
     ];
+
+    /// Computes AES ct with given pt, iv and key which are represented as wires_x1 and wires_x2 which need to be added first get the inputs. The output is composed using wires_c. If the plaintext is not of size 0 mod 16 it is padded using PKCS7 padding.
+    pub(crate) fn aes128<
+        G: FancyBinary + FancyBinaryConstant + BristolFashionEvaluator<WireValue = G::Item>,
+        F: PrimeField,
+    >(
+        g: &mut G,
+        wires_x1: &BinaryBundle<G::Item>,
+        wires_x2: &BinaryBundle<G::Item>,
+        wires_c: &BinaryBundle<G::Item>,
+        pt_length: usize,
+        key_length: usize,
+        bitsize: usize,
+    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+        const AES_BLOCK_SIZE: usize = 16;
+        let input_bitlen = F::MODULUS_BIT_SIZE as usize;
+
+        // Reading the circuit from txt file
+        let circuit = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/protocols/rep3/yao/bristol_fashion/circuit_files/aes_128.txt"
+        ));
+        let circuit_read =
+            BristolFashionCircuit::from_reader(circuit.as_bytes()).expect("aes128 circuit works");
+
+        let mut plaintext = Vec::new();
+        let mut key = Vec::new();
+        let mut iv = Vec::new();
+
+        for (chunk_x1, chunk_x2) in izip!(
+            wires_x1.wires()[..pt_length * input_bitlen].chunks(input_bitlen),
+            wires_x2.wires()[..pt_length * input_bitlen].chunks(input_bitlen)
+        ) {
+            let mut plaintext_bits =
+                Self::adder_mod_p_with_output_size::<_, F>(g, chunk_x1, chunk_x2, bitsize)?;
+            plaintext_bits.reverse();
+            plaintext.extend(plaintext_bits);
+        }
+        for (chunk_y1, chunk_y2, chunk_z1, chunk_z2) in izip!(
+            wires_x1.wires()
+                [pt_length * input_bitlen..pt_length * input_bitlen + key_length * input_bitlen]
+                .chunks(input_bitlen),
+            wires_x2.wires()
+                [pt_length * input_bitlen..pt_length * input_bitlen + key_length * input_bitlen]
+                .chunks(input_bitlen),
+            wires_x1.wires()[pt_length * input_bitlen + key_length * input_bitlen..]
+                .chunks(input_bitlen),
+            wires_x2.wires()[pt_length * input_bitlen + key_length * input_bitlen..]
+                .chunks(input_bitlen),
+        ) {
+            let mut key_bits =
+                Self::adder_mod_p_with_output_size::<_, F>(g, chunk_y1, chunk_y2, bitsize)?;
+            key_bits.reverse();
+            let mut iv_bits =
+                Self::adder_mod_p_with_output_size::<_, F>(g, chunk_z1, chunk_z2, bitsize)?;
+            iv_bits.reverse();
+            key.extend(key_bits);
+            iv.extend(iv_bits);
+        }
+        // PKCS7 padding:
+        if pt_length % AES_BLOCK_SIZE != 0 {
+            let add = AES_BLOCK_SIZE - (pt_length % AES_BLOCK_SIZE);
+            let mut add_bundle = Self::constant_bundle_from_usize(g, add, bitsize)?;
+            add_bundle.reverse();
+            for _ in 0..add {
+                plaintext.extend(add_bundle.clone());
+            }
+        }
+        for block in plaintext.chunks_mut(bitsize * AES_BLOCK_SIZE) {
+            block.reverse();
+        }
+        key.reverse();
+        iv.reverse();
+
+        debug_assert_eq!(plaintext.len() % AES_BLOCK_SIZE, 0);
+
+        let mut my_iv = iv;
+        let mut rest = &mut plaintext[..];
+
+        while rest.len() >= AES_BLOCK_SIZE * bitsize {
+            let (block, remain) = rest.split_at_mut(AES_BLOCK_SIZE * bitsize);
+
+            block.iter_mut().zip(my_iv.iter()).try_for_each(|(x, y)| {
+                *x = FancyBinary::xor(g, x, y)?;
+                Ok::<(), G::Error>(())
+            })?;
+
+            block.clone_from_slice(&Self::aes128_block::<_>(g, &key, block, &circuit_read)?);
+
+            my_iv.clone_from_slice(block);
+            rest = remain;
+        }
+
+        // we need to reorder here, since we the input for the circuit is in reversed order
+        for res in plaintext.chunks_mut(bitsize * AES_BLOCK_SIZE) {
+            for i in 0..bitsize {
+                for j in 0..bitsize {
+                    res.swap(
+                        i * bitsize + j,
+                        AES_BLOCK_SIZE * bitsize - (i + 1) * bitsize + j,
+                    );
+                }
+            }
+        }
+
+        let mut results =
+            Vec::with_capacity(plaintext.len().div_ceil(bitsize) * F::MODULUS_BIT_SIZE as usize);
+        for (xs, ys) in izip!(
+            plaintext.chunks(bitsize),
+            wires_c.wires().chunks(input_bitlen),
+        ) {
+            let result = Self::compose_field_element::<_, F>(g, xs, ys)?;
+            results.extend(result);
+        }
+
+        Ok(BinaryBundle::new(results))
+    }
+
+    /// Computes one single AES block using the parsed Bristol circuit.
+    pub(crate) fn aes128_block<
+        G: FancyBinary + FancyBinaryConstant + BristolFashionEvaluator<WireValue = G::Item>,
+    >(
+        g: &mut G,
+        key: &[G::Item],
+        plaintext: &[G::Item],
+        circuit: &BristolFashionCircuit,
+    ) -> Result<Vec<G::Item>, G::Error> {
+        debug_assert_eq!(key.len(), 128);
+        debug_assert_eq!(plaintext.len(), 128);
+
+        let input = [key, plaintext];
+        let one = g.const_one()?;
+        let result = match circuit.evaluate_with_default::<G::Item>(&input, g, one) {
+            Ok(mut outputs) => match outputs.pop() {
+                Some(output) => output,
+                None => {
+                    return Err(G::Error::from(FancyError::InvalidArg(
+                        "No output found in circuit evaluation".to_string(),
+                    )));
+                }
+            },
+            Err(e) => return Err(G::Error::from(FancyError::from(e))),
+        };
+        Ok(result)
+    }
 }
 
 #[cfg(test)]

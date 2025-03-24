@@ -372,9 +372,11 @@ impl<P: Pairing> ProvingKey<P> {
     ) -> std::io::Result<()> {
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1033): construct tables and counts at top of trace
         let mut table_offset = circuit.blocks.lookup.trace_offset as usize;
-
         for table in circuit.lookup_tables.iter_mut() {
-            // table.initialize_index_map(); // We calculate indices from keys
+            // we need the index_map hash table in this case
+            if table.requires_index_map() {
+                table.initialize_index_map();
+            }
 
             for (i, gate_data) in table.lookup_gates.iter().enumerate() {
                 // convert lookup gate data to an array of three field elements, one for each of the 3 columns
@@ -389,8 +391,23 @@ impl<P: Pairing> ProvingKey<P> {
                 );
 
                 if T::is_shared(&index_in_table) {
-                    let index_in_table =
-                        T::get_shared(&index_in_table).expect("Already checked it is shared");
+                    let index_in_table = if table.requires_index_map() {
+                        let table = &table.column_1;
+                        let mut index = T::public_zero();
+                        let index_vec = vec![index_in_table; table.len()];
+                        let table_vec: Vec<T::AcvmType> =
+                            table.iter().map(|v| T::AcvmType::from(*v)).collect();
+                        let cmp = T::equal_many(driver, &index_vec, &table_vec)?;
+                        for (i, val) in cmp.into_iter().enumerate() {
+                            let mul =
+                                T::mul_with_public(driver, P::ScalarField::from(i as u64), val);
+                            index = T::add(driver, index, mul);
+                        }
+                        T::get_shared(&index).expect("Already checked it is shared")
+                    } else {
+                        T::get_shared(&index_in_table).expect("Already checked it is shared")
+                    };
+
                     let ohv =
                         driver.one_hot_vector_from_shared_index(index_in_table, table.len())?;
 
@@ -430,8 +447,11 @@ impl<P: Pairing> ProvingKey<P> {
                     let index_in_table: BigUint = T::get_public(&index_in_table)
                         .expect("Already checked it is public")
                         .into();
-                    let index_in_table =
-                        usize::try_from(index_in_table).expect("index is too large for usize?");
+                    let index_in_table = if table.requires_index_map() {
+                        table.index_map[index_in_table.into()]
+                    } else {
+                        usize::try_from(index_in_table).expect("index is too large for usize?")
+                    };
 
                     let index_in_poly = table_offset + index_in_table;
 
@@ -449,7 +469,6 @@ impl<P: Pairing> ProvingKey<P> {
             }
             table_offset += table.len(); // set the offset of the next table within the polynomials
         }
-
         Ok(())
     }
 }

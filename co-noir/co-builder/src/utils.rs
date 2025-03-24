@@ -109,4 +109,32 @@ impl Utils {
         };
         (value >> start) & mask
     }
+
+    pub fn map_from_sparse_form<const BASE: u64>(input: BigUint) -> u64 {
+        let mut target = input;
+        let mut output = 0u64;
+
+        let bases = Self::get_base_powers::<BASE, 32>();
+
+        for i in (0..32).rev() {
+            let base_power = &bases[i];
+            let mut prev_threshold = BigUint::zero();
+            for j in 1..BASE + 1 {
+                let threshold = &prev_threshold + base_power;
+                if target < threshold {
+                    let bit = ((j - 1) & 1) != 0;
+                    if bit {
+                        output += 1 << i;
+                    }
+                    if j > 1 {
+                        target -= prev_threshold;
+                    }
+                    break;
+                }
+                prev_threshold = threshold;
+            }
+        }
+
+        output
+    }
 }

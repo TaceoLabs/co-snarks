@@ -30,6 +30,7 @@ serde.workspace = true
 thiserror.workspace = true
 toml.workspace = true
 tracing.workspace = true
+libaes.workspace = true
 num-bigint.workspace = true
 rayon.workspace = true
 

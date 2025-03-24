@@ -3,11 +3,11 @@ use super::field_ct::FieldCT;
 use super::generators;
 use crate::TranscriptFieldType;
 use crate::prelude::HonkCurve;
+use crate::types::aes128::{AES128_BASE, AES128_SBOX};
 use crate::{builder::GenericUltraCircuitBuilder, utils};
 use ark_ec::{AffineRepr, CurveGroup, pairing::Pairing};
 use ark_ff::{PrimeField, Zero};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use itertools::izip;
 use mpc_core::protocols::rep3::yao::circuits::SHA256Table;
 use num_bigint::BigUint;
 use std::array::from_fn;
@@ -343,6 +343,30 @@ impl BasicTableId {
                     .rotate_right(NUM_ROTATED_OUTPUT_BITS as u32),
             ),
             F::zero(),
+        ]
+    }
+
+    pub(crate) fn get_aes_sparse_normalization_values_from_key<F: PrimeField>(
+        key: [u64; 2],
+    ) -> [F; 2] {
+        let byte = Utils::map_from_sparse_form::<{ AES128_BASE as u64 }>(key[0].into());
+        [
+            F::from(Utils::map_into_sparse_form::<{ AES128_BASE as u64 }>(byte)),
+            F::zero(),
+        ]
+    }
+
+    pub(crate) fn get_aes_sbox_values_from_key<F: PrimeField>(key: [u64; 2]) -> [F; 2] {
+        let byte = Utils::map_from_sparse_form::<{ AES128_BASE as u64 }>(key[0].into());
+        let sbox_value = AES128_SBOX[byte as usize];
+        let swizzled = (sbox_value << 1u8) ^ (((sbox_value >> 7u8) & 1u8) * 0x1b);
+        [
+            F::from(Utils::map_into_sparse_form::<{ AES128_BASE as u64 }>(
+                sbox_value as u64,
+            )),
+            F::from(Utils::map_into_sparse_form::<{ AES128_BASE as u64 }>(
+                (sbox_value ^ swizzled) as u64,
+            )),
         ]
     }
 }
@@ -1083,13 +1107,80 @@ impl<F: PrimeField> Plookup<F> {
         table
     }
 
+    fn get_aes_normalization_table() -> PlookupMultiTable<F> {
+        let id = MultiTableId::AesNormalize;
+        const NUM_ENTRIES: usize = 2;
+
+        let mut column_1_coefficients = Vec::with_capacity(NUM_ENTRIES);
+        let mut column_2_coefficients = Vec::with_capacity(NUM_ENTRIES);
+        let mut column_3_coefficients = Vec::with_capacity(NUM_ENTRIES);
+
+        for i in 0..NUM_ENTRIES {
+            column_1_coefficients.push(F::from(AES128_BASE.pow(4 * i as u32)));
+            column_2_coefficients.push(F::from(AES128_BASE.pow(4 * i as u32)));
+            column_3_coefficients.push(F::zero());
+        }
+
+        let mut table = PlookupMultiTable::new_from_vec(
+            id,
+            column_1_coefficients,
+            column_2_coefficients,
+            column_3_coefficients,
+        );
+
+        for _ in 0..NUM_ENTRIES {
+            table.slice_sizes.push(AES128_BASE.pow(4) as u64);
+            table.basic_table_ids.push(BasicTableId::AesSparseNormalize);
+            table
+                .get_table_values
+                .push(BasicTableId::get_aes_sparse_normalization_values_from_key);
+        }
+        table
+    }
+
+    fn get_aes_input_table() -> PlookupMultiTable<F> {
+        let id = MultiTableId::AesInput;
+        const NUM_ENTRIES: usize = 16;
+
+        let mut table =
+            PlookupMultiTable::<F>::new(id, F::from(256), F::zero(), F::zero(), NUM_ENTRIES);
+
+        for _ in 0..NUM_ENTRIES {
+            table.slice_sizes.push(256);
+            table.basic_table_ids.push(BasicTableId::AesSparseMap);
+            table.get_table_values.push(
+                BasicTableId::get_sparse_table_with_rotation_values::<_, { AES128_BASE as u64 }, 0>,
+            );
+        }
+        table
+    }
+
+    fn get_aes_sbox_table() -> PlookupMultiTable<F> {
+        let id = MultiTableId::AesSbox;
+        const NUM_ENTRIES: usize = 1;
+
+        let mut table =
+            PlookupMultiTable::<F>::new(id, F::zero(), F::zero(), F::zero(), NUM_ENTRIES);
+
+        for _ in 0..NUM_ENTRIES {
+            table.slice_sizes.push(AES128_BASE.pow(8) as u64);
+            table.basic_table_ids.push(BasicTableId::AesSboxMap);
+            table
+                .get_table_values
+                .push(BasicTableId::get_aes_sbox_values_from_key);
+        }
+        table
+    }
+
     fn init_multi_tables<P: HonkCurve<TranscriptFieldType, ScalarField = F>>()
     -> [PlookupMultiTable<F>; MultiTableId::NumMultiTables as usize] {
         // TACEO TODO not all are initialized here! We should probably only initialize those we need here?!
+
         let mut multi_tables = from_fn(|_| PlookupMultiTable::default());
         multi_tables[usize::from(MultiTableId::HonkDummyMulti)] = Self::get_honk_dummy_multitable();
         multi_tables[usize::from(MultiTableId::Uint32And)] = Self::get_uint32_and_table();
         multi_tables[usize::from(MultiTableId::Uint32Xor)] = Self::get_uint32_xor_table();
+
         multi_tables[usize::from(MultiTableId::FixedBaseLeftLo)] =
             Self::get_fixed_base_table::<P, 0, 128>(MultiTableId::FixedBaseLeftLo);
         multi_tables[usize::from(MultiTableId::FixedBaseLeftHi)] =
@@ -1114,6 +1205,9 @@ impl<F: PrimeField> Plookup<F> {
             Self::get_blake2s_xor_rotate_8_table();
         multi_tables[usize::from(MultiTableId::BlakeXorRotate7)] =
             Self::get_blake2s_xor_rotate_7_table();
+        multi_tables[usize::from(MultiTableId::AesNormalize)] = Self::get_aes_normalization_table();
+        multi_tables[usize::from(MultiTableId::AesInput)] = Self::get_aes_input_table();
+        multi_tables[usize::from(MultiTableId::AesSbox)] = Self::get_aes_sbox_table();
 
         multi_tables
     }
@@ -1139,6 +1233,9 @@ impl<F: PrimeField> Plookup<F> {
                     | MultiTableId::BlakeXorRotate16
                     | MultiTableId::BlakeXorRotate7
                     | MultiTableId::BlakeXorRotate8
+                    | MultiTableId::AesNormalize
+                    | MultiTableId::AesInput
+                    | MultiTableId::AesSbox
             ),
             "Multitable for {id:?} not implemented"
         ); // The only ones implemented so far
@@ -1515,6 +1612,57 @@ impl<F: PrimeField> Plookup<F> {
                 key_b_slices.extend(values.2);
             }
 
+            MultiTableId::AesInput => {
+                let base = bases[0].next_power_of_two().ilog2() as usize;
+                let total_bit_size = std::cmp::max(base * bases.len(), 64);
+                let rotation = [0; 16];
+                let values = T::slice_and_get_sparse_table_with_rotation_values(
+                    driver,
+                    key_a,
+                    key_b,
+                    bases,
+                    &rotation,
+                    total_bit_size,
+                    AES128_BASE.into(),
+                )?;
+                for (a, b) in values.0.into_iter().zip(values.1) {
+                    results.push((a, b));
+                }
+
+                key_a_slices.extend(values.2);
+                key_b_slices.extend(values.3);
+            }
+            MultiTableId::AesNormalize => {
+                let values = T::slice_and_get_aes_sparse_normalization_values_from_key(
+                    driver,
+                    key_a,
+                    key_b,
+                    bases,
+                    AES128_BASE.into(),
+                )?;
+                for a in values.0.into_iter() {
+                    results.push((a, T::public_zero()));
+                }
+
+                key_a_slices.extend(values.1);
+                key_b_slices.extend(values.2);
+            }
+            MultiTableId::AesSbox => {
+                let values = T::slice_and_get_aes_sbox_values_from_key(
+                    driver,
+                    key_a,
+                    key_b,
+                    bases,
+                    AES128_BASE.into(),
+                    &AES128_SBOX,
+                )?;
+                for (a, b) in values.0.into_iter().zip(values.1) {
+                    results.push((a, b));
+                }
+
+                key_a_slices.extend(values.2);
+                key_b_slices.extend(values.3);
+            }
             _ => todo!("{:?} not yet implemented", multi_table.id),
         }
 
@@ -1585,6 +1733,7 @@ impl<F: PrimeField> Plookup<F> {
         let key_a_slices = values_sliced.1;
         let key_b_slices = values_sliced.2;
         let values_sliced = values_sliced.0;
+
         let mut column_1_raw_values = Vec::with_capacity(num_lookups);
         let mut column_2_raw_values = Vec::with_capacity(num_lookups);
         let mut column_3_raw_values = Vec::with_capacity(num_lookups);
@@ -1805,6 +1954,23 @@ impl<F: PrimeField> Plookup<F> {
             false,
         )?;
         Ok(lookup[ColumnIdx::C2][0].clone())
+    }
+
+    pub fn read_pair_from_table<
+        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<F>,
+    >(
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+        id: MultiTableId,
+        key: &FieldCT<F>,
+    ) -> std::io::Result<(FieldCT<F>, FieldCT<F>)> {
+        let lookup =
+            Self::get_lookup_accumulators_ct(builder, driver, id, key, &FieldCT::default(), false)?;
+        Ok((
+            lookup[ColumnIdx::C2][0].clone(),
+            lookup[ColumnIdx::C3][0].clone(),
+        ))
     }
 }
 
@@ -2131,17 +2297,91 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> PlookupBasicTa
         table
     }
 
-    #[expect(dead_code)]
-    pub(crate) fn initialize_index_map(&mut self) {
-        for (i, (c1, c2, c3)) in izip!(
-            self.column_1.iter().cloned(),
-            self.column_2.iter().cloned(),
-            self.column_3.iter().cloned()
-        )
-        .enumerate()
-        {
-            self.index_map.index_map.insert([c1, c2, c3], i);
+    fn generate_aes_sbox_table(id: BasicTableId, table_index: usize) -> PlookupBasicTable<P, T> {
+        let mut table = PlookupBasicTable::new();
+        table.id = id;
+        table.table_index = table_index;
+        let table_size = 256;
+        table.use_twin_keys = false;
+
+        for i in 0..table_size {
+            let first = Utils::map_into_sparse_form::<{ AES128_BASE as u64 }>(i as u64);
+            let sbox_value = AES128_SBOX[i as usize];
+            let swizzled = (sbox_value << 1) ^ (((sbox_value >> 7) & 1) * 0x1b);
+            let second = Utils::map_into_sparse_form::<{ AES128_BASE as u64 }>(sbox_value as u64);
+            let third = Utils::map_into_sparse_form::<{ AES128_BASE as u64 }>(
+                sbox_value as u64 ^ swizzled as u64,
+            );
+
+            table.column_1.push(P::ScalarField::from(first));
+            table.column_2.push(P::ScalarField::from(second));
+            table.column_3.push(P::ScalarField::from(third));
         }
+
+        table.get_values_from_key = BasicTableId::get_aes_sbox_values_from_key;
+
+        table.column_1_step_size = P::ScalarField::zero();
+        table.column_2_step_size = P::ScalarField::zero();
+        table.column_3_step_size = P::ScalarField::zero();
+
+        table
+    }
+
+    fn generate_aes_sparse_normalization_table(
+        id: BasicTableId,
+        table_index: usize,
+    ) -> PlookupBasicTable<P, T> {
+        let mut table = PlookupBasicTable::new();
+        table.id = id;
+        table.table_index = table_index;
+
+        for i in 0..AES128_BASE {
+            let i_raw = i * AES128_BASE * AES128_BASE * AES128_BASE;
+            let i_normalized = if (i & 1) == 1 {
+                AES128_BASE * AES128_BASE * AES128_BASE
+            } else {
+                0
+            };
+            for j in 0..AES128_BASE {
+                let j_raw = j * AES128_BASE * AES128_BASE;
+                let j_normalized = if (j & 1) == 1 {
+                    AES128_BASE * AES128_BASE
+                } else {
+                    0
+                };
+                for k in 0..AES128_BASE {
+                    let k_raw = k * AES128_BASE;
+                    let k_normalized = if (k & 1) == 1 { AES128_BASE } else { 0 };
+                    for m in 0..AES128_BASE {
+                        let m_raw = m;
+                        let m_normalized = if (m & 1) == 1 { 1 } else { 0 };
+                        let left = i_raw + j_raw + k_raw + m_raw;
+                        let right = i_normalized + j_normalized + k_normalized + m_normalized;
+                        table.column_1.push(P::ScalarField::from(left));
+                        table.column_2.push(P::ScalarField::from(right));
+                        table.column_3.push(P::ScalarField::zero());
+                    }
+                }
+            }
+        }
+
+        table.use_twin_keys = false;
+        table.get_values_from_key = BasicTableId::get_aes_sparse_normalization_values_from_key;
+        table.column_1_step_size = P::ScalarField::from(6561);
+        table.column_2_step_size = P::ScalarField::from(6561);
+        table.column_3_step_size = P::ScalarField::zero();
+
+        table
+    }
+
+    pub(crate) fn initialize_index_map(&mut self) {
+        for (i, c1) in self.column_1.iter().cloned().enumerate() {
+            self.index_map.index_map.insert(c1, i);
+        }
+    }
+
+    pub(crate) fn requires_index_map(&self) -> bool {
+        self.id == BasicTableId::AesSboxMap
     }
 }
 
@@ -2249,6 +2489,9 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                     | BasicTableId::BlakeXorRotate2
                     | BasicTableId::BlakeXorRotate4
                     | BasicTableId::BlakeXorRotate0Slice5Mod4
+                    | BasicTableId::AesSparseMap
+                    | BasicTableId::AesSboxMap
+                    | BasicTableId::AesSparseNormalize
             ),
             "Create Basic Table for {id:?} not implemented"
         );
@@ -2341,6 +2584,15 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             BasicTableId::BlakeXorRotate0Slice5Mod4 => {
                 Self::generate_xor_rotate_table_blake::<5, 0, true>(id, index)
             }
+
+            BasicTableId::AesSparseMap => {
+                Self::generate_sparse_table_with_rotation::<9, 8, 0>(id, index)
+            }
+            BasicTableId::AesSboxMap => Self::generate_aes_sbox_table(id, index),
+            BasicTableId::AesSparseNormalize => {
+                Self::generate_aes_sparse_normalization_table(id, index)
+            }
+
             _ => {
                 todo!("Create other tables")
             }
@@ -2350,13 +2602,13 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 
 #[derive(Default)]
 pub(crate) struct LookupHashMap<F: PrimeField> {
-    pub(crate) index_map: HashMap<[F; 3], usize>,
+    pub(crate) index_map: HashMap<F, usize>,
 }
 
-impl<F: PrimeField> Index<[F; 3]> for LookupHashMap<F> {
+impl<F: PrimeField> Index<F> for LookupHashMap<F> {
     type Output = usize;
 
-    fn index(&self, index: [F; 3]) -> &Self::Output {
+    fn index(&self, index: F) -> &Self::Output {
         self.index_map.index(&index)
     }
 }

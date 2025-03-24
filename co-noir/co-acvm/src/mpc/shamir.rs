@@ -2,6 +2,7 @@ use super::{NoirWitnessExtensionProtocol, plain::PlainAcvmSolver};
 use ark_ec::CurveGroup;
 use ark_ff::{One, PrimeField};
 use co_brillig::mpc::{ShamirBrilligDriver, ShamirBrilligType};
+use core::panic;
 use mpc_core::{
     gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations},
     protocols::{
@@ -769,6 +770,14 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         panic!("functionality equal not feasible for Shamir")
     }
 
+    fn equal_many(
+        &mut self,
+        _a: &[Self::AcvmType],
+        _b: &[Self::AcvmType],
+    ) -> std::io::Result<Vec<Self::AcvmType>> {
+        panic!("functionality equal_many not feasible for Shamir")
+    }
+
     fn multi_scalar_mul(
         &mut self,
         _points: &[Self::AcvmType],
@@ -887,5 +896,56 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         _input2_infinite: Self::AcvmType,
     ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
         panic!("functionality embedded_curve_add not feasible for Shamir")
+    }
+
+    fn aes128_encrypt(
+        &mut self,
+        _scalars: &[Self::AcvmType],
+        _iv: Vec<Self::AcvmType>,
+        _key: Vec<Self::AcvmType>,
+    ) -> std::io::Result<Vec<Self::AcvmType>> {
+        panic!("functionality aes128_encrypt not feasible for Shamir")
+    }
+
+    fn slice_and_get_aes_sparse_normalization_values_from_key(
+        &mut self,
+        _input1: Self::ArithmeticShare,
+        _input2: Self::ArithmeticShare,
+        _base_bits: &[u64],
+        _base: u64,
+    ) -> std::io::Result<(
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+    )> {
+        panic!(
+            "functionality slice_and_get_aes_sparse_normalization_values_from_key not feasible for Shamir"
+        )
+    }
+
+    fn slice_and_get_aes_sbox_values_from_key(
+        &mut self,
+        _input1: Self::ArithmeticShare,
+        _input2: Self::ArithmeticShare,
+        _base_bits: &[u64],
+        _base: u64,
+        _sbox: &[u8],
+    ) -> std::io::Result<(
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+    )> {
+        panic!("functionality slice_and_get_aes_sbox_values_from_key not feasible for Shamir")
+    }
+
+    fn accumulate_from_sparse_bytes(
+        &mut self,
+        _inputs: &[Self::AcvmType],
+        _base: u64,
+        _input_bitsize: usize,
+        _output_bitsize: usize,
+    ) -> std::io::Result<Self::AcvmType> {
+        panic!("functionality accumulate_from_sparse_bytes not feasible for Shamir")
     }
 }
