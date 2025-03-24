@@ -716,7 +716,7 @@ impl<F: PrimeField> FieldCT<F> {
         Ok([lo_wit, slice_wit, hi_wit])
     }
 
-    fn create_range_constraint<
+    pub(crate) fn create_range_constraint<
         P: Pairing<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
@@ -978,7 +978,10 @@ impl<F: PrimeField> FieldCT<F> {
         Ok(result)
     }
 
-    fn add_two<P: Pairing<ScalarField = F>, T: NoirWitnessExtensionProtocol<P::ScalarField>>(
+    pub(crate) fn add_two<
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
         &self,
         add_a: &Self,
         add_b: &Self,
@@ -2073,8 +2076,8 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                 builder,
                 driver,
                 id.to_owned(),
-                scalar,
-                zero_ct.to_owned(),
+                &scalar,
+                &zero_ct,
                 false,
             )?;
             for j in 0..lookup_data[ColumnIdx::C2].len() {

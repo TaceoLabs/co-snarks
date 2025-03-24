@@ -2,20 +2,21 @@
 //!
 //! This module contains operations with Yao's garbled circuits
 
+pub mod bristol_fashion;
 pub mod circuits;
 pub mod evaluator;
 pub mod garbler;
 pub mod streaming_evaluator;
 pub mod streaming_garbler;
-
-use crate::IoResult;
-
 use super::network::{IoContext, Rep3Network};
+use super::{Rep3BigUintShare, Rep3PrimeFieldShare};
+use crate::protocols::rep3::yao::circuits::SHA256Table;
+use crate::IoResult;
 use ark_ff::{PrimeField, Zero};
 use circuits::GarbledCircuits;
 use fancy_garbling::{hash_wires, util::tweak2, BinaryBundle, WireLabel, WireMod2};
 use itertools::{izip, Itertools};
-use mpc_types::protocols::rep3::{id::PartyID, Rep3BigUintShare, Rep3PrimeFieldShare};
+use mpc_types::protocols::rep3::id::PartyID;
 use num_bigint::BigUint;
 use rand::{CryptoRng, Rng};
 use scuttlebutt::Block;
@@ -1067,5 +1068,119 @@ pub fn slice_xor<F: PrimeField, N: Rep3Network>(
         base_bit,
         rotation,
         total_output_bitlen_per_field,
+    )
+}
+
+/// Computes the SHA256 compression function using a Bristol fashion garbled circuit.
+pub fn sha256_from_bristol<F: PrimeField, N: Rep3Network>(
+    state: &[Rep3PrimeFieldShare<F>; 8],
+    message: &[Rep3PrimeFieldShare<F>; 16],
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
+    let mut combined_inputs = Vec::with_capacity(state.len() + message.len());
+    combined_inputs.extend_from_slice(state);
+    combined_inputs.extend_from_slice(message);
+    let total_output_elements = state.len();
+
+    decompose_circuit_compose_blueprint!(
+        &combined_inputs,
+        io_context,
+        total_output_elements,
+        GarbledCircuits::sha256_compression::<_, F>,
+        (state.len())
+    )
+}
+
+/// Slices two slices of field elements, does XOR on the slices and then rotates them. The rotation is done on 32-bit values. Base_bit is the size of the slices, rotation the the length of the rotation and total_output_bitlen_per_field is the amount of bits per input. It also prepares the (rotated) slices into 32 bits such that these can be multiplied with the base powers and then summed up. See get_sparse_table_with_rotation_values in co-noir/co-builder/src/types/plookup.rs for the intended functionality.
+pub fn get_sparse_table_with_rotation_values_many<F: PrimeField, N: Rep3Network>(
+    input1: &[Rep3PrimeFieldShare<F>],
+    input2: &[Rep3PrimeFieldShare<F>],
+    io_context: &mut IoContext<N>,
+    base_bits: &[u64],
+    rotation: &[u32],
+    total_input_bitlen_per_field: usize,
+) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
+    let num_inputs = input1.len() + input2.len();
+    debug_assert_eq!(input1.len(), input2.len());
+    let num_decomps_per_field = base_bits.len();
+    let total_output_elements =
+        num_inputs * num_decomps_per_field + 32 * 2 * (num_inputs / 2) * num_decomps_per_field;
+    let mut combined_inputs = Vec::with_capacity(num_inputs + input2.len());
+    combined_inputs.extend_from_slice(input1);
+    combined_inputs.extend_from_slice(input2);
+
+    decompose_circuit_compose_blueprint!(
+        &combined_inputs,
+        io_context,
+        total_output_elements,
+        GarbledCircuits::slice_and_get_sparse_table_with_rotation_values_many::<_, F>,
+        (base_bits, rotation, total_input_bitlen_per_field)
+    )
+}
+
+/// Slices two field elements, does XOR on the slices and then rotates them. The rotation is done on 32-bit values. Base_bit is the size of the slices, rotation the the length of the rotation and total_output_bitlen_per_field is the amount of bits per input. It also prepares the (rotated) slices into 32 bits such that these can be multiplied with the base powers and then summed up. See get_sparse_table_with_rotation_values in co-noir/co-builder/src/types/plookup.rs for the intended functionality.
+pub fn get_sparse_table_with_rotation_values<F: PrimeField, N: Rep3Network>(
+    input1: Rep3PrimeFieldShare<F>,
+    input2: Rep3PrimeFieldShare<F>,
+    io_context: &mut IoContext<N>,
+    base_bits: &[u64],
+    rotation: &[u32],
+    total_input_bitlen_per_field: usize,
+) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
+    get_sparse_table_with_rotation_values_many(
+        &[input1],
+        &[input2],
+        io_context,
+        base_bits,
+        rotation,
+        total_input_bitlen_per_field,
+    )
+}
+
+/// Slices two slices of field elements according to base_bits, and again slices these slices according to base. These slices are used as indices for the respective SHA256Table which is done via a Moebius Transformation Matrix.
+pub fn get_sparse_normalization_values_many<F: PrimeField, N: Rep3Network>(
+    input1: &[Rep3PrimeFieldShare<F>],
+    input2: &[Rep3PrimeFieldShare<F>],
+    io_context: &mut IoContext<N>,
+    base_bits: &[u64],
+    base: u64,
+    total_input_bitlen_per_field: usize,
+    table_type: &SHA256Table,
+) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
+    let num_inputs = input1.len() + input2.len();
+    debug_assert_eq!(input1.len(), input2.len());
+    let num_decomps_per_field = base_bits.len();
+    let total_output_elements = 3 * num_decomps_per_field * (num_inputs / 2);
+    let mut combined_inputs = Vec::with_capacity(num_inputs);
+    combined_inputs.extend_from_slice(input1);
+    combined_inputs.extend_from_slice(input2);
+
+    decompose_circuit_compose_blueprint!(
+        &combined_inputs,
+        io_context,
+        total_output_elements,
+        GarbledCircuits::slice_and_get_sparse_normalization_values_many::<_, F>,
+        (base_bits, base, total_input_bitlen_per_field, table_type)
+    )
+}
+
+/// Slices two field elements according to base_bits, and again slices these slices according to base. These slices are used as indices for the respective SHA256Table which is done via a Moebius Transformation Matrix.
+pub fn get_sparse_normalization_values<F: PrimeField, N: Rep3Network>(
+    input1: Rep3PrimeFieldShare<F>,
+    input2: Rep3PrimeFieldShare<F>,
+    io_context: &mut IoContext<N>,
+    base_bits: &[u64],
+    base: u64,
+    total_input_bitlen_per_field: usize,
+    table_type: &SHA256Table,
+) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
+    get_sparse_normalization_values_many(
+        &[input1],
+        &[input2],
+        io_context,
+        base_bits,
+        base,
+        total_input_bitlen_per_field,
+        table_type,
     )
 }

@@ -2,9 +2,10 @@
 //!
 //! This module contains some garbled circuit implementations.
 
-use crate::protocols::rep3::yao::GCUtils;
+use super::bristol_fashion::BristolFashionEvaluator;
+use crate::protocols::rep3::yao::{bristol_fashion::BristolFashionCircuit, GCUtils};
 use ark_ff::PrimeField;
-use fancy_garbling::{BinaryBundle, FancyBinary};
+use fancy_garbling::{BinaryBundle, FancyBinary, FancyError};
 use itertools::izip;
 use num_bigint::BigUint;
 use std::ops::Not;
@@ -16,6 +17,17 @@ pub trait FancyBinaryConstant: FancyBinary {
 
     /// Takes an already initialized constant 1 or adds it to the garbled circuit if not yet present
     fn const_one(&mut self) -> Result<Self::Item, Self::Error>;
+}
+
+/// An enum used for using the right table in the garbled circuit implementation of SHA256.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum SHA256Table {
+    /// Picks the CHOOSE_NORMALIZATION_TABLE (see plookup.rs)
+    Choose,
+    /// Picks the MAJORITY_NORMALIZATION_TABLE (see plookup.rs)
+    Majority,
+    /// Picks the WITNESS_EXTENSION_NORMALIZATION_TABLE (see plookup.rs)
+    WitnessExtension,
 }
 
 /// This struct contains some predefined garbled circuits.
@@ -98,6 +110,7 @@ impl GarbledCircuits {
         let c = g.xor(&z4, a)?;
         Ok((s, c))
     }
+
     /// Full adder with carry in set
     fn full_adder_const_cin_set<G: FancyBinary + FancyBinaryConstant>(
         g: &mut G,
@@ -325,6 +338,38 @@ impl GarbledCircuits {
         }
 
         Ok(c)
+    }
+
+    // From swanky:
+    /// Full multiplier with public value
+    fn bin_mul_with_public<G: FancyBinary + FancyBinaryConstant>(
+        g: &mut G,
+        lhs: &[G::Item],
+        rhs: &[bool],
+    ) -> Result<Vec<G::Item>, G::Error> {
+        let zero = g.const_zero()?;
+        let mut sum = if rhs[0] {
+            lhs.to_vec()
+        } else {
+            vec![zero.clone(); lhs.len()]
+        };
+        sum.push(zero.clone());
+        for (i, item) in rhs.iter().enumerate().skip(1) {
+            let mut mul = if *item {
+                lhs.to_vec()
+            } else {
+                vec![zero.clone(); lhs.len()]
+            };
+
+            for _ in 0..i {
+                mul.insert(0, zero.clone());
+            }
+            let res = Self::bin_addition(g, &sum, &mul)?;
+            sum = res.0;
+            sum.push(res.1);
+        }
+
+        Ok(sum)
     }
 
     // From swanky:
@@ -2017,6 +2062,547 @@ impl GarbledCircuits {
             }
         }
         Ok(results)
+    }
+
+    /// Slice two field elements in chunks, then ANDs the slices and rotates them (over u64), a specific circuit for the plookup accumulator in the builder. The field elements are represented as bitdecompositions x1s, x2s, y1s and y2s which need to be added first get the two inputs. The output is composed using wires_c. Base_bit is the size of the slice, rotation the the length of the rotation and total_output_bitlen_per_field is the amount of bits the output field elements have.
+    pub(crate) fn slice_and_get_sparse_table_with_rotation_values_many<
+        G: FancyBinary + FancyBinaryConstant,
+        F: PrimeField,
+    >(
+        g: &mut G,
+        wires_x1: &BinaryBundle<G::Item>,
+        wires_x2: &BinaryBundle<G::Item>,
+        wires_c: &BinaryBundle<G::Item>,
+        base_bits: &[u64],
+        rotation: &[u32],
+        total_output_bitlen_per_field: usize,
+    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+        let input_bitlen = F::MODULUS_BIT_SIZE as usize;
+        debug_assert_eq!(wires_x1.size(), wires_x2.size());
+        let length = wires_x1.size();
+        debug_assert_eq!(length % 2, 0);
+        let num_decomps_per_field = base_bits.len();
+        let num_inputs = length / input_bitlen;
+
+        let total_output_elements =
+            num_inputs * num_decomps_per_field + 32 * 2 * (num_inputs / 2) * num_decomps_per_field;
+
+        debug_assert_eq!(wires_c.size(), total_output_elements * input_bitlen);
+        debug_assert_eq!(length % input_bitlen, 0);
+
+        let mut results = Vec::with_capacity(wires_c.size());
+
+        for (chunk_x1, chunk_x2, chunk_y1, chunk_y2, chunk_c) in izip!(
+            wires_x1.wires()[0..length / 2].chunks(input_bitlen),
+            wires_x2.wires()[0..length / 2].chunks(input_bitlen),
+            wires_x1.wires()[length / 2..].chunks(input_bitlen),
+            wires_x2.wires()[length / 2..].chunks(input_bitlen),
+            wires_c.wires().chunks(
+                (2 * num_decomps_per_field + 32 * 2 * num_decomps_per_field) * input_bitlen
+            ),
+        ) {
+            let value = Self::slice_and_get_sparse_table_with_rotation_values::<G, F>(
+                g,
+                chunk_x1,
+                chunk_x2,
+                chunk_y1,
+                chunk_y2,
+                chunk_c,
+                base_bits,
+                rotation,
+                total_output_bitlen_per_field,
+            )?;
+            results.extend(value);
+        }
+
+        Ok(BinaryBundle::new(results))
+    }
+
+    /// Slice two field elements in chunks, then ANDs the slices and rotates them (over u64), a specific circuit for the plookup accumulator in the builder. The field elements are represented as bitdecompositions x1s, x2s, y1s and y2s which need to be added first get the two inputs. The output is composed using wires_c. Base_bit is the size of the slice, rotation the the length of the rotation and total_output_bitlen_per_field is the amount of bits the output field elements have.
+    #[expect(clippy::too_many_arguments)]
+    pub(crate) fn slice_and_get_sparse_table_with_rotation_values<
+        G: FancyBinary + FancyBinaryConstant,
+        F: PrimeField,
+    >(
+        g: &mut G,
+        x1s: &[G::Item],
+        x2s: &[G::Item],
+        y1s: &[G::Item],
+        y2s: &[G::Item],
+        wires_c: &[G::Item],
+        base_bits: &[u64],
+        rotation: &[u32],
+        total_output_bitlen_per_field: usize,
+    ) -> Result<Vec<G::Item>, G::Error> {
+        let input_bitlen = F::MODULUS_BIT_SIZE as usize;
+        let mut base_bits = base_bits.to_vec();
+        let base_bits = base_bits.iter_mut().map(|x| x.ilog2()).collect::<Vec<_>>();
+        let num_decomps_per_field = base_bits.len();
+        debug_assert_eq!(x1s.len(), input_bitlen);
+        debug_assert_eq!(x2s.len(), input_bitlen);
+        debug_assert_eq!(y1s.len(), input_bitlen);
+        debug_assert_eq!(y2s.len(), input_bitlen);
+        debug_assert_eq!(
+            wires_c.len(),
+            (2 * num_decomps_per_field + 32 * 2 * num_decomps_per_field) * input_bitlen
+        );
+        debug_assert_eq!(base_bits.len(), rotation.len());
+        // Combine the inputs
+        let input_bits_1 =
+            Self::adder_mod_p_with_output_size::<_, F>(g, x1s, x2s, total_output_bitlen_per_field)?;
+        let input_bits_2 =
+            Self::adder_mod_p_with_output_size::<_, F>(g, y1s, y2s, total_output_bitlen_per_field)?;
+        let mut results = Vec::with_capacity(input_bitlen * num_decomps_per_field);
+        let mut rands = wires_c.chunks(input_bitlen);
+        let mut offset = 0;
+        for &bits in base_bits.iter() {
+            let end = offset + bits as usize;
+
+            let inp = &input_bits_1[offset..end];
+            results.extend(Self::compose_field_element::<_, F>(
+                g,
+                inp,
+                rands.next().unwrap(),
+            )?);
+            offset = end;
+        }
+        let mut offset = 0;
+        for &bits in base_bits.iter() {
+            let end = offset + bits as usize;
+            let inp = &input_bits_2[offset..end];
+            results.extend(Self::compose_field_element::<_, F>(
+                g,
+                inp,
+                rands.next().unwrap(),
+            )?);
+
+            offset = end;
+        }
+        let mut offset = 0;
+        // Compose the results
+        for (&bits, rot) in base_bits.iter().zip(rotation.iter()) {
+            let end = offset + bits as usize;
+            if end > input_bits_1.len() {
+                break;
+            }
+            let xs = &input_bits_1[offset..end];
+            let mut resized = xs.to_owned();
+            resized.resize(32, g.const_zero()?);
+            for bit in resized.iter() {
+                results.extend(Self::compose_field_element::<_, F>(
+                    g,
+                    &[bit.clone()],
+                    rands.next().unwrap(),
+                )?);
+            }
+            if *rot == 0 {
+                for bit in resized.iter() {
+                    results.extend(Self::compose_field_element::<_, F>(
+                        g,
+                        &[bit.clone()],
+                        rands.next().unwrap(),
+                    )?);
+                }
+            } else {
+                let mut rotated = resized.to_owned();
+                rotated.rotate_left(*rot as usize);
+                for bit in rotated.iter() {
+                    results.extend(Self::compose_field_element::<_, F>(
+                        g,
+                        &[bit.clone()],
+                        rands.next().unwrap(),
+                    )?);
+                }
+            }
+            offset = end;
+        }
+        Ok(results)
+    }
+
+    /// Slice two field elements in chunks, then ANDs the slices and rotates them (over u64), a specific circuit for the plookup accumulator in the builder. The field elements are represented as bitdecompositions x1s, x2s, y1s and y2s which need to be added first get the two inputs. The output is composed using wires_c. Base_bit is the size of the slice, rotation the the length of the rotation and total_output_bitlen_per_field is the amount of bits the output field elements have.
+    #[expect(clippy::too_many_arguments)]
+    pub(crate) fn slice_and_get_sparse_normalization_values_many<
+        G: FancyBinary + FancyBinaryConstant,
+        F: PrimeField,
+    >(
+        g: &mut G,
+        wires_x1: &BinaryBundle<G::Item>,
+        wires_x2: &BinaryBundle<G::Item>,
+        wires_c: &BinaryBundle<G::Item>,
+        base_bits: &[u64],
+        base: u64,
+        total_output_bitlen_per_field: usize,
+        table_type: &SHA256Table,
+    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+        let input_bitlen = F::MODULUS_BIT_SIZE as usize;
+        debug_assert_eq!(wires_x1.size(), wires_x2.size());
+        let length = wires_x1.size();
+        debug_assert_eq!(length % 2, 0);
+        let num_decomps_per_field = base_bits.len();
+        let num_inputs = length / input_bitlen;
+
+        let total_output_elements = 3 * num_decomps_per_field * (num_inputs / 2);
+        debug_assert_eq!(wires_c.size(), total_output_elements * input_bitlen);
+        debug_assert_eq!(length % input_bitlen, 0);
+
+        let mut results = Vec::with_capacity(wires_c.size());
+
+        for (chunk_x1, chunk_x2, chunk_y1, chunk_y2, chunk_c) in izip!(
+            wires_x1.wires()[0..length / 2].chunks(input_bitlen),
+            wires_x2.wires()[0..length / 2].chunks(input_bitlen),
+            wires_x1.wires()[length / 2..].chunks(input_bitlen),
+            wires_x2.wires()[length / 2..].chunks(input_bitlen),
+            wires_c
+                .wires()
+                .chunks((3 * num_decomps_per_field) * input_bitlen),
+        ) {
+            let value = Self::slice_and_get_sparse_normalization_values::<G, F>(
+                g,
+                chunk_x1,
+                chunk_x2,
+                chunk_y1,
+                chunk_y2,
+                chunk_c,
+                base_bits,
+                base,
+                total_output_bitlen_per_field,
+                table_type,
+            )?;
+            results.extend(value);
+        }
+
+        Ok(BinaryBundle::new(results))
+    }
+
+    /// Slice two field elements in chunks, then ANDs the slices and rotates them (over u64), a specific circuit for the plookup accumulator in the builder. The field elements are represented as bitdecompositions x1s, x2s, y1s and y2s which need to be added first get the two inputs. The output is composed using wires_c. Base_bit is the size of the slice, rotation the the length of the rotation and total_output_bitlen_per_field is the amount of bits the output field elements have.
+    #[expect(clippy::too_many_arguments)]
+    pub(crate) fn slice_and_get_sparse_normalization_values<
+        G: FancyBinary + FancyBinaryConstant,
+        F: PrimeField,
+    >(
+        g: &mut G,
+        x1s: &[G::Item],
+        x2s: &[G::Item],
+        y1s: &[G::Item],
+        y2s: &[G::Item],
+        wires_c: &[G::Item],
+        base_bits: &[u64],
+        base: u64,
+        total_output_bitlen_per_field: usize,
+        table_type: &SHA256Table,
+    ) -> Result<Vec<G::Item>, G::Error> {
+        let input_bitlen = F::MODULUS_BIT_SIZE as usize;
+        let base_bit = base_bits[0] as usize; // For SHA all base_bits are the same
+        if !base_bits.iter().all(|&x| x as usize == base_bit) {
+            panic!("Base bits are not all the same");
+        }
+        let base_bit_log = base_bit.next_power_of_two().ilog2() as usize;
+        let base_log = base.next_power_of_two().ilog2() as usize;
+        let num_decomps_per_field = base_bits.len();
+
+        debug_assert_eq!(x1s.len(), input_bitlen);
+        debug_assert_eq!(x2s.len(), input_bitlen);
+        debug_assert_eq!(y1s.len(), input_bitlen);
+        debug_assert_eq!(y2s.len(), input_bitlen);
+        debug_assert_eq!(wires_c.len(), (3 * num_decomps_per_field) * input_bitlen);
+
+        // Combine the inputs
+        let mut input_bits_1 =
+            Self::adder_mod_p_with_output_size::<_, F>(g, x1s, x2s, total_output_bitlen_per_field)?;
+        let mut input_bits_2 =
+            Self::adder_mod_p_with_output_size::<_, F>(g, y1s, y2s, total_output_bitlen_per_field)?;
+        input_bits_1.resize(base_bit_log * num_decomps_per_field, g.const_zero()?);
+        input_bits_2.resize(base_bit_log * num_decomps_per_field, g.const_zero()?);
+        let mut results = Vec::with_capacity(input_bitlen * num_decomps_per_field);
+        let mut rands = wires_c.chunks(input_bitlen);
+
+        // Compose the inputs
+        if base_bit.count_ones() == 1 {
+            for inp in input_bits_1.chunks(base_bit_log) {
+                results.extend(Self::compose_field_element::<_, F>(
+                    g,
+                    inp,
+                    rands.next().unwrap(),
+                )?);
+            }
+            for inp in input_bits_2.chunks(base_bit_log) {
+                results.extend(Self::compose_field_element::<_, F>(
+                    g,
+                    inp,
+                    rands.next().unwrap(),
+                )?);
+            }
+
+            for chunk in input_bits_1.chunks(base_bit_log) {
+                let mut accumulator = vec![g.const_zero()?; 64];
+                if base.count_ones() != 1 {
+                    panic!("Base is not a power of 2");
+                }
+                let base = base.ilog2() as usize;
+                for (count, slice) in chunk.chunks(base).enumerate() {
+                    let mut bit = if *table_type == SHA256Table::Choose {
+                        Self::get_choose_normalization_table_value(g, slice)?
+                    } else if *table_type == SHA256Table::Majority {
+                        Self::get_majority_normalization_table_value(g, slice)?
+                    } else {
+                        Self::get_witness_extension_normalization_table_value(g, slice)?
+                    };
+                    debug_assert_eq!(bit.len(), 2);
+                    bit.resize(bit.len() + count, g.const_zero()?);
+                    bit.rotate_left(2);
+                    bit.resize(64, g.const_zero()?);
+                    accumulator = Self::bin_addition_no_carry(g, &accumulator, &bit)?;
+                }
+                results.extend(Self::compose_field_element::<_, F>(
+                    g,
+                    &accumulator,
+                    rands.next().unwrap(),
+                )?);
+            }
+        } else {
+            let slices_inp1 = Self::bin_slicing_using_arbitrary_base(
+                g,
+                &input_bits_1,
+                base_bit as u64,
+                num_decomps_per_field,
+            )?;
+            for slice in slices_inp1.iter() {
+                results.extend(Self::compose_field_element::<_, F>(
+                    g,
+                    slice,
+                    rands.next().unwrap(),
+                )?);
+            }
+
+            let slices_inp2 = Self::bin_slicing_using_arbitrary_base(
+                g,
+                &input_bits_2,
+                base_bit as u64,
+                num_decomps_per_field,
+            )?;
+            for slice in slices_inp2.iter() {
+                results.extend(Self::compose_field_element::<_, F>(
+                    g,
+                    slice,
+                    rands.next().unwrap(),
+                )?);
+            }
+            if base_bit.count_ones() == 1 {
+                panic!("Base is not a power of 2, should not happen");
+            }
+            for chunk in slices_inp1 {
+                let num_decomps = chunk.len().div_ceil(base_log);
+                let sliced_bits =
+                    Self::bin_slicing_using_arbitrary_base(g, &chunk, base, num_decomps)?;
+                let mut accumulator = vec![g.const_zero()?; 64];
+                for (count, slice) in sliced_bits.iter().enumerate() {
+                    let mut bit = if *table_type == SHA256Table::Choose {
+                        Self::get_choose_normalization_table_value(g, slice)?
+                    } else if *table_type == SHA256Table::Majority {
+                        Self::get_majority_normalization_table_value(g, slice)?
+                    } else {
+                        Self::get_witness_extension_normalization_table_value(g, slice)?
+                    };
+                    debug_assert_eq!(bit.len(), 2);
+                    bit.resize(bit.len() + count, g.const_zero()?);
+                    bit.rotate_left(2);
+                    bit.resize(64, g.const_zero()?);
+                    accumulator = Self::bin_addition_no_carry(g, &accumulator, &bit)?;
+                }
+                results.extend(Self::compose_field_element::<_, F>(
+                    g,
+                    &accumulator,
+                    rands.next().unwrap(),
+                )?);
+            }
+        }
+
+        Ok(results)
+    }
+
+    /// Slices a field element wrt to 'base' into 'num_decomps_per_field' many slices. Should be used for bases which are not powers of 2, because in that case you can just take the bits directly from the wire.
+    pub fn bin_slicing_using_arbitrary_base<G: FancyBinary + FancyBinaryConstant>(
+        g: &mut G,
+        x: &[G::Item],
+        base: u64,
+        num_decomps_per_field: usize,
+    ) -> Result<Vec<Vec<G::Item>>, G::Error> {
+        let mut slices_inp: Vec<Vec<_>> = Vec::with_capacity(num_decomps_per_field);
+        let mut input = x.to_vec();
+        for _ in 0..num_decomps_per_field {
+            let (b, k) = Self::bin_modulo_reduction(g, &input, base)?;
+            slices_inp.push(b);
+            input = k;
+        }
+
+        Ok(slices_inp)
+    }
+
+    /// Does a modulo reduction on the input 'x' using the modulus 'modulus'. Also returns the integer division of 'x' by 'modulus' as a vector, in case it is needed (e.g. for slicing).
+    #[expect(clippy::type_complexity)]
+    pub fn bin_modulo_reduction<G: FancyBinary + FancyBinaryConstant>(
+        g: &mut G,
+        x: &[G::Item],
+        modulus: u64,
+    ) -> Result<(Vec<G::Item>, Vec<G::Item>), G::Error> {
+        let mut base_bit_vec: Vec<bool> = (0..u64::BITS)
+            .rev()
+            .map(|i| (modulus & (1 << i)) != 0)
+            .skip_while(|&b| !b)
+            .collect();
+        base_bit_vec.reverse();
+        if x.len() < base_bit_vec.len() {
+            let zero = g.const_zero()?;
+            let k = vec![zero.clone(); x.len()];
+            return Ok((x.to_vec(), k.to_vec()));
+        }
+        let next_power_of_two = modulus.next_power_of_two();
+        let base_ceil = next_power_of_two.ilog2() as usize;
+        base_bit_vec.resize(x.len(), false);
+        let k = Self::bin_div_by_public(g, x, &base_bit_vec)?;
+        let km = Self::bin_mul_with_public(g, &k, &base_bit_vec)?;
+        let b = Self::bin_subtraction(g, x, &km[..x.len()])?.0;
+        Ok((b[..base_ceil].to_vec(), k))
+    }
+
+    /// Computes the Majority Normalization Table value for the given input. The input is expected to be of length 3. The arithmetization comes from a Moebius Transformation on the truth table.
+    pub(crate) fn get_majority_normalization_table_value<G: FancyBinary + FancyBinaryConstant>(
+        g: &mut G,
+        x: &[G::Item],
+    ) -> Result<Vec<G::Item>, G::Error> {
+        debug_assert!(x.len() >= 3);
+        let x1_and_x2 = g.and(&x[1], &x[2])?;
+        let x1_xor_x2 = g.xor(&x[1], &x[2])?;
+        Ok([x1_xor_x2, x1_and_x2].to_vec())
+    }
+
+    /// Computes the Choose Normalization Table value for the given input. The input is expected to be of length 5. The arithmetization comes from a Moebius Transformation on the truth table.
+    pub(crate) fn get_choose_normalization_table_value<G: FancyBinary + FancyBinaryConstant>(
+        g: &mut G,
+        x: &[G::Item],
+    ) -> Result<Vec<G::Item>, G::Error> {
+        debug_assert_eq!(x.len(), 5);
+        let x0_and_x1 = g.and(&x[0], &x[1])?;
+        let x0_and_x2 = g.and(&x[0], &x[2])?;
+        let x1_and_x2 = g.and(&x[1], &x[2])?;
+        let x1_and_x3 = g.and(&x[1], &x[3])?;
+        let x2_and_x3 = g.and(&x[2], &x[3])?;
+        let x0_and_x4 = g.and(&x[0], &x[4])?;
+        let x2_and_x4 = g.and(&x[2], &x[4])?;
+        let x3_and_x4 = g.and(&x[3], &x[4])?;
+        let x0_and_x1_and_x3 = g.and(&x0_and_x1, &x[3])?;
+        let x0_and_x2_and_x3 = g.and(&x0_and_x2, &x[3])?;
+        let x0_and_x1_and_x4 = g.and(&x0_and_x1, &x[4])?;
+        let x0_and_x3_and_x4 = g.and(&x0_and_x4, &x[3])?;
+        let x1_and_x3_and_x4 = g.and(&x1_and_x3, &x[4])?;
+        let x1_and_x2_and_x4 = g.and(&x1_and_x2, &x[4])?;
+        let x0_and_x1_and_x2_and_x3 = g.and(&x0_and_x1_and_x3, &x[2])?;
+        let x0_and_x1_and_x3_and_x4 = g.and(&x0_and_x1_and_x3, &x[4])?;
+
+        let mut shared_sum = g.xor(&x1_and_x3, &x1_and_x3_and_x4)?;
+        shared_sum = g.xor(&shared_sum, &x2_and_x3)?;
+        shared_sum = g.xor(&shared_sum, &x0_and_x1_and_x2_and_x3)?;
+        shared_sum = g.xor(&shared_sum, &x3_and_x4)?;
+
+        let mut f1 = g.xor(&shared_sum, &x0_and_x1)?;
+
+        f1 = g.xor(&f1, &x0_and_x2)?;
+        f1 = g.xor(&f1, &x1_and_x2)?;
+        f1 = g.xor(&f1, &x[3])?;
+        f1 = g.xor(&f1, &x0_and_x2_and_x3)?;
+        f1 = g.xor(&f1, &x0_and_x4)?;
+        f1 = g.xor(&f1, &x0_and_x1_and_x4)?;
+        f1 = g.xor(&f1, &x2_and_x4)?;
+        f1 = g.xor(&f1, &x1_and_x2_and_x4)?;
+        f1 = g.xor(&f1, &x0_and_x1_and_x3_and_x4)?;
+
+        let mut f2 = g.xor(&shared_sum, &x0_and_x1_and_x3)?;
+        f2 = g.xor(&f2, &x0_and_x3_and_x4)?;
+
+        Ok([f1, f2].to_vec())
+    }
+
+    /// Computes the Witness Extension Normalization Table value for the given input. The input is expected to be of length 3. The arithmetization comes from a Moebius Transformation on the truth table.
+    pub(crate) fn get_witness_extension_normalization_table_value<
+        G: FancyBinary + FancyBinaryConstant,
+    >(
+        g: &mut G,
+        x: &[G::Item],
+    ) -> Result<Vec<G::Item>, G::Error> {
+        debug_assert!(x.len() >= 3);
+        let x0_and_x2 = g.and(&x[0], &x[2])?;
+        let x0_xor_x2 = g.xor(&x[0], &x[2])?;
+        Ok([x0_xor_x2, x0_and_x2].to_vec())
+    }
+
+    /// Computes the SHA256 compression using a Bristol fashion circuit which is first parsed from a .txt file. The field elements are represented as bitdecompositions x1s, x2s, y1s and y2s which need to be added first to get the two inputs. The output is composed using wires_c.
+    pub(crate) fn sha256_compression<
+        G: FancyBinary + FancyBinaryConstant + BristolFashionEvaluator<WireValue = G::Item>,
+        F: PrimeField,
+    >(
+        g: &mut G,
+        wires_x1: &BinaryBundle<G::Item>,
+        wires_x2: &BinaryBundle<G::Item>,
+        wires_c: &BinaryBundle<G::Item>,
+        state_length: usize,
+    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+        let input_bitlen = F::MODULUS_BIT_SIZE as usize;
+
+        // Reading the circuit from txt file
+        let circuit = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/protocols/rep3/yao/bristol_fashion/circuit_files/sha256.txt"
+        ));
+        let circuit_read =
+            BristolFashionCircuit::from_reader(circuit.as_bytes()).expect("sha256 circuit works");
+
+        let mut state = Vec::new();
+        let mut message = Vec::new();
+
+        for (chunk_x1, chunk_x2) in izip!(
+            wires_x1.wires()[..state_length * input_bitlen].chunks(input_bitlen),
+            wires_x2.wires()[..state_length * input_bitlen].chunks(input_bitlen)
+        ) {
+            let mut state_bits =
+                Self::adder_mod_p_with_output_size::<_, F>(g, chunk_x1, chunk_x2, 32)?;
+            state_bits.reverse();
+            state.extend(state_bits);
+        }
+        for (chunk_y1, chunk_y2) in izip!(
+            wires_x1.wires()[state_length * input_bitlen..].chunks(input_bitlen),
+            wires_x2.wires()[state_length * input_bitlen..].chunks(input_bitlen),
+        ) {
+            let mut message_bits =
+                Self::adder_mod_p_with_output_size::<_, F>(g, chunk_y1, chunk_y2, 32)?;
+            message_bits.reverse();
+            message.extend(message_bits);
+        }
+
+        message.reverse();
+        state.reverse();
+
+        let input = [message, state];
+        let zero = g.const_zero()?;
+        let mut output = circuit_read
+            .evaluate_with_default::<G::Item>(&input, g, zero)
+            .map_err(|e| e.into())?;
+        let mut result = output.pop().ok_or(FancyError::InvalidArg(
+            "No output found in circuit evaluation".to_string(),
+        ))?;
+        let mut results = Vec::with_capacity(result.len());
+
+        // the input (and the output) for the bristol circuit is in reversed order
+        result.reverse();
+        for chunk in result.chunks_mut(32) {
+            chunk.reverse();
+        }
+
+        for (xs, ys) in izip!(result.chunks(32), wires_c.wires().chunks(input_bitlen),) {
+            let result = Self::compose_field_element::<_, F>(g, xs, ys)?;
+            results.extend(result);
+        }
+
+        Ok(BinaryBundle::new(results))
     }
 }
 

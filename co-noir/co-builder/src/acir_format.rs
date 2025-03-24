@@ -13,7 +13,7 @@ use std::collections::{BTreeMap, HashSet};
 use crate::types::types::{
     AcirFormatOriginalOpcodeIndices, BlockConstraint, BlockType, LogicConstraint, MulQuad,
     MultiScalarMul, PolyTriple, Poseidon2Constraint, RangeConstraint, RecursionConstraint,
-    WitnessOrConstant,
+    Sha256Compression, WitnessOrConstant,
 };
 #[expect(dead_code)]
 pub struct ProgramMetadata {
@@ -51,8 +51,7 @@ pub struct AcirFormat<F: PrimeField> {
     pub(crate) range_constraints: Vec<RangeConstraint>,
     pub(crate) logic_constraints: Vec<LogicConstraint<F>>,
     //  std::vector<AES128Constraint> aes128_constraints;
-    //  std::vector<Sha256Constraint> sha256_constraints;
-    //  std::vector<Sha256Compression> sha256_compression;
+    pub(crate) sha256_compression: Vec<Sha256Compression<F>>,
     //  std::vector<SchnorrConstraint> schnorr_constraints;
     //  std::vector<EcdsaSecp256k1Constraint> ecdsa_k1_constraints;
     //  std::vector<EcdsaSecp256r1Constraint> ecdsa_r1_constraints;
@@ -790,10 +789,26 @@ impl<F: PrimeField> AcirFormat<F> {
                     .push(opcode_index);
             }
             BlackBoxFuncCall::Sha256Compression {
-                inputs: _,
-                hash_values: _,
-                outputs: _,
-            } => todo!("BlackBoxFuncCall::Sha256Compression"),
+                inputs,
+                hash_values,
+                outputs,
+            } => {
+                let constraint = Sha256Compression {
+                    inputs: inputs.into_iter().map(|e| Self::parse_input(e)).collect(),
+                    hash_values: hash_values
+                        .into_iter()
+                        .map(|e| Self::parse_input(e))
+                        .collect(),
+                    result: outputs.into_iter().map(|e| e.0).collect(),
+                };
+                for output in constraint.result.iter() {
+                    af.constrained_witness.insert(*output);
+                }
+                af.sha256_compression.push(constraint);
+                af.original_opcode_indices
+                    .sha256_compression
+                    .push(opcode_index);
+            }
             BlackBoxFuncCall::RecursiveAggregation {
                 verification_key: _,
                 proof: _,

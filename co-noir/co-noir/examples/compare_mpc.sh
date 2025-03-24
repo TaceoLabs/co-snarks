@@ -8,6 +8,7 @@ PLAINDRIVER="../../../target/release/plaindriver"
 exit_code=0
 
 REMOVE_OUTPUT=1
+TEST_SLOWER_CIRCUITS=0 ## this is a flag to also run the slower test cases
 PIPE=""
 if [[ $REMOVE_OUTPUT -eq 1 ]];
 then
@@ -38,6 +39,8 @@ echo "Using bb version $BARRETENBERG_VERSION"
 echo ""
 
 test_cases=("add3u64" "mul3u64" "assert" "get_bytes" "if_then" "negative" "poseidon_assert" "quantized" "add3" "add3_assert" "poseidon" "poseidon_input2" "approx_sigmoid" "addition_multiplication" "unconstrained_fn" "unconstrained_fn_field" "blackbox_not" "blackbox_and" "blackbox_xor" "ram" "rom_shared" "poseidon2" "blackbox_poseidon2" "assert_max_bit_size" "pedersen_hash" "pedersen_commitment")
+
+slow_test_cases=("bb_sha256_compression")
 
 run_proof_verification() {
   local name=$1
@@ -100,6 +103,11 @@ run_proof_verification() {
   fi
   return $exit_code
 }
+
+if [[ $TEST_SLOWER_CIRCUITS -eq 1 ]];
+then
+  test_cases+=("${slow_test_cases[@]}")
+fi
 
 # comparing works with all test scripts where "run_full_" is followed by the precise test case name
 for f in "${test_cases[@]}"; do

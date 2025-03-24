@@ -4,18 +4,16 @@
 //!
 //! This file is heavily inspired by [fancy-garbling](https://github.com/GaloisInc/swanky/blob/dev/fancy-garbling/src/garble/evaluator.rs)
 
-use super::{circuits::FancyBinaryConstant, GCUtils};
+use super::{bristol_fashion::BristolFashionEvaluator, circuits::FancyBinaryConstant, GCUtils};
 use crate::{
-    protocols::rep3::{
-        network::{IoContext, Rep3Network},
-        PartyID,
-    },
+    protocols::rep3::network::{IoContext, Rep3Network},
     IoResult,
 };
 use fancy_garbling::{
     errors::EvaluatorError, util::output_tweak, BinaryBundle, Fancy, FancyBinary, WireLabel,
     WireMod2,
 };
+use mpc_types::protocols::rep3::id::PartyID;
 use scuttlebutt::Block;
 use sha3::{Digest, Sha3_256};
 
@@ -275,7 +273,7 @@ impl<N: Rep3Network> FancyBinaryConstant for Rep3Evaluator<'_, N> {
         let zero = match self.const_zero {
             Some(zero) => zero,
             None => {
-                let zero = self.constant(0, 2)?;
+                let zero = <Self as Fancy>::constant(self, 0, 2)?;
                 self.const_zero = Some(zero);
                 zero
             }
@@ -287,11 +285,54 @@ impl<N: Rep3Network> FancyBinaryConstant for Rep3Evaluator<'_, N> {
         let one = match self.const_one {
             Some(one) => one,
             None => {
-                let one = self.constant(1, 2)?;
+                let one = <Self as Fancy>::constant(self, 1, 2)?;
                 self.const_one = Some(one);
                 one
             }
         };
         Ok(one)
+    }
+}
+impl<N: Rep3Network> BristolFashionEvaluator for Rep3Evaluator<'_, N> {
+    type WireValue = WireMod2;
+
+    fn constant(
+        &mut self,
+        input: bool,
+    ) -> Result<Self::WireValue, super::bristol_fashion::CircuitExecutionError> {
+        match input {
+            true => Ok(self
+                .const_one()
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("{:?}", e)))?),
+            false => Ok(self
+                .const_zero()
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("{:?}", e)))?),
+        }
+    }
+
+    fn inv(
+        &mut self,
+        input: &Self::WireValue,
+    ) -> Result<Self::WireValue, super::bristol_fashion::CircuitExecutionError> {
+        Ok(<Self as FancyBinary>::negate(self, input)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("{:?}", e)))?)
+    }
+
+    fn xor(
+        &mut self,
+        input1: &Self::WireValue,
+        input2: &Self::WireValue,
+    ) -> Result<Self::WireValue, super::bristol_fashion::CircuitExecutionError> {
+        Ok(<Self as FancyBinary>::xor(self, input1, input2)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("{:?}", e)))?)
+    }
+
+    fn and(
+        &mut self,
+        input1: &Self::WireValue,
+        input2: &Self::WireValue,
+    ) -> Result<Self::WireValue, super::bristol_fashion::CircuitExecutionError> {
+        Ok(<Self as FancyBinary>::and(self, input1, input2)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("{:?}", e)))?)
     }
 }
