@@ -4312,6 +4312,7 @@ dependencies = [
  "co-noir",
  "co-plonk",
  "co-ultrahonk",
+ "eyre",
  "itertools 0.14.0",
  "mpc-core",
  "noirc_abi",
