@@ -445,6 +445,13 @@ pub(crate) struct LogicConstraint<F: PrimeField> {
     pub(crate) is_xor_gate: bool,
 }
 
+pub(crate) struct AES128Constraint<F: PrimeField> {
+    pub(crate) inputs: Vec<WitnessOrConstant<F>>,
+    pub(crate) iv: Vec<WitnessOrConstant<F>>,
+    pub(crate) key: Vec<WitnessOrConstant<F>>,
+    pub(crate) outputs: Vec<u32>,
+}
+
 impl<F: PrimeField> LogicConstraint<F> {
     pub(crate) fn and_gate(
         a: WitnessOrConstant<F>,

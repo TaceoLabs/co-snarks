@@ -166,6 +166,38 @@ impl<N: Rep3Network> Rep3LookupTable<N> {
         Ok(val)
     }
 
+    /// DOCS TODO
+    pub fn get_from_lut_internal_no_conversion<T: IntRing2k, F: PrimeField>(
+        index: Rep3PrimeFieldShare<F>,
+        lut: &PublicPrivateLut<F>,
+        network0: &mut IoContext<N>,
+        network1: &mut IoContext<N>,
+    ) -> IoResult<Rep3BigUintShare<F>>
+    where
+        Standard: Distribution<T>,
+    {
+        let index = rep3::conversion::a2b_selector(index, network0)?;
+        let a = T::cast_from_biguint(&index.a);
+        let b = T::cast_from_biguint(&index.b);
+        let share = Rep3RingShare::new(a, b);
+
+        match lut {
+            PublicPrivateLut::Public(vec) => {
+                let bin_a = gadgets::lut::read_public_lut_low_depth(
+                    vec.as_ref(),
+                    share,
+                    network0,
+                    network1,
+                )?;
+                let bin_b = network0.network.reshare(bin_a.to_owned())?;
+                Ok(Rep3BigUintShare::new(bin_a, bin_b))
+            }
+            PublicPrivateLut::Shared(_) => {
+                panic!("LUT is not public")
+            }
+        }
+    }
+
     fn write_to_lut_internal<T: IntRing2k, F: PrimeField>(
         index: Rep3BigUintShare<F>,
         lut: &mut PublicPrivateLut<F>,

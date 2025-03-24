@@ -15,6 +15,7 @@ pub use crate::polynomials::polynomial_types::{
     PROVER_WITNESS_ENTITIES_SIZE,
 };
 pub use crate::serialize::{Serialize, SerializeP};
+pub use crate::types::aes128::AES128_SBOX;
 pub use crate::types::types::{
     ActiveRegionData, CycleNode, CyclicPermutation, ZeroKnowledge, AGGREGATION_OBJECT_SIZE,
     NUM_SELECTORS, NUM_WIRES, PAIRING_POINT_ACCUMULATOR_SIZE,
