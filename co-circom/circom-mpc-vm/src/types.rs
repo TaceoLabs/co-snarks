@@ -6,8 +6,13 @@ use mpc_net::config::NetworkConfig;
 
 use crate::{
     accelerator::{MpcAccelerator, MpcAcceleratorConfig},
-    mpc::plain::CircomPlainVmWitnessExtension,
-    mpc_vm::{PlainWitnessExtension, Rep3WitnessExtension, VMConfig, WitnessExtension},
+    mpc::{
+        batched_plain::BatchedCircomPlainVmWitnessExtension, plain::CircomPlainVmWitnessExtension,
+    },
+    mpc_vm::{
+        BatchedPlainWitnessExtension, PlainWitnessExtension, Rep3WitnessExtension, VMConfig,
+        WitnessExtension,
+    },
     op_codes::CodeBlock,
 };
 use eyre::Result;
@@ -161,6 +166,26 @@ impl<F: PrimeField> CoCircomCompilerParsed<F> {
         vm_config: VMConfig,
     ) -> WitnessExtension<F, CircomPlainVmWitnessExtension<F>> {
         PlainWitnessExtension::new(self, vm_config)
+    }
+
+    /// Consumes `self` and constructs an instance of [`BatchedPlainWitnessExtension`].
+    ///
+    /// The plain witness extension allows local execution of the witness extension without
+    /// using MPC. Be cautious when using this method, as the resulting
+    /// witness and input will not be protected. Do not share sensitive data when using this feature.
+    ///
+    /// The difference to [`Self::to_plain_vm`] is that this version executes the same circuit
+    /// simultaneously with different inputs. This does NOT use folding or any other similar
+    /// techniques. It reduces multiplicative depth in contrast to running $n$ witness
+    /// extensions consecutively.
+    ///
+    /// This method is primarily intended for testing purposes.
+    pub fn to_batched_plain_vm(
+        self,
+        vm_config: VMConfig,
+        batch_size: usize,
+    ) -> WitnessExtension<F, BatchedCircomPlainVmWitnessExtension<F>> {
+        BatchedPlainWitnessExtension::new(self, vm_config, batch_size)
     }
 
     /// Consumes `self` and a [`NetworkConfig`], and constructs an instance of [`Rep3WitnessExtension`].

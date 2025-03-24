@@ -14,7 +14,6 @@ use mpc_core::protocols::rep3::{
     Rep3PrimeFieldShare,
 };
 use num_bigint::BigUint;
-use num_traits::cast::ToPrimitive;
 use std::io;
 
 type ArithmeticShare<F> = Rep3PrimeFieldShare<F>;
@@ -99,6 +98,7 @@ impl<F: PrimeField, N: Rep3Network> CircomRep3VmWitnessExtension<F, N> {
 impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
     for CircomRep3VmWitnessExtension<F, N>
 {
+    type Public = F;
     type ArithmeticShare = ArithmeticShare<F>;
 
     type VmType = Rep3VmType<F>;
@@ -604,6 +604,15 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
         let carry = result.pop().unwrap();
         result.reverse();
         Ok((result.into_iter().map(Into::into).collect(), carry.into()))
+    }
+
+    fn log(&mut self, a: Self::VmType, allow_leaky_logs: bool) -> eyre::Result<String> {
+        if allow_leaky_logs {
+            let field = self.open(a)?;
+            Ok(field.to_string())
+        } else {
+            Ok("secret".to_string())
+        }
     }
 }
 

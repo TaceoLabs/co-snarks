@@ -1,4 +1,5 @@
 use crate::accelerator::MpcAcceleratorConfig;
+use crate::mpc::batched_plain::BatchedCircomPlainVmWitnessExtension;
 use crate::mpc::plain::CircomPlainVmWitnessExtension;
 use crate::mpc::rep3::{CircomRep3VmWitnessExtension, Rep3VmType};
 use crate::types::{CoCircomCompilerParsed, FunDecl, InputList, OutputMapping, TemplateDecl};
@@ -51,6 +52,13 @@ pub struct WitnessExtension<F: PrimeField, C: VmCircomWitnessExtension<F>> {
     driver: C,
     config: VMConfig,
 }
+
+/// Shorthand type for an instance of the MPC-VM that runs locally on a single machine without MPC,
+/// but by batching multiple inputs into a single run.
+///
+/// This type is mostly used for testing purposes, so use with care in production environments.
+pub type BatchedPlainWitnessExtension<F> =
+    WitnessExtension<F, BatchedCircomPlainVmWitnessExtension<F>>;
 
 /// Shorthand type for an instance of the MPC-VM that runs locally on a single machine without MPC.
 ///
@@ -327,7 +335,6 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
             match inst {
                 op_codes::MpcOpCode::PushConstant(index) => {
                     let constant = ctx.constant_table[*index].clone();
-                    tracing::trace!("pushing constant {}", constant);
                     self.push_field(constant);
                 }
                 op_codes::MpcOpCode::PushIndex(index) => self.push_index(*index),
@@ -338,7 +345,6 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                         .iter()
                         .cloned()
                         .for_each(|signal| {
-                            tracing::trace!("pushing signal {signal}");
                             self.push_field(signal);
                         });
                 }
@@ -477,7 +483,6 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                     let mut input_signals = vec![C::VmType::default(); *amount];
                     for i in 0..*amount {
                         input_signals[*amount - i - 1] = self.pop_field();
-                        tracing::trace!("popping {}", input_signals.last().unwrap());
                     }
 
                     let component = &mut self.sub_components[sub_comp_index];
@@ -798,12 +803,8 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                     current_body = old_body;
                 }
                 op_codes::MpcOpCode::Log => {
-                    if config.allow_leaky_logs {
-                        let field = protocol.open(self.pop_field())?;
-                        self.log_buf.push_str(&field.to_string());
-                    } else {
-                        self.log_buf.push_str("secret");
-                    }
+                    let log = protocol.log(self.pop_field(), config.allow_leaky_logs)?;
+                    self.log_buf.push_str(&log);
                     self.log_buf.push(' ');
                 }
                 op_codes::MpcOpCode::LogString(idx) => {
@@ -881,7 +882,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtension<F, C> {
 
     fn set_input_signals(
         &mut self,
-        mut input_signals: SharedInput<F, C::ArithmeticShare>,
+        mut input_signals: SharedInput<C::Public, C::ArithmeticShare>,
     ) -> Result<usize> {
         let mut amount_public_inputs = 0;
         for (name, offset, size) in self.main_input_list.iter() {
@@ -947,7 +948,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtension<F, C> {
     /// Panics if any of the [`CodeBlocks`](CodeBlock) are corrupted.
     pub fn run(
         mut self,
-        input_signals: SharedInput<F, C::ArithmeticShare>,
+        input_signals: SharedInput<C::Public, C::ArithmeticShare>,
     ) -> Result<FinalizedWitnessExtension<F, C>> {
         self.driver.compare_vm_config(&self.config)?;
         let amount_public_inputs = self.set_input_signals(input_signals)?;
@@ -994,12 +995,12 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtension<F, C> {
 ///
 /// If you want to retrieve the shared witness, call [`into_shared_witness()`](FinalizedWitnessExtension::into_shared_witness()).
 pub struct FinalizedWitnessExtension<F: PrimeField, C: VmCircomWitnessExtension<F>> {
-    shared_witness: SharedWitness<F, C::ArithmeticShare>,
+    shared_witness: SharedWitness<C::Public, C::ArithmeticShare>,
     output_mapping: OutputMapping,
 }
 
 impl<F: PrimeField, C: VmCircomWitnessExtension<F>> From<FinalizedWitnessExtension<F, C>>
-    for SharedWitness<F, C::ArithmeticShare>
+    for SharedWitness<C::Public, C::ArithmeticShare>
 {
     fn from(value: FinalizedWitnessExtension<F, C>) -> Self {
         value.shared_witness
@@ -1008,7 +1009,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> From<FinalizedWitnessExtensi
 
 impl<F: PrimeField, C: VmCircomWitnessExtension<F>> FinalizedWitnessExtension<F, C> {
     /// Consumes self and returns the [`SharedWitness`].
-    pub fn into_shared_witness(self) -> SharedWitness<F, C::ArithmeticShare> {
+    pub fn into_shared_witness(self) -> SharedWitness<C::Public, C::ArithmeticShare> {
         self.shared_witness
     }
 
@@ -1035,7 +1036,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> FinalizedWitnessExtension<F,
     /// # Returns
     /// Returns an `Option<Vec<F>>` containing the signals associated with the requested output.
     /// Returns `None` if the name is not known.
-    pub fn get_output(&self, name: &str) -> Option<Vec<F>> {
+    pub fn get_output(&self, name: &str) -> Option<Vec<C::Public>> {
         self.output_mapping.get(name).map(|(offset, amount)| {
             self.shared_witness.public_inputs[*offset..*offset + *amount].to_vec()
         })
@@ -1053,6 +1054,40 @@ impl<F: PrimeField> PlainWitnessExtension<F> {
             ctx: WitnessExtensionCtx::new(
                 signals,
                 parser.constant_table,
+                parser.fun_decls,
+                parser.templ_decls,
+                parser.string_table,
+                MpcAccelerator::from_config(MpcAcceleratorConfig::from_env()),
+            ),
+            main_inputs: parser.main_inputs,
+            main_outputs: parser.main_outputs,
+            main_input_list: parser.main_input_list,
+            output_mapping: parser.output_mapping,
+            config,
+        }
+    }
+}
+
+impl<F: PrimeField> BatchedPlainWitnessExtension<F> {
+    pub(crate) fn new(
+        parser: CoCircomCompilerParsed<F>,
+        config: VMConfig,
+        batch_size: usize,
+    ) -> Self {
+        let mut signals = vec![Vec::with_capacity(batch_size); parser.amount_signals];
+        signals[0] = vec![F::one(); batch_size];
+        let batched_constant_table = parser
+            .constant_table
+            .into_iter()
+            .map(|constant| vec![constant; batch_size])
+            .collect_vec();
+        Self {
+            driver: BatchedCircomPlainVmWitnessExtension::new(batch_size),
+            signal_to_witness: parser.signal_to_witness,
+            main: parser.main,
+            ctx: WitnessExtensionCtx::new(
+                signals,
+                batched_constant_table,
                 parser.fun_decls,
                 parser.templ_decls,
                 parser.string_table,

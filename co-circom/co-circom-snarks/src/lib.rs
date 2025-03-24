@@ -5,6 +5,7 @@
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use circom_types::Witness;
+use core::panic;
 use mpc_core::protocols::{
     rep3::{
         self,
@@ -17,6 +18,14 @@ use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::error::Error;
+
+/// A shorthand type for batched inputs. Should be used with the batched
+/// witness extension
+pub type BatchedSharedInput<P, S> = SharedInput<Vec<P>, Vec<S>>;
+
+/// A shorthand type for batched witnesses. Produced by the batched
+/// witness extension
+pub type BatchedWitness<P, S> = SharedWitness<Vec<P>, Vec<S>>;
 
 /// A REP3 shared input type
 pub type Rep3SharedInput<F> = SharedInput<F, Rep3PrimeFieldShare<F>>;
@@ -127,10 +136,78 @@ impl<F: PrimeField> CompressedRep3SharedWitness<F> {
     }
 }
 
-/// A shared witness in the circom ecosystem.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SharedWitness<F: PrimeField, S>
+impl<P, S> TryFrom<Vec<SharedInput<P, S>>> for BatchedSharedInput<P, S>
 where
+    P: CanonicalSerialize + CanonicalDeserialize + Clone,
+    S: CanonicalSerialize + CanonicalDeserialize + Clone,
+{
+    type Error = eyre::Report;
+    fn try_from(value: Vec<SharedInput<P, S>>) -> eyre::Result<Self> {
+        if value.is_empty() {
+            eyre::bail!("Cannot build Batched Shared Input from empty vec");
+        }
+        let batch_len = value.len();
+        let mut public_inputs = BTreeMap::<String, Vec<Vec<P>>>::new();
+        let mut shared_inputs = BTreeMap::<String, Vec<Vec<S>>>::new();
+
+        for shared_input in value.into_iter() {
+            for (k, v) in shared_input.public_inputs {
+                let public_input = public_inputs
+                    .entry(k.clone())
+                    .or_insert_with(|| vec![vec![]; v.len()]);
+                if v.len() != public_input.len() {
+                    eyre::bail!("Cannot build BatchedShared Input from different inputs");
+                }
+                for (idx, ele) in v.into_iter().enumerate() {
+                    public_input[idx].push(ele);
+                }
+            }
+
+            for (k, v) in shared_input.shared_inputs {
+                let witness = shared_inputs
+                    .entry(k.clone())
+                    .or_insert_with(|| vec![vec![]; v.len()]);
+                if v.len() != witness.len() {
+                    eyre::bail!("Cannot build BatchedShared Input from different inputs");
+                }
+                for (idx, ele) in v.into_iter().enumerate() {
+                    witness[idx].push(ele);
+                }
+            }
+
+            if !shared_input.maybe_shared_inputs.is_empty() {
+                eyre::bail!("Cannot build batched input if there are still maybe shares")
+            }
+        }
+
+        // check that all values have same batch len
+        if public_inputs
+            .values()
+            .flatten()
+            .any(|b| b.len() != batch_len)
+        {
+            eyre::bail!("Cannot build BatchedShared Input from different inputs");
+        }
+        if shared_inputs
+            .values()
+            .flatten()
+            .any(|b| b.len() != batch_len)
+        {
+            eyre::bail!("Cannot build BatchedShared Input from different inputs");
+        }
+        Ok(BatchedSharedInput {
+            public_inputs,
+            shared_inputs,
+            maybe_shared_inputs: BTreeMap::new(),
+        })
+    }
+}
+
+/// A shared witness in the circom ecosystem.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SharedWitness<P, S>
+where
+    P: CanonicalSerialize + CanonicalDeserialize + Clone,
     S: CanonicalSerialize + CanonicalDeserialize + Clone,
 {
     #[serde(
@@ -139,13 +216,59 @@ where
     )]
     /// The public inputs (which are the outputs of the circom circuit).
     /// This also includes the constant 1 at position 0.
-    pub public_inputs: Vec<F>,
+    pub public_inputs: Vec<P>,
     #[serde(
         serialize_with = "mpc_core::ark_se",
         deserialize_with = "mpc_core::ark_de"
     )]
     /// The secret-shared witness elements.
     pub witness: Vec<S>,
+}
+
+impl<P, S> BatchedWitness<P, S>
+where
+    P: CanonicalSerialize + CanonicalDeserialize + Clone,
+    S: CanonicalSerialize + CanonicalDeserialize + Clone,
+{
+    /// Transforms the [BatchedWitness] to a vec of ordinary [SharedWitness] instances.
+    pub fn unbatch(self) -> Vec<SharedWitness<P, S>> {
+        if self.public_inputs.is_empty() {
+            panic!("trying to unbatch an empty shared witness");
+        }
+        let batch_size = self.public_inputs[0].len();
+        let mut public_inputs = vec![Vec::with_capacity(self.public_inputs.len()); batch_size];
+        let mut witnesses = vec![Vec::with_capacity(self.witness.len()); batch_size];
+
+        for batched_public_input in self.public_inputs.into_iter() {
+            assert_eq!(
+                batched_public_input.len(),
+                batch_size,
+                "batch size not consistent in batched witness"
+            );
+            for (idx, public_input) in batched_public_input.into_iter().enumerate() {
+                public_inputs[idx].push(public_input);
+            }
+        }
+
+        for batched_witness in self.witness.into_iter() {
+            assert_eq!(
+                batched_witness.len(),
+                batch_size,
+                "batch size not consistent in batched witness"
+            );
+            for (idx, witness) in batched_witness.into_iter().enumerate() {
+                witnesses[idx].push(witness);
+            }
+        }
+        public_inputs
+            .into_iter()
+            .zip(witnesses)
+            .map(|(public_inputs, witness)| SharedWitness {
+                public_inputs,
+                witness,
+            })
+            .collect()
+    }
 }
 
 impl<F: PrimeField, S> SharedWitness<F, S>
@@ -160,8 +283,9 @@ where
 
 /// A shared input for a collaborative circom witness extension.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SharedInput<F: PrimeField, S>
+pub struct SharedInput<P, S>
 where
+    P: CanonicalSerialize + CanonicalDeserialize + Clone,
     S: CanonicalSerialize + CanonicalDeserialize + Clone,
 {
     #[serde(
@@ -170,7 +294,7 @@ where
     )]
     /// A map from variable names to the public field elements.
     /// This is a BTreeMap because it implements Canonical(De)Serialize.
-    pub public_inputs: BTreeMap<String, Vec<F>>,
+    pub public_inputs: BTreeMap<String, Vec<P>>,
     #[serde(
         serialize_with = "mpc_core::ark_se",
         deserialize_with = "mpc_core::ark_de"
