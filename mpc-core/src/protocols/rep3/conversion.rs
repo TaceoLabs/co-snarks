@@ -2,6 +2,10 @@
 //!
 //! This module contains conversions between share types
 
+use std::fmt::Binary;
+
+use crate::protocols::rep3::arithmetic::BinaryShare;
+
 use super::{
     arithmetic, detail,
     id::PartyID,
@@ -15,7 +19,7 @@ use super::{
 };
 use ark_ff::PrimeField;
 use fancy_garbling::{BinaryBundle, WireMod2};
-use itertools::izip;
+use itertools::{izip, Itertools as _};
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 
@@ -88,6 +92,61 @@ pub fn a2b<F: PrimeField, N: Rep3Network>(
     x01.b = local_b;
 
     detail::low_depth_binary_add_mod_p::<F, N>(&x01, &x2, io_context, F::MODULUS_BIT_SIZE as usize)
+}
+
+pub fn a2b_many<F: PrimeField, N: Rep3Network>(
+    x: &[Rep3PrimeFieldShare<F>],
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<Rep3BigUintShare<F>>> {
+    let mut x2 = vec![BinaryShare::<F>::zero_share(); x.len()];
+
+    let mut r_vec = Vec::with_capacity(x.len());
+    let mut r2_vec = Vec::with_capacity(x.len());
+    for _ in 0..x.len() {
+        let (mut r, r2) = io_context
+            .rngs
+            .rand
+            .random_biguint(F::MODULUS_BIT_SIZE as usize);
+        r ^= &r2;
+        r_vec.push(r);
+        r2_vec.push(r2);
+    }
+
+    let x01_a = match io_context.id {
+        PartyID::ID0 => {
+            for (x2, x) in izip!(x2.iter_mut(), x) {
+                x2.b = x.b.into();
+            }
+            r_vec
+        }
+
+        PartyID::ID1 => izip!(x, r_vec)
+            .map(|(x, r)| {
+                let tmp: BigUint = (x.a + x.b).into();
+                tmp ^ r
+            })
+            .collect(),
+        PartyID::ID2 => {
+            for (x2, x) in izip!(x2.iter_mut(), x) {
+                x2.a = x.a.into();
+            }
+            r_vec
+        }
+    };
+
+    // reshare x01
+    io_context.network.send_next(x01_a.to_owned())?;
+    let x01_b = io_context.network.recv_prev::<Vec<BigUint>>()?;
+    let x01 = izip!(x01_a, x01_b)
+        .map(|(a, b)| BinaryShare::new(a, b))
+        .collect_vec();
+
+    detail::low_depth_binary_add_mod_p_many::<F, N>(
+        &x01,
+        &x2,
+        io_context,
+        F::MODULUS_BIT_SIZE as usize,
+    )
 }
 
 /// Transforms the replicated shared value x from a binary sharing to an arithmetic sharing. I.e., x = x_1 xor x_2 xor x_3 gets transformed into x = x'_1 + x'_2 + x'_3. This implementation currently works only for a binary sharing of a valid field element, i.e., x = x_1 xor x_2 xor x_3 < p.
