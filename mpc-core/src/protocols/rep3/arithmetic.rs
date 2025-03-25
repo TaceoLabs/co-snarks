@@ -135,12 +135,10 @@ pub fn local_mul_vec<F: PrimeField>(
 ) -> Vec<F> {
     //squeeze all random elements at once in beginning for determinismus
     let masking_fes = rngs.rand.masking_field_elements_vec::<F>(lhs.len());
-
-    lhs.par_iter()
-        .zip_eq(rhs.par_iter())
-        .zip_eq(masking_fes.par_iter())
+    (lhs, rhs, masking_fes)
+        .into_par_iter()
         .with_min_len(1024)
-        .map(|((lhs, rhs), masking)| lhs * rhs + masking)
+        .map(|(lhs, rhs, masking)| lhs * rhs + masking)
         .collect()
 }
 
@@ -169,10 +167,6 @@ pub fn mul_vec<F: PrimeField, N: Rep3Network>(
     rhs: &[FieldShare<F>],
     io_context: &mut IoContext<N>,
 ) -> IoResult<Vec<FieldShare<F>>> {
-    // do not use local_mul_vec here!!! We are , this means we
-    // run on a tokio runtime. local_mul_vec uses rayon and starves the
-    // runtime. This method is for small multiplications of vecs.
-    // If you want a larger one use local_mul_vec and then io_mul_vec.
     debug_assert_eq!(lhs.len(), rhs.len());
     let local_a = izip!(lhs.iter(), rhs.iter())
         .map(|(lhs, rhs)| lhs * rhs + io_context.rngs.rand.masking_field_element::<F>())
