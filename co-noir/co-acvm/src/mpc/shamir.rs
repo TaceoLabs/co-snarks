@@ -648,4 +648,21 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
     ) -> std::io::Result<Vec<Self::AcvmType>> {
         panic!("functionality sha256_compression not feasible for Shamir")
     }
+
+    fn map_into_sparse_form(
+        &mut self,
+        _base: u64,
+        _input: Self::AcvmType,
+    ) -> std::io::Result<Self::AcvmType> {
+        panic!("functionality map_into_sparse_form feasible for Shamir")
+    }
+
+    fn get_overflow_bit(
+        &mut self,
+        _input: Self::ArithmeticShare,
+        _bit: usize,
+        _max_bitsize: usize,
+    ) -> std::io::Result<Self::ArithmeticShare> {
+        panic!("functionality get_overflow_bit feasible for Shamir")
+    }
 }

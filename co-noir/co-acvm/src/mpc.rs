@@ -259,6 +259,13 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         Vec<Self::AcvmType>,
     )>;
 
+    fn get_overflow_bit(
+        &mut self,
+        input: Self::ArithmeticShare,
+        bit: usize,
+        max_bitsize: usize,
+    ) -> std::io::Result<Self::ArithmeticShare>;
+
     /// Computes the Poseidon2 permutation for the given input.
     fn poseidon2_permutation<const T: usize, const D: u64>(
         &mut self,
@@ -302,5 +309,11 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         &mut self,
         state: &[Self::AcvmType; 8],
         message: &[Self::AcvmType; 16],
-    ) -> io::Result<Vec<Self::AcvmType>>;
+    ) -> std::io::Result<Vec<Self::AcvmType>>;
+
+    fn map_into_sparse_form(
+        &mut self,
+        base: u64,
+        input: Self::AcvmType,
+    ) -> std::io::Result<Self::AcvmType>;
 }

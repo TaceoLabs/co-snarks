@@ -51,8 +51,7 @@ pub struct AcirFormat<F: PrimeField> {
     pub(crate) range_constraints: Vec<RangeConstraint>,
     pub(crate) logic_constraints: Vec<LogicConstraint<F>>,
     //  std::vector<AES128Constraint> aes128_constraints;
-    //  std::vector<Sha256Constraint> sha256_constraints;
-    //  std::vector<Sha256Compression> sha256_compression;
+    pub(crate) sha256_compression: Vec<Sha256Compression<F>>,
     //  std::vector<SchnorrConstraint> schnorr_constraints;
     //  std::vector<EcdsaSecp256k1Constraint> ecdsa_k1_constraints;
     //  std::vector<EcdsaSecp256r1Constraint> ecdsa_r1_constraints;
@@ -791,6 +790,7 @@ impl<F: PrimeField> AcirFormat<F> {
                 for output in constraint.result.iter() {
                     af.constrained_witness.insert(*output);
                 }
+                af.sha256_compression.push(constraint);
                 af.original_opcode_indices
                     .sha256_compression
                     .push(opcode_index);

@@ -1,9 +1,12 @@
+use std::array;
+
 use crate::{crs::ProverCrs, HonkProofError, HonkProofResult};
 use ark_ec::{pairing::Pairing, VariableBaseMSM};
-use ark_ff::PrimeField;
+use ark_ff::One;
+use ark_ff::{PrimeField, Zero};
 use eyre::Error;
 use mpc_core::gadgets;
-
+use num_bigint::BigUint;
 pub struct Utils {}
 
 impl Utils {
@@ -52,5 +55,39 @@ impl Utils {
         } else {
             value
         }
+    }
+
+    pub fn rotate32(value: u32, rotation: u32) -> u32 {
+        if rotation != 0 {
+            (value >> rotation) | (value << (32 - rotation))
+        } else {
+            value
+        }
+    }
+
+    pub fn get_base_powers<const BASE: u64, const NUM_SLICES: usize>() -> [BigUint; NUM_SLICES] {
+        //TODO FLORIN
+        let mut output: [BigUint; NUM_SLICES] = array::from_fn(|_| BigUint::zero());
+        output[0] = BigUint::one();
+        let base: BigUint = BASE.into();
+        for i in 1..NUM_SLICES {
+            let mask = (BigUint::from(1u64) << 256) - BigUint::one();
+            let tmp = output[i - 1].clone() * base.clone();
+            output[i] = tmp & mask;
+        }
+        output
+    }
+
+    pub fn map_into_sparse_form<const BASE: u64>(input: u64) -> BigUint {
+        let mut out: BigUint = BigUint::zero();
+        let base_powers = Self::get_base_powers::<BASE, 32>();
+
+        for (i, base_power) in base_powers.iter().enumerate() {
+            let sparse_bit = (input >> i) & 1;
+            if sparse_bit != 0 {
+                out += base_power;
+            }
+        }
+        out
     }
 }

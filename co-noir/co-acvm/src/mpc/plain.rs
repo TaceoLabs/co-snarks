@@ -540,4 +540,45 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         sha2::compress256(&mut state_as_u32, &[blocks]);
         state_as_u32.iter().map(|x| Ok(F::from(*x))).collect()
     }
+
+    fn get_overflow_bit(
+        &mut self,
+        input: Self::ArithmeticShare,
+        _bit: usize,
+        max_bitsize: usize,
+    ) -> std::io::Result<Self::ArithmeticShare> {
+        let mut sum: BigUint = input.into();
+        let mask = (BigUint::from(1u64) << max_bitsize) - BigUint::one();
+        sum &= mask;
+        let normalized_sum = sum.to_u32_digits()[0];
+        Ok(Self::ArithmeticShare::from((sum - normalized_sum) >> 32))
+    }
+
+    fn map_into_sparse_form(
+        &mut self,
+        base: u64,
+        input: Self::AcvmType,
+    ) -> std::io::Result<Self::AcvmType> {
+        let mask = (BigUint::from(1u64) << 64) - BigUint::one();
+        let mut inp: BigUint = input.into();
+        inp &= mask;
+        let inp: u64 = inp.to_u64_digits()[0];
+        let mut out = 0u128;
+        fn get_base_powers<const NUM_SLICES: usize>(base: u64) -> [u128; NUM_SLICES] {
+            let mut output = [0u128; NUM_SLICES];
+            output[0] = 1;
+            for i in 1..NUM_SLICES {
+                output[i] = output[i - 1] * base as u128;
+            }
+            output
+        }
+        let base_powers = get_base_powers::<32>(base);
+        for (i, &base_power) in base_powers.iter().enumerate() {
+            let sparse_bit = (inp >> i) & 1;
+            if sparse_bit != 0 {
+                out += base_power;
+            }
+        }
+        Ok(Self::ArithmeticShare::from(out))
+    }
 }

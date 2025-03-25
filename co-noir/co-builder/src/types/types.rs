@@ -381,7 +381,6 @@ pub(crate) struct Poseidon2Constraint<F: PrimeField> {
     pub(crate) len: u32,
 }
 
-#[expect(dead_code)]
 pub(crate) struct Sha256Compression<F: PrimeField> {
     pub(crate) inputs: Vec<WitnessOrConstant<F>>,
     pub(crate) hash_values: Vec<WitnessOrConstant<F>>,

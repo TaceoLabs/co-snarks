@@ -2,7 +2,7 @@ use ark_ff::{One, PrimeField};
 use co_brillig::mpc::{Rep3BrilligDriver, Rep3BrilligType};
 use itertools::{izip, Itertools};
 use mpc_core::gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations};
-use mpc_core::protocols::rep3::{arithmetic, binary, conversion, yao};
+use mpc_core::protocols::rep3::{arithmetic, binary, conversion, yao, Rep3BigUintShare};
 use mpc_core::protocols::rep3_ring::gadgets::sort::{radix_sort_fields, radix_sort_fields_vec_by};
 use mpc_core::{
     lut::LookupTableProvider,
@@ -1053,5 +1053,29 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 .map(|x| Ok(Rep3AcvmType::Public(F::from(*x))))
                 .collect()
         }
+    }
+
+    fn get_overflow_bit(
+        &mut self,
+        input: Self::ArithmeticShare,
+        bit: usize,
+        max_bitsize: usize,
+    ) -> std::io::Result<Self::ArithmeticShare> {
+        let shared = conversion::a2b_selector(input, &mut self.io_context0)?;
+
+        let mut result = Rep3BigUintShare::default();
+        for i in bit..max_bitsize {
+            result.a.set_bit(i as u64 - 32, shared.a.bit(i as u64));
+            result.b.set_bit(i as u64 - 32, shared.b.bit(i as u64));
+        }
+        conversion::b2a_selector(&result.clone(), &mut self.io_context0)
+    }
+
+    fn map_into_sparse_form(
+        &mut self,
+        _base: u64,
+        _input: Self::AcvmType,
+    ) -> std::io::Result<Self::AcvmType> {
+        todo!()
     }
 }
