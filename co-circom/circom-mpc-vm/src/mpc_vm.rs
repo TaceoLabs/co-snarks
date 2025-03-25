@@ -1,5 +1,6 @@
 use crate::accelerator::MpcAcceleratorConfig;
 use crate::mpc::batched_plain::BatchedCircomPlainVmWitnessExtension;
+use crate::mpc::batched_rep3::{BatchedCircomRep3VmWitnessExtension, BatchedRep3VmType};
 use crate::mpc::plain::CircomPlainVmWitnessExtension;
 use crate::mpc::rep3::{CircomRep3VmWitnessExtension, Rep3VmType};
 use crate::types::{CoCircomCompilerParsed, FunDecl, InputList, OutputMapping, TemplateDecl};
@@ -64,6 +65,9 @@ pub type BatchedPlainWitnessExtension<F> =
 ///
 /// This type is mostly used for testing purposes, so use with care in production environments.
 pub type PlainWitnessExtension<F> = WitnessExtension<F, CircomPlainVmWitnessExtension<F>>;
+
+pub type BatchedRep3WitnessExtension<F, N> =
+    WitnessExtension<F, BatchedCircomRep3VmWitnessExtension<F, N>>;
 
 /// Shorthand type for the MPC-VM instantiated with a `Rep3` protocol.
 ///
@@ -297,7 +301,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
     ) -> Result<()> {
         let mut ip = 0;
         let mut current_body = Arc::clone(&self.component_body);
-        let mut current_vars = vec![C::VmType::default(); self.amount_vars];
+        let mut current_vars = vec![protocol.public_zero(); self.amount_vars];
         let mut current_shared_ret_vals = vec![];
 
         let name = self.symbol.clone();
@@ -408,7 +412,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                         assert_eq!(result.len(), 1);
                         self.push_field(result.pop().unwrap());
                     } else {
-                        let mut func_vars = vec![C::VmType::default(); fun_decl.vars];
+                        let mut func_vars = vec![protocol.public_zero(); fun_decl.vars];
                         //copy the parameters
                         for (idx, param) in self.field_stack.peek_stack_frame()[to_copy..]
                             .iter()
@@ -480,7 +484,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                     let sub_comp_index = self.pop_index();
                     let mut index = self.pop_index();
                     //we cannot borrow later therefore we need to pop from stack here and push later
-                    let mut input_signals = vec![C::VmType::default(); *amount];
+                    let mut input_signals = vec![protocol.public_zero(); *amount];
                     for i in 0..*amount {
                         input_signals[*amount - i - 1] = self.pop_field();
                     }
@@ -1116,6 +1120,51 @@ impl<F: PrimeField, N: Rep3Network> Rep3WitnessExtension<F, N> {
             .constant_table
             .into_iter()
             .map(Rep3VmType::Public)
+            .collect_vec();
+        Ok(Self {
+            driver,
+            signal_to_witness: parser.signal_to_witness,
+            main: parser.main,
+            ctx: WitnessExtensionCtx::new(
+                signals,
+                constant_table,
+                parser.fun_decls,
+                parser.templ_decls,
+                parser.string_table,
+                mpc_accelerator,
+            ),
+            main_inputs: parser.main_inputs,
+            main_outputs: parser.main_outputs,
+            main_input_list: parser.main_input_list,
+            output_mapping: parser.output_mapping,
+            config,
+        })
+    }
+}
+
+impl<F: PrimeField, N: Rep3Network> BatchedRep3WitnessExtension<F, N> {
+    pub(crate) fn from_network(
+        parser: CoCircomCompilerParsed<F>,
+        network: N,
+        mpc_accelerator: MpcAccelerator<F, BatchedCircomRep3VmWitnessExtension<F, N>>,
+        config: VMConfig,
+        batch_size: usize,
+    ) -> Result<Self> {
+        let driver = BatchedCircomRep3VmWitnessExtension::from_network(
+            network,
+            config.a2b_type,
+            batch_size,
+        )?;
+
+        let mut signals = vec![
+            BatchedRep3VmType::from(Vec::<F>::with_capacity(batch_size));
+            parser.amount_signals
+        ];
+        signals[0] = BatchedRep3VmType::from(vec![F::one(); batch_size]);
+        let constant_table = parser
+            .constant_table
+            .into_iter()
+            .map(|constant| BatchedRep3VmType::from(vec![constant; batch_size]))
             .collect_vec();
         Ok(Self {
             driver,
