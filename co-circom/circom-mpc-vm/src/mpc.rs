@@ -5,6 +5,7 @@ use eyre::Result;
 use std::fmt;
 
 pub(crate) mod batched_plain;
+pub(crate) mod batched_rep3;
 pub(crate) mod plain;
 pub(crate) mod rep3;
 
@@ -15,7 +16,7 @@ pub trait VmCircomWitnessExtension<F: PrimeField> {
     /// The arithemitc share type
     type ArithmeticShare: CanonicalSerialize + CanonicalDeserialize + Clone + Default;
     /// The VM type
-    type VmType: Clone + Default + fmt::Debug + From<Self::Public> + From<Self::ArithmeticShare>;
+    type VmType: Clone + fmt::Debug + From<Self::Public> + From<Self::ArithmeticShare>;
 
     /// Add two VM-types: c = a + b.
     fn add(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType>;
@@ -109,10 +110,10 @@ pub trait VmCircomWitnessExtension<F: PrimeField> {
     /// Transforms a VM-type into a secret-shared value.
     fn to_share(&mut self, a: Self::VmType) -> Result<Self::ArithmeticShare>;
 
-    /// Returns F::one() as a VM-type.
+    /// Returns one as a public VM-type.
     fn public_one(&self) -> Self::VmType;
 
-    /// Returns F::zero() as a VM-type. The default implementation uses the `Default` trait. If `Default` does not return 0, this function has to be overwritten.
+    /// Returns zero as a public VM-type.
     fn public_zero(&self) -> Self::VmType;
 
     /// Compares the VM Config with other parties

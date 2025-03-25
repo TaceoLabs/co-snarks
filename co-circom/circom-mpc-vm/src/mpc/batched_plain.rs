@@ -199,6 +199,7 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for BatchedCircomPlainVmWitnessE
     }
 
     fn to_index(&mut self, a: Self::VmType) -> eyre::Result<usize> {
+        assert!(!a.is_empty(), "Empty Batch in to_index");
         let mut all_indices = Vec::with_capacity(a.len());
 
         for ele in a.iter() {
@@ -226,7 +227,7 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for BatchedCircomPlainVmWitnessE
     }
 
     fn public_zero(&self) -> Self::VmType {
-        todo!()
+        vec![F::zero(); self.batch_size]
     }
 
     fn compare_vm_config(&mut self, config: &crate::mpc_vm::VMConfig) -> eyre::Result<()> {
