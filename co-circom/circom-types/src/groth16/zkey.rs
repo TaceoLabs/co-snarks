@@ -28,6 +28,7 @@
 //! Inspired by <https://github.com/arkworks-rs/circom-compat/blob/170b10fc9ed182b5f72ecf379033dda023d0bf07/src/zkey.rs>
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
+use ark_groth16::ProvingKey;
 use ark_serialize::CanonicalDeserialize;
 
 use std::io::Read;
@@ -75,6 +76,8 @@ pub struct ZKey<P: Pairing> {
     pub a_matrix: ConstraintMatrix<P::ScalarField>,
     /// The constraint matrices B
     pub b_matrix: ConstraintMatrix<P::ScalarField>,
+    /// The constraint matrices B
+    pub c_matrix: Option<ConstraintMatrix<P::ScalarField>>,
 }
 
 /// A constraint matrix used in Groth16.
@@ -99,6 +102,33 @@ where
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
+    /// Create a new [`Zkey`] from a Groth16 [`ProvingKey`] and the a, b and c matrices.
+    pub fn from_pk_and_matrices(
+        pk: ProvingKey<P>,
+        a_matrix: ConstraintMatrix<P::ScalarField>,
+        b_matrix: ConstraintMatrix<P::ScalarField>,
+        c_matrix: ConstraintMatrix<P::ScalarField>,
+    ) -> Self {
+        Self {
+            n_public: pk.b_g1_query.len() - pk.l_query.len() - 1,
+            pow: pk.h_query.len().ilog2() as usize,
+            num_constraints: a_matrix.len(),
+            beta_g1: pk.beta_g1,
+            delta_g1: pk.delta_g1,
+            a_query: pk.a_query,
+            b_g1_query: pk.b_g1_query,
+            b_g2_query: pk.b_g2_query,
+            h_query: pk.h_query,
+            l_query: pk.l_query,
+            alpha_g1: pk.vk.alpha_g1,
+            beta_g2: pk.vk.beta_g2,
+            delta_g2: pk.vk.delta_g2,
+            a_matrix,
+            b_matrix,
+            c_matrix: Some(c_matrix),
+        }
+    }
+
     /// Deserializes a [`ZKey`] from a reader.
     ///
     /// You may use the second parameter to specify whether
@@ -172,6 +202,7 @@ where
             delta_g2: header.delta_g2,
             a_matrix,
             b_matrix,
+            c_matrix: None,
         })
     }
 

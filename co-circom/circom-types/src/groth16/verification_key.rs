@@ -3,6 +3,7 @@ use std::io::Read;
 use std::marker::PhantomData;
 
 use ark_ec::pairing::Pairing;
+use ark_groth16::VerifyingKey;
 use serde::ser::SerializeSeq;
 use serde::{
     de::{self},
@@ -53,6 +54,22 @@ where
     #[serde(serialize_with = "serialize_g1_sequence::<_,P>")]
     #[serde(deserialize_with = "deserialize_g1_sequence::<_,P>")]
     pub ic: Vec<P::G1Affine>,
+}
+
+impl<P: Pairing + CircomArkworksPairingBridge> From<JsonVerificationKey<P>> for VerifyingKey<P>
+where
+    P::BaseField: CircomArkworksPrimeFieldBridge,
+    P::ScalarField: CircomArkworksPrimeFieldBridge,
+{
+    fn from(value: JsonVerificationKey<P>) -> Self {
+        Self {
+            alpha_g1: value.alpha_1,
+            beta_g2: value.beta_2,
+            gamma_g2: value.gamma_2,
+            delta_g2: value.delta_2,
+            gamma_abc_g1: value.ic,
+        }
+    }
 }
 
 impl<P: Pairing + CircomArkworksPairingBridge> JsonVerificationKey<P>
