@@ -40,6 +40,11 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
     /// Get the party id
     fn get_party_id(&self) -> Self::PartyID;
 
+    fn fft(coeffs: Vec<Self::ArithmeticShare>) -> Vec<Self::ArithmeticShare>;
+    fn fft_half_share(coeffs: Vec<P::ScalarField>) -> Vec<P::ScalarField>;
+    fn ifft(coeffs: Vec<Self::ArithmeticShare>) -> Vec<Self::ArithmeticShare>;
+    fn ifft_half_share(coeffs: Vec<P::ScalarField>) -> Vec<P::ScalarField>;
+
     /// Each value of lhs consists of a coefficient c and an index i. This function computes the sum of the coefficients times the corresponding public input or private witness. In other words, an accumulator a is initialized to 0, and for each (c, i) in lhs, a += c * public_inputs\[i\] is computed if i corresponds to a public input, or c * private_witness[i - public_inputs.len()] if i corresponds to a private witness.
     fn evaluate_constraint(
         party_id: Self::PartyID,

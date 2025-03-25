@@ -11,7 +11,6 @@ use eyre::Result;
 use mpc_core::protocols::rep3::network::{IoContext, Rep3Network};
 use mpc_core::protocols::shamir::network::ShamirNetwork;
 use mpc_core::protocols::shamir::{ShamirPreprocessing, ShamirProtocol};
-use num_traits::identities::One;
 use num_traits::ToPrimitive;
 use rayon::prelude::*;
 use std::marker::PhantomData;
@@ -164,6 +163,7 @@ where
                 .ok_or(eyre::eyre!("Polynomial Degree too large"))?;
         let domain_size = domain.size();
         let party_id = self.driver.get_party_id();
+
         let eval_constraint_span =
             tracing::debug_span!("evaluate constraints + root of unity computation").entered();
         let (roots_to_power_domain, a, b) = rayon_join!(
@@ -172,7 +172,7 @@ where
                     tracing::debug_span!("root of unity computation").entered();
                 let root_of_unity = root_of_unity_for_groth16(power, &mut domain);
                 let mut roots = Vec::with_capacity(domain_size);
-                let mut c = P::ScalarField::one();
+                let mut c = <P::ScalarField as num_traits::One>::one();
                 for _ in 0..domain_size {
                     roots.push(c);
                     c *= root_of_unity;
@@ -212,67 +212,55 @@ where
         );
 
         eval_constraint_span.exit();
-        let domain = Arc::new(domain);
 
-        let (a_tx, a_rx) = oneshot::channel();
-        let (b_tx, b_rx) = oneshot::channel();
-        let (c_tx, c_rx) = oneshot::channel();
-        let a_domain = Arc::clone(&domain);
-        let b_domain = Arc::clone(&domain);
-        let c_domain = Arc::clone(&domain);
         let mut a_result = a.clone();
         let mut b_result = b.clone();
-        let a_roots = Arc::clone(&roots_to_power_domain);
-        let b_roots = Arc::clone(&roots_to_power_domain);
-        let c_roots = Arc::clone(&roots_to_power_domain);
-        rayon::spawn(move || {
-            let a_span = tracing::debug_span!("a: distribute powers mul a (fft/ifft)").entered();
-            a_domain.ifft_in_place(&mut a_result);
-            T::distribute_powers_and_mul_by_const(&mut a_result, &a_roots);
-            a_domain.fft_in_place(&mut a_result);
-            a_tx.send(a_result).expect("channel not droped");
-            a_span.exit();
-        });
 
-        rayon::spawn(move || {
-            let b_span = tracing::debug_span!("b: distribute powers mul b (fft/ifft)").entered();
-            b_domain.ifft_in_place(&mut b_result);
-            T::distribute_powers_and_mul_by_const(&mut b_result, &b_roots);
-            b_domain.fft_in_place(&mut b_result);
-            b_tx.send(b_result).expect("channel not droped");
-            b_span.exit();
-        });
+        let a_span = tracing::debug_span!("a: distribute powers mul a (fft/ifft)").entered();
+        // a_domain.ifft_in_place(&mut a_result);
+        a_result = T::ifft(a_result);
+        T::distribute_powers_and_mul_by_const(&mut a_result, &roots_to_power_domain);
+        // a_domain.fft_in_place(&mut a_result);
+        a_result = T::fft(a_result);
+        a_span.exit();
+
+        let b_span = tracing::debug_span!("b: distribute powers mul b (fft/ifft)").entered();
+        // b_domain.ifft_in_place(&mut b_result);
+        b_result = T::ifft(b_result);
+        T::distribute_powers_and_mul_by_const(&mut b_result, &roots_to_power_domain);
+        // b_domain.fft_in_place(&mut b_result);
+        b_result = T::fft(b_result);
+        b_span.exit();
 
         let local_mul_vec_span = tracing::debug_span!("c: local_mul_vec").entered();
-        let mut ab = self.driver.local_mul_vec(a, b);
+        let ab = self.driver.local_mul_vec(a, b);
         local_mul_vec_span.exit();
-        rayon::spawn(move || {
-            let ifft_span = tracing::debug_span!("c: ifft in dist pows").entered();
-            c_domain.ifft_in_place(&mut ab);
-            ifft_span.exit();
-            let dist_pows_span = tracing::debug_span!("c: dist pows").entered();
-            ab.par_iter_mut()
-                .zip_eq(c_roots.par_iter())
-                .with_min_len(512)
-                .for_each(|(share, pow)| {
-                    *share *= pow;
-                });
-            dist_pows_span.exit();
-            let fft_span = tracing::debug_span!("c: fft in dist pows").entered();
-            c_domain.fft_in_place(&mut ab);
-            fft_span.exit();
-            c_tx.send(ab).expect("channel not dropped");
-        });
+        let ifft_span = tracing::debug_span!("c: ifft in dist pows").entered();
+        let mut ab = T::ifft_half_share(ab);
+        // c_domain.ifft_in_place(&mut ab);
+        ifft_span.exit();
+        let dist_pows_span = tracing::debug_span!("c: dist pows").entered();
+        ab.par_iter_mut()
+            .zip_eq(roots_to_power_domain.par_iter())
+            .with_min_len(512)
+            .for_each(|(share, pow)| {
+                *share *= pow;
+            });
+        dist_pows_span.exit();
+        let fft_span = tracing::debug_span!("c: fft in dist pows").entered();
+        let ab = T::fft_half_share(ab);
+        let c = ab;
+        // c_domain.fft_in_place(&mut ab);
+        fft_span.exit();
 
-        let a = a_rx.blocking_recv()?;
-        let b = b_rx.blocking_recv()?;
+        let a = a_result;
+        let b = b_result;
 
         let compute_ab_span = tracing::debug_span!("compute ab").entered();
         let local_ab_span = tracing::debug_span!("local part (mul and sub)").entered();
         // same as above. No IO task is run at the moment.
         let mut ab = self.driver.local_mul_vec(a, b);
         local_ab_span.exit();
-        let c = c_rx.blocking_recv()?;
         ab.par_iter_mut()
             .zip_eq(c.par_iter())
             .with_min_len(512)

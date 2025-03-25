@@ -41,6 +41,9 @@ toml.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 tracing.workspace = true
 rustls.workspace = true
+icicle-core.workspace = true
+icicle-runtime.workspace = true
+icicle-bn254.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true

@@ -49,6 +49,22 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
         self.protocol0.network.get_id()
     }
 
+    fn fft(coeffs: Vec<Self::ArithmeticShare>) -> Vec<Self::ArithmeticShare> {
+        todo!()
+    }
+
+    fn fft_half_share(coeffs: Vec<P::ScalarField>) -> Vec<<P as Pairing>::ScalarField> {
+        todo!()
+    }
+
+    fn ifft(coeffs: Vec<Self::ArithmeticShare>) -> Vec<Self::ArithmeticShare> {
+        todo!()
+    }
+
+    fn ifft_half_share(coeffs: Vec<P::ScalarField>) -> Vec<<P as Pairing>::ScalarField> {
+        todo!()
+    }
+
     fn evaluate_constraint(
         _party_id: Self::PartyID,
         lhs: &[(P::ScalarField, usize)],

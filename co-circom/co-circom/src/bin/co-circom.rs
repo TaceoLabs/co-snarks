@@ -13,6 +13,9 @@ use figment::{
     providers::{Env, Format, Serialized, Toml},
     Figment,
 };
+use icicle_bn254::curve::ScalarField;
+use icicle_core::ntt::{self, get_root_of_unity, initialize_domain};
+use icicle_runtime::{self, Device};
 use mpc_net::config::NetworkConfigFile;
 use num_traits::Zero;
 use serde::{Deserialize, Serialize};
@@ -951,6 +954,26 @@ where
                         bincode::deserialize_from(witness_file)?;
                     let witness_share = witness_share.uncompress(&mut mpc_net)?;
                     let public_input = witness_share.public_inputs.clone();
+
+                    // Load installed backends
+                    let _ = icicle_runtime::load_backend_from_env_or_default();
+
+                    // Check if GPU is available
+                    let device_cpu = Device::new("CPU", 0);
+                    let mut device_gpu = Device::new("CUDA", 0);
+                    let is_cuda_device_available = icicle_runtime::is_device_available(&device_gpu);
+
+                    if is_cuda_device_available {
+                        tracing::info!("GPU is available");
+                    } else {
+                        tracing::info!("GPU is not available, falling back to CPU only");
+                        device_gpu = device_cpu.clone();
+                    }
+
+                    icicle_runtime::set_device(&device_gpu).expect("Failed to set device to GPU");
+
+                    let root_of_unity = get_root_of_unity::<ScalarField>(1 << zkey.pow as u64);
+                    initialize_domain(root_of_unity, &ntt::NTTInitDomainConfig::default()).unwrap();
 
                     let start = Instant::now();
                     let (proof, mpc_net) = Rep3CoGroth16::prove(mpc_net, zkey, witness_share)?;

@@ -1,4 +1,12 @@
 use ark_ec::{pairing::Pairing, CurveGroup};
+use ark_ff::{Field, PrimeField};
+use icicle_bn254::curve::ScalarField;
+use icicle_core::{
+    ntt::{self, ntt_inplace, NTTConfig},
+    traits::{FieldImpl, MontgomeryConvertible},
+};
+use icicle_runtime::{self};
+use icicle_runtime::{memory::HostSlice, stream::IcicleStream};
 use mpc_core::protocols::rep3::{
     arithmetic,
     id::PartyID,
@@ -8,6 +16,22 @@ use mpc_core::protocols::rep3::{
 use rayon::prelude::*;
 
 use super::{CircomGroth16Prover, IoResult};
+
+fn transmute_ark_to_icicle_scalars<T, I>(ark_scalars: &mut [T]) -> &mut [I]
+where
+    T: PrimeField,
+    I: FieldImpl + MontgomeryConvertible,
+{
+    // SAFETY: Reinterpreting Arkworks field elements as Icicle-specific scalars
+    let icicle_scalars = unsafe { &mut *(ark_scalars as *mut _ as *mut [I]) };
+
+    let icicle_host_slice = HostSlice::from_mut_slice(&mut icicle_scalars[..]);
+
+    // Convert from Montgomery representation using the Icicle type's conversion method
+    I::from_mont(icicle_host_slice, &IcicleStream::default());
+
+    icicle_scalars
+}
 
 /// A Groth16 driver for REP3 secret sharing
 ///
@@ -47,6 +71,100 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
 
     fn get_party_id(&self) -> Self::PartyID {
         self.io_context0.id
+    }
+
+    fn fft(coeffs: Vec<Self::ArithmeticShare>) -> Vec<Self::ArithmeticShare> {
+        let ntt_config = NTTConfig::<ScalarField>::default();
+        let (mut a_inout, mut b_inout) = coeffs
+            .into_iter()
+            .map(|x| (x.a, x.b))
+            .collect::<(Vec<_>, Vec<_>)>();
+        let a_inout = transmute_ark_to_icicle_scalars(&mut a_inout);
+        let b_inout = transmute_ark_to_icicle_scalars(&mut b_inout);
+        ntt_inplace(
+            HostSlice::from_mut_slice(a_inout),
+            ntt::NTTDir::kForward,
+            &ntt_config,
+        )
+        .expect("NTT computation failed on GPU");
+        ntt_inplace(
+            HostSlice::from_mut_slice(b_inout),
+            ntt::NTTDir::kForward,
+            &ntt_config,
+        )
+        .expect("NTT computation failed on GPU");
+        a_inout
+            .iter()
+            .zip(b_inout)
+            .map(|(a, b)| {
+                Rep3PrimeFieldShare::new(
+                    P::ScalarField::from_random_bytes(&a.to_bytes_le()).unwrap(),
+                    P::ScalarField::from_random_bytes(&b.to_bytes_le()).unwrap(),
+                )
+            })
+            .collect::<Vec<_>>()
+    }
+
+    fn fft_half_share(mut coeffs: Vec<P::ScalarField>) -> Vec<<P as Pairing>::ScalarField> {
+        let ntt_config = NTTConfig::<ScalarField>::default();
+        let inout = transmute_ark_to_icicle_scalars(&mut coeffs);
+        ntt_inplace(
+            HostSlice::from_mut_slice(inout),
+            ntt::NTTDir::kForward,
+            &ntt_config,
+        )
+        .expect("NTT computation failed on GPU");
+        inout
+            .iter()
+            .map(|a| P::ScalarField::from_random_bytes(&a.to_bytes_le()).unwrap())
+            .collect::<Vec<_>>()
+    }
+
+    fn ifft(evals: Vec<Self::ArithmeticShare>) -> Vec<Self::ArithmeticShare> {
+        let ntt_config = NTTConfig::<ScalarField>::default();
+        let (mut a_inout, mut b_inout) = evals
+            .into_iter()
+            .map(|x| (x.a, x.b))
+            .collect::<(Vec<_>, Vec<_>)>();
+        let a_inout = transmute_ark_to_icicle_scalars(&mut a_inout);
+        let b_inout = transmute_ark_to_icicle_scalars(&mut b_inout);
+        ntt_inplace(
+            HostSlice::from_mut_slice(a_inout),
+            ntt::NTTDir::kInverse,
+            &ntt_config,
+        )
+        .expect("NTT computation failed on GPU");
+        ntt_inplace(
+            HostSlice::from_mut_slice(b_inout),
+            ntt::NTTDir::kInverse,
+            &ntt_config,
+        )
+        .expect("NTT computation failed on GPU");
+        a_inout
+            .iter()
+            .zip(b_inout)
+            .map(|(a, b)| {
+                Rep3PrimeFieldShare::new(
+                    P::ScalarField::from_random_bytes(&a.to_bytes_le()).unwrap(),
+                    P::ScalarField::from_random_bytes(&b.to_bytes_le()).unwrap(),
+                )
+            })
+            .collect::<Vec<_>>()
+    }
+
+    fn ifft_half_share(mut coeffs: Vec<P::ScalarField>) -> Vec<<P as Pairing>::ScalarField> {
+        let ntt_config = NTTConfig::<ScalarField>::default();
+        let inout = transmute_ark_to_icicle_scalars(&mut coeffs);
+        ntt_inplace(
+            HostSlice::from_mut_slice(inout),
+            ntt::NTTDir::kInverse,
+            &ntt_config,
+        )
+        .expect("NTT computation failed on GPU");
+        inout
+            .iter()
+            .map(|a| P::ScalarField::from_random_bytes(&a.to_bytes_le()).unwrap())
+            .collect::<Vec<_>>()
     }
 
     fn evaluate_constraint(

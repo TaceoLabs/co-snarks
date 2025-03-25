@@ -1058,6 +1058,9 @@ dependencies = [
  "color-eyre",
  "criterion",
  "figment",
+ "icicle-bn254",
+ "icicle-core",
+ "icicle-runtime",
  "mpc-core",
  "mpc-net",
  "num-bigint 0.4.6",
@@ -1100,6 +1103,9 @@ dependencies = [
  "circom-types",
  "co-circom-snarks",
  "eyre",
+ "icicle-bn254",
+ "icicle-core",
+ "icicle-runtime",
  "mpc-core",
  "mpc-net",
  "num-traits",
@@ -2175,6 +2181,49 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f31827a206f56af32e590ba56d5d2d085f558508192593743f16b2306495269f"
 dependencies = [
  "cc",
+]
+
+[[package]]
+name = "icicle-bn254"
+version = "3.6.0"
+source = "git+https://github.com/ingonyama-zk/icicle.git?branch=main#baa0c88b1980f20991895f8b45bd67cdca58a775"
+dependencies = [
+ "cmake",
+ "icicle-core",
+ "icicle-hash",
+ "icicle-runtime",
+]
+
+[[package]]
+name = "icicle-core"
+version = "3.6.0"
+source = "git+https://github.com/ingonyama-zk/icicle.git?branch=main#baa0c88b1980f20991895f8b45bd67cdca58a775"
+dependencies = [
+ "hex",
+ "icicle-runtime",
+ "once_cell",
+ "rand 0.8.5",
+ "rayon",
+]
+
+[[package]]
+name = "icicle-hash"
+version = "3.6.0"
+source = "git+https://github.com/ingonyama-zk/icicle.git?branch=main#baa0c88b1980f20991895f8b45bd67cdca58a775"
+dependencies = [
+ "cmake",
+ "icicle-core",
+ "icicle-runtime",
+ "rand 0.8.5",
+]
+
+[[package]]
+name = "icicle-runtime"
+version = "3.6.0"
+source = "git+https://github.com/ingonyama-zk/icicle.git?branch=main#baa0c88b1980f20991895f8b45bd67cdca58a775"
+dependencies = [
+ "cmake",
+ "once_cell",
 ]
 
 [[package]]

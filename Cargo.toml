@@ -84,6 +84,10 @@ tokio-util = { version = "0.7.10", features = ["codec"] }
 toml = "0.8.13"
 tracing = { version = "0.1.40" }
 tracing-subscriber = "0.3"
+icicle-core = { git = "https://github.com/ingonyama-zk/icicle.git", branch="main" }
+icicle-bls12-381 = { git = "https://github.com/ingonyama-zk/icicle.git", branch="main" }
+icicle-bn254 = { git = "https://github.com/ingonyama-zk/icicle.git", branch="main" }
+icicle-runtime = { git = "https://github.com/ingonyama-zk/icicle.git", branch="main" }
 
 # This profile can be used for CI in pull requests.
 [profile.ci-dev]
