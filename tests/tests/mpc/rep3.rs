@@ -2207,10 +2207,12 @@ mod curve_share {
     use std::{sync::mpsc, thread};
 
     use ark_std::UniformRand;
-    use itertools::izip;
+    use itertools::{izip, Itertools};
 
-    use mpc_core::protocols::rep3::{self, pointshare};
+    use mpc_core::protocols::rep3::{self, conversion, network::IoContext, pointshare};
+    use num_bigint::BigUint;
     use rand::thread_rng;
+    use tests::rep3_network::Rep3TestNetwork;
 
     #[test]
     fn rep3_add() {
@@ -2300,5 +2302,86 @@ mod curve_share {
         let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_curve_point(result1, result2, result3);
         assert_eq!(is_result, should_result);
+    }
+
+    #[test]
+    fn rep3_a2b_many_single() {
+        let mut rng = thread_rng();
+        let x = ark_bn254::Fr::rand(&mut rng);
+        let x_shares = rep3::share_field_element(x, &mut rng);
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+        let net = Rep3TestNetwork::new();
+
+        for (tx, x, net) in izip!(
+            [tx1, tx2, tx3],
+            x_shares.into_iter(),
+            net.get_party_networks()
+        ) {
+            thread::spawn(move || {
+                let mut io_context = IoContext::init(net).unwrap();
+                let single = conversion::a2b(x, &mut io_context).unwrap();
+                let many = conversion::a2b_many(&[x], &mut io_context).unwrap();
+                tx.send((single, many))
+            });
+        }
+        let (single1, many1) = rx1.recv().unwrap();
+        let (single2, many2) = rx2.recv().unwrap();
+        let (single3, many3) = rx3.recv().unwrap();
+        let result_single = rep3::combine_binary_element(single1, single2, single3);
+        let result_many =
+            rep3::combine_binary_element(many1[0].clone(), many2[0].clone(), many3[0].clone());
+        assert_eq!(result_many, x.into());
+        assert_eq!(result_many, result_single);
+    }
+
+    #[test]
+    fn rep3_a2b_many() {
+        let mut rng = thread_rng();
+        let batch_size = 10;
+        let should_batch = (0..batch_size)
+            .map(|_| ark_bn254::Fr::rand(&mut rng))
+            .collect_vec();
+        let batch_shares = rep3::share_field_elements(&should_batch, &mut rng);
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+        let net = Rep3TestNetwork::new();
+
+        for (tx, x, net) in izip!(
+            [tx1, tx2, tx3],
+            batch_shares.into_iter(),
+            net.get_party_networks()
+        ) {
+            thread::spawn(move || {
+                let mut io_context = IoContext::init(net).unwrap();
+                let single = x
+                    .iter()
+                    .map(|x| conversion::a2b(*x, &mut io_context).unwrap())
+                    .collect_vec();
+                let single_many = conversion::a2b_many(&x, &mut io_context).unwrap();
+                tx.send((single, single_many))
+            });
+        }
+        let (single1, many1) = rx1.recv().unwrap();
+        let (single2, many2) = rx2.recv().unwrap();
+        let (single3, many3) = rx3.recv().unwrap();
+        let single_batch = izip!(single1, single2, single3)
+            .map(|(single1, single2, single3)| {
+                rep3::combine_binary_element(single1, single2, single3)
+            })
+            .collect_vec();
+        let many_batch = izip!(many1, many2, many3)
+            .map(|(many1, many2, many3)| rep3::combine_binary_element(many1, many2, many3))
+            .collect_vec();
+        assert_eq!(single_batch, many_batch);
+        assert_eq!(
+            many_batch,
+            should_batch
+                .into_iter()
+                .map(|x| BigUint::from(x))
+                .collect_vec()
+        );
     }
 }

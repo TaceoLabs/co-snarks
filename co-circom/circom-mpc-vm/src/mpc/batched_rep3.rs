@@ -3,11 +3,14 @@ use std::io;
 
 use ark_ff::PrimeField;
 use itertools::Itertools;
-use mpc_core::protocols::rep3::{
-    arithmetic,
-    conversion::{self, A2BType},
-    network::{IoContext, Rep3Network},
-    Rep3PrimeFieldShare,
+use mpc_core::protocols::{
+    rep3::{
+        arithmetic,
+        conversion::{self, A2BType},
+        network::{IoContext, Rep3Network},
+        Rep3PrimeFieldShare,
+    },
+    rep3_ring::{ring::int_ring::IntRing2k, yao::decompose_field_to_rings_many},
 };
 use num_bigint::BigUint;
 
@@ -358,16 +361,18 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
             vec![Rep3PrimeFieldShare::zero_share(); self.batch_size],
             |acc, x| acc.iter().zip(x).map(|(acc, x)| acc + acc + x).collect(),
         );
-        // TODO we need a2b selector batched!
-        let sum_bits = a_sum
+
+        let sum = a_sum
             .into_iter()
             .zip(b_sum)
-            .map(|(a, b)| conversion::a2b_selector(arithmetic::add(a, b), &mut self.io_context0))
-            .collect::<io::Result<Vec<_>>>()?;
+            .map(|(a, b)| arithmetic::add(a, b))
+            .collect_vec();
+        let sum_bits = conversion::a2b_many(&sum, &mut self.io_context0)?;
 
         let individual_bits = (0..bitlen + 1)
             .flat_map(|i| sum_bits.iter().map(move |bit| (bit >> i) & BigUint::one()))
             .collect_vec();
+
         let result = conversion::bit_inject_many(&individual_bits, &mut self.io_context0)?;
         assert!(result.len() % (bitlen + 1) == 0);
         assert!(result.len() / (bitlen + 1) == self.batch_size);

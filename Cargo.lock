@@ -4323,6 +4323,7 @@ dependencies = [
  "rand 0.8.5",
  "serde_json",
  "sha3",
+ "tracing",
  "tracing-subscriber 0.3.19",
 ]
 

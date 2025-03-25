@@ -35,6 +35,13 @@ pub struct VMConfig {
     pub a2b_type: A2BType,
 }
 
+impl VMConfig {
+    /// Creates a new default config
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
 /// The MPC-VM that performs the witness extension.
 ///
 /// This struct can only be instantiated by constructing it with a [`CoCircomCompilerParsed`].
