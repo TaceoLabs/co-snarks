@@ -9,7 +9,7 @@
 use std::{marker::PhantomData, sync::Arc};
 
 use ark_ff::PrimeField;
-use co_circom_snarks::{CompressedRep3SharedWitness, SharedWitness};
+use co_circom_snarks::SharedWitness;
 use color_eyre::eyre::{self, Context, ContextCompat};
 use mpc_core::protocols::{
     bridges::network::RepToShamirNetwork,
@@ -31,8 +31,11 @@ pub use circom_types::{
     traits::{CheckElement, CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
     Witness, R1CS,
 };
-pub use co_circom_snarks::{Compression, Rep3SharedInput, Rep3SharedWitness, ShamirSharedWitness};
-pub use co_groth16::{Groth16, Rep3CoGroth16, ShamirCoGroth16};
+pub use co_circom_snarks::{
+    CompressedRep3SharedWitness, Compression, Rep3SharedInput, Rep3SharedWitness,
+    ShamirSharedWitness,
+};
+pub use co_groth16::{CircomReduction, Groth16, LibsnarkReduction, Rep3CoGroth16, ShamirCoGroth16};
 pub use co_plonk::{Plonk, Rep3CoPlonk, ShamirCoPlonk};
 pub use mpc_core::protocols::{
     rep3::{id::PartyID, network::Rep3MpcNet},
@@ -80,7 +83,12 @@ where
         zkey: Arc<Groth16ZKey<P>>,
     ) -> eyre::Result<(Groth16Proof<P>, Vec<P::ScalarField>)> {
         let public_inputs = self.witness.public_inputs[1..].to_vec();
-        let (proof, _net) = ShamirCoGroth16::prove(self.net, self.threshold, zkey, self.witness)?;
+        let (proof, _net) = ShamirCoGroth16::prove::<CircomReduction>(
+            self.net,
+            self.threshold,
+            zkey,
+            self.witness,
+        )?;
         Ok((proof, public_inputs))
     }
 
@@ -141,7 +149,7 @@ where
     ) -> eyre::Result<(Groth16Proof<P>, Vec<P::ScalarField>)> {
         let witness = self.witness.uncompress(&mut self.net)?;
         let public_inputs = witness.public_inputs[1..].to_vec();
-        let (proof, _net) = Rep3CoGroth16::prove(self.net, zkey, witness)?;
+        let (proof, _net) = Rep3CoGroth16::prove::<CircomReduction>(self.net, zkey, witness)?;
         Ok((proof, public_inputs))
     }
 
@@ -272,18 +280,18 @@ pub fn merge_input_shares<F: PrimeField>(
 
 /// Split the witness into REP3 shares
 pub fn split_witness_rep3<P: Pairing>(
-    r1cs: &R1CS<P>,
+    num_inputs: usize,
     witness: Witness<P::ScalarField>,
     compression: Compression,
 ) -> [CompressedRep3SharedWitness<P::ScalarField>; 3] {
     let mut rng = rand::thread_rng();
     // create witness shares
-    CompressedRep3SharedWitness::share_rep3(witness, r1cs.num_inputs, &mut rng, compression)
+    CompressedRep3SharedWitness::share_rep3(witness, num_inputs, &mut rng, compression)
 }
 
 /// Split the witness into shamir shares
 pub fn split_witness_shamir<P: Pairing>(
-    r1cs: &R1CS<P>,
+    num_inputs: usize,
     witness: Witness<P::ScalarField>,
     threshold: usize,
     num_parties: usize,
@@ -292,7 +300,7 @@ pub fn split_witness_shamir<P: Pairing>(
     // create witness shares
     ShamirSharedWitness::<P::ScalarField>::share_shamir(
         witness,
-        r1cs.num_inputs,
+        num_inputs,
         threshold,
         num_parties,
         &mut rng,

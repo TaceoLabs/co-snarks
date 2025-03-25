@@ -33,6 +33,20 @@ macro_rules! impl_bls12_381 {
     };
 }
 
+macro_rules! impl_bls12_377 {
+    () => {
+        impl_serde_for_curve!(
+            bls12_377,
+            Bls12_377,
+            ark_bls12_377,
+            "bls12_377",
+            48,
+            32,
+            "bls12377"
+        );
+    };
+}
+
 macro_rules! impl_serde_for_curve {
     ($mod_name: ident, $config: ident, $curve: ident, $name: expr, $field_size: expr, $scalar_field_size: expr, $circom_name: expr) => {
 
@@ -685,3 +699,4 @@ pub enum CheckElement {
 
 impl_bn256!();
 impl_bls12_381!();
+impl_bls12_377!();

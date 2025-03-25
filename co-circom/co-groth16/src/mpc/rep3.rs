@@ -75,6 +75,28 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
         acc
     }
 
+    fn evaluate_constraint_half_share(
+        party_id: Self::PartyID,
+        lhs: &[(P::ScalarField, usize)],
+        public_inputs: &[P::ScalarField],
+        private_witness: &[Self::ArithmeticShare],
+    ) -> Self::ArithmeticHalfShare {
+        let mut acc = P::ScalarField::default();
+        for (coeff, index) in lhs {
+            if index < &public_inputs.len() {
+                let val = public_inputs[*index];
+                let mul_result = val * coeff;
+                if party_id == PartyID::ID0 {
+                    acc += mul_result;
+                }
+            } else {
+                let current_witness = private_witness[*index - public_inputs.len()];
+                acc += current_witness.a * coeff;
+            }
+        }
+        acc
+    }
+
     fn promote_to_trivial_shares(
         id: Self::PartyID,
         public_values: &[P::ScalarField],

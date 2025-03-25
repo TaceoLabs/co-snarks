@@ -1,12 +1,12 @@
 //! A Groth16 proof protocol that uses a collaborative MPC protocol to generate the proof.
 use ark_ec::pairing::Pairing;
 use ark_ec::{AffineRepr, CurveGroup};
-use ark_ff::{FftField, PrimeField};
+use ark_ff::{FftField, Field, PrimeField};
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use circom_types::groth16::{ConstraintMatrix, Groth16Proof, ZKey};
 use circom_types::traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge};
 use co_circom_snarks::{Rep3SharedWitness, ShamirSharedWitness, SharedWitness};
-use eyre::Result;
+use eyre::{ContextCompat, Result};
 use mpc_core::protocols::rep3::network::{IoContext, Rep3Network};
 use mpc_core::protocols::shamir::network::ShamirNetwork;
 use mpc_core::protocols::shamir::{ShamirPreprocessing, ShamirProtocol};
@@ -104,7 +104,7 @@ where
     /// Execute the Groth16 prover using the internal MPC driver.
     /// This version takes the Circom-generated constraint matrices as input and does not re-calculate them.
     #[instrument(level = "debug", name = "Groth16 - Proof", skip_all)]
-    fn prove_inner(
+    fn prove_inner<R: Reduction<P, T>>(
         mut self,
         zkey: Arc<ZKey<P>>,
         private_witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
@@ -118,7 +118,13 @@ where
             )
         }
 
-        let h = self.witness_map_from_matrices(&zkey, &public_inputs, &private_witness.witness)?;
+        let h = R::witness_map_from_matrices(
+            &mut self.driver,
+            &zkey,
+            &public_inputs,
+            &private_witness.witness,
+        )?;
+
         let (r, s) = (self.driver.rand()?, self.driver.rand()?);
 
         let private_witness_half_share = private_witness
@@ -137,156 +143,6 @@ where
             public_inputs,
             private_witness_hs,
         )
-    }
-
-    fn evaluate_constraint(
-        party_id: T::PartyID,
-        domain_size: usize,
-        matrix: &ConstraintMatrix<P::ScalarField>,
-        public_inputs: &[P::ScalarField],
-        private_witness: &[T::ArithmeticShare],
-    ) -> Vec<T::ArithmeticShare> {
-        let mut result = matrix
-            .par_iter()
-            .with_min_len(256)
-            .map(|x| T::evaluate_constraint(party_id, x, public_inputs, private_witness))
-            .collect::<Vec<_>>();
-        result.resize(domain_size, T::ArithmeticShare::default());
-        result
-    }
-
-    #[instrument(level = "debug", name = "witness map from matrices", skip_all)]
-    fn witness_map_from_matrices(
-        &mut self,
-        zkey: &ZKey<P>,
-        public_inputs: &[P::ScalarField],
-        private_witness: &[T::ArithmeticShare],
-    ) -> Result<Vec<T::ArithmeticHalfShare>> {
-        let num_constraints = zkey.num_constraints;
-        let num_inputs = zkey.n_public + 1;
-        let power = zkey.pow;
-        let mut domain =
-            GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints + num_inputs)
-                .ok_or(eyre::eyre!("Polynomial Degree too large"))?;
-        let domain_size = domain.size();
-        let party_id = self.driver.get_party_id();
-        let eval_constraint_span =
-            tracing::debug_span!("evaluate constraints + root of unity computation").entered();
-        let (roots_to_power_domain, a, b) = rayon_join!(
-            {
-                let root_of_unity_span =
-                    tracing::debug_span!("root of unity computation").entered();
-                let root_of_unity = root_of_unity_for_groth16(power, &mut domain);
-                let mut roots = Vec::with_capacity(domain_size);
-                let mut c = P::ScalarField::one();
-                for _ in 0..domain_size {
-                    roots.push(c);
-                    c *= root_of_unity;
-                }
-                root_of_unity_span.exit();
-                Arc::new(roots)
-            },
-            {
-                let eval_constraint_span_a =
-                    tracing::debug_span!("evaluate constraints - a").entered();
-                let mut result = Self::evaluate_constraint(
-                    party_id,
-                    domain_size,
-                    &zkey.a_matrix,
-                    public_inputs,
-                    private_witness,
-                );
-                let promoted_public = T::promote_to_trivial_shares(party_id, public_inputs);
-                result[num_constraints..num_constraints + num_inputs]
-                    .clone_from_slice(&promoted_public[..num_inputs]);
-                eval_constraint_span_a.exit();
-                result
-            },
-            {
-                let eval_constraint_span_b =
-                    tracing::debug_span!("evaluate constraints - a").entered();
-                let result = Self::evaluate_constraint(
-                    party_id,
-                    domain_size,
-                    &zkey.b_matrix,
-                    public_inputs,
-                    private_witness,
-                );
-                eval_constraint_span_b.exit();
-                result
-            }
-        );
-
-        eval_constraint_span.exit();
-        let domain = Arc::new(domain);
-
-        let (a_tx, a_rx) = oneshot::channel();
-        let (b_tx, b_rx) = oneshot::channel();
-        let (c_tx, c_rx) = oneshot::channel();
-        let a_domain = Arc::clone(&domain);
-        let b_domain = Arc::clone(&domain);
-        let c_domain = Arc::clone(&domain);
-        let mut a_result = a.clone();
-        let mut b_result = b.clone();
-        let a_roots = Arc::clone(&roots_to_power_domain);
-        let b_roots = Arc::clone(&roots_to_power_domain);
-        let c_roots = Arc::clone(&roots_to_power_domain);
-        rayon::spawn(move || {
-            let a_span = tracing::debug_span!("a: distribute powers mul a (fft/ifft)").entered();
-            a_domain.ifft_in_place(&mut a_result);
-            T::distribute_powers_and_mul_by_const(&mut a_result, &a_roots);
-            a_domain.fft_in_place(&mut a_result);
-            a_tx.send(a_result).expect("channel not droped");
-            a_span.exit();
-        });
-
-        rayon::spawn(move || {
-            let b_span = tracing::debug_span!("b: distribute powers mul b (fft/ifft)").entered();
-            b_domain.ifft_in_place(&mut b_result);
-            T::distribute_powers_and_mul_by_const(&mut b_result, &b_roots);
-            b_domain.fft_in_place(&mut b_result);
-            b_tx.send(b_result).expect("channel not droped");
-            b_span.exit();
-        });
-
-        let local_mul_vec_span = tracing::debug_span!("c: local_mul_vec").entered();
-        let mut ab = self.driver.local_mul_vec(a, b);
-        local_mul_vec_span.exit();
-        rayon::spawn(move || {
-            let ifft_span = tracing::debug_span!("c: ifft in dist pows").entered();
-            c_domain.ifft_in_place(&mut ab);
-            ifft_span.exit();
-            let dist_pows_span = tracing::debug_span!("c: dist pows").entered();
-            ab.par_iter_mut()
-                .zip_eq(c_roots.par_iter())
-                .with_min_len(512)
-                .for_each(|(share, pow): (&mut T::ArithmeticHalfShare, _)| {
-                    *share *= *pow;
-                });
-            dist_pows_span.exit();
-            let fft_span = tracing::debug_span!("c: fft in dist pows").entered();
-            c_domain.fft_in_place(&mut ab);
-            fft_span.exit();
-            c_tx.send(ab).expect("channel not dropped");
-        });
-
-        let a = a_rx.blocking_recv()?;
-        let b = b_rx.blocking_recv()?;
-
-        let compute_ab_span = tracing::debug_span!("compute ab").entered();
-        let local_ab_span = tracing::debug_span!("local part (mul and sub)").entered();
-        // same as above. No IO task is run at the moment.
-        let mut ab = self.driver.local_mul_vec(a, b);
-        local_ab_span.exit();
-        let c = c_rx.blocking_recv()?;
-        ab.par_iter_mut()
-            .zip_eq(c.par_iter())
-            .with_min_len(512)
-            .for_each(|(a, b): (&mut T::ArithmeticHalfShare, _)| {
-                *a -= *b;
-            });
-        compute_ab_span.exit();
-        Ok(ab)
     }
 
     fn calculate_coeff<C>(
@@ -471,7 +327,7 @@ where
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
     /// Create a [`Groth16Proof`].
-    pub fn prove(
+    pub fn prove<R: Reduction<P, Rep3Groth16Driver<N>>>(
         net: N,
         zkey: Arc<ZKey<P>>,
         witness: Rep3SharedWitness<P::ScalarField>,
@@ -484,7 +340,7 @@ where
             phantom_data: PhantomData,
         };
         // execute prover in MPC
-        let (proof, driver) = prover.prove_inner(zkey, witness)?;
+        let (proof, driver) = prover.prove_inner::<R>(zkey, witness)?;
         Ok((proof, driver.get_network()))
     }
 }
@@ -496,7 +352,7 @@ where
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
     /// Create a [`Groth16Proof`].
-    pub fn prove(
+    pub fn prove<R: Reduction<P, ShamirGroth16Driver<P::ScalarField, N>>>(
         net: N,
         threshold: usize,
         zkey: Arc<ZKey<P>>,
@@ -516,7 +372,7 @@ where
             phantom_data: PhantomData,
         };
         // execute prover in MPC
-        let (proof, driver) = prover.prove_inner(zkey, witness)?;
+        let (proof, driver) = prover.prove_inner::<R>(zkey, witness)?;
         Ok((proof, driver.get_network()))
     }
 }
@@ -531,7 +387,7 @@ where
     /// initialized with the [`PlainGroth16Driver`].
     ///
     /// DOES NOT PERFORM ANY MPC. For a plain prover checkout the [Groth16 implementation of arkworks](https://docs.rs/ark-groth16/latest/ark_groth16/).
-    pub fn plain_prove(
+    pub fn plain_prove<R: Reduction<P, PlainGroth16Driver>>(
         zkey: Arc<ZKey<P>>,
         private_witness: SharedWitness<P::ScalarField, P::ScalarField>,
     ) -> Result<Groth16Proof<P>> {
@@ -539,7 +395,269 @@ where
             driver: PlainGroth16Driver,
             phantom_data: PhantomData,
         };
-        let (proof, _) = prover.prove_inner(zkey, private_witness)?;
+        let (proof, _) = prover.prove_inner::<R>(zkey, private_witness)?;
         Ok(proof)
+    }
+}
+
+pub trait Reduction<P: Pairing, T: CircomGroth16Prover<P>> {
+    fn witness_map_from_matrices(
+        driver: &mut T,
+        zkey: &ZKey<P>,
+        public_inputs: &[P::ScalarField],
+        private_witness: &[T::ArithmeticShare],
+    ) -> Result<Vec<T::ArithmeticHalfShare>>;
+}
+
+fn evaluate_constraint<P: Pairing, T: CircomGroth16Prover<P>>(
+    party_id: T::PartyID,
+    domain_size: usize,
+    matrix: &ConstraintMatrix<P::ScalarField>,
+    public_inputs: &[P::ScalarField],
+    private_witness: &[T::ArithmeticShare],
+) -> Vec<T::ArithmeticShare> {
+    let mut result = matrix
+        .par_iter()
+        .with_min_len(256)
+        .map(|x| T::evaluate_constraint(party_id, x, public_inputs, private_witness))
+        .collect::<Vec<_>>();
+    result.resize(domain_size, T::ArithmeticShare::default());
+    result
+}
+
+fn evaluate_constraint_half_share<P: Pairing, T: CircomGroth16Prover<P>>(
+    party_id: T::PartyID,
+    domain_size: usize,
+    matrix: &ConstraintMatrix<P::ScalarField>,
+    public_inputs: &[P::ScalarField],
+    private_witness: &[T::ArithmeticShare],
+) -> Vec<T::ArithmeticHalfShare> {
+    let mut result = matrix
+        .par_iter()
+        .with_min_len(256)
+        .map(|x| T::evaluate_constraint_half_share(party_id, x, public_inputs, private_witness))
+        .collect::<Vec<_>>();
+    result.resize(domain_size, T::ArithmeticHalfShare::default());
+    result
+}
+
+/// The Groth16 circom reduction
+pub struct CircomReduction;
+
+impl<P: Pairing, T: CircomGroth16Prover<P>> Reduction<P, T> for CircomReduction {
+    #[instrument(level = "debug", name = "witness map from matrices", skip_all)]
+    fn witness_map_from_matrices(
+        driver: &mut T,
+        zkey: &ZKey<P>,
+        public_inputs: &[P::ScalarField],
+        private_witness: &[T::ArithmeticShare],
+    ) -> Result<Vec<T::ArithmeticHalfShare>> {
+        let num_constraints = zkey.num_constraints;
+        let num_inputs = zkey.n_public + 1;
+        let power = zkey.pow;
+        let mut domain =
+            GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints + num_inputs)
+                .ok_or(eyre::eyre!("Polynomial Degree too large"))?;
+        let domain_size = domain.size();
+        let party_id = driver.get_party_id();
+        let eval_constraint_span =
+            tracing::debug_span!("evaluate constraints + root of unity computation").entered();
+        let (roots_to_power_domain, a, b) = rayon_join!(
+            {
+                let root_of_unity_span =
+                    tracing::debug_span!("root of unity computation").entered();
+                let root_of_unity = root_of_unity_for_groth16(power, &mut domain);
+                let mut roots = Vec::with_capacity(domain_size);
+                let mut c = P::ScalarField::one();
+                for _ in 0..domain_size {
+                    roots.push(c);
+                    c *= root_of_unity;
+                }
+                root_of_unity_span.exit();
+                Arc::new(roots)
+            },
+            {
+                let eval_constraint_span_a =
+                    tracing::debug_span!("evaluate constraints - a").entered();
+                let mut result = evaluate_constraint::<P, T>(
+                    party_id,
+                    domain_size,
+                    &zkey.a_matrix,
+                    public_inputs,
+                    private_witness,
+                );
+                let promoted_public = T::promote_to_trivial_shares(party_id, public_inputs);
+                result[num_constraints..num_constraints + num_inputs]
+                    .clone_from_slice(&promoted_public[..num_inputs]);
+                eval_constraint_span_a.exit();
+                result
+            },
+            {
+                let eval_constraint_span_b =
+                    tracing::debug_span!("evaluate constraints - a").entered();
+                let result = evaluate_constraint::<P, T>(
+                    party_id,
+                    domain_size,
+                    &zkey.b_matrix,
+                    public_inputs,
+                    private_witness,
+                );
+                eval_constraint_span_b.exit();
+                result
+            }
+        );
+
+        eval_constraint_span.exit();
+        let domain = Arc::new(domain);
+
+        let (a_tx, a_rx) = oneshot::channel();
+        let (b_tx, b_rx) = oneshot::channel();
+        let (c_tx, c_rx) = oneshot::channel();
+        let a_domain = Arc::clone(&domain);
+        let b_domain = Arc::clone(&domain);
+        let c_domain = Arc::clone(&domain);
+        let mut a_result = a.clone();
+        let mut b_result = b.clone();
+        let a_roots = Arc::clone(&roots_to_power_domain);
+        let b_roots = Arc::clone(&roots_to_power_domain);
+        let c_roots = Arc::clone(&roots_to_power_domain);
+        rayon::spawn(move || {
+            let a_span = tracing::debug_span!("a: distribute powers mul a (fft/ifft)").entered();
+            a_domain.ifft_in_place(&mut a_result);
+            T::distribute_powers_and_mul_by_const(&mut a_result, &a_roots);
+            a_domain.fft_in_place(&mut a_result);
+            a_tx.send(a_result).expect("channel not droped");
+            a_span.exit();
+        });
+
+        rayon::spawn(move || {
+            let b_span = tracing::debug_span!("b: distribute powers mul b (fft/ifft)").entered();
+            b_domain.ifft_in_place(&mut b_result);
+            T::distribute_powers_and_mul_by_const(&mut b_result, &b_roots);
+            b_domain.fft_in_place(&mut b_result);
+            b_tx.send(b_result).expect("channel not droped");
+            b_span.exit();
+        });
+
+        let local_mul_vec_span = tracing::debug_span!("c: local_mul_vec").entered();
+        let mut ab = driver.local_mul_vec(a, b);
+        local_mul_vec_span.exit();
+        rayon::spawn(move || {
+            let ifft_span = tracing::debug_span!("c: ifft in dist pows").entered();
+            c_domain.ifft_in_place(&mut ab);
+            ifft_span.exit();
+            let dist_pows_span = tracing::debug_span!("c: dist pows").entered();
+            ab.par_iter_mut()
+                .zip_eq(c_roots.par_iter())
+                .with_min_len(512)
+                .for_each(|(share, pow): (&mut T::ArithmeticHalfShare, _)| {
+                    *share *= *pow;
+                });
+            dist_pows_span.exit();
+            let fft_span = tracing::debug_span!("c: fft in dist pows").entered();
+            c_domain.fft_in_place(&mut ab);
+            fft_span.exit();
+            c_tx.send(ab).expect("channel not dropped");
+        });
+
+        let a = a_rx.blocking_recv()?;
+        let b = b_rx.blocking_recv()?;
+
+        let compute_ab_span = tracing::debug_span!("compute ab").entered();
+        let local_ab_span = tracing::debug_span!("local part (mul and sub)").entered();
+        // same as above. No IO task is run at the moment.
+        let mut ab = driver.local_mul_vec(a, b);
+        local_ab_span.exit();
+        let c = c_rx.blocking_recv()?;
+        ab.par_iter_mut()
+            .zip_eq(c.par_iter())
+            .with_min_len(512)
+            .for_each(|(a, b): (&mut T::ArithmeticHalfShare, _)| {
+                *a -= *b;
+            });
+        compute_ab_span.exit();
+        Ok(ab)
+    }
+}
+
+/// The Groth16 libsnark reduction
+pub struct LibsnarkReduction;
+
+impl<P: Pairing, T: CircomGroth16Prover<P>> Reduction<P, T> for LibsnarkReduction {
+    #[instrument(level = "debug", name = "witness map from matrices", skip_all)]
+    fn witness_map_from_matrices(
+        driver: &mut T,
+        zkey: &ZKey<P>,
+        public_inputs: &[P::ScalarField],
+        private_witness: &[T::ArithmeticShare],
+    ) -> Result<Vec<T::ArithmeticHalfShare>> {
+        let num_constraints = zkey.num_constraints;
+        let num_inputs = zkey.n_public + 1;
+        let domain = GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints + num_inputs)
+            .ok_or(eyre::eyre!("Polynomial Degree too large"))?;
+        let domain_size = domain.size();
+        let party_id = driver.get_party_id();
+
+        let (mut a, mut b) = rayon::join(
+            || {
+                let mut result = evaluate_constraint::<P, T>(
+                    party_id,
+                    domain_size,
+                    &zkey.a_matrix,
+                    public_inputs,
+                    private_witness,
+                );
+                let promoted_public = T::promote_to_trivial_shares(party_id, public_inputs);
+                result[num_constraints..num_constraints + num_inputs]
+                    .clone_from_slice(&promoted_public[..num_inputs]);
+                result
+            },
+            || {
+                evaluate_constraint::<P, T>(
+                    party_id,
+                    domain_size,
+                    &zkey.b_matrix,
+                    public_inputs,
+                    private_witness,
+                )
+            },
+        );
+
+        domain.ifft_in_place(&mut a);
+        domain.ifft_in_place(&mut b);
+
+        let coset_domain = domain.get_coset(P::ScalarField::GENERATOR).unwrap();
+
+        coset_domain.fft_in_place(&mut a);
+        coset_domain.fft_in_place(&mut b);
+
+        let mut ab = driver.local_mul_vec(a, b);
+
+        let mut c = evaluate_constraint_half_share::<P, T>(
+            party_id,
+            domain_size,
+            zkey.c_matrix
+                .as_ref()
+                .context("c matrix must be Some for LibsnarkReduction")?,
+            public_inputs,
+            private_witness,
+        );
+
+        domain.ifft_in_place(&mut c);
+        coset_domain.fft_in_place(&mut c);
+
+        let vanishing_polynomial_over_coset = domain
+            .evaluate_vanishing_polynomial(P::ScalarField::GENERATOR)
+            .inverse()
+            .unwrap();
+
+        ab.iter_mut().zip(c.iter()).for_each(|(ab_i, c_i)| {
+            *ab_i -= *c_i;
+            *ab_i *= vanishing_polynomial_over_coset;
+        });
+
+        coset_domain.ifft_in_place(&mut ab);
+
+        Ok(ab)
     }
 }
