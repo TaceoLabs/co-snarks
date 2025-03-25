@@ -1,7 +1,6 @@
 use ark_bn254::Bn254;
 use circom_mpc_compiler::CoCircomCompiler;
 use circom_types::Witness;
-use co_circom_snarks::SharedWitness;
 use itertools::izip;
 use mpc_core::protocols::rep3::{self};
 use rand::thread_rng;
@@ -32,23 +31,6 @@ fn install_tracing() {
 pub struct TestInputs {
     inputs: Vec<Vec<ark_bn254::Fr>>,
     witnesses: Vec<Witness<ark_ff::Fp<ark_ff::MontBackend<ark_bn254::FrConfig, 4>, 4>>>,
-}
-
-fn combine_field_elements_for_vm(
-    a: SharedWitness<ark_bn254::Fr, rep3::arithmetic::FieldShare<ark_bn254::Fr>>,
-    b: SharedWitness<ark_bn254::Fr, rep3::arithmetic::FieldShare<ark_bn254::Fr>>,
-    c: SharedWitness<ark_bn254::Fr, rep3::arithmetic::FieldShare<ark_bn254::Fr>>,
-) -> Vec<ark_bn254::Fr> {
-    let mut res = Vec::with_capacity(a.public_inputs.len() + a.witness.len());
-    for (a, b, c) in izip!(a.public_inputs, b.public_inputs, c.public_inputs) {
-        assert_eq!(a, b);
-        assert_eq!(b, c);
-        res.push(a);
-    }
-    res.extend(rep3::combine_field_elements(
-        &a.witness, &b.witness, &c.witness,
-    ));
-    res
 }
 
 fn read_field_element(s: &str) -> ark_bn254::Fr {
@@ -104,6 +86,7 @@ pub fn from_test_name(fn_name: &str) -> TestInputs {
 
 macro_rules! run_test {
     ($file: expr, $input: expr) => {{
+        use tests::test_utils;
         //install_tracing();
         let mut rng = thread_rng();
         let inputs = rep3::share_field_elements($input, &mut rng);
@@ -138,7 +121,7 @@ macro_rules! run_test {
         let result3 = threads.pop().unwrap().join().unwrap();
         let result2 = threads.pop().unwrap().join().unwrap();
         let result1 = threads.pop().unwrap().join().unwrap();
-        combine_field_elements_for_vm(result1, result2, result3)
+        test_utils::combine_field_elements_for_vm(result1, result2, result3)
     }};
 }
 
