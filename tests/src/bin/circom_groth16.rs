@@ -47,7 +47,7 @@ fn main() -> eyre::Result<()> {
 
     let test_network = Rep3TestNetwork::default();
 
-    let batch_size = 1;
+    let batch_size = 2;
     let mut rng = thread_rng();
     let input_file = BufReader::new(File::open(input)?);
     let input_json: serde_json::Map<String, serde_json::Value> =
