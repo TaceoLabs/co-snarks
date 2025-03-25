@@ -12,7 +12,7 @@ use super::{
 };
 use crate::mpc::VmCircomWitnessExtension;
 use ark_ff::PrimeField;
-use co_circom_snarks::{SharedInput, SharedWitness};
+use co_circom_snarks::{BatchedSharedInput, SharedInput, SharedWitness};
 use core::panic;
 use eyre::{bail, eyre, Result};
 use itertools::{izip, Itertools};
@@ -1146,6 +1146,25 @@ impl<F: PrimeField, N: Rep3Network> Rep3WitnessExtension<F, N> {
             output_mapping: parser.output_mapping,
             config,
         })
+    }
+}
+
+impl<F: PrimeField> BatchedRep3WitnessExtension<F, Rep3MpcNet> {
+    #[expect(clippy::type_complexity)]
+    pub fn run_and_return_network(
+        mut self,
+        input_signals: BatchedSharedInput<F, Rep3PrimeFieldShare<F>>,
+    ) -> Result<(
+        FinalizedWitnessExtension<F, BatchedCircomRep3VmWitnessExtension<F, Rep3MpcNet>>,
+        Rep3MpcNet,
+    )> {
+        self.driver.compare_vm_config(&self.config)?;
+        let amount_public_inputs = self.set_input_signals(input_signals)?;
+        self.call_main_component()?;
+        Ok((
+            self.post_processing(amount_public_inputs)?,
+            self.driver.get_network(),
+        ))
     }
 }
 
