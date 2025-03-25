@@ -252,10 +252,10 @@ fn main() -> color_eyre::Result<ExitCode> {
     // Verify the proof
     let is_valid = match hasher {
         TranscriptHash::POSEIDON => {
-            UltraHonk::<_, Poseidon2Sponge>::verify(proof, verifying_key, has_zk)
+            UltraHonk::<_, Poseidon2Sponge>::verify(proof, &verifying_key, has_zk)
                 .context("While verifying proof")?
         }
-        TranscriptHash::KECCAK => UltraHonk::<_, Keccak256>::verify(proof, verifying_key, has_zk)
+        TranscriptHash::KECCAK => UltraHonk::<_, Keccak256>::verify(proof, &verifying_key, has_zk)
             .context("While verifying proof")?,
     };
 

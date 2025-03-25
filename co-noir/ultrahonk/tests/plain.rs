@@ -52,7 +52,7 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(
         assert_eq!(proof, read_proof);
     }
 
-    let is_valid = UltraHonk::<_, H>::verify(proof, verifying_key, has_zk).unwrap();
+    let is_valid = UltraHonk::<_, H>::verify(proof, &verifying_key, has_zk).unwrap();
     assert!(is_valid);
 }
 
