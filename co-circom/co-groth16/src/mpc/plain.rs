@@ -3,7 +3,15 @@ use ark_ec::CurveGroup;
 use ark_ff::UniformRand;
 use rand::thread_rng;
 
-use super::CircomGroth16Prover;
+use super::{CircomGroth16Prover, FftHandle};
+
+pub struct PlainFftHandle;
+
+impl<P: Pairing, T> FftHandle<P, T> for PlainFftHandle {
+    fn join(self) -> T {
+        todo!()
+    }
+}
 
 type IoResult<T> = std::io::Result<T>;
 
@@ -20,6 +28,8 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
 
     type PartyID = usize;
 
+    type FftHandle = PlainFftHandle;
+
     fn rand(&mut self) -> IoResult<Self::ArithmeticShare> {
         let mut rng = thread_rng();
         Ok(Self::ArithmeticShare::rand(&mut rng))
@@ -31,6 +41,14 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
     }
 
     fn fft(coeffs: Vec<Self::ArithmeticShare>) -> Vec<Self::ArithmeticShare> {
+        todo!()
+    }
+
+    fn fft_async(coeffs: Vec<Self::ArithmeticShare>) -> Self::FftHandle {
+        todo!()
+    }
+
+    fn ifft_async(coeffs: Vec<Self::ArithmeticShare>) -> Self::FftHandle {
         todo!()
     }
 

@@ -1,11 +1,16 @@
+use std::marker::PhantomData;
+
 use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::{Field, PrimeField};
 use icicle_bn254::curve::ScalarField;
 use icicle_core::{
-    ntt::{self, ntt_inplace, NTTConfig},
+    ntt::{self, ntt, ntt_inplace, NTTConfig},
     traits::{FieldImpl, MontgomeryConvertible},
 };
-use icicle_runtime::{self};
+use icicle_runtime::{
+    self,
+    memory::{DeviceVec, HostOrDeviceSlice},
+};
 use icicle_runtime::{memory::HostSlice, stream::IcicleStream};
 use mpc_core::protocols::rep3::{
     arithmetic,
@@ -15,7 +20,7 @@ use mpc_core::protocols::rep3::{
 };
 use rayon::prelude::*;
 
-use super::{CircomGroth16Prover, IoResult};
+use super::{CircomGroth16Prover, FftHandle, IoResult};
 
 fn transmute_ark_to_icicle_scalars<T, I>(ark_scalars: &mut [T]) -> &mut [I]
 where
@@ -31,6 +36,48 @@ where
     I::from_mont(icicle_host_slice, &IcicleStream::default());
 
     icicle_scalars
+}
+
+fn to_ark<T, I>(icicle: &I) -> T
+where
+    T: Field,
+    I: FieldImpl,
+{
+    T::from_random_bytes(&icicle.to_bytes_le()).unwrap()
+}
+
+pub struct Rep3FftHandle<P, T, I> {
+    a_results: DeviceVec<I>,
+    b_results: DeviceVec<I>,
+    a_stream: IcicleStream,
+    b_stream: IcicleStream,
+    phantom0: PhantomData<T>,
+    phantom1: PhantomData<P>,
+}
+
+impl<P: Pairing, T: Field, I: FieldImpl> FftHandle<P, Vec<Rep3PrimeFieldShare<P::ScalarField>>>
+    for Rep3FftHandle<P, T, I>
+{
+    fn join(self) -> Vec<Rep3PrimeFieldShare<P::ScalarField>> {
+        self.a_stream.synchronize().unwrap();
+        let mut a_host_result = vec![I::zero(); self.a_results.len()];
+        self.a_results
+            .copy_to_host(HostSlice::from_mut_slice(&mut a_host_result[..]))
+            .unwrap();
+        self.b_stream.synchronize().unwrap();
+        let mut b_host_result = vec![I::zero(); self.b_results.len()];
+        self.b_results
+            .copy_to_host(HostSlice::from_mut_slice(&mut b_host_result[..]))
+            .unwrap();
+        a_host_result
+            .into_iter()
+            .zip(b_host_result)
+            .map(|(a, b)| Rep3PrimeFieldShare {
+                a: to_ark(&a),
+                b: to_ark(&b),
+            })
+            .collect()
+    }
 }
 
 /// A Groth16 driver for REP3 secret sharing
@@ -62,8 +109,8 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
         = Rep3PointShare<C>
     where
         C: CurveGroup;
-
     type PartyID = PartyID;
+    type FftHandle = Rep3FftHandle<P, P::ScalarField, ScalarField>;
 
     fn rand(&mut self) -> IoResult<Self::ArithmeticShare> {
         Ok(Self::ArithmeticShare::rand(&mut self.io_context0))
@@ -105,6 +152,54 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
             .collect::<Vec<_>>()
     }
 
+    fn fft_async(
+        coeffs: Vec<Self::ArithmeticShare>,
+    ) -> Rep3FftHandle<P, P::ScalarField, ScalarField> {
+        let (mut a_input, mut b_input) = coeffs
+            .into_iter()
+            .map(|x| (x.a, x.b))
+            .collect::<(Vec<_>, Vec<_>)>();
+        let a_input = transmute_ark_to_icicle_scalars(&mut a_input);
+        let b_input = transmute_ark_to_icicle_scalars(&mut b_input);
+
+        let a_stream = IcicleStream::create().unwrap();
+        let mut a_ntt_config = NTTConfig::<ScalarField>::default();
+        a_ntt_config.is_async = true;
+        a_ntt_config.stream_handle = *a_stream;
+        let mut a_results = DeviceVec::<ScalarField>::device_malloc(a_input.len()).unwrap();
+
+        let b_stream = IcicleStream::create().unwrap();
+        let mut b_ntt_config = NTTConfig::<ScalarField>::default();
+        b_ntt_config.is_async = true;
+        b_ntt_config.stream_handle = *b_stream;
+        let mut b_results = DeviceVec::<ScalarField>::device_malloc(b_input.len()).unwrap();
+
+        ntt(
+            HostSlice::from_mut_slice(a_input),
+            ntt::NTTDir::kForward,
+            &a_ntt_config,
+            &mut a_results[..],
+        )
+        .expect("NTT computation failed on GPU");
+
+        ntt(
+            HostSlice::from_mut_slice(b_input),
+            ntt::NTTDir::kForward,
+            &b_ntt_config,
+            &mut b_results[..],
+        )
+        .expect("NTT computation failed on GPU");
+
+        Rep3FftHandle {
+            a_results,
+            b_results,
+            a_stream,
+            b_stream,
+            phantom0: PhantomData,
+            phantom1: PhantomData,
+        }
+    }
+
     fn fft_half_share(mut coeffs: Vec<P::ScalarField>) -> Vec<<P as Pairing>::ScalarField> {
         let ntt_config = NTTConfig::<ScalarField>::default();
         let inout = transmute_ark_to_icicle_scalars(&mut coeffs);
@@ -119,6 +214,29 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
             .map(|a| P::ScalarField::from_random_bytes(&a.to_bytes_le()).unwrap())
             .collect::<Vec<_>>()
     }
+
+    // fn fft_half_share_async(
+    //     mut coeffs: Vec<P::ScalarField>,
+    // ) -> FftHandle<P::ScalarField, ScalarField> {
+    //     let stream = IcicleStream::create().unwrap();
+    //     let mut ntt_config = NTTConfig::<ScalarField>::default();
+    //     ntt_config.is_async = true;
+    //     ntt_config.stream_handle = *stream;
+    //     let mut results = DeviceVec::<ScalarField>::device_malloc(coeffs.len()).unwrap();
+    //     let input = transmute_ark_to_icicle_scalars(&mut coeffs);
+    //     ntt(
+    //         HostSlice::from_mut_slice(input),
+    //         ntt::NTTDir::kForward,
+    //         &ntt_config,
+    //         &mut results[..],
+    //     )
+    //     .expect("NTT computation failed on GPU");
+    //     FftHandle {
+    //         results,
+    //         stream,
+    //         phantom: PhantomData,
+    //     }
+    // }
 
     fn ifft(evals: Vec<Self::ArithmeticShare>) -> Vec<Self::ArithmeticShare> {
         let ntt_config = NTTConfig::<ScalarField>::default();
@@ -150,6 +268,54 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
                 )
             })
             .collect::<Vec<_>>()
+    }
+
+    fn ifft_async(
+        coeffs: Vec<Self::ArithmeticShare>,
+    ) -> Rep3FftHandle<P, P::ScalarField, ScalarField> {
+        let (mut a_input, mut b_input) = coeffs
+            .into_iter()
+            .map(|x| (x.a, x.b))
+            .collect::<(Vec<_>, Vec<_>)>();
+        let a_input = transmute_ark_to_icicle_scalars(&mut a_input);
+        let b_input = transmute_ark_to_icicle_scalars(&mut b_input);
+
+        let a_stream = IcicleStream::create().unwrap();
+        let mut a_ntt_config = NTTConfig::<ScalarField>::default();
+        a_ntt_config.is_async = true;
+        a_ntt_config.stream_handle = *a_stream;
+        let mut a_results = DeviceVec::<ScalarField>::device_malloc(a_input.len()).unwrap();
+
+        let b_stream = IcicleStream::create().unwrap();
+        let mut b_ntt_config = NTTConfig::<ScalarField>::default();
+        b_ntt_config.is_async = true;
+        b_ntt_config.stream_handle = *b_stream;
+        let mut b_results = DeviceVec::<ScalarField>::device_malloc(b_input.len()).unwrap();
+
+        ntt(
+            HostSlice::from_mut_slice(a_input),
+            ntt::NTTDir::kInverse,
+            &a_ntt_config,
+            &mut a_results[..],
+        )
+        .expect("NTT computation failed on GPU");
+
+        ntt(
+            HostSlice::from_mut_slice(b_input),
+            ntt::NTTDir::kInverse,
+            &b_ntt_config,
+            &mut b_results[..],
+        )
+        .expect("NTT computation failed on GPU");
+
+        Rep3FftHandle {
+            a_results,
+            b_results,
+            a_stream,
+            b_stream,
+            phantom0: PhantomData,
+            phantom1: PhantomData,
+        }
     }
 
     fn ifft_half_share(mut coeffs: Vec<P::ScalarField>) -> Vec<<P as Pairing>::ScalarField> {

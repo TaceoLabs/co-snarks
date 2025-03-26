@@ -1,7 +1,8 @@
 use core::fmt;
-use std::fmt::Debug;
+use std::{fmt::Debug, marker::PhantomData};
 
 use ark_ec::{pairing::Pairing, CurveGroup};
+use ark_ff::{Field, Zero};
 use ark_poly::domain::DomainCoeff;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 
@@ -9,9 +10,19 @@ pub(crate) mod plain;
 pub(crate) mod rep3;
 pub(crate) mod shamir;
 
+use icicle_bn254::curve::ScalarField;
+use icicle_core::{curve::Curve, traits::FieldImpl};
+use icicle_runtime::{
+    memory::{DeviceVec, HostOrDeviceSlice, HostSlice},
+    stream::IcicleStream,
+};
 pub use plain::PlainGroth16Driver;
 pub use rep3::Rep3Groth16Driver;
 pub use shamir::ShamirGroth16Driver;
+
+pub trait FftHandle<P: Pairing, T> {
+    fn join(self) -> T;
+}
 
 type IoResult<T> = std::io::Result<T>;
 
@@ -34,6 +45,8 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
     /// The party id type
     type PartyID: Send + Sync + Copy + fmt::Display + 'static;
 
+    type FftHandle: FftHandle<P, Vec<Self::ArithmeticShare>>;
+
     /// Generate a random arithemitc share
     fn rand(&mut self) -> IoResult<Self::ArithmeticShare>;
 
@@ -41,8 +54,11 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
     fn get_party_id(&self) -> Self::PartyID;
 
     fn fft(coeffs: Vec<Self::ArithmeticShare>) -> Vec<Self::ArithmeticShare>;
+    fn fft_async(coeffs: Vec<Self::ArithmeticShare>) -> Self::FftHandle;
     fn fft_half_share(coeffs: Vec<P::ScalarField>) -> Vec<P::ScalarField>;
+    // fn fft_half_share_async(coeffs: Vec<P::ScalarField>) -> FftHandle<P::ScalarField, ScalarField>;
     fn ifft(coeffs: Vec<Self::ArithmeticShare>) -> Vec<Self::ArithmeticShare>;
+    fn ifft_async(coeffs: Vec<Self::ArithmeticShare>) -> Self::FftHandle;
     fn ifft_half_share(coeffs: Vec<P::ScalarField>) -> Vec<P::ScalarField>;
 
     /// Each value of lhs consists of a coefficient c and an index i. This function computes the sum of the coefficients times the corresponding public input or private witness. In other words, an accumulator a is initialized to 0, and for each (c, i) in lhs, a += c * public_inputs\[i\] is computed if i corresponds to a public input, or c * private_witness[i - public_inputs.len()] if i corresponds to a private witness.

@@ -1,4 +1,4 @@
-use super::{CircomGroth16Prover, IoResult};
+use super::{CircomGroth16Prover, FftHandle, IoResult};
 use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::PrimeField;
 use mpc_core::protocols::shamir::{
@@ -6,6 +6,14 @@ use mpc_core::protocols::shamir::{
     ShamirProtocol,
 };
 use rayon::prelude::*;
+
+pub struct PlainFftHandle;
+
+impl<P: Pairing, T> FftHandle<P, T> for PlainFftHandle {
+    fn join(self) -> T {
+        todo!()
+    }
+}
 
 /// A Groth16 dirver unsing shamir secret sharing
 ///
@@ -40,6 +48,7 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
         C: CurveGroup;
 
     type PartyID = usize;
+    type FftHandle = PlainFftHandle;
 
     fn rand(&mut self) -> IoResult<Self::ArithmeticShare> {
         self.protocol0.rand()
@@ -50,6 +59,14 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
     }
 
     fn fft(coeffs: Vec<Self::ArithmeticShare>) -> Vec<Self::ArithmeticShare> {
+        todo!()
+    }
+
+    fn fft_async(coeffs: Vec<Self::ArithmeticShare>) -> Self::FftHandle {
+        todo!()
+    }
+
+    fn ifft_async(coeffs: Vec<Self::ArithmeticShare>) -> Self::FftHandle {
         todo!()
     }
 

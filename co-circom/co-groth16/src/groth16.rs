@@ -21,7 +21,7 @@ use tracing::instrument;
 use crate::mpc::plain::PlainGroth16Driver;
 use crate::mpc::rep3::Rep3Groth16Driver;
 use crate::mpc::shamir::ShamirGroth16Driver;
-use crate::mpc::CircomGroth16Prover;
+use crate::mpc::{CircomGroth16Prover, FftHandle};
 
 macro_rules! rayon_join {
     ($t1: expr, $t2: expr, $t3: expr) => {{
@@ -213,24 +213,30 @@ where
 
         eval_constraint_span.exit();
 
-        let mut a_result = a.clone();
-        let mut b_result = b.clone();
+        let a_result = a.clone();
+        let b_result = b.clone();
 
-        let a_span = tracing::debug_span!("a: distribute powers mul a (fft/ifft)").entered();
+        // let a_span = tracing::debug_span!("a: distribute powers mul a (fft/ifft)").entered();
         // a_domain.ifft_in_place(&mut a_result);
-        a_result = T::ifft(a_result);
-        T::distribute_powers_and_mul_by_const(&mut a_result, &roots_to_power_domain);
+        let a_result = T::ifft_async(a_result);
+        let b_result = T::ifft_async(b_result);
+        let mut a_result = a_result.join();
+        let mut b_result = b_result.join();
+        rayon::join(
+            || T::distribute_powers_and_mul_by_const(&mut a_result, &roots_to_power_domain),
+            || T::distribute_powers_and_mul_by_const(&mut b_result, &roots_to_power_domain),
+        );
         // a_domain.fft_in_place(&mut a_result);
-        a_result = T::fft(a_result);
-        a_span.exit();
+        let a_result = T::fft_async(a_result);
+        let b_result = T::fft_async(b_result);
+        let a_result = a_result.join();
+        let b_result = b_result.join();
+        // a_span.exit();
 
-        let b_span = tracing::debug_span!("b: distribute powers mul b (fft/ifft)").entered();
+        // let b_span = tracing::debug_span!("b: distribute powers mul b (fft/ifft)").entered();
         // b_domain.ifft_in_place(&mut b_result);
-        b_result = T::ifft(b_result);
-        T::distribute_powers_and_mul_by_const(&mut b_result, &roots_to_power_domain);
         // b_domain.fft_in_place(&mut b_result);
-        b_result = T::fft(b_result);
-        b_span.exit();
+        // b_span.exit();
 
         let local_mul_vec_span = tracing::debug_span!("c: local_mul_vec").entered();
         let ab = self.driver.local_mul_vec(a, b);
