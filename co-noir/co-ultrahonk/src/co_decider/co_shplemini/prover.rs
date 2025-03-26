@@ -20,7 +20,7 @@ use co_builder::{
 use itertools::izip;
 use ultrahonk::{
     prelude::{Transcript, TranscriptFieldType, TranscriptHasher, ZeroKnowledge},
-    Utils, NUM_LIBRA_EVALUATIONS,
+    Utils, NUM_SMALL_IPA_EVALUATIONS,
 };
 
 impl<
@@ -458,7 +458,7 @@ impl<
         circuit_size: u32,
         crs: &ProverCrs<P>,
         sumcheck_output: SumcheckOutput<P::ScalarField>,
-        libra_polynomials: Option<[SharedPolynomial<T, P>; NUM_LIBRA_EVALUATIONS]>,
+        libra_polynomials: Option<[SharedPolynomial<T, P>; NUM_SMALL_IPA_EVALUATIONS]>,
     ) -> HonkProofResult<ShpleminiOpeningClaim<T, P>> {
         let has_zk = ZeroKnowledge::from(libra_polynomials.is_some());
 
@@ -647,18 +647,18 @@ impl<
      */
     fn compute_libra_opening_claims(
         gemini_r: P::ScalarField,
-        libra_polynomials: [SharedPolynomial<T, P>; NUM_LIBRA_EVALUATIONS],
+        libra_polynomials: [SharedPolynomial<T, P>; NUM_SMALL_IPA_EVALUATIONS],
         transcript: &mut Transcript<TranscriptFieldType, H>,
         driver: &mut T,
     ) -> HonkProofResult<Vec<ShpleminiOpeningClaim<T, P>>> {
-        let mut libra_opening_claims = Vec::with_capacity(NUM_LIBRA_EVALUATIONS);
+        let mut libra_opening_claims = Vec::with_capacity(NUM_SMALL_IPA_EVALUATIONS);
 
         let subgroup_generator = P::get_subgroup_generator();
 
         let libra_eval_labels = [
             "Libra:concatenation_eval",
-            "Libra:shifted_big_sum_eval",
-            "Libra:big_sum_eval",
+            "Libra:shifted_grand_sum_eval",
+            "Libra:grand_sum_eval",
             "Libra:quotient_eval",
         ];
         let evaluation_points = [gemini_r, gemini_r * subgroup_generator, gemini_r, gemini_r];

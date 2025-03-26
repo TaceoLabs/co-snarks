@@ -8,7 +8,7 @@ pub struct Crs<P: Pairing> {
     pub g2_x: P::G2Affine,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Default)]
 pub struct ProverCrs<P: Pairing> {
     #[serde(
         serialize_with = "mpc_core::ark_se",

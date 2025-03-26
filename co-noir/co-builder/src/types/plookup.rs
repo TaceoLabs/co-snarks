@@ -34,8 +34,10 @@ pub(crate) enum BasicTableId {
     Sha256Base16Rotate6,
     Sha256Base16Rotate7,
     Sha256Base16Rotate8,
-    UintXorRotate0,
-    UintAndRotate0,
+    UintXorSlice6Rotate0,
+    UintXorSlice2Rotate0,
+    UintAndSlice6Rotate0,
+    UintAndSlice2Rotate0,
     Bn254XloBasic,
     Bn254XhiBasic,
     Bn254YloBasic,
@@ -270,13 +272,13 @@ impl<F: PrimeField> Plookup<F> {
             PlookupMultiTable::<F>::new(base.into(), base.into(), base.into(), num_entries);
 
         table.id = id;
-        for _ in 0..num_entries {
-            table.slice_sizes.push(base);
-            table.basic_table_ids.push(BasicTableId::UintXorRotate0);
-            table
-                .get_table_values
-                .push(BasicTableId::get_xor_rotate_values_from_key::<F, 0>);
-        }
+        // for _ in 0..num_entries {
+        //     table.slice_sizes.push(base);
+        //     table.basic_table_ids.push(BasicTableId::UintXorRotate0);
+        //     table
+        //         .get_table_values
+        //         .push(BasicTableId::get_xor_rotate_values_from_key::<F, 0>);
+        // }
         table
     }
 
@@ -287,13 +289,13 @@ impl<F: PrimeField> Plookup<F> {
         let mut table = PlookupMultiTable::new(base.into(), base.into(), base.into(), num_entries);
 
         table.id = id;
-        for _ in 0..num_entries {
-            table.slice_sizes.push(base);
-            table.basic_table_ids.push(BasicTableId::UintAndRotate0);
-            table
-                .get_table_values
-                .push(BasicTableId::get_and_rotate_values_from_key::<F, 0>);
-        }
+        // for _ in 0..num_entries {
+        //     table.slice_sizes.push(base);
+        //     table.basic_table_ids.push(BasicTableId::UintAndRotate0);
+        //     table
+        //         .get_table_values
+        //         .push(BasicTableId::get_and_rotate_values_from_key::<F, 0>);
+        // }
         table
     }
 
@@ -301,8 +303,8 @@ impl<F: PrimeField> Plookup<F> {
         // TACEO TODO not all are initialized here!
         let mut multi_tables = from_fn(|_| PlookupMultiTable::default());
         multi_tables[usize::from(MultiTableId::HonkDummyMulti)] = Self::get_honk_dummy_multitable();
-        multi_tables[usize::from(MultiTableId::Uint32And)] = Self::get_uint32_and_table();
-        multi_tables[usize::from(MultiTableId::Uint32Xor)] = Self::get_uint32_xor_table();
+        // multi_tables[usize::from(MultiTableId::Uint32And)] = Self::get_uint32_and_table();
+        // multi_tables[usize::from(MultiTableId::Uint32Xor)] = Self::get_uint32_xor_table();
         multi_tables
     }
 
@@ -842,10 +844,8 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> PlookupBasicTa
         assert!(
             matches!(
                 id,
-                BasicTableId::HonkDummyBasic1
-                    | BasicTableId::HonkDummyBasic2
-                    | BasicTableId::UintAndRotate0
-                    | BasicTableId::UintXorRotate0
+                BasicTableId::HonkDummyBasic1 | BasicTableId::HonkDummyBasic2 // | BasicTableId::UintAndRotate0
+                                                                              // | BasicTableId::UintXorRotate0
             ),
             "Create Basic Table for {:?} not implemented",
             id
@@ -858,8 +858,8 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> PlookupBasicTa
             BasicTableId::HonkDummyBasic2 => Self::generate_honk_dummy_table::<
                 { BasicTableId::HonkDummyBasic2 as u64 },
             >(id, index),
-            BasicTableId::UintAndRotate0 => Self::generate_and_rotate_table::<6, 0>(id, index),
-            BasicTableId::UintXorRotate0 => Self::generate_xor_rotate_table::<6, 0>(id, index),
+            // BasicTableId::UintAndRotate0 => Self::generate_and_rotate_table::<6, 0>(id, index),
+            // BasicTableId::UintXorRotate0 => Self::generate_xor_rotate_table::<6, 0>(id, index),
             _ => {
                 todo!("Create other tables")
             }

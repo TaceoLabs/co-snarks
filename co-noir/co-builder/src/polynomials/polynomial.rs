@@ -7,6 +7,9 @@ use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::ops::{AddAssign, Index, IndexMut, MulAssign, SubAssign};
 
+// The number of entries in ProverPolynomials reserved for randomness intended to mask witness commitments, witness
+// evaluation at the sumcheck challenge, and, if necessary, the evaluation of the corresponding shift
+pub const MASKING_OFFSET: u32 = 4;
 #[derive(Clone, Debug, Default)]
 pub struct Polynomial<F> {
     pub coefficients: Vec<F>,
@@ -27,7 +30,7 @@ impl<'a, F: CanonicalDeserialize> Deserialize<'a> for Polynomial<F> {
 
 pub struct ShiftedPoly<'a, F> {
     pub(crate) coefficients: &'a [F],
-    zero: F, // TACEO TODO is there are better solution
+    zero: F, // TACEO TODO is there a better solution
 }
 
 impl<F: Clone> ShiftedPoly<'_, F> {
@@ -187,6 +190,21 @@ impl<F: PrimeField> Polynomial<F> {
             }
         }
         self.coefficients.pop();
+    }
+    /**
+     * @brief Add random values to the coefficients of a polynomial. In practice, this is used for ensuring the
+     * commitment and evaluation of a polynomial don't leak information about the coefficients in the context of zero
+     * knowledge.
+     */
+    pub fn mask<R: Rng + CryptoRng>(&mut self, rng: &mut R) {
+        let virtual_size = self.coefficients.len();
+        assert!(
+            virtual_size >= MASKING_OFFSET as usize,
+            "Insufficient space for masking"
+        );
+        for i in (virtual_size - MASKING_OFFSET as usize..virtual_size).rev() {
+            self.coefficients[i] = F::rand(rng);
+        }
     }
 
     pub fn add_scaled_slice(&mut self, src: &[F], scalar: &F) {

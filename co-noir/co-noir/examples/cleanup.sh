@@ -11,6 +11,6 @@ find . -name "proof.bb*" -type f -delete
 find . -name "vk.bb*" -type f -delete
 # delete all proofs and vks in test_vectors files
 cd test_vectors
-find . -name "vk" -type f -delete
-find . -name "proof" -type f -delete
+find . -name "vk*" -type f -delete
+find . -name "proof*" -type f -delete
 find . -name "zk_proof" -type f -delete

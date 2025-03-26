@@ -15,6 +15,7 @@ pub(crate) struct ShpleminiVerifierOpeningClaim<P: Pairing> {
 pub(crate) struct ShpleminiOpeningClaim<F: PrimeField> {
     pub(crate) polynomial: Polynomial<F>,
     pub(crate) opening_pair: OpeningPair<F>,
+    pub(crate) gemini_fold: bool,
 }
 #[derive(Clone)]
 pub(crate) struct OpeningPair<F: PrimeField> {

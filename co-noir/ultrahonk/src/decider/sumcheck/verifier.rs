@@ -122,7 +122,6 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
         let checked = full_honk_purported_value == sum_check_round.target_total_sum;
         verified = verified && checked;
-
         Ok(SumcheckVerifierOutput {
             multivariate_challenge,
             verified,

@@ -2765,6 +2765,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             self.process_rom_arrays(driver)?;
             self.process_ram_arrays(driver)?;
             self.process_range_lists(driver)?;
+            self.populate_public_inputs_block();
             self.circuit_finalized = true;
         }
         Ok(())
@@ -3488,6 +3489,15 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         // for the lookup argument the circuit size must be at least as large as the sum of all tables used
         let min_size_due_to_lookups = self.get_tables_size();
 
+        // // Get cumulative size of all blocks
+        // let total_size: usize = self
+        //     .blocks
+        //     .get()
+        //     .iter()
+        //     .map(|block| block.wires.len())
+        //     .sum();
+
+        //TODO FLORIN CHECK AGAIN
         // minimum size of execution trace due to everything else
         let min_size_of_execution_trace = self.public_inputs.len() + self.num_gates;
 
@@ -3506,15 +3516,10 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
         // Update the public inputs block
         for idx in self.public_inputs.iter() {
-            for (wire_idx, wire) in self.blocks.pub_inputs.wires.iter_mut().enumerate() {
-                if wire_idx < 2 {
-                    // first two wires get a copy of the public inputs
-                    wire.push(*idx);
-                } else {
-                    // the remaining wires get zeros
-                    wire.push(self.zero_idx);
-                }
-            }
+            // first two wires get a copy of the public inputs
+            self.blocks
+                .pub_inputs
+                .populate_wires(*idx, *idx, self.zero_idx, self.zero_idx);
             for selector in self.blocks.pub_inputs.selectors.iter_mut() {
                 selector.push(P::ScalarField::zero());
             }
