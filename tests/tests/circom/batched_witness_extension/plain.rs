@@ -1,12 +1,9 @@
 use std::{fs::File, io::BufReader};
 
-use ark_ff::PrimeField;
 use circom_mpc_compiler::{CoCircomCompiler, CompilerConfig};
 use circom_mpc_vm::mpc_vm::VMConfig;
 use co_circom_snarks::{BatchedSharedInput, SharedInput};
 use co_noir::Bn254;
-use num_bigint::BigUint;
-use num_traits::Num as _;
 use rand::{thread_rng, Rng};
 use tests::test_utils;
 

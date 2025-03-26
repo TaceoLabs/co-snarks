@@ -3,14 +3,11 @@ use std::io;
 
 use ark_ff::PrimeField;
 use itertools::Itertools;
-use mpc_core::protocols::{
-    rep3::{
-        arithmetic,
-        conversion::{self, A2BType},
-        network::{IoContext, Rep3Network},
-        Rep3PrimeFieldShare,
-    },
-    rep3_ring::{ring::int_ring::IntRing2k, yao::decompose_field_to_rings_many},
+use mpc_core::protocols::rep3::{
+    arithmetic,
+    conversion::{self, A2BType},
+    network::{IoContext, Rep3Network},
+    Rep3PrimeFieldShare,
 };
 use num_bigint::BigUint;
 
@@ -18,9 +15,13 @@ use super::{batched_plain::BatchedCircomPlainVmWitnessExtension, VmCircomWitness
 
 type ArithmeticShare<F> = Rep3PrimeFieldShare<F>;
 
+/// A batched version of the [`CircomRep3VmWitnessExtension`]. It operates on multiple
+/// elements at once to reduce mul-depth if run on multiple inputs of the same circuit.
+///
+/// This is a pure MPC improvement and does not use any advanced ZK techniques like folding.
 pub struct BatchedCircomRep3VmWitnessExtension<F: PrimeField, N: Rep3Network> {
     io_context0: IoContext<N>,
-    io_context1: IoContext<N>,
+    _io_context1: IoContext<N>,
     plain: BatchedCircomPlainVmWitnessExtension<F>,
     batch_size: usize,
 }
@@ -32,7 +33,7 @@ impl<F: PrimeField, N: Rep3Network> BatchedCircomRep3VmWitnessExtension<F, N> {
         let io_context_fork = io_context.fork()?;
         Ok(Self {
             io_context0: io_context,
-            io_context1: io_context_fork,
+            _io_context1: io_context_fork,
             plain: BatchedCircomPlainVmWitnessExtension::new(batch_size),
             batch_size,
         })
@@ -44,15 +45,13 @@ impl<F: PrimeField, N: Rep3Network> BatchedCircomRep3VmWitnessExtension<F, N> {
     }
 }
 
-/// This type represents a public, arithmetic share, or binary share type used in the co-cricom MPC-VM
+/// This type represents a public, arithmetic share, or binary share type used in the batched co-cricom MPC-VM.
 #[derive(Clone)]
 pub enum BatchedRep3VmType<F: PrimeField> {
     /// The public variant
     Public(Vec<F>),
     /// The arithemtic share variant
     Arithmetic(Vec<ArithmeticShare<F>>),
-    // /// The binary share variant
-    // Binary(BinaryShare<F>),
 }
 
 impl<F: PrimeField> std::fmt::Debug for BatchedRep3VmType<F> {

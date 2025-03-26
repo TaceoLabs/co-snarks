@@ -61,8 +61,8 @@ pub struct WitnessExtension<F: PrimeField, C: VmCircomWitnessExtension<F>> {
     config: VMConfig,
 }
 
-/// Shorthand type for an instance of the MPC-VM that runs locally on a single machine without MPC,
-/// but by batching multiple inputs into a single run.
+/// Shorthand type for an instance of the MPC-VM that runs locally on a single machine without MPC
+/// and batching multiple inputs into a single run.
 ///
 /// This type is mostly used for testing purposes, so use with care in production environments.
 pub type BatchedPlainWitnessExtension<F> =
@@ -73,6 +73,9 @@ pub type BatchedPlainWitnessExtension<F> =
 /// This type is mostly used for testing purposes, so use with care in production environments.
 pub type PlainWitnessExtension<F> = WitnessExtension<F, CircomPlainVmWitnessExtension<F>>;
 
+/// Shorthand type for the MPC-VM instantiated with a `Rep3` protocol and batching multiple inputs into a single run.
+///
+/// This is the only supported protocol at the moment.
 pub type BatchedRep3WitnessExtension<F, N> =
     WitnessExtension<F, BatchedCircomRep3VmWitnessExtension<F, N>>;
 
@@ -1150,6 +1153,21 @@ impl<F: PrimeField, N: Rep3Network> Rep3WitnessExtension<F, N> {
 }
 
 impl<F: PrimeField> BatchedRep3WitnessExtension<F, Rep3MpcNet> {
+    /// Starts the execution of the MPC-VM with the provided [BatchedSharedInput], consumes `self` and returns the [`Rep3MpcNet`].
+    ///
+    /// Use this method over [`run_with_flat()`](WitnessExtension::run) when ever possible.
+    /// # Arguments
+    ///
+    /// * `input_signals` - The [BatchedSharedInput] distributed over the parties.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(([BatchedSharedWitness], Rep3MpcNet))` - The secret-shared witness, distributed over the parties.
+    /// * `Err([eyre::Result])` - An error result.
+    ///
+    /// # Panics
+    ///
+    /// Panics if any of the [`CodeBlocks`](CodeBlock) are corrupted.
     #[expect(clippy::type_complexity)]
     pub fn run_and_return_network(
         mut self,
