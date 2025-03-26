@@ -5,6 +5,7 @@ use acir::{
     native_types::Expression,
 };
 use ark_ff::PrimeField;
+use co_brillig::BrilligSuccess;
 use co_brillig::CoBrilligResult;
 use eyre::Context;
 use itertools::izip;
@@ -102,10 +103,14 @@ where
             }
         }
         let brillig_result = self.brillig.run(id, calldata)?;
-        if let CoBrilligResult::Success(brillig_result, persisted_state) = brillig_result {
+        if let CoBrilligResult::Success(BrilligSuccess {
+            unconstrained_witnesses,
+            generated_pss,
+        }) = brillig_result
+        {
             self.value_store
-                .add_from_brillig(&mut self.driver, persisted_state)?;
-            let brillig_result = self.driver.parse_brillig_result(brillig_result)?;
+                .add_from_brillig(&mut self.driver, generated_pss)?;
+            let brillig_result = self.driver.parse_brillig_result(unconstrained_witnesses)?;
             let brillig_result = brillig_mask.mask(brillig_result, &mut self.driver)?;
             self.fill_output(brillig_result, outputs);
             Ok(())

@@ -2,8 +2,8 @@
 //![warn(missing_docs)]
 
 pub mod mpc;
+pub mod pss_store;
 pub mod solver;
-pub mod value_store;
 pub use mpc::plain::PlainAcvmSolver;
 pub use mpc::rep3::{Rep3AcvmSolver, Rep3AcvmType};
 pub use mpc::shamir::{ShamirAcvmSolver, ShamirAcvmType};

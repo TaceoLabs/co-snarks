@@ -12,5 +12,6 @@ pub(crate) mod memory;
 pub mod mpc;
 mod taceo_std_lib;
 
+pub use brillig_vm::BrilligSuccess;
 pub use brillig_vm::CoBrilligResult;
 pub use brillig_vm::CoBrilligVM;

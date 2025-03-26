@@ -5,8 +5,7 @@ use co_brillig::mpc::BrilligDriver;
 
 use crate::mpc::NoirWitnessExtensionProtocol;
 
-/// TODO better name?
-pub struct ValueStore<T, F>
+pub struct PssStore<T, F>
 where
     T: NoirWitnessExtensionProtocol<F>,
     F: PrimeField,
@@ -15,7 +14,7 @@ where
     inner: HashMap<String, Vec<T::AcvmType>>,
 }
 
-impl<T, F> ValueStore<T, F>
+impl<T, F> PssStore<T, F>
 where
     T: NoirWitnessExtensionProtocol<F>,
     F: PrimeField,

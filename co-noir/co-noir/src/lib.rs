@@ -10,7 +10,7 @@ use acir::{
     FieldElement,
 };
 use ark_ff::PrimeField;
-use co_acvm::value_store::ValueStore;
+use co_acvm::pss_store::PssStore;
 use co_acvm::{
     solver::{partial_abi::PublicMarker, Rep3CoSolver},
     PlainAcvmSolver, Rep3AcvmSolver, ShamirAcvmSolver,
@@ -299,7 +299,7 @@ pub fn execute_circuit_rep3<N: Rep3Network>(
     net: N,
 ) -> Result<(
     Vec<Rep3AcvmType<ark_bn254::Fr>>,
-    ValueStore<Rep3AcvmSolver<ark_bn254::Fr, N>, ark_bn254::Fr>,
+    PssStore<Rep3AcvmSolver<ark_bn254::Fr, N>, ark_bn254::Fr>,
     N,
 )> {
     let input_share = witness_to_witness_map(input_share, &compiled_program.abi)?;
