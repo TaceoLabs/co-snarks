@@ -24,7 +24,7 @@ use crate::{
         plain::PlainAcvmSolver, rep3::Rep3AcvmSolver, shamir::ShamirAcvmSolver,
         NoirWitnessExtensionProtocol,
     },
-    value_store::ValueStore,
+    pss_store::PssStore,
 };
 
 /// The default expression width defined used by the ACVM.
@@ -81,7 +81,7 @@ where
     brillig: CoBrilligVM<T::BrilligDriver, F>,
     abi: Abi,
     functions: Vec<Circuit<GenericFieldElement<F>>>,
-    value_store: ValueStore<T, F>,
+    value_store: PssStore<T, F>,
     // maybe this can be an array. lets see..
     witness_map: Vec<WitnessMap<T::AcvmType>>,
     // there will a more fields added as we add functionality
@@ -170,7 +170,7 @@ where
             brillig,
             driver,
             abi: compiled_program.abi,
-            value_store: ValueStore::new(),
+            value_store: PssStore::new(),
             functions: compiled_program
                 .bytecode
                 .functions
@@ -202,7 +202,7 @@ where
             driver,
             brillig,
             abi: compiled_program.abi,
-            value_store: ValueStore::new(),
+            value_store: PssStore::new(),
             functions: compiled_program
                 .bytecode
                 .functions
@@ -366,7 +366,7 @@ where
     #[allow(clippy::type_complexity)]
     pub fn solve_with_output(
         mut self,
-    ) -> CoAcvmResult<(WitnessStack<T::AcvmType>, ValueStore<T, F>, T)> {
+    ) -> CoAcvmResult<(WitnessStack<T::AcvmType>, PssStore<T, F>, T)> {
         let functions = std::mem::take(&mut self.functions);
 
         for opcode in functions[self.function_index].opcodes.iter() {
@@ -396,8 +396,6 @@ where
         let output = self.open_results(&functions[self.function_index])?;
         self.value_store.set_output(output);
         tracing::trace!("Done! Wrap things up.");
-
-        // TODO here we need to store the output
 
         let mut witness_stack = WitnessStack::default();
         for (idx, witness) in self.witness_map.into_iter().rev().enumerate() {
