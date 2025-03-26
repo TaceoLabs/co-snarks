@@ -2,8 +2,6 @@
 //!
 //! This module contains conversions between share types
 
-use std::fmt::Binary;
-
 use crate::protocols::rep3::arithmetic::BinaryShare;
 
 use super::{
@@ -94,6 +92,7 @@ pub fn a2b<F: PrimeField, N: Rep3Network>(
     detail::low_depth_binary_add_mod_p::<F, N>(&x01, &x2, io_context, F::MODULUS_BIT_SIZE as usize)
 }
 
+/// Transforms the provided replicated shared values from an arithmetic sharing to a binary sharing. I.e., x = x_1 + x_2 + x_3 gets transformed into x = x'_1 xor x'_2 xor x'_3. Reduces the mul-depth by batching all elements together.
 pub fn a2b_many<F: PrimeField, N: Rep3Network>(
     x: &[Rep3PrimeFieldShare<F>],
     io_context: &mut IoContext<N>,
