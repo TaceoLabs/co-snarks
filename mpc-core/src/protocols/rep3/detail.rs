@@ -54,13 +54,12 @@ fn kogge_stone_inner_many<F: PrimeField, N: Rep3Network>(
         // The loop looks slightly different to the one for rep3 rings to have the and gates at the LSBs of the storage
         let shift = 1 << i;
         let mask = (BigUint::from(1u64) << (bitlen - shift)) - BigUint::one();
-        let p_ = &p.iter().map(|p| p & &mask).collect_vec();
-        let g_ = &g.iter().map(|p| p & &mask).collect_vec();
-        let p_shift = &p.iter().map(|p| p >> shift).collect_vec();
+        let len = p.len();
+        let p_ = p.iter().map(|p| p & &mask);
+        let g_ = g.iter().map(|p| p & &mask);
+        let p_shift = p.iter().map(|p| p >> shift);
 
-        // TODO: Make and more communication efficient, ATM we send the full element for each level, even though they reduce in size
-        // maybe just input the mask into AND?
-        let (r1, r2) = and_twice_many(p_shift, g_, p_, io_context, bitlen - shift)?;
+        let (r1, r2) = and_twice_many_iter(p_shift, g_, p_, io_context, bitlen - shift, len)?;
         for (p, r2) in izip!(p.iter_mut(), r2.into_iter()) {
             *p = r2 << shift;
         }
@@ -223,22 +222,23 @@ fn ceil_log2(x: usize) -> usize {
 }
 
 #[expect(clippy::type_complexity)]
-fn and_twice_many<F: PrimeField, N: Rep3Network>(
-    a: &[Rep3BigUintShare<F>],
-    b1: &[Rep3BigUintShare<F>],
-    b2: &[Rep3BigUintShare<F>],
+fn and_twice_many_iter<F: PrimeField, N: Rep3Network>(
+    a: impl Iterator<Item = Rep3BigUintShare<F>>,
+    b1: impl Iterator<Item = Rep3BigUintShare<F>>,
+    b2: impl Iterator<Item = Rep3BigUintShare<F>>,
     io_context: &mut IoContext<N>,
     bitlen: usize,
+    len: usize,
 ) -> IoResult<(Vec<Rep3BigUintShare<F>>, Vec<Rep3BigUintShare<F>>)> {
-    let mut local_a1 = Vec::with_capacity(a.len());
-    let mut local_a2 = Vec::with_capacity(a.len());
+    let mut local_a1 = Vec::with_capacity(len);
+    let mut local_a2 = Vec::with_capacity(len);
     for (a, b1, b2) in izip!(a, b1, b2) {
         let (mut mask1, mask_b) = io_context.rngs.rand.random_biguint(bitlen);
         mask1 ^= mask_b;
 
         let (mut mask2, mask_b) = io_context.rngs.rand.random_biguint(bitlen);
         mask2 ^= mask_b;
-        local_a1.push((b1 & a) ^ mask1);
+        local_a1.push((&b1 & &a) ^ mask1);
         local_a2.push((a & b2) ^ mask2);
     }
 
@@ -247,8 +247,8 @@ fn and_twice_many<F: PrimeField, N: Rep3Network>(
         .send_next([local_a1.to_owned(), local_a2.to_owned()])?;
     let [local_b1, local_b2] = io_context.network.recv_prev::<[Vec<BigUint>; 2]>()?;
 
-    let mut r1 = Vec::with_capacity(a.len());
-    let mut r2 = Vec::with_capacity(a.len());
+    let mut r1 = Vec::with_capacity(len);
+    let mut r2 = Vec::with_capacity(len);
 
     for (local_a1, local_b1, local_a2, local_b2) in izip!(local_a1, local_b1, local_a2, local_b2) {
         r1.push(Rep3BigUintShare {

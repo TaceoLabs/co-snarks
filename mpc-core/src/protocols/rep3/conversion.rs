@@ -134,8 +134,7 @@ pub fn a2b_many<F: PrimeField, N: Rep3Network>(
     };
 
     // reshare x01
-    io_context.network.send_next(x01_a.to_owned())?;
-    let x01_b = io_context.network.recv_prev::<Vec<BigUint>>()?;
+    let x01_b = io_context.network.reshare_many(&x01_a)?;
     let x01 = izip!(x01_a, x01_b)
         .map(|(a, b)| BinaryShare::new(a, b))
         .collect_vec();
