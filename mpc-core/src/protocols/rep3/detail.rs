@@ -60,7 +60,7 @@ fn kogge_stone_inner_many<F: PrimeField, N: Rep3Network>(
 
         // TODO: Make and more communication efficient, ATM we send the full element for each level, even though they reduce in size
         // maybe just input the mask into AND?
-        let (r1, r2) = and_twice_many(&p_shift, &g_, &p_, io_context, bitlen - shift)?;
+        let (r1, r2) = and_twice_many(p_shift, g_, p_, io_context, bitlen - shift)?;
         for (p, r2) in izip!(p.iter_mut(), r2.into_iter()) {
             *p = r2 << shift;
         }
@@ -222,6 +222,7 @@ fn ceil_log2(x: usize) -> usize {
     y
 }
 
+#[expect(clippy::type_complexity)]
 fn and_twice_many<F: PrimeField, N: Rep3Network>(
     a: &[Rep3BigUintShare<F>],
     b1: &[Rep3BigUintShare<F>],

@@ -2378,10 +2378,7 @@ mod curve_share {
         assert_eq!(single_batch, many_batch);
         assert_eq!(
             many_batch,
-            should_batch
-                .into_iter()
-                .map(|x| BigUint::from(x))
-                .collect_vec()
+            should_batch.into_iter().map(BigUint::from).collect_vec()
         );
     }
 }

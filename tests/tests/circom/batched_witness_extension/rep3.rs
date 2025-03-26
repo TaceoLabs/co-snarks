@@ -22,7 +22,7 @@ fn batched_add_1() -> eyre::Result<()> {
 
     let batch_size = 1;
     let mut rng = thread_rng();
-    let mut batch = vec![Vec::with_capacity(batch_size); 3];
+    let mut batch = vec![Vec::new(); 3];
     let mut should_witness = Vec::with_capacity(batch_size);
     for _ in 0..batch_size {
         let mut plain_input = SharedInput::default();
@@ -105,7 +105,7 @@ fn batched_add_100() -> eyre::Result<()> {
 
     let batch_size = 100;
     let mut rng = thread_rng();
-    let mut batch = vec![Vec::with_capacity(batch_size); 3];
+    let mut batch = vec![Vec::new(); 3];
     let mut should_witness = Vec::with_capacity(batch_size);
     for _ in 0..batch_size {
         let mut plain_input = SharedInput::default();

@@ -44,13 +44,14 @@ pub fn xor_public<F: PrimeField>(
     res
 }
 
+/// Performs element-wise bitwise XOR operation on the provided public and shared values.
 pub fn xor_public_vec<F: PrimeField>(
     shared: &[BinaryShare<F>],
     public: &[BigUint],
     id: PartyID,
 ) -> Vec<BinaryShare<F>> {
     shared
-        .into_iter()
+        .iter()
         .zip(public)
         .map(|(shared, public)| {
             let mut res = shared.to_owned();
@@ -104,6 +105,7 @@ pub fn and<F: PrimeField, N: Rep3Network>(
     Ok(BinaryShare::new(local_a, local_b))
 }
 
+/// Performs element-wise bitwise AND operation on the provided shared values.
 pub fn and_vec<F: PrimeField, N: Rep3Network>(
     a: &[BinaryShare<F>],
     b: &[BinaryShare<F>],
@@ -277,12 +279,15 @@ pub fn cmux<F: PrimeField, N: Rep3Network>(
     Ok(and)
 }
 
+/// Computes an element-wise CMUX: If `$c_i$` is `1`, returns `$x^t_i$`, otherwise returns `$x^f_i$`.
 pub fn cmux_many<F: PrimeField, N: Rep3Network>(
     c: &[BinaryShare<F>],
     x_t: &[BinaryShare<F>],
     x_f: &[BinaryShare<F>],
     io_context: &mut IoContext<N>,
 ) -> IoResult<Vec<BinaryShare<F>>> {
+    assert_eq!(c.len(), x_t.len());
+    assert_eq!(c.len(), x_f.len());
     let xor = izip!(x_f, x_t).map(|(x_f, x_t)| x_f ^ x_t).collect_vec();
     let mut and = and_vec(c, &xor, io_context)?;
     for (and, x_f) in izip!(and.iter_mut(), x_f) {
