@@ -21,6 +21,7 @@ pub(crate) struct CoDecider<
 > {
     pub(crate) driver: T,
     pub(super) memory: ProverMemory<T, P>,
+    pub(crate) has_zk: ZeroKnowledge,
     phantom_data: PhantomData<P>,
     phantom_hasher: PhantomData<H>,
 }
@@ -31,10 +32,11 @@ impl<
         H: TranscriptHasher<TranscriptFieldType>,
     > CoDecider<T, P, H>
 {
-    pub fn new(driver: T, memory: ProverMemory<T, P>) -> Self {
+    pub fn new(driver: T, memory: ProverMemory<T, P>, has_zk: ZeroKnowledge) -> Self {
         Self {
             driver,
             memory,
+            has_zk,
             phantom_data: PhantomData,
             phantom_hasher: PhantomData,
         }
@@ -72,12 +74,11 @@ impl<
         transcript: &mut Transcript<TranscriptFieldType, H>,
         crs: &ProverCrs<P>,
         circuit_size: u32,
-        has_zk: ZeroKnowledge,
     ) -> HonkProofResult<(
         SumcheckOutput<P::ScalarField>,
         Option<SharedZKSumcheckData<T, P>>,
     )> {
-        if has_zk == ZeroKnowledge::Yes {
+        if self.has_zk == ZeroKnowledge::Yes {
             let log_subgroup_size = Utils::get_msb64(P::SUBGROUP_SIZE as u64);
             let commitment_key = &crs.monomials[..1 << (log_subgroup_size + 1)];
             let mut zk_sumcheck_data: SharedZKSumcheckData<T, P> =
@@ -110,10 +111,9 @@ impl<
         circuit_size: u32,
         crs: &ProverCrs<P>,
         sumcheck_output: SumcheckOutput<P::ScalarField>,
-        has_zk: ZeroKnowledge,
         zk_sumcheck_data: Option<SharedZKSumcheckData<T, P>>,
     ) -> HonkProofResult<()> {
-        if has_zk == ZeroKnowledge::No {
+        if self.has_zk == ZeroKnowledge::No {
             let prover_opening_claim =
                 self.shplemini_prove(transcript, circuit_size, crs, sumcheck_output, None)?;
             Self::compute_opening_proof(&mut self.driver, prover_opening_claim, transcript, crs)
@@ -145,13 +145,12 @@ impl<
         circuit_size: u32,
         crs: &ProverCrs<P>,
         mut transcript: Transcript<TranscriptFieldType, H>,
-        has_zk: ZeroKnowledge,
     ) -> HonkProofResult<(HonkProof<TranscriptFieldType>, T)> {
         tracing::trace!("Decider prove");
 
         // Run sumcheck subprotocol.
         let (sumcheck_output, zk_sumcheck_data) =
-            self.execute_relation_check_rounds(&mut transcript, crs, circuit_size, has_zk)?;
+            self.execute_relation_check_rounds(&mut transcript, crs, circuit_size)?;
 
         // Fiat-Shamir: rho, y, x, z
         // Execute Zeromorph multilinear PCS
@@ -160,7 +159,6 @@ impl<
             circuit_size,
             crs,
             sumcheck_output,
-            has_zk,
             zk_sumcheck_data,
         )?;
 

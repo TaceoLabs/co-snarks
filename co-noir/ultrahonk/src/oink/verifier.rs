@@ -6,7 +6,6 @@ use crate::{
     verifier::HonkVerifyResult,
 };
 use co_builder::prelude::{HonkCurve, VerifyingKey};
-use eyre::Context;
 
 pub(crate) struct OinkVerifier<
     P: HonkCurve<TranscriptFieldType>,
@@ -43,27 +42,13 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     ) -> HonkVerifyResult<()> {
         tracing::trace!("executing (verifying) preamble round");
 
-        let circuit_size = transcript
-            .receive_u64_from_prover("circuit_size".to_string())
-            .context("Failed to receive circuit_size")?;
-        let public_input_size = transcript
-            .receive_u64_from_prover("public_input_size".to_string())
-            .context("Failed to receive public_input_size")?;
-        let pub_inputs_offset = transcript
-            .receive_u64_from_prover("pub_inputs_offset".to_string())
-            .context("Failed to receive pub_inputs_offset")?;
+        let circuit_size = verifying_key.circuit_size as u64;
+        let public_input_size = verifying_key.num_public_inputs as u64;
+        let pub_inputs_offset = verifying_key.pub_inputs_offset as u64;
 
-        if circuit_size != verifying_key.circuit_size as u64 {
-            return Err(eyre::eyre!("OinkVerifier::execute_preamble_round: proof circuit size does not match verification key!"));
-        }
-
-        if public_input_size != verifying_key.num_public_inputs as u64 {
-            return Err(eyre::eyre!("OinkVerifier::execute_preamble_round: public inputs size does not match verification key!"));
-        }
-
-        if pub_inputs_offset != verifying_key.pub_inputs_offset as u64 {
-            return Err(eyre::eyre!("OinkVerifier::execute_preamble_round: public inputs offset does not match verification key!"));
-        }
+        transcript.add_u64_to_hash_buffer("circuit_size".to_string(), circuit_size);
+        transcript.add_u64_to_hash_buffer("public_input_size".to_string(), public_input_size);
+        transcript.add_u64_to_hash_buffer("pub_inputs_offset".to_string(), pub_inputs_offset);
 
         self.public_inputs = Vec::with_capacity(public_input_size as usize);
 

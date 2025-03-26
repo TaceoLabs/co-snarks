@@ -20,7 +20,7 @@ use co_builder::{
 use itertools::izip;
 use ultrahonk::{
     prelude::{Transcript, TranscriptFieldType, TranscriptHasher, ZeroKnowledge},
-    Utils, NUM_LIBRA_EVALUATIONS,
+    Utils, NUM_GEMINI_CLAIMS, NUM_SMALL_IPA_EVALUATIONS,
 };
 
 impl<
@@ -94,11 +94,11 @@ impl<
         // Note: g_batched is formed from the to-be-shifted polynomials, but the batched evaluation incorporates the
         // evaluations produced by sumcheck of h_i = g_i_shifted.
 
-        let mut rho_challenge = P::ScalarField::ONE;
+        let mut running_scalar = P::ScalarField::ONE;
 
         if has_zk == ZeroKnowledge::Yes {
             // ρ⁰ is used to batch the hiding polynomial
-            rho_challenge *= rho;
+            running_scalar *= rho;
         }
 
         if has_zk == ZeroKnowledge::Yes {
@@ -107,17 +107,17 @@ impl<
                 batched_unshifted.add_scaled_slice_public(
                     self.driver.get_party_id(),
                     f_poly,
-                    &rho_challenge,
+                    &running_scalar,
                 );
-                rho_challenge *= rho;
+                running_scalar *= rho;
             }
         } else {
             let mut batched_unshifted_plain = Polynomial::new_zero(n); // batched unshifted polynomials
 
             // Precomputed part of batched_unshifted
             for f_poly in f_polynomials.precomputed.iter() {
-                batched_unshifted_plain.add_scaled_slice(f_poly, &rho_challenge);
-                rho_challenge *= rho;
+                batched_unshifted_plain.add_scaled_slice(f_poly, &running_scalar);
+                running_scalar *= rho;
             }
 
             // Shared part of batched_unshifted
@@ -125,16 +125,16 @@ impl<
                 SharedPolynomial::<T, P>::promote_poly(&self.driver, batched_unshifted_plain);
         }
         for f_poly in f_polynomials.witness.iter() {
-            batched_unshifted.add_scaled_slice(f_poly, &rho_challenge);
-            rho_challenge *= rho;
+            batched_unshifted.add_scaled_slice(f_poly, &running_scalar);
+            running_scalar *= rho;
         }
 
         // For batched_to_be_shifted we only have shared
         let mut batched_to_be_shifted = SharedPolynomial::<T, P>::new_zero(n); // batched to-be-shifted polynomials
 
         for g_poly in g_polynomials.iter() {
-            batched_to_be_shifted.add_scaled_slice(g_poly, &rho_challenge);
-            rho_challenge *= rho;
+            batched_to_be_shifted.add_scaled_slice(g_poly, &running_scalar);
+            running_scalar *= rho;
         }
 
         Ok((batched_unshifted, batched_to_be_shifted))
@@ -383,6 +383,7 @@ impl<
                 challenge: r_challenge,
                 evaluation,
             },
+            gemini_fold: false,
         });
         // Compute evaluation of partially evaluated batch polynomial (negative) A₀₋(-r)
         let evaluation = T::eval_poly(a_0_neg.as_ref(), -r_challenge);
@@ -392,10 +393,15 @@ impl<
                 challenge: -r_challenge,
                 evaluation,
             },
+            gemini_fold: false,
         });
 
         // Compute univariate opening queries rₗ = r^{2ˡ} for l = 0, 1, ..., m-1
         let r_squares = Self::powers_of_evaluation_challenge(r_challenge, log_n);
+
+        // Each fold polynomial Aₗ has to be opened at −r^{2ˡ} and r^{2ˡ}. To avoid storing two copies of Aₗ for l = 1,...,
+        // m-1, we use a flag that is processed by ShplonkProver.
+        let gemini_fold = true;
 
         // Compute the remaining m opening pairs {−r^{2ˡ}, Aₗ(−r^{2ˡ})}, l = 1, ..., m-1.
 
@@ -407,10 +413,37 @@ impl<
                     challenge: -r_square,
                     evaluation,
                 },
+                gemini_fold,
             });
         }
 
         claims
+    }
+
+    /**
+     * @brief Compute evaluations of fold polynomials Fold_i at r^{2^i} for i>0.
+     * AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1223): Reconsider minor performance/memory
+     * optimizations in Gemini.
+     * @param opening_claims
+     * @return std::vector<Fr>
+     */
+    fn compute_gemini_fold_pos_evaluations(
+        opening_claims: &[ShpleminiOpeningClaim<T, P>],
+    ) -> Vec<T::ArithmeticShare> {
+        tracing::trace!("Compute gemini fold pos evaluations");
+        let mut gemini_fold_pos_evaluations = Vec::with_capacity(opening_claims.len());
+
+        for claim in opening_claims {
+            if claim.gemini_fold {
+                // -r^{2^i} is stored in the claim
+                let evaluation_point = -claim.opening_pair.challenge;
+                // Compute Fold_i(r^{2^i})
+                let evaluation = T::eval_poly(claim.polynomial.as_ref(), evaluation_point);
+                gemini_fold_pos_evaluations.push(evaluation);
+            }
+        }
+
+        gemini_fold_pos_evaluations
     }
 
     /**
@@ -431,8 +464,15 @@ impl<
     ) -> HonkProofResult<ShpleminiOpeningClaim<T, P>> {
         tracing::trace!("Shplonk prove");
         let nu = transcript.get_challenge::<P>("Shplonk:nu".to_string());
-        let batched_quotient =
-            Self::compute_batched_quotient(&opening_claims, nu, &libra_opening_claims);
+        // Compute the evaluations Fold_i(r^{2^i}) for i>0.
+        let gemini_fold_pos_evaluations =
+            Self::compute_gemini_fold_pos_evaluations(&opening_claims);
+        let batched_quotient = Self::compute_batched_quotient(
+            &opening_claims,
+            nu,
+            &gemini_fold_pos_evaluations,
+            &libra_opening_claims,
+        );
         let batched_quotient_commitment =
             CoUtils::commit::<T, P>(batched_quotient.as_ref(), commitment_key);
         let batched_quotient_commitment = self.driver.open_point(batched_quotient_commitment)?;
@@ -448,6 +488,7 @@ impl<
             batched_quotient,
             nu,
             z,
+            &gemini_fold_pos_evaluations,
             libra_opening_claims,
         ))
     }
@@ -458,7 +499,7 @@ impl<
         circuit_size: u32,
         crs: &ProverCrs<P>,
         sumcheck_output: SumcheckOutput<P::ScalarField>,
-        libra_polynomials: Option<[SharedPolynomial<T, P>; NUM_LIBRA_EVALUATIONS]>,
+        libra_polynomials: Option<[SharedPolynomial<T, P>; NUM_SMALL_IPA_EVALUATIONS]>,
     ) -> HonkProofResult<ShpleminiOpeningClaim<T, P>> {
         let has_zk = ZeroKnowledge::from(libra_polynomials.is_some());
 
@@ -505,15 +546,18 @@ impl<
         batched_quotient_q: SharedPolynomial<T, P>,
         nu_challenge: P::ScalarField,
         z_challenge: P::ScalarField,
+        gemini_fold_pos_evaluations: &[T::ArithmeticShare],
         libra_opening_claims: Option<Vec<ShpleminiOpeningClaim<T, P>>>,
     ) -> ShpleminiOpeningClaim<T, P> {
         tracing::trace!("Compute partially evaluated batched quotient");
         let has_zk = ZeroKnowledge::from(libra_opening_claims.is_some());
         let num_opening_claims = opening_claims.len();
-
         let mut inverse_vanishing_evals: Vec<P::ScalarField> =
             Vec::with_capacity(num_opening_claims);
         for claim in &opening_claims {
+            if claim.gemini_fold {
+                inverse_vanishing_evals.push(z_challenge + claim.opening_pair.challenge);
+            }
             inverse_vanishing_evals.push(z_challenge - claim.opening_pair.challenge);
         }
 
@@ -527,12 +571,23 @@ impl<
         inverse_vanishing_evals.iter_mut().for_each(|x| {
             x.inverse_in_place();
         });
-
         let mut g = batched_quotient_q;
-        let len = opening_claims.len();
         let mut current_nu = P::ScalarField::one();
         let mut idx = 0;
+        let mut fold_idx = 0;
         for claim in opening_claims.into_iter() {
+            if claim.gemini_fold {
+                let mut tmp = claim.polynomial.clone();
+                let sub = T::sub(tmp[0], gemini_fold_pos_evaluations[fold_idx]);
+                tmp[0] = sub;
+                let scaling_factor = current_nu * inverse_vanishing_evals[idx]; // = νʲ / (z − xⱼ )
+                                                                                // G -= νʲ ⋅ ( fⱼ(X) − vⱼ) / ( z − xⱼ )
+                g.add_scaled(&tmp, &-scaling_factor);
+
+                current_nu *= nu_challenge;
+                idx += 1;
+                fold_idx += 1;
+            }
             let mut tmp = claim.polynomial;
             let claim_neg = T::neg(claim.opening_pair.evaluation);
             tmp[0] = T::add(tmp[0], claim_neg);
@@ -545,9 +600,7 @@ impl<
         }
 
         // Take into account the constant proof size in Gemini
-        for _ in len..CONST_PROOF_SIZE_LOG_N + 2 {
-            current_nu *= nu_challenge;
-        }
+        current_nu = nu_challenge.pow([NUM_GEMINI_CLAIMS as u64]);
 
         if has_zk == ZeroKnowledge::Yes {
             for claim in libra_opening_claims.expect("Has ZK").into_iter() {
@@ -569,6 +622,7 @@ impl<
                 challenge: z_challenge,
                 evaluation: T::ArithmeticShare::default(),
             },
+            gemini_fold: false,
         }
     }
     /**
@@ -582,6 +636,7 @@ impl<
     pub(crate) fn compute_batched_quotient(
         opening_claims: &Vec<ShpleminiOpeningClaim<T, P>>,
         nu_challenge: P::ScalarField,
+        gemini_fold_pos_evaluations: &[T::ArithmeticShare],
         libra_opening_claims: &Option<Vec<ShpleminiOpeningClaim<T, P>>>,
     ) -> SharedPolynomial<T, P> {
         tracing::trace!("Compute batched quotient");
@@ -601,10 +656,21 @@ impl<
         }
 
         // Q(X) = ∑ⱼ νʲ ⋅ ( fⱼ(X) − vⱼ) / ( X − xⱼ )
-
         let mut q = SharedPolynomial::<T, P>::new_zero(max_poly_size);
         let mut current_nu = P::ScalarField::one();
+        let mut fold_idx = 0;
         for claim in opening_claims {
+            // Gemini Fold Polynomials have to be opened at -r^{2^j} and r^{2^j}.
+            if claim.gemini_fold {
+                let mut tmp = claim.polynomial.clone();
+                let sub = T::sub(tmp[0], gemini_fold_pos_evaluations[fold_idx]);
+                tmp[0] = sub;
+                tmp.factor_roots(&-claim.opening_pair.challenge);
+                // Add the claim quotient to the batched quotient polynomial
+                q.add_scaled(&tmp, &current_nu);
+                current_nu *= nu_challenge;
+                fold_idx += 1;
+            }
             // Compute individual claim quotient tmp = ( fⱼ(X) − vⱼ) / ( X − xⱼ )
             let mut tmp = claim.polynomial.clone();
             let claim_neg = T::neg(claim.opening_pair.evaluation);
@@ -618,11 +684,11 @@ impl<
         }
 
         // We use the same batching challenge for Gemini and Libra opening claims. The number of the claims
-        // batched before adding Libra commitments and evaluations is bounded by CONST_PROOF_SIZE_LOG_N+2
+        // batched before adding Libra commitments and evaluations is bounded by 2 * CONST_PROOF_SIZE_LOG_N + 2, where
+        // 2 * CONST_PROOF_SIZE_LOG_N is the number of fold claims including the dummy ones, and +2 is reserved for
+        // interleaving.
+        current_nu = nu_challenge.pow([NUM_GEMINI_CLAIMS as u64]);
         if has_zk == ZeroKnowledge::Yes {
-            for _ in opening_claims.len()..CONST_PROOF_SIZE_LOG_N + 2 {
-                current_nu *= nu_challenge;
-            }
             if let Some(libra_claims) = libra_opening_claims {
                 for claim in libra_claims.iter() {
                     // Compute individual claim quotient tmp = ( fⱼ(X) − vⱼ) / ( X − xⱼ )
@@ -647,18 +713,19 @@ impl<
      */
     fn compute_libra_opening_claims(
         gemini_r: P::ScalarField,
-        libra_polynomials: [SharedPolynomial<T, P>; NUM_LIBRA_EVALUATIONS],
+        libra_polynomials: [SharedPolynomial<T, P>; NUM_SMALL_IPA_EVALUATIONS],
         transcript: &mut Transcript<TranscriptFieldType, H>,
         driver: &mut T,
     ) -> HonkProofResult<Vec<ShpleminiOpeningClaim<T, P>>> {
-        let mut libra_opening_claims = Vec::with_capacity(NUM_LIBRA_EVALUATIONS);
+        tracing::trace!("Compute libra opening claims");
+        let mut libra_opening_claims = Vec::with_capacity(NUM_SMALL_IPA_EVALUATIONS);
 
         let subgroup_generator = P::get_subgroup_generator();
 
         let libra_eval_labels = [
             "Libra:concatenation_eval",
-            "Libra:shifted_big_sum_eval",
-            "Libra:big_sum_eval",
+            "Libra:shifted_grand_sum_eval",
+            "Libra:grand_sum_eval",
             "Libra:quotient_eval",
         ];
         let evaluation_points = [gemini_r, gemini_r * subgroup_generator, gemini_r, gemini_r];
@@ -673,6 +740,7 @@ impl<
                     challenge: point,
                     evaluation: eval,
                 },
+                gemini_fold: false,
             };
             to_open.push(new_claim.opening_pair.evaluation);
             libra_opening_claims.push(new_claim);

@@ -114,7 +114,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
             libra_commitments.push(
                 transcript
-                    .receive_point_from_prover::<P>("Libra:big_sum_commitment".to_string())?,
+                    .receive_point_from_prover::<P>("Libra:grand_sum_commitment".to_string())?,
             );
             libra_commitments.push(
                 transcript
@@ -147,7 +147,6 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         )?;
 
         let pairing_points = Self::reduce_verify_shplemini(&mut opening_claim, transcript)?;
-
         let pcs_verified = Self::pairing_check(
             pairing_points.0,
             pairing_points.1,

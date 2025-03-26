@@ -2,7 +2,7 @@ use crate::{
     builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder},
     crs::ProverCrs,
     polynomials::{
-        polynomial::Polynomial,
+        polynomial::{Polynomial, MASKING_OFFSET},
         polynomial_types::{Polynomials, PrecomputedEntities},
     },
     types::types::{
@@ -49,7 +49,6 @@ impl<P: Pairing> ProvingKey<P> {
         let dyadic_circuit_size = circuit.compute_dyadic_size();
 
         // Complete the public inputs execution trace block from builder.public_inputs
-        circuit.populate_public_inputs_block();
         circuit.blocks.compute_offsets(false);
 
         // Find index of last non-trivial wire value in the trace
@@ -83,7 +82,7 @@ impl<P: Pairing> ProvingKey<P> {
                 .get_table_polynomials_mut(),
             &circuit,
             dyadic_circuit_size,
-            0,
+            MASKING_OFFSET as usize,
         );
         Self::construct_lookup_read_counts(
             driver,

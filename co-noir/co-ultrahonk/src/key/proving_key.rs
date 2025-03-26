@@ -80,7 +80,6 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         let dyadic_circuit_size = circuit.compute_dyadic_size();
 
         // Complete the public inputs execution trace block from builder.public_inputs
-        circuit.populate_public_inputs_block();
         circuit.blocks.compute_offsets(false);
 
         // Find index of last non-trivial wire value in the trace
@@ -378,7 +377,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             + 1 // ZKData::new
             + n.ilog2() as usize * P::LIBRA_UNIVARIATES_LENGTH // generate_libra_univariates
             + 2 // compute_concatenated_libra_polynomial
-            + 3 // compute_big_sum_polynomial
+            + 3 // compute_grand_sum_polynomial
         };
         num_pairs_oink_prove
             + num_pairs_sumcheck_prove

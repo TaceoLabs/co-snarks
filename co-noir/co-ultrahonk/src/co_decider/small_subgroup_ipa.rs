@@ -24,11 +24,11 @@ pub(crate) struct SharedSmallSubgroupIPAProver<T: NoirUltraHonkProver<P>, P: Pai
     libra_concatenated_lagrange_form: SharedPolynomial<T, P>,
     challenge_polynomial: Polynomial<P::ScalarField>,
     challenge_polynomial_lagrange: Polynomial<P::ScalarField>,
-    big_sum_polynomial_unmasked: SharedPolynomial<T, P>,
-    big_sum_polynomial: SharedPolynomial<T, P>,
-    big_sum_lagrange_coeffs: Vec<T::ArithmeticShare>,
-    batched_polynomial: SharedPolynomial<T, P>,
-    batched_quotient: SharedPolynomial<T, P>,
+    grand_sum_polynomial_unmasked: SharedPolynomial<T, P>,
+    grand_sum_polynomial: SharedPolynomial<T, P>,
+    grand_sum_lagrange_coeffs: Vec<T::ArithmeticShare>,
+    grand_sum_identity_polynomial: SharedPolynomial<T, P>,
+    grand_sum_identity_quotient: SharedPolynomial<T, P>,
     domain: GeneralEvaluationDomain<P::ScalarField>,
     phantom_data: PhantomData<T>,
 }
@@ -37,8 +37,18 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
     SharedSmallSubgroupIPAProver<T, P>
 {
     const SUBGROUP_SIZE: usize = P::SUBGROUP_SIZE;
-    const BATCHED_POLYNOMIAL_LENGTH: usize = 2 * P::SUBGROUP_SIZE + 2;
+    // A masking term of length 2 (degree 1) is required to mask [G] and G(r).
+    const WITNESS_MASKING_TERM_LENGTH: usize = 2;
+    const MASKED_CONCATENATED_WITNESS_LENGTH: usize =
+        Self::SUBGROUP_SIZE + Self::WITNESS_MASKING_TERM_LENGTH;
     const QUOTIENT_LENGTH: usize = Self::SUBGROUP_SIZE + 2;
+    // A masking term of length 3 (degree 2) is required to mask [A], A(r), and A(g*r)
+    const GRAND_SUM_MASKING_TERM_LENGTH: usize = 3;
+    const MASKED_GRAND_SUM_LENGTH: usize =
+        Self::SUBGROUP_SIZE + Self::GRAND_SUM_MASKING_TERM_LENGTH;
+    // Length of the big sum identity polynomial C. It is equal to the length of the highest degree term X * F(X) * G(X)
+    const GRAND_SUM_IDENTITY_LENGTH: usize =
+        Self::MASKED_CONCATENATED_WITNESS_LENGTH + Self::SUBGROUP_SIZE;
     pub(crate) fn new<H: TranscriptHasher<TranscriptFieldType>>(
         driver: &mut T,
         zk_sumcheck_data: SharedZKSumcheckData<T, P>,
@@ -54,33 +64,35 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
             libra_concatenated_lagrange_form: zk_sumcheck_data.libra_concatenated_lagrange_form,
             challenge_polynomial: Polynomial::new_zero(Self::SUBGROUP_SIZE),
             challenge_polynomial_lagrange: Polynomial::new_zero(Self::SUBGROUP_SIZE),
-            big_sum_polynomial_unmasked: SharedPolynomial::<T, P>::new_zero(Self::SUBGROUP_SIZE),
-            big_sum_polynomial: SharedPolynomial::<T, P>::new_zero(Self::SUBGROUP_SIZE + 3),
-            big_sum_lagrange_coeffs: vec![T::ArithmeticShare::default(); Self::SUBGROUP_SIZE],
-            batched_polynomial: SharedPolynomial::<T, P>::new_zero(Self::BATCHED_POLYNOMIAL_LENGTH),
-            batched_quotient: SharedPolynomial::<T, P>::new_zero(Self::QUOTIENT_LENGTH),
+            grand_sum_polynomial_unmasked: SharedPolynomial::<T, P>::new_zero(Self::SUBGROUP_SIZE),
+            grand_sum_polynomial: SharedPolynomial::<T, P>::new_zero(Self::MASKED_GRAND_SUM_LENGTH),
+            grand_sum_lagrange_coeffs: vec![T::ArithmeticShare::default(); Self::SUBGROUP_SIZE],
+            grand_sum_identity_polynomial: SharedPolynomial::<T, P>::new_zero(
+                Self::GRAND_SUM_IDENTITY_LENGTH,
+            ),
+            grand_sum_identity_quotient: SharedPolynomial::<T, P>::new_zero(Self::QUOTIENT_LENGTH),
             domain: GeneralEvaluationDomain::<P::ScalarField>::new(Self::SUBGROUP_SIZE)
                 .ok_or(HonkProofError::LargeSubgroup)?,
             phantom_data: PhantomData,
         };
         prover.compute_challenge_polynomial(multivariate_challenge);
-        prover.compute_big_sum_polynomial(driver)?;
+        prover.compute_grand_sum_polynomial(driver)?;
 
-        let libra_big_sum_commitment_shared = CoUtils::commit::<T, P>(
-            prover.big_sum_polynomial.coefficients.as_ref(),
+        let libra_grand_sum_commitment_shared = CoUtils::commit::<T, P>(
+            prover.grand_sum_polynomial.coefficients.as_ref(),
             commitment_key,
         );
-        let libra_big_sum_commitment = T::open_point(driver, libra_big_sum_commitment_shared)?;
+        let libra_grand_sum_commitment = T::open_point(driver, libra_grand_sum_commitment_shared)?;
         transcript.send_point_to_verifier::<P>(
-            "Libra:big_sum_commitment".to_string(),
-            libra_big_sum_commitment.into(),
+            "Libra:grand_sum_commitment".to_string(),
+            libra_grand_sum_commitment.into(),
         );
 
-        prover.compute_batched_polynomial(claimed_ipa_eval, driver);
+        prover.compute_grand_sum_identity_polynomial(claimed_ipa_eval, driver);
         prover.compute_batched_quotient();
 
         let libra_quotient_commitment_shared = CoUtils::commit::<T, P>(
-            prover.batched_quotient.coefficients.as_ref(),
+            prover.grand_sum_identity_quotient.coefficients.as_ref(),
             commitment_key,
         );
         let libra_quotient_commitment = T::open_point(driver, libra_quotient_commitment_shared)?;
@@ -156,8 +168,8 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
      * - First, we recursively compute the coefficients of the unmasked big sum polynomial, i.e. we set the first
      *   coefficient to `0`.
      * - For each i, the coefficient is updated as:
-     *   \f$ \texttt{big_sum_lagrange_coeffs} (g^{i}) =
-     *        \texttt{big_sum_lagrange_coeffs} (g^{i-1}) +
+     *   \f$ \texttt{grand_sum_lagrange_coeffs} (g^{i}) =
+     *        \texttt{grand_sum_lagrange_coeffs} (g^{i-1}) +
      *        \texttt{challenge_polynomial_lagrange[prev_idx]} (g^{i-1}) \cdot
      *        \texttt{libra_concatenated_lagrange_form[prev_idx]} (g^{i-1}) \f$
      * #### Masking Term
@@ -166,8 +178,8 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
      *   vanishing polynomial.
      *
      */
-    fn compute_big_sum_polynomial(&mut self, driver: &mut T) -> HonkProofResult<()> {
-        self.big_sum_lagrange_coeffs[0] = T::ArithmeticShare::default();
+    fn compute_grand_sum_polynomial(&mut self, driver: &mut T) -> HonkProofResult<()> {
+        self.grand_sum_lagrange_coeffs[0] = T::ArithmeticShare::default();
 
         // Compute the big sum coefficients recursively
         for idx in 1..Self::SUBGROUP_SIZE {
@@ -176,27 +188,28 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
                 self.challenge_polynomial_lagrange.coefficients[prev_idx],
                 self.libra_concatenated_lagrange_form.coefficients[prev_idx],
             );
-            self.big_sum_lagrange_coeffs[idx] = T::add(mul, self.big_sum_lagrange_coeffs[prev_idx]);
+            self.grand_sum_lagrange_coeffs[idx] =
+                T::add(mul, self.grand_sum_lagrange_coeffs[prev_idx]);
         }
 
         //  Get the coefficients in the monomial basis
-        let big_sum_ifft = T::ifft(&self.big_sum_lagrange_coeffs, &self.domain);
-        self.big_sum_polynomial_unmasked = SharedPolynomial {
-            coefficients: big_sum_ifft,
+        let grand_sum_ifft = T::ifft(&self.grand_sum_lagrange_coeffs, &self.domain);
+        self.grand_sum_polynomial_unmasked = SharedPolynomial {
+            coefficients: grand_sum_ifft,
         };
 
         //  Generate random masking_term of degree 2, add Z_H(X) * masking_term
         let masking_term = SharedUnivariate::<T, P, 3>::get_random(driver)?;
-        self.big_sum_polynomial
-            .add_assign_slice(&self.big_sum_polynomial_unmasked.coefficients);
+        self.grand_sum_polynomial
+            .add_assign_slice(&self.grand_sum_polynomial_unmasked.coefficients);
 
         for idx in 0..masking_term.evaluations.len() {
-            self.big_sum_polynomial.coefficients[idx] = T::sub(
-                self.big_sum_polynomial.coefficients[idx],
+            self.grand_sum_polynomial.coefficients[idx] = T::sub(
+                self.grand_sum_polynomial.coefficients[idx],
                 masking_term.evaluations[idx],
             );
-            self.big_sum_polynomial.coefficients[idx + Self::SUBGROUP_SIZE] = T::add(
-                self.big_sum_polynomial.coefficients[idx + Self::SUBGROUP_SIZE],
+            self.grand_sum_polynomial.coefficients[idx + Self::SUBGROUP_SIZE] = T::add(
+                self.grand_sum_polynomial.coefficients[idx + Self::SUBGROUP_SIZE],
                 masking_term.evaluations[idx],
             );
         }
@@ -208,18 +221,22 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
      * \f$ is the fixed generator of \f$ H \f$.
      *
      */
-    fn compute_batched_polynomial(&mut self, claimed_evaluation: P::ScalarField, driver: &mut T) {
+    fn compute_grand_sum_identity_polynomial(
+        &mut self,
+        claimed_evaluation: P::ScalarField,
+        driver: &mut T,
+    ) {
         // Compute shifted big sum polynomial A(gX)
-        let mut shifted_big_sum = SharedPolynomial::<T, P>::new_zero(Self::SUBGROUP_SIZE + 3);
+        let mut shifted_grand_sum = SharedPolynomial::<T, P>::new_zero(Self::SUBGROUP_SIZE + 3);
 
         for idx in 0..(Self::SUBGROUP_SIZE + 3) {
-            shifted_big_sum.coefficients[idx] = T::mul_with_public(
+            shifted_grand_sum.coefficients[idx] = T::mul_with_public(
                 self.interpolation_domain[idx % Self::SUBGROUP_SIZE],
-                self.big_sum_polynomial.coefficients[idx],
+                self.grand_sum_polynomial.coefficients[idx],
             );
         }
 
-        let (lagrange_first, lagrange_last) = self.compute_lagrange_polynomials();
+        let (lagrange_first, lagrange_last) = self.compute_lagrange_first_and_last();
 
         // Compute -F(X)*G(X), the negated product of challenge_polynomial and libra_concatenated_monomial_form
         for i in 0..self.concatenated_polynomial.coefficients.len() {
@@ -228,55 +245,55 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
                     self.challenge_polynomial.coefficients[j],
                     self.concatenated_polynomial.coefficients[i],
                 );
-                self.batched_polynomial.coefficients[i + j] =
-                    T::sub(self.batched_polynomial.coefficients[i + j], mul);
+                self.grand_sum_identity_polynomial.coefficients[i + j] =
+                    T::sub(self.grand_sum_identity_polynomial.coefficients[i + j], mul);
             }
         }
 
         // Compute - F(X) * G(X) + A(gX) - A(X)
-        for idx in 0..shifted_big_sum.coefficients.len() {
+        for idx in 0..shifted_grand_sum.coefficients.len() {
             let sub = T::sub(
-                shifted_big_sum.coefficients[idx],
-                self.big_sum_polynomial.coefficients[idx],
+                shifted_grand_sum.coefficients[idx],
+                self.grand_sum_polynomial.coefficients[idx],
             );
-            self.batched_polynomial.coefficients[idx] =
-                T::add(self.batched_polynomial.coefficients[idx], sub);
+            self.grand_sum_identity_polynomial.coefficients[idx] =
+                T::add(self.grand_sum_identity_polynomial.coefficients[idx], sub);
         }
 
         // Mutiply - F(X) * G(X) + A(gX) - A(X) by X-g:
         // 1. Multiply by X
-        for idx in (1..self.batched_polynomial.coefficients.len()).rev() {
-            self.batched_polynomial.coefficients[idx] =
-                self.batched_polynomial.coefficients[idx - 1];
+        for idx in (1..self.grand_sum_identity_polynomial.coefficients.len()).rev() {
+            self.grand_sum_identity_polynomial.coefficients[idx] =
+                self.grand_sum_identity_polynomial.coefficients[idx - 1];
         }
-        self.batched_polynomial.coefficients[0] = T::ArithmeticShare::default();
+        self.grand_sum_identity_polynomial.coefficients[0] = T::ArithmeticShare::default();
 
         // 2. Subtract  1/g(A(gX) - A(X) - F(X) * G(X))
-        for idx in 0..self.batched_polynomial.coefficients.len() - 1 {
-            let tmp = self.batched_polynomial.coefficients[idx + 1];
+        for idx in 0..self.grand_sum_identity_polynomial.coefficients.len() - 1 {
+            let tmp = self.grand_sum_identity_polynomial.coefficients[idx + 1];
             let mul = T::mul_with_public(self.interpolation_domain[Self::SUBGROUP_SIZE - 1], tmp);
-            self.batched_polynomial.coefficients[idx] =
-                T::sub(self.batched_polynomial.coefficients[idx], mul);
+            self.grand_sum_identity_polynomial.coefficients[idx] =
+                T::sub(self.grand_sum_identity_polynomial.coefficients[idx], mul);
         }
 
         // Add (L_1 + L_{|H|}) * A(X) to the result
-        for i in 0..self.big_sum_polynomial.coefficients.len() {
+        for i in 0..self.grand_sum_polynomial.coefficients.len() {
             for j in 0..Self::SUBGROUP_SIZE {
                 let mul = T::mul_with_public(
                     lagrange_first.coefficients[j] + lagrange_last.coefficients[j],
-                    self.big_sum_polynomial.coefficients[i],
+                    self.grand_sum_polynomial.coefficients[i],
                 );
-                self.batched_polynomial.coefficients[i + j] =
-                    T::add(self.batched_polynomial.coefficients[i + j], mul);
+                self.grand_sum_identity_polynomial.coefficients[i + j] =
+                    T::add(self.grand_sum_identity_polynomial.coefficients[i + j], mul);
             }
         }
         let party_id = driver.get_party_id();
 
         // Subtract L_{|H|} * s
         for idx in 0..Self::SUBGROUP_SIZE {
-            self.batched_polynomial.coefficients[idx] = T::add_with_public(
+            self.grand_sum_identity_polynomial.coefficients[idx] = T::add_with_public(
                 -lagrange_last.coefficients[idx] * claimed_evaluation,
-                self.batched_polynomial.coefficients[idx],
+                self.grand_sum_identity_polynomial.coefficients[idx],
                 party_id,
             );
         }
@@ -285,9 +302,9 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
     /** @brief Efficiently compute the quotient of batched_polynomial by Z_H = X ^ { | H | } - 1
      */
     fn compute_batched_quotient(&mut self) {
-        let mut remainder = self.batched_polynomial.clone();
-        for idx in (Self::SUBGROUP_SIZE..Self::BATCHED_POLYNOMIAL_LENGTH).rev() {
-            self.batched_quotient.coefficients[idx - Self::SUBGROUP_SIZE] =
+        let mut remainder = self.grand_sum_identity_polynomial.clone();
+        for idx in (Self::SUBGROUP_SIZE..Self::GRAND_SUM_IDENTITY_LENGTH).rev() {
+            self.grand_sum_identity_quotient.coefficients[idx - Self::SUBGROUP_SIZE] =
                 remainder.coefficients[idx];
 
             let tmp = remainder.coefficients[idx];
@@ -295,7 +312,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
             remainder.coefficients[idx - Self::SUBGROUP_SIZE] =
                 T::add(tmp, remainder.coefficients[idx - Self::SUBGROUP_SIZE]);
         }
-        self.batched_polynomial = remainder;
+        self.grand_sum_identity_polynomial = remainder;
     }
 
     /**
@@ -305,7 +322,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
      * @param bn_evaluation_domain
      * @return std::array<Polynomial<FF>, 2>
      */
-    fn compute_lagrange_polynomials(
+    fn compute_lagrange_first_and_last(
         &self,
     ) -> (Polynomial<P::ScalarField>, Polynomial<P::ScalarField>) {
         // Compute the monomial coefficients of L_1
@@ -335,9 +352,9 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
     pub(crate) fn into_witness_polynomials(self) -> [SharedPolynomial<T, P>; 4] {
         [
             self.concatenated_polynomial,
-            self.big_sum_polynomial.to_owned(),
-            self.big_sum_polynomial,
-            self.batched_quotient,
+            self.grand_sum_polynomial.to_owned(),
+            self.grand_sum_polynomial,
+            self.grand_sum_identity_quotient,
         ]
     }
 }

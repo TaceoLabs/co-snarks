@@ -113,12 +113,24 @@ impl<T: Default> ProverWitnessEntities<T> {
         &self.elements[Self::W_L]
     }
 
+    pub fn w_l_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::W_L]
+    }
+
     pub fn w_r(&self) -> &T {
         &self.elements[Self::W_R]
     }
 
+    pub fn w_r_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::W_R]
+    }
+
     pub fn w_o(&self) -> &T {
         &self.elements[Self::W_O]
+    }
+
+    pub fn w_o_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::W_O]
     }
 
     pub fn w_4(&self) -> &T {
@@ -129,8 +141,16 @@ impl<T: Default> ProverWitnessEntities<T> {
         &self.elements[Self::LOOKUP_READ_COUNTS]
     }
 
+    pub fn lookup_read_counts_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::LOOKUP_READ_COUNTS]
+    }
+
     pub fn lookup_read_tags(&self) -> &T {
         &self.elements[Self::LOOKUP_READ_TAGS]
+    }
+
+    pub fn lookup_read_tags_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::LOOKUP_READ_TAGS]
     }
 
     pub fn lookup_read_counts_and_tags(&self) -> &[T] {
