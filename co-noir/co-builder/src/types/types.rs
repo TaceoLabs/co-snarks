@@ -260,6 +260,14 @@ impl<F: PrimeField> UltraTraceBlocks<UltraTraceBlock<F>> {
             offset += block.get_fixed_size(is_structured);
         }
     }
+
+    pub(crate) fn get_total_content_size(&self) -> usize {
+        let mut total_size = 0;
+        for block in self.get() {
+            total_size += block.len();
+        }
+        total_size
+    }
 }
 
 impl<F: PrimeField> UltraTraceBlock<F> {

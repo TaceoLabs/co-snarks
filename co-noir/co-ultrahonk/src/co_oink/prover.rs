@@ -27,10 +27,11 @@ use co_builder::{
 use itertools::izip;
 use std::{array, marker::PhantomData};
 use ultrahonk::{
-    prelude::{Transcript, TranscriptFieldType, TranscriptHasher},
+    prelude::{Transcript, TranscriptFieldType, TranscriptHasher, ZeroKnowledge},
     NUM_ALPHAS,
 };
 
+#[expect(dead_code)] //see e.g. in execute_wire_commitments_round why we will need has_zk in the future
 pub(crate) struct CoOink<
     'a,
     T: NoirUltraHonkProver<P>,
@@ -41,6 +42,7 @@ pub(crate) struct CoOink<
     memory: ProverMemory<T, P>,
     phantom_data: PhantomData<P>,
     phantom_hasher: PhantomData<H>,
+    has_zk: ZeroKnowledge,
 }
 
 impl<
@@ -50,12 +52,13 @@ impl<
         H: TranscriptHasher<TranscriptFieldType>,
     > CoOink<'a, T, P, H>
 {
-    pub(crate) fn new(driver: &'a mut T) -> Self {
+    pub(crate) fn new(driver: &'a mut T, has_zk: ZeroKnowledge) -> Self {
         Self {
             driver,
             memory: ProverMemory::default(),
             phantom_data: PhantomData,
             phantom_hasher: PhantomData,
+            has_zk,
         }
     }
 
@@ -503,12 +506,12 @@ impl<
         tracing::trace!("executing preamble round");
 
         transcript
-            .send_u64_to_verifier("circuit_size".to_string(), proving_key.circuit_size as u64);
-        transcript.send_u64_to_verifier(
+            .add_u64_to_hash_buffer("circuit_size".to_string(), proving_key.circuit_size as u64);
+        transcript.add_u64_to_hash_buffer(
             "public_input_size".to_string(),
             proving_key.num_public_inputs as u64,
         );
-        transcript.send_u64_to_verifier(
+        transcript.add_u64_to_hash_buffer(
             "pub_inputs_offset".to_string(),
             proving_key.pub_inputs_offset as u64,
         );
@@ -537,6 +540,15 @@ impl<
 
         // Commit to the first three wire polynomials of the instance
         // We only commit to the fourth wire polynomial after adding memory records
+
+        // TACEO note: Until issue https://github.com/AztecProtocol/aztec-packages/issues/13117 is resolved, we cannot apply the masking
+        // here, but it should be added in the future
+        // Mask the polynomial when proving in zero-knowledge
+        // if self.has_zk == ZeroKnowledge::Yes {
+        // proving_key.polynomials.witness.w_l_mut().mask(); // TODO: implement this
+        // proving_key.polynomials.witness.w_r_mut().mask(); // TODO: implement this
+        // proving_key.polynomials.witness.w_o_mut().mask(); // TODO: implement this
+        // };
 
         let w_l = CoUtils::commit::<T, P>(proving_key.polynomials.witness.w_l().as_ref(), crs);
         let w_r = CoUtils::commit::<T, P>(proving_key.polynomials.witness.w_r().as_ref(), crs);
@@ -570,6 +582,15 @@ impl<
         self.memory.challenges.eta_2 = challs[1];
         self.memory.challenges.eta_3 = challs[2];
         self.compute_w4(proving_key);
+
+        // TACEO note: Until issue https://github.com/AztecProtocol/aztec-packages/issues/13117 is resolved, we cannot apply the masking
+        // here, but it should be added in the future
+        // Mask the polynomial when proving in zero-knowledge
+        // if self.has_zk == ZeroKnowledge::Yes {
+        // proving_key.polynomials.witness.lookup_read_counts_mut().mask(); // TODO: implement this
+        // proving_key.polynomials.witness.lookup_read_tags_mut().mask(); // TODO: implement this
+        // self.memory.w_4.mask(); // TODO: implement this
+        // };
 
         // Commit to lookup argument polynomials and the finalized (i.e. with memory records) fourth wire polynomial
         let lookup_read_counts = CoUtils::commit::<T, P>(
@@ -627,6 +648,14 @@ impl<
 
         self.memory.public_input_delta = self.compute_public_input_delta(proving_key);
         self.compute_grand_product(proving_key)?;
+
+        // TACEO note: Until issue https://github.com/AztecProtocol/aztec-packages/issues/13117 is resolved, we cannot apply the masking
+        // here, but it should be added in the future
+        // Mask the polynomial when proving in zero-knowledge
+        // if self.has_zk == ZeroKnowledge::Yes {
+        // self.memory.lookup_inverses.mask(); // TODO: implement this
+        // self.memory.z_perm.mask(); // TODO: implement this
+        // };
 
         // This is from the previous round, but we open it here with z_perm
         let lookup_inverses = CoUtils::commit::<T, P>(self.memory.lookup_inverses.as_ref(), crs);

@@ -23,33 +23,59 @@ use crate::{
     Utils, NUM_ALPHAS,
 };
 use ark_ff::{One, Zero};
-use co_builder::prelude::{HonkCurve, ProvingKey};
+use co_builder::prelude::{HonkCurve, Polynomial, ProverCrs, ProvingKey, ZeroKnowledge};
 use co_builder::{HonkProofError, HonkProofResult};
 use itertools::izip;
 use std::{array, marker::PhantomData};
 
+#[expect(dead_code)] // See commit_to_witness_polynomial for explanation why has_zk are not used
 pub(crate) struct Oink<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
 {
     memory: ProverMemory<P>,
     phantom_data: PhantomData<P>,
     phantom_hasher: PhantomData<H>,
+    has_zk: ZeroKnowledge,
 }
 
 impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> Default
     for Oink<P, H>
 {
     fn default() -> Self {
-        Self::new()
+        Self::new(ZeroKnowledge::No)
     }
 }
 
 impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> Oink<P, H> {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(has_zk: ZeroKnowledge) -> Self {
         Self {
             memory: ProverMemory::default(),
             phantom_data: PhantomData,
             phantom_hasher: PhantomData,
+            has_zk,
         }
+    }
+
+    /// A uniform method to mask, commit, and send the corresponding commitment to the verifier.
+    fn commit_to_witness_polynomial(
+        polynomial: &Polynomial<P::ScalarField>,
+        label: &str,
+        crs: &ProverCrs<P>,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
+    ) -> HonkProofResult<()> {
+        // TACEO note: Until issue https://github.com/AztecProtocol/aztec-packages/issues/13117 is resolved, we cannot apply the masking
+        // here, but it should be added in the future
+        // // Mask the polynomial when proving in zero-knowledge
+        // if self.has_zk == ZeroKnowledge::Yes {
+        //     polynomial.mask(&mut self.rng)
+        // };
+
+        // Commit to the polynomial
+        let commitment = Utils::commit(polynomial.as_ref(), crs)?;
+
+        // Send the commitment to the verifier
+        transcript.send_point_to_verifier::<P>(label.to_string(), commitment.into());
+
+        Ok(())
     }
 
     fn compute_w4(&mut self, proving_key: &ProvingKey<P>) {
@@ -377,12 +403,12 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         tracing::trace!("executing preamble round");
 
         transcript
-            .send_u64_to_verifier("circuit_size".to_string(), proving_key.circuit_size as u64);
-        transcript.send_u64_to_verifier(
+            .add_u64_to_hash_buffer("circuit_size".to_string(), proving_key.circuit_size as u64);
+        transcript.add_u64_to_hash_buffer(
             "public_input_size".to_string(),
             proving_key.num_public_inputs as u64,
         );
-        transcript.send_u64_to_verifier(
+        transcript.add_u64_to_hash_buffer(
             "pub_inputs_offset".to_string(),
             proving_key.pub_inputs_offset as u64,
         );
@@ -411,24 +437,27 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         // Commit to the first three wire polynomials of the instance
         // We only commit to the fourth wire polynomial after adding memory records
 
-        // Ultracircuits are not structured
-
-        let w_l = Utils::commit(
-            proving_key.polynomials.witness.w_l().as_ref(),
+        // Ultracircuits are not structured (also our commitment type is CommitType::Default, so no changes are needed here yet)
+        Self::commit_to_witness_polynomial(
+            proving_key.polynomials.witness.w_l(),
+            "W_L",
             &proving_key.crs,
-        )?;
-        let w_r = Utils::commit(
-            proving_key.polynomials.witness.w_r().as_ref(),
-            &proving_key.crs,
-        )?;
-        let w_o = Utils::commit(
-            proving_key.polynomials.witness.w_o().as_ref(),
-            &proving_key.crs,
+            transcript,
         )?;
 
-        transcript.send_point_to_verifier::<P>("W_L".to_string(), w_l.into());
-        transcript.send_point_to_verifier::<P>("W_R".to_string(), w_r.into());
-        transcript.send_point_to_verifier::<P>("W_O".to_string(), w_o.into());
+        Self::commit_to_witness_polynomial(
+            proving_key.polynomials.witness.w_r(),
+            "W_R",
+            &proving_key.crs,
+            transcript,
+        )?;
+
+        Self::commit_to_witness_polynomial(
+            proving_key.polynomials.witness.w_o(),
+            "W_O",
+            &proving_key.crs,
+            transcript,
+        )?;
 
         // Round is done since ultra_honk is no goblin flavor
         Ok(())
@@ -453,28 +482,21 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         self.compute_w4(proving_key);
 
         // Commit to lookup argument polynomials and the finalized (i.e. with memory records) fourth wire polynomial
-        let lookup_read_counts = Utils::commit(
-            proving_key
-                .polynomials
-                .witness
-                .lookup_read_counts()
-                .as_ref(),
-            &proving_key.crs,
-        )?;
-        let lookup_read_tags = Utils::commit(
-            proving_key.polynomials.witness.lookup_read_tags().as_ref(),
-            &proving_key.crs,
-        )?;
-        let w_4 = Utils::commit(self.memory.w_4.as_ref(), &proving_key.crs)?;
+        // TACEO TODO: BB does "sparse" commitment here, I don't know if that is necessary (performance wise)
 
-        transcript.send_point_to_verifier::<P>(
-            "LOOKUP_READ_COUNTS".to_string(),
-            lookup_read_counts.into(),
-        );
-        transcript
-            .send_point_to_verifier::<P>("LOOKUP_READ_TAGS".to_string(), lookup_read_tags.into());
-        transcript.send_point_to_verifier::<P>("W_4".to_string(), w_4.into());
-
+        Self::commit_to_witness_polynomial(
+            proving_key.polynomials.witness.lookup_read_counts(),
+            "LOOKUP_READ_COUNTS",
+            &proving_key.crs,
+            transcript,
+        )?;
+        Self::commit_to_witness_polynomial(
+            proving_key.polynomials.witness.lookup_read_tags(),
+            "LOOKUP_READ_TAGS",
+            &proving_key.crs,
+            transcript,
+        )?;
+        Self::commit_to_witness_polynomial(&self.memory.w_4, "W_4", &proving_key.crs, transcript)?;
         Ok(())
     }
 
@@ -492,12 +514,13 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
         self.compute_logderivative_inverses(proving_key);
 
-        let lookup_inverses =
-            Utils::commit(self.memory.lookup_inverses.as_ref(), &proving_key.crs)?;
-
-        transcript
-            .send_point_to_verifier::<P>("LOOKUP_INVERSES".to_string(), lookup_inverses.into());
-
+        // TACEO TODO: BB does "sparse" commitment here, I don't know if that is necessary (performance wise)
+        Self::commit_to_witness_polynomial(
+            &self.memory.lookup_inverses,
+            "LOOKUP_INVERSES",
+            &proving_key.crs,
+            transcript,
+        )?;
         // Round is done since ultra_honk is no goblin flavor
         Ok(())
     }
@@ -518,10 +541,12 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             proving_key.pub_inputs_offset,
         );
         self.compute_grand_product(proving_key);
-
-        let z_perm = Utils::commit(self.memory.z_perm.as_ref(), &proving_key.crs)?;
-
-        transcript.send_point_to_verifier::<P>("Z_PERM".to_string(), z_perm.into());
+        Self::commit_to_witness_polynomial(
+            &self.memory.z_perm,
+            "Z_PERM",
+            &proving_key.crs,
+            transcript,
+        )?;
         Ok(())
     }
 

@@ -41,18 +41,18 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
         let mut transcript = Transcript::<TranscriptFieldType, H>::new();
 
-        let oink = Oink::default();
+        let oink = Oink::new(has_zk);
         let oink_result = oink.prove(&proving_key, &mut transcript)?;
 
-        let cicruit_size = proving_key.circuit_size;
         let crs = proving_key.crs;
+        let cicruit_size = proving_key.circuit_size;
 
         let mut memory =
             ProverMemory::from_memory_and_polynomials(oink_result, proving_key.polynomials);
         memory.relation_parameters.gate_challenges =
             Self::generate_gate_challenges(&mut transcript);
 
-        let decider = Decider::new(memory);
-        decider.prove(cicruit_size, &crs, transcript, has_zk)
+        let decider = Decider::new(memory, has_zk);
+        decider.prove(cicruit_size, &crs, transcript)
     }
 }

@@ -1,4 +1,5 @@
 use crate::acir_format::{HonkRecursion, ProgramMetadata};
+use crate::polynomials::polynomial::MASKING_OFFSET;
 use crate::{
     acir_format::AcirFormat,
     crs::ProverCrs,
@@ -2765,6 +2766,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             self.process_rom_arrays(driver)?;
             self.process_ram_arrays(driver)?;
             self.process_range_lists(driver)?;
+            self.populate_public_inputs_block();
             self.circuit_finalized = true;
         }
         Ok(())
@@ -3489,13 +3491,14 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         let min_size_due_to_lookups = self.get_tables_size();
 
         // minimum size of execution trace due to everything else
-        let min_size_of_execution_trace = self.public_inputs.len() + self.num_gates;
+        let min_size_of_execution_trace = self.blocks.get_total_content_size();
 
         // The number of gates is the maximum required by the lookup argument or everything else, plus an optional zero row
         // to allow for shifts.
         let num_zero_rows = 1;
-        let total_num_gates =
-            num_zero_rows + std::cmp::max(min_size_due_to_lookups, min_size_of_execution_trace);
+        let total_num_gates = MASKING_OFFSET as usize
+            + num_zero_rows
+            + std::cmp::max(min_size_due_to_lookups, min_size_of_execution_trace);
 
         // Next power of 2 (dyadic circuit size)
         Self::get_circuit_subgroup_size(total_num_gates)
@@ -3506,15 +3509,10 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
         // Update the public inputs block
         for idx in self.public_inputs.iter() {
-            for (wire_idx, wire) in self.blocks.pub_inputs.wires.iter_mut().enumerate() {
-                if wire_idx < 2 {
-                    // first two wires get a copy of the public inputs
-                    wire.push(*idx);
-                } else {
-                    // the remaining wires get zeros
-                    wire.push(self.zero_idx);
-                }
-            }
+            // first two wires get a copy of the public inputs
+            self.blocks
+                .pub_inputs
+                .populate_wires(*idx, *idx, self.zero_idx, self.zero_idx);
             for selector in self.blocks.pub_inputs.selectors.iter_mut() {
                 selector.push(P::ScalarField::zero());
             }
