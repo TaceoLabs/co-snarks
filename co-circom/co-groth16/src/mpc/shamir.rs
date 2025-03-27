@@ -34,8 +34,15 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
     for ShamirGroth16Driver<P::ScalarField, N>
 {
     type ArithmeticShare = ShamirPrimeFieldShare<P::ScalarField>;
+    type ArithmeticHalfShare = P::ScalarField;
+
     type PointShare<C>
         = ShamirPointShare<C>
+    where
+        C: CurveGroup;
+
+    type PointHalfShare<C>
+        = C
     where
         C: CurveGroup;
 
@@ -130,12 +137,12 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
         a.inner() + b
     }
 
-    fn add_assign_points_public<C: CurveGroup>(
+    fn add_assign_points_public_hs<C: CurveGroup>(
         _id: Self::PartyID,
-        a: &mut Self::PointShare<C>,
+        a: &mut Self::PointHalfShare<C>,
         b: &C,
     ) {
-        pointshare::add_assign_public(a, b)
+        *a += b;
     }
 
     fn open_point<C>(&mut self, a: &Self::PointShare<C>) -> IoResult<C>
@@ -160,13 +167,9 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
         pointshare::sub_assign(a, b);
     }
 
-    fn open_two_points(
-        &mut self,
-        a: P::G1,
-        b: Self::PointShare<P::G2>,
-    ) -> std::io::Result<(P::G1, P::G2)> {
+    fn open_two_half_points(&mut self, a: P::G1, b: P::G2) -> std::io::Result<(P::G1, P::G2)> {
         let s1 = a;
-        let s2 = b.a;
+        let s2 = b;
         let (r1, r2) = std::thread::scope(|s| {
             let r1 = s.spawn(|| {
                 self.protocol0
@@ -176,25 +179,62 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
             let r2 = s.spawn(|| {
                 self.protocol1
                     .network
-                    .broadcast_next(s2, self.protocol0.threshold + 1)
+                    .broadcast_next(s2, self.protocol0.threshold * 2 + 1)
             });
             (r1.join().expect("can join"), r2.join().expect("can join"))
         });
         let r1 = core::reconstruct_point(&r1?, &self.protocol0.open_lagrange_2t);
-        let r2 = core::reconstruct_point(&r2?, &self.protocol0.open_lagrange_t);
+        let r2 = core::reconstruct_point(&r2?, &self.protocol0.open_lagrange_2t);
         Ok((r1, r2))
     }
 
     fn open_point_and_scalar_mul(
         &mut self,
-        g_a: &Self::PointShare<P::G1>,
-        g1_b: &Self::PointShare<P::G1>,
+        g_a: &Self::PointHalfShare<P::G1>,
+        g1_b: &Self::PointHalfShare<P::G1>,
         r: Self::ArithmeticShare,
-    ) -> super::IoResult<(P::G1, Self::PointShare<P::G1>)> {
+    ) -> super::IoResult<(P::G1, Self::PointHalfShare<P::G1>)> {
         std::thread::scope(|s| {
-            let opened = s.spawn(|| pointshare::open_point(g_a, &mut self.protocol0));
-            let mul_result = pointshare::scalar_mul(g1_b, r, &mut self.protocol1)?;
-            Ok((opened.join().expect("can join")?, mul_result))
+            let opened = s.spawn(|| {
+                self.protocol0
+                    .network
+                    .broadcast_next(*g_a, self.protocol0.threshold * 2 + 1)
+            });
+            let mul_result = s.spawn(|| {
+                self.protocol1
+                    .degree_reduce_point(*g1_b)
+                    .map(|x| pointshare::scalar_mul_local(&x, r))
+            });
+            let opened = core::reconstruct_point(
+                &opened.join().expect("can join")?,
+                &self.protocol0.open_lagrange_2t,
+            );
+            Ok((opened, mul_result.join().expect("can join")?))
         })
+    }
+
+    fn to_half_share(a: Self::ArithmeticShare) -> <P as Pairing>::ScalarField {
+        a.inner()
+    }
+
+    fn to_half_share_vec(a: Vec<Self::ArithmeticShare>) -> Vec<<P as Pairing>::ScalarField> {
+        a.into_iter().map(|x| x.inner()).collect()
+    }
+
+    fn msm_public_points_hs<C>(
+        points: &[C::Affine],
+        scalars: &[Self::ArithmeticHalfShare],
+    ) -> Self::PointHalfShare<C>
+    where
+        C: CurveGroup<ScalarField = <P as Pairing>::ScalarField>,
+    {
+        C::msm_unchecked(points, scalars)
+    }
+
+    fn scalar_mul_public_point_hs<C>(a: &C, b: Self::ArithmeticHalfShare) -> Self::PointHalfShare<C>
+    where
+        C: CurveGroup<ScalarField = <P as Pairing>::ScalarField>,
+    {
+        *a * b
     }
 }

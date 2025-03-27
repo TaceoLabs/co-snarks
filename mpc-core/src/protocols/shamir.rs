@@ -466,10 +466,8 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
         Ok(ShamirShare::convert_vec_rev(my_shares))
     }
 
-    pub(crate) fn degree_reduce_point<C>(
-        &mut self,
-        mut input: C,
-    ) -> std::io::Result<ShamirPointShare<C>>
+    /// Reduces the degree of a point share C from 2*t to t
+    pub fn degree_reduce_point<C>(&mut self, mut input: C) -> std::io::Result<ShamirPointShare<C>>
     where
         C: CurveGroup + std::ops::Mul<F, Output = C> + for<'a> std::ops::Mul<&'a F, Output = C>,
     {

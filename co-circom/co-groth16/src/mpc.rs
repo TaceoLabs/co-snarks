@@ -1,5 +1,8 @@
 use core::fmt;
-use std::fmt::Debug;
+use std::{
+    fmt::Debug,
+    ops::{AddAssign, MulAssign, SubAssign},
+};
 
 use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_poly::domain::DomainCoeff;
@@ -17,7 +20,7 @@ type IoResult<T> = std::io::Result<T>;
 
 /// This trait represents the operations used during Groth16 proof generation
 pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
-    /// The arithemitc share type
+    /// The arithmetic share type
     type ArithmeticShare: CanonicalSerialize
         + CanonicalDeserialize
         + Copy
@@ -27,8 +30,26 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
         + Debug
         + DomainCoeff<P::ScalarField>
         + 'static;
-    /// The G1 point share type
+
+    /// The arithmetic half share type
+    type ArithmeticHalfShare: CanonicalSerialize
+        + CanonicalDeserialize
+        + Copy
+        + Clone
+        + Default
+        + Send
+        + Debug
+        + DomainCoeff<P::ScalarField>
+        + MulAssign<P::ScalarField>
+        + 'static;
+
+    /// The point share type
     type PointShare<C>: Debug + Send + 'static
+    where
+        C: CurveGroup;
+
+    /// The point half share type
+    type PointHalfShare<C>: Debug + Send + 'static + AddAssign + SubAssign
     where
         C: CurveGroup;
     /// The party id type
@@ -63,7 +84,7 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
         &mut self,
         a: Vec<Self::ArithmeticShare>,
         b: Vec<Self::ArithmeticShare>,
-    ) -> Vec<P::ScalarField>;
+    ) -> Vec<Self::ArithmeticHalfShare>;
 
     /// Compute the msm of `h` and `h_query` and multiplication `r` * `s`.
     fn mul(
@@ -78,6 +99,9 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
         roots: &[P::ScalarField],
     );
 
+    fn to_half_share(a: Self::ArithmeticShare) -> Self::ArithmeticHalfShare;
+    fn to_half_share_vec(a: Vec<Self::ArithmeticShare>) -> Vec<Self::ArithmeticHalfShare>;
+
     /// Perform msm between `points` and `scalars`
     fn msm_public_points<C>(
         points: &[C::Affine],
@@ -86,8 +110,24 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
     where
         C: CurveGroup<ScalarField = P::ScalarField>;
 
+    /// Perform msm between `points` and `scalars`
+    fn msm_public_points_hs<C>(
+        points: &[C::Affine],
+        scalars: &[Self::ArithmeticHalfShare],
+    ) -> Self::PointHalfShare<C>
+    where
+        C: CurveGroup<ScalarField = P::ScalarField>;
+
     /// Multiplies a public point B to the shared point A in place: \[A\] *= B
     fn scalar_mul_public_point<C>(a: &C, b: Self::ArithmeticShare) -> Self::PointShare<C>
+    where
+        C: CurveGroup<ScalarField = P::ScalarField>;
+
+    /// Multiplies a public point B to the shared point A in place: \[A\] *= B
+    fn scalar_mul_public_point_hs<C>(
+        a: &C,
+        b: Self::ArithmeticHalfShare,
+    ) -> Self::PointHalfShare<C>
     where
         C: CurveGroup<ScalarField = P::ScalarField>;
 
@@ -101,9 +141,9 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
     fn add_points_half_share<C: CurveGroup>(a: Self::PointShare<C>, b: &C) -> C;
 
     /// Add a public point B in place to the shared point A
-    fn add_assign_points_public<C: CurveGroup>(
+    fn add_assign_points_public_hs<C: CurveGroup>(
         id: Self::PartyID,
-        a: &mut Self::PointShare<C>,
+        a: &mut Self::PointHalfShare<C>,
         b: &C,
     );
 
@@ -122,18 +162,18 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
         C: CurveGroup<ScalarField = P::ScalarField>;
 
     /// Reconstructs a shared points: A = Open(\[A\]), B = Open(\[B\]).
-    fn open_two_points(
+    fn open_two_half_points(
         &mut self,
-        a: P::G1,
-        b: Self::PointShare<P::G2>,
+        a: Self::PointHalfShare<P::G1>,
+        b: Self::PointHalfShare<P::G2>,
     ) -> std::io::Result<(P::G1, P::G2)>;
 
     /// Reconstruct point G_a and perform scalar multiplication of G1_b and r concurrently
     #[expect(clippy::type_complexity)]
     fn open_point_and_scalar_mul(
         &mut self,
-        g_a: &Self::PointShare<P::G1>,
-        g1_b: &Self::PointShare<P::G1>,
+        g_a: &Self::PointHalfShare<P::G1>,
+        g1_b: &Self::PointHalfShare<P::G1>,
         r: Self::ArithmeticShare,
-    ) -> std::io::Result<(P::G1, Self::PointShare<P::G1>)>;
+    ) -> std::io::Result<(P::G1, Self::PointHalfShare<P::G1>)>;
 }
