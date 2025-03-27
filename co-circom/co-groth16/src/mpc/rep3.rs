@@ -82,7 +82,7 @@ fn ark_to_icicle_affine_points(ark_affine: &[ArkAffine]) -> Vec<IcicleAffine> {
         .collect()
 }
 
-fn ark_to_icicle_affine_points_(ark_affine: &[impl AffineRepr]) -> Vec<IcicleAffine> {
+fn ark_to_icicle_affine_points_g1(ark_affine: &[impl AffineRepr]) -> Vec<IcicleAffine> {
     ark_affine
         .par_iter()
         .map(|ark| IcicleAffine {
@@ -173,7 +173,7 @@ fn icicle_to_ark_projective_points(icicle_projective: &[IcicleProjective]) -> Ve
         .collect()
 }
 
-fn icicle_to_ark_projective_points_<P: Pairing + IcileToArkProjective>(
+fn icicle_to_ark_projective_points_g1<P: Pairing + IcileToArkProjective>(
     icicle_projective: &[IcicleProjective],
 ) -> Vec<P::G1> {
     icicle_projective
@@ -189,6 +189,28 @@ fn icicle_to_ark_projective_points_g2<P: Pairing + IcileToArkProjective>(
         .par_iter()
         .map(|icicle| <P as IcileToArkProjective>::convert_g2(icicle))
         .collect()
+}
+
+fn ark_to_icicle_scalars_async<T, I>(ark_scalars: &[T], stream: &IcicleStream) -> DeviceVec<I>
+where
+    T: PrimeField,
+    I: FieldImpl + MontgomeryConvertible,
+{
+    // SAFETY: Reinterpreting Arkworks field elements as Icicle-specific scalars
+    let icicle_scalars = unsafe { &*(ark_scalars as *const _ as *const [I]) };
+
+    // Create a HostSlice from the mutable slice
+    let icicle_host_slice = HostSlice::from_slice(&icicle_scalars[..]);
+
+    let mut icicle_scalars =
+        DeviceVec::<I>::device_malloc_async(ark_scalars.len(), &stream).unwrap();
+    icicle_scalars
+        .copy_from_host_async(&icicle_host_slice, &stream)
+        .unwrap();
+
+    // Convert from Montgomery representation using the Icicle type's conversion method
+    I::from_mont(&mut icicle_scalars, &stream);
+    icicle_scalars
 }
 
 pub struct Rep3FftHandle<P, T, I> {
@@ -576,14 +598,12 @@ impl<P: Pairing + IcileToArkProjective, N: Rep3Network> CircomGroth16Prover<P>
         let points = &points[..min];
         let scalars = &scalars[..min];
         debug_assert_eq!(points.len(), scalars.len());
-        let (mut a, mut b) = scalars
+        let (a, b) = scalars
             .into_par_iter()
             .with_min_len(1 << 14)
             .map(|share| (share.a, share.b))
             .collect::<(Vec<_>, Vec<_>)>();
-        let points = ark_to_icicle_affine_points_(points);
-        let a = transmute_ark_to_icicle_scalars(&mut a);
-        let b = transmute_ark_to_icicle_scalars(&mut b);
+        let points = ark_to_icicle_affine_points_g1(points);
 
         let mut a_stream = IcicleStream::create().unwrap();
         let mut a_msm_config = MSMConfig::default();
@@ -597,45 +617,47 @@ impl<P: Pairing + IcileToArkProjective, N: Rep3Network> CircomGroth16Prover<P>
         b_msm_config.stream_handle = *b_stream;
         let mut b_results = DeviceVec::<G1Projective>::device_malloc(1).unwrap();
 
+        let a_dev: DeviceVec<ScalarField> = ark_to_icicle_scalars_async(&a, &a_stream);
+        let b_dev: DeviceVec<ScalarField> = ark_to_icicle_scalars_async(&b, &b_stream);
+        let mut points_dev = DeviceVec::<IcicleAffine>::device_malloc(points.len()).unwrap();
+        points_dev
+            .copy_from_host(HostSlice::from_slice(&points))
+            .unwrap();
+
+        a_stream.synchronize().unwrap();
+        b_stream.synchronize().unwrap();
+
         span.exit();
 
         let span = tracing::debug_span!("msm_g1 compute").entered();
 
-        msm(
-            HostSlice::from_slice(a),
-            HostSlice::from_slice(&points),
-            &a_msm_config,
-            &mut a_results[..],
-        )
-        .unwrap();
+        msm(&a_dev, &points_dev, &a_msm_config, &mut a_results[..]).unwrap();
 
-        msm(
-            HostSlice::from_slice(b),
-            HostSlice::from_slice(&points),
-            &b_msm_config,
-            &mut b_results[..],
-        )
-        .unwrap();
+        msm(&b_dev, &points_dev, &b_msm_config, &mut b_results[..]).unwrap();
 
         a_stream.synchronize().unwrap();
+        b_stream.synchronize().unwrap();
 
         span.exit();
-        let span = tracing::debug_span!("msm_g1 conv and copy back").entered();
 
+        let span = tracing::debug_span!("msm_g1 conv and copy back").entered();
         let mut a_host_result = vec![G1Projective::zero(); a_results.len()];
         a_results
-            .copy_to_host(HostSlice::from_mut_slice(&mut a_host_result[..]))
+            .copy_to_host_async(HostSlice::from_mut_slice(&mut a_host_result[..]), &a_stream)
             .unwrap();
         b_stream.synchronize().unwrap();
         let mut b_host_result = vec![G1Projective::zero(); b_results.len()];
         b_results
-            .copy_to_host(HostSlice::from_mut_slice(&mut b_host_result[..]))
+            .copy_to_host_async(HostSlice::from_mut_slice(&mut b_host_result[..]), &b_stream)
             .unwrap();
+
+        a_stream.synchronize().unwrap();
+        b_stream.synchronize().unwrap();
         a_stream.destroy().unwrap();
         b_stream.destroy().unwrap();
 
-        let a = icicle_to_ark_projective_points_::<P>(&a_host_result);
-        let b = icicle_to_ark_projective_points_::<P>(&b_host_result);
+        let a = icicle_to_ark_projective_points_g1::<P>(&a_host_result);
+        let b = icicle_to_ark_projective_points_g1::<P>(&b_host_result);
 
         span.exit();
 
@@ -648,18 +670,24 @@ impl<P: Pairing + IcileToArkProjective, N: Rep3Network> CircomGroth16Prover<P>
         let scalars = &scalars[..min];
         let span = tracing::debug_span!("msm_g1_public setup").entered();
         debug_assert_eq!(points.len(), scalars.len());
-        let points = ark_to_icicle_affine_points_(points);
-        let mut scalars = scalars.to_vec();
-        let scalars = transmute_ark_to_icicle_scalars(&mut scalars);
+        let points = ark_to_icicle_affine_points_g1(points);
+
+        let scalars_dev: DeviceVec<ScalarField> =
+            ark_to_icicle_scalars_async(scalars, &IcicleStream::default());
+        let mut points_dev = DeviceVec::<IcicleAffine>::device_malloc(points.len()).unwrap();
+        points_dev
+            .copy_from_host(HostSlice::from_slice(&points))
+            .unwrap();
 
         let mut results = DeviceVec::<G1Projective>::device_malloc(1).unwrap();
 
         span.exit();
 
         let span = tracing::debug_span!("msm_g1_public compute").entered();
+
         msm(
-            HostSlice::from_slice(scalars),
-            HostSlice::from_slice(&points),
+            &scalars_dev,
+            &points_dev,
             &MSMConfig::default(),
             &mut results[..],
         )
@@ -674,7 +702,7 @@ impl<P: Pairing + IcileToArkProjective, N: Rep3Network> CircomGroth16Prover<P>
             .copy_to_host(HostSlice::from_mut_slice(&mut host_result[..]))
             .unwrap();
 
-        let a = icicle_to_ark_projective_points_::<P>(&host_result);
+        let a = icicle_to_ark_projective_points_g1::<P>(&host_result);
 
         span.exit();
 
@@ -685,19 +713,17 @@ impl<P: Pairing + IcileToArkProjective, N: Rep3Network> CircomGroth16Prover<P>
         points: &[P::G2Affine],
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShare<P::G2> {
+        let span = tracing::debug_span!("msm_g2 setup").entered();
         let min = points.len().min(scalars.len());
         let points = &points[..min];
         let scalars = &scalars[..min];
-        let span = tracing::debug_span!("msm_g2 setup").entered();
         debug_assert_eq!(points.len(), scalars.len());
-        let (mut a, mut b) = scalars
+        let (a, b) = scalars
             .into_par_iter()
             .with_min_len(1 << 14)
             .map(|share| (share.a, share.b))
             .collect::<(Vec<_>, Vec<_>)>();
         let points = ark_to_icicle_affine_points_g2(points);
-        let a = transmute_ark_to_icicle_scalars(&mut a);
-        let b = transmute_ark_to_icicle_scalars(&mut b);
 
         let mut a_stream = IcicleStream::create().unwrap();
         let mut a_msm_config = MSMConfig::default();
@@ -711,40 +737,42 @@ impl<P: Pairing + IcileToArkProjective, N: Rep3Network> CircomGroth16Prover<P>
         b_msm_config.stream_handle = *b_stream;
         let mut b_results = DeviceVec::<G2Projective>::device_malloc(1).unwrap();
 
+        let a_dev: DeviceVec<ScalarField> = ark_to_icicle_scalars_async(&a, &a_stream);
+        let b_dev: DeviceVec<ScalarField> = ark_to_icicle_scalars_async(&b, &b_stream);
+        let mut points_dev = DeviceVec::<IcicleG2Affine>::device_malloc(points.len()).unwrap();
+        points_dev
+            .copy_from_host(HostSlice::from_slice(&points))
+            .unwrap();
+
+        a_stream.synchronize().unwrap();
+        b_stream.synchronize().unwrap();
+
         span.exit();
 
         let span = tracing::debug_span!("msm_g2 compute").entered();
 
-        msm(
-            HostSlice::from_slice(a),
-            HostSlice::from_slice(&points),
-            &a_msm_config,
-            &mut a_results[..],
-        )
-        .unwrap();
+        msm(&a_dev, &points_dev, &a_msm_config, &mut a_results[..]).unwrap();
 
-        msm(
-            HostSlice::from_slice(b),
-            HostSlice::from_slice(&points),
-            &b_msm_config,
-            &mut b_results[..],
-        )
-        .unwrap();
+        msm(&b_dev, &points_dev, &b_msm_config, &mut b_results[..]).unwrap();
 
         a_stream.synchronize().unwrap();
+        b_stream.synchronize().unwrap();
 
         span.exit();
-        let span = tracing::debug_span!("msm_g2 conv and copy back").entered();
 
+        let span = tracing::debug_span!("msm_g2 conv and copy back").entered();
         let mut a_host_result = vec![G2Projective::zero(); a_results.len()];
         a_results
-            .copy_to_host(HostSlice::from_mut_slice(&mut a_host_result[..]))
+            .copy_to_host_async(HostSlice::from_mut_slice(&mut a_host_result[..]), &a_stream)
             .unwrap();
         b_stream.synchronize().unwrap();
         let mut b_host_result = vec![G2Projective::zero(); b_results.len()];
         b_results
-            .copy_to_host(HostSlice::from_mut_slice(&mut b_host_result[..]))
+            .copy_to_host_async(HostSlice::from_mut_slice(&mut b_host_result[..]), &b_stream)
             .unwrap();
+
+        a_stream.synchronize().unwrap();
+        b_stream.synchronize().unwrap();
         a_stream.destroy().unwrap();
         b_stream.destroy().unwrap();
 
