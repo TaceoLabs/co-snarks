@@ -133,7 +133,7 @@ pub trait VmCircomWitnessExtension<F: PrimeField> {
     ) -> Result<(Vec<Self::VmType>, Self::VmType)>;
 
     /// Returns a string representation of the provided value.
-    /// **DANGEROUES**: If enabled by the second parameter, the implementation
+    /// **DANGEROUS**: If enabled by the second parameter, the implementation
     /// will open secret values. Otherwise will return the string `secret`.
     fn log(&mut self, a: Self::VmType, allow_leaky_logs: bool) -> eyre::Result<String>;
 }
