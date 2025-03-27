@@ -1,8 +1,16 @@
 use std::marker::PhantomData;
+use std::sync::Arc;
 
+use ark_bn254::{
+    Bn254, Fq, Fq2, Fr, G1Affine as ArkAffine, G1Projective as ArkProjective,
+    G2Projective as ArkG2Projective,
+};
+use ark_ec::short_weierstrass::{Projective, SWCurveConfig};
 use ark_ec::{pairing::Pairing, CurveGroup};
-use ark_ff::{Field, PrimeField};
-use icicle_bn254::curve::ScalarField;
+use ark_ec::{AffineRepr, VariableBaseMSM};
+use ark_ff::{BigInteger, Field, PrimeField};
+use icicle_bn254::curve::{G1Projective, G2Projective, ScalarField};
+use icicle_core::curve::Curve;
 use icicle_core::{
     ntt::{self, ntt, ntt_inplace, NTTConfig},
     traits::{FieldImpl, MontgomeryConvertible},
@@ -18,9 +26,15 @@ use mpc_core::protocols::rep3::{
     network::{IoContext, Rep3Network},
     pointshare, Rep3PointShare, Rep3PrimeFieldShare,
 };
+
+use icicle_bn254::curve::{
+    G1Affine as IcicleAffine, G1Projective as IcicleProjective, G2Affine as IcicleG2Affine,
+    G2Projective as IcicleG2Projective, ScalarField as IcicleScalar,
+};
+use icicle_core::msm::{msm, MSMConfig};
 use rayon::prelude::*;
 
-use super::{CircomGroth16Prover, FftHandle, IoResult};
+use super::{CircomGroth16Prover, FftHandle, IoResult, MsmHandle};
 
 fn transmute_ark_to_icicle_scalars<T, I>(ark_scalars: &mut [T]) -> &mut [I]
 where
@@ -38,12 +52,143 @@ where
     icicle_scalars
 }
 
+fn from_ark<T, I>(ark: &T) -> I
+where
+    T: Field,
+    I: FieldImpl,
+{
+    let mut ark_bytes = vec![];
+    for base_elem in ark.to_base_prime_field_elements() {
+        ark_bytes.extend_from_slice(&base_elem.into_bigint().to_bytes_le());
+    }
+    I::from_bytes_le(&ark_bytes)
+}
+
 fn to_ark<T, I>(icicle: &I) -> T
 where
     T: Field,
     I: FieldImpl,
 {
     T::from_random_bytes(&icicle.to_bytes_le()).unwrap()
+}
+
+fn ark_to_icicle_affine_points(ark_affine: &[ArkAffine]) -> Vec<IcicleAffine> {
+    ark_affine
+        .par_iter()
+        .map(|ark| IcicleAffine {
+            x: from_ark(&ark.x),
+            y: from_ark(&ark.y),
+        })
+        .collect()
+}
+
+fn ark_to_icicle_affine_points_(ark_affine: &[impl AffineRepr]) -> Vec<IcicleAffine> {
+    ark_affine
+        .par_iter()
+        .map(|ark| IcicleAffine {
+            x: from_ark(&ark.x().unwrap_or_default()),
+            y: from_ark(&ark.y().unwrap_or_default()),
+        })
+        .collect()
+}
+
+fn ark_to_icicle_affine_points_g2(ark_affine: &[impl AffineRepr]) -> Vec<IcicleG2Affine> {
+    ark_affine
+        .par_iter()
+        .map(|ark| IcicleG2Affine {
+            x: from_ark(&ark.x().unwrap_or_default()),
+            y: from_ark(&ark.y().unwrap_or_default()),
+        })
+        .collect()
+}
+
+fn ark_to_icicle_projective_points(ark_projective: &[ArkProjective]) -> Vec<IcicleProjective> {
+    ark_projective
+        .par_iter()
+        .map(|ark| {
+            let proj_x = ark.x * ark.z;
+            let proj_z = ark.z * ark.z * ark.z;
+            IcicleProjective {
+                x: from_ark(&proj_x),
+                y: from_ark(&ark.y),
+                z: from_ark(&proj_z),
+            }
+        })
+        .collect()
+}
+
+#[allow(unused)]
+fn icicle_to_ark_affine_points(icicle_projective: &[IcicleAffine]) -> Vec<ArkAffine> {
+    icicle_projective
+        .par_iter()
+        .map(|icicle| ArkAffine::new_unchecked(to_ark(&icicle.x), to_ark(&icicle.y)))
+        .collect()
+}
+
+pub trait IcileToArkProjective
+where
+    Self: Pairing,
+{
+    fn convert(value: &IcicleProjective) -> Self::G1;
+    fn convert_g2(value: &IcicleG2Projective) -> Self::G2;
+}
+
+impl IcileToArkProjective for Bn254 {
+    fn convert(value: &IcicleProjective) -> Self::G1 {
+        let proj_x: Fq = to_ark(&value.x);
+        let proj_y: Fq = to_ark(&value.y);
+        let proj_z: Fq = to_ark(&value.z);
+
+        // conversion between projective used in icicle and Jacobian used in arkworks
+        let proj_x = proj_x * proj_z;
+        let proj_y = proj_y * proj_z * proj_z;
+        ArkProjective::new_unchecked(proj_x, proj_y, proj_z)
+    }
+
+    fn convert_g2(value: &IcicleG2Projective) -> Self::G2 {
+        let proj_x: Fq2 = to_ark(&value.x);
+        let proj_y: Fq2 = to_ark(&value.y);
+        let proj_z: Fq2 = to_ark(&value.z);
+
+        // conversion between projective used in icicle and Jacobian used in arkworks
+        let proj_x = proj_x * proj_z;
+        let proj_y = proj_y * proj_z * proj_z;
+        ArkG2Projective::new_unchecked(proj_x, proj_y, proj_z)
+    }
+}
+
+fn icicle_to_ark_projective_points(icicle_projective: &[IcicleProjective]) -> Vec<ArkProjective> {
+    icicle_projective
+        .par_iter()
+        .map(|icicle| {
+            let proj_x: Fq = to_ark(&icicle.x);
+            let proj_y: Fq = to_ark(&icicle.y);
+            let proj_z: Fq = to_ark(&icicle.z);
+
+            // conversion between projective used in icicle and Jacobian used in arkworks
+            let proj_x = proj_x * proj_z;
+            let proj_y = proj_y * proj_z * proj_z;
+            ArkProjective::new_unchecked(proj_x, proj_y, proj_z)
+        })
+        .collect()
+}
+
+fn icicle_to_ark_projective_points_<P: Pairing + IcileToArkProjective>(
+    icicle_projective: &[IcicleProjective],
+) -> Vec<P::G1> {
+    icicle_projective
+        .par_iter()
+        .map(|icicle| <P as IcileToArkProjective>::convert(icicle))
+        .collect()
+}
+
+fn icicle_to_ark_projective_points_g2<P: Pairing + IcileToArkProjective>(
+    icicle_projective: &[IcicleG2Projective],
+) -> Vec<P::G2> {
+    icicle_projective
+        .par_iter()
+        .map(|icicle| <P as IcileToArkProjective>::convert_g2(icicle))
+        .collect()
 }
 
 pub struct Rep3FftHandle<P, T, I> {
@@ -58,7 +203,7 @@ pub struct Rep3FftHandle<P, T, I> {
 impl<P: Pairing, T: Field, I: FieldImpl> FftHandle<P, Vec<Rep3PrimeFieldShare<P::ScalarField>>>
     for Rep3FftHandle<P, T, I>
 {
-    fn join(self) -> Vec<Rep3PrimeFieldShare<P::ScalarField>> {
+    fn join(mut self) -> Vec<Rep3PrimeFieldShare<P::ScalarField>> {
         self.a_stream.synchronize().unwrap();
         let mut a_host_result = vec![I::zero(); self.a_results.len()];
         self.a_results
@@ -69,6 +214,8 @@ impl<P: Pairing, T: Field, I: FieldImpl> FftHandle<P, Vec<Rep3PrimeFieldShare<P:
         self.b_results
             .copy_to_host(HostSlice::from_mut_slice(&mut b_host_result[..]))
             .unwrap();
+        self.a_stream.destroy().unwrap();
+        self.b_stream.destroy().unwrap();
         a_host_result
             .into_iter()
             .zip(b_host_result)
@@ -77,6 +224,35 @@ impl<P: Pairing, T: Field, I: FieldImpl> FftHandle<P, Vec<Rep3PrimeFieldShare<P:
                 b: to_ark(&b),
             })
             .collect()
+    }
+}
+
+pub struct Rep3MsmHandle {
+    a_results: DeviceVec<G1Projective>,
+    b_results: DeviceVec<G1Projective>,
+    a_stream: IcicleStream,
+    b_stream: IcicleStream,
+}
+
+impl MsmHandle<Rep3PointShare<ArkProjective>> for Rep3MsmHandle {
+    fn join(mut self) -> Rep3PointShare<ArkProjective> {
+        self.a_stream.synchronize().unwrap();
+        let mut a_host_result = vec![G1Projective::zero(); self.a_results.len()];
+        self.a_results
+            .copy_to_host(HostSlice::from_mut_slice(&mut a_host_result[..]))
+            .unwrap();
+        self.b_stream.synchronize().unwrap();
+        let mut b_host_result = vec![G1Projective::zero(); self.b_results.len()];
+        self.b_results
+            .copy_to_host(HostSlice::from_mut_slice(&mut b_host_result[..]))
+            .unwrap();
+        self.a_stream.destroy().unwrap();
+        self.b_stream.destroy().unwrap();
+
+        let a = icicle_to_ark_projective_points(&a_host_result);
+        let b = icicle_to_ark_projective_points(&b_host_result);
+
+        Rep3PointShare { a: a[0], b: b[0] }
     }
 }
 
@@ -103,7 +279,9 @@ impl<N: Rep3Network> Rep3Groth16Driver<N> {
     }
 }
 
-impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N> {
+impl<P: Pairing + IcileToArkProjective, N: Rep3Network> CircomGroth16Prover<P>
+    for Rep3Groth16Driver<N>
+{
     type ArithmeticShare = Rep3PrimeFieldShare<P::ScalarField>;
     type PointShare<C>
         = Rep3PointShare<C>
@@ -111,6 +289,7 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
         C: CurveGroup;
     type PartyID = PartyID;
     type FftHandle = Rep3FftHandle<P, P::ScalarField, ScalarField>;
+    type MsmHandle = Rep3MsmHandle;
 
     fn rand(&mut self) -> IoResult<Self::ArithmeticShare> {
         Ok(Self::ArithmeticShare::rand(&mut self.io_context0))
@@ -175,7 +354,7 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
         let mut b_results = DeviceVec::<ScalarField>::device_malloc(b_input.len()).unwrap();
 
         ntt(
-            HostSlice::from_mut_slice(a_input),
+            HostSlice::from_slice(a_input),
             ntt::NTTDir::kForward,
             &a_ntt_config,
             &mut a_results[..],
@@ -183,7 +362,7 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
         .expect("NTT computation failed on GPU");
 
         ntt(
-            HostSlice::from_mut_slice(b_input),
+            HostSlice::from_slice(b_input),
             ntt::NTTDir::kForward,
             &b_ntt_config,
             &mut b_results[..],
@@ -293,7 +472,7 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
         let mut b_results = DeviceVec::<ScalarField>::device_malloc(b_input.len()).unwrap();
 
         ntt(
-            HostSlice::from_mut_slice(a_input),
+            HostSlice::from_slice(a_input),
             ntt::NTTDir::kInverse,
             &a_ntt_config,
             &mut a_results[..],
@@ -301,7 +480,7 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
         .expect("NTT computation failed on GPU");
 
         ntt(
-            HostSlice::from_mut_slice(b_input),
+            HostSlice::from_slice(b_input),
             ntt::NTTDir::kInverse,
             &b_ntt_config,
             &mut b_results[..],
@@ -331,6 +510,200 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
             .iter()
             .map(|a| P::ScalarField::from_random_bytes(&a.to_bytes_le()).unwrap())
             .collect::<Vec<_>>()
+    }
+
+    fn msm_async(points: &[ArkAffine], scalars: &[Self::ArithmeticShare]) -> Self::MsmHandle {
+        debug_assert_eq!(points.len(), scalars.len());
+        let (mut a, mut b) = scalars
+            .into_par_iter()
+            .with_min_len(1 << 14)
+            .map(|share| (share.a, share.b))
+            .collect::<(Vec<_>, Vec<_>)>();
+        let points = ark_to_icicle_affine_points(points);
+        let a = transmute_ark_to_icicle_scalars(&mut a);
+        let b = transmute_ark_to_icicle_scalars(&mut b);
+
+        let a_stream = IcicleStream::create().unwrap();
+        let mut a_msm_config = MSMConfig::default();
+        a_msm_config.is_async = true;
+        a_msm_config.stream_handle = *a_stream;
+        let mut a_results = DeviceVec::<G1Projective>::device_malloc(1).unwrap();
+
+        let b_stream = IcicleStream::create().unwrap();
+        let mut b_msm_config = MSMConfig::default();
+        b_msm_config.is_async = true;
+        b_msm_config.stream_handle = *b_stream;
+        let mut b_results = DeviceVec::<G1Projective>::device_malloc(1).unwrap();
+
+        msm(
+            HostSlice::from_slice(a),
+            HostSlice::from_slice(&points),
+            &a_msm_config,
+            &mut a_results[..],
+        )
+        .unwrap();
+
+        msm(
+            HostSlice::from_slice(b),
+            HostSlice::from_slice(&points),
+            &b_msm_config,
+            &mut b_results[..],
+        )
+        .unwrap();
+
+        Rep3MsmHandle {
+            a_results,
+            b_results,
+            a_stream,
+            b_stream,
+        }
+    }
+
+    fn msm_g1(
+        points: &[P::G1Affine],
+        scalars: &[Self::ArithmeticShare],
+    ) -> Self::PointShare<P::G1> {
+        debug_assert_eq!(points.len(), scalars.len());
+        let (mut a, mut b) = scalars
+            .into_par_iter()
+            .with_min_len(1 << 14)
+            .map(|share| (share.a, share.b))
+            .collect::<(Vec<_>, Vec<_>)>();
+        let points = ark_to_icicle_affine_points_(points);
+        let a = transmute_ark_to_icicle_scalars(&mut a);
+        let b = transmute_ark_to_icicle_scalars(&mut b);
+
+        let mut a_stream = IcicleStream::create().unwrap();
+        let mut a_msm_config = MSMConfig::default();
+        a_msm_config.is_async = true;
+        a_msm_config.stream_handle = *a_stream;
+        let mut a_results = DeviceVec::<G1Projective>::device_malloc(1).unwrap();
+
+        let mut b_stream = IcicleStream::create().unwrap();
+        let mut b_msm_config = MSMConfig::default();
+        b_msm_config.is_async = true;
+        b_msm_config.stream_handle = *b_stream;
+        let mut b_results = DeviceVec::<G1Projective>::device_malloc(1).unwrap();
+
+        msm(
+            HostSlice::from_slice(a),
+            HostSlice::from_slice(&points),
+            &a_msm_config,
+            &mut a_results[..],
+        )
+        .unwrap();
+
+        msm(
+            HostSlice::from_slice(b),
+            HostSlice::from_slice(&points),
+            &b_msm_config,
+            &mut b_results[..],
+        )
+        .unwrap();
+
+        a_stream.synchronize().unwrap();
+        let mut a_host_result = vec![G1Projective::zero(); a_results.len()];
+        a_results
+            .copy_to_host(HostSlice::from_mut_slice(&mut a_host_result[..]))
+            .unwrap();
+        b_stream.synchronize().unwrap();
+        let mut b_host_result = vec![G1Projective::zero(); b_results.len()];
+        b_results
+            .copy_to_host(HostSlice::from_mut_slice(&mut b_host_result[..]))
+            .unwrap();
+        a_stream.destroy().unwrap();
+        b_stream.destroy().unwrap();
+
+        let a = icicle_to_ark_projective_points_::<P>(&a_host_result);
+        let b = icicle_to_ark_projective_points_::<P>(&b_host_result);
+
+        Rep3PointShare { a: a[0], b: b[0] }
+    }
+
+    fn msm_g1_public(points: &[P::G1Affine], scalars: &[P::ScalarField]) -> P::G1 {
+        debug_assert_eq!(points.len(), scalars.len());
+        let points = ark_to_icicle_affine_points_(points);
+        let mut scalars = scalars.to_vec();
+        let scalars = transmute_ark_to_icicle_scalars(&mut scalars);
+
+        let mut results = DeviceVec::<G1Projective>::device_malloc(1).unwrap();
+
+        msm(
+            HostSlice::from_slice(scalars),
+            HostSlice::from_slice(&points),
+            &MSMConfig::default(),
+            &mut results[..],
+        )
+        .unwrap();
+
+        let mut host_result = vec![G1Projective::zero(); 1];
+        results
+            .copy_to_host(HostSlice::from_mut_slice(&mut host_result[..]))
+            .unwrap();
+
+        let a = icicle_to_ark_projective_points_::<P>(&host_result);
+        a[0]
+    }
+
+    fn msm_g2(
+        points: &[P::G2Affine],
+        scalars: &[Self::ArithmeticShare],
+    ) -> Self::PointShare<P::G2> {
+        debug_assert_eq!(points.len(), scalars.len());
+        let (mut a, mut b) = scalars
+            .into_par_iter()
+            .with_min_len(1 << 14)
+            .map(|share| (share.a, share.b))
+            .collect::<(Vec<_>, Vec<_>)>();
+        let points = ark_to_icicle_affine_points_g2(points);
+        let a = transmute_ark_to_icicle_scalars(&mut a);
+        let b = transmute_ark_to_icicle_scalars(&mut b);
+
+        let mut a_stream = IcicleStream::create().unwrap();
+        let mut a_msm_config = MSMConfig::default();
+        a_msm_config.is_async = true;
+        a_msm_config.stream_handle = *a_stream;
+        let mut a_results = DeviceVec::<G2Projective>::device_malloc(1).unwrap();
+
+        let mut b_stream = IcicleStream::create().unwrap();
+        let mut b_msm_config = MSMConfig::default();
+        b_msm_config.is_async = true;
+        b_msm_config.stream_handle = *b_stream;
+        let mut b_results = DeviceVec::<G2Projective>::device_malloc(1).unwrap();
+
+        msm(
+            HostSlice::from_slice(a),
+            HostSlice::from_slice(&points),
+            &a_msm_config,
+            &mut a_results[..],
+        )
+        .unwrap();
+
+        msm(
+            HostSlice::from_slice(b),
+            HostSlice::from_slice(&points),
+            &b_msm_config,
+            &mut b_results[..],
+        )
+        .unwrap();
+
+        a_stream.synchronize().unwrap();
+        let mut a_host_result = vec![G2Projective::zero(); a_results.len()];
+        a_results
+            .copy_to_host(HostSlice::from_mut_slice(&mut a_host_result[..]))
+            .unwrap();
+        b_stream.synchronize().unwrap();
+        let mut b_host_result = vec![G2Projective::zero(); b_results.len()];
+        b_results
+            .copy_to_host(HostSlice::from_mut_slice(&mut b_host_result[..]))
+            .unwrap();
+        a_stream.destroy().unwrap();
+        b_stream.destroy().unwrap();
+
+        let a = icicle_to_ark_projective_points_g2::<P>(&a_host_result);
+        let b = icicle_to_ark_projective_points_g2::<P>(&b_host_result);
+
+        Rep3PointShare { a: a[0], b: b[0] }
     }
 
     fn evaluate_constraint(

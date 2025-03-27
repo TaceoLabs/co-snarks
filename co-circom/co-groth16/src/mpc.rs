@@ -1,7 +1,8 @@
 use core::fmt;
 use std::{fmt::Debug, marker::PhantomData};
 
-use ark_ec::{pairing::Pairing, CurveGroup};
+use ark_bn254::{Bn254, Config, G1Affine};
+use ark_ec::{bn, pairing::Pairing, CurveGroup};
 use ark_ff::{Field, Zero};
 use ark_poly::domain::DomainCoeff;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
@@ -21,6 +22,10 @@ pub use rep3::Rep3Groth16Driver;
 pub use shamir::ShamirGroth16Driver;
 
 pub trait FftHandle<P: Pairing, T> {
+    fn join(self) -> T;
+}
+
+pub trait MsmHandle<T> {
     fn join(self) -> T;
 }
 
@@ -46,6 +51,7 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
     type PartyID: Send + Sync + Copy + fmt::Display + 'static;
 
     type FftHandle: FftHandle<P, Vec<Self::ArithmeticShare>>;
+    type MsmHandle: MsmHandle<Self::PointShare<ark_bn254::G1Projective>>;
 
     /// Generate a random arithemitc share
     fn rand(&mut self) -> IoResult<Self::ArithmeticShare>;
@@ -98,6 +104,17 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
         coeffs: &mut [Self::ArithmeticShare],
         roots: &[P::ScalarField],
     );
+
+    fn msm_async(
+        points: &[ark_bn254::G1Affine],
+        scalars: &[Self::ArithmeticShare],
+    ) -> Self::MsmHandle;
+
+    fn msm_g1(points: &[P::G1Affine], scalars: &[Self::ArithmeticShare])
+        -> Self::PointShare<P::G1>;
+    fn msm_g1_public(points: &[P::G1Affine], scalars: &[P::ScalarField]) -> P::G1;
+    fn msm_g2(points: &[P::G2Affine], scalars: &[Self::ArithmeticShare])
+        -> Self::PointShare<P::G2>;
 
     /// Perform msm between `points` and `scalars`
     fn msm_public_points<C>(

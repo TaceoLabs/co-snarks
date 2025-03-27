@@ -10,6 +10,7 @@ use std::{marker::PhantomData, sync::Arc};
 
 use ark_ff::PrimeField;
 use co_circom_snarks::{CompressedRep3SharedWitness, SharedWitness};
+pub use co_groth16::IcileToArkProjective;
 use color_eyre::eyre::{self, Context, ContextCompat};
 use mpc_core::protocols::{
     bridges::network::RepToShamirNetwork,
@@ -57,7 +58,7 @@ where
 
 impl<P> ShamirSharedWitnessState<P>
 where
-    P: Pairing + CircomArkworksPairingBridge,
+    P: Pairing + CircomArkworksPairingBridge + IcileToArkProjective,
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
@@ -109,7 +110,7 @@ where
 
 impl<P> Rep3SharedWitnessState<P>
 where
-    P: Pairing + CircomArkworksPairingBridge,
+    P: Pairing + CircomArkworksPairingBridge + IcileToArkProjective,
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {

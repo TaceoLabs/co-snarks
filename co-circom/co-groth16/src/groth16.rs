@@ -1,4 +1,5 @@
 //! A Groth16 proof protocol that uses a collaborative MPC protocol to generate the proof.
+use ark_bn254::Bn254;
 use ark_ec::pairing::Pairing;
 use ark_ec::scalar_mul::variable_base::VariableBaseMSM;
 use ark_ec::{AffineRepr, CurveGroup};
@@ -19,9 +20,10 @@ use tokio::sync::oneshot;
 use tracing::instrument;
 
 use crate::mpc::plain::PlainGroth16Driver;
+use crate::mpc::rep3::IcileToArkProjective;
 use crate::mpc::rep3::Rep3Groth16Driver;
 use crate::mpc::shamir::ShamirGroth16Driver;
-use crate::mpc::{CircomGroth16Prover, FftHandle};
+use crate::mpc::{CircomGroth16Prover, FftHandle, MsmHandle};
 
 macro_rules! rayon_join {
     ($t1: expr, $t2: expr, $t3: expr) => {{
@@ -88,7 +90,10 @@ pub struct CoGroth16<P: Pairing, T: CircomGroth16Prover<P>> {
     phantom_data: PhantomData<P>,
 }
 
-impl<P: Pairing + CircomArkworksPairingBridge, T: CircomGroth16Prover<P>> CoGroth16<P, T>
+impl<
+        P: Pairing + CircomArkworksPairingBridge + IcileToArkProjective,
+        T: CircomGroth16Prover<P>,
+    > CoGroth16<P, T>
 where
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
@@ -303,6 +308,52 @@ where
         res
     }
 
+    fn calculate_coeff_g1(
+        id: T::PartyID,
+        initial: T::PointShare<P::G1>,
+        query: &[P::G1Affine],
+        vk_param: P::G1Affine,
+        input_assignment: &[P::ScalarField],
+        aux_assignment: &[T::ArithmeticShare],
+    ) -> T::PointShare<P::G1> {
+        let pub_len = input_assignment.len();
+
+        let (priv_acc, pub_acc) = rayon::join(
+            || T::msm_g1(&query[1 + pub_len..], aux_assignment),
+            || P::G1::msm_unchecked(&query[1..=pub_len], input_assignment),
+        );
+
+        let mut res = initial;
+        T::add_assign_points_public(id, &mut res, &query[0].into_group());
+        T::add_assign_points_public(id, &mut res, &vk_param.into_group());
+        T::add_assign_points_public(id, &mut res, &pub_acc);
+        T::add_assign_points(&mut res, &priv_acc);
+        res
+    }
+
+    fn calculate_coeff_g2(
+        id: T::PartyID,
+        initial: T::PointShare<P::G2>,
+        query: &[P::G2Affine],
+        vk_param: P::G2Affine,
+        input_assignment: &[P::ScalarField],
+        aux_assignment: &[T::ArithmeticShare],
+    ) -> T::PointShare<P::G2> {
+        let pub_len = input_assignment.len();
+
+        let (priv_acc, pub_acc) = rayon::join(
+            || T::msm_g2(&query[1 + pub_len..], aux_assignment),
+            || P::G2::msm_unchecked(&query[1..=pub_len], input_assignment),
+        );
+
+        let mut res = initial;
+        T::add_assign_points_public(id, &mut res, &query[0].into_group());
+        T::add_assign_points_public(id, &mut res, &vk_param.into_group());
+        T::add_assign_points_public(id, &mut res, &pub_acc);
+        T::add_assign_points(&mut res, &priv_acc);
+        res
+    }
+
     #[instrument(level = "debug", name = "create proof with assignment", skip_all)]
     fn create_proof_with_assignment(
         mut self,
@@ -343,7 +394,7 @@ where
                 tracing::debug_span!("compute A in create proof with assignment").entered();
             // Compute A
             let r_g1 = T::scalar_mul_public_point(&delta_g1, r);
-            let r_g1 = Self::calculate_coeff(
+            let r_g1 = Self::calculate_coeff_g1(
                 party_id,
                 r_g1,
                 &a_query.a_query,
@@ -361,7 +412,7 @@ where
             // Compute B in G1
             // In original implementation this is skipped if r==0, however r is shared in our case
             let s_g1 = T::scalar_mul_public_point(&delta_g1, s);
-            let s_g1 = Self::calculate_coeff(
+            let s_g1 = Self::calculate_coeff_g1(
                 party_id,
                 s_g1,
                 &b_g1_query.b_g1_query,
@@ -378,7 +429,7 @@ where
                 tracing::debug_span!("compute B/G2 in create proof with assignment").entered();
             // Compute B in G2
             let s_g2 = T::scalar_mul_public_point(&delta_g2, s);
-            let s_g2 = Self::calculate_coeff(
+            let s_g2 = Self::calculate_coeff_g2(
                 party_id,
                 s_g2,
                 &b_g2_query.b_g2_query,
@@ -392,7 +443,7 @@ where
 
         rayon::spawn(move || {
             let msm_l_query = tracing::debug_span!("msm l_query").entered();
-            let result = T::msm_public_points(&l_query.l_query, &aux_assignment4);
+            let result = T::msm_g1(&l_query.l_query, &aux_assignment4);
             l_acc_tx.send(result).expect("channel not dropped");
             msm_l_query.exit();
         });
@@ -400,7 +451,7 @@ where
         rayon::spawn(move || {
             let msm_h_query = tracing::debug_span!("msm h_query").entered();
             //perform the msm for h
-            let result = P::G1::msm_unchecked(&h_query.h_query, &h);
+            let result = T::msm_g1_public(&h_query.h_query, &h);
             h_acc_tx.send(result).expect("channel not dropped");
             msm_h_query.exit();
         });
@@ -448,7 +499,7 @@ where
     }
 }
 
-impl<P: Pairing, N: Rep3Network> Rep3CoGroth16<P, N>
+impl<P: Pairing + IcileToArkProjective, N: Rep3Network> Rep3CoGroth16<P, N>
 where
     P: CircomArkworksPairingBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
@@ -473,7 +524,7 @@ where
     }
 }
 
-impl<P: Pairing, N: ShamirNetwork> ShamirCoGroth16<P, N>
+impl<P: Pairing + IcileToArkProjective, N: ShamirNetwork> ShamirCoGroth16<P, N>
 where
     P: CircomArkworksPairingBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
@@ -505,7 +556,7 @@ where
     }
 }
 
-impl<P: Pairing> Groth16<P>
+impl<P: Pairing + IcileToArkProjective> Groth16<P>
 where
     P: CircomArkworksPairingBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,

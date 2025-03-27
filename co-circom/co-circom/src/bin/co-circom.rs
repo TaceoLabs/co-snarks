@@ -3,9 +3,10 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use co_circom::{
     Bls12_381, Bn254, CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge,
     CoCircomCompiler, CompilerConfig, Compression, Groth16, Groth16JsonVerificationKey,
-    Groth16Proof, Groth16ZKey, Pairing, Plonk, PlonkJsonVerificationKey, PlonkProof, PlonkZKey,
-    Rep3CoGroth16, Rep3CoPlonk, Rep3MpcNet, Rep3SharedInput, ShamirCoGroth16, ShamirCoPlonk,
-    ShamirMpcNet, ShamirSharedWitness, SimplificationLevel, VMConfig, Witness, R1CS,
+    Groth16Proof, Groth16ZKey, IcileToArkProjective, Pairing, Plonk, PlonkJsonVerificationKey,
+    PlonkProof, PlonkZKey, Rep3CoGroth16, Rep3CoPlonk, Rep3MpcNet, Rep3SharedInput,
+    ShamirCoGroth16, ShamirCoPlonk, ShamirMpcNet, ShamirSharedWitness, SimplificationLevel,
+    VMConfig, Witness, R1CS,
 };
 use co_circom_snarks::{CompressedRep3SharedWitness, VerificationError};
 use color_eyre::eyre::{self, eyre, Context, ContextCompat};
@@ -606,7 +607,8 @@ fn main() -> color_eyre::Result<ExitCode> {
             let config = GenerateProofConfig::parse(cli).context("while parsing config")?;
             match config.curve {
                 Curve::BN254 => run_generate_proof::<Bn254>(config),
-                Curve::BLS12_381 => run_generate_proof::<Bls12_381>(config),
+                // Curve::BLS12_381 => run_generate_proof::<Bls12_381>(config),
+                _ => unreachable!(),
             }
         }
         Commands::Verify(cli) => {
@@ -904,7 +906,7 @@ where
 }
 
 #[instrument(level = "debug", skip(config))]
-fn run_generate_proof<P: Pairing + CircomArkworksPairingBridge>(
+fn run_generate_proof<P: Pairing + CircomArkworksPairingBridge + IcileToArkProjective>(
     config: GenerateProofConfig,
 ) -> color_eyre::Result<ExitCode>
 where

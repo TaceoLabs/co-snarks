@@ -1,4 +1,4 @@
-use super::{CircomGroth16Prover, FftHandle, IoResult};
+use super::{CircomGroth16Prover, FftHandle, IoResult, MsmHandle};
 use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::PrimeField;
 use mpc_core::protocols::shamir::{
@@ -10,6 +10,14 @@ use rayon::prelude::*;
 pub struct PlainFftHandle;
 
 impl<P: Pairing, T> FftHandle<P, T> for PlainFftHandle {
+    fn join(self) -> T {
+        todo!()
+    }
+}
+
+pub struct PlainMsmHandle;
+
+impl<T> MsmHandle<T> for PlainMsmHandle {
     fn join(self) -> T {
         todo!()
     }
@@ -49,6 +57,7 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
 
     type PartyID = usize;
     type FftHandle = PlainFftHandle;
+    type MsmHandle = PlainMsmHandle;
 
     fn rand(&mut self) -> IoResult<Self::ArithmeticShare> {
         self.protocol0.rand()
@@ -79,6 +88,34 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
     }
 
     fn ifft_half_share(coeffs: Vec<P::ScalarField>) -> Vec<<P as Pairing>::ScalarField> {
+        todo!()
+    }
+
+    fn msm_async(
+        points: &[ark_bn254::G1Affine],
+        scalars: &[Self::ArithmeticShare],
+    ) -> Self::MsmHandle {
+        todo!()
+    }
+
+    fn msm_g1(
+        points: &[<P as Pairing>::G1Affine],
+        scalars: &[Self::ArithmeticShare],
+    ) -> Self::PointShare<<P as Pairing>::G1> {
+        todo!()
+    }
+
+    fn msm_g1_public(
+        points: &[<P as Pairing>::G1Affine],
+        scalars: &[<P as Pairing>::ScalarField],
+    ) -> <P as Pairing>::G1 {
+        todo!()
+    }
+
+    fn msm_g2(
+        points: &[<P as Pairing>::G2Affine],
+        scalars: &[Self::ArithmeticShare],
+    ) -> Self::PointShare<<P as Pairing>::G2> {
         todo!()
     }
 
