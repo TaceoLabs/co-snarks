@@ -204,6 +204,7 @@ impl<P: Pairing, T: Field, I: FieldImpl> FftHandle<P, Vec<Rep3PrimeFieldShare<P:
     for Rep3FftHandle<P, T, I>
 {
     fn join(mut self) -> Vec<Rep3PrimeFieldShare<P::ScalarField>> {
+        let span = tracing::debug_span!("(i)fft_async join").entered();
         self.a_stream.synchronize().unwrap();
         let mut a_host_result = vec![I::zero(); self.a_results.len()];
         self.a_results
@@ -216,14 +217,16 @@ impl<P: Pairing, T: Field, I: FieldImpl> FftHandle<P, Vec<Rep3PrimeFieldShare<P:
             .unwrap();
         self.a_stream.destroy().unwrap();
         self.b_stream.destroy().unwrap();
-        a_host_result
+        let res = a_host_result
             .into_iter()
             .zip(b_host_result)
             .map(|(a, b)| Rep3PrimeFieldShare {
                 a: to_ark(&a),
                 b: to_ark(&b),
             })
-            .collect()
+            .collect();
+        span.exit();
+        res
     }
 }
 
@@ -334,6 +337,7 @@ impl<P: Pairing + IcileToArkProjective, N: Rep3Network> CircomGroth16Prover<P>
     fn fft_async(
         coeffs: Vec<Self::ArithmeticShare>,
     ) -> Rep3FftHandle<P, P::ScalarField, ScalarField> {
+        let span = tracing::debug_span!("fft_async setup").entered();
         let (mut a_input, mut b_input) = coeffs
             .into_iter()
             .map(|x| (x.a, x.b))
@@ -352,6 +356,8 @@ impl<P: Pairing + IcileToArkProjective, N: Rep3Network> CircomGroth16Prover<P>
         b_ntt_config.is_async = true;
         b_ntt_config.stream_handle = *b_stream;
         let mut b_results = DeviceVec::<ScalarField>::device_malloc(b_input.len()).unwrap();
+
+        span.exit();
 
         ntt(
             HostSlice::from_slice(a_input),
@@ -452,6 +458,7 @@ impl<P: Pairing + IcileToArkProjective, N: Rep3Network> CircomGroth16Prover<P>
     fn ifft_async(
         coeffs: Vec<Self::ArithmeticShare>,
     ) -> Rep3FftHandle<P, P::ScalarField, ScalarField> {
+        let span = tracing::debug_span!("ifft_async setup").entered();
         let (mut a_input, mut b_input) = coeffs
             .into_iter()
             .map(|x| (x.a, x.b))
@@ -470,6 +477,7 @@ impl<P: Pairing + IcileToArkProjective, N: Rep3Network> CircomGroth16Prover<P>
         b_ntt_config.is_async = true;
         b_ntt_config.stream_handle = *b_stream;
         let mut b_results = DeviceVec::<ScalarField>::device_malloc(b_input.len()).unwrap();
+        span.exit();
 
         ntt(
             HostSlice::from_slice(a_input),
@@ -563,6 +571,7 @@ impl<P: Pairing + IcileToArkProjective, N: Rep3Network> CircomGroth16Prover<P>
         points: &[P::G1Affine],
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShare<P::G1> {
+        let span = tracing::debug_span!("msm_g1 setup").entered();
         debug_assert_eq!(points.len(), scalars.len());
         let (mut a, mut b) = scalars
             .into_par_iter()
@@ -585,6 +594,10 @@ impl<P: Pairing + IcileToArkProjective, N: Rep3Network> CircomGroth16Prover<P>
         b_msm_config.stream_handle = *b_stream;
         let mut b_results = DeviceVec::<G1Projective>::device_malloc(1).unwrap();
 
+        span.exit();
+
+        let span = tracing::debug_span!("msm_g1 compute").entered();
+
         msm(
             HostSlice::from_slice(a),
             HostSlice::from_slice(&points),
@@ -602,6 +615,10 @@ impl<P: Pairing + IcileToArkProjective, N: Rep3Network> CircomGroth16Prover<P>
         .unwrap();
 
         a_stream.synchronize().unwrap();
+
+        span.exit();
+        let span = tracing::debug_span!("msm_g1 conv and copy back").entered();
+
         let mut a_host_result = vec![G1Projective::zero(); a_results.len()];
         a_results
             .copy_to_host(HostSlice::from_mut_slice(&mut a_host_result[..]))
@@ -617,10 +634,13 @@ impl<P: Pairing + IcileToArkProjective, N: Rep3Network> CircomGroth16Prover<P>
         let a = icicle_to_ark_projective_points_::<P>(&a_host_result);
         let b = icicle_to_ark_projective_points_::<P>(&b_host_result);
 
+        span.exit();
+
         Rep3PointShare { a: a[0], b: b[0] }
     }
 
     fn msm_g1_public(points: &[P::G1Affine], scalars: &[P::ScalarField]) -> P::G1 {
+        let span = tracing::debug_span!("msm_g1_public setup").entered();
         debug_assert_eq!(points.len(), scalars.len());
         let points = ark_to_icicle_affine_points_(points);
         let mut scalars = scalars.to_vec();
@@ -628,6 +648,9 @@ impl<P: Pairing + IcileToArkProjective, N: Rep3Network> CircomGroth16Prover<P>
 
         let mut results = DeviceVec::<G1Projective>::device_malloc(1).unwrap();
 
+        span.exit();
+
+        let span = tracing::debug_span!("msm_g1_public compute").entered();
         msm(
             HostSlice::from_slice(scalars),
             HostSlice::from_slice(&points),
@@ -636,12 +659,19 @@ impl<P: Pairing + IcileToArkProjective, N: Rep3Network> CircomGroth16Prover<P>
         )
         .unwrap();
 
+        span.exit();
+
+        let span = tracing::debug_span!("msm_g1_public conv and copy back").entered();
+
         let mut host_result = vec![G1Projective::zero(); 1];
         results
             .copy_to_host(HostSlice::from_mut_slice(&mut host_result[..]))
             .unwrap();
 
         let a = icicle_to_ark_projective_points_::<P>(&host_result);
+
+        span.exit();
+
         a[0]
     }
 
@@ -649,6 +679,7 @@ impl<P: Pairing + IcileToArkProjective, N: Rep3Network> CircomGroth16Prover<P>
         points: &[P::G2Affine],
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShare<P::G2> {
+        let span = tracing::debug_span!("msm_g2 setup").entered();
         debug_assert_eq!(points.len(), scalars.len());
         let (mut a, mut b) = scalars
             .into_par_iter()
@@ -671,6 +702,10 @@ impl<P: Pairing + IcileToArkProjective, N: Rep3Network> CircomGroth16Prover<P>
         b_msm_config.stream_handle = *b_stream;
         let mut b_results = DeviceVec::<G2Projective>::device_malloc(1).unwrap();
 
+        span.exit();
+
+        let span = tracing::debug_span!("msm_g2 compute").entered();
+
         msm(
             HostSlice::from_slice(a),
             HostSlice::from_slice(&points),
@@ -688,6 +723,10 @@ impl<P: Pairing + IcileToArkProjective, N: Rep3Network> CircomGroth16Prover<P>
         .unwrap();
 
         a_stream.synchronize().unwrap();
+
+        span.exit();
+        let span = tracing::debug_span!("msm_g2 conv and copy back").entered();
+
         let mut a_host_result = vec![G2Projective::zero(); a_results.len()];
         a_results
             .copy_to_host(HostSlice::from_mut_slice(&mut a_host_result[..]))
@@ -702,6 +741,8 @@ impl<P: Pairing + IcileToArkProjective, N: Rep3Network> CircomGroth16Prover<P>
 
         let a = icicle_to_ark_projective_points_g2::<P>(&a_host_result);
         let b = icicle_to_ark_projective_points_g2::<P>(&b_host_result);
+
+        span.exit();
 
         Rep3PointShare { a: a[0], b: b[0] }
     }

@@ -17,6 +17,7 @@ use figment::{
 use icicle_bn254::curve::ScalarField;
 use icicle_core::ntt::{self, get_root_of_unity, initialize_domain};
 use icicle_runtime::{self, Device};
+use mpc_core::protocols::rep3::network::Rep3Network;
 use mpc_net::config::NetworkConfigFile;
 use num_traits::Zero;
 use serde::{Deserialize, Serialize};
@@ -962,7 +963,7 @@ where
 
                     // Check if GPU is available
                     let device_cpu = Device::new("CPU", 0);
-                    let mut device_gpu = Device::new("CUDA", 0);
+                    let mut device_gpu = Device::new("CUDA", mpc_net.get_id() as i32);
                     let is_cuda_device_available = icicle_runtime::is_device_available(&device_gpu);
 
                     if is_cuda_device_available {
