@@ -524,15 +524,23 @@ where
                             template_header: _,
                         } => {
                             let inner: &Instruction = location;
-                            if let Instruction::Value(value_bucket) = inner {
-                                self.emit_opcode(MpcOpCode::Call(
-                                    call_bucket.symbol.clone(),
-                                    get_size_from_size_option(&final_data.context.size),
-                                ));
-                                debug_assert!(matches!(value_bucket.parse_as, ValueType::U32));
-                                self.emit_opcode(MpcOpCode::PushIndex(value_bucket.value));
-                            } else {
-                                panic!("Another way for multiple return vals???");
+                            match inner {
+                                Instruction::Value(value_bucket) => {
+                                    self.emit_opcode(MpcOpCode::Call(
+                                        call_bucket.symbol.clone(),
+                                        get_size_from_size_option(&final_data.context.size),
+                                    ));
+                                    debug_assert!(matches!(value_bucket.parse_as, ValueType::U32));
+                                    self.emit_opcode(MpcOpCode::PushIndex(value_bucket.value));
+                                }
+                                Instruction::Compute(compute_bucket) => {
+                                    self.emit_opcode(MpcOpCode::Call(
+                                        call_bucket.symbol.clone(),
+                                        get_size_from_size_option(&final_data.context.size),
+                                    ));
+                                    self.handle_compute_bucket(compute_bucket);
+                                }
+                                _ => panic!("Another way for multiple return vals???"),
                             }
                         }
                         LocationRule::Mapped {
