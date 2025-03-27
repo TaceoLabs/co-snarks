@@ -1,3 +1,4 @@
+use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_brillig::mpc::BrilligDriver;
 use mpc_core::{
@@ -24,6 +25,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         + From<F>
         + PartialEq
         + Into<<Self::BrilligDriver as BrilligDriver<F>>::BrilligType>;
+    type AcvmPoint<C: CurveGroup<BaseField = F>>: Clone + fmt::Debug + fmt::Display + From<C>;
 
     type BrilligDriver: BrilligDriver<F>;
 
@@ -62,6 +64,13 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     /// Adds to acvm types. Both can either be public or shared
     fn add(&self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> Self::AcvmType;
 
+    /// Adds to acvm points. Both can either be public or shared
+    fn add_points<C: CurveGroup<BaseField = F>>(
+        &self,
+        lhs: Self::AcvmPoint<C>,
+        rhs: Self::AcvmPoint<C>,
+    ) -> Self::AcvmPoint<C>;
+
     /// Subtracts two ACVM-type values: secret - secret
     fn sub(&mut self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType;
 
@@ -74,6 +83,9 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         secret_1: Self::AcvmType,
         secret_2: Self::AcvmType,
     ) -> io::Result<Self::AcvmType>;
+
+    /// Inverts an ACVM-type: \[c\] = \[secret\]^(-1).
+    fn invert(&mut self, secret: Self::AcvmType) -> io::Result<Self::AcvmType>;
 
     /// Negates an ACVM-type inplace: \[a\] = -\[a\].
     fn negate_inplace(&mut self, a: &mut Self::AcvmType);
@@ -113,6 +125,13 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         index: Self::AcvmType,
         lut: &<Self::Lookup as LookupTableProvider<F>>::LutType,
     ) -> io::Result<Self::AcvmType>;
+
+    /// Reads from multiple public LUTs.
+    fn read_from_public_luts(
+        &mut self,
+        index: Self::AcvmType,
+        luts: &[Vec<F>],
+    ) -> io::Result<Vec<Self::AcvmType>>;
 
     /// Wrapper around writing a value to a LUT. The index and the value can be shared or public.
     fn write_lut_by_acvm_type(
@@ -156,6 +175,9 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
 
     /// Returns the value if the value is public
     fn get_public(a: &Self::AcvmType) -> Option<F>;
+
+    /// Returns the value if the point is public
+    fn get_public_point<C: CurveGroup<BaseField = F>>(a: &Self::AcvmPoint<C>) -> Option<C>;
 
     /// Checks if two shared values are equal. The result is a shared value that has value 1 if the two shared values are equal and 0 otherwise.
     fn equal(&mut self, a: &Self::AcvmType, b: &Self::AcvmType) -> std::io::Result<Self::AcvmType>;
@@ -296,4 +318,37 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         precomp: &mut Poseidon2Precomputations<Self::ArithmeticShare>,
         poseidon2: &Poseidon2<F, T, D>,
     ) -> std::io::Result<()>;
+
+    /// Performs multi scalar multiplications.
+    fn multi_scalar_mul(
+        &mut self,
+        points: &[Self::AcvmType],
+        scalars_lo: &[Self::AcvmType],
+        scalars_hi: &[Self::AcvmType],
+        pedantic_solving: bool,
+    ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)>;
+
+    /// Translates a share of the coordinates to a shared point
+    fn field_shares_to_pointshare<C: CurveGroup<BaseField = F>>(
+        &mut self,
+        x: Self::AcvmType,
+        y: Self::AcvmType,
+        is_infinity: Self::AcvmType,
+    ) -> io::Result<Self::AcvmPoint<C>>;
+
+    /// Translates a share of the point to a share of its coordinates
+    fn pointshare_to_field_shares<C: CurveGroup<BaseField = F>>(
+        &mut self,
+        point: Self::AcvmPoint<C>,
+    ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)>;
+
+    /// Compute the greater than operation: a > b. Outputs 1 if a > b, 0 otherwise.
+    fn gt(&mut self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> io::Result<Self::AcvmType>;
+
+    /// Computes: result = if point == 0 { value } else { point }
+    fn set_point_to_value_if_zero<C: CurveGroup<BaseField = F>>(
+        &mut self,
+        point: Self::AcvmPoint<C>,
+        value: Self::AcvmPoint<C>,
+    ) -> std::io::Result<Self::AcvmPoint<C>>;
 }
