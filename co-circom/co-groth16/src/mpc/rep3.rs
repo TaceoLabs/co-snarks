@@ -572,6 +572,9 @@ impl<P: Pairing + IcileToArkProjective, N: Rep3Network> CircomGroth16Prover<P>
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShare<P::G1> {
         let span = tracing::debug_span!("msm_g1 setup").entered();
+        let min = points.len().min(scalars.len());
+        let points = &points[..min];
+        let scalars = &scalars[..min];
         debug_assert_eq!(points.len(), scalars.len());
         let (mut a, mut b) = scalars
             .into_par_iter()
@@ -640,6 +643,9 @@ impl<P: Pairing + IcileToArkProjective, N: Rep3Network> CircomGroth16Prover<P>
     }
 
     fn msm_g1_public(points: &[P::G1Affine], scalars: &[P::ScalarField]) -> P::G1 {
+        let min = points.len().min(scalars.len());
+        let points = &points[..min];
+        let scalars = &scalars[..min];
         let span = tracing::debug_span!("msm_g1_public setup").entered();
         debug_assert_eq!(points.len(), scalars.len());
         let points = ark_to_icicle_affine_points_(points);
@@ -679,6 +685,9 @@ impl<P: Pairing + IcileToArkProjective, N: Rep3Network> CircomGroth16Prover<P>
         points: &[P::G2Affine],
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShare<P::G2> {
+        let min = points.len().min(scalars.len());
+        let points = &points[..min];
+        let scalars = &scalars[..min];
         let span = tracing::debug_span!("msm_g2 setup").entered();
         debug_assert_eq!(points.len(), scalars.len());
         let (mut a, mut b) = scalars
