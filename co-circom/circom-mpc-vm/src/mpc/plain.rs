@@ -10,7 +10,7 @@ use num_traits::cast::ToPrimitive;
 macro_rules! to_usize {
     ($field: expr) => {{
         let a: BigUint = $field.into();
-        usize::try_from(a.to_u64().ok_or(eyre!("Cannot convert var into u64"))?)?
+        usize::try_from(a.to_u64().ok_or(eyre!("Cannot convert var into usize"))?)?
     }};
 }
 pub(crate) use to_usize;
@@ -26,13 +26,6 @@ macro_rules! bool_comp_op {
         tracing::trace!("{}{}{} -> 0", $lhs,stringify!($op), $rhs);
         F::zero()
        }
-    }};
-}
-
-macro_rules! to_u128 {
-    ($field: expr) => {{
-        let a: BigUint = $field.into();
-        a.to_u128().ok_or(eyre!("Cannot convert var into u64"))?
     }};
 }
 
@@ -124,9 +117,8 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtensio
     }
 
     fn int_div(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
-        tracing::debug!("trying to divide {a}/{b}");
-        let lhs = to_u128!(a);
-        let rhs = to_u128!(b);
+        let lhs = to_bigint!(a);
+        let rhs = to_bigint!(b);
         Ok(F::from(lhs / rhs))
     }
 
