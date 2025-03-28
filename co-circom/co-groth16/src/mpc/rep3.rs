@@ -61,18 +61,19 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
         public_inputs: &[P::ScalarField],
         private_witness: &[Self::ArithmeticShare],
     ) -> Self::ArithmeticShare {
-        let mut acc = Self::ArithmeticShare::default();
-        for (coeff, index) in lhs {
-            if index < &public_inputs.len() {
-                let val = public_inputs[*index];
-                let mul_result = val * coeff;
-                arithmetic::add_assign_public(&mut acc, mul_result, party_id);
-            } else {
-                let current_witness = private_witness[*index - public_inputs.len()];
-                arithmetic::add_assign(&mut acc, arithmetic::mul_public(current_witness, *coeff));
-            }
-        }
-        acc
+        lhs.into_par_iter()
+            .map(|(coeff, index)| {
+                if index < &public_inputs.len() {
+                    let val = public_inputs[*index];
+                    let mul_result = val * coeff;
+                    Self::ArithmeticShare::promote_from_trivial(&mul_result, party_id)
+                } else {
+                    let current_witness = private_witness[*index - public_inputs.len()];
+                    arithmetic::mul_public(current_witness, *coeff)
+                }
+            })
+            .fold(Self::ArithmeticShare::default, arithmetic::add)
+            .reduce(Self::ArithmeticShare::default, arithmetic::add)
     }
 
     fn promote_to_trivial_shares(
