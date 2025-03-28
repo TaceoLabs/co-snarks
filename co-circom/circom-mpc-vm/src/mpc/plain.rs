@@ -4,7 +4,6 @@ use ark_ff::{One, PrimeField};
 use eyre::eyre;
 use eyre::Result;
 use num_bigint::BigUint;
-use num_traits::cast::ToPrimitive;
 
 /// Transforms a field element into an usize if possible.
 macro_rules! to_usize {
