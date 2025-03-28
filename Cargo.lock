@@ -2617,7 +2617,7 @@ dependencies = [
 [[package]]
 name = "mpc-engine"
 version = "0.1.0"
-source = "git+https://github.com/TaceoLabs/mpc-engine#23b5f67eae8067a0c56d0705c2fa41a6e34634df"
+source = "git+https://github.com/TaceoLabs/mpc-engine#f97b02635f17402d7c3ea8df73159af9ba6b85ef"
 dependencies = [
  "byteorder",
  "eyre",
