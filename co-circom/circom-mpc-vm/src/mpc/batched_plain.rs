@@ -13,10 +13,8 @@ macro_rules! bool_comp_op {
         let lhs = $driver.val($lhs);
         let rhs = $driver.val($rhs);
        if (lhs $op rhs){
-        tracing::trace!("{}{}{} -> 1", $lhs,stringify!($op), $rhs);
         F::one()
        } else {
-        tracing::trace!("{}{}{} -> 0", $lhs,stringify!($op), $rhs);
         F::zero()
        }
     }};
