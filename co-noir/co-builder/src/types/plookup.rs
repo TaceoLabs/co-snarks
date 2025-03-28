@@ -106,7 +106,6 @@ impl BasicTableId {
             F::zero(),
         ]
     }
-
     pub(crate) fn get_and_rotate_values_from_key<
         F: PrimeField,
         const NUM_ROTATED_OUTPUT_BITS: u64,
@@ -263,7 +262,7 @@ impl<F: PrimeField> Plookup<F> {
             .push(BasicTableId::get_value_from_key::<F, { BasicTableId::HonkDummyBasic2 as u64 }>);
         table
     }
-
+    #[expect(dead_code)]
     fn get_uint32_xor_table() -> PlookupMultiTable<F> {
         let id = MultiTableId::Uint32Xor;
         let num_entries = (32 + 5) / 6;
@@ -281,7 +280,7 @@ impl<F: PrimeField> Plookup<F> {
         // }
         table
     }
-
+    #[expect(dead_code)]
     fn get_uint32_and_table() -> PlookupMultiTable<F> {
         let id = MultiTableId::Uint32And;
         let num_entries = (32 + 5) / 6;
@@ -774,7 +773,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> PlookupBasicTa
 
         table
     }
-
+    #[expect(dead_code)]
     fn generate_and_rotate_table<const BITS_PER_SLICE: u64, const NUM_ROTATED_OUTPUT_BITS: u64>(
         id: BasicTableId,
         table_index: usize,
@@ -806,7 +805,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> PlookupBasicTa
 
         table
     }
-
+    #[expect(dead_code)]
     fn generate_xor_rotate_table<const BITS_PER_SLICE: u64, const NUM_ROTATED_OUTPUT_BITS: u64>(
         id: BasicTableId,
         table_index: usize,

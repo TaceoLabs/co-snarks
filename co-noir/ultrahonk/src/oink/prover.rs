@@ -69,7 +69,6 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     ) -> HonkProofResult<()> {
         // TACEO note: Until issue https://github.com/AztecProtocol/aztec-packages/issues/13117 is resolved, we cannot apply the masking
         // here, but it should be added in the future
-
         // // Mask the polynomial when proving in zero-knowledge
         // if self.has_zk == ZeroKnowledge::Yes {
         //     polynomial.mask(&mut self.rng)

@@ -36,8 +36,7 @@ echo "Using nargo version $NARGO_VERSION"
 echo "Using bb version $BARRETENBERG_VERSION"
 echo ""
 
-test_cases=("add3u64") 
-##  "mul3u64" "assert" "get_bytes" "if_then" "negative" "poseidon_assert" "quantized" "add3" "add3_assert" "poseidon" "poseidon_input2" "approx_sigmoid" "addition_multiplication" "unconstrained_fn" "unconstrained_fn_field" "blackbox_not" "blackbox_and" "blackbox_xor" "ram" "rom_shared" "poseidon2" "blackbox_poseidon2" "assert_max_bit_size
+test_cases=("add3u64" "mul3u64" "assert" "get_bytes" "if_then" "negative" "poseidon_assert" "quantized" "add3" "add3_assert" "poseidon" "poseidon_input2" "approx_sigmoid" "addition_multiplication" "unconstrained_fn" "unconstrained_fn_field" "blackbox_not" "blackbox_and" "blackbox_xor" "ram" "rom_shared" "poseidon2" "blackbox_poseidon2" "assert_max_bit_size")
 
 run_proof_verification() {
   local name=$1
@@ -53,17 +52,18 @@ run_proof_verification() {
     verify_command="verify --scheme ultra_honk --oracle_hash keccak"
   elif [[ "$algorithm" == "poseidon_zk" ]]; then
     prove_command="prove --scheme ultra_honk --oracle_hash poseidon2 --zk"
-    write_command="write_vk --scheme ultra_honk --oracle_hash poseidon2 --zk"
+    write_command="write_vk --scheme ultra_honk --oracle_hash poseidon2"
     verify_command="verify --scheme ultra_honk --oracle_hash poseidon2 --zk"
   else 
     prove_command="prove --scheme ultra_honk --oracle_hash keccak --zk"
-    write_command="write_vk --scheme ultra_honk --oracle_hash keccak --zk"
+    write_command="write_vk --scheme ultra_honk --oracle_hash keccak"
     verify_command="verify --scheme ultra_honk --oracle_hash keccak --zk"
   fi
 
   echo "comparing" $name "with bb and $algorithm transcript"
 
   bash -c "$BARRETENBERG_BINARY $prove_command -b test_vectors/${name}/target/${name}.json -w test_vectors/${name}/target/${name}.gz -o test_vectors/${name}/ $PIPE"
+
 
   if [[ "$algorithm" == "poseidon" ]] || [[ "$algorithm" == "keccak" ]]; then
     diff test_vectors/${name}/proof test_vectors/${name}/proof_plaindriver
@@ -129,7 +129,8 @@ for f in "${test_cases[@]}"; do
     exit_code=1
     echo "::error::" $f "failed with ZK"
   fi
-  run_proof_verification "$f" "poseidon_zk"
+  # Note: ZK proofs are not (yet) possible with Poseidon in Barretenberg
+  # run_proof_verification "$f" "poseidon_zk"
   bash cleanup.sh
 
    # -e to exit on first error
@@ -141,6 +142,7 @@ for f in "${test_cases[@]}"; do
     echo "::error::" $f "failed"
   fi
   run_proof_verification "$f" "keccak"
+   bash cleanup.sh
   # Run with ZK:
   bash -c "${PLAINDRIVER} --prover-crs test_vectors/bn254_g1.dat --verifier-crs test_vectors/bn254_g2.dat --input test_vectors/${f}/Prover.toml --circuit test_vectors/${f}/target/${f}.json --hasher KECCAK --out-dir test_vectors/${f} --zk $PIPE" || failed=1
   if [ "$failed" -ne 0 ]

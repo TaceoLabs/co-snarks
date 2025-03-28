@@ -358,6 +358,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     fn compute_gemini_fold_pos_evaluations(
         opening_claims: &[ShpleminiOpeningClaim<P::ScalarField>],
     ) -> Vec<P::ScalarField> {
+        tracing::trace!("Compute gemini fold pos evaluations");
         let mut gemini_fold_pos_evaluations = Vec::with_capacity(opening_claims.len());
 
         for claim in opening_claims {
@@ -637,6 +638,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         libra_polynomials: [Polynomial<P::ScalarField>; NUM_SMALL_IPA_EVALUATIONS],
         transcript: &mut Transcript<TranscriptFieldType, H>,
     ) -> Vec<ShpleminiOpeningClaim<P::ScalarField>> {
+        tracing::trace!("Compute libra opening claims");
         let mut libra_opening_claims = Vec::with_capacity(NUM_SMALL_IPA_EVALUATIONS);
 
         let subgroup_generator = P::get_subgroup_generator();

@@ -14,3 +14,6 @@ cd test_vectors
 find . -name "vk*" -type f -delete
 find . -name "proof*" -type f -delete
 find . -name "zk_proof" -type f -delete
+find . -name "cosnark_vk*" -type f -delete
+find . -name "cosnark_proof*" -type f -delete
+find . -name "cosnark_zk_proof*" -type f -delete

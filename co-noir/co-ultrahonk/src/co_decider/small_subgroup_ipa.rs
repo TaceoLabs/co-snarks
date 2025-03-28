@@ -236,7 +236,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
             );
         }
 
-        let (lagrange_first, lagrange_last) = self.compute_lagrange_polynomials();
+        let (lagrange_first, lagrange_last) = self.compute_lagrange_first_and_last();
 
         // Compute -F(X)*G(X), the negated product of challenge_polynomial and libra_concatenated_monomial_form
         for i in 0..self.concatenated_polynomial.coefficients.len() {
@@ -322,7 +322,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
      * @param bn_evaluation_domain
      * @return std::array<Polynomial<FF>, 2>
      */
-    fn compute_lagrange_polynomials(
+    fn compute_lagrange_first_and_last(
         &self,
     ) -> (Polynomial<P::ScalarField>, Polynomial<P::ScalarField>) {
         // Compute the monomial coefficients of L_1
