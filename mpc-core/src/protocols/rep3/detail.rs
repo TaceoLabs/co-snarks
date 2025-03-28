@@ -35,21 +35,20 @@ fn low_depth_binary_add_many<F: PrimeField, N: Rep3Network>(
     bitlen: usize,
 ) -> IoResult<Vec<Rep3BigUintShare<F>>> {
     // Add x1 + x2 via a packed Kogge-Stone adder
-    let p = izip!(x1, x2).map(|(x1, x2)| x1 ^ x2).collect_vec();
-    let g = binary::and_vec(x1, x2, io_context)?;
-    kogge_stone_inner_many(&p, &g, io_context, bitlen)
+    let mut p = izip!(x1, x2).map(|(x1, x2)| x1 ^ x2).collect_vec();
+    let mut g = binary::and_vec(x1, x2, io_context)?;
+    kogge_stone_inner_many(&mut p, &mut g, io_context, bitlen)?;
+    Ok(g)
 }
 
 fn kogge_stone_inner_many<F: PrimeField, N: Rep3Network>(
-    p: &[Rep3BigUintShare<F>],
-    g: &[Rep3BigUintShare<F>],
+    p: &mut [Rep3BigUintShare<F>],
+    g: &mut [Rep3BigUintShare<F>],
     io_context: &mut IoContext<N>,
     bitlen: usize,
-) -> IoResult<Vec<Rep3BigUintShare<F>>> {
+) -> IoResult<()> {
     let d = ceil_log2(bitlen);
-    let s_ = p;
-    let mut p = s_.to_owned();
-    let mut g = g.to_owned();
+    let s_ = p.to_owned();
     for i in 0..d {
         // The loop looks slightly different to the one for rep3 rings to have the and gates at the LSBs of the storage
         let shift = 1 << i;
@@ -71,7 +70,7 @@ fn kogge_stone_inner_many<F: PrimeField, N: Rep3Network>(
         *g <<= 1;
         *g ^= s_;
     }
-    Ok(g)
+    Ok(())
 }
 
 pub(super) fn low_depth_binary_add_mod_p<F: PrimeField, N: Rep3Network>(
@@ -324,12 +323,13 @@ fn low_depth_binary_sub_p_many<F: PrimeField, N: Rep3Network>(
     let p_ = (BigUint::from(1u64) << bitlen) - F::MODULUS.into();
 
     // Add x1 + p_ via a packed Kogge-Stone adder
-    let g = izip!(x).map(|x| x & &p_).collect_vec();
-    let p = x
+    let mut g = izip!(x).map(|x| x & &p_).collect_vec();
+    let mut p = x
         .iter()
         .map(|x| binary::xor_public(x, &p_, io_context.id))
         .collect_vec();
-    kogge_stone_inner_many(&p, &g, io_context, bitlen)
+    kogge_stone_inner_many(&mut p, &mut g, io_context, bitlen)?;
+    Ok(g)
 }
 
 /// Computes a binary circuit to compare two shared values \[x\] > \[y\]. Thus, the inputs x and y are transformed from arithmetic to binary sharings using [Rep3Protocol::a2b] first. The output is a binary sharing of one bit.
