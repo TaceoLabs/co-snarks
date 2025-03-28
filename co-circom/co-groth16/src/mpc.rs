@@ -31,7 +31,7 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
         + DomainCoeff<P::ScalarField>
         + 'static;
 
-    /// The arithmetic half share type
+    /// The arithmetic half share type. For Rep3 this is an unreplicated additive share. For Shamir this is a degree-2t sharing.
     type ArithmeticHalfShare: CanonicalSerialize
         + CanonicalDeserialize
         + Copy
@@ -99,8 +99,8 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
         roots: &[P::ScalarField],
     );
 
+    /// Converts a shared value to a half shared value. Local interaction only.
     fn to_half_share(a: Self::ArithmeticShare) -> Self::ArithmeticHalfShare;
-    fn to_half_share_vec(a: Vec<Self::ArithmeticShare>) -> Vec<Self::ArithmeticHalfShare>;
 
     /// Perform msm between `points` and `scalars`
     fn msm_public_points<C>(

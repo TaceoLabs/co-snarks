@@ -123,7 +123,8 @@ where
         let (r, s) = (self.driver.rand()?, self.driver.rand()?);
 
         let private_witness = Arc::into_inner(private_witness).unwrap();
-        let private_witness_half_share = T::to_half_share_vec(private_witness);
+        let private_witness_half_share =
+            private_witness.into_iter().map(T::to_half_share).collect();
         let private_witness = Arc::new(private_witness_half_share);
 
         self.create_proof_with_assignment(
@@ -420,9 +421,7 @@ where
         // TODO we should move this to seperate thread so that we not block here
         // we can do some additional work so we don't necessary need to block
         let rs_span = tracing::debug_span!("r*s with networking").entered();
-        // TODO: mul local only
-        let rs = self.driver.mul(r, s)?;
-        let rs = T::to_half_share(rs);
+        let rs = self.driver.local_mul_vec(vec![r], vec![s]).pop().unwrap();
         let r_s_delta_g1 = T::scalar_mul_public_point_hs(&delta_g1, rs);
         rs_span.exit();
 

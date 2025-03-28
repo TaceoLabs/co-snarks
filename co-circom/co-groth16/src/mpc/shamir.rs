@@ -217,10 +217,6 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
         a.inner()
     }
 
-    fn to_half_share_vec(a: Vec<Self::ArithmeticShare>) -> Vec<<P as Pairing>::ScalarField> {
-        a.into_iter().map(|x| x.inner()).collect()
-    }
-
     fn msm_public_points_hs<C>(
         points: &[C::Affine],
         scalars: &[Self::ArithmeticHalfShare],

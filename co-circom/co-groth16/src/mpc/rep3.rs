@@ -217,10 +217,6 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
         a.a
     }
 
-    fn to_half_share_vec(a: Vec<Self::ArithmeticShare>) -> Vec<<P as Pairing>::ScalarField> {
-        a.into_iter().map(|x| x.a).collect()
-    }
-
     fn msm_public_points_hs<C>(
         points: &[C::Affine],
         scalars: &[Self::ArithmeticHalfShare],

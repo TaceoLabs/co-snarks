@@ -57,10 +57,6 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
         a
     }
 
-    fn to_half_share_vec(a: Vec<Self::ArithmeticShare>) -> Vec<<P as Pairing>::ScalarField> {
-        a
-    }
-
     fn msm_public_points_hs<C>(
         points: &[C::Affine],
         scalars: &[Self::ArithmeticHalfShare],
