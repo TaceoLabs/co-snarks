@@ -6,8 +6,13 @@ use mpc_net::config::NetworkConfig;
 
 use crate::{
     accelerator::{MpcAccelerator, MpcAcceleratorConfig},
-    mpc::plain::CircomPlainVmWitnessExtension,
-    mpc_vm::{PlainWitnessExtension, Rep3WitnessExtension, VMConfig, WitnessExtension},
+    mpc::{
+        batched_plain::BatchedCircomPlainVmWitnessExtension, plain::CircomPlainVmWitnessExtension,
+    },
+    mpc_vm::{
+        BatchedPlainWitnessExtension, BatchedRep3WitnessExtension, PlainWitnessExtension,
+        Rep3WitnessExtension, VMConfig, WitnessExtension,
+    },
     op_codes::CodeBlock,
 };
 use eyre::Result;
@@ -163,6 +168,26 @@ impl<F: PrimeField> CoCircomCompilerParsed<F> {
         PlainWitnessExtension::new(self, vm_config)
     }
 
+    /// Consumes `self` and constructs an instance of [`BatchedPlainWitnessExtension`].
+    ///
+    /// The plain witness extension allows local execution of the witness extension without
+    /// using MPC. Be cautious when using this method, as the resulting
+    /// witness and input will not be protected. Do not share sensitive data when using this feature.
+    ///
+    /// The difference to [`Self::to_plain_vm`] is that this version executes the same circuit
+    /// simultaneously with different inputs. This does NOT use folding or any other similar
+    /// techniques. It reduces multiplicative depth in contrast to running $n$ witness
+    /// extensions consecutively.
+    ///
+    /// This method is primarily intended for testing purposes.
+    pub fn to_batched_plain_vm(
+        self,
+        vm_config: VMConfig,
+        batch_size: usize,
+    ) -> WitnessExtension<F, BatchedCircomPlainVmWitnessExtension<F>> {
+        BatchedPlainWitnessExtension::new(self, vm_config, batch_size)
+    }
+
     /// Consumes `self` and a [`NetworkConfig`], and constructs an instance of [`Rep3WitnessExtension`].
     ///
     /// # Arguments
@@ -187,7 +212,8 @@ impl<F: PrimeField> CoCircomCompilerParsed<F> {
     /// Consumes `self` and an already established [`Rep3Network`], and constructs an instance of [`Rep3WitnessExtension`].
     ///
     /// # Arguments
-    /// - `network`: Am already established [`Rep3Network`].
+    /// - `network`: An already established [`Rep3Network`].
+    /// - `vm_config`: The [`VMConfig`].
     ///
     /// # Returns
     /// - `Ok(Rep3WitnessExtension)`: The MPC-VM capable of performing the witness extension using the Rep3 protocol.
@@ -202,6 +228,32 @@ impl<F: PrimeField> CoCircomCompilerParsed<F> {
             network,
             MpcAccelerator::from_config(MpcAcceleratorConfig::from_env()),
             vm_config,
+        )
+    }
+
+    /// Consumes `self` and and already established [`Rep3Network`] andn constructs an instance of [`BatchedRep3WitnessExtension`].
+    ///
+    /// # Arguments
+    /// - `network`: An already established [`Rep3Network`].
+    /// - `vm_config`: The [`VMConfig`].
+    /// - `batch_size`: The batched size the VM is operating on. The run will fail if the
+    ///    provided batch size doesn't match with the provided input.
+    ///
+    /// # Returns
+    /// - `Ok(Rep3WitnessExtension)`: The MPC-VM capable of performing the witness extension using the Rep3 protocol.
+    /// - `Err(err)`: An error indicating a failure.
+    pub fn to_batched_rep3_vm_with_network<N: Rep3Network>(
+        self,
+        network: N,
+        vm_config: VMConfig,
+        batch_size: usize,
+    ) -> Result<BatchedRep3WitnessExtension<F, N>> {
+        BatchedRep3WitnessExtension::from_network(
+            self,
+            network,
+            MpcAccelerator::from_config(MpcAcceleratorConfig::from_env()),
+            vm_config,
+            batch_size,
         )
     }
 

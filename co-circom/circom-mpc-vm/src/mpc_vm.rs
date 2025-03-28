@@ -1,4 +1,6 @@
 use crate::accelerator::MpcAcceleratorConfig;
+use crate::mpc::batched_plain::BatchedCircomPlainVmWitnessExtension;
+use crate::mpc::batched_rep3::{BatchedCircomRep3VmWitnessExtension, BatchedRep3VmType};
 use crate::mpc::plain::CircomPlainVmWitnessExtension;
 use crate::mpc::rep3::{CircomRep3VmWitnessExtension, Rep3VmType};
 use crate::types::{CoCircomCompilerParsed, FunDecl, InputList, OutputMapping, TemplateDecl};
@@ -10,7 +12,7 @@ use super::{
 };
 use crate::mpc::VmCircomWitnessExtension;
 use ark_ff::PrimeField;
-use co_circom_snarks::{SharedInput, SharedWitness};
+use co_circom_snarks::{BatchedSharedInput, SharedInput, SharedWitness};
 use core::panic;
 use eyre::{bail, eyre, Result};
 use itertools::{izip, Itertools};
@@ -33,6 +35,13 @@ pub struct VMConfig {
     pub a2b_type: A2BType,
 }
 
+impl VMConfig {
+    /// Creates a new default config
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
 /// The MPC-VM that performs the witness extension.
 ///
 /// This struct can only be instantiated by constructing it with a [`CoCircomCompilerParsed`].
@@ -52,10 +61,23 @@ pub struct WitnessExtension<F: PrimeField, C: VmCircomWitnessExtension<F>> {
     config: VMConfig,
 }
 
+/// Shorthand type for an instance of the MPC-VM that runs locally on a single machine without MPC
+/// and batching multiple inputs into a single run.
+///
+/// This type is mostly used for testing purposes, so use with care in production environments.
+pub type BatchedPlainWitnessExtension<F> =
+    WitnessExtension<F, BatchedCircomPlainVmWitnessExtension<F>>;
+
 /// Shorthand type for an instance of the MPC-VM that runs locally on a single machine without MPC.
 ///
 /// This type is mostly used for testing purposes, so use with care in production environments.
 pub type PlainWitnessExtension<F> = WitnessExtension<F, CircomPlainVmWitnessExtension<F>>;
+
+/// Shorthand type for the MPC-VM instantiated with a `Rep3` protocol and batching multiple inputs into a single run.
+///
+/// This is the only supported protocol at the moment.
+pub type BatchedRep3WitnessExtension<F, N> =
+    WitnessExtension<F, BatchedCircomRep3VmWitnessExtension<F, N>>;
 
 /// Shorthand type for the MPC-VM instantiated with a `Rep3` protocol.
 ///
@@ -289,7 +311,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
     ) -> Result<()> {
         let mut ip = 0;
         let mut current_body = Arc::clone(&self.component_body);
-        let mut current_vars = vec![C::VmType::default(); self.amount_vars];
+        let mut current_vars = vec![protocol.public_zero(); self.amount_vars];
         let mut current_shared_ret_vals = vec![];
 
         let name = self.symbol.clone();
@@ -327,7 +349,6 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
             match inst {
                 op_codes::MpcOpCode::PushConstant(index) => {
                     let constant = ctx.constant_table[*index].clone();
-                    tracing::trace!("pushing constant {}", constant);
                     self.push_field(constant);
                 }
                 op_codes::MpcOpCode::PushIndex(index) => self.push_index(*index),
@@ -338,7 +359,6 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                         .iter()
                         .cloned()
                         .for_each(|signal| {
-                            tracing::trace!("pushing signal {signal}");
                             self.push_field(signal);
                         });
                 }
@@ -402,7 +422,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                         assert_eq!(result.len(), 1);
                         self.push_field(result.pop().unwrap());
                     } else {
-                        let mut func_vars = vec![C::VmType::default(); fun_decl.vars];
+                        let mut func_vars = vec![protocol.public_zero(); fun_decl.vars];
                         //copy the parameters
                         for (idx, param) in self.field_stack.peek_stack_frame()[to_copy..]
                             .iter()
@@ -474,10 +494,9 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                     let sub_comp_index = self.pop_index();
                     let mut index = self.pop_index();
                     //we cannot borrow later therefore we need to pop from stack here and push later
-                    let mut input_signals = vec![C::VmType::default(); *amount];
+                    let mut input_signals = vec![protocol.public_zero(); *amount];
                     for i in 0..*amount {
                         input_signals[*amount - i - 1] = self.pop_field();
-                        tracing::trace!("popping {}", input_signals.last().unwrap());
                     }
 
                     let component = &mut self.sub_components[sub_comp_index];
@@ -798,12 +817,8 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                     current_body = old_body;
                 }
                 op_codes::MpcOpCode::Log => {
-                    if config.allow_leaky_logs {
-                        let field = protocol.open(self.pop_field())?;
-                        self.log_buf.push_str(&field.to_string());
-                    } else {
-                        self.log_buf.push_str("secret");
-                    }
+                    let log = protocol.log(self.pop_field(), config.allow_leaky_logs)?;
+                    self.log_buf.push_str(&log);
                     self.log_buf.push(' ');
                 }
                 op_codes::MpcOpCode::LogString(idx) => {
@@ -881,7 +896,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtension<F, C> {
 
     fn set_input_signals(
         &mut self,
-        mut input_signals: SharedInput<F, C::ArithmeticShare>,
+        mut input_signals: SharedInput<C::Public, C::ArithmeticShare>,
     ) -> Result<usize> {
         let mut amount_public_inputs = 0;
         for (name, offset, size) in self.main_input_list.iter() {
@@ -947,7 +962,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtension<F, C> {
     /// Panics if any of the [`CodeBlocks`](CodeBlock) are corrupted.
     pub fn run(
         mut self,
-        input_signals: SharedInput<F, C::ArithmeticShare>,
+        input_signals: SharedInput<C::Public, C::ArithmeticShare>,
     ) -> Result<FinalizedWitnessExtension<F, C>> {
         self.driver.compare_vm_config(&self.config)?;
         let amount_public_inputs = self.set_input_signals(input_signals)?;
@@ -994,12 +1009,12 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtension<F, C> {
 ///
 /// If you want to retrieve the shared witness, call [`into_shared_witness()`](FinalizedWitnessExtension::into_shared_witness()).
 pub struct FinalizedWitnessExtension<F: PrimeField, C: VmCircomWitnessExtension<F>> {
-    shared_witness: SharedWitness<F, C::ArithmeticShare>,
+    shared_witness: SharedWitness<C::Public, C::ArithmeticShare>,
     output_mapping: OutputMapping,
 }
 
 impl<F: PrimeField, C: VmCircomWitnessExtension<F>> From<FinalizedWitnessExtension<F, C>>
-    for SharedWitness<F, C::ArithmeticShare>
+    for SharedWitness<C::Public, C::ArithmeticShare>
 {
     fn from(value: FinalizedWitnessExtension<F, C>) -> Self {
         value.shared_witness
@@ -1008,7 +1023,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> From<FinalizedWitnessExtensi
 
 impl<F: PrimeField, C: VmCircomWitnessExtension<F>> FinalizedWitnessExtension<F, C> {
     /// Consumes self and returns the [`SharedWitness`].
-    pub fn into_shared_witness(self) -> SharedWitness<F, C::ArithmeticShare> {
+    pub fn into_shared_witness(self) -> SharedWitness<C::Public, C::ArithmeticShare> {
         self.shared_witness
     }
 
@@ -1035,7 +1050,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> FinalizedWitnessExtension<F,
     /// # Returns
     /// Returns an `Option<Vec<F>>` containing the signals associated with the requested output.
     /// Returns `None` if the name is not known.
-    pub fn get_output(&self, name: &str) -> Option<Vec<F>> {
+    pub fn get_output(&self, name: &str) -> Option<Vec<C::Public>> {
         self.output_mapping.get(name).map(|(offset, amount)| {
             self.shared_witness.public_inputs[*offset..*offset + *amount].to_vec()
         })
@@ -1067,6 +1082,40 @@ impl<F: PrimeField> PlainWitnessExtension<F> {
     }
 }
 
+impl<F: PrimeField> BatchedPlainWitnessExtension<F> {
+    pub(crate) fn new(
+        parser: CoCircomCompilerParsed<F>,
+        config: VMConfig,
+        batch_size: usize,
+    ) -> Self {
+        let mut signals = vec![Vec::with_capacity(batch_size); parser.amount_signals];
+        signals[0] = vec![F::one(); batch_size];
+        let batched_constant_table = parser
+            .constant_table
+            .into_iter()
+            .map(|constant| vec![constant; batch_size])
+            .collect_vec();
+        Self {
+            driver: BatchedCircomPlainVmWitnessExtension::new(batch_size),
+            signal_to_witness: parser.signal_to_witness,
+            main: parser.main,
+            ctx: WitnessExtensionCtx::new(
+                signals,
+                batched_constant_table,
+                parser.fun_decls,
+                parser.templ_decls,
+                parser.string_table,
+                MpcAccelerator::from_config(MpcAcceleratorConfig::from_env()),
+            ),
+            main_inputs: parser.main_inputs,
+            main_outputs: parser.main_outputs,
+            main_input_list: parser.main_input_list,
+            output_mapping: parser.output_mapping,
+            config,
+        }
+    }
+}
+
 impl<F: PrimeField, N: Rep3Network> Rep3WitnessExtension<F, N> {
     pub(crate) fn from_network(
         parser: CoCircomCompilerParsed<F>,
@@ -1081,6 +1130,85 @@ impl<F: PrimeField, N: Rep3Network> Rep3WitnessExtension<F, N> {
             .constant_table
             .into_iter()
             .map(Rep3VmType::Public)
+            .collect_vec();
+        Ok(Self {
+            driver,
+            signal_to_witness: parser.signal_to_witness,
+            main: parser.main,
+            ctx: WitnessExtensionCtx::new(
+                signals,
+                constant_table,
+                parser.fun_decls,
+                parser.templ_decls,
+                parser.string_table,
+                mpc_accelerator,
+            ),
+            main_inputs: parser.main_inputs,
+            main_outputs: parser.main_outputs,
+            main_input_list: parser.main_input_list,
+            output_mapping: parser.output_mapping,
+            config,
+        })
+    }
+}
+
+impl<F: PrimeField> BatchedRep3WitnessExtension<F, Rep3MpcNet> {
+    /// Starts the execution of the MPC-VM with the provided [BatchedSharedInput], consumes `self` and returns the [`Rep3MpcNet`].
+    ///
+    /// Use this method over [`run_with_flat()`](WitnessExtension::run) when ever possible.
+    /// # Arguments
+    ///
+    /// * `input_signals` - The [BatchedSharedInput] distributed over the parties.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(([BatchedSharedWitness], Rep3MpcNet))` - The secret-shared witness, distributed over the parties.
+    /// * `Err([eyre::Result])` - An error result.
+    ///
+    /// # Panics
+    ///
+    /// Panics if any of the [`CodeBlocks`](CodeBlock) are corrupted.
+    #[expect(clippy::type_complexity)]
+    pub fn run_and_return_network(
+        mut self,
+        input_signals: BatchedSharedInput<F, Rep3PrimeFieldShare<F>>,
+    ) -> Result<(
+        FinalizedWitnessExtension<F, BatchedCircomRep3VmWitnessExtension<F, Rep3MpcNet>>,
+        Rep3MpcNet,
+    )> {
+        self.driver.compare_vm_config(&self.config)?;
+        let amount_public_inputs = self.set_input_signals(input_signals)?;
+        self.call_main_component()?;
+        Ok((
+            self.post_processing(amount_public_inputs)?,
+            self.driver.get_network(),
+        ))
+    }
+}
+
+impl<F: PrimeField, N: Rep3Network> BatchedRep3WitnessExtension<F, N> {
+    pub(crate) fn from_network(
+        parser: CoCircomCompilerParsed<F>,
+        network: N,
+        mpc_accelerator: MpcAccelerator<F, BatchedCircomRep3VmWitnessExtension<F, N>>,
+        config: VMConfig,
+        batch_size: usize,
+    ) -> Result<Self> {
+        let driver = BatchedCircomRep3VmWitnessExtension::from_network(
+            network,
+            config.a2b_type,
+            batch_size,
+        )?;
+
+        let mut signals = vec![
+            BatchedRep3VmType::from(Vec::<F>::with_capacity(batch_size));
+            parser.amount_signals
+        ];
+        signals[0] = BatchedRep3VmType::from(vec![F::one(); batch_size]);
+        let constant_table = parser
+            .constant_table
+            .into_iter()
+            .map(|constant| BatchedRep3VmType::from(vec![constant; batch_size]))
             .collect_vec();
         Ok(Self {
             driver,
