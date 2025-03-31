@@ -14,6 +14,7 @@ pub use types::Rep3PointShare;
 use super::{
     id::PartyID,
     network::{IoContext, Rep3Network},
+    rngs::Rep3CorrelatedRng,
     IoResult, Rep3PrimeFieldShare,
 };
 
@@ -77,6 +78,15 @@ pub fn scalar_mul_public_scalar<C: CurveGroup>(
     b: C::ScalarField,
 ) -> PointShare<C> {
     a * b
+}
+
+/// Perform local part of scalar multiplication
+pub fn scalar_mul_local<C: CurveGroup>(
+    a: &PointShare<C>,
+    b: FieldShare<C::ScalarField>,
+    rng: &mut Rep3CorrelatedRng,
+) -> C {
+    b * a + rng.rand.masking_ec_element::<C>()
 }
 
 /// Perform scalar multiplication

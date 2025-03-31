@@ -1,6 +1,5 @@
 //! A Groth16 proof protocol that uses a collaborative MPC protocol to generate the proof.
 use ark_ec::pairing::Pairing;
-use ark_ec::scalar_mul::variable_base::VariableBaseMSM;
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{FftField, PrimeField};
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
@@ -119,9 +118,16 @@ where
             )
         }
 
-        let private_witness = Arc::new(private_witness.witness);
-        let h = self.witness_map_from_matrices(&zkey, &public_inputs, &private_witness)?;
+        let h = self.witness_map_from_matrices(&zkey, &public_inputs, &private_witness.witness)?;
         let (r, s) = (self.driver.rand()?, self.driver.rand()?);
+
+        let private_witness_half_share = private_witness
+            .witness
+            .into_iter()
+            .map(T::to_half_share)
+            .collect();
+
+        let private_witness_hs = Arc::new(private_witness_half_share);
 
         self.create_proof_with_assignment(
             Arc::clone(&zkey),
@@ -129,7 +135,7 @@ where
             s,
             h,
             public_inputs,
-            private_witness,
+            private_witness_hs,
         )
     }
 
@@ -155,7 +161,7 @@ where
         zkey: &ZKey<P>,
         public_inputs: &[P::ScalarField],
         private_witness: &[T::ArithmeticShare],
-    ) -> Result<Vec<P::ScalarField>> {
+    ) -> Result<Vec<T::ArithmeticHalfShare>> {
         let num_constraints = zkey.num_constraints;
         let num_inputs = zkey.n_public + 1;
         let power = zkey.pow;
@@ -254,8 +260,8 @@ where
             ab.par_iter_mut()
                 .zip_eq(c_roots.par_iter())
                 .with_min_len(512)
-                .for_each(|(share, pow)| {
-                    *share *= pow;
+                .for_each(|(share, pow): (&mut T::ArithmeticHalfShare, _)| {
+                    *share *= *pow;
                 });
             dist_pows_span.exit();
             let fft_span = tracing::debug_span!("c: fft in dist pows").entered();
@@ -276,8 +282,8 @@ where
         ab.par_iter_mut()
             .zip_eq(c.par_iter())
             .with_min_len(512)
-            .for_each(|(a, b)| {
-                *a -= b;
+            .for_each(|(a, b): (&mut T::ArithmeticHalfShare, _)| {
+                *a -= *b;
             });
         compute_ab_span.exit();
         Ok(ab)
@@ -285,27 +291,27 @@ where
 
     fn calculate_coeff<C>(
         id: T::PartyID,
-        initial: T::PointShare<C>,
+        initial: T::PointHalfShare<C>,
         query: &[C::Affine],
         vk_param: C::Affine,
         input_assignment: &[P::ScalarField],
-        aux_assignment: &[T::ArithmeticShare],
-    ) -> T::PointShare<C>
+        aux_assignment: &[T::ArithmeticHalfShare],
+    ) -> T::PointHalfShare<C>
     where
         C: CurveGroup<ScalarField = P::ScalarField>,
     {
         let pub_len = input_assignment.len();
 
         let (priv_acc, pub_acc) = rayon::join(
-            || T::msm_public_points(&query[1 + pub_len..], aux_assignment),
+            || T::msm_public_points_hs(&query[1 + pub_len..], aux_assignment),
             || C::msm_unchecked(&query[1..=pub_len], input_assignment),
         );
 
         let mut res = initial;
-        T::add_assign_points_public(id, &mut res, &query[0].into_group());
-        T::add_assign_points_public(id, &mut res, &vk_param.into_group());
-        T::add_assign_points_public(id, &mut res, &pub_acc);
-        T::add_assign_points(&mut res, &priv_acc);
+        T::add_assign_points_public_hs(id, &mut res, &query[0].into_group());
+        T::add_assign_points_public_hs(id, &mut res, &vk_param.into_group());
+        T::add_assign_points_public_hs(id, &mut res, &pub_acc);
+        res += priv_acc;
         res
     }
 
@@ -315,9 +321,9 @@ where
         zkey: Arc<ZKey<P>>,
         r: T::ArithmeticShare,
         s: T::ArithmeticShare,
-        h: Vec<P::ScalarField>,
+        h: Vec<T::ArithmeticHalfShare>,
         input_assignment: Arc<Vec<P::ScalarField>>,
-        aux_assignment: Arc<Vec<T::ArithmeticShare>>,
+        aux_assignment: Arc<Vec<T::ArithmeticHalfShare>>,
     ) -> Result<(Groth16Proof<P>, T)> {
         let delta_g1 = zkey.delta_g1.into_group();
         let (l_acc_tx, l_acc_rx) = oneshot::channel();
@@ -348,7 +354,8 @@ where
             let compute_a =
                 tracing::debug_span!("compute A in create proof with assignment").entered();
             // Compute A
-            let r_g1 = T::scalar_mul_public_point(&delta_g1, r);
+            let r = T::to_half_share(r);
+            let r_g1 = T::scalar_mul_public_point_hs(&delta_g1, r);
             let r_g1 = Self::calculate_coeff(
                 party_id,
                 r_g1,
@@ -366,7 +373,8 @@ where
                 tracing::debug_span!("compute B/G1 in create proof with assignment").entered();
             // Compute B in G1
             // In original implementation this is skipped if r==0, however r is shared in our case
-            let s_g1 = T::scalar_mul_public_point(&delta_g1, s);
+            let s = T::to_half_share(s);
+            let s_g1 = T::scalar_mul_public_point_hs(&delta_g1, s);
             let s_g1 = Self::calculate_coeff(
                 party_id,
                 s_g1,
@@ -383,7 +391,8 @@ where
             let compute_b =
                 tracing::debug_span!("compute B/G2 in create proof with assignment").entered();
             // Compute B in G2
-            let s_g2 = T::scalar_mul_public_point(&delta_g2, s);
+            let s = T::to_half_share(s);
+            let s_g2 = T::scalar_mul_public_point_hs(&delta_g2, s);
             let s_g2 = Self::calculate_coeff(
                 party_id,
                 s_g2,
@@ -398,7 +407,7 @@ where
 
         rayon::spawn(move || {
             let msm_l_query = tracing::debug_span!("msm l_query").entered();
-            let result = T::msm_public_points(&l_query.l_query, &aux_assignment4);
+            let result = T::msm_public_points_hs(&l_query.l_query, &aux_assignment4);
             l_acc_tx.send(result).expect("channel not dropped");
             msm_l_query.exit();
         });
@@ -406,7 +415,7 @@ where
         rayon::spawn(move || {
             let msm_h_query = tracing::debug_span!("msm h_query").entered();
             //perform the msm for h
-            let result = P::G1::msm_unchecked(&h_query.h_query, &h);
+            let result = T::msm_public_points_hs(&h_query.h_query, &h);
             h_acc_tx.send(result).expect("channel not dropped");
             msm_h_query.exit();
         });
@@ -414,8 +423,8 @@ where
         // TODO we should move this to seperate thread so that we not block here
         // we can do some additional work so we don't necessary need to block
         let rs_span = tracing::debug_span!("r*s with networking").entered();
-        let rs = self.driver.mul(r, s)?;
-        let r_s_delta_g1 = T::scalar_mul_public_point(&delta_g1, rs);
+        let rs = self.driver.local_mul_vec(vec![r], vec![s]).pop().unwrap();
+        let r_s_delta_g1 = T::scalar_mul_public_point_hs(&delta_g1, rs);
         rs_span.exit();
 
         let g_a = r_g1_rx.blocking_recv()?;
@@ -426,19 +435,20 @@ where
         network_round.exit();
 
         let last_round = tracing::debug_span!("finish - open two points and some adds").entered();
-        let s_g_a = T::scalar_mul_public_point(&g_a_opened, s);
+        let s = T::to_half_share(s);
+        let s_g_a = T::scalar_mul_public_point_hs(&g_a_opened, s);
 
         let mut g_c = s_g_a;
-        T::add_assign_points(&mut g_c, &r_g1_b);
-        T::sub_assign_points(&mut g_c, &r_s_delta_g1);
+        g_c += r_g1_b;
+        g_c -= r_s_delta_g1;
         let l_aux_acc = l_acc_rx.blocking_recv().expect("channel not dropped");
-        T::add_assign_points(&mut g_c, &l_aux_acc);
+        g_c += l_aux_acc;
 
         let h_acc = h_acc_rx.blocking_recv()?;
-        let g_c = T::add_points_half_share(g_c, &h_acc);
+        g_c += h_acc;
 
         let g2_b = s_g2_rx.blocking_recv()?;
-        let (g_c_opened, g2_b_opened) = self.driver.open_two_points(g_c, g2_b)?;
+        let (g_c_opened, g2_b_opened) = self.driver.open_two_half_points(g_c, g2_b)?;
         last_round.exit();
 
         Ok((

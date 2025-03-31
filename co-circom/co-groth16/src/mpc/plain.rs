@@ -12,8 +12,14 @@ pub struct PlainGroth16Driver;
 
 impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
     type ArithmeticShare = P::ScalarField;
+    type ArithmeticHalfShare = P::ScalarField;
 
     type PointShare<C>
+        = C
+    where
+        C: CurveGroup;
+
+    type PointHalfShare<C>
         = C
     where
         C: CurveGroup;
@@ -45,6 +51,20 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
             }
         }
         acc
+    }
+
+    fn to_half_share(a: Self::ArithmeticShare) -> <P as Pairing>::ScalarField {
+        a
+    }
+
+    fn msm_public_points_hs<C>(
+        points: &[C::Affine],
+        scalars: &[Self::ArithmeticHalfShare],
+    ) -> Self::PointShare<C>
+    where
+        C: CurveGroup<ScalarField = <P as Pairing>::ScalarField>,
+    {
+        C::msm_unchecked(points, scalars)
     }
 
     fn promote_to_trivial_shares(
@@ -104,7 +124,7 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
         a + b
     }
 
-    fn add_assign_points_public<C: CurveGroup>(
+    fn add_assign_points_public_hs<C: CurveGroup>(
         _: Self::PartyID,
         a: &mut Self::PointShare<C>,
         b: &C,
@@ -134,7 +154,7 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
         *a -= b;
     }
 
-    fn open_two_points(
+    fn open_two_half_points(
         &mut self,
         a: Self::PointShare<P::G1>,
         b: Self::PointShare<P::G2>,
@@ -149,5 +169,12 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
         r: Self::ArithmeticShare,
     ) -> super::IoResult<(P::G1, Self::PointShare<P::G1>)> {
         Ok((*g_a, *g1_b * r))
+    }
+
+    fn scalar_mul_public_point_hs<C>(a: &C, b: Self::ArithmeticHalfShare) -> Self::PointHalfShare<C>
+    where
+        C: CurveGroup<ScalarField = <P as Pairing>::ScalarField>,
+    {
+        *a * b
     }
 }
