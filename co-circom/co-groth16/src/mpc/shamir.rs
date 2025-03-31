@@ -213,6 +213,7 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
         })
     }
 
+    /// For Shamir sharing, a valid degree-t share is always a valid degree-2t share.
     fn to_half_share(a: Self::ArithmeticShare) -> <P as Pairing>::ScalarField {
         a.inner()
     }
