@@ -62,19 +62,18 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
         public_inputs: &[P::ScalarField],
         private_witness: &[Self::ArithmeticShare],
     ) -> Self::ArithmeticShare {
-        lhs.into_par_iter()
-            .map(|(coeff, index)| {
-                if index < &public_inputs.len() {
-                    let val = public_inputs[*index];
-                    let mul_result = val * coeff;
-                    arithmetic::promote_to_trivial_share(mul_result)
-                } else {
-                    let current_witness = private_witness[*index - public_inputs.len()];
-                    arithmetic::mul_public(current_witness, *coeff)
-                }
-            })
-            .fold(Self::ArithmeticShare::default, arithmetic::add)
-            .reduce(Self::ArithmeticShare::default, arithmetic::add)
+        let mut acc = Self::ArithmeticShare::default();
+        for (coeff, index) in lhs {
+            if index < &public_inputs.len() {
+                let val = public_inputs[*index];
+                let mul_result = val * coeff;
+                arithmetic::add_assign_public(&mut acc, mul_result);
+            } else {
+                let current_witness = private_witness[*index - public_inputs.len()];
+                arithmetic::add_assign(&mut acc, arithmetic::mul_public(current_witness, *coeff));
+            }
+        }
+        acc
     }
 
     fn promote_to_trivial_shares(
