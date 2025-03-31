@@ -118,14 +118,16 @@ where
             )
         }
 
-        let private_witness = Arc::new(private_witness.witness);
-        let h = self.witness_map_from_matrices(&zkey, &public_inputs, &private_witness)?;
+        let h = self.witness_map_from_matrices(&zkey, &public_inputs, &private_witness.witness)?;
         let (r, s) = (self.driver.rand()?, self.driver.rand()?);
 
-        let private_witness = Arc::into_inner(private_witness).unwrap();
-        let private_witness_half_share =
-            private_witness.into_iter().map(T::to_half_share).collect();
-        let private_witness = Arc::new(private_witness_half_share);
+        let private_witness_half_share = private_witness
+            .witness
+            .into_iter()
+            .map(T::to_half_share)
+            .collect();
+
+        let private_witness_hs = Arc::new(private_witness_half_share);
 
         self.create_proof_with_assignment(
             Arc::clone(&zkey),
@@ -133,7 +135,7 @@ where
             s,
             h,
             public_inputs,
-            private_witness,
+            private_witness_hs,
         )
     }
 
