@@ -2550,7 +2550,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         Ok(result)
     }
 
-    #[expect(clippy::field_reassign_with_default)]
     fn sub(
         &self,
         other: &Self,
