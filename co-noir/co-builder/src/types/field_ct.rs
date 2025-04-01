@@ -324,6 +324,7 @@ impl<F: PrimeField> FieldCT<F> {
         Ok(())
     }
 
+    #[expect(dead_code)]
     pub(crate) fn divide<
         P: Pairing<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
@@ -1482,7 +1483,66 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T> {
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> std::io::Result<Self> {
-        todo!()
+        if other.is_constant() && self.is_constant() {
+            let self_value = T::get_public(&self.get_value(driver)).expect("Constants are public");
+            let other_value =
+                T::get_public(&other.get_value(driver)).expect("Constants are public");
+            let result = BoolCT::from(self_value == other_value);
+            Ok(result)
+        } else if !self.is_constant() && other.is_constant() {
+            let other_value =
+                T::get_public(&other.get_value(driver)).expect("Constants are public");
+            if other_value.is_one() {
+                Ok(self.to_owned())
+            } else {
+                Ok(self.not())
+            }
+        } else if self.is_constant() && !other.is_constant() {
+            let self_value = T::get_public(&self.get_value(driver)).expect("Constants are public");
+            if self_value.is_one() {
+                Ok(other.to_owned())
+            } else {
+                Ok(other.not())
+            }
+        } else {
+            let mut result = BoolCT::default();
+            let self_value = self.get_value(driver);
+            let other_value = other.get_value(driver);
+            let value = driver.equal(&self_value, &other_value)?;
+            result.witness_bool = value.to_owned();
+            result.witness_index = builder.add_variable(value);
+            // norm a, norm b or both inv: 1 - a - b + 2ab
+            // inv a or inv b = a + b - 2ab
+            let multiplicative_coefficient;
+            let left_coefficient;
+            let right_coefficient;
+            let constant_coefficient;
+            if (self.witness_inverted && other.witness_inverted)
+                || (!self.witness_inverted && !other.witness_inverted)
+            {
+                multiplicative_coefficient = P::ScalarField::from(2);
+                left_coefficient = -P::ScalarField::one();
+                right_coefficient = -P::ScalarField::one();
+                constant_coefficient = P::ScalarField::one();
+            } else {
+                multiplicative_coefficient = -P::ScalarField::from(2);
+                left_coefficient = P::ScalarField::one();
+                right_coefficient = P::ScalarField::one();
+                constant_coefficient = P::ScalarField::zero();
+            }
+            builder.create_poly_gate(&PolyTriple {
+                a: self.witness_index,
+                b: other.witness_index,
+                c: result.witness_index,
+                q_m: multiplicative_coefficient,
+                q_l: left_coefficient,
+                q_r: right_coefficient,
+                q_o: -P::ScalarField::one(),
+                q_c: constant_coefficient,
+            });
+
+            Ok(result)
+        }
     }
 
     fn normalize(&self, builder: &mut GenericUltraCircuitBuilder<P, T>, driver: &mut T) -> Self {
