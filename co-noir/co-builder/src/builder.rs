@@ -3957,7 +3957,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 
         let mut a_accumulator = FieldCT::default();
         let mut b_accumulator = FieldCT::default();
-        let mut res = FieldCT::zero();
+        let mut res = FieldCT::default();
 
         for (i, (left_chunk, right_chunk)) in decomp_left.into_iter().zip(decomp_right).enumerate()
         {

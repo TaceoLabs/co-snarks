@@ -23,22 +23,6 @@ pub(crate) struct FieldCT<F: PrimeField> {
 impl<F: PrimeField> FieldCT<F> {
     pub(crate) const IS_CONSTANT: u32 = u32::MAX;
 
-    pub(crate) fn zero() -> Self {
-        Self {
-            additive_constant: F::zero(),
-            multiplicative_constant: F::zero(),
-            witness_index: Self::IS_CONSTANT,
-        }
-    }
-
-    pub(crate) fn zero_with_additive(additive: F) -> Self {
-        Self {
-            additive_constant: additive,
-            multiplicative_constant: F::zero(),
-            witness_index: Self::IS_CONSTANT,
-        }
-    }
-
     pub(crate) fn from_witness_index(witness_index: u32) -> Self {
         Self {
             additive_constant: F::zero(),
@@ -72,6 +56,7 @@ impl<F: PrimeField> FieldCT<F> {
             driver.add_assign_with_public(self.additive_constant, &mut res);
             res
         } else {
+            assert!(self.multiplicative_constant == F::one());
             T::AcvmType::from(self.additive_constant)
         }
     }
@@ -472,7 +457,7 @@ impl<F: PrimeField> FieldCT<F> {
     ) -> Self {
         let mut result = Self::default();
 
-        if self.witness_index == other.witness_index {
+        if self.witness_index == other.witness_index && !self.is_constant() {
             result.additive_constant = self.additive_constant + other.additive_constant;
             result.multiplicative_constant =
                 self.multiplicative_constant + other.multiplicative_constant;
@@ -527,7 +512,9 @@ impl<F: PrimeField> FieldCT<F> {
     pub(crate) fn neg(&self) -> Self {
         let mut result = self.to_owned();
         result.additive_constant = -result.additive_constant;
-        result.multiplicative_constant = -result.multiplicative_constant;
+        if !result.is_constant() {
+            result.multiplicative_constant = -result.multiplicative_constant;
+        }
         result
     }
 
@@ -540,7 +527,13 @@ impl<F: PrimeField> FieldCT<F> {
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> Self {
-        let rhs = other.neg();
+        let mut rhs = other.to_owned();
+
+        rhs.additive_constant = -rhs.additive_constant;
+        if !rhs.is_constant() {
+            rhs.multiplicative_constant = -rhs.multiplicative_constant;
+        }
+
         self.add(&rhs, builder, driver)
     }
 
@@ -959,11 +952,11 @@ impl<F: PrimeField> FieldCT<F> {
         let to_invert = driver.cmux(is_equal.to_owned(), F::one().into(), fd)?;
         let fc = driver.invert(to_invert)?;
 
-        let result_witness = WitnessCT::from_acvm_type(is_equal.to_owned(), builder);
+        let result_witness = builder.add_variable(is_equal.to_owned());
         let result = BoolCT {
             witness_bool: is_equal,
             witness_inverted: false,
-            witness_index: result_witness.witness_index,
+            witness_index: result_witness,
         };
 
         let x = FieldCT::from_witness(fc, builder);
@@ -1538,7 +1531,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupCT<P
         }
 
         self.is_standard = true;
-        let zero = FieldCT::zero();
+        let zero = FieldCT::default();
         self.x = FieldCT::conditional_assign(&self.is_infinity, &zero, &self.x, builder, driver)?;
         self.y = FieldCT::conditional_assign(&self.is_infinity, &zero, &self.y, builder, driver)?;
 
@@ -1575,7 +1568,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupCT<P
         }
         self.is_standard = true;
 
-        let zero = FieldCT::zero();
+        let zero = FieldCT::default();
         self.x = FieldCT::conditional_assign(&is_infinity, &zero, &self.x, builder, driver)?;
         self.y = FieldCT::conditional_assign(&is_infinity, &zero, &self.y, builder, driver)?;
 
@@ -1621,8 +1614,8 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupCT<P
 impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> Default for CycleGroupCT<P, T> {
     fn default() -> Self {
         Self {
-            x: FieldCT::zero(),
-            y: FieldCT::zero(),
+            x: FieldCT::default(),
+            y: FieldCT::default(),
             is_infinity: BoolCT::from(true),
             is_constant: true,
             is_standard: true,
@@ -1645,8 +1638,8 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                 is_standard: true,
             },
             None => Self {
-                x: FieldCT::zero(),
-                y: FieldCT::zero(),
+                x: FieldCT::default(),
+                y: FieldCT::default(),
                 is_infinity: BoolCT::from(true),
                 is_constant: true,
                 is_standard: true,
@@ -1894,7 +1887,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 
         let mut lookup_points = Vec::new();
         let mut offset_generator_accumulator = P::CycleGroup::zero();
-        let zero_ct = FieldCT::zero();
+        let zero_ct = FieldCT::default();
         for (id, scalar) in plookup_table_ids.into_iter().zip(plookup_scalars) {
             let lookup_data = Plookup::get_lookup_accumulators_ct(
                 builder,
@@ -2176,7 +2169,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         // validate that none of the x-coordinate differences are zero
         // we batch the x-coordinate checks together
         // because `assert_is_not_zero` witness generation needs a modular inversion (expensive)
-        let mut coordinate_check_product = FieldCT::zero_with_additive(P::ScalarField::one());
+        let mut coordinate_check_product = FieldCT::from(P::ScalarField::one());
         for (x1, x2) in x_coordinate_checks {
             let x_diff = x2.sub(&x1, builder, driver);
             coordinate_check_product.mul_assign(&x_diff, builder, driver)?;
@@ -2197,7 +2190,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         // this costs 0 gates if `is_infinity` is a circuit constant
         let modified_y = FieldCT::conditional_assign(
             self.is_point_at_infinity(),
-            &FieldCT::zero_with_additive(P::ScalarField::one()),
+            &FieldCT::from(P::ScalarField::one()),
             &self.y,
             builder,
             driver,
@@ -2783,7 +2776,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> StrausScalarSl
             let mut raw_value: BigUint = value.into();
             for _ in 0..num_slices {
                 let slice_v = raw_value.iter_u64_digits().next().unwrap_or_default() & table_mask;
-                result.push(FieldCT::zero_with_additive(P::ScalarField::from(slice_v)));
+                result.push(FieldCT::from(P::ScalarField::from(slice_v)));
                 result_native.push(P::ScalarField::from(slice_v).into());
                 raw_value >>= table_bits;
             }
@@ -2920,7 +2913,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 
             // batch the x-coordinate checks together
             // because `assert_is_not_zero` witness generation needs a modular inversion (expensive)
-            let mut coordinate_check_product = FieldCT::zero_with_additive(P::ScalarField::one());
+            let mut coordinate_check_product = FieldCT::from(P::ScalarField::one());
             for (x1, x2) in x_coordinate_checks {
                 let x_diff = x2.sub(&x1, builder, driver);
                 coordinate_check_product.mul_assign(&x_diff, builder, driver)?;
