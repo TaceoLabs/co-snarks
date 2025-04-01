@@ -980,6 +980,9 @@ where
 
             // write result to output file
             if let Some(out) = out {
+                // convert proof to Groth16Proof for serialization
+                let proof = Groth16Proof::from(proof);
+
                 let out_file = BufWriter::new(
                     std::fs::File::create(&out).context("while creating output file")?,
                 );
@@ -1121,6 +1124,10 @@ where
 
             let vk: Groth16JsonVerificationKey<P> = serde_json::from_reader(vk_file)
                 .context("while deserializing verification key from file")?;
+
+            // convert circom vk and proof types to arkworks types
+            let vk = vk.into();
+            let proof = proof.into();
 
             Groth16::<P>::verify(&vk, &proof, &public_inputs)
         }

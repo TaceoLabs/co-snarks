@@ -85,6 +85,8 @@ fn main() -> Result<()> {
     let vk = Groth16JsonVerificationKey::<Bn254>::from_reader(
         std::fs::read(dir.join("verification_key.json"))?.as_slice(),
     )?;
+    // convert vk to arkworks vk format
+    let vk = vk.into();
     Groth16::verify(&vk, &proof, &public_inputs)?;
 
     Ok(())
