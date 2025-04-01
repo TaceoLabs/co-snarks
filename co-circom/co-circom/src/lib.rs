@@ -81,7 +81,7 @@ where
     ) -> eyre::Result<(Groth16Proof<P>, Vec<P::ScalarField>)> {
         let public_inputs = self.witness.public_inputs[1..].to_vec();
         let (proof, _net) = ShamirCoGroth16::prove(self.net, self.threshold, zkey, self.witness)?;
-        Ok((proof, public_inputs))
+        Ok((proof.into(), public_inputs))
     }
 
     /// Create a Plonk poof and return the public inputs
@@ -142,7 +142,7 @@ where
         let witness = self.witness.uncompress(&mut self.net)?;
         let public_inputs = witness.public_inputs[1..].to_vec();
         let (proof, _net) = Rep3CoGroth16::prove(self.net, zkey, witness)?;
-        Ok((proof, public_inputs))
+        Ok((proof.into(), public_inputs))
     }
 
     /// Create a Plonk poof and return the public inputs
