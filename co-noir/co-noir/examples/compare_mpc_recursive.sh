@@ -206,10 +206,10 @@ for f in "${test_cases[@]}"; do
     exit_code=1
     echo "::error::" $f "failed with keccak and zk"
   fi
- run_proof_verification "$f" "keccak_zk"
+  run_proof_verification "$f" "keccak_zk"
 
   bash cleanup.sh
-#   echo ""
+  echo ""
 done
 
 exit "$exit_code"
