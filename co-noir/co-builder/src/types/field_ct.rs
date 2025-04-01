@@ -1218,7 +1218,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T> {
         let witness_same =
             same && !lhs.is_constant() && (lhs.witness_inverted == rhs.witness_inverted);
 
-        let const_same = same && (lhs.is_constant()) && (lhs.witness_bool == rhs.witness_bool);
+        let const_same = same && lhs.is_constant() && (lhs.witness_bool == rhs.witness_bool); // Both lhs and rhs are constants so we can just compare
 
         if witness_same || const_same {
             return Ok(lhs.to_owned());
@@ -1446,7 +1446,8 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T> {
     }
 
     fn normalize(&self, builder: &mut GenericUltraCircuitBuilder<P, T>, driver: &mut T) -> Self {
-        if self.is_constant() || !self.witness_inverted {
+        if self.is_constant() {
+            assert!(!self.witness_inverted);
             return self.to_owned();
         }
 
