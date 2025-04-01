@@ -1641,12 +1641,14 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                 y: FieldCT::from(y),
                 is_infinity: BoolCT::from(false),
                 is_constant: true,
+                is_standard: true,
             },
             None => Self {
                 x: FieldCT::zero(),
                 y: FieldCT::zero(),
                 is_infinity: BoolCT::from(true),
                 is_constant: true,
+                is_standard: true,
             },
         }
     }
@@ -2531,10 +2533,11 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 
         let mut is_standard = lhs.is_standard && rhs.is_standard;
         if predicate.is_constant() {
-            let value = T::get_public(&predicate.get_value(driver))
-                .expect("Constants are public")
-                .is_zero();
-            is_standard = (!value && lhs.is_standard) && (value && rhs.is_standard);
+            // let value = T::get_public(&predicate.get_value(driver))
+            //     .expect("Constants are public")
+            //     .is_zero();
+            // // is_standard = (!value && lhs.is_standard) && (value && rhs.is_standard);
+            is_standard = false; // TACEO note: there seems to be a bug in Barrettenberg here
         }
 
         // Rare case when we bump into two constants, s.t. lhs = -rhs
@@ -2855,8 +2858,14 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             builder,
             driver,
         )?;
-        let mut modded_base_point =
-            CycleGroupCT::new(modded_x, modded_y, BoolCT::from(false), builder, driver);
+        let mut modded_base_point = CycleGroupCT::new(
+            modded_x,
+            modded_y,
+            BoolCT::from(false),
+            false,
+            builder,
+            driver,
+        );
 
         // if the input point is constant, it is cheaper to fix the point as a witness and then derive the table, than it is
         // to derive the table and fix its witnesses to be constant! (due to group additions = 1 gate, and fixing x/y coords
