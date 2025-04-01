@@ -1203,6 +1203,27 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T> {
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> std::io::Result<Self> {
+        if predicate.is_constant() {
+            let value = predicate.get_value(driver);
+            let value = T::get_public(&value).expect("Constants are public");
+            if value.is_zero() {
+                return Ok(rhs.to_owned());
+            } else {
+                return Ok(lhs.to_owned());
+            }
+        }
+
+        let same = lhs.witness_index == rhs.witness_index;
+
+        let witness_same =
+            same && !lhs.is_constant() && (lhs.witness_inverted == rhs.witness_inverted);
+
+        let const_same = same && (lhs.is_constant()) && (lhs.witness_bool == rhs.witness_bool);
+
+        if witness_same || const_same {
+            return Ok(lhs.to_owned());
+        }
+
         // TACEO TODO: is this the correct order?
         let l = predicate.and(lhs, builder, driver)?;
         let r = predicate.not().and(rhs, builder, driver)?;
@@ -1413,6 +1434,13 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T> {
 
     fn not(&self) -> Self {
         let mut result = self.to_owned();
+        if result.is_constant() {
+            result.witness_bool = (P::ScalarField::one()
+                - T::get_public(&result.witness_bool).expect("Constants are public"))
+            .into();
+
+            return result;
+        }
         result.witness_inverted = !result.witness_inverted;
         result
     }
@@ -1776,7 +1804,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         let mut plookup_scalars = Vec::with_capacity(num_points * 2);
 
         for (scalar, point) in scalars.iter().zip(base_points.iter()) {
-            // Merge all tags of scalars (we don't have to account for CircuitSimulator in cycle_group yet, because it breaks)
             let table_id = Plookup::get_lookup_table_ids_for_point::<P>(point.to_owned().into())
                 .expect("This function is only called when these exist");
             plookup_table_ids.push(table_id.0);
