@@ -1661,9 +1661,8 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupCT<P
         driver: &mut T,
     ) -> std::io::Result<()> {
         assert!(
-            self.is_constant() == self.x.is_constant()
-                && self.y.is_constant()
-                && self.is_infinity.is_constant()
+            self.is_constant()
+                == (self.x.is_constant() && self.y.is_constant() && self.is_infinity.is_constant())
         );
         if self.is_infinity.is_constant()
             && !T::get_public(&self.is_infinity.get_value(driver))
@@ -1707,9 +1706,8 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupCT<P
         driver: &mut T,
     ) -> std::io::Result<()> {
         assert!(
-            self.is_constant() == self.x.is_constant()
-                && self.y.is_constant()
-                && self.is_infinity.is_constant()
+            self.is_constant()
+                == (self.x.is_constant() && self.y.is_constant() && self.is_infinity.is_constant())
         );
 
         self.is_standard = true;
