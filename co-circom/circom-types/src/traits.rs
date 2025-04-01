@@ -674,3 +674,14 @@ impl_serde_for_curve!(
     32,
     "bls12381"
 );
+
+#[cfg(feature = "ark-bls12-377")]
+impl_serde_for_curve!(
+    bls12_377,
+    Bls12_377,
+    ark_bls12_377,
+    "bls12_377",
+    48,
+    32,
+    "bls12377"
+);
