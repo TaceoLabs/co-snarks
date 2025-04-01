@@ -28,6 +28,7 @@
 //! Inspired by <https://github.com/arkworks-rs/circom-compat/blob/170b10fc9ed182b5f72ecf379033dda023d0bf07/src/zkey.rs>
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
+use ark_relations::r1cs::Matrix;
 use ark_serialize::CanonicalDeserialize;
 
 use std::io::Read;
@@ -72,14 +73,13 @@ pub struct ZKey<P: Pairing> {
     /// delta_g1
     pub delta_g2: P::G2Affine,
     /// The constraint matrices A
-    pub a_matrix: ConstraintMatrix<P::ScalarField>,
+    pub a_matrix: Matrix<P::ScalarField>,
     /// The constraint matrices B
-    pub b_matrix: ConstraintMatrix<P::ScalarField>,
+    pub b_matrix: Matrix<P::ScalarField>,
 }
 
 /// A constraint matrix used in Groth16.
-pub type ConstraintMatrix<F> = Vec<Vec<(F, usize)>>;
-type ConstraintMatrixAB<F> = (usize, ConstraintMatrix<F>, ConstraintMatrix<F>);
+type ConstraintMatrixAB<F> = (usize, Matrix<F>, Matrix<F>);
 
 #[derive(Clone, Debug)]
 struct HeaderGroth<P: Pairing> {
