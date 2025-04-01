@@ -158,7 +158,6 @@ where
 
 #[cfg(test)]
 mod test {
-    use ark_bls12_381::Bls12_381;
     use ark_bn254::Bn254;
     use ark_ec::pairing::Pairing;
 
@@ -244,7 +243,9 @@ mod test {
     }
 
     #[test]
+    #[cfg(feature = "ark-bls12-381")]
     fn can_serde_vk_bls12_381() {
+        use ark_bls12_381::Bls12_381;
         let vk_string = fs::read_to_string(
             "../../test_vectors/Groth16/bls12_381/multiplier2/verification_key.json",
         )

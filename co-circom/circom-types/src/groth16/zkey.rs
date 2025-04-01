@@ -320,7 +320,6 @@ mod tests {
     use crate::groth16::test_utils;
 
     use super::*;
-    use ark_bls12_381::Bls12_381;
     use ark_bn254::{Bn254, Fq, Fq2, G1Affine, G1Projective, G2Affine, G2Projective};
     use ark_ff::BigInteger256;
     use num_bigint::BigUint;
@@ -332,7 +331,9 @@ mod tests {
     use std::convert::TryFrom;
 
     #[test]
+    #[cfg(feature = "ark-bls12-381")]
     fn can_deser_bls12_381_mult2_key() {
+        use ark_bls12_381::Bls12_381;
         let checks = [CheckElement::Yes, CheckElement::No];
         for check in checks {
             let zkey = File::open("../../test_vectors/Groth16/bls12_381/multiplier2/circuit.zkey")

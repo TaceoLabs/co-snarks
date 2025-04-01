@@ -12,27 +12,6 @@ use std::str::FromStr;
 
 type IoResult<T> = Result<T, SerializationError>;
 
-macro_rules! impl_bn256 {
-    () => {
-        //TODO use stringify
-        impl_serde_for_curve!(bn254, Bn254, ark_bn254, "bn254", 32, 32, "bn128");
-    };
-}
-
-macro_rules! impl_bls12_381 {
-    () => {
-        impl_serde_for_curve!(
-            bls12_381,
-            Bls12_381,
-            ark_bls12_381,
-            "bls12_381",
-            48,
-            32,
-            "bls12381"
-        );
-    };
-}
-
 macro_rules! impl_serde_for_curve {
     ($mod_name: ident, $config: ident, $curve: ident, $name: expr, $field_size: expr, $scalar_field_size: expr, $circom_name: expr) => {
 
@@ -683,5 +662,15 @@ pub enum CheckElement {
     No,
 }
 
-impl_bn256!();
-impl_bls12_381!();
+impl_serde_for_curve!(bn254, Bn254, ark_bn254, "bn254", 32, 32, "bn128");
+
+#[cfg(feature = "ark-bls12-381")]
+impl_serde_for_curve!(
+    bls12_381,
+    Bls12_381,
+    ark_bls12_381,
+    "bls12_381",
+    48,
+    32,
+    "bls12381"
+);

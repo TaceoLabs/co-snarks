@@ -91,6 +91,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "ark-bls12-381")]
     fn can_serde_public_input_bls12_381() {
         let is_public_input_str = "[\"1\",\"2\",\"3\"]";
         let public_input =

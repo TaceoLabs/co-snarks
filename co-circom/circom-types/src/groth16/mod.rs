@@ -12,6 +12,7 @@ pub use zkey::ZKey;
 
 #[cfg(test)]
 pub(crate) mod test_utils {
+    #[cfg(feature = "ark-bls12-381")]
     macro_rules! to_g1_bls12_381 {
         ($x: expr, $y: expr) => {
             <ark_bls12_381::Bls12_381 as Pairing>::G1Affine::new(
@@ -20,6 +21,7 @@ pub(crate) mod test_utils {
             )
         };
     }
+    #[cfg(feature = "ark-bls12-381")]
     macro_rules! to_g2_bls12_381 {
         ({$x1: expr, $x2: expr}, {$y1: expr, $y2: expr}) => {
             <ark_bls12_381::Bls12_381 as Pairing>::G2Affine::new(
@@ -57,8 +59,10 @@ pub(crate) mod test_utils {
             )
         };
     }
+    #[cfg(feature = "ark-bls12-381")]
     pub(crate) use to_g1_bls12_381;
     pub(crate) use to_g1_bn254;
+    #[cfg(feature = "ark-bls12-381")]
     pub(crate) use to_g2_bls12_381;
     pub(crate) use to_g2_bn254;
 }
