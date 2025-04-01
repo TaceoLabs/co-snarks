@@ -7,7 +7,6 @@ mod zkey;
 pub use proof::Groth16Proof;
 pub use public_input::JsonPublicInput;
 pub use verification_key::JsonVerificationKey;
-pub use zkey::ConstraintMatrix;
 pub use zkey::ZKey;
 
 #[cfg(test)]

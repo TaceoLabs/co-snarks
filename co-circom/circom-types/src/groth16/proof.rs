@@ -27,6 +27,37 @@ where
     /// The curve used to generate the proof
     pub curve: String,
 }
+
+impl<P: Pairing + CircomArkworksPairingBridge> From<Groth16Proof<P>> for ark_groth16::Proof<P>
+where
+    P::BaseField: CircomArkworksPrimeFieldBridge,
+    P::ScalarField: CircomArkworksPrimeFieldBridge,
+{
+    fn from(proof: Groth16Proof<P>) -> Self {
+        ark_groth16::Proof {
+            a: proof.pi_a,
+            b: proof.pi_b,
+            c: proof.pi_c,
+        }
+    }
+}
+
+impl<P: Pairing + CircomArkworksPairingBridge> From<ark_groth16::Proof<P>> for Groth16Proof<P>
+where
+    P::BaseField: CircomArkworksPrimeFieldBridge,
+    P::ScalarField: CircomArkworksPrimeFieldBridge,
+{
+    fn from(proof: ark_groth16::Proof<P>) -> Self {
+        Groth16Proof {
+            pi_a: proof.a,
+            pi_b: proof.b,
+            pi_c: proof.c,
+            protocol: "groth16".to_string(),
+            curve: P::get_circom_name().to_string(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::groth16::test_utils;
