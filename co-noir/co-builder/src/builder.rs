@@ -680,6 +680,8 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         //  * we can chain an ecc_add_gate + an ecc_dbl_gate if x3 y3 of previous add_gate equals x1 y1 of current gate
         //  * can also chain double gates together
         //  **/
+        self.assert_valid_variables(&[inp.x1, inp.x3, inp.y1, inp.y3]);
+
         let size = self.blocks.elliptic.len();
         let previous_elliptic_gate_exists = size > 0;
         let mut can_fuse_into_previous_gate = previous_elliptic_gate_exists;
