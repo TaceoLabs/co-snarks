@@ -11,8 +11,11 @@ rust-version.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+default = ["ark-bls12-381"]
+
 [dependencies]
-ark-bls12-381 = { workspace = true }
+ark-bls12-381 = { workspace = true, optional = true }
 ark-bn254 = { workspace = true }
 ark-ec = { workspace = true }
 ark-ff = { workspace = true }
