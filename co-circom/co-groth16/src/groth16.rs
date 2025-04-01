@@ -2,9 +2,10 @@
 use ark_ec::pairing::Pairing;
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{FftField, PrimeField};
+use ark_groth16::Proof;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
-use circom_types::groth16::{ConstraintMatrix, Groth16Proof, ZKey};
-use circom_types::traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge};
+use ark_relations::r1cs::Matrix;
+use circom_types::groth16::ZKey;
 use co_circom_snarks::{Rep3SharedWitness, ShamirSharedWitness, SharedWitness};
 use eyre::Result;
 use mpc_core::protocols::rep3::network::{IoContext, Rep3Network};
@@ -88,11 +89,7 @@ pub struct CoGroth16<P: Pairing, T: CircomGroth16Prover<P>> {
     phantom_data: PhantomData<P>,
 }
 
-impl<P: Pairing + CircomArkworksPairingBridge, T: CircomGroth16Prover<P>> CoGroth16<P, T>
-where
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-{
+impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
     /// Creates a new [CoGroth16] protocol with a given MPC driver.
     pub fn new(driver: T) -> Self {
         Self {
@@ -108,7 +105,7 @@ where
         mut self,
         zkey: Arc<ZKey<P>>,
         private_witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
-    ) -> Result<(Groth16Proof<P>, T)> {
+    ) -> Result<(Proof<P>, T)> {
         let public_inputs = Arc::new(private_witness.public_inputs);
         if public_inputs.len() != zkey.n_public + 1 {
             eyre::bail!(
@@ -142,7 +139,7 @@ where
     fn evaluate_constraint(
         party_id: T::PartyID,
         domain_size: usize,
-        matrix: &ConstraintMatrix<P::ScalarField>,
+        matrix: &Matrix<P::ScalarField>,
         public_inputs: &[P::ScalarField],
         private_witness: &[T::ArithmeticShare],
     ) -> Vec<T::ArithmeticShare> {
@@ -324,7 +321,7 @@ where
         h: Vec<T::ArithmeticHalfShare>,
         input_assignment: Arc<Vec<P::ScalarField>>,
         aux_assignment: Arc<Vec<T::ArithmeticHalfShare>>,
-    ) -> Result<(Groth16Proof<P>, T)> {
+    ) -> Result<(Proof<P>, T)> {
         let delta_g1 = zkey.delta_g1.into_group();
         let (l_acc_tx, l_acc_rx) = oneshot::channel();
         let (h_acc_tx, h_acc_rx) = oneshot::channel();
@@ -452,30 +449,23 @@ where
         last_round.exit();
 
         Ok((
-            Groth16Proof {
-                pi_a: g_a_opened.into_affine(),
-                pi_b: g2_b_opened.into_affine(),
-                pi_c: g_c_opened.into_affine(),
-                protocol: "groth16".to_owned(),
-                curve: P::get_circom_name(),
+            Proof {
+                a: g_a_opened.into_affine(),
+                b: g2_b_opened.into_affine(),
+                c: g_c_opened.into_affine(),
             },
             self.driver,
         ))
     }
 }
 
-impl<P: Pairing, N: Rep3Network> Rep3CoGroth16<P, N>
-where
-    P: CircomArkworksPairingBridge,
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-{
+impl<P: Pairing, N: Rep3Network> Rep3CoGroth16<P, N> {
     /// Create a [`Groth16Proof`].
     pub fn prove(
         net: N,
         zkey: Arc<ZKey<P>>,
         witness: Rep3SharedWitness<P::ScalarField>,
-    ) -> Result<(Groth16Proof<P>, N)> {
+    ) -> Result<(Proof<P>, N)> {
         let mut io_context0 = IoContext::init(net)?;
         let io_context1 = io_context0.fork()?;
         let driver = Rep3Groth16Driver::new(io_context0, io_context1);
@@ -489,19 +479,14 @@ where
     }
 }
 
-impl<P: Pairing, N: ShamirNetwork> ShamirCoGroth16<P, N>
-where
-    P: CircomArkworksPairingBridge,
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-{
+impl<P: Pairing, N: ShamirNetwork> ShamirCoGroth16<P, N> {
     /// Create a [`Groth16Proof`].
     pub fn prove(
         net: N,
         threshold: usize,
         zkey: Arc<ZKey<P>>,
         witness: ShamirSharedWitness<P::ScalarField>,
-    ) -> Result<(Groth16Proof<P>, N)> {
+    ) -> Result<(Proof<P>, N)> {
         // we need 2 + 1 number of corr rand pairs. We need the values r/s (1 pair) and 2 muls (2
         // pairs)
         let num_pairs = 3;
@@ -521,12 +506,7 @@ where
     }
 }
 
-impl<P: Pairing> Groth16<P>
-where
-    P: CircomArkworksPairingBridge,
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-{
+impl<P: Pairing> Groth16<P> {
     /// *Locally* create a `Groth16` proof. This is just the [`CoGroth16`] prover
     /// initialized with the [`PlainGroth16Driver`].
     ///
@@ -534,7 +514,7 @@ where
     pub fn plain_prove(
         zkey: Arc<ZKey<P>>,
         private_witness: SharedWitness<P::ScalarField, P::ScalarField>,
-    ) -> Result<Groth16Proof<P>> {
+    ) -> Result<Proof<P>> {
         let prover = Self {
             driver: PlainGroth16Driver,
             phantom_data: PhantomData,
