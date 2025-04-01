@@ -1576,8 +1576,8 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupCT<P
         self.is_standard = true;
 
         let zero = FieldCT::zero();
-        self.x = FieldCT::conditional_assign(&self.is_infinity, &zero, &self.x, builder, driver)?;
-        self.y = FieldCT::conditional_assign(&self.is_infinity, &zero, &self.y, builder, driver)?;
+        self.x = FieldCT::conditional_assign(&is_infinity, &zero, &self.x, builder, driver)?;
+        self.y = FieldCT::conditional_assign(&is_infinity, &zero, &self.y, builder, driver)?;
 
         if is_infinity.is_constant()
             && !T::get_public(&is_infinity.get_value(driver))
@@ -1659,6 +1659,9 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> Self {
+        // Point at infinity's coordinates break our arithmetic
+        // Since we are not using these coordinates anyway
+        // We can set them both to be zero
         let (x, y) = inp.into_affine().xy().unwrap_or_default();
         let result = Self {
             x: FieldCT::from_witness(x.into(), builder),
