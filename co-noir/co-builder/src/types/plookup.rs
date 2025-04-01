@@ -947,15 +947,15 @@ impl<F: PrimeField> Plookup<F> {
         let length = lookup_data[ColumnIdx::C1].len();
         if is_key_a_constant && (key_b.is_constant() || !is_2_to_1_lookup) {
             for i in 0..length {
-                lookup[ColumnIdx::C1].push(FieldCT::zero_with_additive(
+                lookup[ColumnIdx::C1].push(FieldCT::from(
                     T::get_public(&lookup_data[ColumnIdx::C1][i])
                         .expect("Constant should be public"),
                 ));
-                lookup[ColumnIdx::C2].push(FieldCT::zero_with_additive(
+                lookup[ColumnIdx::C2].push(FieldCT::from(
                     T::get_public(&lookup_data[ColumnIdx::C2][i])
                         .expect("Constant should be public"),
                 ));
-                lookup[ColumnIdx::C3].push(FieldCT::zero_with_additive(
+                lookup[ColumnIdx::C3].push(FieldCT::from(
                     T::get_public(&lookup_data[ColumnIdx::C3][i])
                         .expect("Constant should be public"),
                 ));
