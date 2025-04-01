@@ -2,7 +2,7 @@ export CARGO_TERM_QUIET=true
 BARRETENBERG_BINARY=~/.bb/bb  ##specify the $BARRETENBERG_BINARY path here
 
 NARGO_VERSION=1.0.0-beta.3 ##specify the desired nargo version here
-BARRETENBERG_VERSION=0.82.0 ##specify the desired barretenberg version here or use the corresponding one for this nargo version
+BARRETENBERG_VERSION=0.82.3 ##specify the desired barretenberg version here or use the corresponding one for this nargo version
 PLAINDRIVER="../../../target/release/plaindriver"
 exit_code=0
 
@@ -54,7 +54,7 @@ run_proof_verification() {
     prove_command="prove --scheme ultra_honk --oracle_hash poseidon2 --zk"
     write_command="write_vk --scheme ultra_honk --oracle_hash poseidon2"
     verify_command="verify --scheme ultra_honk --oracle_hash poseidon2 --zk"
-  else 
+  else
     prove_command="prove --scheme ultra_honk --oracle_hash keccak --zk"
     write_command="write_vk --scheme ultra_honk --oracle_hash keccak"
     verify_command="verify --scheme ultra_honk --oracle_hash keccak --zk"

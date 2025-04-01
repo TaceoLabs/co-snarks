@@ -1,11 +1,11 @@
 # UltraHonk
 
-This crate uses our rewrite of Atec's UltraHonk prover and verifier in Rust (see `co-snarks/co-noir/ultrahonk`). It is compatible with Barretenberg v0.72.1 To get Barretenberg with this version, use the following commands:
+This crate uses our rewrite of Atec's UltraHonk prover and verifier in Rust (see `co-snarks/co-noir/ultrahonk`). It is compatible with Barretenberg v0.82.3 To get Barretenberg with this version, use the following commands:
 
 ```bash
 git clone https://github.com/AztecProtocol/aztec-packages.git
 cd aztec-packages
-git checkout tags/aztec-package-v0.72.1
+git checkout tags/aztec-package-v0.82.3
 ```
 
 To compile Barretenberg, one can use:
