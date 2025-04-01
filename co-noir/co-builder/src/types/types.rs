@@ -792,7 +792,7 @@ impl<F: PrimeField> WitnessOrConstant<F> {
                 builder.variables[input_y.index as usize] = g1_y.into();
             }
         }
-        CycleGroupCT::new(point_x, point_y, infinity, false, builder, driver)
+        CycleGroupCT::new(point_x, point_y, infinity, builder, driver)
     }
 }
 

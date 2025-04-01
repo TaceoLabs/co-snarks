@@ -1223,6 +1223,44 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T> {
         l.or(&r, builder, driver)
     }
 
+    fn assert_equal(
+        &self,
+        other: &Self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) {
+        if self.is_constant() && other.is_constant() {
+            assert_eq!(self.get_value(driver), other.get_value(driver)); // Both are public so we can just compare
+        } else if self.is_constant() {
+            // if rhs is inverted, flip the value of the lhs constant
+            let value = T::get_public(&self.get_value(driver)).expect("Constants are public");
+            let value = if other.witness_inverted {
+                P::ScalarField::one() - value
+            } else {
+                value
+            };
+            builder.assert_equal_constant(other.witness_index as usize, value);
+        } else if other.is_constant() {
+            // if lhs is inverted, flip the value of the rhs constant
+            let value = T::get_public(&other.get_value(driver)).expect("Constants are public");
+            let value = if self.witness_inverted {
+                P::ScalarField::one() - value
+            } else {
+                value
+            };
+            builder.assert_equal_constant(self.witness_index as usize, value);
+        } else {
+            let mut left = self.to_owned();
+            let mut right = other.to_owned();
+            // we need to normalize iff lhs or rhs has an inverted witness (but not both)
+            if self.witness_inverted ^ other.witness_inverted {
+                left = left.normalize(builder, driver);
+                right = right.normalize(builder, driver);
+            }
+            builder.assert_equal(left.witness_index as usize, right.witness_index as usize);
+        }
+    }
+
     fn and(
         &self,
         other: &Self,
@@ -1438,6 +1476,15 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T> {
         result
     }
 
+    fn equals(
+        &self,
+        other: &Self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> std::io::Result<Self> {
+        todo!()
+    }
+
     fn normalize(&self, builder: &mut GenericUltraCircuitBuilder<P, T>, driver: &mut T) -> Self {
         if self.is_constant() {
             assert!(!self.witness_inverted);
@@ -1504,13 +1551,21 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupCT<P
         x: FieldCT<P::ScalarField>,
         y: FieldCT<P::ScalarField>,
         is_infinity: BoolCT<P, T>,
-        is_standard: bool,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> Self {
         let x_ = x.normalize(builder, driver);
         let y_ = y.normalize(builder, driver);
-        let is_constant = x.is_constant() && y.is_constant() && is_infinity.is_constant();
+        let is_standard = is_infinity.is_constant();
+        let is_constant = x.is_constant() && y.is_constant() && is_standard;
+
+        if is_standard
+            && !T::get_public(&is_infinity.get_value(driver))
+                .expect("Constants are public")
+                .is_zero()
+        {
+            return Self::default();
+        }
 
         Self {
             x: x_,
@@ -1521,11 +1576,43 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupCT<P
         }
     }
 
+    pub(crate) fn new_from_parts(x: P::ScalarField, y: P::ScalarField, is_infinity: bool) -> Self {
+        if is_infinity {
+            return Self::default();
+        }
+        let x = FieldCT::from(x);
+        let y = FieldCT::from(y);
+        let is_infinity = BoolCT::from(false);
+
+        // TACEO TODO: We should assert a valid point here
+
+        Self {
+            x,
+            y,
+            is_infinity,
+            is_standard: true,
+            is_constant: true,
+        }
+    }
+
     pub(crate) fn standardize(
         &mut self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> std::io::Result<()> {
+        assert!(
+            self.is_constant() == self.x.is_constant()
+                && self.y.is_constant()
+                && self.is_infinity.is_constant()
+        );
+        if self.is_infinity.is_constant()
+            && !T::get_public(&self.is_infinity.get_value(driver))
+                .expect("Constants are public")
+                .is_zero()
+        {
+            assert!(self.is_constant && self.is_standard);
+        }
+
         if self.is_standard {
             return Ok(());
         }
@@ -1552,57 +1639,85 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupCT<P
         &self.is_infinity
     }
 
+    #[expect(dead_code)]
     pub(crate) fn set_point_at_infinity(
         &mut self,
         is_infinity: BoolCT<P, T>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> std::io::Result<()> {
-        // No operations are performed in this case
-        if is_infinity.is_constant()
-            && T::get_public(&is_infinity.get_value(driver))
+        assert!(
+            self.is_constant() == self.x.is_constant()
+                && self.y.is_constant()
+                && self.is_infinity.is_constant()
+        );
+
+        self.is_standard = true;
+
+        if is_infinity.is_constant() && self.is_infinity.is_constant() {
+            // Check that it's not possible to enter the case when
+            // The point is already infinity, but `is_infinity` = false
+            let self_val =
+                T::get_public(&self.is_infinity.get_value(driver)).expect("Constants are public");
+            let other_val =
+                T::get_public(&is_infinity.get_value(driver)).expect("Constants are public");
+            assert!(self_val == other_val || !self_val.is_zero());
+
+            if !other_val.is_zero() {
+                self.x = FieldCT::default();
+                self.y = FieldCT::default();
+                self.is_infinity = BoolCT::from(true);
+                self.is_constant = true;
+                return Ok(());
+            }
+        }
+
+        if is_infinity.is_constant() && !self.is_infinity.is_constant() {
+            let other_val =
+                T::get_public(&is_infinity.get_value(driver)).expect("Constants are public");
+            if other_val.is_zero() {
+                self.is_infinity
+                    .assert_equal(&BoolCT::from(false), builder, driver);
+                self.is_infinity = BoolCT::from(false);
+            } else {
+                self.x = FieldCT::default();
+                self.y = FieldCT::default();
+                self.is_infinity = BoolCT::from(true);
+                self.is_constant = true;
+                return Ok(());
+            }
+            return Ok(());
+        }
+
+        if self.is_infinity.is_constant()
+            && !T::get_public(&self.is_infinity.get_value(driver))
                 .expect("Constants are public")
                 .is_zero()
         {
+            // I can't imagine this case happening, but still
+            is_infinity.assert_equal(&BoolCT::from(true), builder, driver);
+
+            self.x = FieldCT::default();
+            self.y = FieldCT::default();
+            self.is_constant = true;
             return Ok(());
         }
-        self.is_standard = true;
 
         let zero = FieldCT::default();
         self.x = FieldCT::conditional_assign(&is_infinity, &zero, &self.x, builder, driver)?;
         self.y = FieldCT::conditional_assign(&is_infinity, &zero, &self.y, builder, driver)?;
 
-        if is_infinity.is_constant()
-            && !T::get_public(&is_infinity.get_value(driver))
-                .expect("Constants are public")
-                .is_zero()
-        {
-            self.is_constant = true;
-            self.is_infinity = BoolCT::from(true);
-            return Ok(());
-        }
+        // We won't bump into the case where we end up with non constant coordinates
+        assert!(!self.x.is_constant() && !self.y.is_constant());
+        self.is_constant = false;
 
-        if !self.x.is_constant() && self.y.is_constant() {
-            let value =
-                T::get_public(&self.y.get_value(builder, driver)).expect("Constants are public");
-            self.y = FieldCT::from_witness_index(builder.put_constant_variable(value));
-        }
+        // We have to check this to avoid the situation, where we change the infinity
+        let equal = self.is_infinity.equals(&is_infinity, builder, driver)?;
+        let set_allowed = equal.or(&is_infinity, builder, driver)?;
 
-        if self.x.is_constant() && !self.y.is_constant() {
-            let value =
-                T::get_public(&self.x.get_value(builder, driver)).expect("Constants are public");
-            self.x = FieldCT::from_witness_index(builder.put_constant_variable(value));
-        }
+        set_allowed.assert_equal(&BoolCT::from(true), builder, driver);
+        self.is_infinity = is_infinity;
 
-        // Due to conditional_assign behavior
-        // Sometimes we won't create the gate here
-        // If this->x = 0 and this->y = 0 and both of them are constants
-        // This ensures that at least one of the switches was performed
-        self.is_constant = self.x.is_constant() && self.y.is_constant();
-
-        if !self.is_constant {
-            self.is_infinity = is_infinity;
-        }
         Ok(())
     }
 
@@ -1652,20 +1767,27 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> Self {
+        let mut result = Self::default();
+
         // Point at infinity's coordinates break our arithmetic
         // Since we are not using these coordinates anyway
         // We can set them both to be zero
-        let (x, y) = inp.into_affine().xy().unwrap_or_default();
-        let result = Self {
-            x: FieldCT::from_witness(x.into(), builder),
-            y: FieldCT::from_witness(y.into(), builder),
-            is_infinity: BoolCT::from(inp.is_zero()),
-            is_constant: false,
-            is_standard: true,
-        };
+        if inp.is_zero() {
+            result.x = FieldCT::default();
+            result.y = FieldCT::default();
+            result.is_constant = true;
+        } else {
+            let (x, y) = inp.into_affine().xy().expect("Non-zero");
+            result.x = FieldCT::from_witness(x.into(), builder);
+            result.y = FieldCT::from_witness(y.into(), builder);
+            result.x.assert_equal(&FieldCT::from(x), builder, driver);
+            result.y.assert_equal(&FieldCT::from(y), builder, driver);
+            result.is_constant = false;
+        }
 
-        result.x.assert_equal(&FieldCT::from(x), builder, driver);
-        result.y.assert_equal(&FieldCT::from(y), builder, driver);
+        // point at infinity is circuit constant
+        result.is_infinity = BoolCT::from(inp.is_zero());
+        result.is_standard = true;
         result
     }
 
@@ -1904,7 +2026,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                     x,
                     y,
                     BoolCT::from(false),
-                    true,
                     builder,
                     driver,
                 ));
@@ -2219,7 +2340,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                     FieldCT::from(x3),
                     FieldCT::from(y3),
                     self.is_point_at_infinity().to_owned(),
-                    false,
                     builder,
                     driver,
                 );
@@ -2232,7 +2352,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                 x,
                 y,
                 self.is_point_at_infinity().to_owned(),
-                false,
                 builder,
                 driver,
             );
@@ -2267,21 +2386,13 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                 let y3 = T::get_public(&y3).expect("Constants are public");
                 let inf_value = self.is_point_at_infinity().get_value(driver);
                 let inf_value = T::get_public(&inf_value).expect("Constants are public");
-                let result = CycleGroupCT::new(
-                    FieldCT::from(x3),
-                    FieldCT::from(y3),
-                    BoolCT::from(inf_value.is_one()),
-                    false,
-                    builder,
-                    driver,
-                );
+                let result = CycleGroupCT::new_from_parts(x3, y3, inf_value.is_one());
                 return Ok(result);
             }
             result = CycleGroupCT::new(
                 FieldCT::from_witness(x3, builder),
                 FieldCT::from_witness(y3, builder),
                 self.is_point_at_infinity().to_owned(),
-                false,
                 builder,
                 driver,
             );
@@ -2346,18 +2457,11 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             if lhs_constant && rhs_constant {
                 let x3 = T::get_public(&x3).expect("Constants are public");
                 let y3 = T::get_public(&y3).expect("Constants are public");
-                return Ok(CycleGroupCT::new(
-                    FieldCT::from(x3),
-                    FieldCT::from(y3),
-                    BoolCT::from(false),
-                    true,
-                    builder,
-                    driver,
-                ));
+                return Ok(CycleGroupCT::new_from_parts(x3, y3, false));
             }
             let x = FieldCT::from_witness(x3, builder);
             let y = FieldCT::from_witness(y3, builder);
-            result = CycleGroupCT::new(x, y, BoolCT::from(false), true, builder, driver);
+            result = CycleGroupCT::new(x, y, BoolCT::from(false), builder, driver);
         } else {
             let p1 = self.get_value(builder, driver)?;
             let p2 = other.get_value(builder, driver)?;
@@ -2371,7 +2475,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             let (x, y, _) = driver.pointshare_to_field_shares(p3)?;
             let r_x = FieldCT::from_witness(x, builder);
             let r_y = FieldCT::from_witness(y, builder);
-            result = CycleGroupCT::new(r_x, r_y, BoolCT::from(false), true, builder, driver);
+            result = CycleGroupCT::new(r_x, r_y, BoolCT::from(false), builder, driver);
         }
 
         let add_gate = EccAddGate {
@@ -2430,34 +2534,39 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             builder,
             driver,
         );
-        let lambda = y2
-            .neg()
-            .sub(y1, builder, driver)
-            .divide(&x_diff, builder, driver)?;
+
+        // Computes lambda = (-y2-y1)/x_diff, using the fact that x_diff is never 0
+
+        let lambda = if (y1.is_constant() && y2.is_constant()) || x_diff.is_constant() {
+            (y2.neg().sub(y1, builder, driver)).divide_no_zero_check(&x_diff, builder, driver)?
+        } else {
+            let y2_ = y2.neg().get_value(builder, driver);
+            let y1_ = y1.get_value(builder, driver);
+            let sub = driver.sub(y2_, y1_);
+            let x_diff_value = x_diff.get_value(builder, driver);
+            let invert = driver.invert(x_diff_value)?;
+            let lambda = driver.mul(sub, invert)?;
+            let lambda = FieldCT::from_witness(lambda, builder);
+            FieldCT::evaluate_polynomial_identity(&x_diff, &lambda, y2, y1, builder, driver);
+            lambda
+        };
+
         let x3 = lambda.madd(&lambda, &x2.add(x1, builder, driver).neg(), builder, driver)?;
         let y3 = lambda.madd(&x1.sub(&x3, builder, driver), &y1.neg(), builder, driver)?;
-        let add_result = CycleGroupCT::new(
-            x3,
-            y3,
-            x_coordinates_match.to_owned(),
-            false,
-            builder,
-            driver,
-        );
+        let add_result = CycleGroupCT::new(x3, y3, x_coordinates_match.to_owned(), builder, driver);
 
         let dbl_result = self.dbl(None, builder, driver)?;
 
         // dbl if x_match, !y_match
         // infinity if x_match, y_match
-        let mut result = CycleGroupCT::default();
-        result.x = FieldCT::conditional_assign(
+        let mut result_x = FieldCT::conditional_assign(
             &double_predicate,
             &dbl_result.x,
             &add_result.x,
             builder,
             driver,
         )?;
-        result.y = FieldCT::conditional_assign(
+        let mut result_y = FieldCT::conditional_assign(
             &double_predicate,
             &dbl_result.y,
             &add_result.y,
@@ -2468,18 +2577,18 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         let lhs_infinity = self.is_point_at_infinity();
         let rhs_infinity = other.is_point_at_infinity();
         // if lhs infinity, return -rhs
-        result.x = FieldCT::conditional_assign(lhs_infinity, &other.x, &result.x, builder, driver)?;
-        result.y = FieldCT::conditional_assign(
+        result_x = FieldCT::conditional_assign(lhs_infinity, &other.x, &result_x, builder, driver)?;
+        result_y = FieldCT::conditional_assign(
             lhs_infinity,
             &other.y.neg().normalize(builder, driver),
-            &result.y,
+            &result_y,
             builder,
             driver,
         )?;
 
         // if rhs infinity, return lhs
-        result.x = FieldCT::conditional_assign(rhs_infinity, &self.x, &result.x, builder, driver)?;
-        result.y = FieldCT::conditional_assign(rhs_infinity, &self.y, &result.y, builder, driver)?;
+        result_x = FieldCT::conditional_assign(rhs_infinity, &self.x, &result_x, builder, driver)?;
+        result_y = FieldCT::conditional_assign(rhs_infinity, &self.y, &result_y, builder, driver)?;
 
         // is result point at infinity?
         // yes = infinity_predicate && !lhs_infinity && !rhs_infinity
@@ -2495,9 +2604,13 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         let both_infinity = lhs_infinity.and(rhs_infinity, builder, driver)?;
         let result_is_infinity = result_is_infinity.or(&both_infinity, builder, driver)?;
 
-        // need to set this before set_point_at_infinity call
-        result.is_constant = self.is_constant & other.is_constant;
-        result.set_point_at_infinity(result_is_infinity, builder, driver)?;
+        let result = CycleGroupCT::new(
+            result_x,
+            result_y,
+            result_is_infinity.to_owned(),
+            builder,
+            driver,
+        );
         Ok(result)
     }
 
@@ -2530,11 +2643,14 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 
         let mut is_standard = lhs.is_standard && rhs.is_standard;
         if predicate.is_constant() {
-            // let value = T::get_public(&predicate.get_value(driver))
-            //     .expect("Constants are public")
-            //     .is_zero();
-            // // is_standard = (!value && lhs.is_standard) && (value && rhs.is_standard);
-            is_standard = false; // TACEO note: there seems to be a bug in Barrettenberg here
+            let value = T::get_public(&predicate.get_value(driver))
+                .expect("Constants are public")
+                .is_zero();
+            is_standard = if value {
+                rhs.is_standard
+            } else {
+                lhs.is_standard
+            };
         }
 
         // Rare case when we bump into two constants, s.t. lhs = -rhs
@@ -2544,14 +2660,10 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             ));
         }
 
-        // Is this initializer list ok?
-        Ok(Self {
-            x,
-            y,
-            is_infinity,
-            is_standard,
-            is_constant: false,
-        })
+        let mut result = CycleGroupCT::new(x, y, is_infinity, builder, driver);
+        result.is_standard = is_standard;
+
+        Ok(result)
     }
 }
 
@@ -2855,14 +2967,8 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             builder,
             driver,
         )?;
-        let mut modded_base_point = CycleGroupCT::new(
-            modded_x,
-            modded_y,
-            BoolCT::from(false),
-            false,
-            builder,
-            driver,
-        );
+        let mut modded_base_point =
+            CycleGroupCT::new(modded_x, modded_y, BoolCT::from(false), builder, driver);
 
         // if the input point is constant, it is cheaper to fix the point as a witness and then derive the table, than it is
         // to derive the table and fix its witnesses to be constant! (due to group additions = 1 gate, and fixing x/y coords
@@ -3000,7 +3106,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             x,
             y,
             BoolCT::from(false),
-            true,
             builder,
             driver,
         ))
