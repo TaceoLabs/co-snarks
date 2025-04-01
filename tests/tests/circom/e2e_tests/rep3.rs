@@ -66,12 +66,15 @@ macro_rules! add_test_impl {
                 let result1 = threads.pop().unwrap().join().unwrap();
                 assert_eq!(result1, result2);
                 assert_eq!(result2, result3);
-                let ser_proof = serde_json::to_string(&result1).unwrap();
+                let proof = [< $proof_system Proof >]::from(result1);
+                let ser_proof = serde_json::to_string(&proof).unwrap();
                 let der_proof = serde_json::from_str::<[< $proof_system Proof >]<$curve>>(&ser_proof).unwrap();
                 let vk: [ < $proof_system VK > ]<$curve> = serde_json::from_reader(
                     File::open(format!("../test_vectors/{}/{}/{}/verification_key.json", stringify!($proof_system), stringify!([< $curve:lower >]), $name)).unwrap(),
                 )
                 .unwrap();
+                let vk = vk.into();
+                let der_proof = der_proof.into();
                 assert_eq!(der_proof, result2);
                     $proof_system::<$curve>::verify(&vk, &der_proof, &public_input).expect("can verify");
             }
@@ -88,9 +91,11 @@ macro_rules! add_test_impl {
                     vk_file,
                 )
                 .unwrap();
+                let vk = vk.into();
                 let public_input: JsonPublicInput::<[< ark_ $curve:lower >]::Fr> = serde_json::from_reader(public_input_file).unwrap();
                 let snarkjs_proof: [< $proof_system Proof >]<$curve> = serde_json::from_reader(&snarkjs_proof_file).unwrap();
-                    $proof_system::<$curve>::verify(&vk, &snarkjs_proof, &public_input.values).expect("can verify");
+                let proof = snarkjs_proof.into();
+                $proof_system::<$curve>::verify(&vk, &proof, &public_input.values).expect("can verify");
             }
         }
     };
