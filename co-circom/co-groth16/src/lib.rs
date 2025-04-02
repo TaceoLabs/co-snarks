@@ -6,10 +6,7 @@ pub mod mpc;
 #[cfg(feature = "verifier")]
 mod verifier;
 
-pub use groth16::CoGroth16;
-pub use groth16::Groth16;
-pub use groth16::Rep3CoGroth16;
-pub use groth16::ShamirCoGroth16;
+pub use groth16::{CircomReduction, CoGroth16, Groth16, R1CSToQAP, Rep3CoGroth16, ShamirCoGroth16};
 
 pub use ark_groth16::{Proof, ProvingKey, VerifyingKey};
 pub use ark_relations::r1cs::ConstraintMatrices;
