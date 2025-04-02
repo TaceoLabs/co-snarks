@@ -21,7 +21,7 @@ use crate::mpc::CircomGroth16Prover;
 
 macro_rules! rayon_join {
     ($t1: expr, $t2: expr, $t3: expr) => {{
-        let ((x, y), z) = rayon::join(|| rayon::join(|| $t1, || $t2), || $t3);
+        let ((x, y), z) = rayon::join(|| rayon::join($t1, $t2), $t3);
         (x, y, z)
     }};
 }
@@ -375,8 +375,6 @@ mod reduction {
         IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator,
         ParallelIterator,
     };
-    use std::sync::Arc;
-    use tokio::sync::oneshot;
     use tracing::instrument;
 
     use crate::mpc::CircomGroth16Prover;
@@ -425,7 +423,7 @@ mod reduction {
             let eval_constraint_span =
                 tracing::debug_span!("evaluate constraints + root of unity computation").entered();
             let (roots_to_power_domain, a, b) = rayon_join!(
-                {
+                || {
                     let root_of_unity_span =
                         tracing::debug_span!("root of unity computation").entered();
                     let root_of_unity = root_of_unity_for_groth16(power, &mut domain);
@@ -436,9 +434,9 @@ mod reduction {
                         c *= root_of_unity;
                     }
                     root_of_unity_span.exit();
-                    Arc::new(roots)
+                    roots
                 },
-                {
+                || {
                     let eval_constraint_span_a =
                         tracing::debug_span!("evaluate constraints - a").entered();
                     let mut result = evaluate_constraint::<P, T>(
@@ -454,7 +452,7 @@ mod reduction {
                     eval_constraint_span_a.exit();
                     result
                 },
-                {
+                || {
                     let eval_constraint_span_b =
                         tracing::debug_span!("evaluate constraints - a").entered();
                     let result = evaluate_constraint::<P, T>(
@@ -470,69 +468,66 @@ mod reduction {
             );
 
             eval_constraint_span.exit();
-            let domain = Arc::new(domain);
-
-            let (a_tx, a_rx) = oneshot::channel();
-            let (b_tx, b_rx) = oneshot::channel();
-            let (c_tx, c_rx) = oneshot::channel();
-            let a_domain = Arc::clone(&domain);
-            let b_domain = Arc::clone(&domain);
-            let c_domain = Arc::clone(&domain);
             let mut a_result = a.clone();
             let mut b_result = b.clone();
-            let a_roots = Arc::clone(&roots_to_power_domain);
-            let b_roots = Arc::clone(&roots_to_power_domain);
-            let c_roots = Arc::clone(&roots_to_power_domain);
-            rayon::spawn(move || {
-                let a_span =
-                    tracing::debug_span!("a: distribute powers mul a (fft/ifft)").entered();
-                a_domain.ifft_in_place(&mut a_result);
-                T::distribute_powers_and_mul_by_const(&mut a_result, &a_roots);
-                a_domain.fft_in_place(&mut a_result);
-                a_tx.send(a_result).expect("channel not droped");
-                a_span.exit();
-            });
+            let ((a, b), c) = rayon::join(
+                || {
+                    rayon::join(
+                        || {
+                            let a_span =
+                                tracing::debug_span!("a: distribute powers mul a (fft/ifft)")
+                                    .entered();
+                            domain.ifft_in_place(&mut a_result);
+                            T::distribute_powers_and_mul_by_const(
+                                &mut a_result,
+                                &roots_to_power_domain,
+                            );
+                            domain.fft_in_place(&mut a_result);
+                            a_span.exit();
+                            a_result
+                        },
+                        || {
+                            let b_span =
+                                tracing::debug_span!("b: distribute powers mul b (fft/ifft)")
+                                    .entered();
+                            domain.ifft_in_place(&mut b_result);
+                            T::distribute_powers_and_mul_by_const(
+                                &mut b_result,
+                                &roots_to_power_domain,
+                            );
+                            domain.fft_in_place(&mut b_result);
+                            b_span.exit();
+                            b_result
+                        },
+                    )
+                },
+                || {
+                    let local_mul_vec_span = tracing::debug_span!("c: local_mul_vec").entered();
+                    let mut ab = driver.local_mul_vec(a, b);
+                    local_mul_vec_span.exit();
+                    let ifft_span = tracing::debug_span!("c: ifft in dist pows").entered();
+                    domain.ifft_in_place(&mut ab);
+                    ifft_span.exit();
+                    let dist_pows_span = tracing::debug_span!("c: dist pows").entered();
+                    ab.par_iter_mut()
+                        .zip_eq(roots_to_power_domain.par_iter())
+                        .with_min_len(512)
+                        .for_each(|(share, pow): (&mut T::ArithmeticHalfShare, _)| {
+                            *share *= *pow;
+                        });
+                    dist_pows_span.exit();
+                    let fft_span = tracing::debug_span!("c: fft in dist pows").entered();
+                    domain.fft_in_place(&mut ab);
+                    fft_span.exit();
+                    ab
+                },
+            );
 
-            rayon::spawn(move || {
-                let b_span =
-                    tracing::debug_span!("b: distribute powers mul b (fft/ifft)").entered();
-                b_domain.ifft_in_place(&mut b_result);
-                T::distribute_powers_and_mul_by_const(&mut b_result, &b_roots);
-                b_domain.fft_in_place(&mut b_result);
-                b_tx.send(b_result).expect("channel not droped");
-                b_span.exit();
-            });
-
-            let local_mul_vec_span = tracing::debug_span!("c: local_mul_vec").entered();
-            let mut ab = driver.local_mul_vec(a, b);
-            local_mul_vec_span.exit();
-            rayon::spawn(move || {
-                let ifft_span = tracing::debug_span!("c: ifft in dist pows").entered();
-                c_domain.ifft_in_place(&mut ab);
-                ifft_span.exit();
-                let dist_pows_span = tracing::debug_span!("c: dist pows").entered();
-                ab.par_iter_mut()
-                    .zip_eq(c_roots.par_iter())
-                    .with_min_len(512)
-                    .for_each(|(share, pow): (&mut T::ArithmeticHalfShare, _)| {
-                        *share *= *pow;
-                    });
-                dist_pows_span.exit();
-                let fft_span = tracing::debug_span!("c: fft in dist pows").entered();
-                c_domain.fft_in_place(&mut ab);
-                fft_span.exit();
-                c_tx.send(ab).expect("channel not dropped");
-            });
-
-            let a = a_rx.blocking_recv()?;
-            let b = b_rx.blocking_recv()?;
-
-            let compute_ab_span = tracing::debug_span!("compute ab").entered();
-            let local_ab_span = tracing::debug_span!("local part (mul and sub)").entered();
+            let local_ab_span = tracing::debug_span!("ab: local_mul_vec").entered();
             // same as above. No IO task is run at the moment.
             let mut ab = driver.local_mul_vec(a, b);
             local_ab_span.exit();
-            let c = c_rx.blocking_recv()?;
+            let compute_ab_span = tracing::debug_span!("compute ab").entered();
             ab.par_iter_mut()
                 .zip_eq(c.par_iter())
                 .with_min_len(512)
