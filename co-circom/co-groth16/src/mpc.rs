@@ -43,15 +43,11 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
         + MulAssign<P::ScalarField>
         + 'static;
 
-    /// The point share type
-    type PointShare<C>: Debug + Send + 'static
-    where
-        C: CurveGroup;
-
     /// The point half share type
     type PointHalfShare<C>: Debug + Send + 'static + AddAssign + SubAssign
     where
         C: CurveGroup;
+
     /// The party id type
     type PartyID: Send + Sync + Copy + fmt::Display + 'static;
 
@@ -94,13 +90,6 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
         b: Vec<Self::ArithmeticShare>,
     ) -> Vec<Self::ArithmeticHalfShare>;
 
-    /// Compute the msm of `h` and `h_query` and multiplication `r` * `s`.
-    fn mul(
-        &mut self,
-        r: Self::ArithmeticShare,
-        s: Self::ArithmeticShare,
-    ) -> IoResult<Self::ArithmeticShare>;
-
     /// Computes the \[coeffs_i\] *= c * g^i for the coefficients in 0 <= i < coeff.len()
     fn distribute_powers_and_mul_by_const(
         coeffs: &mut [Self::ArithmeticShare],
@@ -111,23 +100,10 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
     fn to_half_share(a: Self::ArithmeticShare) -> Self::ArithmeticHalfShare;
 
     /// Perform msm between `points` and `scalars`
-    fn msm_public_points<C>(
-        points: &[C::Affine],
-        scalars: &[Self::ArithmeticShare],
-    ) -> Self::PointShare<C>
-    where
-        C: CurveGroup<ScalarField = P::ScalarField>;
-
-    /// Perform msm between `points` and `scalars`
     fn msm_public_points_hs<C>(
         points: &[C::Affine],
         scalars: &[Self::ArithmeticHalfShare],
     ) -> Self::PointHalfShare<C>
-    where
-        C: CurveGroup<ScalarField = P::ScalarField>;
-
-    /// Multiplies a public point B to the shared point A in place: \[A\] *= B
-    fn scalar_mul_public_point<C>(a: &C, b: Self::ArithmeticShare) -> Self::PointShare<C>
     where
         C: CurveGroup<ScalarField = P::ScalarField>;
 
@@ -139,35 +115,12 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
     where
         C: CurveGroup<ScalarField = P::ScalarField>;
 
-    /// Add a shared point B in place to the shared point A: \[A\] += \[B\]
-    fn add_assign_points<C: CurveGroup>(a: &mut Self::PointShare<C>, b: &Self::PointShare<C>);
-
-    /// Subtract a shared point B in place from the shared point A: \[A\] -= \[B\]
-    fn sub_assign_points<C: CurveGroup>(a: &mut Self::PointShare<C>, b: &Self::PointShare<C>);
-
-    /// Add a shared point B in place to the shared point A: \[A\] += \[B\]
-    fn add_points_half_share<C: CurveGroup>(a: Self::PointShare<C>, b: &C) -> C;
-
     /// Add a public point B in place to the shared point A
     fn add_assign_points_public_hs<C: CurveGroup>(
         id: Self::PartyID,
         a: &mut Self::PointHalfShare<C>,
         b: &C,
     );
-
-    /// Reconstructs a shared point: A = Open(\[A\]).
-    fn open_point<C>(&mut self, a: &Self::PointShare<C>) -> IoResult<C>
-    where
-        C: CurveGroup<ScalarField = P::ScalarField>;
-
-    /// Multiplies a share b to the shared point A: \[A\] *= \[b\]. Requires network communication.
-    fn scalar_mul<C>(
-        &mut self,
-        a: &Self::PointShare<C>,
-        b: Self::ArithmeticShare,
-    ) -> IoResult<Self::PointShare<C>>
-    where
-        C: CurveGroup<ScalarField = P::ScalarField>;
 
     /// Reconstructs a shared points: A = Open(\[A\]), B = Open(\[B\]).
     fn open_two_half_points(
