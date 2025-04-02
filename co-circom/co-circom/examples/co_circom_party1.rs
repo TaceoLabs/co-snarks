@@ -5,7 +5,7 @@ use co_circom::{
 };
 use color_eyre::Result;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
-use std::{path::PathBuf, sync::Arc};
+use std::path::PathBuf;
 use tracing_subscriber::{
     fmt::{self, format::FmtSpan},
     prelude::*,
@@ -64,10 +64,11 @@ fn main() -> Result<()> {
         CoCircomCompiler::<Bn254>::parse(dir.join("circuit.circom"), CompilerConfig::default())?;
 
     // parse zkey, without performing extra checks (only advised for zkeys knwon to be valid)
-    let zkey = Arc::new(Groth16ZKey::<Bn254>::from_reader(
+    let zkey = Groth16ZKey::<Bn254>::from_reader(
         std::fs::read(dir.join("multiplier2.zkey"))?.as_slice(),
         CheckElement::No,
-    )?);
+    )?;
+    let (matrices, pkey) = zkey.into();
 
     // recv share from party 0, only needed for this demo for private-proof delegation and for PSS this is done separately,
     // because the party with the shares usually does not take part in the computation
@@ -79,7 +80,7 @@ fn main() -> Result<()> {
     let public_inputs = witness.public_inputs_for_verify();
 
     // generate proof
-    let (proof, _) = Rep3CoGroth16::prove(net, zkey, witness)?;
+    let (proof, _) = Rep3CoGroth16::prove(net, &pkey, &matrices, witness)?;
 
     // verify proof
     let vk = Groth16JsonVerificationKey::<Bn254>::from_reader(
