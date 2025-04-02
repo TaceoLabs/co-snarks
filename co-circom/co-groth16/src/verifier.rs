@@ -19,8 +19,8 @@ impl<P: Pairing> Groth16<P> {
         proof: &Proof<P>,
         public_inputs: &[P::ScalarField],
     ) -> Result<(), VerificationError> {
-        let vk = ark_groth16::prepare_verifying_key(&vk);
-        let proof_valid = ArkworksGroth16::<P>::verify_proof(&vk, &proof, public_inputs)
+        let vk = ark_groth16::prepare_verifying_key(vk);
+        let proof_valid = ArkworksGroth16::<P>::verify_proof(&vk, proof, public_inputs)
             .map_err(eyre::Report::from)?;
         if proof_valid {
             Ok(())

@@ -2,10 +2,9 @@
 use ark_ec::pairing::Pairing;
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{FftField, PrimeField};
-use ark_groth16::Proof;
+use ark_groth16::{Proof, ProvingKey};
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
-use ark_relations::r1cs::Matrix;
-use circom_types::groth16::ZKey;
+use ark_relations::r1cs::{ConstraintMatrices, Matrix};
 use co_circom_snarks::{Rep3SharedWitness, ShamirSharedWitness, SharedWitness};
 use eyre::Result;
 use mpc_core::protocols::rep3::network::{IoContext, Rep3Network};
@@ -28,6 +27,15 @@ macro_rules! rayon_join {
     ($t1: expr, $t2: expr, $t3: expr) => {{
         let ((x, y), z) = rayon::join(|| rayon::join(|| $t1, || $t2), || $t3);
         (x, y, z)
+    }};
+}
+macro_rules! rayon_join5 {
+    ($t1: expr, $t2: expr, $t3: expr, $t4: expr, $t5: expr) => {{
+        let ((((v, w), x), y), z) = rayon::join(
+            || rayon::join(|| rayon::join(|| rayon::join($t1, $t2), $t3), $t4),
+            $t5,
+        );
+        (v, w, x, y, z)
     }};
 }
 
@@ -103,36 +111,36 @@ impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
     #[instrument(level = "debug", name = "Groth16 - Proof", skip_all)]
     fn prove_inner(
         mut self,
-        zkey: Arc<ZKey<P>>,
+        pkey: &ProvingKey<P>,
+        matrices: &ConstraintMatrices<P::ScalarField>,
         private_witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
     ) -> Result<(Proof<P>, T)> {
-        let public_inputs = Arc::new(private_witness.public_inputs);
-        if public_inputs.len() != zkey.n_public + 1 {
+        let public_inputs = private_witness.public_inputs;
+        if public_inputs.len() != matrices.num_instance_variables {
             eyre::bail!(
-                "amount of public inputs do not match with provided zkey! Expected {}, but got {}",
-                zkey.n_public + 1,
+                "amount of public inputs do not match with provided constraint system! Expected {}, but got {}",
+                matrices.num_instance_variables,
                 public_inputs.len()
             )
         }
 
-        let h = self.witness_map_from_matrices(&zkey, &public_inputs, &private_witness.witness)?;
+        let h =
+            self.witness_map_from_matrices(matrices, &public_inputs, &private_witness.witness)?;
         let (r, s) = (self.driver.rand()?, self.driver.rand()?);
 
-        let private_witness_half_share = private_witness
+        let private_witness_half_share: Vec<_> = private_witness
             .witness
             .into_iter()
             .map(T::to_half_share)
             .collect();
 
-        let private_witness_hs = Arc::new(private_witness_half_share);
-
         self.create_proof_with_assignment(
-            Arc::clone(&zkey),
+            pkey,
             r,
             s,
             h,
-            public_inputs,
-            private_witness_hs,
+            &public_inputs,
+            &private_witness_half_share,
         )
     }
 
@@ -155,17 +163,17 @@ impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
     #[instrument(level = "debug", name = "witness map from matrices", skip_all)]
     fn witness_map_from_matrices(
         &mut self,
-        zkey: &ZKey<P>,
+        matrices: &ConstraintMatrices<P::ScalarField>,
         public_inputs: &[P::ScalarField],
         private_witness: &[T::ArithmeticShare],
     ) -> Result<Vec<T::ArithmeticHalfShare>> {
-        let num_constraints = zkey.num_constraints;
-        let num_inputs = zkey.n_public + 1;
-        let power = zkey.pow;
+        let num_constraints = matrices.num_constraints;
+        let num_inputs = matrices.num_instance_variables;
         let mut domain =
             GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints + num_inputs)
                 .ok_or(eyre::eyre!("Polynomial Degree too large"))?;
         let domain_size = domain.size();
+        let power = domain_size.ilog2() as usize;
         let party_id = self.driver.get_party_id();
         let eval_constraint_span =
             tracing::debug_span!("evaluate constraints + root of unity computation").entered();
@@ -189,7 +197,7 @@ impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
                 let mut result = Self::evaluate_constraint(
                     party_id,
                     domain_size,
-                    &zkey.a_matrix,
+                    &matrices.a,
                     public_inputs,
                     private_witness,
                 );
@@ -205,7 +213,7 @@ impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
                 let result = Self::evaluate_constraint(
                     party_id,
                     domain_size,
-                    &zkey.b_matrix,
+                    &matrices.b,
                     public_inputs,
                     private_witness,
                 );
@@ -315,117 +323,97 @@ impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
     #[instrument(level = "debug", name = "create proof with assignment", skip_all)]
     fn create_proof_with_assignment(
         mut self,
-        zkey: Arc<ZKey<P>>,
+        pkey: &ProvingKey<P>,
         r: T::ArithmeticShare,
         s: T::ArithmeticShare,
         h: Vec<T::ArithmeticHalfShare>,
-        input_assignment: Arc<Vec<P::ScalarField>>,
-        aux_assignment: Arc<Vec<T::ArithmeticHalfShare>>,
+        input_assignment: &[P::ScalarField],
+        aux_assignment: &[T::ArithmeticHalfShare],
     ) -> Result<(Proof<P>, T)> {
-        let delta_g1 = zkey.delta_g1.into_group();
-        let (l_acc_tx, l_acc_rx) = oneshot::channel();
-        let (h_acc_tx, h_acc_rx) = oneshot::channel();
-        let h_query = Arc::clone(&zkey);
-        let l_query = Arc::clone(&zkey);
+        let delta_g1 = pkey.delta_g1.into_group();
 
         let party_id = self.driver.get_party_id();
-        let (r_g1_tx, r_g1_rx) = oneshot::channel();
-        let (s_g1_tx, s_g1_rx) = oneshot::channel();
-        let (s_g2_tx, s_g2_rx) = oneshot::channel();
-        let a_query = Arc::clone(&zkey);
-        let b_g1_query = Arc::clone(&zkey);
-        let b_g2_query = Arc::clone(&zkey);
-        let input_assignment1 = Arc::clone(&input_assignment);
-        let input_assignment2 = Arc::clone(&input_assignment);
-        let input_assignment3 = Arc::clone(&input_assignment);
-        let aux_assignment1 = Arc::clone(&aux_assignment);
-        let aux_assignment2 = Arc::clone(&aux_assignment);
-        let aux_assignment3 = Arc::clone(&aux_assignment);
-        let aux_assignment4 = Arc::clone(&aux_assignment);
-        let alpha_g1 = zkey.alpha_g1;
-        let beta_g1 = zkey.beta_g1;
-        let beta_g2 = zkey.beta_g2;
-        let delta_g2 = zkey.delta_g2.into_group();
+        let alpha_g1 = pkey.vk.alpha_g1;
+        let beta_g1 = pkey.beta_g1;
+        let beta_g2 = pkey.vk.beta_g2;
+        let delta_g2 = pkey.vk.delta_g2.into_group();
 
-        rayon::spawn(move || {
-            let compute_a =
-                tracing::debug_span!("compute A in create proof with assignment").entered();
-            // Compute A
-            let r = T::to_half_share(r);
-            let r_g1 = T::scalar_mul_public_point_hs(&delta_g1, r);
-            let r_g1 = Self::calculate_coeff(
-                party_id,
-                r_g1,
-                &a_query.a_query,
-                alpha_g1,
-                &input_assignment1[1..],
-                &aux_assignment1,
-            );
-            r_g1_tx.send(r_g1).expect("not dropped");
-            compute_a.exit();
-        });
+        let (r_g1, s_g1, s_g2, l_acc, h_acc) = rayon_join5!(
+            || {
+                let compute_a =
+                    tracing::debug_span!("compute A in create proof with assignment").entered();
+                // Compute A
+                let r = T::to_half_share(r);
+                let r_g1 = T::scalar_mul_public_point_hs(&delta_g1, r);
+                let r_g1 = Self::calculate_coeff(
+                    party_id,
+                    r_g1,
+                    &pkey.a_query,
+                    alpha_g1,
+                    &input_assignment[1..],
+                    aux_assignment,
+                );
+                compute_a.exit();
+                r_g1
+            },
+            || {
+                let compute_b =
+                    tracing::debug_span!("compute B/G1 in create proof with assignment").entered();
+                // Compute B in G1
+                // In original implementation this is skipped if r==0, however r is shared in our case
+                let s = T::to_half_share(s);
+                let s_g1 = T::scalar_mul_public_point_hs(&delta_g1, s);
+                let s_g1 = Self::calculate_coeff(
+                    party_id,
+                    s_g1,
+                    &pkey.b_g1_query,
+                    beta_g1,
+                    &input_assignment[1..],
+                    aux_assignment,
+                );
+                compute_b.exit();
+                s_g1
+            },
+            || {
+                let compute_b =
+                    tracing::debug_span!("compute B/G2 in create proof with assignment").entered();
+                // Compute B in G2
+                let s = T::to_half_share(s);
+                let s_g2 = T::scalar_mul_public_point_hs(&delta_g2, s);
+                let s_g2 = Self::calculate_coeff(
+                    party_id,
+                    s_g2,
+                    &pkey.b_g2_query,
+                    beta_g2,
+                    &input_assignment[1..],
+                    aux_assignment,
+                );
+                compute_b.exit();
+                s_g2
+            },
+            || {
+                let msm_l_query = tracing::debug_span!("msm l_query").entered();
+                let result: <T as CircomGroth16Prover<P>>::PointHalfShare<P::G1> =
+                    T::msm_public_points_hs(&pkey.l_query, aux_assignment);
+                msm_l_query.exit();
+                result
+            },
+            || {
+                let msm_h_query = tracing::debug_span!("msm h_query").entered();
+                //perform the msm for h
+                let result = T::msm_public_points_hs(&pkey.h_query, &h);
+                msm_h_query.exit();
+                result
+            }
+        );
 
-        rayon::spawn(move || {
-            let compute_b =
-                tracing::debug_span!("compute B/G1 in create proof with assignment").entered();
-            // Compute B in G1
-            // In original implementation this is skipped if r==0, however r is shared in our case
-            let s = T::to_half_share(s);
-            let s_g1 = T::scalar_mul_public_point_hs(&delta_g1, s);
-            let s_g1 = Self::calculate_coeff(
-                party_id,
-                s_g1,
-                &b_g1_query.b_g1_query,
-                beta_g1,
-                &input_assignment2[1..],
-                &aux_assignment2,
-            );
-            s_g1_tx.send(s_g1).expect("not dropped");
-            compute_b.exit();
-        });
-
-        rayon::spawn(move || {
-            let compute_b =
-                tracing::debug_span!("compute B/G2 in create proof with assignment").entered();
-            // Compute B in G2
-            let s = T::to_half_share(s);
-            let s_g2 = T::scalar_mul_public_point_hs(&delta_g2, s);
-            let s_g2 = Self::calculate_coeff(
-                party_id,
-                s_g2,
-                &b_g2_query.b_g2_query,
-                beta_g2,
-                &input_assignment3[1..],
-                &aux_assignment3,
-            );
-            s_g2_tx.send(s_g2).expect("not dropped");
-            compute_b.exit();
-        });
-
-        rayon::spawn(move || {
-            let msm_l_query = tracing::debug_span!("msm l_query").entered();
-            let result = T::msm_public_points_hs(&l_query.l_query, &aux_assignment4);
-            l_acc_tx.send(result).expect("channel not dropped");
-            msm_l_query.exit();
-        });
-
-        rayon::spawn(move || {
-            let msm_h_query = tracing::debug_span!("msm h_query").entered();
-            //perform the msm for h
-            let result = T::msm_public_points_hs(&h_query.h_query, &h);
-            h_acc_tx.send(result).expect("channel not dropped");
-            msm_h_query.exit();
-        });
-
-        // TODO we should move this to seperate thread so that we not block here
-        // we can do some additional work so we don't necessary need to block
-        let rs_span = tracing::debug_span!("r*s with networking").entered();
+        let rs_span = tracing::debug_span!("r*s without networking").entered();
         let rs = self.driver.local_mul_vec(vec![r], vec![s]).pop().unwrap();
         let r_s_delta_g1 = T::scalar_mul_public_point_hs(&delta_g1, rs);
         rs_span.exit();
 
-        let g_a = r_g1_rx.blocking_recv()?;
-        let g1_b = s_g1_rx.blocking_recv()?;
+        let g_a = r_g1;
+        let g1_b = s_g1;
 
         let network_round = tracing::debug_span!("network round after calc coeff").entered();
         let (g_a_opened, r_g1_b) = self.driver.open_point_and_scalar_mul(&g_a, &g1_b, r)?;
@@ -438,13 +426,11 @@ impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
         let mut g_c = s_g_a;
         g_c += r_g1_b;
         g_c -= r_s_delta_g1;
-        let l_aux_acc = l_acc_rx.blocking_recv().expect("channel not dropped");
-        g_c += l_aux_acc;
+        g_c += l_acc;
 
-        let h_acc = h_acc_rx.blocking_recv()?;
         g_c += h_acc;
 
-        let g2_b = s_g2_rx.blocking_recv()?;
+        let g2_b = s_g2;
         let (g_c_opened, g2_b_opened) = self.driver.open_two_half_points(g_c, g2_b)?;
         last_round.exit();
 
@@ -460,10 +446,11 @@ impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
 }
 
 impl<P: Pairing, N: Rep3Network> Rep3CoGroth16<P, N> {
-    /// Create a [`Groth16Proof`].
+    /// Create a [`Proof`].
     pub fn prove(
         net: N,
-        zkey: Arc<ZKey<P>>,
+        pkey: &ProvingKey<P>,
+        matrices: &ConstraintMatrices<P::ScalarField>,
         witness: Rep3SharedWitness<P::ScalarField>,
     ) -> Result<(Proof<P>, N)> {
         let mut io_context0 = IoContext::init(net)?;
@@ -474,17 +461,18 @@ impl<P: Pairing, N: Rep3Network> Rep3CoGroth16<P, N> {
             phantom_data: PhantomData,
         };
         // execute prover in MPC
-        let (proof, driver) = prover.prove_inner(zkey, witness)?;
+        let (proof, driver) = prover.prove_inner(pkey, matrices, witness)?;
         Ok((proof, driver.get_network()))
     }
 }
 
 impl<P: Pairing, N: ShamirNetwork> ShamirCoGroth16<P, N> {
-    /// Create a [`Groth16Proof`].
+    /// Create a [`Proof`].
     pub fn prove(
         net: N,
         threshold: usize,
-        zkey: Arc<ZKey<P>>,
+        pkey: &ProvingKey<P>,
+        matrices: &ConstraintMatrices<P::ScalarField>,
         witness: ShamirSharedWitness<P::ScalarField>,
     ) -> Result<(Proof<P>, N)> {
         // we need 2 + 1 number of corr rand pairs. We need the values r/s (1 pair) and 2 muls (2
@@ -501,7 +489,7 @@ impl<P: Pairing, N: ShamirNetwork> ShamirCoGroth16<P, N> {
             phantom_data: PhantomData,
         };
         // execute prover in MPC
-        let (proof, driver) = prover.prove_inner(zkey, witness)?;
+        let (proof, driver) = prover.prove_inner(pkey, matrices, witness)?;
         Ok((proof, driver.get_network()))
     }
 }
@@ -512,14 +500,15 @@ impl<P: Pairing> Groth16<P> {
     ///
     /// DOES NOT PERFORM ANY MPC. For a plain prover checkout the [Groth16 implementation of arkworks](https://docs.rs/ark-groth16/latest/ark_groth16/).
     pub fn plain_prove(
-        zkey: Arc<ZKey<P>>,
+        pkey: &ProvingKey<P>,
+        matrices: &ConstraintMatrices<P::ScalarField>,
         private_witness: SharedWitness<P::ScalarField, P::ScalarField>,
     ) -> Result<Proof<P>> {
         let prover = Self {
             driver: PlainGroth16Driver,
             phantom_data: PhantomData,
         };
-        let (proof, _) = prover.prove_inner(zkey, private_witness)?;
+        let (proof, _) = prover.prove_inner(pkey, matrices, private_witness)?;
         Ok(proof)
     }
 }

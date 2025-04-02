@@ -11,6 +11,9 @@ pub use groth16::Groth16;
 pub use groth16::Rep3CoGroth16;
 pub use groth16::ShamirCoGroth16;
 
+pub use ark_groth16::{Proof, ProvingKey, VerifyingKey};
+pub use ark_relations::r1cs::ConstraintMatrices;
+
 #[cfg(test)]
 #[cfg(feature = "verifier")]
 mod tests {
@@ -22,10 +25,7 @@ mod tests {
         Witness,
     };
     use co_circom_snarks::SharedWitness;
-    use std::{
-        fs::{self, File},
-        sync::Arc,
-    };
+    use std::fs::{self, File};
 
     use crate::groth16::Groth16;
 
@@ -41,16 +41,17 @@ mod tests {
                     .unwrap();
 
             let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
-            let zkey = Arc::new(ZKey::<Bn254>::from_reader(zkey_file, check).unwrap());
+            let zkey = ZKey::<Bn254>::from_reader(zkey_file, check).unwrap();
+            let (matrices, pkey) = zkey.into();
             let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(vk_file).unwrap();
             let vk = vk.into();
-            let public_input = witness.values[..=zkey.n_public].to_vec();
+            let public_input = witness.values[..matrices.num_instance_variables].to_vec();
             let witness = SharedWitness {
                 public_inputs: public_input.clone(),
-                witness: witness.values[zkey.n_public + 1..].to_vec(),
+                witness: witness.values[matrices.num_instance_variables..].to_vec(),
             };
-            let proof =
-                Groth16::<Bn254>::plain_prove(zkey, witness).expect("proof generation works");
+            let proof = Groth16::<Bn254>::plain_prove(&pkey, &matrices, witness)
+                .expect("proof generation works");
             let proof = Groth16Proof::from(proof);
             let ser_proof = serde_json::to_string(&proof).unwrap();
             let der_proof = serde_json::from_str::<Groth16Proof<Bn254>>(&ser_proof).unwrap();
@@ -91,16 +92,17 @@ mod tests {
                 File::open("../../test_vectors/Groth16/bn254/poseidon/verification_key.json")
                     .unwrap();
             let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
-            let zkey = Arc::new(ZKey::<Bn254>::from_reader(zkey_file, check).unwrap());
+            let zkey = ZKey::<Bn254>::from_reader(zkey_file, check).unwrap();
+            let (matrices, pkey) = zkey.into();
             let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(vk_file).unwrap();
             let vk = vk.into();
-            let public_input = witness.values[..=zkey.n_public].to_vec();
+            let public_input = witness.values[..matrices.num_instance_variables].to_vec();
             let witness = SharedWitness {
                 public_inputs: public_input.clone(),
-                witness: witness.values[zkey.n_public + 1..].to_vec(),
+                witness: witness.values[matrices.num_instance_variables..].to_vec(),
             };
-            let proof =
-                Groth16::<Bn254>::plain_prove(zkey, witness).expect("proof generation works");
+            let proof = Groth16::<Bn254>::plain_prove(&pkey, &matrices, witness)
+                .expect("proof generation works");
             let proof = Groth16Proof::from(proof);
             let ser_proof = serde_json::to_string(&proof).unwrap();
             let der_proof = serde_json::from_str::<Groth16Proof<Bn254>>(&ser_proof).unwrap();
@@ -163,17 +165,18 @@ mod tests {
             )
             .unwrap();
             let witness = Witness::<ark_bls12_381::Fr>::from_reader(witness_file).unwrap();
-            let zkey = Arc::new(ZKey::<Bls12_381>::from_reader(zkey_file, check).unwrap());
+            let zkey = ZKey::<Bls12_381>::from_reader(zkey_file, check).unwrap();
+            let (matrices, pkey) = zkey.into();
             let vk: JsonVerificationKey<Bls12_381> = serde_json::from_reader(vk_file).unwrap();
             let vk = vk.into();
-            let public_input = witness.values[..=zkey.n_public].to_vec();
+            let public_input = witness.values[..matrices.num_instance_variables].to_vec();
             let witness = SharedWitness {
                 public_inputs: public_input.clone(),
-                witness: witness.values[zkey.n_public + 1..].to_vec(),
+                witness: witness.values[matrices.num_instance_variables..].to_vec(),
             };
 
-            let proof =
-                Groth16::<Bls12_381>::plain_prove(zkey, witness).expect("proof generation works");
+            let proof = Groth16::<Bls12_381>::plain_prove(&pkey, &matrices, witness)
+                .expect("proof generation works");
             Groth16::<Bls12_381>::verify(&vk, &proof, &public_input[1..]).expect("can verify");
             let proof = Groth16Proof::from(proof);
             let ser_proof = serde_json::to_string(&proof).unwrap();
@@ -194,17 +197,18 @@ mod tests {
                 File::open("../../test_vectors/Groth16/bn254/multiplier2/verification_key.json")
                     .unwrap();
             let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
-            let zkey = Arc::new(ZKey::<Bn254>::from_reader(zkey_file, check).unwrap());
+            let zkey = ZKey::<Bn254>::from_reader(zkey_file, check).unwrap();
+            let (matrices, pkey) = zkey.into();
             let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(vk_file).unwrap();
             let vk = vk.into();
-            let public_input = witness.values[..=zkey.n_public].to_vec();
+            let public_input = witness.values[..matrices.num_instance_variables].to_vec();
             let witness = SharedWitness {
                 public_inputs: public_input.clone(),
-                witness: witness.values[zkey.n_public + 1..].to_vec(),
+                witness: witness.values[matrices.num_instance_variables..].to_vec(),
             };
 
-            let proof =
-                Groth16::<Bn254>::plain_prove(zkey, witness).expect("proof generation works");
+            let proof = Groth16::<Bn254>::plain_prove(&pkey, &matrices, witness)
+                .expect("proof generation works");
             Groth16::<Bn254>::verify(&vk, &proof, &public_input[1..]).expect("can verify");
             let proof = Groth16Proof::from(proof);
             let ser_proof = serde_json::to_string(&proof).unwrap();
