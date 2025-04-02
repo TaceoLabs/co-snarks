@@ -53,6 +53,23 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
         acc
     }
 
+    fn evaluate_constraint_half_share(
+        _: Self::PartyID,
+        lhs: &[(P::ScalarField, usize)],
+        public_inputs: &[P::ScalarField],
+        private_witness: &[Self::ArithmeticShare],
+    ) -> Self::ArithmeticHalfShare {
+        let mut acc = P::ScalarField::default();
+        for (coeff, index) in lhs {
+            if index < &public_inputs.len() {
+                acc += *coeff * public_inputs[*index];
+            } else {
+                acc += *coeff * private_witness[*index - public_inputs.len()];
+            }
+        }
+        acc
+    }
+
     fn to_half_share(a: Self::ArithmeticShare) -> <P as Pairing>::ScalarField {
         a
     }

@@ -76,6 +76,27 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
         acc
     }
 
+    fn evaluate_constraint_half_share(
+        _party_id: Self::PartyID,
+        lhs: &[(P::ScalarField, usize)],
+        public_inputs: &[P::ScalarField],
+        private_witness: &[Self::ArithmeticShare],
+    ) -> Self::ArithmeticHalfShare {
+        let mut acc = Self::ArithmeticHalfShare::default();
+        for (coeff, index) in lhs {
+            if index < &public_inputs.len() {
+                let val = public_inputs[*index];
+                let mul_result = val * coeff;
+                acc += mul_result;
+            } else {
+                let current_witness = private_witness[*index - public_inputs.len()];
+                let current_witness_hs = current_witness.inner();
+                acc += current_witness_hs * coeff;
+            }
+        }
+        acc
+    }
+
     fn promote_to_trivial_shares(
         _id: Self::PartyID,
         public_values: &[P::ScalarField],

@@ -69,6 +69,14 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
         private_witness: &[Self::ArithmeticShare],
     ) -> Self::ArithmeticShare;
 
+    /// Each value of lhs consists of a coefficient c and an index i. This function computes the sum of the coefficients times the corresponding public input or private witness. In other words, an accumulator a is initialized to 0, and for each (c, i) in lhs, a += c * public_inputs\[i\] is computed if i corresponds to a public input, or c * private_witness[i - public_inputs.len()] if i corresponds to a private witness.
+    fn evaluate_constraint_half_share(
+        party_id: Self::PartyID,
+        lhs: &[(P::ScalarField, usize)],
+        public_inputs: &[P::ScalarField],
+        private_witness: &[Self::ArithmeticShare],
+    ) -> Self::ArithmeticHalfShare;
+
     /// Elementwise transformation of a vector of public values into a vector of shared values: \[a_i\] = a_i.
     fn promote_to_trivial_shares(
         id: Self::PartyID,
