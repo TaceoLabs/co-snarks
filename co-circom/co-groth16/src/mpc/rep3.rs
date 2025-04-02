@@ -35,10 +35,6 @@ impl<N: Rep3Network> Rep3Groth16Driver<N> {
 impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N> {
     type ArithmeticShare = Rep3PrimeFieldShare<P::ScalarField>;
     type ArithmeticHalfShare = P::ScalarField;
-    type PointShare<C>
-        = Rep3PointShare<C>
-    where
-        C: CurveGroup;
 
     type PointHalfShare<C>
         = C
@@ -119,14 +115,6 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
         arithmetic::local_mul_vec(&a, &b, &mut self.io_context0.rngs)
     }
 
-    fn mul(
-        &mut self,
-        r: Self::ArithmeticShare,
-        s: Self::ArithmeticShare,
-    ) -> IoResult<Self::ArithmeticShare> {
-        arithmetic::mul(r, s, &mut self.io_context1)
-    }
-
     fn distribute_powers_and_mul_by_const(
         coeffs: &mut [Self::ArithmeticShare],
         roots: &[P::ScalarField],
@@ -140,33 +128,6 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
             })
     }
 
-    fn msm_public_points<C>(
-        points: &[C::Affine],
-        scalars: &[Self::ArithmeticShare],
-    ) -> Self::PointShare<C>
-    where
-        C: CurveGroup<ScalarField = P::ScalarField>,
-    {
-        pointshare::msm_public_points(points, scalars)
-    }
-
-    fn scalar_mul_public_point<C>(a: &C, b: Self::ArithmeticShare) -> Self::PointShare<C>
-    where
-        C: CurveGroup<ScalarField = P::ScalarField>,
-    {
-        pointshare::scalar_mul_public_point(a, b)
-    }
-
-    /// Add a shared point B in place to the shared point A: \[A\] += \[B\]
-    fn add_assign_points<C: CurveGroup>(a: &mut Self::PointShare<C>, b: &Self::PointShare<C>) {
-        pointshare::add_assign(a, b)
-    }
-
-    fn add_points_half_share<C: CurveGroup>(a: Self::PointShare<C>, b: &C) -> C {
-        let (a, _) = a.ab();
-        a + b
-    }
-
     fn add_assign_points_public_hs<C: CurveGroup>(
         id: Self::PartyID,
         a: &mut Self::PointHalfShare<C>,
@@ -177,28 +138,6 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
             PartyID::ID1 => {}
             PartyID::ID2 => {}
         }
-    }
-
-    fn open_point<C>(&mut self, a: &Self::PointShare<C>) -> IoResult<C>
-    where
-        C: CurveGroup<ScalarField = P::ScalarField>,
-    {
-        pointshare::open_point(a, &mut self.io_context0)
-    }
-
-    fn scalar_mul<C>(
-        &mut self,
-        a: &Self::PointShare<C>,
-        b: Self::ArithmeticShare,
-    ) -> IoResult<Self::PointShare<C>>
-    where
-        C: CurveGroup<ScalarField = P::ScalarField>,
-    {
-        pointshare::scalar_mul(a, b, &mut self.io_context0)
-    }
-
-    fn sub_assign_points<C: CurveGroup>(a: &mut Self::PointShare<C>, b: &Self::PointShare<C>) {
-        pointshare::sub_assign(a, b);
     }
 
     fn open_two_half_points(&mut self, a: P::G1, b: P::G2) -> std::io::Result<(P::G1, P::G2)> {
