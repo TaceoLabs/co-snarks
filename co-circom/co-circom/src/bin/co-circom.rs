@@ -954,7 +954,7 @@ where
 
                     let start = Instant::now();
                     let (proof, mpc_net) =
-                        Rep3CoGroth16::prove(mpc_net, &pkey, &matrices, witness_share)?;
+                        Rep3CoGroth16::<_, _>::prove(mpc_net, &pkey, &matrices, witness_share)?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
                     // network is shutdown in drop, which can take seom time with quinn
@@ -969,8 +969,13 @@ where
                     let public_input = witness_share.public_inputs.clone();
 
                     let start = Instant::now();
-                    let (proof, mpc_net) =
-                        ShamirCoGroth16::prove(mpc_net, t, &pkey, &matrices, witness_share)?;
+                    let (proof, mpc_net) = ShamirCoGroth16::<_, _>::prove(
+                        mpc_net,
+                        t,
+                        &pkey,
+                        &matrices,
+                        witness_share,
+                    )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
                     // network is shutdown in drop, which can take seom time with quinn

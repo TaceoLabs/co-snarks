@@ -87,7 +87,7 @@ fn main() -> Result<()> {
     let public_inputs = witness.public_inputs_for_verify();
 
     // generate proof
-    let (proof, _) = Rep3CoGroth16::prove(net, &pkey, &matrices, witness)?;
+    let (proof, _) = Rep3CoGroth16::<_, _>::prove(net, &pkey, &matrices, witness)?;
 
     // verify proof
     let vk = Groth16JsonVerificationKey::<Bn254>::from_reader(

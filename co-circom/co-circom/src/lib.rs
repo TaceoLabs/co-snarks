@@ -10,7 +10,7 @@ use std::{marker::PhantomData, sync::Arc};
 
 use ark_ff::PrimeField;
 use co_circom_snarks::{CompressedRep3SharedWitness, SharedWitness};
-use co_groth16::{ConstraintMatrices, ProvingKey};
+use co_groth16::{CircomReduction, ConstraintMatrices, ProvingKey};
 use color_eyre::eyre::{self, Context, ContextCompat};
 use mpc_core::protocols::{
     bridges::network::RepToShamirNetwork,
@@ -82,8 +82,13 @@ where
         matrices: &ConstraintMatrices<P::ScalarField>,
     ) -> eyre::Result<(CircomGroth16Proof<P>, Vec<P::ScalarField>)> {
         let public_inputs = self.witness.public_inputs[1..].to_vec();
-        let (proof, _net) =
-            ShamirCoGroth16::prove(self.net, self.threshold, pkey, matrices, self.witness)?;
+        let (proof, _net) = ShamirCoGroth16::<P, _, CircomReduction>::prove(
+            self.net,
+            self.threshold,
+            pkey,
+            matrices,
+            self.witness,
+        )?;
         Ok((proof.into(), public_inputs))
     }
 
@@ -145,7 +150,8 @@ where
     ) -> eyre::Result<(CircomGroth16Proof<P>, Vec<P::ScalarField>)> {
         let witness = self.witness.uncompress(&mut self.net)?;
         let public_inputs = witness.public_inputs[1..].to_vec();
-        let (proof, _net) = Rep3CoGroth16::prove(self.net, pkey, matrices, witness)?;
+        let (proof, _net) =
+            Rep3CoGroth16::<P, _, CircomReduction>::prove(self.net, pkey, matrices, witness)?;
         Ok((proof.into(), public_inputs))
     }
 
