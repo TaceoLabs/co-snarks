@@ -367,7 +367,7 @@ impl<P: Pairing, R: R1CSToQAP> Groth16<P, R> {
 pub use reduction::{CircomReduction, R1CSToQAP};
 mod reduction {
     use ark_ec::pairing::Pairing;
-    use ark_ff::One;
+    use ark_ff::{FftField, Field, One};
     use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
     use ark_relations::r1cs::{ConstraintMatrices, Matrix};
     use eyre::Result;
@@ -558,5 +558,101 @@ mod reduction {
             .collect::<Vec<_>>();
         result.resize(domain_size, T::ArithmeticShare::default());
         result
+    }
+
+    fn evaluate_constraint_half_share<P: Pairing, T: CircomGroth16Prover<P>>(
+        party_id: T::PartyID,
+        domain_size: usize,
+        matrix: &Matrix<P::ScalarField>,
+        public_inputs: &[P::ScalarField],
+        private_witness: &[T::ArithmeticShare],
+    ) -> Vec<T::ArithmeticHalfShare> {
+        let mut result = matrix
+            .par_iter()
+            .with_min_len(256)
+            .map(|x| T::evaluate_constraint_half_share(party_id, x, public_inputs, private_witness))
+            .collect::<Vec<_>>();
+        result.resize(domain_size, T::ArithmeticHalfShare::default());
+        result
+    }
+
+    pub struct LibSnarkReduction;
+
+    impl R1CSToQAP for LibSnarkReduction {
+        #[instrument(level = "debug", name = "witness map from matrices", skip_all)]
+        fn witness_map_from_matrices<P: Pairing, T: CircomGroth16Prover<P>>(
+            driver: &mut T,
+            matrices: &ConstraintMatrices<P::ScalarField>,
+            public_inputs: &[P::ScalarField],
+            private_witness: &[T::ArithmeticShare],
+        ) -> Result<Vec<T::ArithmeticHalfShare>> {
+            let num_constraints = matrices.num_constraints;
+            let num_inputs = matrices.num_instance_variables;
+            let domain =
+                GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints + num_inputs)
+                    .ok_or(eyre::eyre!("Polynomial Degree too large"))?;
+            let domain_size = domain.size();
+            let party_id = driver.get_party_id();
+
+            let (mut a, mut b) = rayon::join(
+                || {
+                    let mut result = evaluate_constraint::<P, T>(
+                        party_id,
+                        domain_size,
+                        &matrices.a,
+                        public_inputs,
+                        private_witness,
+                    );
+                    let promoted_public = T::promote_to_trivial_shares(party_id, public_inputs);
+                    result[num_constraints..num_constraints + num_inputs]
+                        .clone_from_slice(&promoted_public[..num_inputs]);
+                    result
+                },
+                || {
+                    evaluate_constraint::<P, T>(
+                        party_id,
+                        domain_size,
+                        &matrices.b,
+                        public_inputs,
+                        private_witness,
+                    )
+                },
+            );
+
+            domain.ifft_in_place(&mut a);
+            domain.ifft_in_place(&mut b);
+
+            let coset_domain = domain.get_coset(P::ScalarField::GENERATOR).unwrap();
+
+            coset_domain.fft_in_place(&mut a);
+            coset_domain.fft_in_place(&mut b);
+
+            let mut ab = driver.local_mul_vec(a, b);
+
+            let mut c = evaluate_constraint_half_share::<P, T>(
+                party_id,
+                domain_size,
+                &matrices.c,
+                public_inputs,
+                private_witness,
+            );
+
+            domain.ifft_in_place(&mut c);
+            coset_domain.fft_in_place(&mut c);
+
+            let vanishing_polynomial_over_coset = domain
+                .evaluate_vanishing_polynomial(P::ScalarField::GENERATOR)
+                .inverse()
+                .unwrap();
+
+            ab.iter_mut().zip(c.iter()).for_each(|(ab_i, c_i)| {
+                *ab_i -= *c_i;
+                *ab_i *= vanishing_polynomial_over_coset;
+            });
+
+            coset_domain.ifft_in_place(&mut ab);
+
+            Ok(ab)
+        }
     }
 }
