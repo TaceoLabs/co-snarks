@@ -3,6 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use ark_ff::PrimeField;
 use mpc_core::protocols::rep3::network::{Rep3MpcNet, Rep3Network};
 use mpc_net::config::NetworkConfig;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     accelerator::{MpcAccelerator, MpcAcceleratorConfig},
@@ -24,7 +25,7 @@ use eyre::Result;
 ///
 /// > **Warning**: Users should usually not interact directly with this struct. It is only public because the
 /// > compiler requires these declarations, and the compiler is a separate crate due to licensing constraints.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct TemplateDecl {
     pub(crate) symbol: String,
     pub(crate) component_name: String,
@@ -69,7 +70,7 @@ impl TemplateDecl {
 ///
 /// > **Warning**: Users should usually not interact directly with this struct. It is only public because the
 /// > compiler requires these declarations, and the compiler is a separate crate due to licensing constraints.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct FunDecl {
     pub(crate) num_params: usize,
     pub(crate) vars: usize,
@@ -100,10 +101,14 @@ pub(crate) type InputList = Vec<(String, usize, usize)>;
 ///
 /// The struct provides certain methods to consume it and create an
 /// [MPC-VM](WitnessExtension).
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct CoCircomCompilerParsed<F: PrimeField> {
     pub(crate) main: String,
     pub(crate) amount_signals: usize,
+    #[serde(
+        serialize_with = "mpc_core::ark_se",
+        deserialize_with = "mpc_core::ark_de"
+    )]
     pub(crate) constant_table: Vec<F>,
     pub(crate) string_table: Vec<String>,
     pub(crate) fun_decls: HashMap<String, FunDecl>,
