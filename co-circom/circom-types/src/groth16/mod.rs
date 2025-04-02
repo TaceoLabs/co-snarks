@@ -4,7 +4,7 @@ mod public_input;
 mod verification_key;
 mod zkey;
 
-pub use proof::Groth16Proof;
+pub use proof::CircomGroth16Proof;
 pub use public_input::JsonPublicInput;
 pub use verification_key::JsonVerificationKey;
 pub use zkey::ZKey;

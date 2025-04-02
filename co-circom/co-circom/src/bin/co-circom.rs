@@ -2,10 +2,10 @@ use circom_types::traits::CheckElement;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use co_circom::{
     Bls12_381, Bn254, CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge,
-    CoCircomCompiler, CompilerConfig, Compression, Groth16, Groth16JsonVerificationKey,
-    Groth16Proof, Groth16ZKey, Pairing, Plonk, PlonkJsonVerificationKey, PlonkProof, PlonkZKey,
-    Rep3CoGroth16, Rep3CoPlonk, Rep3MpcNet, Rep3SharedInput, ShamirCoGroth16, ShamirCoPlonk,
-    ShamirMpcNet, ShamirSharedWitness, SimplificationLevel, VMConfig, Witness, R1CS,
+    CircomGroth16Proof, CoCircomCompiler, CompilerConfig, Compression, Groth16,
+    Groth16JsonVerificationKey, Groth16ZKey, Pairing, Plonk, PlonkJsonVerificationKey, PlonkProof,
+    PlonkZKey, Rep3CoGroth16, Rep3CoPlonk, Rep3MpcNet, Rep3SharedInput, ShamirCoGroth16,
+    ShamirCoPlonk, ShamirMpcNet, ShamirSharedWitness, SimplificationLevel, VMConfig, Witness, R1CS,
 };
 use co_circom_snarks::{CompressedRep3SharedWitness, VerificationError};
 use color_eyre::eyre::{self, eyre, Context, ContextCompat};
@@ -983,7 +983,7 @@ where
             // write result to output file
             if let Some(out) = out {
                 // convert proof to Groth16Proof for serialization
-                let proof = Groth16Proof::from(proof);
+                let proof = CircomGroth16Proof::from(proof);
 
                 let out_file = BufWriter::new(
                     std::fs::File::create(&out).context("while creating output file")?,
@@ -1121,7 +1121,7 @@ where
     let start = Instant::now();
     let res = match proofsystem {
         ProofSystem::Groth16 => {
-            let proof: Groth16Proof<P> = serde_json::from_reader(proof_file)
+            let proof: CircomGroth16Proof<P> = serde_json::from_reader(proof_file)
                 .context("while deserializing proof from file")?;
 
             let vk: Groth16JsonVerificationKey<P> = serde_json::from_reader(vk_file)

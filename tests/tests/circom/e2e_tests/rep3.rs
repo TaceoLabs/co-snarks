@@ -3,7 +3,9 @@ use ark_bn254::Bn254;
 use circom_types::plonk::PlonkProof;
 use circom_types::Witness;
 use circom_types::{
-    groth16::{Groth16Proof, JsonPublicInput, JsonVerificationKey as Groth16VK, ZKey as Groth16ZK},
+    groth16::{
+        CircomGroth16Proof, JsonPublicInput, JsonVerificationKey as Groth16VK, ZKey as Groth16ZK,
+    },
     plonk::{JsonVerificationKey as PlonkVK, ZKey as PlonkZK},
     R1CS,
 };
@@ -67,9 +69,9 @@ macro_rules! add_test_impl_g16 {
                 let result1 = threads.pop().unwrap().join().unwrap();
                 assert_eq!(result1, result2);
                 assert_eq!(result2, result3);
-                let proof = Groth16Proof::from(result1);
+                let proof = CircomGroth16Proof::from(result1);
                 let ser_proof = serde_json::to_string(&proof).unwrap();
-                let der_proof = serde_json::from_str::<Groth16Proof<$curve>>(&ser_proof).unwrap();
+                let der_proof = serde_json::from_str::<CircomGroth16Proof<$curve>>(&ser_proof).unwrap();
                 let vk: Groth16VK<$curve> = serde_json::from_reader(
                     File::open(format!("../test_vectors/{}/{}/{}/verification_key.json", "Groth16", stringify!([< $curve:lower >]), $name)).unwrap(),
                 )
@@ -94,7 +96,7 @@ macro_rules! add_test_impl_g16 {
                 .unwrap();
                 let vk = vk.into();
                 let public_input: JsonPublicInput::<[< ark_ $curve:lower >]::Fr> = serde_json::from_reader(public_input_file).unwrap();
-                let snarkjs_proof: Groth16Proof<$curve> = serde_json::from_reader(&snarkjs_proof_file).unwrap();
+                let snarkjs_proof: CircomGroth16Proof<$curve> = serde_json::from_reader(&snarkjs_proof_file).unwrap();
                 let proof = snarkjs_proof.into();
                 Groth16::<$curve>::verify(&vk, &proof, &public_input.values).expect("can verify");
             }

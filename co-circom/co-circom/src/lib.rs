@@ -26,7 +26,7 @@ pub use circom_mpc_compiler::{CoCircomCompiler, CompilerConfig, SimplificationLe
 pub use circom_mpc_vm::{mpc_vm::VMConfig, types::CoCircomCompilerParsed};
 pub use circom_types::{
     groth16::{
-        Groth16Proof, JsonVerificationKey as Groth16JsonVerificationKey, ZKey as Groth16ZKey,
+        CircomGroth16Proof, JsonVerificationKey as Groth16JsonVerificationKey, ZKey as Groth16ZKey,
     },
     plonk::{JsonVerificationKey as PlonkJsonVerificationKey, PlonkProof, ZKey as PlonkZKey},
     traits::{CheckElement, CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
@@ -80,7 +80,7 @@ where
         self,
         pkey: &ProvingKey<P>,
         matrices: &ConstraintMatrices<P::ScalarField>,
-    ) -> eyre::Result<(Groth16Proof<P>, Vec<P::ScalarField>)> {
+    ) -> eyre::Result<(CircomGroth16Proof<P>, Vec<P::ScalarField>)> {
         let public_inputs = self.witness.public_inputs[1..].to_vec();
         let (proof, _net) =
             ShamirCoGroth16::prove(self.net, self.threshold, pkey, matrices, self.witness)?;
@@ -142,7 +142,7 @@ where
         mut self,
         pkey: &ProvingKey<P>,
         matrices: &ConstraintMatrices<P::ScalarField>,
-    ) -> eyre::Result<(Groth16Proof<P>, Vec<P::ScalarField>)> {
+    ) -> eyre::Result<(CircomGroth16Proof<P>, Vec<P::ScalarField>)> {
         let witness = self.witness.uncompress(&mut self.net)?;
         let public_inputs = witness.public_inputs[1..].to_vec();
         let (proof, _net) = Rep3CoGroth16::prove(self.net, pkey, matrices, witness)?;
