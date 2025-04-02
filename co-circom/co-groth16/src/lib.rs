@@ -20,7 +20,7 @@ mod tests {
     use ark_bls12_381::Bls12_381;
     use ark_bn254::Bn254;
     use circom_types::{
-        groth16::{Groth16Proof, JsonPublicInput, JsonVerificationKey, ZKey},
+        groth16::{CircomGroth16Proof, JsonPublicInput, JsonVerificationKey, ZKey},
         traits::CheckElement,
         Witness,
     };
@@ -52,9 +52,9 @@ mod tests {
             };
             let proof = Groth16::<Bn254>::plain_prove(&pkey, &matrices, witness)
                 .expect("proof generation works");
-            let proof = Groth16Proof::from(proof);
+            let proof = CircomGroth16Proof::from(proof);
             let ser_proof = serde_json::to_string(&proof).unwrap();
-            let der_proof = serde_json::from_str::<Groth16Proof<Bn254>>(&ser_proof).unwrap();
+            let der_proof = serde_json::from_str::<CircomGroth16Proof<Bn254>>(&ser_proof).unwrap();
             let der_proof = der_proof.into();
             Groth16::verify(&vk, &der_proof, &public_input[1..]).expect("can verify");
         }
@@ -75,7 +75,7 @@ mod tests {
         let vk = vk.into();
         let public_input =
             serde_json::from_str::<JsonPublicInput<ark_bn254::Fr>>(public_string).unwrap();
-        let proof = serde_json::from_str::<Groth16Proof<Bn254>>(&proof_string).unwrap();
+        let proof = serde_json::from_str::<CircomGroth16Proof<Bn254>>(&proof_string).unwrap();
         let proof = proof.into();
 
         Groth16::<Bn254>::verify(&vk, &proof, &public_input.values).expect("can verify");
@@ -103,9 +103,9 @@ mod tests {
             };
             let proof = Groth16::<Bn254>::plain_prove(&pkey, &matrices, witness)
                 .expect("proof generation works");
-            let proof = Groth16Proof::from(proof);
+            let proof = CircomGroth16Proof::from(proof);
             let ser_proof = serde_json::to_string(&proof).unwrap();
-            let der_proof = serde_json::from_str::<Groth16Proof<Bn254>>(&ser_proof).unwrap();
+            let der_proof = serde_json::from_str::<CircomGroth16Proof<Bn254>>(&ser_proof).unwrap();
             let der_proof = der_proof.into();
             Groth16::verify(&vk, &der_proof, &public_input[1..]).expect("can verify");
         }
@@ -126,7 +126,7 @@ mod tests {
         let vk = vk.into();
         let public_input =
             serde_json::from_str::<JsonPublicInput<ark_bn254::Fr>>(public_string).unwrap();
-        let proof = serde_json::from_str::<Groth16Proof<Bn254>>(&proof_string).unwrap();
+        let proof = serde_json::from_str::<CircomGroth16Proof<Bn254>>(&proof_string).unwrap();
         let proof = proof.into();
         Groth16::verify(&vk, &proof, &public_input.values).expect("can verify");
     }
@@ -146,7 +146,7 @@ mod tests {
         let vk = vk.into();
         let public_input =
             serde_json::from_str::<JsonPublicInput<ark_bls12_381::Fr>>(public_string).unwrap();
-        let proof = serde_json::from_str::<Groth16Proof<Bls12_381>>(&proof_string).unwrap();
+        let proof = serde_json::from_str::<CircomGroth16Proof<Bls12_381>>(&proof_string).unwrap();
         let proof = proof.into();
         Groth16::<Bls12_381>::verify(&vk, &proof, &public_input.values).expect("can verify");
     }
@@ -178,9 +178,10 @@ mod tests {
             let proof = Groth16::<Bls12_381>::plain_prove(&pkey, &matrices, witness)
                 .expect("proof generation works");
             Groth16::<Bls12_381>::verify(&vk, &proof, &public_input[1..]).expect("can verify");
-            let proof = Groth16Proof::from(proof);
+            let proof = CircomGroth16Proof::from(proof);
             let ser_proof = serde_json::to_string(&proof).unwrap();
-            let der_proof = serde_json::from_str::<Groth16Proof<Bls12_381>>(&ser_proof).unwrap();
+            let der_proof =
+                serde_json::from_str::<CircomGroth16Proof<Bls12_381>>(&ser_proof).unwrap();
             let der_proof = der_proof.into();
             Groth16::<Bls12_381>::verify(&vk, &der_proof, &public_input[1..]).expect("can verify");
         }
@@ -210,9 +211,9 @@ mod tests {
             let proof = Groth16::<Bn254>::plain_prove(&pkey, &matrices, witness)
                 .expect("proof generation works");
             Groth16::<Bn254>::verify(&vk, &proof, &public_input[1..]).expect("can verify");
-            let proof = Groth16Proof::from(proof);
+            let proof = CircomGroth16Proof::from(proof);
             let ser_proof = serde_json::to_string(&proof).unwrap();
-            let der_proof = serde_json::from_str::<Groth16Proof<Bn254>>(&ser_proof).unwrap();
+            let der_proof = serde_json::from_str::<CircomGroth16Proof<Bn254>>(&ser_proof).unwrap();
             let der_proof = der_proof.into();
             Groth16::<Bn254>::verify(&vk, &der_proof, &public_input[1..]).expect("can verify");
         }

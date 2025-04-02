@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 /// Represents a Groth16 proof in JSON format that was created by circom. Supports de/serialization using [`serde`].
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Groth16Proof<P: Pairing + CircomArkworksPairingBridge>
+pub struct CircomGroth16Proof<P: Pairing + CircomArkworksPairingBridge>
 where
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
@@ -28,12 +28,12 @@ where
     pub curve: String,
 }
 
-impl<P: Pairing + CircomArkworksPairingBridge> From<Groth16Proof<P>> for ark_groth16::Proof<P>
+impl<P: Pairing + CircomArkworksPairingBridge> From<CircomGroth16Proof<P>> for ark_groth16::Proof<P>
 where
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
-    fn from(proof: Groth16Proof<P>) -> Self {
+    fn from(proof: CircomGroth16Proof<P>) -> Self {
         ark_groth16::Proof {
             a: proof.pi_a,
             b: proof.pi_b,
@@ -42,13 +42,13 @@ where
     }
 }
 
-impl<P: Pairing + CircomArkworksPairingBridge> From<ark_groth16::Proof<P>> for Groth16Proof<P>
+impl<P: Pairing + CircomArkworksPairingBridge> From<ark_groth16::Proof<P>> for CircomGroth16Proof<P>
 where
     P::BaseField: CircomArkworksPrimeFieldBridge,
     P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
     fn from(proof: ark_groth16::Proof<P>) -> Self {
-        Groth16Proof {
+        CircomGroth16Proof {
             pi_a: proof.a,
             pi_b: proof.b,
             pi_c: proof.c,
@@ -72,7 +72,7 @@ mod tests {
         let proof_string =
             fs::read_to_string("../../test_vectors/Groth16/bn254/multiplier2/circom.proof")
                 .unwrap();
-        let proof = serde_json::from_str::<Groth16Proof<Bn254>>(&proof_string).unwrap();
+        let proof = serde_json::from_str::<CircomGroth16Proof<Bn254>>(&proof_string).unwrap();
 
         let pi_a = test_utils::to_g1_bn254!(
             "5969123522090814361171588228229368332719697989145919311329989202301051796912",
@@ -93,7 +93,7 @@ mod tests {
         assert_eq!("bn128", proof.curve);
         //serialize and deserialize and check for equality
         let ser_proof = serde_json::to_string(&proof).unwrap();
-        let der_proof = serde_json::from_str::<Groth16Proof<Bn254>>(&ser_proof).unwrap();
+        let der_proof = serde_json::from_str::<CircomGroth16Proof<Bn254>>(&ser_proof).unwrap();
         assert_eq!(der_proof, proof);
     }
 
@@ -104,7 +104,7 @@ mod tests {
         let proof_string =
             fs::read_to_string("../../test_vectors/Groth16/bls12_381/multiplier2/circom.proof")
                 .unwrap();
-        let proof = serde_json::from_str::<Groth16Proof<Bls12_381>>(&proof_string).unwrap();
+        let proof = serde_json::from_str::<CircomGroth16Proof<Bls12_381>>(&proof_string).unwrap();
 
         let pi_a = test_utils::to_g1_bls12_381!(
             "2813585902014243229521635712428097947930461922931227160162435763779471002056411796676626370855763256659769027518815",
@@ -125,7 +125,7 @@ mod tests {
         assert_eq!("bls12381", proof.curve);
         //serialize and deserialize and check for equality
         let ser_proof = serde_json::to_string(&proof).unwrap();
-        let der_proof = serde_json::from_str::<Groth16Proof<Bls12_381>>(&ser_proof).unwrap();
+        let der_proof = serde_json::from_str::<CircomGroth16Proof<Bls12_381>>(&ser_proof).unwrap();
         assert_eq!(der_proof, proof);
     }
 }

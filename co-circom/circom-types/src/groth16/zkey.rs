@@ -89,7 +89,6 @@ impl<P: Pairing> From<ZKey<P>> for (ConstraintMatrices<P::ScalarField>, ProvingK
     fn from(zkey: ZKey<P>) -> Self {
         (
             ConstraintMatrices {
-                // TODO: check these
                 num_instance_variables: zkey.n_public + 1,
                 num_witness_variables: zkey.a_query.len(),
                 num_constraints: zkey.num_constraints,
