@@ -1104,6 +1104,7 @@ dependencies = [
 name = "co-groth16"
 version = "0.8.0"
 dependencies = [
+ "ark-bls12-377",
  "ark-bls12-381",
  "ark-bn254",
  "ark-ec",
