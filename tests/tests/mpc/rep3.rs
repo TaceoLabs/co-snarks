@@ -2201,6 +2201,45 @@ mod field_share {
 
         assert_eq!(is_result, expected);
     }
+
+    #[test]
+    fn rep3_field_mod_pow2() {
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        let x = ark_bn254::Fr::rand(&mut rng);
+        let bit = rng.gen_range(1..ark_bn254::Fr::MODULUS_BIT_SIZE);
+        let y = ark_bn254::Fr::from(BigUint::one() << bit);
+        let x_shares = rep3::share_field_element(x.to_owned(), &mut rng);
+
+        let should_result = ark_bn254::Fr::from(BigUint::from(x) % BigUint::from(y));
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx, x_) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            x_shares
+        ) {
+            let y_c = y.to_owned();
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+
+                let divisor: BigUint = y_c.into();
+                assert_eq!(divisor.count_ones(), 1);
+                let divisor_bit = divisor.bits() as usize - 1;
+                let res = yao::field_mod_power_2(x_, &mut rep3, divisor_bit).unwrap();
+                tx.send(res)
+            });
+        }
+
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3::combine_field_element(result1, result2, result3);
+        assert_eq!(is_result, should_result);
+    }
 }
 
 mod curve_share {

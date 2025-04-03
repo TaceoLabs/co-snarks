@@ -216,14 +216,7 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
                 let result = if divisor.count_ones() == 1 {
                     // is power-of-2
                     let divisor_bit = divisor.bits() as usize - 1;
-                    let decomposed = yao::decompose_arithmetic(
-                        a,
-                        &mut self.io_context0,
-                        divisor_bit,
-                        divisor_bit,
-                    )?;
-                    debug_assert_eq!(decomposed.len(), 1);
-                    decomposed[0]
+                    yao::field_mod_power_2(a, &mut self.io_context0, divisor_bit)?
                 } else {
                     let divided = yao::field_int_div_by_public(a, b, &mut self.io_context0)?;
                     let mul = arithmetic::mul_public(divided, b);
