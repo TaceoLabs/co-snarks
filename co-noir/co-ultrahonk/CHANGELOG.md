@@ -1,5 +1,55 @@
 # Changelog
 
+## [0.5.0](https://github.com/TaceoLabs/co-snarks/compare/co-ultrahonk-v0.4.0...co-ultrahonk-v0.5.0) (2025-04-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* bump to BB 0.82.0
+* The API of several functions that previously took a `VerificationKey` has changed to now take a `&VerificationKey`.
+* ultra arith relation now uses mt and half shares
+* batched versions only gather elements they really need
+* removed old unbatched versions for sum check.
+* batched sum check now skips skippable rows
+* adds batched versions of relation in sumcheck for MPC friendliness
+* removed self references for linear operations in co-noir
+
+### Features
+
+* ! switched to batched versions of relations and removed old code ([d8b76f0](https://github.com/TaceoLabs/co-snarks/commit/d8b76f04207cae954deb96d74cfe1906d121f01d))
+* add MPC ZK prover for coNoir ([#335](https://github.com/TaceoLabs/co-snarks/issues/335)) ([056b2b4](https://github.com/TaceoLabs/co-snarks/commit/056b2b4e10ef822de253ac646e88e2dd5f50edcb))
+* add plain zk prover and zk verifier ([#333](https://github.com/TaceoLabs/co-snarks/issues/333)) ([7681649](https://github.com/TaceoLabs/co-snarks/commit/76816491c81e474e710977fa9f3450a3210b57dc))
+* adds batched versions of relation in sumcheck for MPC friendliness ([475cd84](https://github.com/TaceoLabs/co-snarks/commit/475cd841811be0ee38d76f82a8d5bec8d712cee0))
+* batched sum check now performs edge extension in 2^20 batches ([f815976](https://github.com/TaceoLabs/co-snarks/commit/f81597601bbb5ee9b501cecd61b479425f05ebc0))
+* batched sum check now skips skippable rows ([2ae6d29](https://github.com/TaceoLabs/co-snarks/commit/2ae6d2961670060c1f75b1759f98d4e02f5c0c25))
+* bump to BB 0.82.0 ([28500cc](https://github.com/TaceoLabs/co-snarks/commit/28500ccf1feb0cbca2d06881056705f3a6a9ef6a))
+* rayon in DeltaRelation ([537b1d8](https://github.com/TaceoLabs/co-snarks/commit/537b1d8f5b7d411bb5f656fed71df1922d208c17))
+* remove some duplicate structs ([0e6b17a](https://github.com/TaceoLabs/co-snarks/commit/0e6b17a827449696613ab12baa246d1a79dd5456))
+* ultra arith relation now uses mt and half shares ([d7a6b9a](https://github.com/TaceoLabs/co-snarks/commit/d7a6b9a319124204a8fa9d94e4197a6dbf08ede4))
+
+
+### Bug Fixes
+
+* fixed the batched version for zk ([d50f1b6](https://github.com/TaceoLabs/co-snarks/commit/d50f1b601a688f11d33219d011862e4fd532cc1e))
+
+
+### Code Refactoring
+
+* batched versions only gather elements they really need ([c32fd90](https://github.com/TaceoLabs/co-snarks/commit/c32fd9043e0397736a809b3059ae862522a7abe1))
+* removed old unbatched versions for sum check. ([b800c54](https://github.com/TaceoLabs/co-snarks/commit/b800c54bcc86bdcea634e4fecda69e805f9e59c1))
+* removed self references for linear operations in co-noir ([cf1a62b](https://github.com/TaceoLabs/co-snarks/commit/cf1a62b4910e4bb369d61078332514fdc308eada))
+* take uh-vk by reference ([#344](https://github.com/TaceoLabs/co-snarks/issues/344)) ([af9028a](https://github.com/TaceoLabs/co-snarks/commit/af9028a949fe4685f811da7c80a64c67c49a9150))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * co-acvm bumped from 0.5.0 to 0.6.0
+    * co-builder bumped from 0.3.0 to 0.4.0
+    * mpc-core bumped from 0.8.0 to 0.9.0
+    * ultrahonk bumped from 0.4.0 to 0.5.0
+
 ## [0.4.0](https://github.com/Taceolabs/co-snarks/compare/co-ultrahonk-v0.3.0...co-ultrahonk-v0.4.0) (2025-02-20)
 
 

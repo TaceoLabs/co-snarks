@@ -855,7 +855,7 @@ dependencies = [
 
 [[package]]
 name = "circom-mpc-compiler"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "ark-bn254",
  "ark-ec",
@@ -879,7 +879,7 @@ dependencies = [
 
 [[package]]
 name = "circom-mpc-vm"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "ark-ff",
  "ark-serialize",
@@ -897,7 +897,7 @@ dependencies = [
 
 [[package]]
 name = "circom-types"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ark-bls12-377",
  "ark-bls12-381",
@@ -991,7 +991,7 @@ dependencies = [
 
 [[package]]
 name = "co-acvm"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "acir",
  "acvm",
@@ -1015,7 +1015,7 @@ dependencies = [
 
 [[package]]
 name = "co-brillig"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "acir",
  "acvm",
@@ -1033,7 +1033,7 @@ dependencies = [
 
 [[package]]
 name = "co-builder"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "acir",
  "ark-bn254",
@@ -1055,7 +1055,7 @@ dependencies = [
 
 [[package]]
 name = "co-circom"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ark-bls12-381",
  "ark-bn254",
@@ -1088,7 +1088,7 @@ dependencies = [
 
 [[package]]
 name = "co-circom-snarks"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "ark-ff",
  "ark-serialize",
@@ -1102,7 +1102,7 @@ dependencies = [
 
 [[package]]
 name = "co-groth16"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ark-bls12-377",
  "ark-bls12-381",
@@ -1128,7 +1128,7 @@ dependencies = [
 
 [[package]]
 name = "co-noir"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "acir",
  "ark-bn254",
@@ -1157,7 +1157,7 @@ dependencies = [
 
 [[package]]
 name = "co-plonk"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "ark-bls12-381",
  "ark-bn254",
@@ -1182,7 +1182,7 @@ dependencies = [
 
 [[package]]
 name = "co-ultrahonk"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "ark-bn254",
  "ark-ec",
@@ -2603,7 +2603,7 @@ dependencies = [
 
 [[package]]
 name = "mpc-core"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ark-bn254",
  "ark-ec",
@@ -2632,7 +2632,7 @@ dependencies = [
 
 [[package]]
 name = "mpc-net"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "bincode",
  "bytes",
@@ -4309,7 +4309,7 @@ dependencies = [
 
 [[package]]
 name = "tests"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "acir",
  "ark-bls12-381",
@@ -4671,7 +4671,7 @@ checksum = "2896d95c02a80c6d6a5d6e953d479f5ddf2dfdb6a244441010e373ac0fb88971"
 
 [[package]]
 name = "ultrahonk"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "acir",
  "ark-bn254",

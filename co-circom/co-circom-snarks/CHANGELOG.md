@@ -9,6 +9,25 @@
   * dependencies
     * mpc-core bumped from 0.4.0 to 0.5.0
 
+## [0.5.0](https://github.com/TaceoLabs/co-snarks/compare/co-circom-snarks-v0.4.0...co-circom-snarks-v0.5.0) (2025-04-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* added a batched version for plain witness extension and a chacha test case for it
+
+### Features
+
+* added a batched version for plain witness extension and a chacha test case for it ([36e69cc](https://github.com/TaceoLabs/co-snarks/commit/36e69cc7621b8689e3c829c8f1489344a1298899))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * circom-types bumped from 0.8.0 to 0.9.0
+    * mpc-core bumped from 0.8.0 to 0.9.0
+
 ## [0.4.0](https://github.com/Taceolabs/co-snarks/compare/co-circom-snarks-v0.3.0...co-circom-snarks-v0.4.0) (2025-02-20)
 
 
