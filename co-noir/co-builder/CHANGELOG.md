@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.4.0](https://github.com/TaceoLabs/co-snarks/compare/co-builder-v0.3.0...co-builder-v0.4.0) (2025-04-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* bump to BB 0.82.0
+* The API of several functions that previously took a `VerificationKey` has changed to now take a `&VerificationKey`.
+* batched versions only gather elements they really need
+* batched sum check now skips skippable rows
+
+### Features
+
+* add MPC ZK prover for coNoir ([#335](https://github.com/TaceoLabs/co-snarks/issues/335)) ([056b2b4](https://github.com/TaceoLabs/co-snarks/commit/056b2b4e10ef822de253ac646e88e2dd5f50edcb))
+* add plain zk prover and zk verifier ([#333](https://github.com/TaceoLabs/co-snarks/issues/333)) ([7681649](https://github.com/TaceoLabs/co-snarks/commit/76816491c81e474e710977fa9f3450a3210b57dc))
+* batched sum check now performs edge extension in 2^20 batches ([f815976](https://github.com/TaceoLabs/co-snarks/commit/f81597601bbb5ee9b501cecd61b479425f05ebc0))
+* batched sum check now skips skippable rows ([2ae6d29](https://github.com/TaceoLabs/co-snarks/commit/2ae6d2961670060c1f75b1759f98d4e02f5c0c25))
+* bump to BB 0.82.0 ([28500cc](https://github.com/TaceoLabs/co-snarks/commit/28500ccf1feb0cbca2d06881056705f3a6a9ef6a))
+* remove some duplicate structs ([0e6b17a](https://github.com/TaceoLabs/co-snarks/commit/0e6b17a827449696613ab12baa246d1a79dd5456))
+
+
+### Code Refactoring
+
+* batched versions only gather elements they really need ([c32fd90](https://github.com/TaceoLabs/co-snarks/commit/c32fd9043e0397736a809b3059ae862522a7abe1))
+* take uh-vk by reference ([#344](https://github.com/TaceoLabs/co-snarks/issues/344)) ([af9028a](https://github.com/TaceoLabs/co-snarks/commit/af9028a949fe4685f811da7c80a64c67c49a9150))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * co-acvm bumped from 0.5.0 to 0.6.0
+    * mpc-core bumped from 0.8.0 to 0.9.0
+
 ## [0.3.0](https://github.com/Taceolabs/co-snarks/compare/co-builder-v0.2.0...co-builder-v0.3.0) (2025-02-20)
 
 

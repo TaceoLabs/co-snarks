@@ -11,6 +11,48 @@
     * co-circom-snarks bumped from 0.1.1 to 0.1.2
     * mpc-core bumped from 0.4.0 to 0.5.0
 
+## [0.9.0](https://github.com/TaceoLabs/co-snarks/compare/co-groth16-v0.8.0...co-groth16-v0.9.0) (2025-04-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* make only prove method generic over R1CSToQAP reduction trait
+* reduce MPC related methods in Groth16
+* adds a method to the MPC trait for Groth16
+* factor out used R1CSToQAP reduction method into a trait for co-groth16
+* rename Groth16Proof to CircomGroth16Proof
+* change co-groth16 to no longer use circom types, use `ark-groth16` types instead wherever possible
+* use ark_groth16 types on crate boundary
+* Public API of coGroth16 driver trait changed to include `HalfShare` types. ---------
+
+### Features
+
+* add penumbra libsnark co-groth16 tests ([9ce032c](https://github.com/TaceoLabs/co-snarks/commit/9ce032c83857303a03c768339f34d468c49a15fe))
+* add the libsnark R1CSToQAP reduction. ([ae9d468](https://github.com/TaceoLabs/co-snarks/commit/ae9d468d5663f300a49efd47f6a3666c41b71214))
+* use ark-bls12-* as dev deps in co-groth16, enable features in dev dep ([95fa411](https://github.com/TaceoLabs/co-snarks/commit/95fa4113a86de6c8bc5ccb90ed7c4de5048cbb56))
+
+
+### Code Refactoring
+
+* change co-groth16 to no longer use circom types, use `ark-groth16` types instead wherever possible ([c558ce0](https://github.com/TaceoLabs/co-snarks/commit/c558ce0188fd70b290fb6342e7aa556ce880f3ff))
+* factor out used R1CSToQAP reduction method into a trait for co-groth16 ([f0c26b0](https://github.com/TaceoLabs/co-snarks/commit/f0c26b092d3ae22ff29d783d0017f096fa7a2871))
+* make only prove method generic over R1CSToQAP reduction trait ([e4cbe34](https://github.com/TaceoLabs/co-snarks/commit/e4cbe347a32a6ce89e238411c82fac860dfdb1d0))
+* reduce MPC related methods in Groth16 ([e16f336](https://github.com/TaceoLabs/co-snarks/commit/e16f3360412b0e4c2b6a7c5b7cab411c4720ec54))
+* Reduce work for Groth16 REP3 by working over un-replicated shares as much as possible ([#349](https://github.com/TaceoLabs/co-snarks/issues/349)) ([42068eb](https://github.com/TaceoLabs/co-snarks/commit/42068eb7a1f30f3af4a455f259336dcbabf57eb4))
+* rename Groth16Proof to CircomGroth16Proof ([4b565c7](https://github.com/TaceoLabs/co-snarks/commit/4b565c7b6b80cd60203cd35e6e16cfae40ec2a11))
+* use ark_groth16 types on crate boundary ([5c82a55](https://github.com/TaceoLabs/co-snarks/commit/5c82a550ba2cb6ab7f399c12461e4ce1c4949752))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * co-circom-snarks bumped from 0.4.0 to 0.5.0
+    * mpc-core bumped from 0.8.0 to 0.9.0
+    * mpc-net bumped from 0.3.0 to 0.4.0
+  * dev-dependencies
+    * circom-types bumped from 0.8.0 to 0.9.0
+
 ## [0.8.0](https://github.com/Taceolabs/co-snarks/compare/co-groth16-v0.7.0...co-groth16-v0.8.0) (2025-02-20)
 
 

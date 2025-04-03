@@ -2,6 +2,34 @@
 
 
 
+## [0.9.0](https://github.com/TaceoLabs/co-snarks/compare/mpc-core-v0.8.0...mpc-core-v0.9.0) (2025-04-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* Public API of coGroth16 driver trait changed to include `HalfShare` types. ---------
+* adds batched versions of relation in sumcheck for MPC friendliness
+
+### Features
+
+* Add missing int_div and mod code in the circom rep3 witext backend ([#357](https://github.com/TaceoLabs/co-snarks/issues/357)) ([5c54e5d](https://github.com/TaceoLabs/co-snarks/commit/5c54e5d59349e16cfbb9457d7ea748f9aa6eb359))
+* add MPC ZK prover for coNoir ([#335](https://github.com/TaceoLabs/co-snarks/issues/335)) ([056b2b4](https://github.com/TaceoLabs/co-snarks/commit/056b2b4e10ef822de253ac646e88e2dd5f50edcb))
+* added rep3 version of batched wtns extension for chacha ([310a5dc](https://github.com/TaceoLabs/co-snarks/commit/310a5dc09fc93ab6070571bbe509097817bf2979))
+* adds batched versions of relation in sumcheck for MPC friendliness ([475cd84](https://github.com/TaceoLabs/co-snarks/commit/475cd841811be0ee38d76f82a8d5bec8d712cee0))
+* batched chacha working ([a4cb900](https://github.com/TaceoLabs/co-snarks/commit/a4cb900128dc231660623f16a4fdc02cf181dc10))
+
+
+### Code Refactoring
+
+* Reduce work for Groth16 REP3 by working over un-replicated shares as much as possible ([#349](https://github.com/TaceoLabs/co-snarks/issues/349)) ([42068eb](https://github.com/TaceoLabs/co-snarks/commit/42068eb7a1f30f3af4a455f259336dcbabf57eb4))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * mpc-net bumped from 0.3.0 to 0.4.0
+
 ## [0.8.0](https://github.com/Taceolabs/co-snarks/compare/mpc-core-v0.7.0...mpc-core-v0.8.0) (2025-02-20)
 
 

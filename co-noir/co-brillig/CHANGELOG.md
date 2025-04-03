@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.3.0](https://github.com/TaceoLabs/co-snarks/compare/co-brillig-v0.2.0...co-brillig-v0.3.0) (2025-04-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* added a meaningful struct name for brillig succecss
+* acvm now can store values and returns the output of circuit
+
+### Features
+
+* acvm now can store values and returns the output of circuit ([3df88fb](https://github.com/TaceoLabs/co-snarks/commit/3df88fb244b191e03bbd6e6aaede86eaaf7f3d6b))
+
+
+### Bug Fixes
+
+* Fix brillig int-div for field in plain ([fe55afa](https://github.com/TaceoLabs/co-snarks/commit/fe55afa14cc6e5afa817454a40d4e783bae49b6a))
+
+
+### Code Refactoring
+
+* added a meaningful struct name for brillig succecss ([e0af901](https://github.com/TaceoLabs/co-snarks/commit/e0af901e2999cc7e38215f36fe2a647b18d94e0e))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * mpc-core bumped from 0.8.0 to 0.9.0
+
 ## [0.2.0](https://github.com/Taceolabs/co-snarks/compare/co-brillig-v0.1.0...co-brillig-v0.2.0) (2025-02-20)
 
 

@@ -9,6 +9,38 @@
     * co-plonk bumped from 0.3.0 to 0.3.1
     * mpc-core bumped from 0.4.0 to 0.5.0
 
+## [0.9.0](https://github.com/TaceoLabs/co-snarks/compare/co-circom-v0.8.0...co-circom-v0.9.0) (2025-04-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* make only prove method generic over R1CSToQAP reduction trait
+* rename Groth16Proof to CircomGroth16Proof
+
+### Features
+
+* add optional connect timeout to network config ([#356](https://github.com/TaceoLabs/co-snarks/issues/356)) ([1acd639](https://github.com/TaceoLabs/co-snarks/commit/1acd639a1bfc4e0fea58b291346200a9c82fb487))
+
+
+### Code Refactoring
+
+* make only prove method generic over R1CSToQAP reduction trait ([e4cbe34](https://github.com/TaceoLabs/co-snarks/commit/e4cbe347a32a6ce89e238411c82fac860dfdb1d0))
+* rename Groth16Proof to CircomGroth16Proof ([4b565c7](https://github.com/TaceoLabs/co-snarks/commit/4b565c7b6b80cd60203cd35e6e16cfae40ec2a11))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * circom-mpc-compiler bumped from 0.9.0 to 0.9.1
+    * circom-mpc-vm bumped from 0.7.0 to 0.8.0
+    * circom-types bumped from 0.8.0 to 0.9.0
+    * co-circom-snarks bumped from 0.4.0 to 0.5.0
+    * co-groth16 bumped from 0.8.0 to 0.9.0
+    * co-plonk bumped from 0.6.0 to 0.6.1
+    * mpc-core bumped from 0.8.0 to 0.9.0
+    * mpc-net bumped from 0.3.0 to 0.4.0
+
 ## [0.8.0](https://github.com/Taceolabs/co-snarks/compare/co-circom-v0.7.0...co-circom-v0.8.0) (2025-02-20)
 
 

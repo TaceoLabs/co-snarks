@@ -1,6 +1,6 @@
 [package]
 name = "co-groth16"
-version = "0.8.0"
+version = "0.9.0"
 publish.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -23,10 +23,10 @@ ark-groth16 = { workspace = true }
 ark-poly = { workspace = true }
 ark-relations = { workspace = true }
 ark-serialize = { workspace = true }
-co-circom-snarks = { version = "0.4.0", path = "../co-circom-snarks" }
+co-circom-snarks = { version = "0.5.0", path = "../co-circom-snarks" }
 eyre = { workspace = true }
-mpc-core = { version = "0.8.0", path = "../../mpc-core" }
-mpc-net = { version = "0.3.0", path = "../../mpc-net" }
+mpc-core = { version = "0.9.0", path = "../../mpc-core" }
+mpc-net = { version = "0.4.0", path = "../../mpc-net" }
 num-traits = { workspace = true }
 rand = { workspace = true }
 rayon = { workspace = true }
@@ -38,4 +38,4 @@ serde_json = { workspace = true }
 serde_json = { workspace = true }
 ark-bls12-377 = { workspace = true }
 ark-bls12-381 = { workspace = true }
-circom-types = { version = "0.8.0", path = "../circom-types", features = ["ark-bls12-381", "ark-bls12-377"] }
+circom-types = { version = "0.9.0", path = "../circom-types", features = ["ark-bls12-381", "ark-bls12-377"] }

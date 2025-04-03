@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/TaceoLabs/co-snarks/compare/mpc-net-v0.3.0...mpc-net-v0.4.0) (2025-04-03)
+
+
+### Features
+
+* add optional connect timeout to network config ([#356](https://github.com/TaceoLabs/co-snarks/issues/356)) ([1acd639](https://github.com/TaceoLabs/co-snarks/commit/1acd639a1bfc4e0fea58b291346200a9c82fb487))
+
 ## [0.3.0](https://github.com/Taceolabs/co-snarks/compare/mpc-net-v0.2.1...mpc-net-v0.3.0) (2025-02-20)
 
 
