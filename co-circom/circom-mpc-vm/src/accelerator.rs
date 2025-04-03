@@ -42,6 +42,9 @@ pub struct MpcAcceleratorConfig {
     /// Whether to use the pre-defined ISZERO accelerator
     /// Default: true
     pub(crate) iszero: bool,
+    /// Whether to use the pre-defined BITELEMENTMULANY accelerator
+    /// Default: true
+    pub(crate) bitelementmulany: bool,
 }
 
 impl Default for MpcAcceleratorConfig {
@@ -51,6 +54,7 @@ impl Default for MpcAcceleratorConfig {
             num2bits: true,
             addbits: true,
             iszero: true,
+            bitelementmulany: true,
         }
     }
 }
@@ -97,6 +101,9 @@ impl MpcAcceleratorConfig {
             iszero: std::env::var("CIRCOM_MPC_ACCELERATOR_ISZERO")
                 .map(|x| map_env_string_to_bool(&x))
                 .unwrap_or(true),
+            bitelementmulany: std::env::var("CIRCOM_MPC_ACCELERATOR_BITELEMENTMULANY")
+                .map(|x| map_env_string_to_bool(&x))
+                .unwrap_or(true),
         }
     }
 }
@@ -133,6 +140,9 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> MpcAccelerator<F, C> {
         }
         if config.iszero {
             accelerator.register_iszero();
+        }
+        if config.bitelementmulany {
+            accelerator.register_bit_element_mul_any();
         }
         accelerator
     }
@@ -219,6 +229,26 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> MpcAccelerator<F, C> {
                 intermediate: vec![helper],
             })
         });
+    }
+
+    fn register_bit_element_mul_any(&mut self) {
+        self.register_component(
+            "BitElementMulAny".to_string(),
+            |protocol, args, _amount_outputs| {
+                tracing::debug!("calling pre-defined BitElementMulAny accelerator");
+                if args.len() != 5 {
+                    bail!("Calling AddBits accelerator with wrong number of arguments!");
+                }
+                let sel = args[0].to_owned();
+                let a = args[1..3].to_vec();
+                let b = args[3..].to_vec();
+                let (output, intermediate) = protocol.bitelement_mulany(sel, a, b)?;
+                Ok(ComponentAcceleratorOutput {
+                    output,
+                    intermediate,
+                })
+            },
+        );
     }
 
     pub(crate) fn run_cmp_accelerator(

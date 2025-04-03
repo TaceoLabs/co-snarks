@@ -384,6 +384,15 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
         Ok((res, carry))
     }
 
+    fn bitelement_mulany(
+        &mut self,
+        sel: Self::VmType,
+        dbl_in: Vec<Self::VmType>,
+        add_in: Vec<Self::VmType>,
+    ) -> eyre::Result<(Vec<Self::VmType>, Vec<Self::VmType>)> {
+        todo!()
+    }
+
     fn log(&mut self, a: Self::VmType, allow_leaky_logs: bool) -> eyre::Result<String> {
         match a {
             BatchedRep3VmType::Public(public) => self.plain.log(public, allow_leaky_logs),

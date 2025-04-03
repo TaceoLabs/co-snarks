@@ -296,6 +296,54 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtensio
         Ok((res, carry))
     }
 
+    fn bitelement_mulany(
+        &mut self,
+        sel: Self::VmType,
+        dbl_in: Vec<Self::VmType>,
+        add_in: Vec<Self::VmType>,
+    ) -> Result<(Vec<Self::VmType>, Vec<Self::VmType>)> {
+        assert!(dbl_in.len() == add_in.len());
+        assert_eq!(dbl_in.len(), 2);
+
+        const A: u64 = 168700;
+        const D: u64 = 168696;
+        const A_MIN_D: u64 = A - D;
+        const TWICE_A_PLUS_D: u64 = 2 * (A + D);
+
+        let a_min_d_inv = F::from(A_MIN_D).inverse().expect("Works");
+        let a = F::from(TWICE_A_PLUS_D) * a_min_d_inv;
+        let b = F::from(4) * a_min_d_inv;
+
+        // first: double input
+        let x1_2 = dbl_in[0] * dbl_in[0];
+        let double_lambda_div = ((b + b) * dbl_in[1]).inverse().expect("Works");
+        let double_lambda_num = (x1_2 + x1_2 + x1_2) + (a + a) * dbl_in[0] + F::one();
+        let double_lambda = double_lambda_num * double_lambda_div;
+        let double_lambda_sqr = double_lambda * double_lambda;
+        let dbl_out0 = double_lambda_sqr * b - a - dbl_in[0] - dbl_in[0];
+        let dbl_out1 = double_lambda * (dbl_in[0] - dbl_out0) - dbl_in[1];
+
+        // then: add input to output
+        let add_lambda_div = (add_in[0] - dbl_out0).inverse().expect("Works");
+        let add_lambda_num = add_in[1] - dbl_out1;
+        let add_lambda = add_lambda_num * add_lambda_div;
+        let add_lambda_sqr = add_lambda * add_lambda;
+        let add_out0 = add_lambda_sqr * b - a - dbl_out0 - add_in[0];
+        let add_out1 = add_lambda * (dbl_out0 - add_out0) - dbl_out1;
+
+        // mux
+        let (mux_out0, mux_out1) = if sel.is_one() {
+            (dbl_out0, dbl_out1)
+        } else {
+            (add_out0, add_out1)
+        };
+
+        let res = vec![dbl_out0, dbl_out1, mux_out0, mux_out1];
+        let intermediate = vec![x1_2, double_lambda, add_lambda];
+
+        Ok((res, intermediate))
+    }
+
     fn log(&mut self, a: Self::VmType, _: bool) -> eyre::Result<String> {
         Ok(a.to_string())
     }

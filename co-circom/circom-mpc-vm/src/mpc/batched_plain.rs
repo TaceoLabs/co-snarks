@@ -277,6 +277,15 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for BatchedCircomPlainVmWitnessE
         Ok((res, carry))
     }
 
+    fn bitelement_mulany(
+        &mut self,
+        sel: Self::VmType,
+        dbl_in: Vec<Self::VmType>,
+        add_in: Vec<Self::VmType>,
+    ) -> eyre::Result<(Vec<Self::VmType>, Vec<Self::VmType>)> {
+        todo!()
+    }
+
     fn log(&mut self, a: Self::VmType, _: bool) -> eyre::Result<String> {
         Ok(format!("[{}]", a.iter().map(|a| a.to_string()).join(", ")))
     }

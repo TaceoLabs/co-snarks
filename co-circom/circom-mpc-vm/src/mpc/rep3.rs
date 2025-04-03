@@ -648,6 +648,112 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
         Ok((result.into_iter().map(Into::into).collect(), carry.into()))
     }
 
+    fn bitelement_mulany(
+        &mut self,
+        sel: Self::VmType,
+        dbl_in: Vec<Self::VmType>,
+        add_in: Vec<Self::VmType>,
+    ) -> eyre::Result<(Vec<Self::VmType>, Vec<Self::VmType>)> {
+        assert!(dbl_in.len() == add_in.len());
+        assert_eq!(dbl_in.len(), 2);
+
+        const A: u64 = 168700;
+        const D: u64 = 168696;
+        const A_MIN_D: u64 = A - D;
+        const TWICE_A_PLUS_D: u64 = 2 * (A + D);
+
+        let a_min_d_inv = F::from(A_MIN_D).inverse().expect("Works");
+        let a = F::from(TWICE_A_PLUS_D) * a_min_d_inv;
+        let b = F::from(4) * a_min_d_inv;
+
+        // first: double input
+        match (dbl_in[0].to_owned(), dbl_in[1].to_owned()) {
+            (Rep3VmType::Arithmetic(in0), Rep3VmType::Arithmetic(in1)) => {
+                let to_inv = in1 * (b + b);
+                let (x1_2, inv) = join!(
+                    arithmetic::mul(in0, in0, &mut self.io_context0),
+                    arithmetic::inv(to_inv, &mut self.io_context1)
+                );
+                let x1_2 = x1_2?;
+                let inv = inv?;
+                let mut lambda_num = (x1_2 + x1_2 + x1_2) + in0 * (a + a);
+                arithmetic::add_assign_public(&mut lambda_num, F::one(), self.io_context0.id);
+                let lambda = arithmetic::mul(lambda_num, inv, &mut self.io_context0)?;
+
+                let lambda_sqr = arithmetic::mul(lambda, lambda, &mut self.io_context0)?;
+                let out0 = arithmetic::sub_shared_by_public(
+                    lambda_sqr * b - in0 - in0,
+                    a,
+                    self.io_context0.id,
+                );
+                let t = arithmetic::mul(lambda, in0 - out0, &mut self.io_context0)?;
+                let out1 = t - in1;
+
+                todo!()
+            }
+            (Rep3VmType::Public(in0), Rep3VmType::Arithmetic(in1)) => {
+                let x1_2 = in0 * in0;
+                let to_inv = in1 * (b + b);
+                let inv = arithmetic::inv(to_inv, &mut self.io_context0)?;
+                let lambda_num = (x1_2 + x1_2 + x1_2) + (a + a) * in0 + F::one();
+                let lambda = inv * lambda_num;
+
+                let lambda_sqr = arithmetic::mul(lambda, lambda, &mut self.io_context0)?;
+                let out0 = arithmetic::sub_shared_by_public(
+                    lambda_sqr * b,
+                    a + in0 + in0,
+                    self.io_context0.id,
+                );
+                let t = arithmetic::sub_public_by_shared(in0, out0, self.io_context0.id);
+                let out1 = t - in1;
+
+                todo!()
+            }
+            (Rep3VmType::Arithmetic(in0), Rep3VmType::Public(in1)) => {
+                let x1_2 = arithmetic::mul(in0, in0, &mut self.io_context0)?;
+                let lambda_div = ((b + b) * in1).inverse().expect("Works");
+                let mut lambda_num = (x1_2 + x1_2 + x1_2) + in0 * (a + a);
+                arithmetic::add_assign_public(&mut lambda_num, F::one(), self.io_context0.id);
+                let lambda = lambda_num * lambda_div;
+
+                let lambda_sqr = arithmetic::mul(lambda, lambda, &mut self.io_context0)?;
+                let out0 = arithmetic::sub_shared_by_public(
+                    lambda_sqr * b - in0 - in0,
+                    a,
+                    self.io_context0.id,
+                );
+                let t = arithmetic::mul(lambda, in0 - out0, &mut self.io_context0)?;
+                let out1 = arithmetic::sub_shared_by_public(t, in1, self.io_context0.id);
+                todo!()
+            }
+            (Rep3VmType::Public(in0), Rep3VmType::Public(in1)) => {
+                let x1_2 = in0 * in0;
+                let lambda_div = ((b + b) * in1).inverse().expect("Works");
+                let lambda_num = (x1_2 + x1_2 + x1_2) + (a + a) * in0 + F::one();
+                let lambda = lambda_num * lambda_div;
+
+                let lambda_sqr = lambda * lambda;
+                let out0 = lambda_sqr * b - a - in0 - in0;
+                let out1 = lambda * (in0 - out0) - in1;
+                todo!()
+            }
+        }
+
+        //    let x1_2 =  join!(
+        //     self.mul(dbl_in[0], dbl_in[0]),
+        //    )
+
+        //     let x1_2 = dbl_in[0] * dbl_in[0];
+        //     let double_lambda_div = ((b + b) * dbl_in[1]).inverse().expect("Works");
+        //     let double_lambda_num = (x1_2 + x1_2 + x1_2) + (a + a) * dbl_in[0] + F::one();
+        //     let double_lambda = double_lambda_num * double_lambda_div;
+        //     let double_lambda_sqr = double_lambda * double_lambda;
+        //     let dbl_out0 = double_lambda_sqr * b - a - dbl_in[0] - dbl_in[0];
+        //     let dbl_out1 = double_lambda * (dbl_in[0] - dbl_out0) - dbl_in[1];
+
+        todo!()
+    }
+
     fn log(&mut self, a: Self::VmType, allow_leaky_logs: bool) -> eyre::Result<String> {
         match a {
             Rep3VmType::Public(public) => self.plain.log(public, allow_leaky_logs),

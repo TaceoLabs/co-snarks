@@ -132,6 +132,13 @@ pub trait VmCircomWitnessExtension<F: PrimeField> {
         b: Vec<Self::VmType>,
     ) -> Result<(Vec<Self::VmType>, Self::VmType)>;
 
+    fn bitelement_mulany(
+        &mut self,
+        sel: Self::VmType,
+        dbl_in: Vec<Self::VmType>,
+        add_in: Vec<Self::VmType>,
+    ) -> Result<(Vec<Self::VmType>, Vec<Self::VmType>)>;
+
     /// Returns a string representation of the provided value.
     /// **DANGEROUS**: If enabled by the second parameter, the implementation
     /// will open secret values. Otherwise will return the string `secret`.
