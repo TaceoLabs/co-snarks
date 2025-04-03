@@ -24,15 +24,17 @@ pub(crate) struct Decider<
 > {
     pub(super) memory: ProverMemory<P>,
     pub(super) rng: ChaCha12Rng,
+    pub(crate) has_zk: ZeroKnowledge,
     phantom_data: PhantomData<P>,
     phantom_hasher: PhantomData<H>,
 }
 
 impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> Decider<P, H> {
-    pub(crate) fn new(memory: ProverMemory<P>) -> Self {
+    pub(crate) fn new(memory: ProverMemory<P>, has_zk: ZeroKnowledge) -> Self {
         Self {
             memory,
             rng: ChaCha12Rng::from_entropy(),
+            has_zk,
             phantom_data: PhantomData,
             phantom_hasher: PhantomData,
         }
@@ -67,9 +69,8 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         transcript: &mut Transcript<TranscriptFieldType, H>,
         crs: &ProverCrs<P>,
         circuit_size: u32,
-        has_zk: ZeroKnowledge,
     ) -> HonkProofResult<(SumcheckOutput<P::ScalarField>, Option<ZKSumcheckData<P>>)> {
-        if has_zk == ZeroKnowledge::Yes {
+        if self.has_zk == ZeroKnowledge::Yes {
             let log_subgroup_size = Utils::get_msb64(P::SUBGROUP_SIZE as u64);
             let commitment_key = &crs.monomials[..1 << (log_subgroup_size + 1)];
             let mut zk_sumcheck_data: ZKSumcheckData<P> = ZKSumcheckData::<P>::new::<H, _>(
@@ -100,10 +101,9 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         circuit_size: u32,
         crs: &ProverCrs<P>,
         sumcheck_output: SumcheckOutput<P::ScalarField>,
-        has_zk: ZeroKnowledge,
         zk_sumcheck_data: Option<ZKSumcheckData<P>>,
     ) -> HonkProofResult<()> {
-        if has_zk == ZeroKnowledge::No {
+        if self.has_zk == ZeroKnowledge::No {
             let prover_opening_claim =
                 self.shplemini_prove(transcript, circuit_size, crs, sumcheck_output, None)?;
             Self::compute_opening_proof(prover_opening_claim, transcript, crs)
@@ -135,13 +135,12 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         circuit_size: u32,
         crs: &ProverCrs<P>,
         mut transcript: Transcript<TranscriptFieldType, H>,
-        has_zk: ZeroKnowledge,
     ) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
         tracing::trace!("Decider prove");
 
         // Run sumcheck subprotocol.
         let (sumcheck_output, zk_sumcheck_data) =
-            self.execute_relation_check_rounds(&mut transcript, crs, circuit_size, has_zk)?;
+            self.execute_relation_check_rounds(&mut transcript, crs, circuit_size)?;
 
         // Fiat-Shamir: rho, y, x, z
         // Execute Zeromorph multilinear PCS
@@ -150,7 +149,6 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             circuit_size,
             crs,
             sumcheck_output,
-            has_zk,
             zk_sumcheck_data,
         )?;
         Ok(transcript.get_proof())

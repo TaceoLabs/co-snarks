@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.9.0](https://github.com/TaceoLabs/co-snarks/compare/circom-types-v0.8.0...circom-types-v0.9.0) (2025-04-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* rename Groth16Proof to CircomGroth16Proof
+* change co-groth16 to no longer use circom types, use `ark-groth16` types instead wherever possible
+* use more ark_groth16 types internally and provide conversions
+
+### Features
+
+* add optional support for bls12-377 ([87574ba](https://github.com/TaceoLabs/co-snarks/commit/87574ba792292d3df8f214d7f5a2d3ef2540c3ff))
+* add penumbra libsnark co-groth16 tests ([9ce032c](https://github.com/TaceoLabs/co-snarks/commit/9ce032c83857303a03c768339f34d468c49a15fe))
+* use ark-bls12-* as dev deps in co-groth16, enable features in dev dep ([95fa411](https://github.com/TaceoLabs/co-snarks/commit/95fa4113a86de6c8bc5ccb90ed7c4de5048cbb56))
+
+
+### Code Refactoring
+
+* change co-groth16 to no longer use circom types, use `ark-groth16` types instead wherever possible ([c558ce0](https://github.com/TaceoLabs/co-snarks/commit/c558ce0188fd70b290fb6342e7aa556ce880f3ff))
+* rename Groth16Proof to CircomGroth16Proof ([4b565c7](https://github.com/TaceoLabs/co-snarks/commit/4b565c7b6b80cd60203cd35e6e16cfae40ec2a11))
+* use more ark_groth16 types internally and provide conversions ([bf4572a](https://github.com/TaceoLabs/co-snarks/commit/bf4572a71349a9fedb81b2b5e0fa422da7d65a49))
+
 ## [0.8.0](https://github.com/Taceolabs/co-snarks/compare/circom-types-v0.7.0...circom-types-v0.8.0) (2025-02-20)
 
 

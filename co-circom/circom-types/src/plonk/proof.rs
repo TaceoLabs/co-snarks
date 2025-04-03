@@ -91,7 +91,6 @@ mod tests {
     use crate::plonk::test_utils;
 
     use super::*;
-    use ark_bls12_381::Bls12_381;
     use ark_bn254::Bn254;
 
     use std::{fs, str::FromStr};
@@ -158,7 +157,9 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "ark-bls12-381")]
     pub fn deserialize_bls12_381_proof() {
+        use ark_bls12_381::Bls12_381;
         let proof_string =
             fs::read_to_string("../../test_vectors/Plonk/bls12_381/multiplier2/circom.proof")
                 .unwrap();

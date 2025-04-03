@@ -10,6 +10,36 @@
     * co-circom-snarks bumped from 0.1.1 to 0.1.2
     * mpc-core bumped from 0.4.0 to 0.5.0
 
+## [0.8.0](https://github.com/TaceoLabs/co-snarks/compare/circom-mpc-vm-v0.7.0...circom-mpc-vm-v0.8.0) (2025-04-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* added a batched version for plain witness extension and a chacha test case for it
+
+### Features
+
+* Add missing int_div and mod code in the circom rep3 witext backend ([#357](https://github.com/TaceoLabs/co-snarks/issues/357)) ([5c54e5d](https://github.com/TaceoLabs/co-snarks/commit/5c54e5d59349e16cfbb9457d7ea748f9aa6eb359))
+* added a batched version for plain witness extension and a chacha test case for it ([36e69cc](https://github.com/TaceoLabs/co-snarks/commit/36e69cc7621b8689e3c829c8f1489344a1298899))
+* added rep3 version of batched wtns extension for chacha ([310a5dc](https://github.com/TaceoLabs/co-snarks/commit/310a5dc09fc93ab6070571bbe509097817bf2979))
+* added run_and_return_net for batched wtns extension ([f299c85](https://github.com/TaceoLabs/co-snarks/commit/f299c85ef8f368baa9f90a904ec65942f110c41b))
+* batched chacha working ([a4cb900](https://github.com/TaceoLabs/co-snarks/commit/a4cb900128dc231660623f16a4fdc02cf181dc10))
+* make compiled circom circuit de/serializable ([f0c4427](https://github.com/TaceoLabs/co-snarks/commit/f0c4427e5522f565ed5409139e1fa8e5db827b24))
+
+
+### Bug Fixes
+
+* fixed a bug where large int divs for plain driver didn't work ([a87cac7](https://github.com/TaceoLabs/co-snarks/commit/a87cac70c7ac9e465d5c8e3a5b6b5fa25ab35beb))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * co-circom-snarks bumped from 0.4.0 to 0.5.0
+    * mpc-core bumped from 0.8.0 to 0.9.0
+    * mpc-net bumped from 0.3.0 to 0.4.0
+
 ## [0.7.0](https://github.com/Taceolabs/co-snarks/compare/circom-mpc-vm-v0.6.0...circom-mpc-vm-v0.7.0) (2025-02-20)
 
 

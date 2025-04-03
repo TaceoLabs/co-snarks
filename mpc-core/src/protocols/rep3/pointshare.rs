@@ -14,6 +14,7 @@ pub use types::Rep3PointShare;
 use super::{
     id::PartyID,
     network::{IoContext, Rep3Network},
+    rngs::Rep3CorrelatedRng,
     IoResult, Rep3PrimeFieldShare,
 };
 
@@ -79,6 +80,15 @@ pub fn scalar_mul_public_scalar<C: CurveGroup>(
     a * b
 }
 
+/// Perform local part of scalar multiplication
+pub fn scalar_mul_local<C: CurveGroup>(
+    a: &PointShare<C>,
+    b: FieldShare<C::ScalarField>,
+    rng: &mut Rep3CorrelatedRng,
+) -> C {
+    b * a + rng.rand.masking_ec_element::<C>()
+}
+
 /// Perform scalar multiplication
 pub fn scalar_mul<C: CurveGroup, N: Rep3Network>(
     a: &PointShare<C>,
@@ -131,15 +141,13 @@ pub fn msm_public_points<C: CurveGroup>(
     debug_assert_eq!(points.len(), scalars.len());
     let (a_bigints, b_bigints) = scalars
         .into_par_iter()
+        .with_min_len(1 << 14)
         .map(|share| (share.a.into_bigint(), share.b.into_bigint()))
         .collect::<(Vec<_>, Vec<_>)>();
-    let mut res_a = None;
-    let mut res_b = None;
-    rayon::scope(|s| {
-        s.spawn(|_| res_a = Some(C::msm_bigint(points, &a_bigints)));
-        s.spawn(|_| res_b = Some(C::msm_bigint(points, &b_bigints)));
-    });
+    let (res_a, res_b) = rayon::join(
+        || C::msm_bigint(points, &a_bigints),
+        || C::msm_bigint(points, &b_bigints),
+    );
     tracing::trace!("< MSM public points for {} elements", points.len());
-    //we can unwrap as the we have Some values after rayon scope
-    PointShare::new(res_a.unwrap(), res_b.unwrap())
+    PointShare::new(res_a, res_b)
 }

@@ -66,13 +66,13 @@ impl<T: Default + Clone> AllEntities<Vec<T>> {
 }
 
 const WITNESS_ENTITIES_SIZE: usize = 8;
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct WitnessEntities<T: Default> {
     pub(crate) elements: [T; WITNESS_ENTITIES_SIZE],
 }
 
 const SHIFTED_WITNESS_ENTITIES_SIZE: usize = 5;
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct ShiftedWitnessEntities<T: Default> {
     pub(crate) elements: [T; SHIFTED_WITNESS_ENTITIES_SIZE],
 }
@@ -86,12 +86,40 @@ impl<T: Default> IntoIterator for WitnessEntities<T> {
     }
 }
 
+impl<T: Default> WitnessEntities<Vec<T>> {
+    pub fn new() -> Self {
+        Self {
+            elements: std::array::from_fn(|_| Vec::new()),
+        }
+    }
+
+    pub fn add(&mut self, witness_entity: WitnessEntities<T>) {
+        for (src, dst) in witness_entity.into_iter().zip(self.iter_mut()) {
+            dst.push(src);
+        }
+    }
+}
+
 impl<T: Default> IntoIterator for ShiftedWitnessEntities<T> {
     type Item = T;
     type IntoIter = std::array::IntoIter<T, SHIFTED_WITNESS_ENTITIES_SIZE>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.elements.into_iter()
+    }
+}
+
+impl<T: Default> ShiftedWitnessEntities<Vec<T>> {
+    pub fn new() -> Self {
+        Self {
+            elements: std::array::from_fn(|_| Vec::new()),
+        }
+    }
+
+    pub fn add(&mut self, shifted_witness_entities: ShiftedWitnessEntities<T>) {
+        for (src, dst) in shifted_witness_entities.into_iter().zip(self.iter_mut()) {
+            dst.push(src);
+        }
     }
 }
 
@@ -179,23 +207,23 @@ impl<T: Default> WitnessEntities<T> {
         &self.elements[Self::LOOKUP_READ_TAGS]
     }
 
-    pub(crate) fn w_l_mut(&mut self) -> &mut T {
+    pub fn w_l_mut(&mut self) -> &mut T {
         &mut self.elements[Self::W_L]
     }
 
-    pub(crate) fn w_r_mut(&mut self) -> &mut T {
+    pub fn w_r_mut(&mut self) -> &mut T {
         &mut self.elements[Self::W_R]
     }
 
-    pub(crate) fn w_o_mut(&mut self) -> &mut T {
+    pub fn w_o_mut(&mut self) -> &mut T {
         &mut self.elements[Self::W_O]
     }
 
-    pub(crate) fn w_4_mut(&mut self) -> &mut T {
+    pub fn w_4_mut(&mut self) -> &mut T {
         &mut self.elements[Self::W_4]
     }
 
-    pub(crate) fn z_perm_mut(&mut self) -> &mut T {
+    pub fn z_perm_mut(&mut self) -> &mut T {
         &mut self.elements[Self::Z_PERM]
     }
 
@@ -250,5 +278,25 @@ impl<T: Default> ShiftedWitnessEntities<T> {
 
     pub fn z_perm(&self) -> &T {
         &self.elements[Self::Z_PERM]
+    }
+
+    pub fn w_l_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::W_L]
+    }
+
+    pub fn w_r_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::W_R]
+    }
+
+    pub fn w_o_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::W_O]
+    }
+
+    pub fn w_4_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::W_4]
+    }
+
+    pub fn z_perm_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::Z_PERM]
     }
 }

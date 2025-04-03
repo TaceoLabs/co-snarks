@@ -116,6 +116,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "ark-bls12-381")]
     fn can_deser_witness_bls12381() {
         let witness =
             File::open("../../test_vectors/Groth16/bls12_381/multiplier2/witness.wtns").unwrap();

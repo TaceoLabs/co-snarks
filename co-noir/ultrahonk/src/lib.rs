@@ -26,7 +26,12 @@ pub const NUM_ALPHAS: usize = decider::relations::NUM_SUBRELATIONS - 1;
 pub const CONST_PROOF_SIZE_LOG_N: usize = 28;
 // For ZK Flavors: the number of the commitments required by Libra and SmallSubgroupIPA.
 pub const NUM_LIBRA_COMMITMENTS: usize = 3;
-pub const NUM_LIBRA_EVALUATIONS: usize = 4;
+pub const NUM_SMALL_IPA_EVALUATIONS: usize = 4;
+// Upper bound on the number of claims produced GeminiProver:
+// - Each fold polynomial is opened at two points, the number of resulting claims is bounded by 2*CONST_PROOF_SIZE_LOG_N
+// - The interleaving trick needed for Translator adds 2 extra claims
+// AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1293): Decouple Gemini from Interleaving
+pub const NUM_GEMINI_CLAIMS: usize = 2 * CONST_PROOF_SIZE_LOG_N + 2;
 
 pub struct Utils {}
 

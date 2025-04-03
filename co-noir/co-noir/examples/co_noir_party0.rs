@@ -52,8 +52,7 @@ fn main() -> Result<()> {
             CertificateDer::from(std::fs::read(dir.join("cert2.der"))?).into_owned(),
         ),
     ];
-    let network_config =
-        NetworkConfig::new(PartyID::ID0.into(), "0.0.0.0:10000".parse()?, key, parties);
+    let network_config = NetworkConfig::new(0, "0.0.0.0:10000".parse()?, key, parties, None);
     let mut net = Rep3MpcNet::new(network_config)?;
 
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples/test_vectors");
@@ -101,7 +100,7 @@ fn main() -> Result<()> {
     let (proof, _) = Rep3CoUltraHonk::<_, _, Poseidon2Sponge>::prove(net, pk, &prover_crs, has_zk)?;
 
     // verify proof
-    assert!(UltraHonk::<_, Poseidon2Sponge>::verify(proof, vk, has_zk)
+    assert!(UltraHonk::<_, Poseidon2Sponge>::verify(proof, &vk, has_zk)
         .context("while verifying proof")?);
 
     Ok(())

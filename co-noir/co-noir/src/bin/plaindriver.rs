@@ -206,7 +206,7 @@ fn main() -> color_eyre::Result<ExitCode> {
             .context("While creating keys")?;
 
     // Write the vk to a file
-    let out_path = out_dir.join("vk");
+    let out_path = out_dir.join("vk_plaindriver");
     let mut out_file = BufWriter::new(
         std::fs::File::create(&out_path).context("while creating output file for vk")?,
     );
@@ -236,7 +236,7 @@ fn main() -> color_eyre::Result<ExitCode> {
     };
 
     // Write the proof to a file
-    let out_path = out_dir.join("proof");
+    let out_path = out_dir.join("proof_plaindriver");
     let mut out_file = BufWriter::new(
         std::fs::File::create(&out_path).context("while creating output file for proof")?,
     );
@@ -252,10 +252,10 @@ fn main() -> color_eyre::Result<ExitCode> {
     // Verify the proof
     let is_valid = match hasher {
         TranscriptHash::POSEIDON => {
-            UltraHonk::<_, Poseidon2Sponge>::verify(proof, verifying_key, has_zk)
+            UltraHonk::<_, Poseidon2Sponge>::verify(proof, &verifying_key, has_zk)
                 .context("While verifying proof")?
         }
-        TranscriptHash::KECCAK => UltraHonk::<_, Keccak256>::verify(proof, verifying_key, has_zk)
+        TranscriptHash::KECCAK => UltraHonk::<_, Keccak256>::verify(proof, &verifying_key, has_zk)
             .context("While verifying proof")?,
     };
 

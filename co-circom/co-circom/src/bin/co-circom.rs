@@ -2,12 +2,13 @@ use circom_types::traits::CheckElement;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use co_circom::{
     Bls12_381, Bn254, CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge,
-    CoCircomCompiler, CompilerConfig, Compression, Groth16, Groth16JsonVerificationKey,
-    Groth16Proof, Groth16ZKey, Pairing, Plonk, PlonkJsonVerificationKey, PlonkProof, PlonkZKey,
-    Rep3CoGroth16, Rep3CoPlonk, Rep3MpcNet, Rep3SharedInput, ShamirCoGroth16, ShamirCoPlonk,
-    ShamirMpcNet, ShamirSharedWitness, SimplificationLevel, VMConfig, Witness, R1CS,
+    CircomGroth16Proof, CoCircomCompiler, CompilerConfig, Compression, Groth16,
+    Groth16JsonVerificationKey, Groth16ZKey, Pairing, Plonk, PlonkJsonVerificationKey, PlonkProof,
+    PlonkZKey, Rep3CoGroth16, Rep3CoPlonk, Rep3MpcNet, Rep3SharedInput, ShamirCoGroth16,
+    ShamirCoPlonk, ShamirMpcNet, ShamirSharedWitness, SimplificationLevel, VMConfig, Witness, R1CS,
 };
 use co_circom_snarks::{CompressedRep3SharedWitness, VerificationError};
+use co_groth16::CircomReduction;
 use color_eyre::eyre::{self, eyre, Context, ContextCompat};
 use figment::{
     providers::{Env, Format, Serialized, Toml},
@@ -937,8 +938,8 @@ where
     tracing::info!("Starting proof generation...");
     let public_input = match proof_system {
         ProofSystem::Groth16 => {
-            let zkey =
-                Arc::new(Groth16ZKey::<P>::from_reader(zkey_file, check).context("reading zkey")?);
+            let zkey = Groth16ZKey::<P>::from_reader(zkey_file, check).context("reading zkey")?;
+            let (matrices, pkey) = zkey.into();
 
             let (proof, public_input) = match protocol {
                 MPCProtocol::REP3 => {
@@ -953,7 +954,12 @@ where
                     let public_input = witness_share.public_inputs.clone();
 
                     let start = Instant::now();
-                    let (proof, mpc_net) = Rep3CoGroth16::prove(mpc_net, zkey, witness_share)?;
+                    let (proof, mpc_net) = Rep3CoGroth16::prove::<CircomReduction>(
+                        mpc_net,
+                        &pkey,
+                        &matrices,
+                        witness_share,
+                    )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
                     // network is shutdown in drop, which can take seom time with quinn
@@ -968,7 +974,13 @@ where
                     let public_input = witness_share.public_inputs.clone();
 
                     let start = Instant::now();
-                    let (proof, mpc_net) = ShamirCoGroth16::prove(mpc_net, t, zkey, witness_share)?;
+                    let (proof, mpc_net) = ShamirCoGroth16::prove::<CircomReduction>(
+                        mpc_net,
+                        t,
+                        &pkey,
+                        &matrices,
+                        witness_share,
+                    )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
                     // network is shutdown in drop, which can take seom time with quinn
@@ -980,6 +992,9 @@ where
 
             // write result to output file
             if let Some(out) = out {
+                // convert proof to Groth16Proof for serialization
+                let proof = CircomGroth16Proof::from(proof);
+
                 let out_file = BufWriter::new(
                     std::fs::File::create(&out).context("while creating output file")?,
                 );
@@ -1116,11 +1131,15 @@ where
     let start = Instant::now();
     let res = match proofsystem {
         ProofSystem::Groth16 => {
-            let proof: Groth16Proof<P> = serde_json::from_reader(proof_file)
+            let proof: CircomGroth16Proof<P> = serde_json::from_reader(proof_file)
                 .context("while deserializing proof from file")?;
 
             let vk: Groth16JsonVerificationKey<P> = serde_json::from_reader(vk_file)
                 .context("while deserializing verification key from file")?;
+
+            // convert circom vk and proof types to arkworks types
+            let vk = vk.into();
+            let proof = proof.into();
 
             Groth16::<P>::verify(&vk, &proof, &public_inputs)
         }

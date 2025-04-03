@@ -1,6 +1,7 @@
 use ark_ec::pairing::Pairing;
 use ark_poly::EvaluationDomain;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use rayon::prelude::*;
 
 pub(crate) mod plain;
 pub(crate) mod rep3;
@@ -21,7 +22,11 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
     /// The G1 point share type
     type PointShare: std::fmt::Debug + Send + 'static;
     /// The party id type
-    type PartyID: Copy;
+    type PartyID: Copy + Send + Sync + std::fmt::Debug + 'static;
+
+    fn debug(_: Self::ArithmeticShare) -> String {
+        panic!("not implemented for real protocol");
+    }
 
     /// Generate a share of a random value. The value is thereby unknown to anyone.
     fn rand(&mut self) -> std::io::Result<Self::ArithmeticShare>;
@@ -30,20 +35,184 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
     fn get_party_id(&self) -> Self::PartyID;
 
     /// Subtract the share b from the share a: \[c\] = \[a\] - \[b\]
-    fn sub(&self, a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare;
+    fn sub(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare;
+
+    /// Elementwise subtraction of share b from the share a: \[c\] = \[a\] - \[b\]
+    fn sub_many(
+        a: &[Self::ArithmeticShare],
+        b: &[Self::ArithmeticShare],
+    ) -> Vec<Self::ArithmeticShare> {
+        a.iter()
+            .zip(b.iter())
+            .map(|(a, b)| Self::sub(*a, *b))
+            .collect()
+    }
+
+    /// Elementwise subtraction of share b from the share a: \[c\] = \[a\] - \[b\] and stores it
+    /// into \[a\].
+    fn sub_assign_many(a: &mut [Self::ArithmeticShare], b: &[Self::ArithmeticShare]);
 
     /// Add two shares: \[c\] = \[a\] + \[b\]
-    fn add(&self, a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare;
+    fn add(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare;
+
+    /// Elementwise addition of two shares: \[c\] = \[a\] + \[b\]
+    fn add_many(
+        a: &[Self::ArithmeticShare],
+        b: &[Self::ArithmeticShare],
+    ) -> Vec<Self::ArithmeticShare> {
+        a.iter()
+            .zip(b.iter())
+            .map(|(a, b)| Self::add(*a, *b))
+            .collect()
+    }
+
+    /// Add two shares: \[c\] = \[a\] + \[b\] and stores the result in \[a\].
+    fn add_assign(a: &mut Self::ArithmeticShare, b: Self::ArithmeticShare);
+
+    /// Elementwise addition of two shares: \[c\] = \[a\] + \[b\] and stores the result in \[a\].
+    fn add_assign_many(a: &mut [Self::ArithmeticShare], b: &[Self::ArithmeticShare]) {
+        for (a, b) in a.iter_mut().zip(b.iter()) {
+            Self::add_assign(a, *b);
+        }
+    }
+
+    /// Adds a public value to a share: \[c\] = \[a\] + b and stores the result in \[a\].
+    fn add_assign_public(a: &mut Self::ArithmeticShare, b: P::ScalarField, id: Self::PartyID);
+
+    /// Elementwise addition of a public value to a share: \[c\] = \[a\] + b and stores the result in \[a\].
+    fn add_assign_public_many(
+        a: &mut [Self::ArithmeticShare],
+        b: &[P::ScalarField],
+        id: Self::PartyID,
+    ) {
+        a.par_iter_mut().zip(b.par_iter()).for_each(|(a, b)| {
+            Self::add_assign_public(a, *b, id);
+        })
+    }
+
+    /// Elementwise addition of a public value to a share: \[c\] = a + \[b\].
+    fn add_with_public_many(
+        public: &[P::ScalarField],
+        shared: &[Self::ArithmeticShare],
+        id: Self::PartyID,
+    ) -> Vec<Self::ArithmeticShare> {
+        public
+            .iter()
+            .zip(shared.iter())
+            .map(|(a, b)| Self::add_with_public(*a, *b, id))
+            .collect()
+    }
+
+    /// Elementwise addition of a public value to a share: \[c\] = a + \[b\], where a is provided
+    /// as an iterator.
+    fn add_with_public_many_iter(
+        public: impl Iterator<Item = P::ScalarField>,
+        shared: &[Self::ArithmeticShare],
+        id: Self::PartyID,
+    ) -> Vec<Self::ArithmeticShare> {
+        public
+            .zip(shared.iter())
+            .map(|(a, b)| Self::add_with_public(a, *b, id))
+            .collect()
+    }
 
     /// Negates a shared value: \[b\] = -\[a\].
-    fn neg(&mut self, a: Self::ArithmeticShare) -> Self::ArithmeticShare;
+    fn neg(a: Self::ArithmeticShare) -> Self::ArithmeticShare;
+
+    /// Negates shared values in-place: \[b\] = -\[a\].
+    fn neg_many(a: &mut [Self::ArithmeticShare]) {
+        for a in a.iter_mut() {
+            *a = Self::neg(*a);
+        }
+    }
 
     /// Multiply a share b by a public value a: c = a * \[b\].
     fn mul_with_public(
-        &self,
         public: P::ScalarField,
         shared: Self::ArithmeticShare,
     ) -> Self::ArithmeticShare;
+
+    /// Multiply a share b by a public value a: c = \[a\] * b and stores the result in \[a\];
+    fn mul_assign_with_public(shared: &mut Self::ArithmeticShare, public: P::ScalarField);
+
+    /// Elementwise multiplication a share b by a public value a: c = a * \[b\].
+    fn mul_with_public_many(
+        public: &[P::ScalarField],
+        shared: &[Self::ArithmeticShare],
+    ) -> Vec<Self::ArithmeticShare> {
+        debug_assert_eq!(public.len(), shared.len());
+        public
+            .iter()
+            .zip(shared.iter())
+            .map(|(public, shared)| Self::mul_with_public(*public, *shared))
+            .collect()
+    }
+
+    fn add_assign_public_half_share(
+        share: &mut P::ScalarField,
+        public: P::ScalarField,
+        id: Self::PartyID,
+    );
+
+    fn mul_with_public_to_half_share(
+        public: P::ScalarField,
+        shared: Self::ArithmeticShare,
+    ) -> P::ScalarField;
+
+    /// Elementwise multiplication a share b by a public value a: c = \[a\] * b and stores the
+    /// result in \[a\].
+    fn mul_assign_with_public_many(
+        shared: &mut [Self::ArithmeticShare],
+        public: &[P::ScalarField],
+    ) {
+        debug_assert_eq!(public.len(), shared.len());
+        public
+            .par_iter()
+            .zip(shared.par_iter_mut())
+            .for_each(|(public, shared)| {
+                Self::mul_assign_with_public(shared, *public);
+            });
+    }
+
+    /// Scales all elements in-place in \[a\] by the provided scale, by multiplying every share with the
+    /// public scalar.
+    fn scale_many_in_place(shared: &mut [Self::ArithmeticShare], scale: P::ScalarField) {
+        for shared in shared.iter_mut() {
+            Self::mul_assign_with_public(shared, scale);
+        }
+    }
+
+    /// Adds a public scalar to all elements in \[a\].
+    fn add_scalar(
+        shared: &[Self::ArithmeticShare],
+        scalar: P::ScalarField,
+        id: Self::PartyID,
+    ) -> Vec<Self::ArithmeticShare> {
+        shared
+            .iter()
+            .map(|share| Self::add_with_public(scalar, *share, id))
+            .collect()
+    }
+
+    /// Adds a public scalar to all elements in-place.
+    fn add_scalar_in_place(
+        shared: &mut [Self::ArithmeticShare],
+        scalar: P::ScalarField,
+        id: Self::PartyID,
+    ) {
+        for x in shared.iter_mut() {
+            Self::add_assign_public(x, scalar, id);
+        }
+    }
+
+    fn local_mul_vec(
+        &mut self,
+        a: &[Self::ArithmeticShare],
+        b: &[Self::ArithmeticShare],
+    ) -> Vec<P::ScalarField>;
+
+    /// Restores the original sharing after doing a non-linear operation.
+    fn reshare(&mut self, a: Vec<P::ScalarField>) -> std::io::Result<Vec<Self::ArithmeticShare>>;
 
     /// Multiply two shares: \[c\] = \[a\] * \[b\]. Requires network communication.
     fn mul_many(
@@ -54,9 +223,9 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
 
     /// Add a public value a to the share b: \[c\] = a + \[b\]
     fn add_with_public(
-        &self,
         public: P::ScalarField,
         shared: Self::ArithmeticShare,
+        id: Self::PartyID,
     ) -> Self::ArithmeticShare;
 
     /// Transforms a public value into a shared value: \[a\] = a.
@@ -118,11 +287,7 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
     ) -> Self::PointShare;
 
     /// Evaluates shared polynomials at one point
-    fn eval_poly(
-        &mut self,
-        coeffs: &[Self::ArithmeticShare],
-        point: P::ScalarField,
-    ) -> Self::ArithmeticShare;
+    fn eval_poly(coeffs: &[Self::ArithmeticShare], point: P::ScalarField) -> Self::ArithmeticShare;
 
     /// Computes the FFT of a vector of shared field elements.
     fn fft<D: EvaluationDomain<P::ScalarField>>(

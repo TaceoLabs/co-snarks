@@ -21,7 +21,7 @@ resolver = "2"
 
 [workspace.package]
 edition = "2021"
-rust-version = "1.83"
+rust-version = "1.85"
 authors = ["TACEO GmbH <hello@taceo.io>"]
 homepage = "https://www.taceo.io"
 repository = "https:://github.com/TaceoLabs/collaborative-circom"
@@ -32,11 +32,14 @@ readme = "./README.md"
 [workspace.dependencies]
 acir = { version = "1.0.0-beta.3", git = "https://github.com/noir-lang/noir/", tag = "v1.0.0-beta.3", package = "acir" }
 acvm = { version = "1.0.0-beta.3", git = "https://github.com/noir-lang/noir/", tag = "v1.0.0-beta.3", package = "acvm" }
+ark-bls12-377 = "^0.5.0"
 ark-bls12-381 = "^0.5.0"
 ark-bn254 = "^0.5.0"
 ark-ec = { version = "^0.5.0", default-features = false }
+ark-groth16 = { version = "=0.5.0" }
 ark-ff = "^0.5.0"
 ark-poly = "^0.5.0"
+ark-relations = "^0.5.0"
 ark-serialize = { version = "^0.5.0", features = ["derive", "std"] }
 ark-std = { version = "^0.5.0", features = ["std"] }
 bincode = "1.3.3"
@@ -64,7 +67,7 @@ rand_chacha = "0.3"
 rayon = "1.8.1"
 rcgen = "0.13"
 rustls = "0.23.15"
-serde = { version = "1.0.193", features = ["derive"] }
+serde = { version = "1.0.193", features = ["derive", "rc"] }
 serde_json = "1.0"
 serde_yaml = "0.9.27"
 sha2 = "0.10"

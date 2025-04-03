@@ -1,7 +1,8 @@
 use super::Relation;
 use crate::{
     co_decider::{
-        types::{ProverUnivariates, RelationParameters},
+        relations::fold_accumulator,
+        types::{RelationParameters, MAX_PARTIAL_RELATION_LENGTH},
         univariates::SharedUnivariate,
     },
     mpc::NoirUltraHonkProver,
@@ -10,6 +11,7 @@ use ark_ec::pairing::Pairing;
 use ark_ff::Zero;
 use co_builder::prelude::HonkCurve;
 use co_builder::HonkProofResult;
+use itertools::Itertools as _;
 use ultrahonk::prelude::{TranscriptFieldType, Univariate};
 
 #[derive(Clone, Debug)]
@@ -28,21 +30,19 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for EllipticRelationAcc<T, P
 }
 
 impl<T: NoirUltraHonkProver<P>, P: Pairing> EllipticRelationAcc<T, P> {
-    pub(crate) fn scale(&mut self, driver: &mut T, elements: &[P::ScalarField]) {
+    pub(crate) fn scale(&mut self, elements: &[P::ScalarField]) {
         assert!(elements.len() == EllipticRelation::NUM_RELATIONS);
-        self.r0.scale_inplace(driver, elements[0]);
-        self.r1.scale_inplace(driver, elements[1]);
+        self.r0.scale_inplace(elements[0]);
+        self.r1.scale_inplace(elements[1]);
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(
         &self,
-        driver: &mut T,
         result: &mut SharedUnivariate<T, P, SIZE>,
         extended_random_poly: &Univariate<P::ScalarField, SIZE>,
         partial_evaluation_result: &P::ScalarField,
     ) {
         self.r0.extend_and_batch_univariates(
-            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
@@ -50,7 +50,6 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> EllipticRelationAcc<T, P> {
         );
 
         self.r1.extend_and_batch_univariates(
-            driver,
             result,
             extended_random_poly,
             partial_evaluation_result,
@@ -70,11 +69,26 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
     for EllipticRelation
 {
     type Acc = EllipticRelationAcc<T, P>;
-    const SKIPPABLE: bool = true;
 
-    fn skip(input: &ProverUnivariates<T, P>) -> bool {
-        <Self as Relation<T, P>>::check_skippable();
-        input.precomputed.q_elliptic().is_zero()
+    fn can_skip(entity: &super::ProverUnivariates<T, P>) -> bool {
+        entity.precomputed.q_elliptic().is_zero()
+    }
+
+    fn add_entites(
+        entity: &super::ProverUnivariates<T, P>,
+        batch: &mut super::ProverUnivariatesBatch<T, P>,
+    ) {
+        batch.add_w_r(entity);
+        batch.add_w_o(entity);
+
+        batch.add_shifted_w_l(entity);
+        batch.add_shifted_w_r(entity);
+        batch.add_shifted_w_o(entity);
+        batch.add_shifted_w_4(entity);
+
+        batch.add_q_l(entity);
+        batch.add_q_m(entity);
+        batch.add_q_elliptic(entity);
     }
 
     /**
@@ -90,9 +104,9 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
     fn accumulate(
         driver: &mut T,
         univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariates<T, P>,
-        _relation_parameters: &RelationParameters<P::ScalarField>,
-        scaling_factor: &P::ScalarField,
+        input: &super::ProverUnivariatesBatch<T, P>,
+        _relation_parameters: &RelationParameters<<P>::ScalarField>,
+        scaling_factors: &[<P>::ScalarField],
     ) -> HonkProofResult<()> {
         tracing::trace!("Accumulate EllipticRelation");
 
@@ -100,6 +114,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         // replace old addition relations with these ones and
         // remove endomorphism coefficient in ecc add gate(not used))
 
+        let party_id = driver.get_party_id();
         let x_1 = input.witness.w_r();
         let y_1 = input.witness.w_o();
 
@@ -112,115 +127,130 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let q_elliptic = input.precomputed.q_elliptic();
         let q_is_double = input.precomputed.q_m();
 
-        // First round of multiplications
-        let x_diff = x_2.sub(driver, x_1);
-        let y1_plus_y3 = y_1.add(driver, y_3);
-        let y_diff = y_2.mul_public(driver, q_sign).sub(driver, y_1);
-        let x1_mul_3 = x_1.add(driver, x_1).add(driver, x_1);
+        debug_assert_eq!(x_1.len(), y_1.len());
+        debug_assert_eq!(x_2.len(), y_2.len());
+        debug_assert_eq!(y_2.len(), y_3.len());
+        debug_assert_eq!(x_1.len(), x_2.len());
+        debug_assert_eq!(x_2.len(), x_3.len());
 
-        let lhs = SharedUnivariate::univariates_to_vec(&[
-            y_1.to_owned(),
-            y_2.to_owned(),
-            y_1.to_owned(),
-            x_diff.to_owned(),
-            y1_plus_y3.to_owned(),
-            y_diff,
-            x1_mul_3.to_owned(),
-        ]);
-        let rhs = SharedUnivariate::univariates_to_vec(&[
-            y_1.to_owned(),
-            y_2.to_owned(),
-            y_2.to_owned(),
-            x_diff.to_owned(),
-            x_diff,
-            x_3.sub(driver, x_1),
-            x_1.to_owned(),
-        ]);
+        // First round of multiplications
+        let x_diff = T::sub_many(x_2, x_1);
+        let y1_plus_y3 = T::add_many(y_1, y_3);
+        let mut y_diff = T::mul_with_public_many(q_sign, y_2);
+        T::sub_assign_many(&mut y_diff, y_1);
+
+        let mut x1_mul_3 = T::add_many(x_1, x_1);
+        T::add_assign_many(&mut x1_mul_3, x_1);
+        let mut lhs = Vec::with_capacity(
+            (2 * y_1.len())
+                + y_2.len()
+                + x_diff.len()
+                + y1_plus_y3.len()
+                + y_diff.len()
+                + x1_mul_3.len(),
+        );
+
+        let mut rhs = Vec::with_capacity(lhs.len());
+        lhs.extend(y_1);
+        lhs.extend(y_2);
+        lhs.extend(y_1);
+        lhs.extend(x_diff.clone());
+        lhs.extend(y1_plus_y3.clone());
+        lhs.extend(y_diff.clone());
+        lhs.extend(x1_mul_3.clone());
+
+        rhs.extend(y_1);
+        rhs.extend(y_2);
+        rhs.extend(y_2);
+        rhs.extend(x_diff.clone());
+        rhs.extend(x_diff);
+        rhs.extend(T::sub_many(x_3, x_1));
+        rhs.extend(x_1);
         let mul1 = driver.mul_many(&lhs, &rhs)?;
-        let mul1 = SharedUnivariate::vec_to_univariates(&mul1);
+        // we need the different contributions again
+        let chunks1 = mul1.chunks_exact(mul1.len() / 7).collect_vec();
+        debug_assert_eq!(chunks1.len(), 7);
 
         // Second round of multiplications
         let curve_b = P::get_curve_b(); // here we need the extra constraint on the Curve
-        let y1_sqr = &mul1[0];
-        let y1_sqr_mul_4 = y1_sqr.add(driver, y1_sqr);
-        let y1_sqr_mul_4 = y1_sqr_mul_4.add(driver, &y1_sqr_mul_4);
-        let x1_sqr_mul_3 = &mul1[6];
+        let y1_sqr = chunks1[0];
+        let y1_sqr_mul_4 = T::add_many(y1_sqr, y1_sqr);
+        let y1_sqr_mul_4 = T::add_many(&y1_sqr_mul_4, &y1_sqr_mul_4);
+        let x1_sqr_mul_3 = chunks1[6];
 
-        let lhs = SharedUnivariate::univariates_to_vec(&[
-            x_3.add(driver, x_2).add(driver, x_1),
-            y1_sqr.sub_scalar(driver, curve_b),
-            x_3.add(driver, x_1).add(driver, x_1),
-            x1_sqr_mul_3.to_owned(),
-            y_1.add(driver, y_1),
-        ]);
-        let rhs = SharedUnivariate::univariates_to_vec(&[
-            mul1[3].to_owned(),
-            x1_mul_3,
-            y1_sqr_mul_4,
-            x_1.sub(driver, x_3),
-            y1_plus_y3,
-        ]);
+        let mut lhs =
+            Vec::with_capacity(2 * x_3.len() + y1_sqr.len() + x1_sqr_mul_3.len() + y_1.len());
+        lhs.extend(T::add_many(&T::add_many(x_3, x_2), x_1));
+        lhs.extend(T::add_scalar(y1_sqr, -curve_b, party_id));
+        lhs.extend(T::add_many(&T::add_many(x_3, x_1), x_1));
+        lhs.extend(x1_sqr_mul_3);
+        lhs.extend(T::add_many(y_1, y_1));
+
+        let mut rhs = Vec::with_capacity(lhs.len());
+        rhs.extend(chunks1[3]);
+        rhs.extend(x1_mul_3);
+        rhs.extend(y1_sqr_mul_4);
+        rhs.extend(T::sub_many(x_1, x_3));
+        rhs.extend(y1_plus_y3);
+
         let mul2 = driver.mul_many(&lhs, &rhs)?;
-        let mul2 = SharedUnivariate::vec_to_univariates(&mul2);
+        let chunks2 = mul2.chunks_exact(mul2.len() / 5).collect_vec();
+        debug_assert_eq!(chunks2.len(), 5);
 
         // Contribution (1) point addition, x-coordinate check
         // q_elliptic * (x3 + x2 + x1)(x2 - x1)(x2 - x1) - y2^2 - y1^2 + 2(y2y1)*q_sign = 0
-        let y2_sqr = &mul1[1];
-        let y1y2 = mul1[2].mul_public(driver, q_sign);
-        let x_add_identity = mul2[0]
-            .sub(driver, y2_sqr)
-            .sub(driver, y1_sqr)
-            .add(driver, &y1y2)
-            .add(driver, &y1y2);
+        let y2_sqr = chunks1[1];
+        let y1y2 = T::mul_with_public_many(q_sign, chunks1[2]);
+        let mut x_add_identity = T::sub_many(chunks2[0], y2_sqr);
+        T::sub_assign_many(&mut x_add_identity, y1_sqr);
+        T::add_assign_many(&mut x_add_identity, &y1y2);
+        T::add_assign_many(&mut x_add_identity, &y1y2);
 
-        let q_elliptic_by_scaling = q_elliptic.to_owned() * scaling_factor;
-        let q_elliptic_q_double_scaling = q_elliptic_by_scaling.to_owned() * q_is_double;
-        let q_elliptic_not_double_scaling = q_elliptic_by_scaling - &q_elliptic_q_double_scaling;
-        let tmp_1 = x_add_identity.mul_public(driver, &q_elliptic_not_double_scaling);
+        let q_elliptic_by_scaling = q_elliptic
+            .iter()
+            .zip_eq(scaling_factors)
+            .map(|(a, b)| *a * *b)
+            .collect_vec();
+        let q_elliptic_q_double_scaling = q_elliptic_by_scaling
+            .iter()
+            .zip_eq(q_is_double)
+            .map(|(a, b)| *a * *b)
+            .collect_vec();
+        let q_elliptic_not_double_scaling = q_elliptic_by_scaling
+            .iter()
+            .zip_eq(q_elliptic_q_double_scaling.iter())
+            .map(|(a, b)| *a - *b)
+            .collect_vec();
+
+        let mut tmp_1 = T::mul_with_public_many(&q_elliptic_not_double_scaling, &x_add_identity);
 
         ///////////////////////////////////////////////////////////////////////
         // Contribution (2) point addition, x-coordinate check
         // q_elliptic * (q_sign * y1 + y3)(x2 - x1) + (x3 - x1)(y2 - q_sign * y1) = 0
-        let y_add_identity = &mul1[4].add(driver, &mul1[5]);
-        let tmp_2 = y_add_identity.mul_public(driver, &q_elliptic_not_double_scaling);
+        let y_add_identity = T::add_many(chunks1[4], chunks1[5]);
+        let mut tmp_2 = T::mul_with_public_many(&q_elliptic_not_double_scaling, &y_add_identity);
 
         ///////////////////////////////////////////////////////////////////////
         // Contribution (3) point doubling, x-coordinate check
         // (x3 + x1 + x1) (4y1*y1) - 9 * x1 * x1 * x1 * x1 = 0
         // N.B. we're using the equivalence x1*x1*x1 === y1*y1 - curve_b to reduce degree by 1
+        let x_pow_4_mul_3 = chunks2[1];
+        let mut x1_pow_4_mul_9 = T::add_many(x_pow_4_mul_3, x_pow_4_mul_3);
+        T::add_assign_many(&mut x1_pow_4_mul_9, x_pow_4_mul_3);
+        let x_double_identity = T::sub_many(chunks2[2], &x1_pow_4_mul_9);
 
-        let x_pow_4_mul_3 = &mul2[1];
-        let x1_pow_4_mul_9 = x_pow_4_mul_3
-            .add(driver, x_pow_4_mul_3)
-            .add(driver, x_pow_4_mul_3);
-        let x_double_identity = mul2[2].sub(driver, &x1_pow_4_mul_9);
-
-        let tmp = x_double_identity.mul_public(driver, &q_elliptic_q_double_scaling);
-        let tmp_1 = tmp_1.add(driver, &tmp);
+        let tmp = T::mul_with_public_many(&q_elliptic_q_double_scaling, &x_double_identity);
+        T::add_assign_many(&mut tmp_1, &tmp);
 
         ///////////////////////////////////////////////////////////////////////
         // Contribution (4) point doubling, y-coordinate check
         // (y1 + y1) (2y1) - (3 * x1 * x1)(x1 - x3) = 0
-        let y_double_identity = mul2[3].sub(driver, &mul2[4]);
-        let tmp = y_double_identity.mul_public(driver, &q_elliptic_q_double_scaling);
-        let tmp_2 = tmp_2.add(driver, &tmp);
+        let y_double_identity = T::sub_many(chunks2[3], chunks2[4]);
+        let tmp = T::mul_with_public_many(&q_elliptic_q_double_scaling, &y_double_identity);
+        T::add_assign_many(&mut tmp_2, &tmp);
 
-        ///////////////////////////////////////////////////////////////////////
-
-        for i in 0..univariate_accumulator.r0.evaluations.len() {
-            univariate_accumulator.r0.evaluations[i] = driver.add(
-                univariate_accumulator.r0.evaluations[i],
-                tmp_1.evaluations[i],
-            );
-        }
-
-        for i in 0..univariate_accumulator.r1.evaluations.len() {
-            univariate_accumulator.r1.evaluations[i] = driver.add(
-                univariate_accumulator.r1.evaluations[i],
-                tmp_2.evaluations[i],
-            );
-        }
-
+        fold_accumulator!(univariate_accumulator.r0, tmp_1);
+        fold_accumulator!(univariate_accumulator.r1, tmp_2);
         Ok(())
     }
 }

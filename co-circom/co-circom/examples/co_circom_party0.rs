@@ -3,9 +3,10 @@ use co_circom::{
     Groth16JsonVerificationKey, Groth16ZKey, Input, NetworkConfig, NetworkParty, PartyID,
     Rep3CoGroth16, Rep3MpcNet, VMConfig, Value,
 };
+use co_groth16::CircomReduction;
 use color_eyre::Result;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
-use std::{path::PathBuf, sync::Arc};
+use std::path::PathBuf;
 use tracing_subscriber::{
     fmt::{self, format::FmtSpan},
     prelude::*,
@@ -52,8 +53,7 @@ fn main() -> Result<()> {
             CertificateDer::from(std::fs::read(dir.join("cert2.der"))?).into_owned(),
         ),
     ];
-    let network_config =
-        NetworkConfig::new(PartyID::ID0.into(), "0.0.0.0:10000".parse()?, key, parties);
+    let network_config = NetworkConfig::new(0, "0.0.0.0:10000".parse()?, key, parties, None);
     let mut net = Rep3MpcNet::new(network_config)?;
 
     let dir =
@@ -70,10 +70,11 @@ fn main() -> Result<()> {
     let [share0, share1, share2] = co_circom::split_input::<Bn254>(input, circuit.public_inputs())?;
 
     // parse zkey, without performing extra checks (only advised for zkeys knwon to be valid)
-    let zkey = Arc::new(Groth16ZKey::<Bn254>::from_reader(
+    let zkey = Groth16ZKey::<Bn254>::from_reader(
         std::fs::read(dir.join("multiplier2.zkey"))?.as_slice(),
         CheckElement::No,
-    )?);
+    )?;
+    let (matrices, pkey) = zkey.into();
 
     // send shares to other parties, only needed for this demo for private-proof delegation and for PSS this is done separately,
     // because the party with the shares usually does not take part in the computation
@@ -86,12 +87,14 @@ fn main() -> Result<()> {
     let public_inputs = witness.public_inputs_for_verify();
 
     // generate proof
-    let (proof, _) = Rep3CoGroth16::prove(net, zkey, witness)?;
+    let (proof, _) = Rep3CoGroth16::prove::<CircomReduction>(net, &pkey, &matrices, witness)?;
 
     // verify proof
     let vk = Groth16JsonVerificationKey::<Bn254>::from_reader(
         std::fs::read(dir.join("verification_key.json"))?.as_slice(),
     )?;
+    // convert vk to arkworks vk format
+    let vk = vk.into();
     Groth16::verify(&vk, &proof, &public_inputs)?;
 
     Ok(())

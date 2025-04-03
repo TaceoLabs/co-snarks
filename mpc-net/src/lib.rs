@@ -31,6 +31,8 @@ pub mod channel;
 pub mod codecs;
 pub mod config;
 
+const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(60);
+
 /// A warapper for a runtime and a network handler for MPC protocols.
 /// Ensures a gracefull shutdown on drop
 #[derive(Debug)]
@@ -86,6 +88,8 @@ impl MpcNetworkHandler {
 
         let client_config = {
             let mut transport_config = TransportConfig::default();
+            // we dont set this to timeout, because it is the timeout for a idle connection
+            // maybe we want to make this configurable too?
             transport_config.max_idle_timeout(Some(
                 IdleTimeout::try_from(Duration::from_secs(60)).unwrap(),
             ));
@@ -154,7 +158,11 @@ impl MpcNetworkHandler {
                 endpoints.push(endpoint);
             } else {
                 // we are the server, accept a connection
-                match tokio::time::timeout(Duration::from_secs(60), server_endpoint.accept()).await
+                match tokio::time::timeout(
+                    config.timeout.unwrap_or(DEFAULT_CONNECT_TIMEOUT),
+                    server_endpoint.accept(),
+                )
+                .await
                 {
                     Ok(Some(maybe_conn)) => {
                         let conn = maybe_conn.await?;

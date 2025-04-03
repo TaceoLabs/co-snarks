@@ -11,10 +11,9 @@ use mpc_core::protocols::rep3::{
     binary,
     conversion::{self, bit_inject_many},
     network::{IoContext, Rep3Network},
-    Rep3PrimeFieldShare,
+    yao, Rep3PrimeFieldShare,
 };
 use num_bigint::BigUint;
-use num_traits::cast::ToPrimitive;
 use std::io;
 
 type ArithmeticShare<F> = Rep3PrimeFieldShare<F>;
@@ -99,6 +98,7 @@ impl<F: PrimeField, N: Rep3Network> CircomRep3VmWitnessExtension<F, N> {
 impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
     for CircomRep3VmWitnessExtension<F, N>
 {
+    type Public = F;
     type ArithmeticShare = ArithmeticShare<F>;
 
     type VmType = Rep3VmType<F>;
@@ -167,7 +167,25 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
     fn int_div(&mut self, a: Self::VmType, b: Self::VmType) -> eyre::Result<Self::VmType> {
         match (a, b) {
             (Rep3VmType::Public(a), Rep3VmType::Public(b)) => Ok(self.plain.int_div(a, b)?.into()),
-            _ => todo!("Shared int_div not implemented"),
+            (Rep3VmType::Public(a), Rep3VmType::Arithmetic(b)) => {
+                let divided = yao::field_int_div_by_shared(a, b, &mut self.io_context0)?;
+                Ok(divided.into())
+            }
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
+                let divisor: BigUint = b.into();
+                let divided = if divisor.count_ones() == 1 {
+                    // is power-of-2
+                    let divisor_bit = divisor.bits() as usize - 1;
+                    yao::field_int_div_power_2(a, &mut self.io_context0, divisor_bit)?
+                } else {
+                    yao::field_int_div_by_public(a, b, &mut self.io_context0)?
+                };
+                Ok(divided.into())
+            }
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
+                let divided = yao::field_int_div(a, b, &mut self.io_context0)?;
+                Ok(divided.into())
+            }
         }
     }
 
@@ -187,7 +205,31 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
     fn modulo(&mut self, a: Self::VmType, b: Self::VmType) -> eyre::Result<Self::VmType> {
         match (a, b) {
             (Rep3VmType::Public(a), Rep3VmType::Public(b)) => Ok(self.plain.modulo(a, b)?.into()),
-            (_, _) => todo!("Shared mod not implemented"),
+            (Rep3VmType::Public(a), Rep3VmType::Arithmetic(b)) => {
+                let divided = yao::field_int_div_by_shared(a, b, &mut self.io_context0)?;
+                let mul = arithmetic::mul(divided, b, &mut self.io_context0)?;
+                let result = arithmetic::sub_public_by_shared(a, mul, self.io_context0.id);
+                Ok(result.into())
+            }
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
+                let divisor: BigUint = b.into();
+                let result = if divisor.count_ones() == 1 {
+                    // is power-of-2
+                    let divisor_bit = divisor.bits() as usize - 1;
+                    yao::field_mod_power_2(a, &mut self.io_context0, divisor_bit)?
+                } else {
+                    let divided = yao::field_int_div_by_public(a, b, &mut self.io_context0)?;
+                    let mul = arithmetic::mul_public(divided, b);
+                    arithmetic::sub(a, mul)
+                };
+                Ok(result.into())
+            }
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
+                let divided = yao::field_int_div(a, b, &mut self.io_context0)?;
+                let mul = arithmetic::mul(divided, b, &mut self.io_context0)?;
+                let result = arithmetic::sub(a, mul);
+                Ok(result.into())
+            }
         }
     }
 
@@ -494,7 +536,7 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
 
     fn is_zero(&mut self, a: Self::VmType, allow_secret_inputs: bool) -> eyre::Result<bool> {
         if !allow_secret_inputs && self.is_shared(&a)? {
-            bail!("allow_secret_inputs is false and input is shared");
+            eyre::bail!("allow_secret_inputs is false and input is shared");
         }
         match a {
             Rep3VmType::Public(a) => Ok(self.plain.is_zero(a, allow_secret_inputs)?),
@@ -513,7 +555,7 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
         if let Rep3VmType::Public(a) = a {
             Ok(to_usize!(a))
         } else {
-            bail!("ToIndex called on shared value!")
+            eyre::bail!("ToIndex called on shared value!")
         }
     }
 
@@ -547,7 +589,7 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
         let rcv: Vec<u8> = self.io_context0.network.recv_prev()?;
         let deser = bincode::deserialize(&rcv)?;
         if config != &deser {
-            bail!("VM Config does not match: {:?} != {:?}", config, deser);
+            eyre::bail!("VM Config does not match: {:?} != {:?}", config, deser);
         }
 
         Ok(())
@@ -604,6 +646,20 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
         let carry = result.pop().unwrap();
         result.reverse();
         Ok((result.into_iter().map(Into::into).collect(), carry.into()))
+    }
+
+    fn log(&mut self, a: Self::VmType, allow_leaky_logs: bool) -> eyre::Result<String> {
+        match a {
+            Rep3VmType::Public(public) => self.plain.log(public, allow_leaky_logs),
+            Rep3VmType::Arithmetic(share) => {
+                if allow_leaky_logs {
+                    let field = arithmetic::open(share, &mut self.io_context0)?;
+                    Ok(field.to_string())
+                } else {
+                    Ok("secret".to_string())
+                }
+            }
+        }
     }
 }
 

@@ -8,6 +8,7 @@ use super::polynomial::SharedPolynomial;
 pub(crate) struct ShpleminiOpeningClaim<T: NoirUltraHonkProver<P>, P: Pairing> {
     pub(crate) polynomial: SharedPolynomial<T, P>,
     pub(crate) opening_pair: OpeningPair<T, P>,
+    pub(crate) gemini_fold: bool,
 }
 
 pub(crate) struct OpeningPair<T: NoirUltraHonkProver<P>, P: Pairing> {

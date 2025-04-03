@@ -73,7 +73,7 @@ impl<
 
         let mut transcript = Transcript::<TranscriptFieldType, H>::new();
 
-        let oink = CoOink::new(&mut self.driver);
+        let oink = CoOink::new(&mut self.driver, has_zk);
         let oink_result = oink.prove(&proving_key, &mut transcript, crs)?;
 
         let circuit_size = proving_key.circuit_size;
@@ -83,8 +83,8 @@ impl<
         memory.relation_parameters.gate_challenges =
             Self::generate_gate_challenges(&mut transcript);
 
-        let decider = CoDecider::new(self.driver, memory);
-        decider.prove(circuit_size, crs, transcript, has_zk)
+        let decider = CoDecider::new(self.driver, memory, has_zk);
+        decider.prove(circuit_size, crs, transcript)
     }
 }
 

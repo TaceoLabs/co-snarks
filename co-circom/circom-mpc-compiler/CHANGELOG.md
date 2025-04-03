@@ -7,6 +7,24 @@
     * co-groth16 bumped from 0.5.0 to 0.5.1
     * mpc-core bumped from 0.4.0 to 0.5.0
 
+## [0.9.1](https://github.com/TaceoLabs/co-snarks/compare/circom-mpc-compiler-v0.9.0...circom-mpc-compiler-v0.9.1) (2025-04-03)
+
+
+### Bug Fixes
+
+* added possibility for mul ret vals in circom wtns extension from compute bucket ([06bc96b](https://github.com/TaceoLabs/co-snarks/commit/06bc96b7048a95756ba535c23d132fc9eae369a5))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * circom-types bumped from 0.8.0 to 0.9.0
+    * circom-mpc-vm bumped from 0.7.0 to 0.8.0
+  * dev-dependencies
+    * co-groth16 bumped from 0.8.0 to 0.9.0
+    * mpc-core bumped from 0.8.0 to 0.9.0
+
 ## [0.9.0](https://github.com/Taceolabs/co-snarks/compare/circom-mpc-compiler-v0.8.0...circom-mpc-compiler-v0.9.0) (2025-02-20)
 
 

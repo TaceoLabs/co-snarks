@@ -10,6 +10,7 @@ use std::{marker::PhantomData, sync::Arc};
 
 use ark_ff::PrimeField;
 use co_circom_snarks::{CompressedRep3SharedWitness, SharedWitness};
+use co_groth16::{CircomReduction, ConstraintMatrices, ProvingKey};
 use color_eyre::eyre::{self, Context, ContextCompat};
 use mpc_core::protocols::{
     bridges::network::RepToShamirNetwork,
@@ -25,7 +26,7 @@ pub use circom_mpc_compiler::{CoCircomCompiler, CompilerConfig, SimplificationLe
 pub use circom_mpc_vm::{mpc_vm::VMConfig, types::CoCircomCompilerParsed};
 pub use circom_types::{
     groth16::{
-        Groth16Proof, JsonVerificationKey as Groth16JsonVerificationKey, ZKey as Groth16ZKey,
+        CircomGroth16Proof, JsonVerificationKey as Groth16JsonVerificationKey, ZKey as Groth16ZKey,
     },
     plonk::{JsonVerificationKey as PlonkJsonVerificationKey, PlonkProof, ZKey as PlonkZKey},
     traits::{CheckElement, CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
@@ -77,11 +78,18 @@ where
     /// Create a Groth16 poof and return the public inputs
     pub fn prove_groth16(
         self,
-        zkey: Arc<Groth16ZKey<P>>,
-    ) -> eyre::Result<(Groth16Proof<P>, Vec<P::ScalarField>)> {
+        pkey: &ProvingKey<P>,
+        matrices: &ConstraintMatrices<P::ScalarField>,
+    ) -> eyre::Result<(CircomGroth16Proof<P>, Vec<P::ScalarField>)> {
         let public_inputs = self.witness.public_inputs[1..].to_vec();
-        let (proof, _net) = ShamirCoGroth16::prove(self.net, self.threshold, zkey, self.witness)?;
-        Ok((proof, public_inputs))
+        let (proof, _net) = ShamirCoGroth16::prove::<CircomReduction>(
+            self.net,
+            self.threshold,
+            pkey,
+            matrices,
+            self.witness,
+        )?;
+        Ok((proof.into(), public_inputs))
     }
 
     /// Create a Plonk poof and return the public inputs
@@ -137,12 +145,14 @@ where
     /// Create a Groth16 poof and return the public inputs
     pub fn prove_groth16(
         mut self,
-        zkey: Arc<Groth16ZKey<P>>,
-    ) -> eyre::Result<(Groth16Proof<P>, Vec<P::ScalarField>)> {
+        pkey: &ProvingKey<P>,
+        matrices: &ConstraintMatrices<P::ScalarField>,
+    ) -> eyre::Result<(CircomGroth16Proof<P>, Vec<P::ScalarField>)> {
         let witness = self.witness.uncompress(&mut self.net)?;
         let public_inputs = witness.public_inputs[1..].to_vec();
-        let (proof, _net) = Rep3CoGroth16::prove(self.net, zkey, witness)?;
-        Ok((proof, public_inputs))
+        let (proof, _net) =
+            Rep3CoGroth16::prove::<CircomReduction>(self.net, pkey, matrices, witness)?;
+        Ok((proof.into(), public_inputs))
     }
 
     /// Create a Plonk poof and return the public inputs

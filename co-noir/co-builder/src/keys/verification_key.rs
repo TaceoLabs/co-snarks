@@ -14,6 +14,8 @@ use ark_ec::{pairing::Pairing, AffineRepr};
 use ark_ff::Zero;
 use co_acvm::PlainAcvmSolver;
 
+#[derive(Clone)]
+
 pub struct VerifyingKey<P: Pairing> {
     pub crs: P::G2Affine,
     pub circuit_size: u32,

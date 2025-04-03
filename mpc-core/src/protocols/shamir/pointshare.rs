@@ -79,6 +79,11 @@ pub fn scalar_mul_public_scalar<C: CurveGroup>(
     a * b
 }
 
+/// Performs local part of scalar multiplication between a point share and a field share.
+pub fn scalar_mul_local<C: CurveGroup>(a: &PointShare<C>, b: ShamirShare<C::ScalarField>) -> C {
+    (b * a).a
+}
+
 /// Performs scalar multiplication between a point share and a field share.
 pub fn scalar_mul<C: CurveGroup, N: ShamirNetwork>(
     a: &PointShare<C>,

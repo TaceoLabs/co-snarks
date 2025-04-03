@@ -45,24 +45,72 @@ impl<P: Pairing, N: Rep3Network> NoirUltraHonkProver<P> for Rep3UltraHonkDriver<
     }
 
     // TODO dont take by ref cause impl Copy, remove self
-    fn sub(&self, a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare {
+    fn sub(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare {
         arithmetic::sub(a, b)
     }
 
-    fn add(&self, a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare {
+    fn sub_assign_many(a: &mut [Self::ArithmeticShare], b: &[Self::ArithmeticShare]) {
+        arithmetic::sub_vec_assign(a, b);
+    }
+
+    fn add(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare {
         arithmetic::add(a, b)
     }
 
-    fn neg(&mut self, a: Self::ArithmeticShare) -> Self::ArithmeticShare {
+    fn add_assign(a: &mut Self::ArithmeticShare, b: Self::ArithmeticShare) {
+        arithmetic::add_assign(a, b);
+    }
+
+    fn add_assign_public(
+        a: &mut Self::ArithmeticShare,
+        b: <P as Pairing>::ScalarField,
+        id: Self::PartyID,
+    ) {
+        arithmetic::add_assign_public(a, b, id);
+    }
+
+    fn neg(a: Self::ArithmeticShare) -> Self::ArithmeticShare {
         arithmetic::neg(a)
     }
 
     fn mul_with_public(
-        &self,
         public: <P as Pairing>::ScalarField,
         shared: Self::ArithmeticShare,
     ) -> Self::ArithmeticShare {
         arithmetic::mul_public(shared, public)
+    }
+
+    fn add_assign_public_half_share(
+        share: &mut P::ScalarField,
+        public: P::ScalarField,
+        id: Self::PartyID,
+    ) {
+        if matches!(id, PartyID::ID0) {
+            *share += public
+        }
+    }
+
+    fn mul_with_public_to_half_share(
+        public: P::ScalarField,
+        shared: Self::ArithmeticShare,
+    ) -> P::ScalarField {
+        public * shared.a
+    }
+
+    fn mul_assign_with_public(shared: &mut Self::ArithmeticShare, public: P::ScalarField) {
+        arithmetic::mul_assign_public(shared, public);
+    }
+
+    fn local_mul_vec(
+        &mut self,
+        a: &[Self::ArithmeticShare],
+        b: &[Self::ArithmeticShare],
+    ) -> Vec<P::ScalarField> {
+        arithmetic::local_mul_vec(a, b, &mut self.io_context0.rngs)
+    }
+
+    fn reshare(&mut self, a: Vec<P::ScalarField>) -> std::io::Result<Vec<Self::ArithmeticShare>> {
+        arithmetic::io_mul_vec(a, &mut self.io_context0)
     }
 
     fn mul_many(
@@ -74,11 +122,11 @@ impl<P: Pairing, N: Rep3Network> NoirUltraHonkProver<P> for Rep3UltraHonkDriver<
     }
 
     fn add_with_public(
-        &self,
         public: <P as Pairing>::ScalarField,
         shared: Self::ArithmeticShare,
+        id: PartyID,
     ) -> Self::ArithmeticShare {
-        arithmetic::add_public(shared, public, self.io_context0.id)
+        arithmetic::add_public(shared, public, id)
     }
 
     fn promote_to_trivial_share(
@@ -181,7 +229,6 @@ impl<P: Pairing, N: Rep3Network> NoirUltraHonkProver<P> for Rep3UltraHonkDriver<
     }
 
     fn eval_poly(
-        &mut self,
         coeffs: &[Self::ArithmeticShare],
         point: <P as Pairing>::ScalarField,
     ) -> Self::ArithmeticShare {

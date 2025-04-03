@@ -32,9 +32,23 @@ pub struct ProverWitnessEntities<T: Default> {
 }
 
 pub const PRECOMPUTED_ENTITIES_SIZE: usize = 27;
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Default, Clone, Serialize, Deserialize)]
 pub struct PrecomputedEntities<T: Default> {
     pub elements: [T; PRECOMPUTED_ENTITIES_SIZE],
+}
+
+impl<T: Default> PrecomputedEntities<Vec<T>> {
+    pub fn new() -> Self {
+        Self {
+            elements: std::array::from_fn(|_| Vec::new()),
+        }
+    }
+
+    pub fn add(&mut self, precomputed_entities: PrecomputedEntities<T>) {
+        for (src, dst) in precomputed_entities.into_iter().zip(self.iter_mut()) {
+            dst.push(src);
+        }
+    }
 }
 
 impl<T: Default> IntoIterator for PrecomputedEntities<T> {
@@ -99,12 +113,24 @@ impl<T: Default> ProverWitnessEntities<T> {
         &self.elements[Self::W_L]
     }
 
+    pub fn w_l_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::W_L]
+    }
+
     pub fn w_r(&self) -> &T {
         &self.elements[Self::W_R]
     }
 
+    pub fn w_r_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::W_R]
+    }
+
     pub fn w_o(&self) -> &T {
         &self.elements[Self::W_O]
+    }
+
+    pub fn w_o_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::W_O]
     }
 
     pub fn w_4(&self) -> &T {
@@ -115,8 +141,16 @@ impl<T: Default> ProverWitnessEntities<T> {
         &self.elements[Self::LOOKUP_READ_COUNTS]
     }
 
+    pub fn lookup_read_counts_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::LOOKUP_READ_COUNTS]
+    }
+
     pub fn lookup_read_tags(&self) -> &T {
         &self.elements[Self::LOOKUP_READ_TAGS]
+    }
+
+    pub fn lookup_read_tags_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::LOOKUP_READ_TAGS]
     }
 
     pub fn lookup_read_counts_and_tags(&self) -> &[T] {
@@ -325,5 +359,105 @@ impl<T: Default> PrecomputedEntities<T> {
 
     pub fn lagrange_last_mut(&mut self) -> &mut T {
         &mut self.elements[Self::LAGRANGE_LAST]
+    }
+
+    pub fn q_m_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::Q_M]
+    }
+
+    pub fn q_c_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::Q_C]
+    }
+
+    pub fn q_l_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::Q_L]
+    }
+
+    pub fn q_r_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::Q_R]
+    }
+
+    pub fn q_o_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::Q_O]
+    }
+
+    pub fn q_4_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::Q_4]
+    }
+
+    pub fn q_arith_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::Q_ARITH]
+    }
+
+    pub fn q_delta_range_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::Q_DELTA_RANGE]
+    }
+
+    pub fn q_elliptic_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::Q_ELLIPTIC]
+    }
+
+    pub fn q_aux_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::Q_AUX]
+    }
+
+    pub fn q_lookup_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::Q_LOOKUP]
+    }
+
+    pub fn q_poseidon2_external_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::Q_POSEIDON2_EXTERNAL]
+    }
+
+    pub fn q_poseidon2_internal_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::Q_POSEIDON2_INTERNAL]
+    }
+
+    pub fn table_1_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::TABLE_1]
+    }
+
+    pub fn table_2_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::TABLE_2]
+    }
+
+    pub fn table_3_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::TABLE_3]
+    }
+
+    pub fn table_4_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::TABLE_4]
+    }
+
+    pub fn sigma_1_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::SIGMA_1]
+    }
+
+    pub fn sigma_2_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::SIGMA_2]
+    }
+
+    pub fn sigma_3_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::SIGMA_3]
+    }
+
+    pub fn sigma_4_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::SIGMA_4]
+    }
+
+    pub fn id_1_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::ID_1]
+    }
+
+    pub fn id_2_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::ID_2]
+    }
+
+    pub fn id_3_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::ID_3]
+    }
+
+    pub fn id_4_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::ID_4]
     }
 }

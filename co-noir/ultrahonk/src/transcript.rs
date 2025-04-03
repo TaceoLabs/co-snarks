@@ -98,7 +98,7 @@ where
         &self.manifest
     }
 
-    fn consume_prover_elements(&mut self, label: String, elements: &[F]) {
+    fn add_element_frs_to_hash_buffer(&mut self, label: String, elements: &[F]) {
         // Add an entry to the current round of the manifest
         let len = elements.len();
         self.manifest.add_entry(self.round_number, label, len);
@@ -120,9 +120,15 @@ where
         res
     }
 
+    // Adds an element to the transcript.
+    // Serializes the element to frs and adds it to the current_round_data buffer. Does NOT add the element to the proof. This is used for elements which should be part of the transcript but are not in the final proof (e.g. circuit size)
+    fn add_to_hash_buffer(&mut self, label: String, elements: &[F]) {
+        self.add_element_frs_to_hash_buffer(label, elements);
+    }
+
     fn send_to_verifier(&mut self, label: String, elements: &[F]) {
         self.proof_data.extend(elements);
-        self.consume_prover_elements(label, elements);
+        self.add_element_frs_to_hash_buffer(label, elements);
     }
 
     pub fn send_fr_to_verifier<P: HonkCurve<F>>(&mut self, label: String, element: P::ScalarField) {
@@ -133,6 +139,11 @@ where
     pub fn send_u64_to_verifier(&mut self, label: String, element: u64) {
         let el = F::from(element);
         self.send_to_verifier(label, &[el]);
+    }
+
+    pub fn add_u64_to_hash_buffer(&mut self, label: String, element: u64) {
+        let el = F::from(element);
+        self.add_to_hash_buffer(label, &[el]);
     }
 
     pub fn send_point_to_verifier<P: HonkCurve<F>>(&mut self, label: String, element: P::G1Affine) {
@@ -163,14 +174,8 @@ where
         let elements = self.proof_data[self.num_frs_read..self.num_frs_read + n].to_owned();
         self.num_frs_read += n;
 
-        self.consume_prover_elements(label, &elements);
+        self.add_element_frs_to_hash_buffer(label, &elements);
         Ok(elements)
-    }
-
-    pub(super) fn receive_u64_from_prover(&mut self, label: String) -> HonkProofResult<u64> {
-        let element = self.receive_n_from_prover(label, 1)?[0];
-        let r = element.into_bigint();
-        Ok(r.as_ref().first().unwrap().to_owned())
     }
 
     pub(super) fn receive_fr_from_prover<P: HonkCurve<F>>(

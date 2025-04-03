@@ -28,6 +28,8 @@
 //! Inspired by <https://github.com/arkworks-rs/circom-compat/blob/170b10fc9ed182b5f72ecf379033dda023d0bf07/src/zkey.rs>
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
+use ark_groth16::{ProvingKey, VerifyingKey};
+use ark_relations::r1cs::{ConstraintMatrices, Matrix};
 use ark_serialize::CanonicalDeserialize;
 
 use std::io::Read;
@@ -71,15 +73,51 @@ pub struct ZKey<P: Pairing> {
     pub beta_g2: P::G2Affine,
     /// delta_g1
     pub delta_g2: P::G2Affine,
+    /// Used to bind public inputs to the proof
+    pub ic: Vec<P::G1Affine>,
     /// The constraint matrices A
-    pub a_matrix: ConstraintMatrix<P::ScalarField>,
+    pub a_matrix: Matrix<P::ScalarField>,
     /// The constraint matrices B
-    pub b_matrix: ConstraintMatrix<P::ScalarField>,
+    pub b_matrix: Matrix<P::ScalarField>,
 }
 
 /// A constraint matrix used in Groth16.
-pub type ConstraintMatrix<F> = Vec<Vec<(F, usize)>>;
-type ConstraintMatrixAB<F> = (usize, ConstraintMatrix<F>, ConstraintMatrix<F>);
+type ConstraintMatrixAB<F> = (usize, Matrix<F>, Matrix<F>);
+
+/// Note: The returned ProvingKey is only suitable for proving, the included VerificationKey is not complete due to elements missing in the zkey.
+impl<P: Pairing> From<ZKey<P>> for (ConstraintMatrices<P::ScalarField>, ProvingKey<P>) {
+    fn from(zkey: ZKey<P>) -> Self {
+        (
+            ConstraintMatrices {
+                num_instance_variables: zkey.n_public + 1,
+                num_witness_variables: zkey.a_query.len(),
+                num_constraints: zkey.num_constraints,
+                a_num_non_zero: zkey.a_matrix.len(),
+                b_num_non_zero: zkey.b_matrix.len(),
+                c_num_non_zero: 0,
+                a: zkey.a_matrix,
+                b: zkey.b_matrix,
+                c: vec![],
+            },
+            ProvingKey {
+                vk: VerifyingKey {
+                    alpha_g1: zkey.alpha_g1,
+                    beta_g2: zkey.beta_g2,
+                    gamma_g2: zkey.delta_g2,
+                    delta_g2: zkey.delta_g2,
+                    gamma_abc_g1: zkey.ic,
+                },
+                beta_g1: zkey.beta_g1,
+                delta_g1: zkey.delta_g1,
+                a_query: zkey.a_query,
+                b_g1_query: zkey.b_g1_query,
+                b_g2_query: zkey.b_g2_query,
+                h_query: zkey.h_query,
+                l_query: zkey.l_query,
+            },
+        )
+    }
+}
 
 #[derive(Clone, Debug)]
 struct HeaderGroth<P: Pairing> {
@@ -121,6 +159,7 @@ where
 
         // parse proving key
 
+        let ic_section = binfile.take_section(3);
         let matrices_section = binfile.take_section(4);
         let a_section = binfile.take_section(5);
         let b_g1_section = binfile.take_section(6);
@@ -128,6 +167,7 @@ where
         let l_section = binfile.take_section(8);
         let h_section = binfile.take_section(9);
 
+        let mut ic = None;
         let mut a_query = None;
         let mut b_g1_query = None;
         let mut b_g2_query = None;
@@ -137,6 +177,7 @@ where
 
         tracing::debug!("parsing zkey sections with rayon...");
         rayon::scope(|s| {
+            s.spawn(|_| ic = Some(Self::ic(n_public + 1, ic_section, check)));
             s.spawn(|_| a_query = Some(Self::a_query(n_vars, a_section, check)));
             s.spawn(|_| b_g1_query = Some(Self::b_g1_query(n_vars, b_g1_section, check)));
             s.spawn(|_| b_g2_query = Some(Self::b_g2_query(n_vars, b_g2_section, check)));
@@ -172,10 +213,19 @@ where
             delta_g2: header.delta_g2,
             a_matrix,
             b_matrix,
+            ic: ic.unwrap()?,
         })
     }
 
     fn a_query<R: Read>(
+        n_vars: usize,
+        reader: R,
+        check: CheckElement,
+    ) -> ZKeyParserResult<Vec<P::G1Affine>> {
+        Ok(P::g1_vec_from_reader(reader, n_vars, check)?)
+    }
+
+    fn ic<R: Read>(
         n_vars: usize,
         reader: R,
         check: CheckElement,
@@ -320,7 +370,6 @@ mod tests {
     use crate::groth16::test_utils;
 
     use super::*;
-    use ark_bls12_381::Bls12_381;
     use ark_bn254::{Bn254, Fq, Fq2, G1Affine, G1Projective, G2Affine, G2Projective};
     use ark_ff::BigInteger256;
     use num_bigint::BigUint;
@@ -332,7 +381,9 @@ mod tests {
     use std::convert::TryFrom;
 
     #[test]
+    #[cfg(feature = "ark-bls12-381")]
     fn can_deser_bls12_381_mult2_key() {
+        use ark_bls12_381::Bls12_381;
         let checks = [CheckElement::Yes, CheckElement::No];
         for check in checks {
             let zkey = File::open("../../test_vectors/Groth16/bls12_381/multiplier2/circuit.zkey")

@@ -34,8 +34,10 @@ impl<N: Rep3Network> Rep3Groth16Driver<N> {
 
 impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N> {
     type ArithmeticShare = Rep3PrimeFieldShare<P::ScalarField>;
-    type PointShare<C>
-        = Rep3PointShare<C>
+    type ArithmeticHalfShare = P::ScalarField;
+
+    type PointHalfShare<C>
+        = C
     where
         C: CurveGroup;
 
@@ -69,6 +71,31 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
         acc
     }
 
+    fn evaluate_constraint_half_share(
+        party_id: Self::PartyID,
+        lhs: &[(P::ScalarField, usize)],
+        public_inputs: &[P::ScalarField],
+        private_witness: &[Self::ArithmeticShare],
+    ) -> Self::ArithmeticHalfShare {
+        let mut acc = Self::ArithmeticHalfShare::default();
+        for (coeff, index) in lhs {
+            if index < &public_inputs.len() {
+                let val = public_inputs[*index];
+                let mul_result = val * coeff;
+                match party_id {
+                    PartyID::ID0 => acc += mul_result,
+                    PartyID::ID1 => {}
+                    PartyID::ID2 => {}
+                }
+            } else {
+                let current_witness = private_witness[*index - public_inputs.len()];
+                let current_witness_hs = current_witness.a;
+                acc += current_witness_hs * coeff;
+            }
+        }
+        acc
+    }
+
     fn promote_to_trivial_shares(
         id: Self::PartyID,
         public_values: &[P::ScalarField],
@@ -88,14 +115,6 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
         arithmetic::local_mul_vec(&a, &b, &mut self.io_context0.rngs)
     }
 
-    fn mul(
-        &mut self,
-        r: Self::ArithmeticShare,
-        s: Self::ArithmeticShare,
-    ) -> IoResult<Self::ArithmeticShare> {
-        arithmetic::mul(r, s, &mut self.io_context1)
-    }
-
     fn distribute_powers_and_mul_by_const(
         coeffs: &mut [Self::ArithmeticShare],
         roots: &[P::ScalarField],
@@ -109,92 +128,73 @@ impl<P: Pairing, N: Rep3Network> CircomGroth16Prover<P> for Rep3Groth16Driver<N>
             })
     }
 
-    fn msm_public_points<C>(
-        points: &[C::Affine],
-        scalars: &[Self::ArithmeticShare],
-    ) -> Self::PointShare<C>
-    where
-        C: CurveGroup<ScalarField = P::ScalarField>,
-    {
-        pointshare::msm_public_points(points, scalars)
-    }
-
-    fn scalar_mul_public_point<C>(a: &C, b: Self::ArithmeticShare) -> Self::PointShare<C>
-    where
-        C: CurveGroup<ScalarField = P::ScalarField>,
-    {
-        pointshare::scalar_mul_public_point(a, b)
-    }
-
-    /// Add a shared point B in place to the shared point A: \[A\] += \[B\]
-    fn add_assign_points<C: CurveGroup>(a: &mut Self::PointShare<C>, b: &Self::PointShare<C>) {
-        pointshare::add_assign(a, b)
-    }
-
-    fn add_points_half_share<C: CurveGroup>(a: Self::PointShare<C>, b: &C) -> C {
-        let (a, _) = a.ab();
-        a + b
-    }
-
-    fn add_assign_points_public<C: CurveGroup>(
+    fn add_assign_points_public_hs<C: CurveGroup>(
         id: Self::PartyID,
-        a: &mut Self::PointShare<C>,
+        a: &mut Self::PointHalfShare<C>,
         b: &C,
     ) {
-        pointshare::add_assign_public(a, b, id)
+        match id {
+            PartyID::ID0 => *a += b,
+            PartyID::ID1 => {}
+            PartyID::ID2 => {}
+        }
     }
 
-    fn open_point<C>(&mut self, a: &Self::PointShare<C>) -> IoResult<C>
-    where
-        C: CurveGroup<ScalarField = P::ScalarField>,
-    {
-        pointshare::open_point(a, &mut self.io_context0)
-    }
-
-    fn scalar_mul<C>(
-        &mut self,
-        a: &Self::PointShare<C>,
-        b: Self::ArithmeticShare,
-    ) -> IoResult<Self::PointShare<C>>
-    where
-        C: CurveGroup<ScalarField = P::ScalarField>,
-    {
-        pointshare::scalar_mul(a, b, &mut self.io_context0)
-    }
-
-    fn sub_assign_points<C: CurveGroup>(a: &mut Self::PointShare<C>, b: &Self::PointShare<C>) {
-        pointshare::sub_assign(a, b);
-    }
-
-    fn open_two_points(
-        &mut self,
-        a: P::G1,
-        b: Self::PointShare<P::G2>,
-    ) -> std::io::Result<(P::G1, P::G2)> {
+    fn open_two_half_points(&mut self, a: P::G1, b: P::G2) -> std::io::Result<(P::G1, P::G2)> {
         let mut s1 = a;
-        let s2 = b.b;
+        let mut s2 = b;
         let (r1, r2) = std::thread::scope(|s| {
             let r1 = s.spawn(|| self.io_context0.network.broadcast(s1));
-            let r2 = s.spawn(|| self.io_context1.network.reshare(s2));
+            let r2 = s.spawn(|| self.io_context1.network.broadcast(s2));
             (r1.join().expect("can join"), r2.join().expect("can join"))
         });
         let (r1b, r1c) = r1?;
-        let mut r2 = r2?;
+        let (r2b, r2c) = r2?;
         s1 += r1b + r1c;
-        r2 += b.a + b.b;
-        Ok((s1, r2))
+        s2 += r2b + r2c;
+        Ok((s1, s2))
     }
 
     fn open_point_and_scalar_mul(
         &mut self,
-        g_a: &Self::PointShare<P::G1>,
-        g1_b: &Self::PointShare<P::G1>,
+        g_a: &Self::PointHalfShare<P::G1>,
+        g1_b: &Self::PointHalfShare<P::G1>,
         r: Self::ArithmeticShare,
-    ) -> std::io::Result<(<P as Pairing>::G1, Self::PointShare<P::G1>)> {
+    ) -> std::io::Result<(<P as Pairing>::G1, Self::PointHalfShare<P::G1>)> {
         std::thread::scope(|s| {
-            let opened = s.spawn(|| pointshare::open_point(g_a, &mut self.io_context0));
-            let mul_result = pointshare::scalar_mul(g1_b, r, &mut self.io_context1)?;
-            Ok((opened.join().expect("can join")?, mul_result))
+            let opened = s.spawn(|| self.io_context0.network.broadcast(*g_a));
+            let g1_b_hs = s.spawn(|| self.io_context1.network.reshare(*g1_b));
+            let point = Rep3PointShare {
+                a: *g1_b,
+                b: g1_b_hs.join().expect("can join")?,
+            };
+            let mul_result = pointshare::scalar_mul_local(&point, r, &mut self.io_context1.rngs);
+
+            let (g_a_1, g_a_2) = opened.join().expect("can join")?;
+            let open_res = g_a_1 + g_a_2 + g_a;
+
+            Ok((open_res, mul_result))
         })
+    }
+
+    fn to_half_share(a: Self::ArithmeticShare) -> <P as Pairing>::ScalarField {
+        a.a
+    }
+
+    fn msm_public_points_hs<C>(
+        points: &[C::Affine],
+        scalars: &[Self::ArithmeticHalfShare],
+    ) -> Self::PointHalfShare<C>
+    where
+        C: CurveGroup<ScalarField = <P as Pairing>::ScalarField>,
+    {
+        C::msm_unchecked(points, scalars)
+    }
+
+    fn scalar_mul_public_point_hs<C>(a: &C, b: Self::ArithmeticHalfShare) -> Self::PointHalfShare<C>
+    where
+        C: CurveGroup<ScalarField = <P as Pairing>::ScalarField>,
+    {
+        *a * b
     }
 }

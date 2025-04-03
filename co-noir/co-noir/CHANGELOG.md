@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.6.0](https://github.com/TaceoLabs/co-snarks/compare/co-noir-v0.5.0...co-noir-v0.6.0) (2025-04-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* bump to BB 0.82.0
+* added a meaningful struct name for brillig succecss
+* acvm now can store values and returns the output of circuit
+* The API of several functions that previously took a `VerificationKey` has changed to now take a `&VerificationKey`.
+
+### Features
+
+* acvm now can store values and returns the output of circuit ([3df88fb](https://github.com/TaceoLabs/co-snarks/commit/3df88fb244b191e03bbd6e6aaede86eaaf7f3d6b))
+* add MPC ZK prover for coNoir ([#335](https://github.com/TaceoLabs/co-snarks/issues/335)) ([056b2b4](https://github.com/TaceoLabs/co-snarks/commit/056b2b4e10ef822de253ac646e88e2dd5f50edcb))
+* add optional connect timeout to network config ([#356](https://github.com/TaceoLabs/co-snarks/issues/356)) ([1acd639](https://github.com/TaceoLabs/co-snarks/commit/1acd639a1bfc4e0fea58b291346200a9c82fb487))
+* add plain zk prover and zk verifier ([#333](https://github.com/TaceoLabs/co-snarks/issues/333)) ([7681649](https://github.com/TaceoLabs/co-snarks/commit/76816491c81e474e710977fa9f3450a3210b57dc))
+* bump to BB 0.82.0 ([28500cc](https://github.com/TaceoLabs/co-snarks/commit/28500ccf1feb0cbca2d06881056705f3a6a9ef6a))
+* update noir to version 1.0.0-beta.3 ([65d8284](https://github.com/TaceoLabs/co-snarks/commit/65d82847d14903740a0e980cdf1f441832b69610))
+
+
+### Code Refactoring
+
+* added a meaningful struct name for brillig succecss ([e0af901](https://github.com/TaceoLabs/co-snarks/commit/e0af901e2999cc7e38215f36fe2a647b18d94e0e))
+* take uh-vk by reference ([#344](https://github.com/TaceoLabs/co-snarks/issues/344)) ([af9028a](https://github.com/TaceoLabs/co-snarks/commit/af9028a949fe4685f811da7c80a64c67c49a9150))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * co-acvm bumped from 0.5.0 to 0.6.0
+    * co-ultrahonk bumped from 0.4.0 to 0.5.0
+    * mpc-core bumped from 0.8.0 to 0.9.0
+    * mpc-net bumped from 0.3.0 to 0.4.0
+
 ## [0.5.0](https://github.com/Taceolabs/co-snarks/compare/co-noir-v0.4.0...co-noir-v0.5.0) (2025-02-20)
 
 

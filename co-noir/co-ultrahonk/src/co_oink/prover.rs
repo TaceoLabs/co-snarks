@@ -27,10 +27,11 @@ use co_builder::{
 use itertools::izip;
 use std::{array, marker::PhantomData};
 use ultrahonk::{
-    prelude::{Transcript, TranscriptFieldType, TranscriptHasher},
+    prelude::{Transcript, TranscriptFieldType, TranscriptHasher, ZeroKnowledge},
     NUM_ALPHAS,
 };
 
+#[expect(dead_code)] //see e.g. in execute_wire_commitments_round why we will need has_zk in the future
 pub(crate) struct CoOink<
     'a,
     T: NoirUltraHonkProver<P>,
@@ -41,6 +42,7 @@ pub(crate) struct CoOink<
     memory: ProverMemory<T, P>,
     phantom_data: PhantomData<P>,
     phantom_hasher: PhantomData<H>,
+    has_zk: ZeroKnowledge,
 }
 
 impl<
@@ -50,34 +52,35 @@ impl<
         H: TranscriptHasher<TranscriptFieldType>,
     > CoOink<'a, T, P, H>
 {
-    pub(crate) fn new(driver: &'a mut T) -> Self {
+    pub(crate) fn new(driver: &'a mut T, has_zk: ZeroKnowledge) -> Self {
         Self {
             driver,
             memory: ProverMemory::default(),
             phantom_data: PhantomData,
             phantom_hasher: PhantomData,
+            has_zk,
         }
     }
 
     fn compute_w4_inner(&mut self, proving_key: &ProvingKey<T, P>, gate_idx: usize) {
         let target = &mut self.memory.w_4[gate_idx];
 
-        let mul1 = self.driver.mul_with_public(
+        let mul1 = T::mul_with_public(
             self.memory.challenges.eta_1,
             proving_key.polynomials.witness.w_l()[gate_idx],
         );
-        let mul2 = self.driver.mul_with_public(
+        let mul2 = T::mul_with_public(
             self.memory.challenges.eta_2,
             proving_key.polynomials.witness.w_r()[gate_idx],
         );
-        let mul3 = self.driver.mul_with_public(
+        let mul3 = T::mul_with_public(
             self.memory.challenges.eta_3,
             proving_key.polynomials.witness.w_o()[gate_idx],
         );
         // TACEO TODO add_assign?
-        *target = self.driver.add(*target, mul1);
-        *target = self.driver.add(*target, mul2);
-        *target = self.driver.add(*target, mul3);
+        *target = T::add(*target, mul1);
+        *target = T::add(*target, mul2);
+        *target = T::add(*target, mul3);
     }
 
     fn compute_w4(&mut self, proving_key: &ProvingKey<T, P>) {
@@ -110,7 +113,8 @@ impl<
             let gate_idx = *gate_idx as usize;
             self.compute_w4_inner(proving_key, gate_idx);
             let target = &mut self.memory.w_4[gate_idx];
-            *target = self.driver.add_with_public(P::ScalarField::one(), *target);
+            *target =
+                T::add_with_public(P::ScalarField::one(), *target, self.driver.get_party_id());
         }
 
         // This computes the values for cases where the type (r/w) of the record is a secret share of 0/1 and adds this share
@@ -118,7 +122,7 @@ impl<
             let gate_idx = *gate_idx as usize;
             self.compute_w4_inner(proving_key, gate_idx);
             let target = &mut self.memory.w_4[gate_idx];
-            *target = self.driver.add(*type_share, *target);
+            *target = T::add(*type_share, *target);
         }
     }
 
@@ -147,31 +151,26 @@ impl<
         // The wire values for lookup gates are accumulators structured in such a way that the differences w_i -
         // step_size*w_i_shift result in values present in column i of a corresponding table. See the documentation in
         // method get_lookup_accumulators() in  for a detailed explanation.
+        let party_id = self.driver.get_party_id();
 
-        let mul = self
-            .driver
-            .mul_with_public(negative_column_1_step_size, w_1_shift);
-        let add = self.driver.add_with_public(gamma, mul);
-        let derived_table_entry_1 = self.driver.add(w_1, add);
+        let mul = T::mul_with_public(negative_column_1_step_size, w_1_shift);
+        let add = T::add_with_public(gamma, mul, party_id);
+        let derived_table_entry_1 = T::add(w_1, add);
 
-        let mul = self
-            .driver
-            .mul_with_public(negative_column_2_step_size, w_2_shift);
-        let derived_table_entry_2 = self.driver.add(w_2, mul);
+        let mul = T::mul_with_public(negative_column_2_step_size, w_2_shift);
+        let derived_table_entry_2 = T::add(w_2, mul);
 
-        let mul = self
-            .driver
-            .mul_with_public(negative_column_3_step_size, w_3_shift);
-        let derived_table_entry_3 = self.driver.add(w_3, mul);
+        let mul = T::mul_with_public(negative_column_3_step_size, w_3_shift);
+        let derived_table_entry_3 = T::add(w_3, mul);
 
         // (w_1 + \gamma q_2*w_1_shift) + η(w_2 + q_m*w_2_shift) + η₂(w_3 + q_c*w_3_shift) + η₃q_index.
         // deg 2 or 3
         // TACEO TODO add_assign?
-        let mul = self.driver.mul_with_public(eta_1, derived_table_entry_2);
-        let res = self.driver.add(derived_table_entry_1, mul);
-        let mul = self.driver.mul_with_public(eta_2, derived_table_entry_3);
-        let res = self.driver.add(res, mul);
-        self.driver.add_with_public(table_index * eta_3, res)
+        let mul = T::mul_with_public(eta_1, derived_table_entry_2);
+        let res = T::add(derived_table_entry_1, mul);
+        let mul = T::mul_with_public(eta_2, derived_table_entry_3);
+        let res = T::add(res, mul);
+        T::add_with_public(table_index * eta_3, res, party_id)
     }
 
     // Compute table_1 + gamma + table_2 * eta + table_3 * eta_2 + table_4 * eta_3
@@ -225,15 +224,18 @@ impl<
             //     continue;
             // }
             debug_assert!(q_lookup.is_one() || q_lookup.is_zero());
-            let mul = self
-                .driver
-                .mul_with_public(P::ScalarField::one() - q_lookup, lookup_read_tag.to_owned());
-            q_lookup_mul_read_tag.push(self.driver.add_with_public(q_lookup.to_owned(), mul));
+            let mul =
+                T::mul_with_public(P::ScalarField::one() - q_lookup, lookup_read_tag.to_owned());
+            q_lookup_mul_read_tag.push(T::add_with_public(
+                q_lookup.to_owned(),
+                mul,
+                self.driver.get_party_id(),
+            ));
 
             // READ_TERMS and WRITE_TERMS are 1, so we skip the loop
             let read_term = self.compute_read_term(proving_key, i);
             let write_term = self.compute_write_term(proving_key, i);
-            self.memory.lookup_inverses[i] = self.driver.mul_with_public(write_term, read_term);
+            self.memory.lookup_inverses[i] = T::mul_with_public(write_term, read_term);
         }
         self.memory.lookup_inverses = Polynomial::new(
             self.driver
@@ -323,9 +325,10 @@ impl<
             } else {
                 i
             };
+            let paryty_id = driver.get_party_id();
 
-            let m1 = driver.add_with_public(pub1[idx] * beta + gamma, shared1[idx]);
-            let m2 = driver.add_with_public(pub2[idx] * beta + gamma, shared2[idx]);
+            let m1 = T::add_with_public(pub1[idx] * beta + gamma, shared1[idx], paryty_id);
+            let m2 = T::add_with_public(pub2[idx] * beta + gamma, shared2[idx], paryty_id);
             mul1.push(m1);
             mul2.push(m2);
         }
@@ -357,7 +360,7 @@ impl<
         }
 
         for (unblind, open) in unblind.iter_mut().zip(open.iter()) {
-            *unblind = self.driver.mul_with_public(*open, *unblind);
+            *unblind = T::mul_with_public(*open, *unblind);
         }
         Ok(unblind)
     }
@@ -503,12 +506,12 @@ impl<
         tracing::trace!("executing preamble round");
 
         transcript
-            .send_u64_to_verifier("circuit_size".to_string(), proving_key.circuit_size as u64);
-        transcript.send_u64_to_verifier(
+            .add_u64_to_hash_buffer("circuit_size".to_string(), proving_key.circuit_size as u64);
+        transcript.add_u64_to_hash_buffer(
             "public_input_size".to_string(),
             proving_key.num_public_inputs as u64,
         );
-        transcript.send_u64_to_verifier(
+        transcript.add_u64_to_hash_buffer(
             "pub_inputs_offset".to_string(),
             proving_key.pub_inputs_offset as u64,
         );
@@ -537,6 +540,15 @@ impl<
 
         // Commit to the first three wire polynomials of the instance
         // We only commit to the fourth wire polynomial after adding memory records
+
+        // TACEO note: Until issue https://github.com/AztecProtocol/aztec-packages/issues/13117 is resolved, we cannot apply the masking
+        // here, but it should be added in the future
+        // Mask the polynomial when proving in zero-knowledge
+        // if self.has_zk == ZeroKnowledge::Yes {
+        // proving_key.polynomials.witness.w_l_mut().mask(); // TODO: implement this
+        // proving_key.polynomials.witness.w_r_mut().mask(); // TODO: implement this
+        // proving_key.polynomials.witness.w_o_mut().mask(); // TODO: implement this
+        // };
 
         let w_l = CoUtils::commit::<T, P>(proving_key.polynomials.witness.w_l().as_ref(), crs);
         let w_r = CoUtils::commit::<T, P>(proving_key.polynomials.witness.w_r().as_ref(), crs);
@@ -570,6 +582,15 @@ impl<
         self.memory.challenges.eta_2 = challs[1];
         self.memory.challenges.eta_3 = challs[2];
         self.compute_w4(proving_key);
+
+        // TACEO note: Until issue https://github.com/AztecProtocol/aztec-packages/issues/13117 is resolved, we cannot apply the masking
+        // here, but it should be added in the future
+        // Mask the polynomial when proving in zero-knowledge
+        // if self.has_zk == ZeroKnowledge::Yes {
+        // proving_key.polynomials.witness.lookup_read_counts_mut().mask(); // TODO: implement this
+        // proving_key.polynomials.witness.lookup_read_tags_mut().mask(); // TODO: implement this
+        // self.memory.w_4.mask(); // TODO: implement this
+        // };
 
         // Commit to lookup argument polynomials and the finalized (i.e. with memory records) fourth wire polynomial
         let lookup_read_counts = CoUtils::commit::<T, P>(
@@ -627,6 +648,14 @@ impl<
 
         self.memory.public_input_delta = self.compute_public_input_delta(proving_key);
         self.compute_grand_product(proving_key)?;
+
+        // TACEO note: Until issue https://github.com/AztecProtocol/aztec-packages/issues/13117 is resolved, we cannot apply the masking
+        // here, but it should be added in the future
+        // Mask the polynomial when proving in zero-knowledge
+        // if self.has_zk == ZeroKnowledge::Yes {
+        // self.memory.lookup_inverses.mask(); // TODO: implement this
+        // self.memory.z_perm.mask(); // TODO: implement this
+        // };
 
         // This is from the previous round, but we open it here with z_perm
         let lookup_inverses = CoUtils::commit::<T, P>(self.memory.lookup_inverses.as_ref(), crs);

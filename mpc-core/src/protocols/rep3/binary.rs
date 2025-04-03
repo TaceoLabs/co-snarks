@@ -3,7 +3,7 @@
 //! This module contains operations with binary shares
 
 use ark_ff::{One, PrimeField};
-use itertools::izip;
+use itertools::{izip, Itertools as _};
 use num_bigint::BigUint;
 use types::Rep3BigUintShare;
 
@@ -44,6 +44,27 @@ pub fn xor_public<F: PrimeField>(
     res
 }
 
+/// Performs element-wise bitwise XOR operation on the provided public and shared values.
+pub fn xor_public_vec<F: PrimeField>(
+    shared: &[BinaryShare<F>],
+    public: &[BigUint],
+    id: PartyID,
+) -> Vec<BinaryShare<F>> {
+    shared
+        .iter()
+        .zip(public)
+        .map(|(shared, public)| {
+            let mut res = shared.to_owned();
+            match id {
+                PartyID::ID0 => res.a ^= public,
+                PartyID::ID1 => res.b ^= public,
+                PartyID::ID2 => {}
+            }
+            res
+        })
+        .collect()
+}
+
 /// Performs a bitwise OR operation on two shared values.
 pub fn or<F: PrimeField, N: Rep3Network>(
     a: &BinaryShare<F>,
@@ -82,6 +103,29 @@ pub fn and<F: PrimeField, N: Rep3Network>(
     let local_a = (a & b) ^ mask;
     let local_b = io_context.network.reshare(local_a.clone())?;
     Ok(BinaryShare::new(local_a, local_b))
+}
+
+/// Performs element-wise bitwise AND operation on the provided shared values.
+pub fn and_vec<F: PrimeField, N: Rep3Network>(
+    a: &[BinaryShare<F>],
+    b: &[BinaryShare<F>],
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<BinaryShare<F>>> {
+    let local_a = izip!(a, b)
+        .map(|(a, b)| {
+            let (mut mask, mask_b) = io_context
+                .rngs
+                .rand
+                .random_biguint(usize::try_from(F::MODULUS_BIT_SIZE).expect("u32 fits into usize"));
+
+            mask ^= mask_b;
+            (a & b) ^ mask
+        })
+        .collect_vec();
+    let local_b = io_context.network.reshare(local_a.clone())?;
+    Ok(izip!(local_a, local_b)
+        .map(|(a, b)| BinaryShare::new(a, b))
+        .collect_vec())
 }
 
 /// Performs a bitwise AND operation on a shared value and a public value.
@@ -232,6 +276,23 @@ pub fn cmux<F: PrimeField, N: Rep3Network>(
     let xor = x_f ^ x_t;
     let mut and = and(c, &xor, io_context)?;
     and ^= x_f;
+    Ok(and)
+}
+
+/// Computes an element-wise CMUX: If `$c_i$` is `1`, returns `$x^t_i$`, otherwise returns `$x^f_i$`.
+pub fn cmux_many<F: PrimeField, N: Rep3Network>(
+    c: &[BinaryShare<F>],
+    x_t: &[BinaryShare<F>],
+    x_f: &[BinaryShare<F>],
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<BinaryShare<F>>> {
+    assert_eq!(c.len(), x_t.len());
+    assert_eq!(c.len(), x_f.len());
+    let xor = izip!(x_f, x_t).map(|(x_f, x_t)| x_f ^ x_t).collect_vec();
+    let mut and = and_vec(c, &xor, io_context)?;
+    for (and, x_f) in izip!(and.iter_mut(), x_f) {
+        *and ^= x_f;
+    }
     Ok(and)
 }
 

@@ -75,21 +75,21 @@ impl<F: PrimeField> Relation<F> for UltraPermutationRelation {
     }
 
     /**
-    * @brief Compute contribution of the permutation relation for a given edge (internal function)
-    *
-    * @details This relation confirms faithful calculation of the grand
-    * product polynomial \f$ Z_{\text{perm}}\f$.
-    * In Sumcheck Prover Round, this method adds to accumulators evaluations of subrelations at the point
-       \f$(u_0,\ldots, u_{i-1}, k, \vec\ell)\f$ for \f$ k=0,\ldots, D\f$, where \f$ \vec \ell\f$ is a point  on the
-       Boolean hypercube \f$\{0,1\}^{d-1-i}\f$ and \f$ D \f$ is specified by the calling class. It does so by taking as
-       input an array of Prover Polynomials partially evaluated at the points \f$(u_0,\ldots, u_{i-1}, k, \vec\ell)\f$ and
-       computing point-wise evaluations of the sub-relations. \todo Protogalaxy Accumulation
-    *
-    * @param evals transformed to `evals + C(in(X)...)*scaling_factor`
-    * @param in an std::array containing the fully extended Univariate edges.
-    * @param parameters contains beta, gamma, and public_input_delta, ....
-    * @param scaling_factor optional term to scale the evaluation before adding to evals.
-    */
+     * @brief Compute contribution of the permutation relation for a given edge (internal function)
+     *
+     * @details This relation confirms faithful calculation of the grand
+     * product polynomial \f$ Z_{\text{perm}}\f$.
+     * In Sumcheck Prover Round, this method adds to accumulators evaluations of subrelations at the point
+     * \f$(u_0,\ldots, u_{i-1}, k, \vec\ell)\f$ for \f$ k=0,\ldots, D\f$, where \f$ \vec \ell\f$ is a point  on the
+     * Boolean hypercube \f$\{0,1\}^{d-1-i}\f$ and \f$ D \f$ is specified by the calling class. It does so by taking as
+     * input an array of Prover Polynomials partially evaluated at the points \f$(u_0,\ldots, u_{i-1}, k, \vec\ell)\f$ and
+     * computing point-wise evaluations of the sub-relations. \todo Protogalaxy Accumulation
+     *
+     * @param evals transformed to `evals + C(in(X)...)*scaling_factor`
+     * @param in an std::array containing the fully extended Univariate edges.
+     * @param parameters contains beta, gamma, and public_input_delta, ....
+     * @param scaling_factor optional term to scale the evaluation before adding to evals.
+     */
     fn accumulate(
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariates<F>,

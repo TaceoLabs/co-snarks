@@ -276,13 +276,14 @@ fn read_map<R: Read>(mut reader: R, size: u64, n_wires: usize) -> Result<Vec<u64
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ark_bls12_381::Bls12_381;
     use ark_bn254::Bn254;
 
     use std::{fs::File, str::FromStr};
 
     #[test]
+    #[cfg(feature = "ark-bls12-381")]
     fn test_bls_12_381_mult2() {
+        use ark_bls12_381::Bls12_381;
         let r1cs_file =
             File::open("../../test_vectors/Groth16/bls12_381/multiplier2/circuit.r1cs").unwrap();
         let r1cs = R1CS::<Bls12_381>::from_reader(r1cs_file).unwrap();
