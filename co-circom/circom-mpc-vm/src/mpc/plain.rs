@@ -333,9 +333,9 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtensio
 
         // mux
         let (mux_out0, mux_out1) = if sel.is_one() {
-            (dbl_out0, dbl_out1)
-        } else {
             (add_out0, add_out1)
+        } else {
+            (add_in[0].to_owned(), add_in[1].to_owned())
         };
 
         let res = vec![dbl_out0, dbl_out1, mux_out0, mux_out1];

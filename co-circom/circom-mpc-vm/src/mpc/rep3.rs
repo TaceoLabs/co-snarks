@@ -666,7 +666,7 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
         let a = F::from(TWICE_A_PLUS_D) * a_min_d_inv;
         let b = F::from(4) * a_min_d_inv;
 
-        let mut res = Vec::with_capacity(4);
+        let mut res: Vec<Rep3VmType<F>> = Vec::with_capacity(4);
         let mut intermediate = Vec::with_capacity(3);
 
         // first: double input
@@ -757,7 +757,59 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
         }
 
         // then: add input to output
-        todo!();
+        let lambda_div = self.sub(add_in[0].to_owned(), res[0].to_owned())?;
+        let lambda_num = self.sub(add_in[1].to_owned(), res[1].to_owned())?;
+        let lambda = self.div(lambda_num, lambda_div)?;
+
+        let lambda_sqr = self.mul(lambda.to_owned(), lambda.to_owned())?;
+        let add_out0 = self.mul(lambda_sqr, b.into())?;
+        let add_out0 = self.sub(add_out0, a.into())?;
+        let add_out0 = self.sub(add_out0, res[0].to_owned())?;
+        let add_out0 = self.sub(add_out0, add_in[0].to_owned())?;
+
+        let t = self.sub(res[0].to_owned(), add_out0.to_owned())?;
+        let add_out1 = self.mul(lambda.to_owned(), t)?;
+        let add_out1 = self.sub(add_out1, res[1].to_owned())?;
+
+        intermediate.push(lambda);
+
+        // mux
+        let diff1 = self.sub(add_out0.to_owned(), add_in[0].to_owned())?;
+        let diff2 = self.sub(add_out1.to_owned(), add_in[1].to_owned())?;
+
+        match (sel, diff1, diff2) {
+            (Rep3VmType::Public(sel), _, _) => {
+                if sel.is_one() {
+                    res.push(add_out0);
+                    res.push(add_out1);
+                } else {
+                    res.push(add_in[0].to_owned());
+                    res.push(add_in[1].to_owned());
+                }
+            }
+            (Rep3VmType::Arithmetic(sel), Rep3VmType::Public(diff1), Rep3VmType::Public(diff2)) => {
+                let mul1 = arithmetic::mul_public(sel, diff1).into();
+                let mul2 = arithmetic::mul_public(sel, diff2).into();
+                res.push(self.add(mul1, add_in[0].to_owned())?);
+                res.push(self.add(mul2, add_in[1].to_owned())?);
+            }
+            (
+                Rep3VmType::Arithmetic(sel),
+                Rep3VmType::Arithmetic(diff1),
+                Rep3VmType::Arithmetic(diff2),
+            ) => {
+                let mul = arithmetic::mul_vec(
+                    &[sel.to_owned(), sel],
+                    &[diff1, diff2],
+                    &mut self.io_context0,
+                )?;
+                let mul1 = mul[0].into();
+                let mul2 = mul[1].into();
+                res.push(self.add(mul1, add_in[0].to_owned())?);
+                res.push(self.add(mul2, add_in[1].to_owned())?);
+            }
+            _ => unreachable!(),
+        }
 
         Ok((res, intermediate))
     }
