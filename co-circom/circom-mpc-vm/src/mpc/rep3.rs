@@ -11,7 +11,7 @@ use mpc_core::protocols::rep3::{
     binary,
     conversion::{self, bit_inject_many},
     network::{IoContext, Rep3Network},
-    Rep3PrimeFieldShare,
+    yao, Rep3PrimeFieldShare,
 };
 use num_bigint::BigUint;
 use std::io;
@@ -167,7 +167,25 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
     fn int_div(&mut self, a: Self::VmType, b: Self::VmType) -> eyre::Result<Self::VmType> {
         match (a, b) {
             (Rep3VmType::Public(a), Rep3VmType::Public(b)) => Ok(self.plain.int_div(a, b)?.into()),
-            _ => todo!("Shared int_div not implemented"),
+            (Rep3VmType::Public(a), Rep3VmType::Arithmetic(b)) => {
+                let divided = yao::field_int_div_by_shared(a, b, &mut self.io_context0)?;
+                Ok(divided.into())
+            }
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
+                let divisor: BigUint = b.into();
+                let divided = if divisor.count_ones() == 1 {
+                    // is power-of-2
+                    let divisor_bit = divisor.bits() as usize - 1;
+                    yao::field_int_div_power_2(a, &mut self.io_context0, divisor_bit)?
+                } else {
+                    yao::field_int_div_by_public(a, b, &mut self.io_context0)?
+                };
+                Ok(divided.into())
+            }
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
+                let divided = yao::field_int_div(a, b, &mut self.io_context0)?;
+                Ok(divided.into())
+            }
         }
     }
 
@@ -187,7 +205,31 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
     fn modulo(&mut self, a: Self::VmType, b: Self::VmType) -> eyre::Result<Self::VmType> {
         match (a, b) {
             (Rep3VmType::Public(a), Rep3VmType::Public(b)) => Ok(self.plain.modulo(a, b)?.into()),
-            (_, _) => todo!("Shared mod not implemented"),
+            (Rep3VmType::Public(a), Rep3VmType::Arithmetic(b)) => {
+                let divided = yao::field_int_div_by_shared(a, b, &mut self.io_context0)?;
+                let mul = arithmetic::mul(divided, b, &mut self.io_context0)?;
+                let result = arithmetic::sub_public_by_shared(a, mul, self.io_context0.id);
+                Ok(result.into())
+            }
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
+                let divisor: BigUint = b.into();
+                let result = if divisor.count_ones() == 1 {
+                    // is power-of-2
+                    let divisor_bit = divisor.bits() as usize - 1;
+                    yao::field_mod_power_2(a, &mut self.io_context0, divisor_bit)?
+                } else {
+                    let divided = yao::field_int_div_by_public(a, b, &mut self.io_context0)?;
+                    let mul = arithmetic::mul_public(divided, b);
+                    arithmetic::sub(a, mul)
+                };
+                Ok(result.into())
+            }
+            (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
+                let divided = yao::field_int_div(a, b, &mut self.io_context0)?;
+                let mul = arithmetic::mul(divided, b, &mut self.io_context0)?;
+                let result = arithmetic::sub(a, mul);
+                Ok(result.into())
+            }
         }
     }
 

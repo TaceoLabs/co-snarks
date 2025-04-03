@@ -695,6 +695,18 @@ pub fn slice_arithmetic<F: PrimeField, N: Rep3Network>(
     slice_arithmetic_many(&[input], io_context, msb, lsb, bitsize)
 }
 
+/// Computes input % 2^divisor_bit.
+pub fn field_mod_power_2<F: PrimeField, N: Rep3Network>(
+    input: Rep3PrimeFieldShare<F>,
+    io_context: &mut IoContext<N>,
+    mod_bit: usize,
+) -> IoResult<Rep3PrimeFieldShare<F>> {
+    let decomposed = decompose_arithmetic(input, io_context, mod_bit, mod_bit)?;
+    debug_assert_eq!(decomposed.len(), 1);
+    let res = decomposed[0];
+    Ok(res)
+}
+
 /// Divides a vector of field elements by a power of 2, rounding down.
 pub fn field_int_div_power_2_many<F: PrimeField, N: Rep3Network>(
     inputs: &[Rep3PrimeFieldShare<F>],
