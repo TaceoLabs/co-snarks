@@ -8,6 +8,7 @@ use std::{
     num::ParseIntError,
     path::PathBuf,
     str::FromStr,
+    time::Duration,
 };
 
 /// A network address wrapper.
@@ -143,6 +144,8 @@ pub struct NetworkConfigFile {
     pub bind_addr: SocketAddr,
     /// The path to our private key file.
     pub key_path: PathBuf,
+    /// The connect timeout in seconds.
+    pub timeout_secs: Option<u64>,
 }
 
 /// The network configuration.
@@ -156,6 +159,8 @@ pub struct NetworkConfig {
     pub bind_addr: SocketAddr,
     /// The private key.
     pub key: PrivateKeyDer<'static>,
+    /// The connect timeout.
+    pub timeout: Option<Duration>,
 }
 
 impl NetworkConfig {
@@ -165,12 +170,14 @@ impl NetworkConfig {
         bind_addr: SocketAddr,
         key: PrivateKeyDer<'static>,
         parties: Vec<NetworkParty>,
+        timeout: Option<Duration>,
     ) -> Self {
         Self {
             parties,
             my_id: id,
             bind_addr,
             key,
+            timeout,
         }
     }
 }
@@ -190,6 +197,7 @@ impl TryFrom<NetworkConfigFile> for NetworkConfig {
             my_id: value.my_id,
             bind_addr: value.bind_addr,
             key,
+            timeout: value.timeout_secs.map(Duration::from_secs),
         })
     }
 }
@@ -201,6 +209,7 @@ impl Clone for NetworkConfig {
             my_id: self.my_id,
             bind_addr: self.bind_addr,
             key: self.key.clone_key(),
+            timeout: self.timeout,
         }
     }
 }

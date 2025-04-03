@@ -53,8 +53,7 @@ fn main() -> Result<()> {
             CertificateDer::from(std::fs::read(dir.join("cert2.der"))?).into_owned(),
         ),
     ];
-    let network_config =
-        NetworkConfig::new(PartyID::ID0.into(), "0.0.0.0:10000".parse()?, key, parties);
+    let network_config = NetworkConfig::new(0, "0.0.0.0:10000".parse()?, key, parties, None);
     let mut net = Rep3MpcNet::new(network_config)?;
 
     let dir =

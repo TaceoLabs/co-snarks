@@ -52,8 +52,7 @@ fn main() -> Result<()> {
             CertificateDer::from(std::fs::read(dir.join("cert2.der"))?).into_owned(),
         ),
     ];
-    let network_config =
-        NetworkConfig::new(PartyID::ID1.into(), "0.0.0.0:10001".parse()?, key, parties);
+    let network_config = NetworkConfig::new(1, "0.0.0.0:10001".parse()?, key, parties, None);
     let mut net = Rep3MpcNet::new(network_config)?;
 
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("examples/test_vectors");
