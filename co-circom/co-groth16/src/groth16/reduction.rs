@@ -206,6 +206,11 @@ fn evaluate_constraint_half_share<P: Pairing, T: CircomGroth16Prover<P>>(
     result
 }
 
+/// Implements the witness map used by libsnark. The arkworks witness map calculates the
+/// coefficients of H through computing (AB-C)/Z in the evaluation domain and going back to the
+/// coefficients domain.
+///
+/// Based on <https://github.com/arkworks-rs/groth16/>.
 pub struct LibSnarkReduction;
 
 impl R1CSToQAP for LibSnarkReduction {

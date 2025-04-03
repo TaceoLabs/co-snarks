@@ -3,6 +3,7 @@ use co_circom::{
     Groth16JsonVerificationKey, Groth16ZKey, NetworkConfig, NetworkParty, PartyID, Rep3CoGroth16,
     Rep3MpcNet, Rep3SharedInput, VMConfig,
 };
+use co_groth16::CircomReduction;
 use color_eyre::Result;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use std::path::PathBuf;
@@ -80,7 +81,7 @@ fn main() -> Result<()> {
     let public_inputs = witness.public_inputs_for_verify();
 
     // generate proof
-    let (proof, _) = Rep3CoGroth16::<_, _>::prove(net, &pkey, &matrices, witness)?;
+    let (proof, _) = Rep3CoGroth16::prove::<CircomReduction>(net, &pkey, &matrices, witness)?;
 
     // verify proof
     let vk = Groth16JsonVerificationKey::<Bn254>::from_reader(

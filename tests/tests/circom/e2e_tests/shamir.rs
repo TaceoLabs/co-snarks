@@ -13,7 +13,7 @@ use std::sync::Arc;
 use circom_types::traits::CheckElement;
 use co_circom_snarks::SharedWitness;
 use co_groth16::ShamirCoGroth16;
-use co_groth16::{ConstraintMatrices, Groth16, ProvingKey};
+use co_groth16::{CircomReduction, ConstraintMatrices, Groth16, ProvingKey};
 use co_plonk::Plonk;
 use co_plonk::ShamirCoPlonk;
 use itertools::izip;
@@ -61,7 +61,7 @@ macro_rules! add_test_impl_g16 {
                     [zkey1, zkey2, zkey3].into_iter()
                 ) {
                     threads.push(thread::spawn(move || {
-                        ShamirCoGroth16::<$curve, PartyTestNetwork>::prove(net, 1, &zkey.1, &zkey.0, x).unwrap().0
+                        ShamirCoGroth16::<$curve, PartyTestNetwork>::prove::<CircomReduction>(net, 1, &zkey.1, &zkey.0, x).unwrap().0
                     }));
                 }
                 let result3 = threads.pop().unwrap().join().unwrap();

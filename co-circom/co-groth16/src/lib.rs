@@ -6,7 +6,10 @@ pub mod mpc;
 #[cfg(feature = "verifier")]
 mod verifier;
 
-pub use groth16::{CircomReduction, CoGroth16, Groth16, R1CSToQAP, Rep3CoGroth16, ShamirCoGroth16};
+pub use groth16::{
+    CircomReduction, CoGroth16, Groth16, LibSnarkReduction, R1CSToQAP, Rep3CoGroth16,
+    ShamirCoGroth16,
+};
 
 pub use ark_groth16::{Proof, ProvingKey, VerifyingKey};
 pub use ark_relations::r1cs::ConstraintMatrices;
@@ -24,7 +27,7 @@ mod tests {
     use co_circom_snarks::SharedWitness;
     use std::fs::{self, File};
 
-    use crate::groth16::Groth16;
+    use crate::{groth16::Groth16, CircomReduction};
 
     #[test]
     fn create_proof_and_verify_bn254() {
@@ -47,7 +50,7 @@ mod tests {
                 public_inputs: public_input.clone(),
                 witness: witness.values[matrices.num_instance_variables..].to_vec(),
             };
-            let proof = Groth16::<Bn254>::plain_prove(&pkey, &matrices, witness)
+            let proof = Groth16::<Bn254>::plain_prove::<CircomReduction>(&pkey, &matrices, witness)
                 .expect("proof generation works");
             let proof = CircomGroth16Proof::from(proof);
             let ser_proof = serde_json::to_string(&proof).unwrap();
@@ -98,7 +101,7 @@ mod tests {
                 public_inputs: public_input.clone(),
                 witness: witness.values[matrices.num_instance_variables..].to_vec(),
             };
-            let proof = Groth16::<Bn254>::plain_prove(&pkey, &matrices, witness)
+            let proof = Groth16::<Bn254>::plain_prove::<CircomReduction>(&pkey, &matrices, witness)
                 .expect("proof generation works");
             let proof = CircomGroth16Proof::from(proof);
             let ser_proof = serde_json::to_string(&proof).unwrap();
@@ -172,8 +175,9 @@ mod tests {
                 witness: witness.values[matrices.num_instance_variables..].to_vec(),
             };
 
-            let proof = Groth16::<Bls12_381>::plain_prove(&pkey, &matrices, witness)
-                .expect("proof generation works");
+            let proof =
+                Groth16::<Bls12_381>::plain_prove::<CircomReduction>(&pkey, &matrices, witness)
+                    .expect("proof generation works");
             Groth16::<Bls12_381>::verify(&vk, &proof, &public_input[1..]).expect("can verify");
             let proof = CircomGroth16Proof::from(proof);
             let ser_proof = serde_json::to_string(&proof).unwrap();
@@ -205,7 +209,7 @@ mod tests {
                 witness: witness.values[matrices.num_instance_variables..].to_vec(),
             };
 
-            let proof = Groth16::<Bn254>::plain_prove(&pkey, &matrices, witness)
+            let proof = Groth16::<Bn254>::plain_prove::<CircomReduction>(&pkey, &matrices, witness)
                 .expect("proof generation works");
             Groth16::<Bn254>::verify(&vk, &proof, &public_input[1..]).expect("can verify");
             let proof = CircomGroth16Proof::from(proof);
