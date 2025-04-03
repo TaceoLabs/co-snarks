@@ -132,6 +132,11 @@ pub trait VmCircomWitnessExtension<F: PrimeField> {
         b: Vec<Self::VmType>,
     ) -> Result<(Vec<Self::VmType>, Self::VmType)>;
 
+    /// bitelementmulany accelerator
+    ///
+    /// Computes multiply_and_add based on an selector input. The output is the double_output and either the add_input, or the multiply_and_add result.
+    /// Also return three extra values that are required for the circom witness.
+    #[expect(clippy::type_complexity)]
     fn bitelement_mulany(
         &mut self,
         sel: Self::VmType,
