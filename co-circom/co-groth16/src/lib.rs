@@ -17,8 +17,12 @@ pub use ark_relations::r1cs::ConstraintMatrices;
 #[cfg(test)]
 #[cfg(feature = "verifier")]
 mod tests {
+    use ark_bls12_377::Bls12_377;
     use ark_bls12_381::Bls12_381;
     use ark_bn254::Bn254;
+    use ark_groth16::{ProvingKey, VerifyingKey};
+    use ark_relations::r1cs::{ConstraintMatrices, Matrix};
+    use ark_serialize::CanonicalDeserialize;
     use circom_types::{
         groth16::{CircomGroth16Proof, JsonPublicInput, JsonVerificationKey, ZKey},
         traits::CheckElement,
@@ -27,7 +31,7 @@ mod tests {
     use co_circom_snarks::SharedWitness;
     use std::fs::{self, File};
 
-    use crate::{groth16::Groth16, CircomReduction};
+    use crate::{groth16::Groth16, CircomReduction, LibSnarkReduction};
 
     #[test]
     fn create_proof_and_verify_bn254() {
@@ -218,5 +222,76 @@ mod tests {
             let der_proof = der_proof.into();
             Groth16::<Bn254>::verify(&vk, &der_proof, &public_input[1..]).expect("can verify");
         }
+    }
+
+    fn proof_libsnark_penumbra_bls12_377(circuit: &str) {
+        let pkey_file = File::open(format!(
+            "../../test_vectors/Groth16/bls12_377/{circuit}/circuit.pk"
+        ))
+        .unwrap();
+        let a_file = File::open(format!(
+            "../../test_vectors/Groth16/bls12_377/{circuit}/a.bin"
+        ))
+        .unwrap();
+        let b_file = File::open(format!(
+            "../../test_vectors/Groth16/bls12_377/{circuit}/b.bin"
+        ))
+        .unwrap();
+        let c_file = File::open(format!(
+            "../../test_vectors/Groth16/bls12_377/{circuit}/c.bin"
+        ))
+        .unwrap();
+        let witness_file = File::open(format!(
+            "../../test_vectors/Groth16/bls12_377/{circuit}/witness.wtns"
+        ))
+        .unwrap();
+        let vk_file = File::open(format!(
+            "../../test_vectors/Groth16/bls12_377/{circuit}/circuit.vk"
+        ))
+        .unwrap();
+        let witness = Witness::<ark_bls12_377::Fr>::from_reader(witness_file).unwrap();
+        let pkey = ProvingKey::<Bls12_377>::deserialize_uncompressed_unchecked(pkey_file).unwrap();
+        // TODO once we can serde ConstraintMatrices, we dont need to do this anymore
+        let a = Matrix::<ark_bls12_377::Fr>::deserialize_uncompressed(a_file).unwrap();
+        let b = Matrix::<ark_bls12_377::Fr>::deserialize_uncompressed(b_file).unwrap();
+        let c = Matrix::<ark_bls12_377::Fr>::deserialize_uncompressed(c_file).unwrap();
+        let matrices = ConstraintMatrices {
+            num_instance_variables: pkey.b_g1_query.len() - pkey.l_query.len(),
+            num_witness_variables: pkey.a_query.len(),
+            num_constraints: a.len(),
+            a_num_non_zero: a.len(),
+            b_num_non_zero: b.len(),
+            c_num_non_zero: c.len(),
+            a,
+            b,
+            c,
+        };
+
+        let vk = VerifyingKey::<Bls12_377>::deserialize_uncompressed_unchecked(vk_file).unwrap();
+        let public_input = witness.values[..matrices.num_instance_variables].to_vec();
+        let witness = SharedWitness {
+            public_inputs: public_input.clone(),
+            witness: witness.values[matrices.num_instance_variables..].to_vec(),
+        };
+
+        let proof =
+            Groth16::<Bls12_377>::plain_prove::<LibSnarkReduction>(&pkey, &matrices, witness)
+                .expect("proof generation works");
+        Groth16::<Bls12_377>::verify(&vk, &proof, &public_input[1..]).expect("can verify");
+    }
+
+    #[test]
+    fn proof_libsnark_penumbra_spend_bls12_377() {
+        proof_libsnark_penumbra_bls12_377("penumbra_spend");
+    }
+
+    #[test]
+    fn proof_libsnark_penumbra_output_bls12_377() {
+        proof_libsnark_penumbra_bls12_377("penumbra_output");
+    }
+
+    #[test]
+    fn proof_libsnark_penumbra_delegator_vote_bls12_377() {
+        proof_libsnark_penumbra_bls12_377("penumbra_delegator_vote");
     }
 }
