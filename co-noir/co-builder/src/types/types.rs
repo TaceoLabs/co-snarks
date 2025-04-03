@@ -1,10 +1,12 @@
-use super::field_ct::FieldCT;
+use super::field_ct::{CycleGroupCT, FieldCT};
 use crate::builder::UltraCircuitBuilder;
 use crate::keys::proving_key::ProvingKey;
 use crate::polynomials::polynomial::Polynomial;
-use crate::prelude::{PrecomputedEntities, ProverWitnessEntities};
+use crate::prelude::{GenericUltraCircuitBuilder, PrecomputedEntities, ProverWitnessEntities};
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
+use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 use std::array;
 use std::cmp::Ordering;
@@ -95,6 +97,25 @@ pub(crate) struct Poseidon2InternalGate {
     pub(crate) round_idx: usize,
 }
 
+#[derive(Default, PartialEq, Eq)]
+pub(crate) struct EccAddGate<F: PrimeField> {
+    pub(crate) x1: u32,
+    pub(crate) y1: u32,
+    pub(crate) x2: u32,
+    pub(crate) y2: u32,
+    pub(crate) x3: u32,
+    pub(crate) y3: u32,
+    pub(crate) sign_coefficient: F,
+}
+
+#[derive(Default, PartialEq, Eq)]
+pub(crate) struct EccDblGate {
+    pub(crate) x1: u32,
+    pub(crate) y1: u32,
+    pub(crate) x3: u32,
+    pub(crate) y3: u32,
+}
+
 pub(crate) struct MemOp<F: PrimeField> {
     pub(crate) access_type: u8,
     pub(crate) index: PolyTriple<F>,
@@ -141,7 +162,7 @@ pub(crate) struct AcirFormatOriginalOpcodeIndices {
     // pub(crate) pedersen_constraints: Vec<usize>,
     // pub(crate) pedersen_hash_constraints: Vec<usize>,
     pub(crate) poseidon2_constraints: Vec<usize>,
-    // pub(crate) multi_scalar_mul_constraints: Vec<usize>,
+    pub(crate) multi_scalar_mul_constraints: Vec<usize>,
     // pub(crate) ec_add_constraints: Vec<usize>,
     // pub(crate) recursion_constraints: Vec<usize>,
     // pub(crate) honk_recursion_constraints: Vec<usize>,
@@ -387,6 +408,14 @@ pub(crate) struct Poseidon2Constraint<F: PrimeField> {
     pub(crate) state: Vec<WitnessOrConstant<F>>,
     pub(crate) result: Vec<u32>,
     pub(crate) len: u32,
+}
+
+pub(crate) struct MultiScalarMul<F: PrimeField> {
+    pub(crate) points: Vec<WitnessOrConstant<F>>,
+    pub(crate) scalars: Vec<WitnessOrConstant<F>>,
+    pub(crate) out_point_x: u32,
+    pub(crate) out_point_y: u32,
+    pub(crate) out_point_is_infinity: u32,
 }
 
 pub(crate) struct LogicConstraint<F: PrimeField> {
@@ -730,7 +759,43 @@ impl<F: PrimeField> WitnessOrConstant<F> {
             FieldCT::from_witness_index(self.index)
         }
     }
+
+    pub(crate) fn to_grumpkin_point<
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        input_x: &Self,
+        input_y: &Self,
+        input_infinity: &Self,
+        has_valid_witness_assignments: bool,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> CycleGroupCT<P, T> {
+        let point_x = input_x.to_field_ct();
+        let point_y = input_y.to_field_ct();
+        let infinity = input_infinity.to_field_ct().to_bool_ct(builder, driver);
+
+        // When we do not have the witness assignments, we set is_infinite value to true if it is not constant
+        // else default values would give a point which is not on the curve and this will fail verification
+        if !has_valid_witness_assignments {
+            if !input_infinity.is_constant {
+                builder.variables[input_infinity.index as usize] = F::one().into();
+            } else if input_infinity.value.is_zero()
+                && !(input_x.is_constant || input_y.is_constant)
+            {
+                // else, if is_infinite is false, but the coordinates (x, y) are witness (and not constant)
+                // then we set their value to an arbitrary valid curve point (in our case G1).
+                builder.variables[input_x.index as usize] = F::one().into();
+                let g1_y = F::from(BigUint::new(vec![
+                    2185176876, 2201994381, 4044886676, 757534021, 111435107, 3474153077, 2,
+                ]));
+                builder.variables[input_y.index as usize] = g1_y.into();
+            }
+        }
+        CycleGroupCT::new(point_x, point_y, infinity, builder, driver)
+    }
 }
+
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct ActiveRegionData {
     ranges: Vec<(usize, usize)>, // active ranges [start_i, end_i) of the execution trace

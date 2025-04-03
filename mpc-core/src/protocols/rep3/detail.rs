@@ -1,20 +1,20 @@
-use std::marker::PhantomData;
-
-use ark_ff::One;
-use ark_ff::PrimeField;
-use ark_ff::Zero;
-use itertools::izip;
-use itertools::Itertools as _;
-use num_bigint::BigUint;
-
-use crate::protocols::rep3::network::Rep3Network;
-
+use super::arithmetic;
 use super::arithmetic::BinaryShare;
 use super::binary;
 use super::conversion;
 use super::network::IoContext;
 use super::Rep3BigUintShare;
 use super::Rep3PrimeFieldShare;
+use crate::protocols::rep3::network::Rep3Network;
+use ark_ec::CurveGroup;
+use ark_ff::One;
+use ark_ff::PrimeField;
+use ark_ff::Zero;
+use itertools::izip;
+use itertools::Itertools;
+use num_bigint::BigUint;
+use std::any::TypeId;
+use std::marker::PhantomData;
 
 type IoResult<T> = std::io::Result<T>;
 
@@ -407,4 +407,80 @@ fn low_depth_binary_sub_from_const<F: PrimeField, N: Rep3Network>(
     let res = kogge_stone_inner(&p, &g, io_context, F::MODULUS_BIT_SIZE as usize)?;
     let res = binary::xor_public(&res, &BigUint::one(), io_context.id);
     Ok(res)
+}
+
+/// For curves of the form y^2 = x^3 + ax + b, computes the addition of two points.
+/// Note: This implementation assumes that at least one point is randomly chosen (as is e.g., the case for point_share_to_fieldshares). Thus, the special case that the x-coordinate of the two points are equal is only considered to be able to happen if the sum is infinity (as is the case when translating a share of the infinity point to fieldshares). Thus, we count the fact of the x coordinates being equal as infinity.
+///
+/// The output will be (x, y, is_infinity). Thereby no statement is made on x, y if is_infinity is true.
+pub(crate) fn point_addition<F: PrimeField, N: Rep3Network>(
+    a_x: Rep3PrimeFieldShare<F>,
+    a_y: Rep3PrimeFieldShare<F>,
+    b_x: Rep3PrimeFieldShare<F>,
+    b_y: Rep3PrimeFieldShare<F>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<(
+    Rep3PrimeFieldShare<F>,
+    Rep3PrimeFieldShare<F>,
+    Rep3PrimeFieldShare<F>,
+)> {
+    let mut diff_x = b_x - a_x;
+    let diff_y = b_y - a_y;
+
+    let zero_share = Rep3PrimeFieldShare::default();
+    let is_zero = arithmetic::eq(zero_share, diff_x, io_context)?;
+    diff_x += arithmetic::mul(
+        arithmetic::add_public(-diff_x, F::one(), io_context.id),
+        is_zero,
+        io_context,
+    )?;
+
+    let inv = arithmetic::inv(diff_x, io_context)?;
+
+    let lambda = arithmetic::mul(diff_y, inv, io_context)?;
+    let lambda_square = arithmetic::mul(lambda, lambda, io_context)?;
+    let x = lambda_square - a_x - b_x;
+    let y = arithmetic::mul(lambda, a_x - x, io_context)? - a_y;
+
+    Ok((x, y, is_zero))
+}
+
+// This function is necessary, since CurveGroup does not expose any way to create a point from x, y directly.
+pub(crate) fn point_from_xy<C: CurveGroup>(
+    x: C::BaseField,
+    y: C::BaseField,
+    is_infinity: C::BaseField,
+) -> std::io::Result<C> {
+    if is_infinity > C::BaseField::one() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Invalid is_infinity",
+        ));
+    }
+    if is_infinity.is_one() {
+        return Ok(C::zero());
+    }
+
+    let point = if TypeId::of::<C>() == TypeId::of::<ark_bn254::G1Projective>() {
+        let (x, y) = unsafe {
+            (
+                *(&x as *const C::BaseField as *const ark_bn254::Fq),
+                *(&y as *const C::BaseField as *const ark_bn254::Fq),
+            )
+        };
+        let result: ark_bn254::G1Projective = ark_bn254::G1Affine::new(x, y).into();
+        unsafe { *(&result as *const ark_bn254::G1Projective as *const C) }
+    } else if TypeId::of::<C>() == TypeId::of::<ark_grumpkin::Projective>() {
+        let (x, y) = unsafe {
+            (
+                *(&x as *const C::BaseField as *const ark_grumpkin::Fq),
+                *(&y as *const C::BaseField as *const ark_grumpkin::Fq),
+            )
+        };
+        let result: ark_grumpkin::Projective = ark_grumpkin::Affine::new(x, y).into();
+        unsafe { *(&result as *const ark_grumpkin::Projective as *const C) }
+    } else {
+        panic!("Unsupported curve {}", std::any::type_name::<C>());
+    };
+    Ok(point)
 }

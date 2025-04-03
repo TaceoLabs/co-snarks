@@ -37,7 +37,7 @@ echo "Using nargo version $NARGO_VERSION"
 echo "Using bb version $BARRETENBERG_VERSION"
 echo ""
 
-test_cases=("add3u64" "mul3u64" "assert" "get_bytes" "if_then" "negative" "poseidon_assert" "quantized" "add3" "add3_assert" "poseidon" "poseidon_input2" "approx_sigmoid" "addition_multiplication" "unconstrained_fn" "unconstrained_fn_field" "blackbox_not" "blackbox_and" "blackbox_xor" "ram" "rom_shared" "poseidon2" "blackbox_poseidon2" "assert_max_bit_size")
+test_cases=("add3u64" "mul3u64" "assert" "get_bytes" "if_then" "negative" "poseidon_assert" "quantized" "add3" "add3_assert" "poseidon" "poseidon_input2" "approx_sigmoid" "addition_multiplication" "unconstrained_fn" "unconstrained_fn_field" "blackbox_not" "blackbox_and" "blackbox_xor" "ram" "rom_shared" "poseidon2" "blackbox_poseidon2" "assert_max_bit_size" "pedersen_hash" "pedersen_commitment")
 
 run_proof_verification() {
   local name=$1
@@ -206,10 +206,10 @@ for f in "${test_cases[@]}"; do
     exit_code=1
     echo "::error::" $f "failed with keccak and zk"
   fi
- run_proof_verification "$f" "keccak_zk"
+  run_proof_verification "$f" "keccak_zk"
 
   bash cleanup.sh
-#   echo ""
+  echo ""
 done
 
 exit "$exit_code"
