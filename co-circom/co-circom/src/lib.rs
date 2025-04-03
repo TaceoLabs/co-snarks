@@ -82,7 +82,7 @@ where
         matrices: &ConstraintMatrices<P::ScalarField>,
     ) -> eyre::Result<(CircomGroth16Proof<P>, Vec<P::ScalarField>)> {
         let public_inputs = self.witness.public_inputs[1..].to_vec();
-        let (proof, _net) = ShamirCoGroth16::<P, _, CircomReduction>::prove(
+        let (proof, _net) = ShamirCoGroth16::prove::<CircomReduction>(
             self.net,
             self.threshold,
             pkey,
@@ -151,7 +151,7 @@ where
         let witness = self.witness.uncompress(&mut self.net)?;
         let public_inputs = witness.public_inputs[1..].to_vec();
         let (proof, _net) =
-            Rep3CoGroth16::<P, _, CircomReduction>::prove(self.net, pkey, matrices, witness)?;
+            Rep3CoGroth16::prove::<CircomReduction>(self.net, pkey, matrices, witness)?;
         Ok((proof.into(), public_inputs))
     }
 

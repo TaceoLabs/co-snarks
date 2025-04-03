@@ -19,7 +19,7 @@ use crate::mpc::rep3::Rep3Groth16Driver;
 use crate::mpc::shamir::ShamirGroth16Driver;
 use crate::mpc::CircomGroth16Prover;
 
-pub use reduction::{CircomReduction, R1CSToQAP};
+pub use reduction::{CircomReduction, LibSnarkReduction, R1CSToQAP};
 mod reduction;
 
 macro_rules! rayon_join5 {
@@ -42,13 +42,12 @@ macro_rules! rayon_join5 {
 ///
 /// More interesting is the [`Groth16::verify`] method. You can verify any circom Groth16 proof, be it
 /// from snarkjs or one created by this project. Under the hood we use the arkwork Groth16 project for verifying.
-pub type Groth16<P, R = CircomReduction> = CoGroth16<P, PlainGroth16Driver, R>;
+pub type Groth16<P> = CoGroth16<P, PlainGroth16Driver>;
 
 /// A type alias for a [CoGroth16] protocol using replicated secret sharing, using the Circom R1CSToQAPReduction by default.
-pub type Rep3CoGroth16<P, N, R = CircomReduction> = CoGroth16<P, Rep3Groth16Driver<N>, R>;
+pub type Rep3CoGroth16<P, N> = CoGroth16<P, Rep3Groth16Driver<N>>;
 /// A type alias for a [CoGroth16] protocol using shamir secret sharing, using the Circom R1CSToQAPReduction by default.
-pub type ShamirCoGroth16<P, N, R = CircomReduction> =
-    CoGroth16<P, ShamirGroth16Driver<<P as Pairing>::ScalarField, N>, R>;
+pub type ShamirCoGroth16<P, N> = CoGroth16<P, ShamirGroth16Driver<<P as Pairing>::ScalarField, N>>;
 
 /* old way of computing root of unity, does not work for bls12_381:
 let root_of_unity = {
@@ -86,12 +85,12 @@ fn root_of_unity_for_groth16<F: PrimeField + FftField>(
 }
 
 /// A Groth16 proof protocol that uses a collaborative MPC protocol to generate the proof.
-pub struct CoGroth16<P: Pairing, T: CircomGroth16Prover<P>, R: R1CSToQAP> {
+pub struct CoGroth16<P: Pairing, T: CircomGroth16Prover<P>> {
     pub(crate) driver: T,
-    phantom_data: PhantomData<(P, R)>,
+    phantom_data: PhantomData<P>,
 }
 
-impl<P: Pairing, T: CircomGroth16Prover<P>, R: R1CSToQAP> CoGroth16<P, T, R> {
+impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
     /// Creates a new [CoGroth16] protocol with a given MPC driver.
     pub fn new(driver: T) -> Self {
         Self {
@@ -103,7 +102,7 @@ impl<P: Pairing, T: CircomGroth16Prover<P>, R: R1CSToQAP> CoGroth16<P, T, R> {
     /// Execute the Groth16 prover using the internal MPC driver.
     /// This version takes the Circom-generated constraint matrices as input and does not re-calculate them.
     #[instrument(level = "debug", name = "Groth16 - Proof", skip_all)]
-    fn prove_inner(
+    fn prove_inner<R: R1CSToQAP>(
         mut self,
         pkey: &ProvingKey<P>,
         matrices: &ConstraintMatrices<P::ScalarField>,
@@ -293,9 +292,9 @@ impl<P: Pairing, T: CircomGroth16Prover<P>, R: R1CSToQAP> CoGroth16<P, T, R> {
     }
 }
 
-impl<P: Pairing, N: Rep3Network, R: R1CSToQAP> Rep3CoGroth16<P, N, R> {
+impl<P: Pairing, N: Rep3Network> Rep3CoGroth16<P, N> {
     /// Create a [`Proof`].
-    pub fn prove(
+    pub fn prove<R: R1CSToQAP>(
         net: N,
         pkey: &ProvingKey<P>,
         matrices: &ConstraintMatrices<P::ScalarField>,
@@ -306,17 +305,17 @@ impl<P: Pairing, N: Rep3Network, R: R1CSToQAP> Rep3CoGroth16<P, N, R> {
         let driver = Rep3Groth16Driver::new(io_context0, io_context1);
         let prover = CoGroth16 {
             driver,
-            phantom_data: PhantomData::<(P, R)>,
+            phantom_data: PhantomData,
         };
         // execute prover in MPC
-        let (proof, driver) = prover.prove_inner(pkey, matrices, witness)?;
+        let (proof, driver) = prover.prove_inner::<R>(pkey, matrices, witness)?;
         Ok((proof, driver.get_network()))
     }
 }
 
-impl<P: Pairing, N: ShamirNetwork, R: R1CSToQAP> ShamirCoGroth16<P, N, R> {
+impl<P: Pairing, N: ShamirNetwork> ShamirCoGroth16<P, N> {
     /// Create a [`Proof`].
-    pub fn prove(
+    pub fn prove<R: R1CSToQAP>(
         net: N,
         threshold: usize,
         pkey: &ProvingKey<P>,
@@ -334,29 +333,29 @@ impl<P: Pairing, N: ShamirNetwork, R: R1CSToQAP> ShamirCoGroth16<P, N, R> {
         let driver = ShamirGroth16Driver::new(protocol0, protocol1);
         let prover = CoGroth16 {
             driver,
-            phantom_data: PhantomData::<(P, R)>,
+            phantom_data: PhantomData,
         };
         // execute prover in MPC
-        let (proof, driver) = prover.prove_inner(pkey, matrices, witness)?;
+        let (proof, driver) = prover.prove_inner::<R>(pkey, matrices, witness)?;
         Ok((proof, driver.get_network()))
     }
 }
 
-impl<P: Pairing, R: R1CSToQAP> Groth16<P, R> {
+impl<P: Pairing> Groth16<P> {
     /// *Locally* create a `Groth16` proof. This is just the [`CoGroth16`] prover
     /// initialized with the [`PlainGroth16Driver`].
     ///
     /// DOES NOT PERFORM ANY MPC. For a plain prover checkout the [Groth16 implementation of arkworks](https://docs.rs/ark-groth16/latest/ark_groth16/).
-    pub fn plain_prove(
+    pub fn plain_prove<R: R1CSToQAP>(
         pkey: &ProvingKey<P>,
         matrices: &ConstraintMatrices<P::ScalarField>,
         private_witness: SharedWitness<P::ScalarField, P::ScalarField>,
     ) -> Result<Proof<P>> {
         let prover = Self {
             driver: PlainGroth16Driver,
-            phantom_data: PhantomData::<(P, R)>,
+            phantom_data: PhantomData,
         };
-        let (proof, _) = prover.prove_inner(pkey, matrices, private_witness)?;
+        let (proof, _) = prover.prove_inner::<R>(pkey, matrices, private_witness)?;
         Ok(proof)
     }
 }
