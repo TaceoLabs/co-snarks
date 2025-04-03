@@ -169,9 +169,9 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
      *   coefficient to `0`.
      * - For each i, the coefficient is updated as:
      *   \f$ \texttt{grand_sum_lagrange_coeffs} (g^{i}) =
-     *        \texttt{grand_sum_lagrange_coeffs} (g^{i-1}) +
-     *        \texttt{challenge_polynomial_lagrange[prev_idx]} (g^{i-1}) \cdot
-     *        \texttt{libra_concatenated_lagrange_form[prev_idx]} (g^{i-1}) \f$
+     *   \texttt{grand_sum_lagrange_coeffs} (g^{i-1}) +
+     *   \texttt{challenge_polynomial_lagrange[prev_idx]} (g^{i-1}) \cdot
+     *   \texttt{libra_concatenated_lagrange_form[prev_idx]} (g^{i-1}) \f$
      * #### Masking Term
      * - A random polynomial of degree 2 is generated and added to the Big Sum Polynomial.
      * - The masking term is applied as \f$ Z_H(X) \cdot \texttt{masking_term} \f$, where \f$ Z_H(X) \f$ is the

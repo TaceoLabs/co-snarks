@@ -241,8 +241,7 @@ impl<F: PrimeField> CoCircomCompilerParsed<F> {
     /// # Arguments
     /// - `network`: An already established [`Rep3Network`].
     /// - `vm_config`: The [`VMConfig`].
-    /// - `batch_size`: The batched size the VM is operating on. The run will fail if the
-    ///    provided batch size doesn't match with the provided input.
+    /// - `batch_size`: The batched size the VM is operating on. The run will fail if the provided batch size doesn't match with the provided input.
     ///
     /// # Returns
     /// - `Ok(Rep3WitnessExtension)`: The MPC-VM capable of performing the witness extension using the Rep3 protocol.
