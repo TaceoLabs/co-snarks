@@ -666,6 +666,9 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
         let a = F::from(TWICE_A_PLUS_D) * a_min_d_inv;
         let b = F::from(4) * a_min_d_inv;
 
+        let mut res = Vec::with_capacity(4);
+        let mut intermediate = Vec::with_capacity(3);
+
         // first: double input
         match (dbl_in[0].to_owned(), dbl_in[1].to_owned()) {
             (Rep3VmType::Arithmetic(in0), Rep3VmType::Arithmetic(in1)) => {
@@ -689,7 +692,10 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
                 let t = arithmetic::mul(lambda, in0 - out0, &mut self.io_context0)?;
                 let out1 = t - in1;
 
-                todo!()
+                intermediate.push(x1_2.into());
+                intermediate.push(lambda.into());
+                res.push(out0.into());
+                res.push(out1.into());
             }
             (Rep3VmType::Public(in0), Rep3VmType::Arithmetic(in1)) => {
                 let x1_2 = in0 * in0;
@@ -707,7 +713,10 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
                 let t = arithmetic::sub_public_by_shared(in0, out0, self.io_context0.id);
                 let out1 = t - in1;
 
-                todo!()
+                intermediate.push(x1_2.into());
+                intermediate.push(lambda.into());
+                res.push(out0.into());
+                res.push(out1.into());
             }
             (Rep3VmType::Arithmetic(in0), Rep3VmType::Public(in1)) => {
                 let x1_2 = arithmetic::mul(in0, in0, &mut self.io_context0)?;
@@ -724,7 +733,11 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
                 );
                 let t = arithmetic::mul(lambda, in0 - out0, &mut self.io_context0)?;
                 let out1 = arithmetic::sub_shared_by_public(t, in1, self.io_context0.id);
-                todo!()
+
+                intermediate.push(x1_2.into());
+                intermediate.push(lambda.into());
+                res.push(out0.into());
+                res.push(out1.into());
             }
             (Rep3VmType::Public(in0), Rep3VmType::Public(in1)) => {
                 let x1_2 = in0 * in0;
@@ -735,23 +748,18 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
                 let lambda_sqr = lambda * lambda;
                 let out0 = lambda_sqr * b - a - in0 - in0;
                 let out1 = lambda * (in0 - out0) - in1;
-                todo!()
+
+                intermediate.push(x1_2.into());
+                intermediate.push(lambda.into());
+                res.push(out0.into());
+                res.push(out1.into());
             }
         }
 
-        //    let x1_2 =  join!(
-        //     self.mul(dbl_in[0], dbl_in[0]),
-        //    )
+        // then: add input to output
+        todo!();
 
-        //     let x1_2 = dbl_in[0] * dbl_in[0];
-        //     let double_lambda_div = ((b + b) * dbl_in[1]).inverse().expect("Works");
-        //     let double_lambda_num = (x1_2 + x1_2 + x1_2) + (a + a) * dbl_in[0] + F::one();
-        //     let double_lambda = double_lambda_num * double_lambda_div;
-        //     let double_lambda_sqr = double_lambda * double_lambda;
-        //     let dbl_out0 = double_lambda_sqr * b - a - dbl_in[0] - dbl_in[0];
-        //     let dbl_out1 = double_lambda * (dbl_in[0] - dbl_out0) - dbl_in[1];
-
-        todo!()
+        Ok((res, intermediate))
     }
 
     fn log(&mut self, a: Self::VmType, allow_leaky_logs: bool) -> eyre::Result<String> {
