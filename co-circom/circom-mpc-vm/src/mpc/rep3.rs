@@ -692,8 +692,8 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
                 let t = arithmetic::mul(lambda, in0 - out0, &mut self.io_context0)?;
                 let out1 = t - in1;
 
-                intermediate.push(x1_2.into());
                 intermediate.push(lambda.into());
+                intermediate.push(x1_2.into());
                 res.push(out0.into());
                 res.push(out1.into());
             }
@@ -711,10 +711,11 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
                     self.io_context0.id,
                 );
                 let t = arithmetic::sub_public_by_shared(in0, out0, self.io_context0.id);
-                let out1 = t - in1;
+                let out1 = arithmetic::mul(lambda, t, &mut self.io_context0)?;
+                let out1 = out1 - in1;
 
-                intermediate.push(x1_2.into());
                 intermediate.push(lambda.into());
+                intermediate.push(x1_2.into());
                 res.push(out0.into());
                 res.push(out1.into());
             }
@@ -734,8 +735,8 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
                 let t = arithmetic::mul(lambda, in0 - out0, &mut self.io_context0)?;
                 let out1 = arithmetic::sub_shared_by_public(t, in1, self.io_context0.id);
 
-                intermediate.push(x1_2.into());
                 intermediate.push(lambda.into());
+                intermediate.push(x1_2.into());
                 res.push(out0.into());
                 res.push(out1.into());
             }
@@ -749,8 +750,8 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
                 let out0 = lambda_sqr * b - a - in0 - in0;
                 let out1 = lambda * (in0 - out0) - in1;
 
-                intermediate.push(x1_2.into());
                 intermediate.push(lambda.into());
+                intermediate.push(x1_2.into());
                 res.push(out0.into());
                 res.push(out1.into());
             }

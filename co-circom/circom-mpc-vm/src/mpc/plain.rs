@@ -339,7 +339,7 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtensio
         };
 
         let res = vec![dbl_out0, dbl_out1, mux_out0, mux_out1];
-        let intermediate = vec![x1_2, double_lambda, add_lambda];
+        let intermediate = vec![double_lambda, x1_2, add_lambda];
 
         Ok((res, intermediate))
     }
