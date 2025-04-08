@@ -1,7 +1,9 @@
 use crate::acir_format::{HonkRecursion, ProgramMetadata};
 use crate::polynomials::polynomial::MASKING_OFFSET;
 use crate::types::blake2s::Blake2s;
+use crate::types::blake3::blake3s;
 use crate::types::field_ct::ByteArray;
+use crate::types::types::Blake3Constraint;
 use crate::types::types::{Blake2sConstraint, WitnessOrConstant};
 use crate::{
     acir_format::AcirFormat,
@@ -1199,9 +1201,9 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         }
 
         // Add blake3 constraints
-        // for (i, constraint) in constraint_system.blake3_constraints.iter().enumerate() {
-        //     todo!("blake3 gates");
-        // }
+        for constraint in constraint_system.blake3_constraints.iter() {
+            self.create_blake3_constraints(driver, constraint)?;
+        }
 
         // Add keccak constraints
         // for (i, constraint) in constraint_system.keccak_constraints.iter().enumerate() {
@@ -1655,7 +1657,6 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         let a = T::get_public(&self.get_variable(a_idx));
 
         let b = T::get_public(&self.get_variable(b_idx));
-
         match (a, b) {
             (Some(a), Some(b)) => {
                 self.assert_if_has_witness(a == b);
@@ -4102,6 +4103,41 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             arr.write(&element_bytes);
         }
         let output_bytes = Blake2s::blake2s_init(&arr, self, driver)?;
+
+        // Convert byte array to vector of field_t
+        let bytes = output_bytes.values;
+
+        for (i, byte) in bytes.iter().enumerate() {
+            let wtns_index = byte.normalize(self, driver).witness_index;
+            self.assert_equal(wtns_index as usize, constraint.result[i] as usize);
+        }
+
+        Ok(())
+    }
+
+    fn create_blake3_constraints(
+        &mut self,
+        driver: &mut T,
+        constraint: &Blake3Constraint<P::ScalarField>,
+    ) -> std::io::Result<()> {
+        // Create byte array struct
+        let mut arr = ByteArray::<P::ScalarField>::new();
+
+        // Get the witness assignment for each witness index
+        // Write the witness assignment to the byte_array
+        for witness_index_num_bits in &constraint.inputs {
+            let witness_index = &witness_index_num_bits.blackbox_input;
+            let num_bits = witness_index_num_bits.num_bits;
+
+            // XXX: The implementation requires us to truncate the element to the nearest byte and not bit
+            let num_bytes = Utils::round_to_nearest_byte(num_bits);
+            let element = WitnessOrConstant::to_field_ct(witness_index);
+            let element_bytes =
+                ByteArray::from_field_ct(&element, num_bytes as usize, self, driver)?;
+
+            arr.write(&element_bytes);
+        }
+        let output_bytes = blake3s(&arr, self, driver)?;
 
         // Convert byte array to vector of field_t
         let bytes = output_bytes.values;

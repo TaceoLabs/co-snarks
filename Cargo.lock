@@ -1009,6 +1009,7 @@ dependencies = [
  "ark-bn254",
  "ark-ff",
  "blake2",
+ "blake3",
  "co-brillig",
  "eyre",
  "intmap",

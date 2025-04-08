@@ -2573,6 +2573,363 @@ impl GarbledCircuits {
         [6, 15, 14, 9, 11, 3, 0, 8, 12, 2, 13, 7, 1, 4, 10, 5],
         [10, 2, 8, 4, 7, 6, 1, 5, 15, 11, 9, 14, 3, 12, 13, 0],
     ];
+
+    /// Computes the BLAKE3 hash of 'num_inputs' inputs, each of 'num_bits' bits. The inputs are given as two bitdecompositions wires_a and wires_b, and the output is composed using wires_c. The output is then compose into size 32 Vec of field elements.
+    pub(crate) fn blake3<G: FancyBinary + FancyBinaryConstant, F: PrimeField>(
+        g: &mut G,
+        wires_a: &BinaryBundle<G::Item>,
+        wires_b: &BinaryBundle<G::Item>,
+        wires_c: &BinaryBundle<G::Item>,
+        num_inputs: usize,
+        num_bits: &[usize],
+    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+        let input_bitlen = F::MODULUS_BIT_SIZE as usize;
+        let mut input = Vec::new();
+        let mut rands = wires_c.wires().chunks(input_bitlen);
+        for (chunk_x1, chunk_x2, bits) in izip!(
+            wires_a.wires().chunks(input_bitlen),
+            wires_b.wires().chunks(input_bitlen),
+            num_bits
+        ) {
+            let tmp = Self::adder_mod_p_with_output_size::<_, F>(g, chunk_x1, chunk_x2, *bits)?;
+            for chunk in tmp.chunks(8) {
+                input.push(chunk.to_owned())
+            }
+        }
+        debug_assert_eq!(input.len(), num_inputs);
+
+        let root_flag: u32 = 8;
+        let parent_flag: u32 = 4;
+
+        let mut result = Vec::new();
+        if num_inputs <= 1024 {
+            let h = Self::blake3_chunk_chaining(g, &input, 0, root_flag)?;
+            for res in h {
+                for chunk in res.chunks(8) {
+                    result.extend(Self::compose_field_element::<_, F>(
+                        g,
+                        chunk,
+                        rands.next().unwrap(),
+                    )?)
+                }
+            }
+        } else {
+            // At least two chunks
+            let num_chunks = num_inputs.div_ceil(1024);
+            let mut nodes = Vec::with_capacity(num_chunks);
+            for i in 0..num_chunks - 1 {
+                let start = i * 1024;
+                nodes.push(Self::blake3_chunk_chaining(
+                    g,
+                    &input[start..start + 1024],
+                    i as u64,
+                    0,
+                )?);
+            }
+
+            let start = (num_chunks - 1) * 1024;
+            if num_inputs % 1024 == 0 {
+                nodes.push(Self::blake3_chunk_chaining(
+                    g,
+                    &input[start..start + 1024],
+                    num_chunks as u64 - 1,
+                    0,
+                )?);
+            } else {
+                nodes.push(Self::blake3_chunk_chaining(
+                    g,
+                    &input[start..start + (num_inputs % 1024)],
+                    num_chunks as u64 - 1,
+                    0,
+                )?);
+            }
+
+            // Merkle tree
+            let mut len = num_chunks;
+            let mut iv_as_wires = Vec::new();
+            for inp in Self::IV.iter() {
+                iv_as_wires.push(Self::constant_bundle_from_u32(g, *inp, 32)?);
+            }
+            while len != 1 {
+                let mut i = 0;
+                let mut next_len = 0;
+
+                while i + 1 < len {
+                    let flag = if len == 2 {
+                        root_flag + parent_flag
+                    } else {
+                        parent_flag
+                    };
+
+                    let mut input = vec![Vec::new(); 16];
+                    input[..8].clone_from_slice(&nodes[2 * i][..8]);
+                    input[8..].clone_from_slice(&nodes[2 * i + 1][..8]);
+
+                    nodes[next_len] =
+                        Self::blake3_compress(g, &input, &iv_as_wires, [0, 0], 64, flag)?;
+                    next_len += 1;
+                    i += 2;
+                }
+
+                if len % 2 == 1 {
+                    nodes[next_len] = nodes[len - 1].clone();
+                    next_len += 1;
+                }
+
+                len = next_len;
+            }
+
+            for res in &nodes[0] {
+                for chunk in res.chunks(8) {
+                    result.extend(Self::compose_field_element::<_, F>(
+                        g,
+                        chunk,
+                        rands.next().unwrap(),
+                    )?)
+                }
+            }
+        }
+        Ok(BinaryBundle::new(result))
+    }
+
+    pub(crate) fn blake3_chunk_chaining<G: FancyBinary + FancyBinaryConstant>(
+        g: &mut G,
+        input: &[Vec<G::Item>],
+        chunk_index: u64,
+        flag: u32,
+    ) -> Result<Vec<Vec<G::Item>>, G::Error> {
+        let num_inputs = input.len();
+        assert!(num_inputs <= 1024);
+        let blocks = num_inputs.div_ceil(64);
+        let mut h = Vec::new();
+        for inp in Self::IV.iter() {
+            h.push(Self::constant_bundle_from_u32(g, *inp, 32)?);
+        }
+
+        let chunk_start: u32 = 1;
+        let chunk_end: u32 = 2;
+        let root_flag: u32 = 8;
+        assert!((flag == 0) | (flag == root_flag));
+
+        let t = [chunk_index as u32, (chunk_index >> 32) as u32];
+        let zero = vec![g.const_zero()?; 32];
+        let mut used_flag = chunk_start;
+        if num_inputs > 0 {
+            for block in 0..blocks - 1 {
+                let mut tmp: [_; 16] = core::array::from_fn(|_| zero.clone());
+                for i in 0..64 {
+                    let shift = (i % 4) as u8 * 8;
+                    let shifted_left =
+                        Self::shift_left(g, &input[64 * block + i], shift as usize, 32)?;
+                    tmp[i / 4] = Self::bin_addition_no_carry(g, &tmp[i / 4], &shifted_left)?;
+                }
+                h = Self::blake3_compress(g, &tmp, &h, t, 64, used_flag)?;
+                used_flag = 0;
+            }
+        }
+
+        let mut bytes = num_inputs % 64;
+        if num_inputs > 0 && bytes == 0 {
+            bytes = 64;
+        }
+
+        used_flag += chunk_end + flag;
+
+        let mut tmp: [_; 16] = core::array::from_fn(|_| zero.clone());
+        for i in 0..bytes {
+            let shift = (i % 4) as u8 * 8;
+            let shifted_left =
+                Self::shift_left(g, &input[64 * (blocks - 1) + i], shift as usize, 32)?;
+            tmp[i / 4] = Self::bin_addition_no_carry(g, &tmp[i / 4], &shifted_left)?;
+        }
+        Self::blake3_compress(g, &tmp, &h, t, bytes as u32, used_flag)
+    }
+
+    pub(crate) fn blake3_compress<G: FancyBinary + FancyBinaryConstant>(
+        g: &mut G,
+        input: &[Vec<G::Item>],
+        h: &[Vec<G::Item>],
+        t: [u32; 2],
+        blocklen: u32,
+        flags: u32,
+    ) -> Result<Vec<Vec<G::Item>>, G::Error> {
+        let mut state = Vec::new();
+        for inp in h {
+            state.push(inp.to_vec());
+        }
+        for inp in Self::IV.iter().take(4) {
+            state.push(Self::constant_bundle_from_u32(g, *inp, 32)?);
+        }
+        let t_0 = Self::constant_bundle_from_u32(g, t[0], 32)?;
+        let t_1 = Self::constant_bundle_from_u32(g, t[1], 32)?;
+        let blocklen_as_wires = Self::constant_bundle_from_u32(g, blocklen, 32)?;
+        let flags_as_wires = Self::constant_bundle_from_u32(g, flags, 32)?;
+        state.push(t_0);
+        state.push(t_1);
+        state.push(blocklen_as_wires);
+        state.push(flags_as_wires);
+
+        for r in 0..7 {
+            let sr = Self::SIGMA_BLAKE3[r];
+            let res = Self::blake3_mix(
+                g,
+                &state[0],
+                &state[4],
+                &state[8],
+                &state[12],
+                &input[sr[0] as usize],
+                &input[sr[1] as usize],
+            )?; // Column 0
+            state[0] = res.0;
+            state[4] = res.1;
+            state[8] = res.2;
+            state[12] = res.3;
+            let res = Self::blake3_mix(
+                g,
+                &state[1],
+                &state[5],
+                &state[9],
+                &state[13],
+                &input[sr[2] as usize],
+                &input[sr[3] as usize],
+            )?; // Column 1
+            state[1] = res.0;
+            state[5] = res.1;
+            state[9] = res.2;
+            state[13] = res.3;
+            let res = Self::blake3_mix(
+                g,
+                &state[2],
+                &state[6],
+                &state[10],
+                &state[14],
+                &input[sr[4] as usize],
+                &input[sr[5] as usize],
+            )?; // Column 2
+            state[2] = res.0;
+            state[6] = res.1;
+            state[10] = res.2;
+            state[14] = res.3;
+            let res = Self::blake3_mix(
+                g,
+                &state[3],
+                &state[7],
+                &state[11],
+                &state[15],
+                &input[sr[6] as usize],
+                &input[sr[7] as usize],
+            )?; // Column 3
+            state[3] = res.0;
+            state[7] = res.1;
+            state[11] = res.2;
+            state[15] = res.3;
+            let res = Self::blake3_mix(
+                g,
+                &state[0],
+                &state[5],
+                &state[10],
+                &state[15],
+                &input[sr[8] as usize],
+                &input[sr[9] as usize],
+            )?; // Diagonal 1 (main diagonal)
+            state[0] = res.0;
+            state[5] = res.1;
+            state[10] = res.2;
+            state[15] = res.3;
+            let res = Self::blake3_mix(
+                g,
+                &state[1],
+                &state[6],
+                &state[11],
+                &state[12],
+                &input[sr[10] as usize],
+                &input[sr[11] as usize],
+            )?; // Diagonal 2
+            state[1] = res.0;
+            state[6] = res.1;
+            state[11] = res.2;
+            state[12] = res.3;
+            let res = Self::blake3_mix(
+                g,
+                &state[2],
+                &state[7],
+                &state[8],
+                &state[13],
+                &input[sr[12] as usize],
+                &input[sr[13] as usize],
+            )?; // Diagonal 3
+            state[2] = res.0;
+            state[7] = res.1;
+            state[8] = res.2;
+            state[13] = res.3;
+            let res = Self::blake3_mix(
+                g,
+                &state[3],
+                &state[4],
+                &state[9],
+                &state[14],
+                &input[sr[14] as usize],
+                &input[sr[15] as usize],
+            )?; // Diagonal 4
+            state[3] = res.0;
+            state[4] = res.1;
+            state[9] = res.2;
+            state[14] = res.3;
+        }
+        let mut result = Vec::new();
+        for i in 0..8 {
+            result.push(Self::xor_many_as_wires(g, &state[i], &state[i + 8])?);
+        }
+        Ok(result)
+    }
+
+    fn blake3_rotr<G: FancyBinary + FancyBinaryConstant>(
+        g: &mut G,
+        x: &[G::Item],
+        n: u8,
+    ) -> Result<Vec<G::Item>, G::Error> {
+        let right_shift = Self::shift_right(g, x, n as usize, 32)?;
+        let left_shift = Self::shift_left(g, x, 32 - n as usize, 32)?;
+        Self::bin_addition_no_carry(g, &right_shift, &left_shift)
+    }
+
+    #[expect(clippy::type_complexity)]
+    fn blake3_mix<G: FancyBinary + FancyBinaryConstant>(
+        g: &mut G,
+        a: &[G::Item],
+        b: &[G::Item],
+        c: &[G::Item],
+        d: &[G::Item],
+        x: &[G::Item],
+        y: &[G::Item],
+    ) -> Result<(Vec<G::Item>, Vec<G::Item>, Vec<G::Item>, Vec<G::Item>), G::Error> {
+        let mut a = Self::bin_addition_no_carry(g, a, b)?;
+        a = Self::bin_addition_no_carry(g, &a, x)?;
+        let mut d = Self::xor_many_as_wires(g, d, &a)?;
+        d = Self::blake3_rotr(g, &d, 16)?;
+        let mut c = Self::bin_addition_no_carry(g, c, &d)?;
+        let mut b = Self::xor_many_as_wires(g, b, &c)?;
+        b = Self::blake3_rotr(g, &b, 12)?;
+        a = Self::bin_addition_no_carry(g, &a, &b)?;
+        a = Self::bin_addition_no_carry(g, &a, y)?;
+        d = Self::xor_many_as_wires(g, &d, &a)?;
+        d = Self::blake3_rotr(g, &d, 8)?;
+        c = Self::bin_addition_no_carry(g, &c, &d)?;
+        b = Self::xor_many_as_wires(g, &b, &c)?;
+        b = Self::blake3_rotr(g, &b, 7)?;
+
+        Ok((a, b, c, d))
+    }
+
+    const SIGMA_BLAKE3: [[u8; 16]; 7] = [
+        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+        [2, 6, 3, 10, 7, 0, 4, 13, 1, 11, 12, 5, 9, 14, 15, 8],
+        [3, 4, 10, 12, 13, 2, 7, 14, 6, 5, 9, 0, 11, 15, 8, 1],
+        [10, 7, 12, 9, 14, 3, 13, 15, 4, 0, 11, 2, 5, 8, 1, 6],
+        [12, 13, 9, 11, 15, 10, 14, 8, 7, 2, 5, 3, 0, 1, 6, 4],
+        [9, 14, 11, 5, 8, 12, 15, 1, 13, 3, 0, 10, 2, 6, 4, 7],
+        [11, 15, 5, 0, 1, 9, 8, 6, 14, 10, 2, 12, 3, 4, 7, 13],
+    ];
 }
 
 #[cfg(test)]

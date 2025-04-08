@@ -688,7 +688,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         _bit: usize,
         _max_bitsize: usize,
     ) -> std::io::Result<Self::ArithmeticShare> {
-        panic!("functionality get_overflow_bit feasible for Shamir")
+        panic!("functionality get_overflow_bit not feasible for Shamir")
     }
 
     fn blake2s_hash(
@@ -696,6 +696,14 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         _message_input: Vec<Self::AcvmType>,
         _num_bits: &[usize],
     ) -> std::io::Result<Vec<Self::AcvmType>> {
-        panic!("functionality blake2s_hash feasible for Shamir")
+        panic!("functionality blake2s_hash not feasible for Shamir")
+    }
+
+    fn blake3_hash(
+        &mut self,
+        _message_input: Vec<Self::AcvmType>,
+        _num_bits: &[usize],
+    ) -> std::io::Result<Vec<Self::AcvmType>> {
+        panic!("functionality blake2s_hash not feasible for Shamir")
     }
 }

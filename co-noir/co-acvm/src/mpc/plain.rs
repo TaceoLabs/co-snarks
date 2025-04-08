@@ -650,4 +650,24 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         }
         Ok(result)
     }
+
+    fn blake3_hash(
+        &mut self,
+        message_input: Vec<Self::AcvmType>,
+        num_bits: &[usize],
+    ) -> std::io::Result<Vec<Self::AcvmType>> {
+        let mut real_input = Vec::new();
+        for (inp, num_bits) in message_input.iter().zip(num_bits.iter()) {
+            let num_elements = num_bits.div_ceil(8);
+            let mut bytes = Vec::new();
+            inp.serialize_uncompressed(&mut bytes).unwrap();
+            real_input.extend(bytes[0..num_elements].to_vec());
+        }
+        let output_bytes: [u8; 32] = blake3::hash(&real_input).into();
+        let mut result = Vec::new();
+        for out in output_bytes.iter() {
+            result.push(F::from_be_bytes_mod_order(&[*out]));
+        }
+        Ok(result)
+    }
 }

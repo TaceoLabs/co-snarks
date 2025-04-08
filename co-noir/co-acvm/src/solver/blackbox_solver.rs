@@ -249,6 +249,21 @@ where
         }
         Ok(())
     }
+    fn solve_blake3_opcode(
+        driver: &mut T,
+        initial_witness: &mut WitnessMap<T::AcvmType>,
+        inputs: &[FunctionInput<GenericFieldElement<F>>],
+        outputs: &[Witness; 32],
+    ) -> CoAcvmResult<()> {
+        let (message_input, num_bits) = Self::get_hash_input(initial_witness, inputs)?;
+        let digest = T::blake3_hash(driver, message_input, &num_bits)?;
+
+        for (output_witness, value) in outputs.iter().zip(digest.into_iter()) {
+            Self::insert_value(output_witness, value, initial_witness)?;
+        }
+
+        Ok(())
+    }
 
     fn solve_blake2s_opcode(
         driver: &mut T,
@@ -337,6 +352,9 @@ where
             )?,
             BlackBoxFuncCall::Blake2s { inputs, outputs } => {
                 Self::solve_blake2s_opcode(&mut self.driver, initial_witness, inputs, outputs)?
+            }
+            BlackBoxFuncCall::Blake3 { inputs, outputs } => {
+                Self::solve_blake3_opcode(&mut self.driver, initial_witness, inputs, outputs)?
             }
             _ => todo!("solve blackbox function {} not supported", bb_func.name()),
         }

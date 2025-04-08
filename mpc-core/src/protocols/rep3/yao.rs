@@ -1158,3 +1158,21 @@ pub fn blake2s<F: PrimeField, N: Rep3Network>(
         (num_inputs, num_bits)
     )
 }
+
+/// Computes the BLAKE2s hash of 'num_inputs' inputs, each of 'num_bits' bits. The output is then compose into size 32 Vec of field elements.
+pub fn blake3<F: PrimeField, N: Rep3Network>(
+    input1: &[Rep3PrimeFieldShare<F>],
+    io_context: &mut IoContext<N>,
+    num_bits: &[usize],
+) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
+    let total_output_elements = 32;
+    let num_inputs = input1.len();
+
+    decompose_circuit_compose_blueprint!(
+        &input1,
+        io_context,
+        total_output_elements,
+        GarbledCircuits::blake3::<_, F>,
+        (num_inputs, num_bits)
+    )
+}

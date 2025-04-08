@@ -135,7 +135,7 @@ pub(crate) struct AcirFormatOriginalOpcodeIndices {
     // pub(crate) ecdsa_k1_constraints: Vec<usize>,
     // pub(crate) ecdsa_r1_constraints: Vec<usize>,
     pub(crate) blake2s_constraints: Vec<usize>,
-    // pub(crate) blake3_constraints: Vec<usize>,
+    pub(crate) blake3_constraints: Vec<usize>,
     // pub(crate) keccak_constraints: Vec<usize>,
     // pub(crate) keccak_permutations: Vec<usize>,
     // pub(crate) pedersen_constraints: Vec<usize>,
@@ -462,6 +462,28 @@ pub(crate) struct Blake2sConstraint<F: PrimeField> {
 }
 
 impl<F: PrimeField> PartialEq for Blake2sConstraint<F> {
+    fn eq(&self, other: &Self) -> bool {
+        self.inputs == other.inputs && self.result == other.result
+    }
+}
+
+pub(crate) struct Blake3Input<F: PrimeField> {
+    pub(crate) blackbox_input: WitnessOrConstant<F>,
+    pub(crate) num_bits: u32,
+}
+
+impl<F: PrimeField> PartialEq for Blake3Input<F> {
+    fn eq(&self, other: &Self) -> bool {
+        self.blackbox_input == other.blackbox_input && self.num_bits == other.num_bits
+    }
+}
+
+pub(crate) struct Blake3Constraint<F: PrimeField> {
+    pub(crate) inputs: Vec<Blake3Input<F>>,
+    pub(crate) result: [u32; 32],
+}
+
+impl<F: PrimeField> PartialEq for Blake3Constraint<F> {
     fn eq(&self, other: &Self) -> bool {
         self.inputs == other.inputs && self.result == other.result
     }

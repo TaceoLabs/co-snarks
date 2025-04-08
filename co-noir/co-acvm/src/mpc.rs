@@ -344,4 +344,10 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         message_input: Vec<Self::AcvmType>,
         num_bits: &[usize],
     ) -> std::io::Result<Vec<Self::AcvmType>>;
+
+    fn blake3_hash(
+        &mut self,
+        message_input: Vec<Self::AcvmType>,
+        num_bits: &[usize],
+    ) -> std::io::Result<Vec<Self::AcvmType>>;
 }
