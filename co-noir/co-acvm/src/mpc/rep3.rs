@@ -1782,4 +1782,47 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 .collect()
         }
     }
+    fn blake3_hash(
+        &mut self,
+        message_input: Vec<Self::AcvmType>,
+        num_bits: &[usize],
+    ) -> std::io::Result<Vec<Self::AcvmType>> {
+        if message_input.iter().any(|v| Self::is_shared(v)) {
+            let message_input: Vec<_> = message_input
+                .iter()
+                .map(|y| match y {
+                    Rep3AcvmType::Public(public) => {
+                        arithmetic::promote_to_trivial_share(self.io_context0.id, *public)
+                    }
+                    Rep3AcvmType::Shared(shared) => *shared,
+                })
+                .collect();
+            let result = yao::blake3(&message_input, &mut self.io_context0, num_bits)?;
+            result
+                .iter()
+                .map(|y| Ok(Rep3AcvmType::Shared(*y)))
+                .collect::<Result<Vec<_>, _>>()
+        } else {
+            let mut real_input = Vec::new();
+            let message_input: Vec<_> = message_input
+                .iter()
+                .map(|x| Self::get_public(x).expect("Already checked it is public"))
+                .collect();
+            for (inp, num_bits) in message_input.iter().zip(num_bits.iter()) {
+                let num_elements = num_bits.div_ceil(8);
+                let mut bytes = Vec::new();
+                inp.serialize_uncompressed(&mut bytes).unwrap();
+                real_input.extend(bytes[0..num_elements].to_vec());
+            }
+            let output_bytes: [u8; 32] = blake3::hash(&real_input).into();
+            let mut result = Vec::new();
+            for out in output_bytes.iter() {
+                result.push(F::from_be_bytes_mod_order(&[*out]));
+            }
+            result
+                .iter()
+                .map(|x| Ok(Rep3AcvmType::Public(*x)))
+                .collect()
+        }
+    }
 }

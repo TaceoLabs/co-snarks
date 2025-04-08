@@ -1011,6 +1011,7 @@ dependencies = [
  "ark-ff",
  "ark-grumpkin",
  "blake2",
+ "blake3",
  "co-brillig",
  "eyre",
  "intmap",

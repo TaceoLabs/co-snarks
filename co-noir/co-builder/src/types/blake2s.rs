@@ -17,7 +17,7 @@ use std::{array, marker::PhantomData};
  * 2. replace use of uint32 with basic field_t type
  *
  **/
-const BLAKE2S_IV: [u32; 8] = [
+pub(crate) const BLAKE2S_IV: [u32; 8] = [
     0x6A09E667, 0xBB67AE85, 0x3C6EF372, 0xA54FF53A, 0x510E527F, 0x9B05688C, 0x1F83D9AB, 0x5BE0CD19,
 ];
 
@@ -116,7 +116,7 @@ impl<F: PrimeField> Blake2s<F> {
 
         for (i, m_elem) in m.iter_mut().enumerate() {
             let mut sliced = input.slice(i * 4, 4);
-            sliced.reverse();
+            sliced.reverse_in_place();
             *m_elem = sliced.to_field_ct(builder, driver)?;
         }
 
@@ -274,7 +274,7 @@ impl<F: PrimeField> Blake2s<F> {
         let mut result = ByteArray::<F>::new();
         for h in &s.h {
             let mut v = ByteArray::<F>::from_field_ct(h, 4, builder, driver)?;
-            v.reverse();
+            v.reverse_in_place();
             result.write(&v);
         }
         Ok(result)

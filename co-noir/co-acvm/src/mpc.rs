@@ -441,8 +441,15 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         message: &[Self::AcvmType; 16],
     ) -> std::io::Result<Vec<Self::AcvmType>>;
 
-    /// Computes the Blake2 hash function from a given message.
+    /// Computes the Blake2 hash function on a given message.
     fn blake2s_hash(
+        &mut self,
+        message_input: Vec<Self::AcvmType>,
+        num_bits: &[usize],
+    ) -> std::io::Result<Vec<Self::AcvmType>>;
+
+    /// Computes the Blake3 hash function on a given message.
+    fn blake3_hash(
         &mut self,
         message_input: Vec<Self::AcvmType>,
         num_bits: &[usize],
