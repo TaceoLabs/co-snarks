@@ -11,9 +11,10 @@ use ark_ff::{PrimeField, Zero};
 use std::collections::{BTreeMap, HashSet};
 
 use crate::types::types::{
-    AcirFormatOriginalOpcodeIndices, Blake2sConstraint, Blake2sInput, BlockConstraint, BlockType,
-    LogicConstraint, MulQuad, MultiScalarMul, PolyTriple, Poseidon2Constraint, RangeConstraint,
-    RecursionConstraint, Sha256Compression, WitnessOrConstant,
+    AcirFormatOriginalOpcodeIndices, Blake2sConstraint, Blake2sInput, Blake3Constraint,
+    Blake3Input, BlockConstraint, BlockType, LogicConstraint, MulQuad, MultiScalarMul, PolyTriple,
+    Poseidon2Constraint, RangeConstraint, RecursionConstraint, Sha256Compression,
+    WitnessOrConstant,
 };
 #[expect(dead_code)]
 pub struct ProgramMetadata {
@@ -56,7 +57,7 @@ pub struct AcirFormat<F: PrimeField> {
     //  std::vector<EcdsaSecp256k1Constraint> ecdsa_k1_constraints;
     //  std::vector<EcdsaSecp256r1Constraint> ecdsa_r1_constraints;
     pub(crate) blake2s_constraints: Vec<Blake2sConstraint<F>>,
-    //  std::vector<Blake3Constraint> blake3_constraints;
+    pub(crate) blake3_constraints: Vec<Blake3Constraint<F>>,
     //  std::vector<KeccakConstraint> keccak_constraints;
     //  std::vector<Keccakf1600> keccak_permutations;
     //  std::vector<PedersenConstraint> pedersen_constraints;
@@ -702,10 +703,28 @@ impl<F: PrimeField> AcirFormat<F> {
                     .blake2s_constraints
                     .push(opcode_index);
             }
-            BlackBoxFuncCall::Blake3 {
-                inputs: _,
-                outputs: _,
-            } => todo!("BlackBoxFuncCall::Blake3"),
+            BlackBoxFuncCall::Blake3 { inputs, outputs } => {
+                let constraint = Blake3Constraint {
+                    inputs: inputs
+                        .into_iter()
+                        .map(|e| Blake3Input {
+                            blackbox_input: Self::parse_input(e),
+                            num_bits: e.num_bits(),
+                        })
+                        .collect(),
+                    result: {
+                        let vec: Vec<u32> = outputs.into_iter().map(|e| e.0).collect();
+                        vec.try_into().expect("Expected a Vec of length 32")
+                    },
+                };
+                for output in &constraint.result {
+                    af.constrained_witness.insert(*output);
+                }
+                af.blake3_constraints.push(constraint);
+                af.original_opcode_indices
+                    .blake3_constraints
+                    .push(opcode_index);
+            }
             BlackBoxFuncCall::EcdsaSecp256k1 {
                 public_key_x: _,
                 public_key_y: _,

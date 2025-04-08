@@ -3196,9 +3196,27 @@ impl<F: PrimeField> ByteArray<F> {
         self.values.extend_from_slice(&other.values);
     }
 
+    pub(crate) fn write_at(&mut self, other: &Self, index: usize) {
+        assert!(index + other.values.len() <= self.values.len());
+        for (i, value) in other.values.iter().enumerate() {
+            self.values[i + index] = value.clone();
+        }
+    }
+
     pub(crate) fn new() -> Self {
         Self { values: Vec::new() }
     }
+
+    pub(crate) fn set_byte(&mut self, index: usize, byte_val: FieldCT<F>) {
+        assert!(index < self.values.len());
+        self.values[index] = byte_val;
+    }
+
+    pub(crate) fn get_byte(&self, index: usize) -> FieldCT<F> {
+        assert!(index < self.values.len());
+        self.values[index].clone()
+    }
+
     pub(crate) fn from_field_ct<
         P: Pairing<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
@@ -3351,7 +3369,13 @@ impl<F: PrimeField> ByteArray<F> {
     }
 
     /// Reverse the bytes in the byte array
-    pub(crate) fn reverse(&mut self) {
+    pub(crate) fn reverse_in_place(&mut self) {
         self.values.reverse();
+    }
+
+    pub(crate) fn reverse(&self) -> Self {
+        let mut values = self.values.clone();
+        values.reverse();
+        Self { values }
     }
 }

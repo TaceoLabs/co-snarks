@@ -18,6 +18,7 @@ ark-ec.workspace = true
 ark-ff.workspace = true
 ark-grumpkin.workspace = true
 blake2.workspace = true
+blake3.workspace = true
 co-brillig = { version = "0.3.0", path = "../co-brillig" }
 eyre.workspace = true
 intmap.workspace = true

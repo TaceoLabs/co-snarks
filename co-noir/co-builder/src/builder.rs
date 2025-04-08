@@ -2,6 +2,7 @@ use crate::acir_format::{HonkRecursion, ProgramMetadata};
 use crate::polynomials::polynomial::MASKING_OFFSET;
 use crate::prelude::HonkCurve;
 use crate::types::blake2s::Blake2s;
+use crate::types::blake3::blake3s;
 use crate::types::field_ct::{CycleGroupCT, CycleScalarCT};
 use crate::types::sha_compression::SHA256;
 use crate::types::types::Sha256Compression;
@@ -24,7 +25,7 @@ use crate::{
         },
         types::{
             AddQuad, AddTriple, AggregationObjectIndices, AggregationObjectPubInputIndices,
-            AuxSelectors, Blake2sConstraint, BlockConstraint, BlockType,
+            AuxSelectors, Blake2sConstraint, Blake3Constraint, BlockConstraint, BlockType,
             CachedPartialNonNativeFieldMultiplication, EccDblGate, LogicConstraint, MulQuad,
             PolyTriple, Poseidon2Constraint, Poseidon2ExternalGate, Poseidon2InternalGate,
             RangeList, UltraTraceBlock, UltraTraceBlocks, NUM_WIRES,
@@ -3565,9 +3566,9 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         }
 
         // Add blake3 constraints
-        // for (i, constraint) in constraint_system.blake3_constraints.iter().enumerate() {
-        //     todo!("blake3 gates");
-        // }
+        for constraint in constraint_system.blake3_constraints.iter() {
+            self.create_blake3_constraints(driver, constraint)?;
+        }
 
         // Add keccak constraints
         // for (i, constraint) in constraint_system.keccak_constraints.iter().enumerate() {
@@ -3916,6 +3917,41 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             arr.write(&element_bytes);
         }
         let output_bytes = Blake2s::blake2s_init(&arr, self, driver)?;
+
+        // Convert byte array to vector of field_t
+        let bytes = output_bytes.values;
+
+        for (i, byte) in bytes.iter().enumerate() {
+            let wtns_index = byte.normalize(self, driver).witness_index;
+            self.assert_equal(wtns_index as usize, constraint.result[i] as usize);
+        }
+
+        Ok(())
+    }
+
+    fn create_blake3_constraints(
+        &mut self,
+        driver: &mut T,
+        constraint: &Blake3Constraint<P::ScalarField>,
+    ) -> std::io::Result<()> {
+        // Create byte array struct
+        let mut arr = ByteArray::<P::ScalarField>::new();
+
+        // Get the witness assignment for each witness index
+        // Write the witness assignment to the byte_array
+        for witness_index_num_bits in &constraint.inputs {
+            let witness_index = &witness_index_num_bits.blackbox_input;
+            let num_bits = witness_index_num_bits.num_bits;
+
+            // XXX: The implementation requires us to truncate the element to the nearest byte and not bit
+            let num_bytes = Utils::round_to_nearest_byte(num_bits);
+            let element = WitnessOrConstant::to_field_ct(witness_index);
+            let element_bytes =
+                ByteArray::from_field_ct(&element, num_bytes as usize, self, driver)?;
+
+            arr.write(&element_bytes);
+        }
+        let output_bytes = blake3s(&arr, self, driver)?;
 
         // Convert byte array to vector of field_t
         let bytes = output_bytes.values;
