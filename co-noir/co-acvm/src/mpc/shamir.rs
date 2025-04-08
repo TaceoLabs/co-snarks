@@ -640,4 +640,12 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
     ) -> std::io::Result<Self::AcvmType> {
         panic!("functionality equal not feasible for Shamir")
     }
+
+    fn blake3_hash(
+        &mut self,
+        _message_input: Vec<Self::AcvmType>,
+        _num_bits: &[usize],
+    ) -> std::io::Result<Vec<Self::AcvmType>> {
+        panic!("functionality blake2s_hash feasible for Shamir")
+    }
 }

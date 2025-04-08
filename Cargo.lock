@@ -997,6 +997,7 @@ dependencies = [
  "acvm",
  "ark-bn254",
  "ark-ff",
+ "blake3",
  "co-brillig",
  "eyre",
  "intmap",
