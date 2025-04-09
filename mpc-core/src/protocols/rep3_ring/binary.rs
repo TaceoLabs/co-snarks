@@ -2,20 +2,18 @@
 //!
 //! This module contains operations with binary shares
 
-use super::{
-    arithmetic::RingShare,
-    ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
-};
-use crate::protocols::rep3::{
-    id::PartyID,
-    network::{IoContext, Rep3Network},
+use super::arithmetic::RingShare;
+use crate::{
+    protocols::rep3::network::{IoContext, Rep3Network},
     IoResult,
 };
 use itertools::izip;
+use mpc_types::protocols::{
+    rep3::id::PartyID,
+    rep3_ring::ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
+};
 use num_traits::{One, Zero};
 use rand::{distributions::Standard, prelude::Distribution};
-
-pub(crate) mod ops;
 
 /// Performs a bitwise XOR operation on two shared values.
 pub fn xor<T: IntRing2k>(a: &RingShare<T>, b: &RingShare<T>) -> RingShare<T> {

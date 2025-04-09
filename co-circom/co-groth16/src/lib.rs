@@ -28,7 +28,7 @@ mod tests {
         traits::CheckElement,
         Witness,
     };
-    use co_circom_snarks::SharedWitness;
+    use co_circom_types::SharedWitness;
     use std::fs::{self, File};
 
     use crate::{groth16::Groth16, CircomReduction, LibSnarkReduction};

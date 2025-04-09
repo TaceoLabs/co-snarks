@@ -5,7 +5,7 @@
 //! and, mirroring circom's design, has two "RAM-like" structures in the form of two consecutive chunks of memory (`Vec`), representing the [Signals](https://docs.circom.io/circom-language/signals/)
 //! and [Vars](https://docs.circom.io/circom-language/variables-and-mutability/).
 //!
-//! When running the MPC-VM, the output will be a [`SharedWitness`](co_circom_snarks::SharedWitness), constructed from the `Vec` of Signals mentioned above.
+//! When running the MPC-VM, the output will be a [`SharedWitness`](co_circom_types::SharedWitness), constructed from the `Vec` of Signals mentioned above.
 //!
 //! Currently, we only support a [semi-honest 3-party replicated secret-sharing](https://eprint.iacr.org/2018/403.pdf) protocol, allowing for easy switching between
 //! Arithmetic (A) and Binary (B) Shares, which is necessary for circom's witness extension. The current implementation of the MPC-VM is somewhat naive with respect to

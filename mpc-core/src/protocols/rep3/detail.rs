@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use ark_ff::One;
 use ark_ff::PrimeField;
 use ark_ff::Zero;
@@ -7,16 +5,13 @@ use itertools::izip;
 use itertools::Itertools as _;
 use num_bigint::BigUint;
 
-use crate::protocols::rep3::network::Rep3Network;
+use crate::protocols::rep3::{network::Rep3Network, Rep3BigUintShare, Rep3PrimeFieldShare};
+use crate::IoResult;
 
 use super::arithmetic::BinaryShare;
 use super::binary;
 use super::conversion;
 use super::network::IoContext;
-use super::Rep3BigUintShare;
-use super::Rep3PrimeFieldShare;
-
-type IoResult<T> = std::io::Result<T>;
 
 pub(super) fn low_depth_binary_add_mod_p_many<F: PrimeField, N: Rep3Network>(
     x1: &[BinaryShare<F>],
@@ -250,16 +245,8 @@ fn and_twice_many_iter<F: PrimeField, N: Rep3Network>(
     let mut r2 = Vec::with_capacity(len);
 
     for (local_a1, local_b1, local_a2, local_b2) in izip!(local_a1, local_b1, local_a2, local_b2) {
-        r1.push(Rep3BigUintShare {
-            a: local_a1,
-            b: local_b1,
-            phantom: PhantomData,
-        });
-        r2.push(Rep3BigUintShare {
-            a: local_a2,
-            b: local_b2,
-            phantom: PhantomData,
-        });
+        r1.push(Rep3BigUintShare::new(local_a1, local_b1));
+        r2.push(Rep3BigUintShare::new(local_a2, local_b2));
     }
 
     Ok((r1, r2))
@@ -288,16 +275,8 @@ fn and_twice<F: PrimeField, N: Rep3Network>(
         .send_next([local_a1.to_owned(), local_a2.to_owned()])?;
     let [local_b1, local_b2] = io_context.network.recv_prev()?;
 
-    let r1 = Rep3BigUintShare {
-        a: local_a1,
-        b: local_b1,
-        phantom: PhantomData,
-    };
-    let r2 = Rep3BigUintShare {
-        a: local_a2,
-        b: local_b2,
-        phantom: PhantomData,
-    };
+    let r1 = Rep3BigUintShare::new(local_a1, local_b1);
+    let r2 = Rep3BigUintShare::new(local_a2, local_b2);
 
     Ok((r1, r2))
 }

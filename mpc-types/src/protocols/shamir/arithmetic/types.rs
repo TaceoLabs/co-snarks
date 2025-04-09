@@ -8,7 +8,8 @@ use std::mem::ManuallyDrop;
 )]
 #[repr(transparent)]
 pub struct ShamirPrimeFieldShare<F: PrimeField> {
-    pub(crate) a: F,
+    /// The shamir share.
+    pub a: F,
 }
 
 impl<F: PrimeField> ShamirPrimeFieldShare<F> {

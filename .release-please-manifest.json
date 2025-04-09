@@ -2,7 +2,7 @@
   "co-circom/circom-mpc-compiler": "0.9.1",
   "co-circom/circom-mpc-vm": "0.8.0",
   "co-circom/circom-types": "0.9.0",
-  "co-circom/co-circom-snarks": "0.5.0",
+  "co-circom/co-circom-types": "0.5.0",
   "co-circom/co-circom": "0.9.0",
   "co-circom/co-groth16": "0.9.0",
   "co-circom/co-plonk": "0.6.1",
@@ -13,6 +13,7 @@
   "co-noir/co-ultrahonk": "0.5.0",
   "co-noir/ultrahonk": "0.5.0",
   "mpc-core": "0.9.0",
+  "mpc-types": "0.1.0",
   "mpc-net": "0.4.0",
   "tests": "0.1.11"
 }

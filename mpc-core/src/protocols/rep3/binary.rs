@@ -5,24 +5,22 @@
 use ark_ff::{One, PrimeField};
 use itertools::{izip, Itertools as _};
 use num_bigint::BigUint;
-use types::Rep3BigUintShare;
 
-use crate::protocols::rep3::{
-    arithmetic::{self},
-    conversion,
-    id::PartyID,
-    network::Rep3Network,
+use crate::{
+    protocols::rep3::{
+        arithmetic::{self},
+        conversion,
+        network::Rep3Network,
+        PartyID, Rep3BigUintShare, Rep3PrimeFieldShare,
+    },
+    IoResult,
 };
 
-use super::{network::IoContext, Rep3PrimeFieldShare};
+use super::network::IoContext;
 use num_traits::cast::ToPrimitive;
-
-mod ops;
-pub(super) mod types;
 
 type ArithmeticShare<F> = Rep3PrimeFieldShare<F>;
 type BinaryShare<F> = Rep3BigUintShare<F>;
-type IoResult<T> = std::io::Result<T>;
 
 /// Performs a bitwise XOR operation on two shared values.
 pub fn xor<F: PrimeField>(a: &BinaryShare<F>, b: &BinaryShare<F>) -> BinaryShare<F> {

@@ -1,5 +1,6 @@
 use ark_ff::PrimeField;
 use clap::Parser;
+use co_circom::PartyID;
 use color_eyre::eyre::{eyre, Context};
 use figment::{
     providers::{Env, Format, Serialized, Toml},
@@ -378,7 +379,7 @@ fn share_random_input_rep3<F: PrimeField, const T: usize, R: Rng + CryptoRng>(
     rng: &mut R,
 ) -> color_eyre::Result<Vec<Rep3PrimeFieldShare<F>>> {
     let share = match net.get_id() {
-        rep3::id::PartyID::ID0 => {
+        PartyID::ID0 => {
             let input: Vec<F> = (0..num_elements).map(|_| F::rand(rng)).collect();
             let shares = rep3::share_field_elements(&input, rng);
             let shares = shares
@@ -390,8 +391,8 @@ fn share_random_input_rep3<F: PrimeField, const T: usize, R: Rng + CryptoRng>(
             net.send_many(net.get_id().prev_id(), &shares[2])?;
             shares[0].clone()
         }
-        rep3::id::PartyID::ID1 => net.recv_prev_many()?,
-        rep3::id::PartyID::ID2 => net.recv_many(net.get_id().next_id())?,
+        PartyID::ID1 => net.recv_prev_many()?,
+        PartyID::ID2 => net.recv_many(net.get_id().next_id())?,
     };
 
     Ok(share)

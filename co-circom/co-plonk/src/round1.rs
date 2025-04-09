@@ -1,7 +1,7 @@
 use ark_ec::pairing::Pairing;
 use ark_ec::CurveGroup;
 use circom_types::plonk::ZKey;
-use co_circom_snarks::SharedWitness;
+use co_circom_types::SharedWitness;
 use tracing::instrument;
 
 use crate::{
@@ -287,7 +287,7 @@ pub mod tests {
     use ark_bls12_381::Bls12_381;
     use ark_bn254::Bn254;
     use circom_types::{plonk::ZKey, traits::CheckElement};
-    use co_circom_snarks::SharedWitness;
+    use co_circom_types::SharedWitness;
 
     use crate::mpc::plain::PlainPlonkDriver;
 

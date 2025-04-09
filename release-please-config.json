@@ -24,7 +24,7 @@
       "draft": false,
       "prerelease": false
     },
-    "co-circom/co-circom-snarks": {
+    "co-circom/co-circom-types": {
       "changelog-path": "CHANGELOG.md",
       "release-type": "rust",
       "bump-minor-pre-major": true,
@@ -105,6 +105,14 @@
       "prerelease": false
     },
     "mpc-core": {
+      "changelog-path": "CHANGELOG.md",
+      "release-type": "rust",
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": false,
+      "draft": false,
+      "prerelease": false
+    },
+    "mpc-types": {
       "changelog-path": "CHANGELOG.md",
       "release-type": "rust",
       "bump-minor-pre-major": true,

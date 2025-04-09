@@ -2,21 +2,21 @@
 //!
 //! This module contains some oblivious sorting algorithms for the Rep3 protocol.
 
-use crate::protocols::rep3::id::PartyID;
-use crate::protocols::rep3::{Rep3BigUintShare, Rep3PrimeFieldShare};
-use crate::protocols::rep3_ring::ring::int_ring::IntRing2k;
-use crate::protocols::rep3_ring::ring::ring_impl::RingElement;
 use crate::protocols::rep3_ring::{arithmetic, conversion};
-use crate::protocols::{
-    rep3::{
+use crate::{
+    protocols::rep3::{
         self,
         arithmetic::FieldShare,
         network::{IoContext, Rep3Network},
-        IoResult,
     },
-    rep3_ring::Rep3RingShare,
+    IoResult,
 };
 use ark_ff::{One, PrimeField, Zero};
+use mpc_types::protocols::rep3::id::PartyID;
+use mpc_types::protocols::rep3::{Rep3BigUintShare, Rep3PrimeFieldShare};
+use mpc_types::protocols::rep3_ring::ring::int_ring::IntRing2k;
+use mpc_types::protocols::rep3_ring::ring::ring_impl::RingElement;
+use mpc_types::protocols::rep3_ring::Rep3RingShare;
 use num_bigint::BigUint;
 use rand::distributions::Standard;
 use rand::prelude::Distribution;
@@ -414,7 +414,7 @@ where
     let len = pi.len();
     debug_assert_eq!(len, priv_input.len() + pub_input.len());
     let result = match io_context.id {
-        rep3::id::PartyID::ID0 => {
+        PartyID::ID0 => {
             // has p1, p3
             let mut alpha_1 = Vec::with_capacity(len);
             let mut alpha_3 = Vec::with_capacity(len);
@@ -454,7 +454,7 @@ where
             }
             result
         }
-        rep3::id::PartyID::ID1 => {
+        PartyID::ID1 => {
             // has p2, p1
             let mut alpha_1 = Vec::with_capacity(len);
             let mut beta_2 = Vec::with_capacity(len);
@@ -498,7 +498,7 @@ where
             }
             result
         }
-        rep3::id::PartyID::ID2 => {
+        PartyID::ID2 => {
             // has p3, p2
             let mut alpha_3 = Vec::with_capacity(len);
             for _ in 0..len {
@@ -546,7 +546,7 @@ fn shuffle_field<F: PrimeField, N: Rep3Network>(
     let len = pi.len();
     debug_assert_eq!(len, input.len());
     let result = match io_context.id {
-        rep3::id::PartyID::ID0 => {
+        PartyID::ID0 => {
             // has p1, p3
             let mut alpha_1 = Vec::with_capacity(len);
             let mut alpha_3 = Vec::with_capacity(len);
@@ -580,7 +580,7 @@ fn shuffle_field<F: PrimeField, N: Rep3Network>(
             }
             result
         }
-        rep3::id::PartyID::ID1 => {
+        PartyID::ID1 => {
             // has p2, p1
             let mut alpha_1 = Vec::with_capacity(len);
             let mut beta_2 = Vec::with_capacity(len);
@@ -619,7 +619,7 @@ fn shuffle_field<F: PrimeField, N: Rep3Network>(
             }
             result
         }
-        rep3::id::PartyID::ID2 => {
+        PartyID::ID2 => {
             // has p3, p2
             let mut alpha_3 = Vec::with_capacity(len);
             for _ in 0..len {
@@ -735,7 +735,7 @@ where
     let len = pi.len();
     debug_assert_eq!(len, input.len());
     let result = match io_context.id {
-        rep3::id::PartyID::ID0 => {
+        PartyID::ID0 => {
             // has p1, p3
             let mut alpha_3 = Vec::with_capacity(len);
             for _ in 0..len {
@@ -771,7 +771,7 @@ where
             }
             result
         }
-        rep3::id::PartyID::ID1 => {
+        PartyID::ID1 => {
             // has p2, p1
             let mut alpha_2 = Vec::with_capacity(len);
             let mut beta_2 = Vec::with_capacity(len);
@@ -810,7 +810,7 @@ where
             }
             result
         }
-        rep3::id::PartyID::ID2 => {
+        PartyID::ID2 => {
             // has p3, p2
             let mut alpha_3 = Vec::with_capacity(len);
             let mut alpha_2 = Vec::with_capacity(len);

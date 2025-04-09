@@ -166,7 +166,7 @@ pub mod tests {
     use ark_bn254::Bn254;
     use circom_types::plonk::ZKey;
     use circom_types::Witness;
-    use co_circom_snarks::SharedWitness;
+    use co_circom_types::SharedWitness;
 
     use crate::{
         mpc::plain::PlainPlonkDriver,

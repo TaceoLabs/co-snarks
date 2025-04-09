@@ -6,6 +6,8 @@ use itertools::{izip, Itertools};
 use crate::RngType;
 use rand::{Rng, SeedableRng};
 
+use mpc_types::protocols::shamir::*;
+
 use super::network::ShamirNetwork;
 
 pub(super) struct ShamirRng<F> {
@@ -44,7 +46,7 @@ impl<F: PrimeField> ShamirRng<F> {
             let id_ = (id + i) % num_parties + 1;
             ids.push(id_);
         }
-        let precomputed_interpolation_r_t = super::core::precompute_interpolation_polys::<F>(&ids);
+        let precomputed_interpolation_r_t = precompute_interpolation_polys::<F>(&ids);
 
         // let p_r_t = Self::precompute_interpolation_polys(id, threshold + 1, num_parties);
         let precomputed_interpolation_r_2t =
@@ -238,7 +240,7 @@ impl<F: PrimeField> ShamirRng<F> {
             let rcv_id = (id + i) % num_parties;
             ids.push(rcv_id + 1);
         }
-        super::core::precompute_interpolation_polys::<F>(&ids)
+        precompute_interpolation_polys::<F>(&ids)
     }
 
     fn get_interpolation_polys_from_precomputed<const T: bool>(
@@ -272,14 +274,14 @@ impl<F: PrimeField> ShamirRng<F> {
         // Interpolate polys
         shares
             .into_iter()
-            .map(|s| super::core::interpolate_poly_from_precomputed::<F>(&s, precomputed))
+            .map(|s| interpolate_poly_from_precomputed::<F>(&s, precomputed))
             .collect_vec()
     }
 
     fn set_my_share(&self, output: &mut [Vec<F>], polys: &[Vec<F>]) {
         let id_f = F::from(self.id as u64 + 1);
         for (r, p) in output.iter_mut().zip(polys.iter()) {
-            r[self.id] = super::core::evaluate_poly(p, id_f);
+            r[self.id] = evaluate_poly(p, id_f);
         }
     }
 
@@ -298,7 +300,7 @@ impl<F: PrimeField> ShamirRng<F> {
             let rcv_id = (self.id + i + seeded) % self.num_parties;
             let rcv_id_f = F::from(rcv_id as u64 + 1);
             for (des, p) in to_send.iter_mut().zip(polys.iter()) {
-                *des = super::core::evaluate_poly(p, rcv_id_f);
+                *des = evaluate_poly(p, rcv_id_f);
             }
             network.send_many(rcv_id, &to_send)?;
         }
@@ -357,17 +359,14 @@ impl<F: PrimeField> ShamirRng<F> {
         let polys_t = shares
             .into_iter()
             .map(|s| {
-                super::core::interpolate_poly_from_precomputed::<F>(
-                    &s,
-                    &self.precomputed_interpolation_r_t,
-                )
+                interpolate_poly_from_precomputed::<F>(&s, &self.precomputed_interpolation_r_t)
             })
             .collect_vec();
 
         // Set my rand on the polynomial and calculate the share
         let mut rands = Vec::with_capacity(amount);
         for (r, p) in rcv_t.iter_mut().zip(polys_t.iter()) {
-            r[self.id] = super::core::evaluate_poly(p, F::from(self.id as u64 + 1));
+            r[self.id] = evaluate_poly(p, F::from(self.id as u64 + 1));
             rands.push(p[0]);
         }
 

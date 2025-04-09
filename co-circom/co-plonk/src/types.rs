@@ -1,14 +1,14 @@
 use ark_ec::AffineRepr;
 use ark_poly::{EvaluationDomain, Radix2EvaluationDomain};
 use circom_types::plonk::ZKey;
-use co_circom_snarks::SharedWitness;
+use co_circom_types::SharedWitness;
 use std::marker::PhantomData;
 
 use crate::{mpc::CircomPlonkProver, PlonkProofError, PlonkProofResult};
 use ark_ec::pairing::Pairing;
-use ark_ff::PrimeField;
+use ark_ff::{FftField, LegendreSymbol, PrimeField};
 use ark_serialize::CanonicalSerialize;
-use num_traits::Zero;
+use num_traits::{ToPrimitive, Zero};
 use sha3::{Digest, Keccak256};
 
 pub(super) type Keccak256Transcript<P> = Transcript<Keccak256, P>;
@@ -46,6 +46,27 @@ pub(super) struct PlonkData<'a, P: Pairing, T: CircomPlonkProver<P>> {
     pub(super) zkey: &'a ZKey<P>,
 }
 
+/// Computes the roots of unity over the provided prime field. This method
+/// is equivalent with [circom's implementation](https://github.com/iden3/ffjavascript/blob/337b881579107ab74d5b2094dbe1910e33da4484/src/wasm_field1.js).
+///
+/// We calculate smallest quadratic non residue q (by checking q^((p-1)/2)=-1 mod p). We also calculate smallest t s.t. p-1=2^s*t, s is the two adicity.
+/// We use g=q^t (this is a 2^s-th root of unity) as (some kind of) generator and compute another domain by repeatedly squaring g, should get to 1 in the s+1-th step.
+/// Then if log2(\text{domain_size}) equals s we take q^2 as root of unity. Else we take the log2(\text{domain_size}) + 1-th element of the domain created above.
+fn roots_of_unity<F: PrimeField + FftField>() -> (F, Vec<F>) {
+    let mut roots = vec![F::zero(); F::TWO_ADICITY.to_usize().unwrap() + 1];
+    let mut q = F::one();
+    while q.legendre() != LegendreSymbol::QuadraticNonResidue {
+        q += F::one();
+    }
+    let z = q.pow(F::TRACE);
+    roots[0] = z;
+    for i in 1..roots.len() {
+        roots[i] = roots[i - 1].square();
+    }
+    roots.reverse();
+    (q, roots)
+}
+
 impl<F: PrimeField> Domains<F> {
     pub(super) fn new(domain_size: usize) -> PlonkProofResult<Self> {
         tracing::debug!("building domains/roots of unity for domain size: {domain_size}");
@@ -56,7 +77,7 @@ impl<F: PrimeField> Domains<F> {
                 .ok_or(PlonkProofError::PolynomialDegreeTooLarge)?;
             let mut extended_domain = Radix2EvaluationDomain::<F>::new(domain_size * 4)
                 .ok_or(PlonkProofError::PolynomialDegreeTooLarge)?;
-            let (_, roots_of_unity) = co_circom_snarks::utils::roots_of_unity();
+            let (_, roots_of_unity) = roots_of_unity();
             let pow = usize::try_from(domain_size.ilog2()).expect("u32 fits into usize");
 
             tracing::trace!(

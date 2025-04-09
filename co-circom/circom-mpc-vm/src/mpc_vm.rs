@@ -12,7 +12,7 @@ use super::{
 };
 use crate::mpc::VmCircomWitnessExtension;
 use ark_ff::PrimeField;
-use co_circom_snarks::{BatchedSharedInput, SharedInput, SharedWitness};
+use co_circom_types::{BatchedSharedInput, SharedInput, SharedWitness};
 use core::panic;
 use eyre::{bail, eyre, Result};
 use itertools::{izip, Itertools};

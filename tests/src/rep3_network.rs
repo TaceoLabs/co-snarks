@@ -5,7 +5,7 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::Bytes;
 use mpc_core::protocols::{
     bridges::network::RepToShamirNetwork,
-    rep3::{id::PartyID, network::Rep3Network},
+    rep3::{network::Rep3Network, PartyID},
 };
 
 use crate::Msg;

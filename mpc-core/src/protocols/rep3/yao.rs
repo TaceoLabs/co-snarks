@@ -8,15 +8,14 @@ pub mod garbler;
 pub mod streaming_evaluator;
 pub mod streaming_garbler;
 
-use super::{
-    network::{IoContext, Rep3Network},
-    IoResult, Rep3BigUintShare, Rep3PrimeFieldShare,
-};
-use crate::protocols::rep3::id::PartyID;
+use crate::IoResult;
+
+use super::network::{IoContext, Rep3Network};
 use ark_ff::{PrimeField, Zero};
 use circuits::GarbledCircuits;
 use fancy_garbling::{hash_wires, util::tweak2, BinaryBundle, WireLabel, WireMod2};
 use itertools::{izip, Itertools};
+use mpc_types::protocols::rep3::{id::PartyID, Rep3BigUintShare, Rep3PrimeFieldShare};
 use num_bigint::BigUint;
 use rand::{CryptoRng, Rng};
 use scuttlebutt::Block;
@@ -840,10 +839,9 @@ pub fn field_int_div_by_shared<F: PrimeField, N: Rep3Network>(
 
 macro_rules! decompose_circuit_compose_blueprint {
     ($inputs:expr, $io_context:expr, $output_size:expr, $circuit:expr, ($( $args:expr ),*)) => {{
-        use $crate::protocols::rep3::id::PartyID;
         use itertools::izip;
         use $crate::protocols::rep3::yao;
-        use $crate::protocols::rep3::Rep3PrimeFieldShare;
+        use mpc_types::protocols::rep3::{id::PartyID, Rep3PrimeFieldShare};
 
         let delta = $io_context
             .rngs

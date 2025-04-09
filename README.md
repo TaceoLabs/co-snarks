@@ -35,7 +35,7 @@ The project is built with pure Rust and consists of multiple libraries:
     coSNARK, verifiable by snarkjs.
   - **co-plonk**: A library for verifying and proving a Plonk
     coSNARK, verifiable by snarkjs.
-  - **co-circom-snarks**: A library for the shared code of co-plonk and co-groth16.
+  - **co-circom-types**: A library for the shared types and code of co-plonk and co-groth16.
 
 - **coNoir**:
   - **co-noir**: The main library that exposes the functionality of **coNoir**.
@@ -48,6 +48,7 @@ The project is built with pure Rust and consists of multiple libraries:
 The following libraries are agnostic to **coCircom**/**coNoir** and will be used in the future
 for other coSNARKs:
 
+- **mpc-types**: Implementation of types for MPC protocols.
 - **mpc-core**: Implementation of MPC protocols.
 - **mpc-net**: Network library for MPC protocols.
 

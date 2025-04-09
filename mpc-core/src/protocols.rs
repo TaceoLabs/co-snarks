@@ -5,5 +5,4 @@
 pub mod bridges;
 pub mod rep3;
 pub mod rep3_ring;
-pub(crate) mod serde_compat;
 pub mod shamir;

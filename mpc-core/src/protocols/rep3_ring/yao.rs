@@ -2,26 +2,30 @@
 //!
 //! This module contains operations with Yao's garbled circuits
 
-use super::{
-    arithmetic::types::Rep3RingShare,
-    ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
-};
-use crate::protocols::{
-    rep3::{
-        self,
-        id::PartyID,
-        network::{IoContext, Rep3Network},
-        yao::{
-            circuits::GarbledCircuits, evaluator::Rep3Evaluator, garbler::Rep3Garbler, GCInputs,
-            GCUtils,
+use crate::{
+    protocols::{
+        rep3::{
+            self,
+            network::{IoContext, Rep3Network},
+            yao::{
+                circuits::GarbledCircuits, evaluator::Rep3Evaluator, garbler::Rep3Garbler,
+                GCInputs, GCUtils,
+            },
         },
-        IoResult, Rep3BigUintShare, Rep3PrimeFieldShare,
+        rep3_ring::conversion,
     },
-    rep3_ring::conversion,
+    IoResult,
 };
 use ark_ff::PrimeField;
 use fancy_garbling::{BinaryBundle, WireLabel, WireMod2};
 use itertools::izip;
+use mpc_types::protocols::{
+    rep3::{id::PartyID, Rep3BigUintShare, Rep3PrimeFieldShare},
+    rep3_ring::{
+        ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
+        Rep3RingShare,
+    },
+};
 use num_bigint::BigUint;
 use num_traits::{One, Zero};
 use rand::{distributions::Standard, prelude::Distribution, CryptoRng, Rng};
@@ -570,10 +574,10 @@ where
 
 macro_rules! decompose_circuit_compose_blueprint {
     ($inputs:expr, $io_context:expr, $output_size:expr, $t:ty, $circuit:expr, ($( $args:expr ),*)) => {{
-        use $crate::protocols::rep3::id::PartyID;
         use itertools::izip;
         use $crate::protocols::rep3_ring::yao;
-        use $crate::protocols::rep3_ring::Rep3RingShare;
+        use mpc_types::protocols::rep3_ring::Rep3RingShare;
+        use mpc_types::protocols::rep3::id::PartyID;
 
         let delta = $io_context
             .rngs

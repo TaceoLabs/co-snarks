@@ -9,7 +9,7 @@ use ark_groth16::Proof;
 use ark_groth16::VerifyingKey;
 
 use ark_groth16::Groth16 as ArkworksGroth16;
-use co_circom_snarks::VerificationError;
+use co_circom_types::VerificationError;
 
 impl<P: Pairing> Groth16<P> {
     /// Verify a Groth16 proof.

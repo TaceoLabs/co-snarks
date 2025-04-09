@@ -3,7 +3,7 @@ use circom_mpc_compiler::CoCircomCompiler;
 use circom_mpc_compiler::CompilerConfig;
 use circom_mpc_vm::mpc_vm::VMConfig;
 use circom_types::Witness;
-use co_circom_snarks::SharedWitness;
+use co_circom_types::SharedWitness;
 use std::{
     fs::{self, File},
     str::FromStr,

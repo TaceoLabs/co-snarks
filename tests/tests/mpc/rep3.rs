@@ -8,7 +8,6 @@ mod field_share {
     use mpc_core::gadgets::poseidon2::Poseidon2;
     use mpc_core::protocols::rep3::conversion;
     use mpc_core::protocols::rep3::gadgets;
-    use mpc_core::protocols::rep3::id::PartyID;
     use mpc_core::protocols::rep3::yao;
     use mpc_core::protocols::rep3::yao::circuits::GarbledCircuits;
     use mpc_core::protocols::rep3::yao::evaluator::Rep3Evaluator;
@@ -16,6 +15,7 @@ mod field_share {
     use mpc_core::protocols::rep3::yao::streaming_evaluator::StreamingRep3Evaluator;
     use mpc_core::protocols::rep3::yao::streaming_garbler::StreamingRep3Garbler;
     use mpc_core::protocols::rep3::yao::GCUtils;
+    use mpc_core::protocols::rep3::PartyID;
     use mpc_core::protocols::rep3::{self, arithmetic, network::IoContext};
     use mpc_core::protocols::rep3_ring;
     use num_bigint::BigUint;

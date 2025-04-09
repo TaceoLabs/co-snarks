@@ -7,11 +7,10 @@
 use super::{circuits::FancyBinaryConstant, GCInputs, GCUtils};
 use crate::{
     protocols::rep3::{
-        id::PartyID,
         network::{IoContext, Rep3Network},
-        IoResult,
+        PartyID,
     },
-    RngType,
+    IoResult, RngType,
 };
 use ark_ff::PrimeField;
 use core::panic;

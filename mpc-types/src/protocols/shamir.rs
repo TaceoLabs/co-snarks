@@ -1,12 +1,169 @@
-//! # Shamir Core
+//! # Shamir
 //!
-//! This module implements core functionality of shamir share and combine operations
+//! This module implements the shamir share and combine opertions and shamir preprocessing
 
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
-use rand::Rng;
+use itertools::izip;
 
-pub(crate) fn evaluate_poly<F: PrimeField>(poly: &[F], x: F) -> F {
+use rand::{CryptoRng, Rng};
+
+pub mod arithmetic;
+pub mod pointshare;
+
+pub use arithmetic::types::ShamirPrimeFieldShare;
+pub use pointshare::types::ShamirPointShare;
+
+type ShamirShare<F> = ShamirPrimeFieldShare<F>;
+
+/// Share a field element into Shamir shares with given `degree` and `num_parties`
+pub fn share_field_element<F: PrimeField, R: Rng + CryptoRng>(
+    val: F,
+    degree: usize,
+    num_parties: usize,
+    rng: &mut R,
+) -> Vec<ShamirShare<F>> {
+    let shares = share(val, num_parties, degree, rng);
+    ShamirShare::convert_vec_rev(shares)
+}
+
+/// Reconstructs a field element from its Shamir shares and lagrange coefficients. Thereby at least `degree` + 1 shares need to be present.
+pub fn combine_field_element<F: PrimeField>(
+    shares: &[ShamirShare<F>],
+    coeffs: &[usize],
+    degree: usize,
+) -> eyre::Result<F> {
+    if shares.len() != coeffs.len() {
+        eyre::bail!(
+            "Number of shares ({}) does not match number of party indices ({})",
+            shares.len(),
+            coeffs.len()
+        );
+    }
+    if shares.len() <= degree {
+        eyre::bail!(
+            "Not enough shares to reconstruct the secret. Expected {}, got {}",
+            degree + 1,
+            shares.len()
+        );
+    }
+
+    let lagrange = lagrange_from_coeff(&coeffs[..=degree]);
+    let shares = ShamirShare::convert_slice(shares);
+    let rec = reconstruct(&shares[..=degree], &lagrange);
+    Ok(rec)
+}
+
+/// Secret shares a vector of field element using Shamir secret sharing and the provided random number generator. The field elements are split into num_parties shares each, where each party holds just one. The outputs are `Vecs` of `Vecs` of type [`ShamirPrimeFieldShare`]. The degree of the sharing polynomial (i.e., the threshold of maximum number of tolerated colluding parties) is specified by the degree parameter.
+pub fn share_field_elements<F: PrimeField, R: Rng + CryptoRng>(
+    vals: &[F],
+    degree: usize,
+    num_parties: usize,
+    rng: &mut R,
+) -> Vec<Vec<ShamirShare<F>>> {
+    let mut result = (0..num_parties)
+        .map(|_| Vec::with_capacity(vals.len()))
+        .collect::<Vec<_>>();
+
+    for val in vals {
+        let shares = share(*val, num_parties, degree, rng);
+        let shares = ShamirShare::convert_vec_rev(shares);
+        for (r, s) in izip!(&mut result, shares) {
+            r.push(s);
+        }
+    }
+
+    result
+}
+
+/// Reconstructs a vector of field elements from its Shamir shares and lagrange coefficients. The input is a slice of `Vecs` of [ShamirPrimeFieldShare] per party. Thus, shares\[i\]\[j\] represents the j-th share of party i. Thereby at least `degree` + 1 shares need to be present per field element (i.e., i > degree).
+pub fn combine_field_elements<F: PrimeField>(
+    shares: &[Vec<ShamirShare<F>>],
+    coeffs: &[usize],
+    degree: usize,
+) -> eyre::Result<Vec<F>> {
+    if shares.len() != coeffs.len() {
+        eyre::bail!(
+            "Number of shares ({}) does not match number of party indices ({})",
+            shares.len(),
+            coeffs.len()
+        );
+    }
+    if shares.len() <= degree {
+        eyre::bail!(
+            "Not enough shares to reconstruct the secret. Expected {}, got {}",
+            degree + 1,
+            shares.len()
+        );
+    }
+
+    let num_vals = shares[0].len();
+    for share in shares.iter().skip(1) {
+        if share.len() != num_vals {
+            eyre::bail!(
+                "Number of shares ({}) does not match number of shares in first party ({})",
+                share.len(),
+                num_vals
+            );
+        }
+    }
+    let mut result = Vec::with_capacity(num_vals);
+
+    let lagrange = lagrange_from_coeff(&coeffs[..=degree]);
+
+    for i in 0..num_vals {
+        let s = shares
+            .iter()
+            .take(degree + 1)
+            .map(|s| s[i].a)
+            .collect::<Vec<_>>();
+        let rec = reconstruct(&s, &lagrange);
+        result.push(rec);
+    }
+    Ok(result)
+}
+
+/// Secret shares a curve point using Shamir secret sharing and the provided random number generator. The point is split into num_parties shares, where each party holds just one. The outputs are of type [ShamirPointShare]. The degree of the sharing polynomial (i.e., the threshold of maximum number of tolerated colluding parties) is specified by the degree parameter.
+pub fn share_curve_point<C: CurveGroup, R: Rng + CryptoRng>(
+    val: C,
+    degree: usize,
+    num_parties: usize,
+    rng: &mut R,
+) -> Vec<ShamirPointShare<C>> {
+    let shares = share_point(val, num_parties, degree, rng);
+    ShamirPointShare::convert_vec_rev(shares)
+}
+
+/// Reconstructs a curve point from its Shamir shares and lagrange coefficients. Thereby at least `degree` + 1 shares need to be present.
+pub fn combine_curve_point<C: CurveGroup>(
+    shares: &[ShamirPointShare<C>],
+    coeffs: &[usize],
+    degree: usize,
+) -> eyre::Result<C> {
+    if shares.len() != coeffs.len() {
+        eyre::bail!(
+            "Number of shares ({}) does not match number of party indices ({})",
+            shares.len(),
+            coeffs.len()
+        );
+    }
+    if shares.len() <= degree {
+        eyre::bail!(
+            "Not enough shares to reconstruct the secret. Expected {}, got {}",
+            degree + 1,
+            shares.len()
+        );
+    }
+
+    let lagrange = lagrange_from_coeff(&coeffs[..=degree]);
+    let shares = ShamirPointShare::convert_slice(shares);
+    let rec = reconstruct_point(&shares[..=degree], &lagrange);
+
+    Ok(rec)
+}
+
+/// Evaluate the poly at the given x
+pub fn evaluate_poly<F: PrimeField>(poly: &[F], x: F) -> F {
     debug_assert!(!poly.is_empty());
     let mut iter = poly.iter().rev();
     let mut eval = iter.next().unwrap().to_owned();
@@ -17,7 +174,8 @@ pub(crate) fn evaluate_poly<F: PrimeField>(poly: &[F], x: F) -> F {
     eval
 }
 
-pub(crate) fn evaluate_poly_point<C: CurveGroup>(poly: &[C], x: C::ScalarField) -> C {
+/// Evaluate the poly at the given point
+pub fn evaluate_poly_point<C: CurveGroup>(poly: &[C], x: C::ScalarField) -> C {
     debug_assert!(!poly.is_empty());
     let mut iter = poly.iter().rev();
     let mut eval = iter.next().unwrap().to_owned();
@@ -28,7 +186,8 @@ pub(crate) fn evaluate_poly_point<C: CurveGroup>(poly: &[C], x: C::ScalarField) 
     eval
 }
 
-pub(crate) fn share<F: PrimeField, R: Rng>(
+/// Share
+pub fn share<F: PrimeField, R: Rng>(
     secret: F,
     num_shares: usize,
     degree: usize,
@@ -47,9 +206,9 @@ pub(crate) fn share<F: PrimeField, R: Rng>(
     shares
 }
 
+/// Share with zeros
 // sets the shares of parties in points to 0
-#[expect(dead_code)]
-pub(crate) fn share_with_zeros<F: PrimeField>(
+pub fn share_with_zeros<F: PrimeField>(
     secret: &F,
     zero_points: &[usize],
     share_points: &[usize],
@@ -66,11 +225,9 @@ pub(crate) fn share_with_zeros<F: PrimeField>(
     shares
 }
 
+/// Create the poly from secret and precomputed values
 // sets the shares of parties in points to 0
-pub(crate) fn poly_with_zeros_from_precomputed<F: PrimeField>(
-    secret: &F,
-    precomp: Vec<F>,
-) -> Vec<F> {
+pub fn poly_with_zeros_from_precomputed<F: PrimeField>(secret: &F, precomp: Vec<F>) -> Vec<F> {
     let mut poly = precomp;
     for r in poly.iter_mut() {
         *r *= *secret;
@@ -79,11 +236,9 @@ pub(crate) fn poly_with_zeros_from_precomputed<F: PrimeField>(
     poly
 }
 
+/// Create the poly from secret pont and precomputed values
 // sets the shares of parties in points to 0
-pub(crate) fn poly_with_zeros_from_precomputed_point<F: PrimeField, C>(
-    secret: &C,
-    precomp: &[F],
-) -> Vec<C>
+pub fn poly_with_zeros_from_precomputed_point<F: PrimeField, C>(secret: &C, precomp: &[F]) -> Vec<C>
 where
     C: CurveGroup + std::ops::Mul<F, Output = C> + for<'a> std::ops::Mul<&'a F, Output = C>,
 {
@@ -94,7 +249,8 @@ where
     poly
 }
 
-pub(crate) fn share_point<C: CurveGroup, R: Rng>(
+/// Share a curve point
+pub fn share_point<C: CurveGroup, R: Rng>(
     secret: C,
     num_shares: usize,
     degree: usize,
@@ -113,7 +269,8 @@ pub(crate) fn share_point<C: CurveGroup, R: Rng>(
     shares
 }
 
-pub(crate) fn lagrange_from_coeff<F: PrimeField>(coeffs: &[usize]) -> Vec<F> {
+/// Compute the lagrange coeffs
+pub fn lagrange_from_coeff<F: PrimeField>(coeffs: &[usize]) -> Vec<F> {
     let num = coeffs.len();
     let mut res = Vec::with_capacity(num);
     for i in coeffs.iter() {
@@ -153,7 +310,8 @@ pub(crate) fn lagrange<F: PrimeField>(amount: usize) -> Vec<F> {
     res
 }
 
-pub(crate) fn reconstruct<F: PrimeField>(shares: &[F], lagrange: &[F]) -> F {
+/// Reconstruct the from its shares and lagrange coefficients.
+pub fn reconstruct<F: PrimeField>(shares: &[F], lagrange: &[F]) -> F {
     debug_assert_eq!(shares.len(), lagrange.len());
     let mut res = F::zero();
     for (s, l) in shares.iter().zip(lagrange.iter()) {
@@ -172,7 +330,8 @@ fn poly_times_root_inplace<F: PrimeField>(poly: &mut Vec<F>, root: &F) {
     }
 }
 
-pub(crate) fn precompute_interpolation_polys<F: PrimeField>(coeffs: &[usize]) -> Vec<Vec<F>> {
+/// Precompute the interpolation polys from the given coeffs
+pub fn precompute_interpolation_polys<F: PrimeField>(coeffs: &[usize]) -> Vec<Vec<F>> {
     let mut res = Vec::with_capacity(coeffs.len());
     for i in coeffs.iter() {
         let i_f = F::from(*i as u64);
@@ -196,7 +355,8 @@ pub(crate) fn precompute_interpolation_polys<F: PrimeField>(coeffs: &[usize]) ->
     res
 }
 
-pub(crate) fn interpolate_poly_from_precomputed<F: PrimeField>(
+/// Interpolate the poly from the shares and precomputed values
+pub fn interpolate_poly_from_precomputed<F: PrimeField>(
     shares: &[F],
     precomputed: &[Vec<F>],
 ) -> Vec<F> {
@@ -238,7 +398,8 @@ pub(crate) fn interpolate_poly<F: PrimeField>(shares: &[F], coeffs: &[usize]) ->
     res
 }
 
-pub(crate) fn interpolation_poly_from_zero_points<F: PrimeField>(zero_points: &[usize]) -> Vec<F> {
+/// Interpolate the poly from the given points at zero.
+pub fn interpolation_poly_from_zero_points<F: PrimeField>(zero_points: &[usize]) -> Vec<F> {
     let poly_len = zero_points.len() + 1;
 
     // First round: i = 0, p = secret
@@ -258,8 +419,8 @@ pub(crate) fn interpolation_poly_from_zero_points<F: PrimeField>(zero_points: &[
     num
 }
 
-// puts the secret at x=0 and sets all other p[x] to 0 for x in zero_points
-pub(crate) fn interpolate_poly_from_secret_and_zeros<F: PrimeField>(
+/// Puts the secret at x=0 and sets all other p\[x\] to 0 for x in zero_points
+pub fn interpolate_poly_from_secret_and_zeros<F: PrimeField>(
     secret: &F,
     zero_points: &[usize],
 ) -> Vec<F> {

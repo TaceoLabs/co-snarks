@@ -6,9 +6,9 @@ use circom_types::plonk::PlonkProof;
 use circom_types::plonk::ZKey;
 use circom_types::traits::CircomArkworksPairingBridge;
 use circom_types::traits::CircomArkworksPrimeFieldBridge;
-use co_circom_snarks::Rep3SharedWitness;
-use co_circom_snarks::ShamirSharedWitness;
-use co_circom_snarks::SharedWitness;
+use co_circom_types::Rep3SharedWitness;
+use co_circom_types::ShamirSharedWitness;
+use co_circom_types::SharedWitness;
 use mpc::rep3::Rep3PlonkDriver;
 use mpc::shamir::ShamirPlonkDriver;
 use mpc::CircomPlonkProver;
@@ -275,7 +275,7 @@ mod tests {
     use circom_types::groth16::JsonPublicInput;
     use circom_types::plonk::{JsonVerificationKey, ZKey};
     use circom_types::Witness;
-    use co_circom_snarks::SharedWitness;
+    use co_circom_types::SharedWitness;
     use std::sync::Arc;
     use std::{fs::File, io::BufReader};
 

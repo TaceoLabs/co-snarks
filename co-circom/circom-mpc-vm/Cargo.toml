@@ -16,7 +16,7 @@ ark-serialize.workspace = true
 bincode.workspace = true
 num-bigint.workspace = true
 num-traits.workspace = true
-co-circom-snarks = { version = "0.5.0", path = "../co-circom-snarks" }
+co-circom-types = { version = "0.5.0", path = "../co-circom-types" }
 eyre.workspace = true
 itertools.workspace = true
 mpc-core = { version = "0.9.0", path = "../../mpc-core" }

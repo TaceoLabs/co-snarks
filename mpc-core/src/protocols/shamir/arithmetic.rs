@@ -4,14 +4,14 @@
 
 use ark_ff::PrimeField;
 use itertools::izip;
+use mpc_types::protocols::shamir::{reconstruct, ShamirPrimeFieldShare};
 
-use super::{core, network::ShamirNetwork, IoResult, ShamirProtocol};
+use crate::IoResult;
+
+use super::{network::ShamirNetwork, ShamirProtocol};
 use rayon::prelude::*;
 
-mod ops;
-pub(super) mod types;
-
-type ShamirShare<F> = types::ShamirPrimeFieldShare<F>;
+type ShamirShare<F> = ShamirPrimeFieldShare<F>;
 
 /// Performs addition between two shares.
 pub fn add<F: PrimeField>(a: ShamirShare<F>, b: ShamirShare<F>) -> ShamirShare<F> {
@@ -181,7 +181,7 @@ pub fn open<F: PrimeField, N: ShamirNetwork>(
     shamir: &mut ShamirProtocol<F, N>,
 ) -> IoResult<F> {
     let rcv = shamir.network.broadcast_next(a.a, shamir.threshold + 1)?;
-    let res = core::reconstruct(&rcv, &shamir.open_lagrange_t);
+    let res = reconstruct(&rcv, &shamir.open_lagrange_t);
     Ok(res)
 }
 
@@ -206,7 +206,7 @@ pub fn open_vec<F: PrimeField, N: ShamirNetwork>(
 
     let res = transposed
         .into_iter()
-        .map(|r| core::reconstruct(&r, &shamir.open_lagrange_t))
+        .map(|r| reconstruct(&r, &shamir.open_lagrange_t))
         .collect();
     Ok(res)
 }
@@ -255,7 +255,7 @@ fn mul_open<F: PrimeField, N: ShamirNetwork>(
     let rcv = shamir
         .network
         .broadcast_next(mul.a, 2 * shamir.threshold + 1)?;
-    Ok(core::reconstruct(&rcv, &shamir.open_lagrange_2t))
+    Ok(reconstruct(&rcv, &shamir.open_lagrange_2t))
 }
 
 /// This function performs a multiplication directly followed by an opening. This is preferred over Open(Mul(\[x\], \[y\])), since Mul performs resharing of the result for degree reduction. Thus, mul_open(\[x\], \[y\]) requires less communication in fewer rounds compared to Open(Mul(\[x\], \[y\])).
@@ -285,7 +285,7 @@ pub fn mul_open_vec<F: PrimeField, N: ShamirNetwork>(
 
     let res = transposed
         .into_iter()
-        .map(|r| core::reconstruct(&r, &shamir.open_lagrange_2t))
+        .map(|r| reconstruct(&r, &shamir.open_lagrange_2t))
         .collect();
     Ok(res)
 }

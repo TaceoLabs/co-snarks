@@ -11,7 +11,7 @@ use circom_types::{
     plonk::{JsonVerificationKey, PlonkProof, ZKey},
     traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
 };
-use co_circom_snarks::{SharedWitness, VerificationError};
+use co_circom_types::{SharedWitness, VerificationError};
 use num_traits::One;
 use num_traits::Zero;
 use std::{marker::PhantomData, sync::Arc};

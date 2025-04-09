@@ -4,9 +4,8 @@ use ark_ff::Field;
 use itertools::izip;
 use mpc_core::protocols::rep3::{
     arithmetic,
-    id::PartyID,
     network::{IoContext, Rep3Network},
-    pointshare, poly, Rep3PointShare, Rep3PrimeFieldShare,
+    pointshare, poly, PartyID, Rep3PointShare, Rep3PrimeFieldShare,
 };
 use num_traits::Zero;
 use rayon::prelude::*;
@@ -37,7 +36,7 @@ impl<P: Pairing, N: Rep3Network> NoirUltraHonkProver<P> for Rep3UltraHonkDriver<
     type PartyID = PartyID;
 
     fn rand(&mut self) -> std::io::Result<Self::ArithmeticShare> {
-        Ok(Self::ArithmeticShare::rand(&mut self.io_context0))
+        Ok(arithmetic::rand(&mut self.io_context0))
     }
 
     fn get_party_id(&self) -> Self::PartyID {

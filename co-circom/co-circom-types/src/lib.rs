@@ -6,14 +6,12 @@ use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use circom_types::Witness;
 use core::panic;
-use mpc_core::protocols::{
-    rep3::{
-        self,
-        network::{Rep3MpcNet, Rep3Network},
-        Rep3PrimeFieldShare, Rep3ShareVecType,
-    },
-    shamir::{self, ShamirPrimeFieldShare},
-};
+use eyre::{Context, ContextCompat};
+use mpc_types::protocols::rep3::{self, Rep3PrimeFieldShare, Rep3ShareVecType};
+use mpc_types::protocols::shamir::{self, ShamirPrimeFieldShare};
+use mpc_types::serde_compat::{ark_de, ark_se};
+use num_bigint::BigUint;
+use num_traits::Num;
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -56,10 +54,7 @@ pub enum Compression {
 pub struct CompressedRep3SharedWitness<F: PrimeField> {
     /// The public inputs (which are the outputs of the circom circuit).
     /// This also includes the constant 1 at position 0.
-    #[serde(
-        serialize_with = "mpc_core::ark_se",
-        deserialize_with = "mpc_core::ark_de"
-    )]
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
     pub public_inputs: Vec<F>,
     /// The secret-shared witness elements.
     pub witness: Rep3ShareVecType<F>,
@@ -91,48 +86,6 @@ impl<F: PrimeField> From<CompressedRep3SharedWitness<F>> for SharedWitness<F, F>
             public_inputs,
             witness,
         }
-    }
-}
-
-fn reshare_vec<F: PrimeField>(
-    vec: Vec<F>,
-    mpc_net: &mut Rep3MpcNet,
-) -> eyre::Result<Vec<Rep3PrimeFieldShare<F>>> {
-    let b: Vec<F> = mpc_net.reshare_many(&vec)?;
-
-    if vec.len() != b.len() {
-        return Err(eyre::eyre!("reshare_vec: vec and b have different lengths"));
-    }
-
-    let shares = vec
-        .into_iter()
-        .zip(b)
-        .map(|(a, b)| Rep3PrimeFieldShare { a, b })
-        .collect();
-
-    Ok(shares)
-}
-
-impl<F: PrimeField> CompressedRep3SharedWitness<F> {
-    /// Uncompress into [`Rep3SharedWitness`].
-    pub fn uncompress(self, mpc_net: &mut Rep3MpcNet) -> eyre::Result<Rep3SharedWitness<F>> {
-        let public_inputs = self.public_inputs;
-        let witness = self.witness;
-        let witness = match witness {
-            Rep3ShareVecType::Replicated(vec) => vec,
-            Rep3ShareVecType::SeededReplicated(replicated_seed_type) => {
-                replicated_seed_type.expand_vec()?
-            }
-            Rep3ShareVecType::Additive(vec) => reshare_vec(vec, mpc_net)?,
-            Rep3ShareVecType::SeededAdditive(seeded_type) => {
-                reshare_vec(seeded_type.expand_vec(), mpc_net)?
-            }
-        };
-
-        Ok(SharedWitness {
-            public_inputs,
-            witness,
-        })
     }
 }
 
@@ -210,17 +163,11 @@ where
     P: CanonicalSerialize + CanonicalDeserialize + Clone,
     S: CanonicalSerialize + CanonicalDeserialize + Clone,
 {
-    #[serde(
-        serialize_with = "mpc_core::ark_se",
-        deserialize_with = "mpc_core::ark_de"
-    )]
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
     /// The public inputs (which are the outputs of the circom circuit).
     /// This also includes the constant 1 at position 0.
     pub public_inputs: Vec<P>,
-    #[serde(
-        serialize_with = "mpc_core::ark_se",
-        deserialize_with = "mpc_core::ark_de"
-    )]
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
     /// The secret-shared witness elements.
     pub witness: Vec<S>,
 }
@@ -288,17 +235,11 @@ where
     P: CanonicalSerialize + CanonicalDeserialize + Clone,
     S: CanonicalSerialize + CanonicalDeserialize + Clone,
 {
-    #[serde(
-        serialize_with = "mpc_core::ark_se",
-        deserialize_with = "mpc_core::ark_de"
-    )]
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
     /// A map from variable names to the public field elements.
     /// This is a BTreeMap because it implements Canonical(De)Serialize.
     pub public_inputs: BTreeMap<String, Vec<P>>,
-    #[serde(
-        serialize_with = "mpc_core::ark_se",
-        deserialize_with = "mpc_core::ark_de"
-    )]
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
     /// A map from variable names to the share of the field element.
     /// This is a BTreeMap because it implements Canonical(De)Serialize.
     pub shared_inputs: BTreeMap<String, Vec<S>>,
@@ -508,6 +449,79 @@ impl<F: PrimeField> SharedWitness<F, ShamirPrimeFieldShare<F>> {
     }
 }
 
+/// A JSON map of input names and values
+pub type Input = serde_json::Map<String, serde_json::Value>;
+
+/// Splits the input into REP3 shares
+pub fn split_input<F: PrimeField>(
+    input: Input,
+    public_inputs: &[String],
+) -> eyre::Result<[Rep3SharedInput<F>; 3]> {
+    // create input shares
+    let mut shares = [
+        Rep3SharedInput::<F>::default(),
+        Rep3SharedInput::<F>::default(),
+        Rep3SharedInput::<F>::default(),
+    ];
+
+    let mut rng = rand::thread_rng();
+    for (name, val) in input {
+        let parsed_vals = if val.is_array() {
+            parse_array(&val)?
+        } else if val.is_boolean() {
+            vec![Some(parse_boolean(&val)?)]
+        } else {
+            vec![Some(parse_field(&val)?)]
+        };
+        if public_inputs.contains(&name) {
+            let parsed_vals = parsed_vals
+                .into_iter()
+                .collect::<Option<Vec<F>>>()
+                .context("Public inputs must not be unkown")?;
+            shares[0]
+                .public_inputs
+                .insert(name.clone(), parsed_vals.clone());
+            shares[1]
+                .public_inputs
+                .insert(name.clone(), parsed_vals.clone());
+            shares[2].public_inputs.insert(name.clone(), parsed_vals);
+        } else {
+            // if all elements are Some, then we can share normally
+            // else we can only share as Vec<Option<T>> and we have to merge unknown inputs later
+            if parsed_vals.iter().all(Option::is_some) {
+                let parsed_vals = parsed_vals
+                    .into_iter()
+                    .collect::<Option<Vec<_>>>()
+                    .expect("all are Some");
+                let [share0, share1, share2] = Rep3SharedInput::share_rep3(&parsed_vals, &mut rng);
+                shares[0].shared_inputs.insert(name.clone(), share0);
+                shares[1].shared_inputs.insert(name.clone(), share1);
+                shares[2].shared_inputs.insert(name.clone(), share2);
+            } else {
+                let [share0, share1, share2] =
+                    Rep3SharedInput::maybe_share_rep3(&parsed_vals, &mut rng);
+                shares[0].maybe_shared_inputs.insert(name.clone(), share0);
+                shares[1].maybe_shared_inputs.insert(name.clone(), share1);
+                shares[2].maybe_shared_inputs.insert(name.clone(), share2);
+            };
+        }
+    }
+    Ok(shares)
+}
+
+/// Merge multiple REP3 shared inputs into one
+pub fn merge_input_shares<F: PrimeField>(
+    mut inputs: Vec<Rep3SharedInput<F>>,
+) -> eyre::Result<Rep3SharedInput<F>> {
+    let start_item = inputs
+        .pop()
+        .context("expected at least two inputs in merge input shares")?;
+    let merged = inputs.into_iter().try_fold(start_item, |a, b| {
+        a.merge(b).context("while merging input shares")
+    })?;
+    Ok(merged)
+}
+
 /// The error type for the verification of a Circom proof.
 ///
 /// If the verification failed because the proof is Invalid, the method
@@ -546,29 +560,73 @@ impl std::fmt::Display for VerificationError {
     }
 }
 
-/// Gathers utility methods for proving coSNARKs.
-pub mod utils {
-    use ark_ff::{FftField, LegendreSymbol, PrimeField};
-    use num_traits::ToPrimitive;
+fn parse_field<F>(val: &serde_json::Value) -> eyre::Result<F>
+where
+    F: std::str::FromStr + PrimeField,
+{
+    let s = val.as_str().ok_or_else(|| {
+        eyre::eyre!(
+            "expected input to be a field element string, got \"{}\"",
+            val
+        )
+    })?;
+    let (is_negative, stripped) = if let Some(stripped) = s.strip_prefix('-') {
+        (true, stripped)
+    } else {
+        (false, s)
+    };
+    let positive_value = if let Some(stripped) = stripped.strip_prefix("0x") {
+        let mut big_int = BigUint::from_str_radix(stripped, 16)
+            .map_err(|_| eyre::eyre!("could not parse field element: \"{}\"", val))
+            .context("while parsing field element")?;
+        let modulus = BigUint::try_from(F::MODULUS).expect("can convert mod to biguint");
+        if big_int >= modulus {
+            tracing::warn!("val {} >= mod", big_int);
+            // snarkjs also does this
+            big_int %= modulus;
+        }
+        let big_int: F::BigInt = big_int
+            .try_into()
+            .map_err(|_| eyre::eyre!("could not parse field element: \"{}\"", val))
+            .context("while parsing field element")?;
+        F::from(big_int)
+    } else {
+        stripped
+            .parse::<F>()
+            .map_err(|_| eyre::eyre!("could not parse field element: \"{}\"", val))
+            .context("while parsing field element")?
+    };
+    if is_negative {
+        Ok(-positive_value)
+    } else {
+        Ok(positive_value)
+    }
+}
 
-    /// Computes the roots of unity over the provided prime field. This method
-    /// is equivalent with [circom's implementation](https://github.com/iden3/ffjavascript/blob/337b881579107ab74d5b2094dbe1910e33da4484/src/wasm_field1.js).
-    ///
-    /// We calculate smallest quadratic non residue q (by checking q^((p-1)/2)=-1 mod p). We also calculate smallest t s.t. p-1=2^s*t, s is the two adicity.
-    /// We use g=q^t (this is a 2^s-th root of unity) as (some kind of) generator and compute another domain by repeatedly squaring g, should get to 1 in the s+1-th step.
-    /// Then if log2(\text{domain_size}) equals s we take q^2 as root of unity. Else we take the log2(\text{domain_size}) + 1-th element of the domain created above.
-    pub fn roots_of_unity<F: PrimeField + FftField>() -> (F, Vec<F>) {
-        let mut roots = vec![F::zero(); F::TWO_ADICITY.to_usize().unwrap() + 1];
-        let mut q = F::one();
-        while q.legendre() != LegendreSymbol::QuadraticNonResidue {
-            q += F::one();
+fn parse_array<F: PrimeField>(val: &serde_json::Value) -> eyre::Result<Vec<Option<F>>> {
+    let json_arr = val.as_array().expect("is an array");
+    let mut field_elements = vec![];
+    for ele in json_arr {
+        if ele.is_array() {
+            field_elements.extend(parse_array::<F>(ele)?);
+        } else if ele.is_boolean() {
+            field_elements.push(Some(parse_boolean(ele)?));
+        } else if ele.as_str().is_some_and(|e| e == "?") {
+            field_elements.push(None);
+        } else {
+            field_elements.push(Some(parse_field(ele)?));
         }
-        let z = q.pow(F::TRACE);
-        roots[0] = z;
-        for i in 1..roots.len() {
-            roots[i] = roots[i - 1].square();
-        }
-        roots.reverse();
-        (q, roots)
+    }
+    Ok(field_elements)
+}
+
+fn parse_boolean<F: PrimeField>(val: &serde_json::Value) -> eyre::Result<F> {
+    let bool = val
+        .as_bool()
+        .with_context(|| format!("expected input to be a bool, got {val}"))?;
+    if bool {
+        Ok(F::ONE)
+    } else {
+        Ok(F::ZERO)
     }
 }

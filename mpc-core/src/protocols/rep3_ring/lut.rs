@@ -10,15 +10,20 @@ use crate::{
         rep3::{
             self, arithmetic,
             network::{IoContext, Rep3Network},
-            IoResult, Rep3BigUintShare, Rep3PrimeFieldShare,
         },
-        rep3_ring::{conversion, gadgets, ring::bit::Bit},
+        rep3_ring::{conversion, gadgets},
     },
+    IoResult,
 };
 use ark_ff::PrimeField;
+use mpc_types::protocols::{
+    rep3::{Rep3BigUintShare, Rep3PrimeFieldShare},
+    rep3_ring::{
+        ring::{bit::Bit, int_ring::IntRing2k},
+        Rep3RingShare,
+    },
+};
 use rand::{distributions::Standard, prelude::Distribution};
-
-use super::{ring::int_ring::IntRing2k, Rep3RingShare};
 
 /// Implements an enum which stores a lookup table, either consisting of public or private values.
 pub enum PublicPrivateLut<F: PrimeField> {

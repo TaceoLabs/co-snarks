@@ -3,9 +3,8 @@ use std::array;
 use super::{Poseidon2, Poseidon2Precomputations};
 use crate::protocols::rep3::{
     arithmetic,
-    id::PartyID,
     network::{IoContext, Rep3Network},
-    Rep3PrimeFieldShare,
+    PartyID, Rep3PrimeFieldShare,
 };
 use ark_ff::PrimeField;
 
@@ -22,7 +21,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
 
         let mut r = Vec::with_capacity(num_sbox);
         for _ in 0..num_sbox {
-            r.push(Rep3PrimeFieldShare::rand(driver));
+            r.push(arithmetic::rand(driver));
         }
         let r2 = arithmetic::mul_vec(&r, &r, driver)?;
         let r4 = arithmetic::mul_vec(&r2, &r2, driver)?;

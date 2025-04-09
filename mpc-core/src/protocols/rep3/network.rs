@@ -4,7 +4,7 @@
 
 use std::sync::Arc;
 
-use crate::RngType;
+use crate::{IoResult, RngType};
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::{Bytes, BytesMut};
@@ -15,9 +15,8 @@ use mpc_net::{
 
 use super::{
     conversion::A2BType,
-    id::PartyID,
     rngs::{Rep3CorrelatedRng, Rep3Rand, Rep3RandBitComp},
-    IoResult,
+    PartyID,
 };
 use rand::{distributions::Standard, prelude::Distribution, CryptoRng, Rng, SeedableRng};
 
