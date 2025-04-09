@@ -6,7 +6,7 @@ BARRETENBERG_VERSION=0.82.3 ##specify the desired barretenberg version here or u
 PLAINDRIVER="../../../target/release/plaindriver"
 exit_code=0
 
-REMOVE_OUTPUT=0
+REMOVE_OUTPUT=1
 PIPE=""
 if [[ $REMOVE_OUTPUT -eq 1 ]];
 then

@@ -4603,6 +4603,7 @@ dependencies = [
  "circom-mpc-vm",
  "circom-types",
  "co-acvm",
+ "co-builder",
  "co-circom-snarks",
  "co-groth16",
  "co-noir",

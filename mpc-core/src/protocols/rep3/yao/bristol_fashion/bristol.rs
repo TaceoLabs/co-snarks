@@ -73,22 +73,22 @@ pub struct BristolFashionCircuit {
     gates: Vec<BristolFashionGate>,
     num_and_gates: usize,
 }
-
+#[expect(dead_code)]
 impl BristolFashionCircuit {
     /// Parse a Bristol-Fashion style circuit from a file
-    pub fn from_file(path: impl AsRef<Path>) -> Result<Self, CircuitBuilderError> {
+    pub(crate) fn from_file(path: impl AsRef<Path>) -> Result<Self, CircuitBuilderError> {
         let circuit = std::fs::read_to_string(path)?;
         parser::parse(&circuit)?.verify()
     }
     /// Parse a Bristol-Fashion style circuit from a reader
-    pub fn from_reader(mut reader: impl Read) -> Result<Self, CircuitBuilderError> {
+    pub(crate) fn from_reader(mut reader: impl Read) -> Result<Self, CircuitBuilderError> {
         let mut circuit = String::new();
         reader.read_to_string(&mut circuit)?;
         parser::parse(&circuit)?.verify()
     }
 
     /// Transform circuit into a leveled circuit, for more efficient execution
-    pub fn level(self) -> LeveledBristolFashionCircuit {
+    pub(crate) fn level(self) -> LeveledBristolFashionCircuit {
         let BristolFashionCircuit {
             input_wires,
             output_wires,
@@ -243,30 +243,30 @@ impl BristolFashionCircuit {
             num_and_gates,
         }
     }
-    /// Returns the total number of and gates
-    pub fn num_and_gates(&self) -> usize {
+    /// Returns the total number of AND gates
+    pub(crate) fn num_and_gates(&self) -> usize {
         self.num_and_gates
     }
-    /// todo
-    pub fn num_input_wires(&self) -> usize {
+    /// Returns the total number of input wires
+    pub(crate) fn num_input_wires(&self) -> usize {
         self.input_wires.iter().flatten().count()
     }
-    /// todo
-    pub fn get_input_wires(&self) -> Vec<Vec<usize>> {
+    /// Returns the input wires
+    pub(crate) fn get_input_wires(&self) -> Vec<Vec<usize>> {
         self.input_wires.to_owned()
     }
-    /// todo
-    pub fn get_output_wires(&self) -> Vec<Vec<usize>> {
+    /// Returns the output wires
+    pub(crate) fn get_output_wires(&self) -> Vec<Vec<usize>> {
         self.output_wires.to_owned()
     }
 
     /// Returns the total number of wires in the circuit, including input +  output wires
-    pub fn num_wires(&self) -> usize {
+    pub(crate) fn num_wires(&self) -> usize {
         self.num_input_wires() + self.gates.len()
     }
 
     /// Evaluate the Bristol-Fashion circuit
-    pub fn evaluate<T>(
+    pub(crate) fn evaluate<T>(
         &self,
         inputs: &[impl AsRef<[T]>],
         evaluator: &mut impl BristolFashionEvaluator<WireValue = T>,
@@ -278,7 +278,7 @@ impl BristolFashionCircuit {
     }
 
     /// Evaluate the Bristol-Fashion circuit from a given default value, such that the Default trait not being required
-    pub fn evaluate_with_default<T>(
+    pub(crate) fn evaluate_with_default<T>(
         &self,
         inputs: &[impl AsRef<[T]>],
         evaluator: &mut impl BristolFashionEvaluator<WireValue = T>,
@@ -366,7 +366,7 @@ impl BristolFashionCircuit {
             .collect::<Vec<Vec<T>>>())
     }
     /// todo
-    pub fn write_circuit_file(&self, writer: &mut impl Write) -> Result<(), std::io::Error> {
+    pub(crate) fn write_circuit_file(&self, writer: &mut impl Write) -> Result<(), std::io::Error> {
         writeln!(writer, "{} {}", self.gates.len(), self.num_wires())?;
         write!(writer, "{} ", self.input_wires.len())?;
         for inputs in self.input_wires.iter() {
@@ -421,10 +421,10 @@ pub struct LeveledBristolFashionCircuit {
     levels: Vec<(usize, CircuitLevel)>,
     num_and_gates: usize,
 }
-
+#[expect(dead_code)]
 impl LeveledBristolFashionCircuit {
     /// Returns the total number of wires in the circuit, including input +  output wires
-    pub fn num_wires(&self) -> usize {
+    pub(crate) fn num_wires(&self) -> usize {
         self.input_wires.iter().flatten().count()
             + self
                 .levels
@@ -434,25 +434,25 @@ impl LeveledBristolFashionCircuit {
                 })
                 .sum::<usize>()
     }
-    /// todo
-    pub fn num_and_gates(&self) -> usize {
+    /// Returns the total number of AND gates
+    pub(crate) fn num_and_gates(&self) -> usize {
         self.num_and_gates
     }
-    /// todo
-    pub fn num_input_wires(&self) -> usize {
+    /// Returns the total number of input wires
+    pub(crate) fn num_input_wires(&self) -> usize {
         self.input_wires.iter().flatten().count()
     }
-    /// todo
-    pub fn get_input_wires(&self) -> Vec<Vec<usize>> {
+    /// Returns the input wires
+    pub(crate) fn get_input_wires(&self) -> Vec<Vec<usize>> {
         self.input_wires.to_owned()
     }
-    /// todo
-    pub fn get_output_wires(&self) -> Vec<Vec<usize>> {
+    /// Returns the output wires
+    pub(crate) fn get_output_wires(&self) -> Vec<Vec<usize>> {
         self.output_wires.to_owned()
     }
 
     /// Evaluate the Bristol-Fashion circuit
-    pub fn evaluate<T>(
+    pub(crate) fn evaluate<T>(
         &self,
         inputs: &[impl AsRef<[T]>],
         evaluator: &mut impl BristolFashionEvaluator<WireValue = T>,
@@ -464,7 +464,7 @@ impl LeveledBristolFashionCircuit {
     }
 
     /// Evaluate the Bristol-Fashion circuit from a given default value, such that the Default trait not being required
-    pub fn evaluate_with_default<T>(
+    pub(crate) fn evaluate_with_default<T>(
         &self,
         inputs: &[impl AsRef<[T]>],
         evaluator: &mut impl BristolFashionEvaluator<WireValue = T>,

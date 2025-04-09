@@ -260,7 +260,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         Vec<Self::AcvmType>,
     )>;
 
-    /// TODO
+    /// Slices input1 and input2 according to base_bits, ANDs all values and rotates the results by rotation. The rotated values are then mapped into sparse form using base_powers, compare fn map_into_sparse_form in co-noir/co-builder/src/utils.rs.
     #[expect(clippy::type_complexity)]
     fn slice_and_get_sparse_table_with_rotation_values(
         &mut self,
@@ -277,7 +277,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         Vec<Self::AcvmType>,
     )>;
 
-    /// TODO
+    /// Slices input1 and input2 according to base_bits and depending on the table type gets the respective base_table value via a Moebius transformation and accumulates these, see also fn get_sparse_normalization_values in co-noir/co-builder/src/types/plookup.rs.
     #[expect(clippy::type_complexity)]
     fn slice_and_get_sparse_normalization_values(
         &mut self,
