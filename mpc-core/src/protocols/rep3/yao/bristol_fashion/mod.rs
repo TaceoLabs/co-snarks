@@ -1,5 +1,5 @@
 //! Utilities for generating, parsing and executing binary and arithmetic circuits
-//! This is copied from the DCS (https://github.com/TaceoLabs/data-collaboration-suite)
+//! This is copied from the DCS
 
 use thiserror::Error;
 mod bristol;
