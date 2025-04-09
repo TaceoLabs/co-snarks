@@ -2,20 +2,16 @@
 //!
 //! This module contains operations with point shares
 
-mod ops;
-mod types;
-
+use crate::IoResult;
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use itertools::{izip, Itertools};
 use rayon::prelude::*;
-pub use types::Rep3PointShare;
 
 use super::{
-    id::PartyID,
     network::{IoContext, Rep3Network},
     rngs::Rep3CorrelatedRng,
-    IoResult, Rep3PrimeFieldShare,
+    PartyID, Rep3PointShare, Rep3PrimeFieldShare,
 };
 
 /// Type alias for a [`Rep3PrimeFieldShare`]

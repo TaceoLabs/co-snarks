@@ -4,7 +4,6 @@ mod ring_share {
     use itertools::izip;
     use itertools::Itertools;
     use mpc_core::protocols::rep3;
-    use mpc_core::protocols::rep3::id::PartyID;
     use mpc_core::protocols::rep3::network::IoContext;
     use mpc_core::protocols::rep3::yao::circuits::GarbledCircuits;
     use mpc_core::protocols::rep3::yao::evaluator::Rep3Evaluator;
@@ -12,6 +11,7 @@ mod ring_share {
     use mpc_core::protocols::rep3::yao::streaming_evaluator::StreamingRep3Evaluator;
     use mpc_core::protocols::rep3::yao::streaming_garbler::StreamingRep3Garbler;
     use mpc_core::protocols::rep3::yao::GCUtils;
+    use mpc_core::protocols::rep3::PartyID;
     use mpc_core::protocols::rep3_ring;
     use mpc_core::protocols::rep3_ring::arithmetic;
     use mpc_core::protocols::rep3_ring::casts;

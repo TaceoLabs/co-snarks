@@ -1,3 +1,5 @@
+//! Compatibility functions for serde and ark_serialize
+
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
 
 /// Serialize an object with ark serialization, to be used with serde.

@@ -2,7 +2,8 @@ use super::{CircomGroth16Prover, IoResult};
 use ark_ec::{pairing::Pairing, CurveGroup};
 use ark_ff::PrimeField;
 use mpc_core::protocols::shamir::{
-    arithmetic, core, network::ShamirNetwork, pointshare, ShamirPrimeFieldShare, ShamirProtocol,
+    arithmetic, network::ShamirNetwork, pointshare, reconstruct_point, ShamirPrimeFieldShare,
+    ShamirProtocol,
 };
 use rayon::prelude::*;
 
@@ -143,8 +144,8 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
             });
             (r1.join().expect("can join"), r2.join().expect("can join"))
         });
-        let r1 = core::reconstruct_point(&r1?, &self.protocol0.open_lagrange_2t);
-        let r2 = core::reconstruct_point(&r2?, &self.protocol0.open_lagrange_2t);
+        let r1 = reconstruct_point(&r1?, &self.protocol0.open_lagrange_2t);
+        let r2 = reconstruct_point(&r2?, &self.protocol0.open_lagrange_2t);
         Ok((r1, r2))
     }
 
@@ -165,7 +166,7 @@ impl<P: Pairing, N: ShamirNetwork> CircomGroth16Prover<P>
                     .degree_reduce_point(*g1_b)
                     .map(|x| pointshare::scalar_mul_local(&x, r))
             });
-            let opened = core::reconstruct_point(
+            let opened = reconstruct_point(
                 &opened.join().expect("can join")?,
                 &self.protocol0.open_lagrange_2t,
             );

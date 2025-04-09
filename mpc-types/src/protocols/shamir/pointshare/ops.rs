@@ -2,7 +2,7 @@ use ark_ec::CurveGroup;
 
 use crate::protocols::shamir::ShamirPrimeFieldShare;
 
-use super::ShamirPointShare;
+use super::types::ShamirPointShare;
 
 impl<C: CurveGroup> std::ops::Add for ShamirPointShare<C> {
     type Output = Self;

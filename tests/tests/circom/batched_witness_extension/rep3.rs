@@ -2,7 +2,7 @@ use std::{fs::File, io::BufReader};
 
 use circom_mpc_compiler::{CoCircomCompiler, CompilerConfig};
 use circom_mpc_vm::mpc_vm::VMConfig;
-use co_circom_snarks::{BatchedSharedInput, SharedInput};
+use co_circom_types::{BatchedSharedInput, SharedInput};
 use co_noir::Bn254;
 use itertools::izip;
 use mpc_core::protocols::rep3;

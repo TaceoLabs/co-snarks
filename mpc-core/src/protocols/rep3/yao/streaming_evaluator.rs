@@ -5,9 +5,11 @@
 //! This file is heavily inspired by [fancy-garbling](https://github.com/GaloisInc/swanky/blob/dev/fancy-garbling/src/garble/evaluator.rs)
 
 use super::{circuits::FancyBinaryConstant, GCUtils};
-use crate::protocols::rep3::{
-    id::PartyID,
-    network::{IoContext, Rep3Network},
+use crate::{
+    protocols::rep3::{
+        network::{IoContext, Rep3Network},
+        PartyID,
+    },
     IoResult,
 };
 use fancy_garbling::{

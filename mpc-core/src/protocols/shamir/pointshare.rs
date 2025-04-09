@@ -2,15 +2,14 @@
 //!
 //! This module contains operations with point shares
 
-mod ops;
-pub(super) mod types;
-
 use ark_ec::CurveGroup;
-
-use super::{
-    core, network::ShamirNetwork, IoResult, ShamirPointShare, ShamirPrimeFieldShare,
-    ShamirProtocol, ShamirShare,
+use mpc_types::protocols::shamir::{
+    reconstruct, reconstruct_point, ShamirPointShare, ShamirPrimeFieldShare,
 };
+
+use crate::IoResult;
+
+use super::{network::ShamirNetwork, ShamirProtocol};
 
 type FieldShare<C> = ShamirPrimeFieldShare<C>;
 type PointShare<C> = ShamirPointShare<C>;
@@ -80,14 +79,14 @@ pub fn scalar_mul_public_scalar<C: CurveGroup>(
 }
 
 /// Performs local part of scalar multiplication between a point share and a field share.
-pub fn scalar_mul_local<C: CurveGroup>(a: &PointShare<C>, b: ShamirShare<C::ScalarField>) -> C {
+pub fn scalar_mul_local<C: CurveGroup>(a: &PointShare<C>, b: FieldShare<C::ScalarField>) -> C {
     (b * a).a
 }
 
 /// Performs scalar multiplication between a point share and a field share.
 pub fn scalar_mul<C: CurveGroup, N: ShamirNetwork>(
     a: &PointShare<C>,
-    b: ShamirShare<C::ScalarField>,
+    b: FieldShare<C::ScalarField>,
     shamir: &mut ShamirProtocol<C::ScalarField, N>,
 ) -> IoResult<PointShare<C>> {
     let mul = (b * a).a;
@@ -100,7 +99,7 @@ pub fn open_point<C: CurveGroup, N: ShamirNetwork>(
     shamir: &mut ShamirProtocol<C::ScalarField, N>,
 ) -> IoResult<C> {
     let rcv = shamir.network.broadcast_next(a.a, shamir.threshold + 1)?;
-    let res = core::reconstruct_point(&rcv, &shamir.open_lagrange_t);
+    let res = reconstruct_point(&rcv, &shamir.open_lagrange_t);
     Ok(res)
 }
 
@@ -125,7 +124,7 @@ pub fn open_point_many<C: CurveGroup, N: ShamirNetwork>(
 
     let res = transposed
         .into_iter()
-        .map(|r| core::reconstruct_point(&r, &shamir.open_lagrange_t))
+        .map(|r| reconstruct_point(&r, &shamir.open_lagrange_t))
         .collect();
     Ok(res)
 }
@@ -140,8 +139,8 @@ pub fn open_point_and_field<C: CurveGroup, N: ShamirNetwork>(
         .network
         .broadcast_next((a.a, b.a), shamir.threshold + 1)?;
     let (points, fields): (Vec<_>, Vec<_>) = rcv.into_iter().unzip();
-    let res_point = core::reconstruct_point(&points, &shamir.open_lagrange_t);
-    let res_field = core::reconstruct(&fields, &shamir.open_lagrange_t);
+    let res_point = reconstruct_point(&points, &shamir.open_lagrange_t);
+    let res_field = reconstruct(&fields, &shamir.open_lagrange_t);
 
     Ok((res_point, res_field))
 }

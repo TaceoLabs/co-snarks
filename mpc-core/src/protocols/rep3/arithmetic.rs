@@ -10,22 +10,20 @@ use itertools::{izip, Itertools};
 use num_bigint::BigUint;
 use num_traits::One;
 use num_traits::Zero;
-use types::Rep3PrimeFieldShare;
 
-use crate::protocols::rep3::{detail, id::PartyID, network::Rep3Network};
+use crate::protocols::rep3::{detail, network::Rep3Network, PartyID};
+use crate::IoResult;
 use rayon::prelude::*;
 
 use super::{
-    binary, conversion, network::IoContext, rngs::Rep3CorrelatedRng, IoResult, Rep3BigUintShare,
+    binary, conversion, network::IoContext, rngs::Rep3CorrelatedRng, Rep3BigUintShare,
+    Rep3PrimeFieldShare,
 };
 
 /// Type alias for a [`Rep3PrimeFieldShare`]
 pub type FieldShare<F> = Rep3PrimeFieldShare<F>;
 /// Type alias for a [`Rep3BigUintShare`]
 pub type BinaryShare<F> = Rep3BigUintShare<F>;
-
-mod ops;
-pub(super) mod types;
 
 /// Performs addition between two shared values.
 pub fn add<F: PrimeField>(a: FieldShare<F>, b: FieldShare<F>) -> FieldShare<F> {
@@ -214,7 +212,7 @@ pub fn inv<F: PrimeField, N: Rep3Network>(
     a: FieldShare<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<FieldShare<F>> {
-    let r = FieldShare::rand(io_context);
+    let r = rand(io_context);
     let y = mul_open(a, r, io_context)?;
     if y.is_zero() {
         return Err(std::io::Error::new(
@@ -233,9 +231,7 @@ pub fn inv_vec<F: PrimeField, N: Rep3Network>(
     a: &[FieldShare<F>],
     io_context: &mut IoContext<N>,
 ) -> IoResult<Vec<FieldShare<F>>> {
-    let r = (0..a.len())
-        .map(|_| FieldShare::rand(io_context))
-        .collect_vec();
+    let r = (0..a.len()).map(|_| rand(io_context)).collect_vec();
     let y = mul_open_vec(a, &r, io_context)?;
     if y.iter().any(|y| y.is_zero()) {
         return Err(std::io::Error::new(

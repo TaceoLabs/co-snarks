@@ -2,18 +2,17 @@
 //!
 //! This module contains conversions between share types
 
-use crate::protocols::rep3::arithmetic::BinaryShare;
+use crate::{protocols::rep3::arithmetic::BinaryShare, IoResult};
 
 use super::{
     arithmetic, detail,
-    id::PartyID,
     network::{IoContext, Rep3Network},
     yao::{
         self, circuits::GarbledCircuits, evaluator::Rep3Evaluator, garbler::Rep3Garbler,
         streaming_evaluator::StreamingRep3Evaluator, streaming_garbler::StreamingRep3Garbler,
         GCUtils,
     },
-    IoResult, Rep3BigUintShare, Rep3PrimeFieldShare,
+    PartyID, Rep3BigUintShare, Rep3PrimeFieldShare,
 };
 use ark_ff::PrimeField;
 use fancy_garbling::{BinaryBundle, WireMod2};

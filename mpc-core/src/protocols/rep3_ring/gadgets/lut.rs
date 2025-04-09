@@ -2,14 +2,18 @@
 //!
 //! This module contains some oblivious lookup table algorithms for the Rep3 protocol.
 
-use crate::protocols::{
-    rep3::{
-        network::{IoContext, Rep3Network},
-        IoResult, Rep3BigUintShare, Rep3PrimeFieldShare,
+use crate::{
+    protocols::{
+        rep3::network::{IoContext, Rep3Network},
+        rep3_ring::{binary, conversion, gadgets},
     },
-    rep3_ring::{binary, conversion, gadgets, ring::int_ring::IntRing2k, Rep3RingShare},
+    IoResult,
 };
 use ark_ff::PrimeField;
+use mpc_types::protocols::{
+    rep3::{Rep3BigUintShare, Rep3PrimeFieldShare},
+    rep3_ring::{ring::int_ring::IntRing2k, Rep3RingShare},
+};
 use num_bigint::BigUint;
 use rand::{distributions::Standard, prelude::Distribution};
 

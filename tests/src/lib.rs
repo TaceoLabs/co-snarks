@@ -40,7 +40,7 @@ pub mod test_utils {
         solver::{partial_abi::PublicMarker, Rep3CoSolver},
         Rep3AcvmType,
     };
-    use co_circom_snarks::SharedWitness;
+    use co_circom_types::SharedWitness;
     use co_noir::Pairing;
     use itertools::izip;
     use mpc_core::protocols::rep3;

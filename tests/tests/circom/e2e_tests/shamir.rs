@@ -11,7 +11,7 @@ use circom_types::{
 use std::sync::Arc;
 
 use circom_types::traits::CheckElement;
-use co_circom_snarks::SharedWitness;
+use co_circom_types::SharedWitness;
 use co_groth16::ShamirCoGroth16;
 use co_groth16::{CircomReduction, ConstraintMatrices, Groth16, ProvingKey};
 use co_plonk::Plonk;

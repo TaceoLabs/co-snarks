@@ -1,12 +1,8 @@
 use crate::protocols::{
-    rep3::{
-        id::PartyID,
-        network::{IoContext, Rep3Network},
-    },
+    rep3::id::PartyID,
     rep3_ring::ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
 };
 use num_traits::Zero;
-use rand::{distributions::Standard, prelude::Distribution};
 use serde::{Deserialize, Serialize};
 
 /// This type represents a replicated shared value. Since a replicated share of a ring element contains additive shares of two parties, this type contains two ring elements.
@@ -58,15 +54,6 @@ impl<T: IntRing2k> Rep3RingShare<T> {
         self.b <<= 1;
     }
 
-    /// Generate a random share
-    pub fn rand<N: Rep3Network>(io_context: &mut IoContext<N>) -> Self
-    where
-        Standard: Distribution<T>,
-    {
-        let (a, b) = io_context.rngs.rand.random_elements();
-        Self::new(a, b)
-    }
-
     /// Promotes a public ring element to a replicated share by setting the additive share of the party with id=0 and leaving all other shares to be 0. Thus, the replicated shares of party 0 and party 1 are set.
     pub fn promote_from_trivial(val: &RingElement<T>, id: PartyID) -> Self {
         match id {
@@ -76,7 +63,8 @@ impl<T: IntRing2k> Rep3RingShare<T> {
         }
     }
 
-    pub(crate) fn get_bit(&self, index: usize) -> Rep3RingShare<Bit> {
+    /// Return the bit at position `index`.
+    pub fn get_bit(&self, index: usize) -> Rep3RingShare<Bit> {
         Rep3RingShare {
             a: RingElement(Bit::new(self.a.get_bit(index).0 == T::one())),
             b: RingElement(Bit::new(self.b.get_bit(index).0 == T::one())),

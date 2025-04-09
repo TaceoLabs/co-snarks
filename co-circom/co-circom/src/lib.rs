@@ -8,16 +8,13 @@
 
 use std::{marker::PhantomData, sync::Arc};
 
-use ark_ff::PrimeField;
-use co_circom_snarks::{CompressedRep3SharedWitness, SharedWitness};
+use co_circom_types::{CompressedRep3SharedWitness, SharedWitness};
 use co_groth16::{CircomReduction, ConstraintMatrices, ProvingKey};
-use color_eyre::eyre::{self, Context, ContextCompat};
+use color_eyre::eyre::{self, Context};
 use mpc_core::protocols::{
     bridges::network::RepToShamirNetwork,
     shamir::{ShamirPreprocessing, ShamirProtocol},
 };
-use num_bigint::BigUint;
-use num_traits::Num;
 
 pub use ark_bls12_381::Bls12_381;
 pub use ark_bn254::Bn254;
@@ -32,11 +29,13 @@ pub use circom_types::{
     traits::{CheckElement, CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
     Witness, R1CS,
 };
-pub use co_circom_snarks::{Compression, Rep3SharedInput, Rep3SharedWitness, ShamirSharedWitness};
+pub use co_circom_types::{
+    Compression, Input, Rep3SharedInput, Rep3SharedWitness, ShamirSharedWitness,
+};
 pub use co_groth16::{Groth16, Rep3CoGroth16, ShamirCoGroth16};
 pub use co_plonk::{Plonk, Rep3CoPlonk, ShamirCoPlonk};
 pub use mpc_core::protocols::{
-    rep3::{id::PartyID, network::Rep3MpcNet},
+    rep3::{network::Rep3MpcNet, uncompress_shared_witness, PartyID},
     shamir::network::ShamirMpcNet,
 };
 pub use mpc_net::config::{Address, NetworkConfig, NetworkParty, ParseAddressError};
@@ -148,7 +147,7 @@ where
         pkey: &ProvingKey<P>,
         matrices: &ConstraintMatrices<P::ScalarField>,
     ) -> eyre::Result<(CircomGroth16Proof<P>, Vec<P::ScalarField>)> {
-        let witness = self.witness.uncompress(&mut self.net)?;
+        let witness = uncompress_shared_witness(self.witness, &mut self.net)?;
         let public_inputs = witness.public_inputs[1..].to_vec();
         let (proof, _net) =
             Rep3CoGroth16::prove::<CircomReduction>(self.net, pkey, matrices, witness)?;
@@ -160,7 +159,7 @@ where
         mut self,
         zkey: Arc<PlonkZKey<P>>,
     ) -> eyre::Result<(PlonkProof<P>, Vec<P::ScalarField>)> {
-        let witness = self.witness.uncompress(&mut self.net)?;
+        let witness = uncompress_shared_witness(self.witness, &mut self.net)?;
         let public_inputs = witness.public_inputs[1..].to_vec();
         let (proof, _net) = Rep3CoPlonk::prove(self.net, zkey, witness)?;
         Ok((proof, public_inputs))
@@ -202,82 +201,19 @@ where
     }
 }
 
-/// A JSON map of input names and values
-pub type Input = serde_json::Map<String, serde_json::Value>;
-
-/// Splits the input according to the provided parameters.
-pub fn split_input<P>(
+/// Split the input into REP3 shares
+pub fn split_input<P: Pairing>(
     input: Input,
     public_inputs: &[String],
-) -> color_eyre::Result<[Rep3SharedInput<P::ScalarField>; 3]>
-where
-    P: Pairing + CircomArkworksPairingBridge,
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-{
-    // create input shares
-    let mut shares = [
-        Rep3SharedInput::<P::ScalarField>::default(),
-        Rep3SharedInput::<P::ScalarField>::default(),
-        Rep3SharedInput::<P::ScalarField>::default(),
-    ];
-
-    let mut rng = rand::thread_rng();
-    for (name, val) in input {
-        let parsed_vals = if val.is_array() {
-            parse_array(&val)?
-        } else if val.is_boolean() {
-            vec![Some(parse_boolean(&val)?)]
-        } else {
-            vec![Some(parse_field(&val)?)]
-        };
-        if public_inputs.contains(&name) {
-            let parsed_vals = parsed_vals
-                .into_iter()
-                .collect::<Option<Vec<P::ScalarField>>>()
-                .context("Public inputs must not be unkown")?;
-            shares[0]
-                .public_inputs
-                .insert(name.clone(), parsed_vals.clone());
-            shares[1]
-                .public_inputs
-                .insert(name.clone(), parsed_vals.clone());
-            shares[2].public_inputs.insert(name.clone(), parsed_vals);
-        } else {
-            // if all elements are Some, then we can share normally
-            // else we can only share as Vec<Option<T>> and we have to merge unknown inputs later
-            if parsed_vals.iter().all(Option::is_some) {
-                let parsed_vals = parsed_vals
-                    .into_iter()
-                    .collect::<Option<Vec<_>>>()
-                    .expect("all are Some");
-                let [share0, share1, share2] = Rep3SharedInput::share_rep3(&parsed_vals, &mut rng);
-                shares[0].shared_inputs.insert(name.clone(), share0);
-                shares[1].shared_inputs.insert(name.clone(), share1);
-                shares[2].shared_inputs.insert(name.clone(), share2);
-            } else {
-                let [share0, share1, share2] =
-                    Rep3SharedInput::maybe_share_rep3(&parsed_vals, &mut rng);
-                shares[0].maybe_shared_inputs.insert(name.clone(), share0);
-                shares[1].maybe_shared_inputs.insert(name.clone(), share1);
-                shares[2].maybe_shared_inputs.insert(name.clone(), share2);
-            };
-        }
-    }
-    Ok(shares)
+) -> color_eyre::Result<[Rep3SharedInput<P::ScalarField>; 3]> {
+    co_circom_types::split_input(input, public_inputs)
 }
 
 /// Merge multiple REP3 shared inputs into one
-pub fn merge_input_shares<F: PrimeField>(
-    mut inputs: Vec<Rep3SharedInput<F>>,
-) -> color_eyre::Result<Rep3SharedInput<F>> {
-    let start_item = inputs
-        .pop()
-        .context("expected at least two inputs in merge input shares")?;
-    let merged = inputs.into_iter().try_fold(start_item, |a, b| {
-        a.merge(b).context("while merging input shares")
-    })?;
-    Ok(merged)
+pub fn merge_input_shares<P: Pairing>(
+    inputs: Vec<Rep3SharedInput<P::ScalarField>>,
+) -> color_eyre::Result<Rep3SharedInput<P::ScalarField>> {
+    co_circom_types::merge_input_shares(inputs)
 }
 
 /// Split the witness into REP3 shares
@@ -372,75 +308,4 @@ where
         .context("while running witness generation")?;
 
     Ok((witness_share.into_shared_witness(), mpc_net))
-}
-
-fn parse_field<F>(val: &serde_json::Value) -> eyre::Result<F>
-where
-    F: std::str::FromStr + PrimeField,
-{
-    let s = val.as_str().ok_or_else(|| {
-        eyre::eyre!(
-            "expected input to be a field element string, got \"{}\"",
-            val
-        )
-    })?;
-    let (is_negative, stripped) = if let Some(stripped) = s.strip_prefix('-') {
-        (true, stripped)
-    } else {
-        (false, s)
-    };
-    let positive_value = if let Some(stripped) = stripped.strip_prefix("0x") {
-        let mut big_int = BigUint::from_str_radix(stripped, 16)
-            .map_err(|_| eyre::eyre!("could not parse field element: \"{}\"", val))
-            .context("while parsing field element")?;
-        let modulus = BigUint::try_from(F::MODULUS).expect("can convert mod to biguint");
-        if big_int >= modulus {
-            tracing::warn!("val {} >= mod", big_int);
-            // snarkjs also does this
-            big_int %= modulus;
-        }
-        let big_int: F::BigInt = big_int
-            .try_into()
-            .map_err(|_| eyre::eyre!("could not parse field element: \"{}\"", val))
-            .context("while parsing field element")?;
-        F::from(big_int)
-    } else {
-        stripped
-            .parse::<F>()
-            .map_err(|_| eyre::eyre!("could not parse field element: \"{}\"", val))
-            .context("while parsing field element")?
-    };
-    if is_negative {
-        Ok(-positive_value)
-    } else {
-        Ok(positive_value)
-    }
-}
-
-fn parse_array<F: PrimeField>(val: &serde_json::Value) -> eyre::Result<Vec<Option<F>>> {
-    let json_arr = val.as_array().expect("is an array");
-    let mut field_elements = vec![];
-    for ele in json_arr {
-        if ele.is_array() {
-            field_elements.extend(parse_array::<F>(ele)?);
-        } else if ele.is_boolean() {
-            field_elements.push(Some(parse_boolean(ele)?));
-        } else if ele.as_str().is_some_and(|e| e == "?") {
-            field_elements.push(None);
-        } else {
-            field_elements.push(Some(parse_field(ele)?));
-        }
-    }
-    Ok(field_elements)
-}
-
-fn parse_boolean<F: PrimeField>(val: &serde_json::Value) -> eyre::Result<F> {
-    let bool = val
-        .as_bool()
-        .with_context(|| format!("expected input to be a bool, got {val}"))?;
-    if bool {
-        Ok(F::ONE)
-    } else {
-        Ok(F::ZERO)
-    }
 }

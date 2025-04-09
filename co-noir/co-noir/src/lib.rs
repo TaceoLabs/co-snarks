@@ -44,7 +44,7 @@ pub use co_ultrahonk::{
     Rep3CoBuilder, ShamirCoBuilder,
 };
 pub use mpc_core::protocols::{
-    rep3::{id::PartyID, network::Rep3MpcNet},
+    rep3::{network::Rep3MpcNet, PartyID},
     shamir::network::ShamirMpcNet,
 };
 pub use mpc_net::config::{Address, NetworkConfig, NetworkParty, ParseAddressError};

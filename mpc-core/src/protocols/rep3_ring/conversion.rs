@@ -2,30 +2,33 @@
 //!
 //! This module contains conversions between share types
 
-use super::{
-    arithmetic::types::Rep3RingShare,
-    detail,
-    ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
-    yao,
-};
-use crate::protocols::{
-    rep3::{
-        self,
-        conversion::A2BType,
-        id::PartyID,
-        network::{IoContext, Rep3Network},
-        yao::{
-            circuits::GarbledCircuits, evaluator::Rep3Evaluator, garbler::Rep3Garbler,
-            streaming_evaluator::StreamingRep3Evaluator, streaming_garbler::StreamingRep3Garbler,
-            GCUtils,
+use super::{detail, yao};
+use crate::{
+    protocols::{
+        rep3::{
+            self,
+            conversion::A2BType,
+            network::{IoContext, Rep3Network},
+            yao::{
+                circuits::GarbledCircuits, evaluator::Rep3Evaluator, garbler::Rep3Garbler,
+                streaming_evaluator::StreamingRep3Evaluator,
+                streaming_garbler::StreamingRep3Garbler, GCUtils,
+            },
         },
-        IoResult, Rep3PrimeFieldShare,
+        rep3_ring::arithmetic,
     },
-    rep3_ring::arithmetic,
+    IoResult,
 };
 use ark_ff::PrimeField;
 use fancy_garbling::{BinaryBundle, WireMod2};
 use itertools::izip;
+use mpc_types::protocols::{
+    rep3::{id::PartyID, Rep3PrimeFieldShare},
+    rep3_ring::{
+        ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
+        Rep3RingShare,
+    },
+};
 use rand::{distributions::Standard, prelude::Distribution};
 use std::ops::Neg;
 

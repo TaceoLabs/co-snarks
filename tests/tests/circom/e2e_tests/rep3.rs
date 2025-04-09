@@ -12,7 +12,7 @@ use circom_types::{
 use std::sync::Arc;
 
 use circom_types::traits::CheckElement;
-use co_circom_snarks::SharedWitness;
+use co_circom_types::SharedWitness;
 use co_groth16::{CircomReduction, ConstraintMatrices, Groth16, ProvingKey, Rep3CoGroth16};
 use co_plonk::Plonk;
 use co_plonk::Rep3CoPlonk;

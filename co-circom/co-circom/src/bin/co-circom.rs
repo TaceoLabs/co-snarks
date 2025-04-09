@@ -1,13 +1,14 @@
 use circom_types::traits::CheckElement;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use co_circom::{
-    Bls12_381, Bn254, CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge,
-    CircomGroth16Proof, CoCircomCompiler, CompilerConfig, Compression, Groth16,
-    Groth16JsonVerificationKey, Groth16ZKey, Pairing, Plonk, PlonkJsonVerificationKey, PlonkProof,
-    PlonkZKey, Rep3CoGroth16, Rep3CoPlonk, Rep3MpcNet, Rep3SharedInput, ShamirCoGroth16,
-    ShamirCoPlonk, ShamirMpcNet, ShamirSharedWitness, SimplificationLevel, VMConfig, Witness, R1CS,
+    uncompress_shared_witness, Bls12_381, Bn254, CircomArkworksPairingBridge,
+    CircomArkworksPrimeFieldBridge, CircomGroth16Proof, CoCircomCompiler, CompilerConfig,
+    Compression, Groth16, Groth16JsonVerificationKey, Groth16ZKey, Pairing, Plonk,
+    PlonkJsonVerificationKey, PlonkProof, PlonkZKey, Rep3CoGroth16, Rep3CoPlonk, Rep3MpcNet,
+    Rep3SharedInput, ShamirCoGroth16, ShamirCoPlonk, ShamirMpcNet, ShamirSharedWitness,
+    SimplificationLevel, VMConfig, Witness, R1CS,
 };
-use co_circom_snarks::{CompressedRep3SharedWitness, VerificationError};
+use co_circom_types::{CompressedRep3SharedWitness, VerificationError};
 use co_groth16::CircomReduction;
 use color_eyre::eyre::{self, eyre, Context, ContextCompat};
 use figment::{
@@ -786,7 +787,7 @@ where
 
     tracing::info!("Starting input shares merging...");
     let start = Instant::now();
-    let merged = co_circom::merge_input_shares(input_shares)?;
+    let merged = co_circom::merge_input_shares::<P>(input_shares)?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Merge input shares took {duration_ms} ms");
 
@@ -950,7 +951,7 @@ where
                     let mut mpc_net = Rep3MpcNet::new(network_config)?;
                     let witness_share: CompressedRep3SharedWitness<P::ScalarField> =
                         bincode::deserialize_from(witness_file)?;
-                    let witness_share = witness_share.uncompress(&mut mpc_net)?;
+                    let witness_share = uncompress_shared_witness(witness_share, &mut mpc_net)?;
                     let public_input = witness_share.public_inputs.clone();
 
                     let start = Instant::now();
@@ -1019,7 +1020,7 @@ where
                     let mut mpc_net = Rep3MpcNet::new(network_config)?;
                     let witness_share: CompressedRep3SharedWitness<P::ScalarField> =
                         bincode::deserialize_from(witness_file)?;
-                    let witness_share = witness_share.uncompress(&mut mpc_net)?;
+                    let witness_share = uncompress_shared_witness(witness_share, &mut mpc_net)?;
                     let public_input = witness_share.public_inputs.clone();
 
                     let start = Instant::now();

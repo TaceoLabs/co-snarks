@@ -2,10 +2,8 @@ use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use serde::{Deserialize, Serialize};
 
-use crate::protocols::rep3::{
-    id::PartyID,
-    network::{IoContext, Rep3Network},
-};
+use crate::protocols::rep3::id::PartyID;
+use crate::serde_compat::{ark_de, ark_se};
 
 /// This type represents a replicated shared value. Since a replicated share of a field element contains additive shares of two parties, this type contains two field elements.
 #[derive(
@@ -22,16 +20,10 @@ use crate::protocols::rep3::{
 )]
 pub struct Rep3PrimeFieldShare<F: PrimeField> {
     /// Share of this party
-    #[serde(
-        serialize_with = "crate::protocols::serde_compat::ark_se",
-        deserialize_with = "crate::protocols::serde_compat::ark_de"
-    )]
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
     pub a: F,
     /// Share of the prev party
-    #[serde(
-        serialize_with = "crate::protocols::serde_compat::ark_se",
-        deserialize_with = "crate::protocols::serde_compat::ark_de"
-    )]
+    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
     pub b: F,
 }
 
@@ -74,11 +66,11 @@ impl<F: PrimeField> Rep3PrimeFieldShare<F> {
         }
     }
 
-    /// Generate a random share
-    pub fn rand<N: Rep3Network>(io_context: &mut IoContext<N>) -> Self {
-        let (a, b) = io_context.rngs.rand.random_fes();
-        Self::new(a, b)
-    }
+    // /// Generate a random share
+    // pub fn rand<N: Rep3Network>(io_context: &mut IoContext<N>) -> Self {
+    //     let (a, b) = io_context.rngs.rand.random_fes();
+    //     Self::new(a, b)
+    // }
 
     /// Promotes a public field element to a replicated share by setting the additive share of the party with id=0 and leaving all other shares to be 0. Thus, the replicated shares of party 0 and party 1 are set.
     pub fn promote_from_trivial(val: &F, id: PartyID) -> Self {

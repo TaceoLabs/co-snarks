@@ -3,18 +3,18 @@
 //! This module contains some algorithms to create a random one-hot encoded vector for the Rep3 protocol.
 
 use ark_ff::{One, Zero};
+use mpc_types::protocols::rep3_ring::{
+    ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
+    Rep3RingShare,
+};
 use rand::{distributions::Standard, prelude::Distribution};
 
-use crate::protocols::{
-    rep3::{
-        network::{IoContext, Rep3Network},
-        IoResult,
+use crate::{
+    protocols::{
+        rep3::network::{IoContext, Rep3Network},
+        rep3_ring::binary,
     },
-    rep3_ring::{
-        binary,
-        ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
-        Rep3RingShare,
-    },
+    IoResult,
 };
 
 /// Generates a random one-hot-encoded vector of size k bits.

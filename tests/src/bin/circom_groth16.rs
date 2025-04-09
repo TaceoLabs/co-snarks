@@ -1,5 +1,5 @@
 use circom_mpc_vm::mpc_vm::VMConfig;
-use co_circom_snarks::{BatchedSharedInput, SharedInput};
+use co_circom_types::{BatchedSharedInput, SharedInput};
 
 use ark_bn254::Bn254;
 use circom_mpc_compiler::{CoCircomCompiler, CompilerConfig};

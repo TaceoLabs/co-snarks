@@ -2,9 +2,8 @@ use ark_ec::pairing::Pairing;
 use ark_poly::EvaluationDomain;
 use mpc_core::protocols::rep3::{
     arithmetic,
-    id::PartyID,
     network::{IoContext, Rep3Network},
-    pointshare, poly, Rep3PointShare, Rep3PrimeFieldShare,
+    pointshare, poly, PartyID, Rep3PointShare, Rep3PrimeFieldShare,
 };
 
 use super::{CircomPlonkProver, IoResult};
@@ -42,7 +41,7 @@ impl<P: Pairing, N: Rep3Network> CircomPlonkProver<P> for Rep3PlonkDriver<N> {
     type IoContext = IoContext<N>;
 
     fn rand(&mut self) -> IoResult<Self::ArithmeticShare> {
-        Ok(Self::ArithmeticShare::rand(&mut self.io_context0))
+        Ok(arithmetic::rand(&mut self.io_context0))
     }
 
     fn get_party_id(&self) -> Self::PartyID {
