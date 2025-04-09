@@ -1,7 +1,7 @@
 export CARGO_TERM_QUIET=true
 BARRETENBERG_BINARY=~/.bb/bb  ##specify the $BARRETENBERG_BINARY path here
 
-NARGO_VERSION=1.0.0-beta.3 ##specify the desired nargo version here
+NARGO_VERSION=1.0.0-beta.4 ##specify the desired nargo version here
 BARRETENBERG_VERSION=0.82.3 ##specify the desired barretenberg version here or use the corresponding one for this nargo version
 PLAINDRIVER="../../../target/release/plaindriver"
 exit_code=0

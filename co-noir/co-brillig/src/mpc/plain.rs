@@ -89,7 +89,11 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
             // downcast to int
             (PlainBrilligType::Field(f), BitSize::Integer(target_bit_size)) => {
                 let target_bit_size_u32: u32 = target_bit_size.into();
-                let mask = (1_u128 << target_bit_size_u32) - 1;
+                let mask = if target_bit_size_u32 == 128 {
+                    u128::MAX
+                } else {
+                    (1_u128 << target_bit_size_u32) - 1
+                };
                 PlainBrilligType::Int(acir_field_utils::to_u128(f) & mask, target_bit_size)
             }
             // promote to field
