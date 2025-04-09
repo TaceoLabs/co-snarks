@@ -4,7 +4,7 @@ use co_brillig::mpc::{ShamirBrilligDriver, ShamirBrilligType};
 use mpc_core::{
     gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations},
     protocols::{
-        rep3::network::Rep3MpcNet,
+        rep3::{network::Rep3MpcNet, yao::circuits::SHA256Table},
         rep3_ring::lut::Rep3LookupTable,
         shamir::{arithmetic, network::ShamirNetwork, ShamirPrimeFieldShare, ShamirProtocol},
     },
@@ -639,5 +639,63 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         _b: &Self::AcvmType,
     ) -> std::io::Result<Self::AcvmType> {
         panic!("functionality equal not feasible for Shamir")
+    }
+
+    fn sha256_compression(
+        &mut self,
+        _state: &[Self::AcvmType; 8],
+        _message: &[Self::AcvmType; 16],
+    ) -> std::io::Result<Vec<Self::AcvmType>> {
+        panic!("functionality sha256_compression not feasible for Shamir")
+    }
+
+    fn map_into_sparse_form(
+        &mut self,
+        _base: u64,
+        _input: Self::AcvmType,
+    ) -> std::io::Result<Self::AcvmType> {
+        panic!("functionality map_into_sparse_form feasible for Shamir")
+    }
+
+    fn get_overflow_bit(
+        &mut self,
+        _input: Self::ArithmeticShare,
+        _bit: usize,
+        _max_bitsize: usize,
+    ) -> std::io::Result<Self::ArithmeticShare> {
+        panic!("functionality get_overflow_bit feasible for Shamir")
+    }
+
+    fn slice_and_get_sparse_table_with_rotation_values(
+        &mut self,
+        _input1: Self::ArithmeticShare,
+        _input2: Self::ArithmeticShare,
+        _basis_bits: &[u64],
+        _rotation: &[u32],
+        _total_bitsize: usize,
+        _base: u64,
+    ) -> std::io::Result<(
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+    )> {
+        panic!("functionality slice_and_get_sparse_table_with_rotation_values feasible for Shamir")
+    }
+
+    fn slice_and_get_sparse_normalization_values(
+        &mut self,
+        _input1: Self::ArithmeticShare,
+        _input2: Self::ArithmeticShare,
+        _base_bits: &[u64],
+        _base: u64,
+        _total_output_bitlen_per_field: usize,
+        _table_type: &SHA256Table,
+    ) -> std::io::Result<(
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+    )> {
+        panic!("functionality slice_and_get_sparse_normalization_values feasible for Shamir")
     }
 }

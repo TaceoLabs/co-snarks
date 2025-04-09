@@ -2,7 +2,8 @@ use ark_ff::{One, PrimeField};
 use co_brillig::mpc::{Rep3BrilligDriver, Rep3BrilligType};
 use itertools::{izip, Itertools};
 use mpc_core::gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations};
-use mpc_core::protocols::rep3::{arithmetic, binary, conversion, yao};
+use mpc_core::protocols::rep3::yao::circuits::SHA256Table;
+use mpc_core::protocols::rep3::{arithmetic, binary, conversion, yao, Rep3BigUintShare};
 use mpc_core::protocols::rep3_ring::gadgets::sort::{radix_sort_fields, radix_sort_fields_vec_by};
 use mpc_core::{
     lut::LookupTableProvider,
@@ -15,6 +16,7 @@ use mpc_core::{
 use num_bigint::BigUint;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use sha2::digest::generic_array::GenericArray;
 use std::array;
 use std::marker::PhantomData;
 
@@ -979,5 +981,222 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 arithmetic::eq(*a, *b, &mut self.io_context0)?,
             )),
         }
+    }
+
+    fn sha256_compression(
+        &mut self,
+        state: &[Self::AcvmType; 8],
+        message: &[Self::AcvmType; 16],
+    ) -> std::io::Result<Vec<Self::AcvmType>> {
+        if state.iter().any(|v| Self::is_shared(v)) || message.iter().any(|v| Self::is_shared(v)) {
+            let state: Vec<_> = state
+                .iter()
+                .map(|y| match y {
+                    Rep3AcvmType::Public(public) => {
+                        arithmetic::promote_to_trivial_share(self.io_context0.id, *public)
+                    }
+                    Rep3AcvmType::Shared(shared) => *shared,
+                })
+                .collect();
+            let message: Vec<_> = message
+                .iter()
+                .map(|y| match y {
+                    Rep3AcvmType::Public(public) => {
+                        arithmetic::promote_to_trivial_share(self.io_context0.id, *public)
+                    }
+                    Rep3AcvmType::Shared(shared) => *shared,
+                })
+                .collect();
+            let result = yao::sha_from_bristol(
+                &state
+                    .as_slice()
+                    .try_into()
+                    .expect("slice with incorrect length"),
+                &message
+                    .as_slice()
+                    .try_into()
+                    .expect("slice with incorrect length"),
+                &mut self.io_context0,
+            )?;
+            result
+                .iter()
+                .map(|y| Ok(Rep3AcvmType::Shared(*y)))
+                .collect::<Result<Vec<_>, _>>()
+        } else {
+            let state: Vec<_> = state
+                .iter()
+                .map(|x| Self::get_public(x).expect("Already checked it is public"))
+                .collect();
+            let message: Vec<_> = message
+                .iter()
+                .map(|x| Self::get_public(x).expect("Already checked it is public"))
+                .collect();
+            let mut state_as_u32 = [0u32; 8];
+            for (i, input) in state.iter().enumerate() {
+                let x: BigUint = (input.into_bigint()).into();
+                state_as_u32[i] = x.to_u32_digits()[0];
+            }
+            let mut message_as_u32 = Vec::with_capacity(16);
+            for input in message {
+                let x: BigUint = (input.into_bigint()).into();
+                message_as_u32.push(x.to_u32_digits()[0]);
+            }
+            let mut blocks = [0_u8; 64];
+            for (i, block) in message_as_u32.iter().enumerate() {
+                let bytes = block.to_be_bytes();
+                blocks[i * 4..i * 4 + 4].copy_from_slice(&bytes);
+            }
+
+            let blocks: GenericArray<u8, sha2::digest::typenum::U64> = blocks.into();
+            sha2::compress256(&mut state_as_u32, &[blocks]);
+            state_as_u32
+                .iter()
+                .map(|x| Ok(Rep3AcvmType::Public(F::from(*x))))
+                .collect()
+        }
+    }
+
+    fn get_overflow_bit(
+        &mut self,
+        input: Self::ArithmeticShare,
+        bit: usize,
+        max_bitsize: usize,
+    ) -> std::io::Result<Self::ArithmeticShare> {
+        let shared = conversion::a2b_selector(input, &mut self.io_context0)?;
+
+        let mut result = Rep3BigUintShare::default();
+        for i in bit..max_bitsize {
+            result.a.set_bit(i as u64 - 32, shared.a.bit(i as u64));
+            result.b.set_bit(i as u64 - 32, shared.b.bit(i as u64));
+        }
+        conversion::b2a_selector(&result.clone(), &mut self.io_context0)
+    }
+
+    fn map_into_sparse_form(
+        &mut self,
+        _base: u64,
+        _input: Self::AcvmType,
+    ) -> std::io::Result<Self::AcvmType> {
+        todo!()
+    }
+
+    fn slice_and_get_sparse_table_with_rotation_values(
+        &mut self,
+        input1: Self::ArithmeticShare,
+        input2: Self::ArithmeticShare,
+        basis_bits: &[u64],
+        rotation: &[u32],
+        total_bitsize: usize,
+        base: u64,
+    ) -> std::io::Result<(
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+    )> {
+        let result = yao::get_sparse_table_with_rotation_values(
+            input1,
+            input2,
+            &mut self.io_context0,
+            basis_bits,
+            rotation,
+            total_bitsize,
+        )?;
+        let slices = basis_bits.len();
+        let num_outputs = result.len();
+        debug_assert_eq!(num_outputs, 2 * slices + 2 * 32 * slices);
+        let key_a_slices = result
+            .iter()
+            .take(slices)
+            .map(|a| Rep3AcvmType::Shared(*a))
+            .collect();
+        let key_b_slices = result
+            .iter()
+            .skip(slices)
+            .take(slices)
+            .map(|a| Rep3AcvmType::Shared(*a))
+            .collect();
+
+        //TODO: Is it better to have this table as some sort of constant, since we only need it for 32/16 and 32/28
+        fn get_base_powers<const NUM_SLICES: usize>(base: u64) -> [BigUint; NUM_SLICES] {
+            let mut output: [BigUint; NUM_SLICES] = array::from_fn(|_| BigUint::one());
+            let mask: BigUint = (BigUint::from(1u64) << 256) - BigUint::one();
+            for i in 1..NUM_SLICES {
+                let tmp = output[i - 1].clone() * base;
+                output[i] = tmp & mask.clone();
+            }
+            output
+        }
+        let rotation_values: Vec<_> = result
+            .into_iter()
+            .skip(2 * slices)
+            .map(|a| Rep3AcvmType::Shared(a))
+            .collect();
+        let base_powers = get_base_powers::<32>(base);
+        let mut res0: Vec<_> = Vec::new();
+        let mut res1: Vec<_> = Vec::new();
+        for chunk in rotation_values.chunks_exact(64) {
+            let vec_t0 = chunk[..32].to_vec();
+            let vec_t1 = chunk[32..].to_vec();
+            let mut sum_a =
+                self.mul_with_public(F::from(base_powers[0].clone()), vec_t0[0].clone());
+            let mut sum_b =
+                self.mul_with_public(F::from(base_powers[0].clone()), vec_t1[0].clone());
+            for i in 1..32 {
+                let tmp = self.mul_with_public(F::from(base_powers[i].clone()), vec_t0[i].clone());
+                sum_a = self.add(sum_a, tmp);
+                let tmp = self.mul_with_public(F::from(base_powers[i].clone()), vec_t1[i].clone());
+                sum_b = self.add(sum_b, tmp);
+            }
+            res0.push(sum_a);
+            res1.push(sum_b);
+        }
+
+        Ok((res0, res1, key_a_slices, key_b_slices))
+    }
+
+    fn slice_and_get_sparse_normalization_values(
+        &mut self,
+        input1: Self::ArithmeticShare,
+        input2: Self::ArithmeticShare,
+        base_bits: &[u64],
+        base: u64,
+        total_output_bitlen_per_field: usize,
+        table_type: &SHA256Table,
+    ) -> std::io::Result<(
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+    )> {
+        let result = yao::get_sparse_normalization_values(
+            input1,
+            input2,
+            &mut self.io_context0,
+            base_bits,
+            base,
+            total_output_bitlen_per_field,
+            table_type,
+        )?;
+        let num_outputs = result.len();
+        debug_assert_eq!(num_outputs % 3, 0);
+        let size = num_outputs / 3;
+        let key_a_slices = result
+            .iter()
+            .take(size)
+            .map(|a| Rep3AcvmType::Shared(*a))
+            .collect();
+        let key_b_slices = result
+            .iter()
+            .skip(size)
+            .take(size)
+            .map(|a| Rep3AcvmType::Shared(*a))
+            .collect();
+        let key_values = result
+            .into_iter()
+            .skip(2 * size)
+            .map(|a| Rep3AcvmType::Shared(a))
+            .collect();
+
+        Ok((key_values, key_a_slices, key_b_slices))
     }
 }

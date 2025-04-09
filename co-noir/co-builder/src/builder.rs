@@ -1,5 +1,7 @@
 use crate::acir_format::{HonkRecursion, ProgramMetadata};
 use crate::polynomials::polynomial::MASKING_OFFSET;
+use crate::types::sha_compression::SHA256;
+use crate::types::types::Sha256Compression;
 use crate::{
     acir_format::AcirFormat,
     crs::ProverCrs,
@@ -416,7 +418,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         self.num_gates += 1;
     }
 
-    fn create_big_mul_gate(&mut self, inp: &MulQuad<P::ScalarField>) {
+    pub(crate) fn create_big_mul_gate(&mut self, inp: &MulQuad<P::ScalarField>) {
         self.assert_valid_variables(&[inp.a, inp.b, inp.c, inp.d]);
 
         self.blocks
@@ -863,16 +865,16 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                     self,
                     driver,
                     MultiTableId::Uint32Xor,
-                    a_chunk.to_owned(),
-                    b_chunk.to_owned(),
+                    &a_chunk,
+                    &b_chunk,
                 )?
             } else {
                 Plookup::read_from_2_to_1_table(
                     self,
                     driver,
                     MultiTableId::Uint32And,
-                    a_chunk.to_owned(),
-                    b_chunk.to_owned(),
+                    &a_chunk,
+                    &b_chunk,
                 )?
             };
 
@@ -1156,9 +1158,9 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         // }
 
         // Add sha256 constraints
-        // for (i, constraint) in constraint_system.sha256_constraints.iter().enumerate() {
-        //     todo!("sha256 gates");
-        // }
+        for constraint in constraint_system.sha256_compression.iter() {
+            self.create_sha256_compression_constraints(driver, constraint)?;
+        }
 
         // for (i, constraint) in constraint_system.sha256_compression.iter().enumerate() {
         //     todo!("sha256 compression gates");
@@ -3567,7 +3569,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         Ok(())
     }
 
-    fn create_new_range_constraint(&mut self, variable_index: u32, target_range: u64) {
+    pub(crate) fn create_new_range_constraint(&mut self, variable_index: u32, target_range: u64) {
         // We ignore this check because it is definitely more expensive in MPC, the proof will just not verify if this constraint is not given
         // if (uint256_t(self.get_variable(variable_index)).data[0] > target_range) {
         //     if (!self.failed()) {
@@ -4064,6 +4066,54 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
 
         self.check_selector_length_consistency();
         self.num_gates += 1;
+    }
+
+    fn create_sha256_compression_constraints(
+        &mut self,
+        driver: &mut T,
+        constraint: &Sha256Compression<P::ScalarField>,
+    ) -> std::io::Result<()> {
+        let mut inputs: [FieldCT<P::ScalarField>; 16] =
+            array::from_fn(|_| FieldCT::<P::ScalarField>::zero());
+        let mut hash_inputs: [FieldCT<P::ScalarField>; 8] =
+            array::from_fn(|_| FieldCT::<P::ScalarField>::zero());
+
+        // Get the witness assignment for each witness index
+        // Note that we do not range-check the inputs, which should be 32 bits,
+        // because of the lookup-tables.
+        for (i, witness_index_num_bits) in constraint.inputs.iter().enumerate() {
+            inputs[i] = witness_index_num_bits.to_field_ct();
+        }
+        for (i, witness_index_num_bits) in constraint.hash_values.iter().enumerate() {
+            hash_inputs[i] = witness_index_num_bits.to_field_ct();
+        }
+
+        // Compute sha256 compression
+        let output_bytes = SHA256::sha256_block(hash_inputs, inputs, self, driver)?;
+
+        for (i, output_byte) in output_bytes.iter().enumerate() {
+            let normalised_output = output_byte.normalize(self, driver);
+            if normalised_output.is_constant() {
+                let value = normalised_output.get_value(self, driver);
+                self.fix_witness(
+                    constraint.result[i],
+                    T::get_public(&value).expect("Constants should be public"),
+                );
+            } else {
+                let assert_equal = PolyTriple {
+                    a: normalised_output.witness_index,
+                    b: constraint.result[i],
+                    c: 0,
+                    q_m: P::ScalarField::zero(),
+                    q_l: P::ScalarField::one(),
+                    q_r: -P::ScalarField::one(),
+                    q_o: P::ScalarField::zero(),
+                    q_c: P::ScalarField::zero(),
+                };
+                self.create_poly_gate(&assert_equal);
+            }
+        }
+        Ok(())
     }
 }
 
