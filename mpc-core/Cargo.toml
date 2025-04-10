@@ -26,7 +26,6 @@ fancy-garbling = { git = "https://github.com/GaloisInc/swanky", rev = "5ff648457
 itertools = { workspace = true }
 mpc-net = { version = "0.4.0", path = "../mpc-net" }
 mpc-types = { version = "0.1.0", path = "../mpc-types" }
-co-circom-types = { version = "0.5.0", path = "../co-circom/co-circom-types" }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
 rand = { workspace = true }

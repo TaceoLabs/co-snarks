@@ -8,11 +8,13 @@
 
 use std::{marker::PhantomData, sync::Arc};
 
+use ark_ff::PrimeField;
 use co_circom_types::{CompressedRep3SharedWitness, SharedWitness};
 use co_groth16::{CircomReduction, ConstraintMatrices, ProvingKey};
 use color_eyre::eyre::{self, Context};
 use mpc_core::protocols::{
     bridges::network::RepToShamirNetwork,
+    rep3::{self, network::IoContext},
     shamir::{ShamirPreprocessing, ShamirProtocol},
 };
 
@@ -35,10 +37,11 @@ pub use co_circom_types::{
 pub use co_groth16::{Groth16, Rep3CoGroth16, ShamirCoGroth16};
 pub use co_plonk::{Plonk, Rep3CoPlonk, ShamirCoPlonk};
 pub use mpc_core::protocols::{
-    rep3::{network::Rep3MpcNet, uncompress_shared_witness, PartyID},
+    rep3::{network::Rep3MpcNet, PartyID},
     shamir::network::ShamirMpcNet,
 };
 pub use mpc_net::config::{Address, NetworkConfig, NetworkParty, ParseAddressError};
+use mpc_types::protocols::rep3::Rep3ShareVecType;
 pub use serde_json::Number;
 pub use serde_json::Value;
 
@@ -143,25 +146,24 @@ where
 
     /// Create a Groth16 poof and return the public inputs
     pub fn prove_groth16(
-        mut self,
+        self,
         pkey: &ProvingKey<P>,
         matrices: &ConstraintMatrices<P::ScalarField>,
     ) -> eyre::Result<(CircomGroth16Proof<P>, Vec<P::ScalarField>)> {
-        let witness = uncompress_shared_witness(self.witness, &mut self.net)?;
+        let (witness, net) = uncompress_shared_witness(self.witness, self.net)?;
         let public_inputs = witness.public_inputs[1..].to_vec();
-        let (proof, _net) =
-            Rep3CoGroth16::prove::<CircomReduction>(self.net, pkey, matrices, witness)?;
+        let (proof, _net) = Rep3CoGroth16::prove::<CircomReduction>(net, pkey, matrices, witness)?;
         Ok((proof.into(), public_inputs))
     }
 
     /// Create a Plonk poof and return the public inputs
     pub fn prove_plonk(
-        mut self,
+        self,
         zkey: Arc<PlonkZKey<P>>,
     ) -> eyre::Result<(PlonkProof<P>, Vec<P::ScalarField>)> {
-        let witness = uncompress_shared_witness(self.witness, &mut self.net)?;
+        let (witness, net) = uncompress_shared_witness(self.witness, self.net)?;
         let public_inputs = witness.public_inputs[1..].to_vec();
-        let (proof, _net) = Rep3CoPlonk::prove(self.net, zkey, witness)?;
+        let (proof, _net) = Rep3CoPlonk::prove(net, zkey, witness)?;
         Ok((proof, public_inputs))
     }
 }
@@ -225,6 +227,34 @@ pub fn split_witness_rep3<P: Pairing>(
     let mut rng = rand::thread_rng();
     // create witness shares
     CompressedRep3SharedWitness::share_rep3(witness, r1cs.num_inputs, &mut rng, compression)
+}
+
+/// Uncompress into [`Rep3SharedWitness`].
+pub fn uncompress_shared_witness<F: PrimeField>(
+    compressed_witness: CompressedRep3SharedWitness<F>,
+    net: Rep3MpcNet,
+) -> eyre::Result<(Rep3SharedWitness<F>, Rep3MpcNet)> {
+    let mut io_context = IoContext::init(net)?;
+    let public_inputs = compressed_witness.public_inputs;
+    let witness = compressed_witness.witness;
+    let witness = match witness {
+        Rep3ShareVecType::Replicated(vec) => vec,
+        Rep3ShareVecType::SeededReplicated(replicated_seed_type) => {
+            replicated_seed_type.expand_vec()?
+        }
+        Rep3ShareVecType::Additive(vec) => rep3::arithmetic::io_mul_vec(vec, &mut io_context)?,
+        Rep3ShareVecType::SeededAdditive(seeded_type) => {
+            rep3::arithmetic::io_mul_vec(seeded_type.expand_vec(), &mut io_context)?
+        }
+    };
+
+    Ok((
+        Rep3SharedWitness {
+            public_inputs,
+            witness,
+        },
+        io_context.network,
+    ))
 }
 
 /// Split the witness into shamir shares
