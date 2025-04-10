@@ -1,12 +1,11 @@
 use circom_types::traits::CheckElement;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use co_circom::{
-    uncompress_shared_witness, Bls12_381, Bn254, CircomArkworksPairingBridge,
-    CircomArkworksPrimeFieldBridge, CircomGroth16Proof, CoCircomCompiler, CompilerConfig,
-    Compression, Groth16, Groth16JsonVerificationKey, Groth16ZKey, Pairing, Plonk,
-    PlonkJsonVerificationKey, PlonkProof, PlonkZKey, Rep3CoGroth16, Rep3CoPlonk, Rep3MpcNet,
-    Rep3SharedInput, ShamirCoGroth16, ShamirCoPlonk, ShamirMpcNet, ShamirSharedWitness,
-    SimplificationLevel, VMConfig, Witness, R1CS,
+    Bls12_381, Bn254, CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge,
+    CircomGroth16Proof, CoCircomCompiler, CompilerConfig, Compression, Groth16,
+    Groth16JsonVerificationKey, Groth16ZKey, Pairing, Plonk, PlonkJsonVerificationKey, PlonkProof,
+    PlonkZKey, Rep3CoGroth16, Rep3CoPlonk, Rep3MpcNet, Rep3SharedInput, ShamirCoGroth16,
+    ShamirCoPlonk, ShamirMpcNet, ShamirSharedWitness, SimplificationLevel, VMConfig, Witness, R1CS,
 };
 use co_circom_types::{CompressedRep3SharedWitness, VerificationError};
 use co_groth16::CircomReduction;
@@ -948,10 +947,11 @@ where
                         return Err(eyre!("REP3 only allows the threshold to be 1"));
                     }
 
-                    let mut mpc_net = Rep3MpcNet::new(network_config)?;
+                    let mpc_net = Rep3MpcNet::new(network_config)?;
                     let witness_share: CompressedRep3SharedWitness<P::ScalarField> =
                         bincode::deserialize_from(witness_file)?;
-                    let witness_share = uncompress_shared_witness(witness_share, &mut mpc_net)?;
+                    let (witness_share, mpc_net) =
+                        co_circom::uncompress_shared_witness(witness_share, mpc_net)?;
                     let public_input = witness_share.public_inputs.clone();
 
                     let start = Instant::now();
@@ -1017,10 +1017,11 @@ where
                         return Err(eyre!("REP3 only allows the threshold to be 1"));
                     }
 
-                    let mut mpc_net = Rep3MpcNet::new(network_config)?;
+                    let mpc_net = Rep3MpcNet::new(network_config)?;
                     let witness_share: CompressedRep3SharedWitness<P::ScalarField> =
                         bincode::deserialize_from(witness_file)?;
-                    let witness_share = uncompress_shared_witness(witness_share, &mut mpc_net)?;
+                    let (witness_share, mpc_net) =
+                        co_circom::uncompress_shared_witness(witness_share, mpc_net)?;
                     let public_input = witness_share.public_inputs.clone();
 
                     let start = Instant::now();
