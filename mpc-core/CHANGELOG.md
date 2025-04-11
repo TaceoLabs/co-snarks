@@ -2,6 +2,28 @@
 
 
 
+## [0.10.0](https://github.com/TaceoLabs/co-snarks/compare/mpc-core-v0.9.0...mpc-core-v0.10.0) (2025-04-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* rename io_mul_vec to reshare_vec
+* move uncompress_shared_witness to co-circom
+* move MPC types and share/combine into new mpc-types crate, rename co-circom-snarks to co-circom-types
+
+### Code Refactoring
+
+* move MPC types and share/combine into new mpc-types crate, rename co-circom-snarks to co-circom-types ([31b773a](https://github.com/TaceoLabs/co-snarks/commit/31b773aa71a5e872c25754de7805b02647b65688))
+* move uncompress_shared_witness to co-circom ([0462a2f](https://github.com/TaceoLabs/co-snarks/commit/0462a2fc2dd145e5306e353a227f66d8862712cb))
+* rename io_mul_vec to reshare_vec ([7067486](https://github.com/TaceoLabs/co-snarks/commit/70674869e91950a59b68272127781ecf56d77094))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * mpc-types bumped from 0.1.0 to 0.2.0
+
 ## [0.9.0](https://github.com/TaceoLabs/co-snarks/compare/mpc-core-v0.8.0...mpc-core-v0.9.0) (2025-04-03)
 
 
