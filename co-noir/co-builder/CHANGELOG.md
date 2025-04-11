@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.4.1](https://github.com/TaceoLabs/co-snarks/compare/co-builder-v0.4.0...co-builder-v0.4.1) (2025-04-11)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * co-acvm bumped from 0.6.0 to 0.6.1
+    * mpc-core bumped from 0.9.0 to 0.10.0
+
 ## [0.4.0](https://github.com/TaceoLabs/co-snarks/compare/co-builder-v0.3.0...co-builder-v0.4.0) (2025-04-03)
 
 

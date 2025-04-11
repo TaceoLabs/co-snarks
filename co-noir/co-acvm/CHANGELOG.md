@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.6.1](https://github.com/TaceoLabs/co-snarks/compare/co-acvm-v0.6.0...co-acvm-v0.6.1) (2025-04-11)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * co-brillig bumped from 0.3.0 to 0.4.0
+    * mpc-core bumped from 0.9.0 to 0.10.0
+
 ## [0.6.0](https://github.com/TaceoLabs/co-snarks/compare/co-acvm-v0.5.0...co-acvm-v0.6.0) (2025-04-03)
 
 

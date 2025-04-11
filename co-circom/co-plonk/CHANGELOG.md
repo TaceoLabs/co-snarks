@@ -5,6 +5,27 @@
     * co-circom-snarks bumped from 0.1.1 to 0.1.2
     * mpc-core bumped from 0.4.0 to 0.5.0
 
+## [0.7.0](https://github.com/TaceoLabs/co-snarks/compare/co-plonk-v0.6.1...co-plonk-v0.7.0) (2025-04-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* rename io_mul_vec to reshare_vec
+* move MPC types and share/combine into new mpc-types crate, rename co-circom-snarks to co-circom-types
+
+### Code Refactoring
+
+* move MPC types and share/combine into new mpc-types crate, rename co-circom-snarks to co-circom-types ([31b773a](https://github.com/TaceoLabs/co-snarks/commit/31b773aa71a5e872c25754de7805b02647b65688))
+* rename io_mul_vec to reshare_vec ([7067486](https://github.com/TaceoLabs/co-snarks/commit/70674869e91950a59b68272127781ecf56d77094))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * co-circom-types bumped from 0.5.0 to 0.6.0
+    * mpc-core bumped from 0.9.0 to 0.10.0
+
 ## [0.6.1](https://github.com/TaceoLabs/co-snarks/compare/co-plonk-v0.6.0...co-plonk-v0.6.1) (2025-04-03)
 
 
