@@ -86,7 +86,7 @@ impl<P: Pairing, N: Rep3Network> CircomPlonkProver<P> for Rep3PlonkDriver<N> {
     }
 
     fn io_round_mul_vec(&mut self, a: Vec<P::ScalarField>) -> IoResult<Vec<Self::ArithmeticShare>> {
-        arithmetic::io_mul_vec(a, &mut self.io_context0)
+        arithmetic::reshare_vec(a, &mut self.io_context0)
     }
 
     fn mul_vec(

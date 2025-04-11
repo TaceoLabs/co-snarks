@@ -137,7 +137,7 @@ pub fn mul_assign_public<T: IntRing2k>(shared: &mut RingShare<T>, public: RingEl
 ///
 /// # Security
 /// If you want to perform additional non-linear operations on the result of this function,
-/// you *MUST* call [`io_mul_vec`] first. Only then, a reshare is performed.
+/// you *MUST* call [`reshare_vec`] first. Only then, a reshare is performed.
 pub fn local_mul_vec<T: IntRing2k>(
     lhs: &[RingShare<T>],
     rhs: &[RingShare<T>],
@@ -158,7 +158,7 @@ where
 }
 
 /// Performs a reshare on all shares in the vector.
-pub fn io_mul_vec<T: IntRing2k, N: Rep3Network>(
+pub fn reshare_vec<T: IntRing2k, N: Rep3Network>(
     local_a: Vec<RingElement<T>>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<Vec<RingShare<T>>> {
@@ -176,7 +176,7 @@ pub fn io_mul_vec<T: IntRing2k, N: Rep3Network>(
 
 /// Performs element-wise multiplication of two vectors of shared values.
 ///
-/// Use this function for small vecs. For large vecs see [`local_mul_vec`] and [`io_mul_vec`]
+/// Use this function for small vecs. For large vecs see [`local_mul_vec`] and [`reshare_vec`]
 pub fn mul_vec<T: IntRing2k, N: Rep3Network>(
     lhs: &[RingShare<T>],
     rhs: &[RingShare<T>],
@@ -193,7 +193,7 @@ where
     let local_a = izip!(lhs.iter(), rhs.iter())
         .map(|(lhs, rhs)| lhs * rhs + io_context.rngs.rand.masking_element::<RingElement<T>>())
         .collect_vec();
-    io_mul_vec(local_a, io_context)
+    reshare_vec(local_a, io_context)
 }
 
 /// Negates a shared value.

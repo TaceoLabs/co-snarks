@@ -125,7 +125,7 @@ pub fn mul_assign_public<F: PrimeField>(shared: &mut FieldShare<F>, public: F) {
 ///
 /// # Security
 /// If you want to perform additional non-linear operations on the result of this function,
-/// you *MUST* call [`io_mul_vec`] first. Only then, a reshare is performed.
+/// you *MUST* call [`reshare_vec`] first. Only then, a reshare is performed.
 pub fn local_mul_vec<F: PrimeField>(
     lhs: &[FieldShare<F>],
     rhs: &[FieldShare<F>],
@@ -141,7 +141,7 @@ pub fn local_mul_vec<F: PrimeField>(
 }
 
 /// Performs a reshare on all shares in the vector.
-pub fn io_mul_vec<F: PrimeField, N: Rep3Network>(
+pub fn reshare_vec<F: PrimeField, N: Rep3Network>(
     local_a: Vec<F>,
     io_context: &mut IoContext<N>,
 ) -> IoResult<Vec<FieldShare<F>>> {
@@ -159,7 +159,7 @@ pub fn io_mul_vec<F: PrimeField, N: Rep3Network>(
 
 /// Performs element-wise multiplication of two vectors of shared values.
 ///
-/// Use this function for small vecs. For large vecs see [`local_mul_vec`] and [`io_mul_vec`]
+/// Use this function for small vecs. For large vecs see [`local_mul_vec`] and [`reshare_vec`]
 pub fn mul_vec<F: PrimeField, N: Rep3Network>(
     lhs: &[FieldShare<F>],
     rhs: &[FieldShare<F>],
@@ -169,7 +169,7 @@ pub fn mul_vec<F: PrimeField, N: Rep3Network>(
     let local_a = izip!(lhs.iter(), rhs.iter())
         .map(|(lhs, rhs)| lhs * rhs + io_context.rngs.rand.masking_field_element::<F>())
         .collect_vec();
-    io_mul_vec(local_a, io_context)
+    reshare_vec(local_a, io_context)
 }
 
 /// Performs division of two shared values, returning a / b.

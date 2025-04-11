@@ -242,9 +242,9 @@ pub fn uncompress_shared_witness<F: PrimeField>(
         Rep3ShareVecType::SeededReplicated(replicated_seed_type) => {
             replicated_seed_type.expand_vec()?
         }
-        Rep3ShareVecType::Additive(vec) => rep3::arithmetic::io_mul_vec(vec, &mut io_context)?,
+        Rep3ShareVecType::Additive(vec) => rep3::arithmetic::reshare_vec(vec, &mut io_context)?,
         Rep3ShareVecType::SeededAdditive(seeded_type) => {
-            rep3::arithmetic::io_mul_vec(seeded_type.expand_vec(), &mut io_context)?
+            rep3::arithmetic::reshare_vec(seeded_type.expand_vec(), &mut io_context)?
         }
     };
 
