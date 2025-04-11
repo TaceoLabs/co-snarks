@@ -73,6 +73,10 @@ pub struct Cli {
     /// Prove with or without the zero knowledge property
     #[arg(long)]
     pub zk: bool,
+    /// The path to the witness share file
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub witness: Option<PathBuf>,
 }
 
 /// Config
@@ -92,6 +96,8 @@ pub struct Config {
     pub out_dir: PathBuf,
     /// Prove with or without the zero knowledge property
     pub zk: bool,
+    /// The path to the witness file, if not passed it will get computed with the plaindriver
+    pub witness: Option<PathBuf>,
 }
 
 /// Prefix for config env variables
@@ -170,6 +176,7 @@ fn main() -> color_eyre::Result<ExitCode> {
     let circuit_path = config.circuit;
     let hasher = config.hasher;
     let out_dir = config.out_dir;
+    let witness_file = config.witness;
     let has_zk = ZeroKnowledge::from(config.zk);
 
     // Read circuit
@@ -178,10 +185,14 @@ fn main() -> color_eyre::Result<ExitCode> {
     let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
 
     // Create witness
-    let solver = PlainCoSolver::init_plain_driver(program_artifact, input_path)
-        .context("while initializing plain driver")?;
-    let (witness, _) = solver.solve().context("while solving")?;
-    let witness = convert_witness(witness);
+    let witness = if let Some(witness_path) = witness_file {
+        Utils::get_witness_from_file(&witness_path).expect("failed to parse witness")
+    } else {
+        let solver = PlainCoSolver::init_plain_driver(program_artifact, input_path)
+            .context("while initializing plain driver")?;
+        let (witness, _) = solver.solve().context("while solving")?;
+        convert_witness(witness)
+    };
 
     // Build the circuit
     let mut driver = PlainAcvmSolver::new();
@@ -194,7 +205,6 @@ fn main() -> color_eyre::Result<ExitCode> {
         &mut driver,
     )
     .context("while creating the circuit")?;
-
     // Read the Crs
     let crs_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, false)?;
     let crs = CrsParser::get_crs(&prover_crs_path, &verifier_crs_path, crs_size, has_zk)?;
