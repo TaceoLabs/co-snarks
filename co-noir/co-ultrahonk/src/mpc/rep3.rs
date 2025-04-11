@@ -109,7 +109,7 @@ impl<P: Pairing, N: Rep3Network> NoirUltraHonkProver<P> for Rep3UltraHonkDriver<
     }
 
     fn reshare(&mut self, a: Vec<P::ScalarField>) -> std::io::Result<Vec<Self::ArithmeticShare>> {
-        arithmetic::io_mul_vec(a, &mut self.io_context0)
+        arithmetic::reshare_vec(a, &mut self.io_context0)
     }
 
     fn mul_many(
