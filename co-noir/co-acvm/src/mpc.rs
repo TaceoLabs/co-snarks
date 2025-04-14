@@ -61,10 +61,10 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     /// Adds a public value to an ACVM-type in place: *\[target\] += public
     fn add_assign_with_public(&mut self, public: F, target: &mut Self::AcvmType);
 
-    /// Adds to acvm types. Both can either be public or shared
+    /// Adds two acvm types. Both can either be public or shared
     fn add(&self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> Self::AcvmType;
 
-    /// Adds to acvm points. Both can either be public or shared
+    /// Adds two acvm points. Both can either be public or shared
     fn add_points<C: CurveGroup<BaseField = F>>(
         &self,
         lhs: Self::AcvmPoint<C>,

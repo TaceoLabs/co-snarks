@@ -76,7 +76,7 @@ impl<N: Rep3Network> Rep3LookupTable<N> {
         Self::default()
     }
 
-    /// This is on optimized protocol that takes multiple pulbic LUTs and looks them up with the same index. It only creates the OHV once.
+    /// This is an optimized protocol that takes multiple public LUTs and looks them up with the same index. It only creates the OHV once.
     pub fn get_from_public_luts<F: PrimeField>(
         index: Rep3PrimeFieldShare<F>,
         luts: &[Vec<F>],
