@@ -606,6 +606,7 @@ pub fn b2y2a_streaming<F: PrimeField, N: Rep3Network>(
     y2a_streaming(y, delta, io_context)
 }
 
+/// This function is the first local step of the point_sharing to sharing of the coordinates transformation. In essence, it is very similar to what is done in a2b. It takes a point share and produces two trivial shares of its x and y coordinates each. To create valid (x,y) coordinate shares from it, these shares need to be added according to the point_addition rules of elliptic curves.
 #[expect(clippy::type_complexity)]
 pub(crate) fn point_share_to_fieldshares_pre<C: CurveGroup, N: Rep3Network>(
     x: Rep3PointShare<C>,
