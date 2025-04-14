@@ -1338,9 +1338,15 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                     arithmetic::sub_public_by_shared(ark_bn254::Fr::one(), i, self.io_context0.id);
                 let res = arithmetic::mul_vec(&[x, y], &[mul, mul], &mut self.io_context0)?;
 
-                let out_x: F = *downcast(&res[0]).expect("We checked types");
-                let out_y: F = *downcast(&res[1]).expect("We checked types");
-                let out_i: F = *downcast(&i).expect("We checked types");
+                let out_x = downcast::<_, Self::ArithmeticShare>(&res[0])
+                    .expect("We checked types")
+                    .to_owned();
+                let out_y = downcast::<_, Self::ArithmeticShare>(&res[1])
+                    .expect("We checked types")
+                    .to_owned();
+                let out_i = downcast::<_, Self::ArithmeticShare>(&i)
+                    .expect("We checked types")
+                    .to_owned();
 
                 (out_x.into(), out_y.into(), out_i.into())
             }
