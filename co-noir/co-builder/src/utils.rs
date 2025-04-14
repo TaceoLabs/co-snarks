@@ -1,3 +1,5 @@
+use std::any::Any;
+
 use crate::{crs::ProverCrs, HonkProofError, HonkProofResult};
 use ark_ec::{pairing::Pairing, VariableBaseMSM};
 use ark_ff::PrimeField;
@@ -52,5 +54,9 @@ impl Utils {
         } else {
             value
         }
+    }
+
+    pub fn downcast<A: 'static, B: 'static>(a: &A) -> Option<&B> {
+        (a as &dyn Any).downcast_ref::<B>()
     }
 }

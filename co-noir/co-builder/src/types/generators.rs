@@ -1,4 +1,4 @@
-use crate::{serialize::SerializeC, types::plookup::FixedBaseParams};
+use crate::{serialize::SerializeC, types::plookup::FixedBaseParams, utils::Utils};
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{BigInteger, Field, One, PrimeField};
 use num_bigint::BigUint;
@@ -117,12 +117,10 @@ fn _derive_generators<C: CurveGroup>(
 fn hash_to_curve<C: CurveGroup>(seed: &[u8], attempt_count: u8) -> C::Affine {
     if TypeId::of::<C>() == TypeId::of::<ark_grumpkin::Projective>() {
         let point = _hash_to_curve_grumpkin(seed, attempt_count);
-        // Safety: We checked that the types match
-        unsafe { *(&point as *const ark_grumpkin::Affine as *const C::Affine) }
+        *Utils::downcast(&point).expect("We checked types")
     // } else if TypeId::of::<C>() == TypeId::of::<ark_bn254::G1Projective>() {
     //     let point = _hash_to_curve_bn254(seed, attempt_count);
-    //     // Safety: We checked that the types match
-    //     unsafe { *(&point as *const ark_bn254::G1Affine as *const C::Affine) }
+    //     *Utils::downcast(&point).expect("We checked types")
     } else {
         panic!("Unsupported curve {}", std::any::type_name::<C>())
     }
