@@ -5,11 +5,15 @@ use mpc_core::{
     gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations},
     lut::LookupTableProvider,
 };
-use std::{fmt, io};
+use std::{any::Any, fmt, io};
 
 pub(super) mod plain;
 pub(super) mod rep3;
 pub(super) mod shamir; // Does not support everything, but basic circuits can be build using Shamir (co-builder)
+
+fn downcast<A: 'static, B: 'static>(a: &A) -> Option<&B> {
+    (a as &dyn Any).downcast_ref::<B>()
+}
 
 /// A trait representing the MPC operations required for extending the secret-shared Noir witness in MPC.
 /// The operations are generic over public and private (i.e., secret-shared) inputs.

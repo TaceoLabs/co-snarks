@@ -23,7 +23,7 @@ use std::array;
 use std::marker::PhantomData;
 
 use super::plain::PlainAcvmSolver;
-use super::NoirWitnessExtensionProtocol;
+use super::{downcast, NoirWitnessExtensionProtocol};
 type ArithmeticShare<F> = Rep3PrimeFieldShare<F>;
 
 macro_rules! join {
@@ -1321,10 +1321,8 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         let res = match output_point {
             Rep3AcvmPoint::Public(output_point) => {
                 if let Some((out_x, out_y)) = ark_grumpkin::Affine::from(output_point).xy() {
-                    // Safety: We checked that the types match
-                    let out_x = unsafe { *(&out_x as *const ark_bn254::Fr as *const F) };
-                    // Safety: We checked that the types match
-                    let out_y = unsafe { *(&out_y as *const ark_bn254::Fr as *const F) };
+                    let out_x: F = *downcast(&out_x).expect("We checked types");
+                    let out_y: F = *downcast(&out_y).expect("We checked types");
 
                     (out_x.into(), out_y.into(), F::zero().into())
                 } else {
@@ -1340,21 +1338,10 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                     arithmetic::sub_public_by_shared(ark_bn254::Fr::one(), i, self.io_context0.id);
                 let res = arithmetic::mul_vec(&[x, y], &[mul, mul], &mut self.io_context0)?;
 
-                // Safety: We checked that the types match
-                let out_x = unsafe {
-                    *(&res[0] as *const Rep3PrimeFieldShare<ark_bn254::Fr>
-                        as *const Rep3PrimeFieldShare<F>)
-                };
-                // Safety: We checked that the types match
-                let out_y = unsafe {
-                    *(&res[1] as *const Rep3PrimeFieldShare<ark_bn254::Fr>
-                        as *const Rep3PrimeFieldShare<F>)
-                };
-                // Safety: We checked that the types match
-                let out_i = unsafe {
-                    *(&i as *const Rep3PrimeFieldShare<ark_bn254::Fr>
-                        as *const Rep3PrimeFieldShare<F>)
-                };
+                let out_x: F = *downcast(&res[0]).expect("We checked types");
+                let out_y: F = *downcast(&res[1]).expect("We checked types");
+                let out_i: F = *downcast(&i).expect("We checked types");
+
                 (out_x.into(), out_y.into(), out_i.into())
             }
         };
@@ -1372,25 +1359,15 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             panic!("Only BN254 is supported");
         }
 
-        // Safety: We checked that the types match
-        let x =
-            unsafe { std::mem::transmute::<&Rep3AcvmType<F>, &Rep3AcvmType<ark_bn254::Fr>>(&x) };
-        // Safety: We checked that the types match
-        let y =
-            unsafe { std::mem::transmute::<&Rep3AcvmType<F>, &Rep3AcvmType<ark_bn254::Fr>>(&y) };
-        // Safety: We checked that the types match
-        let is_infinity = unsafe {
-            std::mem::transmute::<&Rep3AcvmType<F>, &Rep3AcvmType<ark_bn254::Fr>>(&is_infinity)
-        };
+        let x = downcast(&x).expect("We checked types");
+        let y = downcast(&y).expect("We checked types");
+        let is_infinity = downcast(&is_infinity).expect("We checked types");
 
         let point = Self::create_grumpkin_point(x, y, is_infinity, &mut self.io_context0, true)?;
 
-        // Safety: We checked that the types match
-        let y = unsafe {
-            let val =
-                &point as *const Rep3AcvmPoint<ark_grumpkin::Projective> as *const Rep3AcvmPoint<C>;
-            (*val).to_owned()
-        };
+        let y = downcast::<_, Self::AcvmPoint<C>>(&point)
+            .expect("We checked types")
+            .to_owned();
 
         Ok(y)
     }

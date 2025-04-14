@@ -1,4 +1,4 @@
-use super::NoirWitnessExtensionProtocol;
+use super::{downcast, NoirWitnessExtensionProtocol};
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{MontConfig, One, PrimeField};
 use co_brillig::mpc::{PlainBrilligDriver, PlainBrilligType};
@@ -655,10 +655,8 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
 
         // TODO maybe find a way to unify this with pointshare_to_field_shares
         if let Some((out_x, out_y)) = output_point.xy() {
-            // Safety: We checked that the types match
-            let out_x = unsafe { *(&out_x as *const ark_bn254::Fr as *const F) };
-            // Safety: We checked that the types match
-            let out_y = unsafe { *(&out_y as *const ark_bn254::Fr as *const F) };
+            let out_x = *downcast(&out_x).expect("We checked types");
+            let out_y = *downcast(&out_y).expect("We checked types");
             Ok((out_x, out_y, F::zero()))
         } else {
             Ok((F::zero(), F::zero(), F::one()))
@@ -683,13 +681,10 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
             ));
         }
 
-        // Safety: We checked that the types match
-        let x = unsafe { *(&x as *const F as *const ark_bn254::Fr) };
-        // Safety: We checked that the types match
-        let y = unsafe { *(&y as *const F as *const ark_bn254::Fr) };
+        let x = *downcast(&x).expect("We checked types");
+        let y = *downcast(&y).expect("We checked types");
         let point = Self::create_grumpkin_point(x, y, is_infinity == F::one())?;
-        // Safety: We checked that the types match
-        let y = unsafe { *(&point as *const ark_grumpkin::Affine as *const C::Affine) };
+        let y = *downcast(&point).expect("We checked types");
 
         Ok(C::from(y))
     }
