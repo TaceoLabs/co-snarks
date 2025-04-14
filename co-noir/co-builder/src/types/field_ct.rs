@@ -2808,6 +2808,7 @@ impl<F: PrimeField> CycleScalarCT<F> {
         let cycle_group_modulus = if self.use_bn254_scalar_field_for_primality_test() {
             BigUint::from(ark_bn254::Fr::MODULUS)
         } else {
+            // In BB this is Grumpkin::ScalarField::MODULUS, so we can use P::BaseField::MODULUS
             P::BaseField::MODULUS.into()
         };
         let (r_lo, r_hi) = Self::slice(cycle_group_modulus);
