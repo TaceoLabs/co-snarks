@@ -1,7 +1,10 @@
 use self::utils::Utils;
 use super::field_ct::FieldCT;
+use super::generators;
+use crate::prelude::HonkCurve;
+use crate::TranscriptFieldType;
 use crate::{builder::GenericUltraCircuitBuilder, utils};
-use ark_ec::pairing::Pairing;
+use ark_ec::{pairing::Pairing, AffineRepr, CurveGroup};
 use ark_ff::{PrimeField, Zero};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use itertools::izip;
@@ -11,6 +14,7 @@ use std::collections::HashMap;
 use std::ops::{Index, IndexMut};
 
 #[expect(dead_code)]
+#[repr(usize)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum BasicTableId {
     Xor,
@@ -60,14 +64,72 @@ pub(crate) enum BasicTableId {
     BlakeXorRotate2,
     BlakeXorRotate4,
     FixedBase0_0,
-    FixedBase1_0 = BasicTableId::FixedBase0_0 as isize
-        + FixedBaseParams::NUM_TABLES_PER_LO_MULTITABLE as isize,
-    FixedBase2_0 = BasicTableId::FixedBase1_0 as isize
-        + FixedBaseParams::NUM_TABLES_PER_HI_MULTITABLE as isize,
-    FixedBase3_0 = BasicTableId::FixedBase2_0 as isize
-        + FixedBaseParams::NUM_TABLES_PER_LO_MULTITABLE as isize,
-    HonkDummyBasic1 = BasicTableId::FixedBase3_0 as isize
-        + FixedBaseParams::NUM_TABLES_PER_HI_MULTITABLE as isize,
+    FixedBase0_1,
+    FixedBase0_2,
+    FixedBase0_3,
+    FixexBase0_4,
+    FixedBase0_5,
+    FixedBase0_6,
+    FixedBase0_7,
+    FixedBase0_8,
+    FixedBase0_9,
+    FixedBase0_10,
+    FixedBase0_11,
+    FixedBase0_12,
+    FixedBase0_13,
+    FixedBase0_14,
+    // FixedBase1_0 = BasicTableId::FixedBase0_0 as usize
+    // + FixedBaseParams::NUM_TABLES_PER_LO_MULTITABLE,
+    FixedBase1_0,
+    FixedBase1_1,
+    FixedBase1_2,
+    FixedBase1_3,
+    FixexBase1_4,
+    FixedBase1_5,
+    FixedBase1_6,
+    FixedBase1_7,
+    FixedBase1_8,
+    FixedBase1_9,
+    FixedBase1_10,
+    FixedBase1_11,
+    FixedBase1_12,
+    FixedBase1_13,
+    // FixedBase2_0 = BasicTableId::FixedBase1_0 as usize
+    //     + FixedBaseParams::NUM_TABLES_PER_HI_MULTITABLE,
+    FixedBase2_0,
+    FixedBase2_1,
+    FixedBase2_2,
+    FixedBase2_3,
+    FixexBase2_4,
+    FixedBase2_5,
+    FixedBase2_6,
+    FixedBase2_7,
+    FixedBase2_8,
+    FixedBase2_9,
+    FixedBase2_10,
+    FixedBase2_11,
+    FixedBase2_12,
+    FixedBase2_13,
+    FixedBase2_14,
+    // FixedBase3_0 = BasicTableId::FixedBase2_0 as usize
+    //     + FixedBaseParams::NUM_TABLES_PER_LO_MULTITABLE,
+    FixedBase3_0,
+    FixedBase3_1,
+    FixedBase3_2,
+    FixedBase3_3,
+    FixexBase3_4,
+    FixedBase3_5,
+    FixedBase3_6,
+    FixedBase3_7,
+    FixedBase3_8,
+    FixedBase3_9,
+    FixedBase3_10,
+    FixedBase3_11,
+    FixedBase3_12,
+    FixedBase3_13,
+    // HonkDummyBasic1 = BasicTableId::FixedBase3_0 as usize
+    //     + FixedBaseParams::NUM_TABLES_PER_HI_MULTITABLE,
+    HonkDummyBasic1,
     HonkDummyBasic2,
     KeccakInput,
     KeccakTheta,
@@ -88,6 +150,22 @@ pub(crate) enum BasicTableId {
 impl From<BasicTableId> for usize {
     fn from(id: BasicTableId) -> usize {
         id as usize
+    }
+}
+
+impl TryFrom<usize> for BasicTableId {
+    type Error = std::io::Error;
+
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        if value > BasicTableId::KeccakRho9 as usize {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Invalid BasicTableId: {}", value),
+            ))
+        } else {
+            // Safety: Safe because BasicTableId is repr(usize) and we checked above it is a valid value
+            Ok(unsafe { std::mem::transmute::<usize, BasicTableId>(value) })
+        }
     }
 }
 
@@ -117,13 +195,32 @@ impl BasicTableId {
             F::zero(),
         ]
     }
+
+    pub(crate) fn get_basic_fixed_base_table_values<
+        C: CurveGroup,
+        const MULTITABLE_INDEX: usize,
+        const TABLE_INDEX: usize,
+    >(
+        key: [u64; 2],
+    ) -> [C::BaseField; 2] {
+        assert!(MULTITABLE_INDEX < FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES);
+        assert!(TABLE_INDEX < FixedBaseParams::get_num_bits_of_multi_table(MULTITABLE_INDEX));
+
+        let tables = generators::generate_fixed_base_tables::<C>();
+        let basic_table = &tables[MULTITABLE_INDEX][TABLE_INDEX];
+
+        let index = key[0] as usize;
+        let point = &basic_table[index];
+        let (x, y) = point.xy().unwrap_or_default();
+        [x, y]
+    }
 }
 
-struct FixedBaseParams {}
+pub(crate) struct FixedBaseParams {}
 
 #[expect(dead_code)]
 impl FixedBaseParams {
-    const BITS_PER_TABLE: usize = 9;
+    pub(crate) const BITS_PER_TABLE: usize = 9;
     const BITS_ON_CURVE: usize = 254;
 
     // We split 1 254-bit scalar mul into two scalar muls of size BITS_PER_LO_SCALAR, BITS_PER_HI_SCALAR.
@@ -133,11 +230,11 @@ impl FixedBaseParams {
     // i.e. check that input scalar < prime modulus when evaluated over the integers
     // (the primality check requires us to split the input into high / low bit chunks so getting this for free as part
     // of the lookup algorithm is nice!)
-    const BITS_PER_LO_SCALAR: usize = 128;
-    const BITS_PER_HI_SCALAR: usize = Self::BITS_ON_CURVE - Self::BITS_PER_LO_SCALAR;
+    pub(crate) const BITS_PER_LO_SCALAR: usize = 128;
+    pub(crate) const BITS_PER_HI_SCALAR: usize = Self::BITS_ON_CURVE - Self::BITS_PER_LO_SCALAR;
     // max table size because the last lookup table might be smaller (BITS_PER_TABLE does not neatly divide
     // BITS_PER_LO_SCALAR)
-    const MAX_TABLE_SIZE: usize = 1 << Self::BITS_PER_TABLE;
+    pub(crate) const MAX_TABLE_SIZE: usize = 1 << Self::BITS_PER_TABLE;
     // how many BITS_PER_TABLE lookup tables do we need to traverse BITS_PER_LO_SCALAR-amount of bits?
     // (we implicitly assume BITS_PER_LO_SCALAR > BITS_PER_HI_SCALAR)
     const MAX_NUM_TABLES_IN_MULTITABLE: usize = (Self::BITS_PER_LO_SCALAR / Self::BITS_PER_TABLE)
@@ -149,7 +246,7 @@ impl FixedBaseParams {
     const NUM_POINTS: usize = 2;
     // how many multitables are we creating? It's 4 because we want enough lookup tables to cover two field elements,
     // two field elements = 2 scalar muls = 4 scalar mul hi/lo slices = 4 multitables
-    const NUM_FIXED_BASE_MULTI_TABLES: usize = Self::NUM_POINTS * 2;
+    pub(crate) const NUM_FIXED_BASE_MULTI_TABLES: usize = Self::NUM_POINTS * 2;
     const NUM_TABLES_PER_LO_MULTITABLE: usize = (Self::BITS_PER_LO_SCALAR / Self::BITS_PER_TABLE)
         + (if Self::BITS_PER_LO_SCALAR % Self::BITS_PER_TABLE == 0 {
             0
@@ -169,6 +266,26 @@ impl FixedBaseParams {
     // points.
     const NUM_FIXED_BASE_BASIC_TABLES: usize =
         Self::NUM_BASIC_TABLES_PER_BASE_POINT * Self::NUM_POINTS;
+
+    pub(crate) const fn get_num_tables_per_multi_table<const NUM_BITS: usize>() -> usize {
+        (NUM_BITS / Self::BITS_PER_TABLE)
+            + if NUM_BITS % Self::BITS_PER_TABLE == 0 {
+                0
+            } else {
+                1
+            }
+    }
+
+    const fn get_num_bits_of_multi_table(multitable_index: usize) -> usize {
+        assert!(multitable_index < Self::NUM_FIXED_BASE_MULTI_TABLES);
+        match multitable_index {
+            0 => Self::BITS_PER_LO_SCALAR,
+            1 => Self::BITS_PER_HI_SCALAR,
+            2 => Self::BITS_PER_LO_SCALAR,
+            3 => Self::BITS_PER_HI_SCALAR,
+            _ => unreachable!(),
+        }
+    }
 }
 
 #[expect(dead_code)]
@@ -229,15 +346,13 @@ pub(crate) struct Plookup<F: PrimeField> {
     pub(crate) multi_tables: [PlookupMultiTable<F>; MultiTableId::NumMultiTables as usize],
 }
 
-impl<F: PrimeField> Default for Plookup<F> {
-    fn default() -> Self {
+impl<F: PrimeField> Plookup<F> {
+    pub(crate) fn new<P: HonkCurve<TranscriptFieldType, ScalarField = F>>() -> Self {
         Self {
-            multi_tables: Self::init_multi_tables(),
+            multi_tables: Self::init_multi_tables::<P>(),
         }
     }
-}
 
-impl<F: PrimeField> Plookup<F> {
     fn get_honk_dummy_multitable() -> PlookupMultiTable<F> {
         let id = MultiTableId::HonkDummyMulti;
         let number_of_elements_in_argument = 1 << 1; // Probably has to be a power of 2
@@ -329,12 +444,93 @@ impl<F: PrimeField> Plookup<F> {
         table
     }
 
-    fn init_multi_tables() -> [PlookupMultiTable<F>; MultiTableId::NumMultiTables as usize] {
+    fn make_fixed_base_function_pointer_table<
+        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
+        const MULTITABLE_INDEX: usize,
+    >() -> [fn([u64; 2]) -> [F; 2]; FixedBaseParams::MAX_NUM_TABLES_IN_MULTITABLE] {
+        [
+            BasicTableId::get_basic_fixed_base_table_values::<P::CycleGroup, MULTITABLE_INDEX, 0>,
+            BasicTableId::get_basic_fixed_base_table_values::<P::CycleGroup, MULTITABLE_INDEX, 1>,
+            BasicTableId::get_basic_fixed_base_table_values::<P::CycleGroup, MULTITABLE_INDEX, 2>,
+            BasicTableId::get_basic_fixed_base_table_values::<P::CycleGroup, MULTITABLE_INDEX, 3>,
+            BasicTableId::get_basic_fixed_base_table_values::<P::CycleGroup, MULTITABLE_INDEX, 4>,
+            BasicTableId::get_basic_fixed_base_table_values::<P::CycleGroup, MULTITABLE_INDEX, 5>,
+            BasicTableId::get_basic_fixed_base_table_values::<P::CycleGroup, MULTITABLE_INDEX, 6>,
+            BasicTableId::get_basic_fixed_base_table_values::<P::CycleGroup, MULTITABLE_INDEX, 7>,
+            BasicTableId::get_basic_fixed_base_table_values::<P::CycleGroup, MULTITABLE_INDEX, 8>,
+            BasicTableId::get_basic_fixed_base_table_values::<P::CycleGroup, MULTITABLE_INDEX, 9>,
+            BasicTableId::get_basic_fixed_base_table_values::<P::CycleGroup, MULTITABLE_INDEX, 10>,
+            BasicTableId::get_basic_fixed_base_table_values::<P::CycleGroup, MULTITABLE_INDEX, 11>,
+            BasicTableId::get_basic_fixed_base_table_values::<P::CycleGroup, MULTITABLE_INDEX, 12>,
+            BasicTableId::get_basic_fixed_base_table_values::<P::CycleGroup, MULTITABLE_INDEX, 13>,
+            BasicTableId::get_basic_fixed_base_table_values::<P::CycleGroup, MULTITABLE_INDEX, 14>,
+        ]
+    }
+
+    fn get_fixed_base_table<
+        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
+        const MULTITABLE_INDEX: usize,
+        const NUM_BITS: usize,
+    >(
+        id: MultiTableId,
+    ) -> PlookupMultiTable<F> {
+        assert!(
+            NUM_BITS == FixedBaseParams::BITS_PER_LO_SCALAR
+                || NUM_BITS == FixedBaseParams::BITS_PER_HI_SCALAR
+        );
+        let num_tables = FixedBaseParams::get_num_tables_per_multi_table::<NUM_BITS>();
+
+        let basic_table_ids = [
+            BasicTableId::FixedBase0_0,
+            BasicTableId::FixedBase1_0,
+            BasicTableId::FixedBase2_0,
+            BasicTableId::FixedBase3_0,
+        ];
+
+        let get_values_from_key_table =
+            Self::make_fixed_base_function_pointer_table::<P, MULTITABLE_INDEX>();
+
+        let mut table = PlookupMultiTable::new(
+            F::from(FixedBaseParams::MAX_TABLE_SIZE as u64),
+            F::zero(),
+            F::zero(),
+            num_tables,
+        );
+        table.id = id;
+        for (i, func) in get_values_from_key_table
+            .into_iter()
+            .take(num_tables)
+            .enumerate()
+        {
+            table
+                .slice_sizes
+                .push(FixedBaseParams::MAX_TABLE_SIZE as u64);
+            table.get_table_values.push(func);
+            assert!(MULTITABLE_INDEX < FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES);
+            let idx = i + usize::from(basic_table_ids[MULTITABLE_INDEX].clone());
+            table
+                .basic_table_ids
+                .push(idx.try_into().expect("Invalid BasicTableId"));
+        }
+
+        table
+    }
+
+    fn init_multi_tables<P: HonkCurve<TranscriptFieldType, ScalarField = F>>(
+    ) -> [PlookupMultiTable<F>; MultiTableId::NumMultiTables as usize] {
         // TACEO TODO not all are initialized here!
         let mut multi_tables = from_fn(|_| PlookupMultiTable::default());
         multi_tables[usize::from(MultiTableId::HonkDummyMulti)] = Self::get_honk_dummy_multitable();
         multi_tables[usize::from(MultiTableId::Uint32And)] = Self::get_uint32_and_table();
         multi_tables[usize::from(MultiTableId::Uint32Xor)] = Self::get_uint32_xor_table();
+        multi_tables[usize::from(MultiTableId::FixedBaseLeftLo)] =
+            Self::get_fixed_base_table::<P, 0, 128>(MultiTableId::FixedBaseLeftLo);
+        multi_tables[usize::from(MultiTableId::FixedBaseLeftHi)] =
+            Self::get_fixed_base_table::<P, 1, 126>(MultiTableId::FixedBaseLeftHi);
+        multi_tables[usize::from(MultiTableId::FixedBaseRightLo)] =
+            Self::get_fixed_base_table::<P, 2, 128>(MultiTableId::FixedBaseRightLo);
+        multi_tables[usize::from(MultiTableId::FixedBaseRightHi)] =
+            Self::get_fixed_base_table::<P, 3, 126>(MultiTableId::FixedBaseRightHi);
         multi_tables
     }
 
@@ -342,13 +538,20 @@ impl<F: PrimeField> Plookup<F> {
         assert!(
             matches!(
                 id,
-                MultiTableId::HonkDummyMulti | MultiTableId::Uint32And | MultiTableId::Uint32Xor
+                MultiTableId::HonkDummyMulti
+                    | MultiTableId::Uint32And
+                    | MultiTableId::Uint32Xor
+                    | MultiTableId::FixedBaseLeftLo
+                    | MultiTableId::FixedBaseLeftHi
+                    | MultiTableId::FixedBaseRightLo
+                    | MultiTableId::FixedBaseRightHi
             ),
             "Multitable for {:?} not implemented",
             id
         ); // The only ones implemented so far
         &self.multi_tables[usize::from(id)]
     }
+
     fn slice_input_using_variable_bases(input: BigUint, bases: &[u64]) -> Vec<u64> {
         let mut target = input;
         let mut slices = Vec::with_capacity(bases.len());
@@ -362,8 +565,54 @@ impl<F: PrimeField> Plookup<F> {
         slices
     }
 
+    pub(crate) fn lookup_table_exists_for_point<
+        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
+    >(
+        point: <P::CycleGroup as CurveGroup>::Affine,
+    ) -> bool {
+        let generators = generators::default_generators::<P::CycleGroup>();
+        point == generators[0] || point == generators[1]
+    }
+
+    pub(crate) fn get_lookup_table_ids_for_point<
+        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
+    >(
+        point: <P::CycleGroup as CurveGroup>::Affine,
+    ) -> Option<(MultiTableId, MultiTableId)> {
+        let generators = generators::default_generators::<P::CycleGroup>();
+        if point == generators[0] {
+            Some((MultiTableId::FixedBaseLeftLo, MultiTableId::FixedBaseLeftHi))
+        } else if point == generators[1] {
+            Some((
+                MultiTableId::FixedBaseRightLo,
+                MultiTableId::FixedBaseRightHi,
+            ))
+        } else {
+            None
+        }
+    }
+
+    pub(crate) fn get_generator_offset_for_table_id<
+        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
+    >(
+        id: MultiTableId,
+    ) -> Option<P::CycleGroup> {
+        let offsets_generators = generators::fixed_base_table_offset_generators::<P::CycleGroup>();
+
+        match id {
+            MultiTableId::FixedBaseLeftLo => Some(offsets_generators[0].to_owned()),
+            MultiTableId::FixedBaseLeftHi => Some(offsets_generators[1].to_owned()),
+            MultiTableId::FixedBaseRightLo => Some(offsets_generators[2].to_owned()),
+            MultiTableId::FixedBaseRightHi => Some(offsets_generators[3].to_owned()),
+            _ => None,
+        }
+    }
+
     #[expect(clippy::type_complexity)]
-    fn slice_and_get_values<P: Pairing<ScalarField = F>, T: NoirWitnessExtensionProtocol<F>>(
+    fn slice_and_get_values<
+        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<F>,
+    >(
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
         id: MultiTableId,
@@ -427,7 +676,6 @@ impl<F: PrimeField> Plookup<F> {
                     32,
                     0,
                 )?;
-                results.reserve(values.0.len());
                 for val in values.0 {
                     results.push((val, T::public_zero()))
                 }
@@ -444,12 +692,59 @@ impl<F: PrimeField> Plookup<F> {
                     32,
                     0,
                 )?;
-                results.reserve(values.0.len());
                 for val in values.0 {
                     results.push((val, T::public_zero()))
                 }
                 key_a_slices.extend(values.1);
                 key_b_slices.extend(values.2);
+            }
+            MultiTableId::FixedBaseLeftLo => {
+                Self::get_fixed_base_table_values::<P, T>(
+                    bases,
+                    key_a,
+                    key_b,
+                    0,
+                    &mut key_a_slices,
+                    &mut key_b_slices,
+                    &mut results,
+                    driver,
+                )?;
+            }
+            MultiTableId::FixedBaseLeftHi => {
+                Self::get_fixed_base_table_values::<P, T>(
+                    bases,
+                    key_a,
+                    key_b,
+                    1,
+                    &mut key_a_slices,
+                    &mut key_b_slices,
+                    &mut results,
+                    driver,
+                )?;
+            }
+            MultiTableId::FixedBaseRightLo => {
+                Self::get_fixed_base_table_values::<P, T>(
+                    bases,
+                    key_a,
+                    key_b,
+                    2,
+                    &mut key_a_slices,
+                    &mut key_b_slices,
+                    &mut results,
+                    driver,
+                )?;
+            }
+            MultiTableId::FixedBaseRightHi => {
+                Self::get_fixed_base_table_values::<P, T>(
+                    bases,
+                    key_a,
+                    key_b,
+                    3,
+                    &mut key_a_slices,
+                    &mut key_b_slices,
+                    &mut results,
+                    driver,
+                )?;
             }
             _ => todo!("{:?} not yet implemented", multi_table.id),
         }
@@ -457,8 +752,51 @@ impl<F: PrimeField> Plookup<F> {
         Ok((results, key_a_slices, key_b_slices))
     }
 
+    #[expect(clippy::too_many_arguments)]
+    fn get_fixed_base_table_values<
+        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<F>,
+    >(
+        bases: &[u64],
+        key_a: T::ArithmeticShare,
+        _key_b: T::ArithmeticShare,
+        multitable_index: usize,
+        key_a_slices: &mut Vec<T::AcvmType>,
+        key_b_slices: &mut Vec<T::AcvmType>,
+        results: &mut Vec<(T::AcvmType, T::AcvmType)>,
+        driver: &mut T,
+    ) -> std::io::Result<()> {
+        assert!(multitable_index < FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES);
+
+        let bitsize = bases[0].ilog2() as usize;
+        let total_size = bitsize * bases.len();
+        let key_a_slices_ = driver.decompose_arithmetic(key_a, total_size, bitsize)?;
+        for slice in key_a_slices_ {
+            key_a_slices.push(slice.into());
+        }
+        key_b_slices.resize(bases.len(), T::public_zero());
+
+        let tables = &generators::generate_fixed_base_tables::<P::CycleGroup>()[multitable_index];
+
+        for (key, table) in key_a_slices.iter().zip(tables.iter()) {
+            // Create the tables since the table itself only stores points and not fields
+            let mut lut1 = Vec::with_capacity(table.len());
+            let mut lut2 = Vec::with_capacity(table.len());
+            for point in table.iter() {
+                let (x, y) = point.xy().unwrap_or_default();
+                lut1.push(x);
+                lut2.push(y);
+            }
+
+            let output = driver.read_from_public_luts(key.to_owned(), &[lut1, lut2])?;
+            debug_assert_eq!(output.len(), 2);
+            results.push((output[0].clone(), output[1].clone()));
+        }
+        Ok(())
+    }
+
     pub(crate) fn get_lookup_accumulators<
-        P: Pairing<ScalarField = F>,
+        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
         T: NoirWitnessExtensionProtocol<F>,
     >(
         builder: &mut GenericUltraCircuitBuilder<P, T>,
@@ -580,7 +918,7 @@ impl<F: PrimeField> Plookup<F> {
     }
 
     pub(crate) fn get_lookup_accumulators_ct<
-        P: Pairing<ScalarField = F>,
+        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
         T: NoirWitnessExtensionProtocol<F>,
     >(
         builder: &mut GenericUltraCircuitBuilder<P, T>,
@@ -610,15 +948,15 @@ impl<F: PrimeField> Plookup<F> {
         let length = lookup_data[ColumnIdx::C1].len();
         if is_key_a_constant && (key_b.is_constant() || !is_2_to_1_lookup) {
             for i in 0..length {
-                lookup[ColumnIdx::C1].push(FieldCT::zero_with_additive(
+                lookup[ColumnIdx::C1].push(FieldCT::from(
                     T::get_public(&lookup_data[ColumnIdx::C1][i])
                         .expect("Constant should be public"),
                 ));
-                lookup[ColumnIdx::C2].push(FieldCT::zero_with_additive(
+                lookup[ColumnIdx::C2].push(FieldCT::from(
                     T::get_public(&lookup_data[ColumnIdx::C2][i])
                         .expect("Constant should be public"),
                 ));
-                lookup[ColumnIdx::C3].push(FieldCT::zero_with_additive(
+                lookup[ColumnIdx::C3].push(FieldCT::from(
                     T::get_public(&lookup_data[ColumnIdx::C3][i])
                         .expect("Constant should be public"),
                 ));
@@ -626,7 +964,7 @@ impl<F: PrimeField> Plookup<F> {
         } else {
             let mut lhs_index = key_a.witness_index;
             let mut rhs_index = key_b.witness_index;
-            // If only one lookup key is constant, we need to instantiate it as a real witness  lookup_data[ColumnIdx::C1][i]
+            // If only one lookup key is constant, we need to instantiate it as a real witness lookup_data[ColumnIdx::C1][i]
             if is_key_a_constant {
                 lhs_index = builder
                     .put_constant_variable(T::get_public(&a).expect("Constant should be public"));
@@ -664,7 +1002,7 @@ impl<F: PrimeField> Plookup<F> {
     }
 
     pub fn read_from_2_to_1_table<
-        P: Pairing<ScalarField = F>,
+        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
         T: NoirWitnessExtensionProtocol<F>,
     >(
         builder: &mut GenericUltraCircuitBuilder<P, T>,
@@ -867,8 +1205,98 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> PlookupBasicTa
         table
     }
 
+    #[expect(dead_code)]
+    pub(crate) fn initialize_index_map(&mut self) {
+        for (i, (c1, c2, c3)) in izip!(
+            self.column_1.iter().cloned(),
+            self.column_2.iter().cloned(),
+            self.column_3.iter().cloned()
+        )
+        .enumerate()
+        {
+            self.index_map.index_map.insert([c1, c2, c3], i);
+        }
+    }
+}
+
+impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::ScalarField>>
+    PlookupBasicTable<P, T>
+{
+    fn generate_basic_fixed_base_table<const MULTITABLE_INDEX: usize>(
+        id: BasicTableId,
+        basic_table_index: usize,
+        table_index: usize,
+    ) -> PlookupBasicTable<P, T> {
+        assert!(MULTITABLE_INDEX < FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES);
+        assert!(table_index < FixedBaseParams::get_num_bits_of_multi_table(MULTITABLE_INDEX));
+
+        let multitable_bits = FixedBaseParams::get_num_bits_of_multi_table(MULTITABLE_INDEX);
+        let bits_covered_by_previous_tables_in_multitable =
+            FixedBaseParams::BITS_PER_TABLE * table_index;
+        let is_small_table = (multitable_bits - bits_covered_by_previous_tables_in_multitable)
+            < FixedBaseParams::BITS_PER_TABLE;
+        let table_bits = if is_small_table {
+            multitable_bits - bits_covered_by_previous_tables_in_multitable
+        } else {
+            FixedBaseParams::BITS_PER_TABLE
+        };
+        let table_size = 1u64 << table_bits;
+
+        let mut table = PlookupBasicTable::new();
+        table.id = id;
+        table.table_index = basic_table_index;
+        table.use_twin_keys = false;
+
+        let tables = generators::generate_fixed_base_tables::<P::CycleGroup>();
+        let basic_table = &tables[MULTITABLE_INDEX][table_index];
+
+        for i in 0..table_size {
+            let point = &basic_table[i as usize];
+            let (x, y) = point.xy().unwrap_or_default();
+            table.column_1.push(P::ScalarField::from(i));
+            table.column_2.push(x);
+            table.column_3.push(y);
+        }
+
+        let get_values_from_key_table =
+            Plookup::make_fixed_base_function_pointer_table::<P, MULTITABLE_INDEX>();
+        table.get_values_from_key = get_values_from_key_table[table_index];
+
+        table.column_1_step_size = P::ScalarField::from(table_size);
+        table.column_2_step_size = P::ScalarField::zero();
+        table.column_3_step_size = P::ScalarField::zero();
+
+        table
+    }
+
     pub(crate) fn create_basic_table(id: BasicTableId, index: usize) -> Self {
-        // TACEO TODO this is a dummy implementation
+        // we have >50 basic fixed base tables so we match with some logic instead of a switch statement
+        let id_var = usize::from(id.to_owned());
+        if id_var >= BasicTableId::FixedBase0_0 as usize
+            && id_var < BasicTableId::FixedBase1_0 as usize
+        {
+            let id_ = id_var - BasicTableId::FixedBase0_0 as usize;
+            return Self::generate_basic_fixed_base_table::<0>(id, index, id_);
+        }
+        if id_var >= BasicTableId::FixedBase1_0 as usize
+            && id_var < BasicTableId::FixedBase2_0 as usize
+        {
+            let id_ = id_var - BasicTableId::FixedBase1_0 as usize;
+            return Self::generate_basic_fixed_base_table::<1>(id, index, id_);
+        }
+        if id_var >= BasicTableId::FixedBase2_0 as usize
+            && id_var < BasicTableId::FixedBase3_0 as usize
+        {
+            let id_ = id_var - BasicTableId::FixedBase2_0 as usize;
+            return Self::generate_basic_fixed_base_table::<2>(id, index, id_);
+        }
+        if id_var >= BasicTableId::FixedBase3_0 as usize
+            && id_var < BasicTableId::HonkDummyBasic1 as usize
+        {
+            let id_ = id_var - BasicTableId::FixedBase3_0 as usize;
+            return Self::generate_basic_fixed_base_table::<3>(id, index, id_);
+        }
+
         assert!(
             matches!(
                 id,
@@ -905,19 +1333,6 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> PlookupBasicTa
             _ => {
                 todo!("Create other tables")
             }
-        }
-    }
-
-    #[expect(dead_code)]
-    pub(crate) fn initialize_index_map(&mut self) {
-        for (i, (c1, c2, c3)) in izip!(
-            self.column_1.iter().cloned(),
-            self.column_2.iter().cloned(),
-            self.column_3.iter().cloned()
-        )
-        .enumerate()
-        {
-            self.index_map.index_map.insert([c1, c2, c3], i);
         }
     }
 }

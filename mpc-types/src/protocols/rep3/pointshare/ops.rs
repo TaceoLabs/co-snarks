@@ -1,8 +1,6 @@
-use ark_ec::CurveGroup;
-
-use crate::protocols::rep3::Rep3PrimeFieldShare;
-
 use super::types::Rep3PointShare;
+use crate::protocols::rep3::Rep3PrimeFieldShare;
+use ark_ec::CurveGroup;
 
 impl<C: CurveGroup> std::ops::Add for Rep3PointShare<C> {
     type Output = Self;
@@ -100,5 +98,16 @@ impl<C: CurveGroup> std::ops::Mul<&Rep3PointShare<C>> for Rep3PrimeFieldShare<C:
     // Local part of mul only
     fn mul(self, rhs: &Rep3PointShare<C>) -> Self::Output {
         rhs.a * self.a + rhs.b * self.a + rhs.a * self.b
+    }
+}
+
+impl<C: CurveGroup> std::ops::Neg for Rep3PointShare<C> {
+    type Output = Rep3PointShare<C>;
+
+    fn neg(self) -> Self::Output {
+        Rep3PointShare::<C> {
+            a: -self.a,
+            b: -self.b,
+        }
     }
 }

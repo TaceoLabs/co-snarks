@@ -12,8 +12,9 @@ use super::{
         streaming_evaluator::StreamingRep3Evaluator, streaming_garbler::StreamingRep3Garbler,
         GCUtils,
     },
-    PartyID, Rep3BigUintShare, Rep3PrimeFieldShare,
+    PartyID, Rep3BigUintShare, Rep3PointShare, Rep3PrimeFieldShare,
 };
+use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::PrimeField;
 use fancy_garbling::{BinaryBundle, WireMod2};
 use itertools::{izip, Itertools as _};
@@ -603,4 +604,203 @@ pub fn b2y2a_streaming<F: PrimeField, N: Rep3Network>(
     let delta = io_context.rngs.generate_random_garbler_delta(io_context.id);
     let y = b2y(x, delta, io_context)?;
     y2a_streaming(y, delta, io_context)
+}
+
+/// This function is the first local step of the point_sharing to sharing of the coordinates transformation. In essence, it is very similar to what is done in a2b. It takes a point share and produces two trivial shares of its x and y coordinates each. To create valid (x,y) coordinate shares from it, these shares need to be added according to the point_addition rules of elliptic curves.
+#[expect(clippy::type_complexity)]
+pub(crate) fn point_share_to_fieldshares_pre<C: CurveGroup, N: Rep3Network>(
+    x: Rep3PointShare<C>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<(
+    Rep3PrimeFieldShare<C::BaseField>,
+    Rep3PrimeFieldShare<C::BaseField>,
+    Rep3PrimeFieldShare<C::BaseField>,
+    Rep3PrimeFieldShare<C::BaseField>,
+)>
+where
+    C::BaseField: PrimeField,
+{
+    let mut x01_x = Rep3PrimeFieldShare::zero_share();
+    let mut x01_y = Rep3PrimeFieldShare::zero_share();
+    let mut x2_x = Rep3PrimeFieldShare::zero_share();
+    let mut x2_y = Rep3PrimeFieldShare::zero_share();
+
+    let r_x = io_context.rngs.rand.masking_field_element::<C::BaseField>();
+    let r_y = io_context.rngs.rand.masking_field_element::<C::BaseField>();
+
+    match io_context.id {
+        PartyID::ID0 => {
+            x01_x.a = r_x;
+            x01_y.a = r_y;
+            if let Some((x, y)) = x.b.into_affine().xy() {
+                x2_x.b = x;
+                x2_y.b = y;
+            }
+        }
+        PartyID::ID1 => {
+            let val = x.a + x.b;
+            if let Some((x, y)) = val.into_affine().xy() {
+                x01_x.a = x + r_x;
+                x01_y.a = y + r_y;
+            } else {
+                x01_x.a = r_x;
+                x01_y.a = r_y;
+            }
+        }
+        PartyID::ID2 => {
+            x01_x.a = r_x;
+            x01_y.a = r_y;
+            if let Some((x, y)) = x.a.into_affine().xy() {
+                x2_x.a = x;
+                x2_y.a = y;
+            }
+        }
+    }
+
+    // reshare x01
+    io_context
+        .network
+        .send_next_many(&[x01_x.a.to_owned(), x01_y.a.to_owned()])?;
+    let local_b = io_context.network.recv_prev_many()?;
+    if local_b.len() != 2 {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Expected 2 elements",
+        ))?;
+    }
+    x01_x.b = local_b[0];
+    x01_y.b = local_b[1];
+
+    Ok((x01_x, x01_y, x2_x, x2_y))
+}
+
+/// Transforms a replicated point share to shares of its coordinates.
+/// The output will be (x, y, is_infinity). Thereby no statement is made on x, y if is_infinity is true.
+#[expect(clippy::type_complexity)]
+pub fn point_share_to_fieldshares<C: CurveGroup, N: Rep3Network>(
+    x: Rep3PointShare<C>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<(
+    Rep3PrimeFieldShare<C::BaseField>,
+    Rep3PrimeFieldShare<C::BaseField>,
+    Rep3PrimeFieldShare<C::BaseField>,
+)>
+where
+    C::BaseField: PrimeField,
+{
+    let (x01_x, x01_y, x2_x, x2_y) = point_share_to_fieldshares_pre(x, io_context)?;
+    detail::point_addition(x01_x, x01_y, x2_x, x2_y, io_context)
+}
+
+/// Transforms shares of coordinates to a replicated point share.
+pub fn fieldshares_to_pointshare<C: CurveGroup, N: Rep3Network>(
+    x: Rep3PrimeFieldShare<C::BaseField>,
+    y: Rep3PrimeFieldShare<C::BaseField>,
+    is_infinity: Rep3PrimeFieldShare<C::BaseField>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<Rep3PointShare<C>>
+where
+    C::BaseField: PrimeField,
+{
+    let mut y_x = Rep3PrimeFieldShare::zero_share();
+    let mut y_y = Rep3PrimeFieldShare::zero_share();
+    let mut res = Rep3PointShare::new(C::zero(), C::zero());
+
+    let r_x = io_context.rngs.rand.masking_field_element::<C::BaseField>();
+    let r_y = io_context.rngs.rand.masking_field_element::<C::BaseField>();
+
+    match io_context.id {
+        PartyID::ID0 => {
+            let k3 = io_context.rngs.bitcomp2.random_curves_3keys::<C>();
+
+            res.b = (k3.0 + k3.1 + k3.2).neg();
+            y_x.a = r_x;
+            y_y.a = r_y;
+        }
+        PartyID::ID1 => {
+            let k2 = io_context.rngs.bitcomp1.random_curves_3keys::<C>();
+
+            res.a = (k2.0 + k2.1 + k2.2).neg();
+            y_x.a = r_x;
+            y_y.a = r_y;
+        }
+        PartyID::ID2 => {
+            let k2 = io_context.rngs.bitcomp1.random_curves_3keys::<C>();
+            let k3 = io_context.rngs.bitcomp2.random_curves_3keys::<C>();
+
+            let k2_comp = k2.0 + k2.1 + k2.2;
+            let k3_comp = k3.0 + k3.1 + k3.2;
+
+            let val = k2_comp + k3_comp;
+            if let Some((x, y)) = val.into_affine().xy() {
+                y_x.a = x + r_x;
+                y_y.a = y + r_y;
+            } else {
+                y_x.a = r_x;
+                y_y.a = r_y;
+            }
+
+            res.a = k3_comp.neg();
+            res.b = k2_comp.neg();
+        }
+    }
+
+    // reshare y
+    io_context
+        .network
+        .send_next_many(&[y_x.a.to_owned(), y_y.a.to_owned()])?;
+    let local_b = io_context.network.recv_prev_many()?;
+    if local_b.len() != 2 {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Expected 2 elements",
+        ))?;
+    }
+    y_x.b = local_b[0];
+    y_y.b = local_b[1];
+
+    let z = detail::point_addition(x, y, y_x, y_y, io_context)?;
+    // If infinity then z should be y
+    let cmux = arithmetic::cmux_vec(is_infinity, &[y_x, y_y], &[z.0, z.1], io_context)?;
+    // Since y is randomly chosen, it is very unlikely that the x-coordinate matches the x-coodrinate of x. Thus z.2 is already 0
+
+    let z_a = [cmux[0].a, cmux[1].a, z.2.a];
+    let z_b = [cmux[0].b, cmux[1].b, z.2.b];
+
+    match io_context.id {
+        PartyID::ID0 => {
+            io_context.network.send_next_many(&z_b)?;
+            let rcv = io_context.network.recv_prev_many::<C::BaseField>()?;
+            if rcv.len() != 3 {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Expected 3 elements",
+                ))?;
+            }
+            res.a = detail::point_from_xy(
+                z_a[0] + z_b[0] + rcv[0],
+                z_a[1] + z_b[1] + rcv[1],
+                z_a[2] + z_b[2] + rcv[2],
+            )?;
+        }
+        PartyID::ID1 => {
+            let rcv = io_context.network.recv_prev_many::<C::BaseField>()?;
+            if rcv.len() != 3 {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Expected 3 elements",
+                ))?;
+            }
+            res.b = detail::point_from_xy(
+                z_a[0] + z_b[0] + rcv[0],
+                z_a[1] + z_b[1] + rcv[1],
+                z_a[2] + z_b[2] + rcv[2],
+            )?;
+        }
+        PartyID::ID2 => {
+            io_context.network.send_next_many(&z_b)?;
+        }
+    }
+
+    Ok(res)
 }

@@ -144,6 +144,85 @@ where
     Ok(t)
 }
 
+/// Takes many public lookup tables containing field elements, and a replicated binary share of an index and returns a non-replicated binary sharing of the looked up value lut`\[`index`\]`. The table sizes needs to be a power of two where the power is even. If this is not the case, the table is implicitly padded with 0.
+/// The algorithm is a rewrite of Protocol 10 from [https://eprint.iacr.org/2024/1317.pdf](https://eprint.iacr.org/2024/1317.pdf) for rep3.
+pub fn read_multiple_public_lut_low_depth<F: PrimeField, T: IntRing2k, N: Rep3Network>(
+    luts: &[Vec<F>],
+    index: Rep3RingShare<T>,
+    io_context0: &mut IoContext<N>,
+    io_context1: &mut IoContext<N>,
+) -> IoResult<Vec<BigUint>>
+where
+    Standard: Distribution<T>,
+{
+    let n = luts.iter().map(|l| l.len()).max().unwrap();
+    let mut k = n.next_power_of_two().ilog2() as usize;
+
+    if k & 1 == 1 {
+        k += 1; // Make even
+                // TODO is it possible to not needing to do that?
+    }
+    assert!(k <= T::K);
+    let k2 = k >> 1;
+
+    // create two ohv's with half the bitsize in parallel
+    let (a, b) = join!(
+        gadgets::ohv::rand_ohv::<T, _>(k2, io_context0),
+        gadgets::ohv::rand_ohv::<T, _>(k2, io_context1)
+    );
+    let (mut r, e) = a?;
+    let (r_, e_) = b?;
+
+    // Combine r and r_;
+    r <<= k2;
+    r += r_;
+
+    // Open the xor of the index and r
+    let c = binary::open(&(r ^ index), io_context0)?;
+    let c: usize =
+        c.0.try_into()
+            .expect("This transformation should work, otherwise we have another issue")
+            & ((1 << k) - 1); // Mask potential overflows from non-well-defined input
+
+    let mut results = Vec::with_capacity(luts.len());
+    for lut in luts {
+        // Start the result with a random mask (for potential resharing later)
+        let (mut t, mask_b) = io_context0
+            .rngs
+            .rand
+            .random_biguint(usize::try_from(F::MODULUS_BIT_SIZE).expect("u32 fits into usize"));
+        t ^= mask_b;
+        let mut j = 0;
+        for f0 in e.iter().cloned() {
+            for f1 in e_.iter() {
+                let index = j ^ c;
+                j += 1;
+                if index >= n {
+                    // The pad with 0 case
+                    continue;
+                }
+                let lut_val: BigUint = lut[index].into();
+                let mut g = Rep3BigUintShare::<F>::default();
+                if f0.a.0.convert() {
+                    g.a ^= &lut_val;
+                }
+                if f0.b.0.convert() {
+                    g.b ^= lut_val;
+                }
+                if f1.a.0.convert() {
+                    t ^= &g.a;
+                    t ^= g.b;
+                }
+                if f1.b.0.convert() {
+                    t ^= g.a;
+                }
+            }
+        }
+        results.push(t);
+    }
+    Ok(results)
+}
+
 /// Takes a secret-shared lookup table containing field elements, and a replicated binary share of an index and returns a non-replicated additive sharing of the looked up value lut`\[`index`\]`.
 /// The algorithm is inspired by Protocol 4 from [https://eprint.iacr.org/2024/1317.pdf](https://eprint.iacr.org/2024/1317.pdf).
 pub fn read_shared_lut<F: PrimeField, T: IntRing2k, N: Rep3Network>(

@@ -1,8 +1,11 @@
-use ark_ff::{One, PrimeField};
+use ark_ec::{AffineRepr, CurveGroup};
+use ark_ff::{MontConfig, One, PrimeField, Zero};
 use co_brillig::mpc::{Rep3BrilligDriver, Rep3BrilligType};
 use itertools::{izip, Itertools};
 use mpc_core::gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations};
-use mpc_core::protocols::rep3::{arithmetic, binary, conversion, yao};
+use mpc_core::protocols::rep3::{
+    arithmetic, binary, conversion, pointshare, yao, Rep3BigUintShare, Rep3PointShare,
+};
 use mpc_core::protocols::rep3_ring::gadgets::sort::{radix_sort_fields, radix_sort_fields_vec_by};
 use mpc_core::{
     lut::LookupTableProvider,
@@ -15,11 +18,12 @@ use mpc_core::{
 use num_bigint::BigUint;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::any::TypeId;
 use std::array;
 use std::marker::PhantomData;
 
 use super::plain::PlainAcvmSolver;
-use super::NoirWitnessExtensionProtocol;
+use super::{downcast, NoirWitnessExtensionProtocol};
 type ArithmeticShare<F> = Rep3PrimeFieldShare<F>;
 
 macro_rules! join {
@@ -61,6 +65,198 @@ impl<F: PrimeField, N: Rep3Network> Rep3AcvmSolver<F, N> {
 
     pub fn into_network(self) -> N {
         self.io_context0.network
+    }
+
+    fn combine_grumpkin_scalar_field_limbs(
+        low: &Rep3AcvmType<ark_bn254::Fr>,
+        high: &Rep3AcvmType<ark_bn254::Fr>,
+        io_context: &mut IoContext<N>,
+        pedantic_solving: bool,
+    ) -> std::io::Result<Rep3AcvmType<ark_grumpkin::Fr>> {
+        let scale = ark_grumpkin::Fr::from(BigUint::one() << 128);
+        let res = match (low, high) {
+            (Rep3AcvmType::Public(low), Rep3AcvmType::Public(high)) => {
+                let scalar_low = PlainAcvmSolver::<F>::bn254_fr_to_u128(*low)?;
+                let scalar_high = PlainAcvmSolver::<F>::bn254_fr_to_u128(*high)?;
+                let grumpkin_integer: BigUint = (BigUint::from(scalar_high) << 128) + scalar_low;
+
+                // Check if this is smaller than the grumpkin modulus
+                if pedantic_solving && grumpkin_integer >= ark_grumpkin::FrConfig::MODULUS.into() {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        format!(
+                            "{} is not a valid grumpkin scalar",
+                            grumpkin_integer.to_str_radix(16)
+                        ),
+                    ));
+                }
+                Rep3AcvmType::Public(ark_grumpkin::Fr::from(grumpkin_integer))
+            }
+            (Rep3AcvmType::Public(low), Rep3AcvmType::Shared(high)) => {
+                let scalar_low = PlainAcvmSolver::<F>::bn254_fr_to_u128(*low)?;
+                // Change the sharing field
+                let scalar_high = conversion::a2b(*high, io_context)?;
+                let scalar_high =
+                    Rep3BigUintShare::<ark_grumpkin::Fr>::new(scalar_high.a, scalar_high.b);
+                let scalar_high = conversion::b2a(&scalar_high, io_context)?;
+
+                let res =
+                    arithmetic::add_public(scalar_high * scale, scalar_low.into(), io_context.id);
+                Rep3AcvmType::Shared(res)
+            }
+            (Rep3AcvmType::Shared(low), Rep3AcvmType::Public(high)) => {
+                let scalar_high = PlainAcvmSolver::<F>::bn254_fr_to_u128(*high)?;
+                // Change the sharing field
+                let scalar_low = conversion::a2b(*low, io_context)?;
+                let scalar_low =
+                    Rep3BigUintShare::<ark_grumpkin::Fr>::new(scalar_low.a, scalar_low.b);
+                let scalar_low = conversion::b2a(&scalar_low, io_context)?;
+
+                let res = arithmetic::add_public(
+                    scalar_low,
+                    scale * ark_grumpkin::Fr::from(scalar_high),
+                    io_context.id,
+                );
+                Rep3AcvmType::Shared(res)
+            }
+            (Rep3AcvmType::Shared(low), Rep3AcvmType::Shared(high)) => {
+                // Change the sharing field
+
+                // TODO parallelize these
+                let scalar_low = conversion::a2b(*low, io_context)?;
+                let scalar_low =
+                    Rep3BigUintShare::<ark_grumpkin::Fr>::new(scalar_low.a, scalar_low.b);
+                let scalar_low = conversion::b2a(&scalar_low, io_context)?;
+
+                let scalar_high = conversion::a2b(*high, io_context)?;
+                let scalar_high =
+                    Rep3BigUintShare::<ark_grumpkin::Fr>::new(scalar_high.a, scalar_high.b);
+                let scalar_high = conversion::b2a(&scalar_high, io_context)?;
+
+                let res = scalar_high * scale + scalar_low;
+                Rep3AcvmType::Shared(res)
+            }
+        };
+        Ok(res)
+    }
+
+    fn create_grumpkin_point(
+        x: &Rep3AcvmType<ark_bn254::Fr>,
+        y: &Rep3AcvmType<ark_bn254::Fr>,
+        is_infinity: &Rep3AcvmType<ark_bn254::Fr>,
+        io_context: &mut IoContext<N>,
+        pedantic_solving: bool,
+    ) -> std::io::Result<Rep3AcvmPoint<ark_grumpkin::Projective>> {
+        if let Rep3AcvmType::Public(is_infinity) = is_infinity {
+            if pedantic_solving && is_infinity > &ark_bn254::Fr::one() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "--pedantic-solving: is_infinity expected to be a bool, but found to be > 1",
+                ));
+            }
+
+            if is_infinity.is_one() {
+                return Ok(Rep3AcvmPoint::Public(ark_grumpkin::Projective::zero()));
+            }
+            if let (Rep3AcvmType::Public(x), Rep3AcvmType::Public(y)) = (x, y) {
+                return Ok(Rep3AcvmPoint::Public(
+                    PlainAcvmSolver::<F>::create_grumpkin_point(*x, *y, false)?.into(),
+                ));
+            }
+        }
+
+        // At least one part is shared, convert and calculate
+        let x = match x {
+            Rep3AcvmType::Public(x) => arithmetic::promote_to_trivial_share(io_context.id, *x),
+            Rep3AcvmType::Shared(x) => *x,
+        };
+        let y = match y {
+            Rep3AcvmType::Public(y) => arithmetic::promote_to_trivial_share(io_context.id, *y),
+            Rep3AcvmType::Shared(y) => *y,
+        };
+        let is_infinity = match is_infinity {
+            Rep3AcvmType::Public(is_infinity) => {
+                arithmetic::promote_to_trivial_share(io_context.id, *is_infinity)
+            }
+            Rep3AcvmType::Shared(is_infinity) => *is_infinity,
+        };
+        let res = conversion::fieldshares_to_pointshare(x, y, is_infinity, io_context)?;
+        Ok(Rep3AcvmPoint::Shared(res))
+    }
+
+    fn scalar_point_mul<C: CurveGroup>(
+        a: Rep3AcvmType<C::ScalarField>,
+        b: Rep3AcvmPoint<C>,
+        io_context: &mut IoContext<N>,
+    ) -> std::io::Result<Rep3AcvmPoint<C>> {
+        let result = match (a, b) {
+            (Rep3AcvmType::Public(a), Rep3AcvmPoint::Public(b)) => Rep3AcvmPoint::Public(b * a),
+            (Rep3AcvmType::Public(a), Rep3AcvmPoint::Shared(b)) => {
+                Rep3AcvmPoint::Shared(pointshare::scalar_mul_public_scalar(&b, a))
+            }
+            (Rep3AcvmType::Shared(a), Rep3AcvmPoint::Public(b)) => {
+                Rep3AcvmPoint::Shared(pointshare::scalar_mul_public_point(&b, a))
+            }
+            (Rep3AcvmType::Shared(a), Rep3AcvmPoint::Shared(b)) => {
+                let result = pointshare::scalar_mul(&b, a, io_context)?;
+                Rep3AcvmPoint::Shared(result)
+            }
+        };
+        Ok(result)
+    }
+
+    fn add_assign_point<C: CurveGroup>(
+        mut inout: &mut Rep3AcvmPoint<C>,
+        other: Rep3AcvmPoint<C>,
+        io_context: &mut IoContext<N>,
+    ) {
+        match (&mut inout, other) {
+            (Rep3AcvmPoint::Public(inout), Rep3AcvmPoint::Public(other)) => *inout += other,
+            (Rep3AcvmPoint::Shared(inout), Rep3AcvmPoint::Shared(other)) => {
+                pointshare::add_assign(inout, &other)
+            }
+            (Rep3AcvmPoint::Public(inout_), Rep3AcvmPoint::Shared(mut other)) => {
+                pointshare::add_assign_public(&mut other, inout_, io_context.id);
+                *inout = Rep3AcvmPoint::Shared(other);
+            }
+            (Rep3AcvmPoint::Shared(inout), Rep3AcvmPoint::Public(other)) => {
+                pointshare::add_assign_public(inout, &other, io_context.id);
+            }
+        }
+    }
+}
+
+// For some intermediate representations
+#[derive(Clone)]
+pub enum Rep3AcvmPoint<C: CurveGroup> {
+    Public(C),
+    Shared(Rep3PointShare<C>),
+}
+
+impl<C: CurveGroup> std::fmt::Debug for Rep3AcvmPoint<C> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Public(point) => f.debug_tuple("Public").field(point).finish(),
+            Self::Shared(share) => f.debug_tuple("Arithmetic").field(share).finish(),
+        }
+    }
+}
+
+impl<C: CurveGroup> std::fmt::Display for Rep3AcvmPoint<C> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Public(point) => f.write_str(&format!("Public ({point})")),
+            Self::Shared(arithmetic) => {
+                let (a, b) = arithmetic.to_owned().ab();
+                f.write_str(&format!("Arithmetic (a: {}, b: {})", a, b))
+            }
+        }
+    }
+}
+
+impl<C: CurveGroup> From<C> for Rep3AcvmPoint<C> {
+    fn from(value: C) -> Self {
+        Self::Public(value)
     }
 }
 
@@ -153,6 +349,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     type ArithmeticShare = Rep3PrimeFieldShare<F>;
 
     type AcvmType = Rep3AcvmType<F>;
+    type AcvmPoint<C: CurveGroup<BaseField = F>> = Rep3AcvmPoint<C>;
 
     type BrilligDriver = Rep3BrilligDriver<F, N>;
 
@@ -248,6 +445,27 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
     }
 
+    fn add_points<C: CurveGroup<BaseField = F>>(
+        &self,
+        lhs: Self::AcvmPoint<C>,
+        rhs: Self::AcvmPoint<C>,
+    ) -> Self::AcvmPoint<C> {
+        match (lhs, rhs) {
+            (Rep3AcvmPoint::Public(lhs), Rep3AcvmPoint::Public(rhs)) => {
+                Rep3AcvmPoint::Public(lhs + rhs)
+            }
+            (Rep3AcvmPoint::Public(public), Rep3AcvmPoint::Shared(mut shared))
+            | (Rep3AcvmPoint::Shared(mut shared), Rep3AcvmPoint::Public(public)) => {
+                pointshare::add_assign_public(&mut shared, &public, self.io_context0.id);
+                Rep3AcvmPoint::Shared(shared)
+            }
+            (Rep3AcvmPoint::Shared(lhs), Rep3AcvmPoint::Shared(rhs)) => {
+                let result = pointshare::add(&lhs, &rhs);
+                Rep3AcvmPoint::Shared(result)
+            }
+        }
+    }
+
     fn sub(&mut self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType {
         let id = self.io_context0.id;
 
@@ -295,6 +513,21 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             (Rep3AcvmType::Shared(secret_1), Rep3AcvmType::Shared(secret_2)) => {
                 let result = arithmetic::mul(secret_1, secret_2, &mut self.io_context0)?;
                 Ok(Rep3AcvmType::Shared(result))
+            }
+        }
+    }
+
+    fn invert(&mut self, secret: Self::AcvmType) -> std::io::Result<Self::AcvmType> {
+        match secret {
+            Rep3AcvmType::Public(secret) => {
+                let inv = secret.inverse().ok_or_else(|| {
+                    std::io::Error::new(std::io::ErrorKind::InvalidInput, "Cannot invert zero")
+                })?;
+                Ok(Rep3AcvmType::Public(inv))
+            }
+            Rep3AcvmType::Shared(secret) => {
+                let inv = arithmetic::inv(secret, &mut self.io_context0)?;
+                Ok(Rep3AcvmType::Shared(inv))
             }
         }
     }
@@ -455,6 +688,40 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         Ok(result)
     }
 
+    fn read_from_public_luts(
+        &mut self,
+        index: Self::AcvmType,
+        luts: &[Vec<F>],
+    ) -> std::io::Result<Vec<Self::AcvmType>> {
+        let mut result = Vec::with_capacity(luts.len());
+        match index {
+            Rep3AcvmType::Public(index) => {
+                let index: BigUint = index.into();
+                let index = usize::try_from(index).map_err(|_| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "Index can not be translated to usize",
+                    )
+                })?;
+                for lut in luts {
+                    result.push(Rep3AcvmType::Public(lut[index].to_owned()));
+                }
+            }
+            Rep3AcvmType::Shared(index) => {
+                let res = Rep3LookupTable::<N>::get_from_public_luts(
+                    index,
+                    luts,
+                    &mut self.io_context0,
+                    &mut self.io_context1,
+                )?;
+                for res in res {
+                    result.push(Rep3AcvmType::Shared(res));
+                }
+            }
+        }
+        Ok(result)
+    }
+
     fn write_lut_by_acvm_type(
         &mut self,
         index: Self::AcvmType,
@@ -575,6 +842,13 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     fn get_public(a: &Self::AcvmType) -> Option<F> {
         match a {
             Rep3AcvmType::Public(public) => Some(*public),
+            _ => None,
+        }
+    }
+
+    fn get_public_point<C: CurveGroup<BaseField = F>>(a: &Self::AcvmPoint<C>) -> Option<C> {
+        match a {
+            Rep3AcvmPoint::Public(public) => Some(*public),
             _ => None,
         }
     }
@@ -978,6 +1252,210 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             (Rep3AcvmType::Shared(a), Rep3AcvmType::Shared(b)) => Ok(Rep3AcvmType::Shared(
                 arithmetic::eq(*a, *b, &mut self.io_context0)?,
             )),
+        }
+    }
+
+    fn multi_scalar_mul(
+        &mut self,
+        points: &[Self::AcvmType],
+        scalars_lo: &[Self::AcvmType],
+        scalars_hi: &[Self::AcvmType],
+        pedantic_solving: bool, // Cannot check values
+    ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
+        // This is very hardcoded to the grumpkin curve
+        if TypeId::of::<F>() != TypeId::of::<ark_bn254::Fr>() {
+            panic!("Only BN254 is supported");
+        }
+
+        // We transmute since we only support one curve
+
+        // Safety: We checked that the types match
+        let points = unsafe {
+            std::mem::transmute::<&[Self::AcvmType], &[Rep3AcvmType<ark_bn254::Fr>]>(points)
+        };
+        // Safety: We checked that the types match
+        let scalars_lo = unsafe {
+            std::mem::transmute::<&[Self::AcvmType], &[Rep3AcvmType<ark_bn254::Fr>]>(scalars_lo)
+        };
+        // Safety: We checked that the types match
+        let scalars_hi = unsafe {
+            std::mem::transmute::<&[Self::AcvmType], &[Rep3AcvmType<ark_bn254::Fr>]>(scalars_hi)
+        };
+
+        if points.len() != 3 * scalars_lo.len() || scalars_lo.len() != scalars_hi.len() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Points and scalars must have the same length",
+            ));
+        }
+
+        let mut output_point = Rep3AcvmPoint::Public(ark_grumpkin::Projective::zero());
+
+        // TODO parallelize all points?
+        for i in (0..points.len()).step_by(3) {
+            let (point, grumpkin_integer) = join!(
+                Self::create_grumpkin_point(
+                    &points[i],
+                    &points[i + 1],
+                    &points[i + 2],
+                    &mut self.io_context0,
+                    pedantic_solving,
+                ),
+                Self::combine_grumpkin_scalar_field_limbs(
+                    &scalars_lo[i / 3],
+                    &scalars_hi[i / 3],
+                    &mut self.io_context1,
+                    pedantic_solving,
+                )
+            );
+            let iteration_output_point =
+                Self::scalar_point_mul(grumpkin_integer?, point?, &mut self.io_context0)?;
+            Self::add_assign_point(
+                &mut output_point,
+                iteration_output_point,
+                &mut self.io_context0,
+            );
+        }
+
+        // TODO maybe find a way to unify this with pointshare_to_field_shares
+        let res = match output_point {
+            Rep3AcvmPoint::Public(output_point) => {
+                if let Some((out_x, out_y)) = ark_grumpkin::Affine::from(output_point).xy() {
+                    let out_x: F = *downcast(&out_x).expect("We checked types");
+                    let out_y: F = *downcast(&out_y).expect("We checked types");
+
+                    (out_x.into(), out_y.into(), F::zero().into())
+                } else {
+                    (F::zero().into(), F::zero().into(), F::one().into())
+                }
+            }
+            Rep3AcvmPoint::Shared(output_point) => {
+                let (x, y, i) =
+                    conversion::point_share_to_fieldshares(output_point, &mut self.io_context0)?;
+                // Set x,y to 0 of infinity is one.
+                // TODO is this even necesary?
+                let mul =
+                    arithmetic::sub_public_by_shared(ark_bn254::Fr::one(), i, self.io_context0.id);
+                let res = arithmetic::mul_vec(&[x, y], &[mul, mul], &mut self.io_context0)?;
+
+                let out_x = downcast::<_, Self::ArithmeticShare>(&res[0])
+                    .expect("We checked types")
+                    .to_owned();
+                let out_y = downcast::<_, Self::ArithmeticShare>(&res[1])
+                    .expect("We checked types")
+                    .to_owned();
+                let out_i = downcast::<_, Self::ArithmeticShare>(&i)
+                    .expect("We checked types")
+                    .to_owned();
+
+                (out_x.into(), out_y.into(), out_i.into())
+            }
+        };
+        Ok(res)
+    }
+
+    fn field_shares_to_pointshare<C: CurveGroup<BaseField = F>>(
+        &mut self,
+        x: Self::AcvmType,
+        y: Self::AcvmType,
+        is_infinity: Self::AcvmType,
+    ) -> std::io::Result<Self::AcvmPoint<C>> {
+        // This is very hardcoded to the grumpkin curve
+        if TypeId::of::<F>() != TypeId::of::<ark_bn254::Fr>() {
+            panic!("Only BN254 is supported");
+        }
+
+        let x = downcast(&x).expect("We checked types");
+        let y = downcast(&y).expect("We checked types");
+        let is_infinity = downcast(&is_infinity).expect("We checked types");
+
+        let point = Self::create_grumpkin_point(x, y, is_infinity, &mut self.io_context0, true)?;
+
+        let y = downcast::<_, Self::AcvmPoint<C>>(&point)
+            .expect("We checked types")
+            .to_owned();
+
+        Ok(y)
+    }
+
+    fn pointshare_to_field_shares<C: CurveGroup<BaseField = F>>(
+        &mut self,
+        point: Self::AcvmPoint<C>,
+    ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
+        let res = match point {
+            Rep3AcvmPoint::Public(point) => {
+                if let Some((out_x, out_y)) = point.into_affine().xy() {
+                    (out_x.into(), out_y.into(), F::zero().into())
+                } else {
+                    (F::zero().into(), F::zero().into(), F::one().into())
+                }
+            }
+            Rep3AcvmPoint::Shared(point) => {
+                let (x, y, i) =
+                    conversion::point_share_to_fieldshares(point, &mut self.io_context0)?;
+                // Set x,y to 0 of infinity is one.
+                // TODO is this even necesary?
+                let mul = arithmetic::sub_public_by_shared(F::one(), i, self.io_context0.id);
+                let res = arithmetic::mul_vec(&[x, y], &[mul, mul], &mut self.io_context0)?;
+
+                (res[0].into(), res[1].into(), i.into())
+            }
+        };
+        Ok(res)
+    }
+
+    fn gt(&mut self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> std::io::Result<Self::AcvmType> {
+        match (lhs, rhs) {
+            (Rep3AcvmType::Public(a), Rep3AcvmType::Public(b)) => {
+                Ok(F::from((a > b) as u64).into())
+            }
+            (Rep3AcvmType::Public(a), Rep3AcvmType::Shared(b)) => {
+                Ok(arithmetic::lt_public(b, a, &mut self.io_context0)?.into())
+            }
+            (Rep3AcvmType::Shared(a), Rep3AcvmType::Public(b)) => {
+                Ok(arithmetic::ge_public(a, b, &mut self.io_context0)?.into())
+            }
+            (Rep3AcvmType::Shared(a), Rep3AcvmType::Shared(b)) => {
+                Ok(arithmetic::ge(a, b, &mut self.io_context0)?.into())
+            }
+        }
+    }
+
+    fn set_point_to_value_if_zero<C: CurveGroup<BaseField = F>>(
+        &mut self,
+        point: Self::AcvmPoint<C>,
+        value: Self::AcvmPoint<C>,
+    ) -> std::io::Result<Self::AcvmPoint<C>> {
+        match point {
+            Rep3AcvmPoint::Public(point) => {
+                if point.is_zero() {
+                    Ok(value)
+                } else {
+                    Ok(Rep3AcvmPoint::Public(point))
+                }
+            }
+            Rep3AcvmPoint::Shared(point) => {
+                let is_zero = pointshare::is_zero(point.to_owned(), &mut self.io_context0)?;
+                let is_zero = Rep3BigUintShare::<C::ScalarField>::new(
+                    BigUint::from(is_zero.0),
+                    BigUint::from(is_zero.1),
+                );
+                let is_zero = conversion::bit_inject(&is_zero, &mut self.io_context0)?;
+
+                let sub = match value {
+                    Rep3AcvmPoint::Public(value) => {
+                        let mut neg = -point.to_owned();
+                        pointshare::add_assign_public(&mut neg, &value, self.io_context0.id);
+                        neg
+                    }
+                    Rep3AcvmPoint::Shared(value) => pointshare::sub(&value, &point),
+                };
+
+                let mut res = pointshare::scalar_mul(&sub, is_zero, &mut self.io_context0)?;
+                pointshare::add_assign(&mut res, &point);
+
+                Ok(Rep3AcvmPoint::Shared(res))
+            }
         }
     }
 }

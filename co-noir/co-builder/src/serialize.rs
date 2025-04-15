@@ -1,18 +1,22 @@
 use crate::{prelude::HonkCurve, HonkProofError, HonkProofResult, TranscriptFieldType};
-use ark_ec::AffineRepr;
-use ark_ff::PrimeField;
+use ark_ec::{pairing::Pairing, AffineRepr, CurveConfig, CurveGroup};
+use ark_ff::{Field, PrimeField};
 use num_bigint::BigUint;
 
-pub struct Serialize<F: PrimeField> {
+pub struct Serialize<F: Field> {
     phantom: std::marker::PhantomData<F>,
 }
 
-pub struct SerializeP<P: HonkCurve<TranscriptFieldType>> {
+pub struct SerializeC<C: CurveGroup> {
+    phantom: std::marker::PhantomData<C>,
+}
+
+pub struct SerializeP<P: Pairing> {
     phantom: std::marker::PhantomData<P>,
 }
 
-impl<F: PrimeField> Serialize<F> {
-    const NUM_64_LIMBS: u32 = F::MODULUS_BIT_SIZE.div_ceil(64);
+impl<F: Field> Serialize<F> {
+    const NUM_64_LIMBS: u32 = <F::BasePrimeField as PrimeField>::MODULUS_BIT_SIZE.div_ceil(64);
     const FIELDSIZE_BYTES: u32 = Self::NUM_64_LIMBS * 8;
     const VEC_LEN_BYTES: u32 = 4;
 
@@ -52,8 +56,12 @@ impl<F: PrimeField> Serialize<F> {
         Ok(res)
     }
 
+    pub(crate) fn field_size() -> usize {
+        Self::FIELDSIZE_BYTES as usize * F::extension_degree() as usize
+    }
+
     pub fn to_buffer(buf: &[F], include_size: bool) -> Vec<u8> {
-        let total_size = buf.len() as u32 * Self::FIELDSIZE_BYTES
+        let total_size = buf.len() as u32 * Self::field_size() as u32
             + if include_size { Self::VEC_LEN_BYTES } else { 0 };
 
         let mut res = Vec::with_capacity(total_size as usize);
@@ -102,25 +110,67 @@ impl<F: PrimeField> Serialize<F> {
 
     pub fn write_field_element(buf: &mut Vec<u8>, el: F) {
         let prev_len = buf.len();
-        let el = el.into_bigint(); // Gets rid of montgomery form
+        for el in el.to_base_prime_field_elements() {
+            let el = el.into_bigint(); // Gets rid of montgomery form
 
-        for data in el.as_ref().iter().rev().cloned() {
-            Self::write_u64(buf, data);
+            for data in el.as_ref().iter().rev().cloned() {
+                Self::write_u64(buf, data);
+            }
+
+            debug_assert_eq!(
+                buf.len() - prev_len,
+                Self::FIELDSIZE_BYTES as usize * F::extension_degree() as usize
+            );
         }
-
-        debug_assert_eq!(buf.len() - prev_len, Self::FIELDSIZE_BYTES as usize);
     }
 
     pub fn read_field_element(buf: &[u8], offset: &mut usize) -> F {
-        let mut bigint: BigUint = Default::default();
+        let mut fields = Vec::with_capacity(F::extension_degree() as usize);
 
-        for _ in 0..Self::NUM_64_LIMBS {
-            let data = Self::read_u64(buf, offset);
-            bigint <<= 64;
-            bigint += data;
+        for _ in 0..F::extension_degree() {
+            let mut bigint: BigUint = Default::default();
+            for _ in 0..Self::NUM_64_LIMBS {
+                let data = Self::read_u64(buf, offset);
+                bigint <<= 64;
+                bigint += data;
+            }
+            fields.push(F::BasePrimeField::from(bigint));
         }
 
-        F::from(bigint)
+        F::from_base_prime_field_elems(fields).expect("Should work")
+    }
+}
+
+impl<C: CurveGroup> SerializeC<C> {
+    const NUM_64_LIMBS: u32 =
+        <<C::Config as CurveConfig>::BaseField as Field>::BasePrimeField::MODULUS_BIT_SIZE
+            .div_ceil(64);
+    const FIELDSIZE_BYTES: u32 = Self::NUM_64_LIMBS * 8;
+    const GROUPSIZE_BYTES: u32 = Self::FIELDSIZE_BYTES * 2; // Times extension degree
+
+    pub fn group_size() -> usize {
+        Self::GROUPSIZE_BYTES as usize * C::BaseField::extension_degree() as usize
+    }
+
+    pub fn write_group_element(buf: &mut Vec<u8>, el: &C::Affine, write_x_first: bool) {
+        let prev_len = buf.len();
+
+        if el.is_zero() {
+            for _ in 0..Self::FIELDSIZE_BYTES * 2 {
+                buf.push(255);
+            }
+        } else {
+            let (x, y) = el.xy().unwrap_or_default();
+            if write_x_first {
+                Serialize::write_field_element(buf, x);
+                Serialize::write_field_element(buf, y);
+            } else {
+                Serialize::write_field_element(buf, y);
+                Serialize::write_field_element(buf, x);
+            }
+        }
+
+        debug_assert_eq!(buf.len() - prev_len, Self::FIELDSIZE_BYTES as usize * 2);
     }
 }
 
@@ -129,24 +179,7 @@ impl<P: HonkCurve<TranscriptFieldType>> SerializeP<P> {
     pub const FIELDSIZE_BYTES: u32 = Self::NUM_64_LIMBS * 8;
 
     pub fn write_g1_element(buf: &mut Vec<u8>, el: &P::G1Affine, write_x_first: bool) {
-        let prev_len = buf.len();
-
-        if el.is_zero() {
-            for _ in 0..Self::FIELDSIZE_BYTES * 2 {
-                buf.push(255);
-            }
-        } else {
-            let (x, y) = P::g1_affine_to_xy(el);
-            if write_x_first {
-                Serialize::<P::BaseField>::write_field_element(buf, x);
-                Serialize::<P::BaseField>::write_field_element(buf, y);
-            } else {
-                Serialize::<P::BaseField>::write_field_element(buf, y);
-                Serialize::<P::BaseField>::write_field_element(buf, x);
-            }
-        }
-
-        debug_assert_eq!(buf.len() - prev_len, Self::FIELDSIZE_BYTES as usize * 2);
+        SerializeC::<P::G1>::write_group_element(buf, el, write_x_first);
     }
 
     pub fn read_g1_element(buf: &[u8], offset: &mut usize, read_x_first: bool) -> P::G1Affine {

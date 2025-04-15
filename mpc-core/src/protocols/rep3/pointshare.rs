@@ -2,17 +2,17 @@
 //!
 //! This module contains operations with point shares
 
-use crate::IoResult;
-use ark_ec::CurveGroup;
-use ark_ff::PrimeField;
-use itertools::{izip, Itertools};
-use rayon::prelude::*;
-
 use super::{
     network::{IoContext, Rep3Network},
     rngs::Rep3CorrelatedRng,
     PartyID, Rep3PointShare, Rep3PrimeFieldShare,
 };
+use crate::protocols::rep3::{arithmetic, conversion};
+use crate::IoResult;
+use ark_ec::CurveGroup;
+use ark_ff::{PrimeField, Zero};
+use itertools::{izip, Itertools};
+use rayon::prelude::*;
 
 /// Type alias for a [`Rep3PrimeFieldShare`]
 type FieldShare<C> = Rep3PrimeFieldShare<C>;
@@ -146,4 +146,21 @@ pub fn msm_public_points<C: CurveGroup>(
     );
     tracing::trace!("< MSM public points for {} elements", points.len());
     PointShare::new(res_a, res_b)
+}
+
+/// Checks whether the shared point is zero/infinity.
+/// The strategy is that we split the point into two random shares (as for point_share_to_fieldshares) and check for equal x-coordinates. This works, since the two random shares, with overwhelming probability, will have different x-coordinates if the underyling value is not zero.
+/// Returns a replicated boolean share in two separate parts.
+pub fn is_zero<C: CurveGroup, N: Rep3Network>(
+    x: PointShare<C>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<(bool, bool)>
+where
+    C::BaseField: PrimeField,
+{
+    let (a_x, _, b_x, _) = conversion::point_share_to_fieldshares_pre::<C, N>(x, io_context)?;
+    let is_equal = arithmetic::eq_bit(a_x, b_x, io_context)?;
+    let a = !is_equal.a.is_zero();
+    let b = !is_equal.b.is_zero();
+    Ok((a, b))
 }

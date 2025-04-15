@@ -1,24 +1,63 @@
-use super::NoirWitnessExtensionProtocol;
-use ark_ff::{One, PrimeField};
+use super::{downcast, NoirWitnessExtensionProtocol};
+use ark_ec::{AffineRepr, CurveGroup};
+use ark_ff::{MontConfig, One, PrimeField};
 use co_brillig::mpc::{PlainBrilligDriver, PlainBrilligType};
+use core::panic;
 use mpc_core::{
     gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations},
     lut::{LookupTableProvider, PlainLookupTableProvider},
 };
 use num_bigint::BigUint;
-use std::io;
 use std::marker::PhantomData;
+use std::{any::TypeId, io};
 
 pub struct PlainAcvmSolver<F: PrimeField> {
     plain_lut: PlainLookupTableProvider<F>,
     phantom_data: PhantomData<F>,
 }
+
 impl<F: PrimeField> PlainAcvmSolver<F> {
     pub fn new() -> Self {
         Self {
             plain_lut: Default::default(),
             phantom_data: Default::default(),
         }
+    }
+
+    pub(crate) fn create_grumpkin_point(
+        x: ark_bn254::Fr,
+        y: ark_bn254::Fr,
+        is_infinity: bool,
+    ) -> std::io::Result<ark_grumpkin::Affine> {
+        if is_infinity {
+            return Ok(ark_grumpkin::Affine::zero());
+        }
+        let point = ark_grumpkin::Affine::new_unchecked(x, y);
+        if !point.is_on_curve() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Point ({}, {}) is not on curve", x, y),
+            ));
+        };
+        if !point.is_in_correct_subgroup_assuming_on_curve() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Point ({}, {}) is not in correct subgroup", x, y),
+            ));
+        };
+        Ok(point)
+    }
+
+    pub(crate) fn bn254_fr_to_u128(inp: ark_bn254::Fr) -> std::io::Result<u128> {
+        let inp_bigint = inp.into_bigint();
+        if inp_bigint.0[2] != 0 || inp_bigint.0[3] != 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Scalar {} is not less than 2^128", inp),
+            ));
+        }
+        let output = inp_bigint.0[0] as u128 + ((inp_bigint.0[1] as u128) << 64);
+        Ok(output)
     }
 }
 
@@ -32,6 +71,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     type Lookup = PlainLookupTableProvider<F>;
     type ArithmeticShare = F;
     type AcvmType = F;
+    type AcvmPoint<C: CurveGroup<BaseField = F>> = C;
 
     type BrilligDriver = PlainBrilligDriver<F>;
 
@@ -76,6 +116,14 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         lhs + rhs
     }
 
+    fn add_points<C: CurveGroup<BaseField = F>>(
+        &self,
+        lhs: Self::AcvmPoint<C>,
+        rhs: Self::AcvmPoint<C>,
+    ) -> Self::AcvmPoint<C> {
+        lhs + rhs
+    }
+
     fn add_assign_with_public(&mut self, public: F, secret: &mut Self::AcvmType) {
         *secret += public;
     }
@@ -94,6 +142,12 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         secret_2: Self::AcvmType,
     ) -> io::Result<Self::AcvmType> {
         Ok(secret_1 * secret_2)
+    }
+
+    fn invert(&mut self, secret: Self::AcvmType) -> io::Result<Self::AcvmType> {
+        secret
+            .inverse()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "Cannot invert zero"))
     }
 
     fn negate_inplace(&mut self, a: &mut Self::AcvmType) {
@@ -140,6 +194,21 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         let mut a = ();
         let mut b = ();
         self.plain_lut.get_from_lut(index, lut, &mut a, &mut b)
+    }
+
+    fn read_from_public_luts(
+        &mut self,
+        index: Self::AcvmType,
+        luts: &[Vec<F>],
+    ) -> std::io::Result<Vec<Self::AcvmType>> {
+        let mut a = ();
+        let mut b = ();
+        let mut result = Vec::with_capacity(luts.len());
+        for lut in luts {
+            let res = self.plain_lut.get_from_lut(index, lut, &mut a, &mut b)?;
+            result.push(res);
+        }
+        Ok(result)
     }
 
     fn write_lut_by_acvm_type(
@@ -202,6 +271,10 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     }
 
     fn get_public(a: &Self::AcvmType) -> Option<F> {
+        Some(*a)
+    }
+
+    fn get_public_point<C: CurveGroup<BaseField = F>>(a: &Self::AcvmPoint<C>) -> Option<C> {
         Some(*a)
     }
 
@@ -512,5 +585,134 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
 
     fn equal(&mut self, a: &Self::AcvmType, b: &Self::AcvmType) -> std::io::Result<Self::AcvmType> {
         Ok(Self::ArithmeticShare::from(a == b))
+    }
+
+    fn multi_scalar_mul(
+        &mut self,
+        points: &[Self::AcvmType],
+        scalars_lo: &[Self::AcvmType],
+        scalars_hi: &[Self::AcvmType],
+        pedantic_solving: bool,
+    ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
+        // This is very hardcoded to the grumpkin curve
+        if TypeId::of::<F>() != TypeId::of::<ark_bn254::Fr>() {
+            panic!("Only BN254 is supported");
+        }
+
+        // We transmute since we only support one curve
+
+        // Safety: We checked that the types match
+        let points = unsafe { std::mem::transmute::<&[Self::AcvmType], &[ark_bn254::Fr]>(points) };
+        // Safety: We checked that the types match
+        let scalars_lo =
+            unsafe { std::mem::transmute::<&[Self::AcvmType], &[ark_bn254::Fr]>(scalars_lo) };
+        // Safety: We checked that the types match
+        let scalars_hi =
+            unsafe { std::mem::transmute::<&[Self::AcvmType], &[ark_bn254::Fr]>(scalars_hi) };
+
+        if points.len() != 3 * scalars_lo.len() || scalars_lo.len() != scalars_hi.len() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Points and scalars must have the same length",
+            ));
+        }
+
+        let mut output_point = ark_grumpkin::Affine::zero();
+
+        for i in (0..points.len()).step_by(3) {
+            if pedantic_solving && points[i + 2] > ark_bn254::Fr::one() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "--pedantic-solving: is_infinity expected to be a bool, but found to be > 1",
+                ));
+            }
+            let point = Self::create_grumpkin_point(
+                points[i],
+                points[i + 1],
+                points[i + 2] == ark_bn254::Fr::one(),
+            )?;
+
+            let scalar_low = Self::bn254_fr_to_u128(scalars_lo[i / 3])?;
+            let scalar_high = Self::bn254_fr_to_u128(scalars_hi[i / 3])?;
+            let grumpkin_integer: BigUint = (BigUint::from(scalar_high) << 128) + scalar_low;
+
+            // Check if this is smaller than the grumpkin modulus
+            if pedantic_solving && grumpkin_integer >= ark_grumpkin::FrConfig::MODULUS.into() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!(
+                        "{} is not a valid grumpkin scalar",
+                        grumpkin_integer.to_str_radix(16)
+                    ),
+                ));
+            }
+
+            let iteration_output_point =
+                ark_grumpkin::Affine::from(point.mul_bigint(grumpkin_integer.to_u64_digits()));
+
+            output_point = ark_grumpkin::Affine::from(output_point + iteration_output_point);
+        }
+
+        // TODO maybe find a way to unify this with pointshare_to_field_shares
+        if let Some((out_x, out_y)) = output_point.xy() {
+            let out_x = *downcast(&out_x).expect("We checked types");
+            let out_y = *downcast(&out_y).expect("We checked types");
+            Ok((out_x, out_y, F::zero()))
+        } else {
+            Ok((F::zero(), F::zero(), F::one()))
+        }
+    }
+
+    fn field_shares_to_pointshare<C: CurveGroup<BaseField = F>>(
+        &mut self,
+        x: Self::AcvmType,
+        y: Self::AcvmType,
+        is_infinity: Self::AcvmType,
+    ) -> io::Result<Self::AcvmPoint<C>> {
+        // This is very hardcoded to the grumpkin curve
+        if TypeId::of::<F>() != TypeId::of::<ark_bn254::Fr>() {
+            panic!("Only BN254 is supported");
+        }
+
+        if is_infinity > F::one() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "--pedantic-solving: is_infinity expected to be a bool, but found to be > 1",
+            ));
+        }
+
+        let x = *downcast(&x).expect("We checked types");
+        let y = *downcast(&y).expect("We checked types");
+        let point = Self::create_grumpkin_point(x, y, is_infinity == F::one())?;
+        let y = *downcast(&point).expect("We checked types");
+
+        Ok(C::from(y))
+    }
+
+    fn pointshare_to_field_shares<C: CurveGroup<BaseField = F>>(
+        &mut self,
+        point: Self::AcvmPoint<C>,
+    ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
+        if let Some((out_x, out_y)) = point.into_affine().xy() {
+            Ok((out_x, out_y, F::zero()))
+        } else {
+            Ok((F::zero(), F::zero(), F::one()))
+        }
+    }
+
+    fn gt(&mut self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> std::io::Result<Self::AcvmType> {
+        Ok(F::from((lhs > rhs) as u64))
+    }
+
+    fn set_point_to_value_if_zero<C: CurveGroup<BaseField = F>>(
+        &mut self,
+        point: Self::AcvmPoint<C>,
+        value: Self::AcvmPoint<C>,
+    ) -> std::io::Result<Self::AcvmPoint<C>> {
+        if point.is_zero() {
+            Ok(value)
+        } else {
+            Ok(point)
+        }
     }
 }

@@ -249,6 +249,45 @@ where
         Ok(())
     }
 
+    pub(super) fn multi_scalar_mul(
+        driver: &mut T,
+        initial_witness: &mut WitnessMap<T::AcvmType>,
+        points: &[FunctionInput<GenericFieldElement<F>>],
+        scalars: &[FunctionInput<GenericFieldElement<F>>],
+        outputs: &(Witness, Witness, Witness),
+        pedantic_solving: bool,
+    ) -> CoAcvmResult<()> {
+        let points: Result<Vec<_>, _> = points
+            .iter()
+            .map(|input| Self::input_to_value(initial_witness, *input, false))
+            .collect();
+        let points: Vec<_> = points?.into_iter().collect();
+
+        let scalars: Result<Vec<_>, _> = scalars
+            .iter()
+            .map(|input| Self::input_to_value(initial_witness, *input, false))
+            .collect();
+        let scalars = scalars?;
+        let mut scalars_lo = Vec::with_capacity(scalars.len().div_ceil(2));
+        let mut scalars_hi = Vec::with_capacity(scalars.len() / 2);
+        for (i, scalar) in scalars.into_iter().enumerate() {
+            if i % 2 == 0 {
+                scalars_lo.push(scalar);
+            } else {
+                scalars_hi.push(scalar);
+            }
+        }
+        // Call the backend's multi-scalar multiplication function
+        let (res_x, res_y, is_infinity) =
+            driver.multi_scalar_mul(&points, &scalars_lo, &scalars_hi, pedantic_solving)?;
+
+        // Insert the resulting point into the witness map
+        Self::insert_value(&outputs.0, res_x, initial_witness)?;
+        Self::insert_value(&outputs.1, res_y, initial_witness)?;
+        Self::insert_value(&outputs.2, is_infinity, initial_witness)?;
+        Ok(())
+    }
+
     pub(super) fn solve_blackbox(
         &mut self,
         bb_func: &BlackBoxFuncCall<GenericFieldElement<F>>,
@@ -299,6 +338,18 @@ where
                 inputs,
                 outputs,
                 *len,
+            )?,
+            BlackBoxFuncCall::MultiScalarMul {
+                points,
+                scalars,
+                outputs,
+            } => Self::multi_scalar_mul(
+                &mut self.driver,
+                initial_witness,
+                points,
+                scalars,
+                outputs,
+                pedantic_solving,
             )?,
             _ => todo!("solve blackbox function {} not supported", bb_func.name()),
         }
