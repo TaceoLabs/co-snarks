@@ -13,8 +13,8 @@ pub(crate) fn default_generators<C: CurveGroup>() -> &'static [C::Affine; NUM_DE
         // Safety: We checked that the types match
         unsafe {
             std::mem::transmute::<
-                &[ark_grumpkin::Affine; NUM_DEFAULT_GENERATORS],
-                &[C::Affine; NUM_DEFAULT_GENERATORS],
+                &'static [ark_grumpkin::Affine; NUM_DEFAULT_GENERATORS],
+                &'static [C::Affine; NUM_DEFAULT_GENERATORS],
             >(gens)
         }
     // } else if TypeId::of::<C>() == TypeId::of::<ark_bn254::G1Projective>() {
@@ -232,8 +232,9 @@ pub(crate) fn generate_fixed_base_tables<C: CurveGroup>(
         // Safety: We checked that the types match
         unsafe {
             std::mem::transmute::<
-                &[Vec<Vec<ark_grumpkin::Affine>>; FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES],
-                &[Vec<Vec<C::Affine>>; FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES],
+                &'static [Vec<Vec<ark_grumpkin::Affine>>;
+                             FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES],
+                &'static [Vec<Vec<C::Affine>>; FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES],
             >(res)
         }
     } else {
@@ -317,8 +318,8 @@ pub(crate) fn fixed_base_table_offset_generators<C: CurveGroup>(
         // Safety: We checked that the types match
         unsafe {
             std::mem::transmute::<
-                &[ark_grumpkin::Projective; FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES],
-                &[C; FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES],
+                &'static [ark_grumpkin::Projective; FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES],
+                &'static [C; FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES],
             >(res)
         }
     } else {
