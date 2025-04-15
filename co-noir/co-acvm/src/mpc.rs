@@ -240,17 +240,6 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         bitsize: usize,
     ) -> std::io::Result<[Self::ArithmeticShare; 3]>;
 
-    /// Slices a shared field element at given indices from msb to lsb, both included in the slice.
-    /// Only considers bitsize bits.
-    /// Result is thus slice, where slice has all bits from lsb to msb.
-    fn slice_once(
-        &mut self,
-        input: Self::ArithmeticShare,
-        msb: u8,
-        lsb: u8,
-        bitsize: usize,
-    ) -> std::io::Result<Self::ArithmeticShare>;
-
     /// Shifts a shared field element to the right by shift bits.
     fn right_shift(
         &mut self,
@@ -441,14 +430,14 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         message: &[Self::AcvmType; 16],
     ) -> std::io::Result<Vec<Self::AcvmType>>;
 
-    /// Computes the Blake2 hash function on a given message.
+    /// Computes the BLAKE2s hash of 'num_inputs' inputs, each of 'num_bits' bits (rounded to next multiple of 8). The output is then composed into size 32 Vec of field elements.
     fn blake2s_hash(
         &mut self,
         message_input: Vec<Self::AcvmType>,
         num_bits: &[usize],
     ) -> std::io::Result<Vec<Self::AcvmType>>;
 
-    /// Computes the Blake3 hash function on a given message.
+    /// Computes the BLAKE3 hash of 'num_inputs' inputs, each of 'num_bits' bits (rounded to next multiple of 8). The output is then composed into size 32 Vec of field elements.
     fn blake3_hash(
         &mut self,
         message_input: Vec<Self::AcvmType>,

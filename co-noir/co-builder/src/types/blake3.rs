@@ -187,6 +187,7 @@ impl<F: PrimeField> Blake3Hasher<F> {
         }
         Ok(())
     }
+
     #[expect(clippy::too_many_arguments)]
     fn compress_xof<
         P: HonkCurve<TranscriptFieldType, ScalarField = F>,

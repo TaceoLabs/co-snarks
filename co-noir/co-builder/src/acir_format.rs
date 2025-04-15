@@ -8,7 +8,10 @@ use acir::{
     AcirField,
 };
 use ark_ff::{PrimeField, Zero};
-use std::collections::{BTreeMap, HashSet};
+use std::{
+    array,
+    collections::{BTreeMap, HashSet},
+};
 
 use crate::types::types::{
     AcirFormatOriginalOpcodeIndices, Blake2sConstraint, Blake2sInput, Blake3Constraint,
@@ -690,10 +693,7 @@ impl<F: PrimeField> AcirFormat<F> {
                             num_bits: e.num_bits(),
                         })
                         .collect(),
-                    result: {
-                        let vec: Vec<u32> = outputs.into_iter().map(|e| e.0).collect();
-                        vec.try_into().expect("Expected a Vec of length 32")
-                    },
+                    result: { array::from_fn(|i| outputs[i].0) },
                 };
                 for output in &constraint.result {
                     af.constrained_witness.insert(*output);
@@ -712,10 +712,7 @@ impl<F: PrimeField> AcirFormat<F> {
                             num_bits: e.num_bits(),
                         })
                         .collect(),
-                    result: {
-                        let vec: Vec<u32> = outputs.into_iter().map(|e| e.0).collect();
-                        vec.try_into().expect("Expected a Vec of length 32")
-                    },
+                    result: { array::from_fn(|i| outputs[i].0) },
                 };
                 for output in &constraint.result {
                     af.constrained_witness.insert(*output);

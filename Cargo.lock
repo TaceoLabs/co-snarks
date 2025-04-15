@@ -4677,6 +4677,7 @@ dependencies = [
  "ark-serialize",
  "ark-std",
  "blake2",
+ "blake3",
  "bytes",
  "circom-mpc-compiler",
  "circom-mpc-vm",

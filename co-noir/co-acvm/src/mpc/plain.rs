@@ -364,22 +364,6 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Ok([lo, slice, hi])
     }
 
-    fn slice_once(
-        &mut self,
-        input: Self::ArithmeticShare,
-        msb: u8,
-        lsb: u8,
-        bitsize: usize,
-    ) -> std::io::Result<Self::ArithmeticShare> {
-        let big_mask = (BigUint::from(1u64) << bitsize) - BigUint::one();
-        let slice_mask = (BigUint::one() << ((msb - lsb) as u32 + 1)) - BigUint::one();
-
-        let mut x: BigUint = input.into();
-        x &= &big_mask;
-
-        Ok(F::from((x >> lsb) & slice_mask))
-    }
-
     fn integer_bitwise_and(
         &mut self,
         lhs: Self::AcvmType,
@@ -440,67 +424,17 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
 
     fn slice_and_get_xor_rotate_values_with_filter(
         &mut self,
-        input1: Self::ArithmeticShare,
-        input2: Self::ArithmeticShare,
-        basis_bits: &[u64],
-        rotation: &[usize],
-        filter: &[bool],
+        _input1: Self::ArithmeticShare,
+        _input2: Self::ArithmeticShare,
+        _basis_bits: &[u64],
+        _rotation: &[usize],
+        _filter: &[bool],
     ) -> std::io::Result<(
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
     )> {
-        let num_decomps_per_field = basis_bits.len();
-        let basis_bits = basis_bits[0];
-        let basis = BigUint::one() << basis_bits;
-
-        let mut target1: BigUint = input1.into();
-        let mut target2: BigUint = input2.into();
-        let mut slices1: Vec<u64> = Vec::with_capacity(num_decomps_per_field);
-        let mut slices2: Vec<u64> = Vec::with_capacity(num_decomps_per_field);
-        for i in 0..num_decomps_per_field {
-            if i == num_decomps_per_field - 1 && (target1 >= basis || target2 >= basis) {
-                panic!("Last key slice greater than {}", basis);
-            }
-            slices1.push(
-                (&target1 % &basis)
-                    .try_into()
-                    .expect("Conversion must work"),
-            );
-            slices2.push(
-                (&target2 % &basis)
-                    .try_into()
-                    .expect("Conversion must work"),
-            );
-            target1 /= &basis;
-            target2 /= &basis;
-        }
-        let mut results = Vec::with_capacity(num_decomps_per_field);
-        slices1
-            .iter()
-            .zip(slices2.iter())
-            .zip(filter.iter())
-            .zip(rotation.iter())
-            .for_each(|(((s1, s2), f), rot)| {
-                let mut key1 = *s1;
-                let mut key2 = *s2;
-                if *f {
-                    key1 &= 3u64;
-                    key2 &= 3u64;
-                }
-                let res = key1 as u32 ^ key2 as u32;
-                results.push(F::from(if *rot != 0 {
-                    (res >> rot) | (res << (32 - *rot as u32))
-                } else {
-                    res
-                }));
-            });
-
-        Ok((
-            results,
-            slices1.into_iter().map(F::from).collect(),
-            slices2.into_iter().map(F::from).collect(),
-        ))
+        panic!("slice_and_get_xor_rotate_values_with_filter not implemented for plaindriver and normally should not be called");
     }
 
     fn sort_vec_by(
@@ -807,25 +741,13 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     ) -> std::io::Result<Vec<Self::AcvmType>> {
         let mut real_input = Vec::new();
         for (inp, num_bits) in message_input.iter().zip(num_bits.iter()) {
-            let num_elements = num_bits.div_ceil(8);
+            let num_elements = num_bits.div_ceil(8); // We need to round to the next byte
             let mut bytes = Vec::new();
             inp.serialize_uncompressed(&mut bytes).unwrap();
-            real_input.extend(bytes[0..num_elements].to_vec());
+            real_input.extend_from_slice(&bytes[..num_elements])
         }
-        let output_bytes: [u8; 32] = Blake2s256::digest(real_input)
-            .as_slice()
-            .try_into()
-            .map_err(|_| "blake2 digest should be 256 bits")
-            .map_err(|err| {
-                std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("Failed to convert blake2 digest to array: {}", err),
-                )
-            })?;
-        let mut result = Vec::new();
-        for out in output_bytes.iter() {
-            result.push(F::from_be_bytes_mod_order(&[*out]));
-        }
+        let output_bytes: [u8; 32] = Blake2s256::digest(real_input).into();
+        let result = output_bytes.into_iter().map(|x| F::from(x)).collect();
         Ok(result)
     }
 
@@ -836,16 +758,13 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     ) -> std::io::Result<Vec<Self::AcvmType>> {
         let mut real_input = Vec::new();
         for (inp, num_bits) in message_input.iter().zip(num_bits.iter()) {
-            let num_elements = num_bits.div_ceil(8);
+            let num_elements = num_bits.div_ceil(8); // We need to round to the next byte
             let mut bytes = Vec::new();
             inp.serialize_uncompressed(&mut bytes).unwrap();
-            real_input.extend(bytes[0..num_elements].to_vec());
+            real_input.extend_from_slice(&bytes[..num_elements])
         }
         let output_bytes: [u8; 32] = blake3::hash(&real_input).into();
-        let mut result = Vec::new();
-        for out in output_bytes.iter() {
-            result.push(F::from_be_bytes_mod_order(&[*out]));
-        }
+        let result = output_bytes.into_iter().map(|x| F::from(x)).collect();
         Ok(result)
     }
 }

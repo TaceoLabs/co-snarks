@@ -42,36 +42,15 @@ impl GarbledCircuits {
         let mut result = Vec::with_capacity(size);
 
         for i in 0..size {
-            result.push((c >> i) & 1 != 0);
+            let bit = (c >> i) & 1 != 0;
+            if bit {
+                result.push(g.const_one()?);
+            } else {
+                result.push(g.const_zero()?);
+            }
         }
 
-        Ok(result
-            .into_iter()
-            .map(|bit| if bit { g.const_one() } else { g.const_zero() })
-            .collect::<Result<Vec<G::Item>, G::Error>>()?[..size]
-            .to_vec())
-    }
-    fn shift_left<G: FancyBinary + FancyBinaryConstant>(
-        g: &mut G,
-        a: &[G::Item],
-        shift: usize,
-        size: usize,
-    ) -> Result<Vec<G::Item>, G::Error> {
-        let mut result = a.to_owned();
-        result.resize(size * 2, g.const_zero()?);
-        result.rotate_right(shift);
-        Ok(result[..size].to_vec())
-    }
-    fn shift_right<G: FancyBinary + FancyBinaryConstant>(
-        g: &mut G,
-        a: &[G::Item],
-        shift: usize,
-        size: usize,
-    ) -> Result<Vec<G::Item>, G::Error> {
-        let mut result = a.to_owned();
-        result.resize(size * 2, g.const_zero()?);
-        result.rotate_left(shift);
-        Ok(result[..size].to_vec())
+        Ok(result)
     }
 
     fn full_adder_const<G: FancyBinary>(
@@ -974,69 +953,6 @@ impl GarbledCircuits {
         ) {
             let sliced =
                 Self::slice_field_element::<_, F>(g, chunk_a, chunk_b, chunk_c, msb, lsb, bitsize)?;
-            results.extend(sliced);
-        }
-
-        Ok(BinaryBundle::new(results))
-    }
-
-    /// Slices a field element (represented as two bitdecompositions wires_a, wires_b which need to be added first) at given indices (msb, lsb), both included in the slice. For the bitcomposition, wires_c are used.
-    fn slice_field_element_once<G: FancyBinary, F: PrimeField>(
-        g: &mut G,
-        wires_a: &[G::Item],
-        wires_b: &[G::Item],
-        wires_c: &[G::Item],
-        msb: usize,
-        lsb: usize,
-        bitsize: usize,
-    ) -> Result<Vec<G::Item>, G::Error> {
-        debug_assert_eq!(wires_a.len(), wires_b.len());
-        let input_bitlen = wires_a.len();
-        debug_assert_eq!(input_bitlen, F::MODULUS_BIT_SIZE as usize);
-        debug_assert!(input_bitlen >= bitsize);
-        debug_assert!(msb >= lsb);
-        debug_assert!(msb < bitsize);
-        debug_assert_eq!(wires_c.len(), input_bitlen);
-
-        let input_bits = Self::adder_mod_p_with_output_size::<_, F>(g, wires_a, wires_b, bitsize)?;
-        let mut rands = wires_c.chunks(input_bitlen);
-
-        Self::compose_field_element::<_, F>(g, &input_bits[lsb..=msb], rands.next().unwrap())
-    }
-
-    /// Slices a vector of field elements (represented as two bitdecompositions wires_a, wires_b which need to be added first) at given indices (msb, lsb), both included in the slice. For the bitcomposition, wires_c are used.
-    pub(crate) fn slice_field_element_once_many<G: FancyBinary, F: PrimeField>(
-        g: &mut G,
-        wires_a: &BinaryBundle<G::Item>,
-        wires_b: &BinaryBundle<G::Item>,
-        wires_c: &BinaryBundle<G::Item>,
-        msb: usize,
-        lsb: usize,
-        bitsize: usize,
-    ) -> Result<BinaryBundle<G::Item>, G::Error> {
-        debug_assert_eq!(wires_a.size(), wires_b.size());
-        let input_size = wires_a.size();
-        let input_bitlen = F::MODULUS_BIT_SIZE as usize;
-        let num_inputs = input_size / input_bitlen;
-
-        let total_output_elements = num_inputs;
-
-        debug_assert_eq!(input_size % input_bitlen, 0);
-        debug_assert!(input_bitlen >= bitsize);
-        debug_assert!(msb >= lsb);
-        debug_assert!(msb < bitsize);
-        debug_assert_eq!(wires_c.size(), input_bitlen * total_output_elements);
-
-        let mut results = Vec::with_capacity(wires_c.size());
-
-        for (chunk_a, chunk_b, chunk_c) in izip!(
-            wires_a.wires().chunks(input_bitlen),
-            wires_b.wires().chunks(input_bitlen),
-            wires_c.wires().chunks(input_bitlen * 3)
-        ) {
-            let sliced = Self::slice_field_element_once::<_, F>(
-                g, chunk_a, chunk_b, chunk_c, msb, lsb, bitsize,
-            )?;
             results.extend(sliced);
         }
 
@@ -2214,36 +2130,26 @@ impl GarbledCircuits {
             offset = end;
         }
 
-        // TODO optimize for actual chunks we want to do this
+        let mut sum = 0;
         for (i, filt) in filter.iter().enumerate() {
+            let len = base_bits[i] as usize;
             if *filt {
-                let len = base_bits[i];
-                let sum: usize = base_bits.iter().take(i).map(|&x| x as usize).sum();
-                let one = g.const_one()?;
-                input_bits_1[sum] = g.and(&input_bits_1[sum], &one)?;
-                input_bits_2[sum] = g.and(&input_bits_2[sum], &one)?;
-                input_bits_1[sum + 1] = g.and(&input_bits_1[sum + 1], &one)?;
-                input_bits_2[sum + 1] = g.and(&input_bits_2[sum + 1], &one)?;
-
                 for (i1, i2) in input_bits_1
                     .iter_mut()
                     .zip(input_bits_2.iter_mut())
                     .skip(sum)
-                    .take(len as usize)
+                    .take(len)
                     .skip(2)
                 {
                     *i1 = g.const_zero()?;
                     *i2 = g.const_zero()?;
                 }
             }
+            sum += len;
         }
 
         // Perform the actual XOR
-        let res = input_bits_1
-            .iter()
-            .zip(input_bits_2.iter())
-            .map(|(x, y)| g.xor(x, y))
-            .collect::<Result<Vec<_>, _>>()?;
+        let res = Self::xor_many_as_wires(g, &input_bits_1, &input_bits_2)?;
 
         // Compose the results
         let mut iter = base_bits.iter();
@@ -2887,7 +2793,7 @@ impl GarbledCircuits {
         Ok(BinaryBundle::new(results))
     }
 
-    /// Computes the BLAKE2s hash of 'num_inputs' inputs, each of 'num_bits' bits. The inputs are given as two bitdecompositions wires_a and wires_b, and the output is composed using wires_c. The output is then compose into size 32 Vec of field elements.
+    /// Computes the BLAKE2s hash of 'num_inputs' inputs, each of 'num_bits' bits (rounded to next multiple of 8). The inputs are given as two bitdecompositions wires_a and wires_b, and the output is composed using wires_c. The output is then compose into size 32 Vec of field elements.
     pub(crate) fn blake2s<G: FancyBinary + FancyBinaryConstant, F: PrimeField>(
         g: &mut G,
         wires_a: &BinaryBundle<G::Item>,
@@ -2895,7 +2801,6 @@ impl GarbledCircuits {
         wires_c: &BinaryBundle<G::Item>,
         num_inputs: usize,
         num_bits: &[usize],
-        // total_output_bitlen_per_field: usize,
     ) -> Result<BinaryBundle<G::Item>, G::Error> {
         let input_bitlen = F::MODULUS_BIT_SIZE as usize;
         let mut input = Vec::new();
@@ -2905,50 +2810,70 @@ impl GarbledCircuits {
             wires_b.wires().chunks(input_bitlen),
             num_bits
         ) {
-            let tmp = Self::adder_mod_p_with_output_size::<_, F>(g, chunk_x1, chunk_x2, *bits)?;
+            let bits = bits.div_ceil(8) * 8; // We need to round to the next byte
+            let tmp = Self::adder_mod_p_with_output_size::<_, F>(g, chunk_x1, chunk_x2, bits)?;
             for chunk in tmp.chunks(8) {
                 input.push(chunk.to_owned())
             }
         }
+
+        // The actual hash
         debug_assert_eq!(input.len(), num_inputs);
         let blocks = num_inputs.div_ceil(64);
         let mut counter: u64 = 0;
-        let mut h = Vec::new();
+        let mut h = Vec::with_capacity(Self::IV.len());
         for inp in Self::IV {
             h.push(Self::constant_bundle_from_u32(g, inp, 32)?);
         }
+
         let zero = vec![g.const_zero()?; 32];
-        let tmp = Self::constant_bundle_from_u32(g, 0x01010020, 32)?;
-        let res = Self::xor_many_as_wires(g, &h[0], &tmp)?;
-        h[0] = res; // no key provided; = 0x0101kknn where kk is key length and nn is output length
+        let tmp = Self::constant_bundle_from_u32(g, 0x01010020, 32)?; // no key provided; = 0x0101kknn where kk is key length and nn is output length
+        h[0] = Self::xor_many_as_wires(g, &h[0], &tmp)?;
+
         if num_inputs > 0 {
-            for block in 0..blocks - 1 {
+            let mut tmp: [_; 16] = core::array::from_fn(|_| zero.clone());
+            for inp in input.chunks(64).take(blocks - 1) {
                 counter += 64;
                 let t = [counter as u32, (counter >> 32) as u32];
-                let mut tmp: [_; 16] = core::array::from_fn(|_| zero.clone());
-                for i in 0..64 {
-                    let shift = (i % 4) as u8 * 8;
-                    let shifted_left =
-                        Self::shift_left(g, &input[64 * block + i], shift as usize, 32)?;
-                    tmp[i / 4] = Self::bin_addition_no_carry(g, &tmp[i / 4], &shifted_left)?;
+
+                for (i, inp) in inp.iter().enumerate() {
+                    let shift = (i % 4) * 8;
+                    tmp[i / 4]
+                        .iter_mut()
+                        .skip(shift)
+                        .zip(inp.iter())
+                        .for_each(|(a, b)| {
+                            *a = b.clone();
+                        });
                 }
                 h = Self::blake2s_compress(g, &tmp, &h, t, [0, 0])?;
             }
         }
+
         let mut bytes = num_inputs % 64;
         if num_inputs > 0 && bytes == 0 {
             bytes = 64;
         }
         counter += bytes as u64;
         let t = [counter as u32, (counter >> 32) as u32];
+
         let mut tmp: [_; 16] = core::array::from_fn(|_| zero.clone());
-        for i in 0..bytes {
-            let shift = (i % 4) as u8 * 8;
-            let shifted_left =
-                Self::shift_left(g, &input[64 * (blocks - 1) + i], shift as usize, 32)?;
-            tmp[i / 4] = Self::bin_addition_no_carry(g, &tmp[i / 4], &shifted_left)?;
+        if num_inputs > 0 {
+            for (i, inp) in input.iter().skip(64 * (blocks - 1)).enumerate() {
+                let shift = (i % 4) * 8;
+                tmp[i / 4]
+                    .iter_mut()
+                    .skip(shift)
+                    .zip(inp.iter())
+                    .for_each(|(a, b)| {
+                        *a = b.clone();
+                    });
+            }
         }
+
         h = Self::blake2s_compress(g, &tmp, &h, t, [0xFFFFFFFF, 0])?;
+
+        // Compose the output
         let mut result = Vec::new();
         for res in h {
             for chunk in res.chunks(8) {
@@ -2969,28 +2894,20 @@ impl GarbledCircuits {
         t: [u32; 2],
         f: [u32; 2],
     ) -> Result<Vec<Vec<G::Item>>, G::Error> {
-        let mut state = Vec::new();
+        let mut state = Vec::with_capacity(16);
         for inp in h {
             state.push(inp.to_vec());
         }
         for inp in Self::IV.iter().take(4) {
             state.push(Self::constant_bundle_from_u32(g, *inp, 32)?);
         }
-        let t_0 = Self::constant_bundle_from_u32(g, t[0], 32)?;
-        let t_1 = Self::constant_bundle_from_u32(g, t[1], 32)?;
-        let f_0 = Self::constant_bundle_from_u32(g, f[0], 32)?;
-        let f_1 = Self::constant_bundle_from_u32(g, f[1], 32)?;
-        let iv_4 = Self::constant_bundle_from_u32(g, Self::IV[4], 32)?;
-        let iv_5 = Self::constant_bundle_from_u32(g, Self::IV[5], 32)?;
-        let iv_6 = Self::constant_bundle_from_u32(g, Self::IV[6], 32)?;
-        let iv_7 = Self::constant_bundle_from_u32(g, Self::IV[7], 32)?;
-        state.push(Self::xor_many_as_wires(g, &iv_4, &t_0)?);
-        state.push(Self::xor_many_as_wires(g, &iv_5, &t_1)?);
-        state.push(Self::xor_many_as_wires(g, &iv_6, &f_0)?);
-        state.push(Self::xor_many_as_wires(g, &iv_7, &f_1)?);
+        state.push(Self::constant_bundle_from_u32(g, Self::IV[4] ^ t[0], 32)?);
+        state.push(Self::constant_bundle_from_u32(g, Self::IV[5] ^ t[1], 32)?);
+        state.push(Self::constant_bundle_from_u32(g, Self::IV[6] ^ f[0], 32)?);
+        state.push(Self::constant_bundle_from_u32(g, Self::IV[7] ^ f[1], 32)?);
 
         for r in 0..10 {
-            let sr = Self::SIGMA[r];
+            let sr = Self::SIGMA_BLAKE2[r];
             let res = Self::blake2s_mix(
                 g,
                 &state[0],
@@ -3105,16 +3022,6 @@ impl GarbledCircuits {
         Ok(result)
     }
 
-    fn blake2s_rotr<G: FancyBinary + FancyBinaryConstant>(
-        g: &mut G,
-        x: &[G::Item],
-        n: u8,
-    ) -> Result<Vec<G::Item>, G::Error> {
-        let right_shift = Self::shift_right(g, x, n as usize, 32)?;
-        let left_shift = Self::shift_left(g, x, 32 - n as usize, 32)?;
-        Self::bin_addition_no_carry(g, &right_shift, &left_shift)
-    }
-
     #[expect(clippy::type_complexity)]
     fn blake2s_mix<G: FancyBinary + FancyBinaryConstant>(
         g: &mut G,
@@ -3128,17 +3035,17 @@ impl GarbledCircuits {
         let mut a = Self::bin_addition_no_carry(g, a, b)?;
         a = Self::bin_addition_no_carry(g, &a, x)?;
         let mut d = Self::xor_many_as_wires(g, d, &a)?;
-        d = Self::blake2s_rotr(g, &d, 16)?;
+        d.rotate_left(16);
         let mut c = Self::bin_addition_no_carry(g, c, &d)?;
         let mut b = Self::xor_many_as_wires(g, b, &c)?;
-        b = Self::blake2s_rotr(g, &b, 12)?;
+        b.rotate_left(12);
         a = Self::bin_addition_no_carry(g, &a, &b)?;
         a = Self::bin_addition_no_carry(g, &a, y)?;
         d = Self::xor_many_as_wires(g, &d, &a)?;
-        d = Self::blake2s_rotr(g, &d, 8)?;
+        d.rotate_left(8);
         c = Self::bin_addition_no_carry(g, &c, &d)?;
         b = Self::xor_many_as_wires(g, &b, &c)?;
-        b = Self::blake2s_rotr(g, &b, 7)?;
+        b.rotate_left(7);
 
         Ok((a, b, c, d))
     }
@@ -3147,7 +3054,7 @@ impl GarbledCircuits {
         0x5BE0CD19,
     ];
 
-    const SIGMA: [[u8; 16]; 10] = [
+    const SIGMA_BLAKE2: [[u8; 16]; 10] = [
         [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
         [14, 10, 4, 8, 9, 15, 13, 6, 1, 12, 0, 2, 11, 7, 5, 3],
         [11, 8, 12, 0, 5, 2, 15, 13, 10, 14, 3, 6, 7, 1, 9, 4],
@@ -3160,7 +3067,7 @@ impl GarbledCircuits {
         [10, 2, 8, 4, 7, 6, 1, 5, 15, 11, 9, 14, 3, 12, 13, 0],
     ];
 
-    /// Computes the BLAKE3 hash of 'num_inputs' inputs, each of 'num_bits' bits. The inputs are given as two bitdecompositions wires_a and wires_b, and the output is composed using wires_c. The output is then compose into size 32 Vec of field elements.
+    /// Computes the BLAKE3 hash of 'num_inputs' inputs, each of 'num_bits' bits (rounded to next multiple of 8). The inputs are given as two bitdecompositions wires_a and wires_b, and the output is composed using wires_c. The output is then compose into size 32 Vec of field elements.
     pub(crate) fn blake3<G: FancyBinary + FancyBinaryConstant, F: PrimeField>(
         g: &mut G,
         wires_a: &BinaryBundle<G::Item>,
@@ -3177,11 +3084,14 @@ impl GarbledCircuits {
             wires_b.wires().chunks(input_bitlen),
             num_bits
         ) {
-            let tmp = Self::adder_mod_p_with_output_size::<_, F>(g, chunk_x1, chunk_x2, *bits)?;
+            let bits = bits.div_ceil(8) * 8; // We need to round to the next byte
+            let tmp = Self::adder_mod_p_with_output_size::<_, F>(g, chunk_x1, chunk_x2, bits)?;
             for chunk in tmp.chunks(8) {
                 input.push(chunk.to_owned())
             }
         }
+
+        // The actual hash
         debug_assert_eq!(input.len(), num_inputs);
 
         let root_flag: u32 = 8;
@@ -3190,6 +3100,8 @@ impl GarbledCircuits {
         let mut result = Vec::new();
         if num_inputs <= 1024 {
             let h = Self::blake3_chunk_chaining(g, &input, 0, root_flag)?;
+
+            // Compose the output
             for res in h {
                 for chunk in res.chunks(8) {
                     result.extend(Self::compose_field_element::<_, F>(
@@ -3199,82 +3111,66 @@ impl GarbledCircuits {
                     )?)
                 }
             }
-        } else {
-            // At least two chunks
-            let num_chunks = num_inputs.div_ceil(1024);
-            let mut nodes = Vec::with_capacity(num_chunks);
-            for i in 0..num_chunks - 1 {
-                let start = i * 1024;
-                nodes.push(Self::blake3_chunk_chaining(
+
+            return Ok(BinaryBundle::new(result));
+        }
+
+        // At least two chunks
+        let num_chunks = num_inputs.div_ceil(1024);
+        let mut nodes = Vec::with_capacity(num_chunks);
+        for (i, inp) in input.chunks(1024).take(num_chunks - 1).enumerate() {
+            nodes.push(Self::blake3_chunk_chaining(g, inp, i as u64, 0)?);
+        }
+
+        let start = (num_chunks - 1) * 1024;
+        nodes.push(Self::blake3_chunk_chaining(
+            g,
+            &input[start..],
+            num_chunks as u64 - 1,
+            0,
+        )?);
+
+        // Merkle tree
+        let mut iv_as_wires = Vec::with_capacity(Self::IV.len());
+        for inp in Self::IV.iter() {
+            iv_as_wires.push(Self::constant_bundle_from_u32(g, *inp, 32)?);
+        }
+
+        let mut len = num_chunks;
+        let mut input = vec![Vec::new(); 16];
+        while len != 1 {
+            let mut new_len = len / 2;
+            for i in 0..new_len {
+                let flag = if len == 2 {
+                    root_flag | parent_flag
+                } else {
+                    parent_flag
+                };
+
+                input[..8].clone_from_slice(&nodes[2 * i]);
+                input[8..].clone_from_slice(&nodes[2 * i + 1]);
+                nodes[i] = Self::blake3_compress(g, &input, &iv_as_wires, [0, 0], 64, flag)?;
+            }
+
+            if len % 2 == 1 {
+                nodes[new_len] = nodes[len - 1].clone();
+                new_len += 1;
+            }
+
+            len = new_len;
+        }
+
+        // Compose the output
+        for res in &nodes[0] {
+            for chunk in res.chunks(8) {
+                result.extend(Self::compose_field_element::<_, F>(
                     g,
-                    &input[start..start + 1024],
-                    i as u64,
-                    0,
-                )?);
-            }
-
-            let start = (num_chunks - 1) * 1024;
-            if num_inputs % 1024 == 0 {
-                nodes.push(Self::blake3_chunk_chaining(
-                    g,
-                    &input[start..start + 1024],
-                    num_chunks as u64 - 1,
-                    0,
-                )?);
-            } else {
-                nodes.push(Self::blake3_chunk_chaining(
-                    g,
-                    &input[start..start + (num_inputs % 1024)],
-                    num_chunks as u64 - 1,
-                    0,
-                )?);
-            }
-
-            // Merkle tree
-            let mut len = num_chunks;
-            let mut iv_as_wires = Vec::new();
-            for inp in Self::IV.iter() {
-                iv_as_wires.push(Self::constant_bundle_from_u32(g, *inp, 32)?);
-            }
-            while len != 1 {
-                let mut i = 0;
-                let mut next_len = 0;
-
-                while i + 1 < len {
-                    let flag = if len == 2 {
-                        root_flag + parent_flag
-                    } else {
-                        parent_flag
-                    };
-
-                    let mut input = vec![Vec::new(); 16];
-                    input[..8].clone_from_slice(&nodes[2 * i][..8]);
-                    input[8..].clone_from_slice(&nodes[2 * i + 1][..8]);
-
-                    nodes[next_len] =
-                        Self::blake3_compress(g, &input, &iv_as_wires, [0, 0], 64, flag)?;
-                    next_len += 1;
-                    i += 2;
-                }
-
-                if len % 2 == 1 {
-                    nodes[next_len] = nodes[len - 1].clone();
-                    next_len += 1;
-                }
-
-                len = next_len;
-            }
-
-            for res in &nodes[0] {
-                for chunk in res.chunks(8) {
-                    result.extend(Self::compose_field_element::<_, F>(
-                        g,
-                        chunk,
-                        rands.next().unwrap(),
-                    )?)
-                }
+                    chunk,
+                    rands.next().unwrap(),
+                )?)
             }
         }
+
         Ok(BinaryBundle::new(result))
     }
 
@@ -3287,9 +3183,9 @@ impl GarbledCircuits {
         let num_inputs = input.len();
         assert!(num_inputs <= 1024);
         let blocks = num_inputs.div_ceil(64);
-        let mut h = Vec::new();
-        for inp in Self::IV.iter() {
-            h.push(Self::constant_bundle_from_u32(g, *inp, 32)?);
+        let mut h = Vec::with_capacity(Self::IV.len());
+        for inp in Self::IV {
+            h.push(Self::constant_bundle_from_u32(g, inp, 32)?);
         }
 
         let chunk_start: u32 = 1;
@@ -3299,15 +3195,20 @@ impl GarbledCircuits {
 
         let t = [chunk_index as u32, (chunk_index >> 32) as u32];
         let zero = vec![g.const_zero()?; 32];
+
         let mut used_flag = chunk_start;
         if num_inputs > 0 {
-            for block in 0..blocks - 1 {
-                let mut tmp: [_; 16] = core::array::from_fn(|_| zero.clone());
-                for i in 0..64 {
-                    let shift = (i % 4) as u8 * 8;
-                    let shifted_left =
-                        Self::shift_left(g, &input[64 * block + i], shift as usize, 32)?;
-                    tmp[i / 4] = Self::bin_addition_no_carry(g, &tmp[i / 4], &shifted_left)?;
+            let mut tmp: [_; 16] = core::array::from_fn(|_| zero.clone());
+            for inp in input.chunks(64).take(blocks - 1) {
+                for (i, inp) in inp.iter().enumerate() {
+                    let shift = (i % 4) * 8;
+                    tmp[i / 4]
+                        .iter_mut()
+                        .skip(shift)
+                        .zip(inp.iter())
+                        .for_each(|(a, b)| {
+                            *a = b.clone();
+                        });
                 }
                 h = Self::blake3_compress(g, &tmp, &h, t, 64, used_flag)?;
                 used_flag = 0;
@@ -3319,15 +3220,22 @@ impl GarbledCircuits {
             bytes = 64;
         }
 
-        used_flag += chunk_end + flag;
+        used_flag |= chunk_end | flag;
 
         let mut tmp: [_; 16] = core::array::from_fn(|_| zero.clone());
-        for i in 0..bytes {
-            let shift = (i % 4) as u8 * 8;
-            let shifted_left =
-                Self::shift_left(g, &input[64 * (blocks - 1) + i], shift as usize, 32)?;
-            tmp[i / 4] = Self::bin_addition_no_carry(g, &tmp[i / 4], &shifted_left)?;
+        if num_inputs > 0 {
+            for (i, inp) in input.iter().skip(64 * (blocks - 1)).enumerate() {
+                let shift = (i % 4) * 8;
+                tmp[i / 4]
+                    .iter_mut()
+                    .skip(shift)
+                    .zip(inp.iter())
+                    .for_each(|(a, b)| {
+                        *a = b.clone();
+                    });
+            }
         }
+
         Self::blake3_compress(g, &tmp, &h, t, bytes as u32, used_flag)
     }
 
@@ -3339,21 +3247,17 @@ impl GarbledCircuits {
         blocklen: u32,
         flags: u32,
     ) -> Result<Vec<Vec<G::Item>>, G::Error> {
-        let mut state = Vec::new();
+        let mut state = Vec::with_capacity(16);
         for inp in h {
             state.push(inp.to_vec());
         }
         for inp in Self::IV.iter().take(4) {
             state.push(Self::constant_bundle_from_u32(g, *inp, 32)?);
         }
-        let t_0 = Self::constant_bundle_from_u32(g, t[0], 32)?;
-        let t_1 = Self::constant_bundle_from_u32(g, t[1], 32)?;
-        let blocklen_as_wires = Self::constant_bundle_from_u32(g, blocklen, 32)?;
-        let flags_as_wires = Self::constant_bundle_from_u32(g, flags, 32)?;
-        state.push(t_0);
-        state.push(t_1);
-        state.push(blocklen_as_wires);
-        state.push(flags_as_wires);
+        state.push(Self::constant_bundle_from_u32(g, t[0], 32)?);
+        state.push(Self::constant_bundle_from_u32(g, t[1], 32)?);
+        state.push(Self::constant_bundle_from_u32(g, blocklen, 32)?);
+        state.push(Self::constant_bundle_from_u32(g, flags, 32)?);
 
         for r in 0..7 {
             let sr = Self::SIGMA_BLAKE3[r];
@@ -3469,16 +3373,6 @@ impl GarbledCircuits {
         Ok(result)
     }
 
-    fn blake3_rotr<G: FancyBinary + FancyBinaryConstant>(
-        g: &mut G,
-        x: &[G::Item],
-        n: u8,
-    ) -> Result<Vec<G::Item>, G::Error> {
-        let right_shift = Self::shift_right(g, x, n as usize, 32)?;
-        let left_shift = Self::shift_left(g, x, 32 - n as usize, 32)?;
-        Self::bin_addition_no_carry(g, &right_shift, &left_shift)
-    }
-
     #[expect(clippy::type_complexity)]
     fn blake3_mix<G: FancyBinary + FancyBinaryConstant>(
         g: &mut G,
@@ -3492,17 +3386,17 @@ impl GarbledCircuits {
         let mut a = Self::bin_addition_no_carry(g, a, b)?;
         a = Self::bin_addition_no_carry(g, &a, x)?;
         let mut d = Self::xor_many_as_wires(g, d, &a)?;
-        d = Self::blake3_rotr(g, &d, 16)?;
+        d.rotate_left(16);
         let mut c = Self::bin_addition_no_carry(g, c, &d)?;
         let mut b = Self::xor_many_as_wires(g, b, &c)?;
-        b = Self::blake3_rotr(g, &b, 12)?;
+        b.rotate_left(12);
         a = Self::bin_addition_no_carry(g, &a, &b)?;
         a = Self::bin_addition_no_carry(g, &a, y)?;
         d = Self::xor_many_as_wires(g, &d, &a)?;
-        d = Self::blake3_rotr(g, &d, 8)?;
+        d.rotate_left(8);
         c = Self::bin_addition_no_carry(g, &c, &d)?;
         b = Self::xor_many_as_wires(g, &b, &c)?;
-        b = Self::blake3_rotr(g, &b, 7)?;
+        b.rotate_left(7);
 
         Ok((a, b, c, d))
     }

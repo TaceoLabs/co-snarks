@@ -485,21 +485,9 @@ pub(crate) struct Blake2sInput<F: PrimeField> {
     pub(crate) num_bits: u32,
 }
 
-impl<F: PrimeField> PartialEq for Blake2sInput<F> {
-    fn eq(&self, other: &Self) -> bool {
-        self.blackbox_input == other.blackbox_input && self.num_bits == other.num_bits
-    }
-}
-
 pub(crate) struct Blake2sConstraint<F: PrimeField> {
     pub(crate) inputs: Vec<Blake2sInput<F>>,
     pub(crate) result: [u32; 32],
-}
-
-impl<F: PrimeField> PartialEq for Blake2sConstraint<F> {
-    fn eq(&self, other: &Self) -> bool {
-        self.inputs == other.inputs && self.result == other.result
-    }
 }
 
 pub(crate) struct Blake3Input<F: PrimeField> {
@@ -507,21 +495,9 @@ pub(crate) struct Blake3Input<F: PrimeField> {
     pub(crate) num_bits: u32,
 }
 
-impl<F: PrimeField> PartialEq for Blake3Input<F> {
-    fn eq(&self, other: &Self) -> bool {
-        self.blackbox_input == other.blackbox_input && self.num_bits == other.num_bits
-    }
-}
-
 pub(crate) struct Blake3Constraint<F: PrimeField> {
     pub(crate) inputs: Vec<Blake3Input<F>>,
     pub(crate) result: [u32; 32],
-}
-
-impl<F: PrimeField> PartialEq for Blake3Constraint<F> {
-    fn eq(&self, other: &Self) -> bool {
-        self.inputs == other.inputs && self.result == other.result
-    }
 }
 
 pub const AGGREGATION_OBJECT_SIZE: usize = 16;
