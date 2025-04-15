@@ -191,7 +191,7 @@ fn _hash_to_curve_bn254(seed: &[u8], attempt_count: u8) -> ark_bn254::G1Affine {
         _hash_to_curve_bn254(seed, attempt_count + 1)
     }
 }
-//
+
 pub(crate) fn generate_fixed_base_tables<C: CurveGroup>(
 ) -> &'static [Vec<Vec<C::Affine>>; FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES] {
     if TypeId::of::<C>() == TypeId::of::<ark_grumpkin::Projective>() {
