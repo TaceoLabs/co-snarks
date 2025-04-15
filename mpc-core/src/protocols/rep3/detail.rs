@@ -1,5 +1,3 @@
-use std::any::TypeId;
-
 use super::arithmetic;
 use super::arithmetic::BinaryShare;
 use super::binary;
@@ -14,6 +12,7 @@ use ark_ff::Zero;
 use itertools::izip;
 use itertools::Itertools as _;
 use num_bigint::BigUint;
+use std::any::TypeId;
 
 pub(super) fn low_depth_binary_add_mod_p_many<F: PrimeField, N: Rep3Network>(
     x1: &[BinaryShare<F>],
@@ -443,23 +442,15 @@ pub(crate) fn point_from_xy<C: CurveGroup>(
     }
 
     let point = if TypeId::of::<C>() == TypeId::of::<ark_bn254::G1Projective>() {
-        let (x, y) = unsafe {
-            (
-                *(&x as *const C::BaseField as *const ark_bn254::Fq),
-                *(&y as *const C::BaseField as *const ark_bn254::Fq),
-            )
-        };
+        let x = *crate::downcast(&x).expect("We checked types");
+        let y = *crate::downcast(&y).expect("We checked types");
         let result: ark_bn254::G1Projective = ark_bn254::G1Affine::new(x, y).into();
-        unsafe { *(&result as *const ark_bn254::G1Projective as *const C) }
+        *crate::downcast(&result).expect("We checked types")
     } else if TypeId::of::<C>() == TypeId::of::<ark_grumpkin::Projective>() {
-        let (x, y) = unsafe {
-            (
-                *(&x as *const C::BaseField as *const ark_grumpkin::Fq),
-                *(&y as *const C::BaseField as *const ark_grumpkin::Fq),
-            )
-        };
+        let x = *crate::downcast(&x).expect("We checked types");
+        let y = *crate::downcast(&y).expect("We checked types");
         let result: ark_grumpkin::Projective = ark_grumpkin::Affine::new(x, y).into();
-        unsafe { *(&result as *const ark_grumpkin::Projective as *const C) }
+        *crate::downcast(&result).expect("We checked types")
     } else {
         panic!("Unsupported curve {}", std::any::type_name::<C>());
     };

@@ -97,8 +97,7 @@ where
 
     // A special case for Bit
     if TypeId::of::<T>() == TypeId::of::<Bit>() {
-        // SAFTEY: We already checked that the type matches
-        let share = unsafe { &*(&share as *const Rep3RingShare<T> as *const Rep3RingShare<Bit>) };
+        let share = crate::downcast(&share).expect("We already checked types");
         return conversion::bit_inject_from_bit(share, io_context);
     }
 
@@ -172,8 +171,8 @@ where
 {
     // A special case for Bit
     if TypeId::of::<T>() == TypeId::of::<Bit>() {
-        // SAFTEY: We already checked that the type matches
-        let share = unsafe { &*(&share as *const Rep3RingShare<T> as *const Rep3RingShare<Bit>) };
+        let share =
+            crate::downcast::<_, Rep3RingShare<Bit>>(&share).expect("We already checked types");
         let biguint_share = Rep3BigUintShare::new(
             BigUint::from(share.a.0.convert() as u64),
             BigUint::from(share.b.0.convert() as u64),

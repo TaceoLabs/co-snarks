@@ -163,6 +163,7 @@ impl TryFrom<usize> for BasicTableId {
                 format!("Invalid BasicTableId: {}", value),
             ))
         } else {
+            // Safety: Safe because BasicTableId is repr(usize)
             Ok(unsafe { std::mem::transmute::<usize, BasicTableId>(value) })
         }
     }
