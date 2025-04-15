@@ -23,3 +23,4 @@ add_plain_acvm_test!("to_radix32");
 add_plain_acvm_test!("unconstrained_fn");
 add_plain_acvm_test!("unconstrained_fn_field");
 add_plain_acvm_test!("write_access");
+add_plain_acvm_test!("bb_sha256_compression");

@@ -1,0 +1,6 @@
+[package]
+name = "bb_sha256_compression"
+type = "bin"
+authors = [""]
+
+[dependencies]

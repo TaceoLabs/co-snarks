@@ -199,7 +199,6 @@ fn main() -> color_eyre::Result<ExitCode> {
     let crs_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, false)?;
     let crs = CrsParser::get_crs(&prover_crs_path, &verifier_crs_path, crs_size, has_zk)?;
     let (prover_crs, verifier_crs) = crs.split();
-
     // Create the proving key and the barretenberg-compatible verifying key
     let (proving_key, vk_barretenberg) =
         ProvingKey::create_keys_barretenberg(0, builder, &prover_crs, &mut driver)

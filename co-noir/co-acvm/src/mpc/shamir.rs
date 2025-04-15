@@ -5,7 +5,7 @@ use co_brillig::mpc::{ShamirBrilligDriver, ShamirBrilligType};
 use mpc_core::{
     gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations},
     protocols::{
-        rep3::network::Rep3MpcNet,
+        rep3::{network::Rep3MpcNet, yao::circuits::SHA256Table},
         rep3_ring::lut::Rep3LookupTable,
         shamir::{
             arithmetic, network::ShamirNetwork, pointshare, ShamirPointShare,
@@ -770,5 +770,55 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         _value: Self::AcvmPoint<C>,
     ) -> std::io::Result<Self::AcvmPoint<C>> {
         panic!("functionality set_point_to_value_if_zero not feasible for Shamir")
+    }
+
+    fn sha256_compression(
+        &mut self,
+        _state: &[Self::AcvmType; 8],
+        _message: &[Self::AcvmType; 16],
+    ) -> std::io::Result<Vec<Self::AcvmType>> {
+        panic!("functionality sha256_compression not feasible for Shamir")
+    }
+
+    fn sha256_get_overflow_bit(
+        &mut self,
+        _input: Self::ArithmeticShare,
+    ) -> std::io::Result<Self::ArithmeticShare> {
+        panic!("functionality sha256_get_overflow_bit not feasible for Shamir")
+    }
+
+    fn slice_and_get_sparse_table_with_rotation_values(
+        &mut self,
+        _input1: Self::ArithmeticShare,
+        _input2: Self::ArithmeticShare,
+        _basis_bits: &[u64],
+        _rotation: &[u32],
+        _total_bitsize: usize,
+        _base: u64,
+    ) -> std::io::Result<(
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+    )> {
+        panic!(
+            "functionality slice_and_get_sparse_table_with_rotation_values not feasible for Shamir"
+        )
+    }
+
+    fn slice_and_get_sparse_normalization_values(
+        &mut self,
+        _input1: Self::ArithmeticShare,
+        _input2: Self::ArithmeticShare,
+        _base_bits: &[u64],
+        _base: u64,
+        _total_output_bitlen_per_field: usize,
+        _table_type: &SHA256Table,
+    ) -> std::io::Result<(
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+    )> {
+        panic!("functionality slice_and_get_sparse_normalization_values not feasible for Shamir")
     }
 }

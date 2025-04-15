@@ -813,7 +813,6 @@ where
 pub fn ring_div_by_public<T: IntRing2k, N: Rep3Network>(
     input: Rep3RingShare<T>,
     divisor: RingElement<T>,
-
     io_context: &mut IoContext<N>,
 ) -> IoResult<Rep3RingShare<T>>
 where

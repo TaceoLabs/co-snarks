@@ -288,6 +288,33 @@ where
         Ok(())
     }
 
+    pub(crate) fn solve_sha_256_permutation_opcode(
+        driver: &mut T,
+        initial_witness: &mut WitnessMap<T::AcvmType>,
+        inputs: &[FunctionInput<GenericFieldElement<F>>; 16],
+        hash_values: &[FunctionInput<GenericFieldElement<F>>; 8],
+        outputs: &[Witness; 8],
+    ) -> CoAcvmResult<()> {
+        let mut message = core::array::from_fn(|_| T::AcvmType::default());
+        for (i, inp) in inputs.iter().enumerate() {
+            let witness_value = Self::input_to_value(initial_witness, *inp, false)?;
+            message[i] = witness_value;
+        }
+        let mut state = core::array::from_fn(|_| T::AcvmType::default());
+        for (i, inp) in hash_values.iter().enumerate() {
+            let witness_value = Self::input_to_value(initial_witness, *inp, false)?;
+            state[i] = witness_value;
+        }
+
+        let state = T::sha256_compression(driver, &state, &message)?;
+
+        for (output_witness, value) in outputs.iter().zip(state.into_iter()) {
+            Self::insert_value(output_witness, value, initial_witness)?;
+        }
+
+        Ok(())
+    }
+
     pub(super) fn solve_blackbox(
         &mut self,
         bb_func: &BlackBoxFuncCall<GenericFieldElement<F>>,
@@ -350,6 +377,17 @@ where
                 scalars,
                 outputs,
                 pedantic_solving,
+            )?,
+            BlackBoxFuncCall::Sha256Compression {
+                inputs,
+                hash_values,
+                outputs,
+            } => Self::solve_sha_256_permutation_opcode(
+                &mut self.driver,
+                initial_witness,
+                inputs,
+                hash_values,
+                outputs,
             )?,
             _ => todo!("solve blackbox function {} not supported", bb_func.name()),
         }

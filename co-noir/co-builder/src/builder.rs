@@ -2,6 +2,8 @@ use crate::acir_format::{HonkRecursion, ProgramMetadata};
 use crate::polynomials::polynomial::MASKING_OFFSET;
 use crate::prelude::HonkCurve;
 use crate::types::field_ct::{CycleGroupCT, CycleScalarCT};
+use crate::types::sha_compression::SHA256;
+use crate::types::types::Sha256Compression;
 use crate::types::types::{EccAddGate, MultiScalarMul, WitnessOrConstant};
 use crate::TranscriptFieldType;
 use crate::{
@@ -3533,9 +3535,9 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         // }
 
         // Add sha256 constraints
-        // for (i, constraint) in constraint_system.sha256_constraints.iter().enumerate() {
-        //     todo!("sha256 gates");
-        // }
+        for constraint in constraint_system.sha256_compression.iter() {
+            self.create_sha256_compression_constraints(driver, constraint)?;
+        }
 
         // for (i, constraint) in constraint_system.sha256_compression.iter().enumerate() {
         //     todo!("sha256 compression gates");
@@ -3842,6 +3844,54 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         Ok(())
     }
 
+    fn create_sha256_compression_constraints(
+        &mut self,
+        driver: &mut T,
+        constraint: &Sha256Compression<P::ScalarField>,
+    ) -> std::io::Result<()> {
+        let mut inputs: [FieldCT<P::ScalarField>; 16] =
+            array::from_fn(|_| FieldCT::<P::ScalarField>::default());
+        let mut hash_inputs: [FieldCT<P::ScalarField>; 8] =
+            array::from_fn(|_| FieldCT::<P::ScalarField>::default());
+
+        // Get the witness assignment for each witness index
+        // Note that we do not range-check the inputs, which should be 32 bits,
+        // because of the lookup-tables.
+        for (i, witness_index_num_bits) in constraint.inputs.iter().enumerate() {
+            inputs[i] = witness_index_num_bits.to_field_ct();
+        }
+        for (i, witness_index_num_bits) in constraint.hash_values.iter().enumerate() {
+            hash_inputs[i] = witness_index_num_bits.to_field_ct();
+        }
+
+        // Compute sha256 compression
+        let output_bytes = SHA256::sha256_block(hash_inputs, inputs, self, driver)?;
+
+        for (i, output_byte) in output_bytes.iter().enumerate() {
+            let normalised_output = output_byte.normalize(self, driver);
+            if normalised_output.is_constant() {
+                let value = normalised_output.get_value(self, driver);
+                self.fix_witness(
+                    constraint.result[i],
+                    T::get_public(&value).expect("Constants should be public"),
+                );
+            } else {
+                let assert_equal = PolyTriple {
+                    a: normalised_output.witness_index,
+                    b: constraint.result[i],
+                    c: 0,
+                    q_m: P::ScalarField::zero(),
+                    q_l: P::ScalarField::one(),
+                    q_r: -P::ScalarField::one(),
+                    q_o: P::ScalarField::zero(),
+                    q_c: P::ScalarField::zero(),
+                };
+                self.create_poly_gate(&assert_equal);
+            }
+        }
+        Ok(())
+    }
+
     fn create_logic_constraint(
         &mut self,
         driver: &mut T,
@@ -3975,16 +4025,16 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                     self,
                     driver,
                     MultiTableId::Uint32Xor,
-                    a_chunk.to_owned(),
-                    b_chunk.to_owned(),
+                    &a_chunk,
+                    &b_chunk,
                 )?
             } else {
                 Plookup::read_from_2_to_1_table(
                     self,
                     driver,
                     MultiTableId::Uint32And,
-                    a_chunk.to_owned(),
-                    b_chunk.to_owned(),
+                    &a_chunk,
+                    &b_chunk,
                 )?
             };
 

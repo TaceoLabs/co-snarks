@@ -8,6 +8,7 @@ use ark_ec::{pairing::Pairing, AffineRepr, CurveGroup};
 use ark_ff::{PrimeField, Zero};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use itertools::izip;
+use mpc_core::protocols::rep3::yao::circuits::SHA256Table;
 use num_bigint::BigUint;
 use std::array::from_fn;
 use std::collections::HashMap;
@@ -170,6 +171,61 @@ impl TryFrom<usize> for BasicTableId {
 }
 
 impl BasicTableId {
+    const MAJORITY_NORMALIZATION_TABLE: [u64; 16] = [
+        // xor result = 0
+        0, // a + b + c = 0 => (a & b) ^ (a & c) ^ (b & c) = 0
+        0, // a + b + c = 1 => (a & b) ^ (a & c) ^ (b & c) = 0
+        1, // a + b + c = 2 => (a & b) ^ (a & c) ^ (b & c) = 1
+        1, // a + b + c = 3 => (a & b) ^ (a & c) ^ (b & c) = 1
+        // xor result = 1
+        1, 1, 2, 2, // xor result = 2
+        0, 0, 1, 1, // xor result = 3
+        1, 1, 2, 2,
+    ];
+
+    const CHOOSE_NORMALIZATION_TABLE: [u64; 28] = [
+        /* xor result = 0 */
+        0, // e + 2f + 3g = 0 => e = 0, f = 0, g = 0 => t = 0
+        0, // e + 2f + 3g = 1 => e = 1, f = 0, g = 0 => t = 0
+        0, // e + 2f + 3g = 2 => e = 0, f = 1, g = 0 => t = 0
+        1, // e + 2f + 3g = 3 => e = 0, f = 0, g = 1 OR e = 1, f = 1, g = 0 => t = 1
+        0, // e + 2f + 3g = 4 => e = 1, f = 0, g = 1 => t = 0
+        1, // e + 2f + 3g = 5 => e = 0, f = 1, g = 1 => t = 1
+        1, // e + 2f + 3g = 6 => e = 1, f = 1, g = 1 => t = 1
+        /* xor result = 1 */
+        1, // e + 2f + 3g = 0 => e = 0, f = 0, g = 0 => t = 0
+        1, // e + 2f + 3g = 1 => e = 1, f = 0, g = 0 => t = 0
+        1, // e + 2f + 3g = 2 => e = 0, f = 1, g = 0 => t = 0
+        2, // e + 2f + 3g = 3 => e = 0, f = 0, g = 1 OR e = 1, f = 1, g = 0 => t = 1
+        1, // e + 2f + 3g = 4 => e = 1, f = 0, g = 1 => t = 0
+        2, // e + 2f + 3g = 5 => e = 0, f = 1, g = 1 => t = 1
+        2, // e + 2f + 3g = 6 => e = 1, f = 1, g = 1 => t = 1
+        /* xor result = 2 */
+        0, // e + 2f + 3g = 0 => e = 0, f = 0, g = 0 => t = 0
+        0, // e + 2f + 3g = 1 => e = 1, f = 0, g = 0 => t = 0
+        0, // e + 2f + 3g = 2 => e = 0, f = 1, g = 0 => t = 0
+        1, // e + 2f + 3g = 3 => e = 0, f = 0, g = 1 OR e = 1, f = 1, g = 0 => t = 1
+        0, // e + 2f + 3g = 4 => e = 1, f = 0, g = 1 => t = 0
+        1, // e + 2f + 3g = 5 => e = 0, f = 1, g = 1 => t = 1
+        1, // e + 2f + 3g = 6 => e = 1, f = 1, g = 1 => t = 1
+        1, // e + 2f + 3g = 0 => e = 0, f = 0, g = 0 => t = 0
+        /* xor result = 3 */
+        1, // e + 2f + 3g = 1 => e = 1, f = 0, g = 0 => t = 0
+        1, // e + 2f + 3g = 2 => e = 0, f = 1, g = 0 => t = 0
+        2, // e + 2f + 3g = 3 => e = 0, f = 0, g = 1 OR e = 1, f = 1, g = 0 => t = 1
+        1, // e + 2f + 3g = 4 => e = 1, f = 0, g = 1 => t = 0
+        2, // e + 2f + 3g = 5 => e = 0, f = 1, g = 1 => t = 1
+        2, // e + 2f + 3g = 6 => e = 1, f = 1, g = 1 => t = 1
+    ];
+
+    const WITNESS_EXTENSION_NORMALIZATION_TABLE: [u64; 16] = [
+        /* xor result = 0 */
+        0, 1, 0, 1, /* xor result = 1 */
+        1, 2, 1, 2, /* xor result = 2 */
+        0, 1, 0, 1, /* xor result = 3 */
+        1, 2, 1, 2,
+    ];
+
     pub(crate) fn get_value_from_key<F: PrimeField, const ID: u64>(key: [u64; 2]) -> [F; 2] {
         [F::from(key[0] * 3 + key[1] * 4 + ID * 0x1337), F::zero()]
     }
@@ -180,7 +236,7 @@ impl BasicTableId {
         key: [u64; 2],
     ) -> [F; 2] {
         [
-            F::from(Utils::rotate64(key[0] ^ key[1], NUM_ROTATED_OUTPUT_BITS)),
+            F::from((key[0] ^ key[1]).rotate_right(NUM_ROTATED_OUTPUT_BITS as u32)),
             F::zero(),
         ]
     }
@@ -191,7 +247,7 @@ impl BasicTableId {
         key: [u64; 2],
     ) -> [F; 2] {
         [
-            F::from(Utils::rotate64(key[0] & key[1], NUM_ROTATED_OUTPUT_BITS)),
+            F::from((key[0] & key[1]).rotate_right(NUM_ROTATED_OUTPUT_BITS as u32)),
             F::zero(),
         ]
     }
@@ -213,6 +269,60 @@ impl BasicTableId {
         let point = &basic_table[index];
         let (x, y) = point.xy().unwrap_or_default();
         [x, y]
+    }
+
+    pub(crate) fn get_sparse_table_with_rotation_values<
+        F: PrimeField,
+        const BASE: u64,
+        const NUM_ROTATED_BITS: u64,
+    >(
+        key: [u64; 2],
+    ) -> [F; 2] {
+        let t0 = Utils::map_into_sparse_form::<BASE>(key[0]);
+        let t1 = if NUM_ROTATED_BITS > 0 {
+            Utils::map_into_sparse_form::<BASE>(
+                (key[0] as u32).rotate_right(NUM_ROTATED_BITS as u32) as u64,
+            )
+        } else {
+            t0.clone()
+        };
+        [F::from(t0), F::from(t1)]
+    }
+
+    pub(crate) fn get_sparse_normalization_values<F: PrimeField, const BASE: u64>(
+        key: [u64; 2],
+        base_table: &[u64],
+    ) -> [F; 2] {
+        let mut accumulator = 0u64;
+        let mut input = key[0];
+        let mut count = 0u64;
+        while input > 0 {
+            let slice = input % BASE;
+            let bit = base_table[slice as usize];
+            accumulator += bit << count;
+            input -= slice;
+            input /= BASE;
+            count += 1;
+        }
+        [F::from(accumulator), F::zero()]
+    }
+    pub(crate) fn get_sparse_normalization_values_wtns<F: PrimeField, const BASE: u64>(
+        key: [u64; 2],
+    ) -> [F; 2] {
+        Self::get_sparse_normalization_values::<F, BASE>(
+            key,
+            &Self::WITNESS_EXTENSION_NORMALIZATION_TABLE,
+        )
+    }
+    pub(crate) fn get_sparse_normalization_values_choose<F: PrimeField, const BASE: u64>(
+        key: [u64; 2],
+    ) -> [F; 2] {
+        Self::get_sparse_normalization_values::<F, BASE>(key, &Self::CHOOSE_NORMALIZATION_TABLE)
+    }
+    pub(crate) fn get_sparse_normalization_values_maj<F: PrimeField, const BASE: u64>(
+        key: [u64; 2],
+    ) -> [F; 2] {
+        Self::get_sparse_normalization_values::<F, BASE>(key, &Self::MAJORITY_NORMALIZATION_TABLE)
     }
 }
 
@@ -516,9 +626,236 @@ impl<F: PrimeField> Plookup<F> {
         table
     }
 
+    fn get_majority_input_table() -> PlookupMultiTable<F> {
+        //   We want to tackle the SHA256 `maj` sub-algorithm
+        //   This requires us to compute ((a >>> 2) ^ (a >>> 13) ^ (a >>> 22)) + ((a & b) ^ (a & c) ^ (b & c))
+        //   In sparse form, we can represent this as:
+        //        4 * (a >>> 2) + (a >>> 13) + (a >>> 22) +  (a + b + c)
+        //   We need to determine the values of the constants (q_1, q_2, q_3) that we will be scaling our lookup values by,
+        //   when assembling our accumulated sums.
+        //   We need the sparse representation of `a` elsewhere in the algorithm, so the constants in columns 1 and 2 are
+        //   fixed.
+        let id = MultiTableId::Sha256MajInput;
+        let base: u64 = 16;
+
+        // scaling factors applied to a's sparse limbs, excluding the rotated limb
+        let rot2_coefficients = [
+            F::zero(),
+            F::from(base.pow(11 - 2)),
+            F::from(base).pow([22 - 2]),
+        ];
+        let rot13_coefficients = [
+            F::from(base).pow([32 - 13]),
+            F::zero(),
+            F::from(base.pow(22 - 13)),
+        ];
+        let rot22_coefficients = [
+            F::from(base.pow(32 - 22)),
+            F::from(base).pow([32 - 22 + 11]),
+            F::zero(),
+        ];
+
+        // these are the coefficients that we want
+        let target_rotation_coefficients = [
+            rot2_coefficients[0] + rot13_coefficients[0] + rot22_coefficients[0],
+            rot2_coefficients[1] + rot13_coefficients[1] + rot22_coefficients[1],
+            rot2_coefficients[2] + rot13_coefficients[2] + rot22_coefficients[2],
+        ];
+
+        let column_2_row_3_multiplier = target_rotation_coefficients[1]
+            * (-F::from(base).pow([11]))
+            + target_rotation_coefficients[2];
+
+        let column_1_coefficients = [F::one(), F::from(1 << 11), F::from(1 << 22)];
+        let column_2_coefficients = [F::one(), F::from(base.pow(11)), F::from(base).pow([22])];
+        let column_3_coefficients = [F::one(), F::one(), F::one() + column_2_row_3_multiplier];
+
+        let mut table = PlookupMultiTable::<F>::new_from_vec(
+            id,
+            column_1_coefficients.to_vec(),
+            column_2_coefficients.to_vec(),
+            column_3_coefficients.to_vec(),
+        );
+        table.id = MultiTableId::Sha256MajInput;
+        table.slice_sizes = vec![(1 << 11), (1 << 11), (1 << 10)];
+        table.basic_table_ids = vec![
+            BasicTableId::Sha256Base16Rotate2,
+            BasicTableId::Sha256Base16Rotate2,
+            BasicTableId::Sha256Base16,
+        ];
+        table.get_table_values = vec![
+            |key| BasicTableId::get_sparse_table_with_rotation_values::<_, 16, 2>(key),
+            |key| BasicTableId::get_sparse_table_with_rotation_values::<_, 16, 2>(key),
+            |key| BasicTableId::get_sparse_table_with_rotation_values::<_, 16, 0>(key),
+        ];
+        table
+    }
+
+    fn get_majority_output_table() -> PlookupMultiTable<F> {
+        let id = MultiTableId::Sha256MajOutput;
+        let num_entries = 11;
+        let base = 16u64.pow(3);
+        let mut table =
+            PlookupMultiTable::<F>::new(base.into(), (1 << 3).into(), F::zero(), num_entries);
+
+        table.id = id;
+        for _ in 0..num_entries {
+            table.slice_sizes.push(base);
+            table.basic_table_ids.push(BasicTableId::Sha256MajNormalize);
+            table.get_table_values.push(|key| {
+                BasicTableId::get_sparse_normalization_values::<_, 16>(
+                    key,
+                    &BasicTableId::MAJORITY_NORMALIZATION_TABLE,
+                )
+            });
+        }
+        table
+    }
+
+    fn get_choose_input_table() -> PlookupMultiTable<F> {
+        let base: u64 = 28;
+        let id = MultiTableId::Sha256ChInput;
+        // Scaling factors applied to a's sparse limbs, excluding the rotated limb
+        let rot6_coefficients = [
+            F::zero(),
+            F::from(base.pow(11 - 6)),
+            F::from(base).pow([22 - 6]),
+        ];
+        let rot11_coefficients = [
+            F::from(base).pow([32 - 11]),
+            F::zero(),
+            F::from(base.pow(22 - 11)),
+        ];
+        let rot25_coefficients = [
+            F::from(base.pow(32 - 25)),
+            F::from(base).pow([32 - 25 + 11]),
+            F::zero(),
+        ];
+
+        // These are the coefficients that we want
+        let target_rotation_coefficients = [
+            rot6_coefficients[0] + rot11_coefficients[0] + rot25_coefficients[0],
+            rot6_coefficients[1] + rot11_coefficients[1] + rot25_coefficients[1],
+            rot6_coefficients[2] + rot11_coefficients[2] + rot25_coefficients[2],
+        ];
+
+        let column_2_row_1_multiplier = target_rotation_coefficients[0];
+
+        // This gives us the correct scaling factor for a0's 1st limb
+        let current_coefficients = [
+            column_2_row_1_multiplier,
+            F::from(base.pow(11)) * column_2_row_1_multiplier,
+            F::from(base).pow([22]) * column_2_row_1_multiplier,
+        ];
+
+        let column_3_row_2_multiplier = -current_coefficients[1] + target_rotation_coefficients[1];
+
+        let column_1_coefficients = [F::one(), F::from(1 << 11), F::from(1 << 22)];
+        let column_2_coefficients = [F::one(), F::from(base.pow(11)), F::from(base).pow([22])];
+        let column_3_coefficients = [F::one(), column_3_row_2_multiplier + F::one(), F::one()];
+
+        let mut table = PlookupMultiTable::<F>::new_from_vec(
+            id,
+            column_1_coefficients.to_vec(),
+            column_2_coefficients.to_vec(),
+            column_3_coefficients.to_vec(),
+        );
+
+        table.id = MultiTableId::Sha256ChInput;
+        table.slice_sizes = vec![(1 << 11), (1 << 11), (1 << 10)];
+        table.basic_table_ids = vec![
+            BasicTableId::Sha256Base28Rotate6,
+            BasicTableId::Sha256Base28,
+            BasicTableId::Sha256Base28Rotate3,
+        ];
+        table.get_table_values = vec![
+            |key| BasicTableId::get_sparse_table_with_rotation_values::<_, 28, 6>(key),
+            |key| BasicTableId::get_sparse_table_with_rotation_values::<_, 28, 0>(key),
+            |key| BasicTableId::get_sparse_table_with_rotation_values::<_, 28, 3>(key),
+        ];
+
+        table
+    }
+
+    fn get_choose_output_table() -> PlookupMultiTable<F> {
+        let id = MultiTableId::Sha256ChOutput;
+        let num_entries = 16;
+        let base = 28u64.pow(2);
+        let mut table =
+            PlookupMultiTable::<F>::new(base.into(), (1 << 2).into(), F::zero(), num_entries);
+
+        table.id = id;
+        for _ in 0..num_entries {
+            table.slice_sizes.push(base);
+            table.basic_table_ids.push(BasicTableId::Sha256ChNormalize);
+            table.get_table_values.push(|key| {
+                BasicTableId::get_sparse_normalization_values::<_, 28>(
+                    key,
+                    &BasicTableId::CHOOSE_NORMALIZATION_TABLE,
+                )
+            });
+        }
+        table
+    }
+
+    fn get_witness_extension_input_table() -> PlookupMultiTable<F> {
+        let id = MultiTableId::Sha256WitnessInput;
+        let column_1_coefficients = [
+            F::one(),
+            F::from(1 << 3),
+            F::from(1 << 10),
+            F::from(1 << 18),
+        ];
+        let column_2_coefficients = [F::zero(); 4];
+        let column_3_coefficients = [F::zero(); 4];
+        let mut table = PlookupMultiTable::new_from_vec(
+            id,
+            column_1_coefficients.to_vec(),
+            column_2_coefficients.to_vec(),
+            column_3_coefficients.to_vec(),
+        );
+        table.slice_sizes = vec![(1 << 3), (1 << 7), (1 << 8), (1 << 18)];
+        table.basic_table_ids = vec![
+            BasicTableId::Sha256WitnessSlice3,
+            BasicTableId::Sha256WitnessSlice7Rotate4,
+            BasicTableId::Sha256WitnessSlice8Rotate7,
+            BasicTableId::Sha256WitnessSlice14Rotate1,
+        ];
+        table.get_table_values = vec![
+            |key| BasicTableId::get_sparse_table_with_rotation_values::<_, 16, 0>(key),
+            |key| BasicTableId::get_sparse_table_with_rotation_values::<_, 16, 4>(key),
+            |key| BasicTableId::get_sparse_table_with_rotation_values::<_, 16, 7>(key),
+            |key| BasicTableId::get_sparse_table_with_rotation_values::<_, 16, 1>(key),
+        ];
+        table
+    }
+
+    fn get_witness_extension_output_table() -> PlookupMultiTable<F> {
+        let id = MultiTableId::Sha256WitnessOutput;
+        let num_entries = 11;
+        let base = 16u64.pow(3);
+        let mut table =
+            PlookupMultiTable::<F>::new(base.into(), (1 << 3).into(), F::zero(), num_entries);
+
+        table.id = id;
+        for _ in 0..num_entries {
+            table.slice_sizes.push(base);
+            table
+                .basic_table_ids
+                .push(BasicTableId::Sha256WitnessNormalize);
+            table.get_table_values.push(|key| {
+                BasicTableId::get_sparse_normalization_values::<_, 16>(
+                    key,
+                    &BasicTableId::WITNESS_EXTENSION_NORMALIZATION_TABLE,
+                )
+            });
+        }
+        table
+    }
+
     fn init_multi_tables<P: HonkCurve<TranscriptFieldType, ScalarField = F>>(
     ) -> [PlookupMultiTable<F>; MultiTableId::NumMultiTables as usize] {
-        // TACEO TODO not all are initialized here!
+        // TACEO TODO not all are initialized here! We should probably only initialize those we need here?!
         let mut multi_tables = from_fn(|_| PlookupMultiTable::default());
         multi_tables[usize::from(MultiTableId::HonkDummyMulti)] = Self::get_honk_dummy_multitable();
         multi_tables[usize::from(MultiTableId::Uint32And)] = Self::get_uint32_and_table();
@@ -531,6 +868,16 @@ impl<F: PrimeField> Plookup<F> {
             Self::get_fixed_base_table::<P, 2, 128>(MultiTableId::FixedBaseRightLo);
         multi_tables[usize::from(MultiTableId::FixedBaseRightHi)] =
             Self::get_fixed_base_table::<P, 3, 126>(MultiTableId::FixedBaseRightHi);
+        multi_tables[usize::from(MultiTableId::Sha256MajInput)] = Self::get_majority_input_table();
+        multi_tables[usize::from(MultiTableId::Sha256MajOutput)] =
+            Self::get_majority_output_table();
+        multi_tables[usize::from(MultiTableId::Sha256ChInput)] = Self::get_choose_input_table();
+        multi_tables[usize::from(MultiTableId::Sha256ChOutput)] = Self::get_choose_output_table();
+        multi_tables[usize::from(MultiTableId::Sha256WitnessInput)] =
+            Self::get_witness_extension_input_table();
+        multi_tables[usize::from(MultiTableId::Sha256WitnessOutput)] =
+            Self::get_witness_extension_output_table();
+
         multi_tables
     }
 
@@ -545,6 +892,12 @@ impl<F: PrimeField> Plookup<F> {
                     | MultiTableId::FixedBaseLeftHi
                     | MultiTableId::FixedBaseRightLo
                     | MultiTableId::FixedBaseRightHi
+                    | MultiTableId::Sha256MajInput
+                    | MultiTableId::Sha256MajOutput
+                    | MultiTableId::Sha256ChInput
+                    | MultiTableId::Sha256ChOutput
+                    | MultiTableId::Sha256WitnessInput
+                    | MultiTableId::Sha256WitnessOutput
             ),
             "Multitable for {:?} not implemented",
             id
@@ -746,6 +1099,124 @@ impl<F: PrimeField> Plookup<F> {
                     driver,
                 )?;
             }
+
+            MultiTableId::Sha256ChInput => {
+                let base = bases[0].next_power_of_two().ilog2() as usize;
+                let total_bit_size = std::cmp::max(base * bases.len(), 64);
+                let rotation = [6, 0, 3];
+                let values = T::slice_and_get_sparse_table_with_rotation_values(
+                    driver,
+                    key_a,
+                    key_b,
+                    bases,
+                    &rotation,
+                    total_bit_size,
+                    28,
+                )?;
+                for (a, b) in values.0.into_iter().zip(values.1) {
+                    results.push((a, b));
+                }
+
+                key_a_slices.extend(values.2);
+                key_b_slices.extend(values.3);
+            }
+            MultiTableId::Sha256ChOutput => {
+                let base = bases[0].next_power_of_two().ilog2() as usize;
+                let total_bit_size = base * bases.len();
+                let values = T::slice_and_get_sparse_normalization_values(
+                    driver,
+                    key_a,
+                    key_b,
+                    bases,
+                    28,
+                    total_bit_size,
+                    &SHA256Table::Choose,
+                )?;
+                results.reserve(values.0.len());
+                for val in values.0 {
+                    results.push((val, T::public_zero()))
+                }
+                key_a_slices.extend(values.1);
+                key_b_slices.extend(values.2);
+            }
+            MultiTableId::Sha256MajInput => {
+                let base = bases[0].next_power_of_two().ilog2() as usize;
+                let total_bit_size = std::cmp::max(base * bases.len(), 64);
+                let rotation = [2, 2, 0];
+                let values = T::slice_and_get_sparse_table_with_rotation_values(
+                    driver,
+                    key_a,
+                    key_b,
+                    bases,
+                    &rotation,
+                    total_bit_size,
+                    16,
+                )?;
+                for (a, b) in values.0.into_iter().zip(values.1) {
+                    results.push((a, b));
+                }
+
+                key_a_slices.extend(values.2);
+                key_b_slices.extend(values.3);
+            }
+            MultiTableId::Sha256MajOutput => {
+                let base = bases[0].next_power_of_two().ilog2() as usize;
+                let total_bit_size = base * bases.len();
+                let values = T::slice_and_get_sparse_normalization_values(
+                    driver,
+                    key_a,
+                    key_b,
+                    bases,
+                    16,
+                    total_bit_size,
+                    &SHA256Table::Majority,
+                )?;
+                results.reserve(values.0.len());
+                for val in values.0 {
+                    results.push((val, T::public_zero()))
+                }
+                key_a_slices.extend(values.1);
+                key_b_slices.extend(values.2);
+            }
+            MultiTableId::Sha256WitnessInput => {
+                let base = bases[0].next_power_of_two().ilog2() as usize;
+                let total_bit_size = std::cmp::max(base * bases.len(), 64);
+                let rotation = [0, 4, 7, 1];
+                let values = T::slice_and_get_sparse_table_with_rotation_values(
+                    driver,
+                    key_a,
+                    key_b,
+                    bases,
+                    &rotation,
+                    total_bit_size,
+                    16,
+                )?;
+                for (a, b) in values.0.into_iter().zip(values.1) {
+                    results.push((a, b));
+                }
+
+                key_a_slices.extend(values.2);
+                key_b_slices.extend(values.3);
+            }
+            MultiTableId::Sha256WitnessOutput => {
+                let base = bases[0].next_power_of_two().ilog2() as usize;
+                let total_bit_size = base * bases.len();
+                let values = T::slice_and_get_sparse_normalization_values(
+                    driver,
+                    key_a,
+                    key_b,
+                    bases,
+                    16,
+                    total_bit_size,
+                    &SHA256Table::WitnessExtension,
+                )?;
+                results.reserve(values.0.len());
+                for val in values.0 {
+                    results.push((val, T::public_zero()))
+                }
+                key_a_slices.extend(values.1);
+                key_b_slices.extend(values.2);
+            }
             _ => todo!("{:?} not yet implemented", multi_table.id),
         }
 
@@ -808,6 +1279,7 @@ impl<F: PrimeField> Plookup<F> {
     ) -> std::io::Result<ReadData<T::AcvmType>> {
         let mut lookup = ReadData::default();
         let values_sliced = Self::slice_and_get_values(builder, driver, id.clone(), key_a, key_b)?;
+
         // return multi-table, populating global array of all multi-tables if need be
         let multi_table = builder.plookup.get_multitable(id);
         let num_lookups = multi_table.basic_table_ids.len();
@@ -924,8 +1396,8 @@ impl<F: PrimeField> Plookup<F> {
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
         id: MultiTableId,
-        key_a: FieldCT<F>,
-        key_b: FieldCT<F>,
+        key_a: &FieldCT<F>,
+        key_b: &FieldCT<F>,
         is_2_to_1_lookup: bool,
     ) -> std::io::Result<ReadData<FieldCT<F>>> {
         let key_a = key_a.normalize(builder, driver);
@@ -1008,11 +1480,31 @@ impl<F: PrimeField> Plookup<F> {
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
         id: MultiTableId,
-        key_a: FieldCT<F>,
-        key_b: FieldCT<F>,
+        key_a: &FieldCT<F>,
+        key_b: &FieldCT<F>,
     ) -> std::io::Result<FieldCT<F>> {
         let lookup = Self::get_lookup_accumulators_ct(builder, driver, id, key_a, key_b, true)?;
         Ok(lookup[ColumnIdx::C3][0].clone())
+    }
+
+    pub fn read_from_1_to_2_table<
+        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<F>,
+    >(
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+        id: MultiTableId,
+        key_a: &FieldCT<F>,
+    ) -> std::io::Result<FieldCT<F>> {
+        let lookup = Plookup::<F>::get_lookup_accumulators_ct(
+            builder,
+            driver,
+            id,
+            key_a,
+            &FieldCT::default(),
+            false,
+        )?;
+        Ok(lookup[ColumnIdx::C2][0].clone())
     }
 }
 
@@ -1142,6 +1634,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> PlookupBasicTa
 
         table
     }
+
     fn generate_and_rotate_table<const BITS_PER_SLICE: u64, const NUM_ROTATED_OUTPUT_BITS: u64>(
         id: BasicTableId,
         table_index: usize,
@@ -1157,10 +1650,9 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> PlookupBasicTa
             for j in 0..base {
                 table.column_1.push(P::ScalarField::from(i));
                 table.column_2.push(P::ScalarField::from(j));
-                table.column_3.push(P::ScalarField::from(Utils::rotate64(
-                    i & j,
-                    NUM_ROTATED_OUTPUT_BITS,
-                )));
+                table.column_3.push(P::ScalarField::from(
+                    ((i & j) as u64).rotate_right(NUM_ROTATED_OUTPUT_BITS as u32),
+                ));
             }
         }
 
@@ -1173,6 +1665,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> PlookupBasicTa
 
         table
     }
+
     fn generate_xor_rotate_table<const BITS_PER_SLICE: u64, const NUM_ROTATED_OUTPUT_BITS: u64>(
         id: BasicTableId,
         table_index: usize,
@@ -1188,10 +1681,9 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> PlookupBasicTa
             for j in 0..base {
                 table.column_1.push(P::ScalarField::from(i));
                 table.column_2.push(P::ScalarField::from(j));
-                table.column_3.push(P::ScalarField::from(Utils::rotate64(
-                    i ^ j,
-                    NUM_ROTATED_OUTPUT_BITS,
-                )));
+                table.column_3.push(P::ScalarField::from(
+                    ((i ^ j) as u64).rotate_right(NUM_ROTATED_OUTPUT_BITS as u32),
+                ));
             }
         }
 
@@ -1201,6 +1693,95 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> PlookupBasicTa
         table.column_1_step_size = base;
         table.column_2_step_size = base;
         table.column_3_step_size = base;
+
+        table
+    }
+
+    fn generate_sparse_table_with_rotation<
+        const BASE: u64,
+        const BITS_PER_SLICE: u64,
+        const NUM_ROTATED_BITS: u64,
+    >(
+        id: BasicTableId,
+        table_index: usize,
+    ) -> PlookupBasicTable<P, T> {
+        let mut table = PlookupBasicTable::new();
+        table.id = id;
+        table.table_index = table_index;
+        let table_size = 1 << BITS_PER_SLICE;
+        table.use_twin_keys = false;
+
+        for i in 0..table_size {
+            let source = i as u64;
+            let target = Utils::map_into_sparse_form::<BASE>(source);
+            table.column_1.push(P::ScalarField::from(source));
+            table.column_2.push(P::ScalarField::from(target.clone()));
+
+            if NUM_ROTATED_BITS > 0 {
+                let rotated = Utils::map_into_sparse_form::<BASE>(
+                    (source as u32).rotate_right(NUM_ROTATED_BITS as u32) as u64,
+                );
+                table.column_3.push(P::ScalarField::from(rotated));
+            } else {
+                table.column_3.push(P::ScalarField::from(target));
+            }
+        }
+
+        table.get_values_from_key = BasicTableId::get_sparse_table_with_rotation_values::<
+            P::ScalarField,
+            BASE,
+            NUM_ROTATED_BITS,
+        >;
+
+        let mut sparse_step_size = 1u64;
+        for _ in 0..BITS_PER_SLICE {
+            sparse_step_size *= BASE;
+        }
+        table.column_1_step_size = P::ScalarField::from(1 << 11);
+        table.column_2_step_size = P::ScalarField::from(sparse_step_size);
+        table.column_3_step_size = P::ScalarField::from(sparse_step_size);
+
+        table
+    }
+
+    fn generate_sparse_normalization_table<const BASE: u64, const NUM_BITS: usize>(
+        id: BasicTableId,
+        table_index: usize,
+        base_table: &[u64],
+        get_values: fn([u64; 2]) -> [P::ScalarField; 2],
+    ) -> PlookupBasicTable<P, T> {
+        let mut table = PlookupBasicTable::new();
+        table.id = id;
+        table.table_index = table_index;
+        table.use_twin_keys = false;
+
+        let table_size = BASE.pow(NUM_BITS as u32);
+
+        let mut accumulator = 0u64;
+        let to_add = 1u64;
+
+        for _ in 0..table_size {
+            let mut key = 0u64;
+            let mut temp_accumulator = accumulator;
+
+            for j in 0..NUM_BITS {
+                let table_idx = (temp_accumulator % BASE) as usize;
+                key += base_table[table_idx] << j;
+                temp_accumulator /= BASE;
+            }
+
+            table.column_1.push(P::ScalarField::from(accumulator));
+            table.column_2.push(P::ScalarField::from(key));
+            table.column_3.push(P::ScalarField::zero());
+
+            accumulator += to_add;
+        }
+
+        table.get_values_from_key = get_values;
+
+        table.column_1_step_size = P::ScalarField::from(table_size);
+        table.column_2_step_size = P::ScalarField::from(1u64 << NUM_BITS);
+        table.column_3_step_size = P::ScalarField::zero();
 
         table
     }
@@ -1306,6 +1887,18 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                     | BasicTableId::UintXorSlice2Rotate0
                     | BasicTableId::UintAndSlice6Rotate0
                     | BasicTableId::UintXorSlice6Rotate0
+                    | BasicTableId::Sha256Base16Rotate2
+                    | BasicTableId::Sha256Base28
+                    | BasicTableId::Sha256Base28Rotate6
+                    | BasicTableId::Sha256Base28Rotate3
+                    | BasicTableId::Sha256Base16
+                    | BasicTableId::Sha256WitnessSlice3
+                    | BasicTableId::Sha256WitnessSlice7Rotate4
+                    | BasicTableId::Sha256WitnessSlice8Rotate7
+                    | BasicTableId::Sha256WitnessSlice14Rotate1
+                    | BasicTableId::Sha256WitnessNormalize
+                    | BasicTableId::Sha256ChNormalize
+                    | BasicTableId::Sha256MajNormalize
             ),
             "Create Basic Table for {:?} not implemented",
             id
@@ -1318,6 +1911,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             BasicTableId::HonkDummyBasic2 => Self::generate_honk_dummy_table::<
                 { BasicTableId::HonkDummyBasic2 as u64 },
             >(id, index),
+
             BasicTableId::UintAndSlice2Rotate0 => {
                 Self::generate_and_rotate_table::<2, 0>(id, index)
             }
@@ -1330,6 +1924,59 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             BasicTableId::UintXorSlice6Rotate0 => {
                 Self::generate_xor_rotate_table::<6, 0>(id, index)
             }
+
+            BasicTableId::Sha256Base16Rotate2 => {
+                Self::generate_sparse_table_with_rotation::<16, 11, 2>(id, index)
+            }
+
+            BasicTableId::Sha256Base28 => {
+                Self::generate_sparse_table_with_rotation::<28, 11, 0>(id, index)
+            }
+
+            BasicTableId::Sha256Base28Rotate6 => {
+                Self::generate_sparse_table_with_rotation::<28, 11, 6>(id, index)
+            }
+
+            BasicTableId::Sha256Base28Rotate3 => {
+                Self::generate_sparse_table_with_rotation::<28, 11, 3>(id, index)
+            }
+
+            BasicTableId::Sha256Base16 => {
+                Self::generate_sparse_table_with_rotation::<16, 11, 0>(id, index)
+            }
+            BasicTableId::Sha256WitnessSlice3 => {
+                Self::generate_sparse_table_with_rotation::<16, 3, 0>(id, index)
+            }
+            BasicTableId::Sha256WitnessSlice7Rotate4 => {
+                Self::generate_sparse_table_with_rotation::<16, 7, 4>(id, index)
+            }
+            BasicTableId::Sha256WitnessSlice8Rotate7 => {
+                Self::generate_sparse_table_with_rotation::<16, 8, 7>(id, index)
+            }
+            BasicTableId::Sha256WitnessSlice14Rotate1 => {
+                Self::generate_sparse_table_with_rotation::<16, 14, 1>(id, index)
+            }
+            BasicTableId::Sha256WitnessNormalize => {
+                Self::generate_sparse_normalization_table::<16, 3>(
+                    id,
+                    index,
+                    &BasicTableId::WITNESS_EXTENSION_NORMALIZATION_TABLE,
+                    BasicTableId::get_sparse_normalization_values_wtns::<P::ScalarField, 16>,
+                )
+            }
+
+            BasicTableId::Sha256ChNormalize => Self::generate_sparse_normalization_table::<28, 2>(
+                id,
+                index,
+                &BasicTableId::CHOOSE_NORMALIZATION_TABLE,
+                BasicTableId::get_sparse_normalization_values_choose::<P::ScalarField, 28>,
+            ),
+            BasicTableId::Sha256MajNormalize => Self::generate_sparse_normalization_table::<16, 3>(
+                id,
+                index,
+                &BasicTableId::MAJORITY_NORMALIZATION_TABLE,
+                BasicTableId::get_sparse_normalization_values_maj::<P::ScalarField, 16>,
+            ),
             _ => {
                 todo!("Create other tables")
             }
@@ -1405,6 +2052,23 @@ impl<F: PrimeField> PlookupMultiTable<F> {
             column_1_coefficients,
             column_2_coefficients,
             column_3_coefficients,
+            ..Default::default()
+        };
+        res.init_step_sizes();
+        res
+    }
+
+    pub(crate) fn new_from_vec(
+        id: MultiTableId,
+        col_1_coeffs: Vec<F>,
+        col_2_coeffs: Vec<F>,
+        col_3_coeffs: Vec<F>,
+    ) -> Self {
+        let mut res = Self {
+            id,
+            column_1_coefficients: col_1_coeffs,
+            column_2_coefficients: col_2_coeffs,
+            column_3_coefficients: col_3_coeffs,
             ..Default::default()
         };
         res.init_step_sizes();
