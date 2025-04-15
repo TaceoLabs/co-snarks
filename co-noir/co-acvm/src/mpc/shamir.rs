@@ -551,16 +551,6 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         panic!("functionality slice not feasible for Shamir")
     }
 
-    fn slice_once(
-        &mut self,
-        _input: Self::ArithmeticShare,
-        _msb: u8,
-        _lsb: u8,
-        _bitsize: usize,
-    ) -> std::io::Result<Self::ArithmeticShare> {
-        panic!("functionality slice_once not feasible for Shamir")
-    }
-
     fn right_shift(
         &mut self,
         _input: Self::AcvmType,

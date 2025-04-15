@@ -87,7 +87,7 @@ impl<F: PrimeField> Blake2s<F> {
         let to_inc = T::lt(driver, s_t_val, F::from(inc).into())?;
         // AZTEC TODO: Secure!? Think so as inc is known at "compile" time as it's derived
         // from the msg length.
-        // TACEO: We open here since this does not get constrained in the original code, sas in the following:
+        // TACEO: We open here since this does not get constrained in the original code, as in the following:
         // const bool to_inc = uint32_t(uint256_t(S.t[0].get_value())) < inc;
         // S.t[1] = S.t[1] + (to_inc ? field_pt(1) : field_pt(0));
         let opened = if T::is_shared(&to_inc) {

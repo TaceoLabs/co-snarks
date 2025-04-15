@@ -3241,28 +3241,34 @@ impl<F: PrimeField> ByteArray<F> {
                 values.push(FieldCT::from(F::from(byte_val)));
             }
         } else {
+            let is_shared = T::is_shared(&value);
+            let decomposed = if is_shared {
+                let value = T::get_shared(&value).expect("Already checked it is shared");
+
+                driver
+                    .decompose_arithmetic(value, num_bytes * 8, 8)?
+                    .into_iter()
+                    .rev()
+                    .map(T::AcvmType::from)
+                    .collect::<Vec<_>>()
+            } else {
+                let value: BigUint = T::get_public(&value)
+                    .expect("Already checked it is public")
+                    .into();
+                let mut bytes = value.to_bytes_be();
+                bytes.resize(num_bytes, 0);
+                bytes
+                    .into_iter()
+                    .map(|byte| F::from(byte).into())
+                    .collect::<Vec<_>>()
+            };
+            assert_eq!(decomposed.len(), num_bytes);
+
             let byte_shift = F::from(256u64);
             let mut validator = FieldCT::default();
             let mut shifted_high_limb = FieldCT::default(); // will be set to 2^128v_hi if `i` reaches 15.
-            for i in 0..num_bytes {
-                let byte = if T::is_shared(&value) {
-                    let byte_val = driver.slice_once(
-                        T::get_shared(&value).expect("Already checked it is shared"),
-                        (num_bytes - i) as u8 * 8 - 1,
-                        (num_bytes - i - 1) as u8 * 8,
-                        254,
-                    )?;
-                    FieldCT::from_witness(byte_val.into(), builder)
-                } else {
-                    let byte_val = Utils::slice_u256(
-                        T::get_public(&value)
-                            .expect("Already checked it is public")
-                            .into(),
-                        (num_bytes - i - 1) as u64 * 8,
-                        (num_bytes - i) as u64 * 8,
-                    );
-                    FieldCT::from_witness(F::from(byte_val).into(), builder)
-                };
+            for (i, byte_val) in decomposed.into_iter().enumerate() {
+                let byte = FieldCT::from_witness(byte_val, builder);
                 byte.create_range_constraint(8, builder, driver)?;
                 let scaling_factor_value = byte_shift.pow([(num_bytes - 1 - i) as u64]);
                 let scaling_factor = FieldCT::from(scaling_factor_value);

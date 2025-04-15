@@ -2774,14 +2774,8 @@ mod field_share {
             inp.serialize_uncompressed(&mut bytes).unwrap();
             real_input.extend(bytes[0..num_elements as usize].to_vec());
         }
-        let output_bytes: [u8; 32] = Blake2s256::digest(real_input)
-            .as_slice()
-            .try_into()
-            .expect("Expected a 32-byte array");
-        let mut should_result = Vec::new();
-        for out in output_bytes.iter() {
-            should_result.push(ark_bn254::Fr::from_be_bytes_mod_order(&[*out]));
-        }
+        let output_bytes: [u8; 32] = Blake2s256::digest(real_input).into();
+        let should_result: Vec<_> = output_bytes.into_iter().map(ark_bn254::Fr::from).collect();
 
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
@@ -2806,16 +2800,55 @@ mod field_share {
         let result3 = rx3.recv().unwrap();
 
         let is_result = rep3::combine_field_elements(&result1, &result2, &result3);
-        assert_eq!(
-            is_result
-                .iter()
-                .map(|&x| ark_bn254::Fr::from(x))
-                .collect_vec(),
-            should_result
-                .iter()
-                .map(|&x| ark_bn254::Fr::from(x))
-                .collect_vec()
-        );
+        assert_eq!(is_result, should_result);
+    }
+
+    #[test]
+    fn rep3_blake3() {
+        let test_network = Rep3TestNetwork::default();
+        let mut rng = thread_rng();
+        const INPUT_SIZE: usize = 64;
+        let input: Vec<u8> = (0..INPUT_SIZE).map(|_| rng.gen()).collect();
+        let num_bits = vec![8; INPUT_SIZE];
+
+        let x = input.iter().map(|&x| ark_bn254::Fr::from(x)).collect_vec();
+
+        let x_shares = rep3::share_field_elements(&x, &mut rng);
+
+        let mut real_input = Vec::new();
+        for (inp, num_bits) in x.into_iter().zip(num_bits.iter()) {
+            let num_elements = (*num_bits as u32).div_ceil(8);
+            let mut bytes = Vec::new();
+            inp.serialize_uncompressed(&mut bytes).unwrap();
+            real_input.extend(bytes[0..num_elements as usize].to_vec());
+        }
+        let output_bytes: [u8; 32] = blake3::hash(&real_input).into();
+        let should_result: Vec<_> = output_bytes.into_iter().map(ark_bn254::Fr::from).collect();
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx, x) in izip!(
+            test_network.get_party_networks().into_iter(),
+            [tx1, tx2, tx3],
+            x_shares.into_iter(),
+        ) {
+            let num_bits = num_bits.to_owned();
+            thread::spawn(move || {
+                let mut rep3 = IoContext::init(net).unwrap();
+
+                let res = rep3::yao::blake3(&x, &mut rep3, &num_bits).unwrap();
+                tx.send(res)
+            });
+        }
+
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+
+        let is_result = rep3::combine_field_elements(&result1, &result2, &result3);
+        assert_eq!(is_result, should_result);
     }
 }
 

@@ -960,24 +960,6 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         Ok([res[0], res[1], res[2]])
     }
 
-    fn slice_once(
-        &mut self,
-        input: Self::ArithmeticShare,
-        msb: u8,
-        lsb: u8,
-        bitsize: usize,
-    ) -> std::io::Result<Self::ArithmeticShare> {
-        let res = yao::slice_arithmetic_once(
-            input,
-            &mut self.io_context0,
-            msb as usize,
-            lsb as usize,
-            bitsize,
-        )?;
-        debug_assert_eq!(res.len(), 1);
-        Ok(res[0])
-    }
-
     fn integer_bitwise_and(
         &mut self,
         lhs: Self::AcvmType,
@@ -1737,51 +1719,37 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     ) -> std::io::Result<Vec<Self::AcvmType>> {
         if message_input.iter().any(|v| Self::is_shared(v)) {
             let message_input: Vec<_> = message_input
-                .iter()
+                .into_iter()
                 .map(|y| match y {
                     Rep3AcvmType::Public(public) => {
-                        arithmetic::promote_to_trivial_share(self.io_context0.id, *public)
+                        arithmetic::promote_to_trivial_share(self.io_context0.id, public)
                     }
-                    Rep3AcvmType::Shared(shared) => *shared,
+                    Rep3AcvmType::Shared(shared) => shared,
                 })
                 .collect();
             let result = yao::blake2s(&message_input, &mut self.io_context0, num_bits)?;
             result
-                .iter()
-                .map(|y| Ok(Rep3AcvmType::Shared(*y)))
+                .into_iter()
+                .map(|y| Ok(Rep3AcvmType::Shared(y)))
                 .collect::<Result<Vec<_>, _>>()
         } else {
             let mut real_input = Vec::new();
-            let message_input: Vec<_> = message_input
-                .iter()
-                .map(|x| Self::get_public(x).expect("Already checked it is public"))
-                .collect();
-            for (inp, num_bits) in message_input.iter().zip(num_bits.iter()) {
-                let num_elements = num_bits.div_ceil(8);
+            for (inp, num_bits) in message_input.into_iter().zip(num_bits.iter()) {
+                let inp = Self::get_public(&inp).expect("Already checked it is public");
+                let num_elements = num_bits.div_ceil(8); // We need to round to the next byte
                 let mut bytes = Vec::new();
                 inp.serialize_uncompressed(&mut bytes).unwrap();
-                real_input.extend(bytes[0..num_elements].to_vec());
+                real_input.extend_from_slice(&bytes[..num_elements])
             }
-            let output_bytes: [u8; 32] = Blake2s256::digest(real_input)
-                .as_slice()
-                .try_into()
-                .map_err(|_| "blake2 digest should be 256 bits")
-                .map_err(|err| {
-                    std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        format!("Failed to convert blake2 digest to array: {}", err),
-                    )
-                })?;
-            let mut result = Vec::new();
-            for out in output_bytes.iter() {
-                result.push(F::from_be_bytes_mod_order(&[*out]));
-            }
-            result
-                .iter()
-                .map(|x| Ok(Rep3AcvmType::Public(*x)))
-                .collect()
+            let output_bytes: [u8; 32] = Blake2s256::digest(real_input).into();
+            let result = output_bytes
+                .into_iter()
+                .map(|x| Rep3AcvmType::Public(F::from(x)))
+                .collect();
+            Ok(result)
         }
     }
+
     fn blake3_hash(
         &mut self,
         message_input: Vec<Self::AcvmType>,
@@ -1789,40 +1757,34 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     ) -> std::io::Result<Vec<Self::AcvmType>> {
         if message_input.iter().any(|v| Self::is_shared(v)) {
             let message_input: Vec<_> = message_input
-                .iter()
+                .into_iter()
                 .map(|y| match y {
                     Rep3AcvmType::Public(public) => {
-                        arithmetic::promote_to_trivial_share(self.io_context0.id, *public)
+                        arithmetic::promote_to_trivial_share(self.io_context0.id, public)
                     }
-                    Rep3AcvmType::Shared(shared) => *shared,
+                    Rep3AcvmType::Shared(shared) => shared,
                 })
                 .collect();
             let result = yao::blake3(&message_input, &mut self.io_context0, num_bits)?;
             result
-                .iter()
-                .map(|y| Ok(Rep3AcvmType::Shared(*y)))
+                .into_iter()
+                .map(|y| Ok(Rep3AcvmType::Shared(y)))
                 .collect::<Result<Vec<_>, _>>()
         } else {
             let mut real_input = Vec::new();
-            let message_input: Vec<_> = message_input
-                .iter()
-                .map(|x| Self::get_public(x).expect("Already checked it is public"))
-                .collect();
-            for (inp, num_bits) in message_input.iter().zip(num_bits.iter()) {
-                let num_elements = num_bits.div_ceil(8);
+            for (inp, num_bits) in message_input.into_iter().zip(num_bits.iter()) {
+                let inp = Self::get_public(&inp).expect("Already checked it is public");
+                let num_elements = num_bits.div_ceil(8); // We need to round to the next byte
                 let mut bytes = Vec::new();
                 inp.serialize_uncompressed(&mut bytes).unwrap();
-                real_input.extend(bytes[0..num_elements].to_vec());
+                real_input.extend_from_slice(&bytes[..num_elements])
             }
             let output_bytes: [u8; 32] = blake3::hash(&real_input).into();
-            let mut result = Vec::new();
-            for out in output_bytes.iter() {
-                result.push(F::from_be_bytes_mod_order(&[*out]));
-            }
-            result
-                .iter()
-                .map(|x| Ok(Rep3AcvmType::Public(*x)))
-                .collect()
+            let result = output_bytes
+                .into_iter()
+                .map(|x| Rep3AcvmType::Public(F::from(x)))
+                .collect();
+            Ok(result)
         }
     }
 }
