@@ -7,7 +7,7 @@ mod zkey;
 pub use proof::CircomGroth16Proof;
 pub use public_input::JsonPublicInput;
 pub use verification_key::JsonVerificationKey;
-pub use zkey::ZKey;
+pub use zkey::{LibSnarkProvingKeyWithMatrices, ZKey};
 
 #[cfg(test)]
 pub(crate) mod test_utils {

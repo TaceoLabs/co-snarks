@@ -30,7 +30,7 @@ use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use ark_groth16::{ProvingKey, VerifyingKey};
 use ark_relations::r1cs::{ConstraintMatrices, Matrix};
-use ark_serialize::CanonicalDeserialize;
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 
 use std::io::Read;
 
@@ -116,6 +116,38 @@ impl<P: Pairing> From<ZKey<P>> for (ConstraintMatrices<P::ScalarField>, ProvingK
                 l_query: zkey.l_query,
             },
         )
+    }
+}
+
+/// Represents a Groth16 [`ProvingKey`] and the three constraint matices a, b, c used for LibSnarkReduction proofs.
+#[derive(Debug, Clone, CanonicalDeserialize, CanonicalSerialize)]
+pub struct LibSnarkProvingKeyWithMatrices<P: Pairing> {
+    /// The Groth16 ProvingKey
+    pub pk: ProvingKey<P>,
+    /// The matrix a
+    pub a: Matrix<P::ScalarField>,
+    /// The matrix b
+    pub b: Matrix<P::ScalarField>,
+    /// The matrix c
+    pub c: Matrix<P::ScalarField>,
+}
+
+impl<P: Pairing> From<LibSnarkProvingKeyWithMatrices<P>>
+    for (ConstraintMatrices<P::ScalarField>, ProvingKey<P>)
+{
+    fn from(value: LibSnarkProvingKeyWithMatrices<P>) -> Self {
+        let matrices = ConstraintMatrices {
+            num_instance_variables: value.pk.b_g1_query.len() - value.pk.l_query.len(),
+            num_witness_variables: value.pk.a_query.len(),
+            num_constraints: value.a.len(),
+            a_num_non_zero: value.a.len(),
+            b_num_non_zero: value.b.len(),
+            c_num_non_zero: value.c.len(),
+            a: value.a,
+            b: value.b,
+            c: value.c,
+        };
+        (matrices, value.pk)
     }
 }
 
