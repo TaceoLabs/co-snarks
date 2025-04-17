@@ -220,13 +220,13 @@ pub fn merge_input_shares<P: Pairing>(
 
 /// Split the witness into REP3 shares
 pub fn split_witness_rep3<P: Pairing>(
-    r1cs: &R1CS<P>,
+    num_inputs: usize,
     witness: Witness<P::ScalarField>,
     compression: Compression,
 ) -> [CompressedRep3SharedWitness<P::ScalarField>; 3] {
     let mut rng = rand::thread_rng();
     // create witness shares
-    CompressedRep3SharedWitness::share_rep3(witness, r1cs.num_inputs, &mut rng, compression)
+    CompressedRep3SharedWitness::share_rep3(witness, num_inputs, &mut rng, compression)
 }
 
 /// Uncompress into [`Rep3SharedWitness`].
@@ -259,7 +259,7 @@ pub fn uncompress_shared_witness<F: PrimeField>(
 
 /// Split the witness into shamir shares
 pub fn split_witness_shamir<P: Pairing>(
-    r1cs: &R1CS<P>,
+    num_inputs: usize,
     witness: Witness<P::ScalarField>,
     threshold: usize,
     num_parties: usize,
@@ -268,7 +268,7 @@ pub fn split_witness_shamir<P: Pairing>(
     // create witness shares
     ShamirSharedWitness::<P::ScalarField>::share_shamir(
         witness,
-        r1cs.num_inputs,
+        num_inputs,
         threshold,
         num_parties,
         &mut rng,
