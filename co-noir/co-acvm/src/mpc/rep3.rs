@@ -1787,4 +1787,80 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             Ok(result)
         }
     }
+
+    fn embedded_curve_add(
+        &mut self,
+        input1_x: Self::AcvmType,
+        input1_y: Self::AcvmType,
+        input1_infinite: Self::AcvmType,
+        input2_x: Self::AcvmType,
+        input2_y: Self::AcvmType,
+        input2_infinite: Self::AcvmType,
+    ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
+        // This is very hardcoded to the grumpkin curve
+        if TypeId::of::<F>() != TypeId::of::<ark_bn254::Fr>() {
+            panic!("Only BN254 is supported");
+        }
+
+        let input1_x =
+            downcast::<_, Rep3AcvmType<ark_bn254::Fr>>(&input1_x).expect("We checked types");
+        let input1_y =
+            downcast::<_, Rep3AcvmType<ark_bn254::Fr>>(&input1_y).expect("We checked types");
+        let input1_infinite =
+            downcast::<_, Rep3AcvmType<ark_bn254::Fr>>(&input1_infinite).expect("We checked types");
+        let input2_x =
+            downcast::<_, Rep3AcvmType<ark_bn254::Fr>>(&input2_x).expect("We checked types");
+        let input2_y =
+            downcast::<_, Rep3AcvmType<ark_bn254::Fr>>(&input2_y).expect("We checked types");
+        let input2_infinite =
+            downcast::<_, Rep3AcvmType<ark_bn254::Fr>>(&input2_infinite).expect("We checked types");
+
+        let point1 = Self::create_grumpkin_point(
+            input1_x,
+            input1_y,
+            input1_infinite,
+            &mut self.io_context0,
+            true,
+        )?;
+
+        let point2 = Self::create_grumpkin_point(
+            input2_x,
+            input2_y,
+            input2_infinite,
+            &mut self.io_context0,
+            true,
+        )?;
+
+        let shared = match (point1, point2) {
+            (Rep3AcvmPoint::Public(lhs), Rep3AcvmPoint::Public(rhs)) => {
+                let res = lhs + rhs;
+                let res = if let Some((out_x, out_y)) = res.into_affine().xy() {
+                    let out_x = *downcast(&out_x).expect("We checked types");
+                    let out_y = *downcast(&out_y).expect("We checked types");
+                    (out_x, out_y, F::zero())
+                } else {
+                    (F::zero(), F::zero(), F::one())
+                };
+                return Ok((res.0.into(), res.1.into(), res.2.into()));
+            }
+            (Rep3AcvmPoint::Public(public), Rep3AcvmPoint::Shared(mut shared))
+            | (Rep3AcvmPoint::Shared(mut shared), Rep3AcvmPoint::Public(public)) => {
+                pointshare::add_assign_public(&mut shared, &public, self.io_context0.id);
+                shared
+            }
+            (Rep3AcvmPoint::Shared(lhs), Rep3AcvmPoint::Shared(rhs)) => pointshare::add(&lhs, &rhs),
+        };
+
+        let (x, y, i) = conversion::point_share_to_fieldshares(shared, &mut self.io_context0)?;
+        let x = *downcast(&x).expect("We checked types");
+        let y = *downcast(&y).expect("We checked types");
+        let i = *downcast(&i).expect("We checked types");
+
+        // Set x,y to 0 of infinity is one.
+        // TODO is this even necesary?
+        let mul = arithmetic::sub_public_by_shared(F::one(), i, self.io_context0.id);
+        let res = arithmetic::mul_vec(&[x, y], &[mul, mul], &mut self.io_context0)?;
+
+        Ok((res[0].into(), res[1].into(), i.into()))
+    }
 }

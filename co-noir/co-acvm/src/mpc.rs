@@ -443,4 +443,15 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         message_input: Vec<Self::AcvmType>,
         num_bits: &[usize],
     ) -> std::io::Result<Vec<Self::AcvmType>>;
+
+    /// Computes the addition of two EC points, where the points are represented by their x and y coordinates (and a is_infinity indicator). Outputs are also in their coordinate representation.
+    fn embedded_curve_add(
+        &mut self,
+        input1_x: Self::AcvmType,
+        input1_y: Self::AcvmType,
+        input1_infinite: Self::AcvmType,
+        input2_x: Self::AcvmType,
+        input2_y: Self::AcvmType,
+        input2_infinite: Self::AcvmType,
+    ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)>;
 }

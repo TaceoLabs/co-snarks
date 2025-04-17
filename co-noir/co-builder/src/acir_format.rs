@@ -15,8 +15,8 @@ use std::{
 
 use crate::types::types::{
     AcirFormatOriginalOpcodeIndices, Blake2sConstraint, Blake2sInput, Blake3Constraint,
-    Blake3Input, BlockConstraint, BlockType, LogicConstraint, MulQuad, MultiScalarMul, PolyTriple,
-    Poseidon2Constraint, RangeConstraint, RecursionConstraint, Sha256Compression,
+    Blake3Input, BlockConstraint, BlockType, EcAdd, LogicConstraint, MulQuad, MultiScalarMul,
+    PolyTriple, Poseidon2Constraint, RangeConstraint, RecursionConstraint, Sha256Compression,
     WitnessOrConstant,
 };
 #[expect(dead_code)]
@@ -67,7 +67,7 @@ pub struct AcirFormat<F: PrimeField> {
     //  std::vector<PedersenHashConstraint> pedersen_hash_constraints;
     pub(crate) poseidon2_constraints: Vec<Poseidon2Constraint<F>>,
     pub(crate) multi_scalar_mul_constraints: Vec<MultiScalarMul<F>>,
-    //  std::vector<EcAdd> ec_add_constraints;
+    pub(crate) ec_add_constraints: Vec<EcAdd<F>>,
     pub(crate) recursion_constraints: Vec<RecursionConstraint>,
     pub(crate) honk_recursion_constraints: Vec<RecursionConstraint>,
     pub(crate) avm_recursion_constraints: Vec<RecursionConstraint>,
@@ -756,10 +756,34 @@ impl<F: PrimeField> AcirFormat<F> {
                     .push(opcode_index);
             }
             BlackBoxFuncCall::EmbeddedCurveAdd {
-                input1: _,
-                input2: _,
-                outputs: _,
-            } => todo!("BlackBoxFuncCall::EmbeddedCurveAdd"),
+                input1,
+                input2,
+                outputs,
+            } => {
+                let input1_x = Self::parse_input(input1[0]);
+                let input1_y = Self::parse_input(input1[1]);
+                let input1_infinite = Self::parse_input(input1[2]);
+                let input2_x = Self::parse_input(input2[0]);
+                let input2_y = Self::parse_input(input2[1]);
+                let input2_infinite = Self::parse_input(input2[2]);
+                af.ec_add_constraints.push(EcAdd {
+                    input1_x,
+                    input1_y,
+                    input1_infinite,
+                    input2_x,
+                    input2_y,
+                    input2_infinite,
+                    result_x: outputs.0.witness_index(),
+                    result_y: outputs.1.witness_index(),
+                    result_infinite: outputs.2.witness_index(),
+                });
+                af.constrained_witness.insert(outputs.0.witness_index());
+                af.constrained_witness.insert(outputs.1.witness_index());
+                af.constrained_witness.insert(outputs.2.witness_index());
+                af.original_opcode_indices
+                    .ec_add_constraints
+                    .push(opcode_index);
+            }
             BlackBoxFuncCall::Keccakf1600 {
                 inputs: _,
                 outputs: _,

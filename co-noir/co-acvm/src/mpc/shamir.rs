@@ -860,4 +860,16 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
     ) -> std::io::Result<Vec<Self::AcvmType>> {
         panic!("functionality blake2s_hash not feasible for Shamir")
     }
+
+    fn embedded_curve_add(
+        &mut self,
+        _input1_x: Self::AcvmType,
+        _input1_y: Self::AcvmType,
+        _input1_infinite: Self::AcvmType,
+        _input2_x: Self::AcvmType,
+        _input2_y: Self::AcvmType,
+        _input2_infinite: Self::AcvmType,
+    ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
+        panic!("functionality embedded_curve_add not feasible for Shamir")
+    }
 }

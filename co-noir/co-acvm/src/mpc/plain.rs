@@ -767,4 +767,45 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         let result = output_bytes.into_iter().map(|x| F::from(x)).collect();
         Ok(result)
     }
+
+    fn embedded_curve_add(
+        &mut self,
+        input1_x: Self::AcvmType,
+        input1_y: Self::AcvmType,
+        input1_infinite: Self::AcvmType,
+        input2_x: Self::AcvmType,
+        input2_y: Self::AcvmType,
+        input2_infinite: Self::AcvmType,
+    ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
+        // This is very hardcoded to the grumpkin curve
+        if TypeId::of::<F>() != TypeId::of::<ark_bn254::Fr>() {
+            panic!("Only BN254 is supported");
+        }
+
+        if input1_infinite > F::one() || input2_infinite > F::one() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "--pedantic-solving: is_infinity expected to be a bool, but found to be > 1",
+            ));
+        }
+
+        let input1_x = *downcast::<_, ark_bn254::Fr>(&input1_x).expect("We checked types");
+        let input1_y = *downcast::<_, ark_bn254::Fr>(&input1_y).expect("We checked types");
+        let input2_x = *downcast::<_, ark_bn254::Fr>(&input2_x).expect("We checked types");
+        let input2_y = *downcast::<_, ark_bn254::Fr>(&input2_y).expect("We checked types");
+
+        let point1 = Self::create_grumpkin_point(input1_x, input1_y, input1_infinite == F::one())?;
+
+        let point2 = Self::create_grumpkin_point(input2_x, input2_y, input2_infinite == F::one())?;
+
+        let add = point1 + point2;
+
+        if let Some((out_x, out_y)) = add.into_affine().xy() {
+            let out_x = *downcast(&out_x).expect("We checked types");
+            let out_y = *downcast(&out_y).expect("We checked types");
+            Ok((out_x, out_y, F::zero()))
+        } else {
+            Ok((F::zero(), F::zero(), F::one()))
+        }
+    }
 }
