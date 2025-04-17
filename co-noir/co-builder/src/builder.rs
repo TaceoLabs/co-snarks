@@ -5,7 +5,7 @@ use crate::types::blake2s::Blake2s;
 use crate::types::blake3::blake3s;
 use crate::types::field_ct::{CycleGroupCT, CycleScalarCT};
 use crate::types::sha_compression::SHA256;
-use crate::types::types::Sha256Compression;
+use crate::types::types::{EcAdd, Sha256Compression};
 use crate::types::types::{EccAddGate, MultiScalarMul, WitnessOrConstant};
 use crate::TranscriptFieldType;
 use crate::{
@@ -3586,7 +3586,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 
         // Add ec add constraints
         for constraint in constraint_system.ec_add_constraints.iter() {
-            todo!("ec add gates");
+            self.create_ec_add_constraint(constraint, has_valid_witness_assignments, driver)?;
         }
 
         // Add block constraints
@@ -3825,6 +3825,81 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             );
         }
 
+        Ok(())
+    }
+
+    fn create_ec_add_constraint(
+        &mut self,
+        constraint: &EcAdd<P::ScalarField>,
+        has_valid_witness_assignments: bool,
+        driver: &mut T,
+    ) -> std::io::Result<()> {
+        // Input to cycle_group points
+        let input1_point = WitnessOrConstant::to_grumpkin_point(
+            &constraint.input1_x,
+            &constraint.input1_y,
+            &constraint.input1_infinite,
+            has_valid_witness_assignments,
+            self,
+            driver,
+        );
+
+        let input2_point = WitnessOrConstant::to_grumpkin_point(
+            &constraint.input2_x,
+            &constraint.input2_y,
+            &constraint.input2_infinite,
+            has_valid_witness_assignments,
+            self,
+            driver,
+        );
+
+        // Addition
+        let result = input1_point.add(&input2_point, self, driver)?;
+        let standard_result = result.get_standard_form(self, driver)?;
+        let x_normalized = standard_result.x.normalize(self, driver);
+        let y_normalized = standard_result.y.normalize(self, driver);
+        let infinite = standard_result
+            .is_point_at_infinity()
+            .normalize(self, driver);
+
+        if x_normalized.is_constant() {
+            let value = x_normalized.get_value(self, driver);
+            self.fix_witness(
+                constraint.result_x,
+                T::get_public(&value).expect("Constants should be public"),
+            );
+        } else {
+            self.assert_equal(
+                x_normalized.witness_index as usize,
+                constraint.result_x as usize,
+            );
+        }
+
+        if y_normalized.is_constant() {
+            let value = y_normalized.get_value(self, driver);
+            self.fix_witness(
+                constraint.result_y,
+                T::get_public(&value).expect("Constants should be public"),
+            );
+        } else {
+            self.assert_equal(
+                y_normalized.witness_index as usize,
+                constraint.result_y as usize,
+            );
+        }
+
+        if infinite.is_constant() {
+            let value = infinite.get_value(driver);
+            self.fix_witness(
+                constraint.result_infinite,
+                T::get_public(&value).expect("Constants should be public"),
+            );
+        } else {
+            self.assert_equal(
+                infinite.witness_index as usize,
+                constraint.result_infinite as usize,
+            );
+        }
         Ok(())
     }
 

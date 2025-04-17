@@ -1556,7 +1556,11 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T> {
         }
     }
 
-    fn normalize(&self, builder: &mut GenericUltraCircuitBuilder<P, T>, driver: &mut T) -> Self {
+    pub(crate) fn normalize(
+        &self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> Self {
         if self.is_constant() {
             assert!(!self.witness_inverted);
             return self.to_owned();
@@ -2559,6 +2563,15 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         builder.create_ecc_add_gate(&add_gate);
 
         Ok(result)
+    }
+
+    pub(crate) fn add(
+        &self,
+        other: &Self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> std::io::Result<Self> {
+        todo!("CycleGroupCT::add not implemented")
     }
 
     fn sub(
