@@ -513,10 +513,7 @@ impl<F: PrimeField> FieldCT<F> {
 
     pub(crate) fn neg(&self) -> Self {
         let mut result = self.to_owned();
-        result.additive_constant = -result.additive_constant;
-        if !result.is_constant() {
-            result.multiplicative_constant = -result.multiplicative_constant;
-        }
+        result.neg_inplace();
         result
     }
 
