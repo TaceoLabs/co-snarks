@@ -653,8 +653,11 @@ where
             }
             // create witness shares
             let start = Instant::now();
-            let shares =
-                co_circom::split_witness_rep3(&r1cs, witness, Compression::SeededHalfShares);
+            let shares = co_circom::split_witness_rep3::<P>(
+                r1cs.num_inputs,
+                witness,
+                Compression::SeededHalfShares,
+            );
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!("Split witness took {duration_ms} ms");
 
@@ -676,7 +679,7 @@ where
         MPCProtocol::SHAMIR => {
             // create witness shares
             let start = Instant::now();
-            let shares = co_circom::split_witness_shamir(&r1cs, witness, t, n);
+            let shares = co_circom::split_witness_shamir::<P>(r1cs.num_inputs, witness, t, n);
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!("Split witness took {duration_ms} ms");
 
