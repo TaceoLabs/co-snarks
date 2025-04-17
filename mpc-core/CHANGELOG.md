@@ -2,6 +2,42 @@
 
 
 
+## [0.10.0](https://github.com/TaceoLabs/co-snarks/compare/mpc-core-v0.9.0...mpc-core-v0.10.0) (2025-04-17)
+
+
+### ⚠ BREAKING CHANGES
+
+* Performance improvements and cleanup for blake2/blake3
+* add BLAKE3 blackbox function to coNoir
+* add BLAKE2s blackbox function to coNoir
+* add Bristol Fashion parsing for GC, also adds the SHA256 blackbox ([#359](https://github.com/TaceoLabs/co-snarks/issues/359))
+* Add the MSM blackbox function to co-noir, which allows to use pedersen hash/commitment
+* rename io_mul_vec to reshare_vec
+* move uncompress_shared_witness to co-circom
+* move MPC types and share/combine into new mpc-types crate, rename co-circom-snarks to co-circom-types
+
+### Features
+
+* add BLAKE2s blackbox function to coNoir ([e98fb7d](https://github.com/TaceoLabs/co-snarks/commit/e98fb7dd60f52d936f07b3e3a74797dfb091e9f3))
+* add BLAKE3 blackbox function to coNoir ([ddcb10e](https://github.com/TaceoLabs/co-snarks/commit/ddcb10e5d685072279b8f11b6935636fb74ecaf0))
+* add Bristol Fashion parsing for GC, also adds the SHA256 blackbox ([#359](https://github.com/TaceoLabs/co-snarks/issues/359)) ([f8509ef](https://github.com/TaceoLabs/co-snarks/commit/f8509ef8147bf29072ba67b4ac0f489546eea2c9))
+* Add the MSM blackbox function to co-noir, which allows to use pedersen hash/commitment ([ffeaa32](https://github.com/TaceoLabs/co-snarks/commit/ffeaa32f754fa16c77bf050486ce871a77908653))
+* Performance improvements and cleanup for blake2/blake3 ([435fcd3](https://github.com/TaceoLabs/co-snarks/commit/435fcd333080201c7c0274519ff6f6b26fb62d50))
+
+
+### Code Refactoring
+
+* move MPC types and share/combine into new mpc-types crate, rename co-circom-snarks to co-circom-types ([31b773a](https://github.com/TaceoLabs/co-snarks/commit/31b773aa71a5e872c25754de7805b02647b65688))
+* move uncompress_shared_witness to co-circom ([0462a2f](https://github.com/TaceoLabs/co-snarks/commit/0462a2fc2dd145e5306e353a227f66d8862712cb))
+* rename io_mul_vec to reshare_vec ([7067486](https://github.com/TaceoLabs/co-snarks/commit/70674869e91950a59b68272127781ecf56d77094))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * mpc-types bumped from 0.1.0 to 0.2.0
+
 ## [0.9.0](https://github.com/TaceoLabs/co-snarks/compare/mpc-core-v0.8.0...mpc-core-v0.9.0) (2025-04-03)
 
 
