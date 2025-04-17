@@ -304,6 +304,34 @@ where
         Ok(())
     }
 
+    pub(super) fn embedded_curve_add(
+        driver: &mut T,
+        initial_witness: &mut WitnessMap<T::AcvmType>,
+        input1: &[FunctionInput<GenericFieldElement<F>>; 3],
+        input2: &[FunctionInput<GenericFieldElement<F>>; 3],
+        outputs: &(Witness, Witness, Witness),
+    ) -> CoAcvmResult<()> {
+        let input1_x = Self::input_to_value(initial_witness, input1[0], false)?;
+        let input1_y = Self::input_to_value(initial_witness, input1[1], false)?;
+        let input1_infinite = Self::input_to_value(initial_witness, input1[2], false)?;
+        let input2_x = Self::input_to_value(initial_witness, input2[0], false)?;
+        let input2_y = Self::input_to_value(initial_witness, input2[1], false)?;
+        let input2_infinite = Self::input_to_value(initial_witness, input2[2], false)?;
+        let (res_x, res_y, res_infinite) = driver.embedded_curve_add(
+            input1_x,
+            input1_y,
+            input1_infinite,
+            input2_x,
+            input2_y,
+            input2_infinite,
+        )?;
+
+        Self::insert_value(&outputs.0, res_x, initial_witness)?;
+        Self::insert_value(&outputs.1, res_y, initial_witness)?;
+        Self::insert_value(&outputs.2, res_infinite, initial_witness)?;
+        Ok(())
+    }
+
     pub(crate) fn solve_sha_256_permutation_opcode(
         driver: &mut T,
         initial_witness: &mut WitnessMap<T::AcvmType>,
@@ -430,6 +458,13 @@ where
                 outputs,
                 pedantic_solving,
             )?,
+            BlackBoxFuncCall::EmbeddedCurveAdd {
+                input1,
+                input2,
+                outputs,
+            } => {
+                Self::embedded_curve_add(&mut self.driver, initial_witness, input1, input2, outputs)
+            }?,
             BlackBoxFuncCall::Sha256Compression {
                 inputs,
                 hash_values,

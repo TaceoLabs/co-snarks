@@ -443,4 +443,14 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         message_input: Vec<Self::AcvmType>,
         num_bits: &[usize],
     ) -> std::io::Result<Vec<Self::AcvmType>>;
+
+    fn embedded_curve_add(
+        &mut self,
+        input1_x: Self::AcvmType,
+        input1_y: Self::AcvmType,
+        input1_infinite: Self::AcvmType,
+        input2_x: Self::AcvmType,
+        input2_y: Self::AcvmType,
+        input2_infinite: Self::AcvmType,
+    ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)>;
 }
