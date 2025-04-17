@@ -2571,7 +2571,105 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> std::io::Result<Self> {
-        todo!("CycleGroupCT::add not implemented")
+        if self.is_infinity.is_constant()
+            && !T::get_public(&self.is_infinity.get_value(driver))
+                .expect("Constants are public")
+                .is_zero()
+        {
+            return Ok(other.to_owned());
+        }
+
+        if other.is_infinity.is_constant()
+            && !T::get_public(&other.is_infinity.get_value(driver))
+                .expect("Constants are public")
+                .is_zero()
+        {
+            return Ok(self.to_owned());
+        }
+
+        let x_coordinates_match = self.x.equals(&other.x, builder, driver)?;
+        let y_coordinates_match = self.y.equals(&other.y, builder, driver)?;
+        let double_predicate = x_coordinates_match.and(&y_coordinates_match, builder, driver)?;
+        let infinity_predicate =
+            x_coordinates_match.and(&y_coordinates_match.not(), builder, driver)?;
+
+        let x1 = &self.x;
+        let y1 = &self.y;
+        let x2 = &other.x;
+        let y2 = &other.y;
+        // if x_coordinates match, lambda triggers a divide by zero error.
+        // Adding in `x_coordinates_match` ensures that lambda will always be well-formed
+        let x_diff = x2.add_two(
+            &x1.neg(),
+            &x_coordinates_match.to_field_ct(driver),
+            builder,
+            driver,
+        );
+
+        // Computes lambda = (y2-y1)/x_diff, using the fact that x_diff is never 0
+
+        let lambda = if (y1.is_constant() && y2.is_constant()) || x_diff.is_constant() {
+            (y2.sub(y1, builder, driver)).divide_no_zero_check(&x_diff, builder, driver)?
+        } else {
+            let y2_ = y2.get_value(builder, driver);
+            let y1_ = y1.get_value(builder, driver);
+            let sub = driver.sub(y2_, y1_);
+            let x_diff_value = x_diff.get_value(builder, driver);
+            let invert = driver.invert(x_diff_value)?;
+            let lambda = driver.mul(sub, invert)?;
+            let lambda = FieldCT::from_witness(lambda, builder);
+            FieldCT::evaluate_polynomial_identity(&x_diff, &lambda, &y2.neg(), y1, builder, driver);
+            lambda
+        };
+
+        let x3 = lambda.madd(&lambda, &x2.add(x1, builder, driver).neg(), builder, driver)?;
+        let y3 = lambda.madd(&x1.sub(&x3, builder, driver), &y1.neg(), builder, driver)?;
+        let add_result = CycleGroupCT::new(x3, y3, x_coordinates_match.to_owned(), builder, driver);
+
+        let dbl_result = self.dbl(None, builder, driver)?;
+
+        // dbl if x_match, y_match
+        // infinity if x_match, !y_match
+        let mut result_x = FieldCT::conditional_assign(
+            &double_predicate,
+            &dbl_result.x,
+            &add_result.x,
+            builder,
+            driver,
+        )?;
+        let mut result_y = FieldCT::conditional_assign(
+            &double_predicate,
+            &dbl_result.y,
+            &add_result.y,
+            builder,
+            driver,
+        )?;
+
+        let lhs_infinity = self.is_point_at_infinity();
+        let rhs_infinity = other.is_point_at_infinity();
+        // if lhs infinity, return rhs
+        result_x = FieldCT::conditional_assign(lhs_infinity, &other.x, &result_x, builder, driver)?;
+        result_y = FieldCT::conditional_assign(lhs_infinity, &other.y, &result_y, builder, driver)?;
+
+        // if rhs infinity, return lhs
+        result_x = FieldCT::conditional_assign(rhs_infinity, &self.x, &result_x, builder, driver)?;
+        result_y = FieldCT::conditional_assign(rhs_infinity, &self.y, &result_y, builder, driver)?;
+
+        // is result point at infinity?
+        // yes = infinity_predicate && !lhs_infinity && !rhs_infinity
+        // yes = lhs_infinity && rhs_infinity
+        let result_is_infinity = infinity_predicate.and(
+            &lhs_infinity
+                .not()
+                .and(&rhs_infinity.not(), builder, driver)?,
+            builder,
+            driver,
+        )?;
+        let both_infinity = lhs_infinity.and(rhs_infinity, builder, driver)?;
+        let result_is_infinity = result_is_infinity.or(&both_infinity, builder, driver)?;
+
+        let result = CycleGroupCT::new(result_x, result_y, result_is_infinity, builder, driver);
+        Ok(result)
     }
 
     fn sub(
@@ -2685,13 +2783,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         let both_infinity = lhs_infinity.and(rhs_infinity, builder, driver)?;
         let result_is_infinity = result_is_infinity.or(&both_infinity, builder, driver)?;
 
-        let result = CycleGroupCT::new(
-            result_x,
-            result_y,
-            result_is_infinity.to_owned(),
-            builder,
-            driver,
-        );
+        let result = CycleGroupCT::new(result_x, result_y, result_is_infinity, builder, driver);
         Ok(result)
     }
 
