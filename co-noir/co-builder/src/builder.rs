@@ -3541,15 +3541,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             self.create_sha256_compression_constraints(driver, constraint)?;
         }
 
-        // for (i, constraint) in constraint_system.sha256_compression.iter().enumerate() {
-        //     todo!("sha256 compression gates");
-        // }
-
-        // Add schnorr constraints
-        // for (i, constraint) in constraint_system.schnorr_constraints.iter().enumerate() {
-        //     todo!("schnorr gates");
-        // }
-
         // Add ECDSA k1 constraints
         // for (i, constraint) in constraint_system.ecdsa_k1_constraints.iter().enumerate() {
         //     todo!("ecdsa k1 gates");
@@ -3579,10 +3570,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         //     todo!("keccak permutation gates");
         // }
 
-        // for (i, constraint) in constraint_system.pedersen_hash_constraints.iter().enumerate() {
-        //     todo!("pedersen hash gates");
-        // }
-
         // Add poseidon2 constraints
         for constraint in constraint_system.poseidon2_constraints.iter() {
             self.create_poseidon2_permutations(constraint, driver)?;
@@ -3597,15 +3584,10 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             )?;
         }
 
-        // Add multi scalar mul constraints
-        // for (i, constraint) in constraint_system.multi_scalar_mul_constraints.iter().enumerate() {
-        //     todo!("multi scalar mul gates");
-        // }
-
         // Add ec add constraints
-        // for (i, constraint) in constraint_system.ec_add_constraints.iter().enumerate() {
-        //     todo!("ec add gates");
-        // }
+        for constraint in constraint_system.ec_add_constraints.iter() {
+            todo!("ec add gates");
+        }
 
         // Add block constraints
         for constraint in constraint_system.block_constraints.iter() {

@@ -163,7 +163,7 @@ pub(crate) struct AcirFormatOriginalOpcodeIndices {
     // pub(crate) pedersen_hash_constraints: Vec<usize>,
     pub(crate) poseidon2_constraints: Vec<usize>,
     pub(crate) multi_scalar_mul_constraints: Vec<usize>,
-    // pub(crate) ec_add_constraints: Vec<usize>,
+    pub(crate) ec_add_constraints: Vec<usize>,
     // pub(crate) recursion_constraints: Vec<usize>,
     // pub(crate) honk_recursion_constraints: Vec<usize>,
     // pub(crate) avm_recursion_constraints: Vec<usize>,
@@ -416,6 +416,18 @@ pub(crate) struct MultiScalarMul<F: PrimeField> {
     pub(crate) out_point_x: u32,
     pub(crate) out_point_y: u32,
     pub(crate) out_point_is_infinity: u32,
+}
+
+pub(crate) struct EcAdd<F: PrimeField> {
+    pub(crate) input1_x: WitnessOrConstant<F>,
+    pub(crate) input1_y: WitnessOrConstant<F>,
+    pub(crate) input1_infinite: WitnessOrConstant<F>,
+    pub(crate) input2_x: WitnessOrConstant<F>,
+    pub(crate) input2_y: WitnessOrConstant<F>,
+    pub(crate) input2_infinite: WitnessOrConstant<F>,
+    pub(crate) result_x: u32,
+    pub(crate) result_y: u32,
+    pub(crate) result_infinite: u32,
 }
 
 pub(crate) struct Sha256Compression<F: PrimeField> {
