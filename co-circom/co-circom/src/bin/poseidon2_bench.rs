@@ -72,7 +72,7 @@ pub struct Cli {
     #[arg(short, long, default_value_t = 10)]
     pub batch_size: usize,
 
-    /// The number of leafs in the Merkle tree tree benchmarks
+    /// The number of leafs in the Merkle tree benchmarks
     #[arg(short, long, default_value_t = 1024)]
     pub merkle_size: usize,
 
