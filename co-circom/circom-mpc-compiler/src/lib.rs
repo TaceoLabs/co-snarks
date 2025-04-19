@@ -489,7 +489,7 @@ where
                 let arg_size = get_size_from_size_option(&call_bucket.argument_types[idx].size);
                 self.handle_instruction(inst);
                 if arg_size > 1 {
-                    //replace Load{Var/Signal} with with respective MultiOpCode
+                    //replace Load{Var/Signal} with respective MultiOpCode
                     let last_instruction = self.current_code_block.pop().expect("is not empty");
                     //self.emit_opcode(MpcOpCode::PushIndex(arg_size));
                     //TODO CLEAN UP
