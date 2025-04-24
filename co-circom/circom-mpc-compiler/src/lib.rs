@@ -216,6 +216,7 @@ where
         let flags = CompilationFlags {
             main_inputs_log: false,
             wat_flag: false,
+            constraint_assert_dissabled_flag: false,
         };
         Ok((
             CircomCircuit::build(vcp, flags, &self.config.version),
@@ -317,7 +318,7 @@ where
             self.handle_instruction(inst);
         });
 
-        match compute_bucket.op {
+        match &compute_bucket.op {
             OperatorType::Add => self.emit_opcode(MpcOpCode::Add),
             OperatorType::Sub => self.emit_opcode(MpcOpCode::Sub),
             OperatorType::Mul => self.emit_opcode(MpcOpCode::Mul),
@@ -331,7 +332,8 @@ where
             OperatorType::GreaterEq => self.emit_opcode(MpcOpCode::Ge),
             OperatorType::Lesser => self.emit_opcode(MpcOpCode::Lt),
             OperatorType::Greater => self.emit_opcode(MpcOpCode::Gt),
-            OperatorType::Eq(size) => {
+            OperatorType::Eq(size_option) => {
+                let size = get_size_from_size_option(size_option);
                 assert_ne!(size, 0, "size must be > 0");
                 self.emit_opcode(MpcOpCode::Eq(size));
             }

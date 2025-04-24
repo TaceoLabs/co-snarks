@@ -1,7 +1,7 @@
 pragma circom 2.0.0;
 
 function evenAnotherFunction(x) {
-    var arr[5] = [1,2,3,4,5];
+    var arr[2] = [1,2];
     if (x != 0) {
         return arr;
     }
@@ -29,8 +29,8 @@ function someValue(x, y) {
         } else if (x-1 == 95) {
             return anotherFunction(x);
         } else {
-            var ret_vals[5] = anotherFunction(x);
-            return [ret_vals[3], ret_vals[4]];
+            var ret_vals[2] = anotherFunction(x);
+            return [ret_vals[0] + 3, ret_vals[1] + 4];
         }
     } else if (x == 50) {
         return [x+4, 5];
