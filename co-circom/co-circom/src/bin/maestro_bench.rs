@@ -142,6 +142,8 @@ fn main() -> color_eyre::Result<ExitCode> {
 
 fn benches<F: PrimeField>(config: &Config) -> color_eyre::Result<ExitCode> {
     maestro_bench::<F>(config)?;
+
+    a2b_sequential_internal::<F>(config)?;
     Ok(ExitCode::SUCCESS)
 }
 
@@ -218,9 +220,9 @@ fn maestro_bench_internal<T: IntRing2k, F: PrimeField>(
 
         for (i, bit) in ohv_opened.into_iter().enumerate() {
             if i as u64 == index {
-                assert!(bit.convert().convert());
+                assert!(bit.convert().convert(), "i = {}, index = {}", i, index);
             } else {
-                assert!(!bit.convert().convert());
+                assert!(!bit.convert().convert(), "i = {}, index = {}", i, index);
             }
         }
     }
@@ -230,6 +232,65 @@ fn maestro_bench_internal<T: IntRing2k, F: PrimeField>(
         times,
         config.network.my_id,
         format!("MAESTRO (2^{})", config.k).as_str(),
+    );
+
+    Ok(ExitCode::SUCCESS)
+}
+
+fn a2b_sequential_internal<F: PrimeField>(config: &Config) -> color_eyre::Result<ExitCode> {
+    let mut rng = rand::thread_rng();
+    let mut times = Vec::with_capacity(config.runs);
+
+    let elements = (1 << config.k) as u64;
+
+    // connect to network
+    let net = Rep3MpcNet::new(config.network.to_owned().try_into()?)?;
+    // init MPC protocol
+    let mut protocol = IoContext::init(net)?;
+
+    for _ in 0..config.runs {
+        let index = share_random_index_rep3::<F, _>(&mut protocol.network, config.k, &mut rng)?;
+
+        let start = Instant::now();
+
+        let mut ohv = Vec::with_capacity(elements as usize);
+        for i in 0..elements {
+            let diff = rep3::arithmetic::add_public(index, -F::from(i), protocol.id);
+            let diff_bin = rep3::conversion::a2b_selector(diff, &mut protocol)?;
+
+            let is_zero = rep3::binary::is_zero(&diff_bin, &mut protocol)?;
+            let is_zero = rep3_ring::Rep3RingShare::new(
+                Bit::cast_from_biguint(&is_zero.a),
+                Bit::cast_from_biguint(&is_zero.b),
+            );
+            ohv.push(is_zero);
+        }
+
+        let duration = start.elapsed().as_micros() as f64;
+        times.push(duration);
+
+        // Check results
+        let opened_index = rep3::arithmetic::open(index, &mut protocol)?;
+        let ohv_opened = rep3_ring::arithmetic::open_vec(&ohv, &mut protocol)?;
+        assert!(opened_index < F::from(elements));
+        let index: BigUint = opened_index.into();
+        let index = index.iter_u64_digits().next().unwrap_or_default();
+        assert_eq!(opened_index, F::from(index));
+
+        for (i, bit) in ohv_opened.into_iter().enumerate() {
+            if i as u64 == index {
+                assert!(bit.convert().convert(), "i = {}, index = {}", i, index);
+            } else {
+                assert!(!bit.convert().convert(), "i = {}, index = {}", i, index);
+            }
+        }
+    }
+
+    sleep(SLEEP);
+    print_runtimes(
+        times,
+        config.network.my_id,
+        format!("A2B Sequential (2^{})", config.k).as_str(),
     );
 
     Ok(ExitCode::SUCCESS)
