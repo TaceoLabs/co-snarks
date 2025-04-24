@@ -933,7 +933,7 @@ dependencies = [
 [[package]]
 name = "circom_algebra"
 version = "2.2.0"
-source = "git+https://github.com/TaceoLabs/circom?rev=1cc17fb#1cc17fb3a9c1df0803c14107fcb759e8064e4c99"
+source = "git+https://github.com/TaceoLabs/circom?rev=ddc718fdf6b4a11932f56c0d1b71544f69d37f21#ddc718fdf6b4a11932f56c0d1b71544f69d37f21"
 dependencies = [
  "constant_tracking",
  "num-bigint-dig",
@@ -1229,8 +1229,8 @@ dependencies = [
 
 [[package]]
 name = "code_producers"
-version = "2.2.0"
-source = "git+https://github.com/TaceoLabs/circom?rev=1cc17fb#1cc17fb3a9c1df0803c14107fcb759e8064e4c99"
+version = "2.2.1"
+source = "git+https://github.com/TaceoLabs/circom?rev=ddc718fdf6b4a11932f56c0d1b71544f69d37f21#ddc718fdf6b4a11932f56c0d1b71544f69d37f21"
 dependencies = [
  "handlebars",
  "lz_fnv",
@@ -1323,8 +1323,8 @@ dependencies = [
 
 [[package]]
 name = "compiler"
-version = "2.2.0"
-source = "git+https://github.com/TaceoLabs/circom?rev=1cc17fb#1cc17fb3a9c1df0803c14107fcb759e8064e4c99"
+version = "2.2.1"
+source = "git+https://github.com/TaceoLabs/circom?rev=ddc718fdf6b4a11932f56c0d1b71544f69d37f21#ddc718fdf6b4a11932f56c0d1b71544f69d37f21"
 dependencies = [
  "code_producers",
  "constant_tracking",
@@ -1348,12 +1348,12 @@ checksum = "7c74b8349d32d297c9134b8c88677813a227df8f779daa29bfc29c183fe3dca6"
 [[package]]
 name = "constant_tracking"
 version = "2.0.0"
-source = "git+https://github.com/TaceoLabs/circom?rev=1cc17fb#1cc17fb3a9c1df0803c14107fcb759e8064e4c99"
+source = "git+https://github.com/TaceoLabs/circom?rev=ddc718fdf6b4a11932f56c0d1b71544f69d37f21#ddc718fdf6b4a11932f56c0d1b71544f69d37f21"
 
 [[package]]
 name = "constraint_generation"
-version = "2.2.0"
-source = "git+https://github.com/TaceoLabs/circom?rev=1cc17fb#1cc17fb3a9c1df0803c14107fcb759e8064e4c99"
+version = "2.2.1"
+source = "git+https://github.com/TaceoLabs/circom?rev=ddc718fdf6b4a11932f56c0d1b71544f69d37f21#ddc718fdf6b4a11932f56c0d1b71544f69d37f21"
 dependencies = [
  "ansi_term",
  "circom_algebra",
@@ -1369,7 +1369,7 @@ dependencies = [
 [[package]]
 name = "constraint_list"
 version = "2.1.8"
-source = "git+https://github.com/TaceoLabs/circom?rev=1cc17fb#1cc17fb3a9c1df0803c14107fcb759e8064e4c99"
+source = "git+https://github.com/TaceoLabs/circom?rev=ddc718fdf6b4a11932f56c0d1b71544f69d37f21#ddc718fdf6b4a11932f56c0d1b71544f69d37f21"
 dependencies = [
  "circom_algebra",
  "constraint_writers",
@@ -1382,7 +1382,7 @@ dependencies = [
 [[package]]
 name = "constraint_writers"
 version = "2.1.8"
-source = "git+https://github.com/TaceoLabs/circom?rev=1cc17fb#1cc17fb3a9c1df0803c14107fcb759e8064e4c99"
+source = "git+https://github.com/TaceoLabs/circom?rev=ddc718fdf6b4a11932f56c0d1b71544f69d37f21#ddc718fdf6b4a11932f56c0d1b71544f69d37f21"
 dependencies = [
  "circom_algebra",
  "json",
@@ -1563,7 +1563,7 @@ dependencies = [
 [[package]]
 name = "dag"
 version = "2.2.0"
-source = "git+https://github.com/TaceoLabs/circom?rev=1cc17fb#1cc17fb3a9c1df0803c14107fcb759e8064e4c99"
+source = "git+https://github.com/TaceoLabs/circom?rev=ddc718fdf6b4a11932f56c0d1b71544f69d37f21#ddc718fdf6b4a11932f56c0d1b71544f69d37f21"
 dependencies = [
  "circom_algebra",
  "constraint_list",
@@ -3249,8 +3249,8 @@ dependencies = [
 
 [[package]]
 name = "parser"
-version = "2.2.0"
-source = "git+https://github.com/TaceoLabs/circom?rev=1cc17fb#1cc17fb3a9c1df0803c14107fcb759e8064e4c99"
+version = "2.2.1"
+source = "git+https://github.com/TaceoLabs/circom?rev=ddc718fdf6b4a11932f56c0d1b71544f69d37f21#ddc718fdf6b4a11932f56c0d1b71544f69d37f21"
 dependencies = [
  "lalrpop",
  "lalrpop-util",
@@ -3493,8 +3493,8 @@ dependencies = [
 
 [[package]]
 name = "program_structure"
-version = "2.2.0"
-source = "git+https://github.com/TaceoLabs/circom?rev=1cc17fb#1cc17fb3a9c1df0803c14107fcb759e8064e4c99"
+version = "2.2.1"
+source = "git+https://github.com/TaceoLabs/circom?rev=ddc718fdf6b4a11932f56c0d1b71544f69d37f21#ddc718fdf6b4a11932f56c0d1b71544f69d37f21"
 dependencies = [
  "codespan 0.9.5",
  "codespan-reporting 0.9.5",
@@ -5021,8 +5021,8 @@ dependencies = [
 
 [[package]]
 name = "type_analysis"
-version = "2.2.0"
-source = "git+https://github.com/TaceoLabs/circom?rev=1cc17fb#1cc17fb3a9c1df0803c14107fcb759e8064e4c99"
+version = "2.2.1"
+source = "git+https://github.com/TaceoLabs/circom?rev=ddc718fdf6b4a11932f56c0d1b71544f69d37f21#ddc718fdf6b4a11932f56c0d1b71544f69d37f21"
 dependencies = [
  "num-bigint-dig",
  "num-traits",
