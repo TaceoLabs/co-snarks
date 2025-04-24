@@ -361,3 +361,47 @@ pub fn is_zero<F: PrimeField, N: Rep3Network>(
     // extract LSB
     Ok(x & BigUint::one())
 }
+
+/// Computes a binary circuit to check whether each element in the replicated binary-shared input x is zero or not. The output is a binary sharing of one bit.
+pub fn is_zero_many<F: PrimeField, N: Rep3Network>(
+    mut x: Vec<BinaryShare<F>>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<BinaryShare<F>>> {
+    let bit_len = F::MODULUS_BIT_SIZE as usize;
+    let mask = (BigUint::from(1u64) << bit_len) - BigUint::one();
+
+    // negate
+    for x_ in x.iter_mut() {
+        *x_ ^= &mask;
+    }
+    let mut y = x.clone();
+
+    // do ands in a tree
+    // TODO: Make and tree more communication efficient, ATM we send the full element for each level, even though they halve in size
+    let mut len = bit_len;
+    while len > 1 {
+        if len % 2 == 1 {
+            len += 1;
+            // pad with a 1 (= 1 xor 1 xor 1) in MSB position
+            // since this is publicly known we just set the bit in each party's share and its replication
+            for x in x.iter_mut() {
+                x.a.set_bit(len as u64 - 1, true);
+                x.b.set_bit(len as u64 - 1, true);
+            }
+        }
+        len /= 2;
+        let mask = (BigUint::from(1u64) << len) - BigUint::one();
+        for (x_, y_) in izip!(x.iter_mut(), y.iter_mut()) {
+            y_.a = (&x_.a >> len) & &mask;
+            y_.b = (&x_.b >> len) & &mask;
+            x_.a &= &mask;
+            x_.b &= &mask;
+        }
+        x = and_vec(&x, &y, io_context)?;
+    }
+    // extract LSB
+    for x_ in x.iter_mut() {
+        *x_ &= BigUint::one();
+    }
+    Ok(x)
+}
