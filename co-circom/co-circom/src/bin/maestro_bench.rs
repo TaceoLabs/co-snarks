@@ -104,6 +104,37 @@ impl Config {
     }
 }
 
+fn print_data(send_receive: Vec<(u64, u64)>, my_id: usize, other_id: usize, s: &str) {
+    let mut min_send = f64::INFINITY;
+    let mut max_send = 0f64;
+    let mut avg_send = 0f64;
+    let mut min_rcv = f64::INFINITY;
+    let mut max_rcv = 0f64;
+    let mut avg_rcv = 0f64;
+
+    let len = send_receive.len();
+    for (send, rcv) in send_receive {
+        avg_send += send as f64;
+        min_send = min_send.min(send as f64);
+        max_send = max_send.max(send as f64);
+
+        avg_rcv += rcv as f64;
+        min_rcv = min_send.min(rcv as f64);
+        max_rcv = max_send.max(rcv as f64);
+    }
+    avg_send /= len as f64;
+    avg_rcv /= len as f64;
+
+    tracing::info!("{}: Party {}->{}, {} runs", s, my_id, other_id, len);
+    tracing::info!("\tavg: {:.2} bytes", avg_send);
+    tracing::info!("\tmin: {:.2} bytes", min_send);
+    tracing::info!("\tmax: {:.2} bytes", max_send);
+    tracing::info!("{}: Party {}<-{}, {} runs", s, my_id, other_id, len);
+    tracing::info!("\tavg: {:.2} bytes", avg_rcv);
+    tracing::info!("\tmin: {:.2} bytes", min_rcv);
+    tracing::info!("\tmax: {:.2} bytes", max_rcv);
+}
+
 #[allow(dead_code)]
 fn print_runtimes(times: Vec<f64>, id: usize, s: &str) {
     let mut min = f64::INFINITY;
@@ -190,6 +221,8 @@ fn maestro_bench_internal<T: IntRing2k, F: PrimeField>(
 ) -> color_eyre::Result<ExitCode> {
     let mut rng = rand::thread_rng();
     let mut times = Vec::with_capacity(config.runs);
+    let mut send_receive_prev = Vec::with_capacity(config.runs);
+    let mut send_receive_next = Vec::with_capacity(config.runs);
 
     // connect to network
     let net = Rep3MpcNet::new(config.network.to_owned().try_into()?)?;
@@ -198,6 +231,17 @@ fn maestro_bench_internal<T: IntRing2k, F: PrimeField>(
 
     for _ in 0..config.runs {
         let index = share_random_index_rep3::<F, _>(&mut protocol.network, config.k, &mut rng)?;
+
+        let send_receive_prev__ = protocol
+            .network
+            .net_handler
+            .inner
+            .get_send_receive(protocol.network.get_id().prev_id() as usize)?;
+        let send_receive_next__ = protocol
+            .network
+            .net_handler
+            .inner
+            .get_send_receive(protocol.network.get_id().next_id() as usize)?;
 
         let start = Instant::now();
 
@@ -208,7 +252,25 @@ fn maestro_bench_internal<T: IntRing2k, F: PrimeField>(
         let ohv = rep3_ring::gadgets::ohv::ohv(config.k, share, &mut protocol)?;
 
         let duration = start.elapsed().as_micros() as f64;
+        let send_receive_prev_ = protocol
+            .network
+            .net_handler
+            .inner
+            .get_send_receive(protocol.network.get_id().prev_id() as usize)?;
+        let send_receive_next_ = protocol
+            .network
+            .net_handler
+            .inner
+            .get_send_receive(protocol.network.get_id().next_id() as usize)?;
         times.push(duration);
+        send_receive_prev.push((
+            send_receive_prev_.0 - send_receive_prev__.0,
+            send_receive_prev_.1 - send_receive_prev__.1,
+        ));
+        send_receive_next.push((
+            send_receive_next_.0 - send_receive_next__.0,
+            send_receive_next_.1 - send_receive_next__.1,
+        ));
 
         // Check results
         let opened_index = rep3::arithmetic::open(index, &mut protocol)?;
@@ -233,6 +295,18 @@ fn maestro_bench_internal<T: IntRing2k, F: PrimeField>(
         config.network.my_id,
         format!("MAESTRO (2^{})", config.k).as_str(),
     );
+    print_data(
+        send_receive_next,
+        config.network.my_id,
+        protocol.network.get_id().next_id() as usize,
+        format!("MAESTRO (2^{})", config.k).as_str(),
+    );
+    print_data(
+        send_receive_prev,
+        config.network.my_id,
+        protocol.network.get_id().prev_id() as usize,
+        format!("MAESTRO (2^{})", config.k).as_str(),
+    );
 
     Ok(ExitCode::SUCCESS)
 }
@@ -240,6 +314,8 @@ fn maestro_bench_internal<T: IntRing2k, F: PrimeField>(
 fn a2b_sequential<F: PrimeField>(config: &Config) -> color_eyre::Result<ExitCode> {
     let mut rng = rand::thread_rng();
     let mut times = Vec::with_capacity(config.runs);
+    let mut send_receive_prev = Vec::with_capacity(config.runs);
+    let mut send_receive_next = Vec::with_capacity(config.runs);
 
     let elements = (1 << config.k) as u64;
 
@@ -250,6 +326,17 @@ fn a2b_sequential<F: PrimeField>(config: &Config) -> color_eyre::Result<ExitCode
 
     for _ in 0..config.runs {
         let index = share_random_index_rep3::<F, _>(&mut protocol.network, config.k, &mut rng)?;
+
+        let send_receive_prev__ = protocol
+            .network
+            .net_handler
+            .inner
+            .get_send_receive(protocol.network.get_id().prev_id() as usize)?;
+        let send_receive_next__ = protocol
+            .network
+            .net_handler
+            .inner
+            .get_send_receive(protocol.network.get_id().next_id() as usize)?;
 
         let start = Instant::now();
 
@@ -267,7 +354,25 @@ fn a2b_sequential<F: PrimeField>(config: &Config) -> color_eyre::Result<ExitCode
         }
 
         let duration = start.elapsed().as_micros() as f64;
+        let send_receive_prev_ = protocol
+            .network
+            .net_handler
+            .inner
+            .get_send_receive(protocol.network.get_id().prev_id() as usize)?;
+        let send_receive_next_ = protocol
+            .network
+            .net_handler
+            .inner
+            .get_send_receive(protocol.network.get_id().next_id() as usize)?;
         times.push(duration);
+        send_receive_prev.push((
+            send_receive_prev_.0 - send_receive_prev__.0,
+            send_receive_prev_.1 - send_receive_prev__.1,
+        ));
+        send_receive_next.push((
+            send_receive_next_.0 - send_receive_next__.0,
+            send_receive_next_.1 - send_receive_next__.1,
+        ));
 
         // Check results
         let opened_index = rep3::arithmetic::open(index, &mut protocol)?;
@@ -292,6 +397,18 @@ fn a2b_sequential<F: PrimeField>(config: &Config) -> color_eyre::Result<ExitCode
         config.network.my_id,
         format!("A2B Sequential (2^{})", config.k).as_str(),
     );
+    print_data(
+        send_receive_next,
+        config.network.my_id,
+        protocol.network.get_id().next_id() as usize,
+        format!("A2B Sequential (2^{})", config.k).as_str(),
+    );
+    print_data(
+        send_receive_prev,
+        config.network.my_id,
+        protocol.network.get_id().prev_id() as usize,
+        format!("A2B Sequential (2^{})", config.k).as_str(),
+    );
 
     Ok(ExitCode::SUCCESS)
 }
@@ -299,6 +416,8 @@ fn a2b_sequential<F: PrimeField>(config: &Config) -> color_eyre::Result<ExitCode
 fn a2b<F: PrimeField>(config: &Config) -> color_eyre::Result<ExitCode> {
     let mut rng = rand::thread_rng();
     let mut times = Vec::with_capacity(config.runs);
+    let mut send_receive_prev = Vec::with_capacity(config.runs);
+    let mut send_receive_next = Vec::with_capacity(config.runs);
 
     let elements = (1 << config.k) as u64;
 
@@ -309,6 +428,17 @@ fn a2b<F: PrimeField>(config: &Config) -> color_eyre::Result<ExitCode> {
 
     for _ in 0..config.runs {
         let index = share_random_index_rep3::<F, _>(&mut protocol.network, config.k, &mut rng)?;
+
+        let send_receive_prev__ = protocol
+            .network
+            .net_handler
+            .inner
+            .get_send_receive(protocol.network.get_id().prev_id() as usize)?;
+        let send_receive_next__ = protocol
+            .network
+            .net_handler
+            .inner
+            .get_send_receive(protocol.network.get_id().next_id() as usize)?;
 
         let start = Instant::now();
 
@@ -327,7 +457,25 @@ fn a2b<F: PrimeField>(config: &Config) -> color_eyre::Result<ExitCode> {
         }
 
         let duration = start.elapsed().as_micros() as f64;
+        let send_receive_prev_ = protocol
+            .network
+            .net_handler
+            .inner
+            .get_send_receive(protocol.network.get_id().prev_id() as usize)?;
+        let send_receive_next_ = protocol
+            .network
+            .net_handler
+            .inner
+            .get_send_receive(protocol.network.get_id().next_id() as usize)?;
         times.push(duration);
+        send_receive_prev.push((
+            send_receive_prev_.0 - send_receive_prev__.0,
+            send_receive_prev_.1 - send_receive_prev__.1,
+        ));
+        send_receive_next.push((
+            send_receive_next_.0 - send_receive_next__.0,
+            send_receive_next_.1 - send_receive_next__.1,
+        ));
 
         // Check results
         let opened_index = rep3::arithmetic::open(index, &mut protocol)?;
@@ -350,6 +498,18 @@ fn a2b<F: PrimeField>(config: &Config) -> color_eyre::Result<ExitCode> {
     print_runtimes(
         times,
         config.network.my_id,
+        format!("A2B Parallel (2^{})", config.k).as_str(),
+    );
+    print_data(
+        send_receive_next,
+        config.network.my_id,
+        protocol.network.get_id().next_id() as usize,
+        format!("A2B Parallel (2^{})", config.k).as_str(),
+    );
+    print_data(
+        send_receive_prev,
+        config.network.my_id,
+        protocol.network.get_id().prev_id() as usize,
         format!("A2B Parallel (2^{})", config.k).as_str(),
     );
 
