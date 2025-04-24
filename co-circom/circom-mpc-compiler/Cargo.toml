@@ -23,11 +23,11 @@ sha2.workspace = true
 tracing.workspace = true
 
 # external circom dependencies
-circom-compiler = { version = "2.2.1", git = "https://github.com/TaceoLabs/circom", package = "compiler", rev = "ddc718fdf6b4a11932f56c0d1b71544f69d37f21" }
-circom-constraint_generation = { version = "2.2.1", git = "https://github.com/TaceoLabs/circom", package = "constraint_generation", rev = "ddc718fdf6b4a11932f56c0d1b71544f69d37f21" }
-circom-parser = { version = "2.2.1", git = "https://github.com/TaceoLabs/circom", package = "parser", rev = "ddc718fdf6b4a11932f56c0d1b71544f69d37f21" }
-circom-program_structure = { version = "2.2.1", git = "https://github.com/TaceoLabs/circom", package = "program_structure", rev = "ddc718fdf6b4a11932f56c0d1b71544f69d37f21" }
-circom-type_analysis = { version = "2.2.1", git = "https://github.com/TaceoLabs/circom", package = "type_analysis", rev = "ddc718fdf6b4a11932f56c0d1b71544f69d37f21" }
+circom-compiler = { version = "2.2.1", git = "https://github.com/TaceoLabs/circom", package = "compiler", rev = "53c1ccd0c74f12665c5aeb89592360f42c3d1226" }
+circom-constraint_generation = { version = "2.2.1", git = "https://github.com/TaceoLabs/circom", package = "constraint_generation", rev = "53c1ccd0c74f12665c5aeb89592360f42c3d1226" }
+circom-parser = { version = "2.2.1", git = "https://github.com/TaceoLabs/circom", package = "parser", rev = "53c1ccd0c74f12665c5aeb89592360f42c3d1226" }
+circom-program_structure = { version = "2.2.1", git = "https://github.com/TaceoLabs/circom", package = "program_structure", rev = "53c1ccd0c74f12665c5aeb89592360f42c3d1226" }
+circom-type_analysis = { version = "2.2.1", git = "https://github.com/TaceoLabs/circom", package = "type_analysis", rev = "53c1ccd0c74f12665c5aeb89592360f42c3d1226" }
 
 [dev-dependencies]
 ark-bn254.workspace = true

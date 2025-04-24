@@ -153,6 +153,7 @@ where
             &self.config.version,
             self.config.link_library.clone(),
             &field_dig,
+            false,
         ) {
             Ok((mut program_archive, warnings)) => {
                 Report::print_reports(&warnings, &program_archive.file_library);
@@ -216,7 +217,8 @@ where
         let flags = CompilationFlags {
             main_inputs_log: false,
             wat_flag: false,
-            constraint_assert_dissabled_flag: false,
+            constraint_assert_disabled_flag: false,
+            no_asm_flag: false,
         };
         Ok((
             CircomCircuit::build(vcp, flags, &self.config.version),
