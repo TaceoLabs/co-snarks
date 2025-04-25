@@ -119,8 +119,8 @@ fn print_data(send_receive: Vec<(u64, u64)>, my_id: usize, other_id: usize, s: &
         max_send = max_send.max(send as f64);
 
         avg_rcv += rcv as f64;
-        min_rcv = min_send.min(rcv as f64);
-        max_rcv = max_send.max(rcv as f64);
+        min_rcv = min_rcv.min(rcv as f64);
+        max_rcv = max_rcv.max(rcv as f64);
     }
     avg_send /= len as f64;
     avg_rcv /= len as f64;
