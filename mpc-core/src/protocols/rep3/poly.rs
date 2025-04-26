@@ -51,7 +51,7 @@ pub fn eval_poly<F: PrimeField>(coeffs: &[FieldShare<F>], point: F) -> FieldShar
 
     // run Horners method on each thread as follows:
     // 1) Split up the coefficients across each thread evenly.
-    // 2) Do polynomial evaluation via horner's method for the thread's coefficeints
+    // 2) Do polynomial evaluation via horner's method for the thread's coefficients
     // 3) Scale the result point^{thread coefficient start index}
     // Then obtain the final polynomial evaluation by summing each threads result.
     let result = coeffs
