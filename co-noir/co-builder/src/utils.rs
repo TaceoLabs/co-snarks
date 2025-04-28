@@ -108,3 +108,23 @@ impl Utils {
         output
     }
 }
+
+mod test {
+    use std::result;
+
+    use rand::Rng;
+    #[test]
+    fn test() {
+        let mut rng = rand::thread_rng();
+        const BASE: u64 = 9;
+        let x = rng.gen_range::<u64, _>(0..u64::MAX);
+        println!("x: {:b}", x);
+        println!("x: {}", x);
+        let result = super::Utils::map_from_sparse_form::<{ BASE }>(x.into());
+        println!("result2: {:b}", result);
+        println!("result2: {}", result);
+        let result2 = super::Utils::map_into_sparse_form::<{ BASE }>(x);
+        println!("result: {:b}", result2);
+        println!("result: {}", result2);
+    }
+}

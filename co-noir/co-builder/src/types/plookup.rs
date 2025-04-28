@@ -1315,6 +1315,28 @@ impl<F: PrimeField> Plookup<F> {
                 key_a_slices.extend(values.1);
                 key_b_slices.extend(values.2);
             }
+            MultiTableId::AesInput => {
+                let base = bases[0].next_power_of_two().ilog2() as usize;
+                let total_bit_size = std::cmp::max(base * bases.len(), 64);
+                let rotation = [0; 16];
+                let values = T::slice_and_get_sparse_table_with_rotation_values(
+                    driver,
+                    key_a,
+                    key_b,
+                    bases,
+                    &rotation,
+                    total_bit_size,
+                    9, // TODO FLORIN CHECK
+                )?;
+                for (a, b) in values.0.into_iter().zip(values.1) {
+                    results.push((a, b));
+                }
+
+                key_a_slices.extend(values.2);
+                key_b_slices.extend(values.3);
+            }
+            MultiTableId::AesNormalize => {}
+            MultiTableId::AesSbox => {}
             _ => todo!("{:?} not yet implemented", multi_table.id),
         }
 

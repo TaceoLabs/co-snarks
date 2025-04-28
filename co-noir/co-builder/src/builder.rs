@@ -40,6 +40,7 @@ use co_acvm::{mpc::NoirWitnessExtensionProtocol, PlainAcvmSolver};
 use itertools::izip;
 use mpc_core::gadgets::poseidon2::POSEIDON2_BN254_T4_PARAMS;
 use num_bigint::BigUint;
+use std::time::Instant;
 use std::{
     array,
     collections::{BTreeMap, HashMap},
