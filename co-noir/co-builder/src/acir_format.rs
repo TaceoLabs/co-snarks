@@ -40,7 +40,7 @@ pub enum HonkRecursion {
     UltraRollup, // 2 means we are using the UltraRollupHonk flavor
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct AcirFormat<F: PrimeField> {
     /// The number of witnesses in the circuit
     pub(crate) varnum: u32,

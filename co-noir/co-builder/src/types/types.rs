@@ -30,7 +30,7 @@ impl From<bool> for ZeroKnowledge {
     }
 }
 
-#[derive(Default, PartialEq, Eq)]
+#[derive(Default, PartialEq, Eq, Clone)]
 pub(crate) struct PolyTriple<F: PrimeField> {
     pub(crate) a: u32,
     pub(crate) b: u32,
@@ -117,13 +117,14 @@ pub(crate) struct EccDblGate {
     pub(crate) y3: u32,
 }
 
+#[derive(Clone)]
 pub(crate) struct MemOp<F: PrimeField> {
     pub(crate) access_type: u8,
     pub(crate) index: PolyTriple<F>,
     pub(crate) value: PolyTriple<F>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 #[expect(clippy::upper_case_acronyms)]
 pub(crate) enum BlockType {
     ROM = 0,
@@ -138,7 +139,7 @@ impl Default for BlockType {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub(crate) struct BlockConstraint<F: PrimeField> {
     pub(crate) init: Vec<PolyTriple<F>>,
     pub(crate) trace: Vec<MemOp<F>>,
@@ -146,7 +147,7 @@ pub(crate) struct BlockConstraint<F: PrimeField> {
     pub(crate) calldata: u32,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub(crate) struct AcirFormatOriginalOpcodeIndices {
     pub(crate) logic_constraints: Vec<usize>,
     pub(crate) range_constraints: Vec<usize>,
@@ -400,17 +401,20 @@ impl<F: PrimeField> UltraTraceBlock<F> {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct RangeConstraint {
     pub(crate) witness: u32,
     pub(crate) num_bits: u32,
 }
 
+#[derive(Clone)]
 pub(crate) struct Poseidon2Constraint<F: PrimeField> {
     pub(crate) state: Vec<WitnessOrConstant<F>>,
     pub(crate) result: Vec<u32>,
     pub(crate) len: u32,
 }
 
+#[derive(Clone)]
 pub(crate) struct MultiScalarMul<F: PrimeField> {
     pub(crate) points: Vec<WitnessOrConstant<F>>,
     pub(crate) scalars: Vec<WitnessOrConstant<F>>,
@@ -419,6 +423,7 @@ pub(crate) struct MultiScalarMul<F: PrimeField> {
     pub(crate) out_point_is_infinity: u32,
 }
 
+#[derive(Clone)]
 pub(crate) struct EcAdd<F: PrimeField> {
     pub(crate) input1_x: WitnessOrConstant<F>,
     pub(crate) input1_y: WitnessOrConstant<F>,
@@ -431,12 +436,14 @@ pub(crate) struct EcAdd<F: PrimeField> {
     pub(crate) result_infinite: u32,
 }
 
+#[derive(Clone)]
 pub(crate) struct Sha256Compression<F: PrimeField> {
     pub(crate) inputs: Vec<WitnessOrConstant<F>>,
     pub(crate) hash_values: Vec<WitnessOrConstant<F>>,
     pub(crate) result: Vec<u32>,
 }
 
+#[derive(Clone)]
 pub(crate) struct LogicConstraint<F: PrimeField> {
     pub(crate) a: WitnessOrConstant<F>,
     pub(crate) b: WitnessOrConstant<F>,
@@ -478,6 +485,7 @@ impl<F: PrimeField> LogicConstraint<F> {
 }
 
 #[expect(dead_code)]
+#[derive(Clone)]
 pub(crate) struct RecursionConstraint {
     // An aggregation state is represented by two G1 affine elements. Each G1 point has
     // two field element coordinates (x, y). Thus, four field elements
@@ -493,21 +501,25 @@ impl RecursionConstraint {
     const NUM_AGGREGATION_ELEMENTS: usize = 4;
 }
 
+#[derive(Clone)]
 pub(crate) struct Blake2sInput<F: PrimeField> {
     pub(crate) blackbox_input: WitnessOrConstant<F>,
     pub(crate) num_bits: u32,
 }
 
+#[derive(Clone)]
 pub(crate) struct Blake2sConstraint<F: PrimeField> {
     pub(crate) inputs: Vec<Blake2sInput<F>>,
     pub(crate) result: [u32; 32],
 }
 
+#[derive(Clone)]
 pub(crate) struct Blake3Input<F: PrimeField> {
     pub(crate) blackbox_input: WitnessOrConstant<F>,
     pub(crate) num_bits: u32,
 }
 
+#[derive(Clone)]
 pub(crate) struct Blake3Constraint<F: PrimeField> {
     pub(crate) inputs: Vec<Blake3Input<F>>,
     pub(crate) result: [u32; 32],
