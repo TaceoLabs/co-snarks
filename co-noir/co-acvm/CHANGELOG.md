@@ -5,7 +5,7 @@
 
 ### ⚠ BREAKING CHANGES
 
-* added a meaningful struct name for brillig succecss
+* added a meaningful struct name for brillig success
 * acvm now can store values and returns the output of circuit
 
 ### Features
@@ -20,7 +20,7 @@
 
 ### Code Refactoring
 
-* added a meaningful struct name for brillig succecss ([e0af901](https://github.com/TaceoLabs/co-snarks/commit/e0af901e2999cc7e38215f36fe2a647b18d94e0e))
+* added a meaningful struct name for brillig success ([e0af901](https://github.com/TaceoLabs/co-snarks/commit/e0af901e2999cc7e38215f36fe2a647b18d94e0e))
 
 
 ### Dependencies
@@ -69,7 +69,7 @@
 
 ### Code Refactoring
 
-* co-noir lib usability improvents, added lib usage examples ([18e644e](https://github.com/Taceolabs/co-snarks/commit/18e644ecdf18419fb9b4a071562210c5b0eee0a7))
+* co-noir lib usability improvements, added lib usage examples ([18e644e](https://github.com/Taceolabs/co-snarks/commit/18e644ecdf18419fb9b4a071562210c5b0eee0a7))
 
 
 ### Dependencies
