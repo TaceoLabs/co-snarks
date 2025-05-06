@@ -7,9 +7,17 @@ use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::ops::{AddAssign, Index, IndexMut, MulAssign, SubAssign};
 
-// The number of entries in ProverPolynomials reserved for randomness intended to mask witness commitments, witness
-// evaluation at the sumcheck challenge, and, if necessary, the evaluation of the corresponding shift
-pub const MASKING_OFFSET: u32 = 4;
+// The number of last rows in ProverPolynomials that are randomized to mask
+// 1) witness commitments,
+// 2) multilinear evaluations of witness polynomials in Sumcheck
+// 3*) multilinear evaluations of shifts of witness polynomials in Sumcheck OR univariate evaluations required in ECCVM
+pub const NUM_MASKED_ROWS: u32 = 3;
+
+// To account for the masked entries of witness polynomials in ZK-Sumcheck, we are disabling all relations in the last
+// `NUM_MASKED_ROWS + 1` rows, where `+1` is needed for the shifts. Namely, any relation involving a shift of a masked
+// polynomial w_shift, can't be satisfied on the row `N - (NUM_MASKED_ROWS + 1)`, as `w_shift.at(N - (NUM_MASKED_ROWS +
+// 1))` is equal to the random value `w.at(N - NUM_MASKED_ROWS)`.
+pub const NUM_DISABLED_ROWS_IN_SUMCHECK: u32 = NUM_MASKED_ROWS + 1;
 #[derive(Clone, Debug, Default)]
 pub struct Polynomial<F> {
     pub coefficients: Vec<F>,
@@ -199,10 +207,10 @@ impl<F: PrimeField> Polynomial<F> {
     pub fn mask<R: Rng + CryptoRng>(&mut self, rng: &mut R) {
         let virtual_size = self.coefficients.len();
         assert!(
-            virtual_size >= MASKING_OFFSET as usize,
+            virtual_size >= NUM_MASKED_ROWS as usize,
             "Insufficient space for masking"
         );
-        for i in (virtual_size - MASKING_OFFSET as usize..virtual_size).rev() {
+        for i in (virtual_size - NUM_MASKED_ROWS as usize..virtual_size).rev() {
             self.coefficients[i] = F::rand(rng);
         }
     }
@@ -348,6 +356,25 @@ impl<F: PrimeField> RowDisablingPolynomial<F> {
 
         for val in multivariate_challenge.iter().take(log_circuit_size).skip(2) {
             evaluation_at_multivariate_challenge *= val;
+        }
+
+        F::one() - evaluation_at_multivariate_challenge
+    }
+    /**
+     * @brief A variant of the above that uses `padding_indicator_array`.
+     *
+     * @param multivariate_challenge Sumcheck evaluation challenge
+     * @param padding_indicator_array An array with first log_n entries equal to 1, and the remaining entries are 0.
+     */
+    pub fn evaluate_at_challenge_with_padding(
+        multivariate_challenge: &[F],
+        padding_indicator_array: &[F],
+    ) -> F {
+        let mut evaluation_at_multivariate_challenge = F::one();
+
+        for (idx, &indicator) in padding_indicator_array.iter().enumerate().skip(2) {
+            evaluation_at_multivariate_challenge *=
+                F::one() - indicator + indicator * multivariate_challenge[idx];
         }
 
         F::one() - evaluation_at_multivariate_challenge

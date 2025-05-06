@@ -14,17 +14,28 @@ impl<F: PrimeField> HonkProof<F> {
         Self { proof }
     }
 
-    pub(crate) fn inner(self) -> Vec<F> {
+    pub fn inner(self) -> Vec<F> {
         self.proof
     }
 
     pub fn to_buffer(&self) -> Vec<u8> {
-        Serialize::to_buffer(&self.proof, true)
+        Serialize::to_buffer(&self.proof, false)
     }
 
     pub fn from_buffer(buf: &[u8]) -> HonkProofResult<Self> {
-        let res = Serialize::from_buffer(buf, true)?;
+        let res = Serialize::from_buffer(buf, false)?;
         Ok(Self::new(res))
+    }
+
+    pub fn separate_proof_and_public_inputs(self, num_public_inputs: usize) -> (Self, Vec<F>) {
+        let (public_inputs, proof) = self.proof.split_at(num_public_inputs);
+        (Self::new(proof.to_vec()), public_inputs.to_vec())
+    }
+
+    pub fn insert_public_inputs(self, public_inputs: Vec<F>) -> Self {
+        let mut proof = public_inputs;
+        proof.extend(self.proof.to_owned());
+        Self::new(proof)
     }
 }
 

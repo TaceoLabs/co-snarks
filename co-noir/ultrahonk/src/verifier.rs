@@ -13,10 +13,12 @@ pub(crate) type HonkVerifyResult<T> = std::result::Result<T, eyre::Report>;
 impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> UltraHonk<P, H> {
     pub fn verify(
         honk_proof: HonkProof<TranscriptFieldType>,
+        public_inputs: &[TranscriptFieldType],
         verifying_key: &VerifyingKey<P>,
         has_zk: ZeroKnowledge,
     ) -> HonkVerifyResult<bool> {
         tracing::trace!("UltraHonk verification");
+        let honk_proof = honk_proof.insert_public_inputs(public_inputs.to_vec());
 
         let mut transcript = Transcript::<TranscriptFieldType, H>::new_verifier(honk_proof);
 

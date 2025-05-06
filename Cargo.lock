@@ -1150,6 +1150,7 @@ dependencies = [
  "bincode",
  "clap",
  "co-acvm",
+ "co-builder",
  "co-ultrahonk",
  "color-eyre",
  "figment",

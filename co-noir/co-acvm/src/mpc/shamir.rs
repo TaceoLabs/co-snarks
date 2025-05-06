@@ -535,10 +535,30 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
 
     fn sort(
         &mut self,
-        _inputs: &[Self::AcvmType],
-        _bitsize: usize,
+        inputs: &[Self::AcvmType],
+        bitsize: usize,
     ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
-        panic!("functionality sort not feasible for Shamir")
+        if inputs.iter().any(|x| Self::is_shared(x)) {
+            panic!("functionality sort not feasible for Shamir")
+        } else {
+            let public: Vec<F> = inputs
+                .iter()
+                .map(|input| Self::get_public(input).unwrap())
+                .collect();
+            let mut result: Vec<_> = Vec::with_capacity(inputs.len());
+            let mask = (BigUint::from(1u64) << bitsize) - BigUint::one();
+            for x in public.iter() {
+                let mut x: BigUint = (*x).into();
+                x &= &mask;
+                result.push(F::from(x));
+            }
+            result.sort();
+
+            result
+                .iter()
+                .map(|x| Ok(arithmetic::promote_to_trivial_share(*x)))
+                .collect()
+        }
     }
 
     fn slice(

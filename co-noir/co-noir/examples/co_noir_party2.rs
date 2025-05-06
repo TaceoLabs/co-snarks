@@ -89,11 +89,14 @@ fn main() -> Result<()> {
     let vk = pk.create_vk(&prover_crs, verifier_crs)?;
 
     // generate proof
-    let (proof, _) = Rep3CoUltraHonk::<_, _, Poseidon2Sponge>::prove(net, pk, &prover_crs, has_zk)?;
+    let (proof, public_inputs, _) =
+        Rep3CoUltraHonk::<_, _, Poseidon2Sponge>::prove(net, pk, &prover_crs, has_zk)?;
 
     // verify proof
-    assert!(UltraHonk::<_, Poseidon2Sponge>::verify(proof, &vk, has_zk)
-        .context("while verifying proof")?);
+    assert!(
+        UltraHonk::<_, Poseidon2Sponge>::verify(proof, &public_inputs, &vk, has_zk)
+            .context("while verifying proof")?
+    );
 
     Ok(())
 }

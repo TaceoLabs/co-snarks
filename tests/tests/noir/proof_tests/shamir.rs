@@ -48,27 +48,38 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
                 false,
             )
             .unwrap();
-            let (proof, _) =
+            let (proof, public_inputs, _) =
                 ShamirCoUltraHonk::<_, _, H>::prove(net, threshold, pk, &prover_crs, has_zk)
                     .unwrap();
-            proof
+            (proof, public_inputs)
         }));
     }
 
-    let mut proofs = threads
-        .into_iter()
-        .map(|t| t.join().unwrap())
+    let results: Vec<_> = threads.into_iter().map(|t| t.join().unwrap()).collect();
+
+    let mut proofs = results
+        .iter()
+        .map(|(proof, _)| proof.to_owned())
         .collect::<Vec<_>>();
     let proof = proofs.pop().unwrap();
     for p in proofs {
         assert_eq!(proof, p);
     }
 
+    let mut public_inputs = results
+        .iter()
+        .map(|(_, public_input)| public_input.to_owned())
+        .collect::<Vec<_>>();
+    let public_input = public_inputs.pop().unwrap();
+    for p in public_inputs {
+        assert_eq!(public_input, p);
+    }
+
     // Get vk
     let verifier_crs = CrsParser::<Bn254>::get_crs_g2(CRS_PATH_G2).unwrap();
     let vk = co_noir::generate_vk(&constraint_system, prover_crs, verifier_crs, false).unwrap();
 
-    let is_valid = UltraHonk::<_, H>::verify(proof, &vk, has_zk).unwrap();
+    let is_valid = UltraHonk::<_, H>::verify(proof, &public_input, &vk, has_zk).unwrap();
     assert!(is_valid);
 }
 

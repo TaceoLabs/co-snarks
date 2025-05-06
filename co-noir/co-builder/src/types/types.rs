@@ -1,3 +1,4 @@
+use super::big_field::BigGroup;
 use super::field_ct::{CycleGroupCT, FieldCT};
 use crate::builder::UltraCircuitBuilder;
 use crate::keys::proving_key::ProvingKey;
@@ -512,12 +513,41 @@ pub(crate) struct Blake3Constraint<F: PrimeField> {
     pub(crate) result: [u32; 32],
 }
 
+pub(crate) struct AggregationState<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
+    p0: BigGroup<P, T>,
+    p1: BigGroup<P, T>,
+}
+impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> AggregationState<P, T> {
+    pub(crate) fn new(p0: BigGroup<P, T>, p1: BigGroup<P, T>) -> Self {
+        Self { p0, p1 }
+    }
+}
+
+// An aggregation state is represented by two G1 affine elements. Each G1 point has
+// two field element coordinates (x, y). Thus, four base field elements
+// Four limbs are used when simulating a non-native field using the bigfield class, so 16 total field elements.
+pub const PAIRING_POINT_ACCUMULATOR_SIZE: u32 = 16;
+
+impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> AggregationState<P, T> {
+    pub fn set_public(
+        &mut self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> usize {
+        let start_idx = self.p0.set_public(driver, builder);
+        self.p1.set_public(driver, builder);
+        builder
+            .pairing_inputs_public_input_key
+            .set(start_idx as u32);
+
+        start_idx
+    }
+}
+
 pub const AGGREGATION_OBJECT_SIZE: usize = 16;
-pub(crate) type AggregationObjectIndices = [u32; AGGREGATION_OBJECT_SIZE];
-pub type AggregationObjectPubInputIndices = [u32; AGGREGATION_OBJECT_SIZE];
 
 #[expect(dead_code)]
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Debug)]
 pub(crate) enum AuxSelectors {
     None,
     LimbAccumulate1,

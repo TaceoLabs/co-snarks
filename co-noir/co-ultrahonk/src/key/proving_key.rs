@@ -10,15 +10,14 @@ use crate::types::Polynomials;
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use co_builder::prelude::GenericUltraCircuitBuilder;
 use co_builder::prelude::Polynomial;
 use co_builder::prelude::PrecomputedEntities;
 use co_builder::prelude::ProverCrs;
+use co_builder::prelude::ProverWitnessEntities;
 use co_builder::prelude::ProvingKey as PlainProvingKey;
 use co_builder::prelude::VerifyingKey;
-use co_builder::prelude::AGGREGATION_OBJECT_SIZE;
 use co_builder::prelude::{ActiveRegionData, HonkCurve};
-use co_builder::prelude::{AggregationObjectPubInputIndices, ProverWitnessEntities};
+use co_builder::prelude::{GenericUltraCircuitBuilder, PublicComponentKey};
 use co_builder::HonkProofResult;
 use co_builder::{HonkProofError, TranscriptFieldType};
 use eyre::Result;
@@ -40,8 +39,6 @@ pub struct ProvingKey<T: NoirUltraHonkProver<P>, P: Pairing> {
     pub public_inputs: Vec<P::ScalarField>,
     pub num_public_inputs: u32,
     pub pub_inputs_offset: u32,
-    pub contains_pairing_point_accumulator: bool,
-    pub pairing_point_accumulator_public_input_indices: AggregationObjectPubInputIndices,
     pub polynomials: Polynomials<T::ArithmeticShare, P::ScalarField>,
     pub memory_read_records: Vec<u32>,
     pub memory_write_records: Vec<u32>,
@@ -52,6 +49,7 @@ pub struct ProvingKey<T: NoirUltraHonkProver<P>, P: Pairing> {
     pub memory_records_shared: BTreeMap<u32, T::ArithmeticShare>,
     pub final_active_wire_idx: usize,
     pub active_region_data: ActiveRegionData,
+    pub pairing_inputs_public_input_key: PublicComponentKey,
     pub phantom: PhantomData<T>,
 }
 
@@ -96,6 +94,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             dyadic_circuit_size,
             circuit.public_inputs.len(),
             final_active_wire_idx,
+            circuit.pairing_inputs_public_input_key,
         );
         // Construct and add to proving key the wire, selector and copy constraint polynomials
         proving_key.populate_trace(id, &mut circuit, driver, false);
@@ -137,11 +136,9 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
                 .ok_or(HonkProofError::ExpectedPublicWitness)?;
             proving_key.public_inputs.push(var);
         }
-
         // Set the pairing point accumulator indices
-        proving_key.pairing_point_accumulator_public_input_indices =
-            circuit.pairing_point_accumulator_public_input_indices;
-        proving_key.contains_pairing_point_accumulator = circuit.contains_pairing_point_accumulator;
+        proving_key.pairing_inputs_public_input_key = circuit.pairing_inputs_public_input_key;
+
         Ok(proving_key)
     }
 
@@ -173,9 +170,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             num_public_inputs: pk.num_public_inputs,
             pub_inputs_offset: pk.pub_inputs_offset,
             commitments,
-            contains_pairing_point_accumulator: pk.contains_pairing_point_accumulator,
-            pairing_point_accumulator_public_input_indices: pk
-                .pairing_point_accumulator_public_input_indices,
+            pairing_inputs_public_input_key: pk.pairing_inputs_public_input_key,
         };
 
         Ok((pk, vk))
@@ -189,10 +184,6 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         crs: &ProverCrs<P>,
         driver: &mut U,
     ) -> HonkProofResult<(Self, VerifyingKeyBarretenberg<P>)> {
-        let contains_pairing_point_accumulator = circuit.contains_pairing_point_accumulator;
-        let pairing_point_accumulator_public_input_indices =
-            circuit.pairing_point_accumulator_public_input_indices;
-
         let pk = ProvingKey::create(id, circuit, driver)?;
         let circuit_size = pk.circuit_size;
 
@@ -211,9 +202,8 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             log_circuit_size: Utils::get_msb64(circuit_size as u64) as u64,
             num_public_inputs: pk.num_public_inputs as u64,
             pub_inputs_offset: pk.pub_inputs_offset as u64,
-            contains_pairing_point_accumulator,
-            pairing_point_accumulator_public_input_indices,
             commitments,
+            pairing_inputs_public_input_key: pk.pairing_inputs_public_input_key,
         };
         Ok((pk, vk))
     }
@@ -222,7 +212,12 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         self.public_inputs.clone()
     }
 
-    fn new(circuit_size: usize, num_public_inputs: usize, final_active_wire_idx: usize) -> Self {
+    fn new(
+        circuit_size: usize,
+        num_public_inputs: usize,
+        final_active_wire_idx: usize,
+        pairing_inputs_public_input_key: PublicComponentKey,
+    ) -> Self {
         tracing::trace!("ProvingKey new");
         let polynomials = Polynomials::new(circuit_size);
 
@@ -236,10 +231,9 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             memory_write_records: Vec::new(),
             final_active_wire_idx,
             phantom: PhantomData,
-            contains_pairing_point_accumulator: false,
-            pairing_point_accumulator_public_input_indices: [0; AGGREGATION_OBJECT_SIZE],
             memory_records_shared: BTreeMap::new(),
             active_region_data: ActiveRegionData::new(),
+            pairing_inputs_public_input_key,
         }
     }
 
@@ -305,6 +299,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         let memory_write_records = plain_key.memory_write_records.to_owned();
         let final_active_wire_idx = plain_key.final_active_wire_idx;
         let active_region_data = plain_key.active_region_data.to_owned();
+        let pairing_inputs_public_input_key = plain_key.pairing_inputs_public_input_key.to_owned();
 
         if shares.len() != circuit_size as usize * 6 {
             return Err(eyre::eyre!("Share length is not 6 times circuit size"));
@@ -336,12 +331,9 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             memory_write_records,
             final_active_wire_idx,
             phantom: PhantomData,
-            contains_pairing_point_accumulator: plain_key.contains_pairing_point_accumulator,
-            pairing_point_accumulator_public_input_indices: plain_key
-                .pairing_point_accumulator_public_input_indices
-                .to_owned(),
             memory_records_shared: BTreeMap::new(),
             active_region_data,
+            pairing_inputs_public_input_key,
         })
     }
 
@@ -404,9 +396,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
             num_public_inputs: self.num_public_inputs,
             pub_inputs_offset: self.pub_inputs_offset,
             commitments,
-            contains_pairing_point_accumulator: self.contains_pairing_point_accumulator,
-            pairing_point_accumulator_public_input_indices: self
-                .pairing_point_accumulator_public_input_indices,
+            pairing_inputs_public_input_key: self.pairing_inputs_public_input_key,
         })
     }
 }

@@ -26,15 +26,17 @@ use ark_ff::{One, Zero};
 use co_builder::prelude::{HonkCurve, Polynomial, ProverCrs, ProvingKey, ZeroKnowledge};
 use co_builder::{HonkProofError, HonkProofResult};
 use itertools::izip;
+use rand::SeedableRng;
+use rand_chacha::ChaCha12Rng;
 use std::{array, marker::PhantomData};
 
-#[expect(dead_code)] // See commit_to_witness_polynomial for explanation why has_zk are not used
 pub(crate) struct Oink<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
 {
     memory: ProverMemory<P>,
     phantom_data: PhantomData<P>,
     phantom_hasher: PhantomData<H>,
     has_zk: ZeroKnowledge,
+    rng: ChaCha12Rng,
 }
 
 impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> Default
@@ -52,22 +54,22 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             phantom_data: PhantomData,
             phantom_hasher: PhantomData,
             has_zk,
+            rng: ChaCha12Rng::from_entropy(),
         }
     }
 
     /// A uniform method to mask, commit, and send the corresponding commitment to the verifier.
     fn commit_to_witness_polynomial(
-        polynomial: &Polynomial<P::ScalarField>,
+        &mut self,
+        polynomial: &mut Polynomial<P::ScalarField>,
         label: &str,
         crs: &ProverCrs<P>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
     ) -> HonkProofResult<()> {
-        // TACEO note: Until issue https://github.com/AztecProtocol/aztec-packages/issues/13117 is resolved, we cannot apply the masking
-        // here, but it should be added in the future
         // // Mask the polynomial when proving in zero-knowledge
-        // if self.has_zk == ZeroKnowledge::Yes {
-        //     polynomial.mask(&mut self.rng)
-        // };
+        if self.has_zk == ZeroKnowledge::Yes {
+            polynomial.mask(&mut self.rng)
+        };
 
         // Commit to the polynomial
         let commitment = Utils::commit(polynomial.as_ref(), crs)?;
@@ -430,7 +432,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     fn execute_wire_commitments_round(
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
-        proving_key: &ProvingKey<P>,
+        proving_key: &mut ProvingKey<P>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing wire commitments round");
 
@@ -438,22 +440,23 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         // We only commit to the fourth wire polynomial after adding memory records
 
         // Ultracircuits are not structured (also our commitment type is CommitType::Default, so no changes are needed here yet)
-        Self::commit_to_witness_polynomial(
-            proving_key.polynomials.witness.w_l(),
+
+        self.commit_to_witness_polynomial(
+            proving_key.polynomials.witness.w_l_mut(),
             "W_L",
             &proving_key.crs,
             transcript,
         )?;
 
-        Self::commit_to_witness_polynomial(
-            proving_key.polynomials.witness.w_r(),
+        self.commit_to_witness_polynomial(
+            proving_key.polynomials.witness.w_r_mut(),
             "W_R",
             &proving_key.crs,
             transcript,
         )?;
 
-        Self::commit_to_witness_polynomial(
-            proving_key.polynomials.witness.w_o(),
+        self.commit_to_witness_polynomial(
+            proving_key.polynomials.witness.w_o_mut(),
             "W_O",
             &proving_key.crs,
             transcript,
@@ -467,7 +470,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     fn execute_sorted_list_accumulator_round(
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
-        proving_key: &ProvingKey<P>,
+        proving_key: &mut ProvingKey<P>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing sorted list accumulator round");
 
@@ -484,19 +487,22 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         // Commit to lookup argument polynomials and the finalized (i.e. with memory records) fourth wire polynomial
         // TACEO TODO: BB does "sparse" commitment here, I don't know if that is necessary (performance wise)
 
-        Self::commit_to_witness_polynomial(
-            proving_key.polynomials.witness.lookup_read_counts(),
+        self.commit_to_witness_polynomial(
+            proving_key.polynomials.witness.lookup_read_counts_mut(),
             "LOOKUP_READ_COUNTS",
             &proving_key.crs,
             transcript,
         )?;
-        Self::commit_to_witness_polynomial(
-            proving_key.polynomials.witness.lookup_read_tags(),
+        self.commit_to_witness_polynomial(
+            proving_key.polynomials.witness.lookup_read_tags_mut(),
             "LOOKUP_READ_TAGS",
             &proving_key.crs,
             transcript,
         )?;
-        Self::commit_to_witness_polynomial(&self.memory.w_4, "W_4", &proving_key.crs, transcript)?;
+        // we do std::mem::take here to avoid borrowing issues with self
+        let mut w_4_tmp = std::mem::take(&mut self.memory.w_4);
+        self.commit_to_witness_polynomial(&mut w_4_tmp, "W_4", &proving_key.crs, transcript)?;
+        std::mem::swap(&mut self.memory.w_4, &mut w_4_tmp);
         Ok(())
     }
 
@@ -504,7 +510,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     fn execute_log_derivative_inverse_round(
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
-        proving_key: &ProvingKey<P>,
+        proving_key: &mut ProvingKey<P>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing log derivative inverse round");
 
@@ -515,12 +521,15 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         self.compute_logderivative_inverses(proving_key);
 
         // TACEO TODO: BB does "sparse" commitment here, I don't know if that is necessary (performance wise)
-        Self::commit_to_witness_polynomial(
-            &self.memory.lookup_inverses,
+        // we do std::mem::take here to avoid borrowing issues with self
+        let mut lookup_inverses_tmp = std::mem::take(&mut self.memory.lookup_inverses);
+        self.commit_to_witness_polynomial(
+            &mut lookup_inverses_tmp,
             "LOOKUP_INVERSES",
             &proving_key.crs,
             transcript,
         )?;
+        std::mem::swap(&mut self.memory.lookup_inverses, &mut lookup_inverses_tmp);
         // Round is done since ultra_honk is no goblin flavor
         Ok(())
     }
@@ -529,7 +538,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     fn execute_grand_product_computation_round(
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
-        proving_key: &ProvingKey<P>,
+        proving_key: &mut ProvingKey<P>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing grand product computation round");
 
@@ -541,18 +550,16 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             proving_key.pub_inputs_offset,
         );
         self.compute_grand_product(proving_key);
-        Self::commit_to_witness_polynomial(
-            &self.memory.z_perm,
-            "Z_PERM",
-            &proving_key.crs,
-            transcript,
-        )?;
+        // we do std::mem::take here to avoid borrowing issues with self
+        let mut z_perm_tmp = std::mem::take(&mut self.memory.z_perm);
+        self.commit_to_witness_polynomial(&mut z_perm_tmp, "Z_PERM", &proving_key.crs, transcript)?;
+        std::mem::swap(&mut self.memory.z_perm, &mut z_perm_tmp);
         Ok(())
     }
 
     pub(crate) fn prove(
         mut self,
-        proving_key: &ProvingKey<P>,
+        proving_key: &mut ProvingKey<P>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
     ) -> HonkProofResult<ProverMemory<P>> {
         tracing::trace!("Oink prove");

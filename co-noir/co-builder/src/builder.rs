@@ -1,12 +1,15 @@
 use crate::acir_format::{HonkRecursion, ProgramMetadata};
-use crate::polynomials::polynomial::MASKING_OFFSET;
+use crate::keys::verification_key::PublicComponentKey;
+use crate::polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK;
 use crate::prelude::HonkCurve;
+use crate::types::big_field::{BigField, BigGroup};
 use crate::types::blake2s::Blake2s;
 use crate::types::blake3::blake3s;
 use crate::types::field_ct::{CycleGroupCT, CycleScalarCT};
 use crate::types::sha_compression::SHA256;
-use crate::types::types::{EcAdd, Sha256Compression};
-use crate::types::types::{EccAddGate, MultiScalarMul, WitnessOrConstant};
+use crate::types::types::{
+    AggregationState, EcAdd, EccAddGate, MultiScalarMul, Sha256Compression, WitnessOrConstant,
+};
 use crate::TranscriptFieldType;
 use crate::{
     acir_format::AcirFormat,
@@ -24,10 +27,9 @@ use crate::{
             RamAccessType, RamRecord, RamTable, RamTranscript, RomRecord, RomTable, RomTranscript,
         },
         types::{
-            AddQuad, AddTriple, AggregationObjectIndices, AggregationObjectPubInputIndices,
-            AuxSelectors, Blake2sConstraint, Blake3Constraint, BlockConstraint, BlockType,
-            CachedPartialNonNativeFieldMultiplication, EccDblGate, LogicConstraint, MulQuad,
-            PolyTriple, Poseidon2Constraint, Poseidon2ExternalGate, Poseidon2InternalGate,
+            AddQuad, AddTriple, AuxSelectors, Blake2sConstraint, Blake3Constraint, BlockConstraint,
+            BlockType, CachedPartialNonNativeFieldMultiplication, EccDblGate, LogicConstraint,
+            MulQuad, PolyTriple, Poseidon2Constraint, Poseidon2ExternalGate, Poseidon2InternalGate,
             RangeList, UltraTraceBlock, UltraTraceBlocks, NUM_WIRES,
         },
     },
@@ -57,10 +59,6 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         crs: Arc<ProverCrs<P>>,
         driver: &mut PlainAcvmSolver<P::ScalarField>,
     ) -> HonkProofResult<VerifyingKeyBarretenberg<P>> {
-        let contains_pairing_point_accumulator = self.contains_pairing_point_accumulator;
-        let pairing_point_accumulator_public_input_indices =
-            self.pairing_point_accumulator_public_input_indices;
-
         let pk = ProvingKey::create::<PlainAcvmSolver<_>>(self, crs, driver)?;
         let circuit_size = pk.circuit_size;
 
@@ -78,9 +76,8 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
             log_circuit_size: Utils::get_msb64(circuit_size as u64) as u64,
             num_public_inputs: pk.num_public_inputs as u64,
             pub_inputs_offset: pk.pub_inputs_offset as u64,
-            contains_pairing_point_accumulator,
-            pairing_point_accumulator_public_input_indices,
             commitments,
+            pairing_inputs_public_input_key: pk.pairing_inputs_public_input_key,
         };
 
         Ok(vk)
@@ -111,9 +108,7 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
             num_public_inputs: pk.num_public_inputs,
             pub_inputs_offset: pk.pub_inputs_offset,
             commitments,
-            contains_pairing_point_accumulator: pk.contains_pairing_point_accumulator,
-            pairing_point_accumulator_public_input_indices: pk
-                .pairing_point_accumulator_public_input_indices,
+            pairing_inputs_public_input_key: pk.pairing_inputs_public_input_key,
         };
 
         Ok((pk, vk))
@@ -124,10 +119,6 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         crs: Arc<ProverCrs<P>>,
         driver: &mut PlainAcvmSolver<P::ScalarField>,
     ) -> HonkProofResult<(ProvingKey<P>, VerifyingKeyBarretenberg<P>)> {
-        let contains_pairing_point_accumulator = self.contains_pairing_point_accumulator;
-        let pairing_point_accumulator_public_input_indices =
-            self.pairing_point_accumulator_public_input_indices;
-
         let pk = ProvingKey::create::<PlainAcvmSolver<_>>(self, crs, driver)?;
         let circuit_size = pk.circuit_size;
 
@@ -146,9 +137,8 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
             log_circuit_size: Utils::get_msb64(circuit_size as u64) as u64,
             num_public_inputs: pk.num_public_inputs as u64,
             pub_inputs_offset: pk.pub_inputs_offset as u64,
-            contains_pairing_point_accumulator,
-            pairing_point_accumulator_public_input_indices,
             commitments,
+            pairing_inputs_public_input_key: pk.pairing_inputs_public_input_key,
         };
 
         Ok((pk, vk))
@@ -172,8 +162,6 @@ pub struct GenericUltraCircuitBuilder<P: Pairing, T: NoirWitnessExtensionProtoco
     pub blocks: GateBlocks<P::ScalarField>, // Storage for wires and selectors for all gate types
     pub(crate) num_gates: usize,
     pub circuit_finalized: bool,
-    pub contains_pairing_point_accumulator: bool,
-    pub pairing_point_accumulator_public_input_indices: AggregationObjectPubInputIndices,
     rom_arrays: Vec<RomTranscript<T::AcvmType>>,
     ram_arrays: Vec<RamTranscript<T::AcvmType, P::ScalarField, T::Lookup>>,
     pub(crate) lookup_tables: Vec<PlookupBasicTable<P, T>>,
@@ -188,6 +176,7 @@ pub struct GenericUltraCircuitBuilder<P: Pairing, T: NoirWitnessExtensionProtoco
     // Stores gate index where Read/Write type is shared
     pub memory_records_shared: BTreeMap<u32, T::AcvmType>, // order does not matter
     has_dummy_witnesses: bool,
+    pub pairing_inputs_public_input_key: PublicComponentKey,
 }
 
 // This workaround is required due to mutability issues
@@ -897,22 +886,6 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         Ok((bits_locations, decomposed, decompose_indices))
     }
 
-    fn add_pairing_point_accumulator(
-        &mut self,
-        pairing_point_accum_witness_indices: AggregationObjectIndices,
-    ) {
-        assert!(
-            !self.contains_pairing_point_accumulator,
-            "added pairing point accumulator when one already exists"
-        );
-        self.contains_pairing_point_accumulator = true;
-        for (i, &idx) in pairing_point_accum_witness_indices.iter().enumerate() {
-            self.set_public_input(idx);
-            self.pairing_point_accumulator_public_input_indices[i] =
-                (self.public_inputs.len() - 1) as u32;
-        }
-    }
-
     fn process_plonk_recursion_constraints(
         &mut self,
         constraint_system: &AcirFormat<P::ScalarField>,
@@ -1081,7 +1054,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         *nnfcount = num_nnf_ops * Self::GATES_PER_NON_NATIVE_FIELD_MULTIPLICATION_ARITHMETIC;
     }
 
-    fn set_public_input(&mut self, witness_index: u32) {
+    pub(crate) fn set_public_input(&mut self, witness_index: u32) {
         for public_input in self.public_inputs.iter().cloned() {
             if public_input == witness_index {
                 panic!("Attempted to set a public input that is already public!");
@@ -1090,59 +1063,36 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         self.public_inputs.push(witness_index);
     }
 
-    fn init_default_agg_obj_indices(&mut self) -> AggregationObjectIndices {
-        const NUM_LIMBS: usize = 4;
-        const NUM_LIMB_BITS: u32 = 68;
-
-        let mask = (BigUint::one() << NUM_LIMB_BITS) - BigUint::one();
-
+    fn construct_default(&mut self, driver: &mut T) -> std::io::Result<AggregationState<P, T>> {
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/911): These are pairing points extracted from a valid
         // proof. This is a workaround because we can't represent the point at infinity in biggroup yet.
-        let mut agg_obj_indices = AggregationObjectIndices::default();
-        let x0 = Utils::field_from_hex_string::<P::BaseField>(
+        let x0_val = Utils::field_from_hex_string::<P::ScalarField>(
             "0x031e97a575e9d05a107acb64952ecab75c020998797da7842ab5d6d1986846cf",
         )
         .expect("x0 works");
-        let y0 = Utils::field_from_hex_string::<P::BaseField>(
+        let y0_val = Utils::field_from_hex_string::<P::ScalarField>(
             "0x178cbf4206471d722669117f9758a4c410db10a01750aebb5666547acf8bd5a4",
         )
         .expect("y0 works");
-        let x1 = Utils::field_from_hex_string::<P::BaseField>(
+        let x1_val = Utils::field_from_hex_string::<P::ScalarField>(
             "0x0f94656a2ca489889939f81e9c74027fd51009034b3357f0e91b8a11e7842c38",
         )
         .expect("x1 works");
-        let y1 = Utils::field_from_hex_string::<P::BaseField>(
+        let y1_val = Utils::field_from_hex_string::<P::ScalarField>(
             "0x1b52c2020d7464a0c80c0da527a08193fe27776f50224bd6fb128b46c1ddb67f",
         )
         .expect("y1 works");
 
-        let mut agg_obj_indices_idx = 0;
-        let aggregation_object_fq_values = [x0, y0, x1, y1];
+        // This internally calls functions that assume we are working with public values (i.e. they are only implemented for public values)
+        let x0 = BigField::from_witness(&x0_val.into(), driver, self)?;
+        let y0 = BigField::from_witness(&y0_val.into(), driver, self)?;
+        let x1 = BigField::from_witness(&x1_val.into(), driver, self)?;
+        let y1 = BigField::from_witness(&y1_val.into(), driver, self)?;
 
-        for val in aggregation_object_fq_values {
-            let mut x: BigUint = val.into();
-            let x0 = &x & &mask;
-            x >>= NUM_LIMB_BITS;
-            let x1 = &x & &mask;
-            x >>= NUM_LIMB_BITS;
-            let x2 = &x & &mask;
-            x >>= NUM_LIMB_BITS;
-            let x3 = x;
+        let p0 = BigGroup::<P, T>::new(x0, y0);
+        let p1 = BigGroup::<P, T>::new(x1, y1);
 
-            let val_limbs: [P::ScalarField; NUM_LIMBS] = [
-                P::ScalarField::from(x0),
-                P::ScalarField::from(x1),
-                P::ScalarField::from(x2),
-                P::ScalarField::from(x3),
-            ];
-
-            for val in val_limbs {
-                let idx = self.add_variable(T::AcvmType::from(val));
-                agg_obj_indices[agg_obj_indices_idx] = idx;
-                agg_obj_indices_idx += 1;
-            }
-        }
-        agg_obj_indices
+        Ok(AggregationState::new(p0, p1))
     }
 
     fn poly_to_field_ct(&self, poly: &PolyTriple<P::ScalarField>) -> FieldCT<P::ScalarField> {
@@ -1842,7 +1792,37 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 block.q_arith().push(P::ScalarField::zero());
                 self.check_selector_length_consistency();
             }
-            _ => todo!("Aux selectors"),
+            AuxSelectors::LimbAccumulate1 => {
+                block.q_1().push(P::ScalarField::zero());
+                block.q_2().push(P::ScalarField::zero());
+                block.q_3().push(P::ScalarField::one());
+                block.q_4().push(P::ScalarField::one());
+                block.q_m().push(P::ScalarField::zero());
+                block.q_c().push(P::ScalarField::zero());
+                block.q_arith().push(P::ScalarField::zero());
+                self.check_selector_length_consistency();
+            }
+            AuxSelectors::LimbAccumulate2 => {
+                block.q_1().push(P::ScalarField::zero());
+                block.q_2().push(P::ScalarField::zero());
+                block.q_3().push(P::ScalarField::one());
+                block.q_4().push(P::ScalarField::zero());
+                block.q_m().push(P::ScalarField::one());
+                block.q_c().push(P::ScalarField::zero());
+                block.q_arith().push(P::ScalarField::zero());
+                self.check_selector_length_consistency();
+            }
+            AuxSelectors::None => {
+                block.q_1().push(P::ScalarField::zero());
+                block.q_2().push(P::ScalarField::zero());
+                block.q_3().push(P::ScalarField::zero());
+                block.q_4().push(P::ScalarField::zero());
+                block.q_m().push(P::ScalarField::zero());
+                block.q_c().push(P::ScalarField::zero());
+                block.q_arith().push(P::ScalarField::zero());
+                self.check_selector_length_consistency();
+            }
+            _ => todo!("Aux selector {:?} not implemented", type_),
         }
     }
 
@@ -2647,7 +2627,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         // The number of gates is the maximum required by the lookup argument or everything else, plus an optional zero row
         // to allow for shifts.
         let num_zero_rows = 1;
-        let total_num_gates = MASKING_OFFSET as usize
+        let total_num_gates = NUM_DISABLED_ROWS_IN_SUMCHECK as usize
             + num_zero_rows
             + std::cmp::max(min_size_due_to_lookups, min_size_of_execution_trace);
 
@@ -2945,6 +2925,180 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         }
 
         Ok(sublimb_indices)
+    }
+
+    // for now we only need this function for public values
+    pub fn decompose_non_native_field_double_width_limb(
+        &mut self,
+        limb_idx: u32,
+        num_limb_bits: usize,
+    ) -> std::io::Result<[u32; 2]> {
+        // we skip this assert
+        // ASSERT(uint256_t(this->get_variable_reference(limb_idx)) < (uint256_t(1) << num_limb_bits));
+
+        const DEFAULT_NON_NATIVE_FIELD_LIMB_BITS: usize = 68;
+        let limb_mask = (BigUint::one() << DEFAULT_NON_NATIVE_FIELD_LIMB_BITS) - BigUint::one();
+        let value = self.get_variable(limb_idx as usize);
+        if T::is_shared(&value) {
+            panic!("This function should not have been called on a shared value");
+        } else {
+            let value: BigUint = T::get_public(&value)
+                .expect("Already checked it is public")
+                .into();
+            let low = &value & &limb_mask;
+            let hi = &value >> DEFAULT_NON_NATIVE_FIELD_LIMB_BITS;
+
+            assert!(&low + (&hi << DEFAULT_NON_NATIVE_FIELD_LIMB_BITS) == value);
+
+            let low_idx = self.add_variable(P::ScalarField::from(low).into());
+            let hi_idx = self.add_variable(P::ScalarField::from(hi).into());
+
+            assert!(num_limb_bits > DEFAULT_NON_NATIVE_FIELD_LIMB_BITS);
+
+            let lo_bits = DEFAULT_NON_NATIVE_FIELD_LIMB_BITS;
+            let hi_bits = num_limb_bits - DEFAULT_NON_NATIVE_FIELD_LIMB_BITS;
+            self.range_constrain_two_limbs(low_idx, hi_idx, lo_bits, hi_bits)?;
+            Ok([low_idx, hi_idx])
+        }
+    }
+
+    // for now we only need this function for public values
+    pub(crate) fn range_constrain_two_limbs(
+        &mut self,
+        lo_idx: u32,
+        hi_idx: u32,
+        lo_limb_bits: usize,
+        hi_limb_bits: usize,
+    ) -> std::io::Result<()> {
+        // Validate limbs are <= 70 bits. If limbs are larger we require more witnesses and cannot use our limb accumulation
+        // custom gate
+        assert!(lo_limb_bits <= (14 * 5));
+        assert!(hi_limb_bits <= (14 * 5));
+
+        // Sometimes we try to use limbs that are too large. It's easier to catch this issue here
+        let mut get_sublimbs = |limb_idx: u32, sublimb_masks: [u64; 5]| -> [u32; 5] {
+            let limb = self.get_variable(limb_idx as usize);
+            if T::is_shared(&limb) {
+                panic!("This function should not have been called on a shared value");
+            } else {
+                // we can use constant 2^14 - 1 mask here. If the sublimb value exceeds the expected value then witness will
+                // fail the range check below
+                // We also use zero_idx to substitute variables that should be zero
+                let limb: BigUint = T::get_public(&limb)
+                    .expect("Already checked it is public")
+                    .into();
+                const MAX_SUBLIMB_MASK: u64 = (1u64 << 14) - 1;
+                let mut sublimb_indices = [self.zero_idx; 5];
+                sublimb_indices[0] = if sublimb_masks[0] != 0 {
+                    self.add_variable(
+                        P::ScalarField::from(limb.clone() & &MAX_SUBLIMB_MASK.into()).into(),
+                    )
+                } else {
+                    self.zero_idx
+                };
+                sublimb_indices[1] = if sublimb_masks[1] != 0 {
+                    self.add_variable(
+                        P::ScalarField::from((limb.clone() >> 14) & &MAX_SUBLIMB_MASK.into())
+                            .into(),
+                    )
+                } else {
+                    self.zero_idx
+                };
+                sublimb_indices[2] = if sublimb_masks[2] != 0 {
+                    self.add_variable(
+                        P::ScalarField::from((limb.clone() >> 28) & &MAX_SUBLIMB_MASK.into())
+                            .into(),
+                    )
+                } else {
+                    self.zero_idx
+                };
+                sublimb_indices[3] = if sublimb_masks[3] != 0 {
+                    self.add_variable(
+                        P::ScalarField::from((limb.clone() >> 42) & &MAX_SUBLIMB_MASK.into())
+                            .into(),
+                    )
+                } else {
+                    self.zero_idx
+                };
+                sublimb_indices[4] = if sublimb_masks[4] != 0 {
+                    self.add_variable(
+                        P::ScalarField::from((limb >> 56) & &MAX_SUBLIMB_MASK.into()).into(),
+                    )
+                } else {
+                    self.zero_idx
+                };
+                sublimb_indices
+            }
+        };
+
+        let get_limb_masks = |limb_bits: usize| -> [u64; 5] {
+            let mut sublimb_masks = [0u64; 5];
+            sublimb_masks[0] = if limb_bits >= 14 { 14 } else { limb_bits } as u64;
+            sublimb_masks[1] = if limb_bits >= 28 {
+                14
+            } else if limb_bits > 14 {
+                (limb_bits - 14) as u64
+            } else {
+                0
+            };
+            sublimb_masks[2] = if limb_bits >= 42 {
+                14
+            } else if limb_bits > 28 {
+                (limb_bits - 28) as u64
+            } else {
+                0
+            };
+            sublimb_masks[3] = if limb_bits >= 56 {
+                14
+            } else if limb_bits > 42 {
+                (limb_bits - 42) as u64
+            } else {
+                0
+            };
+            sublimb_masks[4] = if limb_bits > 56 {
+                (limb_bits - 56) as u64
+            } else {
+                0
+            };
+
+            for mask in &mut sublimb_masks {
+                *mask = (1u64 << *mask) - 1;
+            }
+            sublimb_masks
+        };
+
+        let lo_masks = get_limb_masks(lo_limb_bits);
+        let hi_masks = get_limb_masks(hi_limb_bits);
+        let lo_sublimbs = get_sublimbs(lo_idx, lo_masks);
+        let hi_sublimbs = get_sublimbs(hi_idx, hi_masks);
+
+        self.blocks
+            .aux
+            .populate_wires(lo_sublimbs[0], lo_sublimbs[1], lo_sublimbs[2], lo_idx);
+        self.blocks.aux.populate_wires(
+            lo_sublimbs[3],
+            lo_sublimbs[4],
+            hi_sublimbs[0],
+            hi_sublimbs[1],
+        );
+        self.blocks
+            .aux
+            .populate_wires(hi_sublimbs[2], hi_sublimbs[3], hi_sublimbs[4], hi_idx);
+
+        self.apply_aux_selectors(AuxSelectors::LimbAccumulate1);
+        self.apply_aux_selectors(AuxSelectors::LimbAccumulate2);
+        self.apply_aux_selectors(AuxSelectors::None);
+        self.num_gates += 3;
+
+        for i in 0..5 {
+            if lo_masks[i] != 0 {
+                self.create_new_range_constraint(lo_sublimbs[i], lo_masks[i]);
+            }
+            if hi_masks[i] != 0 {
+                self.create_new_range_constraint(hi_sublimbs[i], hi_masks[i]);
+            }
+        }
+        Ok(())
     }
 
     fn assign_tag(&mut self, variable_index: u32, tag: u32) {
@@ -3307,8 +3461,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             blocks: GateBlocks::default(),
             num_gates: 0,
             circuit_finalized: false,
-            contains_pairing_point_accumulator: false,
-            pairing_point_accumulator_public_input_indices: Default::default(),
             rom_arrays: Vec::new(),
             ram_arrays: Vec::new(),
             lookup_tables: Vec::new(),
@@ -3320,6 +3472,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             memory_records_shared: BTreeMap::new(),
             current_tag: 0,
             has_dummy_witnesses: true,
+            pairing_inputs_public_input_key: PublicComponentKey::default(),
         }
     }
 
@@ -3617,7 +3770,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 
         // RecursionConstraints
         self.process_plonk_recursion_constraints(constraint_system, has_valid_witness_assignments);
-        let current_aggregation_object = self.init_default_agg_obj_indices();
+        let mut current_aggregation_object = self.construct_default(driver)?;
         self.process_honk_recursion_constraints(constraint_system, has_valid_witness_assignments);
         self.process_avm_recursion_constraints(constraint_system, has_valid_witness_assignments);
         // If the circuit has either honk or avm recursion constraints, add the aggregation object. Otherwise, add a
@@ -3625,12 +3778,13 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         if !constraint_system.honk_recursion_constraints.is_empty()
             || !constraint_system.avm_recursion_constraints.is_empty()
         {
+            // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1336): Delete this if statement
+            //    if constexpr (!IsMegaBuilder<Builder>) {
             assert!(metadata.honk_recursion != HonkRecursion::NotHonk);
-            self.add_pairing_point_accumulator(current_aggregation_object);
-        } else if metadata.honk_recursion != HonkRecursion::NotHonk && self.is_recursive_circuit {
-            // Make sure the verification key records the public input indices of the
-            // final recursion output.
-            self.add_pairing_point_accumulator(current_aggregation_object);
+            current_aggregation_object.set_public(self, driver);
+            // }
+        } else if metadata.honk_recursion != HonkRecursion::NotHonk {
+            current_aggregation_object.set_public(self, driver);
         }
 
         Ok(())

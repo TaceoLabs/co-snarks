@@ -4,6 +4,7 @@ find . -name "*.proof" -type f -delete
 find . -name "*.shared" -type f -delete
 # delete public input file
 rm -rf public_input.json
+find . -name "public_input*" -type f -delete
 find . -name "verification_key" -type f -delete
 # delete all bb proof files
 find . -name "proof.bb*" -type f -delete
@@ -17,3 +18,4 @@ find . -name "zk_proof" -type f -delete
 find . -name "cosnark_vk*" -type f -delete
 find . -name "cosnark_proof*" -type f -delete
 find . -name "cosnark_zk_proof*" -type f -delete
+find . -name "cosnark_public_input*" -type f -delete

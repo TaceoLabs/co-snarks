@@ -22,9 +22,3 @@ pub(crate) struct OpeningPair<F: PrimeField> {
     pub(crate) challenge: F,
     pub(crate) evaluation: F,
 }
-
-pub(crate) struct ZeroMorphVerifierOpeningClaim<P: Pairing> {
-    pub(crate) challenge: P::ScalarField,
-    pub(crate) evaluation: P::ScalarField,
-    pub(crate) commitment: P::G1,
-}

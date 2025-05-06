@@ -2,7 +2,7 @@ export CARGO_TERM_QUIET=true
 BARRETENBERG_BINARY=~/.bb/bb  ##specify the $BARRETENBERG_BINARY path here
 
 NARGO_VERSION=1.0.0-beta.4 ##specify the desired nargo version here
-BARRETENBERG_VERSION=0.82.3 ##specify the desired barretenberg version here or use the corresponding one for this nargo version
+BARRETENBERG_VERSION=0.86.0 ##specify the desired barretenberg version here or use the corresponding one for this nargo version
 PLAINDRIVER="../../../target/release/plaindriver"
 exit_code=0
 
@@ -73,27 +73,33 @@ run_proof_verification() {
     fi
   fi
 
+  diff test_vectors/${name}/public_inputs test_vectors/${name}/public_inputs_plaindriver
+    if [[ $? -ne 0 ]]; then
+      exit_code=1
+      echo "::error::$name diff check of public_inputs failed (with: $algorithm)"
+    fi
+
   bash -c "$BARRETENBERG_BINARY $write_command -b test_vectors/${name}/target/${name}.json -o test_vectors/${name}/ $PIPE"
 
-  bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/proof_plaindriver -k test_vectors/${name}/vk_plaindriver $PIPE"
+  bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/proof_plaindriver -i test_vectors/${name}/public_inputs -k test_vectors/${name}/vk_plaindriver $PIPE"
   if [[ $? -ne 0 ]]; then
     exit_code=1
     echo "::error::$name verifying with bb, our proof and our key failed (with: $algorithm)"
   fi
 
-  bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/proof_plaindriver -k test_vectors/${name}/vk $PIPE"
+  bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/proof_plaindriver -i test_vectors/${name}/public_inputs -k test_vectors/${name}/vk $PIPE"
   if [[ $? -ne 0 ]]; then
     exit_code=1
     echo "::error::$name verifying with bb, our proof and their key failed (with: $algorithm)"
   fi
 
-  bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/proof -k test_vectors/${name}/vk_plaindriver $PIPE"
+  bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/proof -i test_vectors/${name}/public_inputs -k test_vectors/${name}/vk_plaindriver $PIPE"
   if [[ $? -ne 0 ]]; then
     exit_code=1
     echo "::error::$name verifying with bb, their proof and our key failed (with: $algorithm)"
   fi
 
-  bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/proof -k test_vectors/${name}/vk $PIPE"
+  bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/proof -i test_vectors/${name}/public_inputs -k test_vectors/${name}/vk $PIPE"
   if [[ $? -ne 0 ]]; then
     exit_code=1
     echo "::error::$name verifying with bb, their proof and their key failed (with: $algorithm)"

@@ -21,7 +21,7 @@ use super::types::ProverMemory;
 use crate::{key::proving_key::ProvingKey, mpc::NoirUltraHonkProver, CoUtils};
 use ark_ff::{One, Zero};
 use co_builder::{
-    prelude::{ActiveRegionData, HonkCurve, Polynomial, ProverCrs},
+    prelude::{ActiveRegionData, HonkCurve, Polynomial, ProverCrs, NUM_MASKED_ROWS},
     HonkProofError, HonkProofResult,
 };
 use itertools::izip;
@@ -31,7 +31,6 @@ use ultrahonk::{
     NUM_ALPHAS,
 };
 
-#[expect(dead_code)] //see e.g. in execute_wire_commitments_round why we will need has_zk in the future
 pub(crate) struct CoOink<
     'a,
     T: NoirUltraHonkProver<P>,
@@ -60,6 +59,24 @@ impl<
             phantom_hasher: PhantomData,
             has_zk,
         }
+    }
+
+    fn mask_polynomial(
+        &mut self,
+        polynomial: &mut Polynomial<T::ArithmeticShare>,
+    ) -> HonkProofResult<()> {
+        tracing::trace!("mask polynomial");
+
+        let virtual_size = polynomial.coefficients.len();
+        assert!(
+            virtual_size >= NUM_MASKED_ROWS as usize,
+            "Insufficient space for masking"
+        );
+        for i in (virtual_size - NUM_MASKED_ROWS as usize..virtual_size).rev() {
+            polynomial.coefficients[i] = self.driver.rand()?;
+        }
+
+        Ok(())
     }
 
     fn compute_w4_inner(&mut self, proving_key: &ProvingKey<T, P>, gate_idx: usize) {
@@ -533,7 +550,7 @@ impl<
     fn execute_wire_commitments_round(
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
-        proving_key: &ProvingKey<T, P>,
+        proving_key: &mut ProvingKey<T, P>,
         crs: &ProverCrs<P>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing wire commitments round");
@@ -541,14 +558,12 @@ impl<
         // Commit to the first three wire polynomials of the instance
         // We only commit to the fourth wire polynomial after adding memory records
 
-        // TACEO note: Until issue https://github.com/AztecProtocol/aztec-packages/issues/13117 is resolved, we cannot apply the masking
-        // here, but it should be added in the future
         // Mask the polynomial when proving in zero-knowledge
-        // if self.has_zk == ZeroKnowledge::Yes {
-        // proving_key.polynomials.witness.w_l_mut().mask(); // TODO: implement this
-        // proving_key.polynomials.witness.w_r_mut().mask(); // TODO: implement this
-        // proving_key.polynomials.witness.w_o_mut().mask(); // TODO: implement this
-        // };
+        if self.has_zk == ZeroKnowledge::Yes {
+            self.mask_polynomial(proving_key.polynomials.witness.w_l_mut())?;
+            self.mask_polynomial(proving_key.polynomials.witness.w_r_mut())?;
+            self.mask_polynomial(proving_key.polynomials.witness.w_o_mut())?;
+        };
 
         let w_l = CoUtils::commit::<T, P>(proving_key.polynomials.witness.w_l().as_ref(), crs);
         let w_r = CoUtils::commit::<T, P>(proving_key.polynomials.witness.w_r().as_ref(), crs);
@@ -568,7 +583,7 @@ impl<
     fn execute_sorted_list_accumulator_round(
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
-        proving_key: &ProvingKey<T, P>,
+        proving_key: &mut ProvingKey<T, P>,
         crs: &ProverCrs<P>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing sorted list accumulator round");
@@ -583,14 +598,15 @@ impl<
         self.memory.challenges.eta_3 = challs[2];
         self.compute_w4(proving_key);
 
-        // TACEO note: Until issue https://github.com/AztecProtocol/aztec-packages/issues/13117 is resolved, we cannot apply the masking
-        // here, but it should be added in the future
         // Mask the polynomial when proving in zero-knowledge
-        // if self.has_zk == ZeroKnowledge::Yes {
-        // proving_key.polynomials.witness.lookup_read_counts_mut().mask(); // TODO: implement this
-        // proving_key.polynomials.witness.lookup_read_tags_mut().mask(); // TODO: implement this
-        // self.memory.w_4.mask(); // TODO: implement this
-        // };
+        if self.has_zk == ZeroKnowledge::Yes {
+            self.mask_polynomial(proving_key.polynomials.witness.lookup_read_counts_mut())?;
+            self.mask_polynomial(proving_key.polynomials.witness.lookup_read_tags_mut())?;
+            // we do std::mem::take here to avoid borrowing issues with self
+            let mut w_4_tmp = std::mem::take(&mut self.memory.w_4);
+            self.mask_polynomial(&mut w_4_tmp)?;
+            std::mem::swap(&mut self.memory.w_4, &mut w_4_tmp);
+        };
 
         // Commit to lookup argument polynomials and the finalized (i.e. with memory records) fourth wire polynomial
         let lookup_read_counts = CoUtils::commit::<T, P>(
@@ -649,13 +665,16 @@ impl<
         self.memory.public_input_delta = self.compute_public_input_delta(proving_key);
         self.compute_grand_product(proving_key)?;
 
-        // TACEO note: Until issue https://github.com/AztecProtocol/aztec-packages/issues/13117 is resolved, we cannot apply the masking
-        // here, but it should be added in the future
         // Mask the polynomial when proving in zero-knowledge
-        // if self.has_zk == ZeroKnowledge::Yes {
-        // self.memory.lookup_inverses.mask(); // TODO: implement this
-        // self.memory.z_perm.mask(); // TODO: implement this
-        // };
+        if self.has_zk == ZeroKnowledge::Yes {
+            // we do std::mem::take here to avoid borrowing issues with self
+            let mut lookup_inverses_mut = std::mem::take(&mut self.memory.lookup_inverses);
+            self.mask_polynomial(&mut lookup_inverses_mut)?;
+            std::mem::swap(&mut self.memory.lookup_inverses, &mut lookup_inverses_mut);
+            let mut z_perm_mut = std::mem::take(&mut self.memory.z_perm);
+            self.mask_polynomial(&mut z_perm_mut)?;
+            std::mem::swap(&mut self.memory.z_perm, &mut z_perm_mut);
+        };
 
         // This is from the previous round, but we open it here with z_perm
         let lookup_inverses = CoUtils::commit::<T, P>(self.memory.lookup_inverses.as_ref(), crs);
@@ -671,7 +690,7 @@ impl<
 
     pub(crate) fn prove(
         mut self,
-        proving_key: &ProvingKey<T, P>,
+        proving_key: &mut ProvingKey<T, P>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         crs: &ProverCrs<P>,
     ) -> HonkProofResult<ProverMemory<T, P>> {

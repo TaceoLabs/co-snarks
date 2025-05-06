@@ -33,7 +33,6 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(
         &mut driver,
     )
     .unwrap();
-
     let crs_size = builder.compute_dyadic_size();
     let crs = CrsParser::get_crs(CRS_PATH_G1, CRS_PATH_G2, crs_size, has_zk).unwrap();
     let (prover_crs, verififer_crs) = crs.split();
@@ -42,7 +41,7 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(
         .create_keys(prover_crs.into(), verififer_crs, &mut driver)
         .unwrap();
 
-    let proof = UltraHonk::<_, H>::prove(proving_key, has_zk).unwrap();
+    let (proof, public_inputs) = UltraHonk::<_, H>::prove(proving_key, has_zk).unwrap();
     if has_zk == ZeroKnowledge::No {
         let proof_u8 = proof.to_buffer();
         let read_proof_u8 = std::fs::read(proof_file).unwrap();
@@ -52,7 +51,8 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(
         assert_eq!(proof, read_proof);
     }
 
-    let is_valid = UltraHonk::<_, H>::verify(proof, &verifying_key, has_zk).unwrap();
+    let is_valid =
+        UltraHonk::<_, H>::verify(proof, &public_inputs, &verifying_key, has_zk).unwrap();
     assert!(is_valid);
 }
 
