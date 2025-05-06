@@ -2,6 +2,24 @@
 
 ## renamed to co-circom-types
 
+## [0.6.0](https://github.com/TaceoLabs/co-snarks/compare/co-circom-types-v0.5.0...co-circom-types-v0.6.0) (2025-05-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* move MPC types and share/combine into new mpc-types crate, rename co-circom-snarks to co-circom-types
+
+### Code Refactoring
+
+* move MPC types and share/combine into new mpc-types crate, rename co-circom-snarks to co-circom-types ([31b773a](https://github.com/TaceoLabs/co-snarks/commit/31b773aa71a5e872c25754de7805b02647b65688))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * mpc-types bumped from 0.1.0 to 0.2.0
+
 ## [0.5.0](https://github.com/TaceoLabs/co-snarks/compare/co-circom-snarks-v0.4.0...co-circom-snarks-v0.5.0) (2025-04-03)
 
 
