@@ -75,13 +75,6 @@ impl<F: Field> Serialize<F> {
         res
     }
 
-    pub(crate) fn read_u8(buf: &[u8], offset: &mut usize) -> u8 {
-        const BYTES: usize = 1;
-        let res = buf[*offset];
-        *offset += BYTES;
-        res
-    }
-
     pub(crate) fn read_u32(buf: &[u8], offset: &mut usize) -> u32 {
         const BYTES: usize = 4;
         let res = u32::from_be_bytes(buf[*offset..*offset + BYTES].try_into().unwrap());
@@ -94,10 +87,6 @@ impl<F: Field> Serialize<F> {
         let res = u64::from_be_bytes(buf[*offset..*offset + BYTES].try_into().unwrap());
         *offset += BYTES;
         res
-    }
-
-    pub(crate) fn write_u8(buf: &mut Vec<u8>, val: u8) {
-        buf.push(val);
     }
 
     pub fn write_u32(buf: &mut Vec<u8>, val: u32) {

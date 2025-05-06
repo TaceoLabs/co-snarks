@@ -74,7 +74,7 @@ impl Rep3ProvingKeyState {
         prover_crs: &ProverCrs<Bn254>,
         has_zk: ZeroKnowledge,
     ) -> eyre::Result<HonkProof<ark_bn254::Fr>> {
-        let (proof, _net) =
+        let (proof, _public_inputs, _net) =
             Rep3CoUltraHonk::<_, _, H>::prove(self.net, self.proving_key, prover_crs, has_zk)?;
         Ok(proof)
     }
@@ -95,7 +95,7 @@ impl ShamirProvingKeyState {
         prover_crs: &ProverCrs<Bn254>,
         has_zk: ZeroKnowledge,
     ) -> eyre::Result<HonkProof<ark_bn254::Fr>> {
-        let (proof, _net) = ShamirCoUltraHonk::<_, _, H>::prove(
+        let (proof, _public_inputs, _net) = ShamirCoUltraHonk::<_, _, H>::prove(
             self.net,
             self.threshold,
             self.proving_key,
@@ -424,10 +424,8 @@ pub fn translate_proving_key<
         memory_records_shared: BTreeMap::new(),
         final_active_wire_idx: proving_key.final_active_wire_idx,
         phantom: std::marker::PhantomData,
-        contains_pairing_point_accumulator: proving_key.contains_pairing_point_accumulator,
-        pairing_point_accumulator_public_input_indices: proving_key
-            .pairing_point_accumulator_public_input_indices,
         active_region_data: proving_key.active_region_data,
+        pairing_inputs_public_input_key: proving_key.pairing_inputs_public_input_key,
     };
 
     Ok((result, protocol.network))

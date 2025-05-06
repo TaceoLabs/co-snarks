@@ -7,7 +7,7 @@ use crate::{
 };
 use ark_ec::pairing::Pairing;
 use co_builder::{
-    prelude::{HonkCurve, ProvingKey, ZeroKnowledge},
+    prelude::{HonkCurve, ProvingKey, ZeroKnowledge, PAIRING_POINT_ACCUMULATOR_SIZE},
     HonkProofResult,
 };
 use std::marker::PhantomData;
@@ -34,15 +34,15 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     }
 
     pub fn prove(
-        proving_key: ProvingKey<P>,
+        mut proving_key: ProvingKey<P>,
         has_zk: ZeroKnowledge,
-    ) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
+    ) -> HonkProofResult<(HonkProof<TranscriptFieldType>, Vec<TranscriptFieldType>)> {
         tracing::trace!("UltraHonk prove");
 
         let mut transcript = Transcript::<TranscriptFieldType, H>::new();
 
         let oink = Oink::new(has_zk);
-        let oink_result = oink.prove(&proving_key, &mut transcript)?;
+        let oink_result = oink.prove(&mut proving_key, &mut transcript)?;
 
         let crs = proving_key.crs;
         let cicruit_size = proving_key.circuit_size;
@@ -52,7 +52,9 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         memory.relation_parameters.gate_challenges =
             Self::generate_gate_challenges(&mut transcript);
 
+        let num_public_inputs = proving_key.num_public_inputs - PAIRING_POINT_ACCUMULATOR_SIZE;
         let decider = Decider::new(memory, has_zk);
-        decider.prove(cicruit_size, &crs, transcript)
+        let proof = decider.prove(cicruit_size, &crs, transcript)?;
+        Ok(proof.separate_proof_and_public_inputs(num_public_inputs as usize))
     }
 }

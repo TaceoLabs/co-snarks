@@ -32,6 +32,9 @@ pub const NUM_SMALL_IPA_EVALUATIONS: usize = 4;
 // - The interleaving trick needed for Translator adds 2 extra claims
 // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1293): Decouple Gemini from Interleaving
 pub const NUM_GEMINI_CLAIMS: usize = 2 * CONST_PROOF_SIZE_LOG_N + 2;
+// The interleaving trick needed for Translator adds 2 extra claims to Gemini fold claims
+// TODO(https://github.com/AztecProtocol/barretenberg/issues/1293): Decouple Gemini from Interleaving
+pub const NUM_INTERLEAVING_CLAIMS: u32 = 2;
 
 pub struct Utils {}
 

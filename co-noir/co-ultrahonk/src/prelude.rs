@@ -9,7 +9,7 @@ pub use crate::types::Polynomials;
 pub use crate::{PlainCoBuilder, Rep3CoBuilder, ShamirCoBuilder};
 // Re-exporting the following types from `ultrahonk` and `co_builder` crates:
 pub use co_builder::prelude::{
-    AcirFormat, HonkRecursion, ProvingKey as PlainProvingKey, VerifyingKey,
+    AcirFormat, HonkRecursion, ProvingKey as PlainProvingKey, VerifyingKey, NUM_MASKED_ROWS,
 };
 pub use co_builder::prelude::{
     Crs, CrsParser, HonkCurve, Polynomial, ProverCrs, ProverWitnessEntities,

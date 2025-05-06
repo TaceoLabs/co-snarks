@@ -1,4 +1,4 @@
-use super::types::{EccDblGate, MulQuad};
+use super::types::{AddQuad, EccDblGate, MulQuad};
 use crate::builder::GenericUltraCircuitBuilder;
 use crate::prelude::HonkCurve;
 use crate::types::generators;
@@ -182,7 +182,6 @@ impl<F: PrimeField> FieldCT<F> {
         result.witness_index = builder.add_variable(out);
         result.additive_constant = F::zero();
         result.multiplicative_constant = F::one();
-
         // Aim of new gate: this.v * this.mul + this.add == result.v
         // <=>                           this.v * [this.mul] +                  result.v * [ -1] + [this.add] == 0
         // <=> this.v * this.v * [ 0 ] + this.v * [this.mul] + this.v * [ 0 ] + result.v * [ -1] + [this.add] == 0
@@ -876,6 +875,66 @@ impl<F: PrimeField> FieldCT<F> {
 
         let diff = lhs.sub(rhs, builder, driver);
         diff.madd(&predicate.to_field_ct(driver), rhs, builder, driver)
+    }
+
+    pub(crate) fn evaluate_linear_identity<
+        P: Pairing<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        a: &FieldCT<F>,
+        b: &FieldCT<F>,
+        c: &FieldCT<F>,
+        d: &FieldCT<F>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) {
+        if a.is_constant() && b.is_constant() && c.is_constant() && d.is_constant() {
+            let val_a = T::get_public(&a.get_value(builder, driver)).expect("Constants are public");
+            let val_b = T::get_public(&b.get_value(builder, driver)).expect("Constants are public");
+            let val_c = T::get_public(&c.get_value(builder, driver)).expect("Constants are public");
+            let val_d = T::get_public(&d.get_value(builder, driver)).expect("Constants are public");
+            assert!(val_a + val_b + val_c + val_d == F::zero());
+            return;
+        }
+
+        // Validate that a + b + c + d = 0
+        let q_1 = a.multiplicative_constant;
+        let q_2 = b.multiplicative_constant;
+        let q_3 = c.multiplicative_constant;
+        let q_4 = d.multiplicative_constant;
+        let q_c =
+            a.additive_constant + b.additive_constant + c.additive_constant + d.additive_constant;
+
+        builder.create_big_add_gate(
+            &AddQuad {
+                a: if a.is_constant() {
+                    builder.zero_idx
+                } else {
+                    a.witness_index
+                },
+                b: if b.is_constant() {
+                    builder.zero_idx
+                } else {
+                    b.witness_index
+                },
+                c: if c.is_constant() {
+                    builder.zero_idx
+                } else {
+                    c.witness_index
+                },
+                d: if d.is_constant() {
+                    builder.zero_idx
+                } else {
+                    d.witness_index
+                },
+                a_scaling: q_1,
+                b_scaling: q_2,
+                c_scaling: q_3,
+                d_scaling: q_4,
+                const_scaling: q_c,
+            },
+            false,
+        );
     }
 
     fn evaluate_polynomial_identity<

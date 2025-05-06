@@ -48,7 +48,7 @@ fn plaindriver_test<H: TranscriptHasher<TranscriptFieldType>>(
     let (proving_key, verifying_key) =
         ProvingKey::create_keys(0, builder, &prover_crs, verifier_crs, &mut driver).unwrap();
 
-    let proof =
+    let (proof, public_inputs) =
         CoUltraHonk::<PlainUltraHonkDriver, _, H>::prove(proving_key, &prover_crs, has_zk).unwrap();
 
     if has_zk == ZeroKnowledge::No {
@@ -60,7 +60,8 @@ fn plaindriver_test<H: TranscriptHasher<TranscriptFieldType>>(
         assert_eq!(proof, read_proof);
     }
 
-    let is_valid = UltraHonk::<_, H>::verify(proof, &verifying_key, has_zk).unwrap();
+    let is_valid =
+        UltraHonk::<_, H>::verify(proof, &public_inputs, &verifying_key, has_zk).unwrap();
     assert!(is_valid);
 }
 

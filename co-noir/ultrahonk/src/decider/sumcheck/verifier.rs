@@ -8,9 +8,9 @@ use crate::{
     transcript::{Transcript, TranscriptHasher},
     types::NUM_ALL_ENTITIES,
     verifier::HonkVerifyResult,
-    Utils, CONST_PROOF_SIZE_LOG_N,
+    CONST_PROOF_SIZE_LOG_N,
 };
-use ark_ff::One;
+use ark_ff::{One, Zero};
 use co_builder::prelude::RowDisablingPolynomial;
 use co_builder::prelude::{HonkCurve, ZeroKnowledge};
 
@@ -21,23 +21,19 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     pub(crate) fn sumcheck_verify<const SIZE: usize>(
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
-        circuit_size: u32,
         has_zk: ZeroKnowledge,
+        padding_indicator_array: &[P::ScalarField; CONST_PROOF_SIZE_LOG_N],
     ) -> HonkVerifyResult<SumcheckVerifierOutput<P::ScalarField>> {
         tracing::trace!("Sumcheck verify");
 
         let mut verified: bool = true;
 
-        let multivariate_n = circuit_size;
-        let multivariate_d = Utils::get_msb64(multivariate_n as u64);
+        // Pad gate challenges for Protogalaxy DeciderVerifier and AVM
+        self.pad_gate_challenges();
 
         let mut gate_separators = GateSeparatorPolynomial::new_without_products(
             self.memory.relation_parameters.gate_challenges.to_owned(),
         );
-
-        if multivariate_d == 0 {
-            return Err(eyre::eyre!("Number of variables in multivariate is 0"));
-        }
 
         let mut sum_check_round = SumcheckVerifierRound::<P>::default();
         let mut libra_challenge = P::ScalarField::one();
@@ -51,9 +47,9 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             sum_check_round.target_total_sum += libra_total_sum * libra_challenge;
         }
 
-        let mut multivariate_challenge = Vec::with_capacity(multivariate_d as usize);
+        let mut multivariate_challenge = Vec::with_capacity(CONST_PROOF_SIZE_LOG_N);
 
-        for round_idx in 0..CONST_PROOF_SIZE_LOG_N {
+        for (round_idx, &padding_value) in padding_indicator_array.iter().enumerate() {
             tracing::trace!("Sumcheck verify round {}", round_idx);
             let round_univariate_label = format!("Sumcheck:univariate_{}", round_idx);
 
@@ -64,18 +60,20 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             let round_challenge =
                 transcript.get_challenge::<P>(format!("Sumcheck:u_{}", round_idx));
 
-            // No recursive flavor, otherwise we need to make some modifications to the following
-            if round_idx < multivariate_d as usize {
-                let checked = sum_check_round.check_sum(&round_univariate);
-                verified = verified && checked;
+            let checked = sum_check_round.check_sum(&round_univariate, padding_value);
+            verified = verified && checked;
 
-                multivariate_challenge.push(round_challenge);
+            multivariate_challenge.push(round_challenge);
 
-                sum_check_round.compute_next_target_sum(&round_univariate, round_challenge);
-                gate_separators.partially_evaluate(round_challenge);
-            } else {
-                multivariate_challenge.push(round_challenge);
-            }
+            sum_check_round.compute_next_target_sum(
+                &round_univariate,
+                round_challenge,
+                padding_value,
+            );
+            gate_separators.partially_evaluate_with_padding(
+                round_challenge,
+                padding_indicator_array[round_idx],
+            );
         }
 
         // Final round
@@ -108,9 +106,9 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
                 transcript.receive_fr_from_prover::<P>("Libra:claimed_evaluation".to_string())?;
             // No recursive flavor, otherwise we need to make some modifications to the following
 
-            let correcting_factor = RowDisablingPolynomial::evaluate_at_challenge(
+            let correcting_factor = RowDisablingPolynomial::evaluate_at_challenge_with_padding(
                 &multivariate_challenge,
-                multivariate_d as usize,
+                padding_indicator_array,
             );
 
             full_honk_purported_value =
@@ -127,5 +125,14 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             verified,
             claimed_libra_evaluation,
         })
+    }
+
+    fn pad_gate_challenges(&mut self) {
+        if self.memory.relation_parameters.gate_challenges.len() < CONST_PROOF_SIZE_LOG_N {
+            let zero = P::ScalarField::zero();
+            for _ in self.memory.relation_parameters.gate_challenges.len()..CONST_PROOF_SIZE_LOG_N {
+                self.memory.relation_parameters.gate_challenges.push(zero);
+            }
+        }
     }
 }

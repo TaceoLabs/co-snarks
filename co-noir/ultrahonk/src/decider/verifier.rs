@@ -1,16 +1,13 @@
-use super::{
-    shplemini::{ShpleminiVerifierOpeningClaim, ZeroMorphVerifierOpeningClaim},
-    types::VerifierMemory,
-};
+use super::{shplemini::ShpleminiVerifierOpeningClaim, types::VerifierMemory};
 use crate::{
     decider::types::{BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK},
     prelude::TranscriptFieldType,
     transcript::{Transcript, TranscriptHasher},
     verifier::HonkVerifyResult,
-    Utils, NUM_LIBRA_COMMITMENTS,
+    Utils, CONST_PROOF_SIZE_LOG_N, NUM_LIBRA_COMMITMENTS,
 };
 use ark_ec::AffineRepr;
-use ark_ff::One;
+use ark_ff::{One, Zero};
 use co_builder::prelude::{HonkCurve, ZeroKnowledge};
 use std::marker::PhantomData;
 
@@ -32,31 +29,6 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             phantom_data: PhantomData,
             phantom_hasher: PhantomData,
         }
-    }
-
-    // this is the KZG one:
-    // Note: The pairing check can be expressed naturally as
-    // e(C - v * [1]_1, [1]_2) = e([W]_1, [X - r]_2) where C =[p(X)]_1. This can be rearranged (e.g. see the plonk
-    // paper) as e(C + r*[W]_1 - v*[1]_1, [1]_2) * e(-[W]_1, [X]_2) = 1, or e(P_0, [1]_2) * e(P_1, [X]_2) = 1
-    #[expect(dead_code)]
-    pub(crate) fn reduce_verify_zm(
-        opening_pair: ZeroMorphVerifierOpeningClaim<P>,
-        mut transcript: Transcript<TranscriptFieldType, H>,
-    ) -> HonkVerifyResult<(P::G1Affine, P::G1Affine)> {
-        tracing::trace!("Reduce and verify opening pair");
-
-        let g1_affine = P::G1Affine::generator();
-        let g1_projective: P::G1 = g1_affine.into_group();
-
-        let quotient_commitment = transcript.receive_point_from_prover::<P>("KZG:W".to_string())?;
-
-        let p_1 = -P::G1::from(quotient_commitment);
-        let p_0 = opening_pair.commitment;
-        let first = quotient_commitment.into_group() * opening_pair.challenge;
-        let second = g1_projective * opening_pair.evaluation;
-        let p_0 = p_0 + first;
-        let p_0 = p_0 - second;
-        Ok((p_0.into(), p_1.into()))
     }
 
     pub(crate) fn reduce_verify_shplemini(
@@ -94,6 +66,17 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         has_zk: ZeroKnowledge,
     ) -> HonkVerifyResult<bool> {
         tracing::trace!("Decider verification");
+        let log_circuit_size = Utils::get_msb32(circuit_size);
+
+        let mut padding_indicator_array = [P::ScalarField::zero(); CONST_PROOF_SIZE_LOG_N];
+
+        for (idx, value) in padding_indicator_array.iter_mut().enumerate() {
+            *value = if idx < log_circuit_size as usize {
+                P::ScalarField::one()
+            } else {
+                P::ScalarField::zero()
+            };
+        }
         let (sumcheck_output, libra_commitments) = if has_zk == ZeroKnowledge::Yes {
             let mut libra_commitments = Vec::with_capacity(NUM_LIBRA_COMMITMENTS);
 
@@ -104,8 +87,8 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
             let sumcheck_output = self.sumcheck_verify::<BATCHED_RELATION_PARTIAL_LENGTH_ZK>(
                 &mut transcript,
-                circuit_size,
                 has_zk,
+                &padding_indicator_array,
             )?;
             if !sumcheck_output.verified {
                 tracing::trace!("Sumcheck failed");
@@ -125,8 +108,8 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         } else {
             let sumcheck_output = self.sumcheck_verify::<BATCHED_RELATION_PARTIAL_LENGTH>(
                 &mut transcript,
-                circuit_size,
                 has_zk,
+                &padding_indicator_array,
             )?;
             if !sumcheck_output.verified {
                 tracing::trace!("Sumcheck failed");
@@ -138,12 +121,12 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
         let mut consistency_checked = true;
         let mut opening_claim = self.compute_batch_opening_claim(
-            circuit_size,
             sumcheck_output.multivariate_challenge,
             &mut transcript,
             libra_commitments,
             sumcheck_output.claimed_libra_evaluation,
             &mut consistency_checked,
+            &padding_indicator_array,
         )?;
 
         let pairing_points = Self::reduce_verify_shplemini(&mut opening_claim, transcript)?;

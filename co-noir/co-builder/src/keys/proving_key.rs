@@ -1,13 +1,13 @@
+use crate::polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK;
 use crate::{
     builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder},
     crs::ProverCrs,
     polynomials::{
-        polynomial::{Polynomial, MASKING_OFFSET},
+        polynomial::Polynomial,
         polynomial_types::{Polynomials, PrecomputedEntities},
     },
     types::types::{
-        ActiveRegionData, AggregationObjectPubInputIndices, CyclicPermutation, Mapping,
-        PermutationMapping, TraceData, NUM_WIRES,
+        ActiveRegionData, CyclicPermutation, Mapping, PermutationMapping, TraceData, NUM_WIRES,
     },
     HonkProofResult,
 };
@@ -17,14 +17,15 @@ use co_acvm::{mpc::NoirWitnessExtensionProtocol, PlainAcvmSolver};
 use num_bigint::BigUint;
 use std::sync::Arc;
 
+use super::verification_key::PublicComponentKey;
+
 pub struct ProvingKey<P: Pairing> {
     pub crs: Arc<ProverCrs<P>>,
     pub circuit_size: u32,
     pub public_inputs: Vec<P::ScalarField>,
     pub num_public_inputs: u32,
     pub pub_inputs_offset: u32,
-    pub contains_pairing_point_accumulator: bool,
-    pub pairing_point_accumulator_public_input_indices: AggregationObjectPubInputIndices,
+    pub pairing_inputs_public_input_key: PublicComponentKey,
     pub polynomials: Polynomials<P::ScalarField>,
     pub memory_read_records: Vec<u32>,
     pub memory_write_records: Vec<u32>,
@@ -82,7 +83,7 @@ impl<P: Pairing> ProvingKey<P> {
                 .get_table_polynomials_mut(),
             &circuit,
             dyadic_circuit_size,
-            MASKING_OFFSET as usize,
+            NUM_DISABLED_ROWS_IN_SUMCHECK as usize,
         );
         Self::construct_lookup_read_counts(
             driver,
@@ -106,11 +107,8 @@ impl<P: Pairing> ProvingKey<P> {
         {
             proving_key.public_inputs.push(*input);
         }
-
         // Set the pairing point accumulator indices
-        proving_key.pairing_point_accumulator_public_input_indices =
-            circuit.pairing_point_accumulator_public_input_indices;
-        proving_key.contains_pairing_point_accumulator = circuit.contains_pairing_point_accumulator;
+        proving_key.pairing_inputs_public_input_key = circuit.pairing_inputs_public_input_key;
 
         Ok(proving_key)
     }
@@ -134,10 +132,8 @@ impl<P: Pairing> ProvingKey<P> {
             memory_read_records: Vec::new(),
             memory_write_records: Vec::new(),
             final_active_wire_idx,
-            contains_pairing_point_accumulator: false,
-            pairing_point_accumulator_public_input_indices: [0;
-                crate::types::types::AGGREGATION_OBJECT_SIZE],
             active_region_data: ActiveRegionData::new(),
+            pairing_inputs_public_input_key: Default::default(),
         }
     }
 
@@ -301,7 +297,6 @@ impl<P: Pairing> ProvingKey<P> {
         let num_gates = circuit_size;
 
         let domain_size = active_region_data.size();
-
         // TACEO TODO Barrettenberg uses multithreading here
 
         for (wire_idx, current_permutation_poly) in permutation_polynomials.iter_mut().enumerate() {

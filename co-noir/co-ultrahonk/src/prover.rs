@@ -8,7 +8,7 @@ use crate::{
 };
 use ark_ec::pairing::Pairing;
 use co_builder::{
-    prelude::{HonkCurve, ProverCrs},
+    prelude::{HonkCurve, ProverCrs, PAIRING_POINT_ACCUMULATOR_SIZE},
     HonkProofResult,
 };
 use mpc_core::protocols::{
@@ -65,7 +65,7 @@ impl<
 
     pub fn prove_inner(
         mut self,
-        proving_key: ProvingKey<T, P>,
+        mut proving_key: ProvingKey<T, P>,
         crs: &ProverCrs<P>,
         has_zk: ZeroKnowledge,
     ) -> HonkProofResult<(HonkProof<TranscriptFieldType>, T)> {
@@ -74,7 +74,7 @@ impl<
         let mut transcript = Transcript::<TranscriptFieldType, H>::new();
 
         let oink = CoOink::new(&mut self.driver, has_zk);
-        let oink_result = oink.prove(&proving_key, &mut transcript, crs)?;
+        let oink_result = oink.prove(&mut proving_key, &mut transcript, crs)?;
 
         let circuit_size = proving_key.circuit_size;
 
@@ -99,7 +99,7 @@ impl<
         proving_key: ProvingKey<Rep3UltraHonkDriver<N>, P>,
         crs: &ProverCrs<P>,
         has_zk: ZeroKnowledge,
-    ) -> eyre::Result<(HonkProof<TranscriptFieldType>, N)> {
+    ) -> eyre::Result<(HonkProof<TranscriptFieldType>, Vec<TranscriptFieldType>, N)> {
         let mut io_context0 = IoContext::init(net)?;
         let io_context1 = io_context0.fork()?;
         let prover = Self {
@@ -107,8 +107,11 @@ impl<
             phantom_data: PhantomData,
             phantom_hasher: PhantomData,
         };
+        let num_public_inputs = proving_key.num_public_inputs - PAIRING_POINT_ACCUMULATOR_SIZE;
         let (proof, driver) = prover.prove_inner(proving_key, crs, has_zk)?;
-        Ok((proof, driver.into_network()))
+        let (proof, public_inputs) =
+            proof.separate_proof_and_public_inputs(num_public_inputs as usize);
+        Ok((proof, public_inputs, driver.into_network()))
     }
 }
 
@@ -124,7 +127,7 @@ impl<
         proving_key: ProvingKey<ShamirUltraHonkDriver<<P as Pairing>::ScalarField, N>, P>,
         crs: &ProverCrs<P>,
         has_zk: ZeroKnowledge,
-    ) -> eyre::Result<(HonkProof<TranscriptFieldType>, N)> {
+    ) -> eyre::Result<(HonkProof<TranscriptFieldType>, Vec<TranscriptFieldType>, N)> {
         // init MPC protocol
         let num_pairs = if net.get_num_parties() == 3 {
             0 // Precomputation is done on the fly since it requires no communication
@@ -140,8 +143,11 @@ impl<
             phantom_data: PhantomData,
             phantom_hasher: PhantomData,
         };
+        let num_public_inputs = proving_key.num_public_inputs - PAIRING_POINT_ACCUMULATOR_SIZE;
         let (proof, driver) = prover.prove_inner(proving_key, crs, has_zk)?;
-        Ok((proof, driver.into_network()))
+        let (proof, public_inputs) =
+            proof.separate_proof_and_public_inputs(num_public_inputs as usize);
+        Ok((proof, public_inputs, driver.into_network()))
     }
 }
 
@@ -152,13 +158,14 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         proving_key: ProvingKey<PlainUltraHonkDriver, P>,
         crs: &ProverCrs<P>,
         has_zk: ZeroKnowledge,
-    ) -> eyre::Result<HonkProof<TranscriptFieldType>> {
+    ) -> eyre::Result<(HonkProof<TranscriptFieldType>, Vec<TranscriptFieldType>)> {
         let prover = Self {
             driver: PlainUltraHonkDriver,
             phantom_data: PhantomData,
             phantom_hasher: PhantomData,
         };
+        let num_public_inputs = proving_key.num_public_inputs - PAIRING_POINT_ACCUMULATOR_SIZE;
         let (proof, _) = prover.prove_inner(proving_key, crs, has_zk)?;
-        Ok(proof)
+        Ok(proof.separate_proof_and_public_inputs(num_public_inputs as usize))
     }
 }

@@ -3,6 +3,7 @@ use ark_bn254::Bn254;
 use ark_ff::PrimeField;
 use clap::{Parser, ValueEnum};
 use co_acvm::{solver::PlainCoSolver, PlainAcvmSolver};
+use co_builder::prelude::Serialize as FieldSerialize;
 use co_noir::HonkRecursion;
 use co_ultrahonk::{
     prelude::{
@@ -229,7 +230,7 @@ fn main() -> color_eyre::Result<ExitCode> {
     tracing::info!("Wrote vk to file {}", out_path.display());
 
     // Create the proof
-    let proof = match hasher {
+    let (proof, public_inputs) = match hasher {
         TranscriptHash::POSEIDON => CoUltraHonk::<PlainUltraHonkDriver, _, Poseidon2Sponge>::prove(
             proving_key,
             &prover_crs,
@@ -243,7 +244,6 @@ fn main() -> color_eyre::Result<ExitCode> {
         )
         .context("While creating proof")?,
     };
-
     // Write the proof to a file
     let out_path = out_dir.join("proof_plaindriver");
     let mut out_file = BufWriter::new(
@@ -255,17 +255,30 @@ fn main() -> color_eyre::Result<ExitCode> {
         .context("while writing proof to file")?;
     tracing::info!("Wrote proof to file {}", out_path.display());
 
+    // Write the public inputs to a file
+    let out_path = out_dir.join("public_inputs_plaindriver");
+    let mut out_file = BufWriter::new(
+        std::fs::File::create(&out_path).context("while creating output file for proof")?,
+    );
+    let public_inputs_u8 = FieldSerialize::to_buffer(&public_inputs, false);
+    out_file
+        .write(public_inputs_u8.as_slice())
+        .context("while writing proof to file")?;
+    tracing::info!("Wrote public inputs to file {}", out_path.display());
+
     // Get the verifying key
     let verifying_key = VerifyingKey::from_barrettenberg_and_crs(vk_barretenberg, verifier_crs);
 
     // Verify the proof
     let is_valid = match hasher {
         TranscriptHash::POSEIDON => {
-            UltraHonk::<_, Poseidon2Sponge>::verify(proof, &verifying_key, has_zk)
+            UltraHonk::<_, Poseidon2Sponge>::verify(proof, &public_inputs, &verifying_key, has_zk)
                 .context("While verifying proof")?
         }
-        TranscriptHash::KECCAK => UltraHonk::<_, Keccak256>::verify(proof, &verifying_key, has_zk)
-            .context("While verifying proof")?,
+        TranscriptHash::KECCAK => {
+            UltraHonk::<_, Keccak256>::verify(proof, &public_inputs, &verifying_key, has_zk)
+                .context("While verifying proof")?
+        }
     };
 
     if is_valid {

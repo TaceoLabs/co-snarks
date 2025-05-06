@@ -2,6 +2,7 @@ use ark_bn254::Bn254;
 use ark_ff::Zero;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use co_acvm::{solver::Rep3CoSolver, Rep3AcvmType};
+use co_builder::prelude::Serialize as FieldSerialize;
 use co_noir::PubShared;
 use co_ultrahonk::prelude::{
     CrsParser, HonkProof, Poseidon2Sponge, ProvingKey, Rep3CoUltraHonk, Rep3UltraHonkDriver,
@@ -441,7 +442,7 @@ pub struct GenerateProofCli {
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
     pub out: Option<PathBuf>,
-    /// The output JSON file where the public inputs are written to. If not passed, this party will not write the public inputs to a file.
+    /// The output file where the public inputs are written to. If not passed, this party will not write the public inputs to a file.
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
     pub public_input: Option<PathBuf>,
@@ -458,6 +459,9 @@ pub struct GenerateProofCli {
     /// Prove with or without the zero knowledge property
     #[arg(long)]
     pub zk: bool,
+    /// Write the outputs as fields to json. If not passed, they will only be written as bytes to a file consistent with Barretenberg (if 'out'/'public_input' is specified).
+    #[arg(long)]
+    pub fields_as_json: bool,
 }
 
 /// Config for `generate_proof`
@@ -471,7 +475,7 @@ pub struct GenerateProofConfig {
     pub hasher: TranscriptHash,
     /// The output file where the final proof is written to. If not passed, this party will not write the proof to a file.
     pub out: Option<PathBuf>,
-    /// The output JSON file where the public inputs are written to. If not passed, this party will not write the public inputs to a file.
+    /// The output file where the public inputs are written to. If not passed, this party will not write the public inputs to a file.
     pub public_input: Option<PathBuf>,
     /// The threshold of tolerated colluding parties
     pub threshold: usize,
@@ -483,6 +487,8 @@ pub struct GenerateProofConfig {
     pub crs: PathBuf,
     /// Prove with or without the zero knowledge property
     pub zk: bool,
+    /// Write the outputs as fields to json. If not passed, they will only be written as bytes to a file consistent with Barretenberg (if 'out'/'public_input' is specified).
+    pub fields_as_json: bool,
 }
 
 /// Cli arguments for `build_and_generate_proof`
@@ -516,7 +522,7 @@ pub struct BuildAndGenerateProofCli {
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
     pub out: Option<PathBuf>,
-    /// The output JSON file where the public inputs are written to. If not passed, this party will not write the public inputs to a file.
+    /// The output file where the public inputs are written to. If not passed, this party will not write the public inputs to a file.
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
     pub public_input: Option<PathBuf>,
@@ -529,6 +535,9 @@ pub struct BuildAndGenerateProofCli {
     /// Prove with or without the zero knowledge property
     #[arg(long)]
     pub zk: bool,
+    /// Write the outputs as fields to json. If not passed, they will only be written as bytes to a file consistent with Barretenberg (if 'out'/'public_input' is specified).
+    #[arg(long)]
+    pub fields_as_json: bool,
 }
 
 /// Config for `build_and_generate_proof`
@@ -546,7 +555,7 @@ pub struct BuildAndGenerateProofConfig {
     pub hasher: TranscriptHash,
     /// The output file where the final proof is written to. If not passed, this party will not write the proof to a file.
     pub out: Option<PathBuf>,
-    /// The output JSON file where the public inputs are written to. If not passed, this party will not write the public inputs to a file.
+    /// The output file where the public inputs are written to. If not passed, this party will not write the public inputs to a file.
     pub public_input: Option<PathBuf>,
     /// The threshold of tolerated colluding parties
     pub threshold: usize,
@@ -556,6 +565,8 @@ pub struct BuildAndGenerateProofConfig {
     pub recursive: bool,
     /// Prove with or without the zero knowledge property
     pub zk: bool,
+    /// Write the outputs as fields to json. If not passed, they will only be written as bytes to a file consistent with Barretenberg (if 'out'/'public_input' is specified).
+    pub fields_as_json: bool,
 }
 
 /// Cli arguments for `creating_vk`
@@ -584,6 +595,9 @@ pub struct CreateVKCli {
     /// Generate a recursive proof
     #[arg(long)]
     pub recursive: bool,
+    /// Write the vk as fields to json. If not passed, the vk will only be written as bytes to a file consistent with Barretenberg.
+    #[arg(long)]
+    pub fields_as_json: bool,
 }
 
 /// Config for `creating_vk`
@@ -599,6 +613,8 @@ pub struct CreateVKConfig {
     pub vk: PathBuf,
     /// Generate a recursive proof
     pub recursive: bool,
+    /// Write the vk as fields to json. If not passed, the vk will only be written as bytes to a file consistent with Barretenberg.
+    pub fields_as_json: bool,
 }
 
 /// Cli arguments for `verify`
@@ -616,6 +632,10 @@ pub struct VerifyCli {
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
     pub proof: Option<PathBuf>,
+    /// The path to the public_inputs file
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub public_input: Option<PathBuf>,
     /// The path to the verification key file
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
@@ -636,6 +656,8 @@ pub struct VerifyConfig {
     pub hasher: TranscriptHash,
     /// The path to the proof file
     pub proof: PathBuf,
+    /// The path to the public_inputs file
+    pub public_input: PathBuf,
     /// The path to the verification key file
     pub vk: PathBuf,
     /// The path to the verifier crs file
@@ -1330,6 +1352,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
     let public_input_filename = config.public_input;
     let t = config.threshold;
     let crs_path = config.crs;
+    let fields_as_json = config.fields_as_json;
     let has_zk = ZeroKnowledge::from(config.zk);
 
     let network_config = config
@@ -1359,27 +1382,28 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
                 proving_key.circuit_size as usize,
                 has_zk,
             )?;
-            let public_input = proving_key.get_public_inputs();
+
             match hasher {
                 TranscriptHash::POSEIDON => {
                     // execute prover in MPC
                     let start = Instant::now();
-                    let (proof, net) = Rep3CoUltraHonk::<_, _, Poseidon2Sponge>::prove(
-                        net,
-                        proving_key,
-                        &prover_crs,
-                        has_zk,
-                    )?;
+                    let (proof, public_inputs, net) =
+                        Rep3CoUltraHonk::<_, _, Poseidon2Sponge>::prove(
+                            net,
+                            proving_key,
+                            &prover_crs,
+                            has_zk,
+                        )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
                     // network is shutdown in drop, which can take seom time with quinn
                     drop(net);
-                    (proof, public_input)
+                    (proof, public_inputs)
                 }
                 TranscriptHash::KECCAK => {
                     // execute prover in MPC
                     let start = Instant::now();
-                    let (proof, net) = Rep3CoUltraHonk::<_, _, Keccak256>::prove(
+                    let (proof, public_inputs, net) = Rep3CoUltraHonk::<_, _, Keccak256>::prove(
                         net,
                         proving_key,
                         &prover_crs,
@@ -1389,7 +1413,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
                     tracing::info!("Generate proof took {duration_ms} ms");
                     // network is shutdown in drop, which can take seom time with quinn
                     drop(net);
-                    (proof, public_input)
+                    (proof, public_inputs)
                 }
             }
         }
@@ -1406,19 +1430,19 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
                 proving_key.circuit_size as usize,
                 has_zk,
             )?;
-            let public_input = proving_key.get_public_inputs();
 
             // execute prover in MPC
             match hasher {
                 TranscriptHash::POSEIDON => {
                     let start = Instant::now();
-                    let (proof, net) = ShamirCoUltraHonk::<_, _, Poseidon2Sponge>::prove(
-                        net,
-                        t,
-                        proving_key,
-                        &prover_crs,
-                        has_zk,
-                    )?;
+                    let (proof, public_input, net) =
+                        ShamirCoUltraHonk::<_, _, Poseidon2Sponge>::prove(
+                            net,
+                            t,
+                            proving_key,
+                            &prover_crs,
+                            has_zk,
+                        )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
                     // network is shutdown in drop, which can take seom time with quinn
@@ -1428,7 +1452,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
                 }
                 TranscriptHash::KECCAK => {
                     let start = Instant::now();
-                    let (proof, net) = ShamirCoUltraHonk::<_, _, Keccak256>::prove(
+                    let (proof, public_input, net) = ShamirCoUltraHonk::<_, _, Keccak256>::prove(
                         net,
                         t,
                         proving_key,
@@ -1447,9 +1471,9 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
     };
 
     // write result to output file
-    if let Some(out) = out {
+    if let Some(ref out) = out {
         let mut out_file =
-            BufWriter::new(std::fs::File::create(&out).context("while creating output file")?);
+            BufWriter::new(std::fs::File::create(out).context("while creating output file")?);
 
         let proof_u8 = proof.to_buffer();
         out_file
@@ -1459,8 +1483,36 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
     }
 
     // write public input to output file
-    if let Some(public_input_filename) = public_input_filename {
-        let public_input_as_strings = public_input
+    if let Some(ref public_input_filename) = public_input_filename {
+        let mut out_file = BufWriter::new(
+            std::fs::File::create(public_input_filename).context("while creating output file")?,
+        );
+
+        let public_inputs_u8 = FieldSerialize::to_buffer(&public_input, false);
+        out_file
+            .write(public_inputs_u8.as_slice())
+            .context("while writing proof to file")?;
+        tracing::info!(
+            "Wrote public inputs to file {}",
+            public_input_filename.display()
+        );
+    }
+
+    // write the proof and public inputs as field elements to a JSON file if flag is set
+    if fields_as_json {
+        let proof_path = if let Some(out_path) = out {
+            out_path.with_extension("json")
+        } else {
+            PathBuf::from("proof.json")
+        };
+        let public_inputs_path = if let Some(public_input_path) = public_input_filename {
+            public_input_path.with_extension("json")
+        } else {
+            PathBuf::from("public_input.json")
+        };
+
+        let proof_as_strings = proof
+            .inner()
             .iter()
             .map(|f| {
                 if f.is_zero() {
@@ -1470,16 +1522,30 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
                 }
             })
             .collect::<Vec<String>>();
-        let public_input_file = BufWriter::new(
-            std::fs::File::create(&public_input_filename)
-                .context("while creating public input file")?,
+        let proof_json_file = BufWriter::new(
+            std::fs::File::create(&proof_path).context("while creating proof json file")?,
         );
-        serde_json::to_writer(public_input_file, &public_input_as_strings)
+        serde_json::to_writer(proof_json_file, &proof_as_strings)
+            .context("while writing out proof to JSON file")?;
+        tracing::info!("Wrote proof to file {}", proof_path.display());
+
+        let public_inputs_as_strings = public_input
+            .iter()
+            .map(|f| {
+                if f.is_zero() {
+                    "0".to_string()
+                } else {
+                    f.to_string()
+                }
+            })
+            .collect::<Vec<String>>();
+        let public_input_json_file = BufWriter::new(
+            std::fs::File::create(&public_inputs_path)
+                .context("while creating public input json file")?,
+        );
+        serde_json::to_writer(public_input_json_file, &public_inputs_as_strings)
             .context("while writing out public inputs to JSON file")?;
-        tracing::info!(
-            "Wrote public inputs to file {}",
-            public_input_filename.display()
-        );
+        tracing::info!("Wrote public input to file {}", proof_path.display());
     }
 
     tracing::info!("Proof generation finished successfully");
@@ -1499,6 +1565,7 @@ fn run_build_and_generate_proof(
     let public_input_filename = config.public_input;
     let t = config.threshold;
     let recursive = config.recursive;
+    let fields_as_json = config.fields_as_json;
     let has_zk = ZeroKnowledge::from(config.zk);
 
     if hasher == TranscriptHash::KECCAK && recursive {
@@ -1544,18 +1611,17 @@ fn run_build_and_generate_proof(
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!("Build proving key took {duration_ms} ms");
 
-            let public_input = proving_key.get_public_inputs();
-
             tracing::info!("Starting proof generation...");
             let (proof, public_input) = match hasher {
                 TranscriptHash::POSEIDON => {
                     let start = Instant::now();
-                    let (proof, net) = Rep3CoUltraHonk::<_, _, Poseidon2Sponge>::prove(
-                        net,
-                        proving_key,
-                        &prover_crs,
-                        has_zk,
-                    )?;
+                    let (proof, public_input, net) =
+                        Rep3CoUltraHonk::<_, _, Poseidon2Sponge>::prove(
+                            net,
+                            proving_key,
+                            &prover_crs,
+                            has_zk,
+                        )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
                     // network is shutdown in drop, which can take seom time with quinn
@@ -1564,7 +1630,7 @@ fn run_build_and_generate_proof(
                 }
                 TranscriptHash::KECCAK => {
                     let start = Instant::now();
-                    let (proof, net) = Rep3CoUltraHonk::<_, _, Keccak256>::prove(
+                    let (proof, public_input, net) = Rep3CoUltraHonk::<_, _, Keccak256>::prove(
                         net,
                         proving_key,
                         &prover_crs,
@@ -1597,19 +1663,18 @@ fn run_build_and_generate_proof(
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!("Build proving key took {duration_ms} ms");
 
-            let public_input = proving_key.get_public_inputs();
-
             tracing::info!("Starting proof generation...");
             let (proof, public_input) = match hasher {
                 TranscriptHash::POSEIDON => {
                     let start = Instant::now();
-                    let (proof, net) = ShamirCoUltraHonk::<_, _, Poseidon2Sponge>::prove(
-                        net,
-                        t,
-                        proving_key,
-                        &prover_crs,
-                        has_zk,
-                    )?;
+                    let (proof, public_input, net) =
+                        ShamirCoUltraHonk::<_, _, Poseidon2Sponge>::prove(
+                            net,
+                            t,
+                            proving_key,
+                            &prover_crs,
+                            has_zk,
+                        )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
                     // network is shutdown in drop, which can take seom time with quinn
@@ -1619,7 +1684,7 @@ fn run_build_and_generate_proof(
                 TranscriptHash::KECCAK => {
                     // execute prover in MPC
                     let start = Instant::now();
-                    let (proof, net) = ShamirCoUltraHonk::<_, _, Keccak256>::prove(
+                    let (proof, public_input, net) = ShamirCoUltraHonk::<_, _, Keccak256>::prove(
                         net,
                         t,
                         proving_key,
@@ -1638,9 +1703,9 @@ fn run_build_and_generate_proof(
     };
 
     // write result to output file
-    if let Some(out) = out {
+    if let Some(ref out) = out {
         let mut out_file =
-            BufWriter::new(std::fs::File::create(&out).context("while creating output file")?);
+            BufWriter::new(std::fs::File::create(out).context("while creating output file")?);
 
         let proof_u8 = proof.to_buffer();
         out_file
@@ -1650,8 +1715,36 @@ fn run_build_and_generate_proof(
     }
 
     // write public input to output file
-    if let Some(public_input_filename) = public_input_filename {
-        let public_input_as_strings = public_input
+    if let Some(ref public_input_filename) = public_input_filename {
+        let mut out_file = BufWriter::new(
+            std::fs::File::create(public_input_filename).context("while creating output file")?,
+        );
+
+        let public_inputs_u8 = FieldSerialize::to_buffer(&public_input, false);
+        out_file
+            .write(public_inputs_u8.as_slice())
+            .context("while writing public input to file")?;
+        tracing::info!(
+            "Wrote public inputs to file {}",
+            public_input_filename.display()
+        );
+    }
+
+    // write the proof and public inputs as field elements to a JSON file if flag is set
+    if fields_as_json {
+        let proof_path = if let Some(out_path) = out {
+            out_path.with_extension("json")
+        } else {
+            PathBuf::from("proof.json")
+        };
+        let public_inputs_path = if let Some(public_input_path) = public_input_filename {
+            public_input_path.with_extension("json")
+        } else {
+            PathBuf::from("public_input.json")
+        };
+
+        let proof_as_strings = proof
+            .inner()
             .iter()
             .map(|f| {
                 if f.is_zero() {
@@ -1661,16 +1754,30 @@ fn run_build_and_generate_proof(
                 }
             })
             .collect::<Vec<String>>();
-        let public_input_file = BufWriter::new(
-            std::fs::File::create(&public_input_filename)
-                .context("while creating public input file")?,
+        let proof_json_file = BufWriter::new(
+            std::fs::File::create(&proof_path).context("while creating proof json file")?,
         );
-        serde_json::to_writer(public_input_file, &public_input_as_strings)
+        serde_json::to_writer(proof_json_file, &proof_as_strings)
+            .context("while writing out proof to JSON file")?;
+        tracing::info!("Wrote proof to file {}", proof_path.display());
+
+        let public_inputs_as_strings = public_input
+            .iter()
+            .map(|f| {
+                if f.is_zero() {
+                    "0".to_string()
+                } else {
+                    f.to_string()
+                }
+            })
+            .collect::<Vec<String>>();
+        let public_input_json_file = BufWriter::new(
+            std::fs::File::create(&public_inputs_path)
+                .context("while creating public input json file")?,
+        );
+        serde_json::to_writer(public_input_json_file, &public_inputs_as_strings)
             .context("while writing out public inputs to JSON file")?;
-        tracing::info!(
-            "Wrote public inputs to file {}",
-            public_input_filename.display()
-        );
+        tracing::info!("Wrote public input to file {}", proof_path.display());
     }
 
     tracing::info!("Proof generation finished successfully");
@@ -1684,6 +1791,8 @@ fn run_generate_vk(config: CreateVKConfig) -> color_eyre::Result<ExitCode> {
     let vk_path = config.vk;
     let hasher = config.hasher;
     let recursive = config.recursive;
+    let fields_as_json = config.fields_as_json;
+
     if hasher == TranscriptHash::KECCAK && recursive {
         tracing::warn!("Note that the Poseidon hasher is better suited for recursion");
     }
@@ -1708,6 +1817,28 @@ fn run_generate_vk(config: CreateVKConfig) -> color_eyre::Result<ExitCode> {
     let mut out_file =
         BufWriter::new(std::fs::File::create(&vk_path).context("while creating output file")?);
 
+    // write the verification key as field elements to a JSON file if flag is set
+    if fields_as_json {
+        let vk_path_json = vk_path.with_extension("json");
+        let vk_as_fields = vk.to_field_elements();
+        let vk_as_strings = vk_as_fields
+            .iter()
+            .map(|f| {
+                if f.is_zero() {
+                    "0".to_string()
+                } else {
+                    f.to_string()
+                }
+            })
+            .collect::<Vec<String>>();
+        let vk_json_file = BufWriter::new(
+            std::fs::File::create(&vk_path_json).context("while creating output json file")?,
+        );
+        serde_json::to_writer(vk_json_file, &vk_as_strings)
+            .context("while writing out verification key to JSON file")?;
+        tracing::info!("Wrote verification key to file {}", vk_path_json.display());
+    }
+
     let vk_u8 = match hasher {
         TranscriptHash::POSEIDON => vk.to_buffer(),
         TranscriptHash::KECCAK => vk.to_buffer_keccak(),
@@ -1724,6 +1855,7 @@ fn run_generate_vk(config: CreateVKConfig) -> color_eyre::Result<ExitCode> {
 #[instrument(level = "debug", skip(config))]
 fn run_verify(config: VerifyConfig) -> color_eyre::Result<ExitCode> {
     let proof = config.proof;
+    let public_inputs = config.public_input;
     let vk_path: PathBuf = config.vk;
     let crs_path = config.crs;
     let hasher = config.hasher;
@@ -1733,6 +1865,12 @@ fn run_verify(config: VerifyConfig) -> color_eyre::Result<ExitCode> {
     let proof_u8 = std::fs::read(&proof).context("while reading proof file")?;
     let proof = HonkProof::from_buffer(&proof_u8).context("while deserializing proof")?;
 
+    // parse public_inputs file
+    let public_inputs_u8 =
+        std::fs::read(&public_inputs).context("while reading public_inputs file")?;
+    let public_inputs = FieldSerialize::from_buffer(&public_inputs_u8, false)
+        .context("while deserializing public_inputs")?;
+
     // parse the crs
     let verifier_crs = CrsParser::<Bn254>::get_crs_g2(crs_path)?;
 
@@ -1740,16 +1878,20 @@ fn run_verify(config: VerifyConfig) -> color_eyre::Result<ExitCode> {
     let vk_u8 = std::fs::read(&vk_path).context("while reading vk file")?;
     let vk = VerifyingKeyBarretenberg::<Bn254>::from_buffer(&vk_u8)
         .context("while deserializing verification key")?;
-    let vk = VerifyingKey::from_barrettenberg_and_crs(vk, verifier_crs);
 
+    let vk = VerifyingKey::from_barrettenberg_and_crs(vk, verifier_crs);
     // The actual verifier
     tracing::info!("Starting proof verification...");
     let start = Instant::now();
     let res = match hasher {
-        TranscriptHash::POSEIDON => UltraHonk::<_, Poseidon2Sponge>::verify(proof, &vk, has_zk)
-            .context("while verifying proof")?,
-        TranscriptHash::KECCAK => UltraHonk::<_, Keccak256>::verify(proof, &vk, has_zk)
-            .context("while verifying proof")?,
+        TranscriptHash::POSEIDON => {
+            UltraHonk::<_, Poseidon2Sponge>::verify(proof, &public_inputs, &vk, has_zk)
+                .context("while verifying proof")?
+        }
+        TranscriptHash::KECCAK => {
+            UltraHonk::<_, Keccak256>::verify(proof, &public_inputs, &vk, has_zk)
+                .context("while verifying proof")?
+        }
     };
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Verify took {} ms", duration_ms);

@@ -1,3 +1,4 @@
+pub(crate) mod big_field;
 pub(crate) mod blake2s;
 pub(crate) mod blake3;
 pub(crate) mod blake_util;
