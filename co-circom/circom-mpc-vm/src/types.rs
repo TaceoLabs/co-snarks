@@ -236,7 +236,7 @@ impl<F: PrimeField> CoCircomCompilerParsed<F> {
         )
     }
 
-    /// Consumes `self` and and already established [`Rep3Network`] andn constructs an instance of [`BatchedRep3WitnessExtension`].
+    /// Consumes `self` and already established [`Rep3Network`] andn constructs an instance of [`BatchedRep3WitnessExtension`].
     ///
     /// # Arguments
     /// - `network`: An already established [`Rep3Network`].
