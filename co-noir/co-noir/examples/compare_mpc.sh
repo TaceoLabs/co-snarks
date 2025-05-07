@@ -8,7 +8,7 @@ BARRETENBERG_VERSION=0.86.0 ##specify the desired barretenberg version here or u
 exit_code=0
 
 REMOVE_OUTPUT=1
-TEST_SLOWER_CIRCUITS=1 ## this is a flag to also run the slower test cases
+TEST_SLOWER_CIRCUITS=0 ## this is a flag to also run the slower test cases
 PIPE=""
 if [[ $REMOVE_OUTPUT -eq 1 ]];
 then

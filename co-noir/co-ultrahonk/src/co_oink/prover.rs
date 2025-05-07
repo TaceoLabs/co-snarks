@@ -564,7 +564,6 @@ impl<
             self.mask_polynomial(proving_key.polynomials.witness.w_r_mut())?;
             self.mask_polynomial(proving_key.polynomials.witness.w_o_mut())?;
         };
-
         let w_l = CoUtils::commit::<T, P>(proving_key.polynomials.witness.w_l().as_ref(), crs);
         let w_r = CoUtils::commit::<T, P>(proving_key.polynomials.witness.w_r().as_ref(), crs);
         let w_o = CoUtils::commit::<T, P>(proving_key.polynomials.witness.w_o().as_ref(), crs);
@@ -697,20 +696,41 @@ impl<
         tracing::trace!("Oink prove");
 
         // Add circuit size public input size and public inputs to transcript
+        let start = std::time::Instant::now();
         Self::execute_preamble_round(transcript, proving_key)?;
+        let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+        tracing::info!("execute_preamble_round took {duration_ms} ms");
+
         // Compute first three wire commitments
+        let start = std::time::Instant::now();
+
         self.execute_wire_commitments_round(transcript, proving_key, crs)?;
+        let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+        tracing::info!("execute_wire_commitments_round took {duration_ms} ms");
         // Compute sorted list accumulator and commitment
+        let start = std::time::Instant::now();
+
         self.execute_sorted_list_accumulator_round(transcript, proving_key, crs)?;
-
+        let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+        tracing::info!("execute_sorted_list_accumulator_round took {duration_ms} ms");
         // Fiat-Shamir: beta & gamma
+        let start = std::time::Instant::now();
+
         self.execute_log_derivative_inverse_round(transcript, proving_key)?;
+        let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+        tracing::info!("execute_log_derivative_inverse_round took {duration_ms} ms");
         // Compute grand product(s) and commitments.
+        let start = std::time::Instant::now();
+
         self.execute_grand_product_computation_round(transcript, proving_key, crs)?;
-
+        let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+        tracing::info!("execute_grand_product_computation_round took {duration_ms} ms");
         // Generate relation separators alphas for sumcheck/combiner computation
-        self.generate_alphas_round(transcript);
+        let start = std::time::Instant::now();
 
+        self.generate_alphas_round(transcript);
+        let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+        tracing::info!("generate_alphas_round took {duration_ms} ms");
         Ok(self.memory)
     }
 }

@@ -15,7 +15,7 @@ use mpc_core::protocols::{
     rep3::network::{IoContext, Rep3Network},
     shamir::{network::ShamirNetwork, ShamirPreprocessing, ShamirProtocol},
 };
-use std::marker::PhantomData;
+use std::{marker::PhantomData, time::Instant};
 use ultrahonk::prelude::{
     HonkProof, Transcript, TranscriptFieldType, TranscriptHasher, ZeroKnowledge,
 };
@@ -74,7 +74,10 @@ impl<
         let mut transcript = Transcript::<TranscriptFieldType, H>::new();
 
         let oink = CoOink::new(&mut self.driver, has_zk);
+        let start = Instant::now();
         let oink_result = oink.prove(&mut proving_key, &mut transcript, crs)?;
+        let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+        tracing::info!("Oink::prove took {duration_ms} ms");
 
         let circuit_size = proving_key.circuit_size;
 
@@ -84,7 +87,11 @@ impl<
             Self::generate_gate_challenges(&mut transcript);
 
         let decider = CoDecider::new(self.driver, memory, has_zk);
-        decider.prove(circuit_size, crs, transcript)
+        let start = Instant::now();
+        let result = decider.prove(circuit_size, crs, transcript);
+        let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+        tracing::info!("Decider::prove took {duration_ms} ms");
+        result
     }
 }
 

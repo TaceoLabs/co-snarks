@@ -9,7 +9,7 @@ use co_builder::{
     prelude::{HonkCurve, ProverCrs, Utils},
     HonkProofResult,
 };
-use std::marker::PhantomData;
+use std::{marker::PhantomData, time::Instant};
 use ultrahonk::prelude::{
     HonkProof, Transcript, TranscriptFieldType, TranscriptHasher, ZeroKnowledge,
 };
@@ -88,14 +88,18 @@ impl<
                     commitment_key,
                     &mut self.driver,
                 )?;
-
-            Ok((
-                self.sumcheck_prove_zk(transcript, circuit_size, &mut zk_sumcheck_data)?,
-                Some(zk_sumcheck_data),
-            ))
+            let start = Instant::now();
+            let result = self.sumcheck_prove_zk(transcript, circuit_size, &mut zk_sumcheck_data)?;
+            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+            tracing::info!("Sumcheck::prove took {duration_ms} ms");
+            Ok((result, Some(zk_sumcheck_data)))
         } else {
+            let start = Instant::now();
             // This is just Sumcheck.prove without ZK
-            Ok((self.sumcheck_prove(transcript, circuit_size)?, None))
+            let result = self.sumcheck_prove(transcript, circuit_size)?;
+            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+            tracing::info!("Sumcheck::prove took {duration_ms} ms");
+            Ok((result, None))
         }
     }
 
@@ -114,8 +118,11 @@ impl<
         zk_sumcheck_data: Option<SharedZKSumcheckData<T, P>>,
     ) -> HonkProofResult<()> {
         if self.has_zk == ZeroKnowledge::No {
+            let start = Instant::now();
             let prover_opening_claim =
                 self.shplemini_prove(transcript, circuit_size, crs, sumcheck_output, None)?;
+            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+            tracing::info!("Shplemini::prove took {duration_ms} ms");
             Self::compute_opening_proof(&mut self.driver, prover_opening_claim, transcript, crs)
         } else {
             let small_subgroup_ipa_prover = SharedSmallSubgroupIPAProver::<T, P>::new::<H>(
@@ -129,6 +136,7 @@ impl<
                 crs,
             )?;
             let witness_polynomials = small_subgroup_ipa_prover.into_witness_polynomials();
+            let start = Instant::now();
             let prover_opening_claim = self.shplemini_prove(
                 transcript,
                 circuit_size,
@@ -136,6 +144,8 @@ impl<
                 sumcheck_output,
                 Some(witness_polynomials),
             )?;
+            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+            tracing::info!("Shplemini::prove took {duration_ms} ms");
             Self::compute_opening_proof(&mut self.driver, prover_opening_claim, transcript, crs)
         }
     }

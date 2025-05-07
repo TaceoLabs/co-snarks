@@ -18,6 +18,7 @@ use co_builder::{
     HonkProofError,
 };
 use itertools::izip;
+use std::time::Instant;
 use ultrahonk::{
     prelude::{Transcript, TranscriptFieldType, TranscriptHasher, ZeroKnowledge},
     Utils, NUM_INTERLEAVING_CLAIMS, NUM_SMALL_IPA_EVALUATIONS,
@@ -512,6 +513,7 @@ impl<
 
         tracing::trace!("Shplemini prove");
         let log_circuit_size = Utils::get_msb32(circuit_size);
+        let start = Instant::now();
         let opening_claims = self.gemini_prove(
             sumcheck_output.challenges,
             log_circuit_size as usize,
@@ -519,6 +521,8 @@ impl<
             has_zk,
             transcript,
         )?;
+        let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+        tracing::info!("Shplemini::Gemini::prove took {duration_ms} ms");
 
         let libra_opening_claims = if has_zk == ZeroKnowledge::Yes {
             let gemini_r = opening_claims[0].opening_pair.challenge;
@@ -532,7 +536,7 @@ impl<
         } else {
             None
         };
-
+        let start = Instant::now();
         let batched_claim = self.shplonk_prove(
             opening_claims,
             crs,
@@ -540,6 +544,8 @@ impl<
             libra_opening_claims,
             virtual_log_n,
         )?;
+        let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+        tracing::info!("Shplemini::Shplonk::prove took {duration_ms} ms");
         Ok(batched_claim)
     }
     /**
