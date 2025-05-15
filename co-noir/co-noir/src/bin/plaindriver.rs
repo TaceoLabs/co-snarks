@@ -35,7 +35,7 @@ pub struct ConfigError(#[from] figment::error::Error);
 #[clap(rename_all = "UPPER")]
 pub enum TranscriptHash {
     /// The Poseidon2 sponge hash function
-    POSEIDON,
+    POSEIDON2,
     // The Keccak256 hash function
     KECCAK,
 }
@@ -221,7 +221,7 @@ fn main() -> color_eyre::Result<ExitCode> {
         std::fs::File::create(&out_path).context("while creating output file for vk")?,
     );
     let vk_u8 = match hasher {
-        TranscriptHash::POSEIDON => vk_barretenberg.to_buffer(),
+        TranscriptHash::POSEIDON2 => vk_barretenberg.to_buffer(),
         TranscriptHash::KECCAK => vk_barretenberg.to_buffer_keccak(),
     };
     out_file
@@ -231,12 +231,14 @@ fn main() -> color_eyre::Result<ExitCode> {
 
     // Create the proof
     let (proof, public_inputs) = match hasher {
-        TranscriptHash::POSEIDON => CoUltraHonk::<PlainUltraHonkDriver, _, Poseidon2Sponge>::prove(
-            proving_key,
-            &prover_crs,
-            has_zk,
-        )
-        .context("While creating proof")?,
+        TranscriptHash::POSEIDON2 => {
+            CoUltraHonk::<PlainUltraHonkDriver, _, Poseidon2Sponge>::prove(
+                proving_key,
+                &prover_crs,
+                has_zk,
+            )
+            .context("While creating proof")?
+        }
         TranscriptHash::KECCAK => CoUltraHonk::<PlainUltraHonkDriver, _, Keccak256>::prove(
             proving_key,
             &prover_crs,
@@ -271,7 +273,7 @@ fn main() -> color_eyre::Result<ExitCode> {
 
     // Verify the proof
     let is_valid = match hasher {
-        TranscriptHash::POSEIDON => {
+        TranscriptHash::POSEIDON2 => {
             UltraHonk::<_, Poseidon2Sponge>::verify(proof, &public_inputs, &verifying_key, has_zk)
                 .context("While verifying proof")?
         }

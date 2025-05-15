@@ -42,10 +42,10 @@ pub enum MPCProtocol {
 
 /// An enum representing the transcript hasher to use.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
-#[clap(rename_all = "UPPER")]
+#[clap(rename_all = "lower")]
 pub enum TranscriptHash {
     /// The Poseidon2 sponge hash function
-    POSEIDON,
+    POSEIDON2,
     // The Keccak256 hash function
     KECCAK,
 }
@@ -62,8 +62,8 @@ impl std::fmt::Display for MPCProtocol {
 impl std::fmt::Display for TranscriptHash {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TranscriptHash::POSEIDON => write!(f, "POSEIDON"),
-            TranscriptHash::KECCAK => write!(f, "KECCAK"),
+            TranscriptHash::POSEIDON2 => write!(f, "poseidon2"),
+            TranscriptHash::KECCAK => write!(f, "keccak"),
         }
     }
 }
@@ -1379,7 +1379,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             )?;
 
             match hasher {
-                TranscriptHash::POSEIDON => {
+                TranscriptHash::POSEIDON2 => {
                     // execute prover in MPC
                     let start = Instant::now();
                     let (proof, public_inputs, net) =
@@ -1428,7 +1428,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
 
             // execute prover in MPC
             match hasher {
-                TranscriptHash::POSEIDON => {
+                TranscriptHash::POSEIDON2 => {
                     let start = Instant::now();
                     let (proof, public_input, net) =
                         ShamirCoUltraHonk::<_, _, Poseidon2Sponge>::prove(
@@ -1608,7 +1608,7 @@ fn run_build_and_generate_proof(
 
             tracing::info!("Starting proof generation...");
             let (proof, public_input) = match hasher {
-                TranscriptHash::POSEIDON => {
+                TranscriptHash::POSEIDON2 => {
                     let start = Instant::now();
                     let (proof, public_input, net) =
                         Rep3CoUltraHonk::<_, _, Poseidon2Sponge>::prove(
@@ -1660,7 +1660,7 @@ fn run_build_and_generate_proof(
 
             tracing::info!("Starting proof generation...");
             let (proof, public_input) = match hasher {
-                TranscriptHash::POSEIDON => {
+                TranscriptHash::POSEIDON2 => {
                     let start = Instant::now();
                     let (proof, public_input, net) =
                         ShamirCoUltraHonk::<_, _, Poseidon2Sponge>::prove(
@@ -1835,7 +1835,7 @@ fn run_generate_vk(config: CreateVKConfig) -> color_eyre::Result<ExitCode> {
     }
 
     let vk_u8 = match hasher {
-        TranscriptHash::POSEIDON => vk.to_buffer(),
+        TranscriptHash::POSEIDON2 => vk.to_buffer(),
         TranscriptHash::KECCAK => vk.to_buffer_keccak(),
     };
     out_file
@@ -1879,7 +1879,7 @@ fn run_verify(config: VerifyConfig) -> color_eyre::Result<ExitCode> {
     tracing::info!("Starting proof verification...");
     let start = Instant::now();
     let res = match hasher {
-        TranscriptHash::POSEIDON => {
+        TranscriptHash::POSEIDON2 => {
             UltraHonk::<_, Poseidon2Sponge>::verify(proof, &public_inputs, &vk, has_zk)
                 .context("while verifying proof")?
         }
