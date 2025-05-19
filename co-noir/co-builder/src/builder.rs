@@ -2705,7 +2705,6 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         //         self.failure(msg);
         //     }
         // }
-        #[expect(clippy::map_entry)] // Required due to borrowing self twice otherwise
         if !self.range_lists.contains_key(&target_range) {
             let new_range_list = self.create_range_list(target_range);
             self.range_lists.insert(target_range, new_range_list);

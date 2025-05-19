@@ -450,16 +450,11 @@ pub struct VerifyConfig {
 /// Prefix for config env variables
 pub const CONFIG_ENV_PREFIX: &str = "COCIRCOM_";
 
-/// Error type for config parsing and merging
-#[derive(thiserror::Error, Debug)]
-#[error(transparent)]
-pub struct ConfigError(#[from] figment::error::Error);
-
 macro_rules! impl_config {
     ($cli: ty, $config: ty) => {
         impl $config {
             /// Parse config from file, env, cli
-            pub fn parse(cli: $cli) -> Result<Self, ConfigError> {
+            pub fn parse(cli: $cli) -> Result<Self, Box<figment::error::Error>> {
                 if let Some(path) = &cli.config {
                     Ok(Figment::new()
                         .merge(Toml::file(path))
@@ -487,7 +482,7 @@ impl_config!(VerifyCli, VerifyConfig);
 // manual one since this is a bit more complex
 impl GenerateWitnessConfig {
     /// Parse config from file, env, cli
-    pub fn parse(cli: GenerateWitnessCli) -> Result<Self, ConfigError> {
+    pub fn parse(cli: GenerateWitnessCli) -> Result<Self, Box<figment::error::Error>> {
         let simplification_level = cli.simplification_level;
         let mut config: GenerateWitnessConfig = if let Some(path) = &cli.config {
             Figment::new()

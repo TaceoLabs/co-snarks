@@ -101,14 +101,9 @@ pub struct Config {
 /// Prefix for config env variables
 pub const CONFIG_ENV_PREFIX: &str = "COCIRCOM_";
 
-/// Error type for config parsing and merging
-#[derive(thiserror::Error, Debug)]
-#[error(transparent)]
-pub struct ConfigError(#[from] figment::error::Error);
-
 impl Config {
     /// Parse config from file, env, cli
-    pub fn parse(cli: Cli) -> Result<Self, ConfigError> {
+    pub fn parse(cli: Cli) -> Result<Self, Box<figment::error::Error>> {
         if let Some(path) = &cli.config {
             Ok(Figment::new()
                 .merge(Toml::file(path))

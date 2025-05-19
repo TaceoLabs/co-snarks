@@ -72,8 +72,7 @@ impl<R, W, C> Channel<R, W, C> {
         if let Some(x) = read_conn.next().await {
             match x {
                 Ok(_) => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::Other,
+                    return Err(io::Error::other(
                         "Unexpected data on read channel when closing connections",
                     ));
                 }

@@ -106,7 +106,7 @@ pub const CONFIG_ENV_PREFIX: &str = "CONOIR_";
 
 impl Config {
     /// Parse config from file, env, cli
-    pub fn parse(cli: Cli) -> Result<Self, ConfigError> {
+    pub fn parse(cli: Cli) -> Result<Self, Box<figment::error::Error>> {
         if let Some(path) = &cli.config {
             Ok(Figment::new()
                 .merge(Toml::file(path))

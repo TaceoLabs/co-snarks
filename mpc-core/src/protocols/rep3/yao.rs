@@ -118,10 +118,7 @@ impl GCUtils {
     }
 
     pub(crate) fn garbled_circuits_error<G, T>(input: Result<T, G>) -> IoResult<T> {
-        input.or(Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "Garbled Circuit failed",
-        )))
+        input.or(Err(std::io::Error::other("Garbled Circuit failed")))
     }
 
     pub(crate) fn collapse_bundle_to_lsb_bits_as_biguint(input: BinaryBundle<WireMod2>) -> BigUint {
