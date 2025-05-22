@@ -434,7 +434,7 @@ pub fn share_biguint<F: PrimeField, R: Rng + CryptoRng>(
     rng: &mut R,
 ) -> [Rep3BigUintShare<F>; 3] {
     let val: BigUint = val.into();
-    let limbsize = F::MODULUS_BIT_SIZE.div_ceil(8);
+    let limbsize = F::MODULUS_BIT_SIZE.div_ceil(32);
     let mask = (BigUint::from(1u32) << F::MODULUS_BIT_SIZE) - BigUint::one();
     let a = BigUint::new((0..limbsize).map(|_| rng.gen()).collect()) & &mask;
     let b = BigUint::new((0..limbsize).map(|_| rng.gen()).collect()) & mask;
