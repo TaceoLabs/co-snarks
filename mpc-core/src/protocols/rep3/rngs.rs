@@ -188,7 +188,7 @@ impl Rep3Rand {
 
     /// Generate two random [`BigUint`]s with given `bitlen`
     pub fn random_biguint(&mut self, bitlen: usize) -> (BigUint, BigUint) {
-        let limbsize = bitlen.div_ceil(8);
+        let limbsize = bitlen.div_ceil(32);
         let a = BigUint::new((0..limbsize).map(|_| self.rng1.gen()).collect());
         let b = BigUint::new((0..limbsize).map(|_| self.rng2.gen()).collect());
         let mask = (BigUint::from(1u32) << bitlen) - BigUint::one();
@@ -197,7 +197,7 @@ impl Rep3Rand {
 
     /// Generate a random [`BigUint`] with given `bitlen` from rng1
     pub fn random_biguint_rng1(&mut self, bitlen: usize) -> BigUint {
-        let limbsize = bitlen.div_ceil(8);
+        let limbsize = bitlen.div_ceil(32);
         let val = BigUint::new((0..limbsize).map(|_| self.rng1.gen()).collect());
         let mask = (BigUint::from(1u32) << bitlen) - BigUint::one();
         val & &mask
@@ -205,7 +205,7 @@ impl Rep3Rand {
 
     /// Generate a random [`BigUint`] with given `bitlen` from rng2
     pub fn random_biguint_rng2(&mut self, bitlen: usize) -> BigUint {
-        let limbsize = bitlen.div_ceil(8);
+        let limbsize = bitlen.div_ceil(32);
         let val = BigUint::new((0..limbsize).map(|_| self.rng2.gen()).collect());
         let mask = (BigUint::from(1u32) << bitlen) - BigUint::one();
         val & &mask
