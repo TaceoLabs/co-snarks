@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.6.0](https://github.com/TaceoLabs/co-snarks/compare/co-ultrahonk-v0.5.0...co-ultrahonk-v0.6.0) (2025-05-22)
+
+
+### ⚠ BREAKING CHANGES
+
+* bump to Barretenberg 0.86.0 ([#373](https://github.com/TaceoLabs/co-snarks/issues/373))
+* rename io_mul_vec to reshare_vec
+* move MPC types and share/combine into new mpc-types crate, rename co-circom-snarks to co-circom-types
+
+### Features
+
+* bump to Barretenberg 0.86.0 ([#373](https://github.com/TaceoLabs/co-snarks/issues/373)) ([55f4ca3](https://github.com/TaceoLabs/co-snarks/commit/55f4ca3211a944cb755e541cfabc4519697ce665))
+
+
+### Code Refactoring
+
+* move MPC types and share/combine into new mpc-types crate, rename co-circom-snarks to co-circom-types ([31b773a](https://github.com/TaceoLabs/co-snarks/commit/31b773aa71a5e872c25754de7805b02647b65688))
+* rename io_mul_vec to reshare_vec ([7067486](https://github.com/TaceoLabs/co-snarks/commit/70674869e91950a59b68272127781ecf56d77094))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * co-acvm bumped from 0.6.0 to 0.7.0
+    * co-builder bumped from 0.4.0 to 0.5.0
+    * mpc-core bumped from 0.9.0 to 0.10.0
+    * ultrahonk bumped from 0.5.0 to 0.6.0
+
 ## [0.5.0](https://github.com/TaceoLabs/co-snarks/compare/co-ultrahonk-v0.4.0...co-ultrahonk-v0.5.0) (2025-04-03)
 
 

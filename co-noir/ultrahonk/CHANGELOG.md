@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.6.0](https://github.com/TaceoLabs/co-snarks/compare/ultrahonk-v0.5.0...ultrahonk-v0.6.0) (2025-05-22)
+
+
+### ⚠ BREAKING CHANGES
+
+* bump to Barretenberg 0.86.0 ([#373](https://github.com/TaceoLabs/co-snarks/issues/373))
+
+### Features
+
+* bump to Barretenberg 0.86.0 ([#373](https://github.com/TaceoLabs/co-snarks/issues/373)) ([55f4ca3](https://github.com/TaceoLabs/co-snarks/commit/55f4ca3211a944cb755e541cfabc4519697ce665))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * co-builder bumped from 0.4.0 to 0.5.0
+    * mpc-core bumped from 0.9.0 to 0.10.0
+
 ## [0.5.0](https://github.com/TaceoLabs/co-snarks/compare/ultrahonk-v0.4.0...ultrahonk-v0.5.0) (2025-04-03)
 
 
