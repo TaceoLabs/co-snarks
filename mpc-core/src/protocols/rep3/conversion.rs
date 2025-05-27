@@ -100,7 +100,7 @@ pub fn a2b_many<F: PrimeField, N: Rep3Network>(
     let mut x2 = vec![BinaryShare::<F>::zero_share(); x.len()];
 
     let mut r_vec = Vec::with_capacity(x.len());
-    let mut r2_vec = Vec::with_capacity(x.len());
+    // let mut r2_vec = Vec::with_capacity(x.len());
     for _ in 0..x.len() {
         let (mut r, r2) = io_context
             .rngs
@@ -108,7 +108,7 @@ pub fn a2b_many<F: PrimeField, N: Rep3Network>(
             .random_biguint(F::MODULUS_BIT_SIZE as usize);
         r ^= &r2;
         r_vec.push(r);
-        r2_vec.push(r2);
+        // r2_vec.push(r2);
     }
 
     let x01_a = match io_context.id {
@@ -214,6 +214,93 @@ pub fn b2a<F: PrimeField, N: Rep3Network>(
         }
         PartyID::ID2 => {
             io_context.network.send_next(z.b)?;
+        }
+    }
+    Ok(res)
+}
+
+/// TODO
+pub fn b2a_many<F: PrimeField, N: Rep3Network>(
+    x: &[Rep3BigUintShare<F>],
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
+    // let mut y = vec![Rep3BigUintShare::zero_share(); x.len()];
+    let mut res = vec![Rep3PrimeFieldShare::zero_share(); x.len()];
+
+    let mut r_vec = Vec::with_capacity(x.len());
+    for _ in 0..x.len() {
+        let (mut r, r2) = io_context
+            .rngs
+            .rand
+            .random_biguint(F::MODULUS_BIT_SIZE as usize);
+        r ^= r2;
+        r_vec.push(r);
+    }
+    match io_context.id {
+        PartyID::ID0 => {
+            for res in res.iter_mut() {
+                let k3 = io_context.rngs.bitcomp2.random_fes_3keys::<F>();
+
+                res.b = (k3.0 + k3.1 + k3.2).neg();
+            }
+        }
+        PartyID::ID1 => {
+            for res in res.iter_mut() {
+                let k2 = io_context.rngs.bitcomp1.random_fes_3keys::<F>();
+
+                res.a = (k2.0 + k2.1 + k2.2).neg();
+            }
+        }
+        PartyID::ID2 => {
+            for (res, y) in res.iter_mut().zip(r_vec.iter_mut()) {
+                let k2 = io_context.rngs.bitcomp1.random_fes_3keys::<F>();
+                let k3 = io_context.rngs.bitcomp2.random_fes_3keys::<F>();
+
+                let k2_comp = k2.0 + k2.1 + k2.2;
+                let k3_comp = k3.0 + k3.1 + k3.2;
+                let val: BigUint = (k2_comp + k3_comp).into();
+                *y ^= val;
+                res.a = k3_comp.neg();
+                res.b = k2_comp.neg();
+            }
+        }
+    }
+
+    // reshare y
+    let y_a = r_vec;
+    io_context.network.send_next_many(&y_a)?;
+    let local_b = io_context.network.recv_prev_many()?;
+
+    let y = izip!(y_a, local_b)
+        .map(|(a, b)| BinaryShare::new(a, b))
+        .collect_vec();
+
+    let z = detail::low_depth_binary_add_mod_p_many::<F, N>(
+        x,
+        &y,
+        io_context,
+        F::MODULUS_BIT_SIZE as usize,
+    )?;
+
+    match io_context.id {
+        PartyID::ID0 => {
+            let z_b = z.iter().cloned().map(|z| z.b).collect::<Vec<_>>();
+            io_context.network.send_next_many(&z_b)?;
+            let rcv: Vec<BigUint> = io_context.network.recv_prev_many()?;
+
+            for (res, z, rcv) in izip!(res.iter_mut(), z, rcv.iter()) {
+                res.a = (z.a ^ z.b ^ rcv).into();
+            }
+        }
+        PartyID::ID1 => {
+            let rcv: Vec<BigUint> = io_context.network.recv_prev_many()?;
+            for (res, z, rcv) in izip!(res.iter_mut(), z, rcv.iter()) {
+                res.b = (z.a ^ z.b ^ rcv).into();
+            }
+        }
+        PartyID::ID2 => {
+            let z_b = z.into_iter().map(|z| z.b).collect::<Vec<_>>();
+            io_context.network.send_next_many(&z_b)?;
         }
     }
     Ok(res)
