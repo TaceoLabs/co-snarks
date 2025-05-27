@@ -91,7 +91,7 @@ impl MpcNetworkHandler {
             // we dont set this to timeout, because it is the timeout for a idle connection
             // maybe we want to make this configurable too?
             transport_config.max_idle_timeout(Some(
-                IdleTimeout::try_from(Duration::from_secs(60)).unwrap(),
+                IdleTimeout::try_from(Duration::from_secs(3600)).unwrap(),
             ));
             // atm clients send keepalive packets
             transport_config.keep_alive_interval(Some(Duration::from_secs(1)));
