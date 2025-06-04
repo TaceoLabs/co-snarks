@@ -175,7 +175,7 @@ impl<F: PrimeField> BigField<F> {
         // If we wish to continue working with this element with lazy reductions - i.e. not moding out again after each
         // addition we apply a more limited range - 2^s for smallest s such that p<2^s (this is the case can_overflow ==
         // false)
-        let num_last_limb_bits = Self::NUM_LAST_LIMB_BITS; //TODO Florin
+        let num_last_limb_bits = Self::NUM_LAST_LIMB_BITS;
 
         // We create the high limb values similar to the low limb ones above
         let num_high_limb_bits = Self::NUM_LIMB_BITS + num_last_limb_bits;

@@ -32,7 +32,7 @@ pub struct ConfigError(#[from] figment::error::Error);
 
 /// An enum representing the transcript hasher to use.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
-#[clap(rename_all = "UPPER")]
+#[clap(rename_all = "lower")]
 pub enum TranscriptHash {
     /// The Poseidon2 sponge hash function
     POSEIDON2,

@@ -187,6 +187,13 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     /// Checks if two shared values are equal. The result is a shared value that has value 1 if the two shared values are equal and 0 otherwise.
     fn equal(&mut self, a: &Self::AcvmType, b: &Self::AcvmType) -> std::io::Result<Self::AcvmType>;
 
+    /// Checks if two slices of shared values are equal element-wise. The result is a Vec of shared values that have value 1 if the two corresponding shared values are equal and 0 otherwise.
+    fn equal_many(
+        &mut self,
+        a: &[Self::AcvmType],
+        b: &[Self::AcvmType],
+    ) -> std::io::Result<Vec<Self::AcvmType>>;
+
     // TODO do we want this here?
     fn open_many(&mut self, a: &[Self::ArithmeticShare]) -> io::Result<Vec<F>>;
 
@@ -341,6 +348,36 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         Vec<Self::AcvmType>,
     )>;
 
+    /// Slices input1 and input2 according to base_bits and then again according to slices, which are output as arithmetic shares of the binary representation. These get then multiplied by base_powers.
+    #[expect(clippy::type_complexity)]
+    fn slice_and_get_aes_sparse_normalization_values_from_key(
+        &mut self,
+        input1: Self::ArithmeticShare,
+        input2: Self::ArithmeticShare,
+        base_bits: &[u64],
+        base: u64,
+    ) -> std::io::Result<(
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+    )>;
+
+    /// Slices input1 and input2 according to base_bits and then again according to slices. These then are used as inputs for the S-Box lookups, which then get further modified.
+    #[expect(clippy::type_complexity)]
+    fn slice_and_get_aes_sbox_values_from_key(
+        &mut self,
+        input1: Self::ArithmeticShare,
+        input2: Self::ArithmeticShare,
+        base_bits: &[u64],
+        base: u64,
+        sbox: &[u8],
+    ) -> std::io::Result<(
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+        Vec<Self::AcvmType>,
+    )>;
+
     /// Gets the overflow bits as used in the add_normalize function of the SHA256 compression
     fn sha256_get_overflow_bit(
         &mut self,
@@ -454,4 +491,21 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         input2_y: Self::AcvmType,
         input2_infinite: Self::AcvmType,
     ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)>;
+
+    /// Computes an AES128 encryption of the given scalars using the given key and iv.
+    fn aes128_encrypt(
+        &mut self,
+        scalars: &[Self::AcvmType],
+        iv: Vec<Self::AcvmType>,
+        key: Vec<Self::AcvmType>,
+    ) -> io::Result<Vec<Self::AcvmType>>;
+
+    /// Slices the inputs and then puts these together to computes the accumulator for conversion from sparse bytes in AES.
+    fn accumulate_from_sparse_bytes(
+        &mut self,
+        inputs: &[Self::AcvmType],
+        base: u64,
+        input_bitsize: usize,
+        output_bitsize: usize,
+    ) -> io::Result<Self::AcvmType>;
 }
