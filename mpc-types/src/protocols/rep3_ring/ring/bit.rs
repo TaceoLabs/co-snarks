@@ -5,9 +5,12 @@
 use num_traits::{AsPrimitive, One, WrappingAdd, WrappingMul, WrappingNeg, WrappingSub, Zero};
 use rand::{distributions::Standard, prelude::Distribution, Rng};
 use serde::{Deserialize, Serialize};
-use std::ops::{
-    Add, BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Mul, Neg, Not, Shl, Shr,
-    Sub,
+use std::{
+    mem::ManuallyDrop,
+    ops::{
+        Add, BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Mul, Neg, Not, Shl,
+        Shr, Sub,
+    },
 };
 
 /// Bit is a sharable wrapper for a boolean value
@@ -34,6 +37,21 @@ impl Bit {
     /// Unwraps a Bit into a bool
     pub fn convert(self) -> bool {
         self.0
+    }
+
+    /// Transform a slice of Bit into a slice of bool
+    // Safe because Bit has repr(transparent)
+    pub fn convert_slice_rev(vec: &[bool]) -> &[Self] {
+        // SAFETY: Bit has repr(transparent)
+        unsafe { &*(vec as *const [bool] as *const [Self]) }
+    }
+
+    /// Transfroms a vector of bool into a vector of Bits
+    // Safe because Bit has repr(transparent)
+    pub fn convert_vec_rev(vec: Vec<bool>) -> Vec<Self> {
+        let me = ManuallyDrop::new(vec);
+        // SAFETY: Bit has repr(transparent)
+        unsafe { Vec::from_raw_parts(me.as_ptr() as *mut Self, me.len(), me.capacity()) }
     }
 }
 
@@ -381,5 +399,34 @@ impl AsRef<Bit> for Bit {
 impl From<Bit> for u128 {
     fn from(val: Bit) -> Self {
         u128::from(val.0)
+    }
+}
+
+#[cfg(test)]
+mod unsafe_test {
+    use super::*;
+    use rand::{Rng, SeedableRng};
+    use rand_chacha::ChaCha12Rng;
+
+    const ELEMENTS: usize = 100;
+
+    #[test]
+    fn conversion_test() {
+        let mut rng = ChaCha12Rng::from_entropy();
+        let t_vec: Vec<bool> = (0..ELEMENTS).map(|_| rng.gen()).collect();
+
+        // Convert vec<bool> to vec<Bit>
+        let t_conv = Bit::convert_vec_rev(t_vec.to_owned());
+        assert_eq!(t_conv.len(), t_vec.len());
+        for (a, b) in t_conv.iter().zip(t_vec.iter()) {
+            assert_eq!(a.0, *b)
+        }
+
+        // Convert slice vec<bool> to vec<Bit>
+        let t_conv = Bit::convert_slice_rev(&t_vec);
+        assert_eq!(t_conv.len(), t_vec.len());
+        for (a, b) in t_conv.iter().zip(t_vec.iter()) {
+            assert_eq!(a.0, *b)
+        }
     }
 }
