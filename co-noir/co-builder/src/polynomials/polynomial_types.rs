@@ -159,6 +159,102 @@ impl<T: Default> ProverWitnessEntities<T> {
     pub fn lookup_read_counts_and_tags_mut(&mut self) -> &mut [T] {
         &mut self.elements[Self::LOOKUP_READ_COUNTS..Self::LOOKUP_READ_TAGS + 1]
     }
+    pub fn calldata(&self) -> &T {
+        todo!("calldata is not implemented in the current flavour")
+    }
+    pub fn calldata_mut(&mut self) -> &mut T {
+        todo!("calldata is not implemented in the current flavour")
+    }
+    pub fn secondary_calldata(&self) -> &T {
+        todo!("secondary calldata is not implemented in the current flavour")
+    }
+    pub fn secondary_calldata_mut(&mut self) -> &mut T {
+        todo!("secondary calldata is not implemented in the current flavour")
+    }
+    pub fn return_data(&self) -> &T {
+        todo!("return data is not implemented in the current flavour")
+    }
+    pub fn return_data_mut(&mut self) -> &mut T {
+        todo!("return data is not implemented in the current flavour")
+    }
+    pub fn ecc_op_wire_1(&self) -> &T {
+        todo!("ecc op wire 1 is not implemented in the current flavour")
+    }
+    pub fn ecc_op_wire_1_mut(&mut self) -> &mut T {
+        todo!("ecc op wire 1 is not implemented in the current flavour")
+    }
+    pub fn ecc_op_wire_2(&self) -> &T {
+        todo!("ecc op wire 2 is not implemented in the current flavour")
+    }
+    pub fn ecc_op_wire_2_mut(&mut self) -> &mut T {
+        todo!("ecc op wire 2 is not implemented in the current flavour")
+    }
+    pub fn ecc_op_wire_3(&self) -> &T {
+        todo!("ecc op wire 3 is not implemented in the current flavour")
+    }
+    pub fn ecc_op_wire_3_mut(&mut self) -> &mut T {
+        todo!("ecc op wire 3 is not implemented in the current flavour")
+    }
+    pub fn ecc_op_wire_4(&self) -> &T {
+        todo!("ecc op wire 4 is not implemented in the current flavour")
+    }
+    pub fn ecc_op_wire_4_mut(&mut self) -> &mut T {
+        todo!("ecc op wire 4 is not implemented in the current flavour")
+    }
+    pub fn calldata_read_counts(&self) -> &T {
+        todo!("calldata read counts is not implemented in the current flavour")
+    }
+    pub fn calldata_read_counts_mut(&mut self) -> &mut T {
+        todo!("calldata read counts is not implemented in the current flavour")
+    }
+    pub fn calldata_read_tags(&self) -> &T {
+        todo!("calldata read tags is not implemented in the current flavour")
+    }
+    pub fn calldata_read_tags_mut(&mut self) -> &mut T {
+        todo!("calldata read tags is not implemented in the current flavour")
+    }
+    pub fn calldata_inverses(&self) -> &T {
+        todo!("calldata inverses is not implemented in the current flavour")
+    }
+    pub fn calldata_inverses_mut(&mut self) -> &mut T {
+        todo!("calldata inverses is not implemented in the current flavour")
+    }
+    pub fn secondary_calldata_read_counts(&self) -> &T {
+        todo!("secondary calldata read counts is not implemented in the current flavour")
+    }
+    pub fn secondary_calldata_read_counts_mut(&mut self) -> &mut T {
+        todo!("secondary calldata read counts is not implemented in the current flavour")
+    }
+    pub fn secondary_calldata_read_tags(&self) -> &T {
+        todo!("secondary calldata read tags is not implemented in the current flavour")
+    }
+    pub fn secondary_calldata_read_tags_mut(&mut self) -> &mut T {
+        todo!("secondary calldata read tags is not implemented in the current flavour")
+    }
+    pub fn secondary_calldata_inverses(&self) -> &T {
+        todo!("secondary calldata inverses is not implemented in the current flavour")
+    }
+    pub fn secondary_calldata_inverses_mut(&mut self) -> &mut T {
+        todo!("secondary calldata inverses is not implemented in the current flavour")
+    }
+    pub fn return_data_read_counts(&self) -> &T {
+        todo!("return data read counts is not implemented in the current flavour")
+    }
+    pub fn return_data_read_counts_mut(&mut self) -> &mut T {
+        todo!("return data read counts is not implemented in the current flavour")
+    }
+    pub fn return_data_read_tags(&self) -> &T {
+        todo!("return data read tags is not implemented in the current flavour")
+    }
+    pub fn return_data_read_tags_mut(&mut self) -> &mut T {
+        todo!("return data read tags is not implemented in the current flavour")
+    }
+    pub fn return_data_inverses(&self) -> &T {
+        todo!("return data inverses is not implemented in the current flavour")
+    }
+    pub fn return_data_inverses_mut(&mut self) -> &mut T {
+        todo!("return data inverses is not implemented in the current flavour")
+    }
 }
 
 impl<T: Default> PrecomputedEntities<T> {
@@ -269,6 +365,10 @@ impl<T: Default> PrecomputedEntities<T> {
         &self.elements[Self::Q_4]
     }
 
+    pub fn q_busread(&self) -> &T {
+        todo!("q_busread is not implemented in the current flavour")
+    }
+
     pub fn q_arith(&self) -> &T {
         &self.elements[Self::Q_ARITH]
     }
@@ -353,12 +453,28 @@ impl<T: Default> PrecomputedEntities<T> {
         &self.elements[Self::LAGRANGE_LAST]
     }
 
+    pub fn lagrange_ecc_op(&self) -> &T {
+        todo!("lagrange ecc op is not implemented in the current flavour")
+    }
+
+    pub fn databus_id(&self) -> &T {
+        todo!("databus id is not implemented in the current flavour")
+    }
+
     pub fn lagrange_first_mut(&mut self) -> &mut T {
         &mut self.elements[Self::LAGRANGE_FIRST]
     }
 
     pub fn lagrange_last_mut(&mut self) -> &mut T {
         &mut self.elements[Self::LAGRANGE_LAST]
+    }
+
+    pub fn lagrange_ecc_op_mut(&mut self) -> &mut T {
+        todo!("lagrange ecc op is not implemented in the current flavour")
+    }
+
+    pub fn databus_id_mut(&mut self) -> &mut T {
+        todo!("databus id is not implemented in the current flavour")
     }
 
     pub fn q_m_mut(&mut self) -> &mut T {

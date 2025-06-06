@@ -1,0 +1,258 @@
+use super::Relation;
+use crate::decider::{
+    types::{
+        ClaimedEvaluations, ProverUnivariates, RelationParameters, MAX_PARTIAL_RELATION_LENGTH,
+    },
+    univariate::Univariate,
+};
+use ark_ff::PrimeField;
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BusData {
+    BusIdx0,
+    BusIdx1,
+    BusIdx2,
+}
+
+impl From<usize> for BusData {
+    fn from(idx: usize) -> Self {
+        match idx {
+            0 => BusData::BusIdx0,
+            1 => BusData::BusIdx1,
+            2 => BusData::BusIdx2,
+            _ => panic!("Invalid bus index: {}", idx),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub(crate) struct DataBusLookupRelationAcc<F: PrimeField> {
+    pub(crate) r0: Univariate<F, 5>,
+    pub(crate) r1: Univariate<F, 5>,
+    pub(crate) r2: Univariate<F, 5>,
+    pub(crate) r3: Univariate<F, 5>,
+    pub(crate) r4: Univariate<F, 5>,
+    pub(crate) r5: Univariate<F, 5>,
+}
+
+pub(crate) struct DataBusLookupRelation {}
+impl DataBusLookupRelation {
+    pub(crate) const NUM_RELATIONS: usize = 6;
+    const NUM_BUS_COLUMNS: usize = 3; // calldata, return data
+    fn values<F: PrimeField>(
+        bus_idx: BusData,
+        input: &ProverUnivariates<F>,
+    ) -> &Univariate<F, MAX_PARTIAL_RELATION_LENGTH> {
+        match bus_idx {
+            BusData::BusIdx0 => input.witness.calldata(),
+            BusData::BusIdx1 => input.witness.secondary_calldata(),
+            BusData::BusIdx2 => input.witness.return_data(),
+        }
+    }
+    fn selector<F: PrimeField>(
+        bus_idx: BusData,
+        input: &ProverUnivariates<F>,
+    ) -> &Univariate<F, MAX_PARTIAL_RELATION_LENGTH> {
+        match bus_idx {
+            BusData::BusIdx0 => input.precomputed.q_l(),
+            BusData::BusIdx1 => input.precomputed.q_r(),
+            BusData::BusIdx2 => input.precomputed.q_o(),
+        }
+    }
+    fn inverses<F: PrimeField>(
+        bus_idx: BusData,
+        input: &ProverUnivariates<F>,
+    ) -> &Univariate<F, MAX_PARTIAL_RELATION_LENGTH> {
+        match bus_idx {
+            BusData::BusIdx0 => input.witness.calldata_inverses(),
+            BusData::BusIdx1 => input.witness.secondary_calldata_inverses(),
+            BusData::BusIdx2 => input.witness.return_data_inverses(),
+        }
+    }
+    fn read_counts<F: PrimeField>(
+        bus_idx: BusData,
+        input: &ProverUnivariates<F>,
+    ) -> &Univariate<F, MAX_PARTIAL_RELATION_LENGTH> {
+        match bus_idx {
+            BusData::BusIdx0 => input.witness.calldata_read_counts(),
+            BusData::BusIdx1 => input.witness.secondary_calldata_read_counts(),
+            BusData::BusIdx2 => input.witness.return_data_read_counts(),
+        }
+    }
+    fn read_tags<F: PrimeField>(
+        bus_idx: BusData,
+        input: &ProverUnivariates<F>,
+    ) -> &Univariate<F, MAX_PARTIAL_RELATION_LENGTH> {
+        match bus_idx {
+            BusData::BusIdx0 => input.witness.calldata_read_tags(),
+            BusData::BusIdx1 => input.witness.secondary_calldata_read_tags(),
+            BusData::BusIdx2 => input.witness.return_data_read_tags(),
+        }
+    }
+
+    fn compute_inverse_exists<F: PrimeField>(
+        bus_idx: BusData,
+        input: &ProverUnivariates<F>,
+    ) -> Univariate<F, MAX_PARTIAL_RELATION_LENGTH> {
+        let is_read_gate = DataBusLookupRelation::get_read_selector(bus_idx, input);
+        let read_tag = DataBusLookupRelation::read_tags(bus_idx, input).clone();
+        is_read_gate.clone() + read_tag.clone() - (is_read_gate * read_tag)
+    }
+
+    fn get_read_selector<F: PrimeField>(
+        bus_idx: BusData,
+        input: &ProverUnivariates<F>,
+    ) -> Univariate<F, MAX_PARTIAL_RELATION_LENGTH> {
+        let q_busread = input.precomputed.q_busread().clone();
+        let column_selector = DataBusLookupRelation::selector(bus_idx, input).clone();
+        q_busread * column_selector
+    }
+
+    fn compute_write_term<F: PrimeField>(
+        bus_idx: BusData,
+        input: &ProverUnivariates<F>,
+        params: &RelationParameters<F>,
+    ) -> Univariate<F, MAX_PARTIAL_RELATION_LENGTH> {
+        let value = DataBusLookupRelation::values(bus_idx, input).clone();
+        let gamma = params.gamma;
+        let beta = params.beta;
+
+        // value_i + idx_i * beta + gamma
+        value + &(F::from(bus_idx as u64) * beta + gamma)
+    }
+
+    fn compute_read_term<F: PrimeField>(
+        input: &ProverUnivariates<F>,
+        params: &RelationParameters<F>,
+    ) -> Univariate<F, MAX_PARTIAL_RELATION_LENGTH> {
+        // Bus value stored in w_l, index into bus column stored in w_r
+        let w_1 = input.witness.w_l().clone();
+        let w_2 = input.witness.w_r().clone();
+        let gamma = params.gamma;
+        let beta = params.beta;
+
+        // value + index * beta + gamma
+        w_2 * beta + w_1 + &gamma
+    }
+
+    fn accumulate_subrelation_contributions<F: PrimeField, const BUS_IDX: usize>(
+        univariate_accumulator: &mut DataBusLookupRelationAcc<F>,
+        input: &ProverUnivariates<F>,
+        params: &RelationParameters<F>,
+        scaling_factor: &F,
+        bus_idx: BusData,
+    ) {
+        let inverses = Self::inverses(bus_idx, input); // Degree 1
+        let read_counts_m = Self::read_counts(bus_idx, input); // Degree 1
+        let read_term = Self::compute_read_term(input, params); // Degree 1 (2)
+        let write_term = Self::compute_write_term(bus_idx, input, params); // Degree 1 (2)
+        let inverse_exists = Self::compute_inverse_exists(bus_idx, input); // Degree 2
+        let read_selector = Self::get_read_selector(bus_idx, input); // Degree 2
+
+        // Determine which pair of subrelations to update based on which bus column is being read
+        let subrel_idx_1: u32 = 2u32 * (bus_idx as u32);
+        let subrel_idx_2: u32 = 2u32 * (bus_idx as u32) + 1u32;
+
+        // Establish the correctness of the polynomial of inverses I. Note: inverses is computed so that the value
+        // is 0 if !inverse_exists. Degree 3 (5)
+        let tmp =
+            (read_term.clone() * write_term.clone() * inverses - inverse_exists) * scaling_factor;
+        match subrel_idx_1 {
+            0 => {
+                for i in 0..univariate_accumulator.r0.evaluations.len() {
+                    univariate_accumulator.r0.evaluations[i] += tmp.evaluations[i];
+                }
+            }
+            2 => {
+                for i in 0..univariate_accumulator.r2.evaluations.len() {
+                    univariate_accumulator.r2.evaluations[i] += tmp.evaluations[i];
+                }
+            }
+            4 => {
+                for i in 0..univariate_accumulator.r4.evaluations.len() {
+                    univariate_accumulator.r4.evaluations[i] += tmp.evaluations[i];
+                }
+            }
+            _ => panic!("unexpected subrel_idx_1"),
+        }
+
+        // Establish validity of the read. Note: no scaling factor here since this constraint is enforced across the
+        // entire trace, not on a per-row basis.
+        let mut tmp = read_selector * write_term;
+        tmp -= read_counts_m.to_owned() * read_term;
+        tmp *= inverses;
+        match subrel_idx_2 {
+            1 => {
+                for i in 0..univariate_accumulator.r1.evaluations.len() {
+                    univariate_accumulator.r1.evaluations[i] += tmp.evaluations[i];
+                }
+            }
+            3 => {
+                for i in 0..univariate_accumulator.r3.evaluations.len() {
+                    univariate_accumulator.r3.evaluations[i] += tmp.evaluations[i];
+                }
+            }
+            5 => {
+                for i in 0..univariate_accumulator.r5.evaluations.len() {
+                    univariate_accumulator.r5.evaluations[i] += tmp.evaluations[i];
+                }
+            }
+            _ => panic!("unexpected subrel_idx_2"),
+        } // Deg 4 (5)
+    }
+}
+
+impl<F: PrimeField> Relation<F> for DataBusLookupRelation {
+    type Acc = DataBusLookupRelationAcc<F>;
+    type VerifyAcc = ();
+
+    const SKIPPABLE: bool = true;
+
+    fn skip(input: &ProverUnivariates<F>) -> bool {
+        // Ensure the input does not contain a read gate or data that is being read
+        todo!("return in.q_busread.is_zero() && in.calldata_read_counts.is_zero() &&
+               in.secondary_calldata_read_counts.is_zero() && in.return_data_read_counts.is_zero();")
+    }
+
+    /**
+     * @brief Expression for the generalized permutation sort gate.
+     * @details The relation is defined as C(in(X)...) =
+     *    q_delta_range * \sum{ i = [0, 3]} \alpha^i D_i(D_i - 1)(D_i - 2)(D_i - 3)
+     *      where
+     *      D_0 = w_2 - w_1
+     *      D_1 = w_3 - w_2
+     *      D_2 = w_4 - w_3
+     *      D_3 = w_1_shift - w_4
+     *
+     * @param evals transformed to `evals + C(in(X)...)*scaling_factor`
+     * @param in an std::array containing the fully extended Univariate edges.
+     * @param parameters contains beta, gamma, and public_input_delta, ....
+     * @param scaling_factor optional term to scale the evaluation before adding to evals.
+     */
+    fn accumulate(
+        univariate_accumulator: &mut Self::Acc,
+        input: &ProverUnivariates<F>,
+        _relation_parameters: &RelationParameters<F>,
+        scaling_factor: &F,
+    ) {
+        tracing::trace!("Accumulate DataBusLookupRelation");
+        // Accumulate the subrelation contributions for each column of the databus
+        for bus_idx in 0..Self::NUM_BUS_COLUMNS {
+            DataBusLookupRelation::accumulate_subrelation_contributions::<F, 0>(
+                univariate_accumulator,
+                input,
+                _relation_parameters,
+                scaling_factor,
+                BusData::from(bus_idx),
+            );
+        }
+    }
+
+    fn verify_accumulate(
+        _univariate_accumulator: &mut Self::VerifyAcc,
+        _input: &ClaimedEvaluations<F>,
+        _relation_parameters: &RelationParameters<F>,
+        _scaling_factor: &F,
+    ) {
+        todo!("implement verify_accumulate for DataBusLookupRelation");
+    }
+}

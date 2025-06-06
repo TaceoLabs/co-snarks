@@ -1,10 +1,12 @@
 #![warn(clippy::iter_over_hash_type)]
 
 pub(crate) mod decider;
+pub(crate) mod flavours;
 pub(crate) mod keccak_hash;
 pub(crate) mod oink;
 pub mod prelude;
 pub(crate) mod prover;
+pub(crate) mod prover_flavour;
 pub(crate) mod sponge_hasher;
 mod transcript;
 pub(crate) mod types;

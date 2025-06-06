@@ -44,7 +44,7 @@ impl<P: Pairing> ProvingKey<P> {
 
         assert!(
             circuit.circuit_finalized,
-            "the circuit must be finalized before creating the  proving key"
+            "the circuit must be finalized before creating the proving key"
         );
 
         let dyadic_circuit_size = circuit.compute_dyadic_size();
