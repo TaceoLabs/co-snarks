@@ -4,23 +4,22 @@ use super::{
     small_subgroup_ipa::SharedSmallSubgroupIPAProver,
     types::ProverMemory,
 };
-use crate::{CoUtils, mpc::NoirUltraHonkProver};
+use crate::{CoUtils, mpc::NoirUltraHonkProver, mpc_prover_flavour::MPCProverFlavour};
 use co_builder::{
-    HonkProofResult,
+    HonkProofResult, TranscriptFieldType,
     prelude::{HonkCurve, ProverCrs, Utils},
 };
 use std::marker::PhantomData;
-use ultrahonk::prelude::{
-    HonkProof, Transcript, TranscriptFieldType, TranscriptHasher, ZeroKnowledge,
-};
+use ultrahonk::prelude::{HonkProof, Transcript, TranscriptHasher, ZeroKnowledge};
 
 pub(crate) struct CoDecider<
     T: NoirUltraHonkProver<P>,
     P: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
+    L: MPCProverFlavour,
 > {
     pub(crate) driver: T,
-    pub(super) memory: ProverMemory<T, P>,
+    pub(super) memory: ProverMemory<T, P, L>,
     pub(crate) has_zk: ZeroKnowledge,
     phantom_data: PhantomData<P>,
     phantom_hasher: PhantomData<H>,
@@ -30,9 +29,10 @@ impl<
     T: NoirUltraHonkProver<P>,
     P: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
-> CoDecider<T, P, H>
+    L: MPCProverFlavour,
+> CoDecider<T, P, H, L>
 {
-    pub fn new(driver: T, memory: ProverMemory<T, P>, has_zk: ZeroKnowledge) -> Self {
+    pub fn new(driver: T, memory: ProverMemory<T, P, L>, has_zk: ZeroKnowledge) -> Self {
         Self {
             driver,
             memory,
@@ -75,7 +75,7 @@ impl<
         crs: &ProverCrs<P>,
         circuit_size: u32,
     ) -> HonkProofResult<(
-        SumcheckOutput<P::ScalarField>,
+        SumcheckOutput<P::ScalarField, L>,
         Option<SharedZKSumcheckData<T, P>>,
     )> {
         if self.has_zk == ZeroKnowledge::Yes {
@@ -110,7 +110,7 @@ impl<
         transcript: &mut Transcript<TranscriptFieldType, H>,
         circuit_size: u32,
         crs: &ProverCrs<P>,
-        sumcheck_output: SumcheckOutput<P::ScalarField>,
+        sumcheck_output: SumcheckOutput<P::ScalarField, L>,
         zk_sumcheck_data: Option<SharedZKSumcheckData<T, P>>,
     ) -> HonkProofResult<()> {
         if self.has_zk == ZeroKnowledge::No {

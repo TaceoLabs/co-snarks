@@ -3,7 +3,7 @@ use ark_ff::Field;
 use std::array;
 use ultrahonk::prelude::{Barycentric, Univariate};
 
-use crate::mpc::NoirUltraHonkProver;
+use crate::{mpc::NoirUltraHonkProver, mpc_prover_flavour::SharedUnivariateTest};
 
 pub(crate) struct SharedUnivariate<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> {
     pub(crate) evaluations: [T::ArithmeticShare; SIZE],
@@ -18,21 +18,6 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> SharedUnivariate<
         }
     }
 
-    pub(crate) fn add(&self, rhs: &Self) -> Self {
-        let mut result = Self::default();
-        for i in 0..SIZE {
-            result.evaluations[i] = T::add(self.evaluations[i], rhs.evaluations[i]);
-        }
-        result
-    }
-
-    pub(crate) fn sub(&self, rhs: &Self) -> Self {
-        let mut result = Self::default();
-        for i in 0..SIZE {
-            result.evaluations[i] = T::sub(self.evaluations[i], rhs.evaluations[i]);
-        }
-        result
-    }
     pub(crate) fn scale_inplace(&mut self, rhs: P::ScalarField) {
         for i in 0..SIZE {
             self.evaluations[i] = T::mul_with_public(rhs, self.evaluations[i]);
@@ -43,14 +28,6 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> SharedUnivariate<
         for i in 0..SIZE {
             self.evaluations[i] = T::add(self.evaluations[i], rhs.evaluations[i]);
         }
-    }
-
-    pub(crate) fn mul_public(&self, rhs: &Univariate<P::ScalarField, SIZE>) -> Self {
-        let mut result = Self::default();
-        for i in 0..SIZE {
-            result.evaluations[i] = T::mul_with_public(rhs.evaluations[i], self.evaluations[i]);
-        }
-        result
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE2: usize>(
@@ -71,15 +48,11 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> SharedUnivariate<
             result.add_assign(&extended);
         }
     }
+}
 
-    pub fn get_random(driver: &mut T) -> std::io::Result<Self> {
-        let mut evaluations = [T::ArithmeticShare::default(); SIZE];
-        for eval in evaluations.iter_mut() {
-            *eval = driver.rand()?;
-        }
-        Ok(Self { evaluations })
-    }
-
+impl<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> SharedUnivariateTest<T, P>
+    for SharedUnivariate<T, P, SIZE>
+{
     /**
      * @brief Given a univariate f represented by {f(domain_start), ..., f(domain_end - 1)}, compute the
      * evaluations {f(domain_end),..., f(extended_domain_end -1)} and return the Univariate represented by
@@ -98,7 +71,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> SharedUnivariate<
      * = f(2) + Δ...
      *
      */
-    pub fn extend_from(&mut self, poly: &[T::ArithmeticShare]) {
+    fn extend_from(&mut self, poly: &[T::ArithmeticShare]) {
         let length = poly.len();
         let extended_length = SIZE;
 
@@ -251,6 +224,50 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> SharedUnivariate<
                     T::mul_with_public(full_numerator_values[k], self.evaluations[k]);
             }
         }
+    }
+
+    fn get_random(driver: &mut T) -> std::io::Result<Self> {
+        let mut evaluations = [T::ArithmeticShare::default(); SIZE];
+        for eval in evaluations.iter_mut() {
+            *eval = driver.rand()?;
+        }
+        Ok(Self { evaluations })
+    }
+
+    fn evaluations(&mut self) -> &mut [T::ArithmeticShare] {
+        &mut self.evaluations
+    }
+
+    fn evaluations_as_ref(&self) -> &[T::ArithmeticShare] {
+        &self.evaluations
+    }
+
+    fn mul_public<K>(&self, other: &K) -> Self
+    where
+        K: ultrahonk::plain_prover_flavour::UnivariateTest<<P as Pairing>::ScalarField>,
+    {
+        let mut result = Self::default();
+        for i in 0..SIZE {
+            result.evaluations[i] =
+                T::mul_with_public(other.evaluations_as_ref()[i], self.evaluations[i]);
+        }
+        result
+    }
+
+    fn sub(&self, rhs: &Self) -> Self {
+        let mut result = Self::default();
+        for i in 0..SIZE {
+            result.evaluations[i] = T::sub(self.evaluations[i], rhs.evaluations[i]);
+        }
+        result
+    }
+
+    fn add(&self, rhs: &Self) -> Self {
+        let mut result = Self::default();
+        for i in 0..SIZE {
+            result.evaluations[i] = T::add(self.evaluations[i], rhs.evaluations[i]);
+        }
+        result
     }
 }
 

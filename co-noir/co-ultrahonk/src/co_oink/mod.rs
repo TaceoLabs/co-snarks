@@ -1,5 +1,6 @@
 pub(crate) mod prover;
 pub(crate) mod types;
+//TODO FLORIN IS THIS CORRECT FOR MEGA?
 
 // execute_log_derivative_inverse_round: n for inv and n for mult
 pub const CRAND_PAIRS_FACTOR_N: usize = 2;

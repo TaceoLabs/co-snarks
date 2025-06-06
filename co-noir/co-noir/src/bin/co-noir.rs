@@ -1383,7 +1383,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
                     // execute prover in MPC
                     let start = Instant::now();
                     let (proof, public_inputs, net) =
-                        Rep3CoUltraHonk::<_, _, Poseidon2Sponge>::prove(
+                        Rep3CoUltraHonk::<_, _, Poseidon2Sponge, UltraFlavour>::prove(
                             net,
                             proving_key,
                             &prover_crs,

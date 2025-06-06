@@ -2,6 +2,7 @@ use crate::{
     CONST_PROOF_SIZE_LOG_N,
     decider::{prover::Decider, types::ProverMemory},
     oink::prover::Oink,
+    plain_prover_flavour::PlainProverFlavour,
     transcript::{Transcript, TranscriptFieldType, TranscriptHasher},
     types::HonkProof,
 };
@@ -12,12 +13,22 @@ use co_builder::{
 };
 use std::marker::PhantomData;
 
-pub struct UltraHonk<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> {
+pub struct UltraHonk<
+    P: HonkCurve<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType>,
+    L: PlainProverFlavour,
+> {
     phantom_data: PhantomData<P>,
     phantom_hasher: PhantomData<H>,
+    phantom_flavor: PhantomData<L>,
 }
 
-impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> UltraHonk<P, H> {
+impl<
+        P: HonkCurve<TranscriptFieldType>,
+        H: TranscriptHasher<TranscriptFieldType>,
+        L: PlainProverFlavour,
+    > UltraHonk<P, H, L>
+{
     pub(crate) fn generate_gate_challenges(
         transcript: &mut Transcript<TranscriptFieldType, H>,
     ) -> Vec<P::ScalarField> {
@@ -34,7 +45,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     }
 
     pub fn prove(
-        mut proving_key: ProvingKey<P>,
+        mut proving_key: ProvingKey<P, L>,
         has_zk: ZeroKnowledge,
     ) -> HonkProofResult<(HonkProof<TranscriptFieldType>, Vec<TranscriptFieldType>)> {
         tracing::trace!("UltraHonk prove");

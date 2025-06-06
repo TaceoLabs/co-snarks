@@ -1,9 +1,16 @@
 use super::Relation;
-use crate::decider::{
-    types::{ClaimedEvaluations, ProverUnivariates, RelationParameters},
-    univariate::Univariate,
+use crate::decider::types::ProverUnivariatesSized;
+use crate::{
+    decider::{
+        types::{ClaimedEvaluations, RelationParameters},
+        univariate::Univariate,
+    },
+    plain_prover_flavour::PlainProverFlavour,
 };
 use ark_ff::{PrimeField, Zero};
+use co_builder::polynomials::polynomial_flavours::{
+    PrecomputedEntitiesFlavour, ShiftedWitnessEntitiesFlavour, WitnessEntitiesFlavour,
+};
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct UltraArithmeticRelationAcc<F: PrimeField> {
@@ -61,14 +68,14 @@ impl UltraArithmeticRelation {
     pub(crate) const NUM_RELATIONS: usize = 2;
 }
 
-impl<F: PrimeField> Relation<F> for UltraArithmeticRelation {
+impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for UltraArithmeticRelation {
     type Acc = UltraArithmeticRelationAcc<F>;
     type VerifyAcc = UltraArithmeticRelationEvals<F>;
 
     const SKIPPABLE: bool = true;
 
-    fn skip(input: &ProverUnivariates<F>) -> bool {
-        <Self as Relation<F>>::check_skippable();
+    fn skip<const SIZE: usize>(input: &ProverUnivariatesSized<F, L, SIZE>) -> bool {
+        <Self as Relation<F, L>>::check_skippable();
         input.precomputed.q_arith().is_zero()
     }
 
@@ -123,10 +130,10 @@ impl<F: PrimeField> Relation<F> for UltraArithmeticRelation {
      * @param parameters contains beta, gamma, and public_input_delta, ....
      * @param scaling_factor optional term to scale the evaluation before adding to evals.
      */
-    fn accumulate(
+    fn accumulate<const SIZE: usize>(
         univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariates<F>,
-        _relation_parameters: &RelationParameters<F>,
+        input: &ProverUnivariatesSized<F, L, SIZE>,
+        _relation_parameters: &RelationParameters<F, L>,
         scaling_factor: &F,
     ) {
         tracing::trace!("Accumulate UltraArithmeticRelation");
@@ -176,8 +183,8 @@ impl<F: PrimeField> Relation<F> for UltraArithmeticRelation {
 
     fn verify_accumulate(
         univariate_accumulator: &mut Self::VerifyAcc,
-        input: &ClaimedEvaluations<F>,
-        _relation_parameters: &RelationParameters<F>,
+        input: &ClaimedEvaluations<F, L>,
+        _relation_parameters: &RelationParameters<F, L>,
         scaling_factor: &F,
     ) {
         tracing::trace!("Accumulate UltraArithmeticRelation_Verify");

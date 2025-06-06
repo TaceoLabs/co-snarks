@@ -13,3 +13,6 @@ target/
 co-noir/co-acvm/src/bin/
 co-circom/co-plonk/src/bin/
 groth16_tester.rs
+co-noir/megahonk/src/bin_mega_proving_key
+co-noir/megahonk/src/finalpk.json
+co-noir/megahonk/src/mega_proving_key

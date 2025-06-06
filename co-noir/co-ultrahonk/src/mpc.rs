@@ -16,6 +16,7 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
         + Clone
         + Default
         + Send
+        + Sync
         + PartialEq
         + std::fmt::Debug
         + 'static;

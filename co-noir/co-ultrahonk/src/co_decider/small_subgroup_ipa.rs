@@ -3,6 +3,7 @@ use std::marker::PhantomData;
 use crate::CONST_PROOF_SIZE_LOG_N;
 use crate::CoUtils;
 use crate::mpc::NoirUltraHonkProver;
+use crate::mpc_prover_flavour::SharedUnivariateTest;
 use crate::prelude::TranscriptHasher;
 use ultrahonk::prelude::Transcript;
 

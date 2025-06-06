@@ -1,16 +1,19 @@
 use super::{ProverUnivariatesBatch, Relation, fold_accumulator};
 use crate::{
-    co_decider::{
-        types::{MAX_PARTIAL_RELATION_LENGTH, RelationParameters},
-        univariates::SharedUnivariate,
-    },
+    co_decider::{types::RelationParameters, univariates::SharedUnivariate},
     mpc::NoirUltraHonkProver,
+    mpc_prover_flavour::MPCProverFlavour,
 };
 use ark_ec::pairing::Pairing;
-use co_builder::HonkProofResult;
+use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
+use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::prelude::HonkCurve;
+use co_builder::{
+    HonkProofResult, TranscriptFieldType,
+    polynomials::polynomial_flavours::PrecomputedEntitiesFlavour,
+};
 use itertools::{Itertools as _, izip};
-use ultrahonk::prelude::{TranscriptFieldType, Univariate};
+use ultrahonk::prelude::Univariate;
 
 #[derive(Clone, Debug)]
 pub(crate) struct LogDerivLookupRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing> {
@@ -64,9 +67,9 @@ impl LogDerivLookupRelation {
 }
 
 impl LogDerivLookupRelation {
-    fn compute_inverse_exists<T: NoirUltraHonkProver<P>, P: Pairing>(
+    fn compute_inverse_exists<T: NoirUltraHonkProver<P>, P: Pairing, L: MPCProverFlavour>(
         driver: &mut T,
-        input: &ProverUnivariatesBatch<T, P>,
+        input: &ProverUnivariatesBatch<T, P, L>,
         // ) -> Univariate<P::ScalarField, MAX_PARTIAL_RELATION_LENGTH> {
     ) -> Vec<T::ArithmeticShare> {
         let row_has_write = input.witness.lookup_read_tags();
@@ -79,10 +82,10 @@ impl LogDerivLookupRelation {
         res
     }
 
-    fn compute_read_term<T: NoirUltraHonkProver<P>, P: Pairing>(
+    fn compute_read_term<T: NoirUltraHonkProver<P>, P: Pairing, L: MPCProverFlavour>(
         driver: &mut T,
-        input: &ProverUnivariatesBatch<T, P>,
-        relation_parameters: &RelationParameters<P::ScalarField>,
+        input: &ProverUnivariatesBatch<T, P, L>,
+        relation_parameters: &RelationParameters<P::ScalarField, L>,
     ) -> Vec<T::ArithmeticShare> {
         let gamma = &relation_parameters.gamma;
         let eta_1 = &relation_parameters.eta_1;
@@ -131,9 +134,9 @@ impl LogDerivLookupRelation {
     }
 
     // Compute table_1 + gamma + table_2 * eta + table_3 * eta_2 + table_4 * eta_3
-    fn compute_write_term<T: NoirUltraHonkProver<P>, P: Pairing>(
-        input: &ProverUnivariatesBatch<T, P>,
-        relation_parameters: &RelationParameters<P::ScalarField>,
+    fn compute_write_term<T: NoirUltraHonkProver<P>, P: Pairing, L: MPCProverFlavour>(
+        input: &ProverUnivariatesBatch<T, P, L>,
+        relation_parameters: &RelationParameters<P::ScalarField, L>,
     ) -> Vec<P::ScalarField> {
         let gamma = &relation_parameters.gamma;
         let eta_1 = &relation_parameters.eta_1;
@@ -160,18 +163,18 @@ impl LogDerivLookupRelation {
     }
 }
 
-impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P>
-    for LogDerivLookupRelation
+impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverFlavour>
+    Relation<T, P, L> for LogDerivLookupRelation
 {
     type Acc = LogDerivLookupRelationAcc<T, P>;
 
-    fn can_skip(_: &super::ProverUnivariates<T, P>) -> bool {
+    fn can_skip(_: &super::ProverUnivariates<T, P, L>) -> bool {
         false
     }
 
-    fn add_entites(
-        entity: &super::ProverUnivariates<T, P>,
-        batch: &mut ProverUnivariatesBatch<T, P>,
+    fn add_entities(
+        entity: &super::ProverUnivariates<T, P, L>,
+        batch: &mut ProverUnivariatesBatch<T, P, L>,
     ) {
         batch.add_w_l(entity);
         batch.add_w_r(entity);
@@ -233,11 +236,11 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
      * @note This relation utilizes functionality in the log-derivative library to compute the polynomial of inverses
      *
      */
-    fn accumulate(
+    fn accumulate<const SIZE: usize>(
         driver: &mut T,
         univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariatesBatch<T, P>,
-        relation_parameters: &RelationParameters<<P>::ScalarField>,
+        input: &ProverUnivariatesBatch<T, P, L>,
+        relation_parameters: &RelationParameters<<P>::ScalarField, L>,
         scaling_factors: &[<P>::ScalarField],
     ) -> HonkProofResult<()> {
         let inverses = input.witness.lookup_inverses(); // Degree 1
@@ -257,7 +260,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         T::sub_assign_many(&mut tmp, &inverse_exists);
         T::mul_assign_with_public_many(&mut tmp, scaling_factors);
 
-        fold_accumulator!(univariate_accumulator.r0, tmp);
+        fold_accumulator!(univariate_accumulator.r0, tmp, SIZE);
 
         ///////////////////////////////////////////////////////////////////////
 
@@ -269,7 +272,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let mut tmp = T::mul_with_public_many(read_selector, &read_inverse);
         T::sub_assign_many(&mut tmp, &mul);
 
-        fold_accumulator!(univariate_accumulator.r1, tmp);
+        fold_accumulator!(univariate_accumulator.r1, tmp, SIZE);
 
         Ok(())
     }
