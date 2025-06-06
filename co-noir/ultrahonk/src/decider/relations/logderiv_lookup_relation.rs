@@ -1,11 +1,16 @@
 use super::Relation;
-use crate::decider::{
-    types::{
-        ClaimedEvaluations, MAX_PARTIAL_RELATION_LENGTH, ProverUnivariates, RelationParameters,
+use crate::decider::types::ProverUnivariatesSized;
+use crate::{
+    decider::{
+        types::{ClaimedEvaluations, RelationParameters},
+        univariate::Univariate,
     },
-    univariate::Univariate,
+    plain_prover_flavour::PlainProverFlavour,
 };
 use ark_ff::{PrimeField, Zero};
+use co_builder::polynomials::polynomial_flavours::{
+    PrecomputedEntitiesFlavour, ShiftedWitnessEntitiesFlavour, WitnessEntitiesFlavour,
+};
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct LogDerivLookupRelationAcc<F: PrimeField> {
@@ -65,26 +70,28 @@ impl LogDerivLookupRelation {
 
 impl LogDerivLookupRelation {
     // Used in the inverse correctness subrelation; facilitates only computing inverses where necessary
-    fn compute_inverse_exists<F: PrimeField>(
-        input: &ProverUnivariates<F>,
-    ) -> Univariate<F, MAX_PARTIAL_RELATION_LENGTH> {
+    fn compute_inverse_exists<F: PrimeField, L: PlainProverFlavour, const SIZE: usize>(
+        input: &ProverUnivariatesSized<F, L, SIZE>,
+    ) -> Univariate<F, SIZE> {
         let row_has_write = input.witness.lookup_read_tags();
         let row_has_read = input.precomputed.q_lookup();
 
         -(row_has_write.to_owned() * row_has_read) + row_has_write + row_has_read
     }
 
-    fn compute_inverse_exists_verifier<F: PrimeField>(input: &ClaimedEvaluations<F>) -> F {
+    fn compute_inverse_exists_verifier<F: PrimeField, L: PlainProverFlavour>(
+        input: &ClaimedEvaluations<F, L>,
+    ) -> F {
         let row_has_write = input.witness.lookup_read_tags();
         let row_has_read = input.precomputed.q_lookup();
 
         -(row_has_write.to_owned() * row_has_read) + row_has_write + row_has_read
     }
 
-    fn compute_read_term<F: PrimeField>(
-        input: &ProverUnivariates<F>,
-        relation_parameters: &RelationParameters<F>,
-    ) -> Univariate<F, MAX_PARTIAL_RELATION_LENGTH> {
+    fn compute_read_term<F: PrimeField, L: PlainProverFlavour, const SIZE: usize>(
+        input: &ProverUnivariatesSized<F, L, SIZE>,
+        relation_parameters: &RelationParameters<F, L>,
+    ) -> Univariate<F, SIZE> {
         let gamma = &relation_parameters.gamma;
         let eta_1 = &relation_parameters.eta_1;
         let eta_2 = &relation_parameters.eta_2;
@@ -116,9 +123,9 @@ impl LogDerivLookupRelation {
             + table_index.to_owned() * eta_3
     }
 
-    fn compute_read_term_verifier<F: PrimeField>(
-        input: &ClaimedEvaluations<F>,
-        relation_parameters: &RelationParameters<F>,
+    fn compute_read_term_verifier<F: PrimeField, L: PlainProverFlavour>(
+        input: &ClaimedEvaluations<F, L>,
+        relation_parameters: &RelationParameters<F, L>,
     ) -> F {
         let gamma = &relation_parameters.gamma;
         let eta_1 = &relation_parameters.eta_1;
@@ -152,10 +159,10 @@ impl LogDerivLookupRelation {
     }
 
     // Compute table_1 + gamma + table_2 * eta + table_3 * eta_2 + table_4 * eta_3
-    fn compute_write_term<F: PrimeField>(
-        input: &ProverUnivariates<F>,
-        relation_parameters: &RelationParameters<F>,
-    ) -> Univariate<F, MAX_PARTIAL_RELATION_LENGTH> {
+    fn compute_write_term<F: PrimeField, L: PlainProverFlavour, const SIZE: usize>(
+        input: &ProverUnivariatesSized<F, L, SIZE>,
+        relation_parameters: &RelationParameters<F, L>,
+    ) -> Univariate<F, SIZE> {
         let gamma = &relation_parameters.gamma;
         let eta_1 = &relation_parameters.eta_1;
         let eta_2 = &relation_parameters.eta_2;
@@ -173,9 +180,9 @@ impl LogDerivLookupRelation {
             + table_4.to_owned() * eta_3
     }
 
-    fn compute_write_term_verifier<F: PrimeField>(
-        input: &ClaimedEvaluations<F>,
-        relation_parameters: &RelationParameters<F>,
+    fn compute_write_term_verifier<F: PrimeField, L: PlainProverFlavour>(
+        input: &ClaimedEvaluations<F, L>,
+        relation_parameters: &RelationParameters<F, L>,
     ) -> F {
         let gamma = &relation_parameters.gamma;
         let eta_1 = &relation_parameters.eta_1;
@@ -195,14 +202,14 @@ impl LogDerivLookupRelation {
     }
 }
 
-impl<F: PrimeField> Relation<F> for LogDerivLookupRelation {
+impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for LogDerivLookupRelation {
     type Acc = LogDerivLookupRelationAcc<F>;
     type VerifyAcc = LogDerivLookupRelationEvals<F>;
 
     const SKIPPABLE: bool = true;
 
-    fn skip(input: &ProverUnivariates<F>) -> bool {
-        <Self as Relation<F>>::check_skippable();
+    fn skip<const SIZE: usize>(input: &ProverUnivariatesSized<F, L, SIZE>) -> bool {
+        <Self as Relation<F, L>>::check_skippable();
         input.precomputed.q_lookup().is_zero() && input.witness.lookup_read_counts().is_zero()
     }
 
@@ -243,10 +250,10 @@ impl<F: PrimeField> Relation<F> for LogDerivLookupRelation {
      * @note This relation utilizes functionality in the log-derivative library to compute the polynomial of inverses
      *
      */
-    fn accumulate(
+    fn accumulate<const SIZE: usize>(
         univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariates<F>,
-        relation_parameters: &RelationParameters<F>,
+        input: &ProverUnivariatesSized<F, L, SIZE>,
+        relation_parameters: &RelationParameters<F, L>,
         scaling_factor: &F,
     ) {
         tracing::trace!("Accumulate LogDerivLookupRelation");
@@ -282,8 +289,8 @@ impl<F: PrimeField> Relation<F> for LogDerivLookupRelation {
 
     fn verify_accumulate(
         univariate_accumulator: &mut Self::VerifyAcc,
-        input: &ClaimedEvaluations<F>,
-        relation_parameters: &RelationParameters<F>,
+        input: &ClaimedEvaluations<F, L>,
+        relation_parameters: &RelationParameters<F, L>,
         scaling_factor: &F,
     ) {
         tracing::trace!("Accumulate LogDerivLookupRelation");

@@ -250,4 +250,12 @@ impl<P: Pairing> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
     ) -> Vec<Self::ArithmeticShare> {
         domain.ifft(data)
     }
+    fn is_zero_many<N: Network>(
+        a: &[Self::ArithmeticShare],
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
+        let zeroes = vec![P::ScalarField::zero(); a.len()];
+        arithmetic::eq_public_many(a, &zeroes, net, state)
+    }
 }

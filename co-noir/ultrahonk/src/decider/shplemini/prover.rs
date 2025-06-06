@@ -3,6 +3,7 @@ use super::{
     ShpleminiOpeningClaim,
     types::{PolyF, PolyG},
 };
+use crate::plain_prover_flavour::PlainProverFlavour;
 use crate::{
     NUM_INTERLEAVING_CLAIMS, NUM_SMALL_IPA_EVALUATIONS, Utils,
     decider::{shplemini::OpeningPair, verifier::DeciderVerifier},
@@ -11,6 +12,7 @@ use crate::{
 };
 use ark_ec::AffineRepr;
 use ark_ff::{Field, One, Zero};
+use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::prelude::ZeroKnowledge;
 use co_builder::{
     HonkProofError, HonkProofResult,
@@ -18,15 +20,24 @@ use co_builder::{
 };
 use itertools::izip;
 
-impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> Decider<P, H> {
-    fn get_f_polynomials(polys: &AllEntities<Vec<P::ScalarField>>) -> PolyF<Vec<P::ScalarField>> {
+impl<
+    P: HonkCurve<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType>,
+    L: PlainProverFlavour,
+> Decider<P, H, L>
+{
+    fn get_f_polynomials(
+        polys: &AllEntities<Vec<P::ScalarField>, L>,
+    ) -> PolyF<Vec<P::ScalarField>, L> {
         PolyF {
             precomputed: &polys.precomputed,
             witness: &polys.witness,
         }
     }
 
-    fn get_g_polynomials(polys: &AllEntities<Vec<P::ScalarField>>) -> PolyG<Vec<P::ScalarField>> {
+    fn get_g_polynomials(
+        polys: &AllEntities<Vec<P::ScalarField>, L>,
+    ) -> PolyG<Vec<P::ScalarField>> {
         PolyG {
             wires: polys.witness.to_be_shifted().try_into().unwrap(),
         }
@@ -318,7 +329,8 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         });
 
         // Compute univariate opening queries rₗ = r^{2ˡ} for l = 0, 1, ..., m-1
-        let r_squares = DeciderVerifier::<P, H>::powers_of_evaluation_challenge(r_challenge, log_n);
+        let r_squares =
+            DeciderVerifier::<P, H, L>::powers_of_evaluation_challenge(r_challenge, log_n);
 
         // Each fold polynomial Aₗ has to be opened at −r^{2ˡ} and r^{2ˡ}. To avoid storing two copies of Aₗ for l = 1,...,
         // m-1, we use a flag that is processed by ShplonkProver.
@@ -421,7 +433,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         transcript: &mut Transcript<TranscriptFieldType, H>,
         circuit_size: u32,
         crs: &ProverCrs<P>,
-        sumcheck_output: SumcheckOutput<P::ScalarField>,
+        sumcheck_output: SumcheckOutput<P::ScalarField, L>,
         libra_polynomials: Option<[Polynomial<P::ScalarField>; NUM_SMALL_IPA_EVALUATIONS]>,
     ) -> HonkProofResult<ShpleminiOpeningClaim<P::ScalarField>> {
         let has_zk = self.has_zk;

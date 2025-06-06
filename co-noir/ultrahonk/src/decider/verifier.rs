@@ -1,33 +1,39 @@
 use super::{shplemini::ShpleminiVerifierOpeningClaim, types::VerifierMemory};
+use crate::CONST_PROOF_SIZE_LOG_N;
+use crate::NUM_LIBRA_COMMITMENTS;
 use crate::{
-    CONST_PROOF_SIZE_LOG_N, NUM_LIBRA_COMMITMENTS, Utils,
-    decider::types::{BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK},
-    prelude::TranscriptFieldType,
+    Utils,
+    plain_prover_flavour::PlainProverFlavour,
     transcript::{Transcript, TranscriptHasher},
     verifier::HonkVerifyResult,
 };
 use ark_ec::AffineRepr;
 use ark_ff::{One, Zero};
-use co_builder::prelude::{HonkCurve, ZeroKnowledge};
+use co_builder::{
+    TranscriptFieldType,
+    prelude::{HonkCurve, ZeroKnowledge},
+};
 use std::marker::PhantomData;
 
 pub(crate) struct DeciderVerifier<
     P: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
+    L: PlainProverFlavour,
 > {
-    pub(super) memory: VerifierMemory<P>,
-    phantom_data: PhantomData<P>,
-    phantom_hasher: PhantomData<H>,
+    pub(super) memory: VerifierMemory<P, L>,
+    phantom_data: PhantomData<(P, H, L)>,
 }
 
-impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
-    DeciderVerifier<P, H>
+impl<
+    P: HonkCurve<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType>,
+    L: PlainProverFlavour,
+> DeciderVerifier<P, H, L>
 {
-    pub(crate) fn new(memory: VerifierMemory<P>) -> Self {
+    pub(crate) fn new(memory: VerifierMemory<P, L>) -> Self {
         Self {
             memory,
             phantom_data: PhantomData,
-            phantom_hasher: PhantomData,
         }
     }
 
@@ -85,11 +91,8 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
                     "Libra:concatenation_commitment".to_string(),
                 )?);
 
-            let sumcheck_output = self.sumcheck_verify::<BATCHED_RELATION_PARTIAL_LENGTH_ZK>(
-                &mut transcript,
-                has_zk,
-                &padding_indicator_array,
-            )?;
+            let sumcheck_output =
+                self.sumcheck_verify(&mut transcript, has_zk, &padding_indicator_array)?;
             if !sumcheck_output.verified {
                 tracing::trace!("Sumcheck failed");
                 return Ok(false);
@@ -106,11 +109,8 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
             (sumcheck_output, Some(libra_commitments))
         } else {
-            let sumcheck_output = self.sumcheck_verify::<BATCHED_RELATION_PARTIAL_LENGTH>(
-                &mut transcript,
-                has_zk,
-                &padding_indicator_array,
-            )?;
+            let sumcheck_output =
+                self.sumcheck_verify(&mut transcript, has_zk, &padding_indicator_array)?;
             if !sumcheck_output.verified {
                 tracing::trace!("Sumcheck failed");
                 return Ok(false);

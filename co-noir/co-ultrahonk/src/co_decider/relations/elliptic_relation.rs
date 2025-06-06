@@ -1,20 +1,23 @@
 use super::Relation;
 use crate::{
     co_decider::{
-        relations::fold_accumulator,
-        types::{MAX_PARTIAL_RELATION_LENGTH, RelationParameters},
-        univariates::SharedUnivariate,
+        relations::fold_accumulator, types::RelationParameters, univariates::SharedUnivariate,
     },
     mpc::NoirUltraHonkProver,
+    mpc_prover_flavour::MPCProverFlavour,
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::Zero;
-use co_builder::HonkProofResult;
+use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::prelude::HonkCurve;
+use co_builder::{HonkProofResult, polynomials::polynomial_flavours::PrecomputedEntitiesFlavour};
+use co_builder::{
+    TranscriptFieldType, polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour,
+};
 use itertools::Itertools as _;
 use mpc_core::MpcState as _;
 use mpc_net::Network;
-use ultrahonk::prelude::{TranscriptFieldType, Univariate};
+use ultrahonk::prelude::Univariate;
 
 #[derive(Clone, Debug)]
 pub(crate) struct EllipticRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing> {
@@ -67,18 +70,18 @@ impl EllipticRelation {
     pub(crate) const CRAND_PAIRS_FACTOR: usize = 12;
 }
 
-impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P>
-    for EllipticRelation
+impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverFlavour>
+    Relation<T, P, L> for EllipticRelation
 {
     type Acc = EllipticRelationAcc<T, P>;
 
-    fn can_skip(entity: &super::ProverUnivariates<T, P>) -> bool {
+    fn can_skip(entity: &super::ProverUnivariates<T, P, L>) -> bool {
         entity.precomputed.q_elliptic().is_zero()
     }
 
-    fn add_entites(
-        entity: &super::ProverUnivariates<T, P>,
-        batch: &mut super::ProverUnivariatesBatch<T, P>,
+    fn add_entities(
+        entity: &super::ProverUnivariates<T, P, L>,
+        batch: &mut super::ProverUnivariatesBatch<T, P, L>,
     ) {
         batch.add_w_r(entity);
         batch.add_w_o(entity);
@@ -103,12 +106,12 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
      * @param parameters contains beta, gamma, and public_input_delta, ....
      * @param scaling_factor optional term to scale the evaluation before adding to evals.
      */
-    fn accumulate<N: Network>(
+    fn accumulate<N: Network, const SIZE: usize>(
         net: &N,
         state: &mut T::State,
         univariate_accumulator: &mut Self::Acc,
-        input: &super::ProverUnivariatesBatch<T, P>,
-        _relation_parameters: &RelationParameters<<P>::ScalarField>,
+        input: &super::ProverUnivariatesBatch<T, P, L>,
+        _relation_parameters: &RelationParameters<<P>::ScalarField, L>,
         scaling_factors: &[<P>::ScalarField],
     ) -> HonkProofResult<()> {
         tracing::trace!("Accumulate EllipticRelation");
@@ -252,8 +255,8 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let tmp = T::mul_with_public_many(&q_elliptic_q_double_scaling, &y_double_identity);
         T::add_assign_many(&mut tmp_2, &tmp);
 
-        fold_accumulator!(univariate_accumulator.r0, tmp_1);
-        fold_accumulator!(univariate_accumulator.r1, tmp_2);
+        fold_accumulator!(univariate_accumulator.r0, tmp_1, SIZE);
+        fold_accumulator!(univariate_accumulator.r1, tmp_2, SIZE);
         Ok(())
     }
 }

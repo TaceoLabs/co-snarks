@@ -2,6 +2,7 @@ use crate::CoUtils;
 use crate::co_decider::polynomial::SharedPolynomial;
 use crate::co_decider::univariates::SharedUnivariate;
 use crate::mpc::NoirUltraHonkProver;
+use crate::mpc_prover_flavour::SharedUnivariateTrait;
 use crate::prelude::TranscriptHasher;
 use ark_ec::pairing::Pairing;
 use ark_ff::Field;

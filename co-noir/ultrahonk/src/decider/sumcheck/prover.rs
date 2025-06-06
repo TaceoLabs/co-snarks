@@ -1,10 +1,8 @@
 use crate::decider::prover::Decider;
 use crate::decider::sumcheck::SumcheckOutput;
-use crate::decider::sumcheck::round_prover::{SumcheckProverRound, SumcheckRoundOutput};
-use crate::decider::types::{
-    BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK, ClaimedEvaluations,
-    GateSeparatorPolynomial, PartiallyEvaluatePolys,
-};
+use crate::decider::sumcheck::round_prover::SumcheckProverRound;
+use crate::decider::types::{ClaimedEvaluations, GateSeparatorPolynomial, PartiallyEvaluatePolys};
+use crate::plain_prover_flavour::{PlainProverFlavour, UnivariateTrait};
 use crate::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
 use crate::types::AllEntities;
 use crate::{CONST_PROOF_SIZE_LOG_N, Utils};
@@ -13,10 +11,15 @@ use co_builder::prelude::{HonkCurve, RowDisablingPolynomial};
 use super::zk_data::ZKSumcheckData;
 
 // Keep in mind, the UltraHonk protocol (UltraFlavor) does not per default have ZK
-impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> Decider<P, H> {
+impl<
+    P: HonkCurve<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType>,
+    L: PlainProverFlavour,
+> Decider<P, H, L>
+{
     pub(crate) fn partially_evaluate_init(
-        partially_evaluated_poly: &mut PartiallyEvaluatePolys<P::ScalarField>,
-        polys: &AllEntities<Vec<P::ScalarField>>,
+        partially_evaluated_poly: &mut PartiallyEvaluatePolys<P::ScalarField, L>,
+        polys: &AllEntities<Vec<P::ScalarField>, L>,
         round_size: usize,
         round_challenge: &P::ScalarField,
     ) {
@@ -31,13 +34,14 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     }
 
     pub(crate) fn partially_evaluate_inplace(
-        partially_evaluated_poly: &mut PartiallyEvaluatePolys<P::ScalarField>,
+        partially_evaluated_poly: &mut PartiallyEvaluatePolys<P::ScalarField, L>,
         round_size: usize,
         round_challenge: &P::ScalarField,
     ) {
         tracing::trace!("Partially_evaluate inplace");
 
         // Barretenberg uses multithreading here
+
         for poly in partially_evaluated_poly.iter_mut() {
             for i in (0..round_size).step_by(2) {
                 poly[i >> 1] = poly[i] + (poly[i + 1] - poly[i]) * round_challenge;
@@ -47,10 +51,9 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
     fn add_evals_to_transcript(
         transcript: &mut Transcript<TranscriptFieldType, H>,
-        evaluations: &ClaimedEvaluations<P::ScalarField>,
+        evaluations: &ClaimedEvaluations<P::ScalarField, L>,
     ) {
         tracing::trace!("Add Evals to Transcript");
-
         transcript.send_fr_iter_to_verifier::<P, _>(
             "Sumcheck:evaluations".to_string(),
             evaluations.iter(),
@@ -58,8 +61,8 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     }
 
     fn extract_claimed_evaluations(
-        partially_evaluated_polynomials: PartiallyEvaluatePolys<P::ScalarField>,
-    ) -> ClaimedEvaluations<P::ScalarField> {
+        partially_evaluated_polynomials: PartiallyEvaluatePolys<P::ScalarField, L>,
+    ) -> ClaimedEvaluations<P::ScalarField, L> {
         let mut multivariate_evaluations = ClaimedEvaluations::default();
 
         #[expect(unused_mut)] // TACEO TODO: This is for the linter, remove once its fixed...
@@ -77,13 +80,14 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         &self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         circuit_size: u32,
-    ) -> SumcheckOutput<P::ScalarField> {
+    ) -> SumcheckOutput<P::ScalarField, L> {
         tracing::trace!("Sumcheck prove");
 
         let multivariate_n = circuit_size;
         let multivariate_d = Utils::get_msb64(multivariate_n as u64);
 
-        let mut sum_check_round = SumcheckProverRound::new(multivariate_n as usize);
+        let mut sum_check_round =
+            SumcheckProverRound::<P::ScalarField, L>::new(multivariate_n as usize);
 
         let mut gate_separators = GateSeparatorPolynomial::new(
             self.memory.relation_parameters.gate_challenges.to_owned(),
@@ -94,10 +98,8 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         let round_idx = 0;
 
         tracing::trace!("Sumcheck prove round {}", round_idx);
-
         // In the first round, we compute the first univariate polynomial and populate the book-keeping table of
-        // #partially_evaluated_polynomials, which has \f$ n/2 \f$ rows and \f$ N \f$ columns. When the Flavor has ZK,
-        // compute_univariate also takes into account the zk_sumcheck_data.
+        // #partially_evaluated_polynomials, which has \f$ n/2 \f$ rows and \f$ N \f$ columns.
         let round_univariate = sum_check_round.compute_univariate::<P>(
             round_idx,
             &self.memory.relation_parameters,
@@ -108,7 +110,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         // Place the evaluations of the round univariate into transcript.
         transcript.send_fr_iter_to_verifier::<P, _>(
             "Sumcheck:univariate_0".to_string(),
-            &round_univariate.evaluations,
+            round_univariate.evaluations_as_ref(),
         );
         let round_challenge = transcript.get_challenge::<P>("Sumcheck:u_0".to_string());
         multivariate_challenge.push(round_challenge);
@@ -141,7 +143,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             // Place the evaluations of the round univariate into transcript.
             transcript.send_fr_iter_to_verifier::<P, _>(
                 format!("Sumcheck:univariate_{round_idx}"),
-                &round_univariate.evaluations,
+                round_univariate.evaluations_as_ref(),
             );
             let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{round_idx}"));
             multivariate_challenge.push(round_challenge);
@@ -156,12 +158,11 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         }
 
         // Zero univariates are used to pad the proof to the fixed size CONST_PROOF_SIZE_LOG_N.
-        let zero_univariate =
-            SumcheckRoundOutput::<P::ScalarField, BATCHED_RELATION_PARTIAL_LENGTH>::default();
+        let zero_univariate = L::SumcheckRoundOutput::default();
         for idx in multivariate_d as usize..CONST_PROOF_SIZE_LOG_N {
             transcript.send_fr_iter_to_verifier::<P, _>(
                 format!("Sumcheck:univariate_{idx}"),
-                &zero_univariate.evaluations,
+                zero_univariate.evaluations_as_ref(),
             );
             let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{idx}"));
             multivariate_challenge.push(round_challenge);
@@ -184,18 +185,20 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         transcript: &mut Transcript<TranscriptFieldType, H>,
         circuit_size: u32,
         zk_sumcheck_data: &mut ZKSumcheckData<P>,
-    ) -> SumcheckOutput<P::ScalarField> {
+    ) -> SumcheckOutput<P::ScalarField, L> {
         tracing::trace!("Sumcheck prove");
 
         // Ensure that the length of Sumcheck Round Univariates does not exceed the length of Libra masking
         // polynomials.
-        assert!(BATCHED_RELATION_PARTIAL_LENGTH_ZK <= P::LIBRA_UNIVARIATES_LENGTH);
+        assert!(L::BATCHED_RELATION_PARTIAL_LENGTH_ZK <= P::LIBRA_UNIVARIATES_LENGTH);
 
         let multivariate_n = circuit_size;
         let multivariate_d = Utils::get_msb64(multivariate_n as u64);
 
         let mut sum_check_round = SumcheckProverRound::new(multivariate_n as usize);
+
         let mut row_disabling_polynomial = RowDisablingPolynomial::<P::ScalarField>::default();
+
         let mut gate_separators = GateSeparatorPolynomial::new(
             self.memory.relation_parameters.gate_challenges.to_owned(),
             multivariate_d as usize,
@@ -221,7 +224,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         // Place the evaluations of the round univariate into transcript.
         transcript.send_fr_iter_to_verifier::<P, _>(
             "Sumcheck:univariate_0".to_string(),
-            &round_univariate.evaluations,
+            round_univariate.evaluations_as_ref(),
         );
         let round_challenge = transcript.get_challenge::<P>("Sumcheck:u_0".to_string());
         multivariate_challenge.push(round_challenge);
@@ -259,7 +262,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             // Place the evaluations of the round univariate into transcript.
             transcript.send_fr_iter_to_verifier::<P, _>(
                 format!("Sumcheck:univariate_{round_idx}"),
-                &round_univariate.evaluations,
+                round_univariate.evaluations_as_ref(),
             );
             let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{round_idx}"));
             multivariate_challenge.push(round_challenge);
@@ -279,12 +282,11 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         tracing::trace!("Completed {multivariate_d} rounds of sumcheck");
 
         // Zero univariates are used to pad the proof to the fixed size CONST_PROOF_SIZE_LOG_N.
-        let zero_univariate =
-            SumcheckRoundOutput::<P::ScalarField, BATCHED_RELATION_PARTIAL_LENGTH_ZK>::default();
+        let zero_univariate = L::SumcheckRoundOutputZK::default();
         for idx in multivariate_d as usize..CONST_PROOF_SIZE_LOG_N {
             transcript.send_fr_iter_to_verifier::<P, _>(
                 format!("Sumcheck:univariate_{idx}"),
-                &zero_univariate.evaluations,
+                zero_univariate.evaluations_as_ref(),
             );
             let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{idx}"));
             multivariate_challenge.push(round_challenge);
