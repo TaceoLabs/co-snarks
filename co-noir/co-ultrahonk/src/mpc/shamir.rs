@@ -249,4 +249,11 @@ impl<P: Pairing> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
     ) -> Vec<Self::ArithmeticShare> {
         domain.ifft(data)
     }
+    fn is_zero_many<N: Network>(
+        _a: &[Self::ArithmeticShare],
+        _net: &N,
+        _state: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
+        panic!("ShamirUltraHonkDriver does not support is_zero_many");
+    }
 }

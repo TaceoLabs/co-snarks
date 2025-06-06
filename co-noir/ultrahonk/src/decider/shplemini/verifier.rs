@@ -2,6 +2,7 @@ use super::{
     ShpleminiVerifierOpeningClaim,
     types::{PolyF, PolyG, PolyGShift},
 };
+use crate::plain_prover_flavour::PlainProverFlavour;
 use crate::{
     CONST_PROOF_SIZE_LOG_N, NUM_INTERLEAVING_CLAIMS, NUM_LIBRA_COMMITMENTS,
     NUM_SMALL_IPA_EVALUATIONS,
@@ -9,41 +10,47 @@ use crate::{
         types::{ClaimedEvaluations, VerifierCommitments},
         verifier::DeciderVerifier,
     },
-    prelude::TranscriptFieldType,
+    transcript::TranscriptFieldType,
     transcript::{Transcript, TranscriptHasher},
     verifier::HonkVerifyResult,
 };
 use ark_ec::AffineRepr;
 use ark_ff::{Field, One, Zero};
+use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::prelude::HonkCurve;
 use co_builder::prelude::ZeroKnowledge;
 
-impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
-    DeciderVerifier<P, H>
+impl<
+    P: HonkCurve<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType>,
+    L: PlainProverFlavour,
+> DeciderVerifier<P, H, L>
 {
     pub fn get_g_shift_evaluations(
-        evaluations: &ClaimedEvaluations<P::ScalarField>,
-    ) -> PolyGShift<P::ScalarField> {
+        evaluations: &ClaimedEvaluations<P::ScalarField, L>,
+    ) -> PolyGShift<P::ScalarField, L> {
         PolyGShift {
             wires: &evaluations.shifted_witness,
         }
     }
 
-    pub fn get_g_shift_comms(evaluations: &VerifierCommitments<P::G1Affine>) -> PolyG<P::G1Affine> {
+    pub fn get_g_shift_comms(
+        evaluations: &VerifierCommitments<P::G1Affine, L>,
+    ) -> PolyG<P::G1Affine> {
         PolyG {
             wires: evaluations.witness.to_be_shifted().try_into().unwrap(),
         }
     }
 
     pub fn get_f_evaluations(
-        evaluations: &ClaimedEvaluations<P::ScalarField>,
-    ) -> PolyF<P::ScalarField> {
+        evaluations: &ClaimedEvaluations<P::ScalarField, L>,
+    ) -> PolyF<P::ScalarField, L> {
         PolyF {
             precomputed: &evaluations.precomputed,
             witness: &evaluations.witness,
         }
     }
-    pub fn get_f_comms(evaluations: &ClaimedEvaluations<P::G1Affine>) -> PolyF<P::G1Affine> {
+    pub fn get_f_comms(evaluations: &ClaimedEvaluations<P::G1Affine, L>) -> PolyF<P::G1Affine, L> {
         PolyF {
             precomputed: &evaluations.precomputed,
             witness: &evaluations.witness,

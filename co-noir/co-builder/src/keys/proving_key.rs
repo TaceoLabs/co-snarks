@@ -1,12 +1,15 @@
+use super::verification_key::PublicComponentKey;
+use crate::flavours::ultra_flavour::UltraFlavour;
 use crate::polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK;
+use crate::polynomials::polynomial_flavours::{
+    PrecomputedEntitiesFlavour, ProverWitnessEntitiesFlavour,
+};
+use crate::prover_flavour::ProverFlavour;
 use crate::{
     HonkProofResult,
     builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder},
     crs::ProverCrs,
-    polynomials::{
-        polynomial::Polynomial,
-        polynomial_types::{Polynomials, PrecomputedEntities},
-    },
+    polynomials::{polynomial::Polynomial, polynomial_types::Polynomials},
     types::types::{
         ActiveRegionData, CyclicPermutation, Mapping, NUM_WIRES, PermutationMapping, TraceData,
     },
@@ -17,23 +20,21 @@ use co_acvm::{PlainAcvmSolver, mpc::NoirWitnessExtensionProtocol};
 use num_bigint::BigUint;
 use std::sync::Arc;
 
-use super::verification_key::PublicComponentKey;
-
-pub struct ProvingKey<P: Pairing> {
+pub struct ProvingKey<P: Pairing, L: ProverFlavour> {
     pub crs: Arc<ProverCrs<P>>,
     pub circuit_size: u32,
     pub public_inputs: Vec<P::ScalarField>,
     pub num_public_inputs: u32,
     pub pub_inputs_offset: u32,
     pub pairing_inputs_public_input_key: PublicComponentKey,
-    pub polynomials: Polynomials<P::ScalarField>,
+    pub polynomials: Polynomials<P::ScalarField, L>,
     pub memory_read_records: Vec<u32>,
     pub memory_write_records: Vec<u32>,
     pub final_active_wire_idx: usize,
     pub active_region_data: ActiveRegionData,
 }
 
-impl<P: Pairing> ProvingKey<P> {
+impl<P: Pairing> ProvingKey<P, UltraFlavour> {
     // We ignore the TraceStructure for now (it is None in barretenberg for UltraHonk)
     pub fn create<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
         mut circuit: UltraCircuitBuilder<P>,
@@ -44,7 +45,7 @@ impl<P: Pairing> ProvingKey<P> {
 
         assert!(
             circuit.circuit_finalized,
-            "the circuit must be finalized before creating the  proving key"
+            "the circuit must be finalized before creating the proving key"
         );
 
         let dyadic_circuit_size = circuit.compute_dyadic_size();
@@ -113,30 +114,6 @@ impl<P: Pairing> ProvingKey<P> {
         Ok(proving_key)
     }
 
-    fn new(
-        circuit_size: usize,
-        num_public_inputs: usize,
-        crs: Arc<ProverCrs<P>>,
-        final_active_wire_idx: usize,
-    ) -> Self {
-        tracing::trace!("ProvingKey new");
-        let polynomials = Polynomials::new(circuit_size);
-
-        Self {
-            crs,
-            circuit_size: circuit_size as u32,
-            public_inputs: Vec::with_capacity(num_public_inputs),
-            num_public_inputs: num_public_inputs as u32,
-            pub_inputs_offset: 0,
-            polynomials,
-            memory_read_records: Vec::new(),
-            memory_write_records: Vec::new(),
-            final_active_wire_idx,
-            active_region_data: ActiveRegionData::new(),
-            pairing_inputs_public_input_key: Default::default(),
-        }
-    }
-
     fn populate_trace(&mut self, builder: &mut UltraCircuitBuilder<P>, is_structured: bool) {
         tracing::trace!("Populating trace");
 
@@ -189,7 +166,9 @@ impl<P: Pairing> ProvingKey<P> {
     pub fn compute_permutation_argument_polynomials<
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
-        polys: &mut PrecomputedEntities<Polynomial<P::ScalarField>>,
+        polys: &mut <UltraFlavour as ProverFlavour>::PrecomputedEntities<
+            Polynomial<P::ScalarField>,
+        >,
         circuit: &GenericUltraCircuitBuilder<P, T>,
         copy_cycles: Vec<CyclicPermutation>,
         circuit_size: usize,
@@ -470,5 +449,31 @@ impl<P: Pairing> ProvingKey<P> {
             table_offset += table.len(); // set the offset of the next table within the polynomials
         }
         Ok(())
+    }
+}
+
+impl<P: Pairing, L: ProverFlavour> ProvingKey<P, L> {
+    pub fn new(
+        circuit_size: usize,
+        num_public_inputs: usize,
+        crs: Arc<ProverCrs<P>>,
+        final_active_wire_idx: usize,
+    ) -> Self {
+        tracing::trace!("ProvingKey new");
+        let polynomials = Polynomials::new(circuit_size);
+
+        Self {
+            crs,
+            circuit_size: circuit_size as u32,
+            public_inputs: Vec::with_capacity(num_public_inputs),
+            num_public_inputs: num_public_inputs as u32,
+            pub_inputs_offset: 0,
+            polynomials,
+            memory_read_records: Vec::new(),
+            memory_write_records: Vec::new(),
+            final_active_wire_idx,
+            active_region_data: ActiveRegionData::new(),
+            pairing_inputs_public_input_key: Default::default(),
+        }
     }
 }

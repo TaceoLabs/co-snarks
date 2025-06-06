@@ -1,20 +1,24 @@
 use super::{Relation, fold_accumulator};
 use crate::{
-    co_decider::{
-        types::{MAX_PARTIAL_RELATION_LENGTH, RelationParameters},
-        univariates::SharedUnivariate,
-    },
+    co_decider::{types::RelationParameters, univariates::SharedUnivariate},
     mpc::NoirUltraHonkProver,
+    mpc_prover_flavour::MPCProverFlavour,
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use ark_ff::Zero;
-use co_builder::HonkProofResult;
+use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::prelude::HonkCurve;
+use co_builder::{
+    HonkProofResult, polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour,
+};
+use co_builder::{
+    TranscriptFieldType, polynomials::polynomial_flavours::PrecomputedEntitiesFlavour,
+};
 use itertools::Itertools as _;
 use mpc_core::MpcState as _;
 use mpc_net::Network;
-use ultrahonk::prelude::{TranscriptFieldType, Univariate};
+use ultrahonk::prelude::Univariate;
 
 #[derive(Clone, Debug)]
 pub(crate) struct DeltaRangeConstraintRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing> {
@@ -87,18 +91,18 @@ impl DeltaRangeConstraintRelation {
     pub(crate) const CRAND_PAIRS_FACTOR: usize = 12;
 }
 
-impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P>
-    for DeltaRangeConstraintRelation
+impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverFlavour>
+    Relation<T, P, L> for DeltaRangeConstraintRelation
 {
     type Acc = DeltaRangeConstraintRelationAcc<T, P>;
 
-    fn can_skip(entity: &super::ProverUnivariates<T, P>) -> bool {
+    fn can_skip(entity: &super::ProverUnivariates<T, P, L>) -> bool {
         entity.precomputed.q_delta_range().is_zero()
     }
 
-    fn add_entites(
-        entity: &super::ProverUnivariates<T, P>,
-        batch: &mut super::ProverUnivariatesBatch<T, P>,
+    fn add_entities(
+        entity: &super::ProverUnivariates<T, P, L>,
+        batch: &mut super::ProverUnivariatesBatch<T, P, L>,
     ) {
         batch.add_w_l(entity);
         batch.add_w_r(entity);
@@ -124,12 +128,12 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
      * @param parameters contains beta, gamma, and public_input_delta, ....
      * @param scaling_factor optional term to scale the evaluation before adding to evals.
      */
-    fn accumulate<N: Network>(
+    fn accumulate<N: Network, const SIZE: usize>(
         net: &N,
         state: &mut T::State,
         univariate_accumulator: &mut Self::Acc,
-        input: &super::ProverUnivariatesBatch<T, P>,
-        _relation_parameters: &RelationParameters<<P>::ScalarField>,
+        input: &super::ProverUnivariatesBatch<T, P, L>,
+        _relation_parameters: &RelationParameters<<P>::ScalarField, L>,
         scaling_factors: &[<P>::ScalarField],
     ) -> HonkProofResult<()> {
         let id = state.id();
@@ -209,10 +213,10 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let (contribution0, contribution1) = lhs.split_at(lhs.len() >> 1);
         let (contribution2, contribution3) = rhs.split_at(rhs.len() >> 1);
 
-        fold_accumulator!(univariate_accumulator.r0, contribution0);
-        fold_accumulator!(univariate_accumulator.r1, contribution1);
-        fold_accumulator!(univariate_accumulator.r2, contribution2);
-        fold_accumulator!(univariate_accumulator.r3, contribution3);
+        fold_accumulator!(univariate_accumulator.r0, contribution0, SIZE);
+        fold_accumulator!(univariate_accumulator.r1, contribution1, SIZE);
+        fold_accumulator!(univariate_accumulator.r2, contribution2, SIZE);
+        fold_accumulator!(univariate_accumulator.r3, contribution3, SIZE);
 
         Ok(())
     }

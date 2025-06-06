@@ -1,4 +1,6 @@
 use ark_bn254::Bn254;
+use co_builder::TranscriptFieldType;
+use co_builder::flavours::ultra_flavour::UltraFlavour;
 use co_builder::prelude::CrsParser;
 use co_builder::prelude::HonkRecursion;
 use co_builder::prelude::ZeroKnowledge;
@@ -6,8 +8,8 @@ use sha3::Keccak256;
 use ultrahonk::{
     Utils,
     prelude::{
-        HonkProof, PlainAcvmSolver, Poseidon2Sponge, TranscriptFieldType, TranscriptHasher,
-        UltraCircuitBuilder, UltraHonk,
+        HonkProof, PlainAcvmSolver, Poseidon2Sponge, TranscriptHasher, UltraCircuitBuilder,
+        UltraHonk,
     },
 };
 
@@ -35,13 +37,14 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(
     .unwrap();
     let crs_size = builder.compute_dyadic_size();
     let crs = CrsParser::get_crs(CRS_PATH_G1, CRS_PATH_G2, crs_size, has_zk).unwrap();
-    let (prover_crs, verififer_crs) = crs.split();
+    let (prover_crs, verifier_crs) = crs.split();
 
     let (proving_key, verifying_key) = builder
-        .create_keys(prover_crs.into(), verififer_crs, &mut driver)
+        .create_keys(prover_crs.into(), verifier_crs, &mut driver)
         .unwrap();
 
-    let (proof, public_inputs) = UltraHonk::<_, H>::prove(proving_key, has_zk).unwrap();
+    let (proof, public_inputs) =
+        UltraHonk::<_, H, UltraFlavour>::prove(proving_key, has_zk).unwrap();
     if has_zk == ZeroKnowledge::No {
         let proof_u8 = proof.to_buffer();
         let read_proof_u8 = std::fs::read(proof_file).unwrap();
@@ -52,7 +55,8 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(
     }
 
     let is_valid =
-        UltraHonk::<_, H>::verify(proof, &public_inputs, &verifying_key, has_zk).unwrap();
+        UltraHonk::<_, H, UltraFlavour>::verify(proof, &public_inputs, &verifying_key, has_zk)
+            .unwrap();
     assert!(is_valid);
 }
 

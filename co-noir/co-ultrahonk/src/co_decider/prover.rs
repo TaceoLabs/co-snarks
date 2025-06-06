@@ -4,16 +4,14 @@ use super::{
     small_subgroup_ipa::SharedSmallSubgroupIPAProver,
     types::ProverMemory,
 };
-use crate::{CoUtils, mpc::NoirUltraHonkProver};
+use crate::{CoUtils, mpc::NoirUltraHonkProver, mpc_prover_flavour::MPCProverFlavour};
 use co_builder::{
-    HonkProofResult,
+    HonkProofResult, TranscriptFieldType,
     prelude::{HonkCurve, ProverCrs, Utils},
 };
 use mpc_net::Network;
 use std::marker::PhantomData;
-use ultrahonk::prelude::{
-    HonkProof, Transcript, TranscriptFieldType, TranscriptHasher, ZeroKnowledge,
-};
+use ultrahonk::prelude::{HonkProof, Transcript, TranscriptHasher, ZeroKnowledge};
 
 pub(crate) struct CoDecider<
     'a,
@@ -21,13 +19,13 @@ pub(crate) struct CoDecider<
     P: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
     N: Network,
+    L: MPCProverFlavour,
 > {
     pub(crate) net: &'a N,
     pub(crate) state: &'a mut T::State,
-    pub(super) memory: ProverMemory<T, P>,
+    pub(super) memory: ProverMemory<T, P, L>,
     pub(crate) has_zk: ZeroKnowledge,
-    phantom_data: PhantomData<P>,
-    phantom_hasher: PhantomData<H>,
+    phantom_data: PhantomData<(P, H)>,
 }
 
 impl<
@@ -36,12 +34,13 @@ impl<
     P: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
     N: Network,
-> CoDecider<'a, T, P, H, N>
+    L: MPCProverFlavour,
+> CoDecider<'a, T, P, H, N, L>
 {
     pub fn new(
         net: &'a N,
         state: &'a mut T::State,
-        memory: ProverMemory<T, P>,
+        memory: ProverMemory<T, P, L>,
         has_zk: ZeroKnowledge,
     ) -> Self {
         Self {
@@ -50,7 +49,6 @@ impl<
             memory,
             has_zk,
             phantom_data: PhantomData,
-            phantom_hasher: PhantomData,
         }
     }
 
@@ -88,7 +86,7 @@ impl<
         crs: &ProverCrs<P>,
         circuit_size: u32,
     ) -> HonkProofResult<(
-        SumcheckOutput<P::ScalarField>,
+        SumcheckOutput<P::ScalarField, L>,
         Option<SharedZKSumcheckData<T, P>>,
     )> {
         if self.has_zk == ZeroKnowledge::Yes {
@@ -124,7 +122,7 @@ impl<
         transcript: &mut Transcript<TranscriptFieldType, H>,
         circuit_size: u32,
         crs: &ProverCrs<P>,
-        sumcheck_output: SumcheckOutput<P::ScalarField>,
+        sumcheck_output: SumcheckOutput<P::ScalarField, L>,
         zk_sumcheck_data: Option<SharedZKSumcheckData<T, P>>,
     ) -> HonkProofResult<()> {
         if self.has_zk == ZeroKnowledge::No {
@@ -164,11 +162,13 @@ impl<
         tracing::trace!("Decider prove");
 
         // Run sumcheck subprotocol.
+
         let (sumcheck_output, zk_sumcheck_data) =
             self.execute_relation_check_rounds(&mut transcript, crs, circuit_size)?;
 
         // Fiat-Shamir: rho, y, x, z
         // Execute Zeromorph multilinear PCS
+
         self.execute_pcs_rounds(
             &mut transcript,
             circuit_size,

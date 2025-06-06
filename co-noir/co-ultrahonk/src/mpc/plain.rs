@@ -2,6 +2,7 @@ use super::NoirUltraHonkProver;
 use ark_ec::pairing::Pairing;
 use ark_ec::scalar_mul::variable_base::VariableBaseMSM;
 use ark_ff::Field;
+use ark_ff::One;
 use ark_ff::UniformRand;
 use ark_poly::DenseUVPolynomial;
 use ark_poly::{Polynomial, univariate::DensePolynomial};
@@ -249,5 +250,21 @@ impl<P: Pairing> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         domain: &D,
     ) -> Vec<Self::ArithmeticShare> {
         domain.ifft(data)
+    }
+
+    fn is_zero_many<N: Network>(
+        a: &[Self::ArithmeticShare],
+        _net: &N,
+        _state: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
+        let mut res = Vec::with_capacity(a.len());
+        for a in a {
+            if a.is_zero() {
+                res.push(Self::ArithmeticShare::one());
+            } else {
+                res.push(Self::ArithmeticShare::zero());
+            }
+        }
+        Ok(res)
     }
 }

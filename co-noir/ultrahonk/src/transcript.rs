@@ -210,7 +210,7 @@ where
         Ok(res)
     }
 
-    pub(super) fn receive_fr_vec_from_verifier<P: HonkCurve<F>>(
+    pub(super) fn receive_fr_vec_from_prover<P: HonkCurve<F>>(
         &mut self,
         label: String,
         n: usize,
@@ -225,7 +225,7 @@ where
         Ok(elements)
     }
 
-    pub(super) fn receive_fr_array_from_verifier<P: HonkCurve<F>, const SIZE: usize>(
+    pub(super) fn receive_fr_array_from_prover<P: HonkCurve<F>, const SIZE: usize>(
         &mut self,
         label: String,
     ) -> HonkProofResult<[P::ScalarField; SIZE]> {

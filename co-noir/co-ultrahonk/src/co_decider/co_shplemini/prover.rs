@@ -1,4 +1,5 @@
 use super::types::{PolyF, PolyG};
+use crate::mpc_prover_flavour::MPCProverFlavour;
 use crate::{
     CoUtils,
     co_decider::{
@@ -13,6 +14,9 @@ use crate::{
 use ark_ec::AffineRepr;
 use ark_ff::{Field, One, Zero};
 use co_builder::HonkProofResult;
+use co_builder::TranscriptFieldType;
+use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
+use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::{
     HonkProofError,
     prelude::{HonkCurve, Polynomial, ProverCrs},
@@ -22,7 +26,7 @@ use mpc_core::MpcState as _;
 use mpc_net::Network;
 use ultrahonk::{
     NUM_INTERLEAVING_CLAIMS, NUM_SMALL_IPA_EVALUATIONS, Utils,
-    prelude::{Transcript, TranscriptFieldType, TranscriptHasher, ZeroKnowledge},
+    prelude::{Transcript, TranscriptHasher, ZeroKnowledge},
 };
 
 impl<
@@ -30,11 +34,12 @@ impl<
     P: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
     N: Network,
-> CoDecider<'_, T, P, H, N>
+    L: MPCProverFlavour,
+> CoDecider<'_, T, P, H, N, L>
 {
     fn get_f_polynomials(
-        polys: &AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>>,
-    ) -> PolyF<Vec<T::ArithmeticShare>, Vec<P::ScalarField>> {
+        polys: &AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>, L>,
+    ) -> PolyF<Vec<T::ArithmeticShare>, Vec<P::ScalarField>, L> {
         PolyF {
             precomputed: &polys.precomputed,
             witness: &polys.witness,
@@ -42,7 +47,7 @@ impl<
     }
 
     fn get_g_polynomials(
-        polys: &AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>>,
+        polys: &AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>, L>,
     ) -> PolyG<Vec<T::ArithmeticShare>> {
         PolyG {
             wires: polys.witness.to_be_shifted().try_into().unwrap(),
@@ -503,7 +508,7 @@ impl<
         transcript: &mut Transcript<TranscriptFieldType, H>,
         circuit_size: u32,
         crs: &ProverCrs<P>,
-        sumcheck_output: SumcheckOutput<P::ScalarField>,
+        sumcheck_output: SumcheckOutput<P::ScalarField, L>,
         libra_polynomials: Option<[SharedPolynomial<T, P>; NUM_SMALL_IPA_EVALUATIONS]>,
     ) -> HonkProofResult<ShpleminiOpeningClaim<T, P>> {
         let has_zk = ZeroKnowledge::from(libra_polynomials.is_some());

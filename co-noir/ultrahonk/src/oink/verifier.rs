@@ -1,31 +1,42 @@
 use super::types::VerifierMemory;
 use crate::{
     oink::prover::Oink,
-    prelude::TranscriptFieldType,
+    plain_prover_flavour::PlainProverFlavour,
     transcript::{Transcript, TranscriptHasher},
     verifier::HonkVerifyResult,
 };
+use co_builder::TranscriptFieldType;
 use co_builder::prelude::{HonkCurve, VerifyingKey};
+use co_builder::{
+    polynomials::polynomial_flavours::WitnessEntitiesFlavour, prover_flavour::Flavour,
+};
 
 pub(crate) struct OinkVerifier<
     P: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
+    L: PlainProverFlavour,
 > {
-    memory: VerifierMemory<P>,
+    memory: VerifierMemory<P, L>,
     pub public_inputs: Vec<P::ScalarField>,
-    phantom_hasher: std::marker::PhantomData<H>,
+    phantom_hasher: std::marker::PhantomData<(H, L)>,
 }
 
-impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> Default
-    for OinkVerifier<P, H>
+impl<
+    P: HonkCurve<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType>,
+    L: PlainProverFlavour,
+> Default for OinkVerifier<P, H, L>
 {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
-    OinkVerifier<P, H>
+impl<
+    P: HonkCurve<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType>,
+    L: PlainProverFlavour,
+> OinkVerifier<P, H, L>
 {
     pub(crate) fn new() -> Self {
         Self {
@@ -37,7 +48,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
     fn execute_preamble_round(
         &mut self,
-        verifying_key: &VerifyingKey<P>,
+        verifying_key: &VerifyingKey<P, L>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
     ) -> HonkVerifyResult<()> {
         tracing::trace!("executing (verifying) preamble round");
@@ -74,7 +85,43 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         *self.memory.witness_commitments.w_o_mut() =
             transcript.receive_point_from_prover::<P>("W_O".to_string())?;
 
-        // Round is done since ultra_honk is no goblin flavor
+        if L::FLAVOUR == Flavour::Mega {
+            *self.memory.witness_commitments.ecc_op_wire_1_mut() =
+                transcript.receive_point_from_prover::<P>("ecc_op_wire_1".to_string())?;
+            *self.memory.witness_commitments.ecc_op_wire_2_mut() =
+                transcript.receive_point_from_prover::<P>("ecc_op_wire_2".to_string())?;
+            *self.memory.witness_commitments.ecc_op_wire_3_mut() =
+                transcript.receive_point_from_prover::<P>("ecc_op_wire_3".to_string())?;
+            *self.memory.witness_commitments.ecc_op_wire_4_mut() =
+                transcript.receive_point_from_prover::<P>("ecc_op_wire_4".to_string())?;
+            *self.memory.witness_commitments.calldata_mut() =
+                transcript.receive_point_from_prover::<P>("calldata".to_string())?;
+            *self.memory.witness_commitments.calldata_read_counts_mut() =
+                transcript.receive_point_from_prover::<P>("calldata_read_counts".to_string())?;
+            *self.memory.witness_commitments.calldata_read_tags_mut() =
+                transcript.receive_point_from_prover::<P>("calldata_read_tags".to_string())?;
+            *self.memory.witness_commitments.secondary_calldata_mut() =
+                transcript.receive_point_from_prover::<P>("secondary_calldata".to_string())?;
+            *self
+                .memory
+                .witness_commitments
+                .secondary_calldata_read_counts_mut() = transcript
+                .receive_point_from_prover::<P>("secondary_calldata_read_counts".to_string())?;
+            *self
+                .memory
+                .witness_commitments
+                .secondary_calldata_read_tags_mut() = transcript
+                .receive_point_from_prover::<P>("secondary_calldata_read_tags".to_string())?;
+            *self.memory.witness_commitments.return_data_mut() =
+                transcript.receive_point_from_prover::<P>("return_data".to_string())?;
+            *self
+                .memory
+                .witness_commitments
+                .return_data_read_counts_mut() =
+                transcript.receive_point_from_prover::<P>("return_data_read_counts".to_string())?;
+            *self.memory.witness_commitments.return_data_read_tags_mut() =
+                transcript.receive_point_from_prover::<P>("return_data_read_tags".to_string())?;
+        }
         Ok(())
     }
 
@@ -118,17 +165,28 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         *self.memory.witness_commitments.lookup_inverses_mut() =
             transcript.receive_point_from_prover::<P>("lookup_inverses".to_string())?;
 
-        // Round is done since ultra_honk is no goblin flavor
+        // If Goblin (i.e. using DataBus) receive commitments to log-deriv inverses polynomials
+        if L::FLAVOUR == Flavour::Mega {
+            *self.memory.witness_commitments.calldata_inverses_mut() =
+                transcript.receive_point_from_prover::<P>("calldata_inverses".to_string())?;
+            *self
+                .memory
+                .witness_commitments
+                .secondary_calldata_inverses_mut() = transcript
+                .receive_point_from_prover::<P>("secondary_calldata_inverses".to_string())?;
+            *self.memory.witness_commitments.return_data_inverses_mut() =
+                transcript.receive_point_from_prover::<P>("return_data_inverses".to_string())?;
+        }
         Ok(())
     }
 
     fn execute_grand_product_computation_round(
         &mut self,
-        verifying_key: &VerifyingKey<P>,
+        verifying_key: &VerifyingKey<P, L>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
     ) -> HonkVerifyResult<()> {
         tracing::trace!("executing (verifying) grand product computation round");
-        self.memory.public_input_delta = Oink::<P, H>::compute_public_input_delta(
+        self.memory.public_input_delta = Oink::<P, H, L>::compute_public_input_delta(
             &self.memory.challenges.beta,
             &self.memory.challenges.gamma,
             &self.public_inputs,
@@ -142,16 +200,16 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
     pub(crate) fn verify(
         mut self,
-        verifying_key: &VerifyingKey<P>,
+        verifying_key: &VerifyingKey<P, L>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
-    ) -> HonkVerifyResult<VerifierMemory<P>> {
+    ) -> HonkVerifyResult<VerifierMemory<P, L>> {
         tracing::trace!("Oink verify");
         self.execute_preamble_round(verifying_key, transcript)?;
         self.execute_wire_commitments_round(transcript)?;
         self.execute_sorted_list_accumulator_round(transcript)?;
         self.execute_log_derivative_inverse_round(transcript)?;
         self.execute_grand_product_computation_round(verifying_key, transcript)?;
-        Oink::<P, H>::generate_alphas_round(&mut self.memory.challenges.alphas, transcript);
+        Oink::<P, H, L>::generate_alphas_round(&mut self.memory.challenges.alphas, transcript);
         Ok(self.memory)
     }
 }

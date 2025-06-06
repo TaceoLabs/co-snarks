@@ -1,24 +1,24 @@
 use super::SumcheckVerifierOutput;
+use crate::CONST_PROOF_SIZE_LOG_N;
 use crate::{
-    CONST_PROOF_SIZE_LOG_N,
-    decider::{
-        sumcheck::{round_prover::SumcheckRoundOutput, round_verifier::SumcheckVerifierRound},
-        verifier::DeciderVerifier,
-    },
-    prelude::{GateSeparatorPolynomial, TranscriptFieldType},
+    decider::{sumcheck::round_verifier::SumcheckVerifierRound, verifier::DeciderVerifier},
+    plain_prover_flavour::PlainProverFlavour,
+    prelude::GateSeparatorPolynomial,
     transcript::{Transcript, TranscriptHasher},
-    types::NUM_ALL_ENTITIES,
     verifier::HonkVerifyResult,
 };
 use ark_ff::{One, Zero};
-use co_builder::prelude::RowDisablingPolynomial;
 use co_builder::prelude::{HonkCurve, ZeroKnowledge};
+use co_builder::{TranscriptFieldType, prelude::RowDisablingPolynomial};
 
 // Keep in mind, the UltraHonk protocol (UltraFlavor) does not per default have ZK
-impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
-    DeciderVerifier<P, H>
+impl<
+    P: HonkCurve<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType>,
+    L: PlainProverFlavour,
+> DeciderVerifier<P, H, L>
 {
-    pub(crate) fn sumcheck_verify<const SIZE: usize>(
+    pub(crate) fn sumcheck_verify(
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         has_zk: ZeroKnowledge,
@@ -35,7 +35,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             self.memory.relation_parameters.gate_challenges.to_owned(),
         );
 
-        let mut sum_check_round = SumcheckVerifierRound::<P>::default();
+        let mut sum_check_round = SumcheckVerifierRound::<P, L>::default();
         let mut libra_challenge = P::ScalarField::one();
         if has_zk == ZeroKnowledge::Yes {
             // If running zero-knowledge sumcheck the target total sum is corrected by the claimed sum of libra masking
@@ -53,32 +53,57 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             tracing::trace!("Sumcheck verify round {}", round_idx);
             let round_univariate_label = format!("Sumcheck:univariate_{round_idx}");
 
-            let evaluations =
-                transcript.receive_fr_array_from_verifier::<P, SIZE>(round_univariate_label)?;
-            let round_univariate = SumcheckRoundOutput { evaluations };
+            if has_zk == ZeroKnowledge::Yes {
+                let round_univariate = L::receive_round_univariate_from_prover_zk::<_, _, P>(
+                    transcript,
+                    round_univariate_label,
+                )?;
+                let round_challenge =
+                    transcript.get_challenge::<P>(format!("Sumcheck:u_{round_idx}"));
 
-            let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{round_idx}"));
+                let checked = sum_check_round.check_sum_zk(&round_univariate, padding_value);
+                verified = verified && checked;
 
-            let checked = sum_check_round.check_sum(&round_univariate, padding_value);
-            verified = verified && checked;
+                multivariate_challenge.push(round_challenge);
 
-            multivariate_challenge.push(round_challenge);
+                sum_check_round.compute_next_target_sum_zk(
+                    &round_univariate,
+                    round_challenge,
+                    padding_value,
+                );
+                gate_separators.partially_evaluate_with_padding(
+                    round_challenge,
+                    padding_indicator_array[round_idx],
+                );
+            } else {
+                let round_univariate = L::receive_round_univariate_from_prover::<_, _, P>(
+                    transcript,
+                    round_univariate_label,
+                )?;
+                let round_challenge =
+                    transcript.get_challenge::<P>(format!("Sumcheck:u_{round_idx}"));
 
-            sum_check_round.compute_next_target_sum(
-                &round_univariate,
-                round_challenge,
-                padding_value,
-            );
-            gate_separators.partially_evaluate_with_padding(
-                round_challenge,
-                padding_indicator_array[round_idx],
-            );
+                let checked = sum_check_round.check_sum(&round_univariate, padding_value);
+                verified = verified && checked;
+
+                multivariate_challenge.push(round_challenge);
+
+                sum_check_round.compute_next_target_sum(
+                    &round_univariate,
+                    round_challenge,
+                    padding_value,
+                );
+                gate_separators.partially_evaluate_with_padding(
+                    round_challenge,
+                    padding_indicator_array[round_idx],
+                );
+            };
         }
 
         // Final round
-        let transcript_evaluations = transcript.receive_fr_vec_from_verifier::<P>(
+        let transcript_evaluations = transcript.receive_fr_vec_from_prover::<P>(
             "Sumcheck:evaluations".to_string(),
-            NUM_ALL_ENTITIES,
+            L::NUM_ALL_ENTITIES,
         )?;
 
         for (eval, &transcript_eval) in self
@@ -93,7 +118,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         // Evaluate the Honk relation at the point (u_0, ..., u_{d-1}) using claimed evaluations of prover polynomials.
 
         let mut full_honk_purported_value =
-            SumcheckVerifierRound::<P>::compute_full_relation_purported_value(
+            SumcheckVerifierRound::<P, L>::compute_full_relation_purported_value(
                 &self.memory.claimed_evaluations,
                 &self.memory.relation_parameters,
                 gate_separators,

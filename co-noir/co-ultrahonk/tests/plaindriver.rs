@@ -1,14 +1,14 @@
 use ark_bn254::Bn254;
 use ark_ff::PrimeField;
 use co_acvm::{PlainAcvmSolver, mpc::NoirWitnessExtensionProtocol};
+use co_builder::TranscriptFieldType;
+use co_builder::flavours::ultra_flavour::UltraFlavour;
 use co_builder::prelude::{CrsParser, HonkRecursion};
 use co_ultrahonk::prelude::{CoUltraHonk, PlainCoBuilder, PlainUltraHonkDriver, ProvingKey};
 use sha3::Keccak256;
 use ultrahonk::{
     Utils,
-    prelude::{
-        HonkProof, Poseidon2Sponge, TranscriptFieldType, TranscriptHasher, UltraHonk, ZeroKnowledge,
-    },
+    prelude::{HonkProof, Poseidon2Sponge, TranscriptHasher, UltraHonk, ZeroKnowledge},
 };
 
 fn promote_public_witness_vector<F: PrimeField, T: NoirWitnessExtensionProtocol<F>>(
@@ -48,8 +48,12 @@ fn plaindriver_test<H: TranscriptHasher<TranscriptFieldType>>(
     let (proving_key, verifying_key) =
         ProvingKey::create_keys(0, builder, &prover_crs, verifier_crs, &mut driver).unwrap();
 
-    let (proof, public_inputs) =
-        CoUltraHonk::<PlainUltraHonkDriver, _, H>::prove(proving_key, &prover_crs, has_zk).unwrap();
+    let (proof, public_inputs) = CoUltraHonk::<PlainUltraHonkDriver, _, H, UltraFlavour>::prove(
+        proving_key,
+        &prover_crs,
+        has_zk,
+    )
+    .unwrap();
 
     if has_zk == ZeroKnowledge::No {
         let proof_u8 = proof.to_buffer();
@@ -61,7 +65,8 @@ fn plaindriver_test<H: TranscriptHasher<TranscriptFieldType>>(
     }
 
     let is_valid =
-        UltraHonk::<_, H>::verify(proof, &public_inputs, &verifying_key, has_zk).unwrap();
+        UltraHonk::<_, H, UltraFlavour>::verify(proof, &public_inputs, &verifying_key, has_zk)
+            .unwrap();
     assert!(is_valid);
 }
 

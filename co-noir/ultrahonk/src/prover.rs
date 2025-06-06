@@ -2,6 +2,7 @@ use crate::{
     CONST_PROOF_SIZE_LOG_N,
     decider::{prover::Decider, types::ProverMemory},
     oink::prover::Oink,
+    plain_prover_flavour::PlainProverFlavour,
     transcript::{Transcript, TranscriptFieldType, TranscriptHasher},
     types::HonkProof,
 };
@@ -9,15 +10,24 @@ use ark_ec::pairing::Pairing;
 use co_builder::{
     HonkProofResult,
     prelude::{HonkCurve, PAIRING_POINT_ACCUMULATOR_SIZE, ProvingKey, ZeroKnowledge},
+    prover_flavour::Flavour,
 };
 use std::marker::PhantomData;
 
-pub struct UltraHonk<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> {
-    phantom_data: PhantomData<P>,
-    phantom_hasher: PhantomData<H>,
+pub struct UltraHonk<
+    P: HonkCurve<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType>,
+    L: PlainProverFlavour,
+> {
+    phantom_data: PhantomData<(P, H, L)>,
 }
 
-impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> UltraHonk<P, H> {
+impl<
+    P: HonkCurve<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType>,
+    L: PlainProverFlavour,
+> UltraHonk<P, H, L>
+{
     pub(crate) fn generate_gate_challenges(
         transcript: &mut Transcript<TranscriptFieldType, H>,
     ) -> Vec<P::ScalarField> {
@@ -34,7 +44,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     }
 
     pub fn prove(
-        mut proving_key: ProvingKey<P>,
+        mut proving_key: ProvingKey<P, L>,
         has_zk: ZeroKnowledge,
     ) -> HonkProofResult<(HonkProof<TranscriptFieldType>, Vec<TranscriptFieldType>)> {
         tracing::trace!("UltraHonk prove");
@@ -52,7 +62,11 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         memory.relation_parameters.gate_challenges =
             Self::generate_gate_challenges(&mut transcript);
 
-        let num_public_inputs = proving_key.num_public_inputs - PAIRING_POINT_ACCUMULATOR_SIZE;
+        let num_public_inputs = if L::FLAVOUR == Flavour::Ultra {
+            proving_key.num_public_inputs - PAIRING_POINT_ACCUMULATOR_SIZE
+        } else {
+            proving_key.num_public_inputs
+        };
         let decider = Decider::new(memory, has_zk);
         let proof = decider.prove(cicruit_size, &crs, transcript)?;
         Ok(proof.separate_proof_and_public_inputs(num_public_inputs as usize))
