@@ -1,6 +1,7 @@
 use super::{shplemini::ShpleminiVerifierOpeningClaim, types::VerifierMemory};
 use crate::{
     decider::types::{BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK},
+    plain_prover_flavour::PlainProverFlavour,
     prelude::TranscriptFieldType,
     transcript::{Transcript, TranscriptHasher},
     verifier::HonkVerifyResult,
@@ -14,20 +15,26 @@ use std::marker::PhantomData;
 pub(crate) struct DeciderVerifier<
     P: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
+    L: PlainProverFlavour<P::ScalarField>,
 > {
-    pub(super) memory: VerifierMemory<P>,
+    pub(super) memory: VerifierMemory<P, L>,
     phantom_data: PhantomData<P>,
     phantom_hasher: PhantomData<H>,
+    phantom_flavour: PhantomData<L>,
 }
 
-impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
-    DeciderVerifier<P, H>
+impl<
+        P: HonkCurve<TranscriptFieldType>,
+        H: TranscriptHasher<TranscriptFieldType>,
+        L: PlainProverFlavour<P::ScalarField>,
+    > DeciderVerifier<P, H, L>
 {
-    pub(crate) fn new(memory: VerifierMemory<P>) -> Self {
+    pub(crate) fn new(memory: VerifierMemory<P, L>) -> Self {
         Self {
             memory,
             phantom_data: PhantomData,
             phantom_hasher: PhantomData,
+            phantom_flavour: PhantomData,
         }
     }
 

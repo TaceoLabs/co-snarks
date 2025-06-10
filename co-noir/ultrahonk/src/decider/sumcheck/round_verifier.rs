@@ -14,26 +14,36 @@ use crate::{
         },
         types::{ClaimedEvaluations, RelationParameters},
     },
+    plain_prover_flavour::PlainProverFlavour,
     prelude::{GateSeparatorPolynomial, TranscriptFieldType},
 };
 use ark_ff::{One, Zero};
 use co_builder::prelude::HonkCurve;
 
-pub(crate) struct SumcheckVerifierRound<P: HonkCurve<TranscriptFieldType>> {
+pub(crate) struct SumcheckVerifierRound<
+    P: HonkCurve<TranscriptFieldType>,
+    L: PlainProverFlavour<P::ScalarField>,
+> {
     pub(crate) target_total_sum: P::ScalarField,
     pub(crate) round_failed: bool,
+    phantom: std::marker::PhantomData<L>,
 }
 
-impl<P: HonkCurve<TranscriptFieldType>> Default for SumcheckVerifierRound<P> {
+impl<P: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour<P::ScalarField>> Default
+    for SumcheckVerifierRound<P, L>
+{
     fn default() -> Self {
         Self::new()
     }
 }
-impl<P: HonkCurve<TranscriptFieldType>> SumcheckVerifierRound<P> {
+impl<P: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour<P::ScalarField>>
+    SumcheckVerifierRound<P, L>
+{
     pub(crate) fn new() -> Self {
         Self {
             target_total_sum: P::ScalarField::zero(),
             round_failed: false,
+            phantom: std::marker::PhantomData,
         }
     }
 
@@ -65,7 +75,7 @@ impl<P: HonkCurve<TranscriptFieldType>> SumcheckVerifierRound<P> {
 
     fn accumulate_one_relation_evaluations<R: Relation<P::ScalarField>>(
         univariate_accumulator: &mut R::VerifyAcc,
-        extended_edges: &ClaimedEvaluations<P::ScalarField>,
+        extended_edges: &ClaimedEvaluations<P::ScalarField, P::ScalarField, L>,
         relation_parameters: &RelationParameters<P::ScalarField>,
         scaling_factor: &P::ScalarField,
     ) {
@@ -79,7 +89,7 @@ impl<P: HonkCurve<TranscriptFieldType>> SumcheckVerifierRound<P> {
 
     fn accumulate_elliptic_curve_relation_evaluations(
         univariate_accumulator: &mut EllipticRelationEvals<P::ScalarField>,
-        extended_edges: &ClaimedEvaluations<P::ScalarField>,
+        extended_edges: &ClaimedEvaluations<P::ScalarField, P::ScalarField, L>,
         relation_parameters: &RelationParameters<P::ScalarField>,
         scaling_factor: &P::ScalarField,
     ) {
@@ -93,7 +103,7 @@ impl<P: HonkCurve<TranscriptFieldType>> SumcheckVerifierRound<P> {
 
     fn accumulate_relation_evaluations(
         univariate_accumulators: &mut AllRelationEvaluations<P::ScalarField>,
-        extended_edges: &ClaimedEvaluations<P::ScalarField>,
+        extended_edges: &ClaimedEvaluations<P::ScalarField, P::ScalarField, L>,
         relation_parameters: &RelationParameters<P::ScalarField>,
         scaling_factor: &P::ScalarField,
     ) {
@@ -150,7 +160,7 @@ impl<P: HonkCurve<TranscriptFieldType>> SumcheckVerifierRound<P> {
     }
 
     pub(crate) fn compute_full_relation_purported_value(
-        purported_evaluations: &ClaimedEvaluations<P::ScalarField>,
+        purported_evaluations: &ClaimedEvaluations<P::ScalarField, P::ScalarField, L>,
         relation_parameters: &RelationParameters<P::ScalarField>,
         gate_sparators: GateSeparatorPolynomial<P::ScalarField>,
     ) -> P::ScalarField {

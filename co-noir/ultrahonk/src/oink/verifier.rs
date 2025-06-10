@@ -1,6 +1,7 @@
 use super::types::VerifierMemory;
 use crate::{
     oink::prover::Oink,
+    plain_prover_flavour::PlainProverFlavour,
     prelude::TranscriptFieldType,
     transcript::{Transcript, TranscriptHasher},
     verifier::HonkVerifyResult,
@@ -10,28 +11,37 @@ use co_builder::prelude::{HonkCurve, VerifyingKey};
 pub(crate) struct OinkVerifier<
     P: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
+    L: PlainProverFlavour<P::ScalarField>,
 > {
-    memory: VerifierMemory<P>,
+    memory: VerifierMemory<P, L>,
     pub public_inputs: Vec<P::ScalarField>,
     phantom_hasher: std::marker::PhantomData<H>,
+    phantom_flavour: std::marker::PhantomData<L>,
 }
 
-impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> Default
-    for OinkVerifier<P, H>
+impl<
+        P: HonkCurve<TranscriptFieldType>,
+        H: TranscriptHasher<TranscriptFieldType>,
+        L: PlainProverFlavour<P::ScalarField>,
+    > Default for OinkVerifier<P, H, L>
 {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
-    OinkVerifier<P, H>
+impl<
+        P: HonkCurve<TranscriptFieldType>,
+        H: TranscriptHasher<TranscriptFieldType>,
+        L: PlainProverFlavour<P::ScalarField>,
+    > OinkVerifier<P, H, L>
 {
     pub(crate) fn new() -> Self {
         Self {
             memory: VerifierMemory::default(),
             public_inputs: Default::default(),
             phantom_hasher: Default::default(),
+            phantom_flavour: Default::default(),
         }
     }
 
@@ -128,7 +138,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         transcript: &mut Transcript<TranscriptFieldType, H>,
     ) -> HonkVerifyResult<()> {
         tracing::trace!("executing (verifying) grand product computation round");
-        self.memory.public_input_delta = Oink::<P, H>::compute_public_input_delta(
+        self.memory.public_input_delta = Oink::<P, H, L>::compute_public_input_delta(
             &self.memory.challenges.beta,
             &self.memory.challenges.gamma,
             &self.public_inputs,
@@ -144,14 +154,14 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         mut self,
         verifying_key: &VerifyingKey<P>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
-    ) -> HonkVerifyResult<VerifierMemory<P>> {
+    ) -> HonkVerifyResult<VerifierMemory<P, L>> {
         tracing::trace!("Oink verify");
         self.execute_preamble_round(verifying_key, transcript)?;
         self.execute_wire_commitments_round(transcript)?;
         self.execute_sorted_list_accumulator_round(transcript)?;
         self.execute_log_derivative_inverse_round(transcript)?;
         self.execute_grand_product_computation_round(verifying_key, transcript)?;
-        Oink::<P, H>::generate_alphas_round(&mut self.memory.challenges.alphas, transcript);
+        Oink::<P, H, L>::generate_alphas_round(&mut self.memory.challenges.alphas, transcript);
         Ok(self.memory)
     }
 }

@@ -4,6 +4,7 @@ use crate::{
         sumcheck::{round_prover::SumcheckRoundOutput, round_verifier::SumcheckVerifierRound},
         verifier::DeciderVerifier,
     },
+    plain_prover_flavour::PlainProverFlavour,
     prelude::{GateSeparatorPolynomial, TranscriptFieldType},
     transcript::{Transcript, TranscriptHasher},
     types::NUM_ALL_ENTITIES,
@@ -15,8 +16,11 @@ use co_builder::prelude::RowDisablingPolynomial;
 use co_builder::prelude::{HonkCurve, ZeroKnowledge};
 
 // Keep in mind, the UltraHonk protocol (UltraFlavor) does not per default have ZK
-impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
-    DeciderVerifier<P, H>
+impl<
+        P: HonkCurve<TranscriptFieldType>,
+        H: TranscriptHasher<TranscriptFieldType>,
+        L: PlainProverFlavour<P::ScalarField>,
+    > DeciderVerifier<P, H, L>
 {
     pub(crate) fn sumcheck_verify<const SIZE: usize>(
         &mut self,
@@ -35,7 +39,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             self.memory.relation_parameters.gate_challenges.to_owned(),
         );
 
-        let mut sum_check_round = SumcheckVerifierRound::<P>::default();
+        let mut sum_check_round = SumcheckVerifierRound::<P, L>::default();
         let mut libra_challenge = P::ScalarField::one();
         if has_zk == ZeroKnowledge::Yes {
             // If running zero-knowledge sumcheck the target total sum is corrected by the claimed sum of libra masking
@@ -94,7 +98,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         // Evaluate the Honk relation at the point (u_0, ..., u_{d-1}) using claimed evaluations of prover polynomials.
 
         let mut full_honk_purported_value =
-            SumcheckVerifierRound::<P>::compute_full_relation_purported_value(
+            SumcheckVerifierRound::<P, L>::compute_full_relation_purported_value(
                 &self.memory.claimed_evaluations,
                 &self.memory.relation_parameters,
                 gate_separators,

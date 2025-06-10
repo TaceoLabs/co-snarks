@@ -1,2 +1,2 @@
-pub(crate) mod mega_flavour;
-pub(crate) mod ultra_flavour;
+pub mod mega_flavour;
+pub mod ultra_flavour;

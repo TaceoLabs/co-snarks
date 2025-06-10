@@ -5,6 +5,7 @@ use crate::decider::types::{
     ClaimedEvaluations, GateSeparatorPolynomial, PartiallyEvaluatePolys,
     BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK,
 };
+use crate::plain_prover_flavour::PlainProverFlavour;
 use crate::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
 use crate::types::AllEntities;
 use crate::{Utils, CONST_PROOF_SIZE_LOG_N};
@@ -13,10 +14,15 @@ use co_builder::prelude::{HonkCurve, RowDisablingPolynomial};
 use super::zk_data::ZKSumcheckData;
 
 // Keep in mind, the UltraHonk protocol (UltraFlavor) does not per default have ZK
-impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> Decider<P, H> {
+impl<
+        P: HonkCurve<TranscriptFieldType>,
+        H: TranscriptHasher<TranscriptFieldType>,
+        L: PlainProverFlavour<P::ScalarField>,
+    > Decider<P, H, L>
+{
     pub(crate) fn partially_evaluate_init(
-        partially_evaluated_poly: &mut PartiallyEvaluatePolys<P::ScalarField>,
-        polys: &AllEntities<Vec<P::ScalarField>>,
+        partially_evaluated_poly: &mut PartiallyEvaluatePolys<P::ScalarField, L>,
+        polys: &AllEntities<Vec<P::ScalarField>, P::ScalarField, L>,
         round_size: usize,
         round_challenge: &P::ScalarField,
     ) {
@@ -31,7 +37,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     }
 
     pub(crate) fn partially_evaluate_inplace(
-        partially_evaluated_poly: &mut PartiallyEvaluatePolys<P::ScalarField>,
+        partially_evaluated_poly: &mut PartiallyEvaluatePolys<P::ScalarField, L>,
         round_size: usize,
         round_challenge: &P::ScalarField,
     ) {
@@ -47,7 +53,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
     fn add_evals_to_transcript(
         transcript: &mut Transcript<TranscriptFieldType, H>,
-        evaluations: &ClaimedEvaluations<P::ScalarField>,
+        evaluations: &ClaimedEvaluations<P::ScalarField, P::ScalarField, L>,
     ) {
         tracing::trace!("Add Evals to Transcript");
 
@@ -58,8 +64,8 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     }
 
     fn extract_claimed_evaluations(
-        partially_evaluated_polynomials: PartiallyEvaluatePolys<P::ScalarField>,
-    ) -> ClaimedEvaluations<P::ScalarField> {
+        partially_evaluated_polynomials: PartiallyEvaluatePolys<P::ScalarField, L>,
+    ) -> ClaimedEvaluations<P::ScalarField, P::ScalarField, L> {
         let mut multivariate_evaluations = ClaimedEvaluations::default();
 
         #[expect(unused_mut)] // TACEO TODO: This is for the linter, remove once its fixed...
@@ -77,7 +83,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         &self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         circuit_size: u32,
-    ) -> SumcheckOutput<P::ScalarField> {
+    ) -> SumcheckOutput<P::ScalarField, L> {
         tracing::trace!("Sumcheck prove");
 
         let multivariate_n = circuit_size;
@@ -185,7 +191,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         transcript: &mut Transcript<TranscriptFieldType, H>,
         circuit_size: u32,
         zk_sumcheck_data: &mut ZKSumcheckData<P>,
-    ) -> SumcheckOutput<P::ScalarField> {
+    ) -> SumcheckOutput<P::ScalarField, L> {
         tracing::trace!("Sumcheck prove");
 
         // Ensure that the length of Sumcheck Round Univariates does not exceed the length of Libra masking

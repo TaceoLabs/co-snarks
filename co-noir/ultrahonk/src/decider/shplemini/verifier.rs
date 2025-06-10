@@ -2,6 +2,7 @@ use super::{
     types::{PolyF, PolyG, PolyGShift},
     ShpleminiVerifierOpeningClaim,
 };
+use crate::plain_prover_flavour::PlainProverFlavour;
 use crate::{
     decider::{
         types::{ClaimedEvaluations, VerifierCommitments},
@@ -18,32 +19,39 @@ use ark_ff::{Field, One, Zero};
 use co_builder::prelude::HonkCurve;
 use co_builder::prelude::ZeroKnowledge;
 
-impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
-    DeciderVerifier<P, H>
+impl<
+        P: HonkCurve<TranscriptFieldType>,
+        H: TranscriptHasher<TranscriptFieldType>,
+        L: PlainProverFlavour<P::ScalarField>,
+    > DeciderVerifier<P, H, L>
 {
     pub fn get_g_shift_evaluations(
-        evaluations: &ClaimedEvaluations<P::ScalarField>,
+        evaluations: &ClaimedEvaluations<P::ScalarField, P::ScalarField, L>,
     ) -> PolyGShift<P::ScalarField> {
         PolyGShift {
             wires: &evaluations.shifted_witness,
         }
     }
 
-    pub fn get_g_shift_comms(evaluations: &VerifierCommitments<P::G1Affine>) -> PolyG<P::G1Affine> {
+    pub fn get_g_shift_comms(
+        evaluations: &VerifierCommitments<P::G1Affine, P::ScalarField, L>,
+    ) -> PolyG<P::G1Affine> {
         PolyG {
             wires: evaluations.witness.to_be_shifted().try_into().unwrap(),
         }
     }
 
     pub fn get_f_evaluations(
-        evaluations: &ClaimedEvaluations<P::ScalarField>,
-    ) -> PolyF<P::ScalarField> {
+        evaluations: &ClaimedEvaluations<P::ScalarField, P::ScalarField, L>,
+    ) -> PolyF<P::ScalarField, P::ScalarField, L> {
         PolyF {
             precomputed: &evaluations.precomputed,
             witness: &evaluations.witness,
         }
     }
-    pub fn get_f_comms(evaluations: &ClaimedEvaluations<P::G1Affine>) -> PolyF<P::G1Affine> {
+    pub fn get_f_comms(
+        evaluations: &ClaimedEvaluations<P::G1Affine, P::ScalarField, L>,
+    ) -> PolyF<P::G1Affine, P::ScalarField, L> {
         PolyF {
             precomputed: &evaluations.precomputed,
             witness: &evaluations.witness,

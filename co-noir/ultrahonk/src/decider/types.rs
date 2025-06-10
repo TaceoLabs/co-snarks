@@ -1,30 +1,32 @@
 use super::univariate::Univariate;
+use crate::plain_prover_flavour::PlainProverFlavour;
 use crate::{types::AllEntities, NUM_ALPHAS};
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
+use co_builder::flavours::ultra_flavour::UltraFlavour;
 use co_builder::prelude::{Polynomials, VerifyingKey};
 use itertools::izip;
 use std::{iter, vec};
 
-pub(crate) struct ProverMemory<P: Pairing> {
-    pub(crate) polys: AllEntities<Vec<P::ScalarField>>,
+pub(crate) struct ProverMemory<P: Pairing, L: PlainProverFlavour<P::ScalarField>> {
+    pub(crate) polys: AllEntities<Vec<P::ScalarField>, P::ScalarField, L>,
     pub(crate) relation_parameters: RelationParameters<P::ScalarField>,
 }
 
-pub(crate) struct VerifierMemory<P: Pairing> {
-    pub(crate) verifier_commitments: VerifierCommitments<P::G1Affine>,
+pub(crate) struct VerifierMemory<P: Pairing, L: PlainProverFlavour<P::ScalarField>> {
+    pub(crate) verifier_commitments: VerifierCommitments<P::G1Affine, P::ScalarField, L>,
     pub(crate) relation_parameters: RelationParameters<P::ScalarField>,
-    pub(crate) claimed_evaluations: ClaimedEvaluations<P::ScalarField>,
+    pub(crate) claimed_evaluations: ClaimedEvaluations<P::ScalarField, P::ScalarField, L>,
 }
 
 pub(crate) const MAX_PARTIAL_RELATION_LENGTH: usize = 7;
 pub(crate) const BATCHED_RELATION_PARTIAL_LENGTH: usize = MAX_PARTIAL_RELATION_LENGTH + 1;
 pub(crate) const BATCHED_RELATION_PARTIAL_LENGTH_ZK: usize = BATCHED_RELATION_PARTIAL_LENGTH + 1;
 
-pub(crate) type ProverUnivariates<F> = AllEntities<Univariate<F, MAX_PARTIAL_RELATION_LENGTH>>;
-pub(crate) type PartiallyEvaluatePolys<F> = AllEntities<Vec<F>>;
-pub(crate) type ClaimedEvaluations<F> = AllEntities<F>;
-pub(crate) type VerifierCommitments<P> = AllEntities<P>;
+pub(crate) type ProverUnivariates<F, L, const SIZE: usize> = AllEntities<Univariate<F, SIZE>, F, L>;
+pub(crate) type PartiallyEvaluatePolys<F, L> = AllEntities<Vec<F>, F, L>;
+pub(crate) type ClaimedEvaluations<F, K, L> = AllEntities<F, K, L>;
+pub(crate) type VerifierCommitments<P, F, L> = AllEntities<P, F, L>;
 
 pub(crate) struct RelationParameters<F: PrimeField> {
     pub(crate) eta_1: F,
@@ -108,10 +110,10 @@ impl<F: PrimeField> GateSeparatorPolynomial<F> {
     }
 }
 
-impl<P: Pairing> ProverMemory<P> {
+impl<P: Pairing, L: PlainProverFlavour<P::ScalarField>> ProverMemory<P, L> {
     pub(crate) fn from_memory_and_polynomials(
         prover_memory: crate::oink::types::ProverMemory<P>,
-        polynomials: Polynomials<P::ScalarField>,
+        polynomials: Polynomials<P::ScalarField, L>,
     ) -> Self {
         let relation_parameters = RelationParameters {
             eta_1: prover_memory.challenges.eta_1,
@@ -166,10 +168,11 @@ impl<P: Pairing> ProverMemory<P> {
     }
 }
 
-impl<P: Pairing> VerifierMemory<P> {
+// TODO FLORIN: Make this generic over the flavour (Or implement for Mega)
+impl<P: Pairing> VerifierMemory<P, UltraFlavour<P::ScalarField>> {
     #[expect(clippy::field_reassign_with_default)]
     pub(crate) fn from_memory_and_key(
-        verifier_memory: crate::oink::types::VerifierMemory<P>,
+        verifier_memory: crate::oink::types::VerifierMemory<P, UltraFlavour<P::ScalarField>>,
         vk: &VerifyingKey<P>,
     ) -> Self {
         let relation_parameters = RelationParameters {

@@ -62,7 +62,7 @@ pub(crate) trait Relation<F: PrimeField> {
     );
 }
 
-pub(crate) const NUM_SUBRELATIONS: usize = UltraArithmeticRelation::NUM_RELATIONS
+pub(crate) const NUM_SUBRELATIONS_ONLY_VERIFIER: usize = UltraArithmeticRelation::NUM_RELATIONS
     + UltraPermutationRelation::NUM_RELATIONS
     + DeltaRangeConstraintRelation::NUM_RELATIONS
     + EllipticRelation::NUM_RELATIONS
@@ -97,7 +97,7 @@ pub(crate) struct AllRelationEvaluations<F: PrimeField> {
 
 impl<F: PrimeField> AllRelationEvaluations<F> {
     pub(crate) fn scale_and_batch_elements(&self, first_scalar: F, elements: &[F]) -> F {
-        assert!(elements.len() == NUM_SUBRELATIONS - 1);
+        assert!(elements.len() == NUM_SUBRELATIONS_ONLY_VERIFIER - 1);
         let mut output = F::zero();
         self.r_arith
             .scale_and_batch_elements(&[first_scalar, elements[0]], &mut output);

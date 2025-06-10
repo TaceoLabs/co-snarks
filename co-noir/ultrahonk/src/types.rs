@@ -1,8 +1,13 @@
+use std::marker::PhantomData;
+
 use ark_ff::PrimeField;
 use co_builder::{
     prelude::{PrecomputedEntities, Serialize, PRECOMPUTED_ENTITIES_SIZE},
+    prover_flavour::ProverFlavour,
     HonkProofResult,
 };
+
+use crate::plain_prover_flavour::PlainProverFlavour;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HonkProof<F: PrimeField> {
@@ -42,13 +47,13 @@ impl<F: PrimeField> HonkProof<F> {
 pub(crate) const NUM_ALL_ENTITIES: usize =
     WITNESS_ENTITIES_SIZE + PRECOMPUTED_ENTITIES_SIZE + SHIFTED_WITNESS_ENTITIES_SIZE;
 #[derive(Default)]
-pub(crate) struct AllEntities<T: Default> {
-    pub(crate) witness: WitnessEntities<T>,
-    pub(crate) precomputed: PrecomputedEntities<T>,
+pub(crate) struct AllEntities<T: Default, F: PrimeField, L: PlainProverFlavour<F>> {
+    pub(crate) witness: WitnessEntities<T, F, L>,
+    pub(crate) precomputed: PrecomputedEntities<T, F, L>,
     pub(crate) shifted_witness: ShiftedWitnessEntities<T>,
 }
 
-impl<T: Default> AllEntities<T> {
+impl<T: Default, F: PrimeField, L: PlainProverFlavour<F>> AllEntities<T, F, L> {
     pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
         self.precomputed
             .iter()
@@ -64,7 +69,7 @@ impl<T: Default> AllEntities<T> {
     }
 }
 
-impl<T: Default + Clone> AllEntities<Vec<T>> {
+impl<T: Default + Clone, F: PrimeField, L: PlainProverFlavour<F>> AllEntities<Vec<T>, F, L> {
     pub(crate) fn new(circuit_size: usize) -> Self {
         let mut polynomials = Self::default();
         // Shifting is done at a later point
@@ -78,8 +83,9 @@ impl<T: Default + Clone> AllEntities<Vec<T>> {
 
 const WITNESS_ENTITIES_SIZE: usize = 8;
 #[derive(Default, Clone)]
-pub struct WitnessEntities<T: Default> {
+pub struct WitnessEntities<T: Default, F: PrimeField, L: ProverFlavour<F>> {
     pub(crate) elements: [T; WITNESS_ENTITIES_SIZE],
+    phantom_data: PhantomData<(F, L)>,
 }
 
 const SHIFTED_WITNESS_ENTITIES_SIZE: usize = 5;
@@ -88,7 +94,9 @@ pub struct ShiftedWitnessEntities<T: Default> {
     pub(crate) elements: [T; SHIFTED_WITNESS_ENTITIES_SIZE],
 }
 
-impl<T: Default> IntoIterator for WitnessEntities<T> {
+impl<T: Default, F: PrimeField, L: PlainProverFlavour<F>> IntoIterator
+    for WitnessEntities<T, F, L>
+{
     type Item = T;
     type IntoIter = std::array::IntoIter<T, WITNESS_ENTITIES_SIZE>;
 
@@ -97,14 +105,15 @@ impl<T: Default> IntoIterator for WitnessEntities<T> {
     }
 }
 
-impl<T: Default> WitnessEntities<Vec<T>> {
+impl<T: Default, F: PrimeField, L: PlainProverFlavour<F>> WitnessEntities<Vec<T>, F, L> {
     pub fn new() -> Self {
         Self {
             elements: std::array::from_fn(|_| Vec::new()),
+            phantom_data: PhantomData,
         }
     }
 
-    pub fn add(&mut self, witness_entity: WitnessEntities<T>) {
+    pub fn add(&mut self, witness_entity: WitnessEntities<T, F, L>) {
         for (src, dst) in witness_entity.into_iter().zip(self.iter_mut()) {
             dst.push(src);
         }
@@ -134,7 +143,7 @@ impl<T: Default> ShiftedWitnessEntities<Vec<T>> {
     }
 }
 
-impl<T: Default> IntoIterator for AllEntities<T> {
+impl<T: Default, F: PrimeField, L: PlainProverFlavour<F>> IntoIterator for AllEntities<T, F, L> {
     type Item = T;
     type IntoIter = std::iter::Chain<
         std::iter::Chain<
@@ -152,7 +161,7 @@ impl<T: Default> IntoIterator for AllEntities<T> {
     }
 }
 
-impl<T: Default> WitnessEntities<T> {
+impl<T: Default, F: PrimeField, L: PlainProverFlavour<F>> WitnessEntities<T, F, L> {
     /// column 0
     const W_L: usize = 0;
     /// column 1
@@ -250,101 +259,230 @@ impl<T: Default> WitnessEntities<T> {
         &mut self.elements[Self::LOOKUP_READ_TAGS]
     }
 
+    // We do +2 here because in this case we also consider z_perm and lookup_inverses
     pub fn calldata(&self) -> &T {
-        todo!("calldata is not implemented in the current flavour")
+        if let Some(idx) = L::CALLDATA {
+            &self.elements[idx + 2]
+        } else {
+            panic!("This should not be called with the UltraFlavor");
+        }
     }
     pub fn calldata_mut(&mut self) -> &mut T {
-        todo!("calldata is not implemented in the current flavour")
+        if let Some(idx) = L::CALLDATA {
+            &mut self.elements[idx + 2]
+        } else {
+            panic!("This should not be called with the UltraFlavor");
+        }
     }
     pub fn secondary_calldata(&self) -> &T {
-        todo!("secondary calldata is not implemented in the current flavour")
+        if let Some(idx) = L::SECONDARY_CALLDATA {
+            &self.elements[idx + 2]
+        } else {
+            panic!("This should not be called with the UltraFlavor");
+        }
     }
     pub fn secondary_calldata_mut(&mut self) -> &mut T {
-        todo!("secondary calldata is not implemented in the current flavour")
+        if let Some(idx) = L::SECONDARY_CALLDATA {
+            &mut self.elements[idx + 2]
+        } else {
+            panic!("This should not be called with the UltraFlavor");
+        }
     }
     pub fn return_data(&self) -> &T {
-        todo!("return data is not implemented in the current flavour")
+        if let Some(idx) = L::RETURN_DATA {
+            &self.elements[idx + 2]
+        } else {
+            panic!("This should not be called with the UltraFlavor");
+        }
     }
     pub fn return_data_mut(&mut self) -> &mut T {
-        todo!("return data is not implemented in the current flavour")
+        if let Some(idx) = L::RETURN_DATA {
+            &mut self.elements[idx + 2]
+        } else {
+            panic!("This should not be called with the UltraFlavor");
+        }
     }
     pub fn ecc_op_wire_1(&self) -> &T {
-        todo!("ecc op wire 1 is not implemented in the current flavour")
+        if let Some(idx) = L::ECC_OP_WIRE_1 {
+            &self.elements[idx + 2]
+        } else {
+            panic!("This should not be called with the UltraFlavor");
+        }
     }
     pub fn ecc_op_wire_1_mut(&mut self) -> &mut T {
-        todo!("ecc op wire 1 is not implemented in the current flavour")
+        if let Some(idx) = L::ECC_OP_WIRE_1 {
+            &mut self.elements[idx + 2]
+        } else {
+            panic!("This should not be called with the UltraFlavor");
+        }
     }
     pub fn ecc_op_wire_2(&self) -> &T {
-        todo!("ecc op wire 2 is not implemented in the current flavour")
+        if let Some(idx) = L::ECC_OP_WIRE_2 {
+            &self.elements[idx + 2]
+        } else {
+            panic!("This should not be called with the UltraFlavor");
+        }
     }
     pub fn ecc_op_wire_2_mut(&mut self) -> &mut T {
-        todo!("ecc op wire 2 is not implemented in the current flavour")
+        if let Some(idx) = L::ECC_OP_WIRE_2 {
+            &mut self.elements[idx + 2]
+        } else {
+            panic!("This should not be called with the UltraFlavor");
+        }
     }
     pub fn ecc_op_wire_3(&self) -> &T {
-        todo!("ecc op wire 3 is not implemented in the current flavour")
+        if let Some(idx) = L::ECC_OP_WIRE_3 {
+            &self.elements[idx + 2]
+        } else {
+            panic!("This should not be called with the UltraFlavor");
+        }
     }
     pub fn ecc_op_wire_3_mut(&mut self) -> &mut T {
-        todo!("ecc op wire 3 is not implemented in the current flavour")
+        if let Some(idx) = L::ECC_OP_WIRE_3 {
+            &mut self.elements[idx + 2]
+        } else {
+            panic!("This should not be called with the UltraFlavor");
+        }
     }
     pub fn ecc_op_wire_4(&self) -> &T {
-        todo!("ecc op wire 4 is not implemented in the current flavour")
+        if let Some(idx) = L::ECC_OP_WIRE_4 {
+            &self.elements[idx + 2]
+        } else {
+            panic!("This should not be called with the UltraFlavor");
+        }
     }
     pub fn ecc_op_wire_4_mut(&mut self) -> &mut T {
-        todo!("ecc op wire 4 is not implemented in the current flavour")
+        if let Some(idx) = L::ECC_OP_WIRE_4 {
+            &mut self.elements[idx + 2]
+        } else {
+            panic!("This should not be called with the UltraFlavor");
+        }
     }
     pub fn calldata_read_counts(&self) -> &T {
-        todo!("calldata read counts is not implemented in the current flavour")
+        if let Some(idx) = L::CALLDATA_READ_COUNTS {
+            &self.elements[idx + 2]
+        } else {
+            panic!("This should not be called with the UltraFlavor");
+        }
     }
     pub fn calldata_read_counts_mut(&mut self) -> &mut T {
-        todo!("calldata read counts is not implemented in the current flavour")
+        if let Some(idx) = L::CALLDATA_READ_COUNTS {
+            &mut self.elements[idx + 2]
+        } else {
+            panic!("This should not be called with the UltraFlavor");
+        }
     }
     pub fn calldata_read_tags(&self) -> &T {
-        todo!("calldata read tags is not implemented in the current flavour")
+        if let Some(idx) = L::CALLDATA_READ_TAGS {
+            &self.elements[idx + 2]
+        } else {
+            panic!("This should not be called with the UltraFlavor");
+        }
     }
     pub fn calldata_read_tags_mut(&mut self) -> &mut T {
-        todo!("calldata read tags is not implemented in the current flavour")
+        if let Some(idx) = L::CALLDATA_READ_TAGS {
+            &mut self.elements[idx + 2]
+        } else {
+            panic!("This should not be called with the UltraFlavor");
+        }
     }
     pub fn calldata_inverses(&self) -> &T {
-        todo!("calldata inverses is not implemented in the current flavour")
+        if let Some(idx) = L::CALLDATA_INVERSES {
+            &self.elements[idx + 2]
+        } else {
+            panic!("This should not be called with the UltraFlavor");
+        }
     }
     pub fn calldata_inverses_mut(&mut self) -> &mut T {
-        todo!("calldata inverses is not implemented in the current flavour")
+        if let Some(idx) = L::CALLDATA_INVERSES {
+            &mut self.elements[idx + 2]
+        } else {
+            panic!("This should not be called with the UltraFlavor");
+        }
     }
     pub fn secondary_calldata_read_counts(&self) -> &T {
-        todo!("secondary calldata read counts is not implemented in the current flavour")
+        if let Some(idx) = L::SECONDARY_CALLDATA_READ_COUNTS {
+            &self.elements[idx + 2]
+        } else {
+            panic!("This should not be called with the UltraFlavor");
+        }
     }
     pub fn secondary_calldata_read_counts_mut(&mut self) -> &mut T {
-        todo!("secondary calldata read counts is not implemented in the current flavour")
+        if let Some(idx) = L::SECONDARY_CALLDATA_READ_COUNTS {
+            &mut self.elements[idx + 2]
+        } else {
+            panic!("This should not be called with the UltraFlavor");
+        }
     }
     pub fn secondary_calldata_read_tags(&self) -> &T {
-        todo!("secondary calldata read tags is not implemented in the current flavour")
+        if let Some(idx) = L::SECONDARY_CALLDATA_READ_TAGS {
+            &self.elements[idx + 2]
+        } else {
+            panic!("This should not be called with the UltraFlavor");
+        }
     }
     pub fn secondary_calldata_read_tags_mut(&mut self) -> &mut T {
-        todo!("secondary calldata read tags is not implemented in the current flavour")
+        if let Some(idx) = L::SECONDARY_CALLDATA_READ_TAGS {
+            &mut self.elements[idx + 2]
+        } else {
+            panic!("This should not be called with the UltraFlavor");
+        }
     }
     pub fn secondary_calldata_inverses(&self) -> &T {
-        todo!("secondary calldata inverses is not implemented in the current flavour")
+        if let Some(idx) = L::SECONDARY_CALLDATA_INVERSES {
+            &self.elements[idx + 2]
+        } else {
+            panic!("This should not be called with the UltraFlavor");
+        }
     }
     pub fn secondary_calldata_inverses_mut(&mut self) -> &mut T {
-        todo!("secondary calldata inverses is not implemented in the current flavour")
+        if let Some(idx) = L::SECONDARY_CALLDATA_INVERSES {
+            &mut self.elements[idx + 2]
+        } else {
+            panic!("This should not be called with the UltraFlavor");
+        }
     }
     pub fn return_data_read_counts(&self) -> &T {
-        todo!("return data read counts is not implemented in the current flavour")
+        if let Some(idx) = L::RETURN_DATA_READ_COUNTS {
+            &self.elements[idx + 2]
+        } else {
+            panic!("This should not be called with the UltraFlavor");
+        }
     }
     pub fn return_data_read_counts_mut(&mut self) -> &mut T {
-        todo!("return data read counts is not implemented in the current flavour")
+        if let Some(idx) = L::RETURN_DATA_READ_COUNTS {
+            &mut self.elements[idx + 2]
+        } else {
+            panic!("This should not be called with the UltraFlavor");
+        }
     }
     pub fn return_data_read_tags(&self) -> &T {
-        todo!("return data read tags is not implemented in the current flavour")
+        if let Some(idx) = L::RETURN_DATA_READ_TAGS {
+            &self.elements[idx + 2]
+        } else {
+            panic!("This should not be called with the UltraFlavor");
+        }
     }
     pub fn return_data_read_tags_mut(&mut self) -> &mut T {
-        todo!("return data read tags is not implemented in the current flavour")
+        if let Some(idx) = L::RETURN_DATA_READ_TAGS {
+            &mut self.elements[idx + 2]
+        } else {
+            panic!("This should not be called with the UltraFlavor");
+        }
     }
     pub fn return_data_inverses(&self) -> &T {
-        todo!("return data inverses is not implemented in the current flavour")
+        if let Some(idx) = L::RETURN_DATA_INVERSES {
+            &self.elements[idx + 2]
+        } else {
+            panic!("This should not be called with the UltraFlavor");
+        }
     }
     pub fn return_data_inverses_mut(&mut self) -> &mut T {
-        todo!("return data inverses is not implemented in the current flavour")
+        if let Some(idx) = L::RETURN_DATA_INVERSES {
+            &mut self.elements[idx + 2]
+        } else {
+            panic!("This should not be called with the UltraFlavor");
+        }
     }
 }
 

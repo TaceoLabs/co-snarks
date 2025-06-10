@@ -1,4 +1,4 @@
-use crate::{types::WitnessEntities, NUM_ALPHAS};
+use crate::{plain_prover_flavour::PlainProverFlavour, types::WitnessEntities, NUM_ALPHAS};
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use co_builder::prelude::Polynomial;
@@ -14,9 +14,9 @@ pub(crate) struct ProverMemory<P: Pairing> {
     pub(crate) challenges: Challenges<P::ScalarField>,
 }
 
-pub(crate) struct VerifierMemory<P: Pairing> {
+pub(crate) struct VerifierMemory<P: Pairing, L: PlainProverFlavour<P::ScalarField>> {
     pub(crate) public_input_delta: P::ScalarField,
-    pub(crate) witness_commitments: WitnessEntities<P::G1Affine>,
+    pub(crate) witness_commitments: WitnessEntities<P::G1Affine, P::ScalarField, L>,
     pub(crate) challenges: Challenges<P::ScalarField>,
 }
 
@@ -54,7 +54,7 @@ impl<P: Pairing> Default for ProverMemory<P> {
     }
 }
 
-impl<P: Pairing> Default for VerifierMemory<P> {
+impl<P: Pairing, L: PlainProverFlavour<P::ScalarField>> Default for VerifierMemory<P, L> {
     fn default() -> Self {
         Self {
             public_input_delta: Default::default(),
