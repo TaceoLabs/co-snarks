@@ -1,12 +1,11 @@
 #![warn(clippy::iter_over_hash_type)]
 
 pub(crate) mod decider;
-pub(crate) mod flavours;
 pub(crate) mod keccak_hash;
 pub(crate) mod oink;
+pub(crate) mod plain_prover_flavour;
 pub mod prelude;
 pub(crate) mod prover;
-pub(crate) mod prover_flavour;
 pub(crate) mod sponge_hasher;
 mod transcript;
 pub(crate) mod types;
@@ -17,7 +16,7 @@ use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use co_builder::{
     prelude::{AcirFormat, ProverCrs},
-    HonkProofResult,
+    prover_flavour, HonkProofResult,
 };
 use noirc_artifacts::program::ProgramArtifact;
 use std::{io, path::Path};

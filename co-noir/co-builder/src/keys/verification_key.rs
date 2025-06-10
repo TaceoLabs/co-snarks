@@ -4,6 +4,7 @@ use std::sync::Arc;
 use crate::{
     builder::UltraCircuitBuilder,
     crs::ProverCrs,
+    flavours::ultra_flavour::UltraFlavour,
     honk_curve::HonkCurve,
     polynomials::polynomial_types::{PrecomputedEntities, PRECOMPUTED_ENTITIES_SIZE},
     serialize::{Serialize, SerializeP},
@@ -22,7 +23,7 @@ pub struct VerifyingKey<P: Pairing> {
     pub num_public_inputs: u32,
     pub pub_inputs_offset: u32,
     pub pairing_inputs_public_input_key: PublicComponentKey,
-    pub commitments: PrecomputedEntities<P::G1Affine>,
+    pub commitments: PrecomputedEntities<P::G1Affine, P::ScalarField, UltraFlavour<P::ScalarField>>,
 }
 
 impl<P: Pairing> VerifyingKey<P> {
@@ -68,7 +69,7 @@ pub struct VerifyingKeyBarretenberg<P: Pairing> {
     pub num_public_inputs: u64,
     pub pub_inputs_offset: u64,
     pub pairing_inputs_public_input_key: PublicComponentKey,
-    pub commitments: PrecomputedEntities<P::G1Affine>,
+    pub commitments: PrecomputedEntities<P::G1Affine, P::ScalarField, UltraFlavour<P::ScalarField>>,
 }
 
 #[derive(Clone, Copy, Debug, SerdeSerialize, Deserialize)]

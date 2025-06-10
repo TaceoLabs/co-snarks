@@ -1,4 +1,6 @@
+use crate::flavours::ultra_flavour::UltraFlavour;
 use crate::polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK;
+use crate::prover_flavour::ProverFlavour;
 use crate::{
     builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder},
     crs::ProverCrs,
@@ -19,21 +21,21 @@ use std::sync::Arc;
 
 use super::verification_key::PublicComponentKey;
 
-pub struct ProvingKey<P: Pairing> {
+pub struct ProvingKey<P: Pairing, L: ProverFlavour<P::ScalarField>> {
     pub crs: Arc<ProverCrs<P>>,
     pub circuit_size: u32,
     pub public_inputs: Vec<P::ScalarField>,
     pub num_public_inputs: u32,
     pub pub_inputs_offset: u32,
     pub pairing_inputs_public_input_key: PublicComponentKey,
-    pub polynomials: Polynomials<P::ScalarField>,
+    pub polynomials: Polynomials<P::ScalarField, L>,
     pub memory_read_records: Vec<u32>,
     pub memory_write_records: Vec<u32>,
     pub final_active_wire_idx: usize,
     pub active_region_data: ActiveRegionData,
 }
 
-impl<P: Pairing> ProvingKey<P> {
+impl<P: Pairing> ProvingKey<P, UltraFlavour<P::ScalarField>> {
     // We ignore the TraceStructure for now (it is None in barretenberg for UltraHonk)
     pub fn create<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
         mut circuit: UltraCircuitBuilder<P>,
@@ -189,7 +191,11 @@ impl<P: Pairing> ProvingKey<P> {
     pub fn compute_permutation_argument_polynomials<
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
-        polys: &mut PrecomputedEntities<Polynomial<P::ScalarField>>,
+        polys: &mut PrecomputedEntities<
+            Polynomial<P::ScalarField>,
+            P::ScalarField,
+            UltraFlavour<P::ScalarField>,
+        >,
         circuit: &GenericUltraCircuitBuilder<P, T>,
         copy_cycles: Vec<CyclicPermutation>,
         circuit_size: usize,

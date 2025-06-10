@@ -1,4 +1,5 @@
 use crate::acir_format::{HonkRecursion, ProgramMetadata};
+use crate::flavours::ultra_flavour::UltraFlavour;
 use crate::keys::verification_key::PublicComponentKey;
 use crate::polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK;
 use crate::prelude::HonkCurve;
@@ -83,12 +84,13 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         Ok(vk)
     }
 
+    #[expect(clippy::type_complexity)]
     pub fn create_keys(
         self,
         prover_crs: Arc<ProverCrs<P>>,
         verifier_crs: P::G2Affine,
         driver: &mut PlainAcvmSolver<P::ScalarField>,
-    ) -> HonkProofResult<(ProvingKey<P>, VerifyingKey<P>)> {
+    ) -> HonkProofResult<(ProvingKey<P, UltraFlavour<P::ScalarField>>, VerifyingKey<P>)> {
         let pk = ProvingKey::create::<PlainAcvmSolver<_>>(self, prover_crs, driver)?;
         let circuit_size = pk.circuit_size;
 
@@ -114,11 +116,15 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         Ok((pk, vk))
     }
 
+    #[expect(clippy::type_complexity)]
     pub fn create_keys_barretenberg(
         self,
         crs: Arc<ProverCrs<P>>,
         driver: &mut PlainAcvmSolver<P::ScalarField>,
-    ) -> HonkProofResult<(ProvingKey<P>, VerifyingKeyBarretenberg<P>)> {
+    ) -> HonkProofResult<(
+        ProvingKey<P, UltraFlavour<P::ScalarField>>,
+        VerifyingKeyBarretenberg<P>,
+    )> {
         let pk = ProvingKey::create::<PlainAcvmSolver<_>>(self, crs, driver)?;
         let circuit_size = pk.circuit_size;
 

@@ -34,6 +34,62 @@ pub(crate) struct DataBusLookupRelationAcc<F: PrimeField> {
     pub(crate) r5: Univariate<F, 5>,
 }
 
+impl<F: PrimeField> DataBusLookupRelationAcc<F> {
+    pub(crate) fn scale(&mut self, elements: &[F]) {
+        assert!(elements.len() == DataBusLookupRelation::NUM_RELATIONS);
+        self.r0 *= elements[0];
+        self.r1 *= elements[1];
+        self.r2 *= elements[2];
+        self.r3 *= elements[3];
+        self.r4 *= elements[4];
+        self.r5 *= elements[5];
+    }
+    pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(
+        &self,
+        result: &mut Univariate<F, SIZE>,
+        extended_random_poly: &Univariate<F, SIZE>,
+        partial_evaluation_result: &F,
+    ) {
+        // TODO FLORIN: is it really true?
+        self.r0.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            true,
+        );
+        self.r1.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            true,
+        );
+        self.r2.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            true,
+        );
+        self.r3.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            true,
+        );
+        self.r4.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            true,
+        );
+        self.r5.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            true,
+        );
+    }
+}
+
 pub(crate) struct DataBusLookupRelation {}
 impl DataBusLookupRelation {
     pub(crate) const NUM_RELATIONS: usize = 6;
@@ -207,7 +263,7 @@ impl<F: PrimeField> Relation<F> for DataBusLookupRelation {
 
     const SKIPPABLE: bool = true;
 
-    fn skip(input: &ProverUnivariates<F>) -> bool {
+    fn skip(_input: &ProverUnivariates<F>) -> bool {
         // Ensure the input does not contain a read gate or data that is being read
         todo!("return in.q_busread.is_zero() && in.calldata_read_counts.is_zero() &&
                in.secondary_calldata_read_counts.is_zero() && in.return_data_read_counts.is_zero();")

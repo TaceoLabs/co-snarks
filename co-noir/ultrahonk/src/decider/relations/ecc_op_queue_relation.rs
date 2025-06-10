@@ -36,6 +36,7 @@ impl<F: PrimeField> EccOpQueueRelationAcc<F> {
         extended_random_poly: &Univariate<F, SIZE>,
         partial_evaluation_result: &F,
     ) {
+        // TODO FLORIN: is it really true?
         self.r0.extend_and_batch_univariates(
             result,
             extended_random_poly,
