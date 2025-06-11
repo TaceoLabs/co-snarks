@@ -2,12 +2,13 @@ use std::marker::PhantomData;
 
 use ark_ff::PrimeField;
 
-use crate::prover_flavour::ProverFlavour;
+use crate::prover_flavour::{Flavour, ProverFlavour};
 #[derive(Default)]
 pub struct MegaFlavour<F: PrimeField> {
     phantom_data: PhantomData<F>,
 }
 impl<F: PrimeField> ProverFlavour<F> for MegaFlavour<F> {
+    const FLAVOUR: Flavour = Flavour::Mega;
     const WITNESS_ENTITIES_SIZE: usize = 24;
     const SHIFTED_WITNESS_ENTITIES_SIZE: usize = 5;
     const PRECOMPUTED_ENTITIES_SIZE: usize = 30;

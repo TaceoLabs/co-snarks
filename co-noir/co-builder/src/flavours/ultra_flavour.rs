@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use ark_ff::PrimeField;
 
-use crate::prover_flavour::ProverFlavour;
+use crate::prover_flavour::{Flavour, ProverFlavour};
 
 // use crate::{
 //     decider::relations::{
@@ -36,8 +36,7 @@ pub struct UltraFlavour<F: PrimeField> {
     phantom_data: PhantomData<F>,
 }
 impl<F: PrimeField> ProverFlavour<F> for UltraFlavour<F> {
-    // type AllRelationAcc = AllRelationAccUltra<F>;
-
+    const FLAVOUR: Flavour = Flavour::Ultra;
     const WITNESS_ENTITIES_SIZE: usize = 8;
     const SHIFTED_WITNESS_ENTITIES_SIZE: usize = 5;
     const PRECOMPUTED_ENTITIES_SIZE: usize = 27;
@@ -141,73 +140,4 @@ impl<F: PrimeField> ProverFlavour<F> for UltraFlavour<F> {
     const RETURN_DATA_READ_COUNTS: Option<usize> = None;
     const RETURN_DATA_READ_TAGS: Option<usize> = None;
     const RETURN_DATA_INVERSES: Option<usize> = None;
-
-    // const NUM_SUBRELATIONS: usize = UltraArithmeticRelation::NUM_RELATIONS
-    //     + UltraPermutationRelation::NUM_RELATIONS
-    //     + DeltaRangeConstraintRelation::NUM_RELATIONS
-    //     + EllipticRelation::NUM_RELATIONS
-    //     + AuxiliaryRelation::NUM_RELATIONS
-    //     + LogDerivLookupRelation::NUM_RELATIONS
-    //     + Poseidon2ExternalRelation::NUM_RELATIONS
-    //     + Poseidon2InternalRelation::NUM_RELATIONS;
-
-    // fn scale(acc: &mut Self::AllRelationAcc, first_scalar: F, elements: &[F]) {
-    //     assert!(elements.len() == Self::NUM_SUBRELATIONS - 1);
-    //     acc.r_arith.scale(&[first_scalar, elements[0]]);
-    //     acc.r_perm.scale(&elements[1..3]);
-    //     acc.r_lookup.scale(&elements[3..5]);
-    //     acc.r_delta.scale(&elements[5..9]);
-    //     acc.r_elliptic.scale(&elements[9..11]);
-    //     acc.r_aux.scale(&elements[11..17]);
-    //     acc.r_pos_ext.scale(&elements[17..21]);
-    //     acc.r_pos_int.scale(&elements[21..]);
-    // }
-
-    // fn extend_and_batch_univariates<const SIZE: usize>(
-    //     acc: &Self::AllRelationAcc,
-    //     result: &mut crate::prelude::Univariate<F, SIZE>,
-    //     extended_random_poly: &crate::prelude::Univariate<F, SIZE>,
-    //     partial_evaluation_result: &F,
-    // ) {
-    //     acc.r_arith.extend_and_batch_univariates(
-    //         result,
-    //         extended_random_poly,
-    //         partial_evaluation_result,
-    //     );
-    //     acc.r_perm.extend_and_batch_univariates(
-    //         result,
-    //         extended_random_poly,
-    //         partial_evaluation_result,
-    //     );
-    //     acc.r_lookup.extend_and_batch_univariates(
-    //         result,
-    //         extended_random_poly,
-    //         partial_evaluation_result,
-    //     );
-    //     acc.r_delta.extend_and_batch_univariates(
-    //         result,
-    //         extended_random_poly,
-    //         partial_evaluation_result,
-    //     );
-    //     acc.r_elliptic.extend_and_batch_univariates(
-    //         result,
-    //         extended_random_poly,
-    //         partial_evaluation_result,
-    //     );
-    //     acc.r_aux.extend_and_batch_univariates(
-    //         result,
-    //         extended_random_poly,
-    //         partial_evaluation_result,
-    //     );
-    //     acc.r_pos_ext.extend_and_batch_univariates(
-    //         result,
-    //         extended_random_poly,
-    //         partial_evaluation_result,
-    //     );
-    //     acc.r_pos_int.extend_and_batch_univariates(
-    //         result,
-    //         extended_random_poly,
-    //         partial_evaluation_result,
-    //     );
-    // }
 }

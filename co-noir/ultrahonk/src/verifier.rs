@@ -11,7 +11,6 @@ use co_builder::prelude::{HonkCurve, VerifyingKey, ZeroKnowledge};
 
 pub(crate) type HonkVerifyResult<T> = std::result::Result<T, eyre::Report>;
 
-//TODO FLORIN MAKE VERIFIER GENERIC
 impl<
         P: HonkCurve<TranscriptFieldType>,
         H: TranscriptHasher<TranscriptFieldType>,

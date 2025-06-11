@@ -24,7 +24,10 @@ use crate::{
     Utils, NUM_ALPHAS,
 };
 use ark_ff::{One, Zero};
-use co_builder::prelude::{HonkCurve, Polynomial, ProverCrs, ProvingKey, ZeroKnowledge};
+use co_builder::{
+    prelude::{HonkCurve, Polynomial, ProverCrs, ProvingKey, ZeroKnowledge},
+    prover_flavour::Flavour,
+};
 use co_builder::{HonkProofError, HonkProofResult};
 use itertools::izip;
 use rand::SeedableRng;
@@ -479,6 +482,102 @@ impl<
             &proving_key.crs,
             transcript,
         )?;
+
+        if L::FLAVOUR == Flavour::Mega {
+            let has_zk = self.has_zk;
+            self.has_zk = ZeroKnowledge::No; // MegaZKFlavor does not mask the wires, so we set has_zk to No
+                                             // Commit to Goblin ECC op wires.
+                                             // To avoid possible issues with the current work on the merge protocol, they are not
+                                             // masked in MegaZKFlavor
+            self.commit_to_witness_polynomial(
+                proving_key.polynomials.witness.ecc_op_wire_1_mut(),
+                "ecc_op_wire_1",
+                &proving_key.crs,
+                transcript,
+            )?;
+            self.commit_to_witness_polynomial(
+                proving_key.polynomials.witness.ecc_op_wire_2_mut(),
+                "ecc_op_wire_2",
+                &proving_key.crs,
+                transcript,
+            )?;
+            self.commit_to_witness_polynomial(
+                proving_key.polynomials.witness.ecc_op_wire_3_mut(),
+                "ecc_op_wire_3",
+                &proving_key.crs,
+                transcript,
+            )?;
+            self.commit_to_witness_polynomial(
+                proving_key.polynomials.witness.ecc_op_wire_4_mut(),
+                "ecc_op_wire_4",
+                &proving_key.crs,
+                transcript,
+            )?;
+            self.commit_to_witness_polynomial(
+                proving_key.polynomials.witness.calldata_mut(),
+                "calldata",
+                &proving_key.crs,
+                transcript,
+            )?;
+            self.commit_to_witness_polynomial(
+                proving_key.polynomials.witness.calldata_read_counts_mut(),
+                "calldata_read_counts",
+                &proving_key.crs,
+                transcript,
+            )?;
+            self.commit_to_witness_polynomial(
+                proving_key.polynomials.witness.calldata_read_tags_mut(),
+                "calldata_read_tags",
+                &proving_key.crs,
+                transcript,
+            )?;
+            self.commit_to_witness_polynomial(
+                proving_key.polynomials.witness.secondary_calldata_mut(),
+                "secondary_calldata",
+                &proving_key.crs,
+                transcript,
+            )?;
+            self.commit_to_witness_polynomial(
+                proving_key
+                    .polynomials
+                    .witness
+                    .secondary_calldata_read_counts_mut(),
+                "secondary_calldata_read_counts",
+                &proving_key.crs,
+                transcript,
+            )?;
+            self.commit_to_witness_polynomial(
+                proving_key
+                    .polynomials
+                    .witness
+                    .secondary_calldata_read_tags_mut(),
+                "secondary_calldata_read_tags",
+                &proving_key.crs,
+                transcript,
+            )?;
+            self.commit_to_witness_polynomial(
+                proving_key.polynomials.witness.return_data_mut(),
+                "return_data",
+                &proving_key.crs,
+                transcript,
+            )?;
+            self.commit_to_witness_polynomial(
+                proving_key
+                    .polynomials
+                    .witness
+                    .return_data_read_counts_mut(),
+                "return_data_read_counts",
+                &proving_key.crs,
+                transcript,
+            )?;
+            self.commit_to_witness_polynomial(
+                proving_key.polynomials.witness.return_data_read_tags_mut(),
+                "return_data_read_tags",
+                &proving_key.crs,
+                transcript,
+            )?;
+            self.has_zk = has_zk;
+        }
 
         // Round is done since ultra_honk is no goblin flavor
         Ok(())
