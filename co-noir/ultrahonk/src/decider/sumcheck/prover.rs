@@ -19,6 +19,8 @@ impl<
         H: TranscriptHasher<TranscriptFieldType>,
         L: PlainProverFlavour<P::ScalarField>,
     > Decider<P, H, L>
+where
+    [(); L::MAX_PARTIAL_RELATION_LENGTH]:,
 {
     pub(crate) fn partially_evaluate_init(
         partially_evaluated_poly: &mut PartiallyEvaluatePolys<P::ScalarField, L>,
@@ -83,10 +85,7 @@ impl<
         &self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         circuit_size: u32,
-    ) -> SumcheckOutput<P::ScalarField, L>
-    where
-        [(); L::MAX_PARTIAL_RELATION_LENGTH]:,
-    {
+    ) -> SumcheckOutput<P::ScalarField, L> {
         tracing::trace!("Sumcheck prove");
 
         let multivariate_n = circuit_size;
@@ -194,10 +193,7 @@ impl<
         transcript: &mut Transcript<TranscriptFieldType, H>,
         circuit_size: u32,
         zk_sumcheck_data: &mut ZKSumcheckData<P>,
-    ) -> SumcheckOutput<P::ScalarField, L>
-    where
-        [(); L::MAX_PARTIAL_RELATION_LENGTH]:,
-    {
+    ) -> SumcheckOutput<P::ScalarField, L> {
         tracing::trace!("Sumcheck prove");
 
         // Ensure that the length of Sumcheck Round Univariates does not exceed the length of Libra masking

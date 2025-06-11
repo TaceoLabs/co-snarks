@@ -36,6 +36,8 @@ impl<
         H: TranscriptHasher<TranscriptFieldType>,
         L: PlainProverFlavour<P::ScalarField>,
     > Decider<P, H, L>
+where
+    [(); L::MAX_PARTIAL_RELATION_LENGTH]:,
 {
     pub(crate) fn new(memory: ProverMemory<P, L>, has_zk: ZeroKnowledge) -> Self {
         Self {
@@ -76,10 +78,7 @@ impl<
         transcript: &mut Transcript<TranscriptFieldType, H>,
         crs: &ProverCrs<P>,
         circuit_size: u32,
-    ) -> HonkProofResult<(SumcheckOutput<P::ScalarField, L>, Option<ZKSumcheckData<P>>)>
-    where
-        [(); L::MAX_PARTIAL_RELATION_LENGTH]:,
-    {
+    ) -> HonkProofResult<(SumcheckOutput<P::ScalarField, L>, Option<ZKSumcheckData<P>>)> {
         if self.has_zk == ZeroKnowledge::Yes {
             let log_subgroup_size = Utils::get_msb64(P::SUBGROUP_SIZE as u64);
             let commitment_key = &crs.monomials[..1 << (log_subgroup_size + 1)];
@@ -152,10 +151,7 @@ impl<
         circuit_size: u32,
         crs: &ProverCrs<P>,
         mut transcript: Transcript<TranscriptFieldType, H>,
-    ) -> HonkProofResult<HonkProof<TranscriptFieldType>>
-    where
-        [(); L::MAX_PARTIAL_RELATION_LENGTH]:,
-    {
+    ) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
         tracing::trace!("Decider prove");
 
         // Run sumcheck subprotocol.

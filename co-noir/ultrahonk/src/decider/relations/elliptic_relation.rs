@@ -84,9 +84,10 @@ impl EllipticRelation {
     pub(crate) fn accumulate<
         P: HonkCurve<TranscriptFieldType>,
         L: PlainProverFlavour<P::ScalarField>,
+        const UNIVARIATE_SIZE: usize,
     >(
         univariate_accumulator: &mut EllipticRelationAcc<P::ScalarField>,
-        input: &ProverUnivariates<P::ScalarField, L, { L::MAX_PARTIAL_RELATION_LENGTH }>,
+        input: &ProverUnivariates<P::ScalarField, L, UNIVARIATE_SIZE>,
         _relation_parameters: &RelationParameters<P::ScalarField>,
         scaling_factor: &P::ScalarField,
     ) {
