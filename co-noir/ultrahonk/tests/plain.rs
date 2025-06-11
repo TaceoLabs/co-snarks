@@ -1,4 +1,7 @@
+#![feature(generic_const_exprs)]
+#![allow(incomplete_features)]
 use ark_bn254::Bn254;
+use co_builder::flavours::ultra_flavour::UltraFlavour;
 use co_builder::prelude::CrsParser;
 use co_builder::prelude::HonkRecursion;
 use co_builder::prelude::ZeroKnowledge;
@@ -41,7 +44,8 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(
         .create_keys(prover_crs.into(), verififer_crs, &mut driver)
         .unwrap();
 
-    let (proof, public_inputs) = UltraHonk::<_, H>::prove(proving_key, has_zk).unwrap();
+    let (proof, public_inputs) =
+        UltraHonk::<_, H, UltraFlavour<_>>::prove(proving_key, has_zk).unwrap();
     if has_zk == ZeroKnowledge::No {
         let proof_u8 = proof.to_buffer();
         let read_proof_u8 = std::fs::read(proof_file).unwrap();
@@ -52,7 +56,8 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(
     }
 
     let is_valid =
-        UltraHonk::<_, H>::verify(proof, &public_inputs, &verifying_key, has_zk).unwrap();
+        UltraHonk::<_, H, UltraFlavour<_>>::verify(proof, &public_inputs, &verifying_key, has_zk)
+            .unwrap();
     assert!(is_valid);
 }
 
