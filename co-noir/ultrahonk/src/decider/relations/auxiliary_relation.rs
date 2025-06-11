@@ -1,7 +1,10 @@
 use super::Relation;
-use crate::decider::{
-    types::{ClaimedEvaluations, ProverUnivariates, RelationParameters},
-    univariate::Univariate,
+use crate::{
+    decider::{
+        types::{ClaimedEvaluations, ProverUnivariates, RelationParameters},
+        univariate::Univariate,
+    },
+    plain_prover_flavour::PlainProverFlavour,
 };
 use ark_ff::{One, PrimeField, Zero};
 use num_bigint::BigUint;
@@ -118,14 +121,14 @@ impl AuxiliaryRelation {
     pub(crate) const NUM_RELATIONS: usize = 6;
 }
 
-impl<F: PrimeField> Relation<F> for AuxiliaryRelation {
+impl<F: PrimeField, L: PlainProverFlavour<F>> Relation<F, L> for AuxiliaryRelation {
     type Acc = AuxiliaryRelationAcc<F>;
     type VerifyAcc = AuxiliaryRelationEvals<F>;
 
     const SKIPPABLE: bool = true;
 
-    fn skip(input: &ProverUnivariates<F>) -> bool {
-        <Self as Relation<F>>::check_skippable();
+    fn skip(input: &ProverUnivariates<F, L, { L::MAX_PARTIAL_RELATION_LENGTH }>) -> bool {
+        <Self as Relation<F, L>>::check_skippable();
         input.precomputed.q_aux().is_zero()
     }
 
@@ -165,7 +168,7 @@ impl<F: PrimeField> Relation<F> for AuxiliaryRelation {
      */
     fn accumulate(
         univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariates<F>,
+        input: &ProverUnivariates<F, L, { L::MAX_PARTIAL_RELATION_LENGTH }>,
         relation_parameters: &RelationParameters<F>,
         scaling_factor: &F,
     ) {
@@ -442,7 +445,7 @@ impl<F: PrimeField> Relation<F> for AuxiliaryRelation {
 
     fn verify_accumulate(
         univariate_accumulator: &mut Self::VerifyAcc,
-        input: &ClaimedEvaluations<F>,
+        input: &ClaimedEvaluations<F, F, L>,
         relation_parameters: &RelationParameters<F>,
         scaling_factor: &F,
     ) {

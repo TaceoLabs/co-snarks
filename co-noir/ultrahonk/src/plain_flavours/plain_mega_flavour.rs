@@ -2,10 +2,6 @@ use ark_ff::PrimeField;
 use co_builder::flavours::mega_flavour::MegaFlavour;
 use co_builder::prelude::HonkCurve;
 
-use crate::decider::sumcheck::round_prover::SumcheckProverRound;
-use crate::decider::types::{ProverUnivariates, RelationParameters};
-use crate::plain_prover_flavour::PlainProverFlavour;
-
 use crate::decider::relations::{
     auxiliary_relation::{AuxiliaryRelation, AuxiliaryRelationAcc},
     databus_lookup_relation::{DataBusLookupRelation, DataBusLookupRelationAcc},
@@ -20,7 +16,11 @@ use crate::decider::relations::{
     poseidon2_internal_relation::{Poseidon2InternalRelation, Poseidon2InternalRelationAcc},
     ultra_arithmetic_relation::{UltraArithmeticRelation, UltraArithmeticRelationAcc},
 };
+use crate::decider::sumcheck::round_prover::SumcheckProverRound;
+use crate::decider::types::{ProverUnivariates, RelationParameters};
+use crate::plain_prover_flavour::PlainProverFlavour;
 use crate::transcript::TranscriptFieldType;
+use co_builder::prover_flavour::ProverFlavour;
 
 #[derive(Default)]
 pub struct AllRelationAccMega<F: PrimeField> {
@@ -122,99 +122,69 @@ impl<F: PrimeField> PlainProverFlavour<F> for MegaFlavour<F> {
         );
     }
 
-    fn accumulate_relation_univariates<
-        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
-        const UNIVARIATE_SIZE: usize,
-    >(
+    fn accumulate_relation_univariates<P: HonkCurve<TranscriptFieldType, ScalarField = F>>(
         univariate_accumulators: &mut Self::AllRelationAcc,
-        extended_edges: &ProverUnivariates<F, Self, UNIVARIATE_SIZE>,
+        extended_edges: &ProverUnivariates<F, Self, { Self::MAX_PARTIAL_RELATION_LENGTH }>,
         relation_parameters: &RelationParameters<F>,
         scaling_factor: &F,
     ) {
         tracing::trace!("Accumulate relations");
 
-        SumcheckProverRound::accumulate_one_relation_univariates::<
-            UltraArithmeticRelation,
-            UNIVARIATE_SIZE,
-        >(
+        SumcheckProverRound::accumulate_one_relation_univariates::<UltraArithmeticRelation>(
             &mut univariate_accumulators.r_arith,
             extended_edges,
             relation_parameters,
             scaling_factor,
         );
-        SumcheckProverRound::accumulate_one_relation_univariates::<
-            UltraPermutationRelation,
-            UNIVARIATE_SIZE,
-        >(
+        SumcheckProverRound::accumulate_one_relation_univariates::<UltraPermutationRelation>(
             &mut univariate_accumulators.r_perm,
             extended_edges,
             relation_parameters,
             scaling_factor,
         );
-        SumcheckProverRound::accumulate_one_relation_univariates::<
-            DeltaRangeConstraintRelation,
-            UNIVARIATE_SIZE,
-        >(
+        SumcheckProverRound::accumulate_one_relation_univariates::<DeltaRangeConstraintRelation>(
             &mut univariate_accumulators.r_delta,
             extended_edges,
             relation_parameters,
             scaling_factor,
         );
-        SumcheckProverRound::accumulate_elliptic_curve_relation_univariates::<P, UNIVARIATE_SIZE>(
+        SumcheckProverRound::accumulate_elliptic_curve_relation_univariates::<P>(
             &mut univariate_accumulators.r_elliptic,
             extended_edges,
             relation_parameters,
             scaling_factor,
         );
-        SumcheckProverRound::accumulate_one_relation_univariates::<
-            AuxiliaryRelation,
-            UNIVARIATE_SIZE,
-        >(
+        SumcheckProverRound::accumulate_one_relation_univariates::<AuxiliaryRelation>(
             &mut univariate_accumulators.r_aux,
             extended_edges,
             relation_parameters,
             scaling_factor,
         );
-        SumcheckProverRound::accumulate_one_relation_univariates::<
-            LogDerivLookupRelation,
-            UNIVARIATE_SIZE,
-        >(
+        SumcheckProverRound::accumulate_one_relation_univariates::<LogDerivLookupRelation>(
             &mut univariate_accumulators.r_lookup,
             extended_edges,
             relation_parameters,
             scaling_factor,
         );
-        SumcheckProverRound::accumulate_one_relation_univariates::<
-            Poseidon2ExternalRelation,
-            UNIVARIATE_SIZE,
-        >(
+        SumcheckProverRound::accumulate_one_relation_univariates::<Poseidon2ExternalRelation>(
             &mut univariate_accumulators.r_pos_ext,
             extended_edges,
             relation_parameters,
             scaling_factor,
         );
-        SumcheckProverRound::accumulate_one_relation_univariates::<
-            Poseidon2InternalRelation,
-            UNIVARIATE_SIZE,
-        >(
+        SumcheckProverRound::accumulate_one_relation_univariates::<Poseidon2InternalRelation>(
             &mut univariate_accumulators.r_pos_int,
             extended_edges,
             relation_parameters,
             scaling_factor,
         );
-        SumcheckProverRound::accumulate_one_relation_univariates::<
-            EccOpQueueRelation,
-            UNIVARIATE_SIZE,
-        >(
+        SumcheckProverRound::accumulate_one_relation_univariates::<EccOpQueueRelation>(
             &mut univariate_accumulators.r_ecc_op_queue,
             extended_edges,
             relation_parameters,
             scaling_factor,
         );
-        SumcheckProverRound::accumulate_one_relation_univariates::<
-            DataBusLookupRelation,
-            UNIVARIATE_SIZE,
-        >(
+        SumcheckProverRound::accumulate_one_relation_univariates::<DataBusLookupRelation>(
             &mut univariate_accumulators.r_databus,
             extended_edges,
             relation_parameters,

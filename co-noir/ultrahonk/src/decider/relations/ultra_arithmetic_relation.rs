@@ -70,8 +70,8 @@ impl<F: PrimeField, L: PlainProverFlavour<F>> Relation<F, L> for UltraArithmetic
 
     const SKIPPABLE: bool = true;
 
-    fn skip(input: &ProverUnivariates<F>) -> bool {
-        <Self as Relation<F>>::check_skippable();
+    fn skip(input: &ProverUnivariates<F, L, { L::MAX_PARTIAL_RELATION_LENGTH }>) -> bool {
+        <Self as Relation<F, L>>::check_skippable();
         input.precomputed.q_arith().is_zero()
     }
 
@@ -128,7 +128,7 @@ impl<F: PrimeField, L: PlainProverFlavour<F>> Relation<F, L> for UltraArithmetic
      */
     fn accumulate(
         univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariates<F>,
+        input: &ProverUnivariates<F, L, { L::MAX_PARTIAL_RELATION_LENGTH }>,
         _relation_parameters: &RelationParameters<F>,
         scaling_factor: &F,
     ) {
@@ -179,7 +179,7 @@ impl<F: PrimeField, L: PlainProverFlavour<F>> Relation<F, L> for UltraArithmetic
 
     fn verify_accumulate(
         univariate_accumulator: &mut Self::VerifyAcc,
-        input: &ClaimedEvaluations<F>,
+        input: &ClaimedEvaluations<F, F, L>,
         _relation_parameters: &RelationParameters<F>,
         scaling_factor: &F,
     ) {

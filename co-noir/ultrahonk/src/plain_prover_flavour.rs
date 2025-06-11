@@ -18,12 +18,9 @@ pub trait PlainProverFlavour<F: PrimeField>: Default + ProverFlavour<F> {
         extended_random_poly: &Univariate<F, SIZE>,
         partial_evaluation_result: &F,
     );
-    fn accumulate_relation_univariates<
-        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
-        const UNIVARIATE_SIZE: usize,
-    >(
+    fn accumulate_relation_univariates<P: HonkCurve<TranscriptFieldType, ScalarField = F>>(
         univariate_accumulators: &mut Self::AllRelationAcc,
-        extended_edges: &ProverUnivariates<F, Self, UNIVARIATE_SIZE>,
+        extended_edges: &ProverUnivariates<F, Self, { Self::MAX_PARTIAL_RELATION_LENGTH }>,
         relation_parameters: &RelationParameters<F>,
         scaling_factor: &F,
     );

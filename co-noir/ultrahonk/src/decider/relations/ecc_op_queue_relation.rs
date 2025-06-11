@@ -1,7 +1,10 @@
-use crate::decider::{
-    relations::Relation,
-    types::{ClaimedEvaluations, ProverUnivariates, RelationParameters},
-    univariate::Univariate,
+use crate::{
+    decider::{
+        relations::Relation,
+        types::{ClaimedEvaluations, ProverUnivariates, RelationParameters},
+        univariate::Univariate,
+    },
+    plain_prover_flavour::PlainProverFlavour,
 };
 use ark_ff::PrimeField;
 
@@ -94,21 +97,21 @@ impl EccOpQueueRelation {
     pub(crate) const NUM_RELATIONS: usize = 8;
 }
 
-impl<F: PrimeField> Relation<F> for EccOpQueueRelation {
+impl<F: PrimeField, L: PlainProverFlavour<F>> Relation<F, L> for EccOpQueueRelation {
     type Acc = EccOpQueueRelationAcc<F>;
 
     type VerifyAcc = ();
 
     const SKIPPABLE: bool = true;
 
-    fn skip(_input: &ProverUnivariates<F>) -> bool {
+    fn skip(_input: &ProverUnivariates<F, L, { L::MAX_PARTIAL_RELATION_LENGTH }>) -> bool {
         // The prover can skip execution of this relation if the ecc op selector is identically zero
         todo!("input.precomputed.lagrange_ecc_op.is_zero()")
     }
 
     fn accumulate(
         univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariates<F>,
+        input: &ProverUnivariates<F, L, { L::MAX_PARTIAL_RELATION_LENGTH }>,
         _relation_parameters: &RelationParameters<F>,
         scaling_factor: &F,
     ) {
@@ -190,7 +193,7 @@ impl<F: PrimeField> Relation<F> for EccOpQueueRelation {
 
     fn verify_accumulate(
         _univariate_accumulator: &mut Self::VerifyAcc,
-        _input: &ClaimedEvaluations<F>,
+        _input: &ClaimedEvaluations<F, F, L>,
         _relation_parameters: &RelationParameters<F>,
         _scaling_factor: &F,
     ) {

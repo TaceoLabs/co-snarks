@@ -1,7 +1,10 @@
 use super::Relation;
-use crate::decider::{
-    types::{ClaimedEvaluations, ProverUnivariates, RelationParameters},
-    univariate::Univariate,
+use crate::{
+    decider::{
+        types::{ClaimedEvaluations, ProverUnivariates, RelationParameters},
+        univariate::Univariate,
+    },
+    plain_prover_flavour::PlainProverFlavour,
 };
 use ark_ff::{PrimeField, Zero};
 use mpc_core::gadgets::poseidon2::POSEIDON2_BN254_T4_PARAMS;
@@ -85,14 +88,14 @@ impl Poseidon2InternalRelation {
     pub(crate) const NUM_RELATIONS: usize = 4;
 }
 
-impl<F: PrimeField> Relation<F> for Poseidon2InternalRelation {
+impl<F: PrimeField, L: PlainProverFlavour<F>> Relation<F, L> for Poseidon2InternalRelation {
     type Acc = Poseidon2InternalRelationAcc<F>;
     type VerifyAcc = Poseidon2InternalRelationEvals<F>;
 
     const SKIPPABLE: bool = true;
 
-    fn skip(input: &ProverUnivariates<F>) -> bool {
-        <Self as Relation<F>>::check_skippable();
+    fn skip(input: &ProverUnivariates<F, L, { L::MAX_PARTIAL_RELATION_LENGTH }>) -> bool {
+        <Self as Relation<F, L>>::check_skippable();
         input.precomputed.q_poseidon2_internal().is_zero()
     }
 
@@ -117,7 +120,7 @@ impl<F: PrimeField> Relation<F> for Poseidon2InternalRelation {
      */
     fn accumulate(
         univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariates<F>,
+        input: &ProverUnivariates<F, L, { L::MAX_PARTIAL_RELATION_LENGTH }>,
         _relation_parameters: &RelationParameters<F>,
         scaling_factor: &F,
     ) {
@@ -201,7 +204,7 @@ impl<F: PrimeField> Relation<F> for Poseidon2InternalRelation {
 
     fn verify_accumulate(
         univariate_accumulator: &mut Self::VerifyAcc,
-        input: &ClaimedEvaluations<F>,
+        input: &ClaimedEvaluations<F, F, L>,
         _relation_parameters: &RelationParameters<F>,
         scaling_factor: &F,
     ) {
