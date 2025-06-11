@@ -10,7 +10,7 @@ pub(crate) mod poseidon2_internal_relation;
 pub(crate) mod ultra_arithmetic_relation;
 
 use super::types::{ClaimedEvaluations, ProverUnivariates, RelationParameters};
-use crate::prelude::Univariate;
+use crate::{plain_prover_flavour::PlainProverFlavour, prelude::Univariate};
 use ark_ff::PrimeField;
 use auxiliary_relation::{AuxiliaryRelation, AuxiliaryRelationAcc, AuxiliaryRelationEvals};
 use delta_range_constraint_relation::{
@@ -34,7 +34,7 @@ use ultra_arithmetic_relation::{
     UltraArithmeticRelation, UltraArithmeticRelationAcc, UltraArithmeticRelationEvals,
 };
 
-pub(crate) trait Relation<F: PrimeField> {
+pub(crate) trait Relation<F: PrimeField, L: PlainProverFlavour<F>> {
     type Acc: Default;
     type VerifyAcc: Default;
 
@@ -46,17 +46,17 @@ pub(crate) trait Relation<F: PrimeField> {
         }
     }
 
-    fn skip(input: &ProverUnivariates<F>) -> bool;
+    fn skip(input: &ProverUnivariates<F, L>) -> bool;
     fn accumulate(
         univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariates<F>,
+        input: &ProverUnivariates<F, L>,
         relation_parameters: &RelationParameters<F>,
         scaling_factor: &F,
     );
 
     fn verify_accumulate(
         univariate_accumulator: &mut Self::VerifyAcc,
-        input: &ClaimedEvaluations<F>,
+        input: &ClaimedEvaluations<F, F, L>,
         relation_parameters: &RelationParameters<F>,
         scaling_factor: &F,
     );

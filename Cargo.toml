@@ -16,7 +16,8 @@ members = [
     "mpc-core",
     "mpc-net",
     "mpc-types",
-    "tests", "co-noir/megahonk",
+    "tests",
+    "co-noir/megahonk",
 ]
 resolver = "2"
 

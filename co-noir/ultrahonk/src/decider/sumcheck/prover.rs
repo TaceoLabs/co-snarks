@@ -79,7 +79,7 @@ impl<
         multivariate_evaluations
     }
 
-    pub(crate) fn sumcheck_prove(
+    pub(crate) fn sumcheck_prove<const UNIVARIATE_SIZE: usize>(
         &self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         circuit_size: u32,
@@ -89,7 +89,8 @@ impl<
         let multivariate_n = circuit_size;
         let multivariate_d = Utils::get_msb64(multivariate_n as u64);
 
-        let mut sum_check_round = SumcheckProverRound::new(multivariate_n as usize);
+        let mut sum_check_round =
+            SumcheckProverRound::<P::ScalarField, L>::new(multivariate_n as usize);
 
         let mut gate_separators = GateSeparatorPolynomial::new(
             self.memory.relation_parameters.gate_challenges.to_owned(),
@@ -100,11 +101,10 @@ impl<
         let round_idx = 0;
 
         tracing::trace!("Sumcheck prove round {}", round_idx);
-
         // In the first round, we compute the first univariate polynomial and populate the book-keeping table of
         // #partially_evaluated_polynomials, which has \f$ n/2 \f$ rows and \f$ N \f$ columns. When the Flavor has ZK,
-        // compute_univariate also takes into account the zk_sumcheck_data.
-        let round_univariate = sum_check_round.compute_univariate::<P>(
+
+        let round_univariate = sum_check_round.compute_univariate::<P, UNIVARIATE_SIZE>(
             round_idx,
             &self.memory.relation_parameters,
             &gate_separators,
@@ -137,7 +137,7 @@ impl<
             tracing::trace!("Sumcheck prove round {}", round_idx);
             // Write the round univariate to the transcript
 
-            let round_univariate = sum_check_round.compute_univariate::<P>(
+            let round_univariate = sum_check_round.compute_univariate::<P, UNIVARIATE_SIZE>(
                 round_idx,
                 &self.memory.relation_parameters,
                 &gate_separators,
@@ -186,7 +186,7 @@ impl<
         }
     }
 
-    pub(crate) fn sumcheck_prove_zk(
+    pub(crate) fn sumcheck_prove_zk<const UNIVARIATE_SIZE: usize>(
         &self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         circuit_size: u32,
@@ -216,7 +216,7 @@ impl<
         // In the first round, we compute the first univariate polynomial and populate the book-keeping table of
         // #partially_evaluated_polynomials, which has \f$ n/2 \f$ rows and \f$ N \f$ columns. When the Flavor has ZK,
         // compute_univariate also takes into account the zk_sumcheck_data.
-        let round_univariate = sum_check_round.compute_univariate_zk::<P>(
+        let round_univariate = sum_check_round.compute_univariate_zk::<P, UNIVARIATE_SIZE>(
             round_idx,
             &self.memory.relation_parameters,
             &gate_separators,
@@ -254,7 +254,7 @@ impl<
             tracing::trace!("Sumcheck prove round {}", round_idx);
             // Write the round univariate to the transcript
 
-            let round_univariate = sum_check_round.compute_univariate_zk::<P>(
+            let round_univariate = sum_check_round.compute_univariate_zk::<P, UNIVARIATE_SIZE>(
                 round_idx,
                 &self.memory.relation_parameters,
                 &gate_separators,

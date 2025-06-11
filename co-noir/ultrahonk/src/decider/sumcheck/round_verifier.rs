@@ -73,7 +73,7 @@ impl<P: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour<P::ScalarField>>
         !sumcheck_round_failed
     }
 
-    fn accumulate_one_relation_evaluations<R: Relation<P::ScalarField>>(
+    fn accumulate_one_relation_evaluations<R: Relation<P::ScalarField, L>>(
         univariate_accumulator: &mut R::VerifyAcc,
         extended_edges: &ClaimedEvaluations<P::ScalarField, P::ScalarField, L>,
         relation_parameters: &RelationParameters<P::ScalarField>,

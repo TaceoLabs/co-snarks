@@ -76,7 +76,10 @@ impl<
         transcript: &mut Transcript<TranscriptFieldType, H>,
         crs: &ProverCrs<P>,
         circuit_size: u32,
-    ) -> HonkProofResult<(SumcheckOutput<P::ScalarField, L>, Option<ZKSumcheckData<P>>)> {
+    ) -> HonkProofResult<(SumcheckOutput<P::ScalarField, L>, Option<ZKSumcheckData<P>>)>
+    where
+        [(); L::MAX_PARTIAL_RELATION_LENGTH]:,
+    {
         if self.has_zk == ZeroKnowledge::Yes {
             let log_subgroup_size = Utils::get_msb64(P::SUBGROUP_SIZE as u64);
             let commitment_key = &crs.monomials[..1 << (log_subgroup_size + 1)];
@@ -87,12 +90,19 @@ impl<
                 &mut self.rng,
             )?;
             Ok((
-                self.sumcheck_prove_zk(transcript, circuit_size, &mut zk_sumcheck_data),
+                self.sumcheck_prove_zk::<{ L::MAX_PARTIAL_RELATION_LENGTH }>(
+                    transcript,
+                    circuit_size,
+                    &mut zk_sumcheck_data,
+                ),
                 Some(zk_sumcheck_data),
             ))
         } else {
             // This is just Sumcheck.prove without ZK
-            Ok((self.sumcheck_prove(transcript, circuit_size), None))
+            Ok((
+                self.sumcheck_prove::<{ L::MAX_PARTIAL_RELATION_LENGTH }>(transcript, circuit_size),
+                None,
+            ))
         }
     }
 
@@ -142,7 +152,10 @@ impl<
         circuit_size: u32,
         crs: &ProverCrs<P>,
         mut transcript: Transcript<TranscriptFieldType, H>,
-    ) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
+    ) -> HonkProofResult<HonkProof<TranscriptFieldType>>
+    where
+        [(); L::MAX_PARTIAL_RELATION_LENGTH]:,
+    {
         tracing::trace!("Decider prove");
 
         // Run sumcheck subprotocol.

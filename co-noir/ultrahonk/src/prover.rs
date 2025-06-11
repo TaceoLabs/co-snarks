@@ -47,7 +47,10 @@ impl<
     pub fn prove(
         mut proving_key: ProvingKey<P, L>,
         has_zk: ZeroKnowledge,
-    ) -> HonkProofResult<(HonkProof<TranscriptFieldType>, Vec<TranscriptFieldType>)> {
+    ) -> HonkProofResult<(HonkProof<TranscriptFieldType>, Vec<TranscriptFieldType>)>
+    where
+        [(); L::MAX_PARTIAL_RELATION_LENGTH]:,
+    {
         tracing::trace!("UltraHonk prove");
 
         let mut transcript = Transcript::<TranscriptFieldType, H>::new();

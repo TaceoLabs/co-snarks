@@ -1,5 +1,6 @@
 #![warn(clippy::iter_over_hash_type)]
-
+#![feature(generic_const_exprs)]
+#![allow(incomplete_features)]
 pub(crate) mod decider;
 pub(crate) mod keccak_hash;
 pub(crate) mod oink;
@@ -16,9 +17,8 @@ use acir::{native_types::WitnessStack, FieldElement};
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use co_builder::{
-    flavours::{mega_flavour, ultra_flavour},
     prelude::{AcirFormat, ProverCrs},
-    prover_flavour, HonkProofResult,
+    HonkProofResult,
 };
 use noirc_artifacts::program::ProgramArtifact;
 use std::{io, path::Path};

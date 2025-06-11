@@ -1,7 +1,10 @@
 use super::Relation;
-use crate::decider::{
-    types::{ClaimedEvaluations, ProverUnivariates, RelationParameters},
-    univariate::Univariate,
+use crate::{
+    decider::{
+        types::{ClaimedEvaluations, ProverUnivariates, RelationParameters},
+        univariate::Univariate,
+    },
+    plain_prover_flavour::PlainProverFlavour,
 };
 use ark_ff::{PrimeField, Zero};
 
@@ -61,7 +64,7 @@ impl UltraArithmeticRelation {
     pub(crate) const NUM_RELATIONS: usize = 2;
 }
 
-impl<F: PrimeField> Relation<F> for UltraArithmeticRelation {
+impl<F: PrimeField, L: PlainProverFlavour<F>> Relation<F, L> for UltraArithmeticRelation {
     type Acc = UltraArithmeticRelationAcc<F>;
     type VerifyAcc = UltraArithmeticRelationEvals<F>;
 
