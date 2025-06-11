@@ -35,6 +35,29 @@ pub(crate) struct DataBusLookupRelationAcc<F: PrimeField> {
     pub(crate) r5: Univariate<F, 5>,
 }
 
+#[derive(Clone, Debug, Default)]
+pub(crate) struct DataBusLookupRelationEvals<F: PrimeField> {
+    pub(crate) r0: F,
+    pub(crate) r1: F,
+    pub(crate) r2: F,
+    pub(crate) r3: F,
+    pub(crate) r4: F,
+    pub(crate) r5: F,
+}
+
+impl<F: PrimeField> DataBusLookupRelationEvals<F> {
+    pub(crate) fn scale_and_batch_elements(&self, running_challenge: &[F], result: &mut F) {
+        assert!(running_challenge.len() == DataBusLookupRelation::NUM_RELATIONS);
+
+        *result += self.r0 * running_challenge[0];
+        *result += self.r1 * running_challenge[1];
+        *result += self.r2 * running_challenge[2];
+        *result += self.r3 * running_challenge[3];
+        *result += self.r4 * running_challenge[4];
+        *result += self.r5 * running_challenge[5];
+    }
+}
+
 impl<F: PrimeField> DataBusLookupRelationAcc<F> {
     pub(crate) fn scale(&mut self, elements: &[F]) {
         assert!(elements.len() == DataBusLookupRelation::NUM_RELATIONS);
@@ -260,7 +283,7 @@ impl DataBusLookupRelation {
 
 impl<F: PrimeField, L: PlainProverFlavour<F>> Relation<F, L> for DataBusLookupRelation {
     type Acc = DataBusLookupRelationAcc<F>;
-    type VerifyAcc = ();
+    type VerifyAcc = DataBusLookupRelationEvals<F>;
 
     const SKIPPABLE: bool = true;
 

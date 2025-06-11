@@ -2,15 +2,8 @@ use super::round_prover::SumcheckRoundOutput;
 use crate::{
     decider::{
         relations::{
-            auxiliary_relation::AuxiliaryRelation,
-            delta_range_constraint_relation::DeltaRangeConstraintRelation,
             elliptic_relation::{EllipticRelation, EllipticRelationEvals},
-            logderiv_lookup_relation::LogDerivLookupRelation,
-            permutation_relation::UltraPermutationRelation,
-            poseidon2_external_relation::Poseidon2ExternalRelation,
-            poseidon2_internal_relation::Poseidon2InternalRelation,
-            ultra_arithmetic_relation::UltraArithmeticRelation,
-            AllRelationEvaluations, Relation,
+            Relation,
         },
         types::{ClaimedEvaluations, RelationParameters},
     },
@@ -73,90 +66,32 @@ impl<P: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour<P::ScalarField>>
         !sumcheck_round_failed
     }
 
-    // fn accumulate_one_relation_evaluations<R: Relation<P::ScalarField, L>>(
-    //     univariate_accumulator: &mut R::VerifyAcc,
-    //     extended_edges: &ClaimedEvaluations<P::ScalarField, P::ScalarField, L>,
-    //     relation_parameters: &RelationParameters<P::ScalarField>,
-    //     scaling_factor: &P::ScalarField,
-    // ) {
-    //     R::verify_accumulate(
-    //         univariate_accumulator,
-    //         extended_edges,
-    //         relation_parameters,
-    //         scaling_factor,
-    //     );
-    // }
-
-    // fn accumulate_elliptic_curve_relation_evaluations(
-    //     univariate_accumulator: &mut EllipticRelationEvals<P::ScalarField>,
-    //     extended_edges: &ClaimedEvaluations<P::ScalarField, P::ScalarField, L>,
-    //     relation_parameters: &RelationParameters<P::ScalarField>,
-    //     scaling_factor: &P::ScalarField,
-    // ) {
-    //     EllipticRelation::verify_accumulate::<P, L>(
-    //         univariate_accumulator,
-    //         extended_edges,
-    //         relation_parameters,
-    //         scaling_factor,
-    //     );
-    // }
-
-    fn accumulate_relation_evaluations(
-        _univariate_accumulators: &mut AllRelationEvaluations<P::ScalarField>,
-        _extended_edges: &ClaimedEvaluations<P::ScalarField, P::ScalarField, L>,
-        _relation_parameters: &RelationParameters<P::ScalarField>,
-        _scaling_factor: &P::ScalarField,
+    pub(crate) fn accumulate_one_relation_evaluations<R: Relation<P::ScalarField, L>>(
+        univariate_accumulator: &mut R::VerifyAcc,
+        extended_edges: &ClaimedEvaluations<P::ScalarField, P::ScalarField, L>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
+        scaling_factor: &P::ScalarField,
     ) {
-        tracing::trace!("Accumulate relations");
-        todo!("Implement accumulate_relation_evaluations for verifier");
-        // Self::accumulate_one_relation_evaluations::<UltraArithmeticRelation>(
-        //     &mut univariate_accumulators.r_arith,
-        //     extended_edges,
-        //     relation_parameters,
-        //     scaling_factor,
-        // );
-        // Self::accumulate_one_relation_evaluations::<UltraPermutationRelation>(
-        //     &mut univariate_accumulators.r_perm,
-        //     extended_edges,
-        //     relation_parameters,
-        //     scaling_factor,
-        // );
-        // Self::accumulate_one_relation_evaluations::<DeltaRangeConstraintRelation>(
-        //     &mut univariate_accumulators.r_delta,
-        //     extended_edges,
-        //     relation_parameters,
-        //     scaling_factor,
-        // );
-        // Self::accumulate_elliptic_curve_relation_evaluations(
-        //     &mut univariate_accumulators.r_elliptic,
-        //     extended_edges,
-        //     relation_parameters,
-        //     scaling_factor,
-        // );
-        // Self::accumulate_one_relation_evaluations::<AuxiliaryRelation>(
-        //     &mut univariate_accumulators.r_aux,
-        //     extended_edges,
-        //     relation_parameters,
-        //     scaling_factor,
-        // );
-        // Self::accumulate_one_relation_evaluations::<LogDerivLookupRelation>(
-        //     &mut univariate_accumulators.r_lookup,
-        //     extended_edges,
-        //     relation_parameters,
-        //     scaling_factor,
-        // );
-        // Self::accumulate_one_relation_evaluations::<Poseidon2ExternalRelation>(
-        //     &mut univariate_accumulators.r_pos_ext,
-        //     extended_edges,
-        //     relation_parameters,
-        //     scaling_factor,
-        // );
-        // Self::accumulate_one_relation_evaluations::<Poseidon2InternalRelation>(
-        //     &mut univariate_accumulators.r_pos_int,
-        //     extended_edges,
-        //     relation_parameters,
-        //     scaling_factor,
-        // );
+        R::verify_accumulate(
+            univariate_accumulator,
+            extended_edges,
+            relation_parameters,
+            scaling_factor,
+        );
+    }
+
+    pub(crate) fn accumulate_elliptic_curve_relation_evaluations(
+        univariate_accumulator: &mut EllipticRelationEvals<P::ScalarField>,
+        extended_edges: &ClaimedEvaluations<P::ScalarField, P::ScalarField, L>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
+        scaling_factor: &P::ScalarField,
+    ) {
+        EllipticRelation::verify_accumulate::<P, L>(
+            univariate_accumulator,
+            extended_edges,
+            relation_parameters,
+            scaling_factor,
+        );
     }
 
     pub(crate) fn compute_full_relation_purported_value(
@@ -166,9 +101,9 @@ impl<P: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour<P::ScalarField>>
     ) -> P::ScalarField {
         tracing::trace!("Compute full relation purported value");
 
-        let mut relation_evaluations = AllRelationEvaluations::<P::ScalarField>::default();
+        let mut relation_evaluations = L::AllRelationEvaluations::default();
 
-        Self::accumulate_relation_evaluations(
+        L::accumulate_relation_evaluations::<P>(
             &mut relation_evaluations,
             purported_evaluations,
             relation_parameters,
@@ -177,7 +112,10 @@ impl<P: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour<P::ScalarField>>
 
         let running_challenge = P::ScalarField::one();
 
-        relation_evaluations
-            .scale_and_batch_elements(running_challenge, &relation_parameters.alphas)
+        L::scale_and_batch_elements(
+            &relation_evaluations,
+            running_challenge,
+            &relation_parameters.alphas,
+        )
     }
 }

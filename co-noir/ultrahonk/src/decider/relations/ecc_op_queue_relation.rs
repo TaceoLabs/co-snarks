@@ -20,6 +20,33 @@ pub(crate) struct EccOpQueueRelationAcc<F: PrimeField> {
     pub(crate) r7: Univariate<F, 3>,
 }
 
+#[derive(Clone, Debug, Default)]
+pub(crate) struct EccOpQueueRelationEvals<F: PrimeField> {
+    pub(crate) r0: F,
+    pub(crate) r1: F,
+    pub(crate) r2: F,
+    pub(crate) r3: F,
+    pub(crate) r4: F,
+    pub(crate) r5: F,
+    pub(crate) r6: F,
+    pub(crate) r7: F,
+}
+
+impl<F: PrimeField> EccOpQueueRelationEvals<F> {
+    pub(crate) fn scale_and_batch_elements(&self, running_challenge: &[F], result: &mut F) {
+        assert!(running_challenge.len() == EccOpQueueRelation::NUM_RELATIONS);
+
+        *result += self.r0 * running_challenge[0];
+        *result += self.r1 * running_challenge[1];
+        *result += self.r2 * running_challenge[2];
+        *result += self.r3 * running_challenge[3];
+        *result += self.r4 * running_challenge[4];
+        *result += self.r5 * running_challenge[5];
+        *result += self.r6 * running_challenge[6];
+        *result += self.r7 * running_challenge[7];
+    }
+}
+
 impl<F: PrimeField> EccOpQueueRelationAcc<F> {
     pub(crate) fn scale(&mut self, elements: &[F]) {
         assert!(elements.len() == EccOpQueueRelation::NUM_RELATIONS);
@@ -100,7 +127,7 @@ impl EccOpQueueRelation {
 impl<F: PrimeField, L: PlainProverFlavour<F>> Relation<F, L> for EccOpQueueRelation {
     type Acc = EccOpQueueRelationAcc<F>;
 
-    type VerifyAcc = ();
+    type VerifyAcc = EccOpQueueRelationEvals<F>;
 
     const SKIPPABLE: bool = true;
 

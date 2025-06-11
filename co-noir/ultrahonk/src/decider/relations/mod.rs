@@ -12,16 +12,14 @@ pub(crate) mod ultra_arithmetic_relation;
 use super::types::{ClaimedEvaluations, ProverUnivariates, RelationParameters};
 use crate::plain_prover_flavour::PlainProverFlavour;
 use ark_ff::PrimeField;
-use auxiliary_relation::{AuxiliaryRelation, AuxiliaryRelationEvals};
-use delta_range_constraint_relation::{
-    DeltaRangeConstraintRelation, DeltaRangeConstraintRelationEvals,
-};
-use elliptic_relation::{EllipticRelation, EllipticRelationEvals};
-use logderiv_lookup_relation::{LogDerivLookupRelation, LogDerivLookupRelationEvals};
-use permutation_relation::{UltraPermutationRelation, UltraPermutationRelationEvals};
-use poseidon2_external_relation::{Poseidon2ExternalRelation, Poseidon2ExternalRelationEvals};
-use poseidon2_internal_relation::{Poseidon2InternalRelation, Poseidon2InternalRelationEvals};
-use ultra_arithmetic_relation::{UltraArithmeticRelation, UltraArithmeticRelationEvals};
+use auxiliary_relation::AuxiliaryRelation;
+use delta_range_constraint_relation::DeltaRangeConstraintRelation;
+use elliptic_relation::EllipticRelation;
+use logderiv_lookup_relation::LogDerivLookupRelation;
+use permutation_relation::UltraPermutationRelation;
+use poseidon2_external_relation::Poseidon2ExternalRelation;
+use poseidon2_internal_relation::Poseidon2InternalRelation;
+use ultra_arithmetic_relation::UltraArithmeticRelation;
 
 pub(crate) trait Relation<F: PrimeField, L: PlainProverFlavour<F>> {
     type Acc: Default;
@@ -51,6 +49,7 @@ pub(crate) trait Relation<F: PrimeField, L: PlainProverFlavour<F>> {
     );
 }
 
+// TODO FLORIN: REMOVE
 pub(crate) const NUM_SUBRELATIONS_ONLY_VERIFIER: usize = UltraArithmeticRelation::NUM_RELATIONS
     + UltraPermutationRelation::NUM_RELATIONS
     + DeltaRangeConstraintRelation::NUM_RELATIONS
@@ -59,41 +58,3 @@ pub(crate) const NUM_SUBRELATIONS_ONLY_VERIFIER: usize = UltraArithmeticRelation
     + LogDerivLookupRelation::NUM_RELATIONS
     + Poseidon2ExternalRelation::NUM_RELATIONS
     + Poseidon2InternalRelation::NUM_RELATIONS;
-
-#[derive(Default)]
-pub(crate) struct AllRelationEvaluations<F: PrimeField> {
-    pub(crate) r_arith: UltraArithmeticRelationEvals<F>,
-    pub(crate) r_perm: UltraPermutationRelationEvals<F>,
-    pub(crate) r_lookup: LogDerivLookupRelationEvals<F>,
-    pub(crate) r_delta: DeltaRangeConstraintRelationEvals<F>,
-    pub(crate) r_elliptic: EllipticRelationEvals<F>,
-    pub(crate) r_aux: AuxiliaryRelationEvals<F>,
-    pub(crate) r_pos_ext: Poseidon2ExternalRelationEvals<F>,
-    pub(crate) r_pos_int: Poseidon2InternalRelationEvals<F>,
-}
-
-impl<F: PrimeField> AllRelationEvaluations<F> {
-    pub(crate) fn scale_and_batch_elements(&self, first_scalar: F, elements: &[F]) -> F {
-        assert!(elements.len() == NUM_SUBRELATIONS_ONLY_VERIFIER - 1);
-        let mut output = F::zero();
-        self.r_arith
-            .scale_and_batch_elements(&[first_scalar, elements[0]], &mut output);
-        self.r_perm
-            .scale_and_batch_elements(&elements[1..3], &mut output);
-        self.r_lookup
-            .scale_and_batch_elements(&elements[3..5], &mut output);
-        self.r_delta
-            .scale_and_batch_elements(&elements[5..9], &mut output);
-        self.r_elliptic
-            .scale_and_batch_elements(&elements[9..11], &mut output);
-        self.r_aux
-            .scale_and_batch_elements(&elements[11..17], &mut output);
-
-        self.r_pos_ext
-            .scale_and_batch_elements(&elements[17..21], &mut output);
-        self.r_pos_int
-            .scale_and_batch_elements(&elements[21..], &mut output);
-
-        output
-    }
-}

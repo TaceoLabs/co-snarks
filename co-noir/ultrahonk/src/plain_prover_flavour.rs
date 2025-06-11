@@ -1,3 +1,4 @@
+use crate::decider::types::ClaimedEvaluations;
 use crate::{
     decider::types::{ProverUnivariates, RelationParameters},
     prelude::Univariate,
@@ -8,6 +9,7 @@ use co_builder::{prelude::HonkCurve, prover_flavour::ProverFlavour};
 
 pub trait PlainProverFlavour<F: PrimeField>: Default + ProverFlavour<F> {
     type AllRelationAcc: Default;
+    type AllRelationEvaluations: Default;
 
     const NUM_SUBRELATIONS: usize;
 
@@ -24,4 +26,15 @@ pub trait PlainProverFlavour<F: PrimeField>: Default + ProverFlavour<F> {
         relation_parameters: &RelationParameters<F>,
         scaling_factor: &F,
     );
+    fn accumulate_relation_evaluations<P: HonkCurve<TranscriptFieldType, ScalarField = F>>(
+        univariate_accumulators: &mut Self::AllRelationEvaluations,
+        extended_edges: &ClaimedEvaluations<F, F, Self>,
+        relation_parameters: &RelationParameters<F>,
+        scaling_factor: &F,
+    );
+    fn scale_and_batch_elements(
+        all_rel_evals: &Self::AllRelationEvaluations,
+        first_scalar: F,
+        elements: &[F],
+    ) -> F;
 }
