@@ -106,7 +106,7 @@ where
         // In the first round, we compute the first univariate polynomial and populate the book-keeping table of
         // #partially_evaluated_polynomials, which has \f$ n/2 \f$ rows and \f$ N \f$ columns. When the Flavor has ZK,
 
-        let round_univariate = sum_check_round.compute_univariate::<P, UNIVARIATE_SIZE>(
+        let round_univariate = sum_check_round.compute_univariate::<P>(
             round_idx,
             &self.memory.relation_parameters,
             &gate_separators,
@@ -139,7 +139,7 @@ where
             tracing::trace!("Sumcheck prove round {}", round_idx);
             // Write the round univariate to the transcript
 
-            let round_univariate = sum_check_round.compute_univariate::<P, UNIVARIATE_SIZE>(
+            let round_univariate = sum_check_round.compute_univariate::<P>(
                 round_idx,
                 &self.memory.relation_parameters,
                 &gate_separators,
@@ -148,11 +148,10 @@ where
 
             // Place the evaluations of the round univariate into transcript.
             transcript.send_fr_iter_to_verifier::<P, _>(
-                format!("Sumcheck:univariate_{}", round_idx),
+                format!("Sumcheck:univariate_{round_idx}"),
                 &round_univariate.evaluations,
             );
-            let round_challenge =
-                transcript.get_challenge::<P>(format!("Sumcheck:u_{}", round_idx));
+            let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{round_idx}"));
             multivariate_challenge.push(round_challenge);
             // Prepare sumcheck book-keeping table for the next round
             Self::partially_evaluate_inplace(
@@ -169,10 +168,10 @@ where
             SumcheckRoundOutput::<P::ScalarField, BATCHED_RELATION_PARTIAL_LENGTH>::default();
         for idx in multivariate_d as usize..CONST_PROOF_SIZE_LOG_N {
             transcript.send_fr_iter_to_verifier::<P, _>(
-                format!("Sumcheck:univariate_{}", idx),
+                format!("Sumcheck:univariate_{idx}"),
                 &zero_univariate.evaluations,
             );
-            let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{}", idx));
+            let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{idx}"));
             multivariate_challenge.push(round_challenge);
         }
 
@@ -218,7 +217,7 @@ where
         // In the first round, we compute the first univariate polynomial and populate the book-keeping table of
         // #partially_evaluated_polynomials, which has \f$ n/2 \f$ rows and \f$ N \f$ columns. When the Flavor has ZK,
         // compute_univariate also takes into account the zk_sumcheck_data.
-        let round_univariate = sum_check_round.compute_univariate_zk::<P, UNIVARIATE_SIZE>(
+        let round_univariate = sum_check_round.compute_univariate_zk::<P>(
             round_idx,
             &self.memory.relation_parameters,
             &gate_separators,
@@ -256,7 +255,7 @@ where
             tracing::trace!("Sumcheck prove round {}", round_idx);
             // Write the round univariate to the transcript
 
-            let round_univariate = sum_check_round.compute_univariate_zk::<P, UNIVARIATE_SIZE>(
+            let round_univariate = sum_check_round.compute_univariate_zk::<P>(
                 round_idx,
                 &self.memory.relation_parameters,
                 &gate_separators,
@@ -267,11 +266,10 @@ where
 
             // Place the evaluations of the round univariate into transcript.
             transcript.send_fr_iter_to_verifier::<P, _>(
-                format!("Sumcheck:univariate_{}", round_idx),
+                format!("Sumcheck:univariate_{round_idx}"),
                 &round_univariate.evaluations,
             );
-            let round_challenge =
-                transcript.get_challenge::<P>(format!("Sumcheck:u_{}", round_idx));
+            let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{round_idx}"));
             multivariate_challenge.push(round_challenge);
             // Prepare sumcheck book-keeping table for the next round
             Self::partially_evaluate_inplace(
@@ -293,10 +291,10 @@ where
             SumcheckRoundOutput::<P::ScalarField, BATCHED_RELATION_PARTIAL_LENGTH_ZK>::default();
         for idx in multivariate_d as usize..CONST_PROOF_SIZE_LOG_N {
             transcript.send_fr_iter_to_verifier::<P, _>(
-                format!("Sumcheck:univariate_{}", idx),
+                format!("Sumcheck:univariate_{idx}"),
                 &zero_univariate.evaluations,
             );
-            let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{}", idx));
+            let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{idx}"));
             multivariate_challenge.push(round_challenge);
         }
 

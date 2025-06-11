@@ -20,7 +20,7 @@ impl From<usize> for BusData {
             0 => BusData::BusIdx0,
             1 => BusData::BusIdx1,
             2 => BusData::BusIdx2,
-            _ => panic!("Invalid bus index: {}", idx),
+            _ => panic!("Invalid bus index: {idx}"),
         }
     }
 }

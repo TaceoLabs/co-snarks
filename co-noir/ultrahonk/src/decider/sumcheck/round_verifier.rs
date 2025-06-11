@@ -73,33 +73,33 @@ impl<P: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour<P::ScalarField>>
         !sumcheck_round_failed
     }
 
-    fn accumulate_one_relation_evaluations<R: Relation<P::ScalarField, L>>(
-        univariate_accumulator: &mut R::VerifyAcc,
-        extended_edges: &ClaimedEvaluations<P::ScalarField, P::ScalarField, L>,
-        relation_parameters: &RelationParameters<P::ScalarField>,
-        scaling_factor: &P::ScalarField,
-    ) {
-        R::verify_accumulate(
-            univariate_accumulator,
-            extended_edges,
-            relation_parameters,
-            scaling_factor,
-        );
-    }
+    // fn accumulate_one_relation_evaluations<R: Relation<P::ScalarField, L>>(
+    //     univariate_accumulator: &mut R::VerifyAcc,
+    //     extended_edges: &ClaimedEvaluations<P::ScalarField, P::ScalarField, L>,
+    //     relation_parameters: &RelationParameters<P::ScalarField>,
+    //     scaling_factor: &P::ScalarField,
+    // ) {
+    //     R::verify_accumulate(
+    //         univariate_accumulator,
+    //         extended_edges,
+    //         relation_parameters,
+    //         scaling_factor,
+    //     );
+    // }
 
-    fn accumulate_elliptic_curve_relation_evaluations(
-        univariate_accumulator: &mut EllipticRelationEvals<P::ScalarField>,
-        extended_edges: &ClaimedEvaluations<P::ScalarField, P::ScalarField, L>,
-        relation_parameters: &RelationParameters<P::ScalarField>,
-        scaling_factor: &P::ScalarField,
-    ) {
-        EllipticRelation::verify_accumulate::<P, L>(
-            univariate_accumulator,
-            extended_edges,
-            relation_parameters,
-            scaling_factor,
-        );
-    }
+    // fn accumulate_elliptic_curve_relation_evaluations(
+    //     univariate_accumulator: &mut EllipticRelationEvals<P::ScalarField>,
+    //     extended_edges: &ClaimedEvaluations<P::ScalarField, P::ScalarField, L>,
+    //     relation_parameters: &RelationParameters<P::ScalarField>,
+    //     scaling_factor: &P::ScalarField,
+    // ) {
+    //     EllipticRelation::verify_accumulate::<P, L>(
+    //         univariate_accumulator,
+    //         extended_edges,
+    //         relation_parameters,
+    //         scaling_factor,
+    //     );
+    // }
 
     fn accumulate_relation_evaluations(
         _univariate_accumulators: &mut AllRelationEvaluations<P::ScalarField>,

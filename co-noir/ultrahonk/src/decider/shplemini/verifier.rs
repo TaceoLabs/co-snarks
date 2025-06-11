@@ -26,32 +26,32 @@ impl<
     > DeciderVerifier<P, H, L>
 {
     pub fn get_g_shift_evaluations(
-        evaluations: &ClaimedEvaluations<P::ScalarField, P::ScalarField, L>,
-    ) -> PolyGShift<P::ScalarField> {
+        evaluations: &'_ ClaimedEvaluations<P::ScalarField, P::ScalarField, L>,
+    ) -> PolyGShift<'_, P::ScalarField> {
         PolyGShift {
             wires: &evaluations.shifted_witness,
         }
     }
 
     pub fn get_g_shift_comms(
-        evaluations: &VerifierCommitments<P::G1Affine, P::ScalarField, L>,
-    ) -> PolyG<P::G1Affine> {
+        evaluations: &'_ VerifierCommitments<P::G1Affine, P::ScalarField, L>,
+    ) -> PolyG<'_, P::G1Affine> {
         PolyG {
             wires: evaluations.witness.to_be_shifted().try_into().unwrap(),
         }
     }
 
     pub fn get_f_evaluations(
-        evaluations: &ClaimedEvaluations<P::ScalarField, P::ScalarField, L>,
-    ) -> PolyF<P::ScalarField, P::ScalarField, L> {
+        evaluations: &'_ ClaimedEvaluations<P::ScalarField, P::ScalarField, L>,
+    ) -> PolyF<'_, P::ScalarField, P::ScalarField, L> {
         PolyF {
             precomputed: &evaluations.precomputed,
             witness: &evaluations.witness,
         }
     }
     pub fn get_f_comms(
-        evaluations: &ClaimedEvaluations<P::G1Affine, P::ScalarField, L>,
-    ) -> PolyF<P::G1Affine, P::ScalarField, L> {
+        evaluations: &'_ ClaimedEvaluations<P::G1Affine, P::ScalarField, L>,
+    ) -> PolyF<'_, P::G1Affine, P::ScalarField, L> {
         PolyF {
             precomputed: &evaluations.precomputed,
             witness: &evaluations.witness,

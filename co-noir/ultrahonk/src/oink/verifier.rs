@@ -64,7 +64,7 @@ impl<
 
         for i in 0..public_input_size {
             let public_input =
-                transcript.receive_fr_from_prover::<P>(format!("public_input_{}", i))?;
+                transcript.receive_fr_from_prover::<P>(format!("public_input_{i}"))?;
             self.public_inputs.push(public_input);
         }
 

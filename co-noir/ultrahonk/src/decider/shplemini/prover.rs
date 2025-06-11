@@ -26,8 +26,8 @@ impl<
     > Decider<P, H, L>
 {
     fn get_f_polynomials(
-        polys: &AllEntities<Vec<P::ScalarField>, P::ScalarField, L>,
-    ) -> PolyF<Vec<P::ScalarField>, P::ScalarField, L> {
+        polys: &'_ AllEntities<Vec<P::ScalarField>, P::ScalarField, L>,
+    ) -> PolyF<'_, Vec<P::ScalarField>, P::ScalarField, L> {
         PolyF {
             precomputed: &polys.precomputed,
             witness: &polys.witness,
@@ -35,8 +35,8 @@ impl<
     }
 
     fn get_g_polynomials(
-        polys: &AllEntities<Vec<P::ScalarField>, P::ScalarField, L>,
-    ) -> PolyG<Vec<P::ScalarField>> {
+        polys: &'_ AllEntities<Vec<P::ScalarField>, P::ScalarField, L>,
+    ) -> PolyG<'_, Vec<P::ScalarField>> {
         PolyG {
             wires: polys.witness.to_be_shifted().try_into().unwrap(),
         }
@@ -206,7 +206,7 @@ impl<
             );
         }
         for l in log_n + 1..=virtual_log_n {
-            transcript.send_fr_to_verifier::<P>(format!("Gemini:a_{}", l), P::ScalarField::zero());
+            transcript.send_fr_to_verifier::<P>(format!("Gemini:a_{l}"), P::ScalarField::zero());
         }
 
         Ok(claims)

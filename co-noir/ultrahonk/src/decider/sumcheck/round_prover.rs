@@ -158,7 +158,6 @@ where
     fn compute_univariate_inner<
         P: HonkCurve<TranscriptFieldType, ScalarField = F>,
         const SIZE: usize,
-        const UNIVARIATE_SIZE: usize,
     >(
         &self,
         relation_parameters: &RelationParameters<P::ScalarField>,
@@ -196,10 +195,7 @@ where
         )
     }
 
-    pub(crate) fn compute_univariate<
-        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
-        const UNIVARIATE_SIZE: usize,
-    >(
+    pub(crate) fn compute_univariate<P: HonkCurve<TranscriptFieldType, ScalarField = F>>(
         &self,
         round_index: usize,
         relation_parameters: &RelationParameters<P::ScalarField>,
@@ -208,17 +204,14 @@ where
     ) -> SumcheckRoundOutput<P::ScalarField, BATCHED_RELATION_PARTIAL_LENGTH> {
         tracing::trace!("Sumcheck round {}", round_index);
 
-        self.compute_univariate_inner::<P, BATCHED_RELATION_PARTIAL_LENGTH, UNIVARIATE_SIZE>(
+        self.compute_univariate_inner::<P, BATCHED_RELATION_PARTIAL_LENGTH>(
             relation_parameters,
             gate_sparators,
             polynomials,
         )
     }
 
-    pub(crate) fn compute_univariate_zk<
-        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
-        const UNIVARIATE_SIZE: usize,
-    >(
+    pub(crate) fn compute_univariate_zk<P: HonkCurve<TranscriptFieldType, ScalarField = F>>(
         &self,
         round_index: usize,
         relation_parameters: &RelationParameters<P::ScalarField>,
@@ -230,21 +223,20 @@ where
         tracing::trace!("Sumcheck round {}", round_index);
 
         let round_univariate = self
-            .compute_univariate_inner::<P, BATCHED_RELATION_PARTIAL_LENGTH_ZK, UNIVARIATE_SIZE>(
+            .compute_univariate_inner::<P, BATCHED_RELATION_PARTIAL_LENGTH_ZK>(
                 relation_parameters,
                 gate_sparators,
                 polynomials,
             );
 
-        let contribution_from_disabled_rows =
-            Self::compute_disabled_contribution::<P, UNIVARIATE_SIZE>(
-                polynomials,
-                relation_parameters,
-                gate_sparators,
-                self.round_size,
-                round_index,
-                row_disabling_polynomial,
-            );
+        let contribution_from_disabled_rows = Self::compute_disabled_contribution::<P>(
+            polynomials,
+            relation_parameters,
+            gate_sparators,
+            self.round_size,
+            round_index,
+            row_disabling_polynomial,
+        );
 
         let libra_round_univariate =
             Self::compute_libra_round_univariate(zk_sumcheck_data, round_index);
@@ -280,10 +272,7 @@ where
         }
     }
 
-    fn compute_disabled_contribution<
-        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
-        const UNIVARIATE_SIZE: usize,
-    >(
+    fn compute_disabled_contribution<P: HonkCurve<TranscriptFieldType, ScalarField = F>>(
         polynomials: &AllEntities<Vec<P::ScalarField>, F, L>,
         relation_parameters: &RelationParameters<P::ScalarField>,
         gate_sparators: &GateSeparatorPolynomial<P::ScalarField>,

@@ -47,7 +47,7 @@ impl<F: PrimeField> HonkProof<F> {
 pub(crate) const NUM_ALL_ENTITIES: usize =
     WITNESS_ENTITIES_SIZE + PRECOMPUTED_ENTITIES_SIZE + SHIFTED_WITNESS_ENTITIES_SIZE;
 #[derive(Default)]
-pub(crate) struct AllEntities<T: Default, F: PrimeField, L: PlainProverFlavour<F>> {
+pub struct AllEntities<T: Default, F: PrimeField, L: PlainProverFlavour<F>> {
     pub(crate) witness: WitnessEntities<T, F, L>,
     pub(crate) precomputed: PrecomputedEntities<T, F, L>,
     pub(crate) shifted_witness: ShiftedWitnessEntities<T>,

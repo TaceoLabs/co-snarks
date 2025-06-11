@@ -28,7 +28,7 @@ pub(crate) type PartiallyEvaluatePolys<F, L> = AllEntities<Vec<F>, F, L>;
 pub(crate) type ClaimedEvaluations<F, K, L> = AllEntities<F, K, L>;
 pub(crate) type VerifierCommitments<P, F, L> = AllEntities<P, F, L>;
 
-pub(crate) struct RelationParameters<F: PrimeField> {
+pub struct RelationParameters<F: PrimeField> {
     pub(crate) eta_1: F,
     pub(crate) eta_2: F,
     pub(crate) eta_3: F,

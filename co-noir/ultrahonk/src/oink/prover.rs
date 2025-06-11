@@ -411,7 +411,7 @@ impl<
     ) {
         tracing::trace!("generate alpha round");
 
-        let args: [String; NUM_ALPHAS] = array::from_fn(|i| format!("alpha_{}", i));
+        let args: [String; NUM_ALPHAS] = array::from_fn(|i| format!("alpha_{i}"));
         alphas.copy_from_slice(&transcript.get_challenges::<P>(&args));
     }
 
@@ -441,7 +441,7 @@ impl<
 
         for (i, public_input) in proving_key.public_inputs.iter().enumerate() {
             // transcript.add_scalar(*public_input);
-            transcript.send_fr_to_verifier::<P>(format!("public_input_{}", i), *public_input);
+            transcript.send_fr_to_verifier::<P>(format!("public_input_{i}"), *public_input);
         }
         Ok(())
     }
