@@ -1,12 +1,11 @@
-use serde::{Deserialize, Serialize as SerdeSerialize};
-use std::sync::Arc;
-
+use crate::prelude::Polynomial;
 use crate::{
     builder::UltraCircuitBuilder,
     crs::ProverCrs,
     flavours::ultra_flavour::UltraFlavour,
     honk_curve::HonkCurve,
-    polynomials::polynomial_types::{PrecomputedEntities, PRECOMPUTED_ENTITIES_SIZE},
+    polynomials::polynomial_types::PrecomputedEntities,
+    prover_flavour::ProverFlavour,
     serialize::{Serialize, SerializeP},
     utils::Utils,
     HonkProofError, HonkProofResult, TranscriptFieldType,
@@ -14,19 +13,20 @@ use crate::{
 use ark_ec::{pairing::Pairing, AffineRepr};
 use ark_ff::Zero;
 use co_acvm::PlainAcvmSolver;
+use serde::{Deserialize, Serialize as SerdeSerialize};
+use std::sync::Arc;
 
 #[derive(Clone)]
-
-pub struct VerifyingKey<P: Pairing> {
+pub struct VerifyingKey<P: Pairing, L: ProverFlavour> {
     pub crs: P::G2Affine,
     pub circuit_size: u32,
     pub num_public_inputs: u32,
     pub pub_inputs_offset: u32,
     pub pairing_inputs_public_input_key: PublicComponentKey,
-    pub commitments: PrecomputedEntities<P::G1Affine, P::ScalarField, UltraFlavour<P::ScalarField>>,
+    pub commitments: PrecomputedEntities<P::G1Affine, P::ScalarField, L>,
 }
 
-impl<P: Pairing> VerifyingKey<P> {
+impl<P: Pairing> VerifyingKey<P, UltraFlavour<P::ScalarField>> {
     pub fn create(
         circuit: UltraCircuitBuilder<P>,
         prover_crs: Arc<ProverCrs<P>>,
@@ -38,7 +38,7 @@ impl<P: Pairing> VerifyingKey<P> {
     }
 
     pub fn from_barrettenberg_and_crs(
-        barretenberg_vk: VerifyingKeyBarretenberg<P>,
+        barretenberg_vk: VerifyingKeyBarretenberg<P, UltraFlavour<P::ScalarField>>,
         crs: P::G2Affine,
     ) -> Self {
         Self {
@@ -51,7 +51,7 @@ impl<P: Pairing> VerifyingKey<P> {
         }
     }
 
-    pub fn to_barrettenberg(self) -> VerifyingKeyBarretenberg<P> {
+    pub fn to_barrettenberg(self) -> VerifyingKeyBarretenberg<P, UltraFlavour<P::ScalarField>> {
         VerifyingKeyBarretenberg {
             circuit_size: self.circuit_size as u64,
             log_circuit_size: Utils::get_msb64(self.circuit_size as u64) as u64,
@@ -63,13 +63,13 @@ impl<P: Pairing> VerifyingKey<P> {
     }
 }
 
-pub struct VerifyingKeyBarretenberg<P: Pairing> {
+pub struct VerifyingKeyBarretenberg<P: Pairing, L: ProverFlavour> {
     pub circuit_size: u64,
     pub log_circuit_size: u64,
     pub num_public_inputs: u64,
     pub pub_inputs_offset: u64,
     pub pairing_inputs_public_input_key: PublicComponentKey,
-    pub commitments: PrecomputedEntities<P::G1Affine, P::ScalarField, UltraFlavour<P::ScalarField>>,
+    pub commitments: PrecomputedEntities<P::G1Affine, P::ScalarField, L>,
 }
 
 #[derive(Clone, Copy, Debug, SerdeSerialize, Deserialize)]
@@ -96,10 +96,13 @@ impl PublicComponentKey {
     }
 }
 
-impl<P: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<P> {
+impl<P: HonkCurve<TranscriptFieldType>, L: ProverFlavour> VerifyingKeyBarretenberg<P, L> {
     const FIELDSIZE_BYTES: u32 = SerializeP::<P>::FIELDSIZE_BYTES;
-    const SER_FULL_SIZE: usize =
-        4 * 8 + 4 + PRECOMPUTED_ENTITIES_SIZE * 2 * Self::FIELDSIZE_BYTES as usize;
+    const SER_FULL_SIZE: usize = 4 * 8
+        + 4
+        + UltraFlavour::<P::ScalarField>::PRECOMPUTED_ENTITIES_SIZE
+            * 2
+            * Self::FIELDSIZE_BYTES as usize;
     const SER_COMPRESSED_SIZE: usize = Self::SER_FULL_SIZE - 4;
 
     pub fn to_field_elements(&self) -> Vec<TranscriptFieldType> {

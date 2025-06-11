@@ -20,6 +20,9 @@ use crate::{
     transcript::TranscriptFieldType,
     types::AllEntities,
 };
+use co_builder::prelude::Polynomial;
+use co_builder::prover_flavour::ProverFlavour;
+
 use ark_ff::PrimeField;
 use co_builder::prelude::{HonkCurve, RowDisablingPolynomial};
 
@@ -31,10 +34,7 @@ pub(crate) struct SumcheckProverRound<F: PrimeField, L: PlainProverFlavour<F>> {
     phantom_flavour: std::marker::PhantomData<L>,
 }
 
-impl<F: PrimeField, L: PlainProverFlavour<F>> SumcheckProverRound<F, L>
-where
-    [(); L::MAX_PARTIAL_RELATION_LENGTH]:,
-{
+impl<F: PrimeField, L: PlainProverFlavour<F>> SumcheckProverRound<F, L> {
     pub(crate) fn new(initial_round_size: usize) -> Self {
         Self {
             round_size: initial_round_size,
@@ -43,8 +43,8 @@ where
         }
     }
 
-    fn extend_edges<const UNIVARIATE_SIZE: usize>(
-        extended_edges: &mut ProverUnivariates<F, L, UNIVARIATE_SIZE>,
+    fn extend_edges(
+        extended_edges: &mut ProverUnivariates<F, L, { L::MAX_PARTIAL_RELATION_LENGTH }>,
         multivariates: &AllEntities<Vec<F>, F, L>,
         edge_index: usize,
     ) {

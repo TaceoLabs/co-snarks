@@ -1,7 +1,123 @@
 // This is just a temporary file and will be removed
+use ark_bn254::Bn254;
 use ark_ff::PrimeField;
+use co_builder::flavours::mega_flavour::MegaFlavour;
+use co_builder::flavours::ultra_flavour::UltraFlavour;
+use co_builder::prelude::ActiveRegionData;
+use co_builder::prelude::CrsParser;
+use co_builder::prelude::HonkRecursion;
+use co_builder::prelude::Polynomial;
+use co_builder::prelude::Polynomials;
+use co_builder::prelude::PrecomputedEntities;
+use co_builder::prelude::ProverWitnessEntities;
+use co_builder::prelude::Serialize as FieldSerialize;
+use co_builder::prelude::ZeroKnowledge;
 use serde::Deserialize;
 use serde::Serialize;
+use sha3::Keccak256;
+use ultrahonk::prelude::ProvingKey;
+use ultrahonk::{
+    prelude::{
+        HonkProof, PlainAcvmSolver, Poseidon2Sponge, TranscriptFieldType, TranscriptHasher,
+        UltraCircuitBuilder, UltraHonk,
+    },
+    Utils,
+};
+
+fn parse_proving_key_from_json(json_str: &str) -> Result<VeryUglyPk, serde_json::Error> {
+    serde_json::from_str(json_str)
+}
+
+fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(has_zk: ZeroKnowledge) {
+    const CRS_PATH_G1: &str = "../co-builder/src/crs/bn254_g1.dat";
+    const CRS_PATH_G2: &str = "../co-builder/src/crs/bn254_g2.dat";
+
+    let path = "src/finalpk.json";
+    let json_str = std::fs::read_to_string(path).expect("failed to read file");
+    let proving_key: VeryUglyPk =
+        parse_proving_key_from_json(&json_str).expect("failed to parse proving key from JSON");
+    let real_pk: RealMegaProvingKey<ark_bn254::Fr> = RealMegaProvingKey::from_ugly(proving_key);
+
+    let crs_size = real_pk.dyadic_circuit_size;
+    let crs: co_builder::prelude::Crs<Bn254> =
+        CrsParser::get_crs(CRS_PATH_G1, CRS_PATH_G2, crs_size, has_zk).unwrap();
+    let (prover_crs, _verifier_crs) = crs.split();
+    let mut pk = ProvingKey::<_, MegaFlavour<_>>::new(
+        real_pk.circuit_size,
+        real_pk.num_public_inputs,
+        prover_crs.into(),
+        real_pk.final_active_wire_idx,
+    );
+    pk.public_inputs = real_pk.public_inputs;
+    pk.pub_inputs_offset = real_pk.pub_inputs_offset as u32;
+
+    pk.active_region_data = ActiveRegionData {
+        ranges: real_pk.ranges,
+        idxs: real_pk.idxs,
+        current_end: real_pk.current_end,
+    };
+    let mut precomp_polys: Vec<Polynomial<ark_bn254::Fr>> = Vec::new();
+    for poly in real_pk.precomputed_polynomials {
+        let new_poly: Polynomial<ark_bn254::Fr> = Polynomial { coefficients: poly };
+        precomp_polys.push(new_poly);
+    }
+    let mut witness_polys: Vec<Polynomial<ark_bn254::Fr>> = Vec::new();
+    for poly in real_pk.witness_polynomials[..4].to_vec() {
+        // println!("Poly: {:?}", poly.len());
+        let new_poly: Polynomial<ark_bn254::Fr> = Polynomial { coefficients: poly };
+        witness_polys.push(new_poly);
+    }
+    for poly in real_pk.witness_polynomials[6..].to_vec() {
+        let new_poly: Polynomial<ark_bn254::Fr> = Polynomial { coefficients: poly };
+        // println!("Poly: {:?}", new_poly.len());
+        witness_polys.push(new_poly);
+    }
+    // println!("Precomputed Polynomials: {}", precomp_polys.len());
+    // println!("Witness Polynomials: {}", witness_polys.len());
+    let precompentities = PrecomputedEntities::<
+        Polynomial<ark_bn254::Fr>,
+        ark_bn254::Fr,
+        MegaFlavour<ark_bn254::Fr>,
+    > {
+        elements: precomp_polys.try_into().unwrap(),
+        phantom_data: std::marker::PhantomData::<(ark_bn254::Fr, MegaFlavour<ark_bn254::Fr>)>,
+    };
+
+    let witness_entities = ProverWitnessEntities::<
+        Polynomial<ark_bn254::Fr>,
+        ark_bn254::Fr,
+        MegaFlavour<ark_bn254::Fr>,
+    > {
+        elements: witness_polys.try_into().unwrap(),
+        phantom_data: std::marker::PhantomData::<(ark_bn254::Fr, MegaFlavour<ark_bn254::Fr>)>,
+    };
+    let polys_together = Polynomials {
+        witness: witness_entities,
+        precomputed: precompentities,
+    };
+    pk.polynomials = polys_together;
+
+    let (proof, public_inputs) = UltraHonk::<_, H, MegaFlavour<_>>::prove(pk, has_zk).unwrap();
+
+    println!("Public Inputs: {:?}", public_inputs.len());
+    println!("Proof: {:?}", proof.inner().len());
+    // assert_eq!(public_inputs.len(), proof.inner().len());
+    // let is_valid =
+    //     UltraHonk::<_, H, UltraFlavour<_>>::verify(proof, &public_inputs, &verifying_key, has_zk)
+    //         .unwrap();
+    // assert!(is_valid);
+}
+
+#[test]
+fn mega_tester_keccak256() {
+    plain_test::<Keccak256>(ZeroKnowledge::No);
+}
+
+#[test]
+fn mega_tester_poseidon() {
+    plain_test::<Poseidon2Sponge>(ZeroKnowledge::No);
+    // plain_test::<Poseidon2Sponge>(ZeroKnowledge::Yes);
+}
 
 #[derive(Serialize, Deserialize)]
 #[serde(bound = "")]
@@ -114,7 +230,7 @@ struct RealMegaProvingKey<F: PrimeField> {
     pub pairing_inputs_public_input_key: usize,
     // these three are the active region data
     pub pub_inputs_offset: usize,
-    pub ranges: Vec<[usize; 2]>,
+    pub ranges: Vec<(usize, usize)>,
     pub idxs: Vec<usize>,
     #[serde(
         serialize_with = "mpc_core::ark_se",
@@ -754,7 +870,7 @@ struct VeryUglyPk {
     pairing_inputs_public_input_key: usize,
     pub_inputs_offset: usize,
 
-    ranges: Vec<[usize; 2]>,
+    ranges: Vec<(usize, usize)>,
 
     public_inputs: Vec<String>,
 }
@@ -773,6 +889,10 @@ mod tests {
         let json_str = std::fs::read_to_string(path).expect("failed to read file");
         let proving_key: VeryUglyPk =
             parse_proving_key_from_json(&json_str).expect("failed to parse proving key from JSON");
+        println!(
+            "Proving Key Witnesspolynomial_0: {:?}",
+            proving_key.Witnesspolynomial_0
+        );
         let real_pk: RealMegaProvingKey<ark_bn254::Fr> = RealMegaProvingKey::from_ugly(proving_key);
         let out = path::PathBuf::from("src/mega_proving_key");
         let out_file = BufWriter::new(std::fs::File::create(&out).unwrap());

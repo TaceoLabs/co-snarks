@@ -2,12 +2,12 @@ use std::marker::PhantomData;
 
 use ark_ff::PrimeField;
 use co_builder::{
-    prelude::{PrecomputedEntities, Serialize, PRECOMPUTED_ENTITIES_SIZE},
+    prelude::{PrecomputedEntities, Serialize},
     prover_flavour::ProverFlavour,
     HonkProofResult,
 };
 
-use crate::plain_prover_flavour::PlainProverFlavour;
+use crate::{plain_prover_flavour::PlainProverFlavour, prelude::Univariate};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HonkProof<F: PrimeField> {
@@ -44,8 +44,8 @@ impl<F: PrimeField> HonkProof<F> {
     }
 }
 
-pub(crate) const NUM_ALL_ENTITIES: usize =
-    WITNESS_ENTITIES_SIZE + PRECOMPUTED_ENTITIES_SIZE + SHIFTED_WITNESS_ENTITIES_SIZE;
+// pub(crate) const NUM_ALL_ENTITIES: usize =
+//     WITNESS_ENTITIES_SIZE + PRECOMPUTED_ENTITIES_SIZE + SHIFTED_WITNESS_ENTITIES_SIZE;
 #[derive(Default)]
 pub struct AllEntities<T: Default, F: PrimeField, L: PlainProverFlavour<F>> {
     pub(crate) witness: WitnessEntities<T, F, L>,
@@ -81,10 +81,10 @@ impl<T: Default + Clone, F: PrimeField, L: PlainProverFlavour<F>> AllEntities<Ve
     }
 }
 
-const WITNESS_ENTITIES_SIZE: usize = 8;
+// const WITNESS_ENTITIES_SIZE: usize = 8;
 #[derive(Default, Clone)]
-pub struct WitnessEntities<T: Default, F: PrimeField, L: ProverFlavour<F>> {
-    pub(crate) elements: [T; WITNESS_ENTITIES_SIZE],
+pub struct WitnessEntities<T: Default, F: PrimeField, L: ProverFlavour> {
+    pub(crate) elements: [T; L::WITNESS_ENTITIES_SIZE],
     phantom_data: PhantomData<(F, L)>,
 }
 
@@ -98,7 +98,7 @@ impl<T: Default, F: PrimeField, L: PlainProverFlavour<F>> IntoIterator
     for WitnessEntities<T, F, L>
 {
     type Item = T;
-    type IntoIter = std::array::IntoIter<T, WITNESS_ENTITIES_SIZE>;
+    type IntoIter = std::array::IntoIter<T, { L::WITNESS_ENTITIES_SIZE }>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.elements.into_iter()
@@ -147,8 +147,8 @@ impl<T: Default, F: PrimeField, L: PlainProverFlavour<F>> IntoIterator for AllEn
     type Item = T;
     type IntoIter = std::iter::Chain<
         std::iter::Chain<
-            std::array::IntoIter<T, PRECOMPUTED_ENTITIES_SIZE>,
-            std::array::IntoIter<T, WITNESS_ENTITIES_SIZE>,
+            std::array::IntoIter<T, { L::PRECOMPUTED_ENTITIES_SIZE }>,
+            std::array::IntoIter<T, { L::WITNESS_ENTITIES_SIZE }>,
         >,
         std::array::IntoIter<T, SHIFTED_WITNESS_ENTITIES_SIZE>,
     >;

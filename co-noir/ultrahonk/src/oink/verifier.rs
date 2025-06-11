@@ -1,4 +1,5 @@
 use super::types::VerifierMemory;
+use crate::prelude::Univariate;
 use crate::{
     oink::prover::Oink,
     plain_prover_flavour::PlainProverFlavour,
@@ -6,7 +7,9 @@ use crate::{
     transcript::{Transcript, TranscriptHasher},
     verifier::HonkVerifyResult,
 };
+use co_builder::prelude::Polynomial;
 use co_builder::prelude::{HonkCurve, VerifyingKey};
+use co_builder::prover_flavour::ProverFlavour;
 
 pub(crate) struct OinkVerifier<
     P: HonkCurve<TranscriptFieldType>,
@@ -47,7 +50,7 @@ impl<
 
     fn execute_preamble_round(
         &mut self,
-        verifying_key: &VerifyingKey<P>,
+        verifying_key: &VerifyingKey<P, L>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
     ) -> HonkVerifyResult<()> {
         tracing::trace!("executing (verifying) preamble round");
@@ -83,6 +86,7 @@ impl<
             transcript.receive_point_from_prover::<P>("W_R".to_string())?;
         *self.memory.witness_commitments.w_o_mut() =
             transcript.receive_point_from_prover::<P>("W_O".to_string())?;
+        todo!("MEGA COMMITMENTS");
 
         // Round is done since ultra_honk is no goblin flavor
         Ok(())
@@ -127,14 +131,14 @@ impl<
 
         *self.memory.witness_commitments.lookup_inverses_mut() =
             transcript.receive_point_from_prover::<P>("lookup_inverses".to_string())?;
-
+        todo!("MEGA COMMITMENTS");
         // Round is done since ultra_honk is no goblin flavor
         Ok(())
     }
 
     fn execute_grand_product_computation_round(
         &mut self,
-        verifying_key: &VerifyingKey<P>,
+        verifying_key: &VerifyingKey<P, L>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
     ) -> HonkVerifyResult<()> {
         tracing::trace!("executing (verifying) grand product computation round");
@@ -152,7 +156,7 @@ impl<
 
     pub(crate) fn verify(
         mut self,
-        verifying_key: &VerifyingKey<P>,
+        verifying_key: &VerifyingKey<P, L>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
     ) -> HonkVerifyResult<VerifierMemory<P, L>> {
         tracing::trace!("Oink verify");

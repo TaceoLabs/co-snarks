@@ -3,6 +3,9 @@ use super::{
     sumcheck::{zk_data::ZKSumcheckData, SumcheckOutput},
     types::ProverMemory,
 };
+use crate::prelude::Univariate;
+use co_builder::prelude::Polynomial;
+use co_builder::prover_flavour::ProverFlavour;
 
 use crate::{
     decider::small_subgroup_ipa::SmallSubgroupIPAProver,
@@ -36,8 +39,6 @@ impl<
         H: TranscriptHasher<TranscriptFieldType>,
         L: PlainProverFlavour<P::ScalarField>,
     > Decider<P, H, L>
-where
-    [(); L::MAX_PARTIAL_RELATION_LENGTH]:,
 {
     pub(crate) fn new(memory: ProverMemory<P, L>, has_zk: ZeroKnowledge) -> Self {
         Self {

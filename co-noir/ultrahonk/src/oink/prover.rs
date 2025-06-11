@@ -18,13 +18,18 @@
 // clang-format on
 
 use super::types::ProverMemory;
+use crate::prelude::Univariate;
 use crate::{
     plain_prover_flavour::PlainProverFlavour,
     transcript::{Transcript, TranscriptFieldType, TranscriptHasher},
     Utils, NUM_ALPHAS,
 };
 use ark_ff::{One, Zero};
-use co_builder::prelude::{HonkCurve, Polynomial, ProverCrs, ProvingKey, ZeroKnowledge};
+use co_builder::prover_flavour::ProverFlavour;
+use co_builder::{
+    prelude::{HonkCurve, Polynomial, ProverCrs, ProvingKey, ZeroKnowledge},
+    prover_flavour::Flavour,
+};
 use co_builder::{HonkProofError, HonkProofResult};
 use itertools::izip;
 use rand::SeedableRng;
@@ -84,10 +89,12 @@ impl<
         if self.has_zk == ZeroKnowledge::Yes {
             polynomial.mask(&mut self.rng)
         };
-
+        // println!("Committing to polynomial: {}", label);
+        // println!("Polynomial: {:?}", polynomial.len());
         // Commit to the polynomial
         let commitment = Utils::commit(polynomial.as_ref(), crs)?;
-
+        // println!("Label : {}", label);
+        // println!("Commitment: {:?}", commitment);
         // Send the commitment to the verifier
         transcript.send_point_to_verifier::<P>(label.to_string(), commitment.into());
 
@@ -458,7 +465,10 @@ impl<
         // We only commit to the fourth wire polynomial after adding memory records
 
         // Ultracircuits are not structured (also our commitment type is CommitType::Default, so no changes are needed here yet)
-
+        println!(
+            "W_l: {:?}",
+            proving_key.polynomials.witness.w_l().coefficients
+        );
         self.commit_to_witness_polynomial(
             proving_key.polynomials.witness.w_l_mut(),
             "W_L",
@@ -479,6 +489,102 @@ impl<
             &proving_key.crs,
             transcript,
         )?;
+        // println!("Flavour: {:?}", L::FLAVOUR);
+        if L::FLAVOUR == Flavour::Mega {
+            let has_zk = self.has_zk;
+            self.has_zk = ZeroKnowledge::No; // MegaZKFlavor does not mask the wires, so we set has_zk to No
+                                             // Commit to Goblin ECC op wires.
+                                             // To avoid possible issues with the current work on the merge protocol, they are not
+                                             // masked in MegaZKFlavor
+            self.commit_to_witness_polynomial(
+                proving_key.polynomials.witness.ecc_op_wire_1_mut(),
+                "ecc_op_wire_1",
+                &proving_key.crs,
+                transcript,
+            )?;
+            self.commit_to_witness_polynomial(
+                proving_key.polynomials.witness.ecc_op_wire_2_mut(),
+                "ecc_op_wire_2",
+                &proving_key.crs,
+                transcript,
+            )?;
+            self.commit_to_witness_polynomial(
+                proving_key.polynomials.witness.ecc_op_wire_3_mut(),
+                "ecc_op_wire_3",
+                &proving_key.crs,
+                transcript,
+            )?;
+            self.commit_to_witness_polynomial(
+                proving_key.polynomials.witness.ecc_op_wire_4_mut(),
+                "ecc_op_wire_4",
+                &proving_key.crs,
+                transcript,
+            )?;
+            self.commit_to_witness_polynomial(
+                proving_key.polynomials.witness.calldata_mut(),
+                "calldata",
+                &proving_key.crs,
+                transcript,
+            )?;
+            self.commit_to_witness_polynomial(
+                proving_key.polynomials.witness.calldata_read_counts_mut(),
+                "calldata_read_counts",
+                &proving_key.crs,
+                transcript,
+            )?;
+            self.commit_to_witness_polynomial(
+                proving_key.polynomials.witness.calldata_read_tags_mut(),
+                "calldata_read_tags",
+                &proving_key.crs,
+                transcript,
+            )?;
+            self.commit_to_witness_polynomial(
+                proving_key.polynomials.witness.secondary_calldata_mut(),
+                "secondary_calldata",
+                &proving_key.crs,
+                transcript,
+            )?;
+            self.commit_to_witness_polynomial(
+                proving_key
+                    .polynomials
+                    .witness
+                    .secondary_calldata_read_counts_mut(),
+                "secondary_calldata_read_counts",
+                &proving_key.crs,
+                transcript,
+            )?;
+            self.commit_to_witness_polynomial(
+                proving_key
+                    .polynomials
+                    .witness
+                    .secondary_calldata_read_tags_mut(),
+                "secondary_calldata_read_tags",
+                &proving_key.crs,
+                transcript,
+            )?;
+            self.commit_to_witness_polynomial(
+                proving_key.polynomials.witness.return_data_mut(),
+                "return_data",
+                &proving_key.crs,
+                transcript,
+            )?;
+            self.commit_to_witness_polynomial(
+                proving_key
+                    .polynomials
+                    .witness
+                    .return_data_read_counts_mut(),
+                "return_data_read_counts",
+                &proving_key.crs,
+                transcript,
+            )?;
+            self.commit_to_witness_polynomial(
+                proving_key.polynomials.witness.return_data_read_tags_mut(),
+                "return_data_read_tags",
+                &proving_key.crs,
+                transcript,
+            )?;
+            self.has_zk = has_zk;
+        }
 
         // Round is done since ultra_honk is no goblin flavor
         Ok(())
@@ -548,6 +654,30 @@ impl<
             transcript,
         )?;
         std::mem::swap(&mut self.memory.lookup_inverses, &mut lookup_inverses_tmp);
+        // If Mega, commit to the databus inverse polynomials and send
+        if L::FLAVOUR == Flavour::Mega {
+            self.commit_to_witness_polynomial(
+                proving_key.polynomials.witness.calldata_inverses_mut(),
+                "calldata_inverses",
+                &proving_key.crs,
+                transcript,
+            )?;
+            self.commit_to_witness_polynomial(
+                proving_key
+                    .polynomials
+                    .witness
+                    .secondary_calldata_inverses_mut(),
+                "secondary_calldata_inverses",
+                &proving_key.crs,
+                transcript,
+            )?;
+            self.commit_to_witness_polynomial(
+                proving_key.polynomials.witness.return_data_inverses_mut(),
+                "return_data_inverses",
+                &proving_key.crs,
+                transcript,
+            )?;
+        }
         // Round is done since ultra_honk is no goblin flavor
         Ok(())
     }

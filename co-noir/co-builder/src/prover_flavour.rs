@@ -1,8 +1,12 @@
-// use crate::prelude::Univariate;
-use ark_ff::PrimeField;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Flavour {
+    Ultra,
+    Mega,
+}
 
-pub trait ProverFlavour<F: PrimeField>: Default {
-    // type AllRelationAcc: Default;
+pub trait ProverFlavour: Default {
+    const FLAVOUR: Flavour;
+
     const WITNESS_ENTITIES_SIZE: usize;
     const SHIFTED_WITNESS_ENTITIES_SIZE: usize;
     const PRECOMPUTED_ENTITIES_SIZE: usize;

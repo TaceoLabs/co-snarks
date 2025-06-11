@@ -1,4 +1,5 @@
 use super::SumcheckVerifierOutput;
+use crate::prelude::Univariate;
 use crate::{
     decider::{
         sumcheck::{round_prover::SumcheckRoundOutput, round_verifier::SumcheckVerifierRound},
@@ -7,13 +8,14 @@ use crate::{
     plain_prover_flavour::PlainProverFlavour,
     prelude::{GateSeparatorPolynomial, TranscriptFieldType},
     transcript::{Transcript, TranscriptHasher},
-    types::NUM_ALL_ENTITIES,
+    // types::NUM_ALL_ENTITIES,
     verifier::HonkVerifyResult,
     CONST_PROOF_SIZE_LOG_N,
 };
 use ark_ff::{One, Zero};
 use co_builder::prelude::RowDisablingPolynomial;
 use co_builder::prelude::{HonkCurve, ZeroKnowledge};
+use co_builder::prover_flavour::ProverFlavour;
 
 // Keep in mind, the UltraHonk protocol (UltraFlavor) does not per default have ZK
 impl<
@@ -82,7 +84,7 @@ impl<
         // Final round
         let transcript_evaluations = transcript.receive_fr_vec_from_verifier::<P>(
             "Sumcheck:evaluations".to_string(),
-            NUM_ALL_ENTITIES,
+            L::NUM_ALL_ENTITIES,
         )?;
 
         for (eval, &transcript_eval) in self

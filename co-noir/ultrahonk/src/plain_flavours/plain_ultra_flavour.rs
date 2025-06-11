@@ -2,9 +2,11 @@ use crate::decider::sumcheck::round_prover::SumcheckProverRound;
 use crate::decider::sumcheck::round_verifier::SumcheckVerifierRound;
 use crate::decider::types::{ClaimedEvaluations, ProverUnivariates, RelationParameters};
 use crate::plain_prover_flavour::PlainProverFlavour;
+use crate::prelude::Univariate;
 use ark_ff::PrimeField;
 use co_builder::flavours::ultra_flavour::UltraFlavour;
 use co_builder::prelude::HonkCurve;
+use co_builder::prelude::Polynomial;
 use co_builder::prover_flavour::ProverFlavour;
 
 use crate::decider::relations::{

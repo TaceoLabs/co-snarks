@@ -19,8 +19,6 @@ impl<
         H: TranscriptHasher<TranscriptFieldType>,
         L: PlainProverFlavour<P::ScalarField>,
     > Decider<P, H, L>
-where
-    [(); L::MAX_PARTIAL_RELATION_LENGTH]:,
 {
     pub(crate) fn partially_evaluate_init(
         partially_evaluated_poly: &mut PartiallyEvaluatePolys<P::ScalarField, L>,

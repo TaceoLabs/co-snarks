@@ -3,8 +3,10 @@ use crate::plain_prover_flavour::PlainProverFlavour;
 use crate::{types::AllEntities, NUM_ALPHAS};
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
-use co_builder::flavours::ultra_flavour::UltraFlavour;
+use co_builder::prelude::Polynomial;
+use co_builder::prelude::PrecomputedEntities;
 use co_builder::prelude::{Polynomials, VerifyingKey};
+use co_builder::prover_flavour::{Flavour, ProverFlavour};
 use itertools::izip;
 use std::{iter, vec};
 
@@ -136,6 +138,53 @@ impl<P: Pairing, L: PlainProverFlavour<P::ScalarField>> ProverMemory<P, L> {
             polynomials.witness.lookup_read_counts().as_ref().to_vec();
         *memory.witness.lookup_read_tags_mut() =
             polynomials.witness.lookup_read_tags().as_ref().to_vec();
+        if L::FLAVOUR == Flavour::Mega {
+            *memory.witness.ecc_op_wire_1_mut() =
+                polynomials.witness.ecc_op_wire_1().as_ref().to_vec();
+            *memory.witness.ecc_op_wire_2_mut() =
+                polynomials.witness.ecc_op_wire_2().as_ref().to_vec();
+            *memory.witness.ecc_op_wire_3_mut() =
+                polynomials.witness.ecc_op_wire_3().as_ref().to_vec();
+            *memory.witness.ecc_op_wire_4_mut() =
+                polynomials.witness.ecc_op_wire_4().as_ref().to_vec();
+            *memory.witness.calldata_mut() = polynomials.witness.calldata().as_ref().to_vec();
+            *memory.witness.calldata_read_counts_mut() =
+                polynomials.witness.calldata_read_counts().as_ref().to_vec();
+            *memory.witness.calldata_read_tags_mut() =
+                polynomials.witness.calldata_read_tags().as_ref().to_vec();
+            *memory.witness.calldata_inverses_mut() =
+                polynomials.witness.calldata_inverses().as_ref().to_vec();
+            *memory.witness.secondary_calldata_mut() =
+                polynomials.witness.secondary_calldata().as_ref().to_vec();
+            *memory.witness.secondary_calldata_read_counts_mut() = polynomials
+                .witness
+                .secondary_calldata_read_counts()
+                .as_ref()
+                .to_vec();
+            *memory.witness.secondary_calldata_read_tags_mut() = polynomials
+                .witness
+                .secondary_calldata_read_tags()
+                .as_ref()
+                .to_vec();
+            *memory.witness.secondary_calldata_inverses_mut() = polynomials
+                .witness
+                .secondary_calldata_inverses()
+                .as_ref()
+                .to_vec();
+            *memory.witness.return_data_mut() = polynomials.witness.return_data().as_ref().to_vec();
+            *memory.witness.return_data_read_counts_mut() = polynomials
+                .witness
+                .return_data_read_counts()
+                .as_ref()
+                .to_vec();
+            *memory.witness.return_data_read_tags_mut() = polynomials
+                .witness
+                .return_data_read_tags()
+                .as_ref()
+                .to_vec();
+            *memory.witness.return_data_inverses_mut() =
+                polynomials.witness.return_data_inverses().as_ref().to_vec();
+        }
 
         // Shift the witnesses
         for (des_shifted, des, src) in izip!(
@@ -169,11 +218,11 @@ impl<P: Pairing, L: PlainProverFlavour<P::ScalarField>> ProverMemory<P, L> {
 }
 
 // TODO FLORIN: Make this generic over the flavour (Or implement for Mega)
-impl<P: Pairing> VerifierMemory<P, UltraFlavour<P::ScalarField>> {
+impl<P: Pairing, L: PlainProverFlavour<P::ScalarField>> VerifierMemory<P, L> {
     #[expect(clippy::field_reassign_with_default)]
     pub(crate) fn from_memory_and_key(
-        verifier_memory: crate::oink::types::VerifierMemory<P, UltraFlavour<P::ScalarField>>,
-        vk: &VerifyingKey<P>,
+        verifier_memory: crate::oink::types::VerifierMemory<P, L>,
+        vk: &VerifyingKey<P, L>,
     ) -> Self {
         let relation_parameters = RelationParameters {
             eta_1: verifier_memory.challenges.eta_1,
@@ -188,7 +237,7 @@ impl<P: Pairing> VerifierMemory<P, UltraFlavour<P::ScalarField>> {
 
         let mut memory = AllEntities::default();
         memory.witness = verifier_memory.witness_commitments;
-        memory.precomputed = vk.commitments.clone();
+        memory.precomputed = PrecomputedEntities::<P::G1Affine, P::ScalarField, L>::default(); //  vk.commitments.clone(); //TODO FLORIN
 
         // These copies are not required
         // for (des, src) in izip!(

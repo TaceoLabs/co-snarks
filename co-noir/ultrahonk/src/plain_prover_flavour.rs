@@ -7,7 +7,7 @@ use crate::{
 use ark_ff::PrimeField;
 use co_builder::{prelude::HonkCurve, prover_flavour::ProverFlavour};
 
-pub trait PlainProverFlavour<F: PrimeField>: Default + ProverFlavour<F> {
+pub trait PlainProverFlavour<F: PrimeField>: Default + ProverFlavour {
     type AllRelationAcc: Default;
     type AllRelationEvaluations: Default;
 

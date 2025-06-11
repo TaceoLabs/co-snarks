@@ -1,6 +1,8 @@
+use crate::prelude::Univariate;
 use ark_ff::PrimeField;
 use co_builder::flavours::mega_flavour::MegaFlavour;
 use co_builder::prelude::HonkCurve;
+use co_builder::prelude::Polynomial;
 
 use crate::decider::relations::databus_lookup_relation::DataBusLookupRelationEvals;
 use crate::decider::relations::ecc_op_queue_relation::EccOpQueueRelationEvals;

@@ -2,16 +2,19 @@ use crate::{
     decider::{types::VerifierMemory, verifier::DeciderVerifier},
     oink::verifier::OinkVerifier,
     plain_prover_flavour::PlainProverFlavour,
-    prelude::TranscriptFieldType,
+    prelude::{TranscriptFieldType, Univariate},
     prover::UltraHonk,
     transcript::{Transcript, TranscriptHasher},
     types::HonkProof,
 };
-use co_builder::prelude::{HonkCurve, VerifyingKey, ZeroKnowledge};
+use co_builder::prelude::Polynomial;
+use co_builder::{
+    prelude::{HonkCurve, VerifyingKey, ZeroKnowledge},
+    prover_flavour::ProverFlavour,
+};
 
 pub(crate) type HonkVerifyResult<T> = std::result::Result<T, eyre::Report>;
 
-//TODO FLORIN MAKE VERIFIER GENERIC
 impl<
         P: HonkCurve<TranscriptFieldType>,
         H: TranscriptHasher<TranscriptFieldType>,
@@ -21,7 +24,7 @@ impl<
     pub fn verify(
         honk_proof: HonkProof<TranscriptFieldType>,
         public_inputs: &[TranscriptFieldType],
-        verifying_key: &VerifyingKey<P>,
+        verifying_key: &VerifyingKey<P, L>,
         has_zk: ZeroKnowledge,
     ) -> HonkVerifyResult<bool> {
         tracing::trace!("UltraHonk verification");

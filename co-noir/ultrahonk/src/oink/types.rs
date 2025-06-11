@@ -1,7 +1,10 @@
-use crate::{plain_prover_flavour::PlainProverFlavour, types::WitnessEntities, NUM_ALPHAS};
+use crate::{
+    plain_prover_flavour::PlainProverFlavour, prelude::Univariate, types::WitnessEntities,
+    NUM_ALPHAS,
+};
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
-use co_builder::prelude::Polynomial;
+use co_builder::{prelude::Polynomial, prover_flavour::ProverFlavour};
 
 pub(crate) struct ProverMemory<P: Pairing> {
     /// column 3

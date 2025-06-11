@@ -1,3 +1,4 @@
+use crate::flavours::mega_flavour::MegaFlavour;
 use crate::flavours::ultra_flavour::UltraFlavour;
 use crate::polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK;
 use crate::prover_flavour::ProverFlavour;
@@ -8,6 +9,7 @@ use crate::{
         polynomial::Polynomial,
         polynomial_types::{Polynomials, PrecomputedEntities},
     },
+    prover_flavour::Flavour,
     types::types::{
         ActiveRegionData, CyclicPermutation, Mapping, PermutationMapping, TraceData, NUM_WIRES,
     },
@@ -21,7 +23,7 @@ use std::sync::Arc;
 
 use super::verification_key::PublicComponentKey;
 
-pub struct ProvingKey<P: Pairing, L: ProverFlavour<P::ScalarField>> {
+pub struct ProvingKey<P: Pairing, L: ProverFlavour> {
     pub crs: Arc<ProverCrs<P>>,
     pub circuit_size: u32,
     pub public_inputs: Vec<P::ScalarField>,
@@ -115,7 +117,8 @@ impl<P: Pairing> ProvingKey<P, UltraFlavour<P::ScalarField>> {
         Ok(proving_key)
     }
 
-    fn new(
+    //TODO FLORIN REMOVE PUBLIC AGAIN
+    pub fn new(
         circuit_size: usize,
         num_public_inputs: usize,
         crs: Arc<ProverCrs<P>>,
@@ -457,5 +460,33 @@ impl<P: Pairing> ProvingKey<P, UltraFlavour<P::ScalarField>> {
         }
 
         Ok(())
+    }
+}
+
+//TODO FLORIN REMOVE LATER
+impl<P: Pairing> ProvingKey<P, MegaFlavour<P::ScalarField>> {
+    //TODO FLORIN REMOVE PUBLIC AGAIN
+    pub fn new(
+        circuit_size: usize,
+        num_public_inputs: usize,
+        crs: Arc<ProverCrs<P>>,
+        final_active_wire_idx: usize,
+    ) -> Self {
+        tracing::trace!("ProvingKey new");
+        let polynomials = Polynomials::new(circuit_size);
+
+        Self {
+            crs,
+            circuit_size: circuit_size as u32,
+            public_inputs: Vec::with_capacity(num_public_inputs),
+            num_public_inputs: num_public_inputs as u32,
+            pub_inputs_offset: 0,
+            polynomials,
+            memory_read_records: Vec::new(),
+            memory_write_records: Vec::new(),
+            final_active_wire_idx,
+            active_region_data: ActiveRegionData::new(),
+            pairing_inputs_public_input_key: Default::default(),
+        }
     }
 }

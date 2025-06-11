@@ -130,10 +130,10 @@ impl<F: PrimeField, L: PlainProverFlavour<F>> Relation<F, L> for EccOpQueueRelat
     type VerifyAcc = EccOpQueueRelationEvals<F>;
 
     const SKIPPABLE: bool = true;
-
-    fn skip(_input: &ProverUnivariates<F, L, { L::MAX_PARTIAL_RELATION_LENGTH }>) -> bool {
+    fn skip(input: &ProverUnivariates<F, L, { L::MAX_PARTIAL_RELATION_LENGTH }>) -> bool {
         // The prover can skip execution of this relation if the ecc op selector is identically zero
-        todo!("input.precomputed.lagrange_ecc_op.is_zero()")
+        <Self as Relation<F, L>>::check_skippable();
+        input.precomputed.lagrange_ecc_op().is_zero()
     }
 
     fn accumulate(
@@ -219,11 +219,68 @@ impl<F: PrimeField, L: PlainProverFlavour<F>> Relation<F, L> for EccOpQueueRelat
     }
 
     fn verify_accumulate(
-        _univariate_accumulator: &mut Self::VerifyAcc,
-        _input: &ClaimedEvaluations<F, F, L>,
+        univariate_accumulator: &mut Self::VerifyAcc,
+        input: &ClaimedEvaluations<F, F, L>,
         _relation_parameters: &RelationParameters<F>,
-        _scaling_factor: &F,
+        scaling_factor: &F,
     ) {
-        todo!()
+        tracing::trace!("Accumulate EccOpQueueRelation");
+        // using Accumulator = std::tuple_element_t<0, ContainerOverSubrelations>;
+        // using CoefficientAccumulator = typename Accumulator::CoefficientAccumulator;
+        // We skip using the CoefficientAccumulator type in this relation, as the overall relation degree is low (deg
+        // 3). To do a degree-1 multiplication in the coefficient basis requires 3 Fp muls and 4 Fp adds (karatsuba
+        // multiplication). But a multiplication of a degree-3 Univariate only requires 3 Fp muls.
+        // We still cast to CoefficientAccumulator so that the degree is extended to degree-3 from degree-1
+
+        let w_1_shift = input.shifted_witness.w_l();
+        let w_2_shift = input.shifted_witness.w_r();
+        let w_3_shift = input.shifted_witness.w_o();
+        let w_4_shift = input.shifted_witness.w_4();
+
+        let op_wire_1 = input.witness.ecc_op_wire_1();
+        let op_wire_2 = input.witness.ecc_op_wire_2();
+        let op_wire_3 = input.witness.ecc_op_wire_3();
+        let op_wire_4 = input.witness.ecc_op_wire_4();
+        let lagrange_ecc_op = input.precomputed.lagrange_ecc_op();
+
+        // If lagrange_ecc_op is the indicator for ecc_op_gates, this is the indicator for the complement
+        let lagrange_by_scaling = lagrange_ecc_op.to_owned() * scaling_factor;
+        let complement_ecc_op_by_scaling = -lagrange_by_scaling + scaling_factor;
+
+        // Contribution (1)
+        let mut tmp = op_wire_1.to_owned() - w_1_shift.to_owned();
+        tmp *= lagrange_by_scaling;
+        univariate_accumulator.r0 += tmp;
+
+        // Contribution (2)
+        tmp = op_wire_2.to_owned() - w_2_shift.to_owned();
+        tmp *= lagrange_by_scaling;
+        univariate_accumulator.r1 += tmp;
+
+        // Contribution (3)
+        tmp = op_wire_3.to_owned() - w_3_shift.to_owned();
+        tmp *= lagrange_by_scaling;
+        univariate_accumulator.r2 += tmp;
+
+        // Contribution (4)
+        tmp = op_wire_4.to_owned() - w_4_shift.to_owned();
+        tmp *= lagrange_by_scaling;
+        univariate_accumulator.r3 += tmp;
+
+        // Contribution (5)
+        tmp = op_wire_1.to_owned() * complement_ecc_op_by_scaling.to_owned();
+        univariate_accumulator.r4 += tmp;
+
+        // Contribution (6)
+        tmp = op_wire_2.to_owned() * complement_ecc_op_by_scaling.to_owned();
+        univariate_accumulator.r5 += tmp;
+
+        // Contribution (7)
+        tmp = op_wire_3.to_owned() * complement_ecc_op_by_scaling.to_owned();
+        univariate_accumulator.r6 += tmp;
+
+        // Contribution (8)
+        tmp = op_wire_4.to_owned() * complement_ecc_op_by_scaling.to_owned();
+        univariate_accumulator.r7 += tmp;
     }
 }

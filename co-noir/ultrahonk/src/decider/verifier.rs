@@ -1,4 +1,5 @@
 use super::{shplemini::ShpleminiVerifierOpeningClaim, types::VerifierMemory};
+use crate::prelude::Univariate;
 use crate::{
     decider::types::{BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK},
     plain_prover_flavour::PlainProverFlavour,
@@ -9,7 +10,9 @@ use crate::{
 };
 use ark_ec::AffineRepr;
 use ark_ff::{One, Zero};
+use co_builder::prelude::Polynomial;
 use co_builder::prelude::{HonkCurve, ZeroKnowledge};
+use co_builder::prover_flavour::ProverFlavour;
 use std::marker::PhantomData;
 
 pub(crate) struct DeciderVerifier<

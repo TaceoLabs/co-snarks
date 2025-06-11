@@ -4,16 +4,19 @@ use crate::prover_flavour::ProverFlavour;
 
 use super::polynomial::Polynomial;
 use ark_ff::PrimeField;
-use serde::{Deserialize, Serialize};
+// use serde::{Deserialize, Serialize};
+
+const DUMMY_SIZE_FLORIN_PROVER_WITNESS: usize = 100;
+const DUMMY_SIZE_FLORIN_PRECOMPUTED: usize = 100;
 
 // This is what we get from the proving key, we shift at a later point
-#[derive(Default, Serialize, Deserialize)]
-pub struct Polynomials<F: PrimeField, L: ProverFlavour<F>> {
+#[derive(Default)]
+pub struct Polynomials<F: PrimeField, L: ProverFlavour> {
     pub witness: ProverWitnessEntities<Polynomial<F>, F, L>,
     pub precomputed: PrecomputedEntities<Polynomial<F>, F, L>,
 }
 
-impl<F: PrimeField, L: ProverFlavour<F>> Polynomials<F, L> {
+impl<F: PrimeField, L: ProverFlavour> Polynomials<F, L> {
     pub fn new(circuit_size: usize) -> Self {
         let mut polynomials = Self::default();
         // Shifting is done at a later point
@@ -29,21 +32,21 @@ impl<F: PrimeField, L: ProverFlavour<F>> Polynomials<F, L> {
     }
 }
 
-pub const PROVER_WITNESS_ENTITIES_SIZE: usize = 6;
-#[derive(Default, Serialize, Deserialize)]
-pub struct ProverWitnessEntities<T: Default, F: PrimeField, L: ProverFlavour<F>> {
-    pub elements: [T; PROVER_WITNESS_ENTITIES_SIZE],
-    phantom_data: PhantomData<(F, L)>,
+// pub const : usize = 6;
+#[derive(Default)]
+pub struct ProverWitnessEntities<T: Default, F: PrimeField, L: ProverFlavour> {
+    pub elements: [T; DUMMY_SIZE_FLORIN_PROVER_WITNESS], //
+    pub phantom_data: PhantomData<(F, L)>,               //TODO FLORIN:Remove LATER
 }
 
-pub const PRECOMPUTED_ENTITIES_SIZE: usize = 27;
-#[derive(Default, Clone, Serialize, Deserialize)]
-pub struct PrecomputedEntities<T: Default, F: PrimeField, L: ProverFlavour<F>> {
-    pub elements: [T; PRECOMPUTED_ENTITIES_SIZE],
-    phantom_data: PhantomData<(F, L)>,
+// pub const : usize = 27;
+#[derive(Default, Clone)]
+pub struct PrecomputedEntities<T: Default, F: PrimeField, L: ProverFlavour> {
+    pub elements: [T; DUMMY_SIZE_FLORIN_PRECOMPUTED], //
+    pub phantom_data: PhantomData<(F, L)>,            //TODO FLORIN:Remove LATER
 }
 
-impl<T: Default, F: PrimeField, L: ProverFlavour<F>> PrecomputedEntities<Vec<T>, F, L> {
+impl<T: Default, F: PrimeField, L: ProverFlavour> PrecomputedEntities<Vec<T>, F, L> {
     pub fn new() -> Self {
         Self {
             elements: std::array::from_fn(|_| Vec::new()),
@@ -58,27 +61,25 @@ impl<T: Default, F: PrimeField, L: ProverFlavour<F>> PrecomputedEntities<Vec<T>,
     }
 }
 
-impl<T: Default, F: PrimeField, L: ProverFlavour<F>> IntoIterator for PrecomputedEntities<T, F, L> {
+impl<T: Default, F: PrimeField, L: ProverFlavour> IntoIterator for PrecomputedEntities<T, F, L> {
     type Item = T;
-    type IntoIter = std::array::IntoIter<T, PRECOMPUTED_ENTITIES_SIZE>;
+    type IntoIter = std::array::IntoIter<T, { DUMMY_SIZE_FLORIN_PRECOMPUTED }>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.elements.into_iter()
     }
 }
 
-impl<T: Default, F: PrimeField, L: ProverFlavour<F>> IntoIterator
-    for ProverWitnessEntities<T, F, L>
-{
+impl<T: Default, F: PrimeField, L: ProverFlavour> IntoIterator for ProverWitnessEntities<T, F, L> {
     type Item = T;
-    type IntoIter = std::array::IntoIter<T, PROVER_WITNESS_ENTITIES_SIZE>;
+    type IntoIter = std::array::IntoIter<T, { DUMMY_SIZE_FLORIN_PROVER_WITNESS }>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.elements.into_iter()
     }
 }
 
-impl<T: Default, F: PrimeField, L: ProverFlavour<F>> ProverWitnessEntities<T, F, L> {
+impl<T: Default, F: PrimeField, L: ProverFlavour> ProverWitnessEntities<T, F, L> {
     /// column 0
     // pub(crate) const W_L: usize = 0;
     /// column 1
@@ -394,7 +395,7 @@ impl<T: Default, F: PrimeField, L: ProverFlavour<F>> ProverWitnessEntities<T, F,
     }
 }
 
-impl<T: Default, F: PrimeField, L: ProverFlavour<F>> PrecomputedEntities<T, F, L> {
+impl<T: Default, F: PrimeField, L: ProverFlavour> PrecomputedEntities<T, F, L> {
     // /// column 0
     // pub(crate) const Q_M: usize = 0;
     // /// column 1

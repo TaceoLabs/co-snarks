@@ -1,6 +1,4 @@
 #![warn(clippy::iter_over_hash_type)]
-#![feature(generic_const_exprs)]
-#![allow(incomplete_features)]
 pub(crate) mod decider;
 pub(crate) mod keccak_hash;
 pub(crate) mod oink;
@@ -23,7 +21,7 @@ use co_builder::{
 use noirc_artifacts::program::ProgramArtifact;
 use std::{io, path::Path};
 
-pub const NUM_ALPHAS: usize = decider::relations::NUM_SUBRELATIONS_ONLY_VERIFIER - 1;
+// pub const NUM_ALPHAS: usize = decider::relations::NUM_SUBRELATIONS_ONLY_VERIFIER - 1;
 /// The log of the max circuit size assumed in order to achieve constant sized Honk proofs
 /// AZTEC TODO(<https://github.com/AztecProtocol/barretenberg/issues/1046>): Remove the need for const sized proofs
 pub const CONST_PROOF_SIZE_LOG_N: usize = 28;
