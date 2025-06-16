@@ -115,7 +115,7 @@ impl SumcheckRound {
         const SIZE: usize,
     >(
         mut univariate_accumulators: AllRelationAcc<T, P>,
-        alphas: &[P::ScalarField; crate::NUM_ALPHAS],
+        alphas: &[P::ScalarField; crate::NUM_ALPHAS], //TODO ALPHAS_ISSUE
         gate_sparators: &GateSeparatorPolynomial<P::ScalarField>,
     ) -> SumcheckRoundOutput<T, P, SIZE> {
         tracing::trace!("batch over relations");

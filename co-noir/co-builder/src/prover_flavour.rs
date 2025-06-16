@@ -1,11 +1,21 @@
+use crate::polynomials::polynomial_flavours::{
+    PrecomputedEntities, ProverWitnessEntities, ShiftedWitnessEntities, WitnessEntities,
+};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Flavour {
     Ultra,
     Mega,
 }
 
-pub trait ProverFlavour: Default {
+pub trait ProverFlavour:
+    Default + ProverWitnessEntities + ShiftedWitnessEntities + WitnessEntities + PrecomputedEntities
+{
     const FLAVOUR: Flavour;
+    // type ProverWitnessEntities<T: Default>: ProverWitnessEntities<T>;
+    // type ShiftedWitnessEntities<T: Default>: ShiftedWitnessEntities<T>;
+    // type WitnessEntities<T: Default>: WitnessEntities<T>;
+    // type PrecomputedEntities<T: Default>: PrecomputedEntities<T>;
 
     const WITNESS_ENTITIES_SIZE: usize;
     const SHIFTED_WITNESS_ENTITIES_SIZE: usize;

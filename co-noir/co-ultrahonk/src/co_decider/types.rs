@@ -39,7 +39,7 @@ pub(crate) struct RelationParameters<F: PrimeField> {
     pub(crate) beta: F,
     pub(crate) gamma: F,
     pub(crate) public_input_delta: F,
-    pub(crate) alphas: [F; NUM_ALPHAS],
+    pub(crate) alphas: [F; NUM_ALPHAS], // TODO ALPHAS_ISSUE
     pub(crate) gate_challenges: Vec<F>,
 }
 

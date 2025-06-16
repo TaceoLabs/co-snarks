@@ -23,21 +23,21 @@ use std::sync::Arc;
 
 use super::verification_key::PublicComponentKey;
 
-pub struct ProvingKey<P: Pairing, L: ProverFlavour> {
+pub struct ProvingKey<P: Pairing> {
     pub crs: Arc<ProverCrs<P>>,
     pub circuit_size: u32,
     pub public_inputs: Vec<P::ScalarField>,
     pub num_public_inputs: u32,
     pub pub_inputs_offset: u32,
     pub pairing_inputs_public_input_key: PublicComponentKey,
-    pub polynomials: Polynomials<P::ScalarField, L>,
+    pub polynomials: Polynomials<P::ScalarField>,
     pub memory_read_records: Vec<u32>,
     pub memory_write_records: Vec<u32>,
     pub final_active_wire_idx: usize,
     pub active_region_data: ActiveRegionData,
 }
 
-impl<P: Pairing> ProvingKey<P, UltraFlavour<P::ScalarField>> {
+impl<P: Pairing> ProvingKey<P> {
     // We ignore the TraceStructure for now (it is None in barretenberg for UltraHonk)
     pub fn create<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
         mut circuit: UltraCircuitBuilder<P>,

@@ -10,7 +10,6 @@ use co_builder::{prelude::HonkCurve, prover_flavour::ProverFlavour};
 pub trait PlainProverFlavour<F: PrimeField>: Default + ProverFlavour {
     type AllRelationAcc: Default;
     type AllRelationEvaluations: Default;
-
     const NUM_SUBRELATIONS: usize;
 
     fn scale(acc: &mut Self::AllRelationAcc, first_scalar: F, elements: &[F]);

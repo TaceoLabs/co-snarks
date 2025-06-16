@@ -413,7 +413,7 @@ impl<
 
     /// Generate relation separators alphas for sumcheck/combiner computation
     pub(crate) fn generate_alphas_round(
-        alphas: &mut [P::ScalarField; NUM_ALPHAS],
+        alphas: &mut [P::ScalarField; NUM_ALPHAS], //TODO ALPHAS_ISSUE
         transcript: &mut Transcript<TranscriptFieldType, H>,
     ) {
         tracing::trace!("generate alpha round");

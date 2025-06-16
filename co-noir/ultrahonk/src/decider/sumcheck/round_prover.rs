@@ -104,7 +104,7 @@ impl<F: PrimeField, L: PlainProverFlavour<F>> SumcheckProverRound<F, L> {
      */
     fn batch_over_relations_univariates<const SIZE: usize>(
         mut univariate_accumulators: L::AllRelationAcc,
-        alphas: &[F; crate::NUM_ALPHAS],
+        alphas: &[F; crate::NUM_ALPHAS], //TODO ALPHAS_ISSUE
         gate_sparators: &GateSeparatorPolynomial<F>,
     ) -> SumcheckRoundOutput<F, SIZE> {
         tracing::trace!("batch over relations");

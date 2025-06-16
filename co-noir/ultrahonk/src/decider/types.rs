@@ -21,9 +21,9 @@ pub(crate) struct VerifierMemory<P: Pairing, L: PlainProverFlavour<P::ScalarFiel
     pub(crate) claimed_evaluations: ClaimedEvaluations<P::ScalarField, P::ScalarField, L>,
 }
 
-pub(crate) const MAX_PARTIAL_RELATION_LENGTH: usize = 7;
-pub(crate) const BATCHED_RELATION_PARTIAL_LENGTH: usize = MAX_PARTIAL_RELATION_LENGTH + 1;
-pub(crate) const BATCHED_RELATION_PARTIAL_LENGTH_ZK: usize = BATCHED_RELATION_PARTIAL_LENGTH + 1;
+// pub(crate) const MAX_PARTIAL_RELATION_LENGTH: usize = 7;
+// pub(crate) const BATCHED_RELATION_PARTIAL_LENGTH: usize = MAX_PARTIAL_RELATION_LENGTH + 1;
+// pub(crate) const BATCHED_RELATION_PARTIAL_LENGTH_ZK: usize = BATCHED_RELATION_PARTIAL_LENGTH + 1;
 
 pub(crate) type ProverUnivariates<F, L, const SIZE: usize> = AllEntities<Univariate<F, SIZE>, F, L>;
 pub(crate) type PartiallyEvaluatePolys<F, L> = AllEntities<Vec<F>, F, L>;
@@ -37,7 +37,7 @@ pub struct RelationParameters<F: PrimeField> {
     pub(crate) beta: F,
     pub(crate) gamma: F,
     pub(crate) public_input_delta: F,
-    pub(crate) alphas: [F; NUM_ALPHAS],
+    pub(crate) alphas: [F; NUM_ALPHAS], //TODO ALPHAS_ISSUE
     pub(crate) gate_challenges: Vec<F>,
 }
 

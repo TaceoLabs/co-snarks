@@ -58,7 +58,7 @@ pub struct AllRelationEvaluationsUltra<F: PrimeField> {
     pub(crate) r_pos_int: Poseidon2InternalRelationEvals<F>,
 }
 
-impl<F: PrimeField> PlainProverFlavour<F> for UltraFlavour<F> {
+impl<F: PrimeField> PlainProverFlavour<F> for UltraFlavour {
     type AllRelationAcc = AllRelationAccUltra<F>;
     type AllRelationEvaluations = AllRelationEvaluationsUltra<F>;
 
