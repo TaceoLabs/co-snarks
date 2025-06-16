@@ -2,9 +2,8 @@ use crate::acir_format::{HonkRecursion, ProgramMetadata};
 use crate::flavours::ultra_flavour::UltraFlavour;
 use crate::keys::verification_key::PublicComponentKey;
 use crate::polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK;
+use crate::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use crate::prelude::HonkCurve;
-use crate::prelude::Polynomial;
-use crate::prover_flavour::ProverFlavour;
 use crate::types::big_field::{BigField, BigGroup};
 use crate::types::blake2s::Blake2s;
 use crate::types::blake3::blake3s;
@@ -21,7 +20,6 @@ use crate::{
         proving_key::ProvingKey,
         verification_key::{VerifyingKey, VerifyingKeyBarretenberg},
     },
-    polynomials::polynomial_types::PrecomputedEntities,
     types::{
         field_ct::{ByteArray, FieldCT},
         plookup::{BasicTableId, ColumnIdx, MultiTableId, Plookup, PlookupBasicTable, ReadData},
@@ -61,11 +59,13 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         self,
         crs: Arc<ProverCrs<P>>,
         driver: &mut PlainAcvmSolver<P::ScalarField>,
-    ) -> HonkProofResult<VerifyingKeyBarretenberg<P, UltraFlavour<P::ScalarField>>> {
+    ) -> HonkProofResult<VerifyingKeyBarretenberg<P, UltraFlavour>> {
         let pk = ProvingKey::create::<PlainAcvmSolver<_>>(self, crs, driver)?;
         let circuit_size = pk.circuit_size;
 
-        let mut commitments = PrecomputedEntities::default();
+        let mut commitments = <UltraFlavour as PrecomputedEntitiesFlavour>::PrecomputedEntity::<
+            P::G1Affine,
+        >::default();
         for (des, src) in commitments
             .iter_mut()
             .zip(pk.polynomials.precomputed.iter())
@@ -92,14 +92,13 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         prover_crs: Arc<ProverCrs<P>>,
         verifier_crs: P::G2Affine,
         driver: &mut PlainAcvmSolver<P::ScalarField>,
-    ) -> HonkProofResult<(
-        ProvingKey<P, UltraFlavour<P::ScalarField>>,
-        VerifyingKey<P, UltraFlavour<P::ScalarField>>,
-    )> {
+    ) -> HonkProofResult<(ProvingKey<P, UltraFlavour>, VerifyingKey<P, UltraFlavour>)> {
         let pk = ProvingKey::create::<PlainAcvmSolver<_>>(self, prover_crs, driver)?;
         let circuit_size = pk.circuit_size;
 
-        let mut commitments = PrecomputedEntities::default();
+        let mut commitments = <UltraFlavour as PrecomputedEntitiesFlavour>::PrecomputedEntity::<
+            P::G1Affine,
+        >::default();
         for (des, src) in commitments
             .iter_mut()
             .zip(pk.polynomials.precomputed.iter())
@@ -127,13 +126,15 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         crs: Arc<ProverCrs<P>>,
         driver: &mut PlainAcvmSolver<P::ScalarField>,
     ) -> HonkProofResult<(
-        ProvingKey<P, UltraFlavour<P::ScalarField>>,
-        VerifyingKeyBarretenberg<P, UltraFlavour<P::ScalarField>>,
+        ProvingKey<P, UltraFlavour>,
+        VerifyingKeyBarretenberg<P, UltraFlavour>,
     )> {
         let pk = ProvingKey::create::<PlainAcvmSolver<_>>(self, crs, driver)?;
         let circuit_size = pk.circuit_size;
 
-        let mut commitments = PrecomputedEntities::default();
+        let mut commitments = <UltraFlavour as PrecomputedEntitiesFlavour>::PrecomputedEntity::<
+            P::G1Affine,
+        >::default();
         for (des, src) in commitments
             .iter_mut()
             .zip(pk.polynomials.precomputed.iter())

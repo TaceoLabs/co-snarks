@@ -4,6 +4,9 @@ use crate::builder::UltraCircuitBuilder;
 use crate::flavours::ultra_flavour::UltraFlavour;
 use crate::keys::proving_key::ProvingKey;
 use crate::polynomials::polynomial::Polynomial;
+use crate::polynomials::polynomial_flavours::{
+    PrecomputedEntitiesFlavour, ProverWitnessEntitiesFlavour,
+};
 use crate::prelude::GenericUltraCircuitBuilder;
 use crate::prover_flavour::ProverFlavour;
 use ark_ec::pairing::Pairing;
@@ -295,23 +298,23 @@ impl<F: PrimeField> UltraTraceBlocks<UltraTraceBlock<F>> {
 }
 
 impl<F: PrimeField> UltraTraceBlock<F> {
-    const W_L: usize = UltraFlavour::<F>::W_L;
-    const W_R: usize = UltraFlavour::<F>::W_R;
-    const W_O: usize = UltraFlavour::<F>::W_O;
-    const W_4: usize = UltraFlavour::<F>::W_4;
-    const Q_M: usize = UltraFlavour::<F>::Q_M;
-    const Q_C: usize = UltraFlavour::<F>::Q_C;
-    const Q_1: usize = UltraFlavour::<F>::Q_L;
-    const Q_2: usize = UltraFlavour::<F>::Q_R;
-    const Q_3: usize = UltraFlavour::<F>::Q_O;
-    const Q_4: usize = UltraFlavour::<F>::Q_4;
-    const Q_ARITH: usize = UltraFlavour::<F>::Q_ARITH;
-    const Q_DELTA_RANGE: usize = UltraFlavour::<F>::Q_DELTA_RANGE;
-    const Q_ELLIPTIC: usize = UltraFlavour::<F>::Q_ELLIPTIC;
-    const Q_AUX: usize = UltraFlavour::<F>::Q_AUX;
-    const Q_LOOKUP_TYPE: usize = UltraFlavour::<F>::Q_LOOKUP;
-    const Q_POSEIDON2_EXTERNAL: usize = UltraFlavour::<F>::Q_POSEIDON2_EXTERNAL;
-    const Q_POSEIDON2_INTERNAL: usize = UltraFlavour::<F>::Q_POSEIDON2_INTERNAL;
+    const W_L: usize = UltraFlavour::W_L;
+    const W_R: usize = UltraFlavour::W_R;
+    const W_O: usize = UltraFlavour::W_O;
+    const W_4: usize = UltraFlavour::W_4;
+    const Q_M: usize = UltraFlavour::Q_M;
+    const Q_C: usize = UltraFlavour::Q_C;
+    const Q_1: usize = UltraFlavour::Q_L;
+    const Q_2: usize = UltraFlavour::Q_R;
+    const Q_3: usize = UltraFlavour::Q_O;
+    const Q_4: usize = UltraFlavour::Q_4;
+    const Q_ARITH: usize = UltraFlavour::Q_ARITH;
+    const Q_DELTA_RANGE: usize = UltraFlavour::Q_DELTA_RANGE;
+    const Q_ELLIPTIC: usize = UltraFlavour::Q_ELLIPTIC;
+    const Q_AUX: usize = UltraFlavour::Q_AUX;
+    const Q_LOOKUP_TYPE: usize = UltraFlavour::Q_LOOKUP;
+    const Q_POSEIDON2_EXTERNAL: usize = UltraFlavour::Q_POSEIDON2_EXTERNAL;
+    const Q_POSEIDON2_INTERNAL: usize = UltraFlavour::Q_POSEIDON2_INTERNAL;
 
     pub(crate) fn w_l(&mut self) -> &mut Vec<u32> {
         &mut self.wires[Self::W_L]
@@ -663,23 +666,22 @@ pub(crate) struct TraceData<'a, P: Pairing> {
 impl<'a, P: Pairing> TraceData<'a, P> {
     pub(crate) fn new(
         builder: &UltraCircuitBuilder<P>,
-        proving_key: &'a mut ProvingKey<P, UltraFlavour<P::ScalarField>>,
+        proving_key: &'a mut ProvingKey<P, UltraFlavour>,
     ) -> Self {
         let copy_cycles = vec![vec![]; builder.variables.len()];
 
         Self {
-            wires: proving_key
-                .polynomials
-                .witness
-                .get_wires_mut()
-                .try_into()
-                .unwrap(),
-            selectors: proving_key
-                .polynomials
-                .precomputed
-                .get_selectors_mut()
-                .try_into()
-                .unwrap(),
+            wires: <UltraFlavour as ProverWitnessEntitiesFlavour>::get_wires_mut::<Polynomial<_>>(
+                &mut proving_key.polynomials.witness,
+            )
+            .try_into()
+            .unwrap(),
+
+            selectors: <UltraFlavour as PrecomputedEntitiesFlavour>::get_selectors_mut::<
+                Polynomial<_>,
+            >(&mut proving_key.polynomials.precomputed)
+            .try_into()
+            .unwrap(),
             copy_cycles,
             ram_rom_offset: 0,
             pub_inputs_offset: 0,

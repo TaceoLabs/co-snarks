@@ -1,14 +1,14 @@
 use crate::flavours::mega_flavour::MegaFlavour;
 use crate::flavours::ultra_flavour::UltraFlavour;
 use crate::polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK;
+use crate::polynomials::polynomial_flavours::{
+    PrecomputedEntitiesFlavour, ProverWitnessEntitiesFlavour, WitnessEntitiesFlavour,
+};
 use crate::prover_flavour::ProverFlavour;
 use crate::{
     builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder},
     crs::ProverCrs,
-    polynomials::{
-        polynomial::Polynomial,
-        polynomial_types::{Polynomials, PrecomputedEntities},
-    },
+    polynomials::{polynomial::Polynomial, polynomial_types::Polynomials},
     prover_flavour::Flavour,
     types::types::{
         ActiveRegionData, CyclicPermutation, Mapping, PermutationMapping, TraceData, NUM_WIRES,
@@ -23,21 +23,21 @@ use std::sync::Arc;
 
 use super::verification_key::PublicComponentKey;
 
-pub struct ProvingKey<P: Pairing> {
+pub struct ProvingKey<P: Pairing, L: ProverFlavour> {
     pub crs: Arc<ProverCrs<P>>,
     pub circuit_size: u32,
     pub public_inputs: Vec<P::ScalarField>,
     pub num_public_inputs: u32,
     pub pub_inputs_offset: u32,
     pub pairing_inputs_public_input_key: PublicComponentKey,
-    pub polynomials: Polynomials<P::ScalarField>,
+    pub polynomials: Polynomials<P::ScalarField, L>,
     pub memory_read_records: Vec<u32>,
     pub memory_write_records: Vec<u32>,
     pub final_active_wire_idx: usize,
     pub active_region_data: ActiveRegionData,
 }
 
-impl<P: Pairing> ProvingKey<P> {
+impl<P: Pairing> ProvingKey<P, UltraFlavour> {
     // We ignore the TraceStructure for now (it is None in barretenberg for UltraHonk)
     pub fn create<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
         mut circuit: UltraCircuitBuilder<P>,
@@ -76,38 +76,52 @@ impl<P: Pairing> ProvingKey<P> {
         proving_key.populate_trace(&mut circuit, false);
 
         // First and last lagrange polynomials (in the full circuit size)
-        proving_key.polynomials.precomputed.lagrange_first_mut()[0] = P::ScalarField::one();
-        proving_key.polynomials.precomputed.lagrange_last_mut()[final_active_wire_idx] =
+        UltraFlavour::lagrange_first_mut(&mut proving_key.polynomials.precomputed)[0] =
             P::ScalarField::one();
+        UltraFlavour::lagrange_last_mut(&mut proving_key.polynomials.precomputed)
+            [final_active_wire_idx] = P::ScalarField::one();
+        // proving_key.polynomials.precomputed.lagrange_first_mut()[0] = P::ScalarField::one();
+        // proving_key.polynomials.precomputed.lagrange_last_mut()[final_active_wire_idx] =
+        //     P::ScalarField::one();
 
         Self::construct_lookup_table_polynomials(
-            proving_key
-                .polynomials
-                .precomputed
-                .get_table_polynomials_mut(),
+            UltraFlavour::get_table_polynomials_mut(&mut proving_key.polynomials.precomputed),
             &circuit,
             dyadic_circuit_size,
             NUM_DISABLED_ROWS_IN_SUMCHECK as usize,
         );
         Self::construct_lookup_read_counts(
             driver,
-            proving_key
-                .polynomials
-                .witness
-                .lookup_read_counts_and_tags_mut()
-                .try_into()
-                .unwrap(),
+            UltraFlavour::lookup_read_counts_and_tags_mut(&mut proving_key.polynomials.witness),
             &mut circuit,
         )?;
+        // Self::construct_lookup_table_polynomials(
+        //     proving_key
+        //         .polynomials
+        //         .precomputed
+        //         .get_table_polynomials_mut(),
+        //     &circuit,
+        //     dyadic_circuit_size,
+        //     NUM_DISABLED_ROWS_IN_SUMCHECK as usize,
+        // );
+        // Self::construct_lookup_read_counts(
+        //     driver,
+        //     proving_key
+        //         .polynomials
+        //         .witness
+        //         .lookup_read_counts_and_tags_mut()
+        //         .try_into()
+        //         .unwrap(),
+        //     &mut circuit,
+        // )?;
 
         // Construct the public inputs array
-        for input in proving_key
-            .polynomials
-            .witness
-            .w_r()
-            .iter()
-            .skip(proving_key.pub_inputs_offset as usize)
-            .take(proving_key.num_public_inputs as usize)
+        for input in <UltraFlavour as ProverWitnessEntitiesFlavour>::w_r::<Polynomial<_>>(
+            &proving_key.polynomials.witness,
+        )
+        .iter()
+        .skip(proving_key.pub_inputs_offset as usize)
+        .take(proving_key.num_public_inputs as usize)
         {
             proving_key.public_inputs.push(*input);
         }
@@ -125,7 +139,7 @@ impl<P: Pairing> ProvingKey<P> {
         final_active_wire_idx: usize,
     ) -> Self {
         tracing::trace!("ProvingKey new");
-        let polynomials = Polynomials::new(circuit_size);
+        let polynomials = todo!(); //Polynomials::new(circuit_size);
 
         Self {
             crs,
@@ -194,10 +208,8 @@ impl<P: Pairing> ProvingKey<P> {
     pub fn compute_permutation_argument_polynomials<
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
-        polys: &mut PrecomputedEntities<
+        polys: &mut <UltraFlavour as PrecomputedEntitiesFlavour>::PrecomputedEntity<
             Polynomial<P::ScalarField>,
-            P::ScalarField,
-            UltraFlavour<P::ScalarField>,
         >,
         circuit: &GenericUltraCircuitBuilder<P, T>,
         copy_cycles: Vec<CyclicPermutation>,
@@ -215,13 +227,13 @@ impl<P: Pairing> ProvingKey<P> {
 
         // Compute Honk-style sigma and ID polynomials from the corresponding mappings
         Self::compute_honk_style_permutation_lagrange_polynomials_from_mapping(
-            polys.get_sigmas_mut(),
+            UltraFlavour::get_sigmas_mut(polys),
             mapping.sigmas,
             circuit_size,
             active_region_data,
         );
         Self::compute_honk_style_permutation_lagrange_polynomials_from_mapping(
-            polys.get_ids_mut(),
+            UltraFlavour::get_ids_mut(polys),
             mapping.ids,
             circuit_size,
             active_region_data,
@@ -376,7 +388,7 @@ impl<P: Pairing> ProvingKey<P> {
 
     pub fn construct_lookup_read_counts<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
         driver: &mut T,
-        witness: &mut [Polynomial<T::ArithmeticShare>; 2],
+        witness: &mut [Polynomial<T::ArithmeticShare>], //TODO FLORIN: think about the witness: &mut [Polynomial<T::ArithmeticShare>;2] here
         circuit: &mut GenericUltraCircuitBuilder<P, T>,
     ) -> std::io::Result<()> {
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1033): construct tables and counts at top of trace
@@ -464,29 +476,29 @@ impl<P: Pairing> ProvingKey<P> {
 }
 
 //TODO FLORIN REMOVE LATER
-impl<P: Pairing> ProvingKey<P, MegaFlavour<P::ScalarField>> {
-    //TODO FLORIN REMOVE PUBLIC AGAIN
-    pub fn new(
-        circuit_size: usize,
-        num_public_inputs: usize,
-        crs: Arc<ProverCrs<P>>,
-        final_active_wire_idx: usize,
-    ) -> Self {
-        tracing::trace!("ProvingKey new");
-        let polynomials = Polynomials::new(circuit_size);
+// impl<P: Pairing> ProvingKey<P, MegaFlavour<P::ScalarField>> {
+//     //TODO FLORIN REMOVE PUBLIC AGAIN
+//     pub fn new(
+//         circuit_size: usize,
+//         num_public_inputs: usize,
+//         crs: Arc<ProverCrs<P>>,
+//         final_active_wire_idx: usize,
+//     ) -> Self {
+//         tracing::trace!("ProvingKey new");
+//         let polynomials = Polynomials::new(circuit_size);
 
-        Self {
-            crs,
-            circuit_size: circuit_size as u32,
-            public_inputs: Vec::with_capacity(num_public_inputs),
-            num_public_inputs: num_public_inputs as u32,
-            pub_inputs_offset: 0,
-            polynomials,
-            memory_read_records: Vec::new(),
-            memory_write_records: Vec::new(),
-            final_active_wire_idx,
-            active_region_data: ActiveRegionData::new(),
-            pairing_inputs_public_input_key: Default::default(),
-        }
-    }
-}
+//         Self {
+//             crs,
+//             circuit_size: circuit_size as u32,
+//             public_inputs: Vec::with_capacity(num_public_inputs),
+//             num_public_inputs: num_public_inputs as u32,
+//             pub_inputs_offset: 0,
+//             polynomials,
+//             memory_read_records: Vec::new(),
+//             memory_write_records: Vec::new(),
+//             final_active_wire_idx,
+//             active_region_data: ActiveRegionData::new(),
+//             pairing_inputs_public_input_key: Default::default(),
+//         }
+//     }
+// }

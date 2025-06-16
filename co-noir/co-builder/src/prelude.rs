@@ -10,7 +10,6 @@ pub use crate::keys::verification_key::{
 };
 pub use crate::polynomials::polynomial::{Polynomial, RowDisablingPolynomial, NUM_MASKED_ROWS};
 pub use crate::polynomials::polynomial_types::Polynomials;
-pub use crate::polynomials::polynomial_types::{PrecomputedEntities, ProverWitnessEntities};
 pub use crate::serialize::{Serialize, SerializeP};
 pub use crate::types::types::{
     ActiveRegionData, CycleNode, CyclicPermutation, ZeroKnowledge, AGGREGATION_OBJECT_SIZE,

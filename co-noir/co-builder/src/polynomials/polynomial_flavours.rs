@@ -1,6 +1,6 @@
 // proverwitnessentities and precomputed entities, also witnessentities
 
-pub trait PrecomputedEntities {
+pub trait PrecomputedEntitiesFlavour {
     type PrecomputedEntity<T: Default>: Default;
 
     fn new<T: Default>() -> Self::PrecomputedEntity<Vec<T>>;
@@ -73,7 +73,7 @@ pub trait PrecomputedEntities {
     fn id_3_mut<T: Default>(poly: &mut Self::PrecomputedEntity<T>) -> &mut T;
     fn id_4_mut<T: Default>(poly: &mut Self::PrecomputedEntity<T>) -> &mut T;
 }
-pub trait WitnessEntities {
+pub trait WitnessEntitiesFlavour {
     type WitnessEntity<T: Default>: Default;
 
     fn new<T: Default>() -> Self::WitnessEntity<Vec<T>>;
@@ -129,7 +129,7 @@ pub trait WitnessEntities {
     fn return_data_inverses<T: Default>(poly: &Self::WitnessEntity<T>) -> &T;
     fn return_data_inverses_mut<T: Default>(poly: &mut Self::WitnessEntity<T>) -> &mut T;
 }
-pub trait ShiftedWitnessEntities {
+pub trait ShiftedWitnessEntitiesFlavour {
     type ShiftedWitnessEntity<T: Default>: Default;
     fn new<T: Default>() -> Self::ShiftedWitnessEntity<Vec<T>>;
     fn add<T: Default>(
@@ -150,7 +150,7 @@ pub trait ShiftedWitnessEntities {
     fn w_4_mut<T: Default>(poly: &mut Self::ShiftedWitnessEntity<T>) -> &mut T;
     fn z_perm_mut<T: Default>(poly: &mut Self::ShiftedWitnessEntity<T>) -> &mut T;
 }
-pub trait ProverWitnessEntities {
+pub trait ProverWitnessEntitiesFlavour {
     type ProverWitnessEntity<T: Default>: Default;
     fn new<T: Default>() -> Self::ProverWitnessEntity<Vec<T>>;
     fn add<T: Default>(

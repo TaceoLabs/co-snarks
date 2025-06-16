@@ -1,10 +1,10 @@
+use crate::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use crate::prelude::Polynomial;
 use crate::{
     builder::UltraCircuitBuilder,
     crs::ProverCrs,
     flavours::ultra_flavour::UltraFlavour,
     honk_curve::HonkCurve,
-    polynomials::polynomial_types::PrecomputedEntities,
     prover_flavour::ProverFlavour,
     serialize::{Serialize, SerializeP},
     utils::Utils,
@@ -23,10 +23,10 @@ pub struct VerifyingKey<P: Pairing, L: ProverFlavour> {
     pub num_public_inputs: u32,
     pub pub_inputs_offset: u32,
     pub pairing_inputs_public_input_key: PublicComponentKey,
-    pub commitments: PrecomputedEntities<P::G1Affine, P::ScalarField, L>,
+    pub commitments: L::PrecomputedEntity<P::G1Affine>,
 }
 
-impl<P: Pairing> VerifyingKey<P, UltraFlavour<P::ScalarField>> {
+impl<P: Pairing> VerifyingKey<P, UltraFlavour> {
     pub fn create(
         circuit: UltraCircuitBuilder<P>,
         prover_crs: Arc<ProverCrs<P>>,
@@ -38,7 +38,7 @@ impl<P: Pairing> VerifyingKey<P, UltraFlavour<P::ScalarField>> {
     }
 
     pub fn from_barrettenberg_and_crs(
-        barretenberg_vk: VerifyingKeyBarretenberg<P, UltraFlavour<P::ScalarField>>,
+        barretenberg_vk: VerifyingKeyBarretenberg<P, UltraFlavour>,
         crs: P::G2Affine,
     ) -> Self {
         Self {
@@ -51,7 +51,7 @@ impl<P: Pairing> VerifyingKey<P, UltraFlavour<P::ScalarField>> {
         }
     }
 
-    pub fn to_barrettenberg(self) -> VerifyingKeyBarretenberg<P, UltraFlavour<P::ScalarField>> {
+    pub fn to_barrettenberg(self) -> VerifyingKeyBarretenberg<P, UltraFlavour> {
         VerifyingKeyBarretenberg {
             circuit_size: self.circuit_size as u64,
             log_circuit_size: Utils::get_msb64(self.circuit_size as u64) as u64,
@@ -69,7 +69,7 @@ pub struct VerifyingKeyBarretenberg<P: Pairing, L: ProverFlavour> {
     pub num_public_inputs: u64,
     pub pub_inputs_offset: u64,
     pub pairing_inputs_public_input_key: PublicComponentKey,
-    pub commitments: PrecomputedEntities<P::G1Affine, P::ScalarField, L>,
+    pub commitments: L::PrecomputedEntity<P::G1Affine>,
 }
 
 #[derive(Clone, Copy, Debug, SerdeSerialize, Deserialize)]
@@ -96,13 +96,10 @@ impl PublicComponentKey {
     }
 }
 
-impl<P: HonkCurve<TranscriptFieldType>, L: ProverFlavour> VerifyingKeyBarretenberg<P, L> {
+impl<P: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<P, UltraFlavour> {
     const FIELDSIZE_BYTES: u32 = SerializeP::<P>::FIELDSIZE_BYTES;
-    const SER_FULL_SIZE: usize = 4 * 8
-        + 4
-        + UltraFlavour::<P::ScalarField>::PRECOMPUTED_ENTITIES_SIZE
-            * 2
-            * Self::FIELDSIZE_BYTES as usize;
+    const SER_FULL_SIZE: usize =
+        4 * 8 + 4 + UltraFlavour::PRECOMPUTED_ENTITIES_SIZE * 2 * Self::FIELDSIZE_BYTES as usize;
     const SER_COMPRESSED_SIZE: usize = Self::SER_FULL_SIZE - 4;
 
     pub fn to_field_elements(&self) -> Vec<TranscriptFieldType> {
@@ -188,7 +185,9 @@ impl<P: HonkCurve<TranscriptFieldType>, L: ProverFlavour> VerifyingKeyBarretenbe
             Default::default()
         };
 
-        let mut commitments = PrecomputedEntities::default();
+        let mut commitments = <UltraFlavour as PrecomputedEntitiesFlavour>::PrecomputedEntity::<
+            P::G1Affine,
+        >::default();
 
         for el in commitments.iter_mut() {
             *el = SerializeP::<P>::read_g1_element(buf, &mut offset, true);

@@ -1,6 +1,7 @@
 use crate::{
     polynomials::polynomial_flavours::{
-        PrecomputedEntities, ProverWitnessEntities, ShiftedWitnessEntities, WitnessEntities,
+        PrecomputedEntitiesFlavour, ProverWitnessEntitiesFlavour, ShiftedWitnessEntitiesFlavour,
+        WitnessEntitiesFlavour,
     },
     prover_flavour::{Flavour, ProverFlavour},
 };
@@ -154,7 +155,7 @@ impl<T: Default> UltraPrecomputedEntities<T> {
     }
 }
 
-impl PrecomputedEntities for UltraFlavour {
+impl PrecomputedEntitiesFlavour for UltraFlavour {
     type PrecomputedEntity<T: Default> = UltraPrecomputedEntities<T>;
 
     fn new<T: Default>() -> Self::PrecomputedEntity<Vec<T>> {
@@ -468,7 +469,7 @@ impl<T: Default> UltraProverWitnessEntities<T> {
     }
 }
 
-impl ProverWitnessEntities for UltraFlavour {
+impl ProverWitnessEntitiesFlavour for UltraFlavour {
     type ProverWitnessEntity<T: Default> = UltraProverWitnessEntities<T>;
 
     fn new<T: Default>() -> Self::ProverWitnessEntity<Vec<T>> {
@@ -801,7 +802,7 @@ impl<T: Default> UltraWitnessEntities<T> {
     }
 }
 
-impl WitnessEntities for UltraFlavour {
+impl WitnessEntitiesFlavour for UltraFlavour {
     type WitnessEntity<T: Default> = UltraWitnessEntities<T>;
 
     fn new<T: Default>() -> Self::WitnessEntity<Vec<T>> {
@@ -1140,7 +1141,7 @@ impl<T: Default> UltraShiftedWitnessEntities<T> {
     }
 }
 
-impl ShiftedWitnessEntities for UltraFlavour {
+impl ShiftedWitnessEntitiesFlavour for UltraFlavour {
     type ShiftedWitnessEntity<T: Default> = UltraShiftedWitnessEntities<T>;
 
     fn new<T: Default>() -> Self::ShiftedWitnessEntity<Vec<T>> {

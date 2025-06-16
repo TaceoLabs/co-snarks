@@ -1,6 +1,7 @@
 use crate::{
     polynomials::polynomial_flavours::{
-        PrecomputedEntities, ProverWitnessEntities, ShiftedWitnessEntities, WitnessEntities,
+        PrecomputedEntitiesFlavour, ProverWitnessEntitiesFlavour, ShiftedWitnessEntitiesFlavour,
+        WitnessEntitiesFlavour,
     },
     prover_flavour::{Flavour, ProverFlavour},
 };
@@ -159,7 +160,7 @@ impl<T: Default> MegaPrecomputedEntities<T> {
     }
 }
 
-impl PrecomputedEntities for MegaFlavour {
+impl PrecomputedEntitiesFlavour for MegaFlavour {
     type PrecomputedEntity<T: Default> = MegaPrecomputedEntities<T>;
 
     fn new<T: Default>() -> Self::PrecomputedEntity<Vec<T>> {
@@ -473,7 +474,7 @@ impl<T: Default> MegaProverWitnessEntities<T> {
     }
 }
 
-impl ProverWitnessEntities for MegaFlavour {
+impl ProverWitnessEntitiesFlavour for MegaFlavour {
     type ProverWitnessEntity<T: Default> = MegaProverWitnessEntities<T>;
 
     fn new<T: Default>() -> Self::ProverWitnessEntity<Vec<T>> {
@@ -806,7 +807,7 @@ impl<T: Default> MegaWitnessEntities<T> {
     }
 }
 
-impl WitnessEntities for MegaFlavour {
+impl WitnessEntitiesFlavour for MegaFlavour {
     type WitnessEntity<T: Default> = MegaWitnessEntities<T>;
 
     fn new<T: Default>() -> Self::WitnessEntity<Vec<T>> {
@@ -1145,7 +1146,7 @@ impl<T: Default> MegaShiftedWitnessEntities<T> {
     }
 }
 
-impl ShiftedWitnessEntities for MegaFlavour {
+impl ShiftedWitnessEntitiesFlavour for MegaFlavour {
     type ShiftedWitnessEntity<T: Default> = MegaShiftedWitnessEntities<T>;
 
     fn new<T: Default>() -> Self::ShiftedWitnessEntity<Vec<T>> {

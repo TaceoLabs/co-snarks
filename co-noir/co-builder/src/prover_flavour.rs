@@ -1,5 +1,6 @@
 use crate::polynomials::polynomial_flavours::{
-    PrecomputedEntities, ProverWitnessEntities, ShiftedWitnessEntities, WitnessEntities,
+    PrecomputedEntitiesFlavour, ProverWitnessEntitiesFlavour, ShiftedWitnessEntitiesFlavour,
+    WitnessEntitiesFlavour,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -9,7 +10,11 @@ pub enum Flavour {
 }
 
 pub trait ProverFlavour:
-    Default + ProverWitnessEntities + ShiftedWitnessEntities + WitnessEntities + PrecomputedEntities
+    Default
+    + ProverWitnessEntitiesFlavour
+    + ShiftedWitnessEntitiesFlavour
+    + WitnessEntitiesFlavour
+    + PrecomputedEntitiesFlavour
 {
     const FLAVOUR: Flavour;
     // type ProverWitnessEntities<T: Default>: ProverWitnessEntities<T>;

@@ -1,4 +1,7 @@
-use crate::prover_flavour::ProverFlavour;
+use crate::{
+    flavours::{mega_flavour::MegaFlavour, ultra_flavour::UltraFlavour},
+    prover_flavour::ProverFlavour,
+};
 
 use super::polynomial::Polynomial;
 use ark_ff::PrimeField;
@@ -15,19 +18,19 @@ pub struct Polynomials<F: PrimeField, L: ProverFlavour> {
 }
 
 impl<F: PrimeField, L: ProverFlavour> Polynomials<F, L> {
-    pub fn new(circuit_size: usize) -> Self {
-        let mut polynomials = Self::default();
-        // Shifting is done at a later point
-        polynomials
-            .iter_mut()
-            .for_each(|el| el.resize(circuit_size, Default::default()));
+    // pub fn new(circuit_size: usize) -> Self {
+    //     let mut polynomials = Self::default();
+    //     // Shifting is done at a later point
+    //     polynomials
+    //         .iter_mut()
+    //         .for_each(|el| el.resize(circuit_size, Default::default()));
 
-        polynomials
-    }
+    //     polynomials
+    // }
 
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Polynomial<F>> {
-        self.witness.iter_mut().chain(self.precomputed.iter_mut())
-    }
+    // pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Polynomial<F>> {
+    //     self.witness.iter_mut().chain(self.precomputed.iter_mut())
+    // }
 }
 
 // // pub const : usize = 6;
