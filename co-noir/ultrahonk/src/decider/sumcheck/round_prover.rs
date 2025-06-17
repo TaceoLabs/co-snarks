@@ -306,20 +306,19 @@ impl<F: PrimeField, L: PlainProverFlavour> SumcheckProverRound<F, L> {
         // the evaluation of Libra round univariate at k=0...D are equal to \f$\texttt{libra_univariates}_{i}(k)\f$
         // corrected by the Libra running sum
         for idx in 0..P::LIBRA_UNIVARIATES_LENGTH {
-            todo!("Implement Libra univariate evaluation logic");
-            // libra_round_univariate.evaluations[idx] = current_column
-            //     .eval_poly(P::ScalarField::from(idx as u64))
-            //     + zk_sumcheck_data.libra_running_sum;
+            libra_round_univariate.evaluations()[idx] = current_column
+                .eval_poly(P::ScalarField::from(idx as u64))
+                + zk_sumcheck_data.libra_running_sum;
         }
 
         if L::BATCHED_RELATION_PARTIAL_LENGTH_ZK == P::LIBRA_UNIVARIATES_LENGTH {
             libra_round_univariate
         } else {
             // Note: Currently not happening
-            todo!("Implement Libra univariate extension logic");
-            // let mut libra_round_univariate_extended = L::SumcheckRoundOutputZK::default();
-            // libra_round_univariate_extended.extend_from(&libra_round_univariate.evaluations);
-            // libra_round_univariate_extended
+            let mut libra_round_univariate_extended = L::SumcheckRoundOutputZK::default();
+            libra_round_univariate_extended
+                .extend_from(&libra_round_univariate.evaluations_as_ref());
+            libra_round_univariate_extended
         }
     }
 

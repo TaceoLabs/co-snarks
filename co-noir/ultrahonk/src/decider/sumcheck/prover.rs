@@ -2,7 +2,7 @@ use crate::decider::prover::Decider;
 use crate::decider::sumcheck::round_prover::{SumcheckProverRound, SumcheckRoundOutput};
 use crate::decider::sumcheck::SumcheckOutput;
 use crate::decider::types::{ClaimedEvaluations, GateSeparatorPolynomial, PartiallyEvaluatePolys};
-use crate::plain_prover_flavour::PlainProverFlavour;
+use crate::plain_prover_flavour::{PlainProverFlavour, UnivariateTest};
 use crate::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
 use crate::types::AllEntities;
 use crate::{Utils, CONST_PROOF_SIZE_LOG_N};
@@ -114,7 +114,7 @@ impl<
         // Place the evaluations of the round univariate into transcript.
         transcript.send_fr_iter_to_verifier::<P, _>(
             "Sumcheck:univariate_0".to_string(),
-            &round_univariate.evaluations,
+            round_univariate.evaluations_as_ref(),
         );
         let round_challenge = transcript.get_challenge::<P>("Sumcheck:u_0".to_string());
         multivariate_challenge.push(round_challenge);
@@ -147,7 +147,7 @@ impl<
             // Place the evaluations of the round univariate into transcript.
             transcript.send_fr_iter_to_verifier::<P, _>(
                 format!("Sumcheck:univariate_{round_idx}"),
-                &round_univariate.evaluations,
+                round_univariate.evaluations_as_ref(),
             );
             let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{round_idx}"));
             multivariate_challenge.push(round_challenge);
@@ -227,7 +227,7 @@ impl<
         // Place the evaluations of the round univariate into transcript.
         transcript.send_fr_iter_to_verifier::<P, _>(
             "Sumcheck:univariate_0".to_string(),
-            &round_univariate.evaluations,
+            round_univariate.evaluations_as_ref(),
         );
         let round_challenge = transcript.get_challenge::<P>("Sumcheck:u_0".to_string());
         multivariate_challenge.push(round_challenge);
@@ -265,7 +265,7 @@ impl<
             // Place the evaluations of the round univariate into transcript.
             transcript.send_fr_iter_to_verifier::<P, _>(
                 format!("Sumcheck:univariate_{round_idx}"),
-                &round_univariate.evaluations,
+                round_univariate.evaluations_as_ref(),
             );
             let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{round_idx}"));
             multivariate_challenge.push(round_challenge);

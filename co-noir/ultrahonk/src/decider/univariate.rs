@@ -235,6 +235,13 @@ impl<F: PrimeField, const SIZE: usize> UnivariateTest<F> for Univariate<F, SIZE>
         let evaluations = array::from_fn(|_| F::rand(rng));
         Self { evaluations }
     }
+
+    fn evaluations(&mut self) -> Vec<F> {
+        (&mut self.evaluations).to_vec()
+    }
+    fn evaluations_as_ref(&self) -> &[F] {
+        &self.evaluations
+    }
 }
 
 impl<F: PrimeField, const SIZE: usize> Default for Univariate<F, SIZE> {

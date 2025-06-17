@@ -38,7 +38,7 @@ impl<
         polys: &'_ AllEntities<Vec<P::ScalarField>, L>,
     ) -> PolyG<'_, Vec<P::ScalarField>> {
         PolyG {
-            wires: polys.witness.to_be_shifted().try_into().unwrap(),
+            wires: L::to_be_shifted(&polys.witness).try_into().unwrap(),
         }
     }
 
