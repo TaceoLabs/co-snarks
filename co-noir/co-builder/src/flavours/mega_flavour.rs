@@ -13,7 +13,7 @@ pub struct MegaFlavour {
 pub struct MegaProverWitnessEntities<T: Default> {
     pub elements: [T; MegaFlavour::PROVER_WITNESS_ENTITIES_SIZE],
 }
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct MegaPrecomputedEntities<T: Default> {
     pub elements: [T; MegaFlavour::PRECOMPUTED_ENTITIES_SIZE],
 }

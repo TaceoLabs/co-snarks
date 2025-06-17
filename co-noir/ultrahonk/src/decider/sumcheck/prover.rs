@@ -1,10 +1,7 @@
 use crate::decider::prover::Decider;
 use crate::decider::sumcheck::round_prover::{SumcheckProverRound, SumcheckRoundOutput};
 use crate::decider::sumcheck::SumcheckOutput;
-use crate::decider::types::{
-    ClaimedEvaluations, GateSeparatorPolynomial, PartiallyEvaluatePolys,
-    BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK,
-};
+use crate::decider::types::{ClaimedEvaluations, GateSeparatorPolynomial, PartiallyEvaluatePolys};
 use crate::plain_prover_flavour::PlainProverFlavour;
 use crate::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
 use crate::types::AllEntities;
@@ -22,18 +19,19 @@ impl<
 {
     pub(crate) fn partially_evaluate_init(
         partially_evaluated_poly: &mut PartiallyEvaluatePolys<P::ScalarField, L>,
-        polys: &AllEntities<Vec<P::ScalarField>, P::ScalarField, L>,
+        polys: &AllEntities<Vec<P::ScalarField>, L>,
         round_size: usize,
         round_challenge: &P::ScalarField,
     ) {
         tracing::trace!("Partially_evaluate init");
 
         // Barretenberg uses multithreading here
-        for (poly_src, poly_des) in polys.iter().zip(partially_evaluated_poly.iter_mut()) {
-            for i in (0..round_size).step_by(2) {
-                poly_des[i >> 1] = poly_src[i] + (poly_src[i + 1] - poly_src[i]) * round_challenge;
-            }
-        }
+        // TODO FLORIN
+        // for (poly_src, poly_des) in polys.iter().zip(partially_evaluated_poly.iter_mut()) {
+        //     for i in (0..round_size).step_by(2) {
+        //         poly_des[i >> 1] = poly_src[i] + (poly_src[i + 1] - poly_src[i]) * round_challenge;
+        //     }
+        // }
     }
 
     pub(crate) fn partially_evaluate_inplace(
@@ -44,42 +42,44 @@ impl<
         tracing::trace!("Partially_evaluate inplace");
 
         // Barretenberg uses multithreading here
-        for poly in partially_evaluated_poly.iter_mut() {
-            for i in (0..round_size).step_by(2) {
-                poly[i >> 1] = poly[i] + (poly[i + 1] - poly[i]) * round_challenge;
-            }
-        }
+
+        // for poly in partially_evaluated_poly.iter_mut() {
+        //     for i in (0..round_size).step_by(2) {
+        //         poly[i >> 1] = poly[i] + (poly[i + 1] - poly[i]) * round_challenge;
+        //     }
+        // }
     }
 
     fn add_evals_to_transcript(
         transcript: &mut Transcript<TranscriptFieldType, H>,
-        evaluations: &ClaimedEvaluations<P::ScalarField, P::ScalarField, L>,
+        evaluations: &ClaimedEvaluations<P::ScalarField, L>,
     ) {
         tracing::trace!("Add Evals to Transcript");
-
-        transcript.send_fr_iter_to_verifier::<P, _>(
-            "Sumcheck:evaluations".to_string(),
-            evaluations.iter(),
-        );
+        // TODO FLORIN
+        // transcript.send_fr_iter_to_verifier::<P, _>(
+        //     "Sumcheck:evaluations".to_string(),
+        //     evaluations.iter(),
+        // );
     }
 
     fn extract_claimed_evaluations(
         partially_evaluated_polynomials: PartiallyEvaluatePolys<P::ScalarField, L>,
-    ) -> ClaimedEvaluations<P::ScalarField, P::ScalarField, L> {
+    ) -> ClaimedEvaluations<P::ScalarField, L> {
         let mut multivariate_evaluations = ClaimedEvaluations::default();
 
-        #[expect(unused_mut)] // TACEO TODO: This is for the linter, remove once its fixed...
-        for (src, mut des) in partially_evaluated_polynomials
-            .into_iter()
-            .zip(multivariate_evaluations.iter_mut())
-        {
-            *des = src[0];
-        }
+        // #[expect(unused_mut)] // TACEO TODO: This is for the linter, remove once its fixed...
+        // // TODO FLORIN
+        // for (src, mut des) in partially_evaluated_polynomials
+        //     .into_iter()
+        //     .zip(multivariate_evaluations.iter_mut())
+        // {
+        //     *des = src[0];
+        // }
 
         multivariate_evaluations
     }
 
-    pub(crate) fn sumcheck_prove<const UNIVARIATE_SIZE: usize>(
+    pub(crate) fn sumcheck_prove(
         &self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         circuit_size: u32,
@@ -185,7 +185,7 @@ impl<
         }
     }
 
-    pub(crate) fn sumcheck_prove_zk<const UNIVARIATE_SIZE: usize>(
+    pub(crate) fn sumcheck_prove_zk(
         &self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         circuit_size: u32,
@@ -195,7 +195,7 @@ impl<
 
         // Ensure that the length of Sumcheck Round Univariates does not exceed the length of Libra masking
         // polynomials.
-        assert!(BATCHED_RELATION_PARTIAL_LENGTH_ZK <= P::LIBRA_UNIVARIATES_LENGTH);
+        assert!(L::BATCHED_RELATION_PARTIAL_LENGTH_ZK <= P::LIBRA_UNIVARIATES_LENGTH);
 
         let multivariate_n = circuit_size;
         let multivariate_d = Utils::get_msb64(multivariate_n as u64);

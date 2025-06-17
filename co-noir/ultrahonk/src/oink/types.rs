@@ -16,7 +16,7 @@ pub(crate) struct ProverMemory<P: Pairing, L: PlainProverFlavour> {
 
 pub(crate) struct VerifierMemory<P: Pairing, L: PlainProverFlavour> {
     pub(crate) public_input_delta: P::ScalarField,
-    pub(crate) witness_commitments: L::WitnessEntity<P::ScalarField>,
+    pub(crate) witness_commitments: L::WitnessEntity<P::G1Affine>,
     pub(crate) challenges: Challenges<P::ScalarField, L>,
 }
 

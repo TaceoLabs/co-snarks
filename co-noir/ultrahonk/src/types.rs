@@ -47,7 +47,7 @@ pub struct AllEntities<T: Default, L: PlainProverFlavour> {
     pub(crate) shifted_witness: L::ShiftedWitnessEntity<T>,
 }
 
-// impl<T: Default, F: PrimeField, L: PlainProverFlavour<F>> AllEntities<T, F, L> {
+// impl<T: Default, F: PrimeField, L: PlainProverFlavour> AllEntities<T, F, L> {
 //     pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
 //         self.precomputed
 //             .iter()
@@ -63,7 +63,7 @@ pub struct AllEntities<T: Default, L: PlainProverFlavour> {
 //     }
 // }
 
-// impl<T: Default + Clone, F: PrimeField, L: PlainProverFlavour<F>> AllEntities<Vec<T>, F, L> {
+// impl<T: Default + Clone, F: PrimeField, L: PlainProverFlavour> AllEntities<Vec<T>, F, L> {
 //     pub(crate) fn new(circuit_size: usize) -> Self {
 //         let mut polynomials = Self::default();
 //         // Shifting is done at a later point
@@ -88,7 +88,7 @@ pub struct AllEntities<T: Default, L: PlainProverFlavour> {
 //     pub(crate) elements: [T; SHIFTED_WITNESS_ENTITIES_SIZE],
 // }
 
-// impl<T: Default, F: PrimeField, L: PlainProverFlavour<F>> IntoIterator
+// impl<T: Default, F: PrimeField, L: PlainProverFlavour> IntoIterator
 //     for WitnessEntities<T, F, L>
 // {
 //     type Item = T;
@@ -99,7 +99,7 @@ pub struct AllEntities<T: Default, L: PlainProverFlavour> {
 //     }
 // }
 
-// impl<T: Default, F: PrimeField, L: PlainProverFlavour<F>> WitnessEntities<Vec<T>, F, L> {
+// impl<T: Default, F: PrimeField, L: PlainProverFlavour> WitnessEntities<Vec<T>, F, L> {
 //     pub fn new() -> Self {
 //         Self {
 //             elements: std::array::from_fn(|_| Vec::new()),
@@ -137,7 +137,7 @@ pub struct AllEntities<T: Default, L: PlainProverFlavour> {
 //     }
 // }
 
-// impl<T: Default, F: PrimeField, L: PlainProverFlavour<F>> IntoIterator for AllEntities<T, F, L> {
+// impl<T: Default, F: PrimeField, L: PlainProverFlavour> IntoIterator for AllEntities<T, F, L> {
 //     type Item = T;
 //     type IntoIter = std::iter::Chain<
 //         std::iter::Chain<
@@ -155,7 +155,7 @@ pub struct AllEntities<T: Default, L: PlainProverFlavour> {
 //     }
 // }
 
-// impl<T: Default, F: PrimeField, L: PlainProverFlavour<F>> WitnessEntities<T, F, L> {
+// impl<T: Default, F: PrimeField, L: PlainProverFlavour> WitnessEntities<T, F, L> {
 //     /// column 0
 //     const W_L: usize = 0;
 //     /// column 1

@@ -1,5 +1,4 @@
 use super::types::VerifierMemory;
-use crate::prelude::Univariate;
 use crate::{
     oink::prover::Oink,
     plain_prover_flavour::PlainProverFlavour,
@@ -7,9 +6,7 @@ use crate::{
     transcript::{Transcript, TranscriptHasher},
     verifier::HonkVerifyResult,
 };
-use co_builder::prelude::Polynomial;
 use co_builder::prelude::{HonkCurve, VerifyingKey};
-use co_builder::prover_flavour::ProverFlavour;
 
 pub(crate) struct OinkVerifier<
     P: HonkCurve<TranscriptFieldType>,

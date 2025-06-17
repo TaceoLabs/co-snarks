@@ -1,8 +1,11 @@
 use super::univariate::Univariate;
-use crate::plain_prover_flavour::PlainProverFlavour;
+use crate::plain_prover_flavour::{PlainProverFlavour, ProverUnivariatePlainFlavour};
 use crate::types::AllEntities;
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
+use co_builder::polynomials::polynomial_flavours::{
+    ProverWitnessEntitiesFlavour, WitnessEntitiesFlavour,
+};
 use co_builder::prelude::Polynomial;
 // use co_builder::prelude::PrecomputedEntities;
 use co_builder::prelude::{Polynomials, VerifyingKey};
@@ -25,7 +28,8 @@ pub(crate) struct VerifierMemory<P: Pairing, L: PlainProverFlavour> {
 // pub(crate) const BATCHED_RELATION_PARTIAL_LENGTH: usize = MAX_PARTIAL_RELATION_LENGTH + 1;
 // pub(crate) const BATCHED_RELATION_PARTIAL_LENGTH_ZK: usize = BATCHED_RELATION_PARTIAL_LENGTH + 1;
 
-// pub(crate) type ProverUnivariates<F, L, const SIZE: usize> = AllEntities<Univariate<F, SIZE>, L>;
+pub(crate) type ProverUnivariates<F, L> =
+    AllEntities<<L as ProverUnivariatePlainFlavour>::ProverUnivariate<F>, L>;
 pub(crate) type PartiallyEvaluatePolys<F, L> = AllEntities<Vec<F>, L>;
 pub(crate) type ClaimedEvaluations<F, L> = AllEntities<F, L>;
 pub(crate) type VerifierCommitments<P, L> = AllEntities<P, L>;
@@ -114,7 +118,7 @@ impl<F: PrimeField> GateSeparatorPolynomial<F> {
 
 impl<P: Pairing, L: PlainProverFlavour> ProverMemory<P, L> {
     pub(crate) fn from_memory_and_polynomials(
-        prover_memory: crate::oink::types::ProverMemory<P>,
+        prover_memory: crate::oink::types::ProverMemory<P, L>,
         polynomials: Polynomials<P::ScalarField, L>,
     ) -> Self {
         let relation_parameters = RelationParameters {
@@ -133,82 +137,122 @@ impl<P: Pairing, L: PlainProverFlavour> ProverMemory<P, L> {
         // TACEO TODO Barretenberg uses the same memory for the shifted polynomials as for the non-shifted ones
 
         // Missing lookups
-        *memory.witness.lookup_inverses_mut() = prover_memory.lookup_inverses.into_vec();
-        *memory.witness.lookup_read_counts_mut() =
-            polynomials.witness.lookup_read_counts().as_ref().to_vec();
-        *memory.witness.lookup_read_tags_mut() =
-            polynomials.witness.lookup_read_tags().as_ref().to_vec();
+        *<L as WitnessEntitiesFlavour>::lookup_inverses_mut(&mut memory.witness) =
+            prover_memory.lookup_inverses.into_vec();
+        *<L as WitnessEntitiesFlavour>::lookup_read_counts_mut(&mut memory.witness) =
+            <L as ProverWitnessEntitiesFlavour>::lookup_read_counts::<_>(&polynomials.witness)
+                .as_ref()
+                .to_vec();
+        *<L as WitnessEntitiesFlavour>::lookup_read_tags_mut(&mut memory.witness) =
+            <L as ProverWitnessEntitiesFlavour>::lookup_read_tags::<_>(&polynomials.witness)
+                .as_ref()
+                .to_vec();
         if L::FLAVOUR == Flavour::Mega {
-            *memory.witness.ecc_op_wire_1_mut() =
-                polynomials.witness.ecc_op_wire_1().as_ref().to_vec();
-            *memory.witness.ecc_op_wire_2_mut() =
-                polynomials.witness.ecc_op_wire_2().as_ref().to_vec();
-            *memory.witness.ecc_op_wire_3_mut() =
-                polynomials.witness.ecc_op_wire_3().as_ref().to_vec();
-            *memory.witness.ecc_op_wire_4_mut() =
-                polynomials.witness.ecc_op_wire_4().as_ref().to_vec();
-            *memory.witness.calldata_mut() = polynomials.witness.calldata().as_ref().to_vec();
-            *memory.witness.calldata_read_counts_mut() =
-                polynomials.witness.calldata_read_counts().as_ref().to_vec();
-            *memory.witness.calldata_read_tags_mut() =
-                polynomials.witness.calldata_read_tags().as_ref().to_vec();
-            *memory.witness.calldata_inverses_mut() =
-                polynomials.witness.calldata_inverses().as_ref().to_vec();
-            *memory.witness.secondary_calldata_mut() =
-                polynomials.witness.secondary_calldata().as_ref().to_vec();
-            *memory.witness.secondary_calldata_read_counts_mut() = polynomials
-                .witness
-                .secondary_calldata_read_counts()
+            *<L as WitnessEntitiesFlavour>::ecc_op_wire_1_mut(&mut memory.witness) =
+                <L as ProverWitnessEntitiesFlavour>::ecc_op_wire_1::<_>(&polynomials.witness)
+                    .as_ref()
+                    .to_vec();
+            *<L as WitnessEntitiesFlavour>::ecc_op_wire_2_mut(&mut memory.witness) =
+                <L as ProverWitnessEntitiesFlavour>::ecc_op_wire_2::<_>(&polynomials.witness)
+                    .as_ref()
+                    .to_vec();
+            *<L as WitnessEntitiesFlavour>::ecc_op_wire_3_mut(&mut memory.witness) =
+                <L as ProverWitnessEntitiesFlavour>::ecc_op_wire_3::<_>(&polynomials.witness)
+                    .as_ref()
+                    .to_vec();
+            *<L as WitnessEntitiesFlavour>::ecc_op_wire_4_mut(&mut memory.witness) =
+                <L as ProverWitnessEntitiesFlavour>::ecc_op_wire_4::<_>(&polynomials.witness)
+                    .as_ref()
+                    .to_vec();
+            *<L as WitnessEntitiesFlavour>::calldata_mut(&mut memory.witness) =
+                <L as ProverWitnessEntitiesFlavour>::calldata::<_>(&polynomials.witness)
+                    .as_ref()
+                    .to_vec();
+            *<L as WitnessEntitiesFlavour>::calldata_read_counts_mut(&mut memory.witness) =
+                <L as ProverWitnessEntitiesFlavour>::calldata_read_counts::<_>(
+                    &polynomials.witness,
+                )
                 .as_ref()
                 .to_vec();
-            *memory.witness.secondary_calldata_read_tags_mut() = polynomials
-                .witness
-                .secondary_calldata_read_tags()
+            *<L as WitnessEntitiesFlavour>::calldata_read_tags_mut(&mut memory.witness) =
+                <L as ProverWitnessEntitiesFlavour>::calldata_read_tags::<_>(&polynomials.witness)
+                    .as_ref()
+                    .to_vec();
+            *<L as WitnessEntitiesFlavour>::calldata_inverses_mut(&mut memory.witness) =
+                <L as ProverWitnessEntitiesFlavour>::calldata_inverses::<_>(&polynomials.witness)
+                    .as_ref()
+                    .to_vec();
+            *<L as WitnessEntitiesFlavour>::secondary_calldata_mut(&mut memory.witness) =
+                <L as ProverWitnessEntitiesFlavour>::secondary_calldata::<_>(&polynomials.witness)
+                    .as_ref()
+                    .to_vec();
+            *<L as WitnessEntitiesFlavour>::secondary_calldata_read_counts_mut(
+                &mut memory.witness,
+            ) = <L as ProverWitnessEntitiesFlavour>::secondary_calldata_read_counts::<_>(
+                &polynomials.witness,
+            )
+            .as_ref()
+            .to_vec();
+            *<L as WitnessEntitiesFlavour>::secondary_calldata_read_tags_mut(&mut memory.witness) =
+                <L as ProverWitnessEntitiesFlavour>::secondary_calldata_read_tags::<_>(
+                    &polynomials.witness,
+                )
                 .as_ref()
                 .to_vec();
-            *memory.witness.secondary_calldata_inverses_mut() = polynomials
-                .witness
-                .secondary_calldata_inverses()
+            *<L as WitnessEntitiesFlavour>::secondary_calldata_inverses_mut(&mut memory.witness) =
+                <L as ProverWitnessEntitiesFlavour>::secondary_calldata_inverses::<_>(
+                    &polynomials.witness,
+                )
                 .as_ref()
                 .to_vec();
-            *memory.witness.return_data_mut() = polynomials.witness.return_data().as_ref().to_vec();
-            *memory.witness.return_data_read_counts_mut() = polynomials
-                .witness
-                .return_data_read_counts()
+            *<L as WitnessEntitiesFlavour>::return_data_mut(&mut memory.witness) =
+                <L as ProverWitnessEntitiesFlavour>::return_data::<_>(&polynomials.witness)
+                    .as_ref()
+                    .to_vec();
+            *<L as WitnessEntitiesFlavour>::return_data_read_counts_mut(&mut memory.witness) =
+                <L as ProverWitnessEntitiesFlavour>::return_data_read_counts::<_>(
+                    &polynomials.witness,
+                )
                 .as_ref()
                 .to_vec();
-            *memory.witness.return_data_read_tags_mut() = polynomials
-                .witness
-                .return_data_read_tags()
+            *<L as WitnessEntitiesFlavour>::return_data_read_tags_mut(&mut memory.witness) =
+                <L as ProverWitnessEntitiesFlavour>::return_data_read_tags::<_>(
+                    &polynomials.witness,
+                )
                 .as_ref()
                 .to_vec();
-            *memory.witness.return_data_inverses_mut() =
-                polynomials.witness.return_data_inverses().as_ref().to_vec();
+            *<L as WitnessEntitiesFlavour>::return_data_inverses_mut(&mut memory.witness) =
+                <L as ProverWitnessEntitiesFlavour>::return_data_inverses::<_>(
+                    &polynomials.witness,
+                )
+                .as_ref()
+                .to_vec();
         }
 
-        // Shift the witnesses
-        for (des_shifted, des, src) in izip!(
-            memory.shifted_witness.iter_mut(),
-            memory.witness.to_be_shifted_mut(),
-            polynomials
-                .witness
-                .into_wires()
-                .take(3)
-                .chain(iter::once(prover_memory.w_4))
-                .chain(iter::once(prover_memory.z_perm)),
-        ) {
-            // TACEO TODO use same memory to prevent copying?
-            *des_shifted = src.shifted().to_vec();
-            *des = src.into_vec();
-        }
+        // TODO FLORIN
+        // // Shift the witnesses
+        // for (des_shifted, des, src) in izip!(
+        //     memory.shifted_witness.iter_mut(),
+        //     memory.witness.to_be_shifted_mut(),
+        //     polynomials
+        //         .witness
+        //         .into_wires()
+        //         .take(3)
+        //         .chain(iter::once(prover_memory.w_4))
+        //         .chain(iter::once(prover_memory.z_perm)),
+        // ) {
+        //     // TACEO TODO use same memory to prevent copying?
+        //     *des_shifted = src.shifted().to_vec();
+        //     *des = src.into_vec();
+        // }
 
-        // Copy precomputed polynomials
-        for (des, src) in izip!(
-            memory.precomputed.iter_mut(),
-            polynomials.precomputed.into_iter()
-        ) {
-            *des = src.into_vec();
-        }
+        // // Copy precomputed polynomials
+        // for (des, src) in izip!(
+        //     memory.precomputed.iter_mut(),
+        //     polynomials.precomputed.into_iter()
+        // ) {
+        //     *des = src.into_vec();
+        // }
 
         Self {
             polys: memory,
@@ -235,9 +279,9 @@ impl<P: Pairing, L: PlainProverFlavour> VerifierMemory<P, L> {
             gate_challenges: Default::default(),
         };
 
-        let mut memory = AllEntities::default();
+        let mut memory = AllEntities::<P::G1Affine, _>::default();
         memory.witness = verifier_memory.witness_commitments;
-        memory.precomputed = PrecomputedEntities::<P::G1Affine, P::ScalarField, L>::default(); //  vk.commitments.clone(); //TODO FLORIN
+        memory.precomputed = todo!(); // vk.commitments.clone();
 
         // These copies are not required
         // for (des, src) in izip!(

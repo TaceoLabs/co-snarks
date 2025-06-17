@@ -1,25 +1,19 @@
-use ark_ff::PrimeField;
-use co_builder::prelude::PrecomputedEntities;
+use crate::plain_prover_flavour::PlainProverFlavour;
 
-use crate::{
-    plain_prover_flavour::PlainProverFlavour,
-    types::{ShiftedWitnessEntities, WitnessEntities},
-};
-
-pub(crate) struct PolyF<'a, T: Default, F: PrimeField, L: PlainProverFlavour<F>> {
-    pub(crate) precomputed: &'a PrecomputedEntities<T, F, L>,
-    pub(crate) witness: &'a WitnessEntities<T, F, L>,
+pub(crate) struct PolyF<'a, T: Default, L: PlainProverFlavour> {
+    pub(crate) precomputed: &'a L::PrecomputedEntity<T>,
+    pub(crate) witness: &'a L::WitnessEntity<T>,
 }
 
 pub(crate) struct PolyG<'a, T: Default> {
     pub(crate) wires: &'a [T; 5],
 }
 
-pub(crate) struct PolyGShift<'a, T: Default> {
-    pub(crate) wires: &'a ShiftedWitnessEntities<T>,
+pub(crate) struct PolyGShift<'a, T: Default, L: PlainProverFlavour> {
+    pub(crate) wires: &'a L::ShiftedWitnessEntity<T>,
 }
 
-impl<T: Default, F: PrimeField, L: PlainProverFlavour<F>> PolyF<'_, T, F, L> {
+impl<T: Default, L: PlainProverFlavour> PolyF<'_, T, L> {
     pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
         self.precomputed.iter().chain(self.witness.iter())
     }
@@ -31,7 +25,7 @@ impl<T: Default> PolyG<'_, T> {
     }
 }
 
-impl<T: Default> PolyGShift<'_, T> {
+impl<T: Default, L: PlainProverFlavour> PolyGShift<'_, T, L> {
     pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
         self.wires.iter()
     }

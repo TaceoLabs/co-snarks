@@ -7,9 +7,6 @@ use super::polynomial::Polynomial;
 use ark_ff::PrimeField;
 // use serde::{Deserialize, Serialize};
 
-const DUMMY_SIZE_FLORIN_PROVER_WITNESS: usize = 100;
-const DUMMY_SIZE_FLORIN_PRECOMPUTED: usize = 100;
-
 // This is what we get from the proving key, we shift at a later point
 #[derive(Default)]
 pub struct Polynomials<F: PrimeField, L: ProverFlavour> {

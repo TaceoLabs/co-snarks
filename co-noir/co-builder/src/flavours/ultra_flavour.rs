@@ -12,7 +12,7 @@ pub struct UltraFlavour {}
 pub struct UltraProverWitnessEntities<T: Default> {
     pub elements: [T; UltraFlavour::PROVER_WITNESS_ENTITIES_SIZE],
 }
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct UltraPrecomputedEntities<T: Default> {
     pub elements: [T; UltraFlavour::PRECOMPUTED_ENTITIES_SIZE],
 }

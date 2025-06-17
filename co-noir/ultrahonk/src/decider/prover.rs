@@ -90,7 +90,7 @@ impl<
                 &mut self.rng,
             )?;
             Ok((
-                self.sumcheck_prove_zk::<{ L::MAX_PARTIAL_RELATION_LENGTH }>(
+                self.sumcheck_prove_zk(
                     //TODO MAX_PARTIAL_RELATION_LENGTH_ISSUE
                     transcript,
                     circuit_size,
@@ -100,10 +100,7 @@ impl<
             ))
         } else {
             // This is just Sumcheck.prove without ZK
-            Ok((
-                self.sumcheck_prove::<{ L::MAX_PARTIAL_RELATION_LENGTH }>(transcript, circuit_size),
-                None,
-            ))
+            Ok((self.sumcheck_prove(transcript, circuit_size), None))
         }
     }
 

@@ -2,13 +2,11 @@ use crate::{
     decider::{prover::Decider, types::ProverMemory},
     oink::prover::Oink,
     plain_prover_flavour::PlainProverFlavour,
-    prelude::Univariate,
     transcript::{Transcript, TranscriptFieldType, TranscriptHasher},
     types::HonkProof,
     CONST_PROOF_SIZE_LOG_N,
 };
 use ark_ec::pairing::Pairing;
-use co_builder::{prelude::Polynomial, prover_flavour::ProverFlavour};
 use co_builder::{
     prelude::{HonkCurve, ProvingKey, ZeroKnowledge, PAIRING_POINT_ACCUMULATOR_SIZE},
     HonkProofResult,

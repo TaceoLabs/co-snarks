@@ -1,7 +1,4 @@
-use std::array;
-use std::ops::DerefMut;
-
-use crate::decider::types::ClaimedEvaluations;
+use crate::decider::types::{ClaimedEvaluations, ProverUnivariates};
 use crate::{
     decider::types::RelationParameters, prelude::Univariate, transcript::TranscriptFieldType,
 };
@@ -15,7 +12,11 @@ pub trait PlainProverFlavour: Default + ProverFlavour + ProverUnivariatePlainFla
     type Alphas<F: PrimeField>: Default + Clone + Copy;
     const NUM_SUBRELATIONS: usize;
 
-    fn scale<F: PrimeField>(acc: &mut Self::AllRelationAcc<F>, first_scalar: F, elements: &[F]);
+    fn scale<F: PrimeField>(
+        acc: &mut Self::AllRelationAcc<F>,
+        first_scalar: F,
+        elements: &Self::Alphas<F>,
+    );
     fn extend_and_batch_univariates<const SIZE: usize, F: PrimeField>(
         acc: &Self::AllRelationAcc<F>,
         result: &mut Univariate<F, SIZE>,
@@ -24,7 +25,7 @@ pub trait PlainProverFlavour: Default + ProverFlavour + ProverUnivariatePlainFla
     );
     fn accumulate_relation_univariates<P: HonkCurve<TranscriptFieldType>>(
         univariate_accumulators: &mut Self::AllRelationAcc<P::ScalarField>,
-        extended_edges: &Self::ProverUnivariate<P::ScalarField>,
+        extended_edges: &ProverUnivariates<P::ScalarField, Self>,
         relation_parameters: &RelationParameters<P::ScalarField, Self>,
         scaling_factor: &P::ScalarField,
     );

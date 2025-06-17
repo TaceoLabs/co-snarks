@@ -3,7 +3,7 @@ use std::array;
 use crate::decider::relations::databus_lookup_relation::DataBusLookupRelationEvals;
 use crate::decider::relations::ecc_op_queue_relation::EccOpQueueRelationEvals;
 use crate::decider::sumcheck::round_prover::SumcheckProverRound;
-use crate::decider::types::RelationParameters;
+use crate::decider::types::{ProverUnivariates, RelationParameters};
 use crate::decider::{
     relations::{
         auxiliary_relation::{AuxiliaryRelation, AuxiliaryRelationAcc, AuxiliaryRelationEvals},
@@ -87,19 +87,23 @@ impl PlainProverFlavour for MegaFlavour {
         + Poseidon2ExternalRelation::NUM_RELATIONS
         + Poseidon2InternalRelation::NUM_RELATIONS;
 
-    fn scale<F: PrimeField>(acc: &mut Self::AllRelationAcc<F>, first_scalar: F, elements: &[F]) {
+    fn scale<F: PrimeField>(
+        acc: &mut Self::AllRelationAcc<F>,
+        first_scalar: F,
+        elements: &Self::Alphas<F>,
+    ) {
         tracing::trace!("Prove::Scale");
-        assert!(elements.len() == Self::NUM_SUBRELATIONS - 1);
-        acc.r_arith.scale(&[first_scalar, elements[0]]);
-        acc.r_perm.scale(&elements[1..3]);
-        acc.r_lookup.scale(&elements[3..5]);
-        acc.r_delta.scale(&elements[5..9]);
-        acc.r_elliptic.scale(&elements[9..11]);
-        acc.r_aux.scale(&elements[11..17]);
-        acc.r_ecc_op_queue.scale(&elements[17..25]);
-        acc.r_databus.scale(&elements[25..31]);
-        acc.r_pos_ext.scale(&elements[31..35]);
-        acc.r_pos_int.scale(&elements[35..]);
+        assert!(elements.0.len() == Self::NUM_SUBRELATIONS - 1);
+        acc.r_arith.scale(&[first_scalar, elements.0[0]]);
+        acc.r_perm.scale(&elements.0[1..3]);
+        acc.r_lookup.scale(&elements.0[3..5]);
+        acc.r_delta.scale(&elements.0[5..9]);
+        acc.r_elliptic.scale(&elements.0[9..11]);
+        acc.r_aux.scale(&elements.0[11..17]);
+        acc.r_ecc_op_queue.scale(&elements.0[17..25]);
+        acc.r_databus.scale(&elements.0[25..31]);
+        acc.r_pos_ext.scale(&elements.0[31..35]);
+        acc.r_pos_int.scale(&elements.0[35..]);
     }
 
     fn extend_and_batch_univariates<const SIZE: usize, F: PrimeField>(
@@ -163,7 +167,7 @@ impl PlainProverFlavour for MegaFlavour {
 
     fn accumulate_relation_univariates<P: HonkCurve<TranscriptFieldType>>(
         univariate_accumulators: &mut Self::AllRelationAcc<P::ScalarField>,
-        extended_edges: &Self::ProverUnivariate<P::ScalarField>,
+        extended_edges: &ProverUnivariates<P::ScalarField, Self>,
         relation_parameters: &RelationParameters<P::ScalarField, Self>,
         scaling_factor: &P::ScalarField,
     ) {

@@ -2,7 +2,7 @@ use std::array;
 
 use crate::decider::sumcheck::round_prover::SumcheckProverRound;
 use crate::decider::sumcheck::round_verifier::SumcheckVerifierRound;
-use crate::decider::types::{ClaimedEvaluations, RelationParameters};
+use crate::decider::types::{ClaimedEvaluations, ProverUnivariates, RelationParameters};
 use crate::plain_prover_flavour::{PlainProverFlavour, ProverUnivariatePlainFlavour};
 use crate::prelude::{Barycentric, Univariate};
 use ark_ff::PrimeField;
@@ -73,7 +73,11 @@ impl PlainProverFlavour for UltraFlavour {
         + Poseidon2ExternalRelation::NUM_RELATIONS
         + Poseidon2InternalRelation::NUM_RELATIONS;
 
-    fn scale<F: PrimeField>(acc: &mut Self::AllRelationAcc<F>, first_scalar: F, elements: &[F]) {
+    fn scale<F: PrimeField>(
+        acc: &mut Self::AllRelationAcc<F>,
+        first_scalar: F,
+        elements: &Self::Alphas<F>,
+    ) {
         tracing::trace!("Prove::Scale");
         assert!(elements.len() == Self::NUM_SUBRELATIONS - 1);
         acc.r_arith.scale(&[first_scalar, elements[0]]);
@@ -136,7 +140,7 @@ impl PlainProverFlavour for UltraFlavour {
     }
     fn accumulate_relation_univariates<P: HonkCurve<TranscriptFieldType>>(
         univariate_accumulators: &mut Self::AllRelationAcc<P::ScalarField>,
-        extended_edges: &Self::ProverUnivariate<P::ScalarField>,
+        extended_edges: &ProverUnivariates<P::ScalarField, Self>,
         relation_parameters: &RelationParameters<P::ScalarField, Self>,
         scaling_factor: &P::ScalarField,
     ) {

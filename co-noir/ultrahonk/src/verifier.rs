@@ -2,16 +2,12 @@ use crate::{
     decider::{types::VerifierMemory, verifier::DeciderVerifier},
     oink::verifier::OinkVerifier,
     plain_prover_flavour::PlainProverFlavour,
-    prelude::{TranscriptFieldType, Univariate},
+    prelude::TranscriptFieldType,
     prover::UltraHonk,
     transcript::{Transcript, TranscriptHasher},
     types::HonkProof,
 };
-use co_builder::prelude::Polynomial;
-use co_builder::{
-    prelude::{HonkCurve, VerifyingKey, ZeroKnowledge},
-    prover_flavour::ProverFlavour,
-};
+use co_builder::prelude::{HonkCurve, VerifyingKey, ZeroKnowledge};
 
 pub(crate) type HonkVerifyResult<T> = std::result::Result<T, eyre::Report>;
 

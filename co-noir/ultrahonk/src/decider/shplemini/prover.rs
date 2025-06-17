@@ -26,8 +26,8 @@ impl<
     > Decider<P, H, L>
 {
     fn get_f_polynomials(
-        polys: &'_ AllEntities<Vec<P::ScalarField>, P::ScalarField, L>,
-    ) -> PolyF<'_, Vec<P::ScalarField>, P::ScalarField, L> {
+        polys: &'_ AllEntities<Vec<P::ScalarField>, L>,
+    ) -> PolyF<'_, Vec<P::ScalarField>, L> {
         PolyF {
             precomputed: &polys.precomputed,
             witness: &polys.witness,
@@ -35,7 +35,7 @@ impl<
     }
 
     fn get_g_polynomials(
-        polys: &'_ AllEntities<Vec<P::ScalarField>, P::ScalarField, L>,
+        polys: &'_ AllEntities<Vec<P::ScalarField>, L>,
     ) -> PolyG<'_, Vec<P::ScalarField>> {
         PolyG {
             wires: polys.witness.to_be_shifted().try_into().unwrap(),

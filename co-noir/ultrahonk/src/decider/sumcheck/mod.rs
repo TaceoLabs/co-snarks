@@ -9,7 +9,7 @@ use crate::plain_prover_flavour::PlainProverFlavour;
 use super::types::ClaimedEvaluations;
 use ark_ff::PrimeField;
 
-pub(crate) struct SumcheckOutput<F: PrimeField, L: PlainProverFlavour<F>> {
+pub(crate) struct SumcheckOutput<F: PrimeField, L: PlainProverFlavour> {
     pub(crate) _claimed_evaluations: ClaimedEvaluations<F, L>,
     pub(crate) challenges: Vec<F>,
     pub(crate) claimed_libra_evaluation: Option<F>,

@@ -6,7 +6,7 @@ pub(crate) mod crs;
 pub mod flavours;
 pub(crate) mod honk_curve;
 pub(crate) mod keys;
-pub(crate) mod polynomials;
+pub mod polynomials;
 pub mod prelude;
 pub mod prover_flavour;
 pub(crate) mod serialize;
