@@ -22,7 +22,7 @@ use itertools::izip;
 impl<
         P: HonkCurve<TranscriptFieldType>,
         H: TranscriptHasher<TranscriptFieldType>,
-        L: PlainProverFlavour<P::ScalarField>,
+        L: PlainProverFlavour,
     > Decider<P, H, L>
 {
     fn get_f_polynomials(

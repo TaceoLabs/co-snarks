@@ -13,25 +13,20 @@ use crate::{
 use ark_ff::{One, Zero};
 use co_builder::prelude::HonkCurve;
 
-pub(crate) struct SumcheckVerifierRound<
-    P: HonkCurve<TranscriptFieldType>,
-    L: PlainProverFlavour<P::ScalarField>,
-> {
+pub(crate) struct SumcheckVerifierRound<P: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour> {
     pub(crate) target_total_sum: P::ScalarField,
     pub(crate) round_failed: bool,
     phantom: std::marker::PhantomData<L>,
 }
 
-impl<P: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour<P::ScalarField>> Default
+impl<P: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour> Default
     for SumcheckVerifierRound<P, L>
 {
     fn default() -> Self {
         Self::new()
     }
 }
-impl<P: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour<P::ScalarField>>
-    SumcheckVerifierRound<P, L>
-{
+impl<P: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour> SumcheckVerifierRound<P, L> {
     pub(crate) fn new() -> Self {
         Self {
             target_total_sum: P::ScalarField::zero(),

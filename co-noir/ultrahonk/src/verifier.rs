@@ -18,7 +18,7 @@ pub(crate) type HonkVerifyResult<T> = std::result::Result<T, eyre::Report>;
 impl<
         P: HonkCurve<TranscriptFieldType>,
         H: TranscriptHasher<TranscriptFieldType>,
-        L: PlainProverFlavour<P::ScalarField>,
+        L: PlainProverFlavour,
     > UltraHonk<P, H, L>
 {
     pub fn verify(

@@ -21,7 +21,7 @@ use co_builder::prover_flavour::ProverFlavour;
 impl<
         P: HonkCurve<TranscriptFieldType>,
         H: TranscriptHasher<TranscriptFieldType>,
-        L: PlainProverFlavour<P::ScalarField>,
+        L: PlainProverFlavour,
     > DeciderVerifier<P, H, L>
 {
     pub(crate) fn sumcheck_verify<const SIZE: usize>(

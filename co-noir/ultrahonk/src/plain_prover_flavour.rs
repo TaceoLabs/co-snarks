@@ -1,43 +1,41 @@
 use std::array;
+use std::ops::DerefMut;
 
 use crate::decider::types::ClaimedEvaluations;
 use crate::{
-    decider::types::{ProverUnivariates, RelationParameters},
-    prelude::Univariate,
-    transcript::TranscriptFieldType,
+    decider::types::RelationParameters, prelude::Univariate, transcript::TranscriptFieldType,
 };
 use ark_ff::PrimeField;
 use co_builder::{prelude::HonkCurve, prover_flavour::ProverFlavour};
 use rand::{CryptoRng, Rng};
 
-pub trait PlainProverFlavour<F: PrimeField>:
-    Default + ProverFlavour + ProverUnivariatePlainFlavour
-{
-    type AllRelationAcc: Default;
-    type AllRelationEvaluations: Default;
+pub trait PlainProverFlavour: Default + ProverFlavour + ProverUnivariatePlainFlavour {
+    type AllRelationAcc<F: PrimeField>: Default;
+    type AllRelationEvaluations<F: PrimeField>: Default;
+    type Alphas<F: PrimeField>: Default + Clone + Copy;
     const NUM_SUBRELATIONS: usize;
 
-    fn scale(acc: &mut Self::AllRelationAcc, first_scalar: F, elements: &[F]);
-    fn extend_and_batch_univariates<const SIZE: usize>(
-        acc: &Self::AllRelationAcc,
+    fn scale<F: PrimeField>(acc: &mut Self::AllRelationAcc<F>, first_scalar: F, elements: &[F]);
+    fn extend_and_batch_univariates<const SIZE: usize, F: PrimeField>(
+        acc: &Self::AllRelationAcc<F>,
         result: &mut Univariate<F, SIZE>,
         extended_random_poly: &Univariate<F, SIZE>,
         partial_evaluation_result: &F,
     );
-    fn accumulate_relation_univariates<P: HonkCurve<TranscriptFieldType, ScalarField = F>>(
-        univariate_accumulators: &mut Self::AllRelationAcc,
-        extended_edges: &Self::ProverUnivariate<F>,
-        relation_parameters: &RelationParameters<F>,
-        scaling_factor: &F,
-    );
-    fn accumulate_relation_evaluations<P: HonkCurve<TranscriptFieldType, ScalarField = F>>(
-        univariate_accumulators: &mut Self::AllRelationEvaluations,
-        extended_edges: &ClaimedEvaluations<P::ScalarField, Self>,
-        relation_parameters: &RelationParameters<P::ScalarField>,
+    fn accumulate_relation_univariates<P: HonkCurve<TranscriptFieldType>>(
+        univariate_accumulators: &mut Self::AllRelationAcc<P::ScalarField>,
+        extended_edges: &Self::ProverUnivariate<P::ScalarField>,
+        relation_parameters: &RelationParameters<P::ScalarField, Self>,
         scaling_factor: &P::ScalarField,
     );
-    fn scale_and_batch_elements(
-        all_rel_evals: &Self::AllRelationEvaluations,
+    fn accumulate_relation_evaluations<P: HonkCurve<TranscriptFieldType>>(
+        univariate_accumulators: &mut Self::AllRelationEvaluations<P::ScalarField>,
+        extended_edges: &ClaimedEvaluations<P::ScalarField, Self>,
+        relation_parameters: &RelationParameters<P::ScalarField, Self>,
+        scaling_factor: &P::ScalarField,
+    );
+    fn scale_and_batch_elements<F: PrimeField>(
+        all_rel_evals: &Self::AllRelationEvaluations<F>,
         first_scalar: F,
         elements: &[F],
     ) -> F;

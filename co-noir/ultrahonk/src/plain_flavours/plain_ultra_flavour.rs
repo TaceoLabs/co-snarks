@@ -2,13 +2,12 @@ use std::array;
 
 use crate::decider::sumcheck::round_prover::SumcheckProverRound;
 use crate::decider::sumcheck::round_verifier::SumcheckVerifierRound;
-use crate::decider::types::{ClaimedEvaluations, ProverUnivariates, RelationParameters};
+use crate::decider::types::{ClaimedEvaluations, RelationParameters};
 use crate::plain_prover_flavour::{PlainProverFlavour, ProverUnivariatePlainFlavour};
 use crate::prelude::{Barycentric, Univariate};
 use ark_ff::PrimeField;
 use co_builder::flavours::ultra_flavour::UltraFlavour;
 use co_builder::prelude::HonkCurve;
-use co_builder::prelude::Polynomial;
 use co_builder::prover_flavour::ProverFlavour;
 
 use crate::decider::relations::{
@@ -60,9 +59,10 @@ pub struct AllRelationEvaluationsUltra<F: PrimeField> {
     pub(crate) r_pos_int: Poseidon2InternalRelationEvals<F>,
 }
 
-impl<F: PrimeField> PlainProverFlavour<F> for UltraFlavour {
-    type AllRelationAcc = AllRelationAccUltra<F>;
-    type AllRelationEvaluations = AllRelationEvaluationsUltra<F>;
+impl PlainProverFlavour for UltraFlavour {
+    type AllRelationAcc<F: PrimeField> = AllRelationAccUltra<F>;
+    type AllRelationEvaluations<F: PrimeField> = AllRelationEvaluationsUltra<F>;
+    type Alphas<F: PrimeField> = [F; Self::NUM_SUBRELATIONS - 1];
 
     const NUM_SUBRELATIONS: usize = UltraArithmeticRelation::NUM_RELATIONS
         + UltraPermutationRelation::NUM_RELATIONS
@@ -73,7 +73,7 @@ impl<F: PrimeField> PlainProverFlavour<F> for UltraFlavour {
         + Poseidon2ExternalRelation::NUM_RELATIONS
         + Poseidon2InternalRelation::NUM_RELATIONS;
 
-    fn scale(acc: &mut Self::AllRelationAcc, first_scalar: F, elements: &[F]) {
+    fn scale<F: PrimeField>(acc: &mut Self::AllRelationAcc<F>, first_scalar: F, elements: &[F]) {
         tracing::trace!("Prove::Scale");
         assert!(elements.len() == Self::NUM_SUBRELATIONS - 1);
         acc.r_arith.scale(&[first_scalar, elements[0]]);
@@ -86,8 +86,8 @@ impl<F: PrimeField> PlainProverFlavour<F> for UltraFlavour {
         acc.r_pos_int.scale(&elements[21..]);
     }
 
-    fn extend_and_batch_univariates<const SIZE: usize>(
-        acc: &Self::AllRelationAcc,
+    fn extend_and_batch_univariates<const SIZE: usize, F: PrimeField>(
+        acc: &Self::AllRelationAcc<F>,
         result: &mut crate::prelude::Univariate<F, SIZE>,
         extended_random_poly: &crate::prelude::Univariate<F, SIZE>,
         partial_evaluation_result: &F,
@@ -134,11 +134,11 @@ impl<F: PrimeField> PlainProverFlavour<F> for UltraFlavour {
             partial_evaluation_result,
         );
     }
-    fn accumulate_relation_univariates<P: HonkCurve<TranscriptFieldType, ScalarField = F>>(
-        univariate_accumulators: &mut Self::AllRelationAcc,
-        extended_edges: &ProverUnivariates<F, Self, { Self::MAX_PARTIAL_RELATION_LENGTH }>,
-        relation_parameters: &RelationParameters<F>,
-        scaling_factor: &F,
+    fn accumulate_relation_univariates<P: HonkCurve<TranscriptFieldType>>(
+        univariate_accumulators: &mut Self::AllRelationAcc<P::ScalarField>,
+        extended_edges: &Self::ProverUnivariate<P::ScalarField>,
+        relation_parameters: &RelationParameters<P::ScalarField, Self>,
+        scaling_factor: &P::ScalarField,
     ) {
         tracing::trace!("Prove::Accumulate relations");
 
@@ -191,11 +191,11 @@ impl<F: PrimeField> PlainProverFlavour<F> for UltraFlavour {
             scaling_factor,
         );
     }
-    fn accumulate_relation_evaluations<P: HonkCurve<TranscriptFieldType, ScalarField = F>>(
-        univariate_accumulators: &mut Self::AllRelationEvaluations,
-        extended_edges: &ClaimedEvaluations<F, Self>,
-        relation_parameters: &RelationParameters<F>,
-        scaling_factor: &F,
+    fn accumulate_relation_evaluations<P: HonkCurve<TranscriptFieldType>>(
+        univariate_accumulators: &mut Self::AllRelationEvaluations<P::ScalarField>,
+        extended_edges: &ClaimedEvaluations<P::ScalarField, Self>,
+        relation_parameters: &RelationParameters<P::ScalarField, Self>,
+        scaling_factor: &P::ScalarField,
     ) {
         tracing::trace!("Verify::Accumulate relations");
         SumcheckVerifierRound::<P, Self>::accumulate_one_relation_evaluations::<
@@ -260,8 +260,8 @@ impl<F: PrimeField> PlainProverFlavour<F> for UltraFlavour {
         );
     }
 
-    fn scale_and_batch_elements(
-        all_rel_evals: &Self::AllRelationEvaluations,
+    fn scale_and_batch_elements<F: PrimeField>(
+        all_rel_evals: &Self::AllRelationEvaluations<F>,
         first_scalar: F,
         elements: &[F],
     ) -> F {

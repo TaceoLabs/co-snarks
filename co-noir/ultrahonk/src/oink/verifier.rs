@@ -14,7 +14,7 @@ use co_builder::prover_flavour::ProverFlavour;
 pub(crate) struct OinkVerifier<
     P: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
-    L: PlainProverFlavour<P::ScalarField>,
+    L: PlainProverFlavour,
 > {
     memory: VerifierMemory<P, L>,
     pub public_inputs: Vec<P::ScalarField>,
@@ -25,7 +25,7 @@ pub(crate) struct OinkVerifier<
 impl<
         P: HonkCurve<TranscriptFieldType>,
         H: TranscriptHasher<TranscriptFieldType>,
-        L: PlainProverFlavour<P::ScalarField>,
+        L: PlainProverFlavour,
     > Default for OinkVerifier<P, H, L>
 {
     fn default() -> Self {
@@ -36,7 +36,7 @@ impl<
 impl<
         P: HonkCurve<TranscriptFieldType>,
         H: TranscriptHasher<TranscriptFieldType>,
-        L: PlainProverFlavour<P::ScalarField>,
+        L: PlainProverFlavour,
     > OinkVerifier<P, H, L>
 {
     pub(crate) fn new() -> Self {

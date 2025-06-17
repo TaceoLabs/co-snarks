@@ -18,7 +18,7 @@ use std::marker::PhantomData;
 pub struct UltraHonk<
     P: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
-    L: PlainProverFlavour<P::ScalarField>,
+    L: PlainProverFlavour,
 > {
     phantom_data: PhantomData<P>,
     phantom_hasher: PhantomData<H>,
@@ -28,7 +28,7 @@ pub struct UltraHonk<
 impl<
         P: HonkCurve<TranscriptFieldType>,
         H: TranscriptHasher<TranscriptFieldType>,
-        L: PlainProverFlavour<P::ScalarField>,
+        L: PlainProverFlavour,
     > UltraHonk<P, H, L>
 {
     pub(crate) fn generate_gate_challenges(

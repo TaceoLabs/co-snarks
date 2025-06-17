@@ -17,7 +17,7 @@ use super::zk_data::ZKSumcheckData;
 impl<
         P: HonkCurve<TranscriptFieldType>,
         H: TranscriptHasher<TranscriptFieldType>,
-        L: PlainProverFlavour<P::ScalarField>,
+        L: PlainProverFlavour,
     > Decider<P, H, L>
 {
     pub(crate) fn partially_evaluate_init(

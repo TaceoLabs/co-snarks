@@ -22,7 +22,7 @@ use crate::prelude::Univariate;
 use crate::{
     plain_prover_flavour::PlainProverFlavour,
     transcript::{Transcript, TranscriptFieldType, TranscriptHasher},
-    Utils, NUM_ALPHAS,
+    Utils,
 };
 use ark_ff::{One, Zero};
 use co_builder::prover_flavour::ProverFlavour;
@@ -39,9 +39,9 @@ use std::{array, marker::PhantomData};
 pub(crate) struct Oink<
     P: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
-    L: PlainProverFlavour<P::ScalarField>,
+    L: PlainProverFlavour,
 > {
-    memory: ProverMemory<P>,
+    memory: ProverMemory<P, L>,
     phantom_data: PhantomData<P>,
     phantom_hasher: PhantomData<H>,
     phantom_flavour: PhantomData<L>,
@@ -52,7 +52,7 @@ pub(crate) struct Oink<
 impl<
         P: HonkCurve<TranscriptFieldType>,
         H: TranscriptHasher<TranscriptFieldType>,
-        L: PlainProverFlavour<P::ScalarField>,
+        L: PlainProverFlavour,
     > Default for Oink<P, H, L>
 {
     fn default() -> Self {
@@ -63,7 +63,7 @@ impl<
 impl<
         P: HonkCurve<TranscriptFieldType>,
         H: TranscriptHasher<TranscriptFieldType>,
-        L: PlainProverFlavour<P::ScalarField>,
+        L: PlainProverFlavour,
     > Oink<P, H, L>
 {
     pub(crate) fn new(has_zk: ZeroKnowledge) -> Self {
@@ -413,13 +413,13 @@ impl<
 
     /// Generate relation separators alphas for sumcheck/combiner computation
     pub(crate) fn generate_alphas_round(
-        alphas: &mut [P::ScalarField; NUM_ALPHAS], //TODO ALPHAS_ISSUE
+        alphas: &mut L::Alphas<P::ScalarField>, //TODO ALPHAS_ISSUE
         transcript: &mut Transcript<TranscriptFieldType, H>,
     ) {
         tracing::trace!("generate alpha round");
-
-        let args: [String; NUM_ALPHAS] = array::from_fn(|i| format!("alpha_{i}"));
-        alphas.copy_from_slice(&transcript.get_challenges::<P>(&args));
+        todo!("Implement alphas generation for Oink");
+        // let args: [String; NUM_ALPHAS] = array::from_fn(|i| format!("alpha_{i}"));
+        // alphas.copy_from_slice(&transcript.get_challenges::<P>(&args));
     }
 
     /// Add circuit size public input size and public inputs to transcript

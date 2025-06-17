@@ -22,7 +22,7 @@ use co_builder::prelude::ZeroKnowledge;
 impl<
         P: HonkCurve<TranscriptFieldType>,
         H: TranscriptHasher<TranscriptFieldType>,
-        L: PlainProverFlavour<P::ScalarField>,
+        L: PlainProverFlavour,
     > DeciderVerifier<P, H, L>
 {
     pub fn get_g_shift_evaluations(

@@ -12,12 +12,12 @@ use std::{iter, vec};
 
 pub(crate) struct ProverMemory<P: Pairing, L: PlainProverFlavour> {
     pub(crate) polys: AllEntities<Vec<P::ScalarField>, L>,
-    pub(crate) relation_parameters: RelationParameters<P::ScalarField>,
+    pub(crate) relation_parameters: RelationParameters<P::ScalarField, L>,
 }
 
 pub(crate) struct VerifierMemory<P: Pairing, L: PlainProverFlavour> {
     pub(crate) verifier_commitments: VerifierCommitments<P::G1Affine, L>,
-    pub(crate) relation_parameters: RelationParameters<P::ScalarField>,
+    pub(crate) relation_parameters: RelationParameters<P::ScalarField, L>,
     pub(crate) claimed_evaluations: ClaimedEvaluations<P::ScalarField, L>,
 }
 
@@ -25,19 +25,19 @@ pub(crate) struct VerifierMemory<P: Pairing, L: PlainProverFlavour> {
 // pub(crate) const BATCHED_RELATION_PARTIAL_LENGTH: usize = MAX_PARTIAL_RELATION_LENGTH + 1;
 // pub(crate) const BATCHED_RELATION_PARTIAL_LENGTH_ZK: usize = BATCHED_RELATION_PARTIAL_LENGTH + 1;
 
-pub(crate) type ProverUnivariates<F, L, const SIZE: usize> = AllEntities<Univariate<F, SIZE>, L>;
+// pub(crate) type ProverUnivariates<F, L, const SIZE: usize> = AllEntities<Univariate<F, SIZE>, L>;
 pub(crate) type PartiallyEvaluatePolys<F, L> = AllEntities<Vec<F>, L>;
 pub(crate) type ClaimedEvaluations<F, L> = AllEntities<F, L>;
 pub(crate) type VerifierCommitments<P, L> = AllEntities<P, L>;
 
-pub struct RelationParameters<F: PrimeField> {
+pub struct RelationParameters<F: PrimeField, L: PlainProverFlavour> {
     pub(crate) eta_1: F,
     pub(crate) eta_2: F,
     pub(crate) eta_3: F,
     pub(crate) beta: F,
     pub(crate) gamma: F,
     pub(crate) public_input_delta: F,
-    pub(crate) alphas: [F; NUM_ALPHAS], //TODO ALPHAS_ISSUE
+    pub(crate) alphas: L::Alphas<F>,
     pub(crate) gate_challenges: Vec<F>,
 }
 
@@ -112,7 +112,7 @@ impl<F: PrimeField> GateSeparatorPolynomial<F> {
     }
 }
 
-impl<P: Pairing, L: PlainProverFlavour<P::ScalarField>> ProverMemory<P, L> {
+impl<P: Pairing, L: PlainProverFlavour> ProverMemory<P, L> {
     pub(crate) fn from_memory_and_polynomials(
         prover_memory: crate::oink::types::ProverMemory<P>,
         polynomials: Polynomials<P::ScalarField, L>,
@@ -218,7 +218,7 @@ impl<P: Pairing, L: PlainProverFlavour<P::ScalarField>> ProverMemory<P, L> {
 }
 
 // TODO FLORIN: Make this generic over the flavour (Or implement for Mega)
-impl<P: Pairing, L: PlainProverFlavour<P::ScalarField>> VerifierMemory<P, L> {
+impl<P: Pairing, L: PlainProverFlavour> VerifierMemory<P, L> {
     #[expect(clippy::field_reassign_with_default)]
     pub(crate) fn from_memory_and_key(
         verifier_memory: crate::oink::types::VerifierMemory<P, L>,

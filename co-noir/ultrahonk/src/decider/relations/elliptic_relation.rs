@@ -83,7 +83,7 @@ impl EllipticRelation {
      */
     pub(crate) fn accumulate<
         P: HonkCurve<TranscriptFieldType>,
-        L: PlainProverFlavour<P::ScalarField>,
+        L: PlainProverFlavour,
         const UNIVARIATE_SIZE: usize,
     >(
         univariate_accumulator: &mut EllipticRelationAcc<P::ScalarField>,
@@ -169,7 +169,7 @@ impl EllipticRelation {
 
     pub(crate) fn verify_accumulate<
         P: HonkCurve<TranscriptFieldType>,
-        L: PlainProverFlavour<P::ScalarField>,
+        L: PlainProverFlavour,
     >(
         univariate_accumulator: &mut EllipticRelationEvals<P::ScalarField>,
         input: &ClaimedEvaluations<P::ScalarField, P::ScalarField, L>,

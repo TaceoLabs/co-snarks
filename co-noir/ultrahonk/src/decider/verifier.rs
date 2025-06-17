@@ -18,7 +18,7 @@ use std::marker::PhantomData;
 pub(crate) struct DeciderVerifier<
     P: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
-    L: PlainProverFlavour<P::ScalarField>,
+    L: PlainProverFlavour,
 > {
     pub(super) memory: VerifierMemory<P, L>,
     phantom_data: PhantomData<P>,
@@ -29,7 +29,7 @@ pub(crate) struct DeciderVerifier<
 impl<
         P: HonkCurve<TranscriptFieldType>,
         H: TranscriptHasher<TranscriptFieldType>,
-        L: PlainProverFlavour<P::ScalarField>,
+        L: PlainProverFlavour,
     > DeciderVerifier<P, H, L>
 {
     pub(crate) fn new(memory: VerifierMemory<P, L>) -> Self {

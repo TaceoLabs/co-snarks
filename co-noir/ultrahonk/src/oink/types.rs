@@ -1,12 +1,9 @@
-use crate::{
-    plain_prover_flavour::PlainProverFlavour, prelude::Univariate, types::WitnessEntities,
-    NUM_ALPHAS,
-};
+use crate::plain_prover_flavour::PlainProverFlavour;
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
-use co_builder::{prelude::Polynomial, prover_flavour::ProverFlavour};
+use co_builder::prelude::Polynomial;
 
-pub(crate) struct ProverMemory<P: Pairing> {
+pub(crate) struct ProverMemory<P: Pairing, L: PlainProverFlavour> {
     /// column 3
     pub(crate) w_4: Polynomial<P::ScalarField>,
     /// column 4
@@ -14,25 +11,25 @@ pub(crate) struct ProverMemory<P: Pairing> {
     /// column 5
     pub(crate) lookup_inverses: Polynomial<P::ScalarField>,
     pub(crate) public_input_delta: P::ScalarField,
-    pub(crate) challenges: Challenges<P::ScalarField>,
+    pub(crate) challenges: Challenges<P::ScalarField, L>,
 }
 
-pub(crate) struct VerifierMemory<P: Pairing, L: PlainProverFlavour<P::ScalarField>> {
+pub(crate) struct VerifierMemory<P: Pairing, L: PlainProverFlavour> {
     pub(crate) public_input_delta: P::ScalarField,
-    pub(crate) witness_commitments: WitnessEntities<P::G1Affine, P::ScalarField, L>,
-    pub(crate) challenges: Challenges<P::ScalarField>,
+    pub(crate) witness_commitments: L::WitnessEntity<P::ScalarField>,
+    pub(crate) challenges: Challenges<P::ScalarField, L>,
 }
 
-pub(crate) struct Challenges<F: PrimeField> {
+pub(crate) struct Challenges<F: PrimeField, L: PlainProverFlavour> {
     pub(crate) eta_1: F,
     pub(crate) eta_2: F,
     pub(crate) eta_3: F,
     pub(crate) beta: F,
     pub(crate) gamma: F,
-    pub(crate) alphas: [F; NUM_ALPHAS], //TODO ALPHAS_ISSUE
+    pub(crate) alphas: L::Alphas<F>, //TODO ALPHAS_ISSUE
 }
 
-impl<F: PrimeField> Default for Challenges<F> {
+impl<F: PrimeField, L: PlainProverFlavour> Default for Challenges<F, L> {
     fn default() -> Self {
         Self {
             eta_1: Default::default(),
@@ -40,12 +37,12 @@ impl<F: PrimeField> Default for Challenges<F> {
             eta_3: Default::default(),
             beta: Default::default(),
             gamma: Default::default(),
-            alphas: [Default::default(); NUM_ALPHAS], //TODO ALPHAS_ISSUE
+            alphas: L::Alphas::default(), //TODO ALPHAS_ISSUE
         }
     }
 }
 
-impl<P: Pairing> Default for ProverMemory<P> {
+impl<P: Pairing, L: PlainProverFlavour> Default for ProverMemory<P, L> {
     fn default() -> Self {
         Self {
             w_4: Default::default(),
@@ -57,7 +54,7 @@ impl<P: Pairing> Default for ProverMemory<P> {
     }
 }
 
-impl<P: Pairing, L: PlainProverFlavour<P::ScalarField>> Default for VerifierMemory<P, L> {
+impl<P: Pairing, L: PlainProverFlavour> Default for VerifierMemory<P, L> {
     fn default() -> Self {
         Self {
             public_input_delta: Default::default(),
