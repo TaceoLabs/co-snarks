@@ -1,9 +1,12 @@
-use crate::decider::types::{ClaimedEvaluations, RelationParameters};
+use crate::decider::types::{ClaimedEvaluations, ProverUnivariatesSized, RelationParameters};
 use crate::decider::{types::ProverUnivariates, univariate::Univariate};
 use crate::plain_prover_flavour::PlainProverFlavour;
 use crate::transcript::TranscriptFieldType;
 use ark_ff::AdditiveGroup;
 use ark_ff::{Field, PrimeField, Zero};
+use co_builder::polynomials::polynomial_flavours::{
+    PrecomputedEntitiesFlavour, ShiftedWitnessEntitiesFlavour, WitnessEntitiesFlavour,
+};
 use co_builder::prelude::HonkCurve;
 #[derive(Clone, Debug, Default)]
 pub(crate) struct EllipticRelationAcc<F: PrimeField> {
@@ -61,8 +64,8 @@ impl EllipticRelation {
     pub(crate) const NUM_RELATIONS: usize = 2;
     pub(crate) const SKIPPABLE: bool = true;
 
-    pub(crate) fn skip<F: PrimeField, L: PlainProverFlavour>(
-        input: &ProverUnivariates<F, L>,
+    pub(crate) fn skip<F: PrimeField, L: PlainProverFlavour, const SIZE: usize>(
+        input: &ProverUnivariatesSized<F, L, SIZE>,
     ) -> bool {
         // This is the relation implemented manually
         if !Self::SKIPPABLE {
@@ -84,10 +87,10 @@ impl EllipticRelation {
     pub(crate) fn accumulate<
         P: HonkCurve<TranscriptFieldType>,
         L: PlainProverFlavour,
-        // const UNIVARIATE_SIZE: usize,
+        const UNIVARIATE_SIZE: usize,
     >(
         univariate_accumulator: &mut EllipticRelationAcc<P::ScalarField>,
-        input: &ProverUnivariates<P::ScalarField, L>,
+        input: &ProverUnivariatesSized<P::ScalarField, L, UNIVARIATE_SIZE>,
         _relation_parameters: &RelationParameters<P::ScalarField, L>,
         scaling_factor: &P::ScalarField,
     ) {

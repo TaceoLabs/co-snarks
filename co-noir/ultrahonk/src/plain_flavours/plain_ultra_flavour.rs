@@ -204,49 +204,73 @@ impl PlainProverFlavour for UltraFlavour {
     ) {
         tracing::trace!("Prove::Accumulate relations");
 
-        SumcheckProverRound::accumulate_one_relation_univariates::<UltraArithmeticRelation>(
+        SumcheckProverRound::accumulate_one_relation_univariates::<
+            UltraArithmeticRelation,
+            { Self::MAX_PARTIAL_RELATION_LENGTH },
+        >(
             &mut univariate_accumulators.r_arith,
             extended_edges,
             relation_parameters,
             scaling_factor,
         );
-        SumcheckProverRound::accumulate_one_relation_univariates::<UltraPermutationRelation>(
+        SumcheckProverRound::accumulate_one_relation_univariates::<
+            UltraPermutationRelation,
+            { Self::MAX_PARTIAL_RELATION_LENGTH },
+        >(
             &mut univariate_accumulators.r_perm,
             extended_edges,
             relation_parameters,
             scaling_factor,
         );
-        SumcheckProverRound::accumulate_one_relation_univariates::<DeltaRangeConstraintRelation>(
+        SumcheckProverRound::accumulate_one_relation_univariates::<
+            DeltaRangeConstraintRelation,
+            { Self::MAX_PARTIAL_RELATION_LENGTH },
+        >(
             &mut univariate_accumulators.r_delta,
             extended_edges,
             relation_parameters,
             scaling_factor,
         );
-        SumcheckProverRound::accumulate_elliptic_curve_relation_univariates::<P>(
+        SumcheckProverRound::accumulate_elliptic_curve_relation_univariates::<
+            P,
+            { Self::MAX_PARTIAL_RELATION_LENGTH },
+        >(
             &mut univariate_accumulators.r_elliptic,
             extended_edges,
             relation_parameters,
             scaling_factor,
         );
-        SumcheckProverRound::accumulate_one_relation_univariates::<AuxiliaryRelation>(
+        SumcheckProverRound::accumulate_one_relation_univariates::<
+            AuxiliaryRelation,
+            { Self::MAX_PARTIAL_RELATION_LENGTH },
+        >(
             &mut univariate_accumulators.r_aux,
             extended_edges,
             relation_parameters,
             scaling_factor,
         );
-        SumcheckProverRound::accumulate_one_relation_univariates::<LogDerivLookupRelation>(
+        SumcheckProverRound::accumulate_one_relation_univariates::<
+            LogDerivLookupRelation,
+            { Self::MAX_PARTIAL_RELATION_LENGTH },
+        >(
             &mut univariate_accumulators.r_lookup,
             extended_edges,
             relation_parameters,
             scaling_factor,
         );
-        SumcheckProverRound::accumulate_one_relation_univariates::<Poseidon2ExternalRelation>(
+        SumcheckProverRound::accumulate_one_relation_univariates::<
+            Poseidon2ExternalRelation,
+            { Self::MAX_PARTIAL_RELATION_LENGTH },
+        >(
             &mut univariate_accumulators.r_pos_ext,
             extended_edges,
             relation_parameters,
             scaling_factor,
         );
-        SumcheckProverRound::accumulate_one_relation_univariates::<Poseidon2InternalRelation>(
+        SumcheckProverRound::accumulate_one_relation_univariates::<
+            Poseidon2InternalRelation,
+            { Self::MAX_PARTIAL_RELATION_LENGTH },
+        >(
             &mut univariate_accumulators.r_pos_int,
             extended_edges,
             relation_parameters,

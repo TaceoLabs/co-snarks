@@ -1,7 +1,5 @@
 use crate::decider::types::{ClaimedEvaluations, ProverUnivariates};
-use crate::{
-    decider::types::RelationParameters, prelude::Univariate, transcript::TranscriptFieldType,
-};
+use crate::{decider::types::RelationParameters, transcript::TranscriptFieldType};
 use ark_ff::PrimeField;
 use co_builder::{prelude::HonkCurve, prover_flavour::ProverFlavour};
 use rand::{CryptoRng, Rng};
@@ -26,7 +24,9 @@ pub trait PlainProverFlavour: Default + ProverFlavour {
         + Clone
         + Default
         + std::ops::MulAssign
-        + std::ops::Add;
+        + std::ops::Add
+        + std::ops::Mul
+        + num_traits::identities::Zero;
 
     const NUM_SUBRELATIONS: usize;
 

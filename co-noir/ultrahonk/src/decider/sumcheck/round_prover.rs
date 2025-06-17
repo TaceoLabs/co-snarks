@@ -5,16 +5,19 @@ use super::{
     },
     zk_data::ZKSumcheckData,
 };
+use crate::{decider::types::ProverUnivariates, plain_prover_flavour::PlainProverFlavour};
 use crate::{
-    decider::relations::{
-        elliptic_relation::{EllipticRelation, EllipticRelationAcc},
-        Relation,
+    decider::{
+        relations::{
+            elliptic_relation::{EllipticRelation, EllipticRelationAcc},
+            Relation,
+        },
+        types::ProverUnivariatesSized,
     },
     plain_prover_flavour::UnivariateTest,
     transcript::TranscriptFieldType,
     types::AllEntities,
 };
-use crate::{decider::types::ProverUnivariates, plain_prover_flavour::PlainProverFlavour};
 
 use ark_ff::PrimeField;
 use co_builder::prelude::{HonkCurve, RowDisablingPolynomial};
@@ -143,9 +146,9 @@ impl<F: PrimeField, L: PlainProverFlavour> SumcheckProverRound<F, L> {
         res
     }
 
-    pub(crate) fn accumulate_one_relation_univariates<R: Relation<F, L>>(
+    pub(crate) fn accumulate_one_relation_univariates<R: Relation<F, L>, const SIZE: usize>(
         univariate_accumulator: &mut R::Acc,
-        extended_edges: &ProverUnivariates<F, L>,
+        extended_edges: &ProverUnivariatesSized<F, L, SIZE>,
         relation_parameters: &RelationParameters<F, L>,
         scaling_factor: &F,
     ) {
@@ -163,17 +166,18 @@ impl<F: PrimeField, L: PlainProverFlavour> SumcheckProverRound<F, L> {
 
     pub(crate) fn accumulate_elliptic_curve_relation_univariates<
         P: HonkCurve<TranscriptFieldType, ScalarField = F>,
+        const SIZE: usize,
     >(
         univariate_accumulator: &mut EllipticRelationAcc<F>,
-        extended_edges: &ProverUnivariates<F, L>,
+        extended_edges: &ProverUnivariatesSized<F, L, SIZE>,
         relation_parameters: &RelationParameters<F, L>,
         scaling_factor: &F,
     ) {
-        if EllipticRelation::SKIPPABLE && EllipticRelation::skip::<F, L>(extended_edges) {
+        if EllipticRelation::SKIPPABLE && EllipticRelation::skip::<F, L, SIZE>(extended_edges) {
             return;
         }
 
-        EllipticRelation::accumulate::<P, L>(
+        EllipticRelation::accumulate::<P, L, SIZE>(
             univariate_accumulator,
             extended_edges,
             relation_parameters,

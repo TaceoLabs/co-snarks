@@ -1,4 +1,5 @@
 use super::Relation;
+use crate::decider::types::ProverUnivariatesSized;
 use crate::{
     decider::{
         types::{ClaimedEvaluations, ProverUnivariates, RelationParameters},
@@ -7,6 +8,9 @@ use crate::{
     plain_prover_flavour::PlainProverFlavour,
 };
 use ark_ff::{PrimeField, Zero};
+use co_builder::polynomials::polynomial_flavours::{
+    PrecomputedEntitiesFlavour, ShiftedWitnessEntitiesFlavour, WitnessEntitiesFlavour,
+};
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct UltraArithmeticRelationAcc<F: PrimeField> {
@@ -70,7 +74,7 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for UltraArithmeticRel
 
     const SKIPPABLE: bool = true;
 
-    fn skip(input: &ProverUnivariates<F, L>) -> bool {
+    fn skip<const SIZE: usize>(input: &ProverUnivariatesSized<F, L, SIZE>) -> bool {
         <Self as Relation<F, L>>::check_skippable();
         input.precomputed.q_arith().is_zero()
     }
@@ -126,10 +130,10 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for UltraArithmeticRel
      * @param parameters contains beta, gamma, and public_input_delta, ....
      * @param scaling_factor optional term to scale the evaluation before adding to evals.
      */
-    fn accumulate(
+    fn accumulate<const SIZE: usize>(
         univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariates<F, L>,
-        _relation_parameters: &RelationParameters<F, L>,
+        input: &ProverUnivariatesSized<F, L, SIZE>,
+        relation_parameters: &RelationParameters<F, L>,
         scaling_factor: &F,
     ) {
         tracing::trace!("Accumulate UltraArithmeticRelation");

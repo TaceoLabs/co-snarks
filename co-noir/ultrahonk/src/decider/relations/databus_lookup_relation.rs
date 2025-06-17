@@ -1,4 +1,5 @@
 use super::Relation;
+use crate::decider::types::ProverUnivariatesSized;
 use crate::{
     decider::{
         types::{ClaimedEvaluations, ProverUnivariates, RelationParameters},
@@ -7,6 +8,9 @@ use crate::{
     plain_prover_flavour::PlainProverFlavour,
 };
 use ark_ff::PrimeField;
+use co_builder::polynomials::polynomial_flavours::{
+    PrecomputedEntitiesFlavour, ShiftedWitnessEntitiesFlavour, WitnessEntitiesFlavour,
+};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BusData {
     BusIdx0,
@@ -435,7 +439,7 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for DataBusLookupRelat
 
     const SKIPPABLE: bool = true;
 
-    fn skip(input: &ProverUnivariates<F, L>) -> bool {
+    fn skip<const SIZE: usize>(input: &ProverUnivariatesSized<F, L, SIZE>) -> bool {
         // Ensure the input does not contain a read gate or data that is being read
         <Self as Relation<F, L>>::check_skippable();
         input.precomputed.q_busread().is_zero()
@@ -459,9 +463,9 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for DataBusLookupRelat
      * @param parameters contains beta, gamma, and public_input_delta, ....
      * @param scaling_factor optional term to scale the evaluation before adding to evals.
      */
-    fn accumulate(
+    fn accumulate<const SIZE: usize>(
         univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariates<F, L>,
+        input: &ProverUnivariatesSized<F, L, SIZE>,
         _relation_parameters: &RelationParameters<F, L>,
         scaling_factor: &F,
     ) {

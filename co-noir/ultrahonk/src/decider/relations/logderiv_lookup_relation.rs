@@ -1,4 +1,5 @@
 use super::Relation;
+use crate::decider::types::ProverUnivariatesSized;
 use crate::{
     decider::{
         types::{ClaimedEvaluations, ProverUnivariates, RelationParameters},
@@ -7,6 +8,9 @@ use crate::{
     plain_prover_flavour::PlainProverFlavour,
 };
 use ark_ff::{PrimeField, Zero};
+use co_builder::polynomials::polynomial_flavours::{
+    PrecomputedEntitiesFlavour, ShiftedWitnessEntitiesFlavour, WitnessEntitiesFlavour,
+};
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct LogDerivLookupRelationAcc<F: PrimeField> {
@@ -204,7 +208,7 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for LogDerivLookupRela
 
     const SKIPPABLE: bool = true;
 
-    fn skip(input: &ProverUnivariates<F, L>) -> bool {
+    fn skip<const SIZE: usize>(input: &ProverUnivariatesSized<F, L, SIZE>) -> bool {
         <Self as Relation<F, L>>::check_skippable();
         input.precomputed.q_lookup().is_zero() && input.witness.lookup_read_counts().is_zero()
     }
@@ -246,9 +250,9 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for LogDerivLookupRela
      * @note This relation utilizes functionality in the log-derivative library to compute the polynomial of inverses
      *
      */
-    fn accumulate(
+    fn accumulate<const SIZE: usize>(
         univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariates<F, L>,
+        input: &ProverUnivariatesSized<F, L, SIZE>,
         relation_parameters: &RelationParameters<F, L>,
         scaling_factor: &F,
     ) {
