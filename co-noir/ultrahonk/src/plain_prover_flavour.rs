@@ -10,8 +10,8 @@ pub trait PlainProverFlavour: Default + ProverFlavour + ProverUnivariatePlainFla
     type AllRelationAcc<F: PrimeField>: Default;
     type AllRelationEvaluations<F: PrimeField>: Default;
     type Alphas<F: PrimeField>: Default + Clone + Copy;
-    type SumcheckRoundOutput<F: PrimeField>: Default;
-    type SumcheckRoundOutputZK<F: PrimeField>: Default;
+    type SumcheckRoundOutput<F: PrimeField>: Default + std::ops::MulAssign + std::ops::Add;
+    type SumcheckRoundOutputZK<F: PrimeField>: Default + std::ops::MulAssign + std::ops::Add;
 
     const NUM_SUBRELATIONS: usize;
 
@@ -47,7 +47,7 @@ pub trait PlainProverFlavour: Default + ProverFlavour + ProverUnivariatePlainFla
     fn scale_and_batch_elements<F: PrimeField>(
         all_rel_evals: &Self::AllRelationEvaluations<F>,
         first_scalar: F,
-        elements: &[F],
+        elements: &Self::Alphas<F>,
     ) -> F;
 }
 

@@ -261,7 +261,7 @@ impl<F: PrimeField, L: PlainProverFlavour> SumcheckProverRound<F, L> {
     ) -> L::SumcheckRoundOutput<P::ScalarField> {
         tracing::trace!("Sumcheck round {}", round_index);
 
-        self.compute_univariate_inner::<P>::(relation_parameters, gate_sparators, polynomials)
+        self.compute_univariate_inner::<P>(relation_parameters, gate_sparators, polynomials)
     }
 
     pub(crate) fn compute_univariate_zk<P: HonkCurve<TranscriptFieldType, ScalarField = F>>(
@@ -314,8 +314,8 @@ impl<F: PrimeField, L: PlainProverFlavour> SumcheckProverRound<F, L> {
             libra_round_univariate
         } else {
             // Note: Currently not happening
-            let mut libra_round_univariate_extended = L::SumcheckRoundOutputZK::default();
             todo!("Implement Libra univariate extension logic");
+            // let mut libra_round_univariate_extended = L::SumcheckRoundOutputZK::default();
             // libra_round_univariate_extended.extend_from(&libra_round_univariate.evaluations);
             // libra_round_univariate_extended
         }

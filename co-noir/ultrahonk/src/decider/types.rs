@@ -41,7 +41,7 @@ pub struct RelationParameters<F: PrimeField, L: PlainProverFlavour> {
     pub(crate) beta: F,
     pub(crate) gamma: F,
     pub(crate) public_input_delta: F,
-    pub(crate) alphas: L::Alphas<F>,
+    pub(crate) alphas: L::Alphas<F>, // TODO FLORIN: Can I please just make this a Vec<F>?
     pub(crate) gate_challenges: Vec<F>,
 }
 

@@ -383,41 +383,41 @@ impl PlainProverFlavour for MegaFlavour {
     fn scale_and_batch_elements<F: PrimeField>(
         all_rel_evals: &Self::AllRelationEvaluations<F>,
         first_scalar: F,
-        elements: &[F],
+        elements: &Self::Alphas<F>,
     ) -> F {
         tracing::trace!("Verify::scale_and_batch_elements");
-        assert!(elements.len() == Self::NUM_SUBRELATIONS - 1);
+        assert!(elements.0.len() == Self::NUM_SUBRELATIONS - 1);
         let mut output = F::zero();
         all_rel_evals
             .r_arith
-            .scale_and_batch_elements(&[first_scalar, elements[0]], &mut output);
+            .scale_and_batch_elements(&[first_scalar, elements.0[0]], &mut output);
         all_rel_evals
             .r_perm
-            .scale_and_batch_elements(&elements[1..3], &mut output);
+            .scale_and_batch_elements(&elements.0[1..3], &mut output);
         all_rel_evals
             .r_lookup
-            .scale_and_batch_elements(&elements[3..5], &mut output);
+            .scale_and_batch_elements(&elements.0[3..5], &mut output);
         all_rel_evals
             .r_delta
-            .scale_and_batch_elements(&elements[5..9], &mut output);
+            .scale_and_batch_elements(&elements.0[5..9], &mut output);
         all_rel_evals
             .r_elliptic
-            .scale_and_batch_elements(&elements[9..11], &mut output);
+            .scale_and_batch_elements(&elements.0[9..11], &mut output);
         all_rel_evals
             .r_aux
-            .scale_and_batch_elements(&elements[11..17], &mut output);
+            .scale_and_batch_elements(&elements.0[11..17], &mut output);
         all_rel_evals
             .r_ecc_op_queue
-            .scale_and_batch_elements(&elements[17..25], &mut output);
+            .scale_and_batch_elements(&elements.0[17..25], &mut output);
         all_rel_evals
             .r_databus
-            .scale_and_batch_elements(&elements[25..31], &mut output);
+            .scale_and_batch_elements(&elements.0[25..31], &mut output);
         all_rel_evals
             .r_pos_ext
-            .scale_and_batch_elements(&elements[31..35], &mut output);
+            .scale_and_batch_elements(&elements.0[31..35], &mut output);
         all_rel_evals
             .r_pos_int
-            .scale_and_batch_elements(&elements[35..], &mut output);
+            .scale_and_batch_elements(&elements.0[35..], &mut output);
 
         output
     }

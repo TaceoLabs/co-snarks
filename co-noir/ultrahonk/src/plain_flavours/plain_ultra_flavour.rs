@@ -321,7 +321,7 @@ impl PlainProverFlavour for UltraFlavour {
     fn scale_and_batch_elements<F: PrimeField>(
         all_rel_evals: &Self::AllRelationEvaluations<F>,
         first_scalar: F,
-        elements: &[F],
+        elements: &Self::Alphas<F>,
     ) -> F {
         tracing::trace!("Verify::scale_and_batch_elements");
         assert!(elements.len() == Self::NUM_SUBRELATIONS - 1);
