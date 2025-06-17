@@ -80,7 +80,7 @@ impl<F: PrimeField> Blake2s<F> {
         inc: u32,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         let inc_scalar = FieldCT::from(F::from(inc));
         s.t[0] = s.t[0].add(&inc_scalar, builder, driver);
         let s_t_val = s.t[0].get_value(builder, driver);
@@ -110,7 +110,7 @@ impl<F: PrimeField> Blake2s<F> {
         input: &ByteArray<F>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         let mut m: [FieldCT<F>; 16] = array::from_fn(|_| FieldCT::<F>::default());
         let mut v: [FieldCT<F>; 16] = array::from_fn(|_| FieldCT::<F>::default());
 
@@ -220,7 +220,7 @@ impl<F: PrimeField> Blake2s<F> {
         input: &ByteArray<F>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         let mut offset = 0;
         let mut size = input.values.len();
         while size > Blake2sConstant::Blake2sBlockbytes as usize {
@@ -261,7 +261,7 @@ impl<F: PrimeField> Blake2s<F> {
         input: &ByteArray<F>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<ByteArray<F>> {
+    ) -> eyre::Result<ByteArray<F>> {
         let mut s = Blake2sState::<F>::new();
 
         #[expect(unused_mut)] // TACEO TODO: This is for the linter, remove once its fixed...

@@ -13,6 +13,7 @@ use ark_ff::Zero;
 use co_builder::prelude::HonkCurve;
 use co_builder::HonkProofResult;
 use itertools::Itertools as _;
+use mpc_net::Network;
 use num_bigint::BigUint;
 use ultrahonk::prelude::{TranscriptFieldType, Univariate};
 
@@ -186,14 +187,15 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
      * @param parameters contains beta, gamma, and public_input_delta, ....
      * @param scaling_factor optional term to scale the evaluation before adding to evals.
      */
-    fn accumulate(
-        driver: &mut T,
+    fn accumulate<N: Network>(
+        net: &N,
+        state: &mut T::State,
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesBatch<T, P>,
         relation_parameters: &RelationParameters<<P>::ScalarField>,
         scaling_factors: &[P::ScalarField],
     ) -> HonkProofResult<()> {
-        let party_id = driver.get_party_id();
+        let party_id = net.id();
 
         let eta = &relation_parameters.eta_1;
         let eta_two = &relation_parameters.eta_2;
@@ -244,7 +246,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         rhs.extend(w_4);
         rhs.extend(w_3);
         rhs.extend(w_2_shift);
-        let mul = driver.mul_many(&lhs, &rhs)?;
+        let mul = T::mul_many(&lhs, &rhs, net, state)?;
         let mul = mul.chunks_exact(mul.len() / 5).collect_vec();
         debug_assert_eq!(mul.len(), 5);
 
@@ -414,7 +416,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         rhs.extend(access_type.clone());
         rhs.extend(index_delta_one.clone());
 
-        let mul = driver.mul_many(&lhs, &rhs)?;
+        let mul = T::mul_many(&lhs, &rhs, net, state)?;
         let mul = mul.chunks_exact(mul.len() / 4).collect_vec();
         debug_assert_eq!(mul.len(), 4);
         let index_is_monotonically_increasing = T::sub_many(mul[0], &index_delta); // deg 2
@@ -481,7 +483,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         rhs.extend(next_gate_access_type.clone());
         rhs.extend(timestamp_delta);
 
-        let mul = driver.mul_many(&lhs, &rhs)?;
+        let mul = T::mul_many(&lhs, &rhs, net, state)?;
         let mul = mul.chunks_exact(mul.len() / 3).collect_vec();
         debug_assert_eq!(mul.len(), 3);
 

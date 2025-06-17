@@ -391,7 +391,7 @@ where
                 input_value_type,
             )?;
         } else {
-            eyre::bail!(format!("unsupported oracle function: {name}"))
+            eyre::bail!("unsupported oracle function: {name}")
         }
         self.increment_program_counter();
         Ok(())

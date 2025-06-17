@@ -3,47 +3,23 @@ use ark_ec::pairing::Pairing;
 use ark_ff::Field;
 use itertools::izip;
 use mpc_core::protocols::rep3::{
-    arithmetic,
-    network::{IoContext, Rep3Network},
-    pointshare, poly, PartyID, Rep3PointShare, Rep3PrimeFieldShare,
+    arithmetic, pointshare, poly, Rep3PointShare, Rep3PrimeFieldShare, Rep3State, PARTY_0,
 };
+use mpc_net::Network;
 use num_traits::Zero;
 use rayon::prelude::*;
 
-// TODO use io_context1
-pub struct Rep3UltraHonkDriver<N: Rep3Network> {
-    io_context0: IoContext<N>,
-    _io_context1: IoContext<N>,
-}
+pub struct Rep3UltraHonkDriver;
 
-impl<N: Rep3Network> Rep3UltraHonkDriver<N> {
-    /// Create a new [`Rep3UltraHonkDriver`] with two [`IoContext`]s
-    pub fn new(io_context0: IoContext<N>, io_context1: IoContext<N>) -> Self {
-        Self {
-            io_context0,
-            _io_context1: io_context1,
-        }
-    }
-
-    pub fn into_network(self) -> N {
-        self.io_context0.network
-    }
-}
-
-impl<P: Pairing, N: Rep3Network> NoirUltraHonkProver<P> for Rep3UltraHonkDriver<N> {
+impl<P: Pairing> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
     type ArithmeticShare = Rep3PrimeFieldShare<P::ScalarField>;
     type PointShare = Rep3PointShare<P::G1>;
-    type PartyID = PartyID;
+    type State = Rep3State;
 
-    fn rand(&mut self) -> std::io::Result<Self::ArithmeticShare> {
-        Ok(arithmetic::rand(&mut self.io_context0))
+    fn rand<N: Network>(_: &N, state: &mut Self::State) -> eyre::Result<Self::ArithmeticShare> {
+        Ok(arithmetic::rand(state))
     }
 
-    fn get_party_id(&self) -> Self::PartyID {
-        self.io_context0.id
-    }
-
-    // TODO dont take by ref cause impl Copy, remove self
     fn sub(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare {
         arithmetic::sub(a, b)
     }
@@ -60,11 +36,7 @@ impl<P: Pairing, N: Rep3Network> NoirUltraHonkProver<P> for Rep3UltraHonkDriver<
         arithmetic::add_assign(a, b);
     }
 
-    fn add_assign_public(
-        a: &mut Self::ArithmeticShare,
-        b: <P as Pairing>::ScalarField,
-        id: Self::PartyID,
-    ) {
+    fn add_assign_public(a: &mut Self::ArithmeticShare, b: <P as Pairing>::ScalarField, id: usize) {
         arithmetic::add_assign_public(a, b, id);
     }
 
@@ -79,12 +51,12 @@ impl<P: Pairing, N: Rep3Network> NoirUltraHonkProver<P> for Rep3UltraHonkDriver<
         arithmetic::mul_public(shared, public)
     }
 
-    fn add_assign_public_half_share(
-        share: &mut P::ScalarField,
-        public: P::ScalarField,
-        id: Self::PartyID,
-    ) {
-        if matches!(id, PartyID::ID0) {
+    fn mul_assign_with_public(shared: &mut Self::ArithmeticShare, public: P::ScalarField) {
+        arithmetic::mul_assign_public(shared, public);
+    }
+
+    fn add_assign_public_half_share(share: &mut P::ScalarField, public: P::ScalarField, id: usize) {
+        if id == PARTY_0 {
             *share += public
         }
     }
@@ -96,47 +68,48 @@ impl<P: Pairing, N: Rep3Network> NoirUltraHonkProver<P> for Rep3UltraHonkDriver<
         public * shared.a
     }
 
-    fn mul_assign_with_public(shared: &mut Self::ArithmeticShare, public: P::ScalarField) {
-        arithmetic::mul_assign_public(shared, public);
-    }
-
     fn local_mul_vec(
-        &mut self,
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
+        state: &mut Self::State,
     ) -> Vec<P::ScalarField> {
-        arithmetic::local_mul_vec(a, b, &mut self.io_context0.rngs)
+        arithmetic::local_mul_vec(a, b, state)
     }
 
-    fn reshare(&mut self, a: Vec<P::ScalarField>) -> std::io::Result<Vec<Self::ArithmeticShare>> {
-        arithmetic::reshare_vec(a, &mut self.io_context0)
+    fn reshare<N: Network>(
+        a: Vec<P::ScalarField>,
+        net: &N,
+        _: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
+        arithmetic::reshare_vec(a, net)
     }
 
-    fn mul_many(
-        &mut self,
+    fn mul_many<N: Network>(
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
-    ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
-        arithmetic::mul_vec(a, b, &mut self.io_context0)
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
+        arithmetic::mul_vec(a, b, net, state)
     }
 
     fn add_with_public(
         public: <P as Pairing>::ScalarField,
         shared: Self::ArithmeticShare,
-        id: PartyID,
+        id: usize,
     ) -> Self::ArithmeticShare {
         arithmetic::add_public(shared, public, id)
     }
 
     fn promote_to_trivial_share(
-        id: Self::PartyID,
+        id: usize,
         public_value: <P as Pairing>::ScalarField,
     ) -> Self::ArithmeticShare {
         arithmetic::promote_to_trivial_share(id, public_value)
     }
 
     fn promote_to_trivial_shares(
-        id: Self::PartyID,
+        id: usize,
         public_values: &[<P as Pairing>::ScalarField],
     ) -> Vec<Self::ArithmeticShare> {
         public_values
@@ -146,51 +119,69 @@ impl<P: Pairing, N: Rep3Network> NoirUltraHonkProver<P> for Rep3UltraHonkDriver<
             .collect()
     }
 
-    fn open_point(&mut self, a: Self::PointShare) -> std::io::Result<<P as Pairing>::G1> {
-        pointshare::open_point(&a, &mut self.io_context0)
+    fn open_point<N: Network>(
+        a: Self::PointShare,
+        net: &N,
+        _: &mut Self::State,
+    ) -> eyre::Result<<P as Pairing>::G1> {
+        pointshare::open_point(&a, net)
     }
 
-    fn open_point_many(
-        &mut self,
+    fn open_point_many<N: Network>(
         a: &[Self::PointShare],
-    ) -> std::io::Result<Vec<<P as Pairing>::G1>> {
-        pointshare::open_point_many(a, &mut self.io_context0)
+        net: &N,
+        _: &mut Self::State,
+    ) -> eyre::Result<Vec<<P as Pairing>::G1>> {
+        pointshare::open_point_many(a, net)
     }
 
-    fn open_many(
-        &mut self,
+    fn open_many<N: Network>(
         a: &[Self::ArithmeticShare],
-    ) -> std::io::Result<Vec<<P as Pairing>::ScalarField>> {
-        arithmetic::open_vec(a, &mut self.io_context0)
+        net: &N,
+        _: &mut Self::State,
+    ) -> eyre::Result<Vec<<P as Pairing>::ScalarField>> {
+        arithmetic::open_vec(a, net)
     }
 
-    fn mul_open_many(
-        &mut self,
+    fn open_point_and_field<N: Network>(
+        a: Self::PointShare,
+        b: Self::ArithmeticShare,
+        net: &N,
+        _: &mut Self::State,
+    ) -> eyre::Result<(<P as Pairing>::G1, <P as Pairing>::ScalarField)> {
+        pointshare::open_point_and_field(&a, &b, net)
+    }
+
+    fn mul_open_many<N: Network>(
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
-    ) -> std::io::Result<Vec<<P as Pairing>::ScalarField>> {
-        arithmetic::mul_open_vec(a, b, &mut self.io_context0)
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<Vec<<P as Pairing>::ScalarField>> {
+        arithmetic::mul_open_vec(a, b, net, state)
     }
 
-    fn inv_many(
-        &mut self,
+    fn inv_many<N: Network>(
         a: &[Self::ArithmeticShare],
-    ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
-        arithmetic::inv_vec(a, &mut self.io_context0)
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
+        arithmetic::inv_vec(a, net, state)
     }
 
-    fn inv_many_in_place(&mut self, a: &mut [Self::ArithmeticShare]) -> std::io::Result<()> {
+    fn inv_many_in_place<N: Network>(
+        a: &mut [Self::ArithmeticShare],
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<()> {
         let r = (0..a.len())
-            .map(|_| <Rep3UltraHonkDriver<N> as NoirUltraHonkProver<P>>::rand(self))
+            .map(|_| <Self as NoirUltraHonkProver<P>>::rand(net, state))
             .collect::<Result<Vec<_>, _>>()?;
         let y: Vec<P::ScalarField> =
-            <Rep3UltraHonkDriver<N> as NoirUltraHonkProver<P>>::mul_open_many(self, a, &r)?;
+            <Self as NoirUltraHonkProver<P>>::mul_open_many(a, &r, net, state)?;
 
         if y.iter().any(|y| y.is_zero()) {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "During execution of inverse in MPC: cannot compute inverse of zero",
-            ));
+            eyre::bail!("Cannot compute inverse of zero",);
         }
         for (a, r, y) in izip!(a.iter_mut(), r, y) {
             *a = r * y.inverse().unwrap();
@@ -199,15 +190,16 @@ impl<P: Pairing, N: Rep3Network> NoirUltraHonkProver<P> for Rep3UltraHonkDriver<
         Ok(())
     }
 
-    fn inv_many_in_place_leaking_zeros(
-        &mut self,
+    fn inv_many_in_place_leaking_zeros<N: Network>(
         a: &mut [Self::ArithmeticShare],
-    ) -> std::io::Result<()> {
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<()> {
         let r = (0..a.len())
-            .map(|_| <Rep3UltraHonkDriver<N> as NoirUltraHonkProver<P>>::rand(self))
+            .map(|_| <Self as NoirUltraHonkProver<P>>::rand(net, state))
             .collect::<Result<Vec<_>, _>>()?;
         let y: Vec<P::ScalarField> =
-            <Rep3UltraHonkDriver<N> as NoirUltraHonkProver<P>>::mul_open_many(self, a, &r)?;
+            <Self as NoirUltraHonkProver<P>>::mul_open_many(a, &r, net, state)?;
 
         for (a, r, y) in izip!(a.iter_mut(), r, y) {
             if y.is_zero() {
@@ -246,13 +238,5 @@ impl<P: Pairing, N: Rep3Network> NoirUltraHonkProver<P> for Rep3UltraHonkDriver<
         domain: &D,
     ) -> Vec<Self::ArithmeticShare> {
         domain.ifft(data)
-    }
-
-    fn open_point_and_field(
-        &mut self,
-        a: Self::PointShare,
-        b: Self::ArithmeticShare,
-    ) -> std::io::Result<(<P as Pairing>::G1, <P as Pairing>::ScalarField)> {
-        pointshare::open_point_and_field(&a, &b, &mut self.io_context0)
     }
 }
