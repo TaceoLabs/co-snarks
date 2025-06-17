@@ -4,19 +4,11 @@
 
 use ark_ff::{One, PrimeField};
 use itertools::{Itertools as _, izip};
+use mpc_net::Network;
 use num_bigint::BigUint;
 
-use crate::{
-    IoResult,
-    protocols::rep3::{
-        PartyID, Rep3BigUintShare, Rep3PrimeFieldShare,
-        arithmetic::{self},
-        conversion,
-        network::Rep3Network,
-    },
-};
-
-use super::network::IoContext;
+use super::{PartyID, Rep3BigUintShare, Rep3PrimeFieldShare, Rep3State, arithmetic, conversion};
+use crate::protocols::rep3::network::{self};
 use num_traits::cast::ToPrimitive;
 
 type ArithmeticShare<F> = Rep3PrimeFieldShare<F>;
@@ -64,13 +56,14 @@ pub fn xor_public_vec<F: PrimeField>(
 }
 
 /// Performs a bitwise OR operation on two shared values.
-pub fn or<F: PrimeField, N: Rep3Network>(
+pub fn or<F: PrimeField, N: Network>(
     a: &BinaryShare<F>,
     b: &BinaryShare<F>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<BinaryShare<F>> {
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<BinaryShare<F>> {
     let xor = a ^ b;
-    let and = and(a, b, io_context)?;
+    let and = and(a, b, net, state)?;
     Ok(xor ^ and)
 }
 
@@ -86,32 +79,34 @@ pub fn or_public<F: PrimeField>(
 }
 
 /// Performs a bitwise AND operation on two shared values.
-pub fn and<F: PrimeField, N: Rep3Network>(
+pub fn and<F: PrimeField, N: Network>(
     a: &BinaryShare<F>,
     b: &BinaryShare<F>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<BinaryShare<F>> {
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<BinaryShare<F>> {
     debug_assert!(a.a.bits() <= u64::from(F::MODULUS_BIT_SIZE));
     debug_assert!(b.a.bits() <= u64::from(F::MODULUS_BIT_SIZE));
-    let (mut mask, mask_b) = io_context
+    let (mut mask, mask_b) = state
         .rngs
         .rand
         .random_biguint(usize::try_from(F::MODULUS_BIT_SIZE).expect("u32 fits into usize"));
     mask ^= mask_b;
     let local_a = (a & b) ^ mask;
-    let local_b = io_context.network.reshare(local_a.clone())?;
+    let local_b = network::reshare(net, local_a.clone())?;
     Ok(BinaryShare::new(local_a, local_b))
 }
 
 /// Performs element-wise bitwise AND operation on the provided shared values.
-pub fn and_vec<F: PrimeField, N: Rep3Network>(
+pub fn and_vec<F: PrimeField, N: Network>(
     a: &[BinaryShare<F>],
     b: &[BinaryShare<F>],
-    io_context: &mut IoContext<N>,
-) -> IoResult<Vec<BinaryShare<F>>> {
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Vec<BinaryShare<F>>> {
     let local_a = izip!(a, b)
         .map(|(a, b)| {
-            let (mut mask, mask_b) = io_context
+            let (mut mask, mask_b) = state
                 .rngs
                 .rand
                 .random_biguint(usize::try_from(F::MODULUS_BIT_SIZE).expect("u32 fits into usize"));
@@ -120,7 +115,7 @@ pub fn and_vec<F: PrimeField, N: Rep3Network>(
             (a & b) ^ mask
         })
         .collect_vec();
-    let local_b = io_context.network.reshare(local_a.clone())?;
+    let local_b = network::reshare(net, local_a.clone())?;
     Ok(izip!(local_a, local_b)
         .map(|(a, b)| BinaryShare::new(a, b))
         .collect_vec())
@@ -162,33 +157,22 @@ pub fn shift_l_public<F: PrimeField>(shared: &BinaryShare<F>, public: F) -> Bina
 }
 
 /// Shifts a public value `F` by a share to the left.
-pub fn shift_l_public_by_shared<F: PrimeField, N: Rep3Network>(
+pub fn shift_l_public_by_shared<F: PrimeField, N: Network>(
     public: F,
     shared: &BinaryShare<F>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<ArithmeticShare<F>> {
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<ArithmeticShare<F>> {
     // This case is equivalent to a*2^b
     // Strategy: limit size of b to k bits
     // bit-decompose b into bits b_i
-
-    // TODO: this sucks... we need something better here...
-    let io_0 = io_context.fork()?;
-    let io_1 = io_context.fork()?;
-    let io_2 = io_context.fork()?;
-    let io_3 = io_context.fork()?;
-    let io_4 = io_context.fork()?;
-    let io_5 = io_context.fork()?;
-    let io_6 = io_context.fork()?;
-    let io_7 = io_context.fork()?;
-    let mut contexts = [io_0, io_1, io_2, io_3, io_4, io_5, io_6, io_7];
-    let party_id = io_context.id;
     let mut individual_bit_shares = Vec::with_capacity(8);
-    for (i, context) in izip!(0..8, contexts.iter_mut()) {
+    for i in 0..8 {
         let bit = Rep3BigUintShare::new(
             (shared.a.clone() >> i) & BigUint::one(),
             (shared.b.clone() >> i) & BigUint::one(),
         );
-        individual_bit_shares.push(conversion::b2a_selector(&bit, context)?);
+        individual_bit_shares.push(conversion::b2a_selector(&bit, net, state)?);
     }
     // v_i = 2^2^i * <b_i> + 1 - <b_i>
     let mut vs: Vec<_> = individual_bit_shares
@@ -199,7 +183,7 @@ pub fn shift_l_public_by_shared<F: PrimeField, N: Rep3Network>(
             // i is 8 at most there `as u32` is ok
             let two_to_two_to_i = two.pow([2u64.pow(i as u32)]);
             let v = arithmetic::mul_public(b_i, two_to_two_to_i);
-            let v = arithmetic::add_public(v, F::one(), party_id);
+            let v = arithmetic::add_public(v, F::one(), state.id);
             arithmetic::sub(v, b_i)
         })
         .collect();
@@ -208,47 +192,14 @@ pub fn shift_l_public_by_shared<F: PrimeField, N: Rep3Network>(
     // TODO: This should be done in a multiplication tree
     let mut v = vs.pop().unwrap();
     for v_i in vs {
-        v = arithmetic::mul(v, v_i, io_context)?;
+        v = arithmetic::mul(v, v_i, net, state)?;
     }
-    // TODO could use try_fold from futures::stream
-    // let last = vs.pop().unwrap();
-    // let v = self.runtime.block_on(
-    //     futures::stream::iter(vs.into_iter().map(|v| Ok(v)))
-    //         .try_fold(last, |a, b|  move {
-    //             arithmetic::mul(a, b, &mut self.io_context)
-    //         }),
-    // )?;
     Ok(arithmetic::mul_public(v, public))
 }
 
-//pub  fn and_vec(
-//    a: &FieldShareVec<F>,
-//    b: &FieldShareVec<F>,
-//    io_context: &mut IoContext<N>,
-//) -> IoResult<FieldShareVec<F>> {
-//    //debug_assert_eq!(a.len(), b.len());
-//    let local_a = izip!(a.a.iter(), a.b.iter(), b.a.iter(), b.b.iter())
-//        .map(|(aa, ab, ba, bb)| {
-//            *aa * ba + *aa * bb + *ab * ba + io_context.rngs.rand.masking_field_element::<F>()
-//        })
-//        .collect_vec();
-//    io_context.network.send_next_many(&local_a)?;
-//    let local_b = io_context.network.recv_prev_many()?;
-//    if local_b.len() != local_a.len() {
-//        return Err(std::io::Error::new(
-//            std::io::ErrorKind::InvalidData,
-//            "During execution of mul_vec in MPC: Invalid number of elements received",
-//        ));
-//    }
-//    Ok(FieldShareVec::new(local_a, local_b))
-//}
-
 /// Performs the opening of a shared value and returns the equivalent public value.
-pub fn open<F: PrimeField, N: Rep3Network>(
-    a: &BinaryShare<F>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<BigUint> {
-    let c = io_context.network.reshare(a.b.clone())?;
+pub fn open<F: PrimeField, N: Network>(a: &BinaryShare<F>, net: &N) -> eyre::Result<BigUint> {
+    let c = network::reshare(net, a.b.clone())?;
     Ok(&a.a ^ &a.b ^ c)
 }
 
@@ -265,29 +216,31 @@ pub fn promote_to_trivial_share<F: PrimeField>(
 }
 
 /// Computes a CMUX: If `c` is `1`, returns `x_t`, otherwise returns `x_f`.
-pub fn cmux<F: PrimeField, N: Rep3Network>(
+pub fn cmux<F: PrimeField, N: Network>(
     c: &BinaryShare<F>,
     x_t: &BinaryShare<F>,
     x_f: &BinaryShare<F>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<BinaryShare<F>> {
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<BinaryShare<F>> {
     let xor = x_f ^ x_t;
-    let mut and = and(c, &xor, io_context)?;
+    let mut and = and(c, &xor, net, state)?;
     and ^= x_f;
     Ok(and)
 }
 
 /// Computes an element-wise CMUX: If `$c_i$` is `1`, returns `$x^t_i$`, otherwise returns `$x^f_i$`.
-pub fn cmux_many<F: PrimeField, N: Rep3Network>(
+pub fn cmux_many<F: PrimeField, N: Network>(
     c: &[BinaryShare<F>],
     x_t: &[BinaryShare<F>],
     x_f: &[BinaryShare<F>],
-    io_context: &mut IoContext<N>,
-) -> IoResult<Vec<BinaryShare<F>>> {
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Vec<BinaryShare<F>>> {
     assert_eq!(c.len(), x_t.len());
     assert_eq!(c.len(), x_f.len());
     let xor = izip!(x_f, x_t).map(|(x_f, x_t)| x_f ^ x_t).collect_vec();
-    let mut and = and_vec(c, &xor, io_context)?;
+    let mut and = and_vec(c, &xor, net, state)?;
     for (and, x_f) in izip!(and.iter_mut(), x_f) {
         *and ^= x_f;
     }
@@ -299,10 +252,11 @@ pub fn cmux_many<F: PrimeField, N: Rep3Network>(
 //but only one bit.
 //Do we want that to be configurable? Semms like a waste?
 /// Compute a OR tree of the input vec
-pub fn or_tree<F: PrimeField, N: Rep3Network>(
+pub fn or_tree<F: PrimeField, N: Network>(
     mut inputs: Vec<BinaryShare<F>>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<BinaryShare<F>> {
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<BinaryShare<F>> {
     let mut num = inputs.len();
 
     tracing::debug!("starting or tree over {} elements", inputs.len());
@@ -318,7 +272,7 @@ pub fn or_tree<F: PrimeField, N: Rep3Network>(
         // TODO WE WANT THIS BATCHED!!!
         // THIS IS SUPER BAD
         for (a, b) in izip!(a_vec.iter(), b_vec.iter()) {
-            res.push(or(a, b, io_context)?);
+            res.push(or(a, b, net, state)?);
         }
 
         res.extend_from_slice(leftover);
@@ -332,10 +286,11 @@ pub fn or_tree<F: PrimeField, N: Rep3Network>(
 }
 
 /// Computes a binary circuit to check whether the replicated binary-shared input x is zero or not. The output is a binary sharing of one bit.
-pub fn is_zero<F: PrimeField, N: Rep3Network>(
+pub fn is_zero<F: PrimeField, N: Network>(
     x: &BinaryShare<F>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<BinaryShare<F>> {
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<BinaryShare<F>> {
     let bit_len = F::MODULUS_BIT_SIZE as usize;
     let mask = (BigUint::from(1u64) << bit_len) - BigUint::one();
 
@@ -356,17 +311,18 @@ pub fn is_zero<F: PrimeField, N: Rep3Network>(
         len /= 2;
         let mask = (BigUint::from(1u64) << len) - BigUint::one();
         let y = &x >> len;
-        x = and(&(&x & &mask), &(&y & &mask), io_context)?;
+        x = and(&(&x & &mask), &(&y & &mask), net, state)?;
     }
     // extract LSB
     Ok(x & BigUint::one())
 }
 
 /// Computes a binary circuit to check whether each of the replicated binary-shared inputs in the vector x is zero or not. The output is a vector of binary sharings of one bit.
-pub(crate) fn is_zero_many<F: PrimeField, N: Rep3Network>(
+pub(crate) fn is_zero_many<F: PrimeField, N: Network>(
     mut x: Vec<Rep3BigUintShare<F>>,
-    io_context: &mut IoContext<N>,
-) -> std::io::Result<Vec<Rep3BigUintShare<F>>> {
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Vec<Rep3BigUintShare<F>>> {
     let bit_len = F::MODULUS_BIT_SIZE as usize;
     let mask = (BigUint::from(1u64) << bit_len) - BigUint::one();
 
@@ -398,7 +354,7 @@ pub(crate) fn is_zero_many<F: PrimeField, N: Rep3Network>(
             x_.a &= &mask;
             x_.b &= &mask;
         }
-        x = and_vec(&x, &y, io_context)?;
+        x = and_vec(&x, &y, net, state)?;
     }
     // extract LSB
     for x_ in x.iter_mut() {

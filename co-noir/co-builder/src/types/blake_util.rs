@@ -61,7 +61,7 @@ impl<F: PrimeField> BlakeUtils<F> {
         which_blake: BlakeType,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         let schedule = if which_blake == BlakeType::Blake3 {
             Self::MSG_SCHEDULE_BLAKE3[round]
         } else {
@@ -232,7 +232,7 @@ impl<F: PrimeField> BlakeUtils<F> {
         last_update: bool,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         state[a] = state[a].add_two(&state[b], x, builder, driver);
         let lookup_1 = Plookup::get_lookup_accumulators_ct(
             builder,
@@ -344,7 +344,7 @@ impl<F: PrimeField> BlakeUtils<F> {
         b: &FieldCT<F>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<FieldCT<F>> {
+    ) -> eyre::Result<FieldCT<F>> {
         if a.is_constant() && b.is_constant() {
             let a_value = a.get_value(builder, driver);
             let b_value = b.get_value(builder, driver);

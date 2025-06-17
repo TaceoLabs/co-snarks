@@ -1,5 +1,4 @@
 //! Data structures and helpers for the network configuration.
-use color_eyre::eyre;
 use quinn::rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -96,7 +95,7 @@ pub struct NetworkPartyConfig {
     /// The DNS name of the party.
     pub dns_name: Address,
     /// The path to the public certificate of the party.
-    pub cert_path: PathBuf,
+    pub cert_path: Option<PathBuf>,
 }
 
 /// A party in the network.
@@ -107,12 +106,12 @@ pub struct NetworkParty {
     /// The DNS name of the party.
     pub dns_name: Address,
     /// The public certificate of the party.
-    pub cert: CertificateDer<'static>,
+    pub cert: Option<CertificateDer<'static>>,
 }
 
 impl NetworkParty {
     /// Construct a new [`NetworkParty`] type.
-    pub fn new(id: usize, address: Address, cert: CertificateDer<'static>) -> Self {
+    pub fn new(id: usize, address: Address, cert: Option<CertificateDer<'static>>) -> Self {
         Self {
             id,
             dns_name: address,
@@ -124,7 +123,11 @@ impl NetworkParty {
 impl TryFrom<NetworkPartyConfig> for NetworkParty {
     type Error = std::io::Error;
     fn try_from(value: NetworkPartyConfig) -> Result<Self, Self::Error> {
-        let cert = CertificateDer::from(std::fs::read(value.cert_path)?).into_owned();
+        let cert = if let Some(path) = value.cert_path {
+            Some(CertificateDer::from(std::fs::read(path)?).into_owned())
+        } else {
+            None
+        };
         Ok(NetworkParty {
             id: value.id,
             dns_name: value.dns_name,
@@ -143,8 +146,8 @@ pub struct NetworkConfigFile {
     /// The [SocketAddr] we bind to.
     pub bind_addr: SocketAddr,
     /// The path to our private key file.
-    pub key_path: PathBuf,
-    /// The connect timeout in seconds.
+    pub key_path: Option<PathBuf>,
+    /// The connection timeout in seconds.
     pub timeout_secs: Option<u64>,
 }
 
@@ -158,8 +161,8 @@ pub struct NetworkConfig {
     /// The [SocketAddr] we bind to.
     pub bind_addr: SocketAddr,
     /// The private key.
-    pub key: PrivateKeyDer<'static>,
-    /// The connect timeout.
+    pub key: Option<PrivateKeyDer<'static>>,
+    /// The connection  timeout.
     pub timeout: Option<Duration>,
 }
 
@@ -168,7 +171,7 @@ impl NetworkConfig {
     pub fn new(
         id: usize,
         bind_addr: SocketAddr,
-        key: PrivateKeyDer<'static>,
+        key: Option<PrivateKeyDer<'static>>,
         parties: Vec<NetworkParty>,
         timeout: Option<Duration>,
     ) -> Self {
@@ -190,8 +193,11 @@ impl TryFrom<NetworkConfigFile> for NetworkConfig {
             .into_iter()
             .map(NetworkParty::try_from)
             .collect::<Result<Vec<_>, _>>()?;
-        let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(std::fs::read(value.key_path)?))
-            .clone_key();
+        let key = if let Some(path) = value.key_path {
+            Some(PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(std::fs::read(path)?)).clone_key())
+        } else {
+            None
+        };
         Ok(NetworkConfig {
             parties,
             my_id: value.my_id,
@@ -208,7 +214,7 @@ impl Clone for NetworkConfig {
             parties: self.parties.clone(),
             my_id: self.my_id,
             bind_addr: self.bind_addr,
-            key: self.key.clone_key(),
+            key: self.key.as_ref().map(|k| k.clone_key()),
             timeout: self.timeout,
         }
     }
@@ -234,7 +240,7 @@ impl NetworkConfig {
         ids.sort_unstable();
         ids.dedup();
         if ids.len() != self.parties.len() {
-            return Err(eyre::eyre!("duplicate party ids found"));
+            eyre::bail!("duplicate party ids found");
         }
         Ok(())
     }

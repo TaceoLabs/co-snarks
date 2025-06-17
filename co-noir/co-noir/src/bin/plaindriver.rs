@@ -191,7 +191,7 @@ fn main() -> color_eyre::Result<ExitCode> {
     } else {
         let solver = PlainCoSolver::init_plain_driver(program_artifact, input_path)
             .context("while initializing plain driver")?;
-        let (witness, _) = solver.solve().context("while solving")?;
+        let witness = solver.solve().context("while solving")?;
         convert_witness(witness)
     };
 

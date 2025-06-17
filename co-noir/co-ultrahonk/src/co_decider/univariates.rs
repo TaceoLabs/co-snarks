@@ -1,5 +1,6 @@
 use ark_ec::pairing::Pairing;
 use ark_ff::Field;
+use mpc_net::Network;
 use std::array;
 use ultrahonk::prelude::{Barycentric, Univariate};
 
@@ -72,10 +73,10 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> SharedUnivariate<
         }
     }
 
-    pub fn get_random(driver: &mut T) -> std::io::Result<Self> {
+    pub fn get_random<N: Network>(net: &N, state: &mut T::State) -> eyre::Result<Self> {
         let mut evaluations = [T::ArithmeticShare::default(); SIZE];
         for eval in evaluations.iter_mut() {
-            *eval = driver.rand()?;
+            *eval = T::rand(net, state)?;
         }
         Ok(Self { evaluations })
     }

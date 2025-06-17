@@ -1,14 +1,12 @@
-use std::thread;
-
 use acir::{native_types::WitnessStack, FieldElement};
 use ark_bn254::Bn254;
 use co_acvm::solver::PlainCoSolver;
 use co_acvm::solver::Rep3CoSolver;
 use itertools::izip;
+use mpc_net::TestNetwork;
 use noirc_artifacts::program::ProgramArtifact;
 use std::path::PathBuf;
-use tests::rep3_network::PartyTestNetwork;
-use tests::rep3_network::Rep3TestNetwork;
+use tests::test_utils::spawn_pool;
 
 use super::add_rep3_acvm_test;
 

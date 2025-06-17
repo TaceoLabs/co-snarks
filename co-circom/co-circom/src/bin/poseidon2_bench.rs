@@ -1,6 +1,6 @@
 use ark_ff::PrimeField;
 use clap::Parser;
-use co_circom::PartyID;
+use co_circom::NetworkConfig;
 use color_eyre::eyre::{Context, eyre};
 use figment::{
     Figment,
@@ -9,17 +9,11 @@ use figment::{
 use mpc_core::{
     gadgets::poseidon2::Poseidon2,
     protocols::{
-        rep3::{
-            self, Rep3PrimeFieldShare,
-            network::{IoContext, Rep3MpcNet, Rep3Network},
-        },
-        shamir::{
-            self, ShamirPreprocessing, ShamirPrimeFieldShare, ShamirProtocol,
-            network::{ShamirMpcNet, ShamirNetwork},
-        },
+        rep3::{self, PartyID, Rep3PrimeFieldShare, Rep3State},
+        shamir::{self, ShamirPreprocessing, ShamirPrimeFieldShare, ShamirState},
     },
 };
-use mpc_net::config::NetworkConfigFile;
+use mpc_net::{Network, TcpNetwork, config::NetworkConfigFile};
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -366,12 +360,13 @@ where
 }
 
 #[allow(dead_code)]
-fn share_random_input_rep3<F: PrimeField, const T: usize, R: Rng + CryptoRng>(
-    net: &mut Rep3MpcNet,
+fn share_random_input_rep3<F: PrimeField, const T: usize, R: Rng + CryptoRng, N: Network>(
+    net: &N,
     num_elements: usize,
     rng: &mut R,
 ) -> color_eyre::Result<Vec<Rep3PrimeFieldShare<F>>> {
-    let share = match net.get_id() {
+    let id = PartyID::try_from(net.id()).expect("valid id");
+    let share = match id {
         PartyID::ID0 => {
             let input: Vec<F> = (0..num_elements).map(|_| F::rand(rng)).collect();
             let shares = rep3::share_field_elements(&input, rng);
@@ -380,12 +375,12 @@ fn share_random_input_rep3<F: PrimeField, const T: usize, R: Rng + CryptoRng>(
                 .map(|s| s.into_iter().collect::<Vec<_>>())
                 .collect::<Vec<_>>();
 
-            net.send_next_many(&shares[1])?;
-            net.send_many(net.get_id().prev_id(), &shares[2])?;
+            rep3::network::send_next_many(net, &shares[1])?;
+            rep3::network::send_many(net, id.prev(), &shares[2])?;
             shares[0].clone()
         }
-        PartyID::ID1 => net.recv_prev_many()?,
-        PartyID::ID2 => net.recv_many(net.get_id().next_id())?,
+        PartyID::ID1 => rep3::network::recv_prev_many(net)?,
+        PartyID::ID2 => rep3::network::recv_many(net, id.next())?,
     };
 
     Ok(share)
@@ -407,18 +402,22 @@ where
     let mut times = Vec::with_capacity(config.runs);
 
     // connect to network
-    let net = Rep3MpcNet::new(config.network.to_owned().try_into()?)?;
-    // init MPC protocol
-    let mut protocol = IoContext::init(net)?;
+    let network_config = NetworkConfig::try_from(config.network.to_owned())
+        .context("while converting network config")?;
+    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+    let mut state = Rep3State::new(&net)?;
 
     for _ in 0..config.runs {
-        let mut share = share_random_input_rep3::<F, T, _>(&mut protocol.network, T, &mut rng)?;
+        let mut share = share_random_input_rep3::<F, T, _, _>(&net, T, &mut rng)?;
 
         let poseidon2 = Poseidon2::<F, T, D>::default();
 
         let start = Instant::now();
-        poseidon2
-            .rep3_permutation_in_place(share.as_mut_slice().try_into().unwrap(), &mut protocol)?;
+        poseidon2.rep3_permutation_in_place(
+            share.as_mut_slice().try_into().unwrap(),
+            &net,
+            &mut state,
+        )?;
         let duration = start.elapsed().as_micros() as f64;
         times.push(duration);
     }
@@ -445,21 +444,22 @@ where
     let mut times = Vec::with_capacity(config.runs);
 
     // connect to network
-    let net = Rep3MpcNet::new(config.network.to_owned().try_into()?)?;
-    // init MPC protocol
-    let mut protocol = IoContext::init(net)?;
+    let network_config = NetworkConfig::try_from(config.network.to_owned())
+        .context("while converting network config")?;
+    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+    let mut state = Rep3State::new(&net)?;
 
     for _ in 0..config.runs {
-        let mut share = share_random_input_rep3::<F, T, _>(&mut protocol.network, T, &mut rng)?;
+        let mut share = share_random_input_rep3::<F, T, _, _>(&net, T, &mut rng)?;
 
         let poseidon2 = Poseidon2::<F, T, D>::default();
 
         let start = Instant::now();
-        let mut precomp = poseidon2.precompute_rep3(1, &mut protocol)?;
+        let mut precomp = poseidon2.precompute_rep3(1, &net, &mut state)?;
         poseidon2.rep3_permutation_in_place_with_precomputation(
             share.as_mut_slice().try_into().unwrap(),
             &mut precomp,
-            &mut protocol,
+            &net,
         )?;
         let duration = start.elapsed().as_micros() as f64;
         times.push(duration);
@@ -487,21 +487,23 @@ where
     let mut times = Vec::with_capacity(config.runs);
 
     // connect to network
-    let net = Rep3MpcNet::new(config.network.to_owned().try_into()?)?;
-    // init MPC protocol
-    let mut protocol = IoContext::init(net)?;
+    let network_config = NetworkConfig::try_from(config.network.to_owned())
+        .context("while converting network config")?;
+    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+    let mut state = Rep3State::new(&net)?;
 
     for _ in 0..config.runs {
-        let mut share = share_random_input_rep3::<F, T, _>(&mut protocol.network, T, &mut rng)?;
+        let mut share = share_random_input_rep3::<F, T, _, _>(&net, T, &mut rng)?;
 
         let poseidon2 = Poseidon2::<F, T, D>::default();
 
         let start = Instant::now();
-        let mut precomp = poseidon2.precompute_rep3_additive(1, &mut protocol)?;
+        let mut precomp = poseidon2.precompute_rep3_additive(1, &net, &mut state)?;
         poseidon2.rep3_permutation_additive_in_place_with_precomputation(
             share.as_mut_slice().try_into().unwrap(),
             &mut precomp,
-            &mut protocol,
+            &net,
+            &mut state,
         )?;
         let duration = start.elapsed().as_micros() as f64;
         times.push(duration);
@@ -533,25 +535,23 @@ where
     let mut times = Vec::with_capacity(config.runs);
 
     // connect to network
-    let net = Rep3MpcNet::new(config.network.to_owned().try_into()?)?;
-    // init MPC protocol
-    let mut protocol = IoContext::init(net)?;
+    let network_config = NetworkConfig::try_from(config.network.to_owned())
+        .context("while converting network config")?;
+    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+    let mut state = Rep3State::new(&net)?;
 
     for _ in 0..config.runs {
-        let mut share = share_random_input_rep3::<F, T, _>(
-            &mut protocol.network,
-            config.batch_size * T,
-            &mut rng,
-        )?;
+        let mut share =
+            share_random_input_rep3::<F, T, _, _>(&net, config.batch_size * T, &mut rng)?;
 
         let poseidon2 = Poseidon2::<F, T, D>::default();
 
         let start = Instant::now();
-        let mut precomp = poseidon2.precompute_rep3(config.batch_size, &mut protocol)?;
+        let mut precomp = poseidon2.precompute_rep3(config.batch_size, &net, &mut state)?;
         poseidon2.rep3_permutation_in_place_with_precomputation_packed(
             &mut share,
             &mut precomp,
-            &mut protocol,
+            &net,
         )?;
         let duration = start.elapsed().as_micros() as f64;
         times.push(duration);
@@ -590,20 +590,21 @@ where
     let size = next_power_of_n(config.merkle_size, ARITY);
 
     // connect to network
-    let net = Rep3MpcNet::new(config.network.to_owned().try_into()?)?;
-    // init MPC protocol
-    let mut protocol = IoContext::init(net)?;
+    let network_config = NetworkConfig::try_from(config.network.to_owned())
+        .context("while converting network config")?;
+    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+    let mut state = Rep3State::new(&net)?;
 
     for _ in 0..config.runs {
-        let share = share_random_input_rep3::<F, T, _>(&mut protocol.network, size, &mut rng)?;
+        let share = share_random_input_rep3::<F, T, _, _>(&net, size, &mut rng)?;
 
         let poseidon2 = Poseidon2::<F, T, D>::default();
 
         let start = Instant::now();
         if COMPRESSION_MODE {
-            poseidon2.merkle_tree_compression_rep3::<ARITY, _>(share, &mut protocol)?;
+            poseidon2.merkle_tree_compression_rep3::<ARITY, _>(share, &net, &mut state)?;
         } else {
-            poseidon2.merkle_tree_sponge_rep3::<ARITY, _>(share, &mut protocol)?;
+            poseidon2.merkle_tree_sponge_rep3::<ARITY, _>(share, &net, &mut state)?;
         }
         let duration = start.elapsed().as_micros() as f64;
         times.push(duration);
@@ -620,22 +621,23 @@ where
 }
 
 #[allow(dead_code)]
-fn share_random_input_shamir<F: PrimeField, const T: usize, R: Rng + CryptoRng>(
-    net: &mut ShamirMpcNet,
+fn share_random_input_shamir<F: PrimeField, const T: usize, R: Rng + CryptoRng, N: Network>(
+    net: &N,
+    num_parties: usize,
     threshold: usize,
     num_elements: usize,
     rng: &mut R,
 ) -> color_eyre::Result<Vec<ShamirPrimeFieldShare<F>>> {
-    let share = if net.get_id() == 0 {
+    let share = if net.id() == 0 {
         let input: Vec<F> = (0..num_elements).map(|_| F::rand(rng)).collect();
-        let shares = shamir::share_field_elements(&input, threshold, net.get_num_parties(), rng);
+        let shares = shamir::share_field_elements(&input, threshold, num_parties, rng);
         let myshare = shares[0].clone();
         for (i, val) in shares.into_iter().enumerate().skip(1) {
-            net.send_many(i, &val)?;
+            shamir::network::send_many(net, i, &val)?;
         }
         myshare
     } else {
-        net.recv_many(0)?
+        shamir::network::recv_many(net, 0)?
     };
 
     Ok(share)
@@ -654,29 +656,39 @@ where
     let mut preprocess_times = Vec::with_capacity(config.runs);
 
     // connect to network
-    let mut net = ShamirMpcNet::new(config.network.to_owned().try_into()?)?;
+    let network_config = NetworkConfig::try_from(config.network.to_owned())
+        .context("while converting network config")?;
+    let num_parties = network_config.parties.len();
+    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
 
     for _ in 0..config.runs {
-        let mut share =
-            share_random_input_shamir::<F, T, _>(&mut net, config.threshold, T, &mut rng)?;
+        let mut share = share_random_input_shamir::<F, T, _, _>(
+            &net,
+            num_parties,
+            config.threshold,
+            T,
+            &mut rng,
+        )?;
 
         let poseidon2 = Poseidon2::<F, T, D>::default();
 
         // init MPC protocol
         let num_pairs = poseidon2.rand_required(1, false);
         let start = Instant::now();
-        let preprocessing = ShamirPreprocessing::new(config.threshold, net, num_pairs)?;
+        let preprocessing =
+            ShamirPreprocessing::new(num_parties, config.threshold, num_pairs, &net)?;
         let duration = start.elapsed().as_micros() as f64;
         preprocess_times.push(duration);
-        let mut protocol = ShamirProtocol::from(preprocessing);
+        let mut state = ShamirState::from(preprocessing);
 
         let start = Instant::now();
-        poseidon2
-            .shamir_permutation_in_place(share.as_mut_slice().try_into().unwrap(), &mut protocol)?;
+        poseidon2.shamir_permutation_in_place(
+            share.as_mut_slice().try_into().unwrap(),
+            &net,
+            &mut state,
+        )?;
         let duration = start.elapsed().as_micros() as f64;
         times.push(duration);
-
-        net = protocol.into_network();
     }
 
     sleep(SLEEP);
@@ -703,33 +715,41 @@ where
     let mut preprocess_times = Vec::with_capacity(config.runs);
 
     // connect to network
-    let mut net = ShamirMpcNet::new(config.network.to_owned().try_into()?)?;
+    let network_config = NetworkConfig::try_from(config.network.to_owned())
+        .context("while converting network config")?;
+    let num_parties = network_config.parties.len();
+    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
 
     for _ in 0..config.runs {
-        let mut share =
-            share_random_input_shamir::<F, T, _>(&mut net, config.threshold, T, &mut rng)?;
+        let mut share = share_random_input_shamir::<F, T, _, _>(
+            &net,
+            num_parties,
+            config.threshold,
+            T,
+            &mut rng,
+        )?;
 
         let poseidon2 = Poseidon2::<F, T, D>::default();
 
         // init MPC protocol
         let num_pairs = poseidon2.rand_required(1, true);
         let start = Instant::now();
-        let preprocessing = ShamirPreprocessing::new(config.threshold, net, num_pairs)?;
+        let preprocessing =
+            ShamirPreprocessing::new(num_parties, config.threshold, num_pairs, &net)?;
         let duration = start.elapsed().as_micros() as f64;
         preprocess_times.push(duration);
-        let mut protocol = ShamirProtocol::from(preprocessing);
+        let mut state = ShamirState::from(preprocessing);
 
         let start = Instant::now();
-        let mut precomp = poseidon2.precompute_shamir(1, &mut protocol)?;
+        let mut precomp = poseidon2.precompute_shamir(1, &net, &mut state)?;
         poseidon2.shamir_permutation_in_place_with_precomputation(
             share.as_mut_slice().try_into().unwrap(),
             &mut precomp,
-            &mut protocol,
+            &net,
+            &mut state,
         )?;
         let duration = start.elapsed().as_micros() as f64;
         times.push(duration);
-
-        net = protocol.into_network();
     }
 
     sleep(SLEEP);
@@ -760,11 +780,15 @@ where
     let mut preprocess_times = Vec::with_capacity(config.runs);
 
     // connect to network
-    let mut net = ShamirMpcNet::new(config.network.to_owned().try_into()?)?;
+    let network_config = NetworkConfig::try_from(config.network.to_owned())
+        .context("while converting network config")?;
+    let num_parties = network_config.parties.len();
+    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
 
     for _ in 0..config.runs {
-        let mut share = share_random_input_shamir::<F, T, _>(
-            &mut net,
+        let mut share = share_random_input_shamir::<F, T, _, _>(
+            &net,
+            num_parties,
             config.threshold,
             config.batch_size * T,
             &mut rng,
@@ -775,22 +799,22 @@ where
         // init MPC protocol
         let num_pairs = poseidon2.rand_required(config.batch_size, true);
         let start = Instant::now();
-        let preprocessing = ShamirPreprocessing::new(config.threshold, net, num_pairs)?;
+        let preprocessing =
+            ShamirPreprocessing::new(num_parties, config.threshold, num_pairs, &net)?;
         let duration = start.elapsed().as_micros() as f64;
         preprocess_times.push(duration);
-        let mut protocol = ShamirProtocol::from(preprocessing);
+        let mut state = ShamirState::from(preprocessing);
 
         let start = Instant::now();
-        let mut precomp = poseidon2.precompute_shamir(config.batch_size, &mut protocol)?;
+        let mut precomp = poseidon2.precompute_shamir(config.batch_size, &net, &mut state)?;
         poseidon2.shamir_permutation_in_place_with_precomputation_packed(
             &mut share,
             &mut precomp,
-            &mut protocol,
+            &net,
+            &mut state,
         )?;
         let duration = start.elapsed().as_micros() as f64;
         times.push(duration);
-
-        net = protocol.into_network();
     }
 
     sleep(SLEEP);
@@ -837,32 +861,39 @@ where
     let num_hashes = (size - 1) / (ARITY - 1);
 
     // connect to network
-    let mut net = ShamirMpcNet::new(config.network.to_owned().try_into()?)?;
+    let network_config = NetworkConfig::try_from(config.network.to_owned())
+        .context("while converting network config")?;
+    let num_parties = network_config.parties.len();
+    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
 
     for _ in 0..config.runs {
-        let share =
-            share_random_input_shamir::<F, T, _>(&mut net, config.threshold, size, &mut rng)?;
+        let share = share_random_input_shamir::<F, T, _, _>(
+            &net,
+            num_parties,
+            config.threshold,
+            size,
+            &mut rng,
+        )?;
 
         let poseidon2 = Poseidon2::<F, T, D>::default();
 
         // init MPC protocol
         let num_pairs = poseidon2.rand_required(num_hashes, true);
         let start = Instant::now();
-        let preprocessing = ShamirPreprocessing::new(config.threshold, net, num_pairs)?;
+        let preprocessing =
+            ShamirPreprocessing::new(num_parties, config.threshold, num_pairs, &net)?;
         let duration = start.elapsed().as_micros() as f64;
         preprocess_times.push(duration);
-        let mut protocol = ShamirProtocol::from(preprocessing);
+        let mut state = ShamirState::from(preprocessing);
 
         let start = Instant::now();
         if COMPRESSION_MODE {
-            poseidon2.merkle_tree_compression_shamir::<ARITY, _>(share, &mut protocol)?;
+            poseidon2.merkle_tree_compression_shamir::<ARITY, _>(share, &net, &mut state)?;
         } else {
-            poseidon2.merkle_tree_sponge_shamir::<ARITY, _>(share, &mut protocol)?;
+            poseidon2.merkle_tree_sponge_shamir::<ARITY, _>(share, &net, &mut state)?;
         }
         let duration = start.elapsed().as_micros() as f64;
         times.push(duration);
-
-        net = protocol.into_network();
     }
 
     sleep(SLEEP);

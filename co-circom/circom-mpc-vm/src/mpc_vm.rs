@@ -12,14 +12,13 @@ use super::{
 };
 use crate::mpc::VmCircomWitnessExtension;
 use ark_ff::PrimeField;
-use co_circom_types::{BatchedSharedInput, SharedInput, SharedWitness};
+use co_circom_types::{SharedInput, SharedWitness};
 use core::panic;
 use eyre::{Result, bail, eyre};
 use itertools::{Itertools, izip};
-use mpc_core::protocols::rep3::Rep3PrimeFieldShare;
+use mpc_core::protocols::rep3::Rep3State;
 use mpc_core::protocols::rep3::conversion::A2BType;
-use mpc_core::protocols::rep3::network::{Rep3MpcNet, Rep3Network};
-use mpc_net::config::NetworkConfig;
+use mpc_net::Network;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -76,13 +75,14 @@ pub type PlainWitnessExtension<F> = WitnessExtension<F, CircomPlainVmWitnessExte
 /// Shorthand type for the MPC-VM instantiated with a `Rep3` protocol and batching multiple inputs into a single run.
 ///
 /// This is the only supported protocol at the moment.
-pub type BatchedRep3WitnessExtension<F, N> =
-    WitnessExtension<F, BatchedCircomRep3VmWitnessExtension<F, N>>;
+pub type BatchedRep3WitnessExtension<'a, F, N> =
+    WitnessExtension<F, BatchedCircomRep3VmWitnessExtension<'a, F, N>>;
 
 /// Shorthand type for the MPC-VM instantiated with a `Rep3` protocol.
 ///
 /// This is the only supported protocol at the moment.
-pub type Rep3WitnessExtension<F, N> = WitnessExtension<F, CircomRep3VmWitnessExtension<F, N>>;
+pub type Rep3WitnessExtension<'a, F, N> =
+    WitnessExtension<F, CircomRep3VmWitnessExtension<'a, F, N>>;
 
 type ConsumedFunCtx<T> = (usize, usize, Vec<T>, Arc<CodeBlock>, Vec<(T, Vec<T>)>);
 
@@ -1116,14 +1116,15 @@ impl<F: PrimeField> BatchedPlainWitnessExtension<F> {
     }
 }
 
-impl<F: PrimeField, N: Rep3Network> Rep3WitnessExtension<F, N> {
-    pub(crate) fn from_network(
+impl<'a, F: PrimeField, N: Network> Rep3WitnessExtension<'a, F, N> {
+    /// Create a new [Rep3WitnessExtension] VM
+    pub fn new(
+        net0: &'a N,
+        net1: &'a N,
         parser: &CoCircomCompilerParsed<F>,
-        network: N,
-        mpc_accelerator: MpcAccelerator<F, CircomRep3VmWitnessExtension<F, N>>,
         config: VMConfig,
-    ) -> Result<Self> {
-        let driver = CircomRep3VmWitnessExtension::from_network(network, config.a2b_type)?;
+    ) -> eyre::Result<Self> {
+        let driver = CircomRep3VmWitnessExtension::new(net0, net1)?;
         let mut signals = vec![Rep3VmType::default(); parser.amount_signals];
         signals[0] = Rep3VmType::Public(F::one());
         let constant_table = parser
@@ -1142,7 +1143,7 @@ impl<F: PrimeField, N: Rep3Network> Rep3WitnessExtension<F, N> {
                 parser.fun_decls.clone(),
                 parser.templ_decls.clone(),
                 parser.string_table.clone(),
-                mpc_accelerator,
+                MpcAccelerator::from_config(MpcAcceleratorConfig::from_env()),
             ),
             main_inputs: parser.main_inputs,
             main_outputs: parser.main_outputs,
@@ -1153,60 +1154,23 @@ impl<F: PrimeField, N: Rep3Network> Rep3WitnessExtension<F, N> {
     }
 }
 
-impl<F: PrimeField> BatchedRep3WitnessExtension<F, Rep3MpcNet> {
-    /// Starts the execution of the MPC-VM with the provided [BatchedSharedInput], consumes `self` and returns the [`Rep3MpcNet`].
-    ///
-    /// Use this method over [`run_with_flat()`](WitnessExtension::run) when ever possible.
-    /// # Arguments
-    ///
-    /// * `input_signals` - The [BatchedSharedInput] distributed over the parties.
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(([BatchedSharedWitness], Rep3MpcNet))` - The secret-shared witness, distributed over the parties.
-    /// * `Err([eyre::Result])` - An error result.
-    ///
-    /// # Panics
-    ///
-    /// Panics if any of the [`CodeBlocks`](CodeBlock) are corrupted.
-    #[expect(clippy::type_complexity)]
-    pub fn run_and_return_network(
-        mut self,
-        input_signals: BatchedSharedInput<F, Rep3PrimeFieldShare<F>>,
-    ) -> Result<(
-        FinalizedWitnessExtension<F, BatchedCircomRep3VmWitnessExtension<F, Rep3MpcNet>>,
-        Rep3MpcNet,
-    )> {
-        self.driver.compare_vm_config(&self.config)?;
-        let amount_public_inputs = self.set_input_signals(input_signals)?;
-        self.call_main_component()?;
-        Ok((
-            self.post_processing(amount_public_inputs)?,
-            self.driver.get_network(),
-        ))
-    }
-}
-
-impl<F: PrimeField, N: Rep3Network> BatchedRep3WitnessExtension<F, N> {
-    pub(crate) fn from_network(
+impl<'a, F: PrimeField, N: Network> BatchedRep3WitnessExtension<'a, F, N> {
+    /// Create a new [BatchedRep3WitnessExtension] VM
+    pub fn new(
+        net0: &'a N,
+        net1: &'a N,
         parser: &CoCircomCompilerParsed<F>,
-        network: N,
-        mpc_accelerator: MpcAccelerator<F, BatchedCircomRep3VmWitnessExtension<F, N>>,
         config: VMConfig,
         batch_size: usize,
-    ) -> Result<Self> {
-        let driver = BatchedCircomRep3VmWitnessExtension::from_network(
-            network,
-            config.a2b_type,
-            batch_size,
-        )?;
-
+    ) -> eyre::Result<Self> {
+        let state = Rep3State::new(net0)?;
+        let driver = BatchedCircomRep3VmWitnessExtension::new(net0, net1, state, batch_size)?;
         let mut signals = vec![
             BatchedRep3VmType::from(Vec::<F>::with_capacity(batch_size));
             parser.amount_signals
         ];
         signals[0] = BatchedRep3VmType::from(vec![F::one(); batch_size]);
-        let constant_table = parser
+        let batched_constant_table = parser
             .constant_table
             .iter()
             .map(|constant| BatchedRep3VmType::from(vec![*constant; batch_size]))
@@ -1217,11 +1181,11 @@ impl<F: PrimeField, N: Rep3Network> BatchedRep3WitnessExtension<F, N> {
             main: parser.main.clone(),
             ctx: WitnessExtensionCtx::new(
                 signals,
-                constant_table,
+                batched_constant_table,
                 parser.fun_decls.clone(),
                 parser.templ_decls.clone(),
                 parser.string_table.clone(),
-                mpc_accelerator,
+                MpcAccelerator::from_config(MpcAcceleratorConfig::from_env()),
             ),
             main_inputs: parser.main_inputs,
             main_outputs: parser.main_outputs,
@@ -1229,49 +1193,5 @@ impl<F: PrimeField, N: Rep3Network> BatchedRep3WitnessExtension<F, N> {
             output_mapping: parser.output_mapping.clone(),
             config,
         })
-    }
-}
-
-impl<F: PrimeField> Rep3WitnessExtension<F, Rep3MpcNet> {
-    pub(crate) fn new(
-        parser: &CoCircomCompilerParsed<F>,
-        network_config: NetworkConfig,
-        mpc_accelerator: MpcAccelerator<F, CircomRep3VmWitnessExtension<F, Rep3MpcNet>>,
-        config: VMConfig,
-    ) -> Result<Self> {
-        let network = Rep3MpcNet::new(network_config)?;
-        Self::from_network(parser, network, mpc_accelerator, config)
-    }
-
-    /// Starts the execution of the MPC-VM with the provided [SharedInput], consumes `self` and returns the [`Rep3MpcNet`].
-    ///
-    /// Use this method over [`run_with_flat()`](WitnessExtension::run) when ever possible.
-    /// # Arguments
-    ///
-    /// * `input_signals` - The [SharedInput] distributed over the parties.
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(([SharedWitness], Rep3MpcNet))` - The secret-shared witness, distributed over the parties.
-    /// * `Err([eyre::Result])` - An error result.
-    ///
-    /// # Panics
-    ///
-    /// Panics if any of the [`CodeBlocks`](CodeBlock) are corrupted.
-    #[expect(clippy::type_complexity)]
-    pub fn run_and_return_network(
-        mut self,
-        input_signals: SharedInput<F, Rep3PrimeFieldShare<F>>,
-    ) -> Result<(
-        FinalizedWitnessExtension<F, CircomRep3VmWitnessExtension<F, Rep3MpcNet>>,
-        Rep3MpcNet,
-    )> {
-        self.driver.compare_vm_config(&self.config)?;
-        let amount_public_inputs = self.set_input_signals(input_signals)?;
-        self.call_main_component()?;
-        Ok((
-            self.post_processing(amount_public_inputs)?,
-            self.driver.get_network(),
-        ))
     }
 }

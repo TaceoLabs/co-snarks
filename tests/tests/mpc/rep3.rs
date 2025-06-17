@@ -13,7 +13,7 @@ mod field_share {
     use mpc_core::gadgets::poseidon2::Poseidon2;
     use mpc_core::protocols::rep3::conversion;
     use mpc_core::protocols::rep3::gadgets;
-    use mpc_core::protocols::rep3::network::Rep3Network;
+    use mpc_core::protocols::rep3::network;
     use mpc_core::protocols::rep3::yao;
     use mpc_core::protocols::rep3::yao::circuits::GarbledCircuits;
     use mpc_core::protocols::rep3::yao::circuits::SHA256Table;
@@ -23,8 +23,12 @@ mod field_share {
     use mpc_core::protocols::rep3::yao::streaming_garbler::StreamingRep3Garbler;
     use mpc_core::protocols::rep3::yao::GCUtils;
     use mpc_core::protocols::rep3::PartyID;
-    use mpc_core::protocols::rep3::{self, arithmetic, network::IoContext};
+    use mpc_core::protocols::rep3::Rep3State;
+    use mpc_core::protocols::rep3::{self, arithmetic};
     use mpc_core::protocols::rep3_ring;
+    use mpc_core::MpcState as _;
+    use mpc_net::Network;
+    use mpc_net::TestNetwork;
     use num_bigint::BigUint;
     use rand::thread_rng;
     use rand::Rng;
@@ -32,18 +36,17 @@ mod field_share {
     use std::ops::BitXor;
     use std::str::FromStr;
     use std::sync::mpsc;
-    use std::thread;
-    use tests::rep3_network::Rep3TestNetwork;
+    use tests::test_utils::spawn_pool;
 
     // This is helpful for debugging
     #[expect(dead_code)]
-    fn open_many<F: PrimeField>(
-        net: &mut IoContext<tests::rep3_network::PartyTestNetwork>,
+    fn open_many<F: PrimeField, N: Network>(
+        net: &N,
         a: Vec<crate::rep3::field_share::rep3::Rep3PrimeFieldShare<F>>,
-    ) -> std::io::Result<Vec<F>> {
+    ) -> eyre::Result<Vec<F>> {
         let bs = a.iter().map(|x| x.b).collect_vec();
-        net.network.send_next(bs)?;
-        let mut cs = net.network.recv_prev::<Vec<F>>()?;
+        network::send_next(net, bs)?;
+        let mut cs = network::recv_prev::<_, Vec<F>>(net)?;
 
         izip!(a, cs.iter_mut()).for_each(|(x, c)| *c += x.a + x.b);
 
@@ -64,7 +67,7 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
         for (tx, x, y) in izip!([tx1, tx2, tx3], x_shares.into_iter(), y_shares.into_iter()) {
-            thread::spawn(move || tx.send(arithmetic::add(x, y)));
+            spawn_pool(move || tx.send(arithmetic::add(x, y)));
         }
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
@@ -85,7 +88,7 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
         for (tx, x, y) in izip!([tx1, tx2, tx3], x_shares.into_iter(), y_shares.into_iter()) {
-            thread::spawn(move || tx.send(arithmetic::sub(x, y)));
+            spawn_pool(move || tx.send(arithmetic::sub(x, y)));
         }
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
@@ -109,7 +112,7 @@ mod field_share {
             x_shares.into_iter(),
             [PartyID::ID0, PartyID::ID1, PartyID::ID2]
         ) {
-            thread::spawn(move || tx.send(arithmetic::sub_shared_by_public(x, y, id)));
+            spawn_pool(move || tx.send(arithmetic::sub_shared_by_public(x, y, id)));
         }
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
@@ -133,7 +136,7 @@ mod field_share {
             y_shares.into_iter(),
             [PartyID::ID0, PartyID::ID1, PartyID::ID2]
         ) {
-            thread::spawn(move || tx.send(arithmetic::sub_public_by_shared(x, y, id)));
+            spawn_pool(move || tx.send(arithmetic::sub_public_by_shared(x, y, id)));
         }
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
@@ -144,7 +147,7 @@ mod field_share {
 
     #[test]
     fn rep3_mul() {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let y = ark_bn254::Fr::rand(&mut rng);
@@ -155,14 +158,14 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
         for (net, tx, x, y) in izip!(
-            test_network.get_party_networks().into_iter(),
+            nets.into_iter(),
             [tx1, tx2, tx3],
             x_shares.into_iter(),
             y_shares.into_iter()
         ) {
-            thread::spawn(move || {
-                let mut ctx = IoContext::init(net).unwrap();
-                let mul = arithmetic::mul(x, y, &mut ctx).unwrap();
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                let mul = arithmetic::mul(x, y, &net, &mut state).unwrap();
                 tx.send(mul)
             });
         }
@@ -175,7 +178,7 @@ mod field_share {
 
     #[test]
     fn rep3_div() {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let y = ark_bn254::Fr::rand(&mut rng);
@@ -186,14 +189,14 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
         for (net, tx, x, y) in izip!(
-            test_network.get_party_networks().into_iter(),
+            nets.into_iter(),
             [tx1, tx2, tx3],
             x_shares.into_iter(),
             y_shares.into_iter()
         ) {
-            thread::spawn(move || {
-                let mut ctx = IoContext::init(net).unwrap();
-                let mul = arithmetic::div(x, y, &mut ctx).unwrap();
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                let mul = arithmetic::div(x, y, &net, &mut state).unwrap();
                 tx.send(mul)
             });
         }
@@ -206,7 +209,8 @@ mod field_share {
 
     #[test]
     fn rep3_fork_mul() {
-        let test_network = Rep3TestNetwork::default();
+        let nets0 = TestNetwork::new_3_parties();
+        let nets1 = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x0 = ark_bn254::Fr::rand(&mut rng);
         let x1 = ark_bn254::Fr::rand(&mut rng);
@@ -219,19 +223,20 @@ mod field_share {
         let should_result0 = x0 * y0;
         let should_result1 = x1 * y1;
         let mut threads = vec![];
-        for (net, (x0, y0), (x1, y1)) in izip!(
-            test_network.get_party_networks().into_iter(),
+        for (net0, net1, (x0, y0), (x1, y1)) in izip!(
+            nets0.into_iter(),
+            nets1.into_iter(),
             x_shares0.into_iter().zip(y_shares0),
             x_shares1.into_iter().zip(y_shares1)
         ) {
-            threads.push(thread::spawn(move || {
-                let mut ctx0 = IoContext::init(net).unwrap();
-                let mut ctx1 = ctx0.fork().unwrap();
-                std::thread::scope(|s| {
-                    let mul0 = s.spawn(|| arithmetic::mul(x0, y0, &mut ctx0));
-                    let mul1 = arithmetic::mul(x1, y1, &mut ctx1).unwrap();
-                    (mul0.join().expect("can join").unwrap(), mul1)
-                })
+            threads.push(spawn_pool(move || {
+                let mut state0 = Rep3State::new(&net0).unwrap();
+                let mut state1 = state0.fork(0).unwrap();
+                let (mul0, mul1) = rayon::join(
+                    || arithmetic::mul(x0, y0, &net0, &mut state0),
+                    || arithmetic::mul(x1, y1, &net1, &mut state1),
+                );
+                (mul0.unwrap(), mul1.unwrap())
             }));
         }
         let result3 = threads.pop().unwrap().join().unwrap();
@@ -245,7 +250,7 @@ mod field_share {
 
     #[test]
     fn rep3_mul2_then_add() {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let y = ark_bn254::Fr::rand(&mut rng);
@@ -256,15 +261,15 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
         for (net, tx, x, y) in izip!(
-            test_network.get_party_networks().into_iter(),
+            nets.into_iter(),
             [tx1, tx2, tx3],
             x_shares.into_iter(),
             y_shares.into_iter()
         ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                let mul = arithmetic::mul(x, y, &mut rep3).unwrap();
-                let mul = arithmetic::mul(mul, y, &mut rep3).unwrap();
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                let mul = arithmetic::mul(x, y, &net, &mut state).unwrap();
+                let mul = arithmetic::mul(mul, y, &net, &mut state).unwrap();
                 tx.send(arithmetic::add(mul, x))
             });
         }
@@ -277,7 +282,7 @@ mod field_share {
 
     #[test]
     fn rep3_mul_vec_bn() {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = [
             ark_bn254::Fr::from_str(
@@ -341,14 +346,14 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
         for (net, tx, x, y) in izip!(
-            test_network.get_party_networks(),
+            nets.into_iter(),
             [tx1, tx2, tx3],
             x_shares.into_iter(),
             y_shares.into_iter()
         ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                let mul = arithmetic::mul_vec(&x, &y, &mut rep3).unwrap();
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                let mul = arithmetic::mul_vec(&x, &y, &net, &mut state).unwrap();
                 tx.send(mul)
             });
         }
@@ -361,7 +366,7 @@ mod field_share {
 
     #[test]
     fn rep3_mul_vec() {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..1)
             .map(|_| ark_bn254::Fr::from_str("2").unwrap())
@@ -381,15 +386,15 @@ mod field_share {
         let (tx3, rx3) = mpsc::channel();
 
         for (net, tx, x, y) in izip!(
-            test_network.get_party_networks(),
+            nets.into_iter(),
             [tx1, tx2, tx3],
             x_shares.into_iter(),
             y_shares.into_iter()
         ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                let mul = arithmetic::mul_vec(&x, &y, &mut rep3).unwrap();
-                let mul = arithmetic::mul_vec(&mul, &y, &mut rep3).unwrap();
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                let mul = arithmetic::mul_vec(&x, &y, &net, &mut state).unwrap();
+                let mul = arithmetic::mul_vec(&mul, &y, &net, &mut state).unwrap();
                 tx.send(mul)
             });
         }
@@ -410,7 +415,7 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
         for (tx, x) in izip!([tx1, tx2, tx3], x_shares.into_iter()) {
-            thread::spawn(move || tx.send(arithmetic::neg(x)));
+            spawn_pool(move || tx.send(arithmetic::neg(x)));
         }
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
@@ -421,7 +426,7 @@ mod field_share {
 
     #[test]
     fn rep3_inv() {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let mut x = ark_bn254::Fr::rand(&mut rng);
         while x.is_zero() {
@@ -432,15 +437,14 @@ mod field_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in test_network
-            .get_party_networks()
+        for ((net, tx), x) in nets
             .into_iter()
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                tx.send(arithmetic::inv(x, &mut rep3).unwrap())
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                tx.send(arithmetic::inv(x, &net, &mut state).unwrap())
             });
         }
         let result1 = rx1.recv().unwrap();
@@ -452,7 +456,7 @@ mod field_share {
 
     #[test]
     fn rep3_sqrt() {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x_ = ark_bn254::Fr::rand(&mut rng);
         let x = x_.square(); // Guarantees a square root exists
@@ -460,10 +464,10 @@ mod field_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for (net, tx, x) in izip!(test_network.get_party_networks(), [tx1, tx2, tx3], x_shares,) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                tx.send(arithmetic::sqrt(x, &mut rep3).unwrap())
+        for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares,) {
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                tx.send(arithmetic::sqrt(x, &net, &mut state).unwrap())
             });
         }
         let result1 = rx1.recv().unwrap();
@@ -475,7 +479,7 @@ mod field_share {
 
     #[test]
     fn rep3_bit_inject() {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::from(rng.gen::<bool>() as u64);
         let mut x_shares = rep3::share_biguint(x, &mut rng);
@@ -488,15 +492,14 @@ mod field_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in test_network
-            .get_party_networks()
+        for ((net, tx), x) in nets
             .into_iter()
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                tx.send(conversion::bit_inject(&x, &mut rep3).unwrap())
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                tx.send(conversion::bit_inject(&x, &net, &mut state).unwrap())
             });
         }
         let result1 = rx1.recv().unwrap();
@@ -510,7 +513,7 @@ mod field_share {
     fn rep3_bit_inject_many() {
         const VEC_SIZE: usize = 10;
 
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let mut should_result = Vec::with_capacity(VEC_SIZE);
         let mut x0_shares = Vec::with_capacity(VEC_SIZE);
@@ -533,15 +536,14 @@ mod field_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in test_network
-            .get_party_networks()
+        for ((net, tx), x) in nets
             .into_iter()
             .zip([tx1, tx2, tx3])
             .zip([x0_shares, x1_shares, x2_shares].into_iter())
         {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                tx.send(conversion::bit_inject_many(&x, &mut rep3).unwrap())
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                tx.send(conversion::bit_inject_many(&x, &net, &mut state).unwrap())
             });
         }
         let result1 = rx1.recv().unwrap();
@@ -563,7 +565,7 @@ mod field_share {
                     let constant_number = ark_bn254::Fr::from_str("50").unwrap();
                     for i in -1..=1 {
                         let compare = constant_number + ark_bn254::Fr::from(i);
-                        let test_network = Rep3TestNetwork::default();
+                        let nets =TestNetwork::new_3_parties();
                         let mut rng = thread_rng();
                         let x_shares = rep3::share_field_element(constant_number, &mut rng);
                         let y_shares = rep3::share_field_element(compare, &mut rng);
@@ -572,16 +574,16 @@ mod field_share {
                         let (tx2, rx2) = mpsc::channel();
                         let (tx3, rx3) = mpsc::channel();
                         for (net, tx, x, y, public) in izip!(
-                            test_network.get_party_networks(),
+                            nets,
                             [tx1, tx2, tx3],
                             x_shares,
                             y_shares,
                             vec![compare; 3]
                         ) {
-            thread::spawn(move || {
-                                let mut rep3 = IoContext::init(net).unwrap();
-                                let shared_compare = arithmetic::$name(x, y, &mut rep3).unwrap();
-                                let rhs_const =[< $name _public >](x, public, &mut rep3).unwrap();
+            spawn_pool(move || {
+                                let mut state = Rep3State::new(&net).unwrap();
+                                let shared_compare = arithmetic::$name(x, y, &net, &mut state).unwrap();
+                                let rhs_const =[< $name _public >](x, public, &net, &mut state).unwrap();
                                 tx.send([shared_compare, rhs_const])
                             });
                         }
@@ -605,7 +607,7 @@ mod field_share {
 
     #[test]
     fn rep3_a2b_zero() {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::zero();
         let x_shares = rep3::share_field_element(x, &mut rng);
@@ -613,15 +615,14 @@ mod field_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in test_network
-            .get_party_networks()
+        for ((net, tx), x) in nets
             .into_iter()
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                tx.send(conversion::a2b(x, &mut rep3).unwrap())
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                tx.send(conversion::a2b(x, &net, &mut state).unwrap())
             });
         }
         let result1 = rx1.recv().unwrap();
@@ -636,7 +637,7 @@ mod field_share {
 
     #[test]
     fn rep3_a2y2b_zero() {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::zero();
         let x_shares = rep3::share_field_element(x, &mut rng);
@@ -644,15 +645,14 @@ mod field_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in test_network
-            .get_party_networks()
+        for ((net, tx), x) in nets
             .into_iter()
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                tx.send(conversion::a2y2b(x, &mut rep3).unwrap())
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                tx.send(conversion::a2y2b(x, &net, &mut state).unwrap())
             });
         }
         let result1 = rx1.recv().unwrap();
@@ -667,7 +667,7 @@ mod field_share {
 
     #[test]
     fn rep3_a2y2b_streaming_zero() {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::zero();
         let x_shares = rep3::share_field_element(x, &mut rng);
@@ -675,15 +675,14 @@ mod field_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in test_network
-            .get_party_networks()
+        for ((net, tx), x) in nets
             .into_iter()
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                tx.send(conversion::a2y2b_streaming(x, &mut rep3).unwrap())
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                tx.send(conversion::a2y2b_streaming(x, &net, &mut state).unwrap())
             });
         }
         let result1 = rx1.recv().unwrap();
@@ -698,7 +697,7 @@ mod field_share {
 
     #[test]
     fn rep3_a2b() {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let x_shares = rep3::share_field_element(x, &mut rng);
@@ -706,15 +705,14 @@ mod field_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in test_network
-            .get_party_networks()
+        for ((net, tx), x) in nets
             .into_iter()
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                tx.send(conversion::a2b(x, &mut rep3).unwrap())
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                tx.send(conversion::a2b(x, &net, &mut state).unwrap())
             });
         }
         let result1 = rx1.recv().unwrap();
@@ -730,7 +728,7 @@ mod field_share {
 
     #[test]
     fn rep3_a2y2b() {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let x_shares = rep3::share_field_element(x, &mut rng);
@@ -738,15 +736,14 @@ mod field_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in test_network
-            .get_party_networks()
+        for ((net, tx), x) in nets
             .into_iter()
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                tx.send(conversion::a2y2b(x, &mut rep3).unwrap())
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                tx.send(conversion::a2y2b(x, &net, &mut state).unwrap())
             });
         }
         let result1 = rx1.recv().unwrap();
@@ -762,7 +759,7 @@ mod field_share {
 
     #[test]
     fn rep3_a2y2b_streaming() {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let x_shares = rep3::share_field_element(x, &mut rng);
@@ -770,15 +767,14 @@ mod field_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in test_network
-            .get_party_networks()
+        for ((net, tx), x) in nets
             .into_iter()
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                tx.send(conversion::a2y2b_streaming(x, &mut rep3).unwrap())
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                tx.send(conversion::a2y2b_streaming(x, &net, &mut state).unwrap())
             });
         }
         let result1 = rx1.recv().unwrap();
@@ -794,7 +790,7 @@ mod field_share {
 
     #[test]
     fn rep3_b2a() {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let x_shares = rep3::share_biguint(x, &mut rng);
@@ -802,15 +798,14 @@ mod field_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in test_network
-            .get_party_networks()
+        for ((net, tx), x) in nets
             .into_iter()
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                tx.send(conversion::b2a(&x, &mut rep3).unwrap())
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                tx.send(conversion::b2a(&x, &net, &mut state).unwrap())
             });
         }
         let result1 = rx1.recv().unwrap();
@@ -822,7 +817,7 @@ mod field_share {
 
     #[test]
     fn rep3_b2y2a() {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let x_shares = rep3::share_biguint(x, &mut rng);
@@ -830,15 +825,14 @@ mod field_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in test_network
-            .get_party_networks()
+        for ((net, tx), x) in nets
             .into_iter()
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                tx.send(conversion::b2y2a(&x, &mut rep3).unwrap())
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                tx.send(conversion::b2y2a(&x, &net, &mut state).unwrap())
             });
         }
         let result1 = rx1.recv().unwrap();
@@ -850,7 +844,7 @@ mod field_share {
 
     #[test]
     fn rep3_b2y2a_streaming() {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let x_shares = rep3::share_biguint(x, &mut rng);
@@ -858,15 +852,14 @@ mod field_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in test_network
-            .get_party_networks()
+        for ((net, tx), x) in nets
             .into_iter()
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                tx.send(conversion::b2y2a_streaming(&x, &mut rep3).unwrap())
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                tx.send(conversion::b2y2a_streaming(&x, &net, &mut state).unwrap())
             });
         }
         let result1 = rx1.recv().unwrap();
@@ -878,7 +871,7 @@ mod field_share {
 
     #[test]
     fn rep3_gc() {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let y = ark_bn254::Fr::rand(&mut rng);
@@ -887,14 +880,13 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        let [net1, net2, net3] = test_network.get_party_networks();
+        let [net1, net2, net3] = nets;
 
         // Both Garblers
         for (net, tx) in izip!([net2, net3], [tx2, tx3]) {
-            thread::spawn(move || {
-                let mut ctx = IoContext::init(net).unwrap();
-
-                let mut garbler = Rep3Garbler::new(&mut ctx);
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                let mut garbler = Rep3Garbler::new(&net, &mut state);
                 let x_ = garbler.encode_field(x);
                 let y_ = garbler.encode_field(y);
 
@@ -911,15 +903,14 @@ mod field_share {
 
                 let output = garbler.output_all_parties(circuit_output.wires()).unwrap();
                 let add = GCUtils::bits_to_field::<ark_bn254::Fr>(&output).unwrap();
-                tx.send(add)
+                tx.send(add).unwrap();
             });
         }
 
         // The evaluator (ID0)
-        thread::spawn(move || {
-            let mut ctx = IoContext::init(net1).unwrap();
-
-            let mut evaluator = Rep3Evaluator::new(&mut ctx);
+        spawn_pool(move || {
+            let _state = Rep3State::new(&net1).unwrap(); // DONT REMOVE
+            let mut evaluator = Rep3Evaluator::new(&net1);
             let n_bits = ark_bn254::Fr::MODULUS_BIT_SIZE as usize;
 
             // This is without OT, just a simulation
@@ -934,7 +925,7 @@ mod field_share {
                 .output_all_parties(circuit_output.wires())
                 .unwrap();
             let add = GCUtils::bits_to_field::<ark_bn254::Fr>(&output).unwrap();
-            tx1.send(add)
+            tx1.send(add).unwrap();
         });
 
         let result1 = rx1.recv().unwrap();
@@ -947,7 +938,7 @@ mod field_share {
 
     #[test]
     fn rep3_gc_streaming() {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let y = ark_bn254::Fr::rand(&mut rng);
@@ -956,14 +947,13 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        let [net1, net2, net3] = test_network.get_party_networks();
+        let [net1, net2, net3] = nets;
 
         // Both Garblers
         for (net, tx) in izip!([net2, net3], [tx2, tx3]) {
-            thread::spawn(move || {
-                let mut ctx = IoContext::init(net).unwrap();
-
-                let mut garbler = StreamingRep3Garbler::new(&mut ctx);
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                let mut garbler = StreamingRep3Garbler::new(&net, &mut state);
                 let x_ = garbler.encode_field(x);
                 let y_ = garbler.encode_field(y);
 
@@ -985,10 +975,9 @@ mod field_share {
         }
 
         // The evaluator (ID0)
-        thread::spawn(move || {
-            let mut ctx = IoContext::init(net1).unwrap();
-
-            let mut evaluator = StreamingRep3Evaluator::new(&mut ctx);
+        spawn_pool(move || {
+            let _state = Rep3State::new(&net1).unwrap(); // DONT REMOVE
+            let mut evaluator = StreamingRep3Evaluator::new(&net1);
             let n_bits = ark_bn254::Fr::MODULUS_BIT_SIZE as usize;
 
             // This is without OT, just a simulation
@@ -1015,7 +1004,7 @@ mod field_share {
 
     #[test]
     fn rep3_a2y() {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let x_shares = rep3::share_field_element(x, &mut rng);
@@ -1024,26 +1013,23 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            x_shares.into_iter()
-        ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                let id = rep3.network.id;
-                let delta = rep3.rngs.generate_random_garbler_delta(id);
+        for (net, tx, x) in izip!(nets.into_iter(), [tx1, tx2, tx3], x_shares.into_iter()) {
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                let id = state.id;
+                let delta = state.rngs.generate_random_garbler_delta(id);
 
-                let converted = conversion::a2y(x, delta, &mut rep3).unwrap();
+                let converted = conversion::a2y(x, delta, &net, &mut state).unwrap();
 
                 let output = match id {
                     PartyID::ID0 => {
-                        let mut evaluator = Rep3Evaluator::new(&mut rep3);
+                        let mut evaluator = Rep3Evaluator::new(&net);
                         evaluator.receive_circuit().unwrap();
                         evaluator.output_all_parties(converted.wires()).unwrap()
                     }
                     PartyID::ID1 | PartyID::ID2 => {
-                        let mut garbler = Rep3Garbler::new_with_delta(&mut rep3, delta.unwrap());
+                        let mut garbler =
+                            Rep3Garbler::new_with_delta(&net, &mut state, delta.unwrap());
                         garbler.output_all_parties(converted.wires()).unwrap()
                     }
                 };
@@ -1063,7 +1049,7 @@ mod field_share {
 
     #[test]
     fn rep3_a2y_streaming() {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let x_shares = rep3::share_field_element(x, &mut rng);
@@ -1072,26 +1058,22 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            x_shares.into_iter()
-        ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                let id = rep3.network.id;
-                let delta = rep3.rngs.generate_random_garbler_delta(id);
+        for (net, tx, x) in izip!(nets.into_iter(), [tx1, tx2, tx3], x_shares.into_iter()) {
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                let id = state.id;
+                let delta = state.rngs.generate_random_garbler_delta(id);
 
-                let converted = conversion::a2y_streaming(x, delta, &mut rep3).unwrap();
+                let converted = conversion::a2y_streaming(x, delta, &net, &mut state).unwrap();
 
                 let output = match id {
                     PartyID::ID0 => {
-                        let mut evaluator = StreamingRep3Evaluator::new(&mut rep3);
+                        let mut evaluator = StreamingRep3Evaluator::new(&net);
                         evaluator.output_all_parties(converted.wires()).unwrap()
                     }
                     PartyID::ID1 | PartyID::ID2 => {
                         let mut garbler =
-                            StreamingRep3Garbler::new_with_delta(&mut rep3, delta.unwrap());
+                            StreamingRep3Garbler::new_with_delta(&net, &mut state, delta.unwrap());
                         garbler.output_all_parties(converted.wires()).unwrap()
                     }
                 };
@@ -1111,7 +1093,7 @@ mod field_share {
 
     #[test]
     fn rep3_y2a() {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let delta = GCUtils::random_delta(&mut rng);
         let x = ark_bn254::Fr::rand(&mut rng);
@@ -1126,15 +1108,11 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            x_shares.into_iter()
-        ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
+        for (net, tx, x) in izip!(nets.into_iter(), [tx1, tx2, tx3], x_shares.into_iter()) {
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
                 let converted =
-                    conversion::y2a::<ark_bn254::Fr, _>(x, Some(delta), &mut rep3).unwrap();
+                    conversion::y2a::<ark_bn254::Fr, _>(x, Some(delta), &net, &mut state).unwrap();
                 tx.send(converted).unwrap();
             });
         }
@@ -1148,7 +1126,7 @@ mod field_share {
 
     #[test]
     fn rep3_y2a_streaming() {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let delta = GCUtils::random_delta(&mut rng);
         let x = ark_bn254::Fr::rand(&mut rng);
@@ -1163,15 +1141,11 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            x_shares.into_iter()
-        ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
+        for (net, tx, x) in izip!(nets.into_iter(), [tx1, tx2, tx3], x_shares.into_iter()) {
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
                 let converted =
-                    conversion::y2a_streaming::<ark_bn254::Fr, _>(x, Some(delta), &mut rep3)
+                    conversion::y2a_streaming::<ark_bn254::Fr, _>(x, Some(delta), &net, &mut state)
                         .unwrap();
                 tx.send(converted).unwrap();
             });
@@ -1186,7 +1160,7 @@ mod field_share {
 
     #[test]
     fn rep3_b2y() {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let x_shares = rep3::share_biguint(x, &mut rng);
@@ -1194,27 +1168,27 @@ mod field_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in test_network
-            .get_party_networks()
+        for ((net, tx), x) in nets
             .into_iter()
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                let id = rep3.network.id;
-                let delta = rep3.rngs.generate_random_garbler_delta(id);
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                let id = state.id;
+                let delta = state.rngs.generate_random_garbler_delta(id);
 
-                let converted = conversion::b2y(&x, delta, &mut rep3).unwrap();
+                let converted = conversion::b2y(&x, delta, &net, &mut state).unwrap();
 
                 let output = match id {
                     PartyID::ID0 => {
-                        let mut evaluator = Rep3Evaluator::new(&mut rep3);
+                        let mut evaluator = Rep3Evaluator::new(&net);
                         evaluator.receive_circuit().unwrap();
                         evaluator.output_all_parties(converted.wires()).unwrap()
                     }
                     PartyID::ID1 | PartyID::ID2 => {
-                        let mut garbler = Rep3Garbler::new_with_delta(&mut rep3, delta.unwrap());
+                        let mut garbler =
+                            Rep3Garbler::new_with_delta(&net, &mut state, delta.unwrap());
                         garbler.output_all_parties(converted.wires()).unwrap()
                     }
                 };
@@ -1233,7 +1207,7 @@ mod field_share {
 
     #[test]
     fn rep3_b2y_streaming() {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let x_shares = rep3::share_biguint(x, &mut rng);
@@ -1241,27 +1215,26 @@ mod field_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in test_network
-            .get_party_networks()
+        for ((net, tx), x) in nets
             .into_iter()
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                let id = rep3.network.id;
-                let delta = rep3.rngs.generate_random_garbler_delta(id);
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                let id = state.id;
+                let delta = state.rngs.generate_random_garbler_delta(id);
 
-                let converted = conversion::b2y(&x, delta, &mut rep3).unwrap();
+                let converted = conversion::b2y(&x, delta, &net, &mut state).unwrap();
 
                 let output = match id {
                     PartyID::ID0 => {
-                        let mut evaluator = StreamingRep3Evaluator::new(&mut rep3);
+                        let mut evaluator = StreamingRep3Evaluator::new(&net);
                         evaluator.output_all_parties(converted.wires()).unwrap()
                     }
                     PartyID::ID1 | PartyID::ID2 => {
                         let mut garbler =
-                            StreamingRep3Garbler::new_with_delta(&mut rep3, delta.unwrap());
+                            StreamingRep3Garbler::new_with_delta(&net, &mut state, delta.unwrap());
                         garbler.output_all_parties(converted.wires()).unwrap()
                     }
                 };
@@ -1280,7 +1253,7 @@ mod field_share {
 
     #[test]
     fn rep3_y2b() {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let delta = GCUtils::random_delta(&mut rng);
         let x = ark_bn254::Fr::rand(&mut rng);
@@ -1295,14 +1268,10 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            x_shares.into_iter()
-        ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                let converted = conversion::y2b::<ark_bn254::Fr, _>(x, &mut rep3).unwrap();
+        for (net, tx, x) in izip!(nets.into_iter(), [tx1, tx2, tx3], x_shares.into_iter()) {
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                let converted = conversion::y2b::<ark_bn254::Fr, _>(x, &net, &mut state).unwrap();
                 tx.send(converted).unwrap();
             });
         }
@@ -1324,7 +1293,7 @@ mod field_share {
         const TOTAL_BIT_SIZE: usize = 64;
         const CHUNK_SIZE: usize = 14;
 
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| ark_bn254::Fr::rand(&mut rng))
@@ -1349,17 +1318,18 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            x_shares.into_iter()
-        ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
+        for (net, tx, x) in izip!(nets.into_iter(), [tx1, tx2, tx3], x_shares.into_iter()) {
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
 
-                let decomposed =
-                    yao::decompose_arithmetic_many(&x, &mut rep3, TOTAL_BIT_SIZE, CHUNK_SIZE)
-                        .unwrap();
+                let decomposed = yao::decompose_arithmetic_many(
+                    &x,
+                    &net,
+                    &mut state,
+                    TOTAL_BIT_SIZE,
+                    CHUNK_SIZE,
+                )
+                .unwrap();
                 tx.send(decomposed)
             });
         }
@@ -1374,7 +1344,7 @@ mod field_share {
     fn rep3_slice_shared_field_many_via_yao_inner(msb: usize, lsb: usize, bitsize: usize) {
         const VEC_SIZE: usize = 10;
 
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| ark_bn254::Fr::rand(&mut rng))
@@ -1404,16 +1374,12 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            x_shares.into_iter()
-        ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
+        for (net, tx, x) in izip!(nets.into_iter(), [tx1, tx2, tx3], x_shares.into_iter()) {
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
 
                 let decomposed =
-                    yao::slice_arithmetic_many(&x, &mut rep3, msb, lsb, bitsize).unwrap();
+                    yao::slice_arithmetic_many(&x, &net, &mut state, msb, lsb, bitsize).unwrap();
                 tx.send(decomposed)
             });
         }
@@ -1441,7 +1407,7 @@ mod field_share {
         const BASE: usize = 1 << BASE_BIT;
         const NUM_DECOMPS: usize = TOTAL_BIT_SIZE.div_ceil(BASE_BIT);
 
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let mask: BigUint = (BigUint::one() << TOTAL_BIT_SIZE) - BigUint::one();
         let x = (0..VEC_SIZE)
@@ -1489,17 +1455,24 @@ mod field_share {
         let (tx3, rx3) = mpsc::channel();
 
         for (net, tx, x, y) in izip!(
-            test_network.get_party_networks().into_iter(),
+            nets.into_iter(),
             [tx1, tx2, tx3],
             x_shares.into_iter(),
             y_shares.into_iter()
         ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
 
-                let decomposed =
-                    yao::slice_and_many(&x, &y, &mut rep3, BASE_BIT, ROTATION, TOTAL_BIT_SIZE)
-                        .unwrap();
+                let decomposed = yao::slice_and_many(
+                    &x,
+                    &y,
+                    &net,
+                    &mut state,
+                    BASE_BIT,
+                    ROTATION,
+                    TOTAL_BIT_SIZE,
+                )
+                .unwrap();
                 tx.send(decomposed)
             });
         }
@@ -1519,7 +1492,7 @@ mod field_share {
         const BASE: usize = 1 << BASE_BIT;
         const NUM_DECOMPS: usize = TOTAL_BIT_SIZE.div_ceil(BASE_BIT);
 
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let mask: BigUint = (BigUint::one() << TOTAL_BIT_SIZE) - BigUint::one();
         let x = (0..VEC_SIZE)
@@ -1567,17 +1540,24 @@ mod field_share {
         let (tx3, rx3) = mpsc::channel();
 
         for (net, tx, x, y) in izip!(
-            test_network.get_party_networks().into_iter(),
+            nets.into_iter(),
             [tx1, tx2, tx3],
             x_shares.into_iter(),
             y_shares.into_iter()
         ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
 
-                let decomposed =
-                    yao::slice_xor_many(&x, &y, &mut rep3, BASE_BIT, ROTATION, TOTAL_BIT_SIZE)
-                        .unwrap();
+                let decomposed = yao::slice_xor_many(
+                    &x,
+                    &y,
+                    &net,
+                    &mut state,
+                    BASE_BIT,
+                    ROTATION,
+                    TOTAL_BIT_SIZE,
+                )
+                .unwrap();
                 tx.send(decomposed)
             });
         }
@@ -1593,7 +1573,7 @@ mod field_share {
         const VEC_SIZE: usize = 10;
         const CHUNK_SIZE: usize = 14;
 
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| ark_bn254::Fr::rand(&mut rng))
@@ -1613,17 +1593,14 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            x_shares.into_iter()
-        ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
+        for (net, tx, x) in izip!(nets.into_iter(), [tx1, tx2, tx3], x_shares.into_iter()) {
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
 
-                let decomposed =
-                    gadgets::sort::batcher_odd_even_merge_sort_yao(&x, &mut rep3, CHUNK_SIZE)
-                        .unwrap();
+                let decomposed = gadgets::sort::batcher_odd_even_merge_sort_yao(
+                    &x, &net, &mut state, CHUNK_SIZE,
+                )
+                .unwrap();
                 tx.send(decomposed)
             });
         }
@@ -1640,7 +1617,8 @@ mod field_share {
         const VEC_SIZE: usize = 20;
         const CHUNK_SIZE: usize = 14;
 
-        let test_network = Rep3TestNetwork::default();
+        let nets0 = TestNetwork::new_3_parties();
+        let nets1 = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| ark_bn254::Fr::rand(&mut rng))
@@ -1665,22 +1643,25 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, x_) in izip!(
-            test_network.get_party_networks().into_iter(),
+        for (net0, net1, tx, x_) in izip!(
+            nets0.into_iter(),
+            nets1.into_iter(),
             [tx1, tx2, tx3],
             x_shares.into_iter()
         ) {
             let x_pub = x[VEC_SIZE / 2..].to_vec();
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                let mut forked = rep3.fork().unwrap();
+            spawn_pool(move || {
+                let mut state0 = Rep3State::new(&net0).unwrap();
+                let mut state1 = state0.fork(0).unwrap();
 
                 let decomposed = rep3_ring::gadgets::sort::radix_sort_fields(
                     x_,
                     x_pub,
-                    &mut rep3,
-                    &mut forked,
                     CHUNK_SIZE,
+                    &net0,
+                    &net1,
+                    &mut state0,
+                    &mut state1,
                 )
                 .unwrap();
                 tx.send(decomposed)
@@ -1696,7 +1677,7 @@ mod field_share {
 
     #[test]
     fn rep3_sha256() {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let mut state: Vec<u32> = (0..8).map(|_| rng.gen()).collect();
         let message: Vec<u32> = (0..16).map(|_| rng.gen()).collect();
@@ -1728,18 +1709,19 @@ mod field_share {
         let (tx3, rx3) = mpsc::channel();
 
         for (net, tx, x, y) in izip!(
-            test_network.get_party_networks().into_iter(),
+            nets.into_iter(),
             [tx1, tx2, tx3],
             x_shares.into_iter(),
             y_shares.into_iter(),
         ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
 
                 let res = rep3::yao::sha256_from_bristol(
                     x.as_slice().try_into().expect("Expected slice of size 8"),
                     y.as_slice().try_into().expect("Expected slice of size 16"),
-                    &mut rep3,
+                    &net,
+                    &mut state,
                 )
                 .unwrap();
                 tx.send(res)
@@ -1761,7 +1743,7 @@ mod field_share {
         const VEC_SIZE: usize = 10;
         const TOTAL_BIT_SIZE: usize = 128;
 
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let mask: BigUint = (BigUint::one() << TOTAL_BIT_SIZE) - BigUint::one();
         let keys_a = (0..VEC_SIZE)
@@ -1814,20 +1796,21 @@ mod field_share {
         let (tx3, rx3) = mpsc::channel();
 
         for (net, tx, x, y) in izip!(
-            test_network.get_party_networks().into_iter(),
+            nets.into_iter(),
             [tx1, tx2, tx3],
             x_shares.into_iter(),
             y_shares.into_iter(),
         ) {
             let slices = slice_sizes.clone();
             let rotation = rotation_values.clone();
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
 
                 let res = rep3::yao::get_sparse_table_with_rotation_values_many(
                     &x,
                     &y,
-                    &mut rep3,
+                    &net,
+                    &mut state,
                     &slices,
                     &rotation,
                     TOTAL_BIT_SIZE,
@@ -1898,7 +1881,7 @@ mod field_share {
         const VEC_SIZE: usize = 1;
         const TOTAL_BIT_SIZE: usize = 128;
 
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let mask: BigUint = (BigUint::one() << TOTAL_BIT_SIZE) - BigUint::one();
         let keys_a = (0..VEC_SIZE)
@@ -1956,20 +1939,21 @@ mod field_share {
         let (tx3, rx3) = mpsc::channel();
 
         for (net, tx, x, y) in izip!(
-            test_network.get_party_networks().into_iter(),
+            nets.into_iter(),
             [tx1, tx2, tx3],
             x_shares.into_iter(),
             y_shares.into_iter(),
         ) {
             let base_bits = slice_sizes.clone();
             let table_type = *table_type;
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
 
                 let res = rep3::yao::get_sparse_normalization_values_many(
                     &x,
                     &y,
-                    &mut rep3,
+                    &net,
+                    &mut state,
                     &base_bits,
                     BASE,
                     TOTAL_BIT_SIZE,
@@ -2030,7 +2014,7 @@ mod field_share {
         const VEC_SIZE: usize = 3;
         const TOTAL_BIT_SIZE: usize = 64;
 
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let mask: BigUint = (BigUint::one() << TOTAL_BIT_SIZE) - BigUint::one();
         let keys_a = (0..VEC_SIZE)
@@ -2079,19 +2063,20 @@ mod field_share {
         let (tx3, rx3) = mpsc::channel();
 
         for (net, tx, x, y) in izip!(
-            test_network.get_party_networks().into_iter(),
+            nets,
             [tx1, tx2, tx3],
             x_shares.into_iter(),
             y_shares.into_iter(),
         ) {
             let base_bits = slice_sizes.clone();
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
 
                 let res = rep3::yao::slice_and_map_from_sparse_form_many(
                     &x,
                     &y,
-                    &mut rep3,
+                    &net,
+                    &mut state,
                     &base_bits,
                     BASE,
                     TOTAL_BIT_SIZE,
@@ -2142,7 +2127,8 @@ mod field_share {
         const TOTAL_BIT_SIZE: usize = 64;
         let s_box = AES128_SBOX;
 
-        let test_network = Rep3TestNetwork::default();
+        let nets0 = TestNetwork::new_3_parties();
+        let nets1 = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let mask: BigUint = (BigUint::one() << TOTAL_BIT_SIZE) - BigUint::one();
         let keys_a = (0..VEC_SIZE)
@@ -2196,21 +2182,23 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, x, y) in izip!(
-            test_network.get_party_networks().into_iter(),
+        for (net0, net1, tx, x, y) in izip!(
+            nets0,
+            nets1,
             [tx1, tx2, tx3],
             x_shares.into_iter(),
             y_shares.into_iter(),
         ) {
             let base_bits = slice_sizes.clone();
             let slices = slice_sizes.len();
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                let mut rep3_2 = rep3.fork().unwrap();
+            spawn_pool(move || {
+                let mut state0 = Rep3State::new(&net0).unwrap();
+                let mut state1 = state0.fork(0).unwrap();
                 let res = rep3::yao::slice_and_map_from_sparse_form_many_sbox(
                     &x,
                     &y,
-                    &mut rep3,
+                    &net0,
+                    &mut state0,
                     &base_bits,
                     BASE,
                     TOTAL_BIT_SIZE,
@@ -2238,13 +2226,15 @@ mod field_share {
                 let base_powers: [ark_bn254::Fr; 32] =
                     array::from_fn(|i| ark_bn254::Fr::from(base_powers[i].clone()));
 
-                let rs = conversion::a2b_many(&rs, &mut rep3).unwrap();
+                let rs = conversion::a2b_many(&rs, &net0, &mut state0).unwrap();
                 for key in rs {
                     let sbox_value =
                         rep3_ring::lut::Rep3LookupTable::get_from_public_lut_no_b2a_conversion::<
                             u8,
                             _,
-                        >(key, &sbox_lut, &mut rep3, &mut rep3_2)
+                        >(
+                            key, &sbox_lut, &net0, &net1, &mut state0, &mut state1
+                        )
                         .unwrap();
 
                     let shift_1 = sbox_value.clone() << 1;
@@ -2267,7 +2257,8 @@ mod field_share {
                             .collect_vec(),
                     );
                     let bin_share =
-                        rep3::conversion::bit_inject_many(&a_bits_split, &mut rep3).unwrap();
+                        rep3::conversion::bit_inject_many(&a_bits_split, &net0, &mut state0)
+                            .unwrap();
                     let (bin_share, second_bin_share) = bin_share.split_at(bin_share.len() / 2);
                     let mut sum_a = arithmetic::mul_public(bin_share[0], base_powers[0]);
                     let mut sum_b = arithmetic::mul_public(second_bin_share[0], base_powers[0]);
@@ -2321,7 +2312,7 @@ mod field_share {
 
     fn accumulate_from_sparse_bytes<const BASE: u64>(input_bitsize: usize, output_bitsize: usize) {
         const VEC_SIZE: usize = 16;
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let mask: BigUint = (BigUint::one() << input_bitsize) - BigUint::one();
         let input = (0..VEC_SIZE)
@@ -2348,17 +2339,14 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            x_shares.into_iter(),
-        ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
+        for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter(),) {
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
 
                 let res = rep3::yao::accumulate_from_sparse_bytes(
                     &x,
-                    &mut rep3,
+                    &net,
+                    &mut state,
                     input_bitsize,
                     output_bitsize,
                     BASE,
@@ -2385,7 +2373,7 @@ mod field_share {
 
     #[test]
     fn rep3_aes() {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let plaintext_size: usize = rng.gen::<u8>() as usize % 1024;
         let key: Vec<u8> = (0..16).map(|_| rng.gen()).collect();
@@ -2431,15 +2419,15 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
         for (net, tx, x, y, z) in izip!(
-            test_network.get_party_networks().into_iter(),
+            nets,
             [tx1, tx2, tx3],
             x_shares.into_iter(),
             y_shares.into_iter(),
             z_shares.into_iter()
         ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                let res = rep3::yao::aes_from_bristol(&x, &y, &z, &mut rep3).unwrap();
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                let res = rep3::yao::aes_from_bristol(&x, &y, &z, &net, &mut state).unwrap();
                 tx.send(res)
             });
         }
@@ -2462,21 +2450,20 @@ mod field_share {
     }
 
     fn rep3_mod_red(a: u64, b: u64) {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let should_result = ark_bn254::Fr::from(a % b);
         let a = ark_bn254::Fr::from(a);
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        let [net1, net2, net3] = test_network.get_party_networks();
+        let [net1, net2, net3] = nets;
 
         // Both Garblers
         for (net, tx) in izip!([net2, net3], [tx2, tx3]) {
-            thread::spawn(move || {
-                let mut ctx = IoContext::init(net).unwrap();
-
-                let mut garbler = Rep3Garbler::new(&mut ctx);
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                let mut garbler = Rep3Garbler::new(&net, &mut state);
                 let x_ = garbler.encode_field(a);
 
                 // This is without OT, just a simulation
@@ -2496,10 +2483,9 @@ mod field_share {
         }
 
         // The evaluator (ID0)
-        thread::spawn(move || {
-            let mut ctx = IoContext::init(net1).unwrap();
-
-            let mut evaluator = Rep3Evaluator::new(&mut ctx);
+        spawn_pool(move || {
+            let _state = Rep3State::new(&net1).unwrap(); // DONT REMOVE
+            let mut evaluator = Rep3Evaluator::new(&net1);
             let n_bits = ark_bn254::Fr::MODULUS_BIT_SIZE as usize;
 
             // This is without OT, just a simulation
@@ -2538,7 +2524,7 @@ mod field_share {
         modulus: u64,
         num_decomps_per_field: usize,
     ) {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let bases = vec![modulus; num_decomps_per_field];
         fn slice_input_using_variable_bases(input: BigUint, bases: &[u64]) -> Vec<ark_bn254::Fr> {
             let mut target = input;
@@ -2557,14 +2543,13 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        let [net1, net2, net3] = test_network.get_party_networks();
+        let [net1, net2, net3] = nets;
 
         // Both Garblers
         for (net, tx) in izip!([net2, net3], [tx2, tx3]) {
-            thread::spawn(move || {
-                let mut ctx = IoContext::init(net).unwrap();
-
-                let mut garbler = Rep3Garbler::new(&mut ctx);
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                let mut garbler = Rep3Garbler::new(&net, &mut state);
                 let x_ = garbler.encode_field(a);
 
                 // This is without OT, just a simulation
@@ -2589,10 +2574,9 @@ mod field_share {
         }
 
         // The evaluator (ID0)
-        thread::spawn(move || {
-            let mut ctx = IoContext::init(net1).unwrap();
-
-            let mut evaluator = Rep3Evaluator::new(&mut ctx);
+        spawn_pool(move || {
+            let _state = Rep3State::new(&net1).unwrap(); // DONT REMOVE
+            let mut evaluator = Rep3Evaluator::new(&net1);
             let n_bits = ark_bn254::Fr::MODULUS_BIT_SIZE as usize;
 
             // This is without OT, just a simulation
@@ -2643,7 +2627,7 @@ mod field_share {
     fn rep3_int_div_power_2_via_yao() {
         const VEC_SIZE: usize = 10;
 
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| ark_bn254::Fr::rand(&mut rng))
@@ -2663,16 +2647,12 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            x_shares.into_iter()
-        ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
+        for (net, tx, x) in izip!(nets.into_iter(), [tx1, tx2, tx3], x_shares.into_iter()) {
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
 
                 let decomposed =
-                    yao::field_int_div_power_2_many(&x, &mut rep3, divisor_bit).unwrap();
+                    yao::field_int_div_power_2_many(&x, &net, &mut state, divisor_bit).unwrap();
                 tx.send(decomposed)
             });
         }
@@ -2688,7 +2668,7 @@ mod field_share {
     fn rep3_int_div_via_yao() {
         const VEC_SIZE: usize = 10;
 
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| ark_bn254::Fr::rand(&mut rng))
@@ -2712,15 +2692,15 @@ mod field_share {
         let (tx3, rx3) = mpsc::channel();
 
         for (net, tx, x, y) in izip!(
-            test_network.get_party_networks().into_iter(),
+            nets.into_iter(),
             [tx1, tx2, tx3],
             x_shares.into_iter(),
             y_shares.into_iter()
         ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
 
-                let decomposed = yao::field_int_div_many(&x, &y, &mut rep3).unwrap();
+                let decomposed = yao::field_int_div_many(&x, &y, &net, &mut state).unwrap();
                 tx.send(decomposed)
             });
         }
@@ -2736,7 +2716,7 @@ mod field_share {
     fn rep3_int_div_by_public_via_yao() {
         const VEC_SIZE: usize = 10;
 
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| ark_bn254::Fr::rand(&mut rng))
@@ -2757,15 +2737,12 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            x_shares.into_iter(),
-        ) {
+        for (net, tx, x) in izip!(nets.into_iter(), [tx1, tx2, tx3], x_shares.into_iter(),) {
             let y_ = y.to_owned();
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                let decomposed = yao::field_int_div_by_public_many(&x, &y_, &mut rep3).unwrap();
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                let decomposed =
+                    yao::field_int_div_by_public_many(&x, &y_, &net, &mut state).unwrap();
                 tx.send(decomposed)
             });
         }
@@ -2781,7 +2758,7 @@ mod field_share {
     fn rep3_int_div_by_shared_via_yao() {
         const VEC_SIZE: usize = 10;
 
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| ark_bn254::Fr::rand(&mut rng))
@@ -2803,16 +2780,12 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, y_c) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            y_shares.into_iter(),
-        ) {
+        for (net, tx, y_c) in izip!(nets.into_iter(), [tx1, tx2, tx3], y_shares.into_iter(),) {
             let x_ = x.to_owned();
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
 
-                let div = yao::field_int_div_by_shared_many(&x_, &y_c, &mut rep3).unwrap();
+                let div = yao::field_int_div_by_shared_many(&x_, &y_c, &net, &mut state).unwrap();
                 tx.send(div)
             });
         }
@@ -2826,7 +2799,7 @@ mod field_share {
 
     fn reshare_from_2_to_3_parties_test_internal(recipient: PartyID) {
         const VEC_SIZE: usize = 10;
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| ark_bn254::Fr::rand(&mut rng))
@@ -2835,18 +2808,15 @@ mod field_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            x_shares.into_iter()
-        ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
+        for (net, tx, x) in izip!(nets.into_iter(), [tx1, tx2, tx3], x_shares.into_iter()) {
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
                 let decomposed = arithmetic::reshare_from_2_to_3_parties(
                     Some(x),
                     VEC_SIZE,
                     recipient,
-                    &mut rep3,
+                    &net,
+                    &mut state,
                 )
                 .unwrap();
                 tx.send(decomposed)
@@ -2868,7 +2838,7 @@ mod field_share {
 
     #[test]
     fn rep3_poseidon2_gadget_kat1() {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let input = [
             ark_bn254::Fr::from(0),
@@ -2902,17 +2872,13 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            input_shares.into_iter()
-        ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
+        for (net, tx, x) in izip!(nets.into_iter(), [tx1, tx2, tx3], input_shares.into_iter()) {
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
 
                 let poseidon = Poseidon2::<_, 4, 5>::default();
                 let output = poseidon
-                    .rep3_permutation(x.as_slice().try_into().unwrap(), &mut rep3)
+                    .rep3_permutation(x.as_slice().try_into().unwrap(), &net, &mut state)
                     .unwrap();
                 tx.send(output)
             });
@@ -2928,7 +2894,7 @@ mod field_share {
 
     #[test]
     fn rep3_poseidon2_gadget_kat1_precomp() {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let input = [
             ark_bn254::Fr::from(0),
@@ -2962,21 +2928,17 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            input_shares.into_iter()
-        ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
+        for (net, tx, x) in izip!(nets.into_iter(), [tx1, tx2, tx3], input_shares.into_iter()) {
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
 
                 let poseidon = Poseidon2::<_, 4, 5>::default();
-                let mut precomp = poseidon.precompute_rep3(1, &mut rep3).unwrap();
+                let mut precomp = poseidon.precompute_rep3(1, &net, &mut state).unwrap();
                 let output = poseidon
                     .rep3_permutation_with_precomputation(
                         x.as_slice().try_into().unwrap(),
                         &mut precomp,
-                        &mut rep3,
+                        &net,
                     )
                     .unwrap();
                 tx.send(output)
@@ -2995,7 +2957,7 @@ mod field_share {
     fn rep3_poseidon2_gadget_kat1_precomp_packed() {
         const NUM_POSEIDON: usize = 10;
 
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let mut input = vec![ark_bn254::Fr::default(); NUM_POSEIDON * 4];
         for input in input.chunks_exact_mut(4) {
@@ -3030,18 +2992,16 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            input_shares.into_iter()
-        ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
+        for (net, tx, x) in izip!(nets.into_iter(), [tx1, tx2, tx3], input_shares.into_iter()) {
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
 
                 let poseidon = Poseidon2::<_, 4, 5>::default();
-                let mut precomp = poseidon.precompute_rep3(NUM_POSEIDON, &mut rep3).unwrap();
+                let mut precomp = poseidon
+                    .precompute_rep3(NUM_POSEIDON, &net, &mut state)
+                    .unwrap();
                 let output = poseidon
-                    .rep3_permutation_with_precomputation_packed(&x, &mut precomp, &mut rep3)
+                    .rep3_permutation_with_precomputation_packed(&x, &mut precomp, &net)
                     .unwrap();
                 tx.send(output)
             });
@@ -3059,7 +3019,7 @@ mod field_share {
 
     #[test]
     fn rep3_poseidon2_gadget_kat1_precomp_additive() {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let input = [
             ark_bn254::Fr::from(0),
@@ -3093,21 +3053,20 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            input_shares.into_iter()
-        ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
+        for (net, tx, x) in izip!(nets.into_iter(), [tx1, tx2, tx3], input_shares.into_iter()) {
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
 
                 let poseidon = Poseidon2::<_, 4, 5>::default();
-                let mut precomp = poseidon.precompute_rep3_additive(1, &mut rep3).unwrap();
+                let mut precomp = poseidon
+                    .precompute_rep3_additive(1, &net, &mut state)
+                    .unwrap();
                 let output = poseidon
                     .rep3_permutation_additive_with_precomputation(
                         x.as_slice().try_into().unwrap(),
                         &mut precomp,
-                        &mut rep3,
+                        &net,
+                        &mut state,
                     )
                     .unwrap();
                 tx.send(output)
@@ -3126,7 +3085,7 @@ mod field_share {
     fn rep3_poseidon2_merkle_tree() {
         const NUM_LEAVES: usize = 4usize.pow(3);
 
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let input = (0..NUM_LEAVES)
             .map(|_| ark_bn254::Fr::rand(&mut rng))
@@ -3143,20 +3102,16 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            input_shares.into_iter()
-        ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
+        for (net, tx, x) in izip!(nets.into_iter(), [tx1, tx2, tx3], input_shares.into_iter()) {
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
 
                 let poseidon = Poseidon2::<_, 4, 5>::default();
                 let output1 = poseidon
-                    .merkle_tree_sponge_rep3::<2, _>(x.clone(), &mut rep3)
+                    .merkle_tree_sponge_rep3::<2, _>(x.clone(), &net, &mut state)
                     .unwrap();
                 let output2 = poseidon
-                    .merkle_tree_compression_rep3::<4, _>(x, &mut rep3)
+                    .merkle_tree_compression_rep3::<4, _>(x, &net, &mut state)
                     .unwrap();
                 let output = [output1, output2];
                 tx.send(output)
@@ -3173,7 +3128,7 @@ mod field_share {
 
     #[test]
     fn rep3_field_mod_pow2() {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let bit = rng.gen_range(1..ark_bn254::Fr::MODULUS_BIT_SIZE);
@@ -3186,19 +3141,15 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, x_) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            x_shares
-        ) {
+        for (net, tx, x_) in izip!(nets.into_iter(), [tx1, tx2, tx3], x_shares) {
             let y_c = y.to_owned();
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
 
                 let divisor: BigUint = y_c.into();
                 assert_eq!(divisor.count_ones(), 1);
                 let divisor_bit = divisor.bits() as usize - 1;
-                let res = yao::field_mod_power_2(x_, &mut rep3, divisor_bit).unwrap();
+                let res = yao::field_mod_power_2(x_, &net, &mut state, divisor_bit).unwrap();
                 tx.send(res)
             });
         }
@@ -3212,7 +3163,7 @@ mod field_share {
 
     #[test]
     fn rep3_blake2s() {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         const INPUT_SIZE: usize = 64;
         let input: Vec<u8> = (0..INPUT_SIZE).map(|_| rng.gen()).collect();
@@ -3235,16 +3186,12 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            x_shares.into_iter(),
-        ) {
+        for (net, tx, x) in izip!(nets.into_iter(), [tx1, tx2, tx3], x_shares.into_iter(),) {
             let num_bits = num_bits.to_owned();
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
 
-                let res = rep3::yao::blake2s(&x, &mut rep3, &num_bits).unwrap();
+                let res = rep3::yao::blake2s(&x, &net, &mut state, &num_bits).unwrap();
                 tx.send(res)
             });
         }
@@ -3259,7 +3206,7 @@ mod field_share {
 
     #[test]
     fn rep3_blake3() {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         const INPUT_SIZE: usize = 64;
         let input: Vec<u8> = (0..INPUT_SIZE).map(|_| rng.gen()).collect();
@@ -3282,16 +3229,12 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            x_shares.into_iter(),
-        ) {
+        for (net, tx, x) in izip!(nets.into_iter(), [tx1, tx2, tx3], x_shares.into_iter(),) {
             let num_bits = num_bits.to_owned();
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
 
-                let res = rep3::yao::blake3(&x, &mut rep3, &num_bits).unwrap();
+                let res = rep3::yao::blake3(&x, &net, &mut state, &num_bits).unwrap();
                 tx.send(res)
             });
         }
@@ -3310,13 +3253,12 @@ mod curve_share {
     use ark_ff::{One, PrimeField, Zero};
     use ark_std::UniformRand;
     use itertools::{izip, Itertools};
-    use mpc_core::protocols::rep3::{
-        self, conversion, network::IoContext, pointshare, Rep3BigUintShare,
-    };
+    use mpc_core::protocols::rep3::{self, conversion, pointshare, Rep3BigUintShare, Rep3State};
+    use mpc_net::TestNetwork;
     use num_bigint::BigUint;
     use rand::thread_rng;
-    use std::{sync::mpsc, thread};
-    use tests::rep3_network::Rep3TestNetwork;
+    use std::sync::mpsc;
+    use tests::test_utils::spawn_pool;
 
     #[test]
     fn rep3_add() {
@@ -3331,7 +3273,7 @@ mod curve_share {
         let (tx3, rx3) = mpsc::channel();
 
         for (tx, x, y) in izip!([tx1, tx2, tx3], x_shares.into_iter(), y_shares.into_iter()) {
-            thread::spawn(move || tx.send(pointshare::add(&x, &y)));
+            spawn_pool(move || tx.send(pointshare::add(&x, &y)));
         }
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
@@ -3352,7 +3294,7 @@ mod curve_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
         for (tx, x, y) in izip!([tx1, tx2, tx3], x_shares.into_iter(), y_shares.into_iter()) {
-            thread::spawn(move || tx.send(pointshare::sub(&x, &y)));
+            spawn_pool(move || tx.send(pointshare::sub(&x, &y)));
         }
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
@@ -3373,9 +3315,7 @@ mod curve_share {
         let (tx3, rx3) = mpsc::channel();
 
         for (tx, scalar) in izip!([tx1, tx2, tx3], scalar_shares,) {
-            thread::spawn(move || {
-                tx.send(pointshare::scalar_mul_public_point(&public_point, scalar))
-            });
+            spawn_pool(move || tx.send(pointshare::scalar_mul_public_point(&public_point, scalar)));
         }
 
         let result1 = rx1.recv().unwrap();
@@ -3397,7 +3337,7 @@ mod curve_share {
         let (tx3, rx3) = mpsc::channel();
 
         for (tx, point) in izip!([tx1, tx2, tx3], point_shares) {
-            thread::spawn(move || {
+            spawn_pool(move || {
                 tx.send(pointshare::scalar_mul_public_scalar(&point, public_scalar))
             });
         }
@@ -3416,17 +3356,13 @@ mod curve_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        let net = Rep3TestNetwork::new();
+        let nets = TestNetwork::new_3_parties();
 
-        for (tx, x, net) in izip!(
-            [tx1, tx2, tx3],
-            x_shares.into_iter(),
-            net.get_party_networks()
-        ) {
-            thread::spawn(move || {
-                let mut io_context = IoContext::init(net).unwrap();
-                let single = conversion::a2b(x, &mut io_context).unwrap();
-                let many = conversion::a2b_many(&[x], &mut io_context).unwrap();
+        for (tx, x, net) in izip!([tx1, tx2, tx3], x_shares.into_iter(), nets) {
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                let single = conversion::a2b(x, &net, &mut state).unwrap();
+                let many = conversion::a2b_many(&[x], &net, &mut state).unwrap();
                 tx.send((single, many))
             });
         }
@@ -3451,20 +3387,16 @@ mod curve_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        let net = Rep3TestNetwork::new();
+        let nets = TestNetwork::new_3_parties();
 
-        for (tx, x, net) in izip!(
-            [tx1, tx2, tx3],
-            batch_shares.into_iter(),
-            net.get_party_networks()
-        ) {
-            thread::spawn(move || {
-                let mut io_context = IoContext::init(net).unwrap();
+        for (tx, x, net) in izip!([tx1, tx2, tx3], batch_shares.into_iter(), nets) {
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
                 let single = x
                     .iter()
-                    .map(|x| conversion::a2b(*x, &mut io_context).unwrap())
+                    .map(|x| conversion::a2b(*x, &net, &mut state).unwrap())
                     .collect_vec();
-                let single_many = conversion::a2b_many(&x, &mut io_context).unwrap();
+                let single_many = conversion::a2b_many(&x, &net, &mut state).unwrap();
                 tx.send((single, single_many))
             });
         }
@@ -3493,21 +3425,17 @@ mod curve_share {
         let mut rng = thread_rng();
         let point_shares = rep3::share_curve_point(point, &mut rng);
 
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
         let (should_result_x, should_result_y) = point.into_affine().xy().unwrap_or_default();
 
-        for (net, tx, point) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            point_shares
-        ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                tx.send(conversion::point_share_to_fieldshares(point, &mut rep3).unwrap())
+        for (net, tx, point) in izip!(nets.into_iter(), [tx1, tx2, tx3], point_shares) {
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                tx.send(conversion::point_share_to_fieldshares(point, &net, &mut state).unwrap())
             });
         }
         let result1 = rx1.recv().unwrap();
@@ -3556,21 +3484,23 @@ mod curve_share {
             rep3::share_field_element(C::BaseField::zero(), &mut rng)
         };
 
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
         for (net, tx, x, y, is_inf) in izip!(
-            test_network.get_party_networks().into_iter(),
+            nets.into_iter(),
             [tx1, tx2, tx3],
             x_shares.into_iter(),
             y_shares.into_iter(),
             is_infinity.into_iter()
         ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                tx.send(conversion::fieldshares_to_pointshare(x, y, is_inf, &mut rep3).unwrap())
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                tx.send(
+                    conversion::fieldshares_to_pointshare(x, y, is_inf, &net, &mut state).unwrap(),
+                )
             });
         }
         let result1 = rx1.recv().unwrap();
@@ -3604,19 +3534,15 @@ mod curve_share {
         let mut rng = thread_rng();
         let shares = rep3::share_curve_point(point, &mut rng);
 
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            shares.into_iter(),
-        ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                let res = pointshare::is_zero(x, &mut rep3).unwrap();
+        for (net, tx, x) in izip!(nets.into_iter(), [tx1, tx2, tx3], shares.into_iter(),) {
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                let res = pointshare::is_zero(x, &net, &mut state).unwrap();
                 let res = Rep3BigUintShare::<C::ScalarField>::new(
                     BigUint::from(res.0),
                     BigUint::from(res.1),

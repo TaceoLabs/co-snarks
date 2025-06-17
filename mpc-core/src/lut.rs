@@ -3,8 +3,9 @@
 //! This module contains the abstraction to lookup tables
 
 use ark_ff::PrimeField;
+use mpc_net::Network;
 use num_bigint::BigUint;
-use std::{io, marker::PhantomData};
+use std::marker::PhantomData;
 
 /// This is some place holder definition. This will change most likely
 pub trait LookupTableProvider<F: PrimeField>: Default {
@@ -12,8 +13,8 @@ pub trait LookupTableProvider<F: PrimeField>: Default {
     type SecretShare;
     /// An input/output LUT (like `Vector`).
     type LutType: Default;
-    /// The network used
-    type NetworkProvider;
+    /// Internal state of used MPC protocol
+    type State;
 
     /// Initializes a LUT from the provided secret values.
     fn init_private(&self, values: Vec<Self::SecretShare>) -> Self::LutType;
@@ -30,13 +31,15 @@ pub trait LookupTableProvider<F: PrimeField>: Default {
     ///
     /// Can fail due to networking problems.
     ///
-    fn get_from_lut(
+    fn get_from_lut<N: Network>(
         &mut self,
         index: Self::SecretShare,
         lut: &Self::LutType,
-        network0: &mut Self::NetworkProvider,
-        network1: &mut Self::NetworkProvider,
-    ) -> io::Result<Self::SecretShare>;
+        net0: &N,
+        net1: &N,
+        state0: &mut Self::State,
+        state1: &mut Self::State,
+    ) -> eyre::Result<Self::SecretShare>;
 
     /// Writes a value to the LUT.
     ///
@@ -46,20 +49,23 @@ pub trait LookupTableProvider<F: PrimeField>: Default {
     ///
     /// #Returns
     /// Can fail due to networking problems.
-    fn write_to_lut(
+    #[expect(clippy::too_many_arguments)]
+    fn write_to_lut<N: Network>(
         &mut self,
         index: Self::SecretShare,
         value: Self::SecretShare,
         lut: &mut Self::LutType,
-        network0: &mut Self::NetworkProvider,
-        network1: &mut Self::NetworkProvider,
-    ) -> io::Result<()>;
+        net0: &N,
+        net1: &N,
+        state0: &mut Self::State,
+        state1: &mut Self::State,
+    ) -> eyre::Result<()>;
 
     /// Returns the length of the LUT
     fn get_lut_len(lut: &Self::LutType) -> usize;
 
     /// Returns the LUT as a vec if public
-    fn get_public_lut(lut: &Self::LutType) -> io::Result<&Vec<F>>;
+    fn get_public_lut(lut: &Self::LutType) -> eyre::Result<&Vec<F>>;
 }
 
 /// LUT provider for public values
@@ -71,7 +77,7 @@ pub struct PlainLookupTableProvider<F: PrimeField> {
 impl<F: PrimeField> LookupTableProvider<F> for PlainLookupTableProvider<F> {
     type SecretShare = F;
     type LutType = Vec<F>;
-    type NetworkProvider = ();
+    type State = ();
 
     fn init_private(&self, values: Vec<Self::SecretShare>) -> Self::LutType {
         values
@@ -81,38 +87,34 @@ impl<F: PrimeField> LookupTableProvider<F> for PlainLookupTableProvider<F> {
         values
     }
 
-    fn get_from_lut(
+    fn get_from_lut<N: Network>(
         &mut self,
         index: Self::SecretShare,
         lut: &Self::LutType,
-        _network0: &mut Self::NetworkProvider,
-        _network1: &mut Self::NetworkProvider,
-    ) -> io::Result<F> {
+        _net0: &N,
+        _net1: &N,
+        _state0: &mut (),
+        _state1: &mut (),
+    ) -> eyre::Result<F> {
         let index: BigUint = index.into();
-        let index = usize::try_from(index).map_err(|_| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "Index can not be translated to usize",
-            )
-        })?;
+        let index = usize::try_from(index)
+            .map_err(|_| eyre::eyre!("Index can not be translated to usize"))?;
         Ok(lut[index])
     }
 
-    fn write_to_lut(
+    fn write_to_lut<N: Network>(
         &mut self,
         index: Self::SecretShare,
         value: Self::SecretShare,
         lut: &mut Self::LutType,
-        _network0: &mut Self::NetworkProvider,
-        _network1: &mut Self::NetworkProvider,
-    ) -> io::Result<()> {
+        _net0: &N,
+        _net1: &N,
+        _state0: &mut (),
+        _state1: &mut (),
+    ) -> eyre::Result<()> {
         let index: BigUint = index.into();
-        let index = usize::try_from(index).map_err(|_| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "Index can not be translated to usize",
-            )
-        })?;
+        let index = usize::try_from(index)
+            .map_err(|_| eyre::eyre!("Index can not be translated to usize"))?;
 
         lut[index] = value;
         Ok(())
@@ -122,7 +124,7 @@ impl<F: PrimeField> LookupTableProvider<F> for PlainLookupTableProvider<F> {
         lut.len()
     }
 
-    fn get_public_lut(lut: &Self::LutType) -> io::Result<&Vec<F>> {
+    fn get_public_lut(lut: &Self::LutType) -> eyre::Result<&Vec<F>> {
         Ok(lut)
     }
 }

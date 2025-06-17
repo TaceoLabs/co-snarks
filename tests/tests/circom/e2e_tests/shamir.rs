@@ -17,9 +17,10 @@ use co_groth16::{CircomReduction, ConstraintMatrices, Groth16, ProvingKey};
 use co_plonk::Plonk;
 use co_plonk::ShamirCoPlonk;
 use itertools::izip;
+use mpc_net::TestNetwork;
 use rand::thread_rng;
-use std::{fs::File, thread};
-use tests::shamir_network::{PartyTestNetwork, ShamirTestNetwork};
+use std::fs::File;
+use tests::test_utils::spawn_pool;
 
 macro_rules! e2e_test {
     ($name: expr) => {
@@ -53,15 +54,17 @@ macro_rules! add_test_impl_g16 {
                 let mut rng = thread_rng();
                 let witness_shares =
                     SharedWitness::share_shamir(witness, r1cs.num_inputs, 1, 3, &mut rng);
-                let test_network = ShamirTestNetwork::new(3);
+                let nets0 = TestNetwork::new_3_parties();
+                let nets1 = TestNetwork::new_3_parties();
                 let mut threads = vec![];
-                for (net, x, zkey) in izip!(
-                    test_network.get_party_networks(),
+                for (net0, net1, x, zkey) in izip!(
+                    nets0,
+                    nets1,
                     witness_shares.into_iter(),
                     [zkey1, zkey2, zkey3].into_iter()
                 ) {
-                    threads.push(thread::spawn(move || {
-                        ShamirCoGroth16::<$curve, PartyTestNetwork>::prove::<CircomReduction>(net, 1, &zkey.1, &zkey.0, x).unwrap().0
+                    threads.push(spawn_pool(move || {
+                        ShamirCoGroth16::<$curve>::prove::<_, CircomReduction>(&net0, &net1, 3, 1, &zkey.1, &zkey.0, x).unwrap()
                     }));
                 }
                 let result3 = threads.pop().unwrap().join().unwrap();
@@ -126,15 +129,21 @@ macro_rules! add_test_impl_plonk {
                 let mut rng = thread_rng();
                 let witness_shares =
                     SharedWitness::share_shamir(witness, r1cs.num_inputs, 1, 3, &mut rng);
-                let test_network = ShamirTestNetwork::new(3);
+                let mut nets = vec![Vec::with_capacity(8), Vec::with_capacity(8), Vec::with_capacity(8)];
+                for _ in 0..8 {
+                    let [n0, n1, n2] = TestNetwork::new_3_parties();
+                    nets[0].push(n0);
+                    nets[1].push(n1);
+                    nets[2].push(n2);
+                }
                 let mut threads = vec![];
-                for (net, x, zkey) in izip!(
-                    test_network.get_party_networks(),
+                for (nets, x, zkey) in izip!(
+                    nets,
                     witness_shares.into_iter(),
                     [zkey1, zkey2, zkey3].into_iter()
                 ) {
-                    threads.push(thread::spawn(move || {
-                        ShamirCoPlonk::<$curve, PartyTestNetwork>::prove(net, 1, zkey, x).unwrap().0
+                    threads.push(spawn_pool(move || {
+                        ShamirCoPlonk::<$curve>::prove(&nets.try_into().unwrap(), 3, 1, zkey, x).unwrap()
                     }));
                 }
                 let result3 = threads.pop().unwrap().join().unwrap();
@@ -172,5 +181,6 @@ macro_rules! add_test_impl_plonk {
         }
     };
 }
+
 e2e_test!("multiplier2");
 e2e_test!("poseidon");

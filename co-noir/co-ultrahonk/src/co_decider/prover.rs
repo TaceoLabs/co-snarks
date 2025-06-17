@@ -9,17 +9,21 @@ use co_builder::{
     HonkProofResult,
     prelude::{HonkCurve, ProverCrs, Utils},
 };
+use mpc_net::Network;
 use std::marker::PhantomData;
 use ultrahonk::prelude::{
     HonkProof, Transcript, TranscriptFieldType, TranscriptHasher, ZeroKnowledge,
 };
 
 pub(crate) struct CoDecider<
+    'a,
     T: NoirUltraHonkProver<P>,
     P: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
+    N: Network,
 > {
-    pub(crate) driver: T,
+    pub(crate) net: &'a N,
+    pub(crate) state: &'a mut T::State,
     pub(super) memory: ProverMemory<T, P>,
     pub(crate) has_zk: ZeroKnowledge,
     phantom_data: PhantomData<P>,
@@ -27,14 +31,22 @@ pub(crate) struct CoDecider<
 }
 
 impl<
+    'a,
     T: NoirUltraHonkProver<P>,
     P: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
-> CoDecider<T, P, H>
+    N: Network,
+> CoDecider<'a, T, P, H, N>
 {
-    pub fn new(driver: T, memory: ProverMemory<T, P>, has_zk: ZeroKnowledge) -> Self {
+    pub fn new(
+        net: &'a N,
+        state: &'a mut T::State,
+        memory: ProverMemory<T, P>,
+        has_zk: ZeroKnowledge,
+    ) -> Self {
         Self {
-            driver,
+            net,
+            state,
             memory,
             has_zk,
             phantom_data: PhantomData,
@@ -43,7 +55,8 @@ impl<
     }
 
     fn compute_opening_proof(
-        driver: &mut T,
+        net: &N,
+        state: &mut T::State,
         opening_claim: ShpleminiOpeningClaim<T, P>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         crs: &ProverCrs<P>,
@@ -58,7 +71,7 @@ impl<
         // AZTEC TODO(#479): for now we compute the KZG commitment directly to unify the KZG and IPA interfaces but in the
         // future we might need to adjust this to use the incoming alternative to work queue (i.e. variation of
         // pthreads) or even the work queue itself
-        let quotient_commitment = driver.open_point(quotient_commitment)?;
+        let quotient_commitment = T::open_point(quotient_commitment, net, state)?;
         transcript.send_point_to_verifier::<P>("KZG:W".to_string(), quotient_commitment.into());
         Ok(())
     }
@@ -82,11 +95,12 @@ impl<
             let log_subgroup_size = Utils::get_msb64(P::SUBGROUP_SIZE as u64);
             let commitment_key = &crs.monomials[..1 << (log_subgroup_size + 1)];
             let mut zk_sumcheck_data: SharedZKSumcheckData<T, P> =
-                SharedZKSumcheckData::<T, P>::new::<H>(
+                SharedZKSumcheckData::<T, P>::new(
                     Utils::get_msb64(circuit_size as u64) as usize,
                     transcript,
                     commitment_key,
-                    &mut self.driver,
+                    self.net,
+                    self.state,
                 )?;
 
             Ok((
@@ -116,10 +130,11 @@ impl<
         if self.has_zk == ZeroKnowledge::No {
             let prover_opening_claim =
                 self.shplemini_prove(transcript, circuit_size, crs, sumcheck_output, None)?;
-            Self::compute_opening_proof(&mut self.driver, prover_opening_claim, transcript, crs)
+            Self::compute_opening_proof(self.net, self.state, prover_opening_claim, transcript, crs)
         } else {
-            let small_subgroup_ipa_prover = SharedSmallSubgroupIPAProver::<T, P>::new::<H>(
-                &mut self.driver,
+            let small_subgroup_ipa_prover = SharedSmallSubgroupIPAProver::<T, P>::new(
+                self.net,
+                self.state,
                 zk_sumcheck_data.expect("We have ZK"),
                 &sumcheck_output.challenges,
                 sumcheck_output
@@ -136,7 +151,7 @@ impl<
                 sumcheck_output,
                 Some(witness_polynomials),
             )?;
-            Self::compute_opening_proof(&mut self.driver, prover_opening_claim, transcript, crs)
+            Self::compute_opening_proof(self.net, self.state, prover_opening_claim, transcript, crs)
         }
     }
 
@@ -145,7 +160,7 @@ impl<
         circuit_size: u32,
         crs: &ProverCrs<P>,
         mut transcript: Transcript<TranscriptFieldType, H>,
-    ) -> HonkProofResult<(HonkProof<TranscriptFieldType>, T)> {
+    ) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
         tracing::trace!("Decider prove");
 
         // Run sumcheck subprotocol.
@@ -162,6 +177,6 @@ impl<
             zk_sumcheck_data,
         )?;
 
-        Ok((transcript.get_proof(), self.driver))
+        Ok(transcript.get_proof())
     }
 }

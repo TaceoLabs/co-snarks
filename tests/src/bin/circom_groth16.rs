@@ -1,13 +1,14 @@
-use circom_mpc_vm::mpc_vm::VMConfig;
+use circom_mpc_vm::mpc_vm::{BatchedRep3WitnessExtension, VMConfig};
 use co_circom_types::{BatchedSharedInput, SharedInput};
 
 use ark_bn254::Bn254;
 use circom_mpc_compiler::{CoCircomCompiler, CompilerConfig};
 use itertools::izip;
 use mpc_core::protocols::rep3::{self, conversion::A2BType};
+use mpc_net::TestNetwork;
 use rand::thread_rng;
 use std::{fs::File, io::BufReader};
-use tests::{rep3_network::Rep3TestNetwork, test_utils};
+use tests::test_utils::{self, spawn_pool};
 
 fn install_tracing() {
     use tracing_subscriber::prelude::*;
@@ -45,7 +46,8 @@ fn main() -> eyre::Result<()> {
     let public_inputs =
         CoCircomCompiler::<Bn254>::get_public_inputs(&chacha_circuit, compiler_config).unwrap();
 
-    let test_network = Rep3TestNetwork::default();
+    let nets0 = TestNetwork::new_3_parties();
+    let nets1 = TestNetwork::new_3_parties();
 
     let batch_size = 2;
     let mut rng = thread_rng();
@@ -95,14 +97,13 @@ fn main() -> eyre::Result<()> {
 
     tracing::info!("starting threads");
     let mut threads = vec![];
-    for (net, input, parsed) in izip!(test_network.get_party_networks(), batch, compiler) {
-        threads.push(std::thread::spawn(move || {
+    for (net0, net1, input, parsed) in izip!(nets0, nets1, batch, compiler) {
+        threads.push(spawn_pool(move || {
             let mut vm_config = VMConfig::new();
             vm_config.a2b_type = A2BType::Direct;
-            parsed
-                .to_batched_rep3_vm_with_network(net, vm_config, batch_size)
-                .unwrap()
-                .run(BatchedSharedInput::try_from(input).unwrap())
+            let vm = BatchedRep3WitnessExtension::new(&net0, &net1, &parsed, vm_config, batch_size)
+                .unwrap();
+            vm.run(BatchedSharedInput::try_from(input).unwrap())
                 .unwrap()
                 .into_shared_witness()
                 .unbatch()

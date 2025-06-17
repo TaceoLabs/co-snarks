@@ -4,7 +4,6 @@ mod ring_share {
     use itertools::izip;
     use itertools::Itertools;
     use mpc_core::protocols::rep3;
-    use mpc_core::protocols::rep3::network::IoContext;
     use mpc_core::protocols::rep3::yao::circuits::GarbledCircuits;
     use mpc_core::protocols::rep3::yao::evaluator::Rep3Evaluator;
     use mpc_core::protocols::rep3::yao::garbler::Rep3Garbler;
@@ -12,6 +11,7 @@ mod ring_share {
     use mpc_core::protocols::rep3::yao::streaming_garbler::StreamingRep3Garbler;
     use mpc_core::protocols::rep3::yao::GCUtils;
     use mpc_core::protocols::rep3::PartyID;
+    use mpc_core::protocols::rep3::Rep3State;
     use mpc_core::protocols::rep3_ring;
     use mpc_core::protocols::rep3_ring::arithmetic;
     use mpc_core::protocols::rep3_ring::casts;
@@ -21,6 +21,8 @@ mod ring_share {
     use mpc_core::protocols::rep3_ring::ring::int_ring::IntRing2k;
     use mpc_core::protocols::rep3_ring::ring::ring_impl::RingElement;
     use mpc_core::protocols::rep3_ring::yao;
+    use mpc_core::MpcState;
+    use mpc_net::TestNetwork;
     use num_bigint::BigUint;
     use num_traits::{AsPrimitive, One, Zero};
     use rand::distributions::Standard;
@@ -28,8 +30,7 @@ mod ring_share {
     use rand::thread_rng;
     use rand::Rng;
     use std::sync::mpsc;
-    use std::thread;
-    use tests::rep3_network::Rep3TestNetwork;
+    use tests::test_utils::spawn_pool;
 
     macro_rules! apply_to_all {
         ($expr:ident,[$($t:ty),*]) => {
@@ -80,7 +81,7 @@ mod ring_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
         for (tx, x, y) in izip!([tx1, tx2, tx3], x_shares.into_iter(), y_shares.into_iter()) {
-            thread::spawn(move || tx.send(arithmetic::add(x, y)));
+            spawn_pool(move || tx.send(arithmetic::add(x, y)));
         }
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
@@ -108,7 +109,7 @@ mod ring_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
         for (tx, x, y) in izip!([tx1, tx2, tx3], x_shares.into_iter(), y_shares.into_iter()) {
-            thread::spawn(move || tx.send(arithmetic::sub(x, y)));
+            spawn_pool(move || tx.send(arithmetic::sub(x, y)));
         }
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
@@ -139,7 +140,7 @@ mod ring_share {
             x_shares.into_iter(),
             [PartyID::ID0, PartyID::ID1, PartyID::ID2]
         ) {
-            thread::spawn(move || tx.send(arithmetic::sub_shared_by_public(x, y, id)));
+            spawn_pool(move || tx.send(arithmetic::sub_shared_by_public(x, y, id)));
         }
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
@@ -170,7 +171,7 @@ mod ring_share {
             y_shares.into_iter(),
             [PartyID::ID0, PartyID::ID1, PartyID::ID2]
         ) {
-            thread::spawn(move || tx.send(arithmetic::sub_public_by_shared(x, y, id)));
+            spawn_pool(move || tx.send(arithmetic::sub_public_by_shared(x, y, id)));
         }
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
@@ -188,7 +189,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = rng.gen::<RingElement<T>>();
         let y = rng.gen::<RingElement<T>>();
@@ -199,14 +200,14 @@ mod ring_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
         for (net, tx, x, y) in izip!(
-            test_network.get_party_networks().into_iter(),
+            nets,
             [tx1, tx2, tx3],
             x_shares.into_iter(),
             y_shares.into_iter()
         ) {
-            thread::spawn(move || {
-                let mut ctx = IoContext::init(net).unwrap();
-                let mul = arithmetic::mul(x, y, &mut ctx).unwrap();
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                let mul = arithmetic::mul(x, y, &net, &mut state).unwrap();
                 tx.send(mul)
             });
         }
@@ -226,7 +227,8 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let test_network = Rep3TestNetwork::default();
+        let nets0 = TestNetwork::new_3_parties();
+        let nets1 = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x0 = rng.gen::<RingElement<T>>();
         let x1 = rng.gen::<RingElement<T>>();
@@ -239,19 +241,20 @@ mod ring_share {
         let should_result0 = x0 * y0;
         let should_result1 = x1 * y1;
         let mut threads = vec![];
-        for (net, (x0, y0), (x1, y1)) in izip!(
-            test_network.get_party_networks().into_iter(),
+        for (net0, net1, (x0, y0), (x1, y1)) in izip!(
+            nets0,
+            nets1,
             x_shares0.into_iter().zip(y_shares0),
             x_shares1.into_iter().zip(y_shares1)
         ) {
-            threads.push(thread::spawn(move || {
-                let mut ctx0 = IoContext::init(net).unwrap();
-                let mut ctx1 = ctx0.fork().unwrap();
-                std::thread::scope(|s| {
-                    let mul0 = s.spawn(|| arithmetic::mul(x0, y0, &mut ctx0));
-                    let mul1 = arithmetic::mul(x1, y1, &mut ctx1).unwrap();
-                    (mul0.join().expect("can join").unwrap(), mul1)
-                })
+            threads.push(spawn_pool(move || {
+                let mut state0 = Rep3State::new(&net0).unwrap();
+                let mut state1 = state0.fork(0).unwrap();
+                let (mul0, mul1) = rayon::join(
+                    || arithmetic::mul(x0, y0, &net0, &mut state0),
+                    || arithmetic::mul(x1, y1, &net1, &mut state1),
+                );
+                (mul0.unwrap(), mul1.unwrap())
             }));
         }
         let result3 = threads.pop().unwrap().join().unwrap();
@@ -272,7 +275,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = rng.gen::<RingElement<T>>();
         let y = rng.gen::<RingElement<T>>();
@@ -283,15 +286,15 @@ mod ring_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
         for (net, tx, x, y) in izip!(
-            test_network.get_party_networks().into_iter(),
+            nets,
             [tx1, tx2, tx3],
             x_shares.into_iter(),
             y_shares.into_iter()
         ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                let mul = arithmetic::mul(x, y, &mut rep3).unwrap();
-                let mul = arithmetic::mul(mul, y, &mut rep3).unwrap();
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                let mul = arithmetic::mul(x, y, &net, &mut state).unwrap();
+                let mul = arithmetic::mul(mul, y, &net, &mut state).unwrap();
                 tx.send(arithmetic::add(mul, x))
             });
         }
@@ -311,7 +314,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..1)
             .map(|_| rng.gen::<RingElement<T>>())
@@ -331,15 +334,15 @@ mod ring_share {
         let (tx3, rx3) = mpsc::channel();
 
         for (net, tx, x, y) in izip!(
-            test_network.get_party_networks(),
+            nets,
             [tx1, tx2, tx3],
             x_shares.into_iter(),
             y_shares.into_iter()
         ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                let mul = arithmetic::mul_vec(&x, &y, &mut rep3).unwrap();
-                let mul = arithmetic::mul_vec(&mul, &y, &mut rep3).unwrap();
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                let mul = arithmetic::mul_vec(&x, &y, &net, &mut state).unwrap();
+                let mul = arithmetic::mul_vec(&mul, &y, &net, &mut state).unwrap();
                 tx.send(mul)
             });
         }
@@ -367,7 +370,7 @@ mod ring_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
         for (tx, x) in izip!([tx1, tx2, tx3], x_shares.into_iter()) {
-            thread::spawn(move || tx.send(arithmetic::neg(x)));
+            spawn_pool(move || tx.send(arithmetic::neg(x)));
         }
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
@@ -385,7 +388,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = rng.gen::<RingElement<T>>() & RingElement::one();
         let mut x_shares = rep3_ring::share_ring_element_binary(x, &mut rng);
@@ -398,15 +401,14 @@ mod ring_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in test_network
-            .get_party_networks()
+        for ((net, tx), x) in nets
             .into_iter()
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                tx.send(conversion::bit_inject(&x, &mut rep3).unwrap())
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                tx.send(conversion::bit_inject(&x, &net, &mut state).unwrap())
             });
         }
         let result1 = rx1.recv().unwrap();
@@ -427,7 +429,7 @@ mod ring_share {
     {
         const VEC_SIZE: usize = 10;
 
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let mut should_result = Vec::with_capacity(VEC_SIZE);
         let mut x0_shares = Vec::with_capacity(VEC_SIZE);
@@ -450,15 +452,14 @@ mod ring_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in test_network
-            .get_party_networks()
+        for ((net, tx), x) in nets
             .into_iter()
             .zip([tx1, tx2, tx3])
             .zip([x0_shares, x1_shares, x2_shares].into_iter())
         {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                tx.send(conversion::bit_inject_many(&x, &mut rep3).unwrap())
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                tx.send(conversion::bit_inject_many(&x, &net, &mut state).unwrap())
             });
         }
         let result1 = rx1.recv().unwrap();
@@ -485,7 +486,7 @@ mod ring_share {
                         let compare = constant_number - RingElement::one();
                         for i in 0u64..3 {
                             let compare = compare + RingElement(T::try_from(i).unwrap());
-                            let test_network = Rep3TestNetwork::default();
+                            let nets = TestNetwork::new_3_parties();
                             let mut rng = thread_rng();
                             let x_shares = rep3_ring::share_ring_element(constant_number, &mut rng);
                             let y_shares = rep3_ring::share_ring_element(compare, &mut rng);
@@ -494,16 +495,16 @@ mod ring_share {
                             let (tx2, rx2) = mpsc::channel();
                             let (tx3, rx3) = mpsc::channel();
                             for (net, tx, x, y, public) in izip!(
-                                test_network.get_party_networks(),
+                                nets,
                                 [tx1, tx2, tx3],
                                 x_shares,
                                 y_shares,
                                 vec![compare; 3]
                             ) {
-                            thread::spawn(move || {
-                                    let mut rep3 = IoContext::init(net).unwrap();
-                                    let shared_compare = arithmetic::$name(x, y, &mut rep3).unwrap();
-                                    let rhs_const =[< $name _public >](x, public, &mut rep3).unwrap();
+                            spawn_pool(move || {
+                                    let mut state = Rep3State::new(&net).unwrap();
+                                    let shared_compare = arithmetic::$name(x, y, &net, &mut state).unwrap();
+                                    let rhs_const =[< $name _public >](x, public, &net, &mut state).unwrap();
                                     tx.send([shared_compare, rhs_const])
                                 });
                             }
@@ -535,7 +536,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = RingElement::<T>::zero();
         let x_shares = rep3_ring::share_ring_element(x, &mut rng);
@@ -543,15 +544,14 @@ mod ring_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in test_network
-            .get_party_networks()
+        for ((net, tx), x) in nets
             .into_iter()
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                tx.send(conversion::a2b(x, &mut rep3).unwrap())
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                tx.send(conversion::a2b(x, &net, &mut state).unwrap())
             });
         }
         let result1 = rx1.recv().unwrap();
@@ -570,7 +570,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = RingElement::<T>::zero();
         let x_shares = rep3_ring::share_ring_element(x, &mut rng);
@@ -578,15 +578,14 @@ mod ring_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in test_network
-            .get_party_networks()
+        for ((net, tx), x) in nets
             .into_iter()
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                tx.send(conversion::a2y2b(x, &mut rep3).unwrap())
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                tx.send(conversion::a2y2b(x, &net, &mut state).unwrap())
             });
         }
         let result1 = rx1.recv().unwrap();
@@ -605,7 +604,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = RingElement::<T>::zero();
         let x_shares = rep3_ring::share_ring_element(x, &mut rng);
@@ -613,15 +612,14 @@ mod ring_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in test_network
-            .get_party_networks()
+        for ((net, tx), x) in nets
             .into_iter()
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                tx.send(conversion::a2y2b_streaming(x, &mut rep3).unwrap())
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                tx.send(conversion::a2y2b_streaming(x, &net, &mut state).unwrap())
             });
         }
         let result1 = rx1.recv().unwrap();
@@ -640,7 +638,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = rng.gen::<RingElement<T>>();
         let x_shares = rep3_ring::share_ring_element(x, &mut rng);
@@ -648,15 +646,14 @@ mod ring_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in test_network
-            .get_party_networks()
+        for ((net, tx), x) in nets
             .into_iter()
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                tx.send(conversion::a2b(x, &mut rep3).unwrap())
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                tx.send(conversion::a2b(x, &net, &mut state).unwrap())
             });
         }
         let result1 = rx1.recv().unwrap();
@@ -675,7 +672,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = rng.gen::<RingElement<T>>();
         let x_shares = rep3_ring::share_ring_element(x, &mut rng);
@@ -683,15 +680,14 @@ mod ring_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in test_network
-            .get_party_networks()
+        for ((net, tx), x) in nets
             .into_iter()
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                tx.send(conversion::a2y2b(x, &mut rep3).unwrap())
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                tx.send(conversion::a2y2b(x, &net, &mut state).unwrap())
             });
         }
         let result1 = rx1.recv().unwrap();
@@ -710,7 +706,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = rng.gen::<RingElement<T>>();
         let x_shares = rep3_ring::share_ring_element(x, &mut rng);
@@ -718,15 +714,14 @@ mod ring_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in test_network
-            .get_party_networks()
+        for ((net, tx), x) in nets
             .into_iter()
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                tx.send(conversion::a2y2b_streaming(x, &mut rep3).unwrap())
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                tx.send(conversion::a2y2b_streaming(x, &net, &mut state).unwrap())
             });
         }
         let result1 = rx1.recv().unwrap();
@@ -745,7 +740,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = rng.gen::<RingElement<T>>();
         let x_shares = rep3_ring::share_ring_element_binary(x, &mut rng);
@@ -753,15 +748,14 @@ mod ring_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in test_network
-            .get_party_networks()
+        for ((net, tx), x) in nets
             .into_iter()
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                tx.send(conversion::b2a(&x, &mut rep3).unwrap())
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                tx.send(conversion::b2a(&x, &net, &mut state).unwrap())
             });
         }
         let result1 = rx1.recv().unwrap();
@@ -780,7 +774,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = rng.gen::<RingElement<T>>();
         let x_shares = rep3_ring::share_ring_element_binary(x, &mut rng);
@@ -788,15 +782,14 @@ mod ring_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in test_network
-            .get_party_networks()
+        for ((net, tx), x) in nets
             .into_iter()
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                tx.send(conversion::b2y2a(&x, &mut rep3).unwrap())
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                tx.send(conversion::b2y2a(&x, &net, &mut state).unwrap())
             });
         }
         let result1 = rx1.recv().unwrap();
@@ -815,7 +808,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = rng.gen::<RingElement<T>>();
         let x_shares = rep3_ring::share_ring_element_binary(x, &mut rng);
@@ -823,15 +816,14 @@ mod ring_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in test_network
-            .get_party_networks()
+        for ((net, tx), x) in nets
             .into_iter()
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                tx.send(conversion::b2y2a_streaming(&x, &mut rep3).unwrap())
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                tx.send(conversion::b2y2a_streaming(&x, &net, &mut state).unwrap())
             });
         }
         let result1 = rx1.recv().unwrap();
@@ -850,7 +842,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = rng.gen::<RingElement<T>>();
         let y = rng.gen::<RingElement<T>>();
@@ -859,14 +851,14 @@ mod ring_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        let [net1, net2, net3] = test_network.get_party_networks();
+        let [net1, net2, net3] = nets;
 
         // Both Garblers
         for (net, tx) in izip!([net2, net3], [tx2, tx3]) {
-            thread::spawn(move || {
-                let mut ctx = IoContext::init(net).unwrap();
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
 
-                let mut garbler = Rep3Garbler::new(&mut ctx);
+                let mut garbler = Rep3Garbler::new(&net, &mut state);
                 let x_ = garbler.encode_ring(x);
                 let y_ = garbler.encode_ring(y);
 
@@ -888,10 +880,9 @@ mod ring_share {
         }
 
         // The evaluator (ID0)
-        thread::spawn(move || {
-            let mut ctx = IoContext::init(net1).unwrap();
-
-            let mut evaluator = Rep3Evaluator::new(&mut ctx);
+        spawn_pool(move || {
+            let _state = Rep3State::new(&net1).unwrap(); // DONT REMOVE
+            let mut evaluator = Rep3Evaluator::new(&net1);
             let n_bits = T::K;
 
             // This is without OT, just a simulation
@@ -925,7 +916,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = rng.gen::<RingElement<T>>();
         let y = rng.gen::<RingElement<T>>();
@@ -934,14 +925,14 @@ mod ring_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        let [net1, net2, net3] = test_network.get_party_networks();
+        let [net1, net2, net3] = nets;
 
         // Both Garblers
         for (net, tx) in izip!([net2, net3], [tx2, tx3]) {
-            thread::spawn(move || {
-                let mut ctx = IoContext::init(net).unwrap();
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
 
-                let mut garbler = StreamingRep3Garbler::new(&mut ctx);
+                let mut garbler = StreamingRep3Garbler::new(&net, &mut state);
                 let x_ = garbler.encode_ring(x);
                 let y_ = garbler.encode_ring(y);
 
@@ -963,10 +954,9 @@ mod ring_share {
         }
 
         // The evaluator (ID0)
-        thread::spawn(move || {
-            let mut ctx = IoContext::init(net1).unwrap();
-
-            let mut evaluator = StreamingRep3Evaluator::new(&mut ctx);
+        spawn_pool(move || {
+            let _state = Rep3State::new(&net1).unwrap(); // DONT REMOVE
+            let mut evaluator = StreamingRep3Evaluator::new(&net1);
             let n_bits = T::K;
 
             // This is without OT, just a simulation
@@ -999,7 +989,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = rng.gen::<RingElement<T>>();
         let x_shares = rep3_ring::share_ring_element(x, &mut rng);
@@ -1008,26 +998,23 @@ mod ring_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            x_shares.into_iter()
-        ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                let id = rep3.network.id;
-                let delta = rep3.rngs.generate_random_garbler_delta(id);
+        for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter()) {
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                let id = state.id;
+                let delta = state.rngs.generate_random_garbler_delta(id);
 
-                let converted = conversion::a2y(x, delta, &mut rep3).unwrap();
+                let converted = conversion::a2y(x, delta, &net, &mut state).unwrap();
 
                 let output = match id {
                     PartyID::ID0 => {
-                        let mut evaluator = Rep3Evaluator::new(&mut rep3);
+                        let mut evaluator = Rep3Evaluator::new(&net);
                         evaluator.receive_circuit().unwrap();
                         evaluator.output_all_parties(converted.wires()).unwrap()
                     }
                     PartyID::ID1 | PartyID::ID2 => {
-                        let mut garbler = Rep3Garbler::new_with_delta(&mut rep3, delta.unwrap());
+                        let mut garbler =
+                            Rep3Garbler::new_with_delta(&net, &mut state, delta.unwrap());
                         garbler.output_all_parties(converted.wires()).unwrap()
                     }
                 };
@@ -1054,7 +1041,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = rng.gen::<RingElement<T>>();
         let x_shares = rep3_ring::share_ring_element(x, &mut rng);
@@ -1063,26 +1050,22 @@ mod ring_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            x_shares.into_iter()
-        ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                let id = rep3.network.id;
-                let delta = rep3.rngs.generate_random_garbler_delta(id);
+        for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter()) {
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                let id = state.id;
+                let delta = state.rngs.generate_random_garbler_delta(id);
 
-                let converted = conversion::a2y_streaming(x, delta, &mut rep3).unwrap();
+                let converted = conversion::a2y_streaming(x, delta, &net, &mut state).unwrap();
 
                 let output = match id {
                     PartyID::ID0 => {
-                        let mut evaluator = StreamingRep3Evaluator::new(&mut rep3);
+                        let mut evaluator = StreamingRep3Evaluator::new(&net);
                         evaluator.output_all_parties(converted.wires()).unwrap()
                     }
                     PartyID::ID1 | PartyID::ID2 => {
                         let mut garbler =
-                            StreamingRep3Garbler::new_with_delta(&mut rep3, delta.unwrap());
+                            StreamingRep3Garbler::new_with_delta(&net, &mut state, delta.unwrap());
                         garbler.output_all_parties(converted.wires()).unwrap()
                     }
                 };
@@ -1109,7 +1092,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let delta = GCUtils::random_delta(&mut rng);
         let x = rng.gen::<RingElement<T>>();
@@ -1124,14 +1107,10 @@ mod ring_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            x_shares.into_iter()
-        ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                let converted = conversion::y2a::<T, _>(x, Some(delta), &mut rep3).unwrap();
+        for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter()) {
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                let converted = conversion::y2a::<T, _>(x, Some(delta), &net, &mut state).unwrap();
                 tx.send(converted).unwrap();
             });
         }
@@ -1152,7 +1131,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let delta = GCUtils::random_delta(&mut rng);
         let x = rng.gen::<RingElement<T>>();
@@ -1167,15 +1146,11 @@ mod ring_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            x_shares.into_iter()
-        ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
+        for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter()) {
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
                 let converted =
-                    conversion::y2a_streaming::<T, _>(x, Some(delta), &mut rep3).unwrap();
+                    conversion::y2a_streaming::<T, _>(x, Some(delta), &net, &mut state).unwrap();
                 tx.send(converted).unwrap();
             });
         }
@@ -1196,7 +1171,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = rng.gen::<RingElement<T>>();
         let x_shares = rep3_ring::share_ring_element_binary(x, &mut rng);
@@ -1204,27 +1179,27 @@ mod ring_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in test_network
-            .get_party_networks()
+        for ((net, tx), x) in nets
             .into_iter()
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                let id = rep3.network.id;
-                let delta = rep3.rngs.generate_random_garbler_delta(id);
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                let id = state.id;
+                let delta = state.rngs.generate_random_garbler_delta(id);
 
-                let converted = conversion::b2y(&x, delta, &mut rep3).unwrap();
+                let converted = conversion::b2y(&x, delta, &net, &mut state).unwrap();
 
                 let output = match id {
                     PartyID::ID0 => {
-                        let mut evaluator = Rep3Evaluator::new(&mut rep3);
+                        let mut evaluator = Rep3Evaluator::new(&net);
                         evaluator.receive_circuit().unwrap();
                         evaluator.output_all_parties(converted.wires()).unwrap()
                     }
                     PartyID::ID1 | PartyID::ID2 => {
-                        let mut garbler = Rep3Garbler::new_with_delta(&mut rep3, delta.unwrap());
+                        let mut garbler =
+                            Rep3Garbler::new_with_delta(&net, &mut state, delta.unwrap());
                         garbler.output_all_parties(converted.wires()).unwrap()
                     }
                 };
@@ -1250,7 +1225,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = rng.gen::<RingElement<T>>();
         let x_shares = rep3_ring::share_ring_element_binary(x, &mut rng);
@@ -1258,27 +1233,26 @@ mod ring_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in test_network
-            .get_party_networks()
+        for ((net, tx), x) in nets
             .into_iter()
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                let id = rep3.network.id;
-                let delta = rep3.rngs.generate_random_garbler_delta(id);
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                let id = state.id;
+                let delta = state.rngs.generate_random_garbler_delta(id);
 
-                let converted = conversion::b2y(&x, delta, &mut rep3).unwrap();
+                let converted = conversion::b2y(&x, delta, &net, &mut state).unwrap();
 
                 let output = match id {
                     PartyID::ID0 => {
-                        let mut evaluator = StreamingRep3Evaluator::new(&mut rep3);
+                        let mut evaluator = StreamingRep3Evaluator::new(&net);
                         evaluator.output_all_parties(converted.wires()).unwrap()
                     }
                     PartyID::ID1 | PartyID::ID2 => {
                         let mut garbler =
-                            StreamingRep3Garbler::new_with_delta(&mut rep3, delta.unwrap());
+                            StreamingRep3Garbler::new_with_delta(&net, &mut state, delta.unwrap());
                         garbler.output_all_parties(converted.wires()).unwrap()
                     }
                 };
@@ -1304,7 +1278,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let delta = GCUtils::random_delta(&mut rng);
         let x = rng.gen::<RingElement<T>>();
@@ -1319,14 +1293,10 @@ mod ring_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            x_shares.into_iter()
-        ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
-                let converted = conversion::y2b::<T, _>(x, &mut rep3).unwrap();
+        for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter()) {
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                let converted = conversion::y2b::<T, _>(x, &net, &mut state).unwrap();
                 tx.send(converted).unwrap();
             });
         }
@@ -1349,7 +1319,7 @@ mod ring_share {
         T: IntRing2k + AsPrimitive<U>,
         U: IntRing2k,
     {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = rng.gen::<RingElement<T>>();
         let x_shares = rep3_ring::share_ring_element(x, &mut rng);
@@ -1357,14 +1327,10 @@ mod ring_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            x_shares.into_iter(),
-        ) {
-            thread::spawn(move || {
-                let mut ctx = IoContext::init(net).unwrap();
-                let y = casts::cast_a2b(x, &mut ctx).unwrap();
+        for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter(),) {
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                let y = casts::cast_a2b(x, &net, &mut state).unwrap();
                 tx.send(y)
             });
         }
@@ -1388,7 +1354,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let x_shares = rep3::share_field_element(x, &mut rng);
@@ -1397,14 +1363,10 @@ mod ring_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            x_shares.into_iter(),
-        ) {
-            thread::spawn(move || {
-                let mut ctx = IoContext::init(net).unwrap();
-                let y = casts::field_to_ring_a2b(x, &mut ctx).unwrap();
+        for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter(),) {
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                let y = casts::field_to_ring_a2b(x, &net, &mut state).unwrap();
                 tx.send(y)
             });
         }
@@ -1427,7 +1389,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = rng.gen::<RingElement<T>>();
         let x_shares = rep3_ring::share_ring_element(x, &mut rng);
@@ -1435,14 +1397,11 @@ mod ring_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            x_shares.into_iter(),
-        ) {
-            thread::spawn(move || {
-                let mut ctx = IoContext::init(net).unwrap();
-                let y = casts::ring_to_field_a2b::<_, ark_bn254::Fr, _>(x, &mut ctx).unwrap();
+        for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter(),) {
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                let y =
+                    casts::ring_to_field_a2b::<_, ark_bn254::Fr, _>(x, &net, &mut state).unwrap();
                 tx.send(y)
             });
         }
@@ -1467,7 +1426,7 @@ mod ring_share {
     {
         const VEC_SIZE: usize = 10;
 
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| ark_bn254::Fr::rand(&mut rng))
@@ -1483,14 +1442,10 @@ mod ring_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            x_shares.into_iter(),
-        ) {
-            thread::spawn(move || {
-                let mut ctx = IoContext::init(net).unwrap();
-                let y = yao::field_to_ring_many::<_, T, _>(&x, &mut ctx).unwrap();
+        for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter(),) {
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                let y = yao::field_to_ring_many::<_, T, _>(&x, &net, &mut state).unwrap();
                 tx.send(y)
             });
         }
@@ -1512,7 +1467,7 @@ mod ring_share {
     {
         const VEC_SIZE: usize = 10;
 
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| rng.gen::<RingElement<T>>())
@@ -1525,14 +1480,11 @@ mod ring_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            x_shares.into_iter(),
-        ) {
-            thread::spawn(move || {
-                let mut ctx = IoContext::init(net).unwrap();
-                let y = yao::ring_to_field_many::<_, ark_bn254::Fr, _>(&x, &mut ctx).unwrap();
+        for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter(),) {
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                let y =
+                    yao::ring_to_field_many::<_, ark_bn254::Fr, _>(&x, &net, &mut state).unwrap();
                 tx.send(y)
             });
         }
@@ -1559,7 +1511,7 @@ mod ring_share {
         if U::K <= T::K {
             return;
         }
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| rng.gen::<RingElement<T>>())
@@ -1572,14 +1524,10 @@ mod ring_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            x_shares.into_iter(),
-        ) {
-            thread::spawn(move || {
-                let mut ctx = IoContext::init(net).unwrap();
-                let y = yao::upcast_many(&x, &mut ctx).unwrap();
+        for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter(),) {
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                let y = yao::upcast_many(&x, &net, &mut state).unwrap();
                 tx.send(y)
             });
         }
@@ -1605,7 +1553,7 @@ mod ring_share {
         T: IntRing2k + AsPrimitive<U>,
         U: IntRing2k,
     {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = rng.gen::<RingElement<T>>();
         let x_shares = rep3_ring::share_ring_element(x, &mut rng);
@@ -1613,14 +1561,10 @@ mod ring_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            x_shares.into_iter(),
-        ) {
-            thread::spawn(move || {
-                let mut ctx = IoContext::init(net).unwrap();
-                let y = casts::cast_gc(x, &mut ctx).unwrap();
+        for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter(),) {
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
+                let y = casts::cast_gc(x, &net, &mut state).unwrap();
                 tx.send(y)
             });
         }
@@ -1647,7 +1591,7 @@ mod ring_share {
         const VEC_SIZE: usize = 10;
         let num_chunks = (ark_bn254::Fr::MODULUS_BIT_SIZE as usize).div_ceil(T::K);
 
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| ark_bn254::Fr::rand(&mut rng))
@@ -1669,16 +1613,13 @@ mod ring_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            x_shares.into_iter()
-        ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
+        for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter()) {
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
 
                 let decomposed =
-                    yao::decompose_field_to_rings_many(&x, &mut rep3, num_chunks, T::K).unwrap();
+                    yao::decompose_field_to_rings_many(&x, &net, &mut state, num_chunks, T::K)
+                        .unwrap();
                 tx.send(decomposed)
             });
         }
@@ -1704,7 +1645,7 @@ mod ring_share {
     {
         const VEC_SIZE: usize = 10;
 
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| rng.gen::<RingElement<T>>())
@@ -1721,15 +1662,12 @@ mod ring_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            x_shares.into_iter()
-        ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
+        for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter()) {
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
 
-                let decomposed = yao::ring_div_power_2_many(&x, &mut rep3, divisor_bit).unwrap();
+                let decomposed =
+                    yao::ring_div_power_2_many(&x, &net, &mut state, divisor_bit).unwrap();
                 tx.send(decomposed)
             });
         }
@@ -1752,7 +1690,7 @@ mod ring_share {
     {
         const VEC_SIZE: usize = 10;
 
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| rng.gen::<RingElement<T>>())
@@ -1773,15 +1711,15 @@ mod ring_share {
         let (tx3, rx3) = mpsc::channel();
 
         for (net, tx, x, y) in izip!(
-            test_network.get_party_networks().into_iter(),
+            nets,
             [tx1, tx2, tx3],
             x_shares.into_iter(),
             y_shares.into_iter()
         ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
 
-                let div = yao::ring_div_many(&x, &y, &mut rep3).unwrap();
+                let div = yao::ring_div_many(&x, &y, &net, &mut state).unwrap();
                 tx.send(div)
             });
         }
@@ -1804,7 +1742,7 @@ mod ring_share {
     {
         const VEC_SIZE: usize = 10;
 
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| rng.gen::<RingElement<T>>())
@@ -1823,16 +1761,12 @@ mod ring_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, x) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            x_shares.into_iter(),
-        ) {
+        for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter(),) {
             let y_ = y.to_owned();
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
 
-                let div = yao::ring_div_by_public_many(&x, &y_, &mut rep3).unwrap();
+                let div = yao::ring_div_by_public_many(&x, &y_, &net, &mut state).unwrap();
                 tx.send(div)
             });
         }
@@ -1855,7 +1789,7 @@ mod ring_share {
     {
         const VEC_SIZE: usize = 10;
 
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| rng.gen::<RingElement<T>>())
@@ -1874,16 +1808,12 @@ mod ring_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, y_c) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-            y_shares.into_iter(),
-        ) {
+        for (net, tx, y_c) in izip!(nets, [tx1, tx2, tx3], y_shares.into_iter(),) {
             let x_ = x.to_owned();
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
 
-                let div = yao::ring_div_by_shared_many(&x_, &y_c, &mut rep3).unwrap();
+                let div = yao::ring_div_by_shared_many(&x_, &y_c, &net, &mut state).unwrap();
                 tx.send(div)
             });
         }
@@ -1904,24 +1834,21 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let test_network = Rep3TestNetwork::default();
+        let nets = TestNetwork::new_3_parties();
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx) in izip!(
-            test_network.get_party_networks().into_iter(),
-            [tx1, tx2, tx3],
-        ) {
-            thread::spawn(move || {
-                let mut rep3 = IoContext::init(net).unwrap();
+        for (net, tx) in izip!(nets, [tx1, tx2, tx3],) {
+            spawn_pool(move || {
+                let mut state = Rep3State::new(&net).unwrap();
 
                 // First run, get one of size K
-                let res = gadgets::ohv::rand_ohv::<T, _>(T::K, &mut rep3).unwrap();
+                let res = gadgets::ohv::rand_ohv::<T, _>(T::K, &net, &mut state).unwrap();
                 tx.send(res).unwrap();
 
                 // Second run, get one of size K/2
-                let res = gadgets::ohv::rand_ohv::<T, _>(T::K >> 1, &mut rep3).unwrap();
+                let res = gadgets::ohv::rand_ohv::<T, _>(T::K >> 1, &net, &mut state).unwrap();
                 tx.send(res)
             });
         }
@@ -1979,26 +1906,19 @@ mod ring_share {
             let x_shares = rep3_ring::share_ring_element_binary(x_, &mut rng);
             let should_result_f = lut[x].to_owned();
 
-            let test_network = Rep3TestNetwork::default();
+            let nets = TestNetwork::new_3_parties();
             let (tx1, rx1) = mpsc::channel();
             let (tx2, rx2) = mpsc::channel();
             let (tx3, rx3) = mpsc::channel();
 
-            std::thread::scope(|s| {
-                let lut_ = &lut;
-                for (net, tx, x) in izip!(
-                    test_network.get_party_networks().into_iter(),
-                    [tx1, tx2, tx3],
-                    x_shares.into_iter(),
-                ) {
-                    s.spawn(move || {
-                        let mut rep3 = IoContext::init(net).unwrap();
-
-                        let res = gadgets::lut::read_public_lut(lut_, x, &mut rep3).unwrap();
-                        tx.send(res)
-                    });
-                }
-            });
+            for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter(),) {
+                let lut = lut.clone();
+                spawn_pool(move || {
+                    let mut state = Rep3State::new(&net).unwrap();
+                    let res = gadgets::lut::read_public_lut(&lut, x, &net, &mut state).unwrap();
+                    tx.send(res)
+                });
+            }
 
             let result1 = rx1.recv().unwrap();
             let result2 = rx2.recv().unwrap();
@@ -2031,30 +1951,31 @@ mod ring_share {
             let x_shares = rep3_ring::share_ring_element_binary(x_, &mut rng);
             let should_result_f = lut[x].to_owned();
 
-            let test_network = Rep3TestNetwork::default();
+            let nets0 = TestNetwork::new_3_parties();
+            let nets1 = TestNetwork::new_3_parties();
             let (tx1, rx1) = mpsc::channel();
             let (tx2, rx2) = mpsc::channel();
             let (tx3, rx3) = mpsc::channel();
 
-            std::thread::scope(|s| {
+            rayon::scope(|s| {
                 let lut_ = &lut;
-                for (net, tx, x) in izip!(
-                    test_network.get_party_networks().into_iter(),
-                    [tx1, tx2, tx3],
-                    x_shares.into_iter(),
-                ) {
-                    s.spawn(move || {
-                        let mut rep3 = IoContext::init(net).unwrap();
-                        let mut forked = rep3.fork().unwrap();
+                for (net0, net1, tx, x) in
+                    izip!(nets0, nets1, [tx1, tx2, tx3], x_shares.into_iter(),)
+                {
+                    s.spawn(move |_| {
+                        let mut state0 = Rep3State::new(&net0).unwrap();
+                        let mut state1 = state0.fork(0).unwrap();
 
                         let res = gadgets::lut::read_public_lut_low_depth(
                             lut_,
                             x,
-                            &mut rep3,
-                            &mut forked,
+                            &net0,
+                            &net1,
+                            &mut state0,
+                            &mut state1,
                         )
                         .unwrap();
-                        tx.send(res)
+                        tx.send(res).unwrap();
                     });
                 }
             });
@@ -2091,21 +2012,21 @@ mod ring_share {
             let lut_shares = rep3::share_field_elements(&lut, &mut rng);
             let should_result = lut[x].to_owned();
 
-            let test_network = Rep3TestNetwork::default();
+            let nets = TestNetwork::new_3_parties();
             let (tx1, rx1) = mpsc::channel();
             let (tx2, rx2) = mpsc::channel();
             let (tx3, rx3) = mpsc::channel();
 
             for (net, tx, x, lut) in izip!(
-                test_network.get_party_networks().into_iter(),
+                nets,
                 [tx1, tx2, tx3],
                 x_shares.into_iter(),
                 lut_shares.into_iter()
             ) {
-                thread::spawn(move || {
-                    let mut rep3 = IoContext::init(net).unwrap();
+                spawn_pool(move || {
+                    let mut state = Rep3State::new(&net).unwrap();
 
-                    let res = gadgets::lut::read_shared_lut(&lut, x, &mut rep3).unwrap();
+                    let res = gadgets::lut::read_shared_lut(&lut, x, &net, &mut state).unwrap();
                     tx.send(res)
                 });
             }
@@ -2142,22 +2063,22 @@ mod ring_share {
             let mut should_result = lut;
             should_result[x] = y;
 
-            let test_network = Rep3TestNetwork::default();
+            let nets = TestNetwork::new_3_parties();
             let (tx1, rx1) = mpsc::channel();
             let (tx2, rx2) = mpsc::channel();
             let (tx3, rx3) = mpsc::channel();
 
             for (net, tx, x, y, mut lut) in izip!(
-                test_network.get_party_networks().into_iter(),
+                nets,
                 [tx1, tx2, tx3],
                 x_shares.into_iter(),
                 y_shares.into_iter(),
                 lut_shares.into_iter()
             ) {
-                thread::spawn(move || {
-                    let mut rep3 = IoContext::init(net).unwrap();
+                spawn_pool(move || {
+                    let mut state = Rep3State::new(&net).unwrap();
 
-                    gadgets::lut::write_lut(&y, &mut lut, x, &mut rep3).unwrap();
+                    gadgets::lut::write_lut(&y, &mut lut, x, &net, &mut state).unwrap();
                     tx.send(lut)
                 });
             }

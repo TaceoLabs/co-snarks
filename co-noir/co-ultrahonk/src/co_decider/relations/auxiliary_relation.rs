@@ -13,6 +13,8 @@ use ark_ff::Zero;
 use co_builder::HonkProofResult;
 use co_builder::prelude::HonkCurve;
 use itertools::Itertools as _;
+use mpc_core::MpcState as _;
+use mpc_net::Network;
 use num_bigint::BigUint;
 use ultrahonk::prelude::{TranscriptFieldType, Univariate};
 
@@ -186,14 +188,15 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
      * @param parameters contains beta, gamma, and public_input_delta, ....
      * @param scaling_factor optional term to scale the evaluation before adding to evals.
      */
-    fn accumulate(
-        driver: &mut T,
+    fn accumulate<N: Network>(
+        net: &N,
+        state: &mut T::State,
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesBatch<T, P>,
         relation_parameters: &RelationParameters<<P>::ScalarField>,
         scaling_factors: &[P::ScalarField],
     ) -> HonkProofResult<()> {
-        let party_id = driver.get_party_id();
+        let id = state.id();
 
         let eta = &relation_parameters.eta_1;
         let eta_two = &relation_parameters.eta_2;
@@ -244,7 +247,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         rhs.extend(w_4);
         rhs.extend(w_3);
         rhs.extend(w_2_shift);
-        let mul = driver.mul_many(&lhs, &rhs)?;
+        let mul = T::mul_many(&lhs, &rhs, net, state)?;
         let mul = mul.chunks_exact(mul.len() / 5).collect_vec();
         debug_assert_eq!(mul.len(), 5);
 
@@ -354,7 +357,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         T::scale_many_in_place(&mut memory_record_check, *eta_three);
         T::add_assign_many(&mut memory_record_check, &tmp1);
         T::add_assign_many(&mut memory_record_check, &tmp2);
-        T::add_assign_public_many(&mut memory_record_check, q_c, party_id);
+        T::add_assign_public_many(&mut memory_record_check, q_c, id);
         let partial_record_check = memory_record_check.clone();
         let mut memory_record_check = T::sub_many(&partial_record_check, w_4);
 
@@ -378,7 +381,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
 
         let mut index_delta_one = index_delta.clone();
         T::neg_many(&mut index_delta_one);
-        T::add_scalar_in_place(&mut index_delta_one, P::ScalarField::one(), party_id);
+        T::add_scalar_in_place(&mut index_delta_one, P::ScalarField::one(), id);
 
         /*
          * RAM Consistency Check
@@ -414,7 +417,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         rhs.extend(access_type.clone());
         rhs.extend(index_delta_one.clone());
 
-        let mul = driver.mul_many(&lhs, &rhs)?;
+        let mul = T::mul_many(&lhs, &rhs, net, state)?;
         let mul = mul.chunks_exact(mul.len() / 4).collect_vec();
         debug_assert_eq!(mul.len(), 4);
         let index_is_monotonically_increasing = T::sub_many(mul[0], &index_delta); // deg 2
@@ -467,7 +470,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let next_gate_access_type = T::sub_many(w_4_shift, &next_gate_access_type);
         let mut tmp = next_gate_access_type.clone();
         T::neg_many(&mut tmp);
-        T::add_scalar_in_place(&mut tmp, P::ScalarField::one(), party_id);
+        T::add_scalar_in_place(&mut tmp, P::ScalarField::one(), id);
 
         let timestamp_delta = T::sub_many(w_2_shift, w_2);
         let mut lhs =
@@ -481,7 +484,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         rhs.extend(next_gate_access_type.clone());
         rhs.extend(timestamp_delta);
 
-        let mul = driver.mul_many(&lhs, &rhs)?;
+        let mul = T::mul_many(&lhs, &rhs, net, state)?;
         let mul = mul.chunks_exact(mul.len() / 3).collect_vec();
         debug_assert_eq!(mul.len(), 3);
 

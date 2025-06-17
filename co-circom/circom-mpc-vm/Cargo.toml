@@ -23,5 +23,6 @@ mpc-core = { version = "0.9.0", path = "../../mpc-core" }
 mpc-net = { version = "0.4.0", path = "../../mpc-net" }
 serde.workspace = true
 tracing.workspace = true
+rayon.workspace = true
 
 

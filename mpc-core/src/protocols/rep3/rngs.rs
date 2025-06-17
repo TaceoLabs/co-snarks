@@ -17,7 +17,8 @@ use rayon::prelude::*;
 #[derive(Debug)]
 /// A correlated rng for rep3
 pub struct Rep3CorrelatedRng {
-    pub(crate) rand: Rep3Rand,
+    /// Rep3 rng with this party's rng and the prev party's rng
+    pub rand: Rep3Rand,
     pub(crate) bitcomp1: Rep3RandBitComp,
     pub(crate) bitcomp2: Rep3RandBitComp,
 }
