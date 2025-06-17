@@ -162,15 +162,15 @@ impl<
         }
 
         // Zero univariates are used to pad the proof to the fixed size CONST_PROOF_SIZE_LOG_N.
-        let zero_univariate =
-            SumcheckRoundOutput::<P::ScalarField, BATCHED_RELATION_PARTIAL_LENGTH>::default();
+        let zero_univariate = L::SumcheckRoundOutput::default();
         for idx in multivariate_d as usize..CONST_PROOF_SIZE_LOG_N {
-            transcript.send_fr_iter_to_verifier::<P, _>(
-                format!("Sumcheck:univariate_{idx}"),
-                &zero_univariate.evaluations,
-            );
-            let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{idx}"));
-            multivariate_challenge.push(round_challenge);
+            todo!("Sumcheck prove round {idx} (zero univariate)");
+            // transcript.send_fr_iter_to_verifier::<P, _>(
+            //     format!("Sumcheck:univariate_{idx}"),
+            //     &zero_univariate.evaluations,
+            // );
+            // let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{idx}"));
+            // multivariate_challenge.push(round_challenge);
         }
 
         // Claimed evaluations of Prover polynomials are extracted and added to the transcript. When Flavor has ZK, the
@@ -285,15 +285,15 @@ impl<
         tracing::trace!("Completed {multivariate_d} rounds of sumcheck");
 
         // Zero univariates are used to pad the proof to the fixed size CONST_PROOF_SIZE_LOG_N.
-        let zero_univariate =
-            SumcheckRoundOutput::<P::ScalarField, BATCHED_RELATION_PARTIAL_LENGTH_ZK>::default();
+        let zero_univariate = L::SumcheckRoundOutputZK::default();
         for idx in multivariate_d as usize..CONST_PROOF_SIZE_LOG_N {
-            transcript.send_fr_iter_to_verifier::<P, _>(
-                format!("Sumcheck:univariate_{idx}"),
-                &zero_univariate.evaluations,
-            );
-            let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{idx}"));
-            multivariate_challenge.push(round_challenge);
+            todo!("Sumcheck prove round {idx} (zero univariate)");
+            // transcript.send_fr_iter_to_verifier::<P, _>(
+            //     format!("Sumcheck:univariate_{idx}"),
+            //     &zero_univariate.evaluations,
+            // );
+            // let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{idx}"));
+            // multivariate_challenge.push(round_challenge);
         }
 
         // Claimed evaluations of Prover polynomials are extracted and added to the transcript. When Flavor has ZK, the

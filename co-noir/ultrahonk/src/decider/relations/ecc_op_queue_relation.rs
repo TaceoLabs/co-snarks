@@ -124,13 +124,13 @@ impl EccOpQueueRelation {
     pub(crate) const NUM_RELATIONS: usize = 8;
 }
 
-impl<F: PrimeField, L: PlainProverFlavour<F>> Relation<F, L> for EccOpQueueRelation {
+impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for EccOpQueueRelation {
     type Acc = EccOpQueueRelationAcc<F>;
 
     type VerifyAcc = EccOpQueueRelationEvals<F>;
 
     const SKIPPABLE: bool = true;
-    fn skip(input: &ProverUnivariates<F, L, { L::MAX_PARTIAL_RELATION_LENGTH }>) -> bool {
+    fn skip(input: &ProverUnivariates<F, L>) -> bool {
         // The prover can skip execution of this relation if the ecc op selector is identically zero
         <Self as Relation<F, L>>::check_skippable();
         input.precomputed.lagrange_ecc_op().is_zero()
@@ -138,8 +138,8 @@ impl<F: PrimeField, L: PlainProverFlavour<F>> Relation<F, L> for EccOpQueueRelat
 
     fn accumulate(
         univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariates<F, L, { L::MAX_PARTIAL_RELATION_LENGTH }>,
-        _relation_parameters: &RelationParameters<F>,
+        input: &ProverUnivariates<F, L>,
+        _relation_parameters: &RelationParameters<F,L>,
         scaling_factor: &F,
     ) {
         tracing::trace!("Accumulate EccOpQueueRelation");
@@ -221,7 +221,7 @@ impl<F: PrimeField, L: PlainProverFlavour<F>> Relation<F, L> for EccOpQueueRelat
     fn verify_accumulate(
         univariate_accumulator: &mut Self::VerifyAcc,
         input: &ClaimedEvaluations<F, L>,
-        _relation_parameters: &RelationParameters<F>,
+        _relation_parameters: &RelationParameters<F,L>,
         scaling_factor: &F,
     ) {
         tracing::trace!("Accumulate EccOpQueueRelation");

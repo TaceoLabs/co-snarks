@@ -10,6 +10,9 @@ pub trait PlainProverFlavour: Default + ProverFlavour + ProverUnivariatePlainFla
     type AllRelationAcc<F: PrimeField>: Default;
     type AllRelationEvaluations<F: PrimeField>: Default;
     type Alphas<F: PrimeField>: Default + Clone + Copy;
+    type SumcheckRoundOutput<F: PrimeField>: Default;
+    type SumcheckRoundOutputZK<F: PrimeField>: Default;
+
     const NUM_SUBRELATIONS: usize;
 
     fn scale<F: PrimeField>(
@@ -17,10 +20,16 @@ pub trait PlainProverFlavour: Default + ProverFlavour + ProverUnivariatePlainFla
         first_scalar: F,
         elements: &Self::Alphas<F>,
     );
-    fn extend_and_batch_univariates<const SIZE: usize, F: PrimeField>(
+    fn extend_and_batch_univariates<F: PrimeField>(
         acc: &Self::AllRelationAcc<F>,
-        result: &mut Univariate<F, SIZE>,
-        extended_random_poly: &Univariate<F, SIZE>,
+        result: &mut Self::SumcheckRoundOutput<F>,
+        extended_random_poly: &Self::SumcheckRoundOutput<F>,
+        partial_evaluation_result: &F,
+    );
+    fn extend_and_batch_univariates_zk<F: PrimeField>(
+        acc: &Self::AllRelationAcc<F>,
+        result: &mut Self::SumcheckRoundOutputZK<F>,
+        extended_random_poly: &Self::SumcheckRoundOutputZK<F>,
         partial_evaluation_result: &F,
     );
     fn accumulate_relation_univariates<P: HonkCurve<TranscriptFieldType>>(

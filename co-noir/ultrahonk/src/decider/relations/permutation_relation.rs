@@ -64,13 +64,13 @@ impl UltraPermutationRelation {
     pub(crate) const NUM_RELATIONS: usize = 2;
 }
 
-impl<F: PrimeField, L: PlainProverFlavour<F>> Relation<F, L> for UltraPermutationRelation {
+impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for UltraPermutationRelation {
     type Acc = UltraPermutationRelationAcc<F>;
     type VerifyAcc = UltraPermutationRelationEvals<F>;
 
     const SKIPPABLE: bool = true;
 
-    fn skip(input: &ProverUnivariates<F, L, { L::MAX_PARTIAL_RELATION_LENGTH }>) -> bool {
+    fn skip(input: &ProverUnivariates<F, L>) -> bool {
         <Self as Relation<F, L>>::check_skippable();
         // If z_perm == z_perm_shift, this implies that none of the wire values for the present input are involved in
         // non-trivial copy constraints.
@@ -95,8 +95,8 @@ impl<F: PrimeField, L: PlainProverFlavour<F>> Relation<F, L> for UltraPermutatio
      */
     fn accumulate(
         univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariates<F, L, { L::MAX_PARTIAL_RELATION_LENGTH }>,
-        relation_parameters: &RelationParameters<F>,
+        input: &ProverUnivariates<F, L>,
+        relation_parameters: &RelationParameters<F, L>,
         scaling_factor: &F,
     ) {
         tracing::trace!("Accumulate UltraPermutationRelation");
@@ -172,7 +172,7 @@ impl<F: PrimeField, L: PlainProverFlavour<F>> Relation<F, L> for UltraPermutatio
     fn verify_accumulate(
         univariate_accumulator: &mut Self::VerifyAcc,
         input: &ClaimedEvaluations<F, L>,
-        relation_parameters: &RelationParameters<F>,
+        relation_parameters: &RelationParameters<F, L>,
         scaling_factor: &F,
     ) {
         let w_1 = input.witness.w_l();

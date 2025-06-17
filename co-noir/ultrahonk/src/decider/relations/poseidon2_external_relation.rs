@@ -86,13 +86,13 @@ impl Poseidon2ExternalRelation {
     pub(crate) const NUM_RELATIONS: usize = 4;
 }
 
-impl<F: PrimeField, L: PlainProverFlavour<F>> Relation<F, L> for Poseidon2ExternalRelation {
+impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for Poseidon2ExternalRelation {
     type Acc = Poseidon2ExternalRelationAcc<F>;
     type VerifyAcc = Poseidon2ExternalRelationEvals<F>;
 
     const SKIPPABLE: bool = true;
 
-    fn skip(input: &ProverUnivariates<F, L, { L::MAX_PARTIAL_RELATION_LENGTH }>) -> bool {
+    fn skip(input: &ProverUnivariates<F, L>) -> bool {
         <Self as Relation<F, L>>::check_skippable();
         input.precomputed.q_poseidon2_external().is_zero()
     }
@@ -123,8 +123,8 @@ impl<F: PrimeField, L: PlainProverFlavour<F>> Relation<F, L> for Poseidon2Extern
      */
     fn accumulate(
         univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariates<F, L, { L::MAX_PARTIAL_RELATION_LENGTH }>,
-        _relation_parameters: &RelationParameters<F>,
+        input: &ProverUnivariates<F, L>,
+        _relation_parameters: &RelationParameters<F,L>,
         scaling_factor: &F,
     ) {
         tracing::trace!("Accumulate Poseidon2ExternalRelation");
@@ -210,7 +210,7 @@ impl<F: PrimeField, L: PlainProverFlavour<F>> Relation<F, L> for Poseidon2Extern
     fn verify_accumulate(
         univariate_accumulator: &mut Self::VerifyAcc,
         input: &ClaimedEvaluations<F, L>,
-        _relation_parameters: &RelationParameters<F>,
+        _relation_parameters: &RelationParameters<F,L>,
         scaling_factor: &F,
     ) {
         tracing::trace!("Accumulate Poseidon2ExternalRelation");

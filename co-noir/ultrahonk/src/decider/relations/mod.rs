@@ -25,7 +25,7 @@ use poseidon2_external_relation::Poseidon2ExternalRelation;
 use poseidon2_internal_relation::Poseidon2InternalRelation;
 use ultra_arithmetic_relation::UltraArithmeticRelation;
 
-pub(crate) trait Relation<F: PrimeField, L: PlainProverFlavour<F>> {
+pub(crate) trait Relation<F: PrimeField, L: PlainProverFlavour> {
     type Acc: Default;
     type VerifyAcc: Default;
 
@@ -37,18 +37,18 @@ pub(crate) trait Relation<F: PrimeField, L: PlainProverFlavour<F>> {
         }
     }
 
-    fn skip(input: &ProverUnivariates<F, L, { L::MAX_PARTIAL_RELATION_LENGTH }>) -> bool;
+    fn skip(input: &ProverUnivariates<F, L>) -> bool;
     fn accumulate(
         univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariates<F, L, { L::MAX_PARTIAL_RELATION_LENGTH }>,
-        relation_parameters: &RelationParameters<F>,
+        input: &ProverUnivariates<F, L>,
+        relation_parameters: &RelationParameters<F, L>,
         scaling_factor: &F,
     );
 
     fn verify_accumulate(
         univariate_accumulator: &mut Self::VerifyAcc,
         input: &ClaimedEvaluations<F, L>,
-        relation_parameters: &RelationParameters<F>,
+        relation_parameters: &RelationParameters<F, L>,
         scaling_factor: &F,
     );
 }

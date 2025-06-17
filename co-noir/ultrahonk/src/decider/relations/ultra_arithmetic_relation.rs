@@ -64,13 +64,13 @@ impl UltraArithmeticRelation {
     pub(crate) const NUM_RELATIONS: usize = 2;
 }
 
-impl<F: PrimeField, L: PlainProverFlavour<F>> Relation<F, L> for UltraArithmeticRelation {
+impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for UltraArithmeticRelation {
     type Acc = UltraArithmeticRelationAcc<F>;
     type VerifyAcc = UltraArithmeticRelationEvals<F>;
 
     const SKIPPABLE: bool = true;
 
-    fn skip(input: &ProverUnivariates<F, L, { L::MAX_PARTIAL_RELATION_LENGTH }>) -> bool {
+    fn skip(input: &ProverUnivariates<F, L>) -> bool {
         <Self as Relation<F, L>>::check_skippable();
         input.precomputed.q_arith().is_zero()
     }
@@ -128,8 +128,8 @@ impl<F: PrimeField, L: PlainProverFlavour<F>> Relation<F, L> for UltraArithmetic
      */
     fn accumulate(
         univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariates<F, L, { L::MAX_PARTIAL_RELATION_LENGTH }>,
-        _relation_parameters: &RelationParameters<F>,
+        input: &ProverUnivariates<F, L>,
+        _relation_parameters: &RelationParameters<F, L>,
         scaling_factor: &F,
     ) {
         tracing::trace!("Accumulate UltraArithmeticRelation");
@@ -180,7 +180,7 @@ impl<F: PrimeField, L: PlainProverFlavour<F>> Relation<F, L> for UltraArithmetic
     fn verify_accumulate(
         univariate_accumulator: &mut Self::VerifyAcc,
         input: &ClaimedEvaluations<F, L>,
-        _relation_parameters: &RelationParameters<F>,
+        _relation_parameters: &RelationParameters<F, L>,
         scaling_factor: &F,
     ) {
         tracing::trace!("Accumulate UltraArithmeticRelation_Verify");

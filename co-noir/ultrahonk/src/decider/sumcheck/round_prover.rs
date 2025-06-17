@@ -61,17 +61,35 @@ impl<F: PrimeField, L: PlainProverFlavour> SumcheckProverRound<F, L> {
      * @param result Round univariate \f$ \tilde{S}^i\f$ represented by its evaluations over \f$ \{0,\ldots, D\} \f$.
      * @param gate_sparators Round \f$pow_{\beta}\f$-factor  \f$ ( (1−X_i) + X_i\cdot \beta_i )\f$.
      */
-    fn extend_and_batch_univariates<const SIZE: usize>(
-        result: &mut SumcheckRoundOutput<F, SIZE>,
+    fn extend_and_batch_univariates(
+        result: &mut L::SumcheckRoundOutput<F>,
         univariate_accumulators: L::AllRelationAcc<F>,
         gate_sparators: &GateSeparatorPolynomial<F>,
     ) {
         // Pow-Factor  \f$ (1-X) + X\beta_i \f$
         let random_polynomial = [F::one(), gate_sparators.current_element()];
-        let mut extended_random_polynomial = Univariate::default();
+        let mut extended_random_polynomial = L::SumcheckRoundOutput::default();
         extended_random_polynomial.extend_from(&random_polynomial);
 
-        L::extend_and_batch_univariates(
+        <L as PlainProverFlavour>::extend_and_batch_univariates(
+            &univariate_accumulators,
+            result,
+            &extended_random_polynomial,
+            &gate_sparators.partial_evaluation_result,
+        );
+    }
+
+    fn extend_and_batch_univariates_zk(
+        result: &mut L::SumcheckRoundOutputZK<F>,
+        univariate_accumulators: L::AllRelationAcc<F>,
+        gate_sparators: &GateSeparatorPolynomial<F>,
+    ) {
+        // Pow-Factor  \f$ (1-X) + X\beta_i \f$
+        let random_polynomial = [F::one(), gate_sparators.current_element()];
+        let mut extended_random_polynomial = L::SumcheckRoundOutputZK::default();
+        extended_random_polynomial.extend_from(&random_polynomial);
+
+        <L as PlainProverFlavour>::extend_and_batch_univariates_zk(
             &univariate_accumulators,
             result,
             &extended_random_polynomial,
@@ -95,18 +113,32 @@ impl<F: PrimeField, L: PlainProverFlavour> SumcheckProverRound<F, L> {
      * @param challenge Challenge \f$\alpha\f$.
      * @param gate_sparators Round \f$pow_{\beta}\f$-factor given by  \f$ ( (1−u_i) + u_i\cdot \beta_i )\f$.
      */
-    fn batch_over_relations_univariates<const SIZE: usize>(
+    fn batch_over_relations_univariates(
         mut univariate_accumulators: L::AllRelationAcc<F>,
         alphas: &L::Alphas<F>, //TODO ALPHAS_ISSUE
         gate_sparators: &GateSeparatorPolynomial<F>,
-    ) -> SumcheckRoundOutput<F, SIZE> {
+    ) -> L::SumcheckRoundOutput<F> {
         tracing::trace!("batch over relations");
 
         let running_challenge = F::one();
         L::scale(&mut univariate_accumulators, running_challenge, alphas);
 
-        let mut res = SumcheckRoundOutput::default();
+        let mut res = L::SumcheckRoundOutput::default();
         Self::extend_and_batch_univariates(&mut res, univariate_accumulators, gate_sparators);
+        res
+    }
+    fn batch_over_relations_univariates_zk(
+        mut univariate_accumulators: L::AllRelationAcc<F>,
+        alphas: &L::Alphas<F>, //TODO ALPHAS_ISSUE
+        gate_sparators: &GateSeparatorPolynomial<F>,
+    ) -> L::SumcheckRoundOutputZK<F> {
+        tracing::trace!("batch over relations");
+
+        let running_challenge = F::one();
+        L::scale(&mut univariate_accumulators, running_challenge, alphas);
+
+        let mut res = L::SumcheckRoundOutputZK::default();
+        Self::extend_and_batch_univariates_zk(&mut res, univariate_accumulators, gate_sparators);
         res
     }
 
@@ -140,7 +172,7 @@ impl<F: PrimeField, L: PlainProverFlavour> SumcheckProverRound<F, L> {
             return;
         }
 
-        EllipticRelation::accumulate::<P, L, { L::MAX_PARTIAL_RELATION_LENGTH }>(
+        EllipticRelation::accumulate::<P, L>(
             univariate_accumulator,
             extended_edges,
             relation_parameters,
@@ -148,19 +180,16 @@ impl<F: PrimeField, L: PlainProverFlavour> SumcheckProverRound<F, L> {
         );
     }
 
-    fn compute_univariate_inner<
-        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
-        const SIZE: usize,
-    >(
+    fn compute_univariate_inner<P: HonkCurve<TranscriptFieldType, ScalarField = F>>(
         &self,
         relation_parameters: &RelationParameters<P::ScalarField, L>,
         gate_sparators: &GateSeparatorPolynomial<P::ScalarField>,
         polynomials: &AllEntities<Vec<P::ScalarField>, L>,
-    ) -> SumcheckRoundOutput<P::ScalarField, SIZE> {
+    ) -> L::SumcheckRoundOutput<P::ScalarField> {
         // Barretenberg uses multithreading here
 
         // Construct extended edge containers
-        let mut extended_edge = L::ProverUnivariate::default();
+        let mut extended_edge = ProverUnivariates::<F, L>::default();
 
         let mut univariate_accumulators = L::AllRelationAcc::<F>::default();
 
@@ -187,20 +216,52 @@ impl<F: PrimeField, L: PlainProverFlavour> SumcheckProverRound<F, L> {
         )
     }
 
+    fn compute_univariate_inner_zk<P: HonkCurve<TranscriptFieldType, ScalarField = F>>(
+        &self,
+        relation_parameters: &RelationParameters<P::ScalarField, L>,
+        gate_sparators: &GateSeparatorPolynomial<P::ScalarField>,
+        polynomials: &AllEntities<Vec<P::ScalarField>, L>,
+    ) -> L::SumcheckRoundOutputZK<P::ScalarField> {
+        // Barretenberg uses multithreading here
+
+        // Construct extended edge containers
+        let mut extended_edge = ProverUnivariates::<F, L>::default();
+
+        let mut univariate_accumulators = L::AllRelationAcc::<F>::default();
+
+        // Accumulate the contribution from each sub-relation accross each edge of the hyper-cube
+        for edge_idx in (0..self.round_size).step_by(2) {
+            Self::extend_edges(&mut extended_edge, polynomials, edge_idx);
+            // Compute the \f$ \ell \f$-th edge's univariate contribution,
+            // scale it by the corresponding \f$ pow_{\beta} \f$ contribution and add it to the accumulators for \f$
+            // \tilde{S}^i(X_i) \f$. If \f$ \ell \f$'s binary representation is given by \f$ (\ell_{i+1},\ldots,
+            // \ell_{d-1})\f$, the \f$ pow_{\beta}\f$-contribution is \f$\beta_{i+1}^{\ell_{i+1}} \cdot \ldots \cdot
+            // \beta_{d-1}^{\ell_{d-1}}\f$.
+            L::accumulate_relation_univariates::<P>(
+                &mut univariate_accumulators,
+                &extended_edge,
+                relation_parameters,
+                &gate_sparators.beta_products[(edge_idx >> 1) * gate_sparators.periodicity],
+            );
+        }
+
+        Self::batch_over_relations_univariates_zk(
+            univariate_accumulators,
+            &relation_parameters.alphas,
+            gate_sparators,
+        )
+    }
+
     pub(crate) fn compute_univariate<P: HonkCurve<TranscriptFieldType, ScalarField = F>>(
         &self,
         round_index: usize,
         relation_parameters: &RelationParameters<P::ScalarField, L>,
         gate_sparators: &GateSeparatorPolynomial<P::ScalarField>,
         polynomials: &AllEntities<Vec<P::ScalarField>, L>,
-    ) -> SumcheckRoundOutput<P::ScalarField, BATCHED_RELATION_PARTIAL_LENGTH> {
+    ) -> L::SumcheckRoundOutput<P::ScalarField> {
         tracing::trace!("Sumcheck round {}", round_index);
 
-        self.compute_univariate_inner::<P, BATCHED_RELATION_PARTIAL_LENGTH>(
-            relation_parameters,
-            gate_sparators,
-            polynomials,
-        )
+        self.compute_univariate_inner::<P>::(relation_parameters, gate_sparators, polynomials)
     }
 
     pub(crate) fn compute_univariate_zk<P: HonkCurve<TranscriptFieldType, ScalarField = F>>(
@@ -211,15 +272,11 @@ impl<F: PrimeField, L: PlainProverFlavour> SumcheckProverRound<F, L> {
         polynomials: &AllEntities<Vec<P::ScalarField>, L>,
         zk_sumcheck_data: &ZKSumcheckData<P>,
         row_disabling_polynomial: &mut RowDisablingPolynomial<P::ScalarField>,
-    ) -> SumcheckRoundOutput<P::ScalarField, BATCHED_RELATION_PARTIAL_LENGTH_ZK> {
+    ) -> L::SumcheckRoundOutputZK<P::ScalarField> {
         tracing::trace!("Sumcheck round {}", round_index);
 
-        let round_univariate = self
-            .compute_univariate_inner::<P, BATCHED_RELATION_PARTIAL_LENGTH_ZK>(
-                relation_parameters,
-                gate_sparators,
-                polynomials,
-            );
+        let round_univariate =
+            self.compute_univariate_inner_zk(relation_parameters, gate_sparators, polynomials);
 
         let contribution_from_disabled_rows = Self::compute_disabled_contribution::<P>(
             polynomials,
@@ -239,28 +296,28 @@ impl<F: PrimeField, L: PlainProverFlavour> SumcheckProverRound<F, L> {
     fn compute_libra_round_univariate<P: HonkCurve<TranscriptFieldType>>(
         zk_sumcheck_data: &ZKSumcheckData<P>,
         round_idx: usize,
-    ) -> SumcheckRoundOutput<P::ScalarField, BATCHED_RELATION_PARTIAL_LENGTH_ZK> {
-        let mut libra_round_univariate =
-            Univariate::<P::ScalarField, BATCHED_RELATION_PARTIAL_LENGTH_ZK>::default();
+    ) -> L::SumcheckRoundOutputZK<P::ScalarField> {
+        let mut libra_round_univariate = L::SumcheckRoundOutputZK::default();
 
         // select the i'th column of Libra book-keeping table
         let current_column = &zk_sumcheck_data.libra_univariates[round_idx];
         // the evaluation of Libra round univariate at k=0...D are equal to \f$\texttt{libra_univariates}_{i}(k)\f$
         // corrected by the Libra running sum
         for idx in 0..P::LIBRA_UNIVARIATES_LENGTH {
-            libra_round_univariate.evaluations[idx] = current_column
-                .eval_poly(P::ScalarField::from(idx as u64))
-                + zk_sumcheck_data.libra_running_sum;
+            todo!("Implement Libra univariate evaluation logic");
+            // libra_round_univariate.evaluations[idx] = current_column
+            //     .eval_poly(P::ScalarField::from(idx as u64))
+            //     + zk_sumcheck_data.libra_running_sum;
         }
 
         if L::BATCHED_RELATION_PARTIAL_LENGTH_ZK == P::LIBRA_UNIVARIATES_LENGTH {
             libra_round_univariate
         } else {
             // Note: Currently not happening
-            let mut libra_round_univariate_extended =
-                Univariate::<P::ScalarField, BATCHED_RELATION_PARTIAL_LENGTH_ZK>::default();
-            libra_round_univariate_extended.extend_from(&libra_round_univariate.evaluations);
-            libra_round_univariate_extended
+            let mut libra_round_univariate_extended = L::SumcheckRoundOutputZK::default();
+            todo!("Implement Libra univariate extension logic");
+            // libra_round_univariate_extended.extend_from(&libra_round_univariate.evaluations);
+            // libra_round_univariate_extended
         }
     }
 
@@ -271,12 +328,12 @@ impl<F: PrimeField, L: PlainProverFlavour> SumcheckProverRound<F, L> {
         round_size: usize,
         round_idx: usize,
         row_disabling_polynomial: &RowDisablingPolynomial<P::ScalarField>,
-    ) -> SumcheckRoundOutput<P::ScalarField, BATCHED_RELATION_PARTIAL_LENGTH_ZK> {
+    ) -> L::SumcheckRoundOutputZK<P::ScalarField> {
         // Barretenberg uses multithreading here
         let mut univariate_accumulators = L::AllRelationAcc::<F>::default();
 
         // Construct extended edge containers
-        let mut extended_edges = L::ProverUnivariate::default();
+        let mut extended_edges = ProverUnivariates::<P::ScalarField, L>::default();
 
         // In Round 0, we have to compute the contribution from 2 edges: n - 1 = (1,1,...,1) and n-4 = (0,1,...,1).
         let start_edge_idx = if round_idx == 0 {
@@ -294,14 +351,13 @@ impl<F: PrimeField, L: PlainProverFlavour> SumcheckProverRound<F, L> {
                 &gate_sparators.beta_products[(edge_idx >> 1) * gate_sparators.periodicity],
             );
         }
-        let mut result = Self::batch_over_relations_univariates(
+        let mut result = Self::batch_over_relations_univariates_zk(
             univariate_accumulators,
             &relation_parameters.alphas,
             gate_sparators,
         );
 
-        let mut row_disabling_factor =
-            Univariate::<P::ScalarField, BATCHED_RELATION_PARTIAL_LENGTH_ZK>::default();
+        let mut row_disabling_factor = L::SumcheckRoundOutputZK::<P::ScalarField>::default();
         row_disabling_factor.extend_from(&[
             row_disabling_polynomial.eval_at_0,
             row_disabling_polynomial.eval_at_1,

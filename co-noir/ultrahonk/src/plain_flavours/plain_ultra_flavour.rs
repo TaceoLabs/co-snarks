@@ -58,11 +58,17 @@ pub struct AllRelationEvaluationsUltra<F: PrimeField> {
     pub(crate) r_pos_ext: Poseidon2ExternalRelationEvals<F>,
     pub(crate) r_pos_int: Poseidon2InternalRelationEvals<F>,
 }
+type UltraSumcheckRoundOutput<F: PrimeField> =
+    Univariate<F, { UltraFlavour::BATCHED_RELATION_PARTIAL_LENGTH }>;
+type UltraSumcheckRoundOutputZK<F: PrimeField> =
+    Univariate<F, { UltraFlavour::BATCHED_RELATION_PARTIAL_LENGTH }>;
 
 impl PlainProverFlavour for UltraFlavour {
     type AllRelationAcc<F: PrimeField> = AllRelationAccUltra<F>;
     type AllRelationEvaluations<F: PrimeField> = AllRelationEvaluationsUltra<F>;
     type Alphas<F: PrimeField> = [F; Self::NUM_SUBRELATIONS - 1];
+    type SumcheckRoundOutput<F: PrimeField> = UltraSumcheckRoundOutput<F>;
+    type SumcheckRoundOutputZK<F: PrimeField> = UltraSumcheckRoundOutputZK<F>;
 
     const NUM_SUBRELATIONS: usize = UltraArithmeticRelation::NUM_RELATIONS
         + UltraPermutationRelation::NUM_RELATIONS
@@ -90,10 +96,58 @@ impl PlainProverFlavour for UltraFlavour {
         acc.r_pos_int.scale(&elements[21..]);
     }
 
-    fn extend_and_batch_univariates<const SIZE: usize, F: PrimeField>(
+    fn extend_and_batch_univariates<F: PrimeField>(
         acc: &Self::AllRelationAcc<F>,
-        result: &mut crate::prelude::Univariate<F, SIZE>,
-        extended_random_poly: &crate::prelude::Univariate<F, SIZE>,
+        result: &mut Self::SumcheckRoundOutput<F>,
+        extended_random_poly: &Self::SumcheckRoundOutput<F>,
+        partial_evaluation_result: &F,
+    ) {
+        tracing::trace!("Prove::Extend and batch univariates");
+        acc.r_arith.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+        );
+        acc.r_perm.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+        );
+        acc.r_lookup.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+        );
+        acc.r_delta.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+        );
+        acc.r_elliptic.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+        );
+        acc.r_aux.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+        );
+        acc.r_pos_ext.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+        );
+        acc.r_pos_int.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+        );
+    }
+    fn extend_and_batch_univariates_zk<F: PrimeField>(
+        acc: &Self::AllRelationAcc<F>,
+        result: &mut Self::SumcheckRoundOutputZK<F>,
+        extended_random_poly: &Self::SumcheckRoundOutputZK<F>,
         partial_evaluation_result: &F,
     ) {
         tracing::trace!("Prove::Extend and batch univariates");
