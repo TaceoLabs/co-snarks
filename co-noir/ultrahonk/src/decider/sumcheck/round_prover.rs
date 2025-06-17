@@ -10,6 +10,7 @@ use crate::{
         elliptic_relation::{EllipticRelation, EllipticRelationAcc},
         Relation,
     },
+    plain_prover_flavour::UnivariateTest,
     transcript::TranscriptFieldType,
     types::AllEntities,
 };
@@ -276,7 +277,7 @@ impl<F: PrimeField, L: PlainProverFlavour> SumcheckProverRound<F, L> {
         tracing::trace!("Sumcheck round {}", round_index);
 
         let round_univariate =
-            self.compute_univariate_inner_zk(relation_parameters, gate_sparators, polynomials);
+            self.compute_univariate_inner_zk::<P>(relation_parameters, gate_sparators, polynomials);
 
         let contribution_from_disabled_rows = Self::compute_disabled_contribution::<P>(
             polynomials,
@@ -287,10 +288,11 @@ impl<F: PrimeField, L: PlainProverFlavour> SumcheckProverRound<F, L> {
             row_disabling_polynomial,
         );
 
-        let libra_round_univariate =
+        let mut libra_round_univariate =
             Self::compute_libra_round_univariate(zk_sumcheck_data, round_index);
-
-        round_univariate + libra_round_univariate - contribution_from_disabled_rows
+        libra_round_univariate += round_univariate;
+        libra_round_univariate -= contribution_from_disabled_rows;
+        libra_round_univariate
     }
 
     fn compute_libra_round_univariate<P: HonkCurve<TranscriptFieldType>>(

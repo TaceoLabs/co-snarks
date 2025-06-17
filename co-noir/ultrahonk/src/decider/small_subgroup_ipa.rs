@@ -1,3 +1,4 @@
+use crate::plain_prover_flavour::UnivariateTest;
 use crate::prelude::TranscriptHasher;
 use crate::prelude::Univariate;
 use crate::Utils;

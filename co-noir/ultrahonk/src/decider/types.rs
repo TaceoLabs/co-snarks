@@ -1,5 +1,5 @@
 use super::univariate::Univariate;
-use crate::plain_prover_flavour::{PlainProverFlavour, ProverUnivariatePlainFlavour};
+use crate::plain_prover_flavour::PlainProverFlavour;
 use crate::types::AllEntities;
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
@@ -29,7 +29,7 @@ pub(crate) struct VerifierMemory<P: Pairing, L: PlainProverFlavour> {
 // pub(crate) const BATCHED_RELATION_PARTIAL_LENGTH_ZK: usize = BATCHED_RELATION_PARTIAL_LENGTH + 1;
 
 pub(crate) type ProverUnivariates<F, L> =
-    AllEntities<<L as ProverUnivariatePlainFlavour>::ProverUnivariate<F>, L>;
+    AllEntities<<L as PlainProverFlavour>::ProverUnivariate<F>, L>;
 pub(crate) type PartiallyEvaluatePolys<F, L> = AllEntities<Vec<F>, L>;
 pub(crate) type ClaimedEvaluations<F, L> = AllEntities<F, L>;
 pub(crate) type VerifierCommitments<P, L> = AllEntities<P, L>;

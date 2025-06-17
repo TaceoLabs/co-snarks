@@ -6,12 +6,27 @@ use ark_ff::PrimeField;
 use co_builder::{prelude::HonkCurve, prover_flavour::ProverFlavour};
 use rand::{CryptoRng, Rng};
 
-pub trait PlainProverFlavour: Default + ProverFlavour + ProverUnivariatePlainFlavour {
+pub trait PlainProverFlavour: Default + ProverFlavour {
     type AllRelationAcc<F: PrimeField>: Default;
     type AllRelationEvaluations<F: PrimeField>: Default;
     type Alphas<F: PrimeField>: Default + Clone + Copy;
-    type SumcheckRoundOutput<F: PrimeField>: Default + std::ops::MulAssign + std::ops::Add;
-    type SumcheckRoundOutputZK<F: PrimeField>: Default + std::ops::MulAssign + std::ops::Add;
+    type SumcheckRoundOutput<F: PrimeField>: Default
+        + std::ops::MulAssign
+        + std::ops::Add
+        + std::ops::Sub
+        + UnivariateTest<F>;
+    type SumcheckRoundOutputZK<F: PrimeField>: Default
+        + std::ops::MulAssign
+        + std::ops::Add
+        + std::ops::Sub
+        + std::ops::AddAssign
+        + std::ops::SubAssign
+        + UnivariateTest<F>;
+    type ProverUnivariate<F: PrimeField>: UnivariateTest<F>
+        + Clone
+        + Default
+        + std::ops::MulAssign
+        + std::ops::Add;
 
     const NUM_SUBRELATIONS: usize;
 
@@ -51,29 +66,35 @@ pub trait PlainProverFlavour: Default + ProverFlavour + ProverUnivariatePlainFla
     ) -> F;
 }
 
-pub trait ProverUnivariatePlainFlavour {
-    type ProverUnivariate<F: PrimeField>: Clone + Default;
+pub trait UnivariateTest<F: PrimeField> {
+    // type ProverUnivariate<F: PrimeField>: Clone + Default;
 
-    fn double<F: PrimeField>(poly: Self::ProverUnivariate<F>) -> Self::ProverUnivariate<F> {
-        let mut result = poly.clone();
-        Self::double_in_place(&mut result);
-        result
-    }
-    fn double_in_place<F: PrimeField>(poly: &mut Self::ProverUnivariate<F>);
-    fn sqr<F: PrimeField>(poly: Self::ProverUnivariate<F>) -> Self::ProverUnivariate<F> {
-        let mut result = poly.clone();
-        Self::square_in_place(&mut result);
-        result
-    }
-    fn square_in_place<F: PrimeField>(poly: &mut Self::ProverUnivariate<F>);
-    fn extend_from<F: PrimeField>(poly_to: &mut Self::ProverUnivariate<F>, poly_from: &[F]);
-    fn evaluate<F: PrimeField>(poly: &Self::ProverUnivariate<F>, u: F) -> F;
-    fn get_random<R: Rng + CryptoRng, F: PrimeField>(rng: &mut R) -> Self::ProverUnivariate<F>;
-    fn extend_and_batch_univariates<const SIZE: usize, F: PrimeField>(
-        lhs: &Univariate<F, SIZE>,
-        result: &mut Self::ProverUnivariate<F>,
-        extended_random_poly: &Self::ProverUnivariate<F>,
-        partial_evaluation_result: &F,
-        linear_independent: bool,
-    );
+    fn double(self) -> Self;
+
+    fn double_in_place(&mut self);
+    fn sqr(self) -> Self;
+
+    fn square_in_place(&mut self);
+
+    fn extend_from(&mut self, poly: &[F]);
+
+    fn evaluate(&self, u: F) -> F;
+
+    // fn extend_and_batch_univariates<const SIZE2: usize>(
+    //     &self,
+    //     result: &mut Univariate<F, SIZE2>,
+    //     extended_random_poly: &Univariate<F, SIZE2>,
+    //     partial_evaluation_result: &F,
+    //     linear_independent: bool,
+    // );
+
+    fn get_random<R: Rng + CryptoRng>(rng: &mut R) -> Self;
+
+    // fn extend_and_batch_univariates<const SIZE: usize, F: PrimeField>(
+    //     lhs: &Univariate<F, SIZE>,
+    //     result: &mut Self::ProverUnivariate<F>,
+    //     extended_random_poly: &Self::ProverUnivariate<F>,
+    //     partial_evaluation_result: &F,
+    //     linear_independent: bool,
+    // );
 }
