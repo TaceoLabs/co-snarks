@@ -11,7 +11,8 @@ use ark_ff::Zero;
 use co_builder::HonkProofResult;
 use co_builder::prelude::HonkCurve;
 use itertools::Itertools as _;
-use mpc_core::gadgets::poseidon2::POSEIDON2_BN254_T4_PARAMS;
+use mpc_core::{MpcState as _, gadgets::poseidon2::POSEIDON2_BN254_T4_PARAMS};
+use mpc_net::Network;
 use num_bigint::BigUint;
 use ultrahonk::prelude::{TranscriptFieldType, Univariate};
 
@@ -133,8 +134,9 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
      * @param parameters contains beta, gamma, and public_input_delta, ....
      * @param scaling_factor optional term to scale the evaluation before adding to evals.
      */
-    fn accumulate(
-        driver: &mut T,
+    fn accumulate<N: Network>(
+        net: &N,
+        state: &mut T::State,
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesBatch<T, P>,
         _relation_parameters: &RelationParameters<<P>::ScalarField>,
@@ -152,13 +154,13 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let q_poseidon2_internal = input.precomputed.q_poseidon2_internal();
 
         // add round constants
-        let s1 = T::add_with_public_many(q_l, w_l, driver.get_party_id());
+        let s1 = T::add_with_public_many(q_l, w_l, state.id());
 
         // apply s-box round
         // 0xThemis TODO again can we do something better for x^5?
-        let u1 = driver.mul_many(&s1, &s1)?;
-        let u1 = driver.mul_many(&u1, &u1)?;
-        let mut u1 = driver.mul_many(&u1, &s1)?;
+        let u1 = T::mul_many(&s1, &s1, net, state)?;
+        let u1 = T::mul_many(&u1, &u1, net, state)?;
+        let mut u1 = T::mul_many(&u1, &s1, net, state)?;
 
         let mut u2 = w_r.to_owned();
         let mut u3 = w_o.to_owned();

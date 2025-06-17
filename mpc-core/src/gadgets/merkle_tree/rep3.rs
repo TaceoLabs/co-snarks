@@ -1,26 +1,25 @@
 use crate::{
     gadgets::poseidon2::Poseidon2,
-    protocols::rep3::{
-        Rep3PrimeFieldShare,
-        network::{IoContext, Rep3Network},
-    },
+    protocols::rep3::{Rep3PrimeFieldShare, Rep3State},
 };
 use ark_ff::{PrimeField, Zero};
+use mpc_net::Network;
 
 impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
     /// Create a Merkle tree with a given arity using Poseidon2 in sponge mode and with the Rep3 MPC protocol.
-    pub fn merkle_tree_sponge_rep3<const ARITY: usize, N: Rep3Network>(
+    pub fn merkle_tree_sponge_rep3<const ARITY: usize, N: Network>(
         &self,
         input_: Vec<Rep3PrimeFieldShare<F>>,
-        driver: &mut IoContext<N>,
-    ) -> std::io::Result<Rep3PrimeFieldShare<F>> {
+        net: &N,
+        state: &mut Rep3State,
+    ) -> eyre::Result<Rep3PrimeFieldShare<F>> {
         assert!(T > ARITY);
         let mut len = input_.len();
         let log = len.ilog(ARITY);
         assert_eq!(len, ARITY.pow(log));
 
         let num_hashes = (len - 1) / (ARITY - 1);
-        let mut precomp = self.precompute_rep3(num_hashes, driver)?;
+        let mut precomp = self.precompute_rep3(num_hashes, net, state)?;
 
         // Prepare for sponge mode
         let mut input = Vec::with_capacity(T * len / ARITY);
@@ -40,7 +39,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
             self.rep3_permutation_in_place_with_precomputation_packed(
                 &mut input[..T * len],
                 &mut precomp,
-                driver,
+                net,
             )?;
             // Only take first element as output and pad with 0 for sponge
             for i in 0..len / ARITY {
@@ -57,18 +56,19 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
     }
 
     /// Create a Merkle tree with a given arity using Poseidon2 in compression mode and with the Rep3 MPC protocol.
-    pub fn merkle_tree_compression_rep3<const ARITY: usize, N: Rep3Network>(
+    pub fn merkle_tree_compression_rep3<const ARITY: usize, N: Network>(
         &self,
         input_: Vec<Rep3PrimeFieldShare<F>>,
-        driver: &mut IoContext<N>,
-    ) -> std::io::Result<Rep3PrimeFieldShare<F>> {
+        net: &N,
+        state: &mut Rep3State,
+    ) -> eyre::Result<Rep3PrimeFieldShare<F>> {
         assert!(T >= ARITY);
         let mut len = input_.len();
         let log = len.ilog(ARITY);
         assert_eq!(len, ARITY.pow(log));
 
         let num_hashes = (len - 1) / (ARITY - 1);
-        let mut precomp = self.precompute_rep3(num_hashes, driver)?;
+        let mut precomp = self.precompute_rep3(num_hashes, net, state)?;
 
         // Prepare padding
         let mut input = if T == ARITY {
@@ -94,7 +94,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
             self.rep3_permutation_in_place_with_precomputation_packed(
                 &mut input[..T * len],
                 &mut precomp,
-                driver,
+                net,
             )?;
             for i in 0..len {
                 input[T * i] += ff[T * i];

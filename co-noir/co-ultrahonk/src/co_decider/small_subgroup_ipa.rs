@@ -4,6 +4,8 @@ use crate::CONST_PROOF_SIZE_LOG_N;
 use crate::CoUtils;
 use crate::mpc::NoirUltraHonkProver;
 use crate::prelude::TranscriptHasher;
+use mpc_core::MpcState;
+use mpc_net::Network;
 use ultrahonk::prelude::Transcript;
 
 use super::co_sumcheck::zk_data::SharedZKSumcheckData;
@@ -49,8 +51,9 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
     // Length of the big sum identity polynomial C. It is equal to the length of the highest degree term X * F(X) * G(X)
     const GRAND_SUM_IDENTITY_LENGTH: usize =
         Self::MASKED_CONCATENATED_WITNESS_LENGTH + Self::SUBGROUP_SIZE;
-    pub(crate) fn new<H: TranscriptHasher<TranscriptFieldType>>(
-        driver: &mut T,
+    pub(crate) fn new<H: TranscriptHasher<TranscriptFieldType>, N: Network>(
+        net: &N,
+        state: &mut T::State,
         zk_sumcheck_data: SharedZKSumcheckData<T, P>,
         multivariate_challenge: &[P::ScalarField],
         claimed_ipa_eval: P::ScalarField,
@@ -76,26 +79,28 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
             phantom_data: PhantomData,
         };
         prover.compute_challenge_polynomial(multivariate_challenge);
-        prover.compute_grand_sum_polynomial(driver)?;
+        prover.compute_grand_sum_polynomial(net, state)?;
 
         let libra_grand_sum_commitment_shared = CoUtils::commit::<T, P>(
             prover.grand_sum_polynomial.coefficients.as_ref(),
             commitment_key,
         );
-        let libra_grand_sum_commitment = T::open_point(driver, libra_grand_sum_commitment_shared)?;
+        let libra_grand_sum_commitment =
+            T::open_point(libra_grand_sum_commitment_shared, net, state)?;
         transcript.send_point_to_verifier::<P>(
             "Libra:grand_sum_commitment".to_string(),
             libra_grand_sum_commitment.into(),
         );
 
-        prover.compute_grand_sum_identity_polynomial(claimed_ipa_eval, driver);
+        prover.compute_grand_sum_identity_polynomial(claimed_ipa_eval, state.id());
         prover.compute_batched_quotient();
 
         let libra_quotient_commitment_shared = CoUtils::commit::<T, P>(
             prover.grand_sum_identity_quotient.coefficients.as_ref(),
             commitment_key,
         );
-        let libra_quotient_commitment = T::open_point(driver, libra_quotient_commitment_shared)?;
+        let libra_quotient_commitment =
+            T::open_point(libra_quotient_commitment_shared, net, state)?;
         transcript.send_point_to_verifier::<P>(
             "Libra:quotient_commitment".to_string(),
             libra_quotient_commitment.into(),
@@ -178,7 +183,11 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
      *   vanishing polynomial.
      *
      */
-    fn compute_grand_sum_polynomial(&mut self, driver: &mut T) -> HonkProofResult<()> {
+    fn compute_grand_sum_polynomial<N: Network>(
+        &mut self,
+        net: &N,
+        state: &mut T::State,
+    ) -> HonkProofResult<()> {
         self.grand_sum_lagrange_coeffs[0] = T::ArithmeticShare::default();
 
         // Compute the big sum coefficients recursively
@@ -199,7 +208,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
         };
 
         //  Generate random masking_term of degree 2, add Z_H(X) * masking_term
-        let masking_term = SharedUnivariate::<T, P, 3>::get_random(driver)?;
+        let masking_term = SharedUnivariate::<T, P, 3>::get_random(net, state)?;
         self.grand_sum_polynomial
             .add_assign_slice(&self.grand_sum_polynomial_unmasked.coefficients);
 
@@ -224,7 +233,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
     fn compute_grand_sum_identity_polynomial(
         &mut self,
         claimed_evaluation: P::ScalarField,
-        driver: &mut T,
+        id: <T::State as MpcState>::PartyID,
     ) {
         // Compute shifted big sum polynomial A(gX)
         let mut shifted_grand_sum = SharedPolynomial::<T, P>::new_zero(Self::SUBGROUP_SIZE + 3);
@@ -287,14 +296,13 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
                     T::add(self.grand_sum_identity_polynomial.coefficients[i + j], mul);
             }
         }
-        let party_id = driver.get_party_id();
 
         // Subtract L_{|H|} * s
         for idx in 0..Self::SUBGROUP_SIZE {
             self.grand_sum_identity_polynomial.coefficients[idx] = T::add_with_public(
                 -lagrange_last.coefficients[idx] * claimed_evaluation,
                 self.grand_sum_identity_polynomial.coefficients[idx],
-                party_id,
+                id,
             );
         }
     }

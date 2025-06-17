@@ -3,7 +3,7 @@ use ark_ff::Zero;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use co_acvm::{Rep3AcvmType, solver::Rep3CoSolver};
 use co_builder::prelude::Serialize as FieldSerialize;
-use co_noir::PubShared;
+use co_noir::{NetworkConfig, PubShared};
 use co_ultrahonk::prelude::{
     CrsParser, HonkProof, Poseidon2Sponge, ProvingKey, Rep3CoUltraHonk, Rep3UltraHonkDriver,
     ShamirCoUltraHonk, ShamirUltraHonkDriver, UltraHonk, Utils, VerifyingKey,
@@ -14,8 +14,7 @@ use figment::{
     Figment,
     providers::{Env, Format, Serialized, Toml},
 };
-use mpc_core::protocols::{rep3::network::Rep3MpcNet, shamir::network::ShamirMpcNet};
-use mpc_net::config::NetworkConfigFile;
+use mpc_net::{TcpNetwork, config::NetworkConfigFile};
 use serde::{Deserialize, Serialize};
 use sha3::Keccak256;
 use std::{
@@ -987,8 +986,7 @@ fn run_split_proving_key(config: SplitProvingKeyConfig) -> color_eyre::Result<Ex
 
             // create shares
             let start = Instant::now();
-            let shares =
-                co_noir::split_proving_key_rep3::<_, _, Rep3MpcNet>(proving_key, &mut rng)?;
+            let shares = co_noir::split_proving_key_rep3(proving_key, &mut rng)?;
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!("Split proving key took {duration_ms} ms");
 
@@ -1006,12 +1004,7 @@ fn run_split_proving_key(config: SplitProvingKeyConfig) -> color_eyre::Result<Ex
         MPCProtocol::SHAMIR => {
             // create shares
             let start = Instant::now();
-            let shares = co_noir::split_proving_key_shamir::<_, _, ShamirMpcNet>(
-                proving_key,
-                t,
-                n,
-                &mut rng,
-            )?;
+            let shares = co_noir::split_proving_key_shamir(proving_key, t, n, &mut rng)?;
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!("Split proving key took {duration_ms} ms");
 
@@ -1050,7 +1043,7 @@ fn run_split_input(config: SplitInputConfig) -> color_eyre::Result<ExitCode> {
         .context("while parsing program artifact")?;
 
     // read the input file
-    let inputs = Rep3CoSolver::<_, Rep3MpcNet>::partially_read_abi_bn254_fieldelement(
+    let inputs = Rep3CoSolver::<_, ()>::partially_read_abi_bn254_fieldelement(
         &input,
         &compiled_program.abi,
         &compiled_program.bytecode,
@@ -1060,7 +1053,7 @@ fn run_split_input(config: SplitInputConfig) -> color_eyre::Result<ExitCode> {
     let mut rng = rand::thread_rng();
     tracing::info!("Starting split input...");
     let start = Instant::now();
-    let shares = co_noir::split_input_rep3::<Bn254, Rep3MpcNet, _>(inputs, &mut rng);
+    let shares = co_noir::split_input_rep3::<Bn254, _>(inputs, &mut rng);
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Split input took {duration_ms} ms");
 
@@ -1150,21 +1143,17 @@ fn run_generate_witness(config: GenerateWitnessConfig) -> color_eyre::Result<Exi
         bincode::deserialize_from(input_share_file).context("while deserializing input share")?;
 
     // connect to network
-    let network_config = config
-        .network
-        .to_owned()
-        .try_into()
+    let network_config = NetworkConfig::try_from(config.network.to_owned())
         .context("while converting network config")?;
-    let net = Rep3MpcNet::new(network_config)?;
+    let [net0, net1] =
+        TcpNetwork::networks::<2>(network_config).context("while connecting to network")?;
 
     tracing::info!("Starting witness generation...");
     let start = Instant::now();
-    let (result_witness_share, net) =
-        co_noir::generate_witness_rep3(input_share, compiled_program, net)?;
+    let result_witness_share =
+        co_noir::generate_witness_rep3(input_share, compiled_program, &net0, &net1)?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Generate witness took {duration_ms} ms");
-    // network is shutdown in drop, which can take seom time with quinn
-    drop(net);
 
     // write result to output file
     let out_file = BufWriter::new(std::fs::File::create(&out)?);
@@ -1192,22 +1181,16 @@ fn run_translate_witness(config: TranslateWitnessConfig) -> color_eyre::Result<E
         bincode::deserialize_from(witness_file).context("while deserializing witness share")?;
 
     // connect to network
-    let network_config = config
-        .network
-        .to_owned()
-        .try_into()
+    let network_config = NetworkConfig::try_from(config.network.to_owned())
         .context("while converting network config")?;
-    let net = Rep3MpcNet::new(network_config)?;
+    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
 
     // Translate witness to shamir shares
     tracing::info!("Starting witness translation...");
     let start = Instant::now();
-    let (shamir_witness_shares, net) =
-        co_noir::translate_witness::<Bn254, _, _>(witness_share, net)?;
+    let shamir_witness_shares = co_noir::translate_witness::<Bn254, _>(witness_share, &net)?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Translate witness took {duration_ms} ms");
-    // network is shutdown in drop, which can take seom time with quinn
-    drop(net);
 
     // write result to output file
     let out_file = BufWriter::new(std::fs::File::create(&out)?);
@@ -1230,25 +1213,20 @@ fn run_translate_proving_key(config: TranslateProvingKeyConfig) -> color_eyre::R
     // parse proving_key shares
     let proving_key_file =
         BufReader::new(File::open(proving_key).context("trying to open witness share file")?);
-    let proving_key: ProvingKey<Rep3UltraHonkDriver<Rep3MpcNet>, Bn254> =
+    let proving_key: ProvingKey<Rep3UltraHonkDriver, Bn254> =
         bincode::deserialize_from(proving_key_file).context("while deserializing witness share")?;
 
     // connect to network
-    let network_config = config
-        .network
-        .to_owned()
-        .try_into()
+    let network_config = NetworkConfig::try_from(config.network.to_owned())
         .context("while converting network config")?;
-    let net = Rep3MpcNet::new(network_config)?;
+    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
 
     // Translate proving key to shamir shares
     tracing::info!("Starting proving key translation...");
     let start = Instant::now();
-    let (shamir_proving_key, net) = co_noir::translate_proving_key(proving_key, net)?;
+    let shamir_proving_key = co_noir::translate_proving_key(proving_key, &net)?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Translate proving key took {duration_ms} ms");
-    // network is shutdown in drop, which can take seom time with quinn
-    drop(net);
 
     // write result to output file
     let out_file = BufWriter::new(std::fs::File::create(&out)?);
@@ -1263,6 +1241,7 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
     let circuit_path = config.circuit;
     let protocol = config.protocol;
     let out = config.out;
+    let n = config.network.parties.len();
     let t = config.threshold;
     let recursive = config.recursive;
 
@@ -1274,11 +1253,11 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
     let constraint_system = Utils::get_constraint_system_from_file(&circuit_path, true)
         .context("while parsing program artifact")?;
 
-    let network_config = config
-        .network
-        .to_owned()
-        .try_into()
+    // connect to network
+    let network_config = NetworkConfig::try_from(config.network.to_owned())
         .context("while converting network config")?;
+    let [net0, net1] =
+        TcpNetwork::networks::<2>(network_config).context("while connecting to network")?;
 
     tracing::info!("Starting proving key generation...");
     match protocol {
@@ -1288,20 +1267,17 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
             }
             let witness_share = bincode::deserialize_from(witness_file)
                 .context("while deserializing witness share")?;
-            // connect to network
-            let net = Rep3MpcNet::new(network_config)?;
 
             let start = Instant::now();
-            let (proving_key, net) = co_noir::generate_proving_key_rep3(
-                net,
+            let proving_key = co_noir::generate_proving_key_rep3(
                 &constraint_system,
                 witness_share,
                 recursive,
+                &net0,
+                &net1,
             )?;
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!("Build proving key took {duration_ms} ms");
-            // network is shutdown in drop, which can take seom time with quinn
-            drop(net);
 
             // write result to output file
             let out_file = BufWriter::new(std::fs::File::create(&out)?);
@@ -1311,21 +1287,18 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
         MPCProtocol::SHAMIR => {
             let witness_share = bincode::deserialize_from(witness_file)
                 .context("while deserializing witness share")?;
-            // connect to network
-            let net = ShamirMpcNet::new(network_config)?;
 
             let start = Instant::now();
-            let (proving_key, net) = co_noir::generate_proving_key_shamir(
-                net,
+            let proving_key = co_noir::generate_proving_key_shamir(
+                n,
                 t,
                 &constraint_system,
                 witness_share,
                 recursive,
+                &net0,
             )?;
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!("Build proving key took {duration_ms} ms");
-            // network is shutdown in drop, which can take seom time with quinn
-            drop(net);
 
             // write result to output file
             let out_file = BufWriter::new(std::fs::File::create(&out)?);
@@ -1345,16 +1318,16 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
     let hasher = config.hasher;
     let out = config.out;
     let public_input_filename = config.public_input;
+    let n = config.network.parties.len();
     let t = config.threshold;
     let crs_path = config.crs;
     let fields_as_json = config.fields_as_json;
     let has_zk = ZeroKnowledge::from(config.zk);
 
-    let network_config = config
-        .network
-        .to_owned()
-        .try_into()
+    // connect to network
+    let network_config = NetworkConfig::try_from(config.network.to_owned())
         .context("while converting network config")?;
+    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
 
     // parse proving_key file
     let proving_key_file =
@@ -1366,10 +1339,8 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             if t != 1 {
                 return Err(eyre!("REP3 only allows the threshold to be 1"));
             }
-            let net = Rep3MpcNet::new(network_config)?;
-
             // Get the proving key and prover
-            let proving_key: ProvingKey<Rep3UltraHonkDriver<Rep3MpcNet>, Bn254> =
+            let proving_key: ProvingKey<Rep3UltraHonkDriver, Bn254> =
                 bincode::deserialize_from(proving_key_file)
                     .context("while deserializing input share")?;
             let prover_crs = CrsParser::<Bn254>::get_crs_g1(
@@ -1382,42 +1353,34 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
                 TranscriptHash::POSEIDON2 => {
                     // execute prover in MPC
                     let start = Instant::now();
-                    let (proof, public_inputs, net) =
-                        Rep3CoUltraHonk::<_, _, Poseidon2Sponge>::prove(
-                            net,
-                            proving_key,
-                            &prover_crs,
-                            has_zk,
-                        )?;
-                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-                    tracing::info!("Generate proof took {duration_ms} ms");
-                    // network is shutdown in drop, which can take seom time with quinn
-                    drop(net);
-                    (proof, public_inputs)
-                }
-                TranscriptHash::KECCAK => {
-                    // execute prover in MPC
-                    let start = Instant::now();
-                    let (proof, public_inputs, net) = Rep3CoUltraHonk::<_, _, Keccak256>::prove(
-                        net,
+                    let (proof, public_inputs) = Rep3CoUltraHonk::<_, Poseidon2Sponge>::prove(
+                        &net,
                         proving_key,
                         &prover_crs,
                         has_zk,
                     )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
-                    // network is shutdown in drop, which can take seom time with quinn
-                    drop(net);
+                    (proof, public_inputs)
+                }
+                TranscriptHash::KECCAK => {
+                    // execute prover in MPC
+                    let start = Instant::now();
+                    let (proof, public_inputs) = Rep3CoUltraHonk::<_, Keccak256>::prove(
+                        &net,
+                        proving_key,
+                        &prover_crs,
+                        has_zk,
+                    )?;
+                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+                    tracing::info!("Generate proof took {duration_ms} ms");
                     (proof, public_inputs)
                 }
             }
         }
         MPCProtocol::SHAMIR => {
-            // connect to network
-            let net = ShamirMpcNet::new(network_config)?;
-
             // Get the proving key and prover
-            let proving_key: ProvingKey<ShamirUltraHonkDriver<ark_bn254::Fr, ShamirMpcNet>, Bn254> =
+            let proving_key: ProvingKey<ShamirUltraHonkDriver, Bn254> =
                 bincode::deserialize_from(proving_key_file)
                     .context("while deserializing input share")?;
             let prover_crs = CrsParser::<Bn254>::get_crs_g1(
@@ -1430,25 +1393,9 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             match hasher {
                 TranscriptHash::POSEIDON2 => {
                     let start = Instant::now();
-                    let (proof, public_input, net) =
-                        ShamirCoUltraHonk::<_, _, Poseidon2Sponge>::prove(
-                            net,
-                            t,
-                            proving_key,
-                            &prover_crs,
-                            has_zk,
-                        )?;
-                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-                    tracing::info!("Generate proof took {duration_ms} ms");
-                    // network is shutdown in drop, which can take seom time with quinn
-                    drop(net);
-
-                    (proof, public_input)
-                }
-                TranscriptHash::KECCAK => {
-                    let start = Instant::now();
-                    let (proof, public_input, net) = ShamirCoUltraHonk::<_, _, Keccak256>::prove(
-                        net,
+                    let (proof, public_input) = ShamirCoUltraHonk::<_, Poseidon2Sponge>::prove(
+                        &net,
+                        n,
                         t,
                         proving_key,
                         &prover_crs,
@@ -1456,9 +1403,20 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
                     )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
-                    // network is shutdown in drop, which can take seom time with quinn
-                    drop(net);
-
+                    (proof, public_input)
+                }
+                TranscriptHash::KECCAK => {
+                    let start = Instant::now();
+                    let (proof, public_input) = ShamirCoUltraHonk::<_, Keccak256>::prove(
+                        &net,
+                        n,
+                        t,
+                        proving_key,
+                        &prover_crs,
+                        has_zk,
+                    )?;
+                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+                    tracing::info!("Generate proof took {duration_ms} ms");
                     (proof, public_input)
                 }
             }
@@ -1558,6 +1516,7 @@ fn run_build_and_generate_proof(
     let hasher = config.hasher;
     let out = config.out;
     let public_input_filename = config.public_input;
+    let n = config.network.parties.len();
     let t = config.threshold;
     let recursive = config.recursive;
     let fields_as_json = config.fields_as_json;
@@ -1575,11 +1534,11 @@ fn run_build_and_generate_proof(
     let constraint_system = Utils::get_constraint_system_from_file(&circuit_path, true)
         .context("while parsing program artifact")?;
 
-    let network_config = config
-        .network
-        .to_owned()
-        .try_into()
+    // connect to network
+    let network_config = NetworkConfig::try_from(config.network.to_owned())
         .context("while converting network config")?;
+    let [net0, net1] =
+        TcpNetwork::networks::<2>(network_config).context("while connecting to network")?;
 
     let circuit_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, recursive)?;
     let prover_crs = CrsParser::get_crs_g1(crs_path, circuit_size, has_zk)?;
@@ -1592,15 +1551,14 @@ fn run_build_and_generate_proof(
             }
             let witness_share = bincode::deserialize_from(witness_file)
                 .context("while deserializing witness share")?;
-            // connect to network
-            let net = Rep3MpcNet::new(network_config)?;
 
             let start = Instant::now();
-            let (proving_key, net) = co_noir::generate_proving_key_rep3(
-                net,
+            let proving_key = co_noir::generate_proving_key_rep3(
                 &constraint_system,
                 witness_share,
                 recursive,
+                &net0,
+                &net1,
             )?;
 
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
@@ -1610,50 +1568,43 @@ fn run_build_and_generate_proof(
             let (proof, public_input) = match hasher {
                 TranscriptHash::POSEIDON2 => {
                     let start = Instant::now();
-                    let (proof, public_input, net) =
-                        Rep3CoUltraHonk::<_, _, Poseidon2Sponge>::prove(
-                            net,
-                            proving_key,
-                            &prover_crs,
-                            has_zk,
-                        )?;
-                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-                    tracing::info!("Generate proof took {duration_ms} ms");
-                    // network is shutdown in drop, which can take seom time with quinn
-                    drop(net);
-                    (proof, public_input)
-                }
-                TranscriptHash::KECCAK => {
-                    let start = Instant::now();
-                    let (proof, public_input, net) = Rep3CoUltraHonk::<_, _, Keccak256>::prove(
-                        net,
+                    let (proof, public_input) = Rep3CoUltraHonk::<_, Poseidon2Sponge>::prove(
+                        &net0,
                         proving_key,
                         &prover_crs,
                         has_zk,
                     )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
-                    // network is shutdown in drop, which can take seom time with quinn
-                    drop(net);
+                    (proof, public_input)
+                }
+                TranscriptHash::KECCAK => {
+                    let start = Instant::now();
+                    let (proof, public_input) = Rep3CoUltraHonk::<_, Keccak256>::prove(
+                        &net0,
+                        proving_key,
+                        &prover_crs,
+                        has_zk,
+                    )?;
+                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+                    tracing::info!("Generate proof took {duration_ms} ms");
                     (proof, public_input)
                 }
             };
-
             (proof, public_input)
         }
         MPCProtocol::SHAMIR => {
             let witness_share = bincode::deserialize_from(witness_file)
                 .context("while deserializing witness share")?;
-            // connect to network
-            let net = ShamirMpcNet::new(network_config)?;
 
             let start = Instant::now();
-            let (proving_key, net) = co_noir::generate_proving_key_shamir(
-                net,
+            let proving_key = co_noir::generate_proving_key_shamir(
+                n,
                 t,
                 &constraint_system,
                 witness_share,
                 recursive,
+                &net0,
             )?;
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!("Build proving key took {duration_ms} ms");
@@ -1662,25 +1613,9 @@ fn run_build_and_generate_proof(
             let (proof, public_input) = match hasher {
                 TranscriptHash::POSEIDON2 => {
                     let start = Instant::now();
-                    let (proof, public_input, net) =
-                        ShamirCoUltraHonk::<_, _, Poseidon2Sponge>::prove(
-                            net,
-                            t,
-                            proving_key,
-                            &prover_crs,
-                            has_zk,
-                        )?;
-                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-                    tracing::info!("Generate proof took {duration_ms} ms");
-                    // network is shutdown in drop, which can take seom time with quinn
-                    drop(net);
-                    (proof, public_input)
-                }
-                TranscriptHash::KECCAK => {
-                    // execute prover in MPC
-                    let start = Instant::now();
-                    let (proof, public_input, net) = ShamirCoUltraHonk::<_, _, Keccak256>::prove(
-                        net,
+                    let (proof, public_input) = ShamirCoUltraHonk::<_, Poseidon2Sponge>::prove(
+                        &net0,
+                        n,
                         t,
                         proving_key,
                         &prover_crs,
@@ -1688,8 +1623,21 @@ fn run_build_and_generate_proof(
                     )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
-                    // network is shutdown in drop, which can take seom time with quinn
-                    drop(net);
+                    (proof, public_input)
+                }
+                TranscriptHash::KECCAK => {
+                    // execute prover in MPC
+                    let start = Instant::now();
+                    let (proof, public_input) = ShamirCoUltraHonk::<_, Keccak256>::prove(
+                        &net0,
+                        n,
+                        t,
+                        proving_key,
+                        &prover_crs,
+                        has_zk,
+                    )?;
+                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+                    tracing::info!("Generate proof took {duration_ms} ms");
                     (proof, public_input)
                 }
             };

@@ -13,7 +13,7 @@ pub(crate) mod rep3;
 pub trait VmCircomWitnessExtension<F: PrimeField> {
     /// The public value type
     type Public: CanonicalSerialize + CanonicalDeserialize + Clone + Default;
-    /// The arithemitc share type
+    /// The arithmetic share type
     type ArithmeticShare: CanonicalSerialize + CanonicalDeserialize + Clone + Default;
     /// The VM type
     type VmType: Clone + fmt::Debug + From<Self::Public> + From<Self::ArithmeticShare>;

@@ -1,22 +1,15 @@
 use std::{collections::HashMap, sync::Arc};
 
 use ark_ff::PrimeField;
-use mpc_core::protocols::rep3::network::{Rep3MpcNet, Rep3Network};
-use mpc_net::config::NetworkConfig;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    accelerator::{MpcAccelerator, MpcAcceleratorConfig},
     mpc::{
         batched_plain::BatchedCircomPlainVmWitnessExtension, plain::CircomPlainVmWitnessExtension,
     },
-    mpc_vm::{
-        BatchedPlainWitnessExtension, BatchedRep3WitnessExtension, PlainWitnessExtension,
-        Rep3WitnessExtension, VMConfig, WitnessExtension,
-    },
+    mpc_vm::{BatchedPlainWitnessExtension, PlainWitnessExtension, VMConfig, WitnessExtension},
     op_codes::CodeBlock,
 };
-use eyre::Result;
 
 /// A template declaration.
 ///
@@ -191,117 +184,6 @@ impl<F: PrimeField> CoCircomCompilerParsed<F> {
         batch_size: usize,
     ) -> WitnessExtension<F, BatchedCircomPlainVmWitnessExtension<F>> {
         BatchedPlainWitnessExtension::new(&self, vm_config, batch_size)
-    }
-
-    /// Consumes `self` and a [`NetworkConfig`], and constructs an instance of [`Rep3WitnessExtension`].
-    ///
-    /// # Arguments
-    /// - `network_config`: A network configuration specifying how to connect to the other two parties.
-    ///
-    /// # Returns
-    /// - `Ok(Rep3WitnessExtension)`: The MPC-VM capable of performing the witness extension using the Rep3 protocol.
-    /// - `Err(err)`: An error indicating a failure, such as inability to connect to the other parties.
-    pub fn to_rep3_vm(
-        self,
-        network_config: NetworkConfig,
-        vm_config: VMConfig,
-    ) -> Result<Rep3WitnessExtension<F, Rep3MpcNet>> {
-        Rep3WitnessExtension::new(
-            &self,
-            network_config,
-            MpcAccelerator::from_config(MpcAcceleratorConfig::from_env()),
-            vm_config,
-        )
-    }
-
-    /// Consumes `self` and an already established [`Rep3Network`], and constructs an instance of [`Rep3WitnessExtension`].
-    ///
-    /// # Arguments
-    /// - `network`: An already established [`Rep3Network`].
-    /// - `vm_config`: The [`VMConfig`].
-    ///
-    /// # Returns
-    /// - `Ok(Rep3WitnessExtension)`: The MPC-VM capable of performing the witness extension using the Rep3 protocol.
-    /// - `Err(err)`: An error indicating a failure.
-    pub fn to_rep3_vm_with_network<N: Rep3Network>(
-        self,
-        network: N,
-        vm_config: VMConfig,
-    ) -> Result<Rep3WitnessExtension<F, N>> {
-        Rep3WitnessExtension::from_network(
-            &self,
-            network,
-            MpcAccelerator::from_config(MpcAcceleratorConfig::from_env()),
-            vm_config,
-        )
-    }
-
-    /// Consumes `self` and and already established [`Rep3Network`] andn constructs an instance of [`BatchedRep3WitnessExtension`].
-    ///
-    /// # Arguments
-    /// - `network`: An already established [`Rep3Network`].
-    /// - `vm_config`: The [`VMConfig`].
-    /// - `batch_size`: The batched size the VM is operating on. The run will fail if the provided batch size doesn't match with the provided input.
-    ///
-    /// # Returns
-    /// - `Ok(Rep3WitnessExtension)`: The MPC-VM capable of performing the witness extension using the Rep3 protocol.
-    /// - `Err(err)`: An error indicating a failure.
-    pub fn to_batched_rep3_vm_with_network<N: Rep3Network>(
-        self,
-        network: N,
-        vm_config: VMConfig,
-        batch_size: usize,
-    ) -> Result<BatchedRep3WitnessExtension<F, N>> {
-        BatchedRep3WitnessExtension::from_network(
-            &self,
-            network,
-            MpcAccelerator::from_config(MpcAcceleratorConfig::from_env()),
-            vm_config,
-            batch_size,
-        )
-    }
-
-    /// Consumes a [`NetworkConfig`], and constructs an instance of [`Rep3WitnessExtension`].
-    ///
-    /// # Arguments
-    /// - `network_config`: A network configuration specifying how to connect to the other two parties.
-    ///
-    /// # Returns
-    /// - `Ok(Rep3WitnessExtension)`: The MPC-VM capable of performing the witness extension using the Rep3 protocol.
-    /// - `Err(err)`: An error indicating a failure, such as inability to connect to the other parties.
-    pub fn get_rep3_vm(
-        &self,
-        network_config: NetworkConfig,
-        vm_config: VMConfig,
-    ) -> Result<Rep3WitnessExtension<F, Rep3MpcNet>> {
-        Rep3WitnessExtension::new(
-            self,
-            network_config,
-            MpcAccelerator::from_config(MpcAcceleratorConfig::from_env()),
-            vm_config,
-        )
-    }
-
-    /// Consumes an already established [`Rep3Network`], and constructs an instance of [`Rep3WitnessExtension`].
-    ///
-    /// # Arguments
-    /// - `network`: An already established [`Rep3Network`].
-    /// - `vm_config`: The [`VMConfig`].
-    ///
-    /// # Returns
-    /// - `Ok(Rep3WitnessExtension)`: The MPC-VM capable of performing the witness extension using the Rep3 protocol.
-    /// - `Err(err)`: An error indicating a failure.
-    pub fn get_rep3_vm_with_network<N: Rep3Network>(
-        &self,
-        network: N,
-        vm_config: VMConfig,
-    ) -> Result<Rep3WitnessExtension<F, N>> {
-        Rep3WitnessExtension::from_network(
-            self,
-            network,
-            MpcAccelerator::from_config(MpcAcceleratorConfig::from_env()),
-            vm_config,
-        )
     }
 
     /// Get public input names.

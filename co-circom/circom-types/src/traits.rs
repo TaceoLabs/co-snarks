@@ -10,7 +10,7 @@ use serde::ser::SerializeSeq;
 use serde::{Serializer, de};
 use std::str::FromStr;
 
-type IoResult<T> = Result<T, SerializationError>;
+type SerResult<T> = Result<T, SerializationError>;
 
 macro_rules! impl_serde_for_curve {
     ($mod_name: ident, $config: ident, $curve: ident, $name: expr, $field_size: expr, $scalar_field_size: expr, $circom_name: expr) => {
@@ -27,14 +27,14 @@ mod $mod_name {
         impl CircomArkworksPrimeFieldBridge for Fr {
             const SERIALIZED_BYTE_SIZE: usize = $scalar_field_size;
             #[inline]
-            fn from_reader(mut reader: impl Read) -> IoResult<Self> {
+            fn from_reader(mut reader: impl Read) -> SerResult<Self> {
                 let mut buf = [0u8; Self::SERIALIZED_BYTE_SIZE];
                 reader.read_exact(&mut buf[..])?;
                 Ok(Self::from_le_bytes_mod_order(&buf))
             }
 
             #[inline]
-            fn montgomery_bigint_from_reader(mut reader: impl Read) -> IoResult<Self> {
+            fn montgomery_bigint_from_reader(mut reader: impl Read) -> SerResult<Self> {
                 let mut buf = [0u8; Self::SERIALIZED_BYTE_SIZE];
                 reader.read_exact(&mut buf[..])?;
                 Ok(Self::new_unchecked(BigInt::deserialize_uncompressed(
@@ -42,7 +42,7 @@ mod $mod_name {
                 )?))
             }
             #[inline]
-            fn from_reader_for_groth16_zkey(reader: impl Read) -> IoResult<Self> {
+            fn from_reader_for_groth16_zkey(reader: impl Read) -> SerResult<Self> {
                 Ok(Self::new_unchecked(Self::montgomery_bigint_from_reader(reader)?.into_bigint()))
             }
 
@@ -50,14 +50,14 @@ mod $mod_name {
         impl CircomArkworksPrimeFieldBridge for Fq {
             const SERIALIZED_BYTE_SIZE: usize = $field_size;
             #[inline]
-            fn from_reader(mut reader: impl Read) -> IoResult<Self> {
+            fn from_reader(mut reader: impl Read) -> SerResult<Self> {
                 let mut buf = [0u8; Self::SERIALIZED_BYTE_SIZE];
                 reader.read_exact(&mut buf[..])?;
                 Ok(Self::from_le_bytes_mod_order(&buf))
             }
 
             #[inline]
-            fn montgomery_bigint_from_reader(mut reader: impl Read) -> IoResult<Self> {
+            fn montgomery_bigint_from_reader(mut reader: impl Read) -> SerResult<Self> {
                 let mut buf = [0u8; Self::SERIALIZED_BYTE_SIZE];
                 reader.read_exact(&mut buf[..])?;
                 Ok(Self::new_unchecked(BigInt::deserialize_uncompressed(
@@ -65,7 +65,7 @@ mod $mod_name {
                 )?))
             }
             #[inline]
-            fn from_reader_for_groth16_zkey(reader: impl Read) -> IoResult<Self> {
+            fn from_reader_for_groth16_zkey(reader: impl Read) -> SerResult<Self> {
                 Ok(Self::new_unchecked(Self::montgomery_bigint_from_reader(reader)?.into_bigint()))
             }
         }
@@ -84,7 +84,7 @@ mod $mod_name {
 
             //Circom serializes its field elements in montgomery form
             //therefore we use Fq::montgomery_bigint_from_reader
-            fn g1_from_bytes(bytes: &[u8], check: CheckElement) -> IoResult<Self::G1Affine> {
+            fn g1_from_bytes(bytes: &[u8], check: CheckElement) -> SerResult<Self::G1Affine> {
                 //already in montgomery form
                 let x = Fq::montgomery_bigint_from_reader(&bytes[..Fq::SERIALIZED_BYTE_SIZE])?;
                 let y = Fq::montgomery_bigint_from_reader(&bytes[Fq::SERIALIZED_BYTE_SIZE..])?;
@@ -105,7 +105,7 @@ mod $mod_name {
                 Ok(p)
             }
 
-            fn g2_from_bytes(bytes: &[u8], check: CheckElement) -> IoResult<Self::G2Affine> {
+            fn g2_from_bytes(bytes: &[u8], check: CheckElement) -> SerResult<Self::G2Affine> {
                 //already in montgomery form
                 let x0 = Fq::montgomery_bigint_from_reader(&bytes[..Fq::SERIALIZED_BYTE_SIZE])?;
                 let x1 = Fq::montgomery_bigint_from_reader(
@@ -137,19 +137,19 @@ mod $mod_name {
                 Ok(p)
             }
 
-            fn g1_from_reader(mut reader: impl Read, check: CheckElement) -> IoResult<Self::G1Affine> {
+            fn g1_from_reader(mut reader: impl Read, check: CheckElement) -> SerResult<Self::G1Affine> {
                 let mut buf = [0u8; Self::G1_SERIALIZED_BYTE_SIZE_UNCOMPRESSED];
                 reader.read_exact(&mut buf)?;
                 Self::g1_from_bytes(&buf, check)
             }
 
-            fn g2_from_reader(mut reader: impl Read, check: CheckElement) -> IoResult<Self::G2Affine> {
+            fn g2_from_reader(mut reader: impl Read, check: CheckElement) -> SerResult<Self::G2Affine> {
                 let mut buf = [0u8; Self::G2_SERIALIZED_BYTE_SIZE_UNCOMPRESSED];
                 reader.read_exact(&mut buf)?;
                 Self::g2_from_bytes(&buf, check)
             }
 
-            fn g1_from_strings_projective(x: &str, y: &str, z: &str, check: CheckElement) -> IoResult<Self::G1Affine> {
+            fn g1_from_strings_projective(x: &str, y: &str, z: &str, check: CheckElement) -> SerResult<Self::G1Affine> {
                 let x = parse_field(x)?;
                 let y = parse_field(y)?;
                 let z = parse_field(z)?;
@@ -185,7 +185,7 @@ mod $mod_name {
                 z0: &str,
                 z1: &str,
                 check: CheckElement
-            ) -> IoResult<Self::G2Affine> {
+            ) -> SerResult<Self::G2Affine> {
                 let x0 = parse_field(x0)?;
                 let x1 = parse_field(x1)?;
                 let y0 = parse_field(y0)?;
@@ -300,7 +300,7 @@ mod $mod_name {
         }
     }
     #[inline]
-    fn cubic_extension_field_from_vec(strings: Vec<Vec<String>>) -> IoResult<$curve::Fq6> {
+    fn cubic_extension_field_from_vec(strings: Vec<Vec<String>>) -> SerResult<$curve::Fq6> {
         if strings.len() != 3 {
             Err(SerializationError::InvalidData)
         } else {
@@ -311,7 +311,7 @@ mod $mod_name {
         }
     }
     #[inline]
-    fn quadratic_extension_field_from_vec(strings: &[String]) -> IoResult<$curve::Fq2> {
+    fn quadratic_extension_field_from_vec(strings: &[String]) -> SerResult<$curve::Fq2> {
         if strings.len() != 2 {
             Err(SerializationError::InvalidData)
         } else {
@@ -322,7 +322,7 @@ mod $mod_name {
     }
 
     #[inline]
-    fn parse_field(string: &str) -> IoResult<$curve::Fq> {
+    fn parse_field(string: &str) -> SerResult<$curve::Fq> {
         $curve::Fq::from_str(string).map_err(|_| SerializationError::InvalidData)
     }
 }
@@ -537,21 +537,21 @@ where
     fn get_circom_name() -> String;
     /// Deserializes element of G1 from bytes where the element is already in montgomery form (no montgomery reduction performed)
     /// Used in default multithreaded impl of g1_vec_from_reader, because `Read` cannot be shared across threads
-    fn g1_from_bytes(bytes: &[u8], check: CheckElement) -> IoResult<Self::G1Affine>;
+    fn g1_from_bytes(bytes: &[u8], check: CheckElement) -> SerResult<Self::G1Affine>;
     /// Deserializes element of G2 from bytes where the element is already in montgomery form (no montgomery reduction performed)
     /// Used in default multithreaded impl of g2_vec_from_reader, because `Read` cannot be shared across threads
-    fn g2_from_bytes(bytes: &[u8], check: CheckElement) -> IoResult<Self::G2Affine>;
+    fn g2_from_bytes(bytes: &[u8], check: CheckElement) -> SerResult<Self::G2Affine>;
     /// Deserializes element of G1 from reader where the element is already in montgomery form (no montgomery reduction performed)
-    fn g1_from_reader(reader: impl Read, check: CheckElement) -> IoResult<Self::G1Affine>;
+    fn g1_from_reader(reader: impl Read, check: CheckElement) -> SerResult<Self::G1Affine>;
     /// Deserializes element of G2 from reader where the element is already in montgomery form (no montgomery reduction performed)
-    fn g2_from_reader(reader: impl Read, check: CheckElement) -> IoResult<Self::G2Affine>;
+    fn g2_from_reader(reader: impl Read, check: CheckElement) -> SerResult<Self::G2Affine>;
     /// Deserializes vec of G1 from reader where the elements are already in montgomery form (no montgomery reduction performed)
     /// The default implementation runs multithreaded using rayon
     fn g1_vec_from_reader(
         mut reader: impl Read,
         num: usize,
         check: CheckElement,
-    ) -> IoResult<Vec<Self::G1Affine>> {
+    ) -> SerResult<Vec<Self::G1Affine>> {
         let mut buf = vec![0u8; Self::G1_SERIALIZED_BYTE_SIZE_UNCOMPRESSED * num];
         reader.read_exact(&mut buf)?;
         buf.par_chunks_exact(Self::G1_SERIALIZED_BYTE_SIZE_UNCOMPRESSED)
@@ -564,7 +564,7 @@ where
         mut reader: impl Read,
         num: usize,
         check: CheckElement,
-    ) -> IoResult<Vec<Self::G2Affine>> {
+    ) -> SerResult<Vec<Self::G2Affine>> {
         let mut buf = vec![0u8; Self::G2_SERIALIZED_BYTE_SIZE_UNCOMPRESSED * num];
         reader.read_exact(&mut buf)?;
         buf.par_chunks_exact(Self::G2_SERIALIZED_BYTE_SIZE_UNCOMPRESSED)
@@ -577,7 +577,7 @@ where
         y: &str,
         z: &str,
         check: CheckElement,
-    ) -> IoResult<Self::G1Affine>;
+    ) -> SerResult<Self::G1Affine>;
     /// Deserializes element of G2 from strings representing projective coordinates
     fn g2_from_strings_projective(
         x0: &str,
@@ -587,7 +587,7 @@ where
         z0: &str,
         z1: &str,
         check: CheckElement,
-    ) -> IoResult<Self::G2Affine>;
+    ) -> SerResult<Self::G2Affine>;
     /// Deserializes element of G1 using deserializer
     fn deserialize_g1_element<'de, D>(deserializer: D) -> Result<Self::G1Affine, D::Error>
     where
@@ -641,12 +641,12 @@ pub trait CircomArkworksPrimeFieldBridge: PrimeField {
     /// Size of serialized field element in bytes
     const SERIALIZED_BYTE_SIZE: usize;
     /// Deserializes field elements and performs montgomery reduction
-    fn from_reader(reader: impl Read) -> IoResult<Self>;
+    fn from_reader(reader: impl Read) -> SerResult<Self>;
     /// deserializes a big int that is already in montgomery
     /// form and creates a field element from that big int. DOES NOT perform montgomery reduction
-    fn montgomery_bigint_from_reader(reader: impl Read) -> IoResult<Self>;
+    fn montgomery_bigint_from_reader(reader: impl Read) -> SerResult<Self>;
     /// deserializes field elements that are multiplied by R^2 already (elements in Groth16 zkey are of this form)
-    fn from_reader_for_groth16_zkey(reader: impl Read) -> IoResult<Self>;
+    fn from_reader_for_groth16_zkey(reader: impl Read) -> SerResult<Self>;
 }
 
 /// Indicates whether we should check if deserialized are valid

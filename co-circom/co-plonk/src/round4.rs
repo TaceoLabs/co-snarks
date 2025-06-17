@@ -6,10 +6,13 @@ use crate::{
     types::{Domains, Keccak256Transcript, PlonkData},
 };
 use ark_ec::pairing::Pairing;
+use mpc_net::Network;
+use tracing::instrument;
 
 // Round 4 of https://eprint.iacr.org/2019/953.pdf (page 29)
-pub(super) struct Round4<'a, P: Pairing, T: CircomPlonkProver<P>> {
-    pub(super) driver: T,
+pub(super) struct Round4<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network> {
+    pub(super) nets: &'a [N; 8],
+    pub(super) state: &'a mut T::State,
     pub(super) domains: Domains<P::ScalarField>,
     pub(super) challenges: Round3Challenges<P, T>,
     pub(super) proof: Round3Proof<P>,
@@ -91,11 +94,13 @@ impl<P: Pairing> Round4Proof<P> {
 }
 
 // Round 4 of https://eprint.iacr.org/2019/953.pdf (page 29)
-impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round4<'a, P, T> {
+impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round4<'a, P, T, N> {
     // Round 4 of https://eprint.iacr.org/2019/953.pdf (page 29)
-    pub(super) fn round4(self) -> PlonkProofResult<Round5<'a, P, T>> {
+    #[instrument(level = "debug", name = "Plonk - Round 4", skip_all)]
+    pub(super) fn round4(self) -> PlonkProofResult<Round5<'a, P, T, N>> {
         let Self {
-            mut driver,
+            nets,
+            state,
             domains,
             challenges,
             proof,
@@ -130,7 +135,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round4<'a, P, T> {
         polys.c.poly = poly_c;
         polys.z.poly = poly_z;
 
-        let opened = driver.open_vec(&[eval_a, eval_b, eval_c, eval_z])?;
+        let opened = T::open_vec(&[eval_a, eval_b, eval_c, eval_z], &nets[0], state)?;
 
         let eval_a = opened[0];
         let eval_b = opened[1];
@@ -143,7 +148,8 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round4<'a, P, T> {
         tracing::debug!("round4 result: {proof}");
 
         Ok(Round5 {
-            driver,
+            nets,
+            state,
             domains,
             challenges,
             proof,
@@ -174,7 +180,6 @@ pub mod tests {
     #[test]
     fn test_round4_multiplier2() {
         for check in [CheckElement::Yes, CheckElement::No] {
-            let mut driver = PlainPlonkDriver;
             let mut reader = BufReader::new(
                 File::open("../../test_vectors/Plonk/bn254/multiplier2/circuit.zkey").unwrap(),
             );
@@ -188,8 +193,9 @@ pub mod tests {
                 witness: witness.values[zkey.n_public + 1..].to_vec(),
             };
 
-            let challenges = Round1Challenges::deterministic(&mut driver);
-            let mut round1 = Round1::init_round(driver, &zkey, witness).unwrap();
+            let challenges = Round1Challenges::<Bn254, PlainPlonkDriver>::deterministic();
+            let mut state = ();
+            let mut round1 = Round1::init_round(&[(); 8], &mut state, &zkey, witness).unwrap();
             round1.challenges = challenges;
             let round2 = round1.round1().unwrap();
             let round3 = round2.round2().unwrap();

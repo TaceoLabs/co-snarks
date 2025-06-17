@@ -3,7 +3,6 @@
 //! This type is a wrapper for all datatypes implementing the [`IntRing2k`] trait. The purpose is explicitly allowing wrapping arithmetic opearations.
 
 use super::int_ring::IntRing2k;
-use crate::protocols::rep3::IoResult;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Valid};
 use num_traits::{One, Zero};
 use rand::{
@@ -53,11 +52,11 @@ impl<T: IntRing2k> RingElement<T> {
         self.0.bits()
     }
 
-    fn from_reader<R: std::io::Read>(reader: R) -> IoResult<Self> {
+    fn from_reader<R: std::io::Read>(reader: R) -> std::io::Result<Self> {
         let res = T::from_reader(reader)?;
         Ok(RingElement(res))
     }
-    fn write<W: std::io::Write>(&self, writer: W) -> IoResult<()> {
+    fn write<W: std::io::Write>(&self, writer: W) -> std::io::Result<()> {
         T::write(&self.0, writer)
     }
 

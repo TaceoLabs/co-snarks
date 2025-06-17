@@ -24,7 +24,7 @@ macro_rules! add_plain_acvm_test {
                     let prover_toml = format!("../test_vectors/noir/{}/Prover.toml", $name);
                     let solver =
                         PlainCoSolver::init_plain_driver(program_artifact, prover_toml).unwrap();
-                    let (is_witness, _) = solver.solve().unwrap();
+                    let is_witness = solver.solve().unwrap();
                     let is_witness = PlainCoSolver::convert_to_plain_acvm_witness(is_witness);
                     assert_eq!(is_witness, should_witness);
                 }
@@ -56,7 +56,7 @@ macro_rules! add_rep3_acvm_test {
                     $name
                 ));
                 // read the input file
-                let inputs = Rep3CoSolver::<_, PartyTestNetwork>::partially_read_abi_bn254_fieldelement(
+                let inputs = Rep3CoSolver::<_, ()>::partially_read_abi_bn254_fieldelement(
                     &input,
                     &program_artifact.abi,
                     &program_artifact.bytecode,
@@ -64,11 +64,13 @@ macro_rules! add_rep3_acvm_test {
 
                 // create input shares
                 let mut rng = rand::thread_rng();
-                let shares = co_noir::split_input_rep3::<Bn254, PartyTestNetwork,_>(inputs, &mut rng);
-                let test_network = Rep3TestNetwork::default();
+                let shares = co_noir::split_input_rep3::<Bn254, _>(inputs, &mut rng);
+                let nets0 = TestNetwork::new_3_parties();
+                let nets1 = TestNetwork::new_3_parties();
                 let mut threads = vec![];
-                for (net, program_artifact, share) in izip!(
-                    test_network.get_party_networks(),
+                for (net0, net1, program_artifact, share) in izip!(
+                    nets0,
+                    nets1,
                     [
                         program_artifact.clone(),
                         program_artifact.clone(),
@@ -76,11 +78,11 @@ macro_rules! add_rep3_acvm_test {
                     ],
                     shares
                 ) {
-                    threads.push(thread::spawn(move || {
+                    threads.push(spawn_pool(move || {
                         let input_share = co_noir::witness_to_witness_map(share, &program_artifact.abi).expect("can translate witness for noir witness extension");
                         let solver =
-                            Rep3CoSolver::from_network_with_witness(net, program_artifact, input_share).unwrap();
-                        let (proof, _) = solver.solve().unwrap();
+                            Rep3CoSolver::new_with_witness(&net0, &net1, program_artifact, input_share).unwrap();
+                        let proof = solver.solve().unwrap();
                         proof
                     }));
                 }

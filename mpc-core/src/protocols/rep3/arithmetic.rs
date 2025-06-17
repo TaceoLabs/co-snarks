@@ -3,6 +3,7 @@
 //! This module contains operations with arithmetic shares
 
 use core::panic;
+use mpc_net::Network;
 use num_traits::cast::ToPrimitive;
 
 use ark_ff::PrimeField;
@@ -11,14 +12,13 @@ use num_bigint::BigUint;
 use num_traits::One;
 use num_traits::Zero;
 
-use crate::IoResult;
-use crate::protocols::rep3::{PartyID, detail, network::Rep3Network};
+use crate::protocols::rep3::detail;
 use rayon::prelude::*;
 
-use super::{
-    Rep3BigUintShare, Rep3PrimeFieldShare, binary, conversion, network::IoContext,
-    rngs::Rep3CorrelatedRng,
-};
+use super::PartyID;
+use super::Rep3State;
+use super::network;
+use super::{Rep3BigUintShare, Rep3PrimeFieldShare, binary, conversion};
 
 /// Type alias for a [`Rep3PrimeFieldShare`]
 pub type FieldShare<F> = Rep3PrimeFieldShare<F>;
@@ -98,13 +98,14 @@ pub fn sub_public_by_shared<F: PrimeField>(
 }
 
 /// Performs multiplication of two shared values.
-pub fn mul<F: PrimeField, N: Rep3Network>(
+pub fn mul<F: PrimeField, N: Network>(
     a: FieldShare<F>,
     b: FieldShare<F>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<FieldShare<F>> {
-    let local_a = a * b + io_context.rngs.rand.masking_field_element::<F>();
-    let local_b = io_context.network.reshare(local_a)?;
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<FieldShare<F>> {
+    let local_a = a * b + state.rngs.rand.masking_field_element::<F>();
+    let local_b = network::reshare(net, local_a)?;
     Ok(FieldShare {
         a: local_a,
         b: local_b,
@@ -129,28 +130,27 @@ pub fn mul_assign_public<F: PrimeField>(shared: &mut FieldShare<F>, public: F) {
 pub fn local_mul_vec<F: PrimeField>(
     lhs: &[FieldShare<F>],
     rhs: &[FieldShare<F>],
-    rngs: &mut Rep3CorrelatedRng,
+    state: &mut Rep3State,
 ) -> Vec<F> {
     //squeeze all random elements at once in beginning for determinismus
-    let masking_fes = rngs.rand.masking_field_elements_vec::<F>(lhs.len());
-    (lhs, rhs, masking_fes)
-        .into_par_iter()
+    let masking_fes = state.rngs.rand.masking_field_elements_vec::<F>(lhs.len());
+
+    lhs.par_iter()
+        .zip_eq(rhs.par_iter())
+        .zip_eq(masking_fes.par_iter())
         .with_min_len(1024)
-        .map(|(lhs, rhs, masking)| lhs * rhs + masking)
+        .map(|((lhs, rhs), masking)| lhs * rhs + masking)
         .collect()
 }
 
 /// Performs a reshare on all shares in the vector.
-pub fn reshare_vec<F: PrimeField, N: Rep3Network>(
+pub fn reshare_vec<F: PrimeField, N: Network>(
     local_a: Vec<F>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<Vec<FieldShare<F>>> {
-    let local_b = io_context.network.reshare_many(&local_a)?;
+    net: &N,
+) -> eyre::Result<Vec<FieldShare<F>>> {
+    let local_b = network::reshare_many(net, &local_a)?;
     if local_b.len() != local_a.len() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "During execution of reshare_vec: Invalid number of elements received",
-        ));
+        eyre::bail!("During execution of mul_vec in MPC: Invalid number of elements received",);
     }
     Ok(izip!(local_a, local_b)
         .map(|(a, b)| FieldShare::new(a, b))
@@ -160,25 +160,27 @@ pub fn reshare_vec<F: PrimeField, N: Rep3Network>(
 /// Performs element-wise multiplication of two vectors of shared values.
 ///
 /// Use this function for small vecs. For large vecs see [`local_mul_vec`] and [`reshare_vec`]
-pub fn mul_vec<F: PrimeField, N: Rep3Network>(
+pub fn mul_vec<F: PrimeField, N: Network>(
     lhs: &[FieldShare<F>],
     rhs: &[FieldShare<F>],
-    io_context: &mut IoContext<N>,
-) -> IoResult<Vec<FieldShare<F>>> {
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Vec<FieldShare<F>>> {
     debug_assert_eq!(lhs.len(), rhs.len());
     let local_a = izip!(lhs.iter(), rhs.iter())
-        .map(|(lhs, rhs)| lhs * rhs + io_context.rngs.rand.masking_field_element::<F>())
+        .map(|(lhs, rhs)| lhs * rhs + state.rngs.rand.masking_field_element::<F>())
         .collect_vec();
-    reshare_vec(local_a, io_context)
+    reshare_vec(local_a, net)
 }
 
 /// Performs division of two shared values, returning a / b.
-pub fn div<F: PrimeField, N: Rep3Network>(
+pub fn div<F: PrimeField, N: Network>(
     a: FieldShare<F>,
     b: FieldShare<F>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<FieldShare<F>> {
-    mul(a, inv(b, io_context)?, io_context)
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<FieldShare<F>> {
+    mul(a, inv(b, net, state)?, net, state)
 }
 
 /// Performs division of a shared value by a public value, returning shared / public.
@@ -194,12 +196,13 @@ pub fn div_shared_by_public<F: PrimeField>(
 }
 
 /// Performs division of a public value by a shared value, returning public / shared.
-pub fn div_public_by_shared<F: PrimeField, N: Rep3Network>(
+pub fn div_public_by_shared<F: PrimeField, N: Network>(
     public: F,
     shared: FieldShare<F>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<FieldShare<F>> {
-    Ok(mul_public(inv(shared, io_context)?, public))
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<FieldShare<F>> {
+    Ok(mul_public(inv(shared, net, state)?, public))
 }
 
 /// Negates a shared value.
@@ -208,17 +211,15 @@ pub fn neg<F: PrimeField>(a: FieldShare<F>) -> FieldShare<F> {
 }
 
 /// Computes the inverse of a shared value.
-pub fn inv<F: PrimeField, N: Rep3Network>(
+pub fn inv<F: PrimeField, N: Network>(
     a: FieldShare<F>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<FieldShare<F>> {
-    let r = rand(io_context);
-    let y = mul_open(a, r, io_context)?;
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<FieldShare<F>> {
+    let r = rand(state);
+    let y = mul_open(a, r, net, state)?;
     if y.is_zero() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "During execution of inverse in MPC: cannot compute inverse of zero",
-        ));
+        eyre::bail!("During execution of inverse in MPC: cannot compute inverse of zero",);
     }
     let y_inv = y
         .inverse()
@@ -227,17 +228,15 @@ pub fn inv<F: PrimeField, N: Rep3Network>(
 }
 
 /// Computes the inverse of a vector of shared field elements
-pub fn inv_vec<F: PrimeField, N: Rep3Network>(
+pub fn inv_vec<F: PrimeField, N: Network>(
     a: &[FieldShare<F>],
-    io_context: &mut IoContext<N>,
-) -> IoResult<Vec<FieldShare<F>>> {
-    let r = (0..a.len()).map(|_| rand(io_context)).collect_vec();
-    let y = mul_open_vec(a, &r, io_context)?;
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Vec<FieldShare<F>>> {
+    let r = (0..a.len()).map(|_| rand(state)).collect_vec();
+    let y = mul_open_vec(a, &r, net, state)?;
     if y.iter().any(|y| y.is_zero()) {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "During execution of inverse in MPC: cannot compute inverse of zero",
-        ));
+        eyre::bail!("During execution of inverse in MPC: cannot compute inverse of zero",);
     }
 
     // we can unwrap as we checked that none of the y is zero
@@ -245,28 +244,22 @@ pub fn inv_vec<F: PrimeField, N: Rep3Network>(
 }
 
 /// Performs the opening of a shared value and returns the equivalent public value.
-pub fn open<F: PrimeField, N: Rep3Network>(
-    a: FieldShare<F>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<F> {
-    let c = io_context.network.reshare(a.b)?;
+pub fn open<F: PrimeField, N: Network>(a: FieldShare<F>, net: &N) -> eyre::Result<F> {
+    let c = network::reshare(net, a.b)?;
     Ok(a.a + a.b + c)
 }
 
 /// Performs the opening of a shared value and returns the equivalent public value.
-pub fn open_bit<F: PrimeField, N: Rep3Network>(
+pub fn open_bit<F: PrimeField, N: Network>(
     a: Rep3BigUintShare<F>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<BigUint> {
-    let c = io_context.network.reshare(a.b.to_owned())?;
+    net: &N,
+) -> eyre::Result<BigUint> {
+    let c = network::reshare(net, a.b.to_owned())?;
     Ok(a.a ^ a.b ^ c)
 }
 
 /// Performs the opening of a shared value and returns the equivalent public value.
-pub fn open_vec<F: PrimeField, N: Rep3Network>(
-    a: &[FieldShare<F>],
-    io_context: &mut IoContext<N>,
-) -> IoResult<Vec<F>> {
+pub fn open_vec<F: PrimeField, N: Network>(a: &[FieldShare<F>], net: &N) -> eyre::Result<Vec<F>> {
     // TODO think about something better... it is not so bad
     // because we use it exactly once in PLONK where we do it for 4
     // shares..
@@ -274,38 +267,40 @@ pub fn open_vec<F: PrimeField, N: Rep3Network>(
         .iter()
         .map(|share| (share.a, share.b))
         .collect::<(Vec<F>, Vec<F>)>();
-    let c = io_context.network.reshare_many(&b)?;
+    let c = network::reshare_many(net, &b)?;
     Ok(izip!(a, b, c).map(|(a, b, c)| a + b + c).collect_vec())
 }
 
 /// Computes a CMUX: If cond is 1, returns truthy, otherwise returns falsy.
 /// Implementations should not overwrite this method.
-pub fn cmux<F: PrimeField, N: Rep3Network>(
+pub fn cmux<F: PrimeField, N: Network>(
     cond: FieldShare<F>,
     truthy: FieldShare<F>,
     falsy: FieldShare<F>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<FieldShare<F>> {
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<FieldShare<F>> {
     let b_min_a = sub(truthy, falsy);
-    let d = mul(cond, b_min_a, io_context)?;
+    let d = mul(cond, b_min_a, net, state)?;
     Ok(add(falsy, d))
 }
 
 /// Computes a CMUX: If cond is 1, returns truthy, otherwise returns falsy.
 /// Implementations should not overwrite this method.
-pub fn cmux_vec<F: PrimeField, N: Rep3Network>(
+pub fn cmux_vec<F: PrimeField, N: Network>(
     cond: FieldShare<F>,
     truthy: &[FieldShare<F>],
     falsy: &[FieldShare<F>],
-    io_context: &mut IoContext<N>,
-) -> IoResult<Vec<FieldShare<F>>> {
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Vec<FieldShare<F>>> {
     debug_assert_eq!(truthy.len(), falsy.len());
     let result_a = truthy
         .iter()
         .zip(falsy.iter())
-        .map(|(t, f)| sub(*t, *f) * cond + f.a + io_context.rngs.rand.masking_field_element::<F>())
+        .map(|(t, f)| sub(*t, *f) * cond + f.a + state.rngs.rand.masking_field_element::<F>())
         .collect_vec();
-    reshare_vec(result_a, io_context)
+    reshare_vec(result_a, net)
 }
 
 /// Convenience method for \[a\] + \[b\] * c
@@ -314,13 +309,14 @@ pub fn add_mul_public<F: PrimeField>(a: FieldShare<F>, b: FieldShare<F>, c: F) -
 }
 
 /// Convenience method for \[a\] + \[b\] * \[c\]
-pub fn add_mul<F: PrimeField, N: Rep3Network>(
+pub fn add_mul<F: PrimeField, N: Network>(
     a: FieldShare<F>,
     b: FieldShare<F>,
     c: FieldShare<F>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<FieldShare<F>> {
-    let mul = mul(c, b, io_context)?;
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<FieldShare<F>> {
+    let mul = mul(c, b, net, state)?;
     Ok(add(a, mul))
 }
 
@@ -334,61 +330,58 @@ pub fn promote_to_trivial_share<F: PrimeField>(id: PartyID, public_value: F) -> 
 }
 
 /// This function performs a multiplication directly followed by an opening. This safes one round of communication in some MPC protocols compared to calling `mul` and `open` separately.
-pub fn mul_open<F: PrimeField, N: Rep3Network>(
+pub fn mul_open<F: PrimeField, N: Network>(
     a: FieldShare<F>,
     b: FieldShare<F>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<F> {
-    let a = a * b + io_context.rngs.rand.masking_field_element::<F>();
-    let (b, c) = io_context.network.broadcast(a)?;
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<F> {
+    let a = a * b + state.rngs.rand.masking_field_element::<F>();
+    let (b, c) = network::broadcast(net, a)?;
     Ok(a + b + c)
 }
 
 /// This function performs a multiplication directly followed by an opening. This safes one round of communication in some MPC protocols compared to calling `mul` and `open` separately.
-pub fn mul_open_vec<F: PrimeField, N: Rep3Network>(
+pub fn mul_open_vec<F: PrimeField, N: Network>(
     a: &[FieldShare<F>],
     b: &[FieldShare<F>],
-    io_context: &mut IoContext<N>,
-) -> IoResult<Vec<F>> {
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Vec<F>> {
     let mut a = izip!(a, b)
-        .map(|(a, b)| a * b + io_context.rngs.rand.masking_field_element::<F>())
+        .map(|(a, b)| a * b + state.rngs.rand.masking_field_element::<F>())
         .collect_vec();
-    let (b, c) = io_context.network.broadcast_many(&a)?;
+    let (b, c) = network::broadcast_many(net, &a)?;
     izip!(a.iter_mut(), b, c).for_each(|(a, b, c)| *a += b + c);
     Ok(a)
 }
 
 /// Generate a random [`FieldShare`].
-pub fn rand<F: PrimeField, N: Rep3Network>(io_context: &mut IoContext<N>) -> FieldShare<F> {
-    let (a, b) = io_context.rngs.rand.random_fes();
+pub fn rand<F: PrimeField>(state: &mut Rep3State) -> FieldShare<F> {
+    let (a, b) = state.rngs.rand.random_fes();
     FieldShare::new(a, b)
 }
 
 /// Computes the square root of a shared value.
-pub fn sqrt<F: PrimeField, N: Rep3Network>(
+pub fn sqrt<F: PrimeField, N: Network>(
     share: FieldShare<F>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<FieldShare<F>> {
-    let r_squ = rand(io_context);
-    let r_inv = rand(io_context);
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<FieldShare<F>> {
+    let r_squ = rand(state);
+    let r_inv = rand(state);
 
-    let rr = mul(r_squ, r_squ, io_context)?;
+    let rr = mul(r_squ, r_squ, net, state)?;
 
     // parallel mul of rr with a and r_squ with r_inv
     let lhs = vec![rr, r_squ];
     let rhs = vec![share, r_inv];
-    let mul = mul_vec(&lhs, &rhs, io_context)?;
+    let mul = mul_vec(&lhs, &rhs, net, state)?;
 
     // Open mul
-    io_context
-        .network
-        .send_next_many(&mul.iter().map(|s| s.b.to_owned()).collect_vec())?;
-    let c = io_context.network.recv_prev_many::<F>()?;
+    let c = network::reshare_many(net, &mul.iter().map(|s| s.b.to_owned()).collect_vec())?;
     if c.len() != 2 {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "During execution of square root: invalid number of elements received",
-        ));
+        eyre::bail!("During execution of square root in MPC: invalid number of elements received",);
     }
     let y_sq = (mul[0].a + mul[0].b + c[0]).sqrt();
     let y_inv = mul[1].a + mul[1].b + c[1];
@@ -397,18 +390,12 @@ pub fn sqrt<F: PrimeField, N: Rep3Network>(
     let y_sq = match y_sq {
         Some(y) => y,
         None => {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "During execution of square root in MPC: cannot compute square root",
-            ));
+            eyre::bail!("During execution of square root in MPC: cannot compute square root",);
         }
     };
 
     if y_inv.is_zero() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "During execution of square root in MPC: cannot compute inverse of zero",
-        ));
+        eyre::bail!("During execution of square root in MPC: cannot compute inverse of zero",);
     }
     let y_inv = y_inv.inverse().unwrap();
 
@@ -419,134 +406,146 @@ pub fn sqrt<F: PrimeField, N: Rep3Network>(
 }
 
 /// Performs a pow operation using a shared value as base and a public value as exponent.
-pub fn pow_public<F: PrimeField, N: Rep3Network>(
+pub fn pow_public<F: PrimeField, N: Network>(
     shared: FieldShare<F>,
     public: F,
-    io_context: &mut IoContext<N>,
-) -> IoResult<Rep3PrimeFieldShare<F>> {
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Rep3PrimeFieldShare<F>> {
     // TODO: are negative exponents allowed in circom?
-    let mut res = promote_to_trivial_share(io_context.id, F::one());
+    let mut res = promote_to_trivial_share(state.id, F::one());
     let mut public: BigUint = public.into_bigint().into();
     let mut shared: FieldShare<F> = shared;
     while !public.is_zero() {
         if public.bit(0) {
-            res = mul(res, shared, io_context)?;
+            res = mul(res, shared, net, state)?;
         }
-        shared = mul(shared, shared, io_context)?;
+        shared = mul(shared, shared, net, state)?;
         public >>= 1;
     }
-    mul(res, shared, io_context)
+    mul(res, shared, net, state)
 }
 
 /// Returns 1 if lhs < rhs and 0 otherwise. Checks if one shared value is less than another shared value. The result is a shared value that has value 1 if the first shared value is less than the second shared value and 0 otherwise.
-pub fn lt<F: PrimeField, N: Rep3Network>(
+pub fn lt<F: PrimeField, N: Network>(
     lhs: FieldShare<F>,
     rhs: FieldShare<F>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<FieldShare<F>> {
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<FieldShare<F>> {
     // a < b is equivalent to !(a >= b)
-    let tmp = ge(lhs, rhs, io_context)?;
-    Ok(sub_public_by_shared(F::one(), tmp, io_context.id))
+    let tmp = ge(lhs, rhs, net, state)?;
+    Ok(sub_public_by_shared(F::one(), tmp, state.id))
 }
 
 /// Returns 1 if lhs < rhs and 0 otherwise. Checks if a shared value is less than the public value. The result is a shared value that has value 1 if the shared value is less than the public value and 0 otherwise.
-pub fn lt_public<F: PrimeField, N: Rep3Network>(
+pub fn lt_public<F: PrimeField, N: Network>(
     lhs: FieldShare<F>,
     rhs: F,
-    io_context: &mut IoContext<N>,
-) -> IoResult<FieldShare<F>> {
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<FieldShare<F>> {
     // a < b is equivalent to !(a >= b)
-    let tmp = ge_public(lhs, rhs, io_context)?;
-    Ok(sub_public_by_shared(F::one(), tmp, io_context.id))
+    let tmp = ge_public(lhs, rhs, net, state)?;
+    Ok(sub_public_by_shared(F::one(), tmp, state.id))
 }
 
 /// Returns 1 if lhs <= rhs and 0 otherwise. Checks if one shared value is less than or equal to another shared value. The result is a shared value that has value 1 if the first shared value is less than or equal to the second shared value and 0 otherwise.
-pub fn le<F: PrimeField, N: Rep3Network>(
+pub fn le<F: PrimeField, N: Network>(
     lhs: FieldShare<F>,
     rhs: FieldShare<F>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<FieldShare<F>> {
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<FieldShare<F>> {
     // a <= b is equivalent to b >= a
-    ge(rhs, lhs, io_context)
+    ge(rhs, lhs, net, state)
 }
 
 /// Returns 1 if lhs <= rhs and 0 otherwise. Checks if a shared value is less than or equal to a public value. The result is a shared value that has value 1 if the shared value is less than or equal to the public value and 0 otherwise.
-pub fn le_public<F: PrimeField, N: Rep3Network>(
+pub fn le_public<F: PrimeField, N: Network>(
     lhs: FieldShare<F>,
     rhs: F,
-    io_context: &mut IoContext<N>,
-) -> IoResult<FieldShare<F>> {
-    let res = le_public_bit(lhs, rhs, io_context)?;
-    conversion::bit_inject(&res, io_context)
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<FieldShare<F>> {
+    let res = le_public_bit(lhs, rhs, net, state)?;
+    conversion::bit_inject(&res, net, state)
 }
 
 /// Same as le_public but without using bit_inject on the result. Returns 1 if lhs <= rhs and 0 otherwise. Checks if a shared value is less than or equal to a public value. The result is a shared value that has value 1 if the shared value is less than or equal to the public value and 0 otherwise.
-pub fn le_public_bit<F: PrimeField, N: Rep3Network>(
+pub fn le_public_bit<F: PrimeField, N: Network>(
     lhs: FieldShare<F>,
     rhs: F,
-    io_context: &mut IoContext<N>,
-) -> IoResult<BinaryShare<F>> {
-    detail::unsigned_ge_const_lhs(rhs, lhs, io_context)
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<BinaryShare<F>> {
+    detail::unsigned_ge_const_lhs(rhs, lhs, net, state)
 }
 
 /// Returns 1 if lhs > rhs and 0 otherwise. Checks if one shared value is greater than another shared value. The result is a shared value that has value 1 if the first shared value is greater than the second shared value and 0 otherwise.
-pub fn gt<F: PrimeField, N: Rep3Network>(
+pub fn gt<F: PrimeField, N: Network>(
     lhs: FieldShare<F>,
     rhs: FieldShare<F>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<FieldShare<F>> {
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<FieldShare<F>> {
     // a > b is equivalent to !(a <= b)
-    let tmp = le(lhs, rhs, io_context)?;
-    Ok(sub_public_by_shared(F::one(), tmp, io_context.id))
+    let tmp = le(lhs, rhs, net, state)?;
+    Ok(sub_public_by_shared(F::one(), tmp, state.id))
 }
 
 /// Returns 1 if lhs > rhs and 0 otherwise. Checks if a shared value is greater than the public value. The result is a shared value that has value 1 if the shared value is greater than the public value and 0 otherwise.
-pub fn gt_public<F: PrimeField, N: Rep3Network>(
+pub fn gt_public<F: PrimeField, N: Network>(
     lhs: FieldShare<F>,
     rhs: F,
-    io_context: &mut IoContext<N>,
-) -> IoResult<FieldShare<F>> {
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<FieldShare<F>> {
     // a > b is equivalent to !(a <= b)
-    let tmp = le_public(lhs, rhs, io_context)?;
-    Ok(sub_public_by_shared(F::one(), tmp, io_context.id))
+    let tmp = le_public(lhs, rhs, net, state)?;
+    Ok(sub_public_by_shared(F::one(), tmp, state.id))
 }
 
 /// Returns 1 if lhs >= rhs and 0 otherwise. Checks if one shared value is greater than or equal to another shared value. The result is a shared value that has value 1 if the first shared value is greater than or equal to the second shared value and 0 otherwise.
-pub fn ge<F: PrimeField, N: Rep3Network>(
+pub fn ge<F: PrimeField, N: Network>(
     lhs: FieldShare<F>,
     rhs: FieldShare<F>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<FieldShare<F>> {
-    let res = ge_bit(lhs, rhs, io_context)?;
-    conversion::bit_inject(&res, io_context)
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<FieldShare<F>> {
+    let res = ge_bit(lhs, rhs, net, state)?;
+    conversion::bit_inject(&res, net, state)
 }
 
 /// Same as ge but without using bit_inject on the result. Returns 1 if lhs >= rhs and 0 otherwise. Checks if one shared value is greater than or equal to another shared value. The result is a shared value that has value 1 if the first shared value is greater than or equal to the second shared value and 0 otherwise.
-pub fn ge_bit<F: PrimeField, N: Rep3Network>(
+pub fn ge_bit<F: PrimeField, N: Network>(
     lhs: FieldShare<F>,
     rhs: FieldShare<F>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<BinaryShare<F>> {
-    detail::unsigned_ge(lhs, rhs, io_context)
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<BinaryShare<F>> {
+    detail::unsigned_ge(lhs, rhs, net, state)
 }
 
 /// Returns 1 if lhs >= rhs and 0 otherwise. Checks if a shared value is greater than or equal to a public value. The result is a shared value that has value 1 if the shared value is greater than or equal to the public value and 0 otherwise.
-pub fn ge_public<F: PrimeField, N: Rep3Network>(
+pub fn ge_public<F: PrimeField, N: Network>(
     lhs: FieldShare<F>,
     rhs: F,
-    io_context: &mut IoContext<N>,
-) -> IoResult<FieldShare<F>> {
-    let res = ge_public_bit(lhs, rhs, io_context)?;
-    conversion::bit_inject(&res, io_context)
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<FieldShare<F>> {
+    let res = ge_public_bit(lhs, rhs, net, state)?;
+    conversion::bit_inject(&res, net, state)
 }
 
 /// Same as ge_public but without using bit_inject on the result. Returns 1 if lhs >= rhs and 0 otherwise. Checks if a shared value is greater than or equal to a public value. The result is a shared value that has value 1 if the shared value is greater than or equal to the public value and 0 otherwise.
-pub fn ge_public_bit<F: PrimeField, N: Rep3Network>(
+pub fn ge_public_bit<F: PrimeField, N: Network>(
     lhs: FieldShare<F>,
     rhs: F,
-    io_context: &mut IoContext<N>,
-) -> IoResult<BinaryShare<F>> {
-    detail::unsigned_ge_const_rhs(lhs, rhs, io_context)
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<BinaryShare<F>> {
+    detail::unsigned_ge_const_rhs(lhs, rhs, net, state)
 }
 
 //TODO FN REMARK - I think we can skip the bit_inject.
@@ -557,166 +556,165 @@ pub fn ge_public_bit<F: PrimeField, N: Rep3Network>(
 //We leave it like that and come back to that later. Maybe it doesn't matter...
 
 /// Checks if two shared values are equal. The result is a shared value that has value 1 if the two shared values are equal and 0 otherwise.
-pub fn eq<F: PrimeField, N: Rep3Network>(
+pub fn eq<F: PrimeField, N: Network>(
     a: FieldShare<F>,
     b: FieldShare<F>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<FieldShare<F>> {
-    let is_zero = eq_bit(a, b, io_context)?;
-    conversion::bit_inject(&is_zero, io_context)
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<FieldShare<F>> {
+    let is_zero = eq_bit(a, b, net, state)?;
+    conversion::bit_inject(&is_zero, net, state)
 }
 
 /// Checks if two slices of shared values are equal element-wise.
 /// Returns a vector of shared values, where each element is 1 if the corresponding elements are equal and 0 otherwise.
-pub fn eq_many<F: PrimeField, N: Rep3Network>(
+pub fn eq_many<F: PrimeField, N: Network>(
     a: &[FieldShare<F>],
     b: &[FieldShare<F>],
-    io_context: &mut IoContext<N>,
-) -> IoResult<Vec<FieldShare<F>>> {
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Vec<FieldShare<F>>> {
     if a.len() != b.len() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            format!(
-                "During execution of eq_many: Invalid number of elements received. Length of a : {} and length of b: {}",
-                a.len(),
-                b.len()
-            ),
-        ));
+        eyre::bail!(
+            "During execution of eq_many: Invalid number of elements received. Length of a : {} and length of b: {}",
+            a.len(),
+            b.len()
+        );
     }
-    let is_zero = eq_bit_many(a, b, io_context)?;
-    conversion::bit_inject_many(&is_zero, io_context)
+    let is_zero = eq_bit_many(a, b, net, state)?;
+    conversion::bit_inject_many(&is_zero, net, state)
 }
 
 /// Checks if a shared value is equal to a public value. The result is a shared value that has value 1 if the two values are equal and 0 otherwise.
-pub fn eq_public<F: PrimeField, N: Rep3Network>(
+pub fn eq_public<F: PrimeField, N: Network>(
     shared: FieldShare<F>,
     public: F,
-    io_context: &mut IoContext<N>,
-) -> IoResult<FieldShare<F>> {
-    let is_zero = eq_bit_public(shared, public, io_context)?;
-    conversion::bit_inject(&is_zero, io_context)
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<FieldShare<F>> {
+    let is_zero = eq_bit_public(shared, public, net, state)?;
+    conversion::bit_inject(&is_zero, net, state)
 }
 
 /// Checks if a slice of shared values is equal to a slice of public values element-wise.
 /// Returns a vector of shared values, where each element is 1 if the corresponding elements are equal and 0 otherwise.
-pub fn eq_public_many<F: PrimeField, N: Rep3Network>(
+pub fn eq_public_many<F: PrimeField, N: Network>(
     shared: &[FieldShare<F>],
     public: &[F],
-    io_context: &mut IoContext<N>,
-) -> IoResult<Vec<FieldShare<F>>> {
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Vec<FieldShare<F>>> {
     if shared.len() != public.len() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            format!(
-                "During execution of eq_public_many: Invalid number of elements received. Length of shared : {} and length of public: {}",
-                shared.len(),
-                public.len()
-            ),
-        ));
+        eyre::bail!(
+            "During execution of eq_public_many: Invalid number of elements received. Length of shared : {} and length of public: {}",
+            shared.len(),
+            public.len()
+        );
     }
-    let is_zero = eq_bit_public_many(shared, public, io_context)?;
-    conversion::bit_inject_many(&is_zero, io_context)
+    let is_zero = eq_bit_public_many(shared, public, net, state)?;
+    conversion::bit_inject_many(&is_zero, net, state)
 }
 
 /// Same as eq_bit but without using bit_inject on the result. Checks if a shared value is equal to a public value. The result is a shared value that has value 1 if the two values are equal and 0 otherwise.
-pub fn eq_bit_public<F: PrimeField, N: Rep3Network>(
+pub fn eq_bit_public<F: PrimeField, N: Network>(
     shared: FieldShare<F>,
     public: F,
-    io_context: &mut IoContext<N>,
-) -> IoResult<BinaryShare<F>> {
-    let public = promote_to_trivial_share(io_context.id, public);
-    eq_bit(shared, public, io_context)
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<BinaryShare<F>> {
+    let public = promote_to_trivial_share(state.id, public);
+    eq_bit(shared, public, net, state)
 }
 
 /// Same as eq_bit_many but without using bit_inject on the result. Checks if a slice of shared values is equal to a slice of public values element-wise.
 /// Returns a vector of shared values, where each element is 1 if the corresponding elements are equal and 0 otherwise.
-pub fn eq_bit_public_many<F: PrimeField, N: Rep3Network>(
+pub fn eq_bit_public_many<F: PrimeField, N: Network>(
     shared: &[FieldShare<F>],
     public: &[F],
-    io_context: &mut IoContext<N>,
-) -> IoResult<Vec<BinaryShare<F>>> {
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Vec<BinaryShare<F>>> {
     if shared.len() != public.len() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            format!(
-                "During execution of eq_bit_public_many: Invalid number of elements received. Length of shared : {} and length of public: {}",
-                shared.len(),
-                public.len()
-            ),
-        ));
+        eyre::bail!(
+            "During execution of eq_bit_public_many: Invalid number of elements received. Length of shared : {} and length of public: {}",
+            shared.len(),
+            public.len()
+        );
     }
     let public = public
         .iter()
-        .map(|&p| promote_to_trivial_share(io_context.id, p))
+        .map(|&p| promote_to_trivial_share(state.id, p))
         .collect::<Vec<_>>();
-    eq_bit_many(shared, &public, io_context)
+    eq_bit_many(shared, &public, net, state)
 }
 
 /// Same as eq but without using bit_inject on the result. Checks whether two prime field shares are equal and return a binary share of 0 or 1. 1 means they are equal.
-pub fn eq_bit<F: PrimeField, N: Rep3Network>(
+pub fn eq_bit<F: PrimeField, N: Network>(
     a: FieldShare<F>,
     b: FieldShare<F>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<BinaryShare<F>> {
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<BinaryShare<F>> {
     let diff = sub(a, b);
-    let bits = conversion::a2b_selector(diff, io_context)?;
-    let is_zero = binary::is_zero(&bits, io_context)?;
+    let bits = conversion::a2b_selector(diff, net, state)?;
+    let is_zero = binary::is_zero(&bits, net, state)?;
     Ok(is_zero)
 }
 
 /// Same as eq_many but without using bit_inject on the result. Checks whether two slice of prime field shares are equal and returns a Vec of binary shares of 0 or 1. 1 means they are equal.
-pub fn eq_bit_many<F: PrimeField, N: Rep3Network>(
+pub fn eq_bit_many<F: PrimeField, N: Network>(
     a: &[FieldShare<F>],
     b: &[FieldShare<F>],
-    io_context: &mut IoContext<N>,
-) -> IoResult<Vec<BinaryShare<F>>> {
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Vec<BinaryShare<F>>> {
     if a.len() != b.len() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            format!(
-                "During execution of eq_bit_many: Invalid number of elements received. Length of a : {} and length of b: {}",
-                a.len(),
-                b.len()
-            ),
-        ));
+        eyre::bail!(
+            "During execution of eq_bit_many: Invalid number of elements received. Length of a : {} and length of b: {}",
+            a.len(),
+            b.len()
+        );
     }
     let mut diff = Vec::with_capacity(a.len());
     for (a_, b_) in izip!(a.iter(), b.iter()) {
         diff.push(sub(*a_, *b_));
     }
-    let bits = conversion::a2b_many(&diff, io_context)?;
-    let is_zero = binary::is_zero_many(bits, io_context)?;
+    let bits = conversion::a2b_many(&diff, net, state)?;
+    let is_zero = binary::is_zero_many(bits, net, state)?;
     Ok(is_zero)
 }
 
 /// Checks if two shared values are not equal. The result is a shared value that has value 1 if the two values are not equal and 0 otherwise.
-pub fn neq<F: PrimeField, N: Rep3Network>(
+pub fn neq<F: PrimeField, N: Network>(
     a: FieldShare<F>,
     b: FieldShare<F>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<FieldShare<F>> {
-    let eq = eq(a, b, io_context)?;
-    Ok(sub_public_by_shared(F::one(), eq, io_context.id))
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<FieldShare<F>> {
+    let eq = eq(a, b, net, state)?;
+    Ok(sub_public_by_shared(F::one(), eq, state.id))
 }
 
 /// Checks if a shared value is not equal to a public value. The result is a shared value that has value 1 if the two values are not equal and 0 otherwise.
-pub fn neq_public<F: PrimeField, N: Rep3Network>(
+pub fn neq_public<F: PrimeField, N: Network>(
     shared: FieldShare<F>,
     public: F,
-    io_context: &mut IoContext<N>,
-) -> IoResult<FieldShare<F>> {
-    let public = promote_to_trivial_share(io_context.id, public);
-    neq(shared, public, io_context)
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<FieldShare<F>> {
+    let public = promote_to_trivial_share(state.id, public);
+    neq(shared, public, net, state)
 }
 
 /// Outputs whether a shared value is zero (true) or not (false).
-pub fn is_zero<F: PrimeField, N: Rep3Network>(
+pub fn is_zero<F: PrimeField, N: Network>(
     a: FieldShare<F>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<bool> {
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<bool> {
     let zero_share = FieldShare::default();
-    let res = eq_bit(zero_share, a, io_context)?;
-    let x = open_bit(res, io_context)?;
+    let res = eq_bit(zero_share, a, net, state)?;
+    let x = open_bit(res, net)?;
     Ok(x.is_one())
 }
 
@@ -743,37 +741,39 @@ pub fn pow_2_public<F: PrimeField>(shared: FieldShare<F>, public: F) -> FieldSha
 }
 
 /// computes XOR using arithmetic operations, only valid when x and y are known to be 0 or 1.
-pub(crate) fn arithmetic_xor<F: PrimeField, N: Rep3Network>(
+pub(crate) fn arithmetic_xor<F: PrimeField, N: Network>(
     x: Rep3PrimeFieldShare<F>,
     y: Rep3PrimeFieldShare<F>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<Rep3PrimeFieldShare<F>> {
-    let mut d = x * y + io_context.rngs.rand.masking_field_element::<F>();
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Rep3PrimeFieldShare<F>> {
+    let mut d = x * y + state.rngs.rand.masking_field_element::<F>();
     d.double_in_place();
     let e = x.a + y.a;
     let res_a = e - d;
 
-    let res_b = io_context.network.reshare(res_a)?;
+    let res_b = network::reshare(net, res_a)?;
     Ok(FieldShare { a: res_a, b: res_b })
 }
 
-pub(crate) fn arithmetic_xor_many<F: PrimeField, N: Rep3Network>(
+pub(crate) fn arithmetic_xor_many<F: PrimeField, N: Network>(
     x: &[Rep3PrimeFieldShare<F>],
     y: &[Rep3PrimeFieldShare<F>],
-    io_context: &mut IoContext<N>,
-) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Vec<Rep3PrimeFieldShare<F>>> {
     debug_assert_eq!(x.len(), y.len());
 
     let mut a = Vec::with_capacity(x.len());
     for (x, y) in x.iter().zip(y.iter()) {
-        let mut d = x * y + io_context.rngs.rand.masking_field_element::<F>();
+        let mut d = x * y + state.rngs.rand.masking_field_element::<F>();
         d.double_in_place();
         let e = x.a + y.a;
         let res_a = e - d;
         a.push(res_a);
     }
 
-    let b = io_context.network.reshare_many(&a)?;
+    let b = network::reshare_many(net, &a)?;
     let res = a
         .into_iter()
         .zip(b)
@@ -784,63 +784,58 @@ pub(crate) fn arithmetic_xor_many<F: PrimeField, N: Rep3Network>(
 
 /// Reshares the shared valuse from two parties to one other
 /// Assumes seeds are set up correctly already
-pub fn reshare_from_2_to_3_parties<F: PrimeField, N: Rep3Network>(
+pub fn reshare_from_2_to_3_parties<F: PrimeField, N: Network>(
     input: Option<Vec<Rep3PrimeFieldShare<F>>>,
     len: usize,
     recipient: PartyID,
-    io_context: &mut IoContext<N>,
-) -> IoResult<Vec<Rep3PrimeFieldShare<F>>> {
-    if io_context.id == recipient {
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Vec<Rep3PrimeFieldShare<F>>> {
+    if state.id == recipient {
         let mut result = Vec::with_capacity(len);
         for _ in 0..len {
-            let (a, b) = io_context.random_fes::<F>();
+            let (a, b) = state.rngs.rand.random_fes::<F>();
             result.push(Rep3PrimeFieldShare::new(a, b));
         }
         return Ok(result);
     }
 
     if input.is_none() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "During execution of reshare_from_2_to_3_parties in MPC: input is None",
-        ));
+        eyre::bail!("During execution of reshare_from_2_to_3_parties in MPC: input is None");
     }
 
     let input = input.unwrap();
     if input.len() != len {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "During execution of reshare_from_2_to_3_parties in MPC: input length does not match",
-        ));
+        eyre::bail!(
+            "During execution of reshare_from_2_to_3_parties in MPC: input length does not match"
+        );
     }
 
     let mut rand = Vec::with_capacity(len);
     let mut result = Vec::with_capacity(len);
-    if io_context.id == recipient.next_id() {
+    if state.id == recipient.next() {
         for inp in input {
             let beta = inp.a + inp.b;
-            let b = io_context.rngs.rand.random_field_element_rng2();
+            let b = state.rngs.rand.random_field_element_rng2();
             let r = beta - b;
             rand.push(r);
             result.push(Rep3PrimeFieldShare::new(r, b));
         }
-        let comm_id = io_context.id.next_id();
-        io_context.network.send_many(comm_id, &rand)?;
-        let rcv = io_context.network.recv_many::<F>(comm_id)?;
+        let comm_id = state.id.next();
+        let rcv = network::send_and_recv_many::<_, F>(net, comm_id, &rand, comm_id)?;
         for (res, r) in result.iter_mut().zip(rcv) {
             res.a += r;
         }
     } else {
         for inp in input {
             let beta = inp.a;
-            let a = io_context.rngs.rand.random_field_element_rng1();
+            let a = state.rngs.rand.random_field_element_rng1();
             let r = beta - a;
             rand.push(r);
             result.push(Rep3PrimeFieldShare::new(a, r));
         }
-        let comm_id = io_context.id.prev_id();
-        io_context.network.send_many(comm_id, &rand)?;
-        let rcv = io_context.network.recv_many::<F>(comm_id)?;
+        let comm_id = state.id.prev();
+        let rcv = network::send_and_recv_many::<_, F>(net, comm_id, &rand, comm_id)?;
         for (res, r) in result.iter_mut().zip(rcv) {
             res.b += r;
         }

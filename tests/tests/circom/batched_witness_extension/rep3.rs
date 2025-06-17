@@ -1,13 +1,14 @@
 use std::{fs::File, io::BufReader};
 
 use circom_mpc_compiler::{CoCircomCompiler, CompilerConfig};
-use circom_mpc_vm::mpc_vm::VMConfig;
+use circom_mpc_vm::mpc_vm::{BatchedRep3WitnessExtension, VMConfig};
 use co_circom_types::{BatchedSharedInput, SharedInput};
 use co_noir::Bn254;
 use itertools::izip;
 use mpc_core::protocols::rep3;
+use mpc_net::TestNetwork;
 use rand::{thread_rng, Rng as _};
-use tests::{rep3_network::Rep3TestNetwork, test_utils};
+use tests::test_utils::{self, spawn_pool};
 
 #[test]
 fn batched_add_1() -> eyre::Result<()> {
@@ -18,7 +19,8 @@ fn batched_add_1() -> eyre::Result<()> {
     compiler_config.simplification = circom_mpc_compiler::SimplificationLevel::O2(usize::MAX);
     let parsed = CoCircomCompiler::<Bn254>::parse(&add_circuit, compiler_config)?;
 
-    let test_network = Rep3TestNetwork::default();
+    let nets0 = TestNetwork::new_3_parties();
+    let nets1 = TestNetwork::new_3_parties();
 
     let batch_size = 1;
     let mut rng = thread_rng();
@@ -60,11 +62,17 @@ fn batched_add_1() -> eyre::Result<()> {
     let compiler = [parsed.clone(), parsed.clone(), parsed];
 
     let mut threads = vec![];
-    for (net, input, parsed) in izip!(test_network.get_party_networks(), batch, compiler) {
-        threads.push(std::thread::spawn(move || {
-            parsed
-                .to_batched_rep3_vm_with_network(net, VMConfig::default(), batch_size)
-                .unwrap()
+    for (net0, net1, input, parsed) in izip!(nets0, nets1, batch, compiler) {
+        threads.push(spawn_pool(move || {
+            let witness_extension = BatchedRep3WitnessExtension::new(
+                &net0,
+                &net1,
+                &parsed,
+                VMConfig::default(),
+                batch_size,
+            )
+            .unwrap();
+            witness_extension
                 .run(BatchedSharedInput::try_from(input).unwrap())
                 .unwrap()
                 .into_shared_witness()
@@ -101,7 +109,8 @@ fn batched_add_100() -> eyre::Result<()> {
     compiler_config.simplification = circom_mpc_compiler::SimplificationLevel::O2(usize::MAX);
     let parsed = CoCircomCompiler::<Bn254>::parse(&add_circuit, compiler_config)?;
 
-    let test_network = Rep3TestNetwork::default();
+    let nets0 = TestNetwork::new_3_parties();
+    let nets1 = TestNetwork::new_3_parties();
 
     let batch_size = 100;
     let mut rng = thread_rng();
@@ -143,11 +152,17 @@ fn batched_add_100() -> eyre::Result<()> {
     let compiler = [parsed.clone(), parsed.clone(), parsed];
 
     let mut threads = vec![];
-    for (net, input, parsed) in izip!(test_network.get_party_networks(), batch, compiler) {
-        threads.push(std::thread::spawn(move || {
-            parsed
-                .to_batched_rep3_vm_with_network(net, VMConfig::default(), batch_size)
-                .unwrap()
+    for (net0, net1, input, parsed) in izip!(nets0, nets1, batch, compiler) {
+        threads.push(spawn_pool(move || {
+            let witness_extension = BatchedRep3WitnessExtension::new(
+                &net0,
+                &net1,
+                &parsed,
+                VMConfig::default(),
+                batch_size,
+            )
+            .unwrap();
+            witness_extension
                 .run(BatchedSharedInput::try_from(input).unwrap())
                 .unwrap()
                 .into_shared_witness()
@@ -188,7 +203,8 @@ fn batched_chacha20_1() -> eyre::Result<()> {
     let public_inputs =
         CoCircomCompiler::<Bn254>::get_public_inputs(&chacha_circuit, compiler_config).unwrap();
 
-    let test_network = Rep3TestNetwork::default();
+    let nets0 = TestNetwork::new_3_parties();
+    let nets1 = TestNetwork::new_3_parties();
 
     let batch_size = 1;
     let mut rng = thread_rng();
@@ -237,11 +253,17 @@ fn batched_chacha20_1() -> eyre::Result<()> {
     let compiler = [parsed.clone(), parsed.clone(), parsed];
 
     let mut threads = vec![];
-    for (net, input, parsed) in izip!(test_network.get_party_networks(), batch, compiler) {
-        threads.push(std::thread::spawn(move || {
-            parsed
-                .to_batched_rep3_vm_with_network(net, VMConfig::default(), batch_size)
-                .unwrap()
+    for (net0, net1, input, parsed) in izip!(nets0, nets1, batch, compiler) {
+        threads.push(spawn_pool(move || {
+            let witness_extension = BatchedRep3WitnessExtension::new(
+                &net0,
+                &net1,
+                &parsed,
+                VMConfig::default(),
+                batch_size,
+            )
+            .unwrap();
+            witness_extension
                 .run(BatchedSharedInput::try_from(input).unwrap())
                 .unwrap()
                 .into_shared_witness()
@@ -276,7 +298,8 @@ fn batched_chacha20_30() -> eyre::Result<()> {
     let public_inputs =
         CoCircomCompiler::<Bn254>::get_public_inputs(&chacha_circuit, compiler_config).unwrap();
 
-    let test_network = Rep3TestNetwork::default();
+    let nets0 = TestNetwork::new_3_parties();
+    let nets1 = TestNetwork::new_3_parties();
 
     let batch_size = 30;
     let mut rng = thread_rng();
@@ -325,11 +348,17 @@ fn batched_chacha20_30() -> eyre::Result<()> {
     let compiler = [parsed.clone(), parsed.clone(), parsed];
 
     let mut threads = vec![];
-    for (net, input, parsed) in izip!(test_network.get_party_networks(), batch, compiler) {
-        threads.push(std::thread::spawn(move || {
-            parsed
-                .to_batched_rep3_vm_with_network(net, VMConfig::default(), batch_size)
-                .unwrap()
+    for (net0, net1, input, parsed) in izip!(nets0, nets1, batch, compiler) {
+        threads.push(spawn_pool(move || {
+            let witness_extension = BatchedRep3WitnessExtension::new(
+                &net0,
+                &net1,
+                &parsed,
+                VMConfig::default(),
+                batch_size,
+            )
+            .unwrap();
+            witness_extension
                 .run(BatchedSharedInput::try_from(input).unwrap())
                 .unwrap()
                 .into_shared_witness()

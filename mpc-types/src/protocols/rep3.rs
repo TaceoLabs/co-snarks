@@ -23,8 +23,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::serde_compat::{ark_de, ark_se};
 
-pub(crate) type IoResult<T> = std::io::Result<T>;
-
 /// The Rng used for expanding compressed Shares
 pub type SeedRng = rand_chacha::ChaCha12Rng;
 

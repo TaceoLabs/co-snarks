@@ -25,6 +25,7 @@ use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use co_builder::HonkProofResult;
 use co_builder::prelude::{HonkCurve, RowDisablingPolynomial};
+use mpc_net::Network;
 use ultrahonk::prelude::{GateSeparatorPolynomial, TranscriptFieldType, Univariate};
 
 const MAX_ROUND_SIZE_PER_BATCH: usize = 1 << 20;
@@ -131,62 +132,72 @@ impl SumcheckRound {
     fn accumulate_relation_univariates_batch<
         T: NoirUltraHonkProver<P>,
         P: HonkCurve<TranscriptFieldType>,
+        N: Network,
     >(
-        driver: &mut T,
+        net: &N,
+        state: &mut T::State,
         univariate_accumulators: &mut AllRelationAccHalfShared<T, P>,
         sum_check_data: &AllEntitiesBatchRelations<T, P>,
         relation_parameters: &RelationParameters<P::ScalarField>,
     ) -> HonkProofResult<()> {
         tracing::trace!("Accumulate relations");
-        Self::accumulate_one_relation_univariates_batch::<_, _, UltraArithmeticRelation>(
-            driver,
+        Self::accumulate_one_relation_univariates_batch::<_, _, _, UltraArithmeticRelation>(
+            net,
+            state,
             &mut univariate_accumulators.r_arith,
             relation_parameters,
             &sum_check_data.ultra_arith,
         )?;
 
-        Self::accumulate_one_relation_univariates_batch::<_, _, UltraPermutationRelation>(
-            driver,
+        Self::accumulate_one_relation_univariates_batch::<_, _, _, UltraPermutationRelation>(
+            net,
+            state,
             &mut univariate_accumulators.r_perm,
             relation_parameters,
             &sum_check_data.ultra_perm,
         )?;
 
-        Self::accumulate_one_relation_univariates_batch::<_, _, DeltaRangeConstraintRelation>(
-            driver,
+        Self::accumulate_one_relation_univariates_batch::<_, _, _, DeltaRangeConstraintRelation>(
+            net,
+            state,
             &mut univariate_accumulators.r_delta,
             relation_parameters,
             &sum_check_data.delta_range,
         )?;
 
-        Self::accumulate_one_relation_univariates_batch::<_, _, EllipticRelation>(
-            driver,
+        Self::accumulate_one_relation_univariates_batch::<_, _, _, EllipticRelation>(
+            net,
+            state,
             &mut univariate_accumulators.r_elliptic,
             relation_parameters,
             &sum_check_data.elliptic,
         )?;
 
-        Self::accumulate_one_relation_univariates_batch::<_, _, AuxiliaryRelation>(
-            driver,
+        Self::accumulate_one_relation_univariates_batch::<_, _, _, AuxiliaryRelation>(
+            net,
+            state,
             &mut univariate_accumulators.r_aux,
             relation_parameters,
             &sum_check_data.auxiliary,
         )?;
 
-        Self::accumulate_one_relation_univariates_batch::<_, _, LogDerivLookupRelation>(
-            driver,
+        Self::accumulate_one_relation_univariates_batch::<_, _, _, LogDerivLookupRelation>(
+            net,
+            state,
             &mut univariate_accumulators.r_lookup,
             relation_parameters,
             &sum_check_data.log_lookup,
         )?;
-        Self::accumulate_one_relation_univariates_batch::<_, _, Poseidon2ExternalRelation>(
-            driver,
+        Self::accumulate_one_relation_univariates_batch::<_, _, _, Poseidon2ExternalRelation>(
+            net,
+            state,
             &mut univariate_accumulators.r_pos_ext,
             relation_parameters,
             &sum_check_data.poseidon_ext,
         )?;
-        Self::accumulate_one_relation_univariates_batch::<_, _, Poseidon2InternalRelation>(
-            driver,
+        Self::accumulate_one_relation_univariates_batch::<_, _, _, Poseidon2InternalRelation>(
+            net,
+            state,
             &mut univariate_accumulators.r_pos_int,
             relation_parameters,
             &sum_check_data.poseidon_int,
@@ -197,9 +208,11 @@ impl SumcheckRound {
     fn accumulate_one_relation_univariates_batch<
         T: NoirUltraHonkProver<P>,
         P: HonkCurve<TranscriptFieldType>,
+        N: Network,
         R: Relation<T, P>,
     >(
-        driver: &mut T,
+        net: &N,
+        state: &mut T::State,
         univariate_accumulator: &mut R::Acc,
         relation_parameters: &RelationParameters<P::ScalarField>,
         sum_check_data: &SumCheckDataForRelation<T, P>,
@@ -208,7 +221,8 @@ impl SumcheckRound {
             return Ok(());
         }
         R::accumulate(
-            driver,
+            net,
+            state,
             univariate_accumulator,
             &sum_check_data.all_entites,
             relation_parameters,
@@ -219,10 +233,12 @@ impl SumcheckRound {
     pub(crate) fn compute_univariate_inner<
         T: NoirUltraHonkProver<P>,
         P: HonkCurve<TranscriptFieldType>,
+        N: Network,
         const SIZE: usize,
     >(
         &self,
-        driver: &mut T,
+        net: &N,
+        state: &mut T::State,
         relation_parameters: &RelationParameters<P::ScalarField>,
         gate_sparators: &GateSeparatorPolynomial<P::ScalarField>,
         polynomials: &AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>>,
@@ -251,14 +267,15 @@ impl SumcheckRound {
                 all_entites.fold_and_filter(extended_edges, scaling_factor);
             }
             Self::accumulate_relation_univariates_batch(
-                driver,
+                net,
+                state,
                 &mut univariate_accumulators,
                 &all_entites,
                 relation_parameters,
             )?;
             start = end;
         }
-        let univariate_accumulators = univariate_accumulators.reshare(driver)?;
+        let univariate_accumulators = univariate_accumulators.reshare(net, state)?;
 
         let res = Self::batch_over_relations_univariates(
             univariate_accumulators,
@@ -271,9 +288,11 @@ impl SumcheckRound {
     pub(crate) fn compute_univariate<
         T: NoirUltraHonkProver<P>,
         P: HonkCurve<TranscriptFieldType>,
+        N: Network,
     >(
         &self,
-        driver: &mut T,
+        net: &N,
+        state: &mut T::State,
         round_index: usize,
         relation_parameters: &RelationParameters<P::ScalarField>,
         gate_sparators: &GateSeparatorPolynomial<P::ScalarField>,
@@ -281,8 +300,9 @@ impl SumcheckRound {
     ) -> HonkProofResult<SumcheckRoundOutput<T, P, BATCHED_RELATION_PARTIAL_LENGTH>> {
         tracing::trace!("Sumcheck round {}", round_index);
 
-        self.compute_univariate_inner::<T, P, BATCHED_RELATION_PARTIAL_LENGTH>(
-            driver,
+        self.compute_univariate_inner::<T, P, N, BATCHED_RELATION_PARTIAL_LENGTH>(
+            net,
+            state,
             relation_parameters,
             gate_sparators,
             polynomials,
@@ -292,9 +312,11 @@ impl SumcheckRound {
     pub(crate) fn compute_univariate_zk<
         T: NoirUltraHonkProver<P>,
         P: HonkCurve<TranscriptFieldType>,
+        N: Network,
     >(
         &self,
-        driver: &mut T,
+        net: &N,
+        state: &mut T::State,
         round_index: usize,
         relation_parameters: &RelationParameters<P::ScalarField>,
         gate_sparators: &GateSeparatorPolynomial<P::ScalarField>,
@@ -305,15 +327,17 @@ impl SumcheckRound {
         tracing::trace!("Sumcheck round {}", round_index);
 
         let round_univariate = self
-            .compute_univariate_inner::<T, P, BATCHED_RELATION_PARTIAL_LENGTH_ZK>(
-                driver,
+            .compute_univariate_inner::<T, P, N, BATCHED_RELATION_PARTIAL_LENGTH_ZK>(
+                net,
+                state,
                 relation_parameters,
                 gate_sparators,
                 polynomials,
             )?;
 
-        let contribution_from_disabled_rows = Self::compute_disabled_contribution::<T, P>(
-            driver,
+        let contribution_from_disabled_rows = Self::compute_disabled_contribution::<T, P, N>(
+            net,
+            state,
             polynomials,
             relation_parameters,
             gate_sparators,
@@ -363,11 +387,14 @@ impl SumcheckRound {
         }
     }
 
+    #[expect(clippy::too_many_arguments)]
     fn compute_disabled_contribution<
         T: NoirUltraHonkProver<P>,
         P: HonkCurve<TranscriptFieldType>,
+        N: Network,
     >(
-        driver: &mut T,
+        net: &N,
+        state: &mut T::State,
         polynomials: &AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>>,
         relation_parameters: &RelationParameters<P::ScalarField>,
         gate_sparators: &GateSeparatorPolynomial<P::ScalarField>,
@@ -394,12 +421,13 @@ impl SumcheckRound {
         let mut univariate_accumulators = AllRelationAccHalfShared::<T, P>::default();
 
         Self::accumulate_relation_univariates_batch(
-            driver,
+            net,
+            state,
             &mut univariate_accumulators,
             &all_entites,
             relation_parameters,
         )?;
-        let univariate_accumulators = univariate_accumulators.reshare(driver)?;
+        let univariate_accumulators = univariate_accumulators.reshare(net, state)?;
         let mut result = Self::batch_over_relations_univariates(
             univariate_accumulators,
             &relation_parameters.alphas,
