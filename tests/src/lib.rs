@@ -1,35 +1,5 @@
-use bytes::Bytes;
-use std::sync::mpsc::Receiver;
-
-pub mod rep3_network;
-pub mod shamir_network;
-
-#[derive(Debug)]
-pub enum Msg {
-    Data(Bytes),
-    Recv(Receiver<Msg>),
-}
-
-impl Msg {
-    fn into_recv(self) -> Option<Receiver<Msg>> {
-        if let Msg::Recv(x) = self {
-            Some(x)
-        } else {
-            None
-        }
-    }
-
-    fn into_data(self) -> Option<Bytes> {
-        if let Msg::Data(x) = self {
-            Some(x)
-        } else {
-            None
-        }
-    }
-}
-
 pub mod test_utils {
-    use std::{array, collections::BTreeMap};
+    use std::{array, collections::BTreeMap, thread::JoinHandle};
 
     use acir::{
         acir_field::GenericFieldElement,
@@ -48,8 +18,18 @@ pub mod test_utils {
     use num_bigint::BigUint;
     use num_traits::Num as _;
     use rand::{CryptoRng, Rng};
+    use rayon::ThreadPoolBuilder;
 
-    use crate::rep3_network::PartyTestNetwork;
+    pub fn spawn_pool<T: Send + 'static>(op: impl FnOnce() -> T + Send + 'static) -> JoinHandle<T> {
+        std::thread::spawn(|| {
+            let pool = ThreadPoolBuilder::new()
+                .num_threads(4)
+                .use_current_thread()
+                .build()
+                .unwrap();
+            pool.install(op)
+        })
+    }
 
     pub fn share_input_rep3<P: Pairing, R: Rng + CryptoRng>(
         initial_witness: BTreeMap<String, PublicMarker<GenericFieldElement<P::ScalarField>>>,
@@ -79,8 +59,7 @@ pub mod test_utils {
         witness: BTreeMap<String, Rep3AcvmType<ark_bn254::Fr>>,
         abi: &Abi,
     ) -> WitnessMap<Rep3AcvmType<ark_bn254::Fr>> {
-        Rep3CoSolver::<ark_bn254::Fr, PartyTestNetwork>::witness_map_from_string_map(witness, abi)
-            .unwrap()
+        Rep3CoSolver::<ark_bn254::Fr, ()>::witness_map_from_string_map(witness, abi).unwrap()
     }
 
     pub fn combine_field_elements_for_vm(

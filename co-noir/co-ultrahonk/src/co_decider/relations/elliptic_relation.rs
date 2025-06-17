@@ -12,6 +12,8 @@ use ark_ff::Zero;
 use co_builder::HonkProofResult;
 use co_builder::prelude::HonkCurve;
 use itertools::Itertools as _;
+use mpc_core::MpcState as _;
+use mpc_net::Network;
 use ultrahonk::prelude::{TranscriptFieldType, Univariate};
 
 #[derive(Clone, Debug)]
@@ -101,8 +103,9 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
      * @param parameters contains beta, gamma, and public_input_delta, ....
      * @param scaling_factor optional term to scale the evaluation before adding to evals.
      */
-    fn accumulate(
-        driver: &mut T,
+    fn accumulate<N: Network>(
+        net: &N,
+        state: &mut T::State,
         univariate_accumulator: &mut Self::Acc,
         input: &super::ProverUnivariatesBatch<T, P>,
         _relation_parameters: &RelationParameters<<P>::ScalarField>,
@@ -114,7 +117,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         // replace old addition relations with these ones and
         // remove endomorphism coefficient in ecc add gate(not used))
 
-        let party_id = driver.get_party_id();
+        let id = state.id();
         let x_1 = input.witness.w_r();
         let y_1 = input.witness.w_o();
 
@@ -166,7 +169,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         rhs.extend(x_diff);
         rhs.extend(T::sub_many(x_3, x_1));
         rhs.extend(x_1);
-        let mul1 = driver.mul_many(&lhs, &rhs)?;
+        let mul1 = T::mul_many(&lhs, &rhs, net, state)?;
         // we need the different contributions again
         let chunks1 = mul1.chunks_exact(mul1.len() / 7).collect_vec();
         debug_assert_eq!(chunks1.len(), 7);
@@ -181,7 +184,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let mut lhs =
             Vec::with_capacity(2 * x_3.len() + y1_sqr.len() + x1_sqr_mul_3.len() + y_1.len());
         lhs.extend(T::add_many(&T::add_many(x_3, x_2), x_1));
-        lhs.extend(T::add_scalar(y1_sqr, -curve_b, party_id));
+        lhs.extend(T::add_scalar(y1_sqr, -curve_b, id));
         lhs.extend(T::add_many(&T::add_many(x_3, x_1), x_1));
         lhs.extend(x1_sqr_mul_3);
         lhs.extend(T::add_many(y_1, y_1));
@@ -193,7 +196,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         rhs.extend(T::sub_many(x_1, x_3));
         rhs.extend(y1_plus_y3);
 
-        let mul2 = driver.mul_many(&lhs, &rhs)?;
+        let mul2 = T::mul_many(&lhs, &rhs, net, state)?;
         let chunks2 = mul2.chunks_exact(mul2.len() / 5).collect_vec();
         debug_assert_eq!(chunks2.len(), 5);
 

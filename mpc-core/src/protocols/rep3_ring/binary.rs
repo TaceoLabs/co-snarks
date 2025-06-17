@@ -2,18 +2,17 @@
 //!
 //! This module contains operations with binary shares
 
-use super::arithmetic::RingShare;
-use crate::{
-    IoResult,
-    protocols::rep3::network::{IoContext, Rep3Network},
+use super::{
+    arithmetic::RingShare,
+    ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
 };
+use crate::protocols::rep3::{Rep3State, id::PartyID, network};
 use itertools::izip;
-use mpc_types::protocols::{
-    rep3::id::PartyID,
-    rep3_ring::ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
-};
+use mpc_net::Network;
 use num_traits::{One, Zero};
 use rand::{distributions::Standard, prelude::Distribution};
+
+mod ops;
 
 /// Performs a bitwise XOR operation on two shared values.
 pub fn xor<T: IntRing2k>(a: &RingShare<T>, b: &RingShare<T>) -> RingShare<T> {
@@ -36,16 +35,17 @@ pub fn xor_public<T: IntRing2k>(
 }
 
 /// Performs a bitwise OR operation on two shared values.
-pub fn or<T: IntRing2k, N: Rep3Network>(
+pub fn or<T: IntRing2k, N: Network>(
     a: &RingShare<T>,
     b: &RingShare<T>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<RingShare<T>>
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<RingShare<T>>
 where
     Standard: Distribution<T>,
 {
     let xor = a ^ b;
-    let and = and(a, b, io_context)?;
+    let and = and(a, b, net, state)?;
     Ok(xor ^ and)
 }
 
@@ -61,18 +61,19 @@ pub fn or_public<T: IntRing2k>(
 }
 
 /// Performs a bitwise AND operation on two shared values.
-pub fn and<T: IntRing2k, N: Rep3Network>(
+pub fn and<T: IntRing2k, N: Network>(
     a: &RingShare<T>,
     b: &RingShare<T>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<RingShare<T>>
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<RingShare<T>>
 where
     Standard: Distribution<T>,
 {
-    let (mut mask, mask_b) = io_context.rngs.rand.random_elements::<RingElement<T>>();
+    let (mut mask, mask_b) = state.rngs.rand.random_elements::<RingElement<T>>();
     mask ^= mask_b;
     let local_a = (a & b) ^ mask;
-    let local_b = io_context.network.reshare(local_a)?;
+    let local_b = network::reshare(net, local_a)?;
     Ok(RingShare::new_ring(local_a, local_b))
 }
 
@@ -119,11 +120,8 @@ pub fn shift_l_public<T: IntRing2k>(shared: &RingShare<T>, public: RingElement<T
 }
 
 /// Performs the opening of a shared value and returns the equivalent public value.
-pub fn open<T: IntRing2k, N: Rep3Network>(
-    a: &RingShare<T>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<RingElement<T>> {
-    let c = io_context.network.reshare(a.b)?;
+pub fn open<T: IntRing2k, N: Network>(a: &RingShare<T>, net: &N) -> eyre::Result<RingElement<T>> {
+    let c = network::reshare(net, a.b)?;
     Ok(a.a ^ a.b ^ c)
 }
 
@@ -140,17 +138,18 @@ pub fn promote_to_trivial_share<T: IntRing2k>(
 }
 
 /// Computes a CMUX: If `c` is `1`, returns `x_t`, otherwise returns `x_f`.
-pub fn cmux<T: IntRing2k, N: Rep3Network>(
+pub fn cmux<T: IntRing2k, N: Network>(
     c: &RingShare<T>,
     x_t: &RingShare<T>,
     x_f: &RingShare<T>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<RingShare<T>>
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<RingShare<T>>
 where
     Standard: Distribution<T>,
 {
     let xor = x_f ^ x_t;
-    let mut and = and(c, &xor, io_context)?;
+    let mut and = and(c, &xor, net, state)?;
     and ^= x_f;
     Ok(and)
 }
@@ -160,10 +159,11 @@ where
 //but only one bit.
 //Do we want that to be configurable? Semms like a waste?
 /// Compute a OR tree of the input vec
-pub fn or_tree<T: IntRing2k, N: Rep3Network>(
+pub fn or_tree<T: IntRing2k, N: Network>(
     mut inputs: Vec<RingShare<T>>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<RingShare<T>>
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<RingShare<T>>
 where
     Standard: Distribution<T>,
 {
@@ -182,7 +182,7 @@ where
         // TODO WE WANT THIS BATCHED!!!
         // THIS IS SUPER BAD
         for (a, b) in izip!(a_vec.iter(), b_vec.iter()) {
-            res.push(or(a, b, io_context)?);
+            res.push(or(a, b, net, state)?);
         }
 
         res.extend_from_slice(leftover);
@@ -196,10 +196,11 @@ where
 }
 
 /// Computes a binary circuit to check whether the replicated binary-shared input x is zero or not. The output is a binary sharing of one bit.
-pub fn is_zero<T: IntRing2k, N: Rep3Network>(
+pub fn is_zero<T: IntRing2k, N: Network>(
     x: &RingShare<T>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<RingShare<Bit>>
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<RingShare<Bit>>
 where
     Standard: Distribution<T>,
 {
@@ -215,7 +216,7 @@ where
         len >>= 1;
         let mask = (RingElement::one() << len) - RingElement::one();
         let y = x >> len;
-        x = and(&(x & mask), &(y & mask), io_context)?;
+        x = and(&(x & mask), &(y & mask), net, state)?;
     }
     // extract LSB
     Ok(RingShare {

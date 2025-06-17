@@ -12,6 +12,8 @@ use ark_ff::Zero;
 use co_builder::HonkProofResult;
 use co_builder::prelude::HonkCurve;
 use itertools::Itertools as _;
+use mpc_core::MpcState as _;
+use mpc_net::Network;
 use ultrahonk::prelude::{TranscriptFieldType, Univariate};
 
 #[derive(Clone, Debug)]
@@ -139,8 +141,9 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
      * @param parameters contains beta, gamma, and public_input_delta, ....
      * @param scaling_factor optional term to scale the evaluation before adding to evals.
      */
-    fn accumulate(
-        driver: &mut T,
+    fn accumulate<N: Network>(
+        net: &N,
+        state: &mut T::State,
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesBatch<T, P>,
         _relation_parameters: &RelationParameters<<P>::ScalarField>,
@@ -160,7 +163,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let q_4 = input.precomputed.q_4();
         let q_poseidon2_external = input.precomputed.q_poseidon2_external();
 
-        let id = driver.get_party_id();
+        let id = state.id();
         // add round constants which are loaded in selectors
         let s1 = T::add_with_public_many(q_l, w_l, id);
         let s2 = T::add_with_public_many(q_r, w_r, id);
@@ -174,9 +177,9 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         s.extend(s4);
         // apply s-box round
         // 0xThemis TODO better mul depth for x^5?
-        let u = driver.mul_many(&s, &s)?;
-        let u = driver.mul_many(&u, &u)?;
-        let u = driver.mul_many(&u, &s)?;
+        let u = T::mul_many(&s, &s, net, state)?;
+        let u = T::mul_many(&u, &u, net, state)?;
+        let u = T::mul_many(&u, &s, net, state)?;
 
         let u = u.chunks_exact(u.len() / 4).collect_vec();
         // matrix mul v = M_E * u with 14 additions

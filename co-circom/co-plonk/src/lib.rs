@@ -9,16 +9,17 @@ use circom_types::traits::CircomArkworksPrimeFieldBridge;
 use co_circom_types::Rep3SharedWitness;
 use co_circom_types::ShamirSharedWitness;
 use co_circom_types::SharedWitness;
+use eyre::Context;
 use mpc::CircomPlonkProver;
+use mpc::plain::PlainPlonkDriver;
 use mpc::rep3::Rep3PlonkDriver;
 use mpc::shamir::ShamirPlonkDriver;
-use mpc_core::protocols::rep3::network::IoContext;
-use mpc_core::protocols::rep3::network::Rep3Network;
+use mpc_core::protocols::rep3::Rep3State;
+use mpc_core::protocols::rep3::conversion::A2BType;
 use mpc_core::protocols::shamir::ShamirPreprocessing;
-use mpc_core::protocols::shamir::ShamirProtocol;
-use mpc_core::protocols::shamir::network::ShamirNetwork;
+use mpc_core::protocols::shamir::ShamirState;
+use mpc_net::Network;
 use round1::Round1;
-use std::io;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -32,14 +33,23 @@ mod round4;
 mod round5;
 pub(crate) mod types;
 
-pub use plonk::Plonk;
-
 type PlonkProofResult<T> = std::result::Result<T, PlonkProofError>;
 
+/// The plain [`Plonk`] type.
+///
+/// This type is actually the [`CoPlonk`] type initialized with
+/// the [`PlainPlonkDriver`], a single party (you) MPC protocol (i.e., your everyday PLONK).
+/// You can use this instance to create a proof, but we recommend against it for a real use-case.
+/// The co-PLONK prover uses some MPC optimizations (for the product check), which are not optimal
+/// for a plain run.
+///
+/// More interesting is the [`Plonk::verify`] method. You can verify any circom PLONK proof, be it
+/// from snarkjs or one created by this project.
+pub type Plonk<P> = CoPlonk<P, PlainPlonkDriver>;
 /// A type alias for a [CoPlonk] protocol using replicated secret sharing.
-pub type Rep3CoPlonk<P, N> = CoPlonk<P, Rep3PlonkDriver<N>>;
+pub type Rep3CoPlonk<P> = CoPlonk<P, Rep3PlonkDriver>;
 /// A type alias for a [CoPlonk] protocol using shamir secret sharing.
-pub type ShamirCoPlonk<P, N> = CoPlonk<P, ShamirPlonkDriver<<P as Pairing>::ScalarField, N>>;
+pub type ShamirCoPlonk<P> = CoPlonk<P, ShamirPlonkDriver>;
 
 /// The errors that may arise during the computation of a co-PLONK proof.
 #[derive(Debug, thiserror::Error)]
@@ -53,15 +63,14 @@ pub enum PlonkProofError {
     /// Indicates that the domain size from the zkey is corrupted.
     #[error("Cannot create domain, Polynomial degree too large")]
     PolynomialDegreeTooLarge,
-    /// An [io::Error]. Communication to another party failed.
+    /// An [eyre::Report].
     #[error(transparent)]
-    IOError(#[from] io::Error),
+    Other(#[from] eyre::Report),
 }
 
 /// A Plonk proof protocol that uses a collaborative MPC protocol to generate the proof.
 pub struct CoPlonk<P: Pairing, T: CircomPlonkProver<P>> {
-    pub(crate) driver: T,
-    phantom_data: PhantomData<P>,
+    phantom_data: PhantomData<(P, T)>,
 }
 
 impl<P, T> CoPlonk<P, T>
@@ -71,20 +80,13 @@ where
     P::ScalarField: CircomArkworksPrimeFieldBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
 {
-    /// Creates a new [CoPlonk] protocol with a given MPC driver.
-    pub fn new(driver: T) -> Self {
-        Self {
-            driver,
-            phantom_data: PhantomData,
-        }
-    }
-
     /// Execute the PLONK prover using the internal MPC driver.
-    fn prove_inner(
-        self,
+    fn prove_inner<N: Network + 'static>(
+        nets: &[N; 8],
+        state: &mut T::State,
         zkey: Arc<ZKey<P>>,
         witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
-    ) -> PlonkProofResult<(PlonkProof<P>, T)> {
+    ) -> PlonkProofResult<PlonkProof<P>> {
         tracing::debug!("starting PLONK prove!");
         tracing::debug!(
             "we have {} constraints and {} addition constraints",
@@ -97,7 +99,7 @@ where
             zkey.n_vars,
             zkey.n_public
         );
-        let state = Round1::init_round(self.driver, zkey.as_ref(), witness)?;
+        let state = Round1::<P, T, N>::init_round(nets, state, zkey.as_ref(), witness)?;
         tracing::debug!("init round done..");
         let state = state.round1()?;
         tracing::debug!("round 1 done..");
@@ -116,6 +118,7 @@ where
 mod plonk_utils {
     use ark_ec::pairing::Pairing;
     use circom_types::plonk::ZKey;
+    use mpc_core::MpcState;
     use rayon::prelude::*;
 
     use crate::mpc::CircomPlonkProver;
@@ -125,17 +128,52 @@ mod plonk_utils {
     use num_traits::One;
     use num_traits::Zero;
 
-    macro_rules! rayon_join {
-        ($t1: expr, $t2: expr, $t3: expr) => {{
-            let ((x, y), z) = rayon::join(|| rayon::join(|| $t1, || $t2), || $t3);
-            (x, y, z)
+    macro_rules! rayon_join3 {
+        ($f0: expr, $f1: expr, $f2: expr) => {{
+            let (r0, (r1, r2)) = rayon::join($f0, || rayon::join($f1, $f2));
+            (r0, r1, r2)
         }};
     }
 
-    pub(crate) use rayon_join;
+    macro_rules! rayon_join4 {
+        ($f0: expr, $f1: expr, $f2: expr, $f3: expr) => {{
+            let (r0, (r1, (r2, r3))) =
+                rayon::join($f0, || rayon::join($f1, || rayon::join($f2, $f3)));
+            (r0, r1, r2, r3)
+        }};
+    }
+
+    macro_rules! rayon_join5 {
+        ($f0: expr, $f1: expr, $f2: expr, $f3: expr, $f4: expr) => {{
+            let (r0, (r1, (r2, (r3, r4)))) = rayon::join($f0, || {
+                rayon::join($f1, || rayon::join($f2, || rayon::join($f3, $f4)))
+            });
+            (r0, r1, r2, r3, r4)
+        }};
+    }
+
+    macro_rules! rayon_join8 {
+        ($f0: expr, $f1: expr, $f2: expr, $f3: expr, $f4: expr, $f5: expr, $f6: expr, $f7: expr) => {{
+            let (r0, (r1, (r2, (r3, (r4, (r5, (r6, r7))))))) = rayon::join($f0, || {
+                rayon::join($f1, || {
+                    rayon::join($f2, || {
+                        rayon::join($f3, || {
+                            rayon::join($f4, || rayon::join($f5, || rayon::join($f6, $f7)))
+                        })
+                    })
+                })
+            });
+            (r0, r1, r2, r3, r4, r5, r6, r7)
+        }};
+    }
+
+    pub(crate) use rayon_join3;
+    pub(crate) use rayon_join4;
+    pub(crate) use rayon_join5;
+    pub(crate) use rayon_join8;
 
     pub(crate) fn get_witness<P: Pairing, T: CircomPlonkProver<P>>(
-        party_id: T::PartyID,
+        id: <T::State as MpcState>::PartyID,
         witness: &PlonkWitness<P, T>,
         zkey: &ZKey<P>,
         index: usize,
@@ -143,7 +181,7 @@ mod plonk_utils {
         tracing::trace!("get witness on {index}");
         let result = if index <= zkey.n_public {
             tracing::trace!("indexing public input!");
-            T::promote_to_trivial_share(party_id, witness.public_inputs[index])
+            T::promote_to_trivial_share(id, witness.public_inputs[index])
         } else if index < zkey.n_vars - zkey.n_additions {
             tracing::trace!("indexing private input!");
             witness.witness[index - zkey.n_public - 1]
@@ -213,39 +251,33 @@ mod plonk_utils {
     }
 }
 
-impl<P: Pairing, N: Rep3Network> Rep3CoPlonk<P, N> {
+impl<P: Pairing> Rep3CoPlonk<P> {
     /// Create a [`PlonkProof`]
-    pub fn prove(
-        net: N,
+    pub fn prove<N: Network + 'static>(
+        nets: &[N; 8],
         zkey: Arc<ZKey<P>>,
         witness: Rep3SharedWitness<P::ScalarField>,
-    ) -> eyre::Result<(PlonkProof<P>, N)>
+    ) -> eyre::Result<PlonkProof<P>>
     where
         P: Pairing + CircomArkworksPairingBridge,
         P::BaseField: CircomArkworksPrimeFieldBridge,
         P::ScalarField: CircomArkworksPrimeFieldBridge,
     {
-        let mut io_context0 = IoContext::init(net)?;
-        let io_context1 = io_context0.fork()?;
-        let driver = Rep3PlonkDriver::new(io_context0, io_context1);
-        let prover = CoPlonk {
-            driver,
-            phantom_data: PhantomData,
-        };
+        let mut state = Rep3State::new(&nets[0], A2BType::default())?;
         // execute prover in MPC
-        let (proof, driver) = prover.prove_inner(zkey, witness)?;
-        Ok((proof, driver.get_network()))
+        Self::prove_inner(nets, &mut state, zkey, witness).context("while prove inner")
     }
 }
 
-impl<P: Pairing, N: ShamirNetwork> ShamirCoPlonk<P, N> {
+impl<P: Pairing> ShamirCoPlonk<P> {
     /// Create a [`PlonkProof`]
-    pub fn prove(
-        net: N,
+    pub fn prove<N: Network + 'static>(
+        nets: &[N; 8],
+        num_parties: usize,
         threshold: usize,
         zkey: Arc<ZKey<P>>,
         witness: ShamirSharedWitness<P::ScalarField>,
-    ) -> eyre::Result<(PlonkProof<P>, N)>
+    ) -> eyre::Result<PlonkProof<P>>
     where
         P: Pairing + CircomArkworksPairingBridge,
         P::BaseField: CircomArkworksPrimeFieldBridge,
@@ -254,34 +286,42 @@ impl<P: Pairing, N: ShamirNetwork> ShamirCoPlonk<P, N> {
         let domain_size = zkey.domain_size;
         // TODO check and explain numbers
         let num_pairs = domain_size * 222 + 15;
-        let preprocessing = ShamirPreprocessing::new(threshold, net, num_pairs)?;
-        let mut protocol0 = ShamirProtocol::from(preprocessing);
-        // TODO check and explain numbers
-        let protocol1 = protocol0.fork_with_pairs(domain_size * 7 + 2)?;
-        let driver = ShamirPlonkDriver::new(protocol0, protocol1);
-        let prover = CoPlonk {
-            driver,
-            phantom_data: PhantomData,
-        };
+        let preprocessing = ShamirPreprocessing::new(num_parties, threshold, num_pairs, &nets[0])?;
+        let mut state = ShamirState::from(preprocessing);
         // execute prover in MPC
-        let (proof, driver) = prover.prove_inner(zkey, witness)?;
-        Ok((proof, driver.get_network()))
+        Self::prove_inner(nets, &mut state, zkey, witness).context("while prove inner")
+    }
+}
+
+impl<P: Pairing> Plonk<P>
+where
+    P: CircomArkworksPairingBridge,
+    P::BaseField: CircomArkworksPrimeFieldBridge,
+    P::ScalarField: CircomArkworksPrimeFieldBridge,
+{
+    /// *Locally* create a `Plonk` proof. This is just the [`CoPlonk`] prover
+    /// initialized with the [`PlainPlonkDriver`].
+    ///
+    /// DOES NOT PERFORM ANY MPC. For a plain prover checkout the [Groth16 implementation of arkworks](https://docs.rs/ark-groth16/latest/ark_groth16/).
+    pub fn plain_prove(
+        zkey: Arc<ZKey<P>>,
+        private_witness: SharedWitness<P::ScalarField, P::ScalarField>,
+    ) -> eyre::Result<PlonkProof<P>> {
+        Self::prove_inner(&[(); 8], &mut (), zkey, private_witness).context("while prove inner")
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::Plonk;
     use ark_bn254::Bn254;
     use circom_types::Witness;
     use circom_types::groth16::JsonPublicInput;
     use circom_types::plonk::{JsonVerificationKey, ZKey};
+    use circom_types::traits::CheckElement;
     use co_circom_types::SharedWitness;
     use std::sync::Arc;
     use std::{fs::File, io::BufReader};
-
-    use circom_types::traits::CheckElement;
-
-    use crate::plonk::Plonk;
 
     #[test]
     pub fn test_multiplier2_bn254() -> eyre::Result<()> {
@@ -306,7 +346,6 @@ mod tests {
                 File::open("../../test_vectors/Plonk/bn254/multiplier2/public.json").unwrap(),
             )
             .unwrap();
-
             let proof = Plonk::<Bn254>::plain_prove(zkey, witness).unwrap();
             Plonk::<Bn254>::verify(&vk, &proof, &public_input.values).unwrap();
         }

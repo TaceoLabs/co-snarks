@@ -626,7 +626,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
         // The probability of this event is negligible but it has to be processed correctly
         if gemini_challenge_in_small_subgroup {
-            return Err(eyre::eyre!("Gemini challenge is in the small subgroup"));
+            eyre::bail!("Gemini challenge is in the small subgroup");
         }
 
         // Construct the challenge polynomial from the sumcheck challenge, the verifier has to evaluate it on its own

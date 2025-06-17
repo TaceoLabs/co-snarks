@@ -7,9 +7,11 @@ use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use ark_relations::r1cs::ConstraintMatrices;
 use co_circom_types::{Rep3SharedWitness, ShamirSharedWitness, SharedWitness};
 use eyre::Result;
-use mpc_core::protocols::rep3::network::{IoContext, Rep3Network};
-use mpc_core::protocols::shamir::network::ShamirNetwork;
-use mpc_core::protocols::shamir::{ShamirPreprocessing, ShamirProtocol};
+use mpc_core::MpcState;
+use mpc_core::protocols::rep3::Rep3State;
+use mpc_core::protocols::rep3::conversion::A2BType;
+use mpc_core::protocols::shamir::{ShamirPreprocessing, ShamirState};
+use mpc_net::Network;
 use num_traits::ToPrimitive;
 use std::marker::PhantomData;
 use tracing::instrument;
@@ -45,9 +47,9 @@ macro_rules! rayon_join5 {
 pub type Groth16<P> = CoGroth16<P, PlainGroth16Driver>;
 
 /// A type alias for a [CoGroth16] protocol using replicated secret sharing, using the Circom R1CSToQAPReduction by default.
-pub type Rep3CoGroth16<P, N> = CoGroth16<P, Rep3Groth16Driver<N>>;
+pub type Rep3CoGroth16<P> = CoGroth16<P, Rep3Groth16Driver>;
 /// A type alias for a [CoGroth16] protocol using shamir secret sharing, using the Circom R1CSToQAPReduction by default.
-pub type ShamirCoGroth16<P, N> = CoGroth16<P, ShamirGroth16Driver<<P as Pairing>::ScalarField, N>>;
+pub type ShamirCoGroth16<P> = CoGroth16<P, ShamirGroth16Driver>;
 
 /// Computes the roots of unity over the provided prime field. This method
 /// is equivalent with [circom's implementation](https://github.com/iden3/ffjavascript/blob/337b881579107ab74d5b2094dbe1910e33da4484/src/wasm_field1.js).
@@ -107,28 +109,22 @@ fn root_of_unity_for_groth16<F: PrimeField + FftField>(
 
 /// A Groth16 proof protocol that uses a collaborative MPC protocol to generate the proof.
 pub struct CoGroth16<P: Pairing, T: CircomGroth16Prover<P>> {
-    pub(crate) driver: T,
-    phantom_data: PhantomData<P>,
+    phantom_data: PhantomData<(P, T)>,
 }
 
 impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
-    /// Creates a new [CoGroth16] protocol with a given MPC driver.
-    pub fn new(driver: T) -> Self {
-        Self {
-            driver,
-            phantom_data: PhantomData,
-        }
-    }
-
     /// Execute the Groth16 prover using the internal MPC driver.
     /// This version takes the Circom-generated constraint matrices as input and does not re-calculate them.
     #[instrument(level = "debug", name = "Groth16 - Proof", skip_all)]
-    fn prove_inner<R: R1CSToQAP>(
-        mut self,
+    fn prove_inner<N: Network, R: R1CSToQAP>(
+        net0: &N,
+        net1: &N,
+        state0: &mut T::State,
+        state1: &mut T::State,
         pkey: &ProvingKey<P>,
         matrices: &ConstraintMatrices<P::ScalarField>,
         private_witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
-    ) -> Result<(Proof<P>, T)> {
+    ) -> eyre::Result<Proof<P>> {
         let public_inputs = private_witness.public_inputs;
         if public_inputs.len() != matrices.num_instance_variables {
             eyre::bail!(
@@ -138,13 +134,13 @@ impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
             )
         }
 
-        let h = R::witness_map_from_matrices(
-            &mut self.driver,
+        let h = R::witness_map_from_matrices::<P, T>(
+            state0,
             matrices,
             &public_inputs,
             &private_witness.witness,
         )?;
-        let (r, s) = (self.driver.rand()?, self.driver.rand()?);
+        let (r, s) = (T::rand(net0, state0)?, T::rand(net0, state0)?);
 
         let private_witness_half_share: Vec<_> = private_witness
             .witness
@@ -152,7 +148,11 @@ impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
             .map(T::to_half_share)
             .collect();
 
-        self.create_proof_with_assignment(
+        Self::create_proof_with_assignment(
+            net0,
+            net1,
+            state0,
+            state1,
             pkey,
             r,
             s,
@@ -163,7 +163,7 @@ impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
     }
 
     fn calculate_coeff<C>(
-        id: T::PartyID,
+        id: <T::State as MpcState>::PartyID,
         initial: T::PointHalfShare<C>,
         query: &[C::Affine],
         vk_param: C::Affine,
@@ -189,18 +189,22 @@ impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
     }
 
     #[instrument(level = "debug", name = "create proof with assignment", skip_all)]
-    fn create_proof_with_assignment(
-        mut self,
+    #[expect(clippy::too_many_arguments)]
+    fn create_proof_with_assignment<N: Network>(
+        net0: &N,
+        net1: &N,
+        state0: &mut T::State,
+        state1: &mut T::State,
         pkey: &ProvingKey<P>,
         r: T::ArithmeticShare,
         s: T::ArithmeticShare,
         h: Vec<T::ArithmeticHalfShare>,
         input_assignment: &[P::ScalarField],
         aux_assignment: &[T::ArithmeticHalfShare],
-    ) -> Result<(Proof<P>, T)> {
+    ) -> eyre::Result<Proof<P>> {
         let delta_g1 = pkey.delta_g1.into_group();
 
-        let party_id = self.driver.get_party_id();
+        let id = state0.id();
         let alpha_g1 = pkey.vk.alpha_g1;
         let beta_g1 = pkey.beta_g1;
         let beta_g2 = pkey.vk.beta_g2;
@@ -214,7 +218,7 @@ impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
                 let r = T::to_half_share(r);
                 let r_g1 = T::scalar_mul_public_point_hs(&delta_g1, r);
                 let r_g1 = Self::calculate_coeff(
-                    party_id,
+                    id,
                     r_g1,
                     &pkey.a_query,
                     alpha_g1,
@@ -232,7 +236,7 @@ impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
                 let s = T::to_half_share(s);
                 let s_g1 = T::scalar_mul_public_point_hs(&delta_g1, s);
                 let s_g1 = Self::calculate_coeff(
-                    party_id,
+                    id,
                     s_g1,
                     &pkey.b_g1_query,
                     beta_g1,
@@ -249,7 +253,7 @@ impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
                 let s = T::to_half_share(s);
                 let s_g2 = T::scalar_mul_public_point_hs(&delta_g2, s);
                 let s_g2 = Self::calculate_coeff(
-                    party_id,
+                    id,
                     s_g2,
                     &pkey.b_g2_query,
                     beta_g2,
@@ -276,7 +280,7 @@ impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
         );
 
         let rs_span = tracing::debug_span!("r*s without networking").entered();
-        let rs = self.driver.local_mul_vec(vec![r], vec![s]).pop().unwrap();
+        let rs = T::local_mul_vec(vec![r], vec![s], state0).pop().unwrap();
         let r_s_delta_g1 = T::scalar_mul_public_point_hs(&delta_g1, rs);
         rs_span.exit();
 
@@ -284,7 +288,12 @@ impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
         let g1_b = s_g1;
 
         let network_round = tracing::debug_span!("network round after calc coeff").entered();
-        let (g_a_opened, r_g1_b) = self.driver.open_point_and_scalar_mul(&g_a, &g1_b, r)?;
+        let (g_a_opened, r_g1_b) = rayon::join(
+            || T::open_half_point(g_a, net0, state0),
+            || T::scalar_mul(&g1_b, r, net1, state1),
+        );
+        let g_a_opened = g_a_opened?;
+        let r_g1_b = r_g1_b?;
         network_round.exit();
 
         let last_round = tracing::debug_span!("finish - open two points and some adds").entered();
@@ -299,66 +308,72 @@ impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
         g_c += h_acc;
 
         let g2_b = s_g2;
-        let (g_c_opened, g2_b_opened) = self.driver.open_two_half_points(g_c, g2_b)?;
+        let (g_c_opened, g2_b_opened) = rayon::join(
+            || T::open_half_point(g_c, net0, state0),
+            || T::open_half_point(g2_b, net1, state1),
+        );
+        let g_c_opened = g_c_opened?;
+        let g2_b_opened = g2_b_opened?;
         last_round.exit();
 
-        Ok((
-            Proof {
-                a: g_a_opened.into_affine(),
-                b: g2_b_opened.into_affine(),
-                c: g_c_opened.into_affine(),
-            },
-            self.driver,
-        ))
+        Ok(Proof {
+            a: g_a_opened.into_affine(),
+            b: g2_b_opened.into_affine(),
+            c: g_c_opened.into_affine(),
+        })
     }
 }
 
-impl<P: Pairing, N: Rep3Network> Rep3CoGroth16<P, N> {
+impl<P: Pairing> Rep3CoGroth16<P> {
     /// Create a [`Proof`].
-    pub fn prove<R: R1CSToQAP>(
-        net: N,
+    pub fn prove<N: Network, R: R1CSToQAP>(
+        net0: &N,
+        net1: &N,
         pkey: &ProvingKey<P>,
         matrices: &ConstraintMatrices<P::ScalarField>,
         witness: Rep3SharedWitness<P::ScalarField>,
-    ) -> Result<(Proof<P>, N)> {
-        let mut io_context0 = IoContext::init(net)?;
-        let io_context1 = io_context0.fork()?;
-        let driver = Rep3Groth16Driver::new(io_context0, io_context1);
-        let prover = CoGroth16 {
-            driver,
-            phantom_data: PhantomData,
-        };
+    ) -> eyre::Result<Proof<P>> {
+        let mut state0 = Rep3State::new(net0, A2BType::default())?;
+        let mut state1 = state0.fork(0)?;
         // execute prover in MPC
-        let (proof, driver) = prover.prove_inner::<R>(pkey, matrices, witness)?;
-        Ok((proof, driver.get_network()))
+        Self::prove_inner::<N, R>(
+            net0,
+            net1,
+            &mut state0,
+            &mut state1,
+            pkey,
+            matrices,
+            witness,
+        )
     }
 }
 
-impl<P: Pairing, N: ShamirNetwork> ShamirCoGroth16<P, N> {
+impl<P: Pairing> ShamirCoGroth16<P> {
     /// Create a [`Proof`].
-    pub fn prove<R: R1CSToQAP>(
-        net: N,
+    pub fn prove<N: Network, R: R1CSToQAP>(
+        net0: &N,
+        net1: &N,
+        num_parties: usize,
         threshold: usize,
         pkey: &ProvingKey<P>,
         matrices: &ConstraintMatrices<P::ScalarField>,
         witness: ShamirSharedWitness<P::ScalarField>,
-    ) -> Result<(Proof<P>, N)> {
-        // we need 2 + 1 number of corr rand pairs. We need the values r/s (1 pair) and 2 muls (2
-        // pairs)
+    ) -> eyre::Result<Proof<P>> {
+        // we need 3 number of corr rand pairs. 2 for two rand calls, 1 for scalar_mul
         let num_pairs = 3;
-        let preprocessing = ShamirPreprocessing::new(threshold, net, num_pairs)?;
-        let mut protocol0 = ShamirProtocol::from(preprocessing);
-        // the protocol1 is only used for scalar_mul and a field_mul which need 1 pair each (ergo 2
-        // pairs)
-        let protocol1 = protocol0.fork_with_pairs(2)?;
-        let driver = ShamirGroth16Driver::new(protocol0, protocol1);
-        let prover = CoGroth16 {
-            driver,
-            phantom_data: PhantomData,
-        };
+        let preprocessing = ShamirPreprocessing::new(num_parties, threshold, num_pairs, net0)?;
+        let mut state0 = ShamirState::from(preprocessing);
+        let mut state1 = state0.fork(1)?;
         // execute prover in MPC
-        let (proof, driver) = prover.prove_inner::<R>(pkey, matrices, witness)?;
-        Ok((proof, driver.get_network()))
+        Self::prove_inner::<N, R>(
+            net0,
+            net1,
+            &mut state0,
+            &mut state1,
+            pkey,
+            matrices,
+            witness,
+        )
     }
 }
 
@@ -372,11 +387,6 @@ impl<P: Pairing> Groth16<P> {
         matrices: &ConstraintMatrices<P::ScalarField>,
         private_witness: SharedWitness<P::ScalarField, P::ScalarField>,
     ) -> Result<Proof<P>> {
-        let prover = Self {
-            driver: PlainGroth16Driver,
-            phantom_data: PhantomData,
-        };
-        let (proof, _) = prover.prove_inner::<R>(pkey, matrices, private_witness)?;
-        Ok(proof)
+        Self::prove_inner::<_, R>(&(), &(), &mut (), &mut (), pkey, matrices, private_witness)
     }
 }

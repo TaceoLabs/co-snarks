@@ -11,8 +11,8 @@ use mpc_core::{
     protocols::rep3::yao::circuits::SHA256Table,
 };
 use num_bigint::BigUint;
+use std::any::TypeId;
 use std::marker::PhantomData;
-use std::{any::TypeId, io};
 
 pub struct PlainAcvmSolver<F: PrimeField> {
     plain_lut: PlainLookupTableProvider<F>,
@@ -31,33 +31,24 @@ impl<F: PrimeField> PlainAcvmSolver<F> {
         x: ark_bn254::Fr,
         y: ark_bn254::Fr,
         is_infinity: bool,
-    ) -> std::io::Result<ark_grumpkin::Affine> {
+    ) -> eyre::Result<ark_grumpkin::Affine> {
         if is_infinity {
             return Ok(ark_grumpkin::Affine::zero());
         }
         let point = ark_grumpkin::Affine::new_unchecked(x, y);
         if !point.is_on_curve() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!("Point ({x}, {y}) is not on curve"),
-            ));
+            eyre::bail!("Point ({}, {}) is not on curve", x, y);
         };
         if !point.is_in_correct_subgroup_assuming_on_curve() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!("Point ({x}, {y}) is not in correct subgroup"),
-            ));
+            eyre::bail!("Point ({}, {}) is not in correct subgroup", x, y);
         };
         Ok(point)
     }
 
-    pub(crate) fn bn254_fr_to_u128(inp: ark_bn254::Fr) -> std::io::Result<u128> {
+    pub(crate) fn bn254_fr_to_u128(inp: ark_bn254::Fr) -> eyre::Result<u128> {
         let inp_bigint = inp.into_bigint();
         if inp_bigint.0[2] != 0 || inp_bigint.0[3] != 0 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!("Scalar {inp} is not less than 2^128"),
-            ));
+            eyre::bail!("Scalar {} is not less than 2^128", inp);
         }
         let output = inp_bigint.0[0] as u128 + ((inp_bigint.0[1] as u128) << 64);
         Ok(output)
@@ -78,7 +69,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
 
     type BrilligDriver = PlainBrilligDriver<F>;
 
-    fn init_brillig_driver(&mut self) -> std::io::Result<Self::BrilligDriver> {
+    fn init_brillig_driver(&mut self) -> eyre::Result<Self::BrilligDriver> {
         Ok(PlainBrilligDriver::default())
     }
 
@@ -89,7 +80,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Ok(brillig_result.into_iter().map(|v| v.into_field()).collect())
     }
 
-    fn shared_zeros(&mut self, len: usize) -> io::Result<Vec<Self::AcvmType>> {
+    fn shared_zeros(&mut self, len: usize) -> eyre::Result<Vec<Self::AcvmType>> {
         Ok(vec![F::default(); len])
     }
 
@@ -106,7 +97,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         cond: Self::AcvmType,
         truthy: Self::AcvmType,
         falsy: Self::AcvmType,
-    ) -> io::Result<Self::AcvmType> {
+    ) -> eyre::Result<Self::AcvmType> {
         assert!(cond.is_one() || cond.is_zero());
         if cond.is_one() { Ok(truthy) } else { Ok(falsy) }
     }
@@ -139,14 +130,14 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         &mut self,
         secret_1: Self::AcvmType,
         secret_2: Self::AcvmType,
-    ) -> io::Result<Self::AcvmType> {
+    ) -> eyre::Result<Self::AcvmType> {
         Ok(secret_1 * secret_2)
     }
 
-    fn invert(&mut self, secret: Self::AcvmType) -> io::Result<Self::AcvmType> {
+    fn invert(&mut self, secret: Self::AcvmType) -> eyre::Result<Self::AcvmType> {
         secret
             .inverse()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "Cannot invert zero"))
+            .ok_or_else(|| eyre::eyre!("Cannot invert zero"))
     }
 
     fn negate_inplace(&mut self, a: &mut Self::AcvmType) {
@@ -166,7 +157,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         c: F,
         lhs: Self::AcvmType,
         rhs: Self::AcvmType,
-    ) -> io::Result<Self::AcvmType> {
+    ) -> eyre::Result<Self::AcvmType> {
         Ok(c * lhs * rhs)
     }
 
@@ -189,22 +180,21 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         &mut self,
         index: Self::AcvmType,
         lut: &<Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::LutType,
-    ) -> io::Result<F> {
-        let mut a = ();
-        let mut b = ();
-        self.plain_lut.get_from_lut(index, lut, &mut a, &mut b)
+    ) -> eyre::Result<F> {
+        self.plain_lut
+            .get_from_lut(index, lut, &(), &(), &mut (), &mut ())
     }
 
     fn read_from_public_luts(
         &mut self,
         index: Self::AcvmType,
         luts: &[Vec<F>],
-    ) -> std::io::Result<Vec<Self::AcvmType>> {
-        let mut a = ();
-        let mut b = ();
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
         let mut result = Vec::with_capacity(luts.len());
         for lut in luts {
-            let res = self.plain_lut.get_from_lut(index, lut, &mut a, &mut b)?;
+            let res = self
+                .plain_lut
+                .get_from_lut(index, lut, &(), &(), &mut (), &mut ())?;
             result.push(res);
         }
         Ok(result)
@@ -215,11 +205,9 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         index: Self::AcvmType,
         value: Self::AcvmType,
         lut: &mut <Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::LutType,
-    ) -> io::Result<()> {
-        let mut a = ();
-        let mut b = ();
+    ) -> eyre::Result<()> {
         self.plain_lut
-            .write_to_lut(index, value, lut, &mut a, &mut b)
+            .write_to_lut(index, value, lut, &(), &(), &mut (), &mut ())
     }
 
     fn get_length_of_lut(lut: &<Self::Lookup as LookupTableProvider<F>>::LutType) -> usize {
@@ -228,7 +216,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
 
     fn get_public_lut(
         lut: &<Self::Lookup as LookupTableProvider<F>>::LutType,
-    ) -> io::Result<&Vec<F>> {
+    ) -> eyre::Result<&Vec<F>> {
         <Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::get_public_lut(lut)
     }
 
@@ -236,7 +224,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         &mut self,
         index: Self::ArithmeticShare,
         len: usize,
-    ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
         let len_ = len.next_power_of_two();
         let mut result = vec![F::zero(); len_];
         let index: BigUint = index.into();
@@ -250,7 +238,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         ohv: &[Self::ArithmeticShare],
         value: Self::ArithmeticShare,
         lut: &mut [Self::ArithmeticShare],
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         let index = ohv
             .iter()
             .enumerate()
@@ -277,7 +265,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Some(*a)
     }
 
-    fn open_many(&mut self, a: &[Self::ArithmeticShare]) -> io::Result<Vec<F>> {
+    fn open_many(&mut self, a: &[Self::ArithmeticShare]) -> eyre::Result<Vec<F>> {
         Ok(a.to_vec())
     }
 
@@ -294,7 +282,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         input: Self::ArithmeticShare,
         total_bit_size_per_field: usize,
         decompose_bit_size: usize,
-    ) -> std::result::Result<std::vec::Vec<F>, std::io::Error> {
+    ) -> eyre::Result<std::vec::Vec<F>> {
         let mut result = Vec::with_capacity(total_bit_size_per_field.div_ceil(decompose_bit_size));
         let big_mask = (BigUint::from(1u64) << total_bit_size_per_field) - BigUint::one();
         let small_mask = (BigUint::from(1u64) << decompose_bit_size) - BigUint::one();
@@ -313,7 +301,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         input: &[Self::ArithmeticShare],
         total_bit_size_per_field: usize,
         decompose_bit_size: usize,
-    ) -> std::io::Result<Vec<Vec<Self::ArithmeticShare>>> {
+    ) -> eyre::Result<Vec<Vec<Self::ArithmeticShare>>> {
         input
             .iter()
             .map(|&inp| {
@@ -326,7 +314,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         &mut self,
         inputs: &[Self::ArithmeticShare],
         bitsize: usize,
-    ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
         let mut result = Vec::with_capacity(inputs.len());
         let mask = (BigUint::from(1u64) << bitsize) - BigUint::one();
         for x in inputs.iter() {
@@ -344,7 +332,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         msb: u8,
         lsb: u8,
         bitsize: usize,
-    ) -> std::io::Result<[Self::ArithmeticShare; 3]> {
+    ) -> eyre::Result<[Self::ArithmeticShare; 3]> {
         let big_mask = (BigUint::from(1u64) << bitsize) - BigUint::one();
         let hi_mask = (BigUint::one() << (bitsize - msb as usize)) - BigUint::one();
         let lo_mask = (BigUint::one() << lsb) - BigUint::one();
@@ -366,7 +354,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         lhs: Self::AcvmType,
         rhs: Self::AcvmType,
         num_bits: u32,
-    ) -> std::io::Result<Self::AcvmType> {
+    ) -> eyre::Result<Self::AcvmType> {
         debug_assert!(num_bits <= 128);
         let mask = (BigUint::one() << num_bits) - BigUint::one();
         let lhs: BigUint = lhs.into();
@@ -380,7 +368,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         lhs: Self::AcvmType,
         rhs: Self::AcvmType,
         num_bits: u32,
-    ) -> std::io::Result<Self::AcvmType> {
+    ) -> eyre::Result<Self::AcvmType> {
         debug_assert!(num_bits <= 128);
         let mask = (BigUint::one() << num_bits) - BigUint::one();
         let lhs: BigUint = lhs.into();
@@ -396,7 +384,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         _basis_bits: usize,
         _total_bitsize: usize,
         _rotation: usize,
-    ) -> std::io::Result<(
+    ) -> eyre::Result<(
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
@@ -413,7 +401,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         _basis_bits: usize,
         _total_bitsize: usize,
         _rotation: usize,
-    ) -> std::io::Result<(
+    ) -> eyre::Result<(
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
@@ -430,7 +418,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         _basis_bits: &[u64],
         _rotation: &[usize],
         _filter: &[bool],
-    ) -> std::io::Result<(
+    ) -> eyre::Result<(
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
@@ -445,7 +433,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         key: &[Self::AcvmType],
         inputs: Vec<&[Self::ArithmeticShare]>,
         bitsize: usize,
-    ) -> std::io::Result<Vec<Vec<Self::ArithmeticShare>>> {
+    ) -> eyre::Result<Vec<Vec<Self::ArithmeticShare>>> {
         let mask = (BigUint::from(1u64) << bitsize) - BigUint::one();
 
         let mut indexed_values: Vec<(F, usize)> = key
@@ -472,12 +460,9 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         &mut self,
         mut input: Vec<Self::AcvmType>,
         poseidon2: &Poseidon2<F, T, D>,
-    ) -> std::io::Result<Vec<Self::AcvmType>> {
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
         if input.len() != T {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!("Expected {} values but encountered {}", T, input.len(),),
-            ));
+            eyre::bail!("Expected {} values but encountered {}", T, input.len());
         }
         poseidon2.permutation_in_place(
             input
@@ -499,7 +484,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         &mut self,
         _num_poseidon: usize,
         _poseidon2: &Poseidon2<F, T, D>,
-    ) -> std::io::Result<Poseidon2Precomputations<Self::ArithmeticShare>> {
+    ) -> eyre::Result<Poseidon2Precomputations<Self::ArithmeticShare>> {
         Ok(Poseidon2Precomputations::default())
     }
 
@@ -509,7 +494,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         r: usize,
         _precomp: &mut Poseidon2Precomputations<Self::ArithmeticShare>,
         poseidon2: &Poseidon2<F, T, D>,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         poseidon2.external_round(input, r);
         Ok(())
     }
@@ -520,7 +505,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         r: usize,
         _precomp: &mut Poseidon2Precomputations<Self::ArithmeticShare>,
         poseidon2: &Poseidon2<F, T, D>,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         poseidon2.internal_round(input, r);
         Ok(())
     }
@@ -529,7 +514,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         true
     }
 
-    fn equal(&mut self, a: &Self::AcvmType, b: &Self::AcvmType) -> std::io::Result<Self::AcvmType> {
+    fn equal(&mut self, a: &Self::AcvmType, b: &Self::AcvmType) -> eyre::Result<Self::AcvmType> {
         Ok(Self::ArithmeticShare::from(a == b))
     }
 
@@ -537,16 +522,13 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         &mut self,
         a: &[Self::AcvmType],
         b: &[Self::AcvmType],
-    ) -> std::io::Result<Vec<Self::AcvmType>> {
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
         if a.len() != b.len() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!(
-                    "Vectors must have the same length. Length of a : {} and length of b: {}",
-                    a.len(),
-                    b.len()
-                ),
-            ));
+            eyre::bail!(
+                "Vectors must have the same length. Length of a : {} and length of b: {}",
+                a.len(),
+                b.len()
+            );
         }
         let mut result = Vec::with_capacity(a.len());
         for (a_i, b_i) in a.iter().zip(b.iter()) {
@@ -561,7 +543,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         scalars_lo: &[Self::AcvmType],
         scalars_hi: &[Self::AcvmType],
         pedantic_solving: bool,
-    ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
+    ) -> eyre::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
         // This is very hardcoded to the grumpkin curve
         if TypeId::of::<F>() != TypeId::of::<ark_bn254::Fr>() {
             panic!("Only BN254 is supported");
@@ -579,20 +561,16 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
             unsafe { std::mem::transmute::<&[Self::AcvmType], &[ark_bn254::Fr]>(scalars_hi) };
 
         if points.len() != 3 * scalars_lo.len() || scalars_lo.len() != scalars_hi.len() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "Points and scalars must have the same length",
-            ));
+            eyre::bail!("Points and scalars must have the same length");
         }
 
         let mut output_point = ark_grumpkin::Affine::zero();
 
         for i in (0..points.len()).step_by(3) {
             if pedantic_solving && points[i + 2] > ark_bn254::Fr::one() {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    "--pedantic-solving: is_infinity expected to be a bool, but found to be > 1",
-                ));
+                eyre::bail!(
+                    "--pedantic-solving: is_infinity expected to be a bool, but found to be > 1"
+                );
             }
             let point = Self::create_grumpkin_point(
                 points[i],
@@ -606,13 +584,10 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
 
             // Check if this is smaller than the grumpkin modulus
             if pedantic_solving && grumpkin_integer >= ark_grumpkin::FrConfig::MODULUS.into() {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    format!(
-                        "{} is not a valid grumpkin scalar",
-                        grumpkin_integer.to_str_radix(16)
-                    ),
-                ));
+                eyre::bail!(
+                    "{} is not a valid grumpkin scalar",
+                    grumpkin_integer.to_str_radix(16)
+                );
             }
 
             let iteration_output_point =
@@ -636,17 +611,16 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         x: Self::AcvmType,
         y: Self::AcvmType,
         is_infinity: Self::AcvmType,
-    ) -> io::Result<Self::AcvmPoint<C>> {
+    ) -> eyre::Result<Self::AcvmPoint<C>> {
         // This is very hardcoded to the grumpkin curve
         if TypeId::of::<F>() != TypeId::of::<ark_bn254::Fr>() {
             panic!("Only BN254 is supported");
         }
 
         if is_infinity > F::one() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "--pedantic-solving: is_infinity expected to be a bool, but found to be > 1",
-            ));
+            eyre::bail!(
+                "--pedantic-solving: is_infinity expected to be a bool, but found to be > 1"
+            );
         }
 
         let x = *downcast(&x).expect("We checked types");
@@ -660,7 +634,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     fn pointshare_to_field_shares<C: CurveGroup<BaseField = F>>(
         &mut self,
         point: Self::AcvmPoint<C>,
-    ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
+    ) -> eyre::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
         if let Some((out_x, out_y)) = point.into_affine().xy() {
             Ok((out_x, out_y, F::zero()))
         } else {
@@ -668,15 +642,11 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         }
     }
 
-    fn gt(&mut self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> std::io::Result<Self::AcvmType> {
+    fn gt(&mut self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> eyre::Result<Self::AcvmType> {
         Ok(F::from(lhs > rhs))
     }
 
-    fn right_shift(
-        &mut self,
-        input: Self::AcvmType,
-        shift: usize,
-    ) -> std::io::Result<Self::AcvmType> {
+    fn right_shift(&mut self, input: Self::AcvmType, shift: usize) -> eyre::Result<Self::AcvmType> {
         let x: BigUint = input.into();
         Ok((x >> shift).into())
     }
@@ -685,7 +655,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         &mut self,
         point: Self::AcvmPoint<C>,
         value: Self::AcvmPoint<C>,
-    ) -> std::io::Result<Self::AcvmPoint<C>> {
+    ) -> eyre::Result<Self::AcvmPoint<C>> {
         if point.is_zero() {
             Ok(value)
         } else {
@@ -696,7 +666,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         &mut self,
         state: &[Self::AcvmType; 8],
         message: &[Self::AcvmType; 16],
-    ) -> io::Result<Vec<Self::AcvmType>> {
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
         let mut state_as_u32 = [0u32; 8];
         for (i, input) in state.iter().enumerate() {
             let x: BigUint = (*input).into();
@@ -718,7 +688,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     fn sha256_get_overflow_bit(
         &mut self,
         input: Self::ArithmeticShare,
-    ) -> std::io::Result<Self::ArithmeticShare> {
+    ) -> eyre::Result<Self::ArithmeticShare> {
         let mut sum: BigUint = input.into();
         let mask = BigUint::from(u64::MAX);
         sum &= mask;
@@ -734,7 +704,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         _rotation: &[u32],
         _total_bitsize: usize,
         _base: u64,
-    ) -> std::io::Result<(
+    ) -> eyre::Result<(
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
@@ -753,7 +723,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         _base: u64,
         _total_output_bitlen_per_field: usize,
         _table_type: &SHA256Table,
-    ) -> std::io::Result<(
+    ) -> eyre::Result<(
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
@@ -767,7 +737,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         &mut self,
         message_input: Vec<Self::AcvmType>,
         num_bits: &[usize],
-    ) -> std::io::Result<Vec<Self::AcvmType>> {
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
         let mut real_input = Vec::new();
         for (inp, num_bits) in message_input.iter().zip(num_bits.iter()) {
             let num_elements = num_bits.div_ceil(8); // We need to round to the next byte
@@ -783,7 +753,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         &mut self,
         message_input: Vec<Self::AcvmType>,
         num_bits: &[usize],
-    ) -> std::io::Result<Vec<Self::AcvmType>> {
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
         let mut real_input = Vec::new();
         for (inp, num_bits) in message_input.iter().zip(num_bits.iter()) {
             let num_elements = num_bits.div_ceil(8); // We need to round to the next byte
@@ -803,17 +773,16 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         input2_x: Self::AcvmType,
         input2_y: Self::AcvmType,
         input2_infinite: Self::AcvmType,
-    ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
+    ) -> eyre::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
         // This is very hardcoded to the grumpkin curve
         if TypeId::of::<F>() != TypeId::of::<ark_bn254::Fr>() {
             panic!("Only BN254 is supported");
         }
 
         if input1_infinite > F::one() || input2_infinite > F::one() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "--pedantic-solving: is_infinity expected to be a bool, but found to be > 1",
-            ));
+            eyre::bail!(
+                "--pedantic-solving: is_infinity expected to be a bool, but found to be > 1"
+            );
         }
 
         let input1_x = *downcast::<_, ark_bn254::Fr>(&input1_x).expect("We checked types");
@@ -841,7 +810,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         scalars: &[Self::AcvmType],
         iv: Vec<Self::AcvmType>,
         key: Vec<Self::AcvmType>,
-    ) -> io::Result<Vec<Self::AcvmType>> {
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
         let mut scalar_to_be_bytes = Vec::with_capacity(scalars.len());
         let mut iv_to_be_bytes = Vec::with_capacity(iv.len());
         let mut key_to_be_bytes = Vec::with_capacity(key.len());
@@ -876,7 +845,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         _input2: Self::ArithmeticShare,
         _base_bits: &[u64],
         _base: u64,
-    ) -> std::io::Result<(
+    ) -> eyre::Result<(
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
@@ -893,7 +862,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         _base_bits: &[u64],
         _base: u64,
         _sbox: &[u8],
-    ) -> std::io::Result<(
+    ) -> eyre::Result<(
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
@@ -911,7 +880,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         _base: u64,
         _input_bitsize: usize,
         _output_bitsize: usize,
-    ) -> io::Result<Self::AcvmType> {
+    ) -> eyre::Result<Self::AcvmType> {
         panic!(
             "accumulate_from_sparse_bytes not implemented for plaindriver and normally should not be called"
         );

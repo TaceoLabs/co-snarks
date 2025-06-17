@@ -80,7 +80,7 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
 
     let solver = PlainCoSolver::init_plain_driver(program_artifact, prover_toml).unwrap();
-    let witness = solver.solve().unwrap().0;
+    let witness = solver.solve().unwrap();
     let witness = convert_witness_plain(witness);
 
     let mut driver = PlainAcvmSolver::new();

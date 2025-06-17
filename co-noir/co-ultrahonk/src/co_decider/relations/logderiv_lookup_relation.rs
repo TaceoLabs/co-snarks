@@ -10,6 +10,8 @@ use ark_ec::pairing::Pairing;
 use co_builder::HonkProofResult;
 use co_builder::prelude::HonkCurve;
 use itertools::{Itertools as _, izip};
+use mpc_core::MpcState;
+use mpc_net::Network;
 use ultrahonk::prelude::{TranscriptFieldType, Univariate};
 
 #[derive(Clone, Debug)]
@@ -65,7 +67,7 @@ impl LogDerivLookupRelation {
 
 impl LogDerivLookupRelation {
     fn compute_inverse_exists<T: NoirUltraHonkProver<P>, P: Pairing>(
-        driver: &mut T,
+        id: <T::State as MpcState>::PartyID,
         input: &ProverUnivariatesBatch<T, P>,
         // ) -> Univariate<P::ScalarField, MAX_PARTIAL_RELATION_LENGTH> {
     ) -> Vec<T::ArithmeticShare> {
@@ -75,12 +77,12 @@ impl LogDerivLookupRelation {
         let mut res = T::mul_with_public_many(row_has_read, row_has_write);
         T::neg_many(&mut res);
         T::add_assign_many(&mut res, row_has_write);
-        T::add_assign_public_many(&mut res, row_has_read, driver.get_party_id());
+        T::add_assign_public_many(&mut res, row_has_read, id);
         res
     }
 
     fn compute_read_term<T: NoirUltraHonkProver<P>, P: Pairing>(
-        driver: &mut T,
+        id: <T::State as MpcState>::PartyID,
         input: &ProverUnivariatesBatch<T, P>,
         relation_parameters: &RelationParameters<P::ScalarField>,
     ) -> Vec<T::ArithmeticShare> {
@@ -99,15 +101,13 @@ impl LogDerivLookupRelation {
         let negative_column_2_step_size = input.precomputed.q_m();
         let negative_column_3_step_size = input.precomputed.q_c();
 
-        let party_id = driver.get_party_id();
-
         // The wire values for lookup gates are accumulators structured in such a way that the differences w_i -
         // step_size*w_i_shift result in values present in column i of a corresponding table. See the documentation in
         // method get_lookup_accumulators() in  for a detailed explanation.
         let mut derived_table_entry_1 =
             T::mul_with_public_many(negative_column_1_step_size, w_1_shift);
         T::add_assign_many(&mut derived_table_entry_1, w_1);
-        T::add_scalar_in_place(&mut derived_table_entry_1, *gamma, party_id);
+        T::add_scalar_in_place(&mut derived_table_entry_1, *gamma, id);
 
         let mut derived_table_entry_2 =
             T::mul_with_public_many(negative_column_2_step_size, w_2_shift);
@@ -126,7 +126,7 @@ impl LogDerivLookupRelation {
         T::add_assign_many(&mut derived_table_entry_1, &derived_table_entry_3);
         // 0xThemis TODO we dont need to collect this
         let table_index = table_index.iter().map(|x| *x * *eta_3).collect_vec();
-        T::add_assign_public_many(&mut derived_table_entry_1, &table_index, party_id);
+        T::add_assign_public_many(&mut derived_table_entry_1, &table_index, id);
         derived_table_entry_1
     }
 
@@ -233,8 +233,9 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
      * @note This relation utilizes functionality in the log-derivative library to compute the polynomial of inverses
      *
      */
-    fn accumulate(
-        driver: &mut T,
+    fn accumulate<N: Network>(
+        net: &N,
+        state: &mut T::State,
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesBatch<T, P>,
         relation_parameters: &RelationParameters<<P>::ScalarField>,
@@ -244,10 +245,10 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let read_counts = input.witness.lookup_read_counts(); // Degree 1
         let read_selector = input.precomputed.q_lookup(); // Degree 1
 
-        let inverse_exists = Self::compute_inverse_exists(driver, input); // Degree 2
-        let read_term = Self::compute_read_term(driver, input, relation_parameters); // Degree 2 (3)
+        let inverse_exists = Self::compute_inverse_exists(state.id(), input); // Degree 2
+        let read_term = Self::compute_read_term(state.id(), input, relation_parameters); // Degree 2 (3)
         let write_term = Self::compute_write_term(input, relation_parameters); // Degree 1 (2)
-        let write_inverse = driver.mul_many(&read_term, inverses)?;
+        let write_inverse = T::mul_many(&read_term, inverses, net, state)?;
         let read_inverse = T::mul_with_public_many(&write_term, inverses);
 
         // Establish the correctness of the polynomial of inverses I. Note: inverses is computed so that the value is 0
@@ -265,7 +266,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         // i.e. enforced across the entire trace, not on a per-row basis.
         // Degrees:                       1            2 (3)            1            3 (4)
         //
-        let mul = driver.mul_many(&write_inverse, read_counts)?;
+        let mul = T::mul_many(&write_inverse, read_counts, net, state)?;
         let mut tmp = T::mul_with_public_many(read_selector, &read_inverse);
         T::sub_assign_many(&mut tmp, &mul);
 

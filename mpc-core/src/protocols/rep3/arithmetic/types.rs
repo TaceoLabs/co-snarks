@@ -66,12 +66,6 @@ impl<F: PrimeField> Rep3PrimeFieldShare<F> {
         }
     }
 
-    // /// Generate a random share
-    // pub fn rand<N: Rep3Network>(io_context: &mut IoContext<N>) -> Self {
-    //     let (a, b) = io_context.rngs.rand.random_fes();
-    //     Self::new(a, b)
-    // }
-
     /// Promotes a public field element to a replicated share by setting the additive share of the party with id=0 and leaving all other shares to be 0. Thus, the replicated shares of party 0 and party 1 are set.
     pub fn promote_from_trivial(val: &F, id: PartyID) -> Self {
         match id {

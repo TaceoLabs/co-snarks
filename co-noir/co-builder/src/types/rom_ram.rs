@@ -147,7 +147,7 @@ impl<F: PrimeField> RamTable<F> {
         index: &FieldCT<F>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<FieldCT<F>> {
+    ) -> eyre::Result<FieldCT<F>> {
         let index_value = index.get_value(builder, driver);
 
         if let Some(native_index) = T::get_public(&index_value) {
@@ -178,7 +178,7 @@ impl<F: PrimeField> RamTable<F> {
         value: &FieldCT<F>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         let index_value = index.get_value(builder, driver);
 
         if let Some(native_index) = T::get_public(&index_value) {
@@ -250,7 +250,7 @@ impl<F: PrimeField> RamTable<F> {
         &mut self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         if self.ram_table_generated_in_builder {
             return Ok(());
         }

@@ -25,13 +25,13 @@ pub struct Polynomial<F> {
 
 impl<F: CanonicalSerialize> Serialize for Polynomial<F> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        mpc_core::ark_se(&self.coefficients, serializer)
+        mpc_core::serde_compat::ark_se(&self.coefficients, serializer)
     }
 }
 
 impl<'a, F: CanonicalDeserialize> Deserialize<'a> for Polynomial<F> {
     fn deserialize<D: Deserializer<'a>>(deserializer: D) -> Result<Self, D::Error> {
-        let coefficients: Vec<F> = mpc_core::ark_de(deserializer)?;
+        let coefficients: Vec<F> = mpc_core::serde_compat::ark_de(deserializer)?;
         Ok(Self { coefficients })
     }
 }

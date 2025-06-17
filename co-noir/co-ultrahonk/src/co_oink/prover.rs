@@ -25,6 +25,8 @@ use co_builder::{
     prelude::{ActiveRegionData, HonkCurve, NUM_MASKED_ROWS, Polynomial, ProverCrs},
 };
 use itertools::izip;
+use mpc_core::MpcState as _;
+use mpc_net::Network;
 use std::{array, marker::PhantomData};
 use ultrahonk::{
     NUM_ALPHAS,
@@ -36,8 +38,10 @@ pub(crate) struct CoOink<
     T: NoirUltraHonkProver<P>,
     P: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
+    N: Network,
 > {
-    driver: &'a mut T,
+    net: &'a N,
+    state: &'a mut T::State,
     memory: ProverMemory<T, P>,
     phantom_data: PhantomData<P>,
     phantom_hasher: PhantomData<H>,
@@ -49,11 +53,13 @@ impl<
     T: NoirUltraHonkProver<P>,
     P: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
-> CoOink<'a, T, P, H>
+    N: Network,
+> CoOink<'a, T, P, H, N>
 {
-    pub(crate) fn new(driver: &'a mut T, has_zk: ZeroKnowledge) -> Self {
+    pub(crate) fn new(net: &'a N, state: &'a mut T::State, has_zk: ZeroKnowledge) -> Self {
         Self {
-            driver,
+            net,
+            state,
             memory: ProverMemory::default(),
             phantom_data: PhantomData,
             phantom_hasher: PhantomData,
@@ -73,7 +79,7 @@ impl<
             "Insufficient space for masking"
         );
         for i in (virtual_size - NUM_MASKED_ROWS as usize..virtual_size).rev() {
-            polynomial.coefficients[i] = self.driver.rand()?;
+            polynomial.coefficients[i] = T::rand(self.net, self.state)?;
         }
 
         Ok(())
@@ -130,8 +136,7 @@ impl<
             let gate_idx = *gate_idx as usize;
             self.compute_w4_inner(proving_key, gate_idx);
             let target = &mut self.memory.w_4[gate_idx];
-            *target =
-                T::add_with_public(P::ScalarField::one(), *target, self.driver.get_party_id());
+            *target = T::add_with_public(P::ScalarField::one(), *target, self.state.id());
         }
 
         // This computes the values for cases where the type (r/w) of the record is a secret share of 0/1 and adds this share
@@ -168,10 +173,10 @@ impl<
         // The wire values for lookup gates are accumulators structured in such a way that the differences w_i -
         // step_size*w_i_shift result in values present in column i of a corresponding table. See the documentation in
         // method get_lookup_accumulators() in  for a detailed explanation.
-        let party_id = self.driver.get_party_id();
+        let id = self.state.id();
 
         let mul = T::mul_with_public(negative_column_1_step_size, w_1_shift);
-        let add = T::add_with_public(gamma, mul, party_id);
+        let add = T::add_with_public(gamma, mul, id);
         let derived_table_entry_1 = T::add(w_1, add);
 
         let mul = T::mul_with_public(negative_column_2_step_size, w_2_shift);
@@ -187,7 +192,7 @@ impl<
         let res = T::add(derived_table_entry_1, mul);
         let mul = T::mul_with_public(eta_2, derived_table_entry_3);
         let res = T::add(res, mul);
-        T::add_with_public(table_index * eta_3, res, party_id)
+        T::add_with_public(table_index * eta_3, res, id)
     }
 
     // Compute table_1 + gamma + table_2 * eta + table_3 * eta_2 + table_4 * eta_3
@@ -246,7 +251,7 @@ impl<
             q_lookup_mul_read_tag.push(T::add_with_public(
                 q_lookup.to_owned(),
                 mul,
-                self.driver.get_party_id(),
+                self.state.id(),
             ));
 
             // READ_TERMS and WRITE_TERMS are 1, so we skip the loop
@@ -254,16 +259,19 @@ impl<
             let write_term = self.compute_write_term(proving_key, i);
             self.memory.lookup_inverses[i] = T::mul_with_public(write_term, read_term);
         }
-        self.memory.lookup_inverses = Polynomial::new(
-            self.driver
-                .mul_many(self.memory.lookup_inverses.as_ref(), &q_lookup_mul_read_tag)?,
-        );
+        self.memory.lookup_inverses = Polynomial::new(T::mul_many(
+            self.memory.lookup_inverses.as_ref(),
+            &q_lookup_mul_read_tag,
+            self.net,
+            self.state,
+        )?);
 
         // Compute inverse polynomial I in place by inverting the product at each row
         // Note: zeroes are ignored as they are not used anyway
-        CoUtils::batch_invert_leaking_zeros::<T, P>(
-            self.driver,
+        CoUtils::batch_invert_leaking_zeros::<T, P, N>(
             self.memory.lookup_inverses.as_mut(),
+            self.net,
+            self.state,
         )?;
         Ok(())
     }
@@ -316,7 +324,8 @@ impl<
 
     #[expect(clippy::too_many_arguments)]
     fn batched_grand_product_num_denom(
-        driver: &mut T,
+        net: &N,
+        state: &mut T::State,
         shared1: &Polynomial<T::ArithmeticShare>,
         shared2: &Polynomial<T::ArithmeticShare>,
         pub1: &Polynomial<P::ScalarField>,
@@ -342,15 +351,14 @@ impl<
             } else {
                 i
             };
-            let paryty_id = driver.get_party_id();
-
-            let m1 = T::add_with_public(pub1[idx] * beta + gamma, shared1[idx], paryty_id);
-            let m2 = T::add_with_public(pub2[idx] * beta + gamma, shared2[idx], paryty_id);
+            let id = state.id();
+            let m1 = T::add_with_public(pub1[idx] * beta + gamma, shared1[idx], id);
+            let m2 = T::add_with_public(pub2[idx] * beta + gamma, shared2[idx], id);
             mul1.push(m1);
             mul2.push(m2);
         }
 
-        Ok(driver.mul_many(&mul1, &mul2)?)
+        Ok(T::mul_many(&mul1, &mul2, net, state)?)
     }
 
     // To reduce the number of communication rounds, we implement the array_prod_mul macro according to https://www.usenix.org/system/files/sec22-ozdemir.pdf, p11 first paragraph.
@@ -362,15 +370,15 @@ impl<
         let len = inp.len();
 
         let r = (0..=len)
-            .map(|_| self.driver.rand())
+            .map(|_| T::rand(self.net, self.state))
             .collect::<Result<Vec<_>, _>>()?;
-        let r_inv = self.driver.inv_many(&r)?;
+        let r_inv = T::inv_many(&r, self.net, self.state)?;
         let r_inv0 = vec![r_inv[0]; len];
 
-        let mut unblind = self.driver.mul_many(&r_inv0, &r[1..])?;
+        let mut unblind = T::mul_many(&r_inv0, &r[1..], self.net, self.state)?;
 
-        let mul = self.driver.mul_many(&r[..len], inp)?;
-        let mut open = self.driver.mul_open_many(&mul, &r_inv[1..])?;
+        let mul = T::mul_many(&r[..len], inp, self.net, self.state)?;
+        let mut open = T::mul_open_many(&mul, &r_inv[1..], self.net, self.state)?;
 
         for i in 1..open.len() {
             open[i] = open[i] * open[i - 1];
@@ -405,7 +413,8 @@ impl<
 
         // TACEO TODO could batch those 4 as well
         let denom1 = Self::batched_grand_product_num_denom(
-            self.driver,
+            self.net,
+            self.state,
             proving_key.polynomials.witness.w_l(),
             proving_key.polynomials.witness.w_r(),
             proving_key.polynomials.precomputed.sigma_1(),
@@ -416,7 +425,8 @@ impl<
             &proving_key.active_region_data,
         )?;
         let denom2 = Self::batched_grand_product_num_denom(
-            self.driver,
+            self.net,
+            self.state,
             proving_key.polynomials.witness.w_o(),
             &self.memory.w_4,
             proving_key.polynomials.precomputed.sigma_3(),
@@ -427,7 +437,8 @@ impl<
             &proving_key.active_region_data,
         )?;
         let num1 = Self::batched_grand_product_num_denom(
-            self.driver,
+            self.net,
+            self.state,
             proving_key.polynomials.witness.w_l(),
             proving_key.polynomials.witness.w_r(),
             proving_key.polynomials.precomputed.id_1(),
@@ -438,7 +449,8 @@ impl<
             &proving_key.active_region_data,
         )?;
         let num2 = Self::batched_grand_product_num_denom(
-            self.driver,
+            self.net,
+            self.state,
             proving_key.polynomials.witness.w_o(),
             &self.memory.w_4,
             proving_key.polynomials.precomputed.id_3(),
@@ -450,8 +462,8 @@ impl<
         )?;
 
         // TACEO TODO could batch here as well
-        let numerator = self.driver.mul_many(&num1, &num2)?;
-        let denominator = self.driver.mul_many(&denom1, &denom2)?;
+        let numerator = T::mul_many(&num1, &num2, self.net, self.state)?;
+        let denominator = T::mul_many(&denom1, &denom2, self.net, self.state)?;
 
         // Step (2)
         // Compute the accumulating product of the numerator and denominator terms.
@@ -462,17 +474,16 @@ impl<
         let mut denominator = self.array_prod_mul(&denominator)?;
 
         // invert denominator
-        CoUtils::batch_invert::<T, P>(self.driver, &mut denominator)?;
+        CoUtils::batch_invert::<T, P, N>(&mut denominator, self.net, self.state)?;
 
         // Step (3) Compute z_perm[i] = numerator[i] / denominator[i]
-        let mul = self.driver.mul_many(&numerator, &denominator)?;
+        let mul = T::mul_many(&numerator, &denominator, self.net, self.state)?;
 
         self.memory.z_perm.resize(
             proving_key.circuit_size as usize,
             T::ArithmeticShare::default(),
         );
-        self.memory.z_perm[1] =
-            T::promote_to_trivial_share(self.driver.get_party_id(), P::ScalarField::one());
+        self.memory.z_perm[1] = T::promote_to_trivial_share(self.state.id(), P::ScalarField::one());
 
         // Compute grand product values corresponding only to the active regions of the trace
         for (i, mul) in mul.into_iter().enumerate() {
@@ -569,7 +580,7 @@ impl<
         let w_r = CoUtils::commit::<T, P>(proving_key.polynomials.witness.w_r().as_ref(), crs);
         let w_o = CoUtils::commit::<T, P>(proving_key.polynomials.witness.w_o().as_ref(), crs);
 
-        let open = self.driver.open_point_many(&[w_l, w_r, w_o])?;
+        let open = T::open_point_many(&[w_l, w_r, w_o], self.net, self.state)?;
 
         transcript.send_point_to_verifier::<P>("W_L".to_string(), open[0].into());
         transcript.send_point_to_verifier::<P>("W_R".to_string(), open[1].into());
@@ -622,9 +633,11 @@ impl<
             crs,
         );
         let w_4 = CoUtils::commit::<T, P>(self.memory.w_4.as_ref(), crs);
-        let opened = self
-            .driver
-            .open_point_many(&[lookup_read_counts, lookup_read_tags, w_4])?;
+        let opened = T::open_point_many(
+            &[lookup_read_counts, lookup_read_tags, w_4],
+            self.net,
+            self.state,
+        )?;
 
         transcript.send_point_to_verifier::<P>("LOOKUP_READ_COUNTS".to_string(), opened[0].into());
         transcript.send_point_to_verifier::<P>("LOOKUP_READ_TAGS".to_string(), opened[1].into());
@@ -681,7 +694,7 @@ impl<
 
         let z_perm = CoUtils::commit::<T, P>(self.memory.z_perm.as_ref(), crs);
 
-        let open = self.driver.open_point_many(&[lookup_inverses, z_perm])?;
+        let open = T::open_point_many(&[lookup_inverses, z_perm], self.net, self.state)?;
 
         transcript.send_point_to_verifier::<P>("LOOKUP_INVERSES".to_string(), open[0].into());
         transcript.send_point_to_verifier::<P>("Z_PERM".to_string(), open[1].into());
