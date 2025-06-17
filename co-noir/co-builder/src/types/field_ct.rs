@@ -218,7 +218,7 @@ impl<F: PrimeField> FieldCT<F> {
         other: &Self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<Self> {
+    ) -> eyre::Result<Self> {
         let mut result = Self::default();
 
         if self.is_constant() && other.is_constant() {
@@ -319,7 +319,7 @@ impl<F: PrimeField> FieldCT<F> {
         other: &Self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         *self = self.multiply(other, builder, driver)?;
         Ok(())
     }
@@ -333,7 +333,7 @@ impl<F: PrimeField> FieldCT<F> {
         other: &Self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<Self> {
+    ) -> eyre::Result<Self> {
         other.assert_is_not_zero(builder, driver)?;
         self.divide_no_zero_check(other, builder, driver)
     }
@@ -346,7 +346,7 @@ impl<F: PrimeField> FieldCT<F> {
         other: &Self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<Self> {
+    ) -> eyre::Result<Self> {
         let mut result = Self::default();
 
         let mut additive_multiplier = F::one();
@@ -552,7 +552,7 @@ impl<F: PrimeField> FieldCT<F> {
         to_add: &Self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<Self> {
+    ) -> eyre::Result<Self> {
         if to_mul.is_constant() && to_add.is_constant() && self.is_constant() {
             let mut mul = self.multiply(to_mul, builder, driver)?;
             mul.add_assign(to_add, builder, driver);
@@ -654,7 +654,7 @@ impl<F: PrimeField> FieldCT<F> {
         total_bitsize: usize,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<[Self; 3]> {
+    ) -> eyre::Result<[Self; 3]> {
         const GRUMPKIN_MAX_NO_WRAP_INTEGER_BIT_LENGTH: usize = 252;
 
         assert!(msb >= lsb);
@@ -728,7 +728,7 @@ impl<F: PrimeField> FieldCT<F> {
         num_bits: usize,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         if num_bits == 0 {
             self.assert_is_zero(builder);
         } else if self.is_constant() {
@@ -794,7 +794,7 @@ impl<F: PrimeField> FieldCT<F> {
     >(
         val: T::AcvmType,
         driver: &mut T,
-    ) -> std::io::Result<T::AcvmType> {
+    ) -> eyre::Result<T::AcvmType> {
         let is_zero = driver.equal(&val, &F::zero().into())?;
         let to_invert = driver.cmux(is_zero.to_owned(), F::one().into(), val)?;
         let inverse = driver.invert(to_invert)?;
@@ -808,7 +808,7 @@ impl<F: PrimeField> FieldCT<F> {
         &self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         if self.is_constant() {
             assert!(!self.additive_constant.is_zero());
             return Ok(());
@@ -856,7 +856,7 @@ impl<F: PrimeField> FieldCT<F> {
         rhs: &Self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<Self> {
+    ) -> eyre::Result<Self> {
         if predicate.is_constant() {
             let val = T::get_public(&predicate.get_value(driver)).expect("Constants are public");
             if val.is_zero() {
@@ -1002,7 +1002,7 @@ impl<F: PrimeField> FieldCT<F> {
         other: &Self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<BoolCT<P, T>> {
+    ) -> eyre::Result<BoolCT<P, T>> {
         let fa = self.get_value(builder, driver);
         let fb = other.get_value(builder, driver);
 
@@ -1260,7 +1260,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T> {
         rhs: &Self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<Self> {
+    ) -> eyre::Result<Self> {
         if predicate.is_constant() {
             let value = predicate.get_value(driver);
             let value = T::get_public(&value).expect("Constants are public");
@@ -1331,7 +1331,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T> {
         other: &Self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<Self> {
+    ) -> eyre::Result<Self> {
         let mut result = BoolCT::default();
 
         let left = self.get_value(driver);
@@ -1438,7 +1438,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T> {
         other: &Self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<Self> {
+    ) -> eyre::Result<Self> {
         let mut result = BoolCT::default();
 
         let left = self.get_value(driver);
@@ -1546,7 +1546,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T> {
         other: &Self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<Self> {
+    ) -> eyre::Result<Self> {
         if other.is_constant() && self.is_constant() {
             let self_value = T::get_public(&self.get_value(driver)).expect("Constants are public");
             let other_value =
@@ -1727,7 +1727,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupCT<P
         &mut self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         assert!(
             self.is_constant()
                 == (self.x.is_constant() && self.y.is_constant() && self.is_infinity.is_constant())
@@ -1756,7 +1756,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupCT<P
         &self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<Self> {
+    ) -> eyre::Result<Self> {
         let mut result = self.clone();
         result.standardize(builder, driver)?;
         Ok(result)
@@ -1772,7 +1772,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupCT<P
         is_infinity: BoolCT<P, T>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         assert!(
             self.is_constant()
                 == (self.x.is_constant() && self.y.is_constant() && self.is_infinity.is_constant())
@@ -1921,7 +1921,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         &self,
         builder: &GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<T::AcvmPoint<P::CycleGroup>> {
+    ) -> eyre::Result<T::AcvmPoint<P::CycleGroup>> {
         let x = self.x.get_value(builder, driver);
         let y = self.y.get_value(builder, driver);
         let is_infinity = self.is_infinity.get_value(driver);
@@ -1934,7 +1934,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         scalars: Vec<CycleScalarCT<P::ScalarField>>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<Self> {
+    ) -> eyre::Result<Self> {
         debug_assert_eq!(base_points.len(), scalars.len());
 
         let mut variable_base_scalars = Vec::new();
@@ -2110,7 +2110,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         // offset_generators: &[<P::CycleGroup as CurveGroup>::Affine],
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<(CycleGroupCT<P, T>, P::CycleGroup)> {
+    ) -> eyre::Result<(CycleGroupCT<P, T>, P::CycleGroup)> {
         debug_assert_eq!(scalars.len(), base_points.len());
 
         let num_points = base_points.len();
@@ -2201,7 +2201,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         unconditional_add: bool,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<(CycleGroupCT<P, T>, P::CycleGroup)> {
+    ) -> eyre::Result<(CycleGroupCT<P, T>, P::CycleGroup)> {
         debug_assert_eq!(scalars.len(), base_points.len());
 
         let mut num_bits = 0;
@@ -2432,7 +2432,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         hint: Option<T::AcvmPoint<P::CycleGroup>>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<Self> {
+    ) -> eyre::Result<Self> {
         // ensure we use a value of y that is not zero. (only happens if point at infinity)
         // this costs 0 gates if `is_infinity` is a circuit constant
         let modified_y = FieldCT::conditional_assign(
@@ -2542,7 +2542,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         hint: Option<T::AcvmPoint<P::CycleGroup>>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<Self> {
+    ) -> eyre::Result<Self> {
         let x_delta = self.x.sub(&other.x, builder, driver);
         if x_delta.is_constant() {
             assert!(
@@ -2562,7 +2562,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         hint: Option<T::AcvmPoint<P::CycleGroup>>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<Self> {
+    ) -> eyre::Result<Self> {
         let lhs_constant = self.is_constant();
         let rhs_constant = other.is_constant();
         if lhs_constant && !rhs_constant {
@@ -2625,7 +2625,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         other: &Self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<Self> {
+    ) -> eyre::Result<Self> {
         if self.is_infinity.is_constant()
             && !T::get_public(&self.is_infinity.get_value(driver))
                 .expect("Constants are public")
@@ -2732,7 +2732,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         other: &Self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<Self> {
+    ) -> eyre::Result<Self> {
         if other.is_infinity.is_constant()
             && !T::get_public(&other.is_infinity.get_value(driver))
                 .expect("Constants are public")
@@ -2846,7 +2846,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         &self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<Self> {
+    ) -> eyre::Result<Self> {
         let mut result = self.to_owned();
         result.y = self.y.neg().normalize(builder, driver);
         Ok(result)
@@ -2858,7 +2858,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         rhs: &Self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<Self> {
+    ) -> eyre::Result<Self> {
         let mut x = FieldCT::conditional_assign(predicate, &lhs.x, &rhs.x, builder, driver)?;
         let y = FieldCT::conditional_assign(predicate, &lhs.y, &rhs.y, builder, driver)?;
         let is_infinity = BoolCT::conditional_assign(
@@ -2971,7 +2971,7 @@ impl<F: PrimeField> CycleScalarCT<F> {
         &self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         if self.is_constant() || self.skip_primality_test() {
             return Ok(());
         }
@@ -3060,7 +3060,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> StrausScalarSl
         table_bits: usize,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<Self> {
+    ) -> eyre::Result<Self> {
         let lo_bits = if scalar.num_bits() > CycleScalarCT::<P::ScalarField>::LO_BITS {
             CycleScalarCT::<P::ScalarField>::LO_BITS
         } else {
@@ -3097,7 +3097,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> StrausScalarSl
         table_bits: usize,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<(Vec<FieldCT<P::ScalarField>>, Vec<T::AcvmType>)> {
+    ) -> eyre::Result<(Vec<FieldCT<P::ScalarField>>, Vec<T::AcvmType>)> {
         // we record the scalar slices both as field_t circuit elements and u64 values
         // (u64 values are used to index arrays and we don't want to repeatedly cast a stdlib value to a numeric
         // primitive as this gets expensive when repeated enough times)
@@ -3167,7 +3167,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         hints: Option<Vec<T::AcvmPoint<P::CycleGroup>>>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<Self> {
+    ) -> eyre::Result<Self> {
         let table_size = (1 << table_bits) as usize;
         let mut point_table = Vec::with_capacity(table_size);
         point_table.push(offset_generator.to_owned());
@@ -3296,7 +3296,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         offset_generator: <P::CycleGroup as CurveGroup>::Affine,
         table_bits: usize,
         driver: &mut T,
-    ) -> std::io::Result<Vec<T::AcvmPoint<P::CycleGroup>>> {
+    ) -> eyre::Result<Vec<T::AcvmPoint<P::CycleGroup>>> {
         let tables_size = (1 << table_bits) as usize;
 
         // let base_point = if base_point == 0 {::CycleGroup::generator() else base_point;
@@ -3318,7 +3318,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         mut index: FieldCT<P::ScalarField>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<CycleGroupCT<P, T>> {
+    ) -> eyre::Result<CycleGroupCT<P, T>> {
         // We are Ultra, so we use ROM
 
         if index.is_constant() {
@@ -3385,7 +3385,7 @@ impl<F: PrimeField> ByteArray<F> {
         num_bytes: usize,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<Self> {
+    ) -> eyre::Result<Self> {
         assert!(num_bytes <= 32);
         let value = input.get_value(builder, driver);
         let mut values = Vec::with_capacity(num_bytes);
@@ -3521,7 +3521,7 @@ impl<F: PrimeField> ByteArray<F> {
         &self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<FieldCT<F>> {
+    ) -> eyre::Result<FieldCT<F>> {
         let bytes = self.values.len();
         let shift = F::from(256u64);
         let mut result = FieldCT::default();

@@ -18,6 +18,8 @@ use co_builder::{
     prelude::{HonkCurve, Polynomial, ProverCrs},
 };
 use itertools::izip;
+use mpc_core::MpcState as _;
+use mpc_net::Network;
 use ultrahonk::{
     NUM_INTERLEAVING_CLAIMS, NUM_SMALL_IPA_EVALUATIONS, Utils,
     prelude::{Transcript, TranscriptFieldType, TranscriptHasher, ZeroKnowledge},
@@ -27,7 +29,8 @@ impl<
     T: NoirUltraHonkProver<P>,
     P: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
-> CoDecider<T, P, H>
+    N: Network,
+> CoDecider<'_, T, P, H, N>
 {
     fn get_f_polynomials(
         polys: &AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>>,
@@ -61,7 +64,7 @@ impl<
 
         // To achieve ZK, we mask the batched polynomial by a random polynomial of the same size
         if has_zk == ZeroKnowledge::Yes {
-            batched_unshifted = SharedPolynomial::<T, P>::random(n, &mut self.driver)?;
+            batched_unshifted = SharedPolynomial::<T, P>::random(n, self.net, self.state)?;
             let masking_poly_comm_shared =
                 CoUtils::commit::<T, P>(batched_unshifted.as_ref(), commitment_key);
 
@@ -70,9 +73,10 @@ impl<
             let masking_poly_eval_shared =
                 batched_unshifted.evaluate_mle(&multilinear_challenge[0..log_n]);
             let (masking_poly_comm, masking_poly_eval) = T::open_point_and_field(
-                &mut self.driver,
                 masking_poly_comm_shared,
                 masking_poly_eval_shared,
+                self.net,
+                self.state,
             )?;
             transcript.send_point_to_verifier::<P>(
                 "Gemini:masking_poly_comm".to_string(),
@@ -104,11 +108,7 @@ impl<
         if has_zk == ZeroKnowledge::Yes {
             // Precomputed part of batched_unshifted
             for f_poly in f_polynomials.precomputed.iter() {
-                batched_unshifted.add_scaled_slice_public(
-                    self.driver.get_party_id(),
-                    f_poly,
-                    &running_scalar,
-                );
+                batched_unshifted.add_scaled_slice_public(self.state.id(), f_poly, &running_scalar);
                 running_scalar *= rho;
             }
         } else {
@@ -122,7 +122,7 @@ impl<
 
             // Shared part of batched_unshifted
             batched_unshifted =
-                SharedPolynomial::<T, P>::promote_poly(&self.driver, batched_unshifted_plain);
+                SharedPolynomial::<T, P>::promote_poly(self.state.id(), batched_unshifted_plain);
         }
         for f_poly in f_polynomials.witness.iter() {
             batched_unshifted.add_scaled_slice(f_poly, &running_scalar);
@@ -212,7 +212,7 @@ impl<
                 commitment_key,
             ));
         }
-        let commitments = self.driver.open_point_many(&commitments)?;
+        let commitments = T::open_point_many(&commitments, self.net, self.state)?;
         for (l, res) in commitments.into_iter().enumerate() {
             transcript.send_point_to_verifier::<P>(format!("Gemini:FOLD_{}", l + 1), res.into());
         }
@@ -253,7 +253,7 @@ impl<
             .take(log_n)
             .map(|claim| claim.opening_pair.evaluation)
             .collect::<Vec<_>>();
-        let claim_eval = self.driver.open_many(&claim_eval)?;
+        let claim_eval = T::open_many(&claim_eval, self.net, self.state)?;
         for (l, claim) in claim_eval.into_iter().enumerate() {
             transcript.send_fr_to_verifier::<P>(format!("Gemini:a_{}", l + 1), claim);
         }
@@ -478,7 +478,8 @@ impl<
         );
         let batched_quotient_commitment =
             CoUtils::commit::<T, P>(batched_quotient.as_ref(), commitment_key);
-        let batched_quotient_commitment = self.driver.open_point(batched_quotient_commitment)?;
+        let batched_quotient_commitment =
+            T::open_point(batched_quotient_commitment, self.net, self.state)?;
         transcript.send_point_to_verifier::<P>(
             "Shplonk:Q".to_string(),
             batched_quotient_commitment.into(),
@@ -526,7 +527,8 @@ impl<
                 gemini_r,
                 libra_polynomials.expect("we have ZK"),
                 transcript,
-                &mut self.driver,
+                self.net,
+                self.state,
             )?;
             Some(libra_opening_claims)
         } else {
@@ -742,7 +744,8 @@ impl<
         gemini_r: P::ScalarField,
         libra_polynomials: [SharedPolynomial<T, P>; NUM_SMALL_IPA_EVALUATIONS],
         transcript: &mut Transcript<TranscriptFieldType, H>,
-        driver: &mut T,
+        net: &N,
+        state: &mut T::State,
     ) -> HonkProofResult<Vec<ShpleminiOpeningClaim<T, P>>> {
         tracing::trace!("Compute libra opening claims");
         let mut libra_opening_claims = Vec::with_capacity(NUM_SMALL_IPA_EVALUATIONS);
@@ -772,7 +775,7 @@ impl<
             to_open.push(new_claim.opening_pair.evaluation);
             libra_opening_claims.push(new_claim);
         }
-        let opened = T::open_many(driver, &to_open)?;
+        let opened = T::open_many(&to_open, net, state)?;
         for (val, label) in izip!(opened, libra_eval_labels) {
             transcript.send_fr_to_verifier::<P>(label.to_string(), val);
         }

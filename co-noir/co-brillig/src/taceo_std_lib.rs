@@ -50,7 +50,7 @@ where
             .insert(identifer.clone(), serialized)
             .is_some()
         {
-            eyre::bail!(format!("duplicate entry for shared state id: {identifer}"));
+            eyre::bail!("duplicate entry for shared state id: {identifer}");
         }
 
         Ok(())

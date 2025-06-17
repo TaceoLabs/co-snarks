@@ -1,12 +1,16 @@
 use ark_ff::One;
-use std::io;
+use mpc_net::Network;
 
 use ark_ff::PrimeField;
 use itertools::Itertools;
-use mpc_core::protocols::rep3::{
-    Rep3PrimeFieldShare, arithmetic,
-    conversion::{self, A2BType},
-    network::{IoContext, Rep3Network},
+use mpc_core::{
+    MpcState as _,
+    protocols::rep3::{
+        Rep3PrimeFieldShare, Rep3State, arithmetic,
+        conversion::{self, A2BType},
+        id::PartyID,
+        network,
+    },
 };
 use num_bigint::BigUint;
 
@@ -18,29 +22,34 @@ type ArithmeticShare<F> = Rep3PrimeFieldShare<F>;
 /// elements at once to reduce mul-depth if run on multiple inputs of the same circuit.
 ///
 /// This is a pure MPC improvement and does not use any advanced ZK techniques like folding.
-pub struct BatchedCircomRep3VmWitnessExtension<F: PrimeField, N: Rep3Network> {
-    io_context0: IoContext<N>,
-    _io_context1: IoContext<N>,
+pub struct BatchedCircomRep3VmWitnessExtension<'a, F: PrimeField, N: Network> {
+    _id: PartyID,
+    net0: &'a N,
+    _net1: &'a N,
+    state0: Rep3State,
+    _state1: Rep3State,
     plain: BatchedCircomPlainVmWitnessExtension<F>,
     batch_size: usize,
 }
 
-impl<F: PrimeField, N: Rep3Network> BatchedCircomRep3VmWitnessExtension<F, N> {
-    pub fn from_network(network: N, a2b_type: A2BType, batch_size: usize) -> io::Result<Self> {
-        let mut io_context = IoContext::init(network)?;
-        io_context.set_a2b_type(a2b_type);
-        let io_context_fork = io_context.fork()?;
+impl<'a, F: PrimeField, N: Network> BatchedCircomRep3VmWitnessExtension<'a, F, N> {
+    pub fn new(
+        net0: &'a N,
+        net1: &'a N,
+        a2b_type: A2BType,
+        batch_size: usize,
+    ) -> eyre::Result<Self> {
+        let mut state = Rep3State::new(net0, a2b_type)?;
+        let state1 = state.fork(0)?;
         Ok(Self {
-            io_context0: io_context,
-            _io_context1: io_context_fork,
+            _id: state.id(),
+            net0,
+            _net1: net1,
+            state0: state,
+            _state1: state1,
             plain: BatchedCircomPlainVmWitnessExtension::new(batch_size),
             batch_size,
         })
-    }
-
-    /// Get the underlying network
-    pub fn get_network(self) -> N {
-        self.io_context0.network
     }
 }
 
@@ -49,7 +58,7 @@ impl<F: PrimeField, N: Rep3Network> BatchedCircomRep3VmWitnessExtension<F, N> {
 pub enum BatchedRep3VmType<F: PrimeField> {
     /// The public variant
     Public(Vec<F>),
-    /// The arithemtic share variant
+    /// The arithmetic share variant
     Arithmetic(Vec<ArithmeticShare<F>>),
 }
 
@@ -75,8 +84,8 @@ impl<F: PrimeField> From<Vec<ArithmeticShare<F>>> for BatchedRep3VmType<F> {
 }
 
 #[expect(unused_variables)]
-impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
-    for BatchedCircomRep3VmWitnessExtension<F, N>
+impl<F: PrimeField, N: Network> VmCircomWitnessExtension<F>
+    for BatchedCircomRep3VmWitnessExtension<'_, F, N>
 {
     type Public = Vec<F>;
 
@@ -93,7 +102,7 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
             | (BatchedRep3VmType::Arithmetic(a), BatchedRep3VmType::Public(b)) => Ok(a
                 .into_iter()
                 .zip(b)
-                .map(|(a, b)| arithmetic::add_public(a, b, self.io_context0.id))
+                .map(|(a, b)| arithmetic::add_public(a, b, self.state0.id))
                 .collect_vec()
                 .into()),
             (BatchedRep3VmType::Arithmetic(a), BatchedRep3VmType::Arithmetic(b)) => Ok(a
@@ -113,13 +122,13 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
             (BatchedRep3VmType::Arithmetic(a), BatchedRep3VmType::Public(b)) => Ok(a
                 .into_iter()
                 .zip(b)
-                .map(|(a, b)| arithmetic::sub_shared_by_public(a, b, self.io_context0.id))
+                .map(|(a, b)| arithmetic::sub_shared_by_public(a, b, self.state0.id))
                 .collect_vec()
                 .into()),
             (BatchedRep3VmType::Public(a), BatchedRep3VmType::Arithmetic(b)) => Ok(a
                 .into_iter()
                 .zip(b)
-                .map(|(a, b)| arithmetic::sub_public_by_shared(a, b, self.io_context0.id))
+                .map(|(a, b)| arithmetic::sub_public_by_shared(a, b, self.state0.id))
                 .collect_vec()
                 .into()),
 
@@ -145,7 +154,7 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
                 .collect_vec()
                 .into()),
             (BatchedRep3VmType::Arithmetic(a), BatchedRep3VmType::Arithmetic(b)) => {
-                Ok(arithmetic::mul_vec(&a, &b, &mut self.io_context0)?.into())
+                Ok(arithmetic::mul_vec(&a, &b, self.net0, &mut self.state0)?.into())
             }
         }
     }
@@ -285,9 +294,7 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
     fn open(&mut self, a: Self::VmType) -> eyre::Result<Self::Public> {
         match a {
             BatchedRep3VmType::Public(public) => Ok(public),
-            BatchedRep3VmType::Arithmetic(shares) => {
-                Ok(arithmetic::open_vec(&shares, &mut self.io_context0)?)
-            }
+            BatchedRep3VmType::Arithmetic(shares) => Ok(arithmetic::open_vec(&shares, self.net0)?),
         }
     }
 
@@ -295,7 +302,7 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
         match a {
             BatchedRep3VmType::Public(a) => Ok(a
                 .iter()
-                .map(|a| arithmetic::promote_to_trivial_share(self.io_context0.id, *a))
+                .map(|a| arithmetic::promote_to_trivial_share(self.state0.id, *a))
                 .collect_vec()),
             BatchedRep3VmType::Arithmetic(a) => Ok(a),
         }
@@ -311,13 +318,12 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
 
     fn compare_vm_config(&mut self, config: &crate::mpc_vm::VMConfig) -> eyre::Result<()> {
         let ser = bincode::serialize(&config)?;
-        self.io_context0.network.send_next(ser)?;
-        let rcv: Vec<u8> = self.io_context0.network.recv_prev()?;
-        let deser = bincode::deserialize(&rcv)?;
+        network::send_next(self.net0, ser)?;
+        let recv: Vec<u8> = network::recv_prev(self.net0)?;
+        let deser = bincode::deserialize(&recv)?;
         if config != &deser {
             eyre::bail!("VM Config does not match: {:?} != {:?}", config, deser);
         }
-
         Ok(())
     }
 
@@ -338,7 +344,7 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
         let a = a.into_iter().map(|x| match x {
             BatchedRep3VmType::Public(x) => x
                 .into_iter()
-                .map(|x| arithmetic::promote_to_trivial_share(self.io_context0.id, x))
+                .map(|x| arithmetic::promote_to_trivial_share(self.state0.id, x))
                 .collect_vec(),
             BatchedRep3VmType::Arithmetic(x) => x,
         });
@@ -346,7 +352,7 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
         let b = b.into_iter().map(|x| match x {
             BatchedRep3VmType::Public(x) => x
                 .into_iter()
-                .map(|x| arithmetic::promote_to_trivial_share(self.io_context0.id, x))
+                .map(|x| arithmetic::promote_to_trivial_share(self.state0.id, x))
                 .collect_vec(),
             BatchedRep3VmType::Arithmetic(x) => x,
         });
@@ -365,13 +371,13 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
             .zip(b_sum)
             .map(|(a, b)| arithmetic::add(a, b))
             .collect_vec();
-        let sum_bits = conversion::a2b_many(&sum, &mut self.io_context0)?;
+        let sum_bits = conversion::a2b_many(&sum, self.net0, &mut self.state0)?;
 
         let individual_bits = (0..bitlen + 1)
             .flat_map(|i| sum_bits.iter().map(move |bit| (bit >> i) & BigUint::one()))
             .collect_vec();
 
-        let result = conversion::bit_inject_many(&individual_bits, &mut self.io_context0)?;
+        let result = conversion::bit_inject_many(&individual_bits, self.net0, &mut self.state0)?;
         assert!(result.len() % (bitlen + 1) == 0);
         assert!(result.len() / (bitlen + 1) == self.batch_size);
         let mut res = Vec::with_capacity(bitlen);
@@ -388,7 +394,7 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
             BatchedRep3VmType::Public(public) => self.plain.log(public, allow_leaky_logs),
             BatchedRep3VmType::Arithmetic(shares) => {
                 if allow_leaky_logs {
-                    let fields = arithmetic::open_vec(&shares, &mut self.io_context0)?;
+                    let fields = arithmetic::open_vec(&shares, self.net0)?;
                     self.plain.log(fields, allow_leaky_logs)
                 } else {
                     Ok("secret".to_string())

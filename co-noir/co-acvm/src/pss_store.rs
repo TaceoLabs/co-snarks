@@ -39,7 +39,7 @@ where
         for (key, val) in output {
             let translated = driver.parse_brillig_result(val)?;
             if self.inner.insert(key.clone(), translated).is_some() {
-                eyre::bail!(format!("duplicate entry for shared state id: {key}"));
+                eyre::bail!("duplicate entry for shared state id: {key}");
             }
         }
         Ok(())

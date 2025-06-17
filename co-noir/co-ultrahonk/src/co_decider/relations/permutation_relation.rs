@@ -10,6 +10,8 @@ use crate::{
 use ark_ec::pairing::Pairing;
 use co_builder::HonkProofResult;
 use co_builder::prelude::HonkCurve;
+use mpc_core::MpcState as _;
+use mpc_net::Network;
 use ultrahonk::prelude::{TranscriptFieldType, Univariate};
 
 #[derive(Clone, Debug)]
@@ -67,8 +69,10 @@ impl UltraPermutationRelation {
     fn compute_grand_product_numerator_and_denominator_batch<
         T: NoirUltraHonkProver<P>,
         P: Pairing,
+        N: Network,
     >(
-        driver: &mut T,
+        net: &N,
+        state: &mut T::State,
         input: &ProverUnivariatesBatch<T, P>,
         relation_parameters: &RelationParameters<P::ScalarField>,
     ) -> HonkProofResult<Vec<T::ArithmeticShare>> {
@@ -88,7 +92,7 @@ impl UltraPermutationRelation {
         let beta = &relation_parameters.beta;
         let gamma = &relation_parameters.gamma;
 
-        let party_id = driver.get_party_id();
+        let id = state.id();
         // witness degree 4; full degree 8
         let id_1 = id_1.iter().map(|x| *x * beta + gamma);
         let id_2 = id_2.iter().map(|x| *x * beta + gamma);
@@ -111,14 +115,14 @@ impl UltraPermutationRelation {
         let mut wsigma4 = None;
 
         rayon::scope(|scope| {
-            scope.spawn(|_| wid1 = Some(T::add_with_public_many_iter(id_1, w_1, party_id)));
-            scope.spawn(|_| wid2 = Some(T::add_with_public_many_iter(id_2, w_2, party_id)));
-            scope.spawn(|_| wid3 = Some(T::add_with_public_many_iter(id_3, w_3, party_id)));
-            scope.spawn(|_| wid4 = Some(T::add_with_public_many_iter(id_4, w_4, party_id)));
-            scope.spawn(|_| wsigma1 = Some(T::add_with_public_many_iter(sigma_1, w_1, party_id)));
-            scope.spawn(|_| wsigma2 = Some(T::add_with_public_many_iter(sigma_2, w_2, party_id)));
-            scope.spawn(|_| wsigma3 = Some(T::add_with_public_many_iter(sigma_3, w_3, party_id)));
-            scope.spawn(|_| wsigma4 = Some(T::add_with_public_many_iter(sigma_4, w_4, party_id)));
+            scope.spawn(|_| wid1 = Some(T::add_with_public_many_iter(id_1, w_1, id)));
+            scope.spawn(|_| wid2 = Some(T::add_with_public_many_iter(id_2, w_2, id)));
+            scope.spawn(|_| wid3 = Some(T::add_with_public_many_iter(id_3, w_3, id)));
+            scope.spawn(|_| wid4 = Some(T::add_with_public_many_iter(id_4, w_4, id)));
+            scope.spawn(|_| wsigma1 = Some(T::add_with_public_many_iter(sigma_1, w_1, id)));
+            scope.spawn(|_| wsigma2 = Some(T::add_with_public_many_iter(sigma_2, w_2, id)));
+            scope.spawn(|_| wsigma3 = Some(T::add_with_public_many_iter(sigma_3, w_3, id)));
+            scope.spawn(|_| wsigma4 = Some(T::add_with_public_many_iter(sigma_4, w_4, id)));
         });
         // we can unwrap here because rayon scope cannot fail
         // and therefore we have Some values for sures
@@ -143,9 +147,9 @@ impl UltraPermutationRelation {
         rhs.extend(wsigma2);
         rhs.extend(wid4);
         rhs.extend(wsigma4);
-        let mul1 = driver.mul_many(&lhs, &rhs)?;
+        let mul1 = T::mul_many(&lhs, &rhs, net, state)?;
         let (lhs, rhs) = mul1.split_at(mul1.len() >> 1);
-        Ok(driver.mul_many(lhs, rhs)?)
+        Ok(T::mul_many(lhs, rhs, net, state)?)
     }
 }
 
@@ -198,8 +202,9 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
      * @param parameters contains beta, gamma, and public_input_delta, ....
      * @param scaling_factor optional term to scale the evaluation before adding to evals.
      */
-    fn accumulate(
-        driver: &mut T,
+    fn accumulate<N: Network>(
+        net: &N,
+        state: &mut T::State,
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesBatch<T, P>,
         relation_parameters: &RelationParameters<P::ScalarField>,
@@ -215,21 +220,22 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         // total degree: deg 9 - deg 10 = deg 10
 
         let num_den = Self::compute_grand_product_numerator_and_denominator_batch(
-            driver,
+            net,
+            state,
             input,
             relation_parameters,
         )?;
 
-        let party_id = driver.get_party_id();
-        let tmp_lhs = T::add_with_public_many(lagrange_first, z_perm, party_id);
+        let id = state.id();
+        let tmp_lhs = T::add_with_public_many(lagrange_first, z_perm, id);
         let lagrange_last_delta = lagrange_last.iter().map(|x| *x * *public_input_delta);
-        let tmp_rhs = T::add_with_public_many_iter(lagrange_last_delta, z_perm_shift, party_id);
+        let tmp_rhs = T::add_with_public_many_iter(lagrange_last_delta, z_perm_shift, id);
 
         let lhs = num_den;
         let mut rhs = Vec::with_capacity(tmp_lhs.len() + tmp_lhs.len());
         rhs.extend(tmp_lhs);
         rhs.extend(tmp_rhs);
-        let mul1 = driver.mul_many(&lhs, &rhs)?;
+        let mul1 = T::mul_many(&lhs, &rhs, net, state)?;
         let (lhs, rhs) = mul1.split_at(mul1.len() >> 1);
         let mut tmp = lhs.to_vec();
         T::sub_assign_many(&mut tmp, rhs);

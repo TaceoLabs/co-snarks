@@ -6,7 +6,7 @@ use mpc_core::{
     lut::LookupTableProvider,
     protocols::rep3::yao::circuits::SHA256Table,
 };
-use std::{any::Any, fmt, io};
+use std::{any::Any, fmt};
 
 pub(super) mod plain;
 pub(super) mod rep3;
@@ -34,7 +34,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
 
     type BrilligDriver: BrilligDriver<F>;
 
-    fn init_brillig_driver(&mut self) -> std::io::Result<Self::BrilligDriver>;
+    fn init_brillig_driver(&mut self) -> eyre::Result<Self::BrilligDriver>;
 
     fn parse_brillig_result(
         &mut self,
@@ -48,7 +48,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
 
     /// Returns the provided amount of secret-shared zeros as ACVM-types. These elements
     /// are masking element squeezed from the shared randomness, and not trivial shares.
-    fn shared_zeros(&mut self, len: usize) -> io::Result<Vec<Self::AcvmType>>;
+    fn shared_zeros(&mut self, len: usize) -> eyre::Result<Vec<Self::AcvmType>>;
 
     /// Checks whether an ACVM-type is public zero.
     fn is_public_zero(a: &Self::AcvmType) -> bool;
@@ -61,7 +61,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         cond: Self::AcvmType,
         truthy: Self::AcvmType,
         falsy: Self::AcvmType,
-    ) -> io::Result<Self::AcvmType>;
+    ) -> eyre::Result<Self::AcvmType>;
 
     /// Adds a public value to an ACVM-type in place: *\[target\] += public
     fn add_assign_with_public(&mut self, public: F, target: &mut Self::AcvmType);
@@ -87,10 +87,10 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         &mut self,
         secret_1: Self::AcvmType,
         secret_2: Self::AcvmType,
-    ) -> io::Result<Self::AcvmType>;
+    ) -> eyre::Result<Self::AcvmType>;
 
     /// Inverts an ACVM-type: \[c\] = \[secret\]^(-1).
-    fn invert(&mut self, secret: Self::AcvmType) -> io::Result<Self::AcvmType>;
+    fn invert(&mut self, secret: Self::AcvmType) -> eyre::Result<Self::AcvmType>;
 
     /// Negates an ACVM-type inplace: \[a\] = -\[a\].
     fn negate_inplace(&mut self, a: &mut Self::AcvmType);
@@ -106,7 +106,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         c: F,
         lhs: Self::AcvmType,
         rhs: Self::AcvmType,
-    ) -> io::Result<Self::AcvmType>;
+    ) -> eyre::Result<Self::AcvmType>;
 
     /// Solves the equation \[q_l\] * w_l + \[c\] = 0, by computing \[-c\]/\[q_l\] and returning the result.
     fn solve_equation(
@@ -129,14 +129,14 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         &mut self,
         index: Self::AcvmType,
         lut: &<Self::Lookup as LookupTableProvider<F>>::LutType,
-    ) -> io::Result<Self::AcvmType>;
+    ) -> eyre::Result<Self::AcvmType>;
 
     /// Reads from multiple public LUTs.
     fn read_from_public_luts(
         &mut self,
         index: Self::AcvmType,
         luts: &[Vec<F>],
-    ) -> io::Result<Vec<Self::AcvmType>>;
+    ) -> eyre::Result<Vec<Self::AcvmType>>;
 
     /// Wrapper around writing a value to a LUT. The index and the value can be shared or public.
     fn write_lut_by_acvm_type(
@@ -144,7 +144,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         index: Self::AcvmType,
         value: Self::AcvmType,
         lut: &mut <Self::Lookup as LookupTableProvider<F>>::LutType,
-    ) -> io::Result<()>;
+    ) -> eyre::Result<()>;
 
     /// Returns the size of a lut
     fn get_length_of_lut(lut: &<Self::Lookup as LookupTableProvider<F>>::LutType) -> usize;
@@ -152,7 +152,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     /// Returns the LUT as a vector of fields if the table is public
     fn get_public_lut(
         lut: &<Self::Lookup as LookupTableProvider<F>>::LutType,
-    ) -> io::Result<&Vec<F>>;
+    ) -> eyre::Result<&Vec<F>>;
 
     /// Returns true if the LUT is public
     fn is_public_lut(lut: &<Self::Lookup as LookupTableProvider<F>>::LutType) -> bool;
@@ -162,7 +162,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         &mut self,
         index: Self::ArithmeticShare,
         len: usize,
-    ) -> io::Result<Vec<Self::ArithmeticShare>>;
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>>;
 
     /// Writes to a shared LUT from a given shared one-hot-encoded vector.
     fn write_to_shared_lut_from_ohv(
@@ -170,7 +170,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         ohv: &[Self::ArithmeticShare],
         value: Self::ArithmeticShare,
         lut: &mut [Self::ArithmeticShare],
-    ) -> io::Result<()>;
+    ) -> eyre::Result<()>;
 
     /// Returns true if the value is shared
     fn is_shared(a: &Self::AcvmType) -> bool;
@@ -185,17 +185,17 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     fn get_public_point<C: CurveGroup<BaseField = F>>(a: &Self::AcvmPoint<C>) -> Option<C>;
 
     /// Checks if two shared values are equal. The result is a shared value that has value 1 if the two shared values are equal and 0 otherwise.
-    fn equal(&mut self, a: &Self::AcvmType, b: &Self::AcvmType) -> std::io::Result<Self::AcvmType>;
+    fn equal(&mut self, a: &Self::AcvmType, b: &Self::AcvmType) -> eyre::Result<Self::AcvmType>;
 
     /// Checks if two slices of shared values are equal element-wise. The result is a Vec of shared values that have value 1 if the two corresponding shared values are equal and 0 otherwise.
     fn equal_many(
         &mut self,
         a: &[Self::AcvmType],
         b: &[Self::AcvmType],
-    ) -> std::io::Result<Vec<Self::AcvmType>>;
+    ) -> eyre::Result<Vec<Self::AcvmType>>;
 
     // TODO do we want this here?
-    fn open_many(&mut self, a: &[Self::ArithmeticShare]) -> io::Result<Vec<F>>;
+    fn open_many(&mut self, a: &[Self::ArithmeticShare]) -> eyre::Result<Vec<F>>;
 
     /// Transforms a public value into a shared value: \[a\] = a.
     fn promote_to_trivial_share(&mut self, public_value: F) -> Self::ArithmeticShare;
@@ -209,7 +209,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         input: Self::ArithmeticShare,
         total_bit_size_per_field: usize,
         decompose_bit_size: usize,
-    ) -> std::io::Result<Vec<Self::ArithmeticShare>>;
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>>;
 
     /// Decompose a shared value into a vector of shared values: \[a\] = a_1 + a_2 + ... + a_n. Each value a_i has at most decompose_bit_size bits, whereas the total bit size of the shares is total_bit_size_per_field. Thus, a_n, might have a smaller bitsize than the other chunks
     fn decompose_arithmetic_many(
@@ -217,7 +217,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         input: &[Self::ArithmeticShare],
         total_bit_size_per_field: usize,
         decompose_bit_size: usize,
-    ) -> std::io::Result<Vec<Vec<Self::ArithmeticShare>>>;
+    ) -> eyre::Result<Vec<Vec<Self::ArithmeticShare>>>;
 
     /// Sorts a vector of shared values in ascending order, only considering the first bitsize bits.
     /// The sort is *not* stable.
@@ -225,7 +225,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         &mut self,
         inputs: &[Self::AcvmType],
         bitsize: usize,
-    ) -> std::io::Result<Vec<Self::ArithmeticShare>>;
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>>;
 
     /// Creates a permutation to sort a vector of shared values based on ordering key in ascending order, only considering the first bitsize bits. Then applies the permutation to the vectors in inputs.
     /// The sort *is* stable.
@@ -234,7 +234,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         key: &[Self::AcvmType],
         inputs: Vec<&[Self::ArithmeticShare]>,
         bitsize: usize,
-    ) -> std::io::Result<Vec<Vec<Self::ArithmeticShare>>>;
+    ) -> eyre::Result<Vec<Vec<Self::ArithmeticShare>>>;
 
     /// Slices a value at given indices (msb, lsb), both included in the slice.
     /// Only considers bitsize bits.
@@ -245,14 +245,10 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         msb: u8,
         lsb: u8,
         bitsize: usize,
-    ) -> std::io::Result<[Self::ArithmeticShare; 3]>;
+    ) -> eyre::Result<[Self::ArithmeticShare; 3]>;
 
     /// Shifts a shared field element to the right by shift bits.
-    fn right_shift(
-        &mut self,
-        input: Self::AcvmType,
-        shift: usize,
-    ) -> std::io::Result<Self::AcvmType>;
+    fn right_shift(&mut self, input: Self::AcvmType, shift: usize) -> eyre::Result<Self::AcvmType>;
 
     /// bitwise AND operation for integer datatype (i.e., the result will be smaller than a field)
     fn integer_bitwise_and(
@@ -260,7 +256,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         lhs: Self::AcvmType,
         rhs: Self::AcvmType,
         num_bits: u32,
-    ) -> std::io::Result<Self::AcvmType>;
+    ) -> eyre::Result<Self::AcvmType>;
 
     /// bitwise XOR operation for integer datatype (i.e., the result will be smaller than a field)
     fn integer_bitwise_xor(
@@ -268,7 +264,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         lhs: Self::AcvmType,
         rhs: Self::AcvmType,
         num_bits: u32,
-    ) -> std::io::Result<Self::AcvmType>;
+    ) -> eyre::Result<Self::AcvmType>;
 
     /// Slices input1 and input2 into a vector of basis_bits bits each, ANDs all values and rotates the results by rotation. Thereby, in total only total_bitsize bits per input are considered.
     #[expect(clippy::type_complexity)]
@@ -279,7 +275,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         basis_bits: usize,
         total_bitsize: usize,
         rotation: usize,
-    ) -> std::io::Result<(
+    ) -> eyre::Result<(
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
@@ -294,7 +290,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         basis_bits: usize,
         total_bitsize: usize,
         rotation: usize,
-    ) -> std::io::Result<(
+    ) -> eyre::Result<(
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
@@ -310,7 +306,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         rotation: &[u32],
         total_bitsize: usize,
         base: u64,
-    ) -> std::io::Result<(
+    ) -> eyre::Result<(
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
@@ -327,7 +323,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         base: u64,
         total_output_bitlen_per_field: usize,
         table_type: &SHA256Table,
-    ) -> std::io::Result<(
+    ) -> eyre::Result<(
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
@@ -342,7 +338,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         basis_bits: &[u64],
         rotation: &[usize],
         filter: &[bool],
-    ) -> std::io::Result<(
+    ) -> eyre::Result<(
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
@@ -356,7 +352,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         input2: Self::ArithmeticShare,
         base_bits: &[u64],
         base: u64,
-    ) -> std::io::Result<(
+    ) -> eyre::Result<(
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
@@ -371,7 +367,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         base_bits: &[u64],
         base: u64,
         sbox: &[u8],
-    ) -> std::io::Result<(
+    ) -> eyre::Result<(
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
@@ -382,14 +378,14 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     fn sha256_get_overflow_bit(
         &mut self,
         input: Self::ArithmeticShare,
-    ) -> std::io::Result<Self::ArithmeticShare>;
+    ) -> eyre::Result<Self::ArithmeticShare>;
 
     /// Computes the Poseidon2 permutation for the given input.
     fn poseidon2_permutation<const T: usize, const D: u64>(
         &mut self,
         input: Vec<Self::AcvmType>,
         poseidon2: &Poseidon2<F, T, D>,
-    ) -> std::io::Result<Vec<Self::AcvmType>>;
+    ) -> eyre::Result<Vec<Self::AcvmType>>;
 
     /// Computes the matrix_multiplication in the external round of the Poseidon2 permutation for the given input.
     fn poseidon2_matmul_external_inplace<const T: usize, const D: u64>(
@@ -402,7 +398,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         &mut self,
         num_poseidon: usize,
         poseidon2: &Poseidon2<F, T, D>,
-    ) -> std::io::Result<Poseidon2Precomputations<Self::ArithmeticShare>>;
+    ) -> eyre::Result<Poseidon2Precomputations<Self::ArithmeticShare>>;
 
     /// Computes the external round for the Poseidon2 permutation for the given input.
     fn poseidon2_external_round_inplace_with_precomp<const T: usize, const D: u64>(
@@ -411,7 +407,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         r: usize,
         precomp: &mut Poseidon2Precomputations<Self::ArithmeticShare>,
         poseidon2: &Poseidon2<F, T, D>,
-    ) -> std::io::Result<()>;
+    ) -> eyre::Result<()>;
 
     /// Computes the internal round for the Poseidon2 permutation for the given input.
     fn poseidon2_internal_round_inplace_with_precomp<const T: usize, const D: u64>(
@@ -420,7 +416,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         r: usize,
         precomp: &mut Poseidon2Precomputations<Self::ArithmeticShare>,
         poseidon2: &Poseidon2<F, T, D>,
-    ) -> std::io::Result<()>;
+    ) -> eyre::Result<()>;
 
     /// Performs multi scalar multiplications.
     fn multi_scalar_mul(
@@ -429,7 +425,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         scalars_lo: &[Self::AcvmType],
         scalars_hi: &[Self::AcvmType],
         pedantic_solving: bool,
-    ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)>;
+    ) -> eyre::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)>;
 
     /// Translates a share of the coordinates to a shared point
     fn field_shares_to_pointshare<C: CurveGroup<BaseField = F>>(
@@ -437,19 +433,19 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         x: Self::AcvmType,
         y: Self::AcvmType,
         is_infinity: Self::AcvmType,
-    ) -> io::Result<Self::AcvmPoint<C>>;
+    ) -> eyre::Result<Self::AcvmPoint<C>>;
 
     /// Translates a share of the point to a share of its coordinates
     fn pointshare_to_field_shares<C: CurveGroup<BaseField = F>>(
         &mut self,
         point: Self::AcvmPoint<C>,
-    ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)>;
+    ) -> eyre::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)>;
 
     /// Compute the greater than operation: a > b. Outputs 1 if a > b, 0 otherwise.
-    fn gt(&mut self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> io::Result<Self::AcvmType>;
+    fn gt(&mut self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> eyre::Result<Self::AcvmType>;
 
     /// Compute the less than operation: a < b. Outputs 1 if a < b, 0 otherwise.
-    fn lt(&mut self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> std::io::Result<Self::AcvmType> {
+    fn lt(&mut self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> eyre::Result<Self::AcvmType> {
         self.gt(rhs, lhs)
     }
 
@@ -458,28 +454,28 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         &mut self,
         point: Self::AcvmPoint<C>,
         value: Self::AcvmPoint<C>,
-    ) -> std::io::Result<Self::AcvmPoint<C>>;
+    ) -> eyre::Result<Self::AcvmPoint<C>>;
 
     /// Computes the SHA256 compression from a given state and message.
     fn sha256_compression(
         &mut self,
         state: &[Self::AcvmType; 8],
         message: &[Self::AcvmType; 16],
-    ) -> std::io::Result<Vec<Self::AcvmType>>;
+    ) -> eyre::Result<Vec<Self::AcvmType>>;
 
     /// Computes the BLAKE2s hash of 'num_inputs' inputs, each of 'num_bits' bits (rounded to next multiple of 8). The output is then composed into size 32 Vec of field elements.
     fn blake2s_hash(
         &mut self,
         message_input: Vec<Self::AcvmType>,
         num_bits: &[usize],
-    ) -> std::io::Result<Vec<Self::AcvmType>>;
+    ) -> eyre::Result<Vec<Self::AcvmType>>;
 
     /// Computes the BLAKE3 hash of 'num_inputs' inputs, each of 'num_bits' bits (rounded to next multiple of 8). The output is then composed into size 32 Vec of field elements.
     fn blake3_hash(
         &mut self,
         message_input: Vec<Self::AcvmType>,
         num_bits: &[usize],
-    ) -> std::io::Result<Vec<Self::AcvmType>>;
+    ) -> eyre::Result<Vec<Self::AcvmType>>;
 
     /// Computes the addition of two EC points, where the points are represented by their x and y coordinates (and a is_infinity indicator). Outputs are also in their coordinate representation.
     fn embedded_curve_add(
@@ -490,7 +486,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         input2_x: Self::AcvmType,
         input2_y: Self::AcvmType,
         input2_infinite: Self::AcvmType,
-    ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)>;
+    ) -> eyre::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)>;
 
     /// Computes an AES128 encryption of the given scalars using the given key and iv.
     fn aes128_encrypt(
@@ -498,7 +494,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         scalars: &[Self::AcvmType],
         iv: Vec<Self::AcvmType>,
         key: Vec<Self::AcvmType>,
-    ) -> io::Result<Vec<Self::AcvmType>>;
+    ) -> eyre::Result<Vec<Self::AcvmType>>;
 
     /// Slices the inputs and then puts these together to computes the accumulator for conversion from sparse bytes in AES.
     fn accumulate_from_sparse_bytes(
@@ -507,5 +503,5 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         base: u64,
         input_bitsize: usize,
         output_bitsize: usize,
-    ) -> io::Result<Self::AcvmType>;
+    ) -> eyre::Result<Self::AcvmType>;
 }

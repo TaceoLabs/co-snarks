@@ -5,21 +5,21 @@
 //! This file is heavily inspired by [fancy-garbling](https://github.com/GaloisInc/swanky/blob/dev/fancy-garbling/src/garble/evaluator.rs)
 
 use super::{GCUtils, bristol_fashion::BristolFashionEvaluator, circuits::FancyBinaryConstant};
-use crate::{
-    IoResult,
-    protocols::rep3::network::{IoContext, Rep3Network},
+use crate::protocols::rep3::{
+    id::PartyID,
+    network::{self},
 };
 use fancy_garbling::{
     BinaryBundle, Fancy, FancyBinary, WireLabel, WireMod2, errors::EvaluatorError,
     util::output_tweak,
 };
-use mpc_types::protocols::rep3::id::PartyID;
+use mpc_net::Network;
 use scuttlebutt::Block;
 use sha3::{Digest, Sha3_256};
 
 /// This struct implements the evaluator for replicated 3-party garbled circuits as described in [ABY3](https://eprint.iacr.org/2018/403.pdf).
-pub struct Rep3Evaluator<'a, N: Rep3Network> {
-    io_context: &'a mut IoContext<N>,
+pub struct Rep3Evaluator<'a, N: Network> {
+    net: &'a N,
     current_output: usize,
     current_gate: usize,
     circuit: Vec<[u8; 16]>,
@@ -28,16 +28,16 @@ pub struct Rep3Evaluator<'a, N: Rep3Network> {
     const_one: Option<WireMod2>,
 }
 
-impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
-    /// Create a new garbler.
-    pub fn new(io_context: &'a mut IoContext<N>) -> Self {
-        let id = io_context.id;
+impl<'a, N: Network> Rep3Evaluator<'a, N> {
+    /// Create a new evaluator.
+    pub fn new(net: &'a N) -> Self {
+        let id = PartyID::try_from(net.id()).expect("valid id");
         if id != PartyID::ID0 {
-            panic!("Garbler should be PartyID::ID0")
+            panic!("Evaluator should be PartyID::ID0")
         }
 
         Self {
-            io_context,
+            net,
             current_output: 0,
             current_gate: 0,
             circuit: Vec::new(),
@@ -48,12 +48,9 @@ impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
     }
 
     /// Get a gate from the circuit.
-    fn get_block_from_circuit(&mut self) -> IoResult<Block> {
+    fn get_block_from_circuit(&mut self) -> eyre::Result<Block> {
         if self.current_circuit_element >= self.circuit.len() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "Too few gates in circuits.",
-            ));
+            eyre::bail!("Too few gates in circuits.",);
         }
         let mut block = Block::default();
         block
@@ -64,9 +61,9 @@ impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
     }
 
     /// Receive the garbled circuit from the garblers.
-    pub fn receive_circuit(&mut self) -> IoResult<()> {
+    pub fn receive_circuit(&mut self) -> eyre::Result<()> {
         debug_assert!(self.circuit.is_empty());
-        self.circuit = self.io_context.network.recv_many(PartyID::ID1)?;
+        self.circuit = network::recv_many(self.net, PartyID::ID1)?;
         self.current_circuit_element = 0;
 
         let mut hasher = Sha3_256::default();
@@ -74,13 +71,10 @@ impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
             hasher.update(block);
         }
         let is_hash = hasher.finalize();
-        let should_hash: Vec<u8> = self.io_context.network.recv(PartyID::ID2)?;
+        let should_hash: Vec<u8> = network::recv(self.net, PartyID::ID2)?;
 
         if should_hash != is_hash.as_slice() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "Inconsistent Garbled Circuits: Hashes do not match!",
-            ));
+            eyre::bail!("Inconsistent Garbled Circuits: Hashes do not match!",);
         }
 
         Ok(())
@@ -101,34 +95,25 @@ impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
     }
 
     /// Outputs the values to the evaluator.
-    fn output_evaluator(&mut self, x: &[WireMod2]) -> IoResult<Vec<bool>> {
-        let result = self.outputs(x).or(Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "Output failed",
-        )))?;
+    fn output_evaluator(&mut self, x: &[WireMod2]) -> eyre::Result<Vec<bool>> {
+        let result = self.outputs(x).or(Err(eyre::eyre!("Output failed")))?;
         match result {
             Some(outputs) => {
                 let mut res = Vec::with_capacity(outputs.len());
                 for val in outputs {
                     if val >= 2 {
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::InvalidData,
-                            "Value is not a bool",
-                        ));
+                        eyre::bail!("Value is not a bool");
                     }
                     res.push(val == 1);
                 }
                 Ok(res)
             }
-            None => Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "No output received",
-            )),
+            None => Err(eyre::eyre!("No output received")),
         }
     }
 
     /// Outputs the values to the garbler.
-    fn output_garbler(&mut self, x: &[WireMod2]) -> IoResult<()> {
+    fn output_garbler(&mut self, x: &[WireMod2]) -> eyre::Result<()> {
         let mut blocks = Vec::with_capacity(x.len());
         for val in x {
             let block = val.as_block();
@@ -136,14 +121,18 @@ impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
             gate.copy_from_slice(block.as_ref());
             blocks.push(gate);
         }
-        self.io_context.network.send_many(PartyID::ID1, &blocks)?;
-        self.io_context.network.send_many(PartyID::ID2, &blocks)?;
+        let (send1, send2) = rayon::join(
+            || network::send_many(self.net, PartyID::ID1, &blocks),
+            || network::send_many(self.net, PartyID::ID2, &blocks),
+        );
+        send1?;
+        send2?;
 
         Ok(())
     }
 
     /// Outputs the values to the garbler with id1.
-    fn output_garbler_id1(&mut self, x: &[WireMod2]) -> IoResult<()> {
+    fn output_garbler_id1(&mut self, x: &[WireMod2]) -> eyre::Result<()> {
         let mut blocks = Vec::with_capacity(x.len());
         for val in x {
             let block = val.as_block();
@@ -151,13 +140,13 @@ impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
             gate.copy_from_slice(block.as_ref());
             blocks.push(gate);
         }
-        self.io_context.network.send_many(PartyID::ID1, &blocks)?;
+        network::send_many(self.net, PartyID::ID1, &blocks)?;
 
         Ok(())
     }
 
     /// Outputs the value to all parties
-    pub fn output_all_parties(&mut self, x: &[WireMod2]) -> IoResult<Vec<bool>> {
+    pub fn output_all_parties(&mut self, x: &[WireMod2]) -> eyre::Result<Vec<bool>> {
         // Garbler's to evaluator
         let res = self.output_evaluator(x)?;
 
@@ -168,7 +157,7 @@ impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
     }
 
     /// Outputs the value to parties ID0 and ID1
-    pub fn output_to_id0_and_id1(&mut self, x: &[WireMod2]) -> IoResult<Vec<bool>> {
+    pub fn output_to_id0_and_id1(&mut self, x: &[WireMod2]) -> eyre::Result<Vec<bool>> {
         // Garbler's to evaluator
         let res = self.output_evaluator(x)?;
 
@@ -180,18 +169,21 @@ impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
 
     /// Read `n` `Block`s from the channel.
     #[inline(always)]
-    fn read_blocks_from_circuit(&mut self, n: usize) -> IoResult<Vec<Block>> {
+    fn read_blocks_from_circuit(&mut self, n: usize) -> eyre::Result<Vec<Block>> {
         (0..n).map(|_| self.get_block_from_circuit()).collect()
     }
 
     /// Read a Wire from the reader.
-    pub fn read_wire_from_circuit(&mut self) -> IoResult<WireMod2> {
+    pub fn read_wire_from_circuit(&mut self) -> eyre::Result<WireMod2> {
         let block = self.get_block_from_circuit()?;
         Ok(WireMod2::from_block(block, 2))
     }
 
     /// Receive a bundle of wires over the established channel.
-    pub fn receive_bundle_from_circuit(&mut self, n: usize) -> IoResult<BinaryBundle<WireMod2>> {
+    pub fn receive_bundle_from_circuit(
+        &mut self,
+        n: usize,
+    ) -> eyre::Result<BinaryBundle<WireMod2>> {
         let mut wires = Vec::with_capacity(n);
         for _ in 0..n {
             let wire = WireMod2::from_block(self.get_block_from_circuit()?, 2);
@@ -218,12 +210,13 @@ impl<'a, N: Rep3Network> Rep3Evaluator<'a, N> {
     }
 }
 
-impl<N: Rep3Network> Fancy for Rep3Evaluator<'_, N> {
+impl<N: Network> Fancy for Rep3Evaluator<'_, N> {
     type Item = WireMod2;
     type Error = EvaluatorError;
 
     fn constant(&mut self, _: u16, _q: u16) -> Result<WireMod2, EvaluatorError> {
-        Ok(self.read_wire_from_circuit()?)
+        self.read_wire_from_circuit()
+            .map_err(|err| EvaluatorError::CommunicationError(err.to_string()))
     }
 
     fn output(&mut self, x: &WireMod2) -> Result<Option<u16>, EvaluatorError> {
@@ -231,7 +224,9 @@ impl<N: Rep3Network> Fancy for Rep3Evaluator<'_, N> {
         let i = self.current_output();
 
         // Receive the output ciphertext from the garbler
-        let ct = self.read_blocks_from_circuit(q as usize)?;
+        let ct = self
+            .read_blocks_from_circuit(q as usize)
+            .map_err(|err| EvaluatorError::CommunicationError(err.to_string()))?;
 
         // Attempt to brute force x using the output ciphertext
         let mut decoded = None;
@@ -251,7 +246,7 @@ impl<N: Rep3Network> Fancy for Rep3Evaluator<'_, N> {
     }
 }
 
-impl<N: Rep3Network> FancyBinary for Rep3Evaluator<'_, N> {
+impl<N: Network> FancyBinary for Rep3Evaluator<'_, N> {
     /// Negate is a noop for the evaluator
     fn negate(&mut self, x: &Self::Item) -> Result<Self::Item, Self::Error> {
         Ok(*x)
@@ -262,13 +257,17 @@ impl<N: Rep3Network> FancyBinary for Rep3Evaluator<'_, N> {
     }
 
     fn and(&mut self, a: &Self::Item, b: &Self::Item) -> Result<Self::Item, Self::Error> {
-        let gate0 = self.get_block_from_circuit()?;
-        let gate1 = self.get_block_from_circuit()?;
+        let gate0 = self
+            .get_block_from_circuit()
+            .map_err(|err| EvaluatorError::CommunicationError(err.to_string()))?;
+        let gate1 = self
+            .get_block_from_circuit()
+            .map_err(|err| EvaluatorError::CommunicationError(err.to_string()))?;
         Ok(self.evaluate_and_gate(a, b, &gate0, &gate1))
     }
 }
 
-impl<N: Rep3Network> FancyBinaryConstant for Rep3Evaluator<'_, N> {
+impl<N: Network> FancyBinaryConstant for Rep3Evaluator<'_, N> {
     fn const_zero(&mut self) -> Result<Self::Item, Self::Error> {
         let zero = match self.const_zero {
             Some(zero) => zero,
@@ -293,7 +292,8 @@ impl<N: Rep3Network> FancyBinaryConstant for Rep3Evaluator<'_, N> {
         Ok(one)
     }
 }
-impl<N: Rep3Network> BristolFashionEvaluator for Rep3Evaluator<'_, N> {
+
+impl<N: Network> BristolFashionEvaluator for Rep3Evaluator<'_, N> {
     type WireValue = WireMod2;
 
     fn constant(

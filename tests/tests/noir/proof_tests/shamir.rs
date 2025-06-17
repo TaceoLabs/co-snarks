@@ -5,9 +5,10 @@ use co_ultrahonk::prelude::{
     CrsParser, Poseidon2Sponge, ShamirCoUltraHonk, TranscriptFieldType, TranscriptHasher,
     UltraHonk, Utils, ZeroKnowledge,
 };
+use mpc_net::local::LocalNetwork;
 use sha3::Keccak256;
-use std::{sync::Arc, thread};
-use tests::shamir_network::ShamirTestNetwork;
+use std::sync::Arc;
+use tests::test_utils::spawn_pool;
 
 fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     name: &str,
@@ -28,29 +29,36 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
         .map(ShamirAcvmType::from)
         .collect::<Vec<_>>();
 
-    let test_network = ShamirTestNetwork::new(num_parties);
+    let nets = LocalNetwork::new(num_parties);
     let mut threads = Vec::with_capacity(num_parties);
     let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
     let crs_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, false).unwrap();
     let prover_crs =
         Arc::new(CrsParser::<Bn254>::get_crs_g1(CRS_PATH_G1, crs_size, has_zk).unwrap());
-    for net in test_network.get_party_networks() {
+    for net in nets {
         let witness = witness.clone();
         let prover_crs = prover_crs.clone();
         let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
-        threads.push(thread::spawn(move || {
+        threads.push(spawn_pool(move || {
             // generate proving key and vk
-            let (pk, net) = co_noir::generate_proving_key_shamir(
-                net,
+            let pk = co_noir::generate_proving_key_shamir(
+                num_parties,
                 threshold,
                 &constraint_system,
                 witness,
                 false,
+                &net,
             )
             .unwrap();
-            let (proof, public_inputs, _) =
-                ShamirCoUltraHonk::<_, _, H>::prove(net, threshold, pk, &prover_crs, has_zk)
-                    .unwrap();
+            let (proof, public_inputs) = ShamirCoUltraHonk::<_, H>::prove(
+                &net,
+                num_parties,
+                threshold,
+                pk,
+                &prover_crs,
+                has_zk,
+            )
+            .unwrap();
             (proof, public_inputs)
         }));
     }

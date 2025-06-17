@@ -13,12 +13,16 @@ use circom_types::{
     plonk::PlonkProof,
     traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
 };
+use mpc_core::MpcState;
+use mpc_net::Network;
 use num_traits::One;
 use num_traits::Zero;
+use tracing::instrument;
 
 // Round 5 of https://eprint.iacr.org/2019/953.pdf (page 30)
-pub(super) struct Round5<'a, P: Pairing, T: CircomPlonkProver<P>> {
-    pub(super) driver: T,
+pub(super) struct Round5<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network> {
+    pub(super) nets: &'a [N; 8],
+    pub(super) state: &'a mut T::State,
     pub(super) domains: Domains<P::ScalarField>,
     pub(super) challenges: Round4Challenges<P>,
     pub(super) proof: Round4Proof<P>,
@@ -74,7 +78,7 @@ where
 }
 
 // Round 5 of https://eprint.iacr.org/2019/953.pdf (page 30)
-impl<P: Pairing, T: CircomPlonkProver<P>> Round5<'_, P, T>
+impl<P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round5<'_, P, T, N>
 where
     P: CircomArkworksPairingBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
@@ -121,7 +125,7 @@ where
 
     // The linearisation polynomial R(X) (see https://eprint.iacr.org/2019/953.pdf)
     fn compute_r(
-        party_id: T::PartyID,
+        id: <T::State as MpcState>::PartyID,
         domains: &Domains<P::ScalarField>,
         proof: &Round4Proof<P>,
         challenges: &Round5Challenges<P>,
@@ -183,7 +187,7 @@ where
         }
 
         for (inout, add) in poly_r_shared.iter_mut().zip(poly_r.iter()) {
-            *inout = T::add_with_public(party_id, *inout, *add);
+            *inout = T::add_with_public(id, *inout, *add);
         }
 
         let mut tmp_poly = vec![T::ArithmeticShare::default(); len];
@@ -207,14 +211,14 @@ where
 
         let r0 = eval_pi - (e3 * (proof.eval_c + challenges.gamma)) - e4;
 
-        poly_r_shared[0] = T::add_with_public(party_id, poly_r_shared[0], r0);
+        poly_r_shared[0] = T::add_with_public(id, poly_r_shared[0], r0);
         tracing::debug!("computing r polynomial done!");
         poly_r_shared
     }
 
     // The opening proof polynomial W_xi(X) (see https://eprint.iacr.org/2019/953.pdf)
     fn compute_wxi(
-        party_id: T::PartyID,
+        id: <T::State as MpcState>::PartyID,
         proof: &Round4Proof<P>,
         challenges: &Round5Challenges<P>,
         data: &PlonkData<P, T>,
@@ -247,18 +251,18 @@ where
         }
         // Sigma1
         for (inout, add) in res.iter_mut().zip(s1_poly_coeffs.iter()) {
-            *inout = T::add_with_public(party_id, *inout, challenges.v[3] * add);
+            *inout = T::add_with_public(id, *inout, challenges.v[3] * add);
         }
         // Sigma2
         for (inout, add) in res.iter_mut().zip(s2_poly_coeffs.iter()) {
-            *inout = T::add_with_public(party_id, *inout, challenges.v[4] * add);
+            *inout = T::add_with_public(id, *inout, challenges.v[4] * add);
         }
 
-        res[0] = T::add_with_public(party_id, res[0], -challenges.v[0] * proof.eval_a);
-        res[0] = T::add_with_public(party_id, res[0], -challenges.v[1] * proof.eval_b);
-        res[0] = T::add_with_public(party_id, res[0], -challenges.v[2] * proof.eval_c);
-        res[0] = T::add_with_public(party_id, res[0], -challenges.v[3] * proof.eval_s1);
-        res[0] = T::add_with_public(party_id, res[0], -challenges.v[4] * proof.eval_s2);
+        res[0] = T::add_with_public(id, res[0], -challenges.v[0] * proof.eval_a);
+        res[0] = T::add_with_public(id, res[0], -challenges.v[1] * proof.eval_b);
+        res[0] = T::add_with_public(id, res[0], -challenges.v[2] * proof.eval_c);
+        res[0] = T::add_with_public(id, res[0], -challenges.v[3] * proof.eval_s1);
+        res[0] = T::add_with_public(id, res[0], -challenges.v[4] * proof.eval_s2);
 
         Self::div_by_zerofier(&mut res, 1, challenges.xi);
 
@@ -268,7 +272,7 @@ where
 
     // The opening proof polynomial W_xiw(X) (see https://eprint.iacr.org/2019/953.pdf)
     fn compute_wxiw(
-        driver: &mut T,
+        id: <T::State as MpcState>::PartyID,
         domains: &Domains<P::ScalarField>,
         proof: &Round4Proof<P>,
         challenges: &Round5Challenges<P>,
@@ -277,8 +281,8 @@ where
         tracing::debug!("computing wxiw polynomial...");
         let xiw = challenges.xi * domains.root_of_unity_pow;
 
-        let mut res = polys.z.poly.clone().into_iter().collect::<Vec<_>>();
-        res[0] = T::add_with_public(driver.get_party_id(), res[0], -proof.eval_zw);
+        let mut res = polys.z.poly.clone();
+        res[0] = T::add_with_public(id, res[0], -proof.eval_zw);
         Self::div_by_zerofier(&mut res, 1, xiw);
 
         tracing::debug!("computing wxiw polynomial done!");
@@ -286,9 +290,11 @@ where
     }
 
     // Round 5 of https://eprint.iacr.org/2019/953.pdf (page 30)
-    pub(super) fn round5(self) -> PlonkProofResult<(PlonkProof<P>, T)> {
+    #[instrument(level = "debug", name = "Plonk - Round 5", skip_all)]
+    pub(super) fn round5(self) -> PlonkProofResult<PlonkProof<P>> {
         let Self {
-            mut driver,
+            nets,
+            state,
             domains,
             challenges,
             proof,
@@ -317,22 +323,22 @@ where
         tracing::debug!("v[3]: {}", v[3]);
         tracing::debug!("v[4]: {}", v[4]);
         let challenges = Round5Challenges::new(challenges, v);
-        let party_id = driver.get_party_id();
+        let id = state.id();
 
         // STEP 5.2 Compute linearisation polynomial r(X)
-        let r = Self::compute_r(party_id, &domains, &proof, &challenges, &data, &polys);
+        let r = Self::compute_r(id, &domains, &proof, &challenges, &data, &polys);
         //STEP 5.3 Compute opening proof polynomial Wxi(X)
-        let wxi = Self::compute_wxi(party_id, &proof, &challenges, &data, &polys, &r);
+        let wxi = Self::compute_wxi(id, &proof, &challenges, &data, &polys, &r);
 
         //STEP 5.4 Compute opening proof polynomial Wxiw(X)
-        let wxiw = Self::compute_wxiw(&mut driver, &domains, &proof, &challenges, &polys);
+        let wxiw = Self::compute_wxiw(id, &domains, &proof, &challenges, &polys);
         // Fifth output of the prover is ([Wxi]_1, [Wxiw]_1)
 
         let p_tau = &data.zkey.p_tau;
         let commit_wxi = T::msm_public_points_g1(&p_tau[..wxi.len()], &wxi);
         let commit_wxiw = T::msm_public_points_g1(&p_tau[..wxiw.len()], &wxiw);
 
-        let opened = driver.open_point_vec_g1(&[commit_wxi, commit_wxiw])?;
+        let opened = T::open_point_vec_g1(&[commit_wxi, commit_wxiw], &nets[0], state)?;
 
         let commit_wxi: P::G1 = opened[0];
         let commit_wxiw: P::G1 = opened[1];
@@ -341,7 +347,7 @@ where
             commit_wxi.into_affine(),
             commit_wxiw.into_affine()
         );
-        Ok((proof.into_final_proof(commit_wxi, commit_wxiw), driver))
+        Ok(proof.into_final_proof(commit_wxi, commit_wxiw))
     }
 }
 
@@ -374,7 +380,6 @@ pub mod tests {
     #[test]
     fn test_round5_multiplier2() {
         for check in [CheckElement::Yes, CheckElement::No] {
-            let mut driver = PlainPlonkDriver;
             let mut reader = BufReader::new(
                 File::open("../../test_vectors/Plonk/bn254/multiplier2/circuit.zkey").unwrap(),
             );
@@ -388,14 +393,15 @@ pub mod tests {
                 witness: witness.values[zkey.n_public + 1..].to_vec(),
             };
 
-            let challenges = Round1Challenges::deterministic(&mut driver);
-            let mut round1 = Round1::init_round(driver, &zkey, witness).unwrap();
+            let challenges = Round1Challenges::<Bn254, PlainPlonkDriver>::deterministic();
+            let mut state = ();
+            let mut round1 = Round1::init_round(&[(); 8], &mut state, &zkey, witness).unwrap();
             round1.challenges = challenges;
             let round2 = round1.round1().unwrap();
             let round3 = round2.round2().unwrap();
             let round4 = round3.round3().unwrap();
             let round5 = round4.round4().unwrap();
-            let (proof, _) = round5.round5().unwrap();
+            let proof = round5.round5().unwrap();
             assert_eq!(
                 proof.wxi,
                 g1_from_xy!(

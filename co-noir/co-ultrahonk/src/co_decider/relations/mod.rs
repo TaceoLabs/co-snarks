@@ -23,6 +23,7 @@ use delta_range_constraint_relation::{
 };
 use elliptic_relation::{EllipticRelation, EllipticRelationAcc};
 use logderiv_lookup_relation::{LogDerivLookupRelation, LogDerivLookupRelationAcc};
+use mpc_net::Network;
 use permutation_relation::{UltraPermutationRelation, UltraPermutationRelationAcc};
 use poseidon2_external_relation::{Poseidon2ExternalRelation, Poseidon2ExternalRelationAcc};
 use poseidon2_internal_relation::{Poseidon2InternalRelation, Poseidon2InternalRelationAcc};
@@ -71,8 +72,9 @@ pub(crate) trait Relation<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFiel
 
     fn add_entites(entity: &ProverUnivariates<T, P>, batch: &mut ProverUnivariatesBatch<T, P>);
 
-    fn accumulate(
-        driver: &mut T,
+    fn accumulate<N: Network>(
+        net: &N,
+        state: &mut T::State,
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesBatch<T, P>,
         relation_parameters: &RelationParameters<P::ScalarField>,
@@ -121,8 +123,12 @@ pub(crate) struct AllRelationAccHalfShared<T: NoirUltraHonkProver<P>, P: Pairing
 }
 
 impl<T: NoirUltraHonkProver<P>, P: Pairing> AllRelationAccHalfShared<T, P> {
-    pub(crate) fn reshare(self, driver: &mut T) -> HonkProofResult<AllRelationAcc<T, P>> {
-        let r_arith_r0 = driver.reshare(self.r_arith.r0.evaluations.to_vec())?;
+    pub(crate) fn reshare<N: Network>(
+        self,
+        net: &N,
+        state: &mut T::State,
+    ) -> HonkProofResult<AllRelationAcc<T, P>> {
+        let r_arith_r0 = T::reshare(self.r_arith.r0.evaluations.to_vec(), net, state)?;
         Ok(AllRelationAcc {
             r_arith: UltraArithmeticRelationAcc {
                 r0: SharedUnivariate::from_vec(r_arith_r0),

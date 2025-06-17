@@ -68,7 +68,7 @@ impl<F: PrimeField> BigField<F> {
         input: &T::AcvmType,
         driver: &mut T,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
-    ) -> std::io::Result<Self> {
+    ) -> eyre::Result<Self> {
         let [lo, hi]: [T::AcvmType; 2] = if T::is_shared(input) {
             let [lo, hi, _] = T::slice(
                 driver,
@@ -107,7 +107,7 @@ impl<F: PrimeField> BigField<F> {
         high_bits_in: FieldCT<F>,
         driver: &mut T,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
-    ) -> std::io::Result<Self> {
+    ) -> eyre::Result<Self> {
         assert_eq!(low_bits_in.is_constant(), high_bits_in.is_constant());
 
         let shift_1: F = F::from(BigUint::one() << Self::NUM_LIMB_BITS);

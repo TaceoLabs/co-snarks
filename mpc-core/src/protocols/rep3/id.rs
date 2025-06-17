@@ -29,7 +29,7 @@ impl Error for InvalidPartyId {}
 
 impl PartyID {
     /// get next ID
-    pub fn next_id(&self) -> Self {
+    pub fn next(&self) -> Self {
         match *self {
             PartyID::ID0 => PartyID::ID1,
             PartyID::ID1 => PartyID::ID2,
@@ -38,7 +38,7 @@ impl PartyID {
     }
 
     /// get previous ID
-    pub fn prev_id(&self) -> Self {
+    pub fn prev(&self) -> Self {
         match *self {
             PartyID::ID0 => PartyID::ID2,
             PartyID::ID1 => PartyID::ID0,

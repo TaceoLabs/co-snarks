@@ -12,6 +12,8 @@ use ark_ff::Zero;
 use co_builder::HonkProofResult;
 use co_builder::prelude::HonkCurve;
 use itertools::Itertools as _;
+use mpc_core::MpcState as _;
+use mpc_net::Network;
 use ultrahonk::prelude::{TranscriptFieldType, Univariate};
 
 #[derive(Clone, Debug)]
@@ -122,14 +124,15 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
      * @param parameters contains beta, gamma, and public_input_delta, ....
      * @param scaling_factor optional term to scale the evaluation before adding to evals.
      */
-    fn accumulate(
-        driver: &mut T,
+    fn accumulate<N: Network>(
+        net: &N,
+        state: &mut T::State,
         univariate_accumulator: &mut Self::Acc,
         input: &super::ProverUnivariatesBatch<T, P>,
         _relation_parameters: &RelationParameters<<P>::ScalarField>,
         scaling_factors: &[<P>::ScalarField],
     ) -> HonkProofResult<()> {
-        let party_id = driver.get_party_id();
+        let id = state.id();
 
         let w_1 = input.witness.w_l();
         let w_2 = input.witness.w_r();
@@ -146,14 +149,14 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let delta_3 = T::sub_many(w_4, w_3);
         let delta_4 = T::sub_many(w_1_shift, w_4);
 
-        let tmp_1 = T::add_scalar(&delta_1, minus_one, party_id);
-        let tmp_2 = T::add_scalar(&delta_2, minus_one, party_id);
-        let tmp_3 = T::add_scalar(&delta_3, minus_one, party_id);
-        let tmp_4 = T::add_scalar(&delta_4, minus_one, party_id);
-        let tmp_1_2 = T::add_scalar(&delta_1, minus_two, party_id);
-        let tmp_2_2 = T::add_scalar(&delta_2, minus_two, party_id);
-        let tmp_3_2 = T::add_scalar(&delta_3, minus_two, party_id);
-        let tmp_4_2 = T::add_scalar(&delta_4, minus_two, party_id);
+        let tmp_1 = T::add_scalar(&delta_1, minus_one, id);
+        let tmp_2 = T::add_scalar(&delta_2, minus_one, id);
+        let tmp_3 = T::add_scalar(&delta_3, minus_one, id);
+        let tmp_4 = T::add_scalar(&delta_4, minus_one, id);
+        let tmp_1_2 = T::add_scalar(&delta_1, minus_two, id);
+        let tmp_2_2 = T::add_scalar(&delta_2, minus_two, id);
+        let tmp_3_2 = T::add_scalar(&delta_3, minus_two, id);
+        let tmp_4_2 = T::add_scalar(&delta_4, minus_two, id);
 
         let mut lhs = Vec::with_capacity(
             tmp_1.len()
@@ -174,14 +177,14 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         lhs.extend(tmp_3_2);
         lhs.extend(tmp_4_2);
 
-        let mut sqr = driver.mul_many(&lhs, &lhs)?;
+        let mut sqr = T::mul_many(&lhs, &lhs, net, state)?;
 
         for el in sqr.iter_mut() {
-            T::add_assign_public(el, minus_one, party_id);
+            T::add_assign_public(el, minus_one, id);
         }
 
         let (lhs, rhs) = sqr.split_at(sqr.len() >> 1);
-        let mut mul = driver.mul_many(lhs, rhs)?;
+        let mut mul = T::mul_many(lhs, rhs, net, state)?;
         let q_delta_range = q_delta_range
             .iter()
             .cloned()
