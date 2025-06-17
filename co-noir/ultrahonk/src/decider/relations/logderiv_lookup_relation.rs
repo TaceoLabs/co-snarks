@@ -76,7 +76,7 @@ impl LogDerivLookupRelation {
     }
 
     fn compute_inverse_exists_verifier<F: PrimeField, L: PlainProverFlavour<F>>(
-        input: &ClaimedEvaluations<F, F, L>,
+        input: &ClaimedEvaluations<F, L>,
     ) -> F {
         let row_has_write = input.witness.lookup_read_tags();
         let row_has_read = input.precomputed.q_lookup();
@@ -120,7 +120,7 @@ impl LogDerivLookupRelation {
     }
 
     fn compute_read_term_verifier<F: PrimeField, L: PlainProverFlavour<F>>(
-        input: &ClaimedEvaluations<F, F, L>,
+        input: &ClaimedEvaluations<F, L>,
         relation_parameters: &RelationParameters<F>,
     ) -> F {
         let gamma = &relation_parameters.gamma;
@@ -177,7 +177,7 @@ impl LogDerivLookupRelation {
     }
 
     fn compute_write_term_verifier<F: PrimeField, L: PlainProverFlavour<F>>(
-        input: &ClaimedEvaluations<F, F, L>,
+        input: &ClaimedEvaluations<F, L>,
         relation_parameters: &RelationParameters<F>,
     ) -> F {
         let gamma = &relation_parameters.gamma;
@@ -285,7 +285,7 @@ impl<F: PrimeField, L: PlainProverFlavour<F>> Relation<F, L> for LogDerivLookupR
 
     fn verify_accumulate(
         univariate_accumulator: &mut Self::VerifyAcc,
-        input: &ClaimedEvaluations<F, F, L>,
+        input: &ClaimedEvaluations<F, L>,
         relation_parameters: &RelationParameters<F>,
         scaling_factor: &F,
     ) {

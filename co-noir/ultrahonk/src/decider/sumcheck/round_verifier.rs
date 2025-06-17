@@ -68,7 +68,7 @@ impl<P: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour<P::ScalarField>>
 
     pub(crate) fn accumulate_one_relation_evaluations<R: Relation<P::ScalarField, L>>(
         univariate_accumulator: &mut R::VerifyAcc,
-        extended_edges: &ClaimedEvaluations<P::ScalarField, P::ScalarField, L>,
+        extended_edges: &ClaimedEvaluations<P::ScalarField, L>,
         relation_parameters: &RelationParameters<P::ScalarField>,
         scaling_factor: &P::ScalarField,
     ) {
@@ -82,7 +82,7 @@ impl<P: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour<P::ScalarField>>
 
     pub(crate) fn accumulate_elliptic_curve_relation_evaluations(
         univariate_accumulator: &mut EllipticRelationEvals<P::ScalarField>,
-        extended_edges: &ClaimedEvaluations<P::ScalarField, P::ScalarField, L>,
+        extended_edges: &ClaimedEvaluations<P::ScalarField, L>,
         relation_parameters: &RelationParameters<P::ScalarField>,
         scaling_factor: &P::ScalarField,
     ) {
@@ -95,7 +95,7 @@ impl<P: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour<P::ScalarField>>
     }
 
     pub(crate) fn compute_full_relation_purported_value(
-        purported_evaluations: &ClaimedEvaluations<P::ScalarField, P::ScalarField, L>,
+        purported_evaluations: &ClaimedEvaluations<P::ScalarField, L>,
         relation_parameters: &RelationParameters<P::ScalarField>,
         gate_sparators: GateSeparatorPolynomial<P::ScalarField>,
     ) -> P::ScalarField {

@@ -220,7 +220,7 @@ impl<F: PrimeField, L: PlainProverFlavour<F>> Relation<F, L> for EccOpQueueRelat
 
     fn verify_accumulate(
         univariate_accumulator: &mut Self::VerifyAcc,
-        input: &ClaimedEvaluations<F, F, L>,
+        input: &ClaimedEvaluations<F, L>,
         _relation_parameters: &RelationParameters<F>,
         scaling_factor: &F,
     ) {

@@ -216,7 +216,7 @@ impl DataBusLookupRelation {
 
     fn values_verifier<F: PrimeField, L: PlainProverFlavour<F>>(
         bus_idx: BusData,
-        input: &ClaimedEvaluations<F, F, L>,
+        input: &ClaimedEvaluations<F, L>,
     ) -> F {
         match bus_idx {
             BusData::BusIdx0 => *input.witness.calldata(),
@@ -226,7 +226,7 @@ impl DataBusLookupRelation {
     }
     fn selector_verifier<F: PrimeField, L: PlainProverFlavour<F>>(
         bus_idx: BusData,
-        input: &ClaimedEvaluations<F, F, L>,
+        input: &ClaimedEvaluations<F, L>,
     ) -> F {
         match bus_idx {
             BusData::BusIdx0 => *input.precomputed.q_l(),
@@ -236,7 +236,7 @@ impl DataBusLookupRelation {
     }
     fn inverses_verifier<F: PrimeField, L: PlainProverFlavour<F>>(
         bus_idx: BusData,
-        input: &ClaimedEvaluations<F, F, L>,
+        input: &ClaimedEvaluations<F, L>,
     ) -> F {
         match bus_idx {
             BusData::BusIdx0 => *input.witness.calldata_inverses(),
@@ -246,7 +246,7 @@ impl DataBusLookupRelation {
     }
     fn read_counts_verifier<F: PrimeField, L: PlainProverFlavour<F>>(
         bus_idx: BusData,
-        input: &ClaimedEvaluations<F, F, L>,
+        input: &ClaimedEvaluations<F, L>,
     ) -> F {
         match bus_idx {
             BusData::BusIdx0 => *input.witness.calldata_read_counts(),
@@ -256,7 +256,7 @@ impl DataBusLookupRelation {
     }
     fn read_tags_verifier<F: PrimeField, L: PlainProverFlavour<F>>(
         bus_idx: BusData,
-        input: &ClaimedEvaluations<F, F, L>,
+        input: &ClaimedEvaluations<F, L>,
     ) -> F {
         match bus_idx {
             BusData::BusIdx0 => *input.witness.calldata_read_tags(),
@@ -267,7 +267,7 @@ impl DataBusLookupRelation {
 
     fn compute_inverse_exists_verifier<F: PrimeField, L: PlainProverFlavour<F>>(
         bus_idx: BusData,
-        input: &ClaimedEvaluations<F, F, L>,
+        input: &ClaimedEvaluations<F, L>,
     ) -> F {
         let is_read_gate = DataBusLookupRelation::get_read_selector_verifier(bus_idx, input);
         let read_tag = DataBusLookupRelation::read_tags_verifier(bus_idx, input);
@@ -276,7 +276,7 @@ impl DataBusLookupRelation {
 
     fn get_read_selector_verifier<F: PrimeField, L: PlainProverFlavour<F>>(
         bus_idx: BusData,
-        input: &ClaimedEvaluations<F, F, L>,
+        input: &ClaimedEvaluations<F, L>,
     ) -> F {
         let q_busread = input.precomputed.q_busread();
         let column_selector = DataBusLookupRelation::selector_verifier(bus_idx, input);
@@ -285,7 +285,7 @@ impl DataBusLookupRelation {
 
     fn compute_write_term_verifier<F: PrimeField, L: PlainProverFlavour<F>>(
         bus_idx: BusData,
-        input: &ClaimedEvaluations<F, F, L>,
+        input: &ClaimedEvaluations<F, L>,
         params: &RelationParameters<F>,
     ) -> F {
         let value = DataBusLookupRelation::values_verifier(bus_idx, input);
@@ -297,7 +297,7 @@ impl DataBusLookupRelation {
     }
 
     fn compute_read_term_verifier<F: PrimeField, L: PlainProverFlavour<F>>(
-        input: &ClaimedEvaluations<F, F, L>,
+        input: &ClaimedEvaluations<F, L>,
         params: &RelationParameters<F>,
     ) -> F {
         // Bus value stored in w_l, index into bus column stored in w_r
@@ -377,7 +377,7 @@ impl DataBusLookupRelation {
     }
     fn verify_accumulate_subrelation_contributions<F: PrimeField, L: PlainProverFlavour<F>>(
         univariate_accumulator: &mut DataBusLookupRelationEvals<F>,
-        input: &ClaimedEvaluations<F, F, L>,
+        input: &ClaimedEvaluations<F, L>,
         params: &RelationParameters<F>,
         scaling_factor: &F,
         bus_idx: BusData,
@@ -480,7 +480,7 @@ impl<F: PrimeField, L: PlainProverFlavour<F>> Relation<F, L> for DataBusLookupRe
 
     fn verify_accumulate(
         univariate_accumulator: &mut Self::VerifyAcc,
-        input: &ClaimedEvaluations<F, F, L>,
+        input: &ClaimedEvaluations<F, L>,
         relation_parameters: &RelationParameters<F>,
         scaling_factor: &F,
     ) {

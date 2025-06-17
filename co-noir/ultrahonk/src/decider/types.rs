@@ -1,34 +1,34 @@
 use super::univariate::Univariate;
 use crate::plain_prover_flavour::PlainProverFlavour;
-use crate::{types::AllEntities, NUM_ALPHAS};
+use crate::types::AllEntities;
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use co_builder::prelude::Polynomial;
-use co_builder::prelude::PrecomputedEntities;
+// use co_builder::prelude::PrecomputedEntities;
 use co_builder::prelude::{Polynomials, VerifyingKey};
 use co_builder::prover_flavour::{Flavour, ProverFlavour};
 use itertools::izip;
 use std::{iter, vec};
 
-pub(crate) struct ProverMemory<P: Pairing, L: PlainProverFlavour<P::ScalarField>> {
-    pub(crate) polys: AllEntities<Vec<P::ScalarField>, P::ScalarField, L>,
+pub(crate) struct ProverMemory<P: Pairing, L: PlainProverFlavour> {
+    pub(crate) polys: AllEntities<Vec<P::ScalarField>, L>,
     pub(crate) relation_parameters: RelationParameters<P::ScalarField>,
 }
 
-pub(crate) struct VerifierMemory<P: Pairing, L: PlainProverFlavour<P::ScalarField>> {
-    pub(crate) verifier_commitments: VerifierCommitments<P::G1Affine, P::ScalarField, L>,
+pub(crate) struct VerifierMemory<P: Pairing, L: PlainProverFlavour> {
+    pub(crate) verifier_commitments: VerifierCommitments<P::G1Affine, L>,
     pub(crate) relation_parameters: RelationParameters<P::ScalarField>,
-    pub(crate) claimed_evaluations: ClaimedEvaluations<P::ScalarField, P::ScalarField, L>,
+    pub(crate) claimed_evaluations: ClaimedEvaluations<P::ScalarField, L>,
 }
 
 // pub(crate) const MAX_PARTIAL_RELATION_LENGTH: usize = 7;
 // pub(crate) const BATCHED_RELATION_PARTIAL_LENGTH: usize = MAX_PARTIAL_RELATION_LENGTH + 1;
 // pub(crate) const BATCHED_RELATION_PARTIAL_LENGTH_ZK: usize = BATCHED_RELATION_PARTIAL_LENGTH + 1;
 
-pub(crate) type ProverUnivariates<F, L, const SIZE: usize> = AllEntities<Univariate<F, SIZE>, F, L>;
-pub(crate) type PartiallyEvaluatePolys<F, L> = AllEntities<Vec<F>, F, L>;
-pub(crate) type ClaimedEvaluations<F, K, L> = AllEntities<F, K, L>;
-pub(crate) type VerifierCommitments<P, F, L> = AllEntities<P, F, L>;
+pub(crate) type ProverUnivariates<F, L, const SIZE: usize> = AllEntities<Univariate<F, SIZE>, L>;
+pub(crate) type PartiallyEvaluatePolys<F, L> = AllEntities<Vec<F>, L>;
+pub(crate) type ClaimedEvaluations<F, L> = AllEntities<F, L>;
+pub(crate) type VerifierCommitments<P, L> = AllEntities<P, L>;
 
 pub struct RelationParameters<F: PrimeField> {
     pub(crate) eta_1: F,
