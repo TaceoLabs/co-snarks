@@ -2,19 +2,21 @@ use ark_ec::pairing::Pairing;
 use ark_ec::CurveGroup;
 use circom_types::plonk::ZKey;
 use co_circom_types::SharedWitness;
+use mpc_net::Network;
 use tracing::instrument;
 
 use crate::{
     mpc::CircomPlonkProver,
-    plonk_utils::{self, rayon_join},
+    plonk_utils::{self, rayon_join3},
     round2::Round2,
     types::{Domains, PlonkData, PlonkWitness, PolyEval},
     PlonkProofError, PlonkProofResult,
 };
 
 // Round 1 of https://eprint.iacr.org/2019/953.pdf (page 28)
-pub(super) struct Round1<'a, P: Pairing, T: CircomPlonkProver<P>> {
-    pub(super) driver: T,
+pub(super) struct Round1<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network> {
+    pub(super) nets: &'a [N; 8],
+    pub(super) state: &'a mut T::State,
     pub(super) domains: Domains<P::ScalarField>,
     pub(super) challenges: Round1Challenges<P, T>,
     pub(super) data: PlonkDataRound1<'a, P, T>,
@@ -69,20 +71,22 @@ impl<P: Pairing> std::fmt::Display for Round1Proof<P> {
 }
 
 impl<P: Pairing, T: CircomPlonkProver<P>> Round1Challenges<P, T> {
-    pub(super) fn random(driver: &mut T) -> PlonkProofResult<Self> {
+    pub(super) fn random<N: Network + 'static>(
+        net: &N,
+        state: &mut T::State,
+    ) -> PlonkProofResult<Self> {
         let mut b = core::array::from_fn(|_| T::ArithmeticShare::default());
         for x in b.iter_mut() {
-            *x = driver.rand()?;
+            *x = T::rand(net, state)?;
         }
         Ok(Self { b })
     }
 
     #[cfg(test)]
-    pub(super) fn deterministic(driver: &mut T) -> Self {
-        let party_id = driver.get_party_id();
+    pub(super) fn deterministic() -> Self {
         Self {
             b: core::array::from_fn(|i| {
-                T::promote_to_trivial_share(party_id, P::ScalarField::from(i as u64))
+                T::promote_to_trivial_share(0, P::ScalarField::from(i as u64))
             }),
         }
     }
@@ -90,9 +94,9 @@ impl<P: Pairing, T: CircomPlonkProver<P>> Round1Challenges<P, T> {
 
 // Round 1 of https://eprint.iacr.org/2019/953.pdf (page 28)
 #[expect(clippy::type_complexity)]
-impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
+impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round1<'a, P, T, N> {
     fn compute_single_wire_poly(
-        party_id: T::PartyID,
+        party_id: usize,
         witness: &PlonkWitness<P, T>,
         domains: &Domains<P::ScalarField>,
         blind_factors: &[T::ArithmeticShare],
@@ -123,15 +127,15 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
     // Essentially the fft of the trace columns
     #[instrument(level = "debug", name = "compute wire polys", skip_all)]
     fn compute_wire_polynomials(
-        driver: &mut T,
+        net: &N,
         domains: &Domains<P::ScalarField>,
         challenges: &Round1Challenges<P, T>,
         zkey: &ZKey<P>,
         witness: &PlonkWitness<P, T>,
     ) -> PlonkProofResult<Round1Polys<P, T>> {
-        let party_id = driver.get_party_id();
-        let (wire_a, wire_b, wire_c) = rayon_join!(
-            Self::compute_single_wire_poly(
+        let party_id = net.id();
+        let (wire_a, wire_b, wire_c) = rayon_join3!(
+            || Self::compute_single_wire_poly(
                 party_id,
                 witness,
                 domains,
@@ -139,7 +143,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
                 zkey,
                 &zkey.map_a,
             ),
-            Self::compute_single_wire_poly(
+            || Self::compute_single_wire_poly(
                 party_id,
                 witness,
                 domains,
@@ -147,7 +151,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
                 zkey,
                 &zkey.map_b,
             ),
-            Self::compute_single_wire_poly(
+            || Self::compute_single_wire_poly(
                 party_id,
                 witness,
                 domains,
@@ -180,11 +184,10 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
     // Calculate the witnesses for the additions, since they are not part of the SharedWitness
     #[instrument(level = "debug", name = "calculate additions", skip_all)]
     fn calculate_additions(
-        driver: &mut T,
+        party_id: usize,
         witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
         zkey: &ZKey<P>,
     ) -> PlonkProofResult<PlonkWitness<P, T>> {
-        let party_id = driver.get_party_id();
         let mut witness = PlonkWitness::new(witness, zkey.n_additions);
         // This is hard to multithread as we have to add the results
         // to the vec as they are needed for the later steps.
@@ -214,17 +217,18 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
 
     #[instrument(level = "debug", name = "Plonk - Round Init", skip_all)]
     pub(super) fn init_round(
-        mut driver: T,
+        nets: &'a [N; 8],
+        state: &'a mut T::State,
         zkey: &'a ZKey<P>,
         private_witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
     ) -> PlonkProofResult<Self> {
-        let plonk_witness = Self::calculate_additions(&mut driver, private_witness, zkey)?;
-        // TODO: we do not want that to be
-        let challenges = Round1Challenges::random(&mut driver)?;
+        let plonk_witness = Self::calculate_additions(nets[0].id(), private_witness, zkey)?;
+        let challenges = Round1Challenges::random(&nets[0], state)?;
         let domains = Domains::new(zkey.domain_size)?;
         Ok(Self {
+            nets,
+            state,
             challenges,
-            driver,
             domains,
             data: PlonkDataRound1 {
                 witness: plonk_witness,
@@ -235,9 +239,10 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
 
     #[instrument(level = "debug", name = "Plonk - Round 1", skip_all)]
     // Round 1 of https://eprint.iacr.org/2019/953.pdf (page 28)
-    pub(super) fn round1(self) -> PlonkProofResult<Round2<'a, P, T>> {
+    pub(super) fn round1(self) -> PlonkProofResult<Round2<'a, P, T, N>> {
         let Self {
-            mut driver,
+            nets,
+            state,
             domains,
             challenges,
             data,
@@ -247,21 +252,20 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
         let p_tau = &zkey.p_tau;
 
         // STEP 1.2 - Compute wire polynomials a(X), b(X) and c(X)
-        let polys =
-            Self::compute_wire_polynomials(&mut driver, &domains, &challenges, zkey, witness)?;
+        let polys = Self::compute_wire_polynomials(&nets[0], &domains, &challenges, zkey, witness)?;
 
         let commit_span = tracing::debug_span!("committing to polys (MSMs)").entered();
         // STEP 1.3 - Compute [a]_1, [b]_1, [c]_1
-        let (commit_a, commit_b, commit_c) = rayon_join!(
-            T::msm_public_points_g1(&p_tau[..polys.a.poly.len()], &polys.a.poly),
-            T::msm_public_points_g1(&p_tau[..polys.b.poly.len()], &polys.b.poly),
-            T::msm_public_points_g1(&p_tau[..polys.c.poly.len()], &polys.c.poly)
+        let (commit_a, commit_b, commit_c) = rayon_join3!(
+            || T::msm_public_points_g1(&p_tau[..polys.a.poly.len()], &polys.a.poly),
+            || T::msm_public_points_g1(&p_tau[..polys.b.poly.len()], &polys.b.poly),
+            || T::msm_public_points_g1(&p_tau[..polys.c.poly.len()], &polys.c.poly)
         );
+        commit_span.exit();
 
         // network round
-        commit_span.exit();
         let opening_span = tracing::debug_span!("opening commits").entered();
-        let opened = driver.open_point_vec_g1(&[commit_a, commit_b, commit_c])?;
+        let opened = T::open_point_vec_g1(&[commit_a, commit_b, commit_c], &nets[0], state)?;
         opening_span.exit();
         let proof = Round1Proof::<P> {
             commit_a: opened[0],
@@ -270,7 +274,8 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round1<'a, P, T> {
         };
         tracing::debug!("round1 result: {proof}");
         Ok(Round2 {
-            driver,
+            nets,
+            state,
             domains,
             challenges,
             proof,
@@ -317,7 +322,6 @@ pub mod tests {
     #[test]
     fn test_round1_multiplier2() {
         for check in [CheckElement::Yes, CheckElement::No] {
-            let mut driver = PlainPlonkDriver;
             let mut reader = BufReader::new(
                 File::open("../../test_vectors/Plonk/bn254/multiplier2/circuit.zkey").unwrap(),
             );
@@ -329,8 +333,10 @@ pub mod tests {
                 public_inputs: witness.values[..=zkey.n_public].to_vec(),
                 witness: witness.values[zkey.n_public + 1..].to_vec(),
             };
-            let challenges = Round1Challenges::deterministic(&mut driver);
-            let mut round1 = Round1::init_round(driver, &zkey, witness).unwrap();
+
+            let challenges = Round1Challenges::<Bn254, PlainPlonkDriver>::deterministic();
+            let mut state = ();
+            let mut round1 = Round1::init_round(&[(); 8], &mut state, &zkey, witness).unwrap();
             round1.challenges = challenges;
             let round2 = round1.round1().unwrap();
             assert_eq!(
@@ -360,7 +366,6 @@ pub mod tests {
     #[test]
     fn test_round1_poseidon_bls12_381() {
         for check in [CheckElement::Yes, CheckElement::No] {
-            let mut driver = PlainPlonkDriver;
             let mut reader = BufReader::new(
                 File::open("../../test_vectors/Plonk/bls12_381/poseidon/circuit.zkey").unwrap(),
             );
@@ -375,8 +380,9 @@ pub mod tests {
                 witness: witness.values[zkey.n_public + 1..].to_vec(),
             };
 
-            let challenges = Round1Challenges::deterministic(&mut driver);
-            let mut round1 = Round1::init_round(driver, &zkey, witness).unwrap();
+            let challenges = Round1Challenges::<Bls12_381, PlainPlonkDriver>::deterministic();
+            let mut state = ();
+            let mut round1 = Round1::init_round(&[(); 8], &mut state, &zkey, witness).unwrap();
             round1.challenges = challenges;
             let round2 = round1.round1().unwrap();
             assert_eq!(

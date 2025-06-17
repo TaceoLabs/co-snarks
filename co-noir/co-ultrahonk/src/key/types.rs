@@ -64,7 +64,7 @@ impl<'a, T: NoirUltraHonkProver<P>, P: Pairing> TraceData<'a, T, P> {
         U: NoirWitnessExtensionProtocol<P::ScalarField, ArithmeticShare = T::ArithmeticShare>,
     >(
         &mut self,
-        id: T::PartyID,
+        id: usize,
         builder: &mut GenericUltraCircuitBuilder<P, U>,
         is_structured: bool,
         active_region_data: &mut ActiveRegionData,

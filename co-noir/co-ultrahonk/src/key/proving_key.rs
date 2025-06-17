@@ -53,9 +53,8 @@ pub struct ProvingKey<T: NoirUltraHonkProver<P>, P: Pairing> {
     pub phantom: PhantomData<T>,
 }
 
-pub type Rep3ProvingKey<P, N> = ProvingKey<Rep3UltraHonkDriver<N>, P>;
-pub type ShamirProvingKey<P, N> =
-    ProvingKey<ShamirUltraHonkDriver<<P as Pairing>::ScalarField, N>, P>;
+pub type Rep3ProvingKey<P> = ProvingKey<Rep3UltraHonkDriver, P>;
+pub type ShamirProvingKey<P> = ProvingKey<ShamirUltraHonkDriver, P>;
 
 impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
     const PUBLIC_INPUT_WIRE_INDEX: usize = ProverWitnessEntities::<T::ArithmeticShare>::W_R;
@@ -64,7 +63,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
     pub fn create<
         U: NoirWitnessExtensionProtocol<P::ScalarField, ArithmeticShare = T::ArithmeticShare>,
     >(
-        id: T::PartyID,
+        id: usize,
         mut circuit: GenericUltraCircuitBuilder<P, U>,
         driver: &mut U,
     ) -> HonkProofResult<Self> {
@@ -145,7 +144,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
     pub fn create_keys<
         U: NoirWitnessExtensionProtocol<P::ScalarField, ArithmeticShare = T::ArithmeticShare>,
     >(
-        id: T::PartyID,
+        id: usize,
         circuit: GenericUltraCircuitBuilder<P, U>,
         prover_crs: &ProverCrs<P>,
         verifier_crs: P::G2Affine,
@@ -179,7 +178,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
     pub fn create_keys_barretenberg<
         U: NoirWitnessExtensionProtocol<P::ScalarField, ArithmeticShare = T::ArithmeticShare>,
     >(
-        id: T::PartyID,
+        id: usize,
         circuit: GenericUltraCircuitBuilder<P, U>,
         crs: &ProverCrs<P>,
         driver: &mut U,
@@ -241,7 +240,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         U: NoirWitnessExtensionProtocol<P::ScalarField, ArithmeticShare = T::ArithmeticShare>,
     >(
         &mut self,
-        id: T::PartyID,
+        id: usize,
         builder: &mut GenericUltraCircuitBuilder<P, U>,
         driver: &mut U,
         is_structured: bool,

@@ -284,7 +284,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
         native_state: &mut [WT::ArithmeticShare; T],
         builder: &mut GenericUltraCircuitBuilder<P, WT>,
         driver: &mut WT,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         let mut precomps = driver.poseidon2_preprocess_permutation(1, &self.poseidon2)?;
 
         // Linear layer at beginning
@@ -363,7 +363,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
         state: &mut [FieldCT<F>; T],
         builder: &mut GenericUltraCircuitBuilder<P, WT>,
         driver: &mut WT,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         let native_state: [_; T] = array::from_fn(|i| state[i].get_value(builder, driver));
 
         if native_state.iter().any(|x| WT::is_shared(x)) {
@@ -391,7 +391,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
         input: &[FieldCT<F>; T],
         builder: &mut GenericUltraCircuitBuilder<P, WT>,
         driver: &mut WT,
-    ) -> std::io::Result<[FieldCT<F>; T]> {
+    ) -> eyre::Result<[FieldCT<F>; T]> {
         let mut state = input.to_owned();
         self.permutation_in_place(&mut state, builder, driver)?;
         Ok(state)

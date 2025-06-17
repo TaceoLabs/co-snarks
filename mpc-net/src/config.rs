@@ -1,5 +1,4 @@
 //! Data structures and helpers for the network configuration.
-use color_eyre::eyre;
 use quinn::rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use serde::{Deserialize, Serialize};
 use std::{

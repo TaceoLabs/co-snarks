@@ -4,7 +4,6 @@
 
 pub mod arithmetic;
 pub mod binary;
-pub mod id;
 pub mod pointshare;
 
 use std::marker::PhantomData;
@@ -23,10 +22,49 @@ use serde::{Deserialize, Serialize};
 
 use crate::serde_compat::{ark_de, ark_se};
 
-pub(crate) type IoResult<T> = std::io::Result<T>;
-
 /// The Rng used for expanding compressed Shares
 pub type SeedRng = rand_chacha::ChaCha12Rng;
+/// The id of party 0.
+pub const PARTY_0: usize = 0;
+/// The id of party 1.
+pub const PARTY_1: usize = 1;
+/// The id of party 2.
+pub const PARTY_2: usize = 2;
+
+/// Trait to get next and prev ids for REP3
+pub trait Rep3PartyId {
+    /// Returns the id of the next party.
+    ///
+    /// # Panics
+    /// Panics if self is not one of [PARTY_0, PARTY_1, PARTY_2]
+    fn next(&self) -> usize;
+
+    /// Returns the id of the previous party.
+    ///
+    /// # Panics
+    /// Panics if self is not one of [PARTY_0, PARTY_1, PARTY_2]
+    fn prev(&self) -> usize;
+}
+
+impl Rep3PartyId for usize {
+    fn next(&self) -> usize {
+        match *self {
+            PARTY_0 => PARTY_1,
+            PARTY_1 => PARTY_2,
+            PARTY_2 => PARTY_0,
+            _ => unreachable!(),
+        }
+    }
+
+    fn prev(&self) -> usize {
+        match *self {
+            PARTY_0 => PARTY_2,
+            PARTY_1 => PARTY_0,
+            PARTY_2 => PARTY_1,
+            _ => unreachable!(),
+        }
+    }
+}
 
 /// A type representing the different states a share can have. Either full replicated share, only an additive share, or both variants in compressed form.
 #[derive(Debug, Serialize, Deserialize)]

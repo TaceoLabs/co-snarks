@@ -7,9 +7,10 @@ use co_ultrahonk::prelude::{
     CrsParser, Poseidon2Sponge, Rep3CoUltraHonk, TranscriptFieldType, TranscriptHasher, UltraHonk,
     Utils, ZeroKnowledge,
 };
+use mpc_net::TestNetwork;
 use sha3::Keccak256;
-use std::{sync::Arc, thread};
-use tests::rep3_network::Rep3TestNetwork;
+use std::sync::Arc;
+use tests::test_utils::spawn_pool;
 
 fn witness_map_to_witness_vector<F: PrimeField>(
     witness_map: WitnessMap<Rep3AcvmType<F>>,
@@ -55,23 +56,29 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str, has_zk: Zero
         .map(Rep3AcvmType::from)
         .collect::<Vec<_>>();
 
-    let test_network = Rep3TestNetwork::default();
+    let nets0 = TestNetwork::new_3_parties();
+    let nets1 = TestNetwork::new_3_parties();
     let mut threads = Vec::with_capacity(3);
     let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
     let crs_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, false).unwrap();
     let prover_crs =
         Arc::new(CrsParser::<Bn254>::get_crs_g1(CRS_PATH_G1, crs_size, has_zk).unwrap());
-    for net in test_network.get_party_networks() {
+    for (net0, net1) in nets0.into_iter().zip(nets1) {
         let witness = witness.clone();
         let prover_crs = prover_crs.clone();
         let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
-        threads.push(thread::spawn(move || {
+        threads.push(spawn_pool(move || {
             // generate proving key and vk
-            let (pk, net) =
-                co_noir::generate_proving_key_rep3(net, &constraint_system, witness, false)
-                    .unwrap();
-            let (proof, public_input, _) =
-                Rep3CoUltraHonk::<_, _, H>::prove(net, pk, &prover_crs, has_zk).unwrap();
+            let pk = co_noir::generate_proving_key_rep3(
+                &constraint_system,
+                witness,
+                false,
+                &net0,
+                &net1,
+            )
+            .unwrap();
+            let (proof, public_input) =
+                Rep3CoUltraHonk::<_, H>::prove(&net0, pk, &prover_crs, has_zk).unwrap();
             (proof, public_input)
         }));
     }
@@ -114,31 +121,33 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     let program_artifact = Utils::get_program_artifact_from_file(&circuit_file)
         .expect("failed to parse program artifact");
 
-    let test_network = Rep3TestNetwork::default();
+    let nets0 = TestNetwork::new_3_parties();
+    let nets1 = TestNetwork::new_3_parties();
     let mut threads = Vec::with_capacity(3);
     let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
     let crs_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, false).unwrap();
     let prover_crs =
         Arc::new(CrsParser::<Bn254>::get_crs_g1(CRS_PATH_G1, crs_size, has_zk).unwrap());
-    for net in test_network.get_party_networks() {
+    for (net0, net1) in nets0.into_iter().zip(nets1) {
         let prover_crs = prover_crs.clone();
         let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
         let artifact = program_artifact.clone();
         let prover_toml = prover_toml.clone();
-        threads.push(thread::spawn(move || {
-            let solver = Rep3CoSolver::from_network(net, artifact, prover_toml).unwrap();
-            let (witness, driver) = solver.solve().unwrap();
+        threads.push(spawn_pool(move || {
+            let solver = Rep3CoSolver::new(&net0, &net1, artifact, prover_toml).unwrap();
+            let witness = solver.solve().unwrap();
             let witness = convert_witness_rep3(witness);
             // generate proving key and vk
-            let (pk, net) = co_noir::generate_proving_key_rep3(
-                driver.into_network(),
+            let pk = co_noir::generate_proving_key_rep3(
                 &constraint_system,
                 witness,
                 false,
+                &net0,
+                &net1,
             )
             .unwrap();
-            let (proof, public_input, _) =
-                Rep3CoUltraHonk::<_, _, H>::prove(net, pk, &prover_crs, has_zk).unwrap();
+            let (proof, public_input) =
+                Rep3CoUltraHonk::<_, H>::prove(&net0, pk, &prover_crs, has_zk).unwrap();
             (proof, public_input)
         }));
     }

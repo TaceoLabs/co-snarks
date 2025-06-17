@@ -12,6 +12,7 @@ use ark_ff::Zero;
 use co_builder::HonkProofResult;
 use co_builder::{prelude::HonkCurve, TranscriptFieldType};
 use itertools::izip;
+use mpc_net::Network;
 use rayon::prelude::*;
 use ultrahonk::prelude::Univariate;
 
@@ -82,8 +83,9 @@ impl UltraArithmeticRelation {
 }
 
 impl UltraArithmeticRelation {
-    fn compute_r0<T, P>(
-        driver: &mut T,
+    fn compute_r0<T, P, N: Network>(
+        net: &N,
+        state: &mut T::State,
         r0: &mut Univariate<P::ScalarField, 6>,
         input: &ProverUnivariatesBatch<T, P>,
         scaling_factors: &[P::ScalarField],
@@ -108,8 +110,8 @@ impl UltraArithmeticRelation {
         let neg_half = -P::ScalarField::from(2u64).inverse().unwrap();
         let three = P::ScalarField::from(3_u64);
 
-        let mul = driver.local_mul_vec(w_l, w_r);
-        let party_id = driver.get_party_id();
+        let mul = T::local_mul_vec(w_l, w_r, state);
+        let party_id = net.id();
         let tmp_l = (w_l, q_l)
             .into_par_iter()
             .map(|(w_l, q_l)| T::mul_with_public_to_half_share(*q_l, *w_l));
@@ -185,7 +187,7 @@ impl UltraArithmeticRelation {
         }
     }
     fn compute_r1<T, P>(
-        party_id: T::PartyID,
+        party_id: usize,
         r1: &mut SharedUnivariate<T, P, 5>,
         input: &ProverUnivariatesBatch<T, P>,
         scaling_factors: &[P::ScalarField],
@@ -317,19 +319,21 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
      * @param parameters contains beta, gamma, and public_input_delta, ....
      * @param scaling_factor optional term to scale the evaluation before adding to evals.
      */
-    fn accumulate(
-        driver: &mut T,
+    fn accumulate<N: Network>(
+        net: &N,
+        state: &mut T::State,
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesBatch<T, P>,
         _relation_parameters: &RelationParameters<<P>::ScalarField>,
         scaling_factors: &[P::ScalarField],
     ) -> HonkProofResult<()> {
         tracing::trace!("Accumulate UltraArithmeticRelation");
-        let party_id = driver.get_party_id();
+        let party_id = net.id();
         rayon::join(
             || {
                 Self::compute_r0(
-                    driver,
+                    net,
+                    state,
                     &mut univariate_accumulator.r0,
                     input,
                     scaling_factors,
