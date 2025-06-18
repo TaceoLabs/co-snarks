@@ -170,7 +170,7 @@ impl<F: PrimeField> CoCircomCompilerParsed<F> {
         self,
         vm_config: VMConfig,
     ) -> WitnessExtension<F, CircomPlainVmWitnessExtension<F>> {
-        PlainWitnessExtension::new(self, vm_config)
+        PlainWitnessExtension::new(&self, vm_config)
     }
 
     /// Consumes `self` and constructs an instance of [`BatchedPlainWitnessExtension`].
@@ -190,7 +190,7 @@ impl<F: PrimeField> CoCircomCompilerParsed<F> {
         vm_config: VMConfig,
         batch_size: usize,
     ) -> WitnessExtension<F, BatchedCircomPlainVmWitnessExtension<F>> {
-        BatchedPlainWitnessExtension::new(self, vm_config, batch_size)
+        BatchedPlainWitnessExtension::new(&self, vm_config, batch_size)
     }
 
     /// Consumes `self` and a [`NetworkConfig`], and constructs an instance of [`Rep3WitnessExtension`].
@@ -207,7 +207,7 @@ impl<F: PrimeField> CoCircomCompilerParsed<F> {
         vm_config: VMConfig,
     ) -> Result<Rep3WitnessExtension<F, Rep3MpcNet>> {
         Rep3WitnessExtension::new(
-            self,
+            &self,
             network_config,
             MpcAccelerator::from_config(MpcAcceleratorConfig::from_env()),
             vm_config,
@@ -229,7 +229,7 @@ impl<F: PrimeField> CoCircomCompilerParsed<F> {
         vm_config: VMConfig,
     ) -> Result<Rep3WitnessExtension<F, N>> {
         Rep3WitnessExtension::from_network(
-            self,
+            &self,
             network,
             MpcAccelerator::from_config(MpcAcceleratorConfig::from_env()),
             vm_config,
@@ -253,11 +253,54 @@ impl<F: PrimeField> CoCircomCompilerParsed<F> {
         batch_size: usize,
     ) -> Result<BatchedRep3WitnessExtension<F, N>> {
         BatchedRep3WitnessExtension::from_network(
-            self,
+            &self,
             network,
             MpcAccelerator::from_config(MpcAcceleratorConfig::from_env()),
             vm_config,
             batch_size,
+        )
+    }
+
+    /// Consumes a [`NetworkConfig`], and constructs an instance of [`Rep3WitnessExtension`].
+    ///
+    /// # Arguments
+    /// - `network_config`: A network configuration specifying how to connect to the other two parties.
+    ///
+    /// # Returns
+    /// - `Ok(Rep3WitnessExtension)`: The MPC-VM capable of performing the witness extension using the Rep3 protocol.
+    /// - `Err(err)`: An error indicating a failure, such as inability to connect to the other parties.
+    pub fn get_rep3_vm(
+        &self,
+        network_config: NetworkConfig,
+        vm_config: VMConfig,
+    ) -> Result<Rep3WitnessExtension<F, Rep3MpcNet>> {
+        Rep3WitnessExtension::new(
+            self,
+            network_config,
+            MpcAccelerator::from_config(MpcAcceleratorConfig::from_env()),
+            vm_config,
+        )
+    }
+
+    /// Consumes an already established [`Rep3Network`], and constructs an instance of [`Rep3WitnessExtension`].
+    ///
+    /// # Arguments
+    /// - `network`: An already established [`Rep3Network`].
+    /// - `vm_config`: The [`VMConfig`].
+    ///
+    /// # Returns
+    /// - `Ok(Rep3WitnessExtension)`: The MPC-VM capable of performing the witness extension using the Rep3 protocol.
+    /// - `Err(err)`: An error indicating a failure.
+    pub fn get_rep3_vm_with_network<N: Rep3Network>(
+        &self,
+        network: N,
+        vm_config: VMConfig,
+    ) -> Result<Rep3WitnessExtension<F, N>> {
+        Rep3WitnessExtension::from_network(
+            self,
+            network,
+            MpcAccelerator::from_config(MpcAcceleratorConfig::from_env()),
+            vm_config,
         )
     }
 

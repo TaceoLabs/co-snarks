@@ -1058,25 +1058,25 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> FinalizedWitnessExtension<F,
 }
 
 impl<F: PrimeField> PlainWitnessExtension<F> {
-    pub(crate) fn new(parser: CoCircomCompilerParsed<F>, config: VMConfig) -> Self {
+    pub(crate) fn new(parser: &CoCircomCompilerParsed<F>, config: VMConfig) -> Self {
         let mut signals = vec![F::default(); parser.amount_signals];
         signals[0] = F::one();
         Self {
             driver: CircomPlainVmWitnessExtension::default(),
-            signal_to_witness: parser.signal_to_witness,
-            main: parser.main,
+            signal_to_witness: parser.signal_to_witness.clone(),
+            main: parser.main.clone(),
             ctx: WitnessExtensionCtx::new(
                 signals,
-                parser.constant_table,
-                parser.fun_decls,
-                parser.templ_decls,
-                parser.string_table,
+                parser.constant_table.clone(),
+                parser.fun_decls.clone(),
+                parser.templ_decls.clone(),
+                parser.string_table.clone(),
                 MpcAccelerator::from_config(MpcAcceleratorConfig::from_env()),
             ),
             main_inputs: parser.main_inputs,
             main_outputs: parser.main_outputs,
-            main_input_list: parser.main_input_list,
-            output_mapping: parser.output_mapping,
+            main_input_list: parser.main_input_list.clone(),
+            output_mapping: parser.output_mapping.clone(),
             config,
         }
     }
@@ -1084,7 +1084,7 @@ impl<F: PrimeField> PlainWitnessExtension<F> {
 
 impl<F: PrimeField> BatchedPlainWitnessExtension<F> {
     pub(crate) fn new(
-        parser: CoCircomCompilerParsed<F>,
+        parser: &CoCircomCompilerParsed<F>,
         config: VMConfig,
         batch_size: usize,
     ) -> Self {
@@ -1092,25 +1092,25 @@ impl<F: PrimeField> BatchedPlainWitnessExtension<F> {
         signals[0] = vec![F::one(); batch_size];
         let batched_constant_table = parser
             .constant_table
-            .into_iter()
-            .map(|constant| vec![constant; batch_size])
+            .iter()
+            .map(|constant| vec![*constant; batch_size])
             .collect_vec();
         Self {
             driver: BatchedCircomPlainVmWitnessExtension::new(batch_size),
-            signal_to_witness: parser.signal_to_witness,
-            main: parser.main,
+            signal_to_witness: parser.signal_to_witness.clone(),
+            main: parser.main.clone(),
             ctx: WitnessExtensionCtx::new(
                 signals,
-                batched_constant_table,
-                parser.fun_decls,
-                parser.templ_decls,
-                parser.string_table,
+                batched_constant_table.clone(),
+                parser.fun_decls.clone(),
+                parser.templ_decls.clone(),
+                parser.string_table.clone(),
                 MpcAccelerator::from_config(MpcAcceleratorConfig::from_env()),
             ),
             main_inputs: parser.main_inputs,
             main_outputs: parser.main_outputs,
-            main_input_list: parser.main_input_list,
-            output_mapping: parser.output_mapping,
+            main_input_list: parser.main_input_list.clone(),
+            output_mapping: parser.output_mapping.clone(),
             config,
         }
     }
@@ -1118,7 +1118,7 @@ impl<F: PrimeField> BatchedPlainWitnessExtension<F> {
 
 impl<F: PrimeField, N: Rep3Network> Rep3WitnessExtension<F, N> {
     pub(crate) fn from_network(
-        parser: CoCircomCompilerParsed<F>,
+        parser: &CoCircomCompilerParsed<F>,
         network: N,
         mpc_accelerator: MpcAccelerator<F, CircomRep3VmWitnessExtension<F, N>>,
         config: VMConfig,
@@ -1128,25 +1128,26 @@ impl<F: PrimeField, N: Rep3Network> Rep3WitnessExtension<F, N> {
         signals[0] = Rep3VmType::Public(F::one());
         let constant_table = parser
             .constant_table
+            .clone()
             .into_iter()
             .map(Rep3VmType::Public)
             .collect_vec();
         Ok(Self {
             driver,
-            signal_to_witness: parser.signal_to_witness,
-            main: parser.main,
+            signal_to_witness: parser.signal_to_witness.clone(),
+            main: parser.main.clone(),
             ctx: WitnessExtensionCtx::new(
                 signals,
                 constant_table,
-                parser.fun_decls,
-                parser.templ_decls,
-                parser.string_table,
+                parser.fun_decls.clone(),
+                parser.templ_decls.clone(),
+                parser.string_table.clone(),
                 mpc_accelerator,
             ),
             main_inputs: parser.main_inputs,
             main_outputs: parser.main_outputs,
-            main_input_list: parser.main_input_list,
-            output_mapping: parser.output_mapping,
+            main_input_list: parser.main_input_list.clone(),
+            output_mapping: parser.output_mapping.clone(),
             config,
         })
     }
@@ -1188,7 +1189,7 @@ impl<F: PrimeField> BatchedRep3WitnessExtension<F, Rep3MpcNet> {
 
 impl<F: PrimeField, N: Rep3Network> BatchedRep3WitnessExtension<F, N> {
     pub(crate) fn from_network(
-        parser: CoCircomCompilerParsed<F>,
+        parser: &CoCircomCompilerParsed<F>,
         network: N,
         mpc_accelerator: MpcAccelerator<F, BatchedCircomRep3VmWitnessExtension<F, N>>,
         config: VMConfig,
@@ -1207,25 +1208,25 @@ impl<F: PrimeField, N: Rep3Network> BatchedRep3WitnessExtension<F, N> {
         signals[0] = BatchedRep3VmType::from(vec![F::one(); batch_size]);
         let constant_table = parser
             .constant_table
-            .into_iter()
-            .map(|constant| BatchedRep3VmType::from(vec![constant; batch_size]))
+            .iter()
+            .map(|constant| BatchedRep3VmType::from(vec![*constant; batch_size]))
             .collect_vec();
         Ok(Self {
             driver,
-            signal_to_witness: parser.signal_to_witness,
-            main: parser.main,
+            signal_to_witness: parser.signal_to_witness.clone(),
+            main: parser.main.clone(),
             ctx: WitnessExtensionCtx::new(
                 signals,
                 constant_table,
-                parser.fun_decls,
-                parser.templ_decls,
-                parser.string_table,
+                parser.fun_decls.clone(),
+                parser.templ_decls.clone(),
+                parser.string_table.clone(),
                 mpc_accelerator,
             ),
             main_inputs: parser.main_inputs,
             main_outputs: parser.main_outputs,
-            main_input_list: parser.main_input_list,
-            output_mapping: parser.output_mapping,
+            main_input_list: parser.main_input_list.clone(),
+            output_mapping: parser.output_mapping.clone(),
             config,
         })
     }
@@ -1233,7 +1234,7 @@ impl<F: PrimeField, N: Rep3Network> BatchedRep3WitnessExtension<F, N> {
 
 impl<F: PrimeField> Rep3WitnessExtension<F, Rep3MpcNet> {
     pub(crate) fn new(
-        parser: CoCircomCompilerParsed<F>,
+        parser: &CoCircomCompilerParsed<F>,
         network_config: NetworkConfig,
         mpc_accelerator: MpcAccelerator<F, CircomRep3VmWitnessExtension<F, Rep3MpcNet>>,
         config: VMConfig,
