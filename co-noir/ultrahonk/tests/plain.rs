@@ -53,10 +53,10 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(
         assert_eq!(proof, read_proof);
     }
 
-    // let is_valid =
-    //     UltraHonk::<_, H, UltraFlavour<_>>::verify(proof, &public_inputs, &verifying_key, has_zk)
-    //         .unwrap();
-    // assert!(is_valid);
+    let is_valid =
+        UltraHonk::<_, H, UltraFlavour>::verify(proof, &public_inputs, &verifying_key, has_zk)
+            .unwrap();
+    assert!(is_valid);
 }
 
 #[test]
