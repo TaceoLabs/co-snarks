@@ -6,8 +6,10 @@ use crate::{
     transcript::{Transcript, TranscriptHasher},
     verifier::HonkVerifyResult,
 };
-use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::prelude::{HonkCurve, VerifyingKey};
+use co_builder::{
+    polynomials::polynomial_flavours::WitnessEntitiesFlavour, prover_flavour::Flavour,
+};
 
 pub(crate) struct OinkVerifier<
     P: HonkCurve<TranscriptFieldType>,
@@ -84,9 +86,44 @@ impl<
             transcript.receive_point_from_prover::<P>("W_R".to_string())?;
         *self.memory.witness_commitments.w_o_mut() =
             transcript.receive_point_from_prover::<P>("W_O".to_string())?;
-        todo!("MEGA COMMITMENTS");
 
-        // Round is done since ultra_honk is no goblin flavor
+        if L::FLAVOUR == Flavour::Mega {
+            *self.memory.witness_commitments.ecc_op_wire_1_mut() =
+                transcript.receive_point_from_prover::<P>("ecc_op_wire_1".to_string())?;
+            *self.memory.witness_commitments.ecc_op_wire_2_mut() =
+                transcript.receive_point_from_prover::<P>("ecc_op_wire_2".to_string())?;
+            *self.memory.witness_commitments.ecc_op_wire_3_mut() =
+                transcript.receive_point_from_prover::<P>("ecc_op_wire_3".to_string())?;
+            *self.memory.witness_commitments.ecc_op_wire_4_mut() =
+                transcript.receive_point_from_prover::<P>("ecc_op_wire_4".to_string())?;
+            *self.memory.witness_commitments.calldata_mut() =
+                transcript.receive_point_from_prover::<P>("calldata".to_string())?;
+            *self.memory.witness_commitments.calldata_read_counts_mut() =
+                transcript.receive_point_from_prover::<P>("calldata_read_counts".to_string())?;
+            *self.memory.witness_commitments.calldata_read_tags_mut() =
+                transcript.receive_point_from_prover::<P>("calldata_read_tags".to_string())?;
+            *self.memory.witness_commitments.secondary_calldata_mut() =
+                transcript.receive_point_from_prover::<P>("secondary_calldata".to_string())?;
+            *self
+                .memory
+                .witness_commitments
+                .secondary_calldata_read_counts_mut() = transcript
+                .receive_point_from_prover::<P>("secondary_calldata_read_counts".to_string())?;
+            *self
+                .memory
+                .witness_commitments
+                .secondary_calldata_read_tags_mut() = transcript
+                .receive_point_from_prover::<P>("secondary_calldata_read_tags".to_string())?;
+            *self.memory.witness_commitments.return_data_mut() =
+                transcript.receive_point_from_prover::<P>("return_data".to_string())?;
+            *self
+                .memory
+                .witness_commitments
+                .return_data_read_counts_mut() =
+                transcript.receive_point_from_prover::<P>("return_data_read_counts".to_string())?;
+            *self.memory.witness_commitments.return_data_read_tags_mut() =
+                transcript.receive_point_from_prover::<P>("return_data_read_tags".to_string())?;
+        }
         Ok(())
     }
 
@@ -129,8 +166,19 @@ impl<
 
         *self.memory.witness_commitments.lookup_inverses_mut() =
             transcript.receive_point_from_prover::<P>("lookup_inverses".to_string())?;
-        todo!("MEGA COMMITMENTS");
-        // Round is done since ultra_honk is no goblin flavor
+
+        // If Goblin (i.e. using DataBus) receive commitments to log-deriv inverses polynomials
+        if L::FLAVOUR == Flavour::Mega {
+            *self.memory.witness_commitments.calldata_inverses_mut() =
+                transcript.receive_point_from_prover::<P>("calldata_inverses".to_string())?;
+            *self
+                .memory
+                .witness_commitments
+                .secondary_calldata_inverses_mut() = transcript
+                .receive_point_from_prover::<P>("secondary_calldata_inverses".to_string())?;
+            *self.memory.witness_commitments.return_data_inverses_mut() =
+                transcript.receive_point_from_prover::<P>("return_data_inverses".to_string())?;
+        }
         Ok(())
     }
 

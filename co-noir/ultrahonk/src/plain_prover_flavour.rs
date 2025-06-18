@@ -31,6 +31,7 @@ pub trait PlainProverFlavour: Default + ProverFlavour {
         + num_traits::identities::Zero;
 
     const NUM_SUBRELATIONS: usize;
+    const NUM_ALPHAS: usize = Self::NUM_SUBRELATIONS - 1;
 
     fn scale<F: PrimeField>(
         acc: &mut Self::AllRelationAcc<F>,
@@ -82,6 +83,11 @@ pub trait PlainProverFlavour: Default + ProverFlavour {
         transcript: &mut Transcript<F, H>,
         label: String,
     ) -> HonkProofResult<Self::SumcheckRoundOutputZK<P::ScalarField>>;
+
+    fn get_alpha_challenges<F: PrimeField, H: TranscriptHasher<F>, P: HonkCurve<F>>(
+        transcript: &mut Transcript<F, H>,
+        alphas: &mut Self::Alphas<P::ScalarField>,
+    );
 }
 
 pub trait UnivariateTest<F: PrimeField> {

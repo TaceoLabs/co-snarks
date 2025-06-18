@@ -1,3 +1,5 @@
+use std::array;
+
 use crate::decider::relations::databus_lookup_relation::DataBusLookupRelationEvals;
 use crate::decider::relations::ecc_op_queue_relation::EccOpQueueRelationEvals;
 use crate::decider::sumcheck::round_prover::SumcheckProverRound;
@@ -476,10 +478,20 @@ impl PlainProverFlavour for MegaFlavour {
             )?;
         Ok(Self::SumcheckRoundOutputZK::<P::ScalarField> { evaluations: array })
     }
+
+    fn get_alpha_challenges<F: PrimeField, H: TranscriptHasher<F>, P: HonkCurve<F>>(
+        transcript: &mut Transcript<F, H>,
+        alphas: &mut Self::Alphas<P::ScalarField>,
+    ) {
+        let args: [String; Self::NUM_ALPHAS] = array::from_fn(|i| format!("alpha_{i}"));
+        alphas
+            .0
+            .copy_from_slice(&transcript.get_challenges::<P>(&args));
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct MegaAlphas<F: PrimeField>([F; MegaFlavour::NUM_SUBRELATIONS - 1]);
+pub struct MegaAlphas<F: PrimeField>([F; MegaFlavour::NUM_ALPHAS]);
 
 impl<F: PrimeField + Default> Default for MegaAlphas<F> {
     fn default() -> Self {

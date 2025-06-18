@@ -416,9 +416,7 @@ impl<
         transcript: &mut Transcript<TranscriptFieldType, H>,
     ) {
         tracing::trace!("generate alpha round");
-        todo!("Implement alphas generation for Oink");
-        // let args: [String; NUM_ALPHAS] = array::from_fn(|i| format!("alpha_{i}"));
-        // alphas.copy_from_slice(&transcript.get_challenges::<P>(&args));
+        L::get_alpha_challenges::<_, _, P>(transcript, alphas);
     }
 
     /// Add circuit size public input size and public inputs to transcript

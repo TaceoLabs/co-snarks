@@ -1,3 +1,5 @@
+use std::array;
+
 use crate::decider::sumcheck::round_prover::SumcheckProverRound;
 use crate::decider::sumcheck::round_verifier::SumcheckVerifierRound;
 use crate::decider::types::{ClaimedEvaluations, ProverUnivariates, RelationParameters};
@@ -61,7 +63,7 @@ pub struct AllRelationEvaluationsUltra<F: PrimeField> {
 impl PlainProverFlavour for UltraFlavour {
     type AllRelationAcc<F: PrimeField> = AllRelationAccUltra<F>;
     type AllRelationEvaluations<F: PrimeField> = AllRelationEvaluationsUltra<F>;
-    type Alphas<F: PrimeField> = [F; Self::NUM_SUBRELATIONS - 1];
+    type Alphas<F: PrimeField> = [F; Self::NUM_ALPHAS];
     type SumcheckRoundOutput<F: PrimeField> =
         Univariate<F, { UltraFlavour::BATCHED_RELATION_PARTIAL_LENGTH }>;
     type SumcheckRoundOutputZK<F: PrimeField> =
@@ -404,5 +406,12 @@ impl PlainProverFlavour for UltraFlavour {
                 label,
             )?;
         Ok(Self::SumcheckRoundOutputZK::<P::ScalarField> { evaluations: array })
+    }
+    fn get_alpha_challenges<F: PrimeField, H: TranscriptHasher<F>, P: HonkCurve<F>>(
+        transcript: &mut Transcript<F, H>,
+        alphas: &mut Self::Alphas<P::ScalarField>,
+    ) {
+        let args: [String; Self::NUM_ALPHAS] = array::from_fn(|i| format!("alpha_{i}"));
+        alphas.copy_from_slice(&transcript.get_challenges::<P>(&args));
     }
 }
