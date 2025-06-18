@@ -236,8 +236,8 @@ impl<F: PrimeField, const SIZE: usize> UnivariateTest<F> for Univariate<F, SIZE>
         Self { evaluations }
     }
 
-    fn evaluations(&mut self) -> Vec<F> {
-        self.evaluations.to_vec()
+    fn evaluations(&mut self) -> &mut [F] {
+        &mut self.evaluations
     }
     fn evaluations_as_ref(&self) -> &[F] {
         &self.evaluations

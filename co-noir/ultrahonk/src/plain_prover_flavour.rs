@@ -114,7 +114,7 @@ pub trait UnivariateTest<F: PrimeField> {
 
     fn get_random<R: Rng + CryptoRng>(rng: &mut R) -> Self;
 
-    fn evaluations(&mut self) -> Vec<F>;
+    fn evaluations(&mut self) -> &mut [F];
     fn evaluations_as_ref(&self) -> &[F];
 
     // fn extend_and_batch_univariates<const SIZE: usize, F: PrimeField>(

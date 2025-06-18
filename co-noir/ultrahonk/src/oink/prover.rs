@@ -482,7 +482,6 @@ impl<
             &proving_key.crs,
             transcript,
         )?;
-        // println!("Flavour: {:?}", L::FLAVOUR);
         if L::FLAVOUR == Flavour::Mega {
             let has_zk = self.has_zk;
             self.has_zk = ZeroKnowledge::No; // MegaZKFlavor does not mask the wires, so we set has_zk to No
