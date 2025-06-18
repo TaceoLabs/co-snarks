@@ -16,6 +16,7 @@ use crate::{
 };
 use ark_ec::AffineRepr;
 use ark_ff::{Field, One, Zero};
+use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::prelude::HonkCurve;
 use co_builder::prelude::ZeroKnowledge;
 
@@ -26,15 +27,15 @@ impl<
     > DeciderVerifier<P, H, L>
 {
     pub fn get_g_shift_evaluations(
-        evaluations: &'_ ClaimedEvaluations<P::ScalarField, P::ScalarField, L>,
-    ) -> PolyGShift<'_, P::ScalarField> {
+        evaluations: &'_ ClaimedEvaluations<P::ScalarField, L>,
+    ) -> PolyGShift<'_, P::ScalarField, L> {
         PolyGShift {
             wires: &evaluations.shifted_witness,
         }
     }
 
     pub fn get_g_shift_comms(
-        evaluations: &'_ VerifierCommitments<P::G1Affine, P::ScalarField, L>,
+        evaluations: &'_ VerifierCommitments<P::G1Affine, L>,
     ) -> PolyG<'_, P::G1Affine> {
         PolyG {
             wires: evaluations.witness.to_be_shifted().try_into().unwrap(),
@@ -42,16 +43,16 @@ impl<
     }
 
     pub fn get_f_evaluations(
-        evaluations: &'_ ClaimedEvaluations<P::ScalarField, P::ScalarField, L>,
-    ) -> PolyF<'_, P::ScalarField, P::ScalarField, L> {
+        evaluations: &'_ ClaimedEvaluations<P::ScalarField, L>,
+    ) -> PolyF<'_, P::ScalarField, L> {
         PolyF {
             precomputed: &evaluations.precomputed,
             witness: &evaluations.witness,
         }
     }
     pub fn get_f_comms(
-        evaluations: &'_ ClaimedEvaluations<P::G1Affine, P::ScalarField, L>,
-    ) -> PolyF<'_, P::G1Affine, P::ScalarField, L> {
+        evaluations: &'_ ClaimedEvaluations<P::G1Affine, L>,
+    ) -> PolyF<'_, P::G1Affine, L> {
         PolyF {
             precomputed: &evaluations.precomputed,
             witness: &evaluations.witness,

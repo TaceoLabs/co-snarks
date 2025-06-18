@@ -1,6 +1,8 @@
 use crate::decider::types::{ClaimedEvaluations, ProverUnivariates};
+use crate::prelude::{Transcript, TranscriptHasher};
 use crate::{decider::types::RelationParameters, transcript::TranscriptFieldType};
 use ark_ff::PrimeField;
+use co_builder::HonkProofResult;
 use co_builder::{prelude::HonkCurve, prover_flavour::ProverFlavour};
 use rand::{CryptoRng, Rng};
 
@@ -64,6 +66,22 @@ pub trait PlainProverFlavour: Default + ProverFlavour {
         first_scalar: F,
         elements: &Self::Alphas<F>,
     ) -> F;
+    fn receive_round_univariate_from_prover<
+        F: PrimeField,
+        H: TranscriptHasher<F>,
+        P: HonkCurve<F>,
+    >(
+        transcript: &mut Transcript<F, H>,
+        label: String,
+    ) -> HonkProofResult<Self::SumcheckRoundOutput<P::ScalarField>>;
+    fn receive_round_univariate_from_prover_zk<
+        F: PrimeField,
+        H: TranscriptHasher<F>,
+        P: HonkCurve<F>,
+    >(
+        transcript: &mut Transcript<F, H>,
+        label: String,
+    ) -> HonkProofResult<Self::SumcheckRoundOutputZK<P::ScalarField>>;
 }
 
 pub trait UnivariateTest<F: PrimeField> {

@@ -1,8 +1,5 @@
 use super::{
-    super::{
-        types::{GateSeparatorPolynomial, RelationParameters},
-        univariate::Univariate,
-    },
+    super::types::{GateSeparatorPolynomial, RelationParameters},
     zk_data::ZKSumcheckData,
 };
 use crate::{decider::types::ProverUnivariates, plain_prover_flavour::PlainProverFlavour};
@@ -21,8 +18,6 @@ use crate::{
 
 use ark_ff::PrimeField;
 use co_builder::prelude::{HonkCurve, RowDisablingPolynomial};
-
-pub(crate) type SumcheckRoundOutput<F, const U: usize> = Univariate<F, U>;
 
 pub(crate) struct SumcheckProverRound<F: PrimeField, L: PlainProverFlavour> {
     pub(crate) round_size: usize,
@@ -46,10 +41,9 @@ impl<F: PrimeField, L: PlainProverFlavour> SumcheckProverRound<F, L> {
     ) {
         tracing::trace!("Extend edges");
 
-        // TODO FLORIN
-        // for (src, des) in multivariates.iter().zip(extended_edges.iter_mut()) {
-        //     des.extend_from(&src[edge_index..edge_index + 2]);
-        // }
+        for (src, des) in multivariates.iter().zip(extended_edges.iter_mut()) {
+            des.extend_from(&src[edge_index..edge_index + 2]);
+        }
     }
 
     /**
@@ -119,7 +113,7 @@ impl<F: PrimeField, L: PlainProverFlavour> SumcheckProverRound<F, L> {
      */
     fn batch_over_relations_univariates(
         mut univariate_accumulators: L::AllRelationAcc<F>,
-        alphas: &L::Alphas<F>, //TODO ALPHAS_ISSUE
+        alphas: &L::Alphas<F>,
         gate_sparators: &GateSeparatorPolynomial<F>,
     ) -> L::SumcheckRoundOutput<F> {
         tracing::trace!("batch over relations");
@@ -133,7 +127,7 @@ impl<F: PrimeField, L: PlainProverFlavour> SumcheckProverRound<F, L> {
     }
     fn batch_over_relations_univariates_zk(
         mut univariate_accumulators: L::AllRelationAcc<F>,
-        alphas: &L::Alphas<F>, //TODO ALPHAS_ISSUE
+        alphas: &L::Alphas<F>,
         gate_sparators: &GateSeparatorPolynomial<F>,
     ) -> L::SumcheckRoundOutputZK<F> {
         tracing::trace!("batch over relations");
@@ -321,7 +315,7 @@ impl<F: PrimeField, L: PlainProverFlavour> SumcheckProverRound<F, L> {
             // Note: Currently not happening
             let mut libra_round_univariate_extended = L::SumcheckRoundOutputZK::default();
             libra_round_univariate_extended
-                .extend_from(&libra_round_univariate.evaluations_as_ref());
+                .extend_from(libra_round_univariate.evaluations_as_ref());
             libra_round_univariate_extended
         }
     }

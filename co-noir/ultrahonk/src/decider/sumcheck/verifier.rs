@@ -1,10 +1,6 @@
 use super::SumcheckVerifierOutput;
-use crate::prelude::Univariate;
 use crate::{
-    decider::{
-        sumcheck::{round_prover::SumcheckRoundOutput, round_verifier::SumcheckVerifierRound},
-        verifier::DeciderVerifier,
-    },
+    decider::{sumcheck::round_verifier::SumcheckVerifierRound, verifier::DeciderVerifier},
     plain_prover_flavour::PlainProverFlavour,
     prelude::{GateSeparatorPolynomial, TranscriptFieldType},
     transcript::{Transcript, TranscriptHasher},
@@ -15,7 +11,6 @@ use crate::{
 use ark_ff::{One, Zero};
 use co_builder::prelude::RowDisablingPolynomial;
 use co_builder::prelude::{HonkCurve, ZeroKnowledge};
-use co_builder::prover_flavour::ProverFlavour;
 
 // Keep in mind, the UltraHonk protocol (UltraFlavor) does not per default have ZK
 impl<
@@ -24,7 +19,7 @@ impl<
         L: PlainProverFlavour,
     > DeciderVerifier<P, H, L>
 {
-    pub(crate) fn sumcheck_verify<const SIZE: usize>(
+    pub(crate) fn sumcheck_verify(
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         has_zk: ZeroKnowledge,
@@ -59,30 +54,72 @@ impl<
             tracing::trace!("Sumcheck verify round {}", round_idx);
             let round_univariate_label = format!("Sumcheck:univariate_{round_idx}");
 
-            let evaluations =
-                transcript.receive_fr_array_from_verifier::<P, SIZE>(round_univariate_label)?;
-            let round_univariate = SumcheckRoundOutput { evaluations };
+            if has_zk == ZeroKnowledge::Yes {
+                let round_univariate = L::receive_round_univariate_from_prover_zk::<_, _, P>(
+                    transcript,
+                    round_univariate_label,
+                )?;
+                let round_challenge =
+                    transcript.get_challenge::<P>(format!("Sumcheck:u_{round_idx}"));
 
-            let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{round_idx}"));
+                let checked = sum_check_round.check_sum_zk(&round_univariate, padding_value);
+                verified = verified && checked;
 
-            let checked = sum_check_round.check_sum(&round_univariate, padding_value);
-            verified = verified && checked;
+                multivariate_challenge.push(round_challenge);
 
-            multivariate_challenge.push(round_challenge);
+                sum_check_round.compute_next_target_sum_zk(
+                    &round_univariate,
+                    round_challenge,
+                    padding_value,
+                );
+                gate_separators.partially_evaluate_with_padding(
+                    round_challenge,
+                    padding_indicator_array[round_idx],
+                );
+            } else {
+                let round_univariate = L::receive_round_univariate_from_prover::<_, _, P>(
+                    transcript,
+                    round_univariate_label,
+                )?;
+                let round_challenge =
+                    transcript.get_challenge::<P>(format!("Sumcheck:u_{round_idx}"));
 
-            sum_check_round.compute_next_target_sum(
-                &round_univariate,
-                round_challenge,
-                padding_value,
-            );
-            gate_separators.partially_evaluate_with_padding(
-                round_challenge,
-                padding_indicator_array[round_idx],
-            );
+                let checked = sum_check_round.check_sum(&round_univariate, padding_value);
+                verified = verified && checked;
+
+                multivariate_challenge.push(round_challenge);
+
+                sum_check_round.compute_next_target_sum(
+                    &round_univariate,
+                    round_challenge,
+                    padding_value,
+                );
+                gate_separators.partially_evaluate_with_padding(
+                    round_challenge,
+                    padding_indicator_array[round_idx],
+                );
+            };
+
+            // let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{round_idx}"));
+
+            // let checked = sum_check_round.check_sum(&round_univariate, padding_value);
+            // verified = verified && checked;
+
+            // multivariate_challenge.push(round_challenge);
+
+            // sum_check_round.compute_next_target_sum(
+            //     &round_univariate,
+            //     round_challenge,
+            //     padding_value,
+            // );
+            // gate_separators.partially_evaluate_with_padding(
+            //     round_challenge,
+            //     padding_indicator_array[round_idx],
+            // );
         }
 
         // Final round
-        let transcript_evaluations = transcript.receive_fr_vec_from_verifier::<P>(
+        let transcript_evaluations = transcript.receive_fr_vec_from_prover::<P>(
             "Sumcheck:evaluations".to_string(),
             L::NUM_ALL_ENTITIES,
         )?;

@@ -1,15 +1,13 @@
-use crate::flavours::mega_flavour::MegaFlavour;
 use crate::flavours::ultra_flavour::UltraFlavour;
 use crate::polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK;
 use crate::polynomials::polynomial_flavours::{
-    PrecomputedEntitiesFlavour, ProverWitnessEntitiesFlavour, WitnessEntitiesFlavour,
+    PrecomputedEntitiesFlavour, ProverWitnessEntitiesFlavour,
 };
 use crate::prover_flavour::ProverFlavour;
 use crate::{
     builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder},
     crs::ProverCrs,
     polynomials::{polynomial::Polynomial, polynomial_types::Polynomials},
-    prover_flavour::Flavour,
     types::types::{
         ActiveRegionData, CyclicPermutation, Mapping, PermutationMapping, TraceData, NUM_WIRES,
     },

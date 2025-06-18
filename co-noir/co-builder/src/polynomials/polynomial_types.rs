@@ -1,10 +1,7 @@
 use super::polynomial::Polynomial;
 use crate::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use crate::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
-use crate::{
-    flavours::{mega_flavour::MegaFlavour, ultra_flavour::UltraFlavour},
-    prover_flavour::ProverFlavour,
-};
+use crate::prover_flavour::ProverFlavour;
 use ark_ff::PrimeField;
 // use serde::{Deserialize, Serialize};
 

@@ -43,7 +43,7 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(
         .unwrap();
 
     let (proof, public_inputs) =
-        UltraHonk::<_, H, UltraFlavour<_>>::prove(proving_key, has_zk).unwrap();
+        UltraHonk::<_, H, UltraFlavour>::prove(proving_key, has_zk).unwrap();
     if has_zk == ZeroKnowledge::No {
         let proof_u8 = proof.to_buffer();
         let read_proof_u8 = std::fs::read(proof_file).unwrap();

@@ -1,4 +1,3 @@
-use super::round_prover::SumcheckRoundOutput;
 use crate::plain_prover_flavour::UnivariateTest;
 use crate::{
     decider::{
@@ -36,9 +35,9 @@ impl<P: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour> SumcheckVerifierR
         }
     }
 
-    pub(crate) fn compute_next_target_sum<const SIZE: usize>(
+    pub(crate) fn compute_next_target_sum(
         &mut self,
-        univariate: &SumcheckRoundOutput<P::ScalarField, SIZE>,
+        univariate: &L::SumcheckRoundOutput<P::ScalarField>,
         round_challenge: P::ScalarField,
         indicator: P::ScalarField,
     ) {
@@ -47,15 +46,40 @@ impl<P: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour> SumcheckVerifierR
             + indicator * univariate.evaluate(round_challenge);
     }
 
-    pub(crate) fn check_sum<const SIZE: usize>(
+    pub(crate) fn check_sum(
         &mut self,
-        univariate: &SumcheckRoundOutput<P::ScalarField, SIZE>,
+        univariate: &L::SumcheckRoundOutput<P::ScalarField>,
         indicator: P::ScalarField,
     ) -> bool {
         tracing::trace!("Check sum");
         let total_sum = (P::ScalarField::one() - indicator) * self.target_total_sum
-            + indicator * univariate.evaluations[0]
-            + univariate.evaluations[1];
+            + indicator * univariate.evaluations_as_ref()[0]
+            + univariate.evaluations_as_ref()[1];
+        let sumcheck_round_failed = self.target_total_sum != total_sum;
+
+        self.round_failed = self.round_failed || sumcheck_round_failed;
+        !sumcheck_round_failed
+    }
+    pub(crate) fn compute_next_target_sum_zk(
+        &mut self,
+        univariate: &L::SumcheckRoundOutputZK<P::ScalarField>,
+        round_challenge: P::ScalarField,
+        indicator: P::ScalarField,
+    ) {
+        tracing::trace!("Compute target sum");
+        self.target_total_sum = (P::ScalarField::one() - indicator) * self.target_total_sum
+            + indicator * univariate.evaluate(round_challenge);
+    }
+
+    pub(crate) fn check_sum_zk(
+        &mut self,
+        univariate: &L::SumcheckRoundOutputZK<P::ScalarField>,
+        indicator: P::ScalarField,
+    ) -> bool {
+        tracing::trace!("Check sum");
+        let total_sum = (P::ScalarField::one() - indicator) * self.target_total_sum
+            + indicator * univariate.evaluations_as_ref()[0]
+            + univariate.evaluations_as_ref()[1];
         let sumcheck_round_failed = self.target_total_sum != total_sum;
 
         self.round_failed = self.round_failed || sumcheck_round_failed;

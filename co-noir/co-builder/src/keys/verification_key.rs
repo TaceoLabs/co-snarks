@@ -1,5 +1,4 @@
 use crate::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
-use crate::prelude::Polynomial;
 use crate::{
     builder::UltraCircuitBuilder,
     crs::ProverCrs,

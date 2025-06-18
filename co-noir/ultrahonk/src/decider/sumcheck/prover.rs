@@ -1,5 +1,5 @@
 use crate::decider::prover::Decider;
-use crate::decider::sumcheck::round_prover::{SumcheckProverRound, SumcheckRoundOutput};
+use crate::decider::sumcheck::round_prover::SumcheckProverRound;
 use crate::decider::sumcheck::SumcheckOutput;
 use crate::decider::types::{ClaimedEvaluations, GateSeparatorPolynomial, PartiallyEvaluatePolys};
 use crate::plain_prover_flavour::{PlainProverFlavour, UnivariateTest};
@@ -65,14 +65,13 @@ impl<
     ) -> ClaimedEvaluations<P::ScalarField, L> {
         let mut multivariate_evaluations = ClaimedEvaluations::default();
 
-        // #[expect(unused_mut)] // TACEO TODO: This is for the linter, remove once its fixed...
-        // // TODO FLORIN
-        // for (src, mut des) in partially_evaluated_polynomials
-        //     .into_iter()
-        //     .zip(multivariate_evaluations.iter_mut())
-        // {
-        //     *des = src[0];
-        // }
+        #[expect(unused_mut)] // TACEO TODO: This is for the linter, remove once its fixed...
+        for (src, mut des) in partially_evaluated_polynomials
+            .iter()
+            .zip(multivariate_evaluations.iter_mut())
+        {
+            *des = src[0];
+        }
 
         multivariate_evaluations
     }

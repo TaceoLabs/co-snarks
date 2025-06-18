@@ -97,6 +97,7 @@ pub trait WitnessEntitiesFlavour<T: Default> {
     fn iter_mut<'a>(&'a mut self) -> impl Iterator<Item = &'a mut T>
     where
         T: 'a;
+    fn into_iter(self) -> impl Iterator<Item = T>;
     fn to_be_shifted(&self) -> &[T];
     fn to_be_shifted_mut(&mut self) -> &mut [T];
     fn w_l(&self) -> &T;
@@ -228,6 +229,7 @@ pub trait ShiftedWitnessEntitiesFlavour<T: Default> {
     fn iter_mut<'a>(&'a mut self) -> impl Iterator<Item = &'a mut T>
     where
         T: 'a;
+    fn into_iter(self) -> impl Iterator<Item = T>;
     fn w_l(&self) -> &T;
     fn w_r(&self) -> &T;
     fn w_o(&self) -> &T;

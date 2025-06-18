@@ -1,8 +1,7 @@
 use crate::{
     polynomials::{
         polynomial_flavours::{
-            PrecomputedEntitiesFlavour, ProverWitnessEntitiesFlavour,
-            ShiftedWitnessEntitiesFlavour, WitnessEntitiesFlavour,
+            PrecomputedEntitiesFlavour, ProverWitnessEntitiesFlavour, WitnessEntitiesFlavour,
         },
         polynomial_types::{
             PrecomputedEntities, ProverWitnessEntities, ShiftedWitnessEntities, WitnessEntities,
@@ -162,13 +161,13 @@ impl ProverFlavour for MegaFlavour {
     const WITNESS_RETURN_DATA_READ_TAGS: Option<usize> = Some(22);
     const WITNESS_RETURN_DATA_INVERSES: Option<usize> = Some(23);
 }
-type MegaPrecomputedEntities<T: Default> =
+type MegaPrecomputedEntities<T> =
     PrecomputedEntities<T, { MegaFlavour::PRECOMPUTED_ENTITIES_SIZE }>;
-type MegaProverWitnessEntities<T: Default> =
+type MegaProverWitnessEntities<T> =
     ProverWitnessEntities<T, { MegaFlavour::PROVER_WITNESS_ENTITIES_SIZE }>;
-type MegaShiftedWitnessEntities<T: Default> =
+type MegaShiftedWitnessEntities<T> =
     ShiftedWitnessEntities<T, { MegaFlavour::SHIFTED_WITNESS_ENTITIES_SIZE }>;
-type MegaWitnessEntities<T: Default> = WitnessEntities<T, { MegaFlavour::WITNESS_ENTITIES_SIZE }>;
+type MegaWitnessEntities<T> = WitnessEntities<T, { MegaFlavour::WITNESS_ENTITIES_SIZE }>;
 
 impl<T: Default> PrecomputedEntitiesFlavour<T> for MegaPrecomputedEntities<T> {
     fn iter<'a>(&'a self) -> impl Iterator<Item = &'a T>
@@ -701,6 +700,9 @@ impl<T: Default> WitnessEntitiesFlavour<T> for MegaWitnessEntities<T> {
         T: 'a,
     {
         self.elements.iter_mut()
+    }
+    fn into_iter(self) -> impl Iterator<Item = T> {
+        self.elements.into_iter()
     }
     fn to_be_shifted(&self) -> &[T] {
         &self.elements[MegaFlavour::WITNESS_W_L..=MegaFlavour::WITNESS_Z_PERM]

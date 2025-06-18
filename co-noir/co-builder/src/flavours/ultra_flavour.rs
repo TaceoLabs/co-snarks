@@ -160,13 +160,13 @@ impl ProverFlavour for UltraFlavour {
     const WITNESS_RETURN_DATA_READ_TAGS: Option<usize> = None;
     const WITNESS_RETURN_DATA_INVERSES: Option<usize> = None;
 }
-type UltraPrecomputedEntities<T: Default> =
+type UltraPrecomputedEntities<T> =
     PrecomputedEntities<T, { UltraFlavour::PRECOMPUTED_ENTITIES_SIZE }>;
-type UltraProverWitnessEntities<T: Default> =
+type UltraProverWitnessEntities<T> =
     ProverWitnessEntities<T, { UltraFlavour::PROVER_WITNESS_ENTITIES_SIZE }>;
-type UltraShiftedWitnessEntities<T: Default> =
+type UltraShiftedWitnessEntities<T> =
     ShiftedWitnessEntities<T, { UltraFlavour::SHIFTED_WITNESS_ENTITIES_SIZE }>;
-type UltraWitnessEntities<T: Default> = WitnessEntities<T, { UltraFlavour::WITNESS_ENTITIES_SIZE }>;
+type UltraWitnessEntities<T> = WitnessEntities<T, { UltraFlavour::WITNESS_ENTITIES_SIZE }>;
 
 impl<T: Default> PrecomputedEntitiesFlavour<T> for UltraPrecomputedEntities<T> {
     fn iter<'a>(&'a self) -> impl Iterator<Item = &'a T>
@@ -448,6 +448,9 @@ impl<T: Default> WitnessEntitiesFlavour<T> for UltraWitnessEntities<T> {
     {
         self.elements.iter_mut()
     }
+    fn into_iter(self) -> impl Iterator<Item = T> {
+        self.elements.into_iter()
+    }
     fn to_be_shifted(&self) -> &[T] {
         &self.elements[UltraFlavour::WITNESS_W_L..=UltraFlavour::WITNESS_Z_PERM]
     }
@@ -515,6 +518,9 @@ impl<T: Default> ShiftedWitnessEntitiesFlavour<T> for UltraShiftedWitnessEntitie
         T: 'a,
     {
         self.elements.iter_mut()
+    }
+    fn into_iter(self) -> impl Iterator<Item = T> {
+        self.elements.into_iter()
     }
     fn w_l(&self) -> &T {
         &self.elements[UltraFlavour::WITNESS_W_L]

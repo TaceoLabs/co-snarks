@@ -2,11 +2,12 @@ use crate::decider::sumcheck::round_prover::SumcheckProverRound;
 use crate::decider::sumcheck::round_verifier::SumcheckVerifierRound;
 use crate::decider::types::{ClaimedEvaluations, ProverUnivariates, RelationParameters};
 use crate::plain_prover_flavour::PlainProverFlavour;
-use crate::prelude::Univariate;
+use crate::prelude::{Transcript, TranscriptHasher, Univariate};
 use ark_ff::PrimeField;
 use co_builder::flavours::ultra_flavour::UltraFlavour;
 use co_builder::prelude::HonkCurve;
 use co_builder::prover_flavour::ProverFlavour;
+use co_builder::HonkProofResult;
 
 use crate::decider::relations::{
     auxiliary_relation::{AuxiliaryRelation, AuxiliaryRelationAcc, AuxiliaryRelationEvals},
@@ -56,10 +57,6 @@ pub struct AllRelationEvaluationsUltra<F: PrimeField> {
     pub(crate) r_pos_ext: Poseidon2ExternalRelationEvals<F>,
     pub(crate) r_pos_int: Poseidon2InternalRelationEvals<F>,
 }
-type UltraSumcheckRoundOutput<F: PrimeField> =
-    Univariate<F, { UltraFlavour::BATCHED_RELATION_PARTIAL_LENGTH }>;
-type UltraSumcheckRoundOutputZK<F: PrimeField> =
-    Univariate<F, { UltraFlavour::BATCHED_RELATION_PARTIAL_LENGTH }>;
 
 impl PlainProverFlavour for UltraFlavour {
     type AllRelationAcc<F: PrimeField> = AllRelationAccUltra<F>;
@@ -68,7 +65,7 @@ impl PlainProverFlavour for UltraFlavour {
     type SumcheckRoundOutput<F: PrimeField> =
         Univariate<F, { UltraFlavour::BATCHED_RELATION_PARTIAL_LENGTH }>;
     type SumcheckRoundOutputZK<F: PrimeField> =
-        Univariate<F, { UltraFlavour::BATCHED_RELATION_PARTIAL_LENGTH }>;
+        Univariate<F, { UltraFlavour::BATCHED_RELATION_PARTIAL_LENGTH_ZK }>;
     type ProverUnivariate<F: PrimeField> =
         Univariate<F, { UltraFlavour::MAX_PARTIAL_RELATION_LENGTH }>;
 
@@ -380,176 +377,32 @@ impl PlainProverFlavour for UltraFlavour {
 
         output
     }
+
+    fn receive_round_univariate_from_prover<
+        F: PrimeField,
+        H: TranscriptHasher<F>,
+        P: HonkCurve<F>,
+    >(
+        transcript: &mut Transcript<F, H>,
+        label: String,
+    ) -> HonkProofResult<Self::SumcheckRoundOutput<P::ScalarField>> {
+        let array = transcript
+            .receive_fr_array_from_prover::<P, { Self::BATCHED_RELATION_PARTIAL_LENGTH }>(label)?;
+        Ok(Self::SumcheckRoundOutput::<P::ScalarField> { evaluations: array })
+    }
+
+    fn receive_round_univariate_from_prover_zk<
+        F: PrimeField,
+        H: TranscriptHasher<F>,
+        P: HonkCurve<F>,
+    >(
+        transcript: &mut Transcript<F, H>,
+        label: String,
+    ) -> HonkProofResult<Self::SumcheckRoundOutputZK<P::ScalarField>> {
+        let array = transcript
+            .receive_fr_array_from_prover::<P, { Self::BATCHED_RELATION_PARTIAL_LENGTH_ZK }>(
+                label,
+            )?;
+        Ok(Self::SumcheckRoundOutputZK::<P::ScalarField> { evaluations: array })
+    }
 }
-
-// type UltraProverUnivariates<F: PrimeField> =
-//     Univariate<F, { UltraFlavour::MAX_PARTIAL_RELATION_LENGTH }>;
-// impl ProverUnivariatePlainFlavour for UltraFlavour {
-//     type ProverUnivariate<F: PrimeField> = UltraProverUnivariates<F>;
-
-//     fn double_in_place<F: PrimeField>(poly: &mut Self::ProverUnivariate<F>) {
-//         for i in 0..UltraFlavour::MAX_PARTIAL_RELATION_LENGTH {
-//             poly.evaluations[i].double_in_place();
-//         }
-//     }
-
-//     fn square_in_place<F: PrimeField>(poly: &mut Self::ProverUnivariate<F>) {
-//         for i in 0..UltraFlavour::MAX_PARTIAL_RELATION_LENGTH {
-//             poly.evaluations[i].square_in_place();
-//         }
-//     }
-
-//     fn extend_from<F: PrimeField>(poly_to: &mut Self::ProverUnivariate<F>, poly_from: &[F]) {
-//         let length = poly_from.len();
-//         let extended_length = UltraFlavour::MAX_PARTIAL_RELATION_LENGTH;
-
-//         assert!(length <= extended_length);
-//         poly_to.evaluations[..length].copy_from_slice(poly_from);
-
-//         if length == 2 {
-//             let delta = poly_from[1] - poly_from[0];
-//             for i in length..extended_length {
-//                 poly_to.evaluations[i] = poly_to.evaluations[i - 1] + delta;
-//             }
-//         } else if length == 3 {
-//             let inverse_two = F::from(2u64).inverse().unwrap();
-//             let a = (poly_from[2] + poly_from[0]) * inverse_two - poly_from[1];
-//             let b = poly_from[1] - a - poly_from[0];
-//             let a2 = a.double();
-//             let mut a_mul = a2.to_owned();
-//             for _ in 0..length - 2 {
-//                 a_mul += a2;
-//             }
-//             let mut extra = a_mul + a + b;
-//             for i in length..extended_length {
-//                 poly_to.evaluations[i] = poly_to.evaluations[i - 1] + extra;
-//                 extra += a2;
-//             }
-//         } else if length == 4 {
-//             let inverse_six = F::from(6u64).inverse().unwrap();
-//             let zero_times_3 = poly_from[0].double() + poly_from[0];
-//             let zero_times_6 = zero_times_3.double();
-//             let zero_times_12 = zero_times_6.double();
-//             let one_times_3 = poly_from[1].double() + poly_from[1];
-//             let one_times_6 = one_times_3.double();
-//             let two_times_3 = poly_from[2].double() + poly_from[2];
-//             let three_times_2 = poly_from[3].double();
-//             let three_times_3 = three_times_2 + poly_from[3];
-
-//             let one_minus_two_times_3 = one_times_3 - two_times_3;
-//             let one_minus_two_times_6 = one_minus_two_times_3 + one_minus_two_times_3;
-//             let one_minus_two_times_12 = one_minus_two_times_6 + one_minus_two_times_6;
-//             let a = (one_minus_two_times_3 + poly_from[3] - poly_from[0]) * inverse_six;
-//             let b =
-//                 (zero_times_6 - one_minus_two_times_12 - one_times_3 - three_times_3) * inverse_six;
-//             let c = (poly_from[0] - zero_times_12
-//                 + one_minus_two_times_12
-//                 + one_times_6
-//                 + two_times_3
-//                 + three_times_2)
-//                 * inverse_six;
-//             let a_plus_b = a + b;
-//             let a_plus_b_times_2 = a_plus_b + a_plus_b;
-//             let start_idx_sqr = (length - 1) * (length - 1);
-//             let idx_sqr_three = start_idx_sqr + start_idx_sqr + start_idx_sqr;
-//             let mut idx_sqr_three_times_a = F::from(idx_sqr_three as u64) * a;
-//             let mut x_a_term = F::from(6 * (length - 1) as u64) * a;
-//             let three_a = a + a + a;
-//             let six_a = three_a + three_a;
-
-//             let three_a_plus_two_b = a_plus_b_times_2 + a;
-//             let mut linear_term = F::from(length as u64 - 1) * three_a_plus_two_b + (a_plus_b + c);
-//             for i in length..extended_length {
-//                 poly_to.evaluations[i] =
-//                     poly_to.evaluations[i - 1] + idx_sqr_three_times_a + linear_term;
-
-//                 idx_sqr_three_times_a += x_a_term + three_a;
-//                 x_a_term += six_a;
-
-//                 linear_term += three_a_plus_two_b;
-//             }
-//         } else {
-//             let big_domain = Barycentric::construct_big_domain(length, extended_length);
-//             let lagrange_denominators =
-//                 Barycentric::construct_lagrange_denominators(length, &big_domain);
-//             let dominator_inverses = Barycentric::construct_denominator_inverses(
-//                 extended_length,
-//                 &big_domain,
-//                 &lagrange_denominators,
-//             );
-//             let full_numerator_values =
-//                 Barycentric::construct_full_numerator_values(length, extended_length, &big_domain);
-
-//             for k in length..extended_length {
-//                 poly_to.evaluations[k] = F::zero();
-//                 for (j, mut term) in poly_from.iter().cloned().enumerate() {
-//                     term *= &dominator_inverses[length * k + j];
-//                     poly_to.evaluations[k] += term;
-//                 }
-//                 poly_to.evaluations[k] *= &full_numerator_values[k];
-//             }
-//         }
-//     }
-
-//     fn evaluate<F: PrimeField>(poly: &Self::ProverUnivariate<F>, u: F) -> F {
-//         if u == F::zero() {
-//             return poly.evaluations[0];
-//         }
-
-//         let mut full_numerator_value = F::one();
-//         for i in 0..UltraFlavour::MAX_PARTIAL_RELATION_LENGTH {
-//             full_numerator_value *= u - F::from(i as u64);
-//         }
-
-//         let big_domain = Barycentric::construct_big_domain(
-//             poly.evaluations.len(),
-//             UltraFlavour::MAX_PARTIAL_RELATION_LENGTH,
-//         );
-//         let lagrange_denominators = Barycentric::construct_lagrange_denominators(
-//             UltraFlavour::MAX_PARTIAL_RELATION_LENGTH,
-//             &big_domain,
-//         );
-
-//         let mut denominator_inverses = [F::zero(); UltraFlavour::MAX_PARTIAL_RELATION_LENGTH];
-//         for i in 0..UltraFlavour::MAX_PARTIAL_RELATION_LENGTH {
-//             let mut inv = lagrange_denominators[i];
-
-//             inv *= u - big_domain[i];
-//             inv = F::one() / inv;
-//             denominator_inverses[i] = inv;
-//         }
-
-//         let mut result = F::zero();
-//         for (i, &inverse) in denominator_inverses.iter().enumerate() {
-//             let mut term = poly.evaluations[i];
-//             term *= inverse;
-//             result += term;
-//         }
-//         result *= full_numerator_value;
-//         result
-//     }
-
-//     fn get_random<R: rand::Rng + rand::CryptoRng, F: PrimeField>(
-//         rng: &mut R,
-//     ) -> Self::ProverUnivariate<F> {
-//         let evaluations = array::from_fn(|_| F::rand(rng));
-//         Self::ProverUnivariate::<F> { evaluations }
-//     }
-
-//     fn extend_and_batch_univariates<const SIZE: usize, F: PrimeField>(
-//         lhs: &Univariate<F, SIZE>,
-//         result: &mut Self::ProverUnivariate<F>,
-//         extended_random_poly: &Self::ProverUnivariate<F>,
-//         partial_evaluation_result: &F,
-//         linear_independent: bool,
-//     ) {
-//         let mut extended = Self::ProverUnivariate::<F>::default();
-//         extended.extend_from(&lhs.evaluations);
-
-//         if linear_independent {
-//             *result += extended * extended_random_poly * partial_evaluation_result;
-//         } else {
-//             *result += extended;
-//         }
-//     }
-// }
