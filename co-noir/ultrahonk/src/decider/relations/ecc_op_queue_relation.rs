@@ -2,12 +2,13 @@ use crate::decider::types::ProverUnivariatesSized;
 use crate::{
     decider::{
         relations::Relation,
-        types::{ClaimedEvaluations, ProverUnivariates, RelationParameters},
+        types::{ClaimedEvaluations, RelationParameters},
         univariate::Univariate,
     },
     plain_prover_flavour::PlainProverFlavour,
 };
 use ark_ff::PrimeField;
+use ark_ff::Zero;
 use co_builder::polynomials::polynomial_flavours::{
     PrecomputedEntitiesFlavour, ShiftedWitnessEntitiesFlavour, WitnessEntitiesFlavour,
 };
@@ -143,7 +144,7 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for EccOpQueueRelation
     fn accumulate<const SIZE: usize>(
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesSized<F, L, SIZE>,
-        relation_parameters: &RelationParameters<F, L>,
+        _relation_parameters: &RelationParameters<F, L>,
         scaling_factor: &F,
     ) {
         tracing::trace!("Accumulate EccOpQueueRelation");

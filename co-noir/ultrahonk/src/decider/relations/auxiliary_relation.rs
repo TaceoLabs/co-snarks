@@ -3,7 +3,7 @@ use crate::decider::types::ProverUnivariatesSized;
 use crate::plain_prover_flavour::UnivariateTest;
 use crate::{
     decider::{
-        types::{ClaimedEvaluations, ProverUnivariates, RelationParameters},
+        types::{ClaimedEvaluations,  RelationParameters},
         univariate::Univariate,
     },
     plain_prover_flavour::PlainProverFlavour,
@@ -134,7 +134,7 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for AuxiliaryRelation 
 
     fn skip<const SIZE: usize>(input: &ProverUnivariatesSized<F, L, SIZE>) -> bool {
         <Self as Relation<F, L>>::check_skippable();
-        L::q_aux::<_>(&input.precomputed).is_zero()
+        input.precomputed.q_aux().is_zero()
     }
 
     /**
@@ -183,23 +183,23 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for AuxiliaryRelation 
         let eta_two = &relation_parameters.eta_2;
         let eta_three = &relation_parameters.eta_3;
 
-        let w_1 = <L as WitnessEntitiesFlavour>::w_l::<_>(&input.witness);
-        let w_2 = <L as WitnessEntitiesFlavour>::w_r::<_>(&input.witness);
-        let w_3 = <L as WitnessEntitiesFlavour>::w_o::<_>(&input.witness);
-        let w_4 = <L as WitnessEntitiesFlavour>::w_4::<_>(&input.witness);
-        let w_1_shift = <L as ShiftedWitnessEntitiesFlavour>::w_l::<_>(&input.shifted_witness);
-        let w_2_shift = <L as ShiftedWitnessEntitiesFlavour>::w_r::<_>(&input.shifted_witness);
-        let w_3_shift = <L as ShiftedWitnessEntitiesFlavour>::w_o::<_>(&input.shifted_witness);
-        let w_4_shift = <L as ShiftedWitnessEntitiesFlavour>::w_4::<_>(&input.shifted_witness);
+        let w_1 = input.witness.w_l();
+        let w_2 = input.witness.w_r();
+        let w_3 = input.witness.w_o();
+        let w_4 = input.witness.w_4();
+        let w_1_shift = input.shifted_witness.w_l();
+        let w_2_shift = input.shifted_witness.w_r();
+        let w_3_shift = input.shifted_witness.w_o();
+        let w_4_shift = input.shifted_witness.w_4();
 
-        let q_1 = <L as PrecomputedEntitiesFlavour>::q_l::<_>(&input.precomputed);
-        let q_2 = <L as PrecomputedEntitiesFlavour>::q_r::<_>(&input.precomputed);
-        let q_3 = <L as PrecomputedEntitiesFlavour>::q_o::<_>(&input.precomputed);
-        let q_4 = <L as PrecomputedEntitiesFlavour>::q_4::<_>(&input.precomputed);
-        let q_m = <L as PrecomputedEntitiesFlavour>::q_m::<_>(&input.precomputed);
-        let q_c = <L as PrecomputedEntitiesFlavour>::q_c::<_>(&input.precomputed);
-        let q_arith = <L as PrecomputedEntitiesFlavour>::q_arith::<_>(&input.precomputed);
-        let q_aux = <L as PrecomputedEntitiesFlavour>::q_aux::<_>(&input.precomputed);
+        let q_1 = input.precomputed.q_l();
+        let q_2 = input.precomputed.q_r();
+        let q_3 = input.precomputed.q_o();
+        let q_4 = input.precomputed.q_4();
+        let q_m = input.precomputed.q_m();
+        let q_c = input.precomputed.q_c();
+        let q_arith = input.precomputed.q_arith();
+        let q_aux = input.precomputed.q_aux();
 
         let limb_size = F::from(BigUint::one() << 68);
         let sublimb_shift = F::from(1u64 << 14);
@@ -460,23 +460,23 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for AuxiliaryRelation 
         let eta_two = &relation_parameters.eta_2;
         let eta_three = &relation_parameters.eta_3;
 
-        let w_1 = <L as WitnessEntitiesFlavour>::w_l::<_>(&input.witness);
-        let w_2 = <L as WitnessEntitiesFlavour>::w_r::<_>(&input.witness);
-        let w_3 = <L as WitnessEntitiesFlavour>::w_o::<_>(&input.witness);
-        let w_4 = <L as WitnessEntitiesFlavour>::w_4::<_>(&input.witness);
-        let w_1_shift = <L as ShiftedWitnessEntitiesFlavour>::w_l::<_>(&input.shifted_witness);
-        let w_2_shift = <L as ShiftedWitnessEntitiesFlavour>::w_r::<_>(&input.shifted_witness);
-        let w_3_shift = <L as ShiftedWitnessEntitiesFlavour>::w_o::<_>(&input.shifted_witness);
-        let w_4_shift = <L as ShiftedWitnessEntitiesFlavour>::w_4::<_>(&input.shifted_witness);
+        let w_1 = input.witness.w_l();
+        let w_2 = input.witness.w_r();
+        let w_3 = input.witness.w_o();
+        let w_4 = input.witness.w_4();
+        let w_1_shift = input.shifted_witness.w_l();
+        let w_2_shift = input.shifted_witness.w_r();
+        let w_3_shift = input.shifted_witness.w_o();
+        let w_4_shift = input.shifted_witness.w_4();
 
-        let q_1 = <L as PrecomputedEntitiesFlavour>::q_l::<_>(&input.precomputed);
-        let q_2 = <L as PrecomputedEntitiesFlavour>::q_r::<_>(&input.precomputed);
-        let q_3 = <L as PrecomputedEntitiesFlavour>::q_o::<_>(&input.precomputed);
-        let q_4 = <L as PrecomputedEntitiesFlavour>::q_4::<_>(&input.precomputed);
-        let q_m = <L as PrecomputedEntitiesFlavour>::q_m::<_>(&input.precomputed);
-        let q_c = <L as PrecomputedEntitiesFlavour>::q_c::<_>(&input.precomputed);
-        let q_arith = <L as PrecomputedEntitiesFlavour>::q_arith::<_>(&input.precomputed);
-        let q_aux = <L as PrecomputedEntitiesFlavour>::q_aux::<_>(&input.precomputed);
+        let q_1 = input.precomputed.q_l();
+        let q_2 = input.precomputed.q_r();
+        let q_3 = input.precomputed.q_o();
+        let q_4 = input.precomputed.q_4();
+        let q_m = input.precomputed.q_m();
+        let q_c = input.precomputed.q_c();
+        let q_arith = input.precomputed.q_arith();
+        let q_aux = input.precomputed.q_aux();
 
         let limb_size = F::from(BigUint::one() << 68);
         let sublimb_shift = F::from(1u64 << 14);

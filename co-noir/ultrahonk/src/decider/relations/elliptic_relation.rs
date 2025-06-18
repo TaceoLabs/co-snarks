@@ -1,6 +1,7 @@
 use crate::decider::types::{ClaimedEvaluations, ProverUnivariatesSized, RelationParameters};
-use crate::decider::{types::ProverUnivariates, univariate::Univariate};
+use crate::decider::{ univariate::Univariate};
 use crate::plain_prover_flavour::PlainProverFlavour;
+use crate::plain_prover_flavour::UnivariateTest;
 use crate::transcript::TranscriptFieldType;
 use ark_ff::AdditiveGroup;
 use ark_ff::{Field, PrimeField, Zero};

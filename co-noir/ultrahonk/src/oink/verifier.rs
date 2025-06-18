@@ -6,6 +6,7 @@ use crate::{
     transcript::{Transcript, TranscriptHasher},
     verifier::HonkVerifyResult,
 };
+use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::prelude::{HonkCurve, VerifyingKey};
 
 pub(crate) struct OinkVerifier<

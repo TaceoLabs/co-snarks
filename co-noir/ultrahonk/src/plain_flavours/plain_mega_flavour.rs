@@ -1,5 +1,3 @@
-use std::array;
-
 use crate::decider::relations::databus_lookup_relation::DataBusLookupRelationEvals;
 use crate::decider::relations::ecc_op_queue_relation::EccOpQueueRelationEvals;
 use crate::decider::sumcheck::round_prover::SumcheckProverRound;
@@ -34,7 +32,6 @@ use crate::decider::{
     types::ClaimedEvaluations,
 };
 use crate::plain_prover_flavour::PlainProverFlavour;
-use crate::prelude::Barycentric;
 use crate::prelude::Univariate;
 use crate::transcript::TranscriptFieldType;
 use ark_ff::PrimeField;
@@ -456,8 +453,8 @@ impl PlainProverFlavour for MegaFlavour {
     }
 }
 
-type MegaProverUnivariates<F: PrimeField> =
-    Univariate<F, { MegaFlavour::MAX_PARTIAL_RELATION_LENGTH }>;
+// type MegaProverUnivariates<F: PrimeField> =
+//     Univariate<F, { MegaFlavour::MAX_PARTIAL_RELATION_LENGTH }>;
 // impl ProverUnivariatePlainFlavour for MegaFlavour {
 //     type ProverUnivariate<F: PrimeField> = MegaProverUnivariates<F>;
 

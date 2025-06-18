@@ -1,10 +1,8 @@
-use std::array;
-
 use crate::decider::sumcheck::round_prover::SumcheckProverRound;
 use crate::decider::sumcheck::round_verifier::SumcheckVerifierRound;
 use crate::decider::types::{ClaimedEvaluations, ProverUnivariates, RelationParameters};
 use crate::plain_prover_flavour::PlainProverFlavour;
-use crate::prelude::{Barycentric, Univariate};
+use crate::prelude::Univariate;
 use ark_ff::PrimeField;
 use co_builder::flavours::ultra_flavour::UltraFlavour;
 use co_builder::prelude::HonkCurve;
@@ -384,8 +382,8 @@ impl PlainProverFlavour for UltraFlavour {
     }
 }
 
-type UltraProverUnivariates<F: PrimeField> =
-    Univariate<F, { UltraFlavour::MAX_PARTIAL_RELATION_LENGTH }>;
+// type UltraProverUnivariates<F: PrimeField> =
+//     Univariate<F, { UltraFlavour::MAX_PARTIAL_RELATION_LENGTH }>;
 // impl ProverUnivariatePlainFlavour for UltraFlavour {
 //     type ProverUnivariate<F: PrimeField> = UltraProverUnivariates<F>;
 

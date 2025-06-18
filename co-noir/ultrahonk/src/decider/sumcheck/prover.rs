@@ -26,12 +26,11 @@ impl<
         tracing::trace!("Partially_evaluate init");
 
         // Barretenberg uses multithreading here
-        // TODO FLORIN
-        // for (poly_src, poly_des) in polys.iter().zip(partially_evaluated_poly.iter_mut()) {
-        //     for i in (0..round_size).step_by(2) {
-        //         poly_des[i >> 1] = poly_src[i] + (poly_src[i + 1] - poly_src[i]) * round_challenge;
-        //     }
-        // }
+        for (poly_src, poly_des) in polys.iter().zip(partially_evaluated_poly.iter_mut()) {
+            for i in (0..round_size).step_by(2) {
+                poly_des[i >> 1] = poly_src[i] + (poly_src[i + 1] - poly_src[i]) * round_challenge;
+            }
+        }
     }
 
     pub(crate) fn partially_evaluate_inplace(
@@ -43,11 +42,11 @@ impl<
 
         // Barretenberg uses multithreading here
 
-        // for poly in partially_evaluated_poly.iter_mut() {
-        //     for i in (0..round_size).step_by(2) {
-        //         poly[i >> 1] = poly[i] + (poly[i + 1] - poly[i]) * round_challenge;
-        //     }
-        // }
+        for poly in partially_evaluated_poly.iter_mut() {
+            for i in (0..round_size).step_by(2) {
+                poly[i >> 1] = poly[i] + (poly[i + 1] - poly[i]) * round_challenge;
+            }
+        }
     }
 
     fn add_evals_to_transcript(
@@ -55,11 +54,10 @@ impl<
         evaluations: &ClaimedEvaluations<P::ScalarField, L>,
     ) {
         tracing::trace!("Add Evals to Transcript");
-        // TODO FLORIN
-        // transcript.send_fr_iter_to_verifier::<P, _>(
-        //     "Sumcheck:evaluations".to_string(),
-        //     evaluations.iter(),
-        // );
+        transcript.send_fr_iter_to_verifier::<P, _>(
+            "Sumcheck:evaluations".to_string(),
+            evaluations.iter(),
+        );
     }
 
     fn extract_claimed_evaluations(
@@ -164,13 +162,12 @@ impl<
         // Zero univariates are used to pad the proof to the fixed size CONST_PROOF_SIZE_LOG_N.
         let zero_univariate = L::SumcheckRoundOutput::default();
         for idx in multivariate_d as usize..CONST_PROOF_SIZE_LOG_N {
-            todo!("Sumcheck prove round {idx} (zero univariate)");
-            // transcript.send_fr_iter_to_verifier::<P, _>(
-            //     format!("Sumcheck:univariate_{idx}"),
-            //     &zero_univariate.evaluations,
-            // );
-            // let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{idx}"));
-            // multivariate_challenge.push(round_challenge);
+            transcript.send_fr_iter_to_verifier::<P, _>(
+                format!("Sumcheck:univariate_{idx}"),
+                zero_univariate.evaluations_as_ref(),
+            );
+            let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{idx}"));
+            multivariate_challenge.push(round_challenge);
         }
 
         // Claimed evaluations of Prover polynomials are extracted and added to the transcript. When Flavor has ZK, the
@@ -287,13 +284,12 @@ impl<
         // Zero univariates are used to pad the proof to the fixed size CONST_PROOF_SIZE_LOG_N.
         let zero_univariate = L::SumcheckRoundOutputZK::default();
         for idx in multivariate_d as usize..CONST_PROOF_SIZE_LOG_N {
-            todo!("Sumcheck prove round {idx} (zero univariate)");
-            // transcript.send_fr_iter_to_verifier::<P, _>(
-            //     format!("Sumcheck:univariate_{idx}"),
-            //     &zero_univariate.evaluations,
-            // );
-            // let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{idx}"));
-            // multivariate_challenge.push(round_challenge);
+            transcript.send_fr_iter_to_verifier::<P, _>(
+                format!("Sumcheck:univariate_{idx}"),
+                zero_univariate.evaluations_as_ref(),
+            );
+            let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{idx}"));
+            multivariate_challenge.push(round_challenge);
         }
 
         // Claimed evaluations of Prover polynomials are extracted and added to the transcript. When Flavor has ZK, the

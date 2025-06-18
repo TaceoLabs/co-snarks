@@ -23,7 +23,7 @@ pub struct VerifyingKey<P: Pairing, L: ProverFlavour> {
     pub num_public_inputs: u32,
     pub pub_inputs_offset: u32,
     pub pairing_inputs_public_input_key: PublicComponentKey,
-    pub commitments: L::PrecomputedEntity<P::G1Affine>,
+    pub commitments: L::PrecomputedEntities<P::G1Affine>,
 }
 
 impl<P: Pairing> VerifyingKey<P, UltraFlavour> {
@@ -69,7 +69,7 @@ pub struct VerifyingKeyBarretenberg<P: Pairing, L: ProverFlavour> {
     pub num_public_inputs: u64,
     pub pub_inputs_offset: u64,
     pub pairing_inputs_public_input_key: PublicComponentKey,
-    pub commitments: L::PrecomputedEntity<P::G1Affine>,
+    pub commitments: L::PrecomputedEntities<P::G1Affine>,
 }
 
 #[derive(Clone, Copy, Debug, SerdeSerialize, Deserialize)]
@@ -185,9 +185,8 @@ impl<P: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<P, UltraFlavour
             Default::default()
         };
 
-        let mut commitments = <UltraFlavour as PrecomputedEntitiesFlavour>::PrecomputedEntity::<
-            P::G1Affine,
-        >::default();
+        let mut commitments =
+            <UltraFlavour as ProverFlavour>::PrecomputedEntities::<P::G1Affine>::default();
 
         for el in commitments.iter_mut() {
             *el = SerializeP::<P>::read_g1_element(buf, &mut offset, true);

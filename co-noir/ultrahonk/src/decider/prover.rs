@@ -3,9 +3,6 @@ use super::{
     sumcheck::{zk_data::ZKSumcheckData, SumcheckOutput},
     types::ProverMemory,
 };
-use crate::prelude::Univariate;
-use co_builder::prelude::Polynomial;
-use co_builder::prover_flavour::ProverFlavour;
 
 use crate::{
     decider::small_subgroup_ipa::SmallSubgroupIPAProver,

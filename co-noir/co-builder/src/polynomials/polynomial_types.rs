@@ -1,45 +1,88 @@
+use super::polynomial::Polynomial;
+use crate::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
+use crate::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
 use crate::{
     flavours::{mega_flavour::MegaFlavour, ultra_flavour::UltraFlavour},
     prover_flavour::ProverFlavour,
 };
-
-use super::polynomial::Polynomial;
 use ark_ff::PrimeField;
 // use serde::{Deserialize, Serialize};
 
 // This is what we get from the proving key, we shift at a later point
 #[derive(Default)]
 pub struct Polynomials<F: PrimeField, L: ProverFlavour> {
-    pub witness: L::ProverWitnessEntity<Polynomial<F>>,
-    pub precomputed: L::PrecomputedEntity<Polynomial<F>>,
+    pub witness: L::ProverWitnessEntities<Polynomial<F>>,
+    pub precomputed: L::PrecomputedEntities<Polynomial<F>>,
 }
 
 impl<F: PrimeField, L: ProverFlavour> Polynomials<F, L> {
-    // pub fn new(circuit_size: usize) -> Self {
-    //     let mut polynomials = Self::default();
-    //     // Shifting is done at a later point
-    //     polynomials
-    //         .iter_mut()
-    //         .for_each(|el| el.resize(circuit_size, Default::default()));
+    pub fn new(circuit_size: usize) -> Self {
+        let mut polynomials = Self::default();
+        // Shifting is done at a later point
+        polynomials
+            .iter_mut()
+            .for_each(|el| el.resize(circuit_size, Default::default()));
 
-    //     polynomials
-    // }
+        polynomials
+    }
 
-    // pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Polynomial<F>> {
-    //     self.witness.iter_mut().chain(self.precomputed.iter_mut())
-    // }
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Polynomial<F>> {
+        self.witness.iter_mut().chain(self.precomputed.iter_mut())
+    }
 }
 
-// // pub const : usize = 6;
-// #[derive(Default)]
-// pub struct ProverWitnessEntities<T: Default> {
-//     pub elements: [T; DUMMY_SIZE_FLORIN_PROVER_WITNESS], //
-// }
+pub struct ProverWitnessEntities<T: Default, const SIZE: usize> {
+    pub elements: [T; SIZE],
+}
 
-// // pub const : usize = 27;
+#[derive(Clone)]
+pub struct PrecomputedEntities<T: Default, const SIZE: usize> {
+    pub elements: [T; SIZE],
+}
+
+pub struct WitnessEntities<T: Default, const SIZE: usize> {
+    pub elements: [T; SIZE],
+}
+pub struct ShiftedWitnessEntities<T: Default, const SIZE: usize> {
+    pub elements: [T; SIZE],
+}
+
+impl<T: Default, const SIZE: usize> Default for ProverWitnessEntities<T, SIZE> {
+    fn default() -> Self {
+        Self {
+            elements: std::array::from_fn(|_| T::default()),
+        }
+    }
+}
+impl<T: Default, const SIZE: usize> Default for PrecomputedEntities<T, SIZE> {
+    fn default() -> Self {
+        Self {
+            elements: std::array::from_fn(|_| T::default()),
+        }
+    }
+}
+impl<T: Default, const SIZE: usize> Default for WitnessEntities<T, SIZE> {
+    fn default() -> Self {
+        Self {
+            elements: std::array::from_fn(|_| T::default()),
+        }
+    }
+}
+impl<T: Default, const SIZE: usize> Default for ShiftedWitnessEntities<T, SIZE> {
+    fn default() -> Self {
+        Self {
+            elements: std::array::from_fn(|_| T::default()),
+        }
+    }
+}
+
+impl<T: Default, const SIZE: usize> PrecomputedEntities<T, SIZE> {}
+
+// pub trait PrecomputedEntities<T: Default> {
+// const SHIFTED_WITNESS_ENTITIES_SIZE: usize = 5;
 // #[derive(Default, Clone)]
-// pub struct PrecomputedEntities<T: Default> {
-//     pub elements: [T; DUMMY_SIZE_FLORIN_PRECOMPUTED], //
+// pub struct ShiftedWitnessEntities<T: Default> {
+//     pub(crate) elements: [T; SHIFTED_WITNESS_ENTITIES_SIZE],
 // }
 
 // impl<T: Default> PrecomputedEntities<Vec<T>> {
@@ -56,12 +99,72 @@ impl<F: PrimeField, L: ProverFlavour> Polynomials<F, L> {
 //     }
 // }
 
-// impl<T: Default> IntoIterator for PrecomputedEntities<T> {
+// impl<T: Default, const SIZE: usize> IntoIterator for PrecomputedEntities<T, SIZE> {
 //     type Item = T;
-//     type IntoIter = std::array::IntoIter<T, { DUMMY_SIZE_FLORIN_PRECOMPUTED }>;
+//     type IntoIter = std::array::IntoIter<T, SIZE>;
 
 //     fn into_iter(self) -> Self::IntoIter {
 //         self.elements.into_iter()
+//     }
+// }
+// impl<T: Default, const SIZE: usize> IntoIterator for ProverWitnessEntities<T, SIZE> {
+//     type Item = T;
+//     type IntoIter = std::array::IntoIter<T, SIZE>;
+
+//     fn into_iter(self) -> Self::IntoIter {
+//         self.elements.into_iter()
+//     }
+// }
+// impl<T: Default, const SIZE: usize> IntoIterator for WitnessEntities<T, SIZE> {
+//     type Item = T;
+//     type IntoIter = std::array::IntoIter<T, SIZE>;
+
+//     fn into_iter(self) -> Self::IntoIter {
+//         self.elements.into_iter()
+//     }
+// }
+// impl<T: Default, const SIZE: usize> IntoIterator for ShiftedWitnessEntities<T, SIZE> {
+//     type Item = T;
+//     type IntoIter = std::array::IntoIter<T, SIZE>;
+
+//     fn into_iter(self) -> Self::IntoIter {
+//         self.elements.into_iter()
+//     }
+// }
+// impl<T: Default, const SIZE: usize> PrecomputedEntities<T, SIZE> {
+//     pub fn iter(&self) -> impl Iterator<Item = &T> {
+//         self.elements.iter()
+//     }
+
+//     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
+//         self.elements.iter_mut()
+//     }
+// }
+// impl<T: Default, const SIZE: usize> ProverWitnessEntities<T, SIZE> {
+//     pub fn iter(&self) -> impl Iterator<Item = &T> {
+//         self.elements.iter()
+//     }
+
+//     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
+//         self.elements.iter_mut()
+//     }
+// }
+// impl<T: Default, const SIZE: usize> WitnessEntities<T, SIZE> {
+//     pub fn iter(&self) -> impl Iterator<Item = &T> {
+//         self.elements.iter()
+//     }
+
+//     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
+//         self.elements.iter_mut()
+//     }
+// }
+// impl<T: Default, const SIZE: usize> ShiftedWitnessEntities<T, SIZE> {
+//     pub fn iter(&self) -> impl Iterator<Item = &T> {
+//         self.elements.iter()
+//     }
+
+//     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
+//         self.elements.iter_mut()
 //     }
 // }
 

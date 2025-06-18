@@ -671,17 +671,19 @@ impl<'a, P: Pairing> TraceData<'a, P> {
         let copy_cycles = vec![vec![]; builder.variables.len()];
 
         Self {
-            wires: <UltraFlavour as ProverWitnessEntitiesFlavour>::get_wires_mut::<Polynomial<_>>(
-                &mut proving_key.polynomials.witness,
-            )
-            .try_into()
-            .unwrap(),
+            wires: proving_key
+                .polynomials
+                .witness
+                .get_wires_mut()
+                .try_into()
+                .unwrap(),
 
-            selectors: <UltraFlavour as PrecomputedEntitiesFlavour>::get_selectors_mut::<
-                Polynomial<_>,
-            >(&mut proving_key.polynomials.precomputed)
-            .try_into()
-            .unwrap(),
+            selectors: proving_key
+                .polynomials
+                .precomputed
+                .get_selectors_mut()
+                .try_into()
+                .unwrap(),
             copy_cycles,
             ram_rom_offset: 0,
             pub_inputs_offset: 0,

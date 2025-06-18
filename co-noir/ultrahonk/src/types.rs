@@ -1,5 +1,11 @@
 use ark_ff::PrimeField;
-use co_builder::{prelude::Serialize, HonkProofResult};
+use co_builder::{
+    polynomials::polynomial_flavours::{
+        PrecomputedEntitiesFlavour, ShiftedWitnessEntitiesFlavour, WitnessEntitiesFlavour,
+    },
+    prelude::Serialize,
+    HonkProofResult,
+};
 
 use crate::plain_prover_flavour::PlainProverFlavour;
 
@@ -40,40 +46,50 @@ impl<F: PrimeField> HonkProof<F> {
 
 // pub(crate) const NUM_ALL_ENTITIES: usize =
 //     WITNESS_ENTITIES_SIZE + PRECOMPUTED_ENTITIES_SIZE + SHIFTED_WITNESS_ENTITIES_SIZE;
-#[derive(Default)]
-pub struct AllEntities<T: Default, L: PlainProverFlavour> {
-    pub(crate) witness: L::WitnessEntity<T>,
-    pub(crate) precomputed: L::PrecomputedEntity<T>,
-    pub(crate) shifted_witness: L::ShiftedWitnessEntity<T>,
+
+pub struct AllEntities<T: Default + Clone, L: PlainProverFlavour> {
+    pub(crate) witness: L::WitnessEntities<T>,
+    pub(crate) precomputed: L::PrecomputedEntities<T>,
+    pub(crate) shifted_witness: L::ShiftedWitnessEntities<T>,
 }
 
-// impl<T: Default, F: PrimeField, L: PlainProverFlavour> AllEntities<T, F, L> {
-//     pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
-//         self.precomputed
-//             .iter()
-//             .chain(self.witness.iter())
-//             .chain(self.shifted_witness.iter())
-//     }
+impl<T: Default + Clone, L: PlainProverFlavour> Default for AllEntities<T, L> {
+    fn default() -> Self {
+        Self {
+            witness: L::WitnessEntities::default(),
+            precomputed: L::PrecomputedEntities::default(),
+            shifted_witness: L::ShiftedWitnessEntities::default(),
+        }
+    }
+}
 
-//     pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
-//         self.precomputed
-//             .iter_mut()
-//             .chain(self.witness.iter_mut())
-//             .chain(self.shifted_witness.iter_mut())
-//     }
-// }
+impl<T: Default + Clone, L: PlainProverFlavour> AllEntities<T, L> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
+        self.precomputed
+            .iter()
+            .chain(self.witness.iter())
+            .chain(self.shifted_witness.iter())
+    }
 
-// impl<T: Default + Clone, F: PrimeField, L: PlainProverFlavour> AllEntities<Vec<T>, F, L> {
-//     pub(crate) fn new(circuit_size: usize) -> Self {
-//         let mut polynomials = Self::default();
-//         // Shifting is done at a later point
-//         polynomials
-//             .iter_mut()
-//             .for_each(|el| el.resize(circuit_size, Default::default()));
+    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
+        self.precomputed
+            .iter_mut()
+            .chain(self.witness.iter_mut())
+            .chain(self.shifted_witness.iter_mut())
+    }
+}
 
-//         polynomials
-//     }
-// }
+impl<T: Default + Clone, L: PlainProverFlavour> AllEntities<Vec<T>, L> {
+    pub(crate) fn new(circuit_size: usize) -> Self {
+        let mut polynomials = Self::default();
+        // Shifting is done at a later point
+        polynomials
+            .iter_mut()
+            .for_each(|el| el.resize(circuit_size, Default::default()));
+
+        polynomials
+    }
+}
 
 // // const WITNESS_ENTITIES_SIZE: usize = 8;
 // #[derive(Default, Clone)]

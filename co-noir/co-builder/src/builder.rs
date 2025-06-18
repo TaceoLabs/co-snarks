@@ -4,6 +4,7 @@ use crate::keys::verification_key::PublicComponentKey;
 use crate::polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK;
 use crate::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use crate::prelude::HonkCurve;
+use crate::prover_flavour::ProverFlavour;
 use crate::types::big_field::{BigField, BigGroup};
 use crate::types::blake2s::Blake2s;
 use crate::types::blake3::blake3s;
@@ -63,9 +64,8 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         let pk = ProvingKey::create::<PlainAcvmSolver<_>>(self, crs, driver)?;
         let circuit_size = pk.circuit_size;
 
-        let mut commitments = <UltraFlavour as PrecomputedEntitiesFlavour>::PrecomputedEntity::<
-            P::G1Affine,
-        >::default();
+        let mut commitments =
+            <UltraFlavour as ProverFlavour>::PrecomputedEntities::<P::G1Affine>::default();
         for (des, src) in commitments
             .iter_mut()
             .zip(pk.polynomials.precomputed.iter())
@@ -86,7 +86,6 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         Ok(vk)
     }
 
-    #[expect(clippy::type_complexity)]
     pub fn create_keys(
         self,
         prover_crs: Arc<ProverCrs<P>>,
@@ -96,9 +95,9 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         let pk = ProvingKey::create::<PlainAcvmSolver<_>>(self, prover_crs, driver)?;
         let circuit_size = pk.circuit_size;
 
-        let mut commitments = <UltraFlavour as PrecomputedEntitiesFlavour>::PrecomputedEntity::<
-            P::G1Affine,
-        >::default();
+        let mut commitments =
+            <UltraFlavour as ProverFlavour>::PrecomputedEntities::<P::G1Affine>::default();
+
         for (des, src) in commitments
             .iter_mut()
             .zip(pk.polynomials.precomputed.iter())
@@ -120,7 +119,6 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         Ok((pk, vk))
     }
 
-    #[expect(clippy::type_complexity)]
     pub fn create_keys_barretenberg(
         self,
         crs: Arc<ProverCrs<P>>,
@@ -132,9 +130,8 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         let pk = ProvingKey::create::<PlainAcvmSolver<_>>(self, crs, driver)?;
         let circuit_size = pk.circuit_size;
 
-        let mut commitments = <UltraFlavour as PrecomputedEntitiesFlavour>::PrecomputedEntity::<
-            P::G1Affine,
-        >::default();
+        let mut commitments =
+            <UltraFlavour as ProverFlavour>::PrecomputedEntities::<P::G1Affine>::default();
         for (des, src) in commitments
             .iter_mut()
             .zip(pk.polynomials.precomputed.iter())

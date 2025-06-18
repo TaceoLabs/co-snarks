@@ -1,8 +1,9 @@
 use super::Relation;
 use crate::decider::types::ProverUnivariatesSized;
+use crate::plain_prover_flavour::UnivariateTest;
 use crate::{
     decider::{
-        types::{ClaimedEvaluations, ProverUnivariates, RelationParameters},
+        types::{ClaimedEvaluations,  RelationParameters},
         univariate::Univariate,
     },
     plain_prover_flavour::PlainProverFlavour,
@@ -96,7 +97,7 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for DeltaRangeConstrai
 
     const SKIPPABLE: bool = true;
 
-      fn skip<const SIZE: usize>(input: &ProverUnivariatesSized<F, L, SIZE>) -> bool {
+    fn skip<const SIZE: usize>(input: &ProverUnivariatesSized<F, L, SIZE>) -> bool {
         <Self as Relation<F, L>>::check_skippable();
         input.precomputed.q_delta_range().is_zero()
     }
@@ -119,7 +120,7 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for DeltaRangeConstrai
     fn accumulate<const SIZE: usize>(
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesSized<F, L, SIZE>,
-        relation_parameters: &RelationParameters<F, L>,
+        _relation_parameters: &RelationParameters<F, L>,
         scaling_factor: &F,
     ) {
         tracing::trace!("Accumulate DeltaRangeConstraintRelation");

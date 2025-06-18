@@ -9,22 +9,11 @@ pub(crate) mod poseidon2_external_relation;
 pub(crate) mod poseidon2_internal_relation;
 pub(crate) mod ultra_arithmetic_relation;
 
-use super::types::{ClaimedEvaluations, ProverUnivariates, RelationParameters};
+use super::types::{ClaimedEvaluations,  RelationParameters};
 use crate::decider::types::ProverUnivariatesSized;
-use crate::{plain_prover_flavour::PlainProverFlavour, prelude::Univariate};
+use crate::{plain_prover_flavour::PlainProverFlavour, };
 use ark_ff::PrimeField;
-use auxiliary_relation::AuxiliaryRelation;
-use co_builder::prelude::Polynomial;
-use co_builder::prover_flavour::ProverFlavour;
-use databus_lookup_relation::DataBusLookupRelation;
-use delta_range_constraint_relation::DeltaRangeConstraintRelation;
-use ecc_op_queue_relation::EccOpQueueRelation;
-use elliptic_relation::EllipticRelation;
-use logderiv_lookup_relation::LogDerivLookupRelation;
-use permutation_relation::UltraPermutationRelation;
-use poseidon2_external_relation::Poseidon2ExternalRelation;
-use poseidon2_internal_relation::Poseidon2InternalRelation;
-use ultra_arithmetic_relation::UltraArithmeticRelation;
+
 
 pub(crate) trait Relation<F: PrimeField, L: PlainProverFlavour> {
     type Acc: Default;

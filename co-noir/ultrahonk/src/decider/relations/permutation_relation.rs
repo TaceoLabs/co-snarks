@@ -2,7 +2,7 @@ use super::Relation;
 use crate::decider::types::ProverUnivariatesSized;
 use crate::{
     decider::{
-        types::{ClaimedEvaluations, ProverUnivariates, RelationParameters},
+        types::{ClaimedEvaluations,  RelationParameters},
         univariate::Univariate,
     },
     plain_prover_flavour::PlainProverFlavour,

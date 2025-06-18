@@ -9,19 +9,13 @@ pub enum Flavour {
     Mega,
 }
 
-pub trait ProverFlavour:
-    Default
-    + ProverWitnessEntitiesFlavour
-    + ShiftedWitnessEntitiesFlavour
-    + WitnessEntitiesFlavour
-    + PrecomputedEntitiesFlavour
-{
+pub trait ProverFlavour: Default {
     const FLAVOUR: Flavour;
-    // type ProverWitnessEntities<T: Default>: ProverWitnessEntities<T>;
-    // type ShiftedWitnessEntities<T: Default>: ShiftedWitnessEntities<T>;
-    // type WitnessEntities<T: Default>: WitnessEntities<T>;
-    // type PrecomputedEntities<T: Default>: PrecomputedEntities<T>;
 
+    type PrecomputedEntities<T: Default + Clone>: PrecomputedEntitiesFlavour<T> + Default + Clone;
+    type WitnessEntities<T: Default>: WitnessEntitiesFlavour<T> + Default;
+    type ShiftedWitnessEntities<T: Default>: ShiftedWitnessEntitiesFlavour<T> + Default;
+    type ProverWitnessEntities<T: Default>: ProverWitnessEntitiesFlavour<T> + Default;
     const WITNESS_ENTITIES_SIZE: usize;
     const SHIFTED_WITNESS_ENTITIES_SIZE: usize;
     const PRECOMPUTED_ENTITIES_SIZE: usize;
@@ -29,6 +23,10 @@ pub trait ProverFlavour:
     const NUM_ALL_ENTITIES: usize = Self::WITNESS_ENTITIES_SIZE
         + Self::PRECOMPUTED_ENTITIES_SIZE
         + Self::SHIFTED_WITNESS_ENTITIES_SIZE;
+    //  The "partial length" of a relation is 1 + the degree of the relation
+    const MAX_PARTIAL_RELATION_LENGTH: usize;
+    const BATCHED_RELATION_PARTIAL_LENGTH: usize;
+    const BATCHED_RELATION_PARTIAL_LENGTH_ZK: usize;
 
     //Precomputed Entities:
     const Q_M: usize;
@@ -62,7 +60,7 @@ pub trait ProverFlavour:
     const LAGRANGE_ECC_OP: Option<usize>;
     const DATABUS_ID: Option<usize>;
 
-    // Witness entities:
+    // Prover Witness entities:
     const W_L: usize;
     const W_R: usize;
     const W_O: usize;
@@ -88,10 +86,40 @@ pub trait ProverFlavour:
     const RETURN_DATA_READ_TAGS: Option<usize>;
     const RETURN_DATA_INVERSES: Option<usize>;
 
-    //  The "partial length" of a relation is 1 + the degree of the relation
-    const MAX_PARTIAL_RELATION_LENGTH: usize;
-    const BATCHED_RELATION_PARTIAL_LENGTH: usize;
-    const BATCHED_RELATION_PARTIAL_LENGTH_ZK: usize;
+    //  Witness entities:
+    /// column 0
+    const WITNESS_W_L: usize;
+    /// column 1
+    const WITNESS_W_R: usize;
+    /// column 2
+    const WITNESS_W_O: usize;
+    /// column 3 (computed by prover)
+    const WITNESS_W_4: usize;
+    /// column 4 (computed by prover)
+    const WITNESS_Z_PERM: usize;
+    // /// column 5 (computed by prover);
+    const WITNESS_LOOKUP_INVERSES: usize;
+    /// column 6
+    const WITNESS_LOOKUP_READ_COUNTS: usize;
+    /// column 7
+    const WITNESS_LOOKUP_READ_TAGS: usize;
+    const WITNESS_ECC_OP_WIRE_1: Option<usize>;
+    const WITNESS_ECC_OP_WIRE_2: Option<usize>;
+    const WITNESS_ECC_OP_WIRE_3: Option<usize>;
+    const WITNESS_ECC_OP_WIRE_4: Option<usize>;
+    const WITNESS_CALLDATA: Option<usize>;
+    const WITNESS_CALLDATA_READ_COUNTS: Option<usize>;
+    const WITNESS_CALLDATA_READ_TAGS: Option<usize>;
+    const WITNESS_CALLDATA_INVERSES: Option<usize>;
+    const WITNESS_SECONDARY_CALLDATA: Option<usize>;
+    const WITNESS_SECONDARY_CALLDATA_READ_COUNTS: Option<usize>;
+    const WITNESS_SECONDARY_CALLDATA_READ_TAGS: Option<usize>;
+    const WITNESS_SECONDARY_CALLDATA_INVERSES: Option<usize>;
+    const WITNESS_RETURN_DATA: Option<usize>;
+    const WITNESS_RETURN_DATA_READ_COUNTS: Option<usize>;
+    const WITNESS_RETURN_DATA_READ_TAGS: Option<usize>;
+    const WITNESS_RETURN_DATA_INVERSES: Option<usize>;
+
     // const NUM_SUBRELATIONS: usize;
 
     // fn scale(acc: &mut Self::AllRelationAcc, first_scalar: F, elements: &[F]);

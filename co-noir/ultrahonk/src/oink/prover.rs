@@ -24,6 +24,7 @@ use crate::{
     Utils,
 };
 use ark_ff::{One, Zero};
+use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
 use co_builder::{
     prelude::{HonkCurve, Polynomial, ProverCrs, ProvingKey, ZeroKnowledge},
@@ -106,17 +107,16 @@ impl<
         // w4 = w3 * eta^3 + w2 * eta^2 + w1 * eta + read_write_flag;
 
         debug_assert_eq!(
-            <L as ProverWitnessEntitiesFlavour>::w_l::<_>(&proving_key.polynomials.witness).len(),
-            <L as ProverWitnessEntitiesFlavour>::w_r::<_>(&proving_key.polynomials.witness).len()
+            proving_key.polynomials.witness.w_l().len(),
+            proving_key.polynomials.witness.w_r().len()
         );
         debug_assert_eq!(
-            <L as ProverWitnessEntitiesFlavour>::w_l::<_>(&proving_key.polynomials.witness).len(),
-            <L as ProverWitnessEntitiesFlavour>::w_o::<_>(&proving_key.polynomials.witness).len()
+            proving_key.polynomials.witness.w_l().len(),
+            proving_key.polynomials.witness.w_o().len()
         );
-        self.memory.w_4 =
-            <L as ProverWitnessEntitiesFlavour>::w_4::<_>(&proving_key.polynomials.witness).clone();
+        self.memory.w_4 = proving_key.polynomials.witness.w_4().clone();
         self.memory.w_4.resize(
-            <L as ProverWitnessEntitiesFlavour>::w_l::<_>(&proving_key.polynomials.witness).len(),
+            proving_key.polynomials.witness.w_l().len(),
             P::ScalarField::zero(),
         );
 
@@ -124,37 +124,21 @@ impl<
         for gate_idx in proving_key.memory_read_records.iter() {
             let gate_idx = *gate_idx as usize;
             let target = &mut self.memory.w_4[gate_idx];
-            *target +=
-                <L as ProverWitnessEntitiesFlavour>::w_l::<_>(&proving_key.polynomials.witness)
-                    [gate_idx]
-                    * self.memory.challenges.eta_1
-                    + <L as ProverWitnessEntitiesFlavour>::w_r::<_>(
-                        &proving_key.polynomials.witness,
-                    )[gate_idx]
-                        * self.memory.challenges.eta_2
-                    + <L as ProverWitnessEntitiesFlavour>::w_o::<_>(
-                        &proving_key.polynomials.witness,
-                    )[gate_idx]
-                        * self.memory.challenges.eta_3;
+            *target += proving_key.polynomials.witness.w_l()[gate_idx]
+                * self.memory.challenges.eta_1
+                + proving_key.polynomials.witness.w_r()[gate_idx] * self.memory.challenges.eta_2
+                + proving_key.polynomials.witness.w_o()[gate_idx] * self.memory.challenges.eta_3;
         }
 
         // Compute write record values
         for gate_idx in proving_key.memory_write_records.iter() {
             let gate_idx = *gate_idx as usize;
             let target = &mut self.memory.w_4[gate_idx];
-            *target +=
-                <L as ProverWitnessEntitiesFlavour>::w_l::<_>(&proving_key.polynomials.witness)
-                    [gate_idx]
-                    * self.memory.challenges.eta_1
-                    + <L as ProverWitnessEntitiesFlavour>::w_r::<_>(
-                        &proving_key.polynomials.witness,
-                    )[gate_idx]
-                        * self.memory.challenges.eta_2
-                    + <L as ProverWitnessEntitiesFlavour>::w_o::<_>(
-                        &proving_key.polynomials.witness,
-                    )[gate_idx]
-                        * self.memory.challenges.eta_3
-                    + P::ScalarField::one();
+            *target += proving_key.polynomials.witness.w_l()[gate_idx]
+                * self.memory.challenges.eta_1
+                + proving_key.polynomials.witness.w_r()[gate_idx] * self.memory.challenges.eta_2
+                + proving_key.polynomials.witness.w_o()[gate_idx] * self.memory.challenges.eta_3
+                + P::ScalarField::one();
         }
     }
 
@@ -165,26 +149,16 @@ impl<
         let eta_1 = &self.memory.challenges.eta_1;
         let eta_2 = &self.memory.challenges.eta_2;
         let eta_3 = &self.memory.challenges.eta_3;
-        let w_1 =
-            &<L as ProverWitnessEntitiesFlavour>::w_l::<_>(&proving_key.polynomials.witness)[i];
-        let w_2 =
-            &<L as ProverWitnessEntitiesFlavour>::w_r::<_>(&proving_key.polynomials.witness)[i];
-        let w_3 =
-            &<L as ProverWitnessEntitiesFlavour>::w_o::<_>(&proving_key.polynomials.witness)[i];
-        let w_1_shift =
-            &<L as ProverWitnessEntitiesFlavour>::w_l::<_>(&proving_key.polynomials.witness)
-                .shifted()[i];
-        let w_2_shift =
-            &<L as ProverWitnessEntitiesFlavour>::w_r::<_>(&proving_key.polynomials.witness)
-                .shifted()[i];
-        let w_3_shift =
-            &<L as ProverWitnessEntitiesFlavour>::w_o::<_>(&proving_key.polynomials.witness)
-                .shifted()[i];
-        let table_index = &L::q_o::<_>(&proving_key.polynomials.precomputed)[i];
-        let negative_column_1_step_size = &L::q_r::<_>(&proving_key.polynomials.precomputed)[i];
-        let negative_column_2_step_size = &L::q_m::<_>(&proving_key.polynomials.precomputed)[i];
-        let negative_column_3_step_size = &L::q_c::<_>(&proving_key.polynomials.precomputed)[i];
-
+        let w_1 = &proving_key.polynomials.witness.w_l()[i];
+        let w_2 = &proving_key.polynomials.witness.w_r()[i];
+        let w_3 = &proving_key.polynomials.witness.w_o()[i];
+        let w_1_shift = &proving_key.polynomials.witness.w_l().shifted()[i];
+        let w_2_shift = &proving_key.polynomials.witness.w_r().shifted()[i];
+        let w_3_shift = &proving_key.polynomials.witness.w_o().shifted()[i];
+        let table_index = &proving_key.polynomials.precomputed.q_o()[i];
+        let negative_column_1_step_size = &proving_key.polynomials.precomputed.q_r()[i];
+        let negative_column_2_step_size = &proving_key.polynomials.precomputed.q_m()[i];
+        let negative_column_3_step_size = &proving_key.polynomials.precomputed.q_c()[i];
         // The wire values for lookup gates are accumulators structured in such a way that the differences w_i -
         // step_size*w_i_shift result in values present in column i of a corresponding table. See the documentation in
         // method get_lookup_accumulators() in  for a detailed explanation.
@@ -208,10 +182,10 @@ impl<
         let eta_1 = &self.memory.challenges.eta_1;
         let eta_2 = &self.memory.challenges.eta_2;
         let eta_3 = &self.memory.challenges.eta_3;
-        let table_1 = &L::table_1::<_>(&proving_key.polynomials.precomputed)[i];
-        let table_2 = &L::table_2::<_>(&proving_key.polynomials.precomputed)[i];
-        let table_3 = &L::table_3::<_>(&proving_key.polynomials.precomputed)[i];
-        let table_4 = &L::table_4::<_>(&proving_key.polynomials.precomputed)[i];
+        let table_1 = &proving_key.polynomials.precomputed.table_1()[i];
+        let table_2 = &proving_key.polynomials.precomputed.table_2()[i];
+        let table_3 = &proving_key.polynomials.precomputed.table_3()[i];
+        let table_4 = &proving_key.polynomials.precomputed.table_4()[i];
 
         *table_1 + gamma + *table_2 * eta_1 + *table_3 * eta_2 + *table_4 * eta_3
     }
@@ -220,14 +194,11 @@ impl<
         tracing::trace!("compute logderivative inverse");
 
         debug_assert_eq!(
-            L::q_lookup::<_>(&proving_key.polynomials.precomputed).len(),
+            proving_key.polynomials.precomputed.q_lookup().len(),
             proving_key.circuit_size as usize
         );
         debug_assert_eq!(
-            <L as ProverWitnessEntitiesFlavour>::lookup_read_tags::<_>(
-                &proving_key.polynomials.witness
-            )
-            .len(),
+            proving_key.polynomials.witness.lookup_read_tags().len(),
             proving_key.circuit_size as usize
         );
         self.memory
@@ -240,11 +211,8 @@ impl<
         // const LENGTH: usize = 5; // both subrelations are degree 4
 
         for (i, (q_lookup, lookup_read_tag)) in izip!(
-            L::q_lookup::<_>(&proving_key.polynomials.precomputed).iter(),
-            <L as ProverWitnessEntitiesFlavour>::lookup_read_tags::<_>(
-                &proving_key.polynomials.witness
-            )
-            .iter(),
+            proving_key.polynomials.precomputed.q_lookup().iter(),
+            proving_key.polynomials.witness.lookup_read_tags().iter(),
         )
         .enumerate()
         {
@@ -317,17 +285,14 @@ impl<
     ) -> P::ScalarField {
         tracing::trace!("compute grand product numerator");
 
-        let w_1 =
-            &<L as ProverWitnessEntitiesFlavour>::w_l::<_>(&proving_key.polynomials.witness)[i];
-        let w_2 =
-            &<L as ProverWitnessEntitiesFlavour>::w_r::<_>(&proving_key.polynomials.witness)[i];
-        let w_3 =
-            &<L as ProverWitnessEntitiesFlavour>::w_o::<_>(&proving_key.polynomials.witness)[i];
+        let w_1 = &proving_key.polynomials.witness.w_l()[i];
+        let w_2 = &proving_key.polynomials.witness.w_r()[i];
+        let w_3 = &proving_key.polynomials.witness.w_o()[i];
         let w_4 = &self.memory.w_4[i];
-        let id_1 = &L::id_1::<_>(&proving_key.polynomials.precomputed)[i];
-        let id_2 = &L::id_2::<_>(&proving_key.polynomials.precomputed)[i];
-        let id_3 = &L::id_3::<_>(&proving_key.polynomials.precomputed)[i];
-        let id_4 = &L::id_4::<_>(&proving_key.polynomials.precomputed)[i];
+        let id_1 = &proving_key.polynomials.precomputed.id_1()[i];
+        let id_2 = &proving_key.polynomials.precomputed.id_2()[i];
+        let id_3 = &proving_key.polynomials.precomputed.id_3()[i];
+        let id_4 = &proving_key.polynomials.precomputed.id_4()[i];
         let beta = &self.memory.challenges.beta;
         let gamma = &self.memory.challenges.gamma;
 
@@ -345,17 +310,14 @@ impl<
     ) -> P::ScalarField {
         tracing::trace!("compute grand product denominator");
 
-        let w_1 =
-            &<L as ProverWitnessEntitiesFlavour>::w_l::<_>(&proving_key.polynomials.witness)[i];
-        let w_2 =
-            &<L as ProverWitnessEntitiesFlavour>::w_r::<_>(&proving_key.polynomials.witness)[i];
-        let w_3 =
-            &<L as ProverWitnessEntitiesFlavour>::w_o::<_>(&proving_key.polynomials.witness)[i];
+        let w_1 = &proving_key.polynomials.witness.w_l()[i];
+        let w_2 = &proving_key.polynomials.witness.w_r()[i];
+        let w_3 = &proving_key.polynomials.witness.w_o()[i];
         let w_4 = &self.memory.w_4[i];
-        let sigma_1 = &L::sigma_1::<_>(&proving_key.polynomials.precomputed)[i];
-        let sigma_2 = &L::sigma_2::<_>(&proving_key.polynomials.precomputed)[i];
-        let sigma_3 = &L::sigma_3::<_>(&proving_key.polynomials.precomputed)[i];
-        let sigma_4 = &L::sigma_4::<_>(&proving_key.polynomials.precomputed)[i];
+        let sigma_1 = &proving_key.polynomials.precomputed.sigma_1()[i];
+        let sigma_2 = &proving_key.polynomials.precomputed.sigma_2()[i];
+        let sigma_3 = &proving_key.polynomials.precomputed.sigma_3()[i];
+        let sigma_4 = &proving_key.polynomials.precomputed.sigma_4()[i];
         let beta = &self.memory.challenges.beta;
         let gamma = &self.memory.challenges.gamma;
 
@@ -502,33 +464,22 @@ impl<
         // We only commit to the fourth wire polynomial after adding memory records
 
         // Ultracircuits are not structured (also our commitment type is CommitType::Default, so no changes are needed here yet)
-        println!(
-            "W_l: {:?}",
-            <L as ProverWitnessEntitiesFlavour>::w_l::<_>(&proving_key.polynomials.witness)
-                .coefficients
-        );
         self.commit_to_witness_polynomial(
-            <L as ProverWitnessEntitiesFlavour>::w_l_mut::<Polynomial<_>>(
-                &mut proving_key.polynomials.witness,
-            ),
+            proving_key.polynomials.witness.w_l_mut(),
             "W_L",
             &proving_key.crs,
             transcript,
         )?;
 
         self.commit_to_witness_polynomial(
-            <L as ProverWitnessEntitiesFlavour>::w_r_mut::<Polynomial<_>>(
-                &mut proving_key.polynomials.witness,
-            ),
+            proving_key.polynomials.witness.w_r_mut(),
             "W_R",
             &proving_key.crs,
             transcript,
         )?;
 
         self.commit_to_witness_polynomial(
-            <L as ProverWitnessEntitiesFlavour>::w_o_mut::<Polynomial<_>>(
-                &mut proving_key.polynomials.witness,
-            ),
+            proving_key.polynomials.witness.w_o_mut(),
             "W_O",
             &proving_key.crs,
             transcript,
@@ -541,105 +492,88 @@ impl<
                                              // To avoid possible issues with the current work on the merge protocol, they are not
                                              // masked in MegaZKFlavor
             self.commit_to_witness_polynomial(
-                <L as ProverWitnessEntitiesFlavour>::ecc_op_wire_1_mut::<Polynomial<_>>(
-                    &mut proving_key.polynomials.witness,
-                ),
+                proving_key.polynomials.witness.ecc_op_wire_1_mut(),
                 "ecc_op_wire_1",
                 &proving_key.crs,
                 transcript,
             )?;
             self.commit_to_witness_polynomial(
-                <L as ProverWitnessEntitiesFlavour>::ecc_op_wire_2_mut::<Polynomial<_>>(
-                    &mut proving_key.polynomials.witness,
-                ),
+                proving_key.polynomials.witness.ecc_op_wire_2_mut(),
                 "ecc_op_wire_2",
                 &proving_key.crs,
                 transcript,
             )?;
             self.commit_to_witness_polynomial(
-                <L as ProverWitnessEntitiesFlavour>::ecc_op_wire_3_mut::<Polynomial<_>>(
-                    &mut proving_key.polynomials.witness,
-                ),
+                proving_key.polynomials.witness.ecc_op_wire_3_mut(),
                 "ecc_op_wire_3",
                 &proving_key.crs,
                 transcript,
             )?;
             self.commit_to_witness_polynomial(
-                <L as ProverWitnessEntitiesFlavour>::ecc_op_wire_4_mut::<Polynomial<_>>(
-                    &mut proving_key.polynomials.witness,
-                ),
+                proving_key.polynomials.witness.ecc_op_wire_4_mut(),
                 "ecc_op_wire_4",
                 &proving_key.crs,
                 transcript,
             )?;
             self.commit_to_witness_polynomial(
-                <L as ProverWitnessEntitiesFlavour>::calldata_mut::<Polynomial<_>>(
-                    &mut proving_key.polynomials.witness,
-                ),
+                proving_key.polynomials.witness.calldata_mut(),
                 "calldata",
                 &proving_key.crs,
                 transcript,
             )?;
             self.commit_to_witness_polynomial(
-                <L as ProverWitnessEntitiesFlavour>::calldata_read_counts_mut::<Polynomial<_>>(
-                    &mut proving_key.polynomials.witness,
-                ),
+                proving_key.polynomials.witness.calldata_read_counts_mut(),
                 "calldata_read_counts",
                 &proving_key.crs,
                 transcript,
             )?;
             self.commit_to_witness_polynomial(
-                <L as ProverWitnessEntitiesFlavour>::calldata_read_tags_mut::<Polynomial<_>>(
-                    &mut proving_key.polynomials.witness,
-                ),
+                proving_key.polynomials.witness.calldata_read_tags_mut(),
                 "calldata_read_tags",
                 &proving_key.crs,
                 transcript,
             )?;
             self.commit_to_witness_polynomial(
-                <L as ProverWitnessEntitiesFlavour>::secondary_calldata_mut::<Polynomial<_>>(
-                    &mut proving_key.polynomials.witness,
-                ),
+                proving_key.polynomials.witness.secondary_calldata_mut(),
                 "secondary_calldata",
                 &proving_key.crs,
                 transcript,
             )?;
             self.commit_to_witness_polynomial(
-                <L as ProverWitnessEntitiesFlavour>::secondary_calldata_read_counts_mut::<
-                    Polynomial<_>,
-                >(&mut proving_key.polynomials.witness),
+                proving_key
+                    .polynomials
+                    .witness
+                    .secondary_calldata_read_tags_mut(),
                 "secondary_calldata_read_counts",
                 &proving_key.crs,
                 transcript,
             )?;
             self.commit_to_witness_polynomial(
-                <L as ProverWitnessEntitiesFlavour>::secondary_calldata_read_tags_mut::<
-                    Polynomial<_>,
-                >(&mut proving_key.polynomials.witness),
+                proving_key
+                    .polynomials
+                    .witness
+                    .secondary_calldata_read_tags_mut(),
                 "secondary_calldata_read_tags",
                 &proving_key.crs,
                 transcript,
             )?;
             self.commit_to_witness_polynomial(
-                <L as ProverWitnessEntitiesFlavour>::return_data_mut::<Polynomial<_>>(
-                    &mut proving_key.polynomials.witness,
-                ),
+                proving_key.polynomials.witness.return_data_mut(),
                 "return_data",
                 &proving_key.crs,
                 transcript,
             )?;
             self.commit_to_witness_polynomial(
-                <L as ProverWitnessEntitiesFlavour>::return_data_read_counts_mut::<Polynomial<_>>(
-                    &mut proving_key.polynomials.witness,
-                ),
+                proving_key
+                    .polynomials
+                    .witness
+                    .return_data_read_counts_mut(),
                 "return_data_read_counts",
                 &proving_key.crs,
                 transcript,
             )?;
             self.commit_to_witness_polynomial(
-                <L as ProverWitnessEntitiesFlavour>::return_data_read_tags_mut::<Polynomial<_>>(
-                    &mut proving_key.polynomials.witness,
-                ),
+                proving_key.polynomials.witness.return_data_read_tags_mut(),
                 "return_data_read_tags",
                 &proving_key.crs,
                 transcript,
@@ -673,17 +607,13 @@ impl<
         // TACEO TODO: BB does "sparse" commitment here, I don't know if that is necessary (performance wise)
 
         self.commit_to_witness_polynomial(
-            <L as ProverWitnessEntitiesFlavour>::lookup_read_counts_mut::<Polynomial<_>>(
-                &mut proving_key.polynomials.witness,
-            ),
+            proving_key.polynomials.witness.lookup_read_counts_mut(),
             "LOOKUP_READ_COUNTS",
             &proving_key.crs,
             transcript,
         )?;
         self.commit_to_witness_polynomial(
-            <L as ProverWitnessEntitiesFlavour>::lookup_read_tags_mut::<Polynomial<_>>(
-                &mut proving_key.polynomials.witness,
-            ),
+            proving_key.polynomials.witness.lookup_read_tags_mut(),
             "LOOKUP_READ_TAGS",
             &proving_key.crs,
             transcript,
@@ -722,25 +652,22 @@ impl<
         // If Mega, commit to the databus inverse polynomials and send
         if L::FLAVOUR == Flavour::Mega {
             self.commit_to_witness_polynomial(
-                <L as ProverWitnessEntitiesFlavour>::calldata_inverses_mut::<Polynomial<_>>(
-                    &mut proving_key.polynomials.witness,
-                ),
+                proving_key.polynomials.witness.calldata_inverses_mut(),
                 "calldata_inverses",
                 &proving_key.crs,
                 transcript,
             )?;
             self.commit_to_witness_polynomial(
-           <L as ProverWitnessEntitiesFlavour>::secondary_calldata_inverses_mut::<Polynomial<_>>(
-                    &mut proving_key.polynomials.witness,
-                ),
+                proving_key
+                    .polynomials
+                    .witness
+                    .secondary_calldata_inverses_mut(),
                 "secondary_calldata_inverses",
                 &proving_key.crs,
                 transcript,
             )?;
             self.commit_to_witness_polynomial(
-                <L as ProverWitnessEntitiesFlavour>::return_data_inverses_mut::<Polynomial<_>>(
-                    &mut proving_key.polynomials.witness,
-                ),
+                proving_key.polynomials.witness.return_data_inverses_mut(),
                 "return_data_inverses",
                 &proving_key.crs,
                 transcript,

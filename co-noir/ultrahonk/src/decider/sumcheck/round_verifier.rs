@@ -1,4 +1,5 @@
 use super::round_prover::SumcheckRoundOutput;
+use crate::plain_prover_flavour::UnivariateTest;
 use crate::{
     decider::{
         relations::{

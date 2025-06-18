@@ -2,7 +2,7 @@ use super::Relation;
 use crate::decider::types::ProverUnivariatesSized;
 use crate::{
     decider::{
-        types::{ClaimedEvaluations, ProverUnivariates, RelationParameters},
+        types::{ClaimedEvaluations, RelationParameters},
         univariate::Univariate,
     },
     plain_prover_flavour::PlainProverFlavour,
@@ -70,9 +70,9 @@ impl LogDerivLookupRelation {
 
 impl LogDerivLookupRelation {
     // Used in the inverse correctness subrelation; facilitates only computing inverses where necessary
-    fn compute_inverse_exists<F: PrimeField, L: PlainProverFlavour>(
-        input: &ProverUnivariates<F, L>,
-    ) -> Univariate<F, { L::MAX_PARTIAL_RELATION_LENGTH }> {
+    fn compute_inverse_exists<F: PrimeField, L: PlainProverFlavour, const SIZE: usize>(
+        input: &ProverUnivariatesSized<F, L, SIZE>,
+    ) -> Univariate<F, SIZE> {
         let row_has_write = input.witness.lookup_read_tags();
         let row_has_read = input.precomputed.q_lookup();
 
@@ -88,10 +88,10 @@ impl LogDerivLookupRelation {
         -(row_has_write.to_owned() * row_has_read) + row_has_write + row_has_read
     }
 
-    fn compute_read_term<F: PrimeField, L: PlainProverFlavour>(
-        input: &ProverUnivariates<F, L>,
+    fn compute_read_term<F: PrimeField, L: PlainProverFlavour, const SIZE: usize>(
+        input: &ProverUnivariatesSized<F, L, SIZE>,
         relation_parameters: &RelationParameters<F, L>,
-    ) -> Univariate<F, { L::MAX_PARTIAL_RELATION_LENGTH }> {
+    ) -> Univariate<F, SIZE> {
         let gamma = &relation_parameters.gamma;
         let eta_1 = &relation_parameters.eta_1;
         let eta_2 = &relation_parameters.eta_2;
@@ -159,10 +159,10 @@ impl LogDerivLookupRelation {
     }
 
     // Compute table_1 + gamma + table_2 * eta + table_3 * eta_2 + table_4 * eta_3
-    fn compute_write_term<F: PrimeField, L: PlainProverFlavour>(
-        input: &ProverUnivariates<F, L>,
+    fn compute_write_term<F: PrimeField, L: PlainProverFlavour, const SIZE: usize>(
+        input: &ProverUnivariatesSized<F, L, SIZE>,
         relation_parameters: &RelationParameters<F, L>,
-    ) -> Univariate<F, { L::MAX_PARTIAL_RELATION_LENGTH }> {
+    ) -> Univariate<F, SIZE> {
         let gamma = &relation_parameters.gamma;
         let eta_1 = &relation_parameters.eta_1;
         let eta_2 = &relation_parameters.eta_2;

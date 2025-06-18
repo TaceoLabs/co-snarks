@@ -1,7 +1,6 @@
 use super::{shplemini::ShpleminiVerifierOpeningClaim, types::VerifierMemory};
 use crate::prelude::Univariate;
 use crate::{
-    decider::types::{BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK},
     plain_prover_flavour::PlainProverFlavour,
     prelude::TranscriptFieldType,
     transcript::{Transcript, TranscriptHasher},
@@ -95,11 +94,8 @@ impl<
                     "Libra:concatenation_commitment".to_string(),
                 )?);
 
-            let sumcheck_output = self.sumcheck_verify::<BATCHED_RELATION_PARTIAL_LENGTH_ZK>(
-                &mut transcript,
-                has_zk,
-                &padding_indicator_array,
-            )?;
+            let sumcheck_output =
+                self.sumcheck_verify(&mut transcript, has_zk, &padding_indicator_array)?;
             if !sumcheck_output.verified {
                 tracing::trace!("Sumcheck failed");
                 return Ok(false);
@@ -116,11 +112,8 @@ impl<
 
             (sumcheck_output, Some(libra_commitments))
         } else {
-            let sumcheck_output = self.sumcheck_verify::<BATCHED_RELATION_PARTIAL_LENGTH>(
-                &mut transcript,
-                has_zk,
-                &padding_indicator_array,
-            )?;
+            let sumcheck_output =
+                self.sumcheck_verify(&mut transcript, has_zk, &padding_indicator_array)?;
             if !sumcheck_output.verified {
                 tracing::trace!("Sumcheck failed");
                 return Ok(false);

@@ -12,6 +12,7 @@ use crate::{
 };
 use ark_ec::AffineRepr;
 use ark_ff::{Field, One, Zero};
+use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::prelude::ZeroKnowledge;
 use co_builder::{
     prelude::{HonkCurve, Polynomial, ProverCrs},
@@ -38,7 +39,7 @@ impl<
         polys: &'_ AllEntities<Vec<P::ScalarField>, L>,
     ) -> PolyG<'_, Vec<P::ScalarField>> {
         PolyG {
-            wires: L::to_be_shifted(&polys.witness).try_into().unwrap(),
+            wires: polys.witness.to_be_shifted().try_into().unwrap(),
         }
     }
 
