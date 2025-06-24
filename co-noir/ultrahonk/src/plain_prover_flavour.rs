@@ -5,11 +5,12 @@ use ark_ff::PrimeField;
 use co_builder::HonkProofResult;
 use co_builder::{prelude::HonkCurve, prover_flavour::ProverFlavour};
 use rand::{CryptoRng, Rng};
+use std::fmt::Debug;
 
 pub trait PlainProverFlavour: Default + ProverFlavour {
     type AllRelationAcc<F: PrimeField>: Default;
     type AllRelationEvaluations<F: PrimeField>: Default;
-    type Alphas<F: PrimeField>: Default + Clone + Copy;
+    type Alphas<F: PrimeField>: Default + Clone + Copy + Debug;
     type SumcheckRoundOutput<F: PrimeField>: Default
         + std::ops::MulAssign
         + std::ops::Add
@@ -90,12 +91,12 @@ pub trait PlainProverFlavour: Default + ProverFlavour {
     );
 }
 
+//TODO Florin Think of a name for this trait
 pub trait UnivariateTest<F: PrimeField> {
-    // type ProverUnivariate<F: PrimeField>: Clone + Default;
-
     fn double(self) -> Self;
 
     fn double_in_place(&mut self);
+
     fn sqr(self) -> Self;
 
     fn square_in_place(&mut self);
@@ -104,24 +105,9 @@ pub trait UnivariateTest<F: PrimeField> {
 
     fn evaluate(&self, u: F) -> F;
 
-    // fn extend_and_batch_univariates<const SIZE2: usize>(
-    //     &self,
-    //     result: &mut Univariate<F, SIZE2>,
-    //     extended_random_poly: &Univariate<F, SIZE2>,
-    //     partial_evaluation_result: &F,
-    //     linear_independent: bool,
-    // );
-
     fn get_random<R: Rng + CryptoRng>(rng: &mut R) -> Self;
 
     fn evaluations(&mut self) -> &mut [F];
-    fn evaluations_as_ref(&self) -> &[F];
 
-    // fn extend_and_batch_univariates<const SIZE: usize, F: PrimeField>(
-    //     lhs: &Univariate<F, SIZE>,
-    //     result: &mut Self::ProverUnivariate<F>,
-    //     extended_random_poly: &Self::ProverUnivariate<F>,
-    //     partial_evaluation_result: &F,
-    //     linear_independent: bool,
-    // );
+    fn evaluations_as_ref(&self) -> &[F];
 }

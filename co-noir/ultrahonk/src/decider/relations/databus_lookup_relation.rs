@@ -90,7 +90,7 @@ impl<F: PrimeField> DataBusLookupRelationAcc<F> {
             result,
             extended_random_poly,
             partial_evaluation_result,
-            true,
+            false,
         );
         self.r2.extend_and_batch_univariates(
             result,
@@ -102,7 +102,7 @@ impl<F: PrimeField> DataBusLookupRelationAcc<F> {
             result,
             extended_random_poly,
             partial_evaluation_result,
-            true,
+            false,
         );
         self.r4.extend_and_batch_univariates(
             result,
@@ -114,7 +114,7 @@ impl<F: PrimeField> DataBusLookupRelationAcc<F> {
             result,
             extended_random_poly,
             partial_evaluation_result,
-            true,
+            false,
         );
     }
 }
@@ -197,12 +197,13 @@ impl DataBusLookupRelation {
         input: &ProverUnivariatesSized<F, L, SIZE>,
         params: &RelationParameters<F, L>,
     ) -> Univariate<F, SIZE> {
+        let id = input.precomputed.databus_id().clone();
         let value = DataBusLookupRelation::values(bus_idx, input).clone();
         let gamma = params.gamma;
         let beta = params.beta;
 
         // value_i + idx_i * beta + gamma
-        value + &(F::from(bus_idx as u64) * beta + gamma)
+        value + id * beta + &gamma
     }
 
     fn compute_read_term<F: PrimeField, L: PlainProverFlavour, const SIZE: usize>(

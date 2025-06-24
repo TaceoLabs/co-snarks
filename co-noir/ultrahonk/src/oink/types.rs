@@ -10,6 +10,9 @@ pub(crate) struct ProverMemory<P: Pairing, L: PlainProverFlavour> {
     pub(crate) z_perm: Polynomial<P::ScalarField>,
     /// column 5
     pub(crate) lookup_inverses: Polynomial<P::ScalarField>,
+    pub(crate) calldata_inverses: Polynomial<P::ScalarField>,
+    pub(crate) secondary_calldata_inverses: Polynomial<P::ScalarField>,
+    pub(crate) return_data_inverses: Polynomial<P::ScalarField>,
     pub(crate) public_input_delta: P::ScalarField,
     pub(crate) challenges: Challenges<P::ScalarField, L>,
 }
@@ -48,6 +51,9 @@ impl<P: Pairing, L: PlainProverFlavour> Default for ProverMemory<P, L> {
             w_4: Default::default(),
             z_perm: Default::default(),
             lookup_inverses: Default::default(),
+            calldata_inverses: Default::default(),
+            secondary_calldata_inverses: Default::default(),
+            return_data_inverses: Default::default(),
             public_input_delta: Default::default(),
             challenges: Default::default(),
         }

@@ -19,6 +19,7 @@
 
 use super::types::ProverMemory;
 use crate::{
+    decider::relations::databus_lookup_relation::BusData,
     plain_prover_flavour::PlainProverFlavour,
     transcript::{Transcript, TranscriptFieldType, TranscriptHasher},
     Utils,
@@ -190,6 +191,44 @@ impl<
         *table_1 + gamma + *table_2 * eta_1 + *table_3 * eta_2 + *table_4 * eta_3
     }
 
+    fn compute_read_term_databus(
+        &self,
+        proving_key: &ProvingKey<P, L>,
+        i: usize,
+    ) -> P::ScalarField {
+        tracing::trace!("compute read term");
+
+        // Bus value stored in w_1, index into bus column stored in w_2
+        let w_1 = &proving_key.polynomials.witness.w_l()[i];
+        let w_2 = &proving_key.polynomials.witness.w_r()[i];
+        let gamma = &self.memory.challenges.gamma;
+        let beta = &self.memory.challenges.beta;
+
+        // Construct value + index*\beta + \gamma
+        (*w_2 * beta) + w_1 + gamma
+    }
+
+    /// Compute table_1 + gamma + table_2 * eta + table_3 * eta_2 + table_4 * eta_3
+    fn compute_write_term_databus(
+        &self,
+        proving_key: &ProvingKey<P, L>,
+        i: usize,
+        bus_idx: BusData,
+    ) -> P::ScalarField {
+        tracing::trace!("compute write term");
+
+        let value = match bus_idx {
+            BusData::BusIdx0 => &proving_key.polynomials.witness.calldata()[i],
+            BusData::BusIdx1 => &proving_key.polynomials.witness.secondary_calldata()[i],
+            BusData::BusIdx2 => &proving_key.polynomials.witness.return_data()[i],
+        };
+        let id = &proving_key.polynomials.precomputed.databus_id()[i];
+        let gamma = &self.memory.challenges.gamma;
+        let beta = &self.memory.challenges.beta;
+        // Construct value_i + idx_i*\beta + \gamma
+        *id * beta + value + gamma // degree 1
+    }
+
     fn compute_logderivative_inverses(&mut self, proving_key: &ProvingKey<P, L>) {
         tracing::trace!("compute logderivative inverse");
 
@@ -229,6 +268,86 @@ impl<
         // Compute inverse polynomial I in place by inverting the product at each row
         // Note: zeroes are ignored as they are not used anyway
         Utils::batch_invert(self.memory.lookup_inverses.as_mut());
+    }
+
+    fn compute_logderivative_inverses_databus(
+        &mut self,
+        proving_key: &ProvingKey<P, L>,
+        bus_idx: BusData,
+    ) {
+        tracing::trace!("compute logderivative inverse for Databus");
+
+        match bus_idx {
+            BusData::BusIdx0 => self
+                .memory
+                .calldata_inverses
+                .resize(proving_key.circuit_size as usize, P::ScalarField::zero()),
+            BusData::BusIdx1 => self
+                .memory
+                .secondary_calldata_inverses
+                .resize(proving_key.circuit_size as usize, P::ScalarField::zero()),
+            BusData::BusIdx2 => self
+                .memory
+                .return_data_inverses
+                .resize(proving_key.circuit_size as usize, P::ScalarField::zero()),
+        };
+        let wire = match bus_idx {
+            BusData::BusIdx0 => &proving_key.polynomials.precomputed.q_l(),
+            BusData::BusIdx1 => &proving_key.polynomials.precomputed.q_r(),
+            BusData::BusIdx2 => &proving_key.polynomials.precomputed.q_o(),
+        };
+        let read_count = match bus_idx {
+            BusData::BusIdx0 => &proving_key.polynomials.witness.calldata_read_counts(),
+            BusData::BusIdx1 => &proving_key
+                .polynomials
+                .witness
+                .secondary_calldata_read_counts(),
+            BusData::BusIdx2 => &proving_key.polynomials.witness.return_data_read_counts(),
+        };
+
+        //TODO FLORIN
+        // debug_assert_eq!(
+        //     proving_key.polynomials.precomputed.q_lookup().len(),
+        //     proving_key.circuit_size as usize
+        // );
+        // debug_assert_eq!(
+        //     proving_key.polynomials.witness.lookup_read_tags().len(),
+        //     proving_key.circuit_size as usize
+        // );
+
+        for (i, (w, read)) in izip!(wire.iter(), read_count.iter(),).enumerate() {
+            // Determine if the present row contains a databus operation
+            let q_busread = &proving_key.polynomials.precomputed.q_busread()[i];
+            let is_read = *q_busread == P::ScalarField::one() && *w == P::ScalarField::one();
+            let nonzero_read_count = *read != P::ScalarField::zero();
+
+            // We only compute the inverse if this row contains a read gate or data that has been read
+
+            if is_read || nonzero_read_count {
+                let read_term = self.compute_read_term_databus(proving_key, i);
+                let write_term = self.compute_write_term_databus(proving_key, i, bus_idx);
+
+                match bus_idx {
+                    BusData::BusIdx0 => self.memory.calldata_inverses[i] = read_term * write_term,
+                    BusData::BusIdx1 => {
+                        self.memory.secondary_calldata_inverses[i] = read_term * write_term
+                    }
+                    BusData::BusIdx2 => {
+                        self.memory.return_data_inverses[i] = read_term * write_term
+                    }
+                };
+            }
+        }
+
+        // Compute inverse polynomial I in place by inverting the product at each row
+        // Note: zeroes are ignored as they are not used anyway
+        match bus_idx {
+            BusData::BusIdx0 => Utils::batch_invert(self.memory.calldata_inverses.as_mut()),
+            BusData::BusIdx1 => {
+                Utils::batch_invert(self.memory.secondary_calldata_inverses.as_mut())
+            }
+            BusData::BusIdx2 => Utils::batch_invert(self.memory.return_data_inverses.as_mut()),
+        };
     }
 
     pub(crate) fn compute_public_input_delta(
@@ -462,6 +581,7 @@ impl<
         // We only commit to the fourth wire polynomial after adding memory records
 
         // Ultracircuits are not structured (also our commitment type is CommitType::Default, so no changes are needed here yet)
+
         self.commit_to_witness_polynomial(
             proving_key.polynomials.witness.w_l_mut(),
             "W_L",
@@ -648,27 +768,47 @@ impl<
         std::mem::swap(&mut self.memory.lookup_inverses, &mut lookup_inverses_tmp);
         // If Mega, commit to the databus inverse polynomials and send
         if L::FLAVOUR == Flavour::Mega {
+            self.compute_logderivative_inverses_databus(proving_key, BusData::BusIdx0);
+            self.compute_logderivative_inverses_databus(proving_key, BusData::BusIdx1);
+            self.compute_logderivative_inverses_databus(proving_key, BusData::BusIdx2);
+
+            // we do std::mem::take here to avoid borrowing issues with self
+            let mut calldata_inverses_tmp = std::mem::take(&mut self.memory.calldata_inverses);
             self.commit_to_witness_polynomial(
-                proving_key.polynomials.witness.calldata_inverses_mut(),
+                &mut calldata_inverses_tmp,
                 "calldata_inverses",
                 &proving_key.crs,
                 transcript,
             )?;
+            std::mem::swap(
+                &mut self.memory.calldata_inverses,
+                &mut calldata_inverses_tmp,
+            );
+            let mut secondary_calldata_inverses_tmp =
+                std::mem::take(&mut self.memory.secondary_calldata_inverses);
+
             self.commit_to_witness_polynomial(
-                proving_key
-                    .polynomials
-                    .witness
-                    .secondary_calldata_inverses_mut(),
+                &mut secondary_calldata_inverses_tmp,
                 "secondary_calldata_inverses",
                 &proving_key.crs,
                 transcript,
             )?;
+            std::mem::swap(
+                &mut self.memory.secondary_calldata_inverses,
+                &mut secondary_calldata_inverses_tmp,
+            );
+            let mut return_data_inverses_tmp =
+                std::mem::take(&mut self.memory.return_data_inverses);
             self.commit_to_witness_polynomial(
-                proving_key.polynomials.witness.return_data_inverses_mut(),
+                &mut return_data_inverses_tmp,
                 "return_data_inverses",
                 &proving_key.crs,
                 transcript,
             )?;
+            std::mem::swap(
+                &mut self.memory.return_data_inverses,
+                &mut return_data_inverses_tmp,
+            );
         }
         // Round is done since ultra_honk is no goblin flavor
         Ok(())

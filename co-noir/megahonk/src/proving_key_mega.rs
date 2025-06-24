@@ -8,10 +8,9 @@ use co_builder::prelude::CrsParser;
 use co_builder::prelude::HonkRecursion;
 use co_builder::prelude::Polynomial;
 use co_builder::prelude::Polynomials;
-use co_builder::prelude::PrecomputedEntities;
-use co_builder::prelude::ProverWitnessEntities;
 use co_builder::prelude::Serialize as FieldSerialize;
 use co_builder::prelude::ZeroKnowledge;
+use co_builder::prover_flavour::ProverFlavour;
 use serde::Deserialize;
 use serde::Serialize;
 use sha3::Keccak256;
@@ -32,6 +31,7 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(has_zk: ZeroKnowledge) {
     const CRS_PATH_G1: &str = "../co-builder/src/crs/bn254_g1.dat";
     const CRS_PATH_G2: &str = "../co-builder/src/crs/bn254_g2.dat";
 
+    let start = std::time::Instant::now();
     let path = "src/finalpk.json";
     let json_str = std::fs::read_to_string(path).expect("failed to read file");
     let proving_key: VeryUglyPk =
@@ -42,7 +42,7 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(has_zk: ZeroKnowledge) {
     let crs: co_builder::prelude::Crs<Bn254> =
         CrsParser::get_crs(CRS_PATH_G1, CRS_PATH_G2, crs_size, has_zk).unwrap();
     let (prover_crs, _verifier_crs) = crs.split();
-    let mut pk = ProvingKey::<_, MegaFlavour<_>>::new(
+    let mut pk = ProvingKey::<_, MegaFlavour>::new(
         real_pk.circuit_size,
         real_pk.num_public_inputs,
         prover_crs.into(),
@@ -62,45 +62,42 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(has_zk: ZeroKnowledge) {
         precomp_polys.push(new_poly);
     }
     let mut witness_polys: Vec<Polynomial<ark_bn254::Fr>> = Vec::new();
-    for poly in real_pk.witness_polynomials[..4].to_vec() {
-        // println!("Poly: {:?}", poly.len());
+    // println!("w_l: {:?}", real_pk.witness_polynomials[0]);
+    for poly in real_pk.witness_polynomials[..4].iter().cloned() {
         let new_poly: Polynomial<ark_bn254::Fr> = Polynomial { coefficients: poly };
         witness_polys.push(new_poly);
     }
-    for poly in real_pk.witness_polynomials[6..].to_vec() {
+    for poly in real_pk.witness_polynomials[6..].iter().cloned() {
         let new_poly: Polynomial<ark_bn254::Fr> = Polynomial { coefficients: poly };
-        // println!("Poly: {:?}", new_poly.len());
+
         witness_polys.push(new_poly);
     }
+
     // println!("Precomputed Polynomials: {}", precomp_polys.len());
     // println!("Witness Polynomials: {}", witness_polys.len());
-    let precompentities = PrecomputedEntities::<
-        Polynomial<ark_bn254::Fr>,
-        ark_bn254::Fr,
-        MegaFlavour<ark_bn254::Fr>,
-    > {
-        elements: precomp_polys.try_into().unwrap(),
-        phantom_data: std::marker::PhantomData::<(ark_bn254::Fr, MegaFlavour<ark_bn254::Fr>)>,
-    };
+    let precompentities =
+        <MegaFlavour as ProverFlavour>::PrecomputedEntities::<Polynomial<ark_bn254::Fr>> {
+            elements: precomp_polys.try_into().unwrap(),
+        };
 
-    let witness_entities = ProverWitnessEntities::<
-        Polynomial<ark_bn254::Fr>,
-        ark_bn254::Fr,
-        MegaFlavour<ark_bn254::Fr>,
-    > {
-        elements: witness_polys.try_into().unwrap(),
-        phantom_data: std::marker::PhantomData::<(ark_bn254::Fr, MegaFlavour<ark_bn254::Fr>)>,
-    };
+    let witness_entities =
+        <MegaFlavour as ProverFlavour>::ProverWitnessEntities::<Polynomial<ark_bn254::Fr>> {
+            elements: witness_polys.try_into().unwrap(),
+        };
+
     let polys_together = Polynomials {
         witness: witness_entities,
         precomputed: precompentities,
     };
     pk.polynomials = polys_together;
-
-    let (proof, public_inputs) = UltraHonk::<_, H, MegaFlavour<_>>::prove(pk, has_zk).unwrap();
-
-    println!("Public Inputs: {:?}", public_inputs.len());
-    println!("Proof: {:?}", proof.inner().len());
+    let time = start.elapsed();
+    println!("Time taken to parse proving key: {:?}", time);
+    let start = std::time::Instant::now();
+    let (proof, public_inputs) = UltraHonk::<_, H, MegaFlavour>::prove(pk, has_zk).unwrap();
+    let time = start.elapsed();
+    println!("Time taken to prove: {:?}", time);
+    // println!("Public Inputs: {:?}", public_inputs.len());
+    // println!("Proof: {:?}", proof.inner());
     // assert_eq!(public_inputs.len(), proof.inner().len());
     // let is_valid =
     //     UltraHonk::<_, H, UltraFlavour<_>>::verify(proof, &public_inputs, &verifying_key, has_zk)

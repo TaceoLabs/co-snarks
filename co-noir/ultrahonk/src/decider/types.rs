@@ -159,8 +159,7 @@ impl<P: Pairing, L: PlainProverFlavour> ProverMemory<P, L> {
                 polynomials.witness.calldata_read_counts().as_ref().to_vec();
             *memory.witness.calldata_read_tags_mut() =
                 polynomials.witness.calldata_read_tags().as_ref().to_vec();
-            *memory.witness.calldata_inverses_mut() =
-                polynomials.witness.calldata_inverses().as_ref().to_vec();
+            *memory.witness.calldata_inverses_mut() = prover_memory.calldata_inverses.into_vec();
             *memory.witness.secondary_calldata_mut() =
                 polynomials.witness.secondary_calldata().as_ref().to_vec();
             *memory.witness.secondary_calldata_read_counts_mut() = polynomials
@@ -173,11 +172,8 @@ impl<P: Pairing, L: PlainProverFlavour> ProverMemory<P, L> {
                 .secondary_calldata_read_tags()
                 .as_ref()
                 .to_vec();
-            *memory.witness.secondary_calldata_inverses_mut() = polynomials
-                .witness
-                .secondary_calldata_inverses()
-                .as_ref()
-                .to_vec();
+            *memory.witness.secondary_calldata_inverses_mut() =
+                prover_memory.secondary_calldata_inverses.into_vec();
             *memory.witness.return_data_mut() = polynomials.witness.return_data().as_ref().to_vec();
             *memory.witness.return_data_read_counts_mut() = polynomials
                 .witness
@@ -190,7 +186,7 @@ impl<P: Pairing, L: PlainProverFlavour> ProverMemory<P, L> {
                 .as_ref()
                 .to_vec();
             *memory.witness.return_data_inverses_mut() =
-                polynomials.witness.return_data_inverses().as_ref().to_vec();
+                prover_memory.return_data_inverses.into_vec();
         }
 
         // TODO FLORIN

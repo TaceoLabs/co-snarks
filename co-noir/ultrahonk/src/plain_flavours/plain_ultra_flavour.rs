@@ -220,6 +220,15 @@ impl PlainProverFlavour for UltraFlavour {
             scaling_factor,
         );
         SumcheckProverRound::accumulate_one_relation_univariates::<
+            LogDerivLookupRelation,
+            { Self::MAX_PARTIAL_RELATION_LENGTH },
+        >(
+            &mut univariate_accumulators.r_lookup,
+            extended_edges,
+            relation_parameters,
+            scaling_factor,
+        );
+        SumcheckProverRound::accumulate_one_relation_univariates::<
             DeltaRangeConstraintRelation,
             { Self::MAX_PARTIAL_RELATION_LENGTH },
         >(
@@ -242,15 +251,6 @@ impl PlainProverFlavour for UltraFlavour {
             { Self::MAX_PARTIAL_RELATION_LENGTH },
         >(
             &mut univariate_accumulators.r_aux,
-            extended_edges,
-            relation_parameters,
-            scaling_factor,
-        );
-        SumcheckProverRound::accumulate_one_relation_univariates::<
-            LogDerivLookupRelation,
-            { Self::MAX_PARTIAL_RELATION_LENGTH },
-        >(
-            &mut univariate_accumulators.r_lookup,
             extended_edges,
             relation_parameters,
             scaling_factor,

@@ -45,7 +45,7 @@ impl ProverFlavour for MegaFlavour {
     /// column 5
     const Q_4: usize = 5;
     /// column 6
-    const Q_BUSREAD: Option<usize> = Some(7);
+    const Q_BUSREAD: Option<usize> = Some(6);
     /// column 7
     const Q_LOOKUP: usize = 7;
     /// column 8
