@@ -9,7 +9,7 @@ use co_circom_types::{Rep3SharedWitness, ShamirSharedWitness, SharedWitness};
 use eyre::Result;
 use mpc_core::protocols::rep3::Rep3State;
 use mpc_core::protocols::shamir::{ShamirPreprocessing, ShamirState};
-use mpc_core::ForkState;
+use mpc_core::MpcState;
 use mpc_net::Network;
 use num_traits::ToPrimitive;
 use std::marker::PhantomData;
@@ -134,8 +134,7 @@ impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
             )
         }
 
-        let h = R::witness_map_from_matrices::<N, P, T>(
-            net0,
+        let h = R::witness_map_from_matrices::<P, T>(
             state0,
             matrices,
             &public_inputs,
@@ -164,7 +163,7 @@ impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
     }
 
     fn calculate_coeff<C>(
-        id: usize,
+        id: <T::State as MpcState>::PartyID,
         initial: T::PointHalfShare<C>,
         query: &[C::Affine],
         vk_param: C::Affine,
@@ -205,7 +204,7 @@ impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
     ) -> eyre::Result<Proof<P>> {
         let delta_g1 = pkey.delta_g1.into_group();
 
-        let party_id = net0.id();
+        let id = state0.id();
         let alpha_g1 = pkey.vk.alpha_g1;
         let beta_g1 = pkey.beta_g1;
         let beta_g2 = pkey.vk.beta_g2;
@@ -219,7 +218,7 @@ impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
                 let r = T::to_half_share(r);
                 let r_g1 = T::scalar_mul_public_point_hs(&delta_g1, r);
                 let r_g1 = Self::calculate_coeff(
-                    party_id,
+                    id,
                     r_g1,
                     &pkey.a_query,
                     alpha_g1,
@@ -237,7 +236,7 @@ impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
                 let s = T::to_half_share(s);
                 let s_g1 = T::scalar_mul_public_point_hs(&delta_g1, s);
                 let s_g1 = Self::calculate_coeff(
-                    party_id,
+                    id,
                     s_g1,
                     &pkey.b_g1_query,
                     beta_g1,
@@ -254,7 +253,7 @@ impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
                 let s = T::to_half_share(s);
                 let s_g2 = T::scalar_mul_public_point_hs(&delta_g2, s);
                 let s_g2 = Self::calculate_coeff(
-                    party_id,
+                    id,
                     s_g2,
                     &pkey.b_g2_query,
                     beta_g2,

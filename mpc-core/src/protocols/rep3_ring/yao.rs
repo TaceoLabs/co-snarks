@@ -9,7 +9,7 @@ use crate::protocols::{
             circuits::GarbledCircuits, evaluator::Rep3Evaluator, garbler::Rep3Garbler, GCInputs,
             GCUtils,
         },
-        Rep3State, PARTY_0, PARTY_1, PARTY_2,
+        Rep3State,
     },
     rep3_ring::conversion,
 };
@@ -18,7 +18,7 @@ use fancy_garbling::{BinaryBundle, WireLabel, WireMod2};
 use itertools::izip;
 use mpc_net::Network;
 use mpc_types::protocols::{
-    rep3::{Rep3BigUintShare, Rep3PrimeFieldShare},
+    rep3::{id::PartyID, Rep3BigUintShare, Rep3PrimeFieldShare},
     rep3_ring::{
         ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
         Rep3RingShare,
@@ -118,21 +118,20 @@ pub fn joint_input_arithmetic_added_many<T: IntRing2k, N: Network>(
     net: &N,
     state: &mut Rep3State,
 ) -> eyre::Result<[BinaryBundle<WireMod2>; 2]> {
-    let id = net.id();
     let n_inputs = x.len();
     let n_bits = T::K;
     let bits = n_inputs * n_bits;
 
-    let (x01, x2) = match id {
-        PARTY_0 => {
+    let (x01, x2) = match state.id {
+        PartyID::ID0 => {
             // Receive x0
-            let x01 = GCUtils::receive_bundle_from(bits, net, PARTY_1)?;
+            let x01 = GCUtils::receive_bundle_from(bits, net, PartyID::ID1)?;
 
             // Receive x2
-            let x2 = GCUtils::receive_bundle_from(bits, net, PARTY_2)?;
+            let x2 = GCUtils::receive_bundle_from(bits, net, PartyID::ID2)?;
             (x01, x2)
         }
-        PARTY_1 => {
+        PartyID::ID1 => {
             let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
             let mut garbler_bundle = Vec::with_capacity(bits);
             let mut evaluator_bundle = Vec::with_capacity(bits);
@@ -149,14 +148,14 @@ pub fn joint_input_arithmetic_added_many<T: IntRing2k, N: Network>(
             let x01 = GCUtils::wires_to_gcinput(garbler_bundle, evaluator_bundle, delta);
 
             // Send x01 to the other parties
-            GCUtils::send_inputs(&x01, net, PARTY_2)?;
+            GCUtils::send_inputs(&x01, net, PartyID::ID2)?;
             let x01 = x01.garbler_wires;
 
             // Receive x2
-            let x2 = GCUtils::receive_bundle_from(bits, net, PARTY_2)?;
+            let x2 = GCUtils::receive_bundle_from(bits, net, PartyID::ID2)?;
             (x01, x2)
         }
-        PARTY_2 => {
+        PartyID::ID2 => {
             let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
             let mut garbler_bundle = Vec::with_capacity(bits);
             let mut evaluator_bundle = Vec::with_capacity(bits);
@@ -172,14 +171,13 @@ pub fn joint_input_arithmetic_added_many<T: IntRing2k, N: Network>(
             let x2 = GCUtils::wires_to_gcinput(garbler_bundle, evaluator_bundle, delta);
 
             // Send x2 to the other parties
-            GCUtils::send_inputs(&x2, net, PARTY_1)?;
+            GCUtils::send_inputs(&x2, net, PartyID::ID1)?;
             let x2 = x2.garbler_wires;
 
             // Receive x01
-            let x01 = GCUtils::receive_bundle_from(bits, net, PARTY_1)?;
+            let x01 = GCUtils::receive_bundle_from(bits, net, PartyID::ID1)?;
             (x01, x2)
         }
-        _ => unreachable!(),
     };
 
     Ok([x01, x2])
@@ -193,16 +191,15 @@ pub fn input_ring_id2_many<T: IntRing2k, N: Network>(
     net: &N,
     state: &mut Rep3State,
 ) -> eyre::Result<BinaryBundle<WireMod2>> {
-    let id = net.id();
     let n_bits = T::K;
     let bits = n_inputs * n_bits;
 
-    let x = match id {
-        PARTY_0 | PARTY_1 => {
+    let x = match state.id {
+        PartyID::ID0 | PartyID::ID1 => {
             // Receive x
-            GCUtils::receive_bundle_from(bits, net, PARTY_2)?
+            GCUtils::receive_bundle_from(bits, net, PartyID::ID2)?
         }
-        PARTY_2 => {
+        PartyID::ID2 => {
             let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
             let x = x.ok_or(eyre::eyre!("No input provided"))?;
 
@@ -224,10 +221,9 @@ pub fn input_ring_id2_many<T: IntRing2k, N: Network>(
             let x = GCUtils::wires_to_gcinput(garbler_bundle, evaluator_bundle, delta);
 
             // Send x to the other parties
-            GCUtils::send_inputs(&x, net, PARTY_1)?;
+            GCUtils::send_inputs(&x, net, PartyID::ID1)?;
             x.garbler_wires
         }
-        _ => unreachable!(),
     };
     Ok(x)
 }
@@ -250,19 +246,18 @@ pub fn joint_input_binary_xored<T: IntRing2k, N: Network>(
     net: &N,
     state: &mut Rep3State,
 ) -> eyre::Result<[BinaryBundle<WireMod2>; 2]> {
-    let id = net.id();
     let bitlen = T::K;
 
-    let (x01, x2) = match id {
-        PARTY_0 => {
+    let (x01, x2) = match state.id {
+        PartyID::ID0 => {
             // Receive x01
-            let x01 = GCUtils::receive_bundle_from(bitlen, net, PARTY_1)?;
+            let x01 = GCUtils::receive_bundle_from(bitlen, net, PartyID::ID1)?;
 
             // Receive x2
-            let x2 = GCUtils::receive_bundle_from(bitlen, net, PARTY_2)?;
+            let x2 = GCUtils::receive_bundle_from(bitlen, net, PartyID::ID2)?;
             (x01, x2)
         }
-        PARTY_1 => {
+        PartyID::ID1 => {
             let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
 
             // Input x01
@@ -270,28 +265,27 @@ pub fn joint_input_binary_xored<T: IntRing2k, N: Network>(
             let x01 = GCUtils::encode_ring(xor, &mut state.rng, delta);
 
             // Send x01 to the other parties
-            GCUtils::send_inputs(&x01, net, PARTY_2)?;
+            GCUtils::send_inputs(&x01, net, PartyID::ID2)?;
             let x01 = x01.garbler_wires;
 
             // Receive x2
-            let x2 = GCUtils::receive_bundle_from(bitlen, net, PARTY_2)?;
+            let x2 = GCUtils::receive_bundle_from(bitlen, net, PartyID::ID2)?;
             (x01, x2)
         }
-        PARTY_2 => {
+        PartyID::ID2 => {
             let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
 
             // Input x2
             let x2 = GCUtils::encode_ring(x.a, &mut state.rng, delta);
 
             // Send x2 to the other parties
-            GCUtils::send_inputs(&x2, net, PARTY_1)?;
+            GCUtils::send_inputs(&x2, net, PartyID::ID1)?;
             let x2 = x2.garbler_wires;
 
             // Receive x01
-            let x01 = GCUtils::receive_bundle_from(bitlen, net, PARTY_1)?;
+            let x01 = GCUtils::receive_bundle_from(bitlen, net, PartyID::ID1)?;
             (x01, x2)
         }
-        _ => unreachable!(),
     };
 
     Ok([x01, x2])
@@ -326,14 +320,14 @@ where
 
     // The actual garbled circuit implementation
     let num_inputs = inputs.len();
-    let delta = state.rngs.generate_random_garbler_delta(net.id());
+    let delta = state.rngs.generate_random_garbler_delta(state.id);
 
     let [x01, x2] = joint_input_arithmetic_added_many(inputs, delta, net, state)?;
 
     let mut res = vec![Rep3PrimeFieldShare::zero_share(); num_inputs];
 
-    match net.id() {
-        PARTY_0 => {
+    match state.id {
+        PartyID::ID0 => {
             for res in res.iter_mut() {
                 let k3 = state.rngs.bitcomp2.random_fes_3keys::<F>();
                 res.b = (k3.0 + k3.1 + k3.2).neg();
@@ -355,7 +349,7 @@ where
                 res.a = GCUtils::bits_to_field(x1)?;
             }
         }
-        PARTY_1 => {
+        PartyID::ID1 => {
             for res in res.iter_mut() {
                 let k2 = state.rngs.bitcomp1.random_fes_3keys::<F>();
                 res.a = (k2.0 + k2.1 + k2.2).neg();
@@ -378,7 +372,7 @@ where
                 res.b = GCUtils::bits_to_field(x1)?;
             }
         }
-        PARTY_2 => {
+        PartyID::ID2 => {
             let mut x23 = Vec::with_capacity(num_inputs);
             for res in res.iter_mut() {
                 let k2 = state.rngs.bitcomp1.random_fes_3keys::<F>();
@@ -404,7 +398,6 @@ where
                 eyre::bail!("Unexpected output received");
             }
         }
-        _ => unreachable!(),
     }
 
     Ok(res)
@@ -420,14 +413,14 @@ where
     Standard: Distribution<T>,
 {
     let num_inputs = inputs.len();
-    let delta = state.rngs.generate_random_garbler_delta(net.id());
+    let delta = state.rngs.generate_random_garbler_delta(state.id);
 
     let [x01, x2] = rep3::yao::joint_input_arithmetic_added_many(inputs, delta, net, state)?;
 
     let mut res = vec![Rep3RingShare::zero_share(); num_inputs];
 
-    match net.id() {
-        PARTY_0 => {
+    match state.id {
+        PartyID::ID0 => {
             for res in res.iter_mut() {
                 let k3 = state
                     .rngs
@@ -452,7 +445,7 @@ where
                 res.a = GCUtils::bits_to_ring(x1)?;
             }
         }
-        PARTY_1 => {
+        PartyID::ID1 => {
             for res in res.iter_mut() {
                 let k2 = state
                     .rngs
@@ -478,7 +471,7 @@ where
                 res.b = GCUtils::bits_to_ring(x1)?;
             }
         }
-        PARTY_2 => {
+        PartyID::ID2 => {
             let mut x23 = Vec::with_capacity(num_inputs);
             for res in res.iter_mut() {
                 let k2 = state
@@ -510,7 +503,6 @@ where
                 eyre::bail!("Unexpected output received");
             }
         }
-        _ => unreachable!(),
     }
 
     Ok(res)
@@ -524,14 +516,14 @@ macro_rules! decompose_circuit_compose_blueprint {
 
         let delta = $state
             .rngs
-            .generate_random_garbler_delta($net.id());
+            .generate_random_garbler_delta($state.id);
 
         let [x01, x2] = yao::joint_input_arithmetic_added_many($inputs, delta, $net, $state)?;
 
         let mut res = vec![Rep3RingShare::zero_share(); $output_size];
 
-        match $net.id() {
-            PARTY_0 => {
+        match $state.id {
+            PartyID::ID0 => {
                 for res in res.iter_mut() {
                     let k3 = $state.rngs.bitcomp2.random_elements_3keys::<RingElement<$t>>();
                     res.b = (k3.0 + k3.1 + k3.2).neg();
@@ -552,7 +544,7 @@ macro_rules! decompose_circuit_compose_blueprint {
                     res.a = yao::GCUtils::bits_to_ring(x1)?;
                 }
             }
-            PARTY_1 => {
+            PartyID::ID1 => {
                 for res in res.iter_mut() {
                     let k2 = $state.rngs.bitcomp1.random_elements_3keys::<RingElement<$t>>();
                     res.a = (k2.0 + k2.1 + k2.2).neg();
@@ -574,7 +566,7 @@ macro_rules! decompose_circuit_compose_blueprint {
                     res.b = yao::GCUtils::bits_to_ring(x1)?;
                 }
             }
-            PARTY_2 => {
+            PartyID::ID2 => {
                 let mut x23 = Vec::with_capacity($output_size);
                 for res in res.iter_mut() {
                     let k2 = $state.rngs.bitcomp1.random_elements_3keys::<RingElement<$t>>();
@@ -599,7 +591,6 @@ macro_rules! decompose_circuit_compose_blueprint {
                     eyre::bail!("Unexpected output received");
                 }
             }
-        _ => unreachable!(),
         }
 
         Ok(res)
@@ -822,14 +813,14 @@ where
 {
     let num_inputs = inputs.len();
     let total_output_elements = num_decomps_per_field * num_inputs;
-    let delta = state.rngs.generate_random_garbler_delta(net.id());
+    let delta = state.rngs.generate_random_garbler_delta(state.id);
 
     let [x01, x2] = rep3::yao::joint_input_arithmetic_added_many(inputs, delta, net, state)?;
 
     let mut res = vec![Rep3RingShare::zero_share(); total_output_elements];
 
-    match net.id() {
-        PARTY_0 => {
+    match state.id {
+        PartyID::ID0 => {
             for res in res.iter_mut() {
                 let k3 = state
                     .rngs
@@ -861,7 +852,7 @@ where
                 res.a = GCUtils::bits_to_ring(x1)?;
             }
         }
-        PARTY_1 => {
+        PartyID::ID1 => {
             for res in res.iter_mut() {
                 let k2 = state
                     .rngs
@@ -894,7 +885,7 @@ where
                 res.b = GCUtils::bits_to_ring(x1)?;
             }
         }
-        PARTY_2 => {
+        PartyID::ID2 => {
             let mut x23 = Vec::with_capacity(total_output_elements);
             for res in res.iter_mut() {
                 let k2 = state
@@ -933,7 +924,6 @@ where
                 eyre::bail!("Unexpected output received");
             }
         }
-        _ => unreachable!(),
     }
 
     Ok(res)
@@ -969,15 +959,15 @@ macro_rules! decompose_circuit_compose_blueprint_2 {
 
         let delta = $state
             .rngs
-            .generate_random_garbler_delta($net.id);
+            .generate_random_garbler_delta($state.id);
 
         let [x01, x2] = yao::joint_input_arithmetic_added_many($input1, delta, $net, $state)?;
         let [y01, y2] = yao::joint_input_arithmetic_added_many($input2, delta, $net, $state)?;
 
         let mut res = vec![Rep3RingShare::zero_share(); $output_size];
 
-        match $net.id() {
-            PARTY_0 => {
+        match $state.id {
+            PartyID::ID0 => {
                 for res in res.iter_mut() {
                     let k3 = $state.rngs.bitcomp2.random_elements_3keys::<RingElement<$t>>();
                     res.b = (k3.0 + k3.1 + k3.2).neg();
@@ -996,7 +986,7 @@ macro_rules! decompose_circuit_compose_blueprint_2 {
                     res.a = yao::GCUtils::bits_to_ring(x1)?;
                 }
             }
-            PARTY_1 => {
+            PartyID::ID1 => {
                 for res in res.iter_mut() {
                     let k2 = $state.rngs.bitcomp1.random_elements_3keys::<RingElement<$t>>();
                     res.a = (k2.0 + k2.1 + k2.2).neg();
@@ -1006,7 +996,7 @@ macro_rules! decompose_circuit_compose_blueprint_2 {
                 let x23 = yao::input_ring_id2_many::<$t, _>(None, None, $output_size, $net, $state)?;
 
                 let mut garbler =
-                    rep3::yao::garbler::Rep3Garbler::new_with_delta($io_context, delta.expect("Delta not provided"));
+                    rep3::yao::garbler::Rep3Garbler::new_with_delta($net, $state, delta.expect("Delta not provided"));
 
                 let x1 = $circuit(&mut garbler,  &x01, &x2,&y01, &y2, &x23, $($args),*);
                 let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
@@ -1018,7 +1008,7 @@ macro_rules! decompose_circuit_compose_blueprint_2 {
                    res.b = yao::GCUtils::bits_to_ring(x1)?;
                 }
             }
-            PARTY_2 => {
+            PartyID::ID2 => {
                 let mut x23 = Vec::with_capacity($output_size);
                 for res in res.iter_mut() {
                     let k2 = $state.rngs.bitcomp1.random_elements_3keys::<RingElement<$t>>();
@@ -1034,7 +1024,7 @@ macro_rules! decompose_circuit_compose_blueprint_2 {
                 let x23 = yao::input_ring_id2_many(Some(x23), delta, $output_size, $net, $state)?;
 
                 let mut garbler =
-                   rep3::yao::garbler::Rep3Garbler::new_with_delta($io_context, delta.expect("Delta not provided"));
+                   rep3::yao::garbler::Rep3Garbler::new_with_delta($net, $state, delta.expect("Delta not provided"));
 
                 let x1 = $circuit(&mut garbler, &x01, &x2,&y01, &y2, &x23, $($args),*);
 
@@ -1044,7 +1034,6 @@ macro_rules! decompose_circuit_compose_blueprint_2 {
                     eyre::bail!("Unexpected output received");
                 }
             }
-            _ => unreachable!(),
         }
 
         Ok(res)

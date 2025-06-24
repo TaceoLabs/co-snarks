@@ -1,5 +1,5 @@
 use crate::protocols::{
-    rep3::{PARTY_0, PARTY_1, PARTY_2},
+    rep3::id::PartyID,
     rep3_ring::ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
 };
 use num_traits::Zero;
@@ -55,12 +55,11 @@ impl<T: IntRing2k> Rep3RingShare<T> {
     }
 
     /// Promotes a public ring element to a replicated share by setting the additive share of the party with id=0 and leaving all other shares to be 0. Thus, the replicated shares of party 0 and party 1 are set.
-    pub fn promote_from_trivial(val: &RingElement<T>, id: usize) -> Self {
+    pub fn promote_from_trivial(val: &RingElement<T>, id: PartyID) -> Self {
         match id {
-            PARTY_0 => Self::new_ring(*val, RingElement::zero()),
-            PARTY_1 => Self::new_ring(RingElement::zero(), *val),
-            PARTY_2 => Self::zero_share(),
-            _ => unreachable!(),
+            PartyID::ID0 => Self::new_ring(*val, RingElement::zero()),
+            PartyID::ID1 => Self::new_ring(RingElement::zero(), *val),
+            PartyID::ID2 => Self::zero_share(),
         }
     }
 

@@ -1,6 +1,7 @@
 use ark_ec::pairing::Pairing;
 use ark_ec::CurveGroup;
 use ark_ff::UniformRand;
+use mpc_core::MpcState;
 use mpc_net::Network;
 use rand::thread_rng;
 
@@ -24,7 +25,7 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
     }
 
     fn evaluate_constraint(
-        _: usize,
+        _: <Self::State as MpcState>::PartyID,
         lhs: &[(P::ScalarField, usize)],
         public_inputs: &[P::ScalarField],
         private_witness: &[Self::ArithmeticShare],
@@ -41,7 +42,7 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
     }
 
     fn evaluate_constraint_half_share(
-        _: usize,
+        _: <Self::State as MpcState>::PartyID,
         lhs: &[(P::ScalarField, usize)],
         public_inputs: &[P::ScalarField],
         private_witness: &[Self::ArithmeticShare],
@@ -72,7 +73,7 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
     }
 
     fn promote_to_trivial_shares(
-        _: usize,
+        _: <Self::State as MpcState>::PartyID,
         public_values: &[P::ScalarField],
     ) -> Vec<Self::ArithmeticShare> {
         public_values.to_vec()
@@ -96,7 +97,7 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
     }
 
     fn add_assign_points_public_hs<C: CurveGroup>(
-        _: usize,
+        _: <Self::State as MpcState>::PartyID,
         a: &mut Self::PointHalfShare<C>,
         b: &C,
     ) {

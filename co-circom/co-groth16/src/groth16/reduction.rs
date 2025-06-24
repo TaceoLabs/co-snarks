@@ -3,7 +3,7 @@ use ark_ff::{FftField, Field, One};
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use ark_relations::r1cs::{ConstraintMatrices, Matrix};
 use eyre::Result;
-use mpc_net::Network;
+use mpc_core::MpcState;
 use rayon::iter::{
     IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator,
 };
@@ -25,8 +25,7 @@ macro_rules! rayon_join {
 pub trait R1CSToQAP {
     /// Computes a QAP witness corresponding to the R1CS witness defined by `private_witness`, using the provided `ConstraintMatrices`.
     /// The provided `driver` is used to perform the necessary operations on the secret-shared witness.
-    fn witness_map_from_matrices<N: Network, P: Pairing, T: CircomGroth16Prover<P>>(
-        net: &N,
+    fn witness_map_from_matrices<P: Pairing, T: CircomGroth16Prover<P>>(
         state: &mut T::State,
         matrices: &ConstraintMatrices<P::ScalarField>,
         public_inputs: &[P::ScalarField],
@@ -45,8 +44,7 @@ pub struct CircomReduction;
 
 impl R1CSToQAP for CircomReduction {
     #[instrument(level = "debug", name = "witness map from matrices", skip_all)]
-    fn witness_map_from_matrices<N: Network, P: Pairing, T: CircomGroth16Prover<P>>(
-        net: &N,
+    fn witness_map_from_matrices<P: Pairing, T: CircomGroth16Prover<P>>(
         state: &mut T::State,
         matrices: &ConstraintMatrices<P::ScalarField>,
         public_inputs: &[P::ScalarField],
@@ -59,7 +57,7 @@ impl R1CSToQAP for CircomReduction {
                 .ok_or(eyre::eyre!("Polynomial Degree too large"))?;
         let domain_size = domain.size();
         let power = domain_size.ilog2() as usize;
-        let party_id = net.id();
+        let id = state.id();
         let eval_constraint_span =
             tracing::debug_span!("evaluate constraints + root of unity computation").entered();
         let (roots_to_power_domain, a, b) = rayon_join!(
@@ -80,13 +78,13 @@ impl R1CSToQAP for CircomReduction {
                 let eval_constraint_span_a =
                     tracing::debug_span!("evaluate constraints - a").entered();
                 let mut result = evaluate_constraint::<P, T>(
-                    party_id,
+                    id,
                     domain_size,
                     &matrices.a,
                     public_inputs,
                     private_witness,
                 );
-                let promoted_public = T::promote_to_trivial_shares(party_id, public_inputs);
+                let promoted_public = T::promote_to_trivial_shares(id, public_inputs);
                 result[num_constraints..num_constraints + num_inputs]
                     .clone_from_slice(&promoted_public[..num_inputs]);
                 eval_constraint_span_a.exit();
@@ -96,7 +94,7 @@ impl R1CSToQAP for CircomReduction {
                 let eval_constraint_span_b =
                     tracing::debug_span!("evaluate constraints - a").entered();
                 let result = evaluate_constraint::<P, T>(
-                    party_id,
+                    id,
                     domain_size,
                     &matrices.b,
                     public_inputs,
@@ -178,7 +176,7 @@ impl R1CSToQAP for CircomReduction {
 }
 
 fn evaluate_constraint<P: Pairing, T: CircomGroth16Prover<P>>(
-    party_id: usize,
+    id: <T::State as MpcState>::PartyID,
     domain_size: usize,
     matrix: &Matrix<P::ScalarField>,
     public_inputs: &[P::ScalarField],
@@ -187,14 +185,14 @@ fn evaluate_constraint<P: Pairing, T: CircomGroth16Prover<P>>(
     let mut result = matrix
         .par_iter()
         .with_min_len(256)
-        .map(|x| T::evaluate_constraint(party_id, x, public_inputs, private_witness))
+        .map(|x| T::evaluate_constraint(id, x, public_inputs, private_witness))
         .collect::<Vec<_>>();
     result.resize(domain_size, T::ArithmeticShare::default());
     result
 }
 
 fn evaluate_constraint_half_share<P: Pairing, T: CircomGroth16Prover<P>>(
-    party_id: usize,
+    id: <T::State as MpcState>::PartyID,
     domain_size: usize,
     matrix: &Matrix<P::ScalarField>,
     public_inputs: &[P::ScalarField],
@@ -203,7 +201,7 @@ fn evaluate_constraint_half_share<P: Pairing, T: CircomGroth16Prover<P>>(
     let mut result = matrix
         .par_iter()
         .with_min_len(256)
-        .map(|x| T::evaluate_constraint_half_share(party_id, x, public_inputs, private_witness))
+        .map(|x| T::evaluate_constraint_half_share(id, x, public_inputs, private_witness))
         .collect::<Vec<_>>();
     result.resize(domain_size, T::ArithmeticHalfShare::default());
     result
@@ -218,8 +216,7 @@ pub struct LibSnarkReduction;
 
 impl R1CSToQAP for LibSnarkReduction {
     #[instrument(level = "debug", name = "witness map from matrices", skip_all)]
-    fn witness_map_from_matrices<N: Network, P: Pairing, T: CircomGroth16Prover<P>>(
-        net: &N,
+    fn witness_map_from_matrices<P: Pairing, T: CircomGroth16Prover<P>>(
         state: &mut T::State,
         matrices: &ConstraintMatrices<P::ScalarField>,
         public_inputs: &[P::ScalarField],
@@ -230,25 +227,25 @@ impl R1CSToQAP for LibSnarkReduction {
         let domain = GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints + num_inputs)
             .ok_or(eyre::eyre!("Polynomial Degree too large"))?;
         let domain_size = domain.size();
-        let party_id = net.id();
+        let id = state.id();
 
         let (mut a, mut b) = rayon::join(
             || {
                 let mut result = evaluate_constraint::<P, T>(
-                    party_id,
+                    id,
                     domain_size,
                     &matrices.a,
                     public_inputs,
                     private_witness,
                 );
-                let promoted_public = T::promote_to_trivial_shares(party_id, public_inputs);
+                let promoted_public = T::promote_to_trivial_shares(id, public_inputs);
                 result[num_constraints..num_constraints + num_inputs]
                     .clone_from_slice(&promoted_public[..num_inputs]);
                 result
             },
             || {
                 evaluate_constraint::<P, T>(
-                    party_id,
+                    id,
                     domain_size,
                     &matrices.b,
                     public_inputs,
@@ -268,7 +265,7 @@ impl R1CSToQAP for LibSnarkReduction {
         let mut ab = T::local_mul_vec(a, b, state);
 
         let mut c = evaluate_constraint_half_share::<P, T>(
-            party_id,
+            id,
             domain_size,
             &matrices.c,
             public_inputs,

@@ -5,15 +5,13 @@
 //! This file is heavily inspired by [fancy-garbling](https://github.com/GaloisInc/swanky/blob/dev/fancy-garbling/src/garble/evaluator.rs)
 
 use super::{bristol_fashion::BristolFashionEvaluator, circuits::FancyBinaryConstant, GCUtils};
-use crate::protocols::rep3::{
-    network::{self},
-    PARTY_0, PARTY_1, PARTY_2,
-};
+use crate::protocols::rep3::network::{self};
 use fancy_garbling::{
     errors::EvaluatorError, util::output_tweak, BinaryBundle, Fancy, FancyBinary, WireLabel,
     WireMod2,
 };
 use mpc_net::Network;
+use mpc_types::protocols::rep3::id::PartyID;
 use scuttlebutt::Block;
 use sha3::{Digest, Sha3_256};
 
@@ -31,9 +29,9 @@ pub struct Rep3Evaluator<'a, N: Network> {
 impl<'a, N: Network> Rep3Evaluator<'a, N> {
     /// Create a new evaluator.
     pub fn new(net: &'a N) -> Self {
-        let id = net.id();
-        if id != PARTY_0 {
-            panic!("Evaluator should be PARTY_0")
+        let id = PartyID::try_from(net.id()).expect("valid id");
+        if id != PartyID::ID0 {
+            panic!("Evaluator should be PartyID::ID0")
         }
 
         Self {
@@ -63,7 +61,7 @@ impl<'a, N: Network> Rep3Evaluator<'a, N> {
     /// Receive the garbled circuit from the garblers.
     pub fn receive_circuit(&mut self) -> eyre::Result<()> {
         debug_assert!(self.circuit.is_empty());
-        self.circuit = network::recv_many(self.net, PARTY_1)?;
+        self.circuit = network::recv_many(self.net, PartyID::ID1)?;
         self.current_circuit_element = 0;
 
         let mut hasher = Sha3_256::default();
@@ -71,7 +69,7 @@ impl<'a, N: Network> Rep3Evaluator<'a, N> {
             hasher.update(block);
         }
         let is_hash = hasher.finalize();
-        let should_hash: Vec<u8> = network::recv(self.net, PARTY_2)?;
+        let should_hash: Vec<u8> = network::recv(self.net, PartyID::ID2)?;
 
         if should_hash != is_hash.as_slice() {
             eyre::bail!("Inconsistent Garbled Circuits: Hashes do not match!",);
@@ -122,8 +120,8 @@ impl<'a, N: Network> Rep3Evaluator<'a, N> {
             blocks.push(gate);
         }
         let (send1, send2) = rayon::join(
-            || network::send_many(self.net, PARTY_1, &blocks),
-            || network::send_many(self.net, PARTY_2, &blocks),
+            || network::send_many(self.net, PartyID::ID1, &blocks),
+            || network::send_many(self.net, PartyID::ID2, &blocks),
         );
         send1?;
         send2?;
@@ -140,7 +138,7 @@ impl<'a, N: Network> Rep3Evaluator<'a, N> {
             gate.copy_from_slice(block.as_ref());
             blocks.push(gate);
         }
-        network::send_many(self.net, PARTY_1, &blocks)?;
+        network::send_many(self.net, PartyID::ID1, &blocks)?;
 
         Ok(())
     }

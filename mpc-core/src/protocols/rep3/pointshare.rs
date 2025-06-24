@@ -6,12 +6,13 @@ use ark_ec::CurveGroup;
 use ark_ff::{PrimeField, Zero};
 use itertools::{izip, Itertools};
 use mpc_net::Network;
+use mpc_types::protocols::rep3::id::PartyID;
 use rayon::prelude::*;
 
 use super::{
     arithmetic, conversion,
     network::{self},
-    Rep3PointShare, Rep3PrimeFieldShare, Rep3State, PARTY_0, PARTY_1, PARTY_2,
+    Rep3PointShare, Rep3PrimeFieldShare, Rep3State,
 };
 
 /// Type alias for a [`Rep3PrimeFieldShare`]
@@ -40,22 +41,20 @@ pub fn sub_assign<C: CurveGroup>(a: &mut PointShare<C>, b: &PointShare<C>) {
 }
 
 /// Performs addition between a shared value and a public value in place.
-pub fn add_assign_public<C: CurveGroup>(a: &mut PointShare<C>, b: &C, id: usize) {
+pub fn add_assign_public<C: CurveGroup>(a: &mut PointShare<C>, b: &C, id: PartyID) {
     match id {
-        PARTY_0 => a.a += b,
-        PARTY_1 => a.b += b,
-        PARTY_2 => {}
-        _ => unreachable!(),
+        PartyID::ID0 => a.a += b,
+        PartyID::ID1 => a.b += b,
+        PartyID::ID2 => {}
     }
 }
 
 /// Performs subtraction between a shared value and a public value in place.
-pub fn sub_assign_public<C: CurveGroup>(a: &mut PointShare<C>, b: &C, id: usize) {
+pub fn sub_assign_public<C: CurveGroup>(a: &mut PointShare<C>, b: &C, id: PartyID) {
     match id {
-        PARTY_0 => a.a -= b,
-        PARTY_1 => a.b -= b,
-        PARTY_2 => {}
-        _ => unreachable!(),
+        PartyID::ID0 => a.a -= b,
+        PartyID::ID1 => a.b -= b,
+        PartyID::ID2 => {}
     }
 }
 

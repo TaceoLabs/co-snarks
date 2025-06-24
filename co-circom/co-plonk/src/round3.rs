@@ -11,7 +11,7 @@ use ark_ec::CurveGroup;
 use ark_ff::Field;
 use circom_types::plonk::ZKey;
 use itertools::izip;
-use mpc_core::ForkState;
+use mpc_core::MpcState;
 use mpc_net::Network;
 use num_traits::One;
 use num_traits::Zero;
@@ -260,7 +260,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round3<'a, P
         let mut ap = Vec::with_capacity(len);
         let mut bp = Vec::with_capacity(len);
         let mut cp = Vec::with_capacity(len);
-        let party_id = nets[0].id();
+        let id = state.id();
 
         let pow_root_of_unity = domains.root_of_unity_pow;
         let pow_plus2_root_of_unity = domains.root_of_unity_pow_2;
@@ -381,36 +381,36 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round3<'a, P
             }
 
             e1_ = T::add(e1_, pi);
-            e1_ = T::add_with_public(party_id, e1_, qc);
+            e1_ = T::add_with_public(id, e1_, qc);
             e1.push(e1_);
             e1z.push(e1z_);
 
             let betaw = challenges.beta * w;
-            e2a.push(T::add_with_public(party_id, *a, betaw + challenges.gamma));
+            e2a.push(T::add_with_public(id, *a, betaw + challenges.gamma));
             e2b.push(T::add_with_public(
-                party_id,
+                id,
                 *b,
                 betaw * zkey.verifying_key.k1 + challenges.gamma,
             ));
             e2c.push(T::add_with_public(
-                party_id,
+                id,
                 *c,
                 betaw * zkey.verifying_key.k2 + challenges.gamma,
             ));
 
             e2d.push(*z);
             e3a.push(T::add_with_public(
-                party_id,
+                id,
                 *a,
                 s1 * challenges.beta + challenges.gamma,
             ));
             e3b.push(T::add_with_public(
-                party_id,
+                id,
                 *b,
                 s2 * challenges.beta + challenges.gamma,
             ));
             e3c.push(T::add_with_public(
-                party_id,
+                id,
                 *c,
                 s3 * challenges.beta + challenges.gamma,
             ));
@@ -446,7 +446,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round3<'a, P
             e3 = T::mul_with_public(e3, challenges.alpha);
             e3z = T::mul_with_public(e3z, challenges.alpha);
 
-            let mut e4 = T::add_with_public(party_id, z, -P::ScalarField::one());
+            let mut e4 = T::add_with_public(id, z, -P::ScalarField::one());
             e4 = T::mul_with_public(e4, zkey.lagrange[0].evaluations[i]);
             e4 = T::mul_with_public(e4, challenges.alpha2);
 

@@ -5,6 +5,7 @@ use ark_ff::Field;
 use ark_ff::UniformRand;
 use ark_poly::DenseUVPolynomial;
 use ark_poly::{univariate::DensePolynomial, Polynomial};
+use mpc_core::MpcState;
 use mpc_net::Network;
 use num_traits::Zero;
 use rand::thread_rng;
@@ -52,7 +53,7 @@ impl<P: Pairing> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
     fn add_assign_public(
         a: &mut Self::ArithmeticShare,
         b: <P as Pairing>::ScalarField,
-        _id: usize,
+        _id: <Self::State as MpcState>::PartyID,
     ) {
         *a += b;
     }
@@ -72,7 +73,11 @@ impl<P: Pairing> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         *shared *= public;
     }
 
-    fn add_assign_public_half_share(share: &mut P::ScalarField, public: P::ScalarField, _: usize) {
+    fn add_assign_public_half_share(
+        share: &mut P::ScalarField,
+        public: P::ScalarField,
+        _id: <Self::State as MpcState>::PartyID,
+    ) {
         *share += public
     }
 
@@ -113,20 +118,20 @@ impl<P: Pairing> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
     fn add_with_public(
         public: P::ScalarField,
         shared: Self::ArithmeticShare,
-        _id: usize,
+        _id: <Self::State as MpcState>::PartyID,
     ) -> Self::ArithmeticShare {
         shared + public
     }
 
     fn promote_to_trivial_share(
-        _id: usize,
+        _id: <Self::State as MpcState>::PartyID,
         public_value: <P as Pairing>::ScalarField,
     ) -> Self::ArithmeticShare {
         public_value
     }
 
     fn promote_to_trivial_shares(
-        _id: usize,
+        _id: <Self::State as MpcState>::PartyID,
         public_values: &[<P as Pairing>::ScalarField],
     ) -> Vec<Self::ArithmeticShare> {
         public_values.to_vec()

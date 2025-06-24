@@ -19,14 +19,11 @@ mod field_share {
     use mpc_core::protocols::rep3::yao::streaming_evaluator::StreamingRep3Evaluator;
     use mpc_core::protocols::rep3::yao::streaming_garbler::StreamingRep3Garbler;
     use mpc_core::protocols::rep3::yao::GCUtils;
+    use mpc_core::protocols::rep3::PartyID;
     use mpc_core::protocols::rep3::Rep3State;
-    use mpc_core::protocols::rep3::PARTY_0;
-    use mpc_core::protocols::rep3::PARTY_1;
-    use mpc_core::protocols::rep3::PARTY_2;
     use mpc_core::protocols::rep3::{self, arithmetic};
     use mpc_core::protocols::rep3_ring;
-    use mpc_core::ForkState as _;
-    use mpc_net::Network as _;
+    use mpc_core::MpcState as _;
     use mpc_net::TestNetwork;
     use num_bigint::BigUint;
     use rand::thread_rng;
@@ -92,7 +89,7 @@ mod field_share {
         for (tx, x, id) in izip!(
             [tx1, tx2, tx3],
             x_shares.into_iter(),
-            [PARTY_0, PARTY_1, PARTY_2]
+            [PartyID::ID0, PartyID::ID1, PartyID::ID2]
         ) {
             spawn_pool(move || tx.send(arithmetic::sub_shared_by_public(x, y, id)));
         }
@@ -116,7 +113,7 @@ mod field_share {
         for (tx, y, id) in izip!(
             [tx1, tx2, tx3],
             y_shares.into_iter(),
-            [PARTY_0, PARTY_1, PARTY_2]
+            [PartyID::ID0, PartyID::ID1, PartyID::ID2]
         ) {
             spawn_pool(move || tx.send(arithmetic::sub_public_by_shared(x, y, id)));
         }
@@ -998,23 +995,22 @@ mod field_share {
         for (net, tx, x) in izip!(nets.into_iter(), [tx1, tx2, tx3], x_shares.into_iter()) {
             spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
-                let id = net.id();
+                let id = state.id;
                 let delta = state.rngs.generate_random_garbler_delta(id);
 
                 let converted = conversion::a2y(x, delta, &net, &mut state).unwrap();
 
                 let output = match id {
-                    PARTY_0 => {
+                    PartyID::ID0 => {
                         let mut evaluator = Rep3Evaluator::new(&net);
                         evaluator.receive_circuit().unwrap();
                         evaluator.output_all_parties(converted.wires()).unwrap()
                     }
-                    PARTY_1 | PARTY_2 => {
+                    PartyID::ID1 | PartyID::ID2 => {
                         let mut garbler =
                             Rep3Garbler::new_with_delta(&net, &mut state, delta.unwrap());
                         garbler.output_all_parties(converted.wires()).unwrap()
                     }
-                    _ => unreachable!(),
                 };
 
                 tx.send(GCUtils::bits_to_field::<ark_bn254::Fr>(&output).unwrap())
@@ -1044,22 +1040,21 @@ mod field_share {
         for (net, tx, x) in izip!(nets.into_iter(), [tx1, tx2, tx3], x_shares.into_iter()) {
             spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
-                let id = net.id();
+                let id = state.id;
                 let delta = state.rngs.generate_random_garbler_delta(id);
 
                 let converted = conversion::a2y_streaming(x, delta, &net, &mut state).unwrap();
 
                 let output = match id {
-                    PARTY_0 => {
+                    PartyID::ID0 => {
                         let mut evaluator = StreamingRep3Evaluator::new(&net);
                         evaluator.output_all_parties(converted.wires()).unwrap()
                     }
-                    PARTY_1 | PARTY_2 => {
+                    PartyID::ID1 | PartyID::ID2 => {
                         let mut garbler =
                             StreamingRep3Garbler::new_with_delta(&net, &mut state, delta.unwrap());
                         garbler.output_all_parties(converted.wires()).unwrap()
                     }
-                    _ => unreachable!(),
                 };
 
                 tx.send(GCUtils::bits_to_field::<ark_bn254::Fr>(&output).unwrap())
@@ -1159,23 +1154,22 @@ mod field_share {
         {
             spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
-                let id = net.id();
+                let id = state.id;
                 let delta = state.rngs.generate_random_garbler_delta(id);
 
                 let converted = conversion::b2y(&x, delta, &net, &mut state).unwrap();
 
                 let output = match id {
-                    PARTY_0 => {
+                    PartyID::ID0 => {
                         let mut evaluator = Rep3Evaluator::new(&net);
                         evaluator.receive_circuit().unwrap();
                         evaluator.output_all_parties(converted.wires()).unwrap()
                     }
-                    PARTY_1 | PARTY_2 => {
+                    PartyID::ID1 | PartyID::ID2 => {
                         let mut garbler =
                             Rep3Garbler::new_with_delta(&net, &mut state, delta.unwrap());
                         garbler.output_all_parties(converted.wires()).unwrap()
                     }
-                    _ => unreachable!(),
                 };
 
                 tx.send(GCUtils::bits_to_field::<ark_bn254::Fr>(&output).unwrap())
@@ -1207,22 +1201,21 @@ mod field_share {
         {
             spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
-                let id = net.id();
+                let id = state.id;
                 let delta = state.rngs.generate_random_garbler_delta(id);
 
                 let converted = conversion::b2y(&x, delta, &net, &mut state).unwrap();
 
                 let output = match id {
-                    PARTY_0 => {
+                    PartyID::ID0 => {
                         let mut evaluator = StreamingRep3Evaluator::new(&net);
                         evaluator.output_all_parties(converted.wires()).unwrap()
                     }
-                    PARTY_1 | PARTY_2 => {
+                    PartyID::ID1 | PartyID::ID2 => {
                         let mut garbler =
                             StreamingRep3Garbler::new_with_delta(&net, &mut state, delta.unwrap());
                         garbler.output_all_parties(converted.wires()).unwrap()
                     }
-                    _ => unreachable!(),
                 };
 
                 tx.send(GCUtils::bits_to_field::<ark_bn254::Fr>(&output).unwrap())
@@ -2344,7 +2337,7 @@ mod field_share {
         assert_eq!(is_result, should_result);
     }
 
-    fn reshare_from_2_to_3_parties_test_internal(recipient: usize) {
+    fn reshare_from_2_to_3_parties_test_internal(recipient: PartyID) {
         const VEC_SIZE: usize = 10;
         let nets = TestNetwork::new_3_parties();
         let mut rng = thread_rng();
@@ -2378,9 +2371,9 @@ mod field_share {
 
     #[test]
     fn reshare_from_2_to_3_parties_test() {
-        reshare_from_2_to_3_parties_test_internal(PARTY_0);
-        reshare_from_2_to_3_parties_test_internal(PARTY_1);
-        reshare_from_2_to_3_parties_test_internal(PARTY_2);
+        reshare_from_2_to_3_parties_test_internal(PartyID::ID0);
+        reshare_from_2_to_3_parties_test_internal(PartyID::ID1);
+        reshare_from_2_to_3_parties_test_internal(PartyID::ID2);
     }
 
     #[test]

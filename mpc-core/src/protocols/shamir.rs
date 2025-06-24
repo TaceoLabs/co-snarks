@@ -9,7 +9,7 @@ use std::time::Instant;
 
 use rand::{Rng, SeedableRng};
 
-use crate::{ForkState, RngType};
+use crate::{MpcState, RngType};
 
 pub mod arithmetic;
 pub mod network;
@@ -28,7 +28,7 @@ pub use mpc_types::protocols::shamir::{
 /// This type is used to construct a [`ShamirState`].
 /// Preprocess `amount` number of correlated randomness pairs that are consumed while using the protocol.
 pub struct ShamirPreprocessing<F: PrimeField> {
-    party_id: usize,
+    id: usize,
     num_parties: usize,
     threshold: usize,
     rng_buffer: ShamirRng<F>,
@@ -59,7 +59,7 @@ impl<F: PrimeField> ShamirPreprocessing<F> {
         );
 
         Ok(Self {
-            party_id: net.id(),
+            id: net.id(),
             num_parties,
             threshold,
             rng_buffer,
@@ -70,7 +70,7 @@ impl<F: PrimeField> ShamirPreprocessing<F> {
 impl<F: PrimeField> From<ShamirPreprocessing<F>> for ShamirState<F> {
     fn from(value: ShamirPreprocessing<F>) -> Self {
         // We send in circles, so we need to receive from the last parties
-        let id = value.party_id;
+        let id = value.id;
         let open_lagrange_t = lagrange_from_coeff(
             &(0..value.threshold + 1)
                 .map(|i| (id + value.num_parties - i) % value.num_parties + 1)
@@ -93,6 +93,7 @@ impl<F: PrimeField> From<ShamirPreprocessing<F>> for ShamirState<F> {
         let mul_reconstruct_with_zeros = interpolation_poly_from_zero_points(&zero_points);
 
         ShamirState {
+            id,
             num_parties: value.num_parties,
             threshold: value.threshold,
             open_lagrange_t,
@@ -107,6 +108,7 @@ impl<F: PrimeField> From<ShamirPreprocessing<F>> for ShamirState<F> {
 
 /// This struct holds all necessary information for an MPC protocol based on Shamir. It contains the randomness, the threshold and the lagrange polynomials for opening.
 pub struct ShamirState<F: PrimeField> {
+    id: usize,
     /// The number of parties
     pub num_parties: usize,
     /// The threshold, degree of polynomial
@@ -165,9 +167,16 @@ impl<F: PrimeField> ShamirState<F> {
     }
 }
 
-impl<F: PrimeField> ForkState for ShamirState<F> {
+impl<F: PrimeField> MpcState for ShamirState<F> {
+    type PartyID = usize;
+
+    fn id(&self) -> Self::PartyID {
+        self.id
+    }
+
     fn fork(&mut self, n: usize) -> eyre::Result<Self> {
         Ok(Self {
+            id: self.id,
             num_parties: self.num_parties,
             threshold: self.threshold,
             open_lagrange_t: self.open_lagrange_t.clone(),

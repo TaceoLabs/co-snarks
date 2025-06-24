@@ -10,7 +10,7 @@ use super::{
 use crate::{
     protocols::rep3::{
         network::{self},
-        Rep3State, PARTY_0, PARTY_1, PARTY_2,
+        Rep3State,
     },
     RngType,
 };
@@ -20,12 +20,14 @@ use fancy_garbling::{
     errors::GarblerError, util::output_tweak, BinaryBundle, Fancy, FancyBinary, WireLabel, WireMod2,
 };
 use mpc_net::Network;
+use mpc_types::protocols::rep3::id::PartyID;
 use rand::SeedableRng;
 use scuttlebutt::Block;
 use sha3::{Digest, Sha3_256};
 
 /// This struct implements the garbler for replicated 3-party garbled circuits as described in [ABY3](https://eprint.iacr.org/2018/403.pdf).
 pub struct Rep3Garbler<'a, N: Network> {
+    id: PartyID,
     net: &'a N,
     pub(crate) delta: WireMod2,
     current_output: usize,
@@ -47,11 +49,12 @@ impl<'a, N: Network> Rep3Garbler<'a, N> {
 
     /// Create a new garbler with existing delta.
     pub fn new_with_delta(net: &'a N, state: &mut Rep3State, delta: WireMod2) -> Self {
-        let id = net.id();
-        let seed = state.rngs.generate_garbler_randomness(id);
+        let id = state.id;
+        let seed = state.rngs.generate_garbler_randomness(state.id);
         let rng = RngType::from_seed(seed);
 
         Self {
+            id,
             net,
             delta,
             current_output: 0,
@@ -66,39 +69,37 @@ impl<'a, N: Network> Rep3Garbler<'a, N> {
 
     /// Add the gate to the circuit
     fn add_block_to_circuit(&mut self, block: &Block) {
-        match self.net.id() {
-            PARTY_0 => {
-                panic!("Garbler should not be PARTY_0");
+        match self.id {
+            PartyID::ID0 => {
+                panic!("Garbler should not be PartyID::ID0");
             }
-            PARTY_1 => {
+            PartyID::ID1 => {
                 let mut gate = [0; 16];
                 gate.copy_from_slice(block.as_ref());
                 self.circuit.push(gate);
             }
-            PARTY_2 => {
+            PartyID::ID2 => {
                 self.hash.update(block.as_ref());
             }
-            _ => unreachable!(),
         }
     }
 
     /// Sends the circuit to the evaluator
     pub fn send_circuit(&self) -> eyre::Result<()> {
-        match self.net.id() {
-            PARTY_0 => {
-                panic!("Garbler should not be PARTY_0");
+        match self.id {
+            PartyID::ID0 => {
+                panic!("Garbler should not be PartyID::ID0");
             }
-            PARTY_1 => {
+            PartyID::ID1 => {
                 // Send the prepared circuit over the network to the evaluator
-                network::send_many(self.net, PARTY_0, &self.circuit)?;
+                network::send_many(self.net, PartyID::ID0, &self.circuit)?;
             }
-            PARTY_2 => {
+            PartyID::ID2 => {
                 // Send the hash of the circuit to the evaluator
                 let digest = self.hash.clone().finalize();
 
-                network::send(self.net, PARTY_0, digest.as_slice())?;
+                network::send(self.net, PartyID::ID0, digest.as_slice())?;
             }
-            _ => unreachable!(),
         }
         Ok(())
     }
@@ -174,7 +175,7 @@ impl<'a, N: Network> Rep3Garbler<'a, N> {
         self.send_circuit()?;
 
         // Evaluator to garbler
-        if self.net.id() == PARTY_1 {
+        if self.id == PartyID::ID1 {
             Ok(Some(self.output_garbler(x)?))
         } else {
             Ok(None)
@@ -184,7 +185,7 @@ impl<'a, N: Network> Rep3Garbler<'a, N> {
     // Read `Block`s from the channel.
     #[inline(always)]
     fn read_blocks(&self) -> eyre::Result<Vec<Block>> {
-        let rcv: Vec<[u8; 16]> = network::recv_many(self.net, PARTY_0)?;
+        let rcv: Vec<[u8; 16]> = network::recv_many(self.net, PartyID::ID0)?;
         let mut result = Vec::with_capacity(rcv.len());
         for block in rcv {
             let mut v = Block::default();

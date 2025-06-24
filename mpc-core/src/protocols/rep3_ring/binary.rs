@@ -3,11 +3,12 @@
 //! This module contains operations with binary shares
 
 use super::arithmetic::RingShare;
-use crate::protocols::rep3::{network, Rep3State, PARTY_0, PARTY_1, PARTY_2};
+use crate::protocols::rep3::{network, Rep3State};
 use itertools::izip;
 use mpc_net::Network;
-use mpc_types::protocols::rep3_ring::ring::{
-    bit::Bit, int_ring::IntRing2k, ring_impl::RingElement,
+use mpc_types::protocols::{
+    rep3::id::PartyID,
+    rep3_ring::ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
 };
 use num_traits::{One, Zero};
 use rand::{distributions::Standard, prelude::Distribution};
@@ -21,14 +22,13 @@ pub fn xor<T: IntRing2k>(a: &RingShare<T>, b: &RingShare<T>) -> RingShare<T> {
 pub fn xor_public<T: IntRing2k>(
     shared: &RingShare<T>,
     public: &RingElement<T>,
-    id: usize,
+    id: PartyID,
 ) -> RingShare<T> {
     let mut res = shared.to_owned();
     match id {
-        PARTY_0 => res.a ^= public,
-        PARTY_1 => res.b ^= public,
-        PARTY_2 => {}
-        _ => unreachable!(),
+        PartyID::ID0 => res.a ^= public,
+        PartyID::ID1 => res.b ^= public,
+        PartyID::ID2 => {}
     }
     res
 }
@@ -52,7 +52,7 @@ where
 pub fn or_public<T: IntRing2k>(
     shared: &RingShare<T>,
     public: &RingElement<T>,
-    id: usize,
+    id: PartyID,
 ) -> RingShare<T> {
     let tmp = shared & public;
     let xor = xor_public(shared, public, id);
@@ -126,14 +126,13 @@ pub fn open<T: IntRing2k, N: Network>(a: &RingShare<T>, net: &N) -> eyre::Result
 
 /// Transforms a public value into a shared value: \[a\] = a.
 pub fn promote_to_trivial_share<T: IntRing2k>(
-    id: usize,
+    id: PartyID,
     public_value: &RingElement<T>,
 ) -> RingShare<T> {
     match id {
-        PARTY_0 => RingShare::new_ring(public_value.to_owned(), RingElement::zero()),
-        PARTY_1 => RingShare::new_ring(RingElement::zero(), public_value.to_owned()),
-        PARTY_2 => RingShare::zero_share(),
-        _ => unreachable!(),
+        PartyID::ID0 => RingShare::new_ring(public_value.to_owned(), RingElement::zero()),
+        PartyID::ID1 => RingShare::new_ring(RingElement::zero(), public_value.to_owned()),
+        PartyID::ID2 => RingShare::zero_share(),
     }
 }
 

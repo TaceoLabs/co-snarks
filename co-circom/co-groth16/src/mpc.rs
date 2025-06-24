@@ -11,7 +11,7 @@ pub(crate) mod plain;
 pub(crate) mod rep3;
 pub(crate) mod shamir;
 
-use mpc_core::ForkState;
+use mpc_core::MpcState;
 use mpc_net::Network;
 pub use plain::PlainGroth16Driver;
 pub use rep3::Rep3Groth16Driver;
@@ -48,14 +48,14 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
         C: CurveGroup;
 
     /// Internal state of used MPC protocol
-    type State: ForkState + Send;
+    type State: MpcState + Send;
 
     /// Generate a random arithmetic share
     fn rand<N: Network>(net: &N, state: &mut Self::State) -> eyre::Result<Self::ArithmeticShare>;
 
     /// Each value of lhs consists of a coefficient c and an index i. This function computes the sum of the coefficients times the corresponding public input or private witness. In other words, an accumulator a is initialized to 0, and for each (c, i) in lhs, a += c * public_inputs\[i\] is computed if i corresponds to a public input, or c * private_witness[i - public_inputs.len()] if i corresponds to a private witness.
     fn evaluate_constraint(
-        party_id: usize,
+        id: <Self::State as MpcState>::PartyID,
         lhs: &[(P::ScalarField, usize)],
         public_inputs: &[P::ScalarField],
         private_witness: &[Self::ArithmeticShare],
@@ -63,7 +63,7 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
 
     /// Each value of lhs consists of a coefficient c and an index i. This function computes the sum of the coefficients times the corresponding public input or private witness. In other words, an accumulator a is initialized to 0, and for each (c, i) in lhs, a += c * public_inputs\[i\] is computed if i corresponds to a public input, or c * private_witness[i - public_inputs.len()] if i corresponds to a private witness.
     fn evaluate_constraint_half_share(
-        party_id: usize,
+        id: <Self::State as MpcState>::PartyID,
         lhs: &[(P::ScalarField, usize)],
         public_inputs: &[P::ScalarField],
         private_witness: &[Self::ArithmeticShare],
@@ -71,7 +71,7 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
 
     /// Elementwise transformation of a vector of public values into a vector of shared values: \[a_i\] = a_i.
     fn promote_to_trivial_shares(
-        id: usize,
+        id: <Self::State as MpcState>::PartyID,
         public_values: &[P::ScalarField],
     ) -> Vec<Self::ArithmeticShare>;
 
@@ -113,7 +113,7 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
 
     /// Add a public point B in place to the shared point A
     fn add_assign_points_public_hs<C: CurveGroup>(
-        id: usize,
+        id: <Self::State as MpcState>::PartyID,
         a: &mut Self::PointHalfShare<C>,
         b: &C,
     );

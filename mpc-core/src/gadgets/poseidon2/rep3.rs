@@ -4,10 +4,11 @@ use super::{Poseidon2, Poseidon2Precomputations};
 use crate::protocols::rep3::{
     arithmetic,
     network::{self},
-    Rep3PrimeFieldShare, Rep3State, PARTY_0, PARTY_1,
+    Rep3PrimeFieldShare, Rep3State,
 };
 use ark_ff::PrimeField;
 use mpc_net::Network;
+use mpc_types::protocols::rep3::id::PartyID;
 
 impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
     /// Create Poseidon2Precomputations for the Rep3 MPC protocol.
@@ -184,16 +185,16 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         &self,
         input: &mut [Rep3PrimeFieldShare<F>; T],
         rc_offset: usize,
-        id: usize,
+        id: PartyID,
     ) {
-        if id == PARTY_0 {
+        if id == PartyID::ID0 {
             for (s, rc) in input
                 .iter_mut()
                 .zip(self.params.round_constants_external[rc_offset].iter())
             {
                 s.a += rc;
             }
-        } else if id == PARTY_1 {
+        } else if id == PartyID::ID1 {
             for (s, rc) in input
                 .iter_mut()
                 .zip(self.params.round_constants_external[rc_offset].iter())
@@ -229,7 +230,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
 
         // Open
         let y = arithmetic::open_vec(input, net)?;
-        let id = net.id();
+        let id = PartyID::try_from(net.id())?;
 
         for (i, (inp, y)) in input.iter_mut().zip(y).enumerate() {
             let (r, r2, r3, r4, r5) = precomp.get(precomp.offset + i);
@@ -252,7 +253,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
             *inp -= precomp.r[precomp.offset + i];
         }
 
-        let id = net.id();
+        let id = PartyID::try_from(net.id())?;
 
         // Open
         let (b, c) = network::broadcast_many(net, input)?;
@@ -282,10 +283,12 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
 
         *input -= *r;
 
+        let id = PartyID::try_from(net.id())?;
+
         // Open
         let y = arithmetic::open(*input, net)?;
 
-        *input = Self::sbox_rep3_precomp_post(&y, r, r2, r3, r4, r5, net.id());
+        *input = Self::sbox_rep3_precomp_post(&y, r, r2, r3, r4, r5, id);
         precomp.offset += 1;
 
         Ok(())
@@ -340,7 +343,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
 
         *input -= r;
 
-        let id = net.id();
+        let id = PartyID::try_from(net.id())?;
 
         // Open
         let (b, c) = network::broadcast(net, *input)?;
@@ -360,7 +363,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         r3: &Rep3PrimeFieldShare<F>,
         r4: &Rep3PrimeFieldShare<F>,
         r5: &Rep3PrimeFieldShare<F>,
-        id: usize,
+        id: PartyID,
     ) -> Rep3PrimeFieldShare<F> {
         assert_eq!(D, 5);
         let y2 = y.square();
@@ -375,10 +378,10 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         res += r2 * (ten * y3);
         res += r * (five * y4);
 
-        if id == PARTY_0 {
+        if id == PartyID::ID0 {
             let y5 = y4 * y;
             res.a += y5;
-        } else if id == PARTY_1 {
+        } else if id == PartyID::ID1 {
             let y5 = y4 * y;
             res.b += y5;
         }
@@ -392,7 +395,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         r3: &F,
         r4: &F,
         r5: &F,
-        id: usize,
+        id: PartyID,
     ) -> F {
         assert_eq!(D, 5);
         let y2 = y.square();
@@ -407,7 +410,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         res += y3 * r2 * ten;
         res += y4 * r * five;
 
-        if id == PARTY_0 {
+        if id == PartyID::ID0 {
             let y5 = y4 * y;
             res += y5;
         }
@@ -450,7 +453,8 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         precomp: &mut Poseidon2Precomputations<F>,
         net: &N,
     ) -> eyre::Result<()> {
-        if net.id() == PARTY_0 {
+        let id = PartyID::try_from(net.id())?;
+        if id == PartyID::ID0 {
             self.add_rc_external(state, r);
         }
         Self::sbox_rep3_precomp_additive(state, precomp, net)?;
@@ -466,7 +470,8 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         precomp: &mut Poseidon2Precomputations<F>,
         net: &N,
     ) -> eyre::Result<()> {
-        if net.id() == PARTY_0 {
+        let id = PartyID::try_from(net.id())?;
+        if id == PartyID::ID0 {
             self.add_rc_internal(state, r);
         }
         Self::single_sbox_rep3_precomp_additive(&mut state[0], precomp, net)?;
@@ -482,7 +487,8 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         precomp: &mut Poseidon2Precomputations<Rep3PrimeFieldShare<F>>,
         net: &N,
     ) -> eyre::Result<()> {
-        self.add_rc_external_rep3(state, r, net.id());
+        let id = PartyID::try_from(net.id())?;
+        self.add_rc_external_rep3(state, r, id);
         Self::sbox_rep3_precomp(state, precomp, net)?;
         Self::matmul_external_rep3(state);
         Ok(())
@@ -496,9 +502,10 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         precomp: &mut Poseidon2Precomputations<Rep3PrimeFieldShare<F>>,
         net: &N,
     ) -> eyre::Result<()> {
-        if net.id() == PARTY_0 {
+        let id = PartyID::try_from(net.id())?;
+        if id == PartyID::ID0 {
             state[0].a += self.params.round_constants_internal[r];
-        } else if net.id() == PARTY_1 {
+        } else if id == PartyID::ID1 {
             state[0].b += self.params.round_constants_internal[r];
         }
         Self::single_sbox_rep3_precomp(&mut state[0], precomp, net)?;
@@ -515,7 +522,8 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         net: &N,
     ) -> eyre::Result<()> {
         debug_assert_eq!(state.len() % T, 0);
-        if net.id() == PARTY_0 {
+        let id = PartyID::try_from(net.id())?;
+        if id == PartyID::ID0 {
             for state in state.chunks_exact_mut(T) {
                 for (s, rc) in state
                     .iter_mut()
@@ -524,7 +532,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
                     s.a += rc;
                 }
             }
-        } else if net.id() == PARTY_1 {
+        } else if id == PartyID::ID1 {
             for state in state.chunks_exact_mut(T) {
                 for (s, rc) in state
                     .iter_mut()
@@ -550,11 +558,12 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         net: &N,
     ) -> eyre::Result<()> {
         debug_assert_eq!(state.len() % T, 0);
-        if net.id() == PARTY_0 {
+        let id = PartyID::try_from(net.id())?;
+        if id == PartyID::ID0 {
             for s in state.chunks_exact_mut(T) {
                 s[0].a += self.params.round_constants_internal[r];
             }
-        } else if net.id() == PARTY_1 {
+        } else if id == PartyID::ID1 {
             for s in state.chunks_exact_mut(T) {
                 s[0].b += self.params.round_constants_internal[r];
             }
@@ -574,7 +583,8 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         net: &N,
         rep3_state: &mut Rep3State,
     ) -> eyre::Result<()> {
-        if net.id() == PARTY_0 {
+        let id = PartyID::try_from(net.id())?;
+        if id == PartyID::ID0 {
             self.add_rc_external(state, r);
         }
         Self::sbox_rep3(state, net, rep3_state)?;
@@ -590,7 +600,8 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         net: &N,
         rep3_state: &mut Rep3State,
     ) -> eyre::Result<()> {
-        if net.id() == PARTY_0 {
+        let id = PartyID::try_from(net.id())?;
+        if id == PartyID::ID0 {
             self.add_rc_internal(state, r);
         }
         Self::single_sbox_rep3(&mut state[0], net, rep3_state)?;
@@ -721,8 +732,10 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         // Linear layer at beginning
         Self::matmul_external_rep3(state_);
 
+        let id = PartyID::try_from(net.id())?;
+
         // First round:
-        self.add_rc_external_rep3(state_, 0, net.id());
+        self.add_rc_external_rep3(state_, 0, id);
         let mut state = Self::sbox_rep3_first(state_, net, rep3_state)?;
         Self::matmul_external(&mut state);
 

@@ -135,7 +135,7 @@ where
     g ^= p & RingElement::one();
 
     let (res, c) = kogge_stone_inner_with_carry(&p, &g, net, state)?;
-    let res = binary::xor_public(&res, &RingElement::one(), net.id()); // cin=1
+    let res = binary::xor_public(&res, &RingElement::one(), state.id); // cin=1
     Ok((res, c))
 }
 
@@ -153,7 +153,7 @@ where
     let x2_ = !x2 + RingElement::one();
 
     // Add x1 + x2_ via a packed Kogge-Stone adder
-    let p = binary::xor_public(x1, &x2_, net.id());
+    let p = binary::xor_public(x1, &x2_, state.id);
     let g = x1 & &x2_;
 
     let (res, mut c) = kogge_stone_inner_with_carry(&p, &g, net, state)?;
@@ -181,13 +181,13 @@ where
     // bitnot of x2
     let x2 = !x2;
     // Now start the Kogge-Stone adder
-    let p = binary::xor_public(&x2, x1, net.id());
+    let p = binary::xor_public(&x2, x1, state.id);
     let mut g = &x2 & x1;
     // Since carry_in = 1, we need to XOR the LSB of x1 and x2 to g (i.e., xor the LSB of p)
     g ^= p & RingElement::one();
 
     let (res, c) = kogge_stone_inner_with_carry(&p, &g, net, state)?;
-    let res = binary::xor_public(&res, &RingElement::one(), net.id());
+    let res = binary::xor_public(&res, &RingElement::one(), state.id);
     Ok((res, c))
 }
 

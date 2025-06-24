@@ -6,11 +6,11 @@ use itertools::{izip, Itertools};
 use mpc_core::gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations};
 use mpc_core::protocols::rep3::yao::circuits::SHA256Table;
 use mpc_core::protocols::rep3::{
-    arithmetic, binary, conversion, network, pointshare, yao, Rep3BigUintShare, Rep3PointShare,
-    Rep3State,
+    arithmetic, binary, conversion, network, pointshare, yao, PartyID, Rep3BigUintShare,
+    Rep3PointShare, Rep3State,
 };
 use mpc_core::protocols::rep3_ring::gadgets::sort::{radix_sort_fields, radix_sort_fields_vec_by};
-use mpc_core::ForkState as _;
+use mpc_core::MpcState as _;
 use mpc_core::{
     lut::LookupTableProvider, protocols::rep3::Rep3PrimeFieldShare,
     protocols::rep3_ring::lut::Rep3LookupTable,
@@ -28,7 +28,7 @@ use super::{downcast, NoirWitnessExtensionProtocol};
 type ArithmeticShare<F> = Rep3PrimeFieldShare<F>;
 
 pub struct Rep3AcvmSolver<'a, F: PrimeField, N: Network> {
-    id: usize,
+    id: PartyID,
     net0: &'a N,
     net1: &'a N,
     state0: Rep3State,
@@ -43,7 +43,7 @@ impl<'a, F: PrimeField, N: Network> Rep3AcvmSolver<'a, F, N> {
         let mut state0 = Rep3State::new(net0)?;
         let state1 = state0.fork(0)?;
         Ok(Self {
-            id: net0.id(),
+            id: state0.id,
             net0,
             net1,
             state0,
@@ -85,7 +85,7 @@ impl<'a, F: PrimeField, N: Network> Rep3AcvmSolver<'a, F, N> {
                     Rep3BigUintShare::<ark_grumpkin::Fr>::new(scalar_high.a, scalar_high.b);
                 let scalar_high = conversion::b2a(&scalar_high, net, state)?;
 
-                let res = arithmetic::add_public(scalar_high * scale, scalar_low.into(), net.id());
+                let res = arithmetic::add_public(scalar_high * scale, scalar_low.into(), state.id);
                 Rep3AcvmType::Shared(res)
             }
             (Rep3AcvmType::Shared(low), Rep3AcvmType::Public(high)) => {
@@ -99,7 +99,7 @@ impl<'a, F: PrimeField, N: Network> Rep3AcvmSolver<'a, F, N> {
                 let res = arithmetic::add_public(
                     scalar_low,
                     scale * ark_grumpkin::Fr::from(scalar_high),
-                    net.id(),
+                    state.id,
                 );
                 Rep3AcvmType::Shared(res)
             }
@@ -151,16 +151,16 @@ impl<'a, F: PrimeField, N: Network> Rep3AcvmSolver<'a, F, N> {
 
         // At least one part is shared, convert and calculate
         let x = match x {
-            Rep3AcvmType::Public(x) => arithmetic::promote_to_trivial_share(net.id(), *x),
+            Rep3AcvmType::Public(x) => arithmetic::promote_to_trivial_share(state.id, *x),
             Rep3AcvmType::Shared(x) => *x,
         };
         let y = match y {
-            Rep3AcvmType::Public(y) => arithmetic::promote_to_trivial_share(net.id(), *y),
+            Rep3AcvmType::Public(y) => arithmetic::promote_to_trivial_share(state.id, *y),
             Rep3AcvmType::Shared(y) => *y,
         };
         let is_infinity = match is_infinity {
             Rep3AcvmType::Public(is_infinity) => {
-                arithmetic::promote_to_trivial_share(net.id(), *is_infinity)
+                arithmetic::promote_to_trivial_share(state.id, *is_infinity)
             }
             Rep3AcvmType::Shared(is_infinity) => *is_infinity,
         };
@@ -193,7 +193,7 @@ impl<'a, F: PrimeField, N: Network> Rep3AcvmSolver<'a, F, N> {
     fn add_assign_point<C: CurveGroup>(
         mut inout: &mut Rep3AcvmPoint<C>,
         other: Rep3AcvmPoint<C>,
-        id: usize,
+        id: PartyID,
     ) {
         match (&mut inout, other) {
             (Rep3AcvmPoint::Public(inout), Rep3AcvmPoint::Public(other)) => *inout += other,

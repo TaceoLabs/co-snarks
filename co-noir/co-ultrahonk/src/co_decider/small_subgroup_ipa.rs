@@ -4,6 +4,7 @@ use crate::mpc::NoirUltraHonkProver;
 use crate::prelude::TranscriptHasher;
 use crate::CoUtils;
 use crate::CONST_PROOF_SIZE_LOG_N;
+use mpc_core::MpcState;
 use mpc_net::Network;
 use ultrahonk::prelude::Transcript;
 
@@ -91,7 +92,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
             libra_grand_sum_commitment.into(),
         );
 
-        prover.compute_grand_sum_identity_polynomial(claimed_ipa_eval, net.id());
+        prover.compute_grand_sum_identity_polynomial(claimed_ipa_eval, state.id());
         prover.compute_batched_quotient();
 
         let libra_quotient_commitment_shared = CoUtils::commit::<T, P>(
@@ -232,7 +233,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
     fn compute_grand_sum_identity_polynomial(
         &mut self,
         claimed_evaluation: P::ScalarField,
-        id: usize,
+        id: <T::State as MpcState>::PartyID,
     ) {
         // Compute shifted big sum polynomial A(gX)
         let mut shifted_grand_sum = SharedPolynomial::<T, P>::new_zero(Self::SUBGROUP_SIZE + 3);

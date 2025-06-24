@@ -1,7 +1,8 @@
 use super::CircomGroth16Prover;
 use ark_ec::{pairing::Pairing, CurveGroup};
-use mpc_core::protocols::shamir::{
-    arithmetic, network, pointshare, ShamirPrimeFieldShare, ShamirState,
+use mpc_core::{
+    protocols::shamir::{arithmetic, network, pointshare, ShamirPrimeFieldShare, ShamirState},
+    MpcState,
 };
 use mpc_net::Network;
 use rayon::prelude::*;
@@ -23,7 +24,7 @@ impl<P: Pairing> CircomGroth16Prover<P> for ShamirGroth16Driver {
     }
 
     fn evaluate_constraint(
-        _party_id: usize,
+        _: <Self::State as MpcState>::PartyID,
         lhs: &[(P::ScalarField, usize)],
         public_inputs: &[P::ScalarField],
         private_witness: &[Self::ArithmeticShare],
@@ -43,7 +44,7 @@ impl<P: Pairing> CircomGroth16Prover<P> for ShamirGroth16Driver {
     }
 
     fn evaluate_constraint_half_share(
-        _party_id: usize,
+        _: <Self::State as MpcState>::PartyID,
         lhs: &[(P::ScalarField, usize)],
         public_inputs: &[P::ScalarField],
         private_witness: &[Self::ArithmeticShare],
@@ -64,7 +65,7 @@ impl<P: Pairing> CircomGroth16Prover<P> for ShamirGroth16Driver {
     }
 
     fn promote_to_trivial_shares(
-        _id: usize,
+        _: <Self::State as MpcState>::PartyID,
         public_values: &[P::ScalarField],
     ) -> Vec<Self::ArithmeticShare> {
         arithmetic::promote_to_trivial_shares(public_values)
@@ -92,7 +93,7 @@ impl<P: Pairing> CircomGroth16Prover<P> for ShamirGroth16Driver {
     }
 
     fn add_assign_points_public_hs<C: CurveGroup>(
-        _id: usize,
+        _: <Self::State as MpcState>::PartyID,
         a: &mut Self::PointHalfShare<C>,
         b: &C,
     ) {

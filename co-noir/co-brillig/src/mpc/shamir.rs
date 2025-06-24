@@ -3,7 +3,7 @@ use ark_ff::{One, PrimeField};
 use brillig::{BitSize, IntegerBitSize};
 use mpc_core::{
     protocols::shamir::{self, ShamirPrimeFieldShare, ShamirState},
-    ForkState as _,
+    MpcState as _,
 };
 use mpc_net::Network;
 use std::marker::PhantomData;

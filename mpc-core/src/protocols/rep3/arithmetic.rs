@@ -16,10 +16,9 @@ use crate::protocols::rep3::detail;
 use rayon::prelude::*;
 
 use super::network;
-use super::Rep3PartyId;
+use super::PartyID;
 use super::Rep3State;
 use super::{binary, conversion, Rep3BigUintShare, Rep3PrimeFieldShare};
-use super::{PARTY_0, PARTY_1, PARTY_2};
 
 /// Type alias for a [`Rep3PrimeFieldShare`]
 pub type FieldShare<F> = Rep3PrimeFieldShare<F>;
@@ -37,24 +36,22 @@ pub fn add_assign<F: PrimeField>(shared: &mut FieldShare<F>, b: FieldShare<F>) {
 }
 
 /// Performs addition between a shared value and a public value.
-pub fn add_public<F: PrimeField>(shared: FieldShare<F>, public: F, id: usize) -> FieldShare<F> {
+pub fn add_public<F: PrimeField>(shared: FieldShare<F>, public: F, id: PartyID) -> FieldShare<F> {
     let mut res = shared;
     match id {
-        PARTY_0 => res.a += public,
-        PARTY_1 => res.b += public,
-        PARTY_2 => {}
-        _ => unreachable!(),
+        PartyID::ID0 => res.a += public,
+        PartyID::ID1 => res.b += public,
+        PartyID::ID2 => {}
     }
     res
 }
 
 /// Performs addition between a shared value and a public value in place.
-pub fn add_assign_public<F: PrimeField>(shared: &mut FieldShare<F>, public: F, id: usize) {
+pub fn add_assign_public<F: PrimeField>(shared: &mut FieldShare<F>, public: F, id: PartyID) {
     match id {
-        PARTY_0 => shared.a += public,
-        PARTY_1 => shared.b += public,
-        PARTY_2 => {}
-        _ => unreachable!(),
+        PartyID::ID0 => shared.a += public,
+        PartyID::ID1 => shared.b += public,
+        PartyID::ID2 => {}
     }
 }
 
@@ -86,7 +83,7 @@ pub fn sub_vec_assign<F: PrimeField>(lhs: &mut [FieldShare<F>], rhs: &[FieldShar
 pub fn sub_shared_by_public<F: PrimeField>(
     shared: FieldShare<F>,
     public: F,
-    id: usize,
+    id: PartyID,
 ) -> FieldShare<F> {
     add_public(shared, -public, id)
 }
@@ -95,7 +92,7 @@ pub fn sub_shared_by_public<F: PrimeField>(
 pub fn sub_public_by_shared<F: PrimeField>(
     public: F,
     shared: FieldShare<F>,
-    id: usize,
+    id: PartyID,
 ) -> FieldShare<F> {
     add_public(-shared, public, id)
 }
@@ -324,12 +321,11 @@ pub fn add_mul<F: PrimeField, N: Network>(
 }
 
 /// Transforms a public value into a shared value: \[a\] = a.
-pub fn promote_to_trivial_share<F: PrimeField>(id: usize, public_value: F) -> FieldShare<F> {
+pub fn promote_to_trivial_share<F: PrimeField>(id: PartyID, public_value: F) -> FieldShare<F> {
     match id {
-        PARTY_0 => Rep3PrimeFieldShare::new(public_value, F::zero()),
-        PARTY_1 => Rep3PrimeFieldShare::new(F::zero(), public_value),
-        PARTY_2 => Rep3PrimeFieldShare::zero_share(),
-        _ => unreachable!(),
+        PartyID::ID0 => Rep3PrimeFieldShare::new(public_value, F::zero()),
+        PartyID::ID1 => Rep3PrimeFieldShare::new(F::zero(), public_value),
+        PartyID::ID2 => Rep3PrimeFieldShare::zero_share(),
     }
 }
 
@@ -417,7 +413,7 @@ pub fn pow_public<F: PrimeField, N: Network>(
     state: &mut Rep3State,
 ) -> eyre::Result<Rep3PrimeFieldShare<F>> {
     // TODO: are negative exponents allowed in circom?
-    let mut res = promote_to_trivial_share(net.id(), F::one());
+    let mut res = promote_to_trivial_share(state.id, F::one());
     let mut public: BigUint = public.into_bigint().into();
     let mut shared: FieldShare<F> = shared;
     while !public.is_zero() {
@@ -439,7 +435,7 @@ pub fn lt<F: PrimeField, N: Network>(
 ) -> eyre::Result<FieldShare<F>> {
     // a < b is equivalent to !(a >= b)
     let tmp = ge(lhs, rhs, net, state)?;
-    Ok(sub_public_by_shared(F::one(), tmp, net.id()))
+    Ok(sub_public_by_shared(F::one(), tmp, state.id))
 }
 
 /// Returns 1 if lhs < rhs and 0 otherwise. Checks if a shared value is less than the public value. The result is a shared value that has value 1 if the shared value is less than the public value and 0 otherwise.
@@ -451,7 +447,7 @@ pub fn lt_public<F: PrimeField, N: Network>(
 ) -> eyre::Result<FieldShare<F>> {
     // a < b is equivalent to !(a >= b)
     let tmp = ge_public(lhs, rhs, net, state)?;
-    Ok(sub_public_by_shared(F::one(), tmp, net.id()))
+    Ok(sub_public_by_shared(F::one(), tmp, state.id))
 }
 
 /// Returns 1 if lhs <= rhs and 0 otherwise. Checks if one shared value is less than or equal to another shared value. The result is a shared value that has value 1 if the first shared value is less than or equal to the second shared value and 0 otherwise.
@@ -495,7 +491,7 @@ pub fn gt<F: PrimeField, N: Network>(
 ) -> eyre::Result<FieldShare<F>> {
     // a > b is equivalent to !(a <= b)
     let tmp = le(lhs, rhs, net, state)?;
-    Ok(sub_public_by_shared(F::one(), tmp, net.id()))
+    Ok(sub_public_by_shared(F::one(), tmp, state.id))
 }
 
 /// Returns 1 if lhs > rhs and 0 otherwise. Checks if a shared value is greater than the public value. The result is a shared value that has value 1 if the shared value is greater than the public value and 0 otherwise.
@@ -507,7 +503,7 @@ pub fn gt_public<F: PrimeField, N: Network>(
 ) -> eyre::Result<FieldShare<F>> {
     // a > b is equivalent to !(a <= b)
     let tmp = le_public(lhs, rhs, net, state)?;
-    Ok(sub_public_by_shared(F::one(), tmp, net.id()))
+    Ok(sub_public_by_shared(F::one(), tmp, state.id))
 }
 
 /// Returns 1 if lhs >= rhs and 0 otherwise. Checks if one shared value is greater than or equal to another shared value. The result is a shared value that has value 1 if the first shared value is greater than or equal to the second shared value and 0 otherwise.
@@ -588,7 +584,7 @@ pub fn eq_bit_public<F: PrimeField, N: Network>(
     net: &N,
     state: &mut Rep3State,
 ) -> eyre::Result<BinaryShare<F>> {
-    let public = promote_to_trivial_share(net.id(), public);
+    let public = promote_to_trivial_share(state.id, public);
     eq_bit(shared, public, net, state)
 }
 
@@ -613,7 +609,7 @@ pub fn neq<F: PrimeField, N: Network>(
     state: &mut Rep3State,
 ) -> eyre::Result<FieldShare<F>> {
     let eq = eq(a, b, net, state)?;
-    Ok(sub_public_by_shared(F::one(), eq, net.id()))
+    Ok(sub_public_by_shared(F::one(), eq, state.id))
 }
 
 /// Checks if a shared value is not equal to a public value. The result is a shared value that has value 1 if the two values are not equal and 0 otherwise.
@@ -623,7 +619,7 @@ pub fn neq_public<F: PrimeField, N: Network>(
     net: &N,
     state: &mut Rep3State,
 ) -> eyre::Result<FieldShare<F>> {
-    let public = promote_to_trivial_share(net.id(), public);
+    let public = promote_to_trivial_share(state.id, public);
     neq(shared, public, net, state)
 }
 
@@ -708,11 +704,11 @@ pub(crate) fn arithmetic_xor_many<F: PrimeField, N: Network>(
 pub fn reshare_from_2_to_3_parties<F: PrimeField, N: Network>(
     input: Option<Vec<Rep3PrimeFieldShare<F>>>,
     len: usize,
-    recipient: usize,
+    recipient: PartyID,
     net: &N,
     state: &mut Rep3State,
 ) -> eyre::Result<Vec<Rep3PrimeFieldShare<F>>> {
-    if net.id() == recipient {
+    if state.id == recipient {
         let mut result = Vec::with_capacity(len);
         for _ in 0..len {
             let (a, b) = state.rngs.rand.random_fes::<F>();
@@ -734,7 +730,7 @@ pub fn reshare_from_2_to_3_parties<F: PrimeField, N: Network>(
 
     let mut rand = Vec::with_capacity(len);
     let mut result = Vec::with_capacity(len);
-    if net.id() == recipient.next() {
+    if state.id == recipient.next() {
         for inp in input {
             let beta = inp.a + inp.b;
             let b = state.rngs.rand.random_field_element_rng2();
@@ -742,7 +738,7 @@ pub fn reshare_from_2_to_3_parties<F: PrimeField, N: Network>(
             rand.push(r);
             result.push(Rep3PrimeFieldShare::new(r, b));
         }
-        let comm_id = net.id().next();
+        let comm_id = state.id.next();
         let rcv = network::send_and_recv_many::<_, F>(net, comm_id, &rand, comm_id)?;
         for (res, r) in result.iter_mut().zip(rcv) {
             res.a += r;
@@ -755,7 +751,7 @@ pub fn reshare_from_2_to_3_parties<F: PrimeField, N: Network>(
             rand.push(r);
             result.push(Rep3PrimeFieldShare::new(a, r));
         }
-        let comm_id = net.id().prev();
+        let comm_id = state.id.prev();
         let rcv = network::send_and_recv_many::<_, F>(net, comm_id, &rand, comm_id)?;
         for (res, r) in result.iter_mut().zip(rcv) {
             res.b += r;

@@ -7,11 +7,12 @@ use mpc_core::protocols::shamir::network;
 use mpc_core::protocols::shamir::{
     arithmetic, pointshare, ShamirPointShare, ShamirPrimeFieldShare, ShamirState,
 };
+use mpc_core::MpcState;
 use mpc_net::Network;
 
 use super::CircomPlonkProver;
 
-/// A Plonk driver unsing shamir secret sharing
+/// A Plonk driver using shamir secret sharing
 pub struct ShamirPlonkDriver;
 
 impl<P: Pairing> CircomPlonkProver<P> for ShamirPlonkDriver {
@@ -29,7 +30,7 @@ impl<P: Pairing> CircomPlonkProver<P> for ShamirPlonkDriver {
     }
 
     fn add_with_public(
-        _party_id: usize,
+        _: <Self::State as MpcState>::PartyID,
         shared: Self::ArithmeticShare,
         public: <P as Pairing>::ScalarField,
     ) -> Self::ArithmeticShare {
@@ -127,7 +128,7 @@ impl<P: Pairing> CircomPlonkProver<P> for ShamirPlonkDriver {
     }
 
     fn promote_to_trivial_share(
-        _party_id: usize,
+        _: <Self::State as MpcState>::PartyID,
         public_value: <P as Pairing>::ScalarField,
     ) -> Self::ArithmeticShare {
         arithmetic::promote_to_trivial_share(public_value)

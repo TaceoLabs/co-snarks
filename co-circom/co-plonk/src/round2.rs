@@ -9,7 +9,7 @@ use crate::{
 use ark_ec::pairing::Pairing;
 use ark_ec::CurveGroup;
 use circom_types::plonk::ZKey;
-use mpc_core::ForkState;
+use mpc_core::MpcState;
 use mpc_net::Network;
 use num_traits::One;
 use tracing::instrument;
@@ -108,7 +108,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round2<'a, P
         let mut d1 = Vec::with_capacity(zkey.domain_size);
         let mut d2 = Vec::with_capacity(zkey.domain_size);
         let mut d3 = Vec::with_capacity(zkey.domain_size);
-        let party_id = nets[0].id();
+        let id = state.id();
         let mut w = P::ScalarField::one();
         // TODO: multithread me - this is not so easy as other
         // parts as we go through the roots of unity but it is doable
@@ -122,42 +122,30 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round2<'a, P
             // numArr := (a + beta·ω + gamma)(b + beta·ω·k1 + gamma)(c + beta·ω·k2 + gamma)
             let betaw = challenges.beta * w;
 
-            let n1_ = T::add_with_public(party_id, *a, betaw);
-            let n1_ = T::add_with_public(party_id, n1_, challenges.gamma);
+            let n1_ = T::add_with_public(id, *a, betaw);
+            let n1_ = T::add_with_public(id, n1_, challenges.gamma);
 
             let tmp = zkey.verifying_key.k1 * betaw;
-            let n2_ = T::add_with_public(party_id, *b, tmp);
-            let n2_ = T::add_with_public(party_id, n2_, challenges.gamma);
+            let n2_ = T::add_with_public(id, *b, tmp);
+            let n2_ = T::add_with_public(id, n2_, challenges.gamma);
 
             let tmp = zkey.verifying_key.k2 * betaw;
-            let n3_ = T::add_with_public(party_id, *c, tmp);
-            let n3_ = T::add_with_public(party_id, n3_, challenges.gamma);
+            let n3_ = T::add_with_public(id, *c, tmp);
+            let n3_ = T::add_with_public(id, n3_, challenges.gamma);
 
             n1.push(n1_);
             n2.push(n2_);
             n3.push(n3_);
 
             // denArr := (a + beta·sigma1 + gamma)(b + beta·sigma2 + gamma)(c + beta·sigma3 + gamma)
-            let d1_ = T::add_with_public(
-                party_id,
-                *a,
-                challenges.beta * zkey.s1_poly.evaluations[i * 4],
-            );
-            let d1_ = T::add_with_public(party_id, d1_, challenges.gamma);
+            let d1_ = T::add_with_public(id, *a, challenges.beta * zkey.s1_poly.evaluations[i * 4]);
+            let d1_ = T::add_with_public(id, d1_, challenges.gamma);
 
-            let d2_ = T::add_with_public(
-                party_id,
-                *b,
-                challenges.beta * zkey.s2_poly.evaluations[i * 4],
-            );
-            let d2_ = T::add_with_public(party_id, d2_, challenges.gamma);
+            let d2_ = T::add_with_public(id, *b, challenges.beta * zkey.s2_poly.evaluations[i * 4]);
+            let d2_ = T::add_with_public(id, d2_, challenges.gamma);
 
-            let d3_ = T::add_with_public(
-                party_id,
-                *c,
-                challenges.beta * zkey.s3_poly.evaluations[i * 4],
-            );
-            let d3_ = T::add_with_public(party_id, d3_, challenges.gamma);
+            let d3_ = T::add_with_public(id, *c, challenges.beta * zkey.s3_poly.evaluations[i * 4]);
+            let d3_ = T::add_with_public(id, d3_, challenges.gamma);
 
             d1.push(d1_);
             d2.push(d2_);

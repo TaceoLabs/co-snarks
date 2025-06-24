@@ -13,6 +13,7 @@ use ark_ff::Zero;
 use co_builder::prelude::HonkCurve;
 use co_builder::HonkProofResult;
 use itertools::Itertools as _;
+use mpc_core::MpcState as _;
 use mpc_net::Network;
 use num_bigint::BigUint;
 use ultrahonk::prelude::{TranscriptFieldType, Univariate};
@@ -195,7 +196,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         relation_parameters: &RelationParameters<<P>::ScalarField>,
         scaling_factors: &[P::ScalarField],
     ) -> HonkProofResult<()> {
-        let party_id = net.id();
+        let id = state.id();
 
         let eta = &relation_parameters.eta_1;
         let eta_two = &relation_parameters.eta_2;
@@ -356,7 +357,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         T::scale_many_in_place(&mut memory_record_check, *eta_three);
         T::add_assign_many(&mut memory_record_check, &tmp1);
         T::add_assign_many(&mut memory_record_check, &tmp2);
-        T::add_assign_public_many(&mut memory_record_check, q_c, party_id);
+        T::add_assign_public_many(&mut memory_record_check, q_c, id);
         let partial_record_check = memory_record_check.clone();
         let mut memory_record_check = T::sub_many(&partial_record_check, w_4);
 
@@ -380,7 +381,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
 
         let mut index_delta_one = index_delta.clone();
         T::neg_many(&mut index_delta_one);
-        T::add_scalar_in_place(&mut index_delta_one, P::ScalarField::one(), party_id);
+        T::add_scalar_in_place(&mut index_delta_one, P::ScalarField::one(), id);
 
         /*
          * RAM Consistency Check
@@ -469,7 +470,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let next_gate_access_type = T::sub_many(w_4_shift, &next_gate_access_type);
         let mut tmp = next_gate_access_type.clone();
         T::neg_many(&mut tmp);
-        T::add_scalar_in_place(&mut tmp, P::ScalarField::one(), party_id);
+        T::add_scalar_in_place(&mut tmp, P::ScalarField::one(), id);
 
         let timestamp_delta = T::sub_many(w_2_shift, w_2);
         let mut lhs =

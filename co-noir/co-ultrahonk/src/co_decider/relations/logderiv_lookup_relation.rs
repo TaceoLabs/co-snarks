@@ -10,6 +10,7 @@ use ark_ec::pairing::Pairing;
 use co_builder::prelude::HonkCurve;
 use co_builder::HonkProofResult;
 use itertools::{izip, Itertools as _};
+use mpc_core::MpcState;
 use mpc_net::Network;
 use ultrahonk::prelude::{TranscriptFieldType, Univariate};
 
@@ -66,7 +67,7 @@ impl LogDerivLookupRelation {
 
 impl LogDerivLookupRelation {
     fn compute_inverse_exists<T: NoirUltraHonkProver<P>, P: Pairing>(
-        id: usize,
+        id: <T::State as MpcState>::PartyID,
         input: &ProverUnivariatesBatch<T, P>,
         // ) -> Univariate<P::ScalarField, MAX_PARTIAL_RELATION_LENGTH> {
     ) -> Vec<T::ArithmeticShare> {
@@ -81,7 +82,7 @@ impl LogDerivLookupRelation {
     }
 
     fn compute_read_term<T: NoirUltraHonkProver<P>, P: Pairing>(
-        id: usize,
+        id: <T::State as MpcState>::PartyID,
         input: &ProverUnivariatesBatch<T, P>,
         relation_parameters: &RelationParameters<P::ScalarField>,
     ) -> Vec<T::ArithmeticShare> {
@@ -244,8 +245,8 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let read_counts = input.witness.lookup_read_counts(); // Degree 1
         let read_selector = input.precomputed.q_lookup(); // Degree 1
 
-        let inverse_exists = Self::compute_inverse_exists(net.id(), input); // Degree 2
-        let read_term = Self::compute_read_term(net.id(), input, relation_parameters); // Degree 2 (3)
+        let inverse_exists = Self::compute_inverse_exists(state.id(), input); // Degree 2
+        let read_term = Self::compute_read_term(state.id(), input, relation_parameters); // Degree 2 (3)
         let write_term = Self::compute_write_term(input, relation_parameters); // Degree 1 (2)
         let write_inverse = T::mul_many(&read_term, inverses, net, state)?;
         let read_inverse = T::mul_with_public_many(&write_term, inverses);

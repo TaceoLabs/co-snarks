@@ -6,7 +6,7 @@ pub(crate) mod plain;
 pub(crate) mod rep3;
 pub(crate) mod shamir;
 
-use mpc_core::ForkState;
+use mpc_core::MpcState;
 use mpc_net::Network;
 pub use plain::PlainPlonkDriver;
 pub use rep3::Rep3PlonkDriver;
@@ -21,7 +21,7 @@ pub trait CircomPlonkProver<P: Pairing> {
     /// The G2 point share type
     type PointShareG2: Send;
     /// Internal state of used MPC protocol
-    type State: ForkState + Send;
+    type State: MpcState + Send;
 
     /// Generate a random arithmetic share
     fn rand<N: Network>(net: &N, state: &mut Self::State) -> eyre::Result<Self::ArithmeticShare>;
@@ -31,7 +31,7 @@ pub trait CircomPlonkProver<P: Pairing> {
 
     /// Add a public value a to the share b: \[c\] = a + \[b\]
     fn add_with_public(
-        party_id: usize,
+        id: <Self::State as MpcState>::PartyID,
         shared: Self::ArithmeticShare,
         public: P::ScalarField,
     ) -> Self::ArithmeticShare;
@@ -130,7 +130,7 @@ pub trait CircomPlonkProver<P: Pairing> {
 
     /// Transforms a public value into a shared value: \[a\] = a.
     fn promote_to_trivial_share(
-        party_id: usize,
+        id: <Self::State as MpcState>::PartyID,
         public_value: P::ScalarField,
     ) -> Self::ArithmeticShare;
 

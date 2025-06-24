@@ -11,7 +11,7 @@ use ark_ff::Zero;
 use co_builder::prelude::HonkCurve;
 use co_builder::HonkProofResult;
 use itertools::Itertools as _;
-use mpc_core::gadgets::poseidon2::POSEIDON2_BN254_T4_PARAMS;
+use mpc_core::{gadgets::poseidon2::POSEIDON2_BN254_T4_PARAMS, MpcState as _};
 use mpc_net::Network;
 use num_bigint::BigUint;
 use ultrahonk::prelude::{TranscriptFieldType, Univariate};
@@ -154,7 +154,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let q_poseidon2_internal = input.precomputed.q_poseidon2_internal();
 
         // add round constants
-        let s1 = T::add_with_public_many(q_l, w_l, net.id());
+        let s1 = T::add_with_public_many(q_l, w_l, state.id());
 
         // apply s-box round
         // 0xThemis TODO again can we do something better for x^5?

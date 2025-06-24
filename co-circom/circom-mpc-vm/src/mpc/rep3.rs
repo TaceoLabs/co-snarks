@@ -11,9 +11,9 @@ use mpc_core::{
         arithmetic::{self, promote_to_trivial_share},
         binary,
         conversion::{self, bit_inject_many},
-        network, yao, Rep3PrimeFieldShare, Rep3State,
+        network, yao, PartyID, Rep3PrimeFieldShare, Rep3State,
     },
-    ForkState,
+    MpcState,
 };
 use mpc_net::Network;
 use num_bigint::BigUint;
@@ -50,7 +50,7 @@ impl<F: PrimeField> Default for Rep3VmType<F> {
 }
 
 pub struct CircomRep3VmWitnessExtension<'a, F: PrimeField, N: Network> {
-    id: usize,
+    id: PartyID,
     net0: &'a N,
     net1: &'a N,
     state0: Rep3State,
@@ -63,7 +63,7 @@ impl<'a, F: PrimeField, N: Network> CircomRep3VmWitnessExtension<'a, F, N> {
         let mut state0 = Rep3State::new(net0)?;
         let state1 = state0.fork(0)?;
         Ok(Self {
-            id: net0.id(),
+            id: state0.id,
             net0,
             net1,
             state0,
@@ -83,7 +83,7 @@ impl<'a, F: PrimeField, N: Network> CircomRep3VmWitnessExtension<'a, F, N> {
         let one = BigUint::one();
         let two = BigUint::from(2u64);
         let p_half_plus_one = F::from(modulus / two + one);
-        arithmetic::sub_shared_by_public(z, p_half_plus_one, self.net0.id())
+        arithmetic::sub_shared_by_public(z, p_half_plus_one, self.id)
     }
 }
 
@@ -201,7 +201,7 @@ impl<F: PrimeField, N: Network> VmCircomWitnessExtension<F>
             (Rep3VmType::Public(a), Rep3VmType::Arithmetic(b)) => {
                 let divided = yao::field_int_div_by_shared(a, b, self.net0, &mut self.state0)?;
                 let mul = arithmetic::mul(divided, b, self.net0, &mut self.state0)?;
-                let result = arithmetic::sub_public_by_shared(a, mul, self.net0.id());
+                let result = arithmetic::sub_public_by_shared(a, mul, self.id);
                 Ok(result.into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {

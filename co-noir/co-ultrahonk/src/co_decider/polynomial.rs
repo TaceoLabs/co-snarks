@@ -1,6 +1,7 @@
 use ark_ec::pairing::Pairing;
 use ark_ff::{Field, Zero};
 use co_builder::prelude::{Polynomial, Utils};
+use mpc_core::MpcState;
 use mpc_net::Network;
 use std::{
     fmt::Debug,
@@ -20,7 +21,10 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> SharedPolynomial<T, P> {
         }
     }
 
-    pub(crate) fn promote_poly(id: usize, poly: Polynomial<P::ScalarField>) -> Self {
+    pub(crate) fn promote_poly(
+        id: <T::State as MpcState>::PartyID,
+        poly: Polynomial<P::ScalarField>,
+    ) -> Self {
         let coefficients = T::promote_to_trivial_shares(id, poly.as_ref());
         Self { coefficients }
     }
@@ -53,7 +57,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> SharedPolynomial<T, P> {
 
     pub(crate) fn add_scaled_slice_public(
         &mut self,
-        id: usize,
+        id: <T::State as MpcState>::PartyID,
         src: &[P::ScalarField],
         scalar: &P::ScalarField,
     ) {

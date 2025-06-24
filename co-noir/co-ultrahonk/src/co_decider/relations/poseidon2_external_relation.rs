@@ -12,6 +12,7 @@ use ark_ff::Zero;
 use co_builder::prelude::HonkCurve;
 use co_builder::HonkProofResult;
 use itertools::Itertools as _;
+use mpc_core::MpcState as _;
 use mpc_net::Network;
 use ultrahonk::prelude::{TranscriptFieldType, Univariate};
 
@@ -162,7 +163,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let q_4 = input.precomputed.q_4();
         let q_poseidon2_external = input.precomputed.q_poseidon2_external();
 
-        let id = net.id();
+        let id = state.id();
         // add round constants which are loaded in selectors
         let s1 = T::add_with_public_many(q_l, w_l, id);
         let s2 = T::add_with_public_many(q_r, w_r, id);

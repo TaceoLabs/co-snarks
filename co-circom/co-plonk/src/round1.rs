@@ -2,11 +2,12 @@ use ark_ec::pairing::Pairing;
 use ark_ec::CurveGroup;
 use circom_types::plonk::ZKey;
 use co_circom_types::SharedWitness;
+use mpc_core::MpcState;
 use mpc_net::Network;
 use tracing::instrument;
 
 use crate::{
-    mpc::CircomPlonkProver,
+    mpc::{CircomPlonkProver, PlainPlonkDriver},
     plonk_utils::{self, rayon_join3},
     round2::Round2,
     types::{Domains, PlonkData, PlonkWitness, PolyEval},
@@ -81,12 +82,17 @@ impl<P: Pairing, T: CircomPlonkProver<P>> Round1Challenges<P, T> {
         }
         Ok(Self { b })
     }
+}
 
+impl<P: Pairing> Round1Challenges<P, PlainPlonkDriver> {
     #[cfg(test)]
     pub(super) fn deterministic() -> Self {
         Self {
             b: core::array::from_fn(|i| {
-                T::promote_to_trivial_share(0, P::ScalarField::from(i as u64))
+                <PlainPlonkDriver as CircomPlonkProver<P>>::promote_to_trivial_share(
+                    0,
+                    P::ScalarField::from(i as u64),
+                )
             }),
         }
     }
@@ -96,7 +102,7 @@ impl<P: Pairing, T: CircomPlonkProver<P>> Round1Challenges<P, T> {
 #[expect(clippy::type_complexity)]
 impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round1<'a, P, T, N> {
     fn compute_single_wire_poly(
-        party_id: usize,
+        id: <T::State as MpcState>::PartyID,
         witness: &PlonkWitness<P, T>,
         domains: &Domains<P::ScalarField>,
         blind_factors: &[T::ArithmeticShare],
@@ -106,7 +112,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round1<'a, P
         let mut buffer = Vec::with_capacity(zkey.n_constraints);
         debug_assert_eq!(zkey.n_constraints, map.len());
         for index in map {
-            match plonk_utils::get_witness(party_id, witness, zkey, *index) {
+            match plonk_utils::get_witness(id, witness, zkey, *index) {
                 Ok(witness) => buffer.push(witness),
                 Err(err) => return Err(err),
             }
@@ -127,16 +133,15 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round1<'a, P
     // Essentially the fft of the trace columns
     #[instrument(level = "debug", name = "compute wire polys", skip_all)]
     fn compute_wire_polynomials(
-        net: &N,
+        id: <T::State as MpcState>::PartyID,
         domains: &Domains<P::ScalarField>,
         challenges: &Round1Challenges<P, T>,
         zkey: &ZKey<P>,
         witness: &PlonkWitness<P, T>,
     ) -> PlonkProofResult<Round1Polys<P, T>> {
-        let party_id = net.id();
         let (wire_a, wire_b, wire_c) = rayon_join3!(
             || Self::compute_single_wire_poly(
-                party_id,
+                id,
                 witness,
                 domains,
                 &challenges.b[..2],
@@ -144,7 +149,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round1<'a, P
                 &zkey.map_a,
             ),
             || Self::compute_single_wire_poly(
-                party_id,
+                id,
                 witness,
                 domains,
                 &challenges.b[2..4],
@@ -152,7 +157,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round1<'a, P
                 &zkey.map_b,
             ),
             || Self::compute_single_wire_poly(
-                party_id,
+                id,
                 witness,
                 domains,
                 &challenges.b[4..6],
@@ -184,7 +189,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round1<'a, P
     // Calculate the witnesses for the additions, since they are not part of the SharedWitness
     #[instrument(level = "debug", name = "calculate additions", skip_all)]
     fn calculate_additions(
-        party_id: usize,
+        id: <T::State as MpcState>::PartyID,
         witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
         zkey: &ZKey<P>,
     ) -> PlonkProofResult<PlonkWitness<P, T>> {
@@ -195,13 +200,13 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round1<'a, P
         // Keep an eye on the span duration, maybe we have to come back to that later.
         for addition in zkey.additions.iter() {
             let witness1 = plonk_utils::get_witness(
-                party_id,
+                id,
                 &witness,
                 zkey,
                 addition.signal_id1.try_into().expect("u32 fits into usize"),
             )?;
             let witness2 = plonk_utils::get_witness(
-                party_id,
+                id,
                 &witness,
                 zkey,
                 addition.signal_id2.try_into().expect("u32 fits into usize"),
@@ -222,7 +227,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round1<'a, P
         zkey: &'a ZKey<P>,
         private_witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
     ) -> PlonkProofResult<Self> {
-        let plonk_witness = Self::calculate_additions(nets[0].id(), private_witness, zkey)?;
+        let plonk_witness = Self::calculate_additions(state.id(), private_witness, zkey)?;
         let challenges = Round1Challenges::random(&nets[0], state)?;
         let domains = Domains::new(zkey.domain_size)?;
         Ok(Self {
@@ -252,7 +257,8 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round1<'a, P
         let p_tau = &zkey.p_tau;
 
         // STEP 1.2 - Compute wire polynomials a(X), b(X) and c(X)
-        let polys = Self::compute_wire_polynomials(&nets[0], &domains, &challenges, zkey, witness)?;
+        let polys =
+            Self::compute_wire_polynomials(state.id(), &domains, &challenges, zkey, witness)?;
 
         let commit_span = tracing::debug_span!("committing to polys (MSMs)").entered();
         // STEP 1.3 - Compute [a]_1, [b]_1, [c]_1

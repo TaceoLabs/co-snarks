@@ -11,7 +11,7 @@ use mpc_core::{
             arithmetic, network, pointshare, ShamirPointShare, ShamirPrimeFieldShare, ShamirState,
         },
     },
-    ForkState,
+    MpcState,
 };
 use mpc_net::Network;
 use num_bigint::BigUint;

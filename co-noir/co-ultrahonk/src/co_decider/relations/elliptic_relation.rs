@@ -12,6 +12,7 @@ use ark_ff::Zero;
 use co_builder::prelude::HonkCurve;
 use co_builder::HonkProofResult;
 use itertools::Itertools as _;
+use mpc_core::MpcState as _;
 use mpc_net::Network;
 use ultrahonk::prelude::{TranscriptFieldType, Univariate};
 
@@ -116,7 +117,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         // replace old addition relations with these ones and
         // remove endomorphism coefficient in ecc add gate(not used))
 
-        let party_id = net.id();
+        let id = state.id();
         let x_1 = input.witness.w_r();
         let y_1 = input.witness.w_o();
 
@@ -183,7 +184,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let mut lhs =
             Vec::with_capacity(2 * x_3.len() + y1_sqr.len() + x1_sqr_mul_3.len() + y_1.len());
         lhs.extend(T::add_many(&T::add_many(x_3, x_2), x_1));
-        lhs.extend(T::add_scalar(y1_sqr, -curve_b, party_id));
+        lhs.extend(T::add_scalar(y1_sqr, -curve_b, id));
         lhs.extend(T::add_many(&T::add_many(x_3, x_1), x_1));
         lhs.extend(x1_sqr_mul_3);
         lhs.extend(T::add_many(y_1, y_1));

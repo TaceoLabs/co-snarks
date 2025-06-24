@@ -7,6 +7,7 @@ use mpc_core::protocols::shamir::ShamirState;
 use mpc_core::protocols::shamir::{
     arithmetic, pointshare, poly, ShamirPointShare, ShamirPrimeFieldShare,
 };
+use mpc_core::MpcState;
 use mpc_net::Network;
 use num_traits::Zero;
 use rayon::prelude::*;
@@ -42,7 +43,7 @@ impl<P: Pairing> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
     fn add_assign_public(
         a: &mut Self::ArithmeticShare,
         b: <P as Pairing>::ScalarField,
-        _id: usize,
+        _id: <Self::State as MpcState>::PartyID,
     ) {
         arithmetic::add_assign_public(a, b);
     }
@@ -62,7 +63,11 @@ impl<P: Pairing> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
         arithmetic::mul_assign_public(shared, public)
     }
 
-    fn add_assign_public_half_share(share: &mut P::ScalarField, public: P::ScalarField, _: usize) {
+    fn add_assign_public_half_share(
+        share: &mut P::ScalarField,
+        public: P::ScalarField,
+        _id: <Self::State as MpcState>::PartyID,
+    ) {
         *share += public
     }
 
@@ -101,17 +106,20 @@ impl<P: Pairing> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
     fn add_with_public(
         public: P::ScalarField,
         shared: Self::ArithmeticShare,
-        _id: usize,
+        _id: <Self::State as MpcState>::PartyID,
     ) -> Self::ArithmeticShare {
         arithmetic::add_public(shared, public)
     }
 
-    fn promote_to_trivial_share(_id: usize, public_value: P::ScalarField) -> Self::ArithmeticShare {
+    fn promote_to_trivial_share(
+        _id: <Self::State as MpcState>::PartyID,
+        public_value: P::ScalarField,
+    ) -> Self::ArithmeticShare {
         arithmetic::promote_to_trivial_share(public_value)
     }
 
     fn promote_to_trivial_shares(
-        id: usize,
+        id: <Self::State as MpcState>::PartyID,
         public_values: &[P::ScalarField],
     ) -> Vec<Self::ArithmeticShare> {
         public_values

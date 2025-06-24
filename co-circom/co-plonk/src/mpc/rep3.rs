@@ -1,7 +1,10 @@
 use ark_ec::pairing::Pairing;
 use ark_poly::EvaluationDomain;
-use mpc_core::protocols::rep3::{
-    arithmetic, pointshare, poly, Rep3PointShare, Rep3PrimeFieldShare, Rep3State,
+use mpc_core::{
+    protocols::rep3::{
+        arithmetic, pointshare, poly, Rep3PointShare, Rep3PrimeFieldShare, Rep3State,
+    },
+    MpcState,
 };
 use mpc_net::Network;
 
@@ -25,11 +28,11 @@ impl<P: Pairing> CircomPlonkProver<P> for Rep3PlonkDriver {
     }
 
     fn add_with_public(
-        party_id: usize,
+        id: <Self::State as MpcState>::PartyID,
         shared: Self::ArithmeticShare,
         public: P::ScalarField,
     ) -> Self::ArithmeticShare {
-        arithmetic::add_public(shared, public, party_id)
+        arithmetic::add_public(shared, public, id)
     }
 
     fn sub(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare {
@@ -123,10 +126,10 @@ impl<P: Pairing> CircomPlonkProver<P> for Rep3PlonkDriver {
     }
 
     fn promote_to_trivial_share(
-        party_id: usize,
+        id: <Self::State as MpcState>::PartyID,
         public_value: P::ScalarField,
     ) -> Self::ArithmeticShare {
-        Self::ArithmeticShare::promote_from_trivial(&public_value, party_id)
+        Self::ArithmeticShare::promote_from_trivial(&public_value, id)
     }
 
     fn fft<D: EvaluationDomain<P::ScalarField>>(

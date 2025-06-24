@@ -12,6 +12,7 @@ use ark_ff::Zero;
 use co_builder::HonkProofResult;
 use co_builder::{prelude::HonkCurve, TranscriptFieldType};
 use itertools::izip;
+use mpc_core::MpcState;
 use mpc_net::Network;
 use rayon::prelude::*;
 use ultrahonk::prelude::Univariate;
@@ -83,8 +84,7 @@ impl UltraArithmeticRelation {
 }
 
 impl UltraArithmeticRelation {
-    fn compute_r0<T, P, N: Network>(
-        net: &N,
+    fn compute_r0<T, P>(
         state: &mut T::State,
         r0: &mut Univariate<P::ScalarField, 6>,
         input: &ProverUnivariatesBatch<T, P>,
@@ -111,7 +111,7 @@ impl UltraArithmeticRelation {
         let three = P::ScalarField::from(3_u64);
 
         let mul = T::local_mul_vec(w_l, w_r, state);
-        let party_id = net.id();
+        let id = state.id();
         let tmp_l = (w_l, q_l)
             .into_par_iter()
             .map(|(w_l, q_l)| T::mul_with_public_to_half_share(*q_l, *w_l));
@@ -156,7 +156,7 @@ impl UltraArithmeticRelation {
                     tmp *= *q_arith - three;
                     tmp *= neg_half;
                     tmp += tmp_l + tmp_r + tmp_o + tmp_4;
-                    T::add_assign_public_half_share(&mut tmp, *q_c, party_id);
+                    T::add_assign_public_half_share(&mut tmp, *q_c, id);
 
                     let tmp_arith = T::mul_with_public_to_half_share(*q_arith - one, *w_4_shift);
                     tmp += tmp_arith;
@@ -187,7 +187,7 @@ impl UltraArithmeticRelation {
         }
     }
     fn compute_r1<T, P>(
-        party_id: usize,
+        id: <T::State as MpcState>::PartyID,
         r1: &mut SharedUnivariate<T, P, 5>,
         input: &ProverUnivariatesBatch<T, P>,
         scaling_factors: &[P::ScalarField],
@@ -209,7 +209,7 @@ impl UltraArithmeticRelation {
             .map(|(w_l, w_4, w_l_shift, q_m, q_arith, scaling_factor)| {
                 let tmp = T::add(*w_l, *w_4);
                 let tmp = T::sub(tmp, *w_l_shift);
-                let tmp = T::add_with_public(*q_m, tmp, party_id);
+                let tmp = T::add_with_public(*q_m, tmp, id);
                 let tmp = T::mul_with_public(*q_arith - two, tmp);
                 let tmp = T::mul_with_public(*q_arith - one, tmp);
                 let tmp = T::mul_with_public(*q_arith, tmp);
@@ -320,7 +320,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
      * @param scaling_factor optional term to scale the evaluation before adding to evals.
      */
     fn accumulate<N: Network>(
-        net: &N,
+        _net: &N,
         state: &mut T::State,
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesBatch<T, P>,
@@ -328,25 +328,17 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         scaling_factors: &[P::ScalarField],
     ) -> HonkProofResult<()> {
         tracing::trace!("Accumulate UltraArithmeticRelation");
-        let party_id = net.id();
+        let id = state.id();
         rayon::join(
             || {
                 Self::compute_r0(
-                    net,
                     state,
                     &mut univariate_accumulator.r0,
                     input,
                     scaling_factors,
                 )
             },
-            || {
-                Self::compute_r1(
-                    party_id,
-                    &mut univariate_accumulator.r1,
-                    input,
-                    scaling_factors,
-                )
-            },
+            || Self::compute_r1(id, &mut univariate_accumulator.r1, input, scaling_factors),
         );
         Ok(())
     }

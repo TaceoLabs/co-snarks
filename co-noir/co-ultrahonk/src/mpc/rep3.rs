@@ -2,8 +2,11 @@ use super::NoirUltraHonkProver;
 use ark_ec::pairing::Pairing;
 use ark_ff::Field;
 use itertools::izip;
-use mpc_core::protocols::rep3::{
-    arithmetic, pointshare, poly, Rep3PointShare, Rep3PrimeFieldShare, Rep3State, PARTY_0,
+use mpc_core::{
+    protocols::rep3::{
+        arithmetic, pointshare, poly, PartyID, Rep3PointShare, Rep3PrimeFieldShare, Rep3State,
+    },
+    MpcState,
 };
 use mpc_net::Network;
 use num_traits::Zero;
@@ -36,7 +39,11 @@ impl<P: Pairing> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
         arithmetic::add_assign(a, b);
     }
 
-    fn add_assign_public(a: &mut Self::ArithmeticShare, b: <P as Pairing>::ScalarField, id: usize) {
+    fn add_assign_public(
+        a: &mut Self::ArithmeticShare,
+        b: <P as Pairing>::ScalarField,
+        id: <Self::State as MpcState>::PartyID,
+    ) {
         arithmetic::add_assign_public(a, b, id);
     }
 
@@ -55,8 +62,12 @@ impl<P: Pairing> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
         arithmetic::mul_assign_public(shared, public);
     }
 
-    fn add_assign_public_half_share(share: &mut P::ScalarField, public: P::ScalarField, id: usize) {
-        if id == PARTY_0 {
+    fn add_assign_public_half_share(
+        share: &mut P::ScalarField,
+        public: P::ScalarField,
+        id: <Self::State as MpcState>::PartyID,
+    ) {
+        if id == PartyID::ID0 {
             *share += public
         }
     }
@@ -96,20 +107,20 @@ impl<P: Pairing> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
     fn add_with_public(
         public: <P as Pairing>::ScalarField,
         shared: Self::ArithmeticShare,
-        id: usize,
+        id: <Self::State as MpcState>::PartyID,
     ) -> Self::ArithmeticShare {
         arithmetic::add_public(shared, public, id)
     }
 
     fn promote_to_trivial_share(
-        id: usize,
+        id: <Self::State as MpcState>::PartyID,
         public_value: <P as Pairing>::ScalarField,
     ) -> Self::ArithmeticShare {
         arithmetic::promote_to_trivial_share(id, public_value)
     }
 
     fn promote_to_trivial_shares(
-        id: usize,
+        id: <Self::State as MpcState>::PartyID,
         public_values: &[<P as Pairing>::ScalarField],
     ) -> Vec<Self::ArithmeticShare> {
         public_values

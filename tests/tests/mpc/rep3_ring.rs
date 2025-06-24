@@ -10,8 +10,8 @@ mod ring_share {
     use mpc_core::protocols::rep3::yao::streaming_evaluator::StreamingRep3Evaluator;
     use mpc_core::protocols::rep3::yao::streaming_garbler::StreamingRep3Garbler;
     use mpc_core::protocols::rep3::yao::GCUtils;
+    use mpc_core::protocols::rep3::PartyID;
     use mpc_core::protocols::rep3::Rep3State;
-    use mpc_core::protocols::rep3::{PARTY_0, PARTY_1, PARTY_2};
     use mpc_core::protocols::rep3_ring;
     use mpc_core::protocols::rep3_ring::arithmetic;
     use mpc_core::protocols::rep3_ring::casts;
@@ -21,8 +21,7 @@ mod ring_share {
     use mpc_core::protocols::rep3_ring::ring::int_ring::IntRing2k;
     use mpc_core::protocols::rep3_ring::ring::ring_impl::RingElement;
     use mpc_core::protocols::rep3_ring::yao;
-    use mpc_core::ForkState;
-    use mpc_net::Network;
+    use mpc_core::MpcState;
     use mpc_net::TestNetwork;
     use num_bigint::BigUint;
     use num_traits::{AsPrimitive, One, Zero};
@@ -139,7 +138,7 @@ mod ring_share {
         for (tx, x, id) in izip!(
             [tx1, tx2, tx3],
             x_shares.into_iter(),
-            [PARTY_0, PARTY_1, PARTY_2]
+            [PartyID::ID0, PartyID::ID1, PartyID::ID2]
         ) {
             spawn_pool(move || tx.send(arithmetic::sub_shared_by_public(x, y, id)));
         }
@@ -170,7 +169,7 @@ mod ring_share {
         for (tx, y, id) in izip!(
             [tx1, tx2, tx3],
             y_shares.into_iter(),
-            [PARTY_0, PARTY_1, PARTY_2]
+            [PartyID::ID0, PartyID::ID1, PartyID::ID2]
         ) {
             spawn_pool(move || tx.send(arithmetic::sub_public_by_shared(x, y, id)));
         }
@@ -1002,23 +1001,22 @@ mod ring_share {
         for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter()) {
             spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
-                let id = net.id();
+                let id = state.id;
                 let delta = state.rngs.generate_random_garbler_delta(id);
 
                 let converted = conversion::a2y(x, delta, &net, &mut state).unwrap();
 
                 let output = match id {
-                    PARTY_0 => {
+                    PartyID::ID0 => {
                         let mut evaluator = Rep3Evaluator::new(&net);
                         evaluator.receive_circuit().unwrap();
                         evaluator.output_all_parties(converted.wires()).unwrap()
                     }
-                    PARTY_1 | PARTY_2 => {
+                    PartyID::ID1 | PartyID::ID2 => {
                         let mut garbler =
                             Rep3Garbler::new_with_delta(&net, &mut state, delta.unwrap());
                         garbler.output_all_parties(converted.wires()).unwrap()
                     }
-                    _ => unreachable!(),
                 };
 
                 tx.send(GCUtils::bits_to_ring::<T>(&output).unwrap())
@@ -1055,22 +1053,21 @@ mod ring_share {
         for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter()) {
             spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
-                let id = net.id();
+                let id = state.id;
                 let delta = state.rngs.generate_random_garbler_delta(id);
 
                 let converted = conversion::a2y_streaming(x, delta, &net, &mut state).unwrap();
 
                 let output = match id {
-                    PARTY_0 => {
+                    PartyID::ID0 => {
                         let mut evaluator = StreamingRep3Evaluator::new(&net);
                         evaluator.output_all_parties(converted.wires()).unwrap()
                     }
-                    PARTY_1 | PARTY_2 => {
+                    PartyID::ID1 | PartyID::ID2 => {
                         let mut garbler =
                             StreamingRep3Garbler::new_with_delta(&net, &mut state, delta.unwrap());
                         garbler.output_all_parties(converted.wires()).unwrap()
                     }
-                    _ => unreachable!(),
                 };
 
                 tx.send(GCUtils::bits_to_ring::<T>(&output).unwrap())
@@ -1189,23 +1186,22 @@ mod ring_share {
         {
             spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
-                let id = net.id();
+                let id = state.id;
                 let delta = state.rngs.generate_random_garbler_delta(id);
 
                 let converted = conversion::b2y(&x, delta, &net, &mut state).unwrap();
 
                 let output = match id {
-                    PARTY_0 => {
+                    PartyID::ID0 => {
                         let mut evaluator = Rep3Evaluator::new(&net);
                         evaluator.receive_circuit().unwrap();
                         evaluator.output_all_parties(converted.wires()).unwrap()
                     }
-                    PARTY_1 | PARTY_2 => {
+                    PartyID::ID1 | PartyID::ID2 => {
                         let mut garbler =
                             Rep3Garbler::new_with_delta(&net, &mut state, delta.unwrap());
                         garbler.output_all_parties(converted.wires()).unwrap()
                     }
-                    _ => unreachable!(),
                 };
 
                 tx.send(GCUtils::bits_to_ring::<T>(&output).unwrap())
@@ -1244,22 +1240,21 @@ mod ring_share {
         {
             spawn_pool(move || {
                 let mut state = Rep3State::new(&net).unwrap();
-                let id = net.id();
+                let id = state.id;
                 let delta = state.rngs.generate_random_garbler_delta(id);
 
                 let converted = conversion::b2y(&x, delta, &net, &mut state).unwrap();
 
                 let output = match id {
-                    PARTY_0 => {
+                    PartyID::ID0 => {
                         let mut evaluator = StreamingRep3Evaluator::new(&net);
                         evaluator.output_all_parties(converted.wires()).unwrap()
                     }
-                    PARTY_1 | PARTY_2 => {
+                    PartyID::ID1 | PartyID::ID2 => {
                         let mut garbler =
                             StreamingRep3Garbler::new_with_delta(&net, &mut state, delta.unwrap());
                         garbler.output_all_parties(converted.wires()).unwrap()
                     }
-                    _ => unreachable!(),
                 };
 
                 tx.send(GCUtils::bits_to_ring::<T>(&output).unwrap())

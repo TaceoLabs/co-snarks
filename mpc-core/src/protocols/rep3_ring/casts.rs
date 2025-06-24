@@ -18,7 +18,7 @@ use num_traits::AsPrimitive;
 use rand::{distributions::Standard, prelude::Distribution};
 use std::any::TypeId;
 
-/// Depending on the `A2BType` of the io_context, this function selects the appropriate implementation for the ring cast. In case of a downcast, the excess bits are just truncated.
+/// Depending on the `A2BType` of the state, this function selects the appropriate implementation for the ring cast. In case of a downcast, the excess bits are just truncated.
 pub fn ring_cast_selector<T, U, N>(
     x: Rep3RingShare<T>,
     net: &N,
@@ -36,7 +36,7 @@ where
     }
 }
 
-/// Depending on the `A2BType` of the io_context, this function selects the appropriate implementation for the ring_to_field cast.
+/// Depending on the `A2BType` of the state, this function selects the appropriate implementation for the ring_to_field cast.
 pub fn ring_to_field_selector<T: IntRing2k, F: PrimeField, N: Network>(
     x: Rep3RingShare<T>,
     net: &N,
@@ -51,7 +51,7 @@ where
     }
 }
 
-/// Depending on the `A2BType` of the io_context, this function selects the appropriate implementation for the field_to_ring cast.
+/// Depending on the `A2BType` of the state, this function selects the appropriate implementation for the field_to_ring cast.
 pub fn field_to_ring_selector<F: PrimeField, T: IntRing2k, N: Network>(
     x: Rep3PrimeFieldShare<F>,
     net: &N,

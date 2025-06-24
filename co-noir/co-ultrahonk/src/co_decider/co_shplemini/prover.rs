@@ -18,6 +18,7 @@ use co_builder::{
     HonkProofError,
 };
 use itertools::izip;
+use mpc_core::MpcState as _;
 use mpc_net::Network;
 use ultrahonk::{
     prelude::{Transcript, TranscriptFieldType, TranscriptHasher, ZeroKnowledge},
@@ -107,7 +108,7 @@ impl<
         if has_zk == ZeroKnowledge::Yes {
             // Precomputed part of batched_unshifted
             for f_poly in f_polynomials.precomputed.iter() {
-                batched_unshifted.add_scaled_slice_public(self.net.id(), f_poly, &running_scalar);
+                batched_unshifted.add_scaled_slice_public(self.state.id(), f_poly, &running_scalar);
                 running_scalar *= rho;
             }
         } else {
@@ -121,7 +122,7 @@ impl<
 
             // Shared part of batched_unshifted
             batched_unshifted =
-                SharedPolynomial::<T, P>::promote_poly(self.net.id(), batched_unshifted_plain);
+                SharedPolynomial::<T, P>::promote_poly(self.state.id(), batched_unshifted_plain);
         }
         for f_poly in f_polynomials.witness.iter() {
             batched_unshifted.add_scaled_slice(f_poly, &running_scalar);

@@ -9,10 +9,7 @@ use num_bigint::BigUint;
 
 use crate::protocols::rep3::network::{self};
 
-use super::{
-    arithmetic, conversion, Rep3BigUintShare, Rep3PrimeFieldShare, Rep3State, PARTY_0, PARTY_1,
-    PARTY_2,
-};
+use super::{arithmetic, conversion, PartyID, Rep3BigUintShare, Rep3PrimeFieldShare, Rep3State};
 use num_traits::cast::ToPrimitive;
 
 type ArithmeticShare<F> = Rep3PrimeFieldShare<F>;
@@ -27,14 +24,13 @@ pub fn xor<F: PrimeField>(a: &BinaryShare<F>, b: &BinaryShare<F>) -> BinaryShare
 pub fn xor_public<F: PrimeField>(
     shared: &BinaryShare<F>,
     public: &BigUint,
-    id: usize,
+    id: PartyID,
 ) -> BinaryShare<F> {
     let mut res = shared.to_owned();
     match id {
-        PARTY_0 => res.a ^= public,
-        PARTY_1 => res.b ^= public,
-        PARTY_2 => {}
-        _ => unreachable!(),
+        PartyID::ID0 => res.a ^= public,
+        PartyID::ID1 => res.b ^= public,
+        PartyID::ID2 => {}
     }
     res
 }
@@ -43,7 +39,7 @@ pub fn xor_public<F: PrimeField>(
 pub fn xor_public_vec<F: PrimeField>(
     shared: &[BinaryShare<F>],
     public: &[BigUint],
-    id: usize,
+    id: PartyID,
 ) -> Vec<BinaryShare<F>> {
     shared
         .iter()
@@ -51,10 +47,9 @@ pub fn xor_public_vec<F: PrimeField>(
         .map(|(shared, public)| {
             let mut res = shared.to_owned();
             match id {
-                PARTY_0 => res.a ^= public,
-                PARTY_1 => res.b ^= public,
-                PARTY_2 => {}
-                _ => unreachable!(),
+                PartyID::ID0 => res.a ^= public,
+                PartyID::ID1 => res.b ^= public,
+                PartyID::ID2 => {}
             }
             res
         })
@@ -77,7 +72,7 @@ pub fn or<F: PrimeField, N: Network>(
 pub fn or_public<F: PrimeField>(
     shared: &BinaryShare<F>,
     public: &BigUint,
-    id: usize,
+    id: PartyID,
 ) -> BinaryShare<F> {
     let tmp = shared & public;
     let xor = xor_public(shared, public, id);
@@ -172,8 +167,6 @@ pub fn shift_l_public_by_shared<F: PrimeField, N: Network>(
     // This case is equivalent to a*2^b
     // Strategy: limit size of b to k bits
     // bit-decompose b into bits b_i
-
-    let party_id = net.id();
     let mut individual_bit_shares = Vec::with_capacity(8);
     for i in 0..8 {
         let bit = Rep3BigUintShare::new(
@@ -191,7 +184,7 @@ pub fn shift_l_public_by_shared<F: PrimeField, N: Network>(
             // i is 8 at most there `as u32` is ok
             let two_to_two_to_i = two.pow([2u64.pow(i as u32)]);
             let v = arithmetic::mul_public(b_i, two_to_two_to_i);
-            let v = arithmetic::add_public(v, F::one(), party_id);
+            let v = arithmetic::add_public(v, F::one(), state.id);
             arithmetic::sub(v, b_i)
         })
         .collect();
@@ -213,14 +206,13 @@ pub fn open<F: PrimeField, N: Network>(a: &BinaryShare<F>, net: &N) -> eyre::Res
 
 /// Transforms a public value into a shared value: \[a\] = a.
 pub fn promote_to_trivial_share<F: PrimeField>(
-    id: usize,
+    id: PartyID,
     public_value: &BigUint,
 ) -> BinaryShare<F> {
     match id {
-        PARTY_0 => BinaryShare::new(public_value.to_owned(), BigUint::ZERO),
-        PARTY_1 => BinaryShare::new(BigUint::ZERO, public_value.to_owned()),
-        PARTY_2 => BinaryShare::zero_share(),
-        _ => unreachable!(),
+        PartyID::ID0 => BinaryShare::new(public_value.to_owned(), BigUint::ZERO),
+        PartyID::ID1 => BinaryShare::new(BigUint::ZERO, public_value.to_owned()),
+        PartyID::ID2 => BinaryShare::zero_share(),
     }
 }
 

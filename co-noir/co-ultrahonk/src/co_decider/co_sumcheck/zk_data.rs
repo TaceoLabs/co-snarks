@@ -12,6 +12,7 @@ use co_builder::prelude::HonkCurve;
 use co_builder::HonkProofError;
 use co_builder::HonkProofResult;
 use co_builder::TranscriptFieldType;
+use mpc_core::MpcState as _;
 use mpc_net::Network;
 use ultrahonk::prelude::Transcript;
 
@@ -87,7 +88,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> SharedZKSumch
         data.libra_challenge = transcript.get_challenge::<P>("Libra:Challenge".to_string());
 
         data.libra_running_sum =
-            T::promote_to_trivial_share(net.id(), data.libra_total_sum * data.libra_challenge);
+            T::promote_to_trivial_share(state.id(), data.libra_total_sum * data.libra_challenge);
         data.setup_auxiliary_data();
 
         Ok(data)

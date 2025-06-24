@@ -12,6 +12,7 @@ use ark_ff::Zero;
 use co_builder::prelude::HonkCurve;
 use co_builder::HonkProofResult;
 use itertools::Itertools as _;
+use mpc_core::MpcState as _;
 use mpc_net::Network;
 use ultrahonk::prelude::{TranscriptFieldType, Univariate};
 
@@ -131,7 +132,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         _relation_parameters: &RelationParameters<<P>::ScalarField>,
         scaling_factors: &[<P>::ScalarField],
     ) -> HonkProofResult<()> {
-        let party_id = net.id();
+        let id = state.id();
 
         let w_1 = input.witness.w_l();
         let w_2 = input.witness.w_r();
@@ -148,14 +149,14 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let delta_3 = T::sub_many(w_4, w_3);
         let delta_4 = T::sub_many(w_1_shift, w_4);
 
-        let tmp_1 = T::add_scalar(&delta_1, minus_one, party_id);
-        let tmp_2 = T::add_scalar(&delta_2, minus_one, party_id);
-        let tmp_3 = T::add_scalar(&delta_3, minus_one, party_id);
-        let tmp_4 = T::add_scalar(&delta_4, minus_one, party_id);
-        let tmp_1_2 = T::add_scalar(&delta_1, minus_two, party_id);
-        let tmp_2_2 = T::add_scalar(&delta_2, minus_two, party_id);
-        let tmp_3_2 = T::add_scalar(&delta_3, minus_two, party_id);
-        let tmp_4_2 = T::add_scalar(&delta_4, minus_two, party_id);
+        let tmp_1 = T::add_scalar(&delta_1, minus_one, id);
+        let tmp_2 = T::add_scalar(&delta_2, minus_one, id);
+        let tmp_3 = T::add_scalar(&delta_3, minus_one, id);
+        let tmp_4 = T::add_scalar(&delta_4, minus_one, id);
+        let tmp_1_2 = T::add_scalar(&delta_1, minus_two, id);
+        let tmp_2_2 = T::add_scalar(&delta_2, minus_two, id);
+        let tmp_3_2 = T::add_scalar(&delta_3, minus_two, id);
+        let tmp_4_2 = T::add_scalar(&delta_4, minus_two, id);
 
         let mut lhs = Vec::with_capacity(
             tmp_1.len()
@@ -179,7 +180,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let mut sqr = T::mul_many(&lhs, &lhs, net, state)?;
 
         for el in sqr.iter_mut() {
-            T::add_assign_public(el, minus_one, party_id);
+            T::add_assign_public(el, minus_one, id);
         }
 
         let (lhs, rhs) = sqr.split_at(sqr.len() >> 1);

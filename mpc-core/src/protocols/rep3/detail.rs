@@ -204,7 +204,7 @@ fn low_depth_binary_sub<F: PrimeField, N: Network>(
     // This is equivalent to x1 - x2 = x1 + two's complement of x2
     let mask = (BigUint::from(1u64) << bitlen) - BigUint::one();
     // bitnot of x2
-    let x2 = binary::xor_public(x2, &mask, net.id());
+    let x2 = binary::xor_public(x2, &mask, state.id);
     // Now start the Kogge-Stone adder
     let p = x1 ^ &x2;
     let mut g = binary::and(x1, &x2, net, state)?;
@@ -212,7 +212,7 @@ fn low_depth_binary_sub<F: PrimeField, N: Network>(
     g ^= &(&p & &BigUint::one());
 
     let res = kogge_stone_inner(&p, &g, net, state, bitlen)?;
-    let res = binary::xor_public(&res, &BigUint::one(), net.id()); // cin=1
+    let res = binary::xor_public(&res, &BigUint::one(), state.id); // cin=1
     Ok(res)
 }
 
@@ -298,7 +298,7 @@ fn low_depth_binary_sub_p<F: PrimeField, N: Network>(
 
     // Add x1 + p_ via a packed Kogge-Stone adder
     let g = x & &p_;
-    let p = binary::xor_public(x, &p_, net.id());
+    let p = binary::xor_public(x, &p_, state.id);
     kogge_stone_inner(&p, &g, net, state, bitlen)
 }
 
@@ -314,7 +314,7 @@ fn low_depth_binary_sub_p_many<F: PrimeField, N: Network>(
     let mut g = izip!(x).map(|x| x & &p_).collect_vec();
     let mut p = x
         .iter()
-        .map(|x| binary::xor_public(x, &p_, net.id()))
+        .map(|x| binary::xor_public(x, &p_, state.id))
         .collect_vec();
     kogge_stone_inner_many(&mut p, &mut g, net, state, bitlen)?;
     Ok(g)
@@ -371,7 +371,7 @@ fn low_depth_binary_sub_by_const<F: PrimeField, N: Network>(
     let x2_ = (BigUint::from(1u64) << F::MODULUS_BIT_SIZE as usize) - x2;
 
     // Add x1 + x2_ via a packed Kogge-Stone adder
-    let p = binary::xor_public(x1, &x2_, net.id());
+    let p = binary::xor_public(x1, &x2_, state.id);
     let g = x1 & &x2_;
 
     let res = kogge_stone_inner(&p, &g, net, state, F::MODULUS_BIT_SIZE as usize)?;
@@ -390,15 +390,15 @@ fn low_depth_binary_sub_from_const<F: PrimeField, N: Network>(
     // This is equivalent to x1 - x2 = x1 + two's complement of x2
     let mask = (BigUint::from(1u64) << F::MODULUS_BIT_SIZE as usize) - BigUint::one();
     // bitnot of x2
-    let x2 = binary::xor_public(x2, &mask, net.id());
+    let x2 = binary::xor_public(x2, &mask, state.id);
     // Now start the Kogge-Stone adder
-    let p = binary::xor_public(&x2, x1, net.id());
+    let p = binary::xor_public(&x2, x1, state.id);
     let mut g = &x2 & x1;
     // Since carry_in = 1, we need to XOR the LSB of x1 and x2 to g (i.e., xor the LSB of p)
     g ^= &p & &BigUint::one();
 
     let res = kogge_stone_inner(&p, &g, net, state, F::MODULUS_BIT_SIZE as usize)?;
-    let res = binary::xor_public(&res, &BigUint::one(), net.id());
+    let res = binary::xor_public(&res, &BigUint::one(), state.id);
     Ok(res)
 }
 
@@ -424,7 +424,7 @@ pub(crate) fn point_addition<F: PrimeField, N: Network>(
     let zero_share = Rep3PrimeFieldShare::default();
     let is_zero = arithmetic::eq(zero_share, diff_x, net, state)?;
     diff_x += arithmetic::mul(
-        arithmetic::add_public(-diff_x, F::one(), net.id()),
+        arithmetic::add_public(-diff_x, F::one(), state.id),
         is_zero,
         net,
         state,

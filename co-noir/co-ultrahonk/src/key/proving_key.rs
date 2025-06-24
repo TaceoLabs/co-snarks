@@ -21,6 +21,7 @@ use co_builder::prelude::{GenericUltraCircuitBuilder, PublicComponentKey};
 use co_builder::HonkProofResult;
 use co_builder::{HonkProofError, TranscriptFieldType};
 use eyre::Result;
+use mpc_core::MpcState;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -63,7 +64,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
     pub fn create<
         U: NoirWitnessExtensionProtocol<P::ScalarField, ArithmeticShare = T::ArithmeticShare>,
     >(
-        id: usize,
+        id: <T::State as MpcState>::PartyID,
         mut circuit: GenericUltraCircuitBuilder<P, U>,
         driver: &mut U,
     ) -> HonkProofResult<Self> {
@@ -144,7 +145,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
     pub fn create_keys<
         U: NoirWitnessExtensionProtocol<P::ScalarField, ArithmeticShare = T::ArithmeticShare>,
     >(
-        id: usize,
+        id: <T::State as MpcState>::PartyID,
         circuit: GenericUltraCircuitBuilder<P, U>,
         prover_crs: &ProverCrs<P>,
         verifier_crs: P::G2Affine,
@@ -178,7 +179,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
     pub fn create_keys_barretenberg<
         U: NoirWitnessExtensionProtocol<P::ScalarField, ArithmeticShare = T::ArithmeticShare>,
     >(
-        id: usize,
+        id: <T::State as MpcState>::PartyID,
         circuit: GenericUltraCircuitBuilder<P, U>,
         crs: &ProverCrs<P>,
         driver: &mut U,
@@ -240,7 +241,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         U: NoirWitnessExtensionProtocol<P::ScalarField, ArithmeticShare = T::ArithmeticShare>,
     >(
         &mut self,
-        id: usize,
+        id: <T::State as MpcState>::PartyID,
         builder: &mut GenericUltraCircuitBuilder<P, U>,
         driver: &mut U,
         is_structured: bool,

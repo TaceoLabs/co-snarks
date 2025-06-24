@@ -4,8 +4,7 @@
 
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use mpc_net::Network;
-
-use super::Rep3PartyId as _;
+use mpc_types::protocols::rep3::id::PartyID;
 
 /// Sends `data` to the next party and receives from the previous party.
 pub fn reshare<N: Network, F: CanonicalSerialize + CanonicalDeserialize + Send>(
@@ -26,7 +25,7 @@ pub fn reshare_many<N: Network, F: CanonicalSerialize + CanonicalDeserialize + S
     net: &N,
     data: &[F],
 ) -> eyre::Result<Vec<F>> {
-    let id = net.id();
+    let id = PartyID::try_from(net.id())?;
     send_and_recv_many(net, id.next(), data, id.prev())
 }
 
@@ -51,7 +50,7 @@ pub fn broadcast_many<N: Network, F: CanonicalSerialize + CanonicalDeserialize +
     net: &N,
     data: &[F],
 ) -> eyre::Result<(Vec<F>, Vec<F>)> {
-    let id = net.id();
+    let id = PartyID::try_from(net.id())?;
     let next_id = id.next();
     let prev_id = id.prev();
 
@@ -66,35 +65,37 @@ pub fn broadcast_many<N: Network, F: CanonicalSerialize + CanonicalDeserialize +
 }
 
 /// Sends data to the target party.
-pub fn send<N: Network, F: CanonicalSerialize>(net: &N, to: usize, data: F) -> eyre::Result<()> {
+pub fn send<N: Network, F: CanonicalSerialize>(net: &N, to: PartyID, data: F) -> eyre::Result<()> {
     send_many(net, to, &[data])
 }
 
 /// Sends a vector of data to the target party.
 pub fn send_many<N: Network, F: CanonicalSerialize>(
     net: &N,
-    to: usize,
+    to: PartyID,
     data: &[F],
 ) -> eyre::Result<()> {
     let size = data.serialized_size(ark_serialize::Compress::No);
     let mut ser_data = Vec::with_capacity(size);
     data.serialize_uncompressed(&mut ser_data)?;
-    net.send(to, &ser_data).unwrap();
+    net.send(to.into(), &ser_data).unwrap();
     Ok(())
 }
 
 /// Sends data to the party with id = next_id (i.e., my_id + 1 mod 3).
 pub fn send_next<N: Network, F: CanonicalSerialize>(net: &N, data: F) -> eyre::Result<()> {
-    send(net, net.id().next(), data)
+    let id = PartyID::try_from(net.id())?;
+    send(net, id.next(), data)
 }
 
 /// Sends a vector data to the party with id = next_id (i.e., my_id + 1 mod 3).
 pub fn send_next_many<N: Network, F: CanonicalSerialize>(net: &N, data: &[F]) -> eyre::Result<()> {
-    send_many(net, net.id().next(), data)
+    let id = PartyID::try_from(net.id())?;
+    send_many(net, id.next(), data)
 }
 
 /// Receives data from the party with the given id
-pub fn recv<N: Network, F: CanonicalDeserialize>(net: &N, from: usize) -> eyre::Result<F> {
+pub fn recv<N: Network, F: CanonicalDeserialize>(net: &N, from: PartyID) -> eyre::Result<F> {
     let mut res = recv_many(net, from)?;
     if res.len() != 1 {
         eyre::bail!("Expected 1 element, got more",)
@@ -106,29 +107,31 @@ pub fn recv<N: Network, F: CanonicalDeserialize>(net: &N, from: usize) -> eyre::
 /// Receives a vector of data from the party with the given id.
 pub fn recv_many<N: Network, F: CanonicalDeserialize>(
     net: &N,
-    from: usize,
+    from: PartyID,
 ) -> eyre::Result<Vec<F>> {
-    let data = net.recv(from)?;
+    let data = net.recv(from.into())?;
     let res = Vec::<F>::deserialize_uncompressed_unchecked(&data[..])?;
     Ok(res)
 }
 
 /// Receives data from the party with the id = prev_id (i.e., my_id + 2 mod 3)
 pub fn recv_prev<N: Network, F: CanonicalDeserialize>(net: &N) -> eyre::Result<F> {
-    recv(net, net.id().prev())
+    let id = PartyID::try_from(net.id())?;
+    recv(net, id.prev())
 }
 
 /// Receives a vector of data from the party with the id = prev_id (i.e., my_id + 2 mod 3).
 pub fn recv_prev_many<N: Network, F: CanonicalDeserialize>(net: &N) -> eyre::Result<Vec<F>> {
-    recv_many(net, net.id().prev())
+    let id = PartyID::try_from(net.id())?;
+    recv_many(net, id.prev())
 }
 
 /// Send and recv `to` and `from` party
 pub fn send_and_recv<N: Network, F: CanonicalSerialize + CanonicalDeserialize + Send>(
     net: &N,
-    to: usize,
+    to: PartyID,
     data: F,
-    from: usize,
+    from: PartyID,
 ) -> eyre::Result<F> {
     let mut res = send_and_recv_many(net, to, &[data], from)?;
     if res.len() != 1 {
@@ -142,9 +145,9 @@ pub fn send_and_recv<N: Network, F: CanonicalSerialize + CanonicalDeserialize + 
 /// Send and recv `to` and `from` party
 pub fn send_and_recv_many<N: Network, F: CanonicalSerialize + CanonicalDeserialize + Send>(
     net: &N,
-    to: usize,
+    to: PartyID,
     data: &[F],
-    from: usize,
+    from: PartyID,
 ) -> eyre::Result<Vec<F>> {
     send_many(net, to, data)?;
     recv_many(net, from)

@@ -5,15 +5,13 @@
 //! This file is heavily inspired by [fancy-garbling](https://github.com/GaloisInc/swanky/blob/dev/fancy-garbling/src/garble/evaluator.rs)
 
 use super::{circuits::FancyBinaryConstant, GCUtils};
-use crate::protocols::rep3::{
-    network::{self},
-    PARTY_0, PARTY_1, PARTY_2,
-};
+use crate::protocols::rep3::network::{self};
 use fancy_garbling::{
     errors::EvaluatorError, util::output_tweak, BinaryBundle, Fancy, FancyBinary, WireLabel,
     WireMod2,
 };
 use mpc_net::Network;
+use mpc_types::protocols::rep3::id::PartyID;
 use scuttlebutt::Block;
 use sha3::{Digest, Sha3_256};
 
@@ -30,9 +28,9 @@ pub struct StreamingRep3Evaluator<'a, N: Network> {
 impl<'a, N: Network> StreamingRep3Evaluator<'a, N> {
     /// Create a new evaluator.
     pub fn new(net: &'a N) -> Self {
-        let id = net.id();
-        if id != PARTY_0 {
-            panic!("Evaluator should be PARTY_0")
+        let id = PartyID::try_from(net.id()).expect("valid id");
+        if id != PartyID::ID0 {
+            panic!("Evaluator should be PartyID::ID0")
         }
 
         Self {
@@ -90,7 +88,7 @@ impl<'a, N: Network> StreamingRep3Evaluator<'a, N> {
     fn output_garbler_id1(&mut self, x: &[WireMod2]) -> eyre::Result<()> {
         for val in x {
             let block = val.as_block();
-            network::send(self.net, PARTY_1, block.as_ref())?;
+            network::send(self.net, PartyID::ID1, block.as_ref())?;
         }
         Ok(())
     }
@@ -125,7 +123,7 @@ impl<'a, N: Network> StreamingRep3Evaluator<'a, N> {
 
     /// Receive a hash of ID2 (the second garbler) to verify the garbled circuit.
     pub fn receive_hash(&mut self) -> eyre::Result<()> {
-        let data: Vec<u8> = network::recv(self.net, PARTY_2)?;
+        let data: Vec<u8> = network::recv(self.net, PartyID::ID2)?;
         let mut hash = Sha3_256::default();
         std::mem::swap(&mut hash, &mut self.hash);
         let digest = hash.finalize();
@@ -138,19 +136,19 @@ impl<'a, N: Network> StreamingRep3Evaluator<'a, N> {
 
     /// Send a block over the network to the garblers.
     fn send_block(&mut self, block: &Block) -> eyre::Result<()> {
-        network::send(self.net, PARTY_1, block.as_ref())?;
-        network::send(self.net, PARTY_2, block.as_ref())?;
+        network::send(self.net, PartyID::ID1, block.as_ref())?;
+        network::send(self.net, PartyID::ID2, block.as_ref())?;
         Ok(())
     }
 
     /// Receive a block from a specific party.
-    fn receive_block_from(&mut self, id: usize) -> eyre::Result<Block> {
+    fn receive_block_from(&mut self, id: PartyID) -> eyre::Result<Block> {
         GCUtils::receive_block_from(self.net, id)
     }
 
     /// Send a block over the network to the evaluator.
     fn receive_block(&mut self) -> eyre::Result<Block> {
-        let block = self.receive_block_from(PARTY_1)?;
+        let block = self.receive_block_from(PartyID::ID1)?;
         self.hash.update(block.as_ref()); // "Receive" from ID2
 
         Ok(block)

@@ -14,7 +14,7 @@ use co_acvm::{
 use co_ultrahonk::prelude::{HonkCurve, ProverCrs, ProverWitnessEntities, TranscriptFieldType};
 use color_eyre::eyre::{self, eyre, Context, Result};
 use mpc_core::protocols::{
-    rep3::{self},
+    rep3::{self, PartyID},
     shamir::{self, ShamirPreprocessing, ShamirState},
 };
 
@@ -275,7 +275,7 @@ pub fn generate_proving_key_rep3<N: Network>(
     net0: &N,
     net1: &N,
 ) -> Result<Rep3ProvingKey<Bn254>> {
-    let id = net0.id();
+    let id = PartyID::try_from(net0.id())?;
     let mut driver = Rep3AcvmSolver::new(net0, net1)?;
     // create the circuit
     let builder = Rep3CoBuilder::create_circuit(

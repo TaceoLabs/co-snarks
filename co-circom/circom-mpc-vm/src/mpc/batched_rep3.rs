@@ -7,9 +7,9 @@ use mpc_core::{
     protocols::rep3::{
         arithmetic,
         conversion::{self},
-        network, Rep3PrimeFieldShare, Rep3State,
+        network, PartyID, Rep3PrimeFieldShare, Rep3State,
     },
-    ForkState as _,
+    MpcState as _,
 };
 use num_bigint::BigUint;
 
@@ -22,7 +22,7 @@ type ArithmeticShare<F> = Rep3PrimeFieldShare<F>;
 ///
 /// This is a pure MPC improvement and does not use any advanced ZK techniques like folding.
 pub struct BatchedCircomRep3VmWitnessExtension<'a, F: PrimeField, N: Network> {
-    _id: usize,
+    _id: PartyID,
     net0: &'a N,
     _net1: &'a N,
     state0: Rep3State,
@@ -40,7 +40,7 @@ impl<'a, F: PrimeField, N: Network> BatchedCircomRep3VmWitnessExtension<'a, F, N
     ) -> eyre::Result<Self> {
         let state1 = state.fork(0)?;
         Ok(Self {
-            _id: net0.id(),
+            _id: state.id(),
             net0,
             _net1: net1,
             state0: state,
@@ -100,7 +100,7 @@ impl<F: PrimeField, N: Network> VmCircomWitnessExtension<F>
             | (BatchedRep3VmType::Arithmetic(a), BatchedRep3VmType::Public(b)) => Ok(a
                 .into_iter()
                 .zip(b)
-                .map(|(a, b)| arithmetic::add_public(a, b, self.net0.id()))
+                .map(|(a, b)| arithmetic::add_public(a, b, self.state0.id))
                 .collect_vec()
                 .into()),
             (BatchedRep3VmType::Arithmetic(a), BatchedRep3VmType::Arithmetic(b)) => Ok(a
@@ -120,13 +120,13 @@ impl<F: PrimeField, N: Network> VmCircomWitnessExtension<F>
             (BatchedRep3VmType::Arithmetic(a), BatchedRep3VmType::Public(b)) => Ok(a
                 .into_iter()
                 .zip(b)
-                .map(|(a, b)| arithmetic::sub_shared_by_public(a, b, self.net0.id()))
+                .map(|(a, b)| arithmetic::sub_shared_by_public(a, b, self.state0.id))
                 .collect_vec()
                 .into()),
             (BatchedRep3VmType::Public(a), BatchedRep3VmType::Arithmetic(b)) => Ok(a
                 .into_iter()
                 .zip(b)
-                .map(|(a, b)| arithmetic::sub_public_by_shared(a, b, self.net0.id()))
+                .map(|(a, b)| arithmetic::sub_public_by_shared(a, b, self.state0.id))
                 .collect_vec()
                 .into()),
 
@@ -300,7 +300,7 @@ impl<F: PrimeField, N: Network> VmCircomWitnessExtension<F>
         match a {
             BatchedRep3VmType::Public(a) => Ok(a
                 .iter()
-                .map(|a| arithmetic::promote_to_trivial_share(self.net0.id(), *a))
+                .map(|a| arithmetic::promote_to_trivial_share(self.state0.id, *a))
                 .collect_vec()),
             BatchedRep3VmType::Arithmetic(a) => Ok(a),
         }
@@ -342,7 +342,7 @@ impl<F: PrimeField, N: Network> VmCircomWitnessExtension<F>
         let a = a.into_iter().map(|x| match x {
             BatchedRep3VmType::Public(x) => x
                 .into_iter()
-                .map(|x| arithmetic::promote_to_trivial_share(self.net0.id(), x))
+                .map(|x| arithmetic::promote_to_trivial_share(self.state0.id, x))
                 .collect_vec(),
             BatchedRep3VmType::Arithmetic(x) => x,
         });
@@ -350,7 +350,7 @@ impl<F: PrimeField, N: Network> VmCircomWitnessExtension<F>
         let b = b.into_iter().map(|x| match x {
             BatchedRep3VmType::Public(x) => x
                 .into_iter()
-                .map(|x| arithmetic::promote_to_trivial_share(self.net0.id(), x))
+                .map(|x| arithmetic::promote_to_trivial_share(self.state0.id, x))
                 .collect_vec(),
             BatchedRep3VmType::Arithmetic(x) => x,
         });

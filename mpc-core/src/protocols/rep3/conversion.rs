@@ -2,7 +2,7 @@
 //!
 //! This module contains conversions between share types
 
-use crate::protocols::rep3::{PARTY_0, PARTY_1, PARTY_2};
+use crate::protocols::rep3::PartyID;
 
 use super::{
     arithmetic, detail,
@@ -35,7 +35,7 @@ pub enum A2BType {
     Yao,
 }
 
-/// Depending on the `A2BType` of the io_context, this function selects the appropriate implementation for the arithmetic-to-binary conversion.
+/// Depending on the `A2BType` of the state, this function selects the appropriate implementation for the arithmetic-to-binary conversion.
 pub fn a2b_selector<F: PrimeField, N: Network>(
     x: Rep3PrimeFieldShare<F>,
     net: &N,
@@ -47,7 +47,7 @@ pub fn a2b_selector<F: PrimeField, N: Network>(
     }
 }
 
-/// Depending on the `A2BType` of the io_context, this function selects the appropriate implementation for the binary-to-arithmetic conversion.
+/// Depending on the `A2BType` of the state, this function selects the appropriate implementation for the binary-to-arithmetic conversion.
 pub fn b2a_selector<F: PrimeField, N: Network>(
     x: &Rep3BigUintShare<F>,
     net: &N,
@@ -71,20 +71,19 @@ pub fn a2b<F: PrimeField, N: Network>(
     let (mut r, r2) = state.rngs.rand.random_biguint(F::MODULUS_BIT_SIZE as usize);
     r ^= r2;
 
-    match net.id() {
-        PARTY_0 => {
+    match state.id {
+        PartyID::ID0 => {
             x01.a = r;
             x2.b = x.b.into();
         }
-        PARTY_1 => {
+        PartyID::ID1 => {
             let val: BigUint = (x.a + x.b).into();
             x01.a = val ^ r;
         }
-        PARTY_2 => {
+        PartyID::ID2 => {
             x01.a = r;
             x2.a = x.a.into();
         }
-        _ => unreachable!(),
     }
 
     // reshare x01
@@ -111,27 +110,26 @@ pub fn a2b_many<F: PrimeField, N: Network>(
         r2_vec.push(r2);
     }
 
-    let x01_a = match net.id() {
-        PARTY_0 => {
+    let x01_a = match state.id {
+        PartyID::ID0 => {
             for (x2, x) in izip!(x2.iter_mut(), x) {
                 x2.b = x.b.into();
             }
             r_vec
         }
 
-        PARTY_1 => izip!(x, r_vec)
+        PartyID::ID1 => izip!(x, r_vec)
             .map(|(x, r)| {
                 let tmp: BigUint = (x.a + x.b).into();
                 tmp ^ r
             })
             .collect(),
-        PARTY_2 => {
+        PartyID::ID2 => {
             for (x2, x) in izip!(x2.iter_mut(), x) {
                 x2.a = x.a.into();
             }
             r_vec
         }
-        _ => unreachable!(),
     };
 
     // reshare x01
@@ -164,20 +162,20 @@ pub fn b2a<F: PrimeField, N: Network>(
     let (mut r, r2) = state.rngs.rand.random_biguint(F::MODULUS_BIT_SIZE as usize);
     r ^= r2;
 
-    match net.id() {
-        PARTY_0 => {
+    match state.id {
+        PartyID::ID0 => {
             let k3 = state.rngs.bitcomp2.random_fes_3keys::<F>();
 
             res.b = (k3.0 + k3.1 + k3.2).neg();
             y.a = r;
         }
-        PARTY_1 => {
+        PartyID::ID1 => {
             let k2 = state.rngs.bitcomp1.random_fes_3keys::<F>();
 
             res.a = (k2.0 + k2.1 + k2.2).neg();
             y.a = r;
         }
-        PARTY_2 => {
+        PartyID::ID2 => {
             let k2 = state.rngs.bitcomp1.random_fes_3keys::<F>();
             let k3 = state.rngs.bitcomp2.random_fes_3keys::<F>();
 
@@ -188,7 +186,6 @@ pub fn b2a<F: PrimeField, N: Network>(
             res.a = k3_comp.neg();
             res.b = k2_comp.neg();
         }
-        _ => unreachable!(),
     }
 
     // reshare y
@@ -203,19 +200,18 @@ pub fn b2a<F: PrimeField, N: Network>(
         F::MODULUS_BIT_SIZE as usize,
     )?;
 
-    match net.id() {
-        PARTY_0 => {
+    match state.id {
+        PartyID::ID0 => {
             let rcv: BigUint = network::reshare(net, z.b.to_owned())?;
             res.a = (z.a ^ z.b ^ rcv).into();
         }
-        PARTY_1 => {
+        PartyID::ID1 => {
             let rcv: BigUint = network::recv_prev(net)?;
             res.b = (z.a ^ z.b ^ rcv).into();
         }
-        PARTY_2 => {
+        PartyID::ID2 => {
             network::send_next(net, z.b)?;
         }
-        _ => unreachable!(),
     }
     Ok(res)
 }
@@ -233,20 +229,19 @@ pub fn bit_inject<F: PrimeField, N: Network>(
     let mut b1 = Rep3PrimeFieldShare::<F>::default();
     let mut b2 = Rep3PrimeFieldShare::<F>::default();
 
-    match net.id() {
-        PARTY_0 => {
+    match state.id {
+        PartyID::ID0 => {
             b0.a = x.a.to_owned().into();
             b2.b = x.b.to_owned().into();
         }
-        PARTY_1 => {
+        PartyID::ID1 => {
             b1.a = x.a.to_owned().into();
             b0.b = x.b.to_owned().into();
         }
-        PARTY_2 => {
+        PartyID::ID2 => {
             b2.a = x.a.to_owned().into();
             b1.b = x.b.to_owned().into();
         }
-        _ => unreachable!(),
     };
 
     let d = arithmetic::arithmetic_xor(b0, b1, net, state)?;
@@ -267,26 +262,25 @@ pub fn bit_inject_many<F: PrimeField, N: Network>(
     let mut b1 = vec![Rep3PrimeFieldShare::<F>::default(); x.len()];
     let mut b2 = vec![Rep3PrimeFieldShare::<F>::default(); x.len()];
 
-    match net.id() {
-        PARTY_0 => {
+    match state.id {
+        PartyID::ID0 => {
             for (b0, b2, x) in izip!(&mut b0, &mut b2, x.iter().cloned()) {
                 b0.a = x.a.into();
                 b2.b = x.b.into();
             }
         }
-        PARTY_1 => {
+        PartyID::ID1 => {
             for (b1, b0, x) in izip!(&mut b1, &mut b0, x.iter().cloned()) {
                 b1.a = x.a.into();
                 b0.b = x.b.into();
             }
         }
-        PARTY_2 => {
+        PartyID::ID2 => {
             for (b2, b1, x) in izip!(&mut b2, &mut b1, x.iter().cloned()) {
                 b2.a = x.a.into();
                 b1.b = x.b.into();
             }
         }
-        _ => unreachable!(),
     };
 
     let d = arithmetic::arithmetic_xor_many(&b0, &b1, net, state)?;
@@ -303,14 +297,14 @@ pub fn a2y<F: PrimeField, N: Network>(
 ) -> eyre::Result<BinaryBundle<WireMod2>> {
     let [x01, x2] = yao::joint_input_arithmetic_added(x, delta, net, state)?;
 
-    let converted = match net.id() {
-        PARTY_0 => {
+    let converted = match state.id {
+        PartyID::ID0 => {
             let mut evaluator = Rep3Evaluator::new(net);
             evaluator.receive_circuit()?;
             let res = GarbledCircuits::adder_mod_p::<_, F>(&mut evaluator, &x01, &x2);
             GCUtils::garbled_circuits_error(res)?
         }
-        PARTY_1 | PARTY_2 => {
+        PartyID::ID1 | PartyID::ID2 => {
             let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
             let mut garbler = Rep3Garbler::new_with_delta(net, state, delta);
             let res = GarbledCircuits::adder_mod_p::<_, F>(&mut garbler, &x01, &x2);
@@ -318,7 +312,6 @@ pub fn a2y<F: PrimeField, N: Network>(
             garbler.send_circuit()?;
             res
         }
-        _ => unreachable!(),
     };
 
     Ok(converted)
@@ -333,15 +326,15 @@ pub fn a2y_streaming<F: PrimeField, N: Network>(
 ) -> eyre::Result<BinaryBundle<WireMod2>> {
     let [x01, x2] = yao::joint_input_arithmetic_added(x, delta, net, state)?;
 
-    let converted = match net.id() {
-        PARTY_0 => {
+    let converted = match state.id {
+        PartyID::ID0 => {
             let mut evaluator = StreamingRep3Evaluator::new(net);
             let res = GarbledCircuits::adder_mod_p::<_, F>(&mut evaluator, &x01, &x2);
             let res = GCUtils::garbled_circuits_error(res)?;
             evaluator.receive_hash()?;
             res
         }
-        PARTY_1 | PARTY_2 => {
+        PartyID::ID1 | PartyID::ID2 => {
             let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
             let mut garbler = StreamingRep3Garbler::new_with_delta(net, state, delta);
             let res = GarbledCircuits::adder_mod_p::<_, F>(&mut garbler, &x01, &x2);
@@ -349,7 +342,6 @@ pub fn a2y_streaming<F: PrimeField, N: Network>(
             garbler.send_hash()?;
             res
         }
-        _ => unreachable!(),
     };
 
     Ok(converted)
@@ -405,8 +397,8 @@ pub fn y2a<F: PrimeField, N: Network>(
 ) -> eyre::Result<Rep3PrimeFieldShare<F>> {
     let mut res = Rep3PrimeFieldShare::zero_share();
 
-    match net.id() {
-        PARTY_0 => {
+    match state.id {
+        PartyID::ID0 => {
             let k3 = state.rngs.bitcomp2.random_fes_3keys::<F>();
             res.b = (k3.0 + k3.1 + k3.2).neg();
             let x23 = yao::input_field_id2::<F, _>(None, None, net, state)?;
@@ -418,13 +410,12 @@ pub fn y2a<F: PrimeField, N: Network>(
             let x1 = evaluator.output_to_id0_and_id1(x1.wires())?;
             res.a = GCUtils::bits_to_field(&x1)?;
         }
-        PARTY_1 => {
+        PartyID::ID1 => {
             y2a_impl_p1!(Rep3Garbler<N>, x, delta, net, state, res)
         }
-        PARTY_2 => {
+        PartyID::ID2 => {
             y2a_impl_p2!(Rep3Garbler<N>, x, delta, net, state, res)
         }
-        _ => unreachable!(),
     };
 
     Ok(res)
@@ -442,8 +433,8 @@ pub fn y2a_streaming<F: PrimeField, N: Network>(
 ) -> eyre::Result<Rep3PrimeFieldShare<F>> {
     let mut res = Rep3PrimeFieldShare::zero_share();
 
-    match net.id() {
-        PARTY_0 => {
+    match state.id {
+        PartyID::ID0 => {
             let k3 = state.rngs.bitcomp2.random_fes_3keys::<F>();
             res.b = (k3.0 + k3.1 + k3.2).neg();
             let x23 = yao::input_field_id2::<F, _>(None, None, net, state)?;
@@ -454,13 +445,12 @@ pub fn y2a_streaming<F: PrimeField, N: Network>(
             let x1 = evaluator.output_to_id0_and_id1(x1.wires())?;
             res.a = GCUtils::bits_to_field(&x1)?;
         }
-        PARTY_1 => {
+        PartyID::ID1 => {
             y2a_impl_p1!(StreamingRep3Garbler<N>, x, delta, net, state, res)
         }
-        PARTY_2 => {
+        PartyID::ID2 => {
             y2a_impl_p2!(StreamingRep3Garbler<N>, x, delta, net, state, res)
         }
-        _ => unreachable!(),
     };
 
     Ok(res)
@@ -479,15 +469,15 @@ pub fn b2y<F: PrimeField, N: Network>(
     let [x01, x2] =
         yao::joint_input_binary_xored(x, delta, net, state, F::MODULUS_BIT_SIZE as usize)?;
 
-    let converted = match net.id() {
-        PARTY_0 => {
+    let converted = match state.id {
+        PartyID::ID0 => {
             // There is no code difference between Rep3Evaluator and StreamingRep3Evaluator
             let mut evaluator = Rep3Evaluator::new(net);
             // evaluator.receive_circuit()?; // No network used here
             let res = GarbledCircuits::xor_many(&mut evaluator, &x01, &x2);
             GCUtils::garbled_circuits_error(res)?
         }
-        PARTY_1 | PARTY_2 => {
+        PartyID::ID1 | PartyID::ID2 => {
             // There is no code difference between Rep3Garbler and StreamingRep3Garbler
             let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
             let mut garbler = Rep3Garbler::new_with_delta(net, state, delta);
@@ -495,7 +485,6 @@ pub fn b2y<F: PrimeField, N: Network>(
             GCUtils::garbled_circuits_error(res)?
             // garbler.send_circuit()?; // No network used here
         }
-        _ => unreachable!(),
     };
 
     Ok(converted)
@@ -510,25 +499,24 @@ pub fn y2b<F: PrimeField, N: Network>(
     let bitlen = x.size();
     let collapsed = GCUtils::collapse_bundle_to_lsb_bits_as_biguint(x);
 
-    let converted = match net.id() {
-        PARTY_0 => {
+    let converted = match state.id {
+        PartyID::ID0 => {
             let x_xor_px = collapsed;
             let r = state.rngs.rand.random_biguint_rng1(bitlen);
             let r_xor_x_xor_px = x_xor_px ^ &r;
-            network::send(net, PARTY_2, r_xor_x_xor_px.to_owned())?;
+            network::send(net, PartyID::ID2, r_xor_x_xor_px.to_owned())?;
             Rep3BigUintShare::new(r, r_xor_x_xor_px)
         }
-        PARTY_1 => {
+        PartyID::ID1 => {
             let px = collapsed;
             let r = state.rngs.rand.random_biguint_rng2(bitlen);
             Rep3BigUintShare::new(px, r)
         }
-        PARTY_2 => {
+        PartyID::ID2 => {
             let px = collapsed;
-            let r_xor_x_xor_px = network::recv(net, PARTY_0)?;
+            let r_xor_x_xor_px = network::recv(net, PartyID::ID0)?;
             Rep3BigUintShare::new(r_xor_x_xor_px, px)
         }
-        _ => unreachable!(),
     };
 
     Ok(converted)
@@ -540,7 +528,7 @@ pub fn a2y2b<F: PrimeField, N: Network>(
     net: &N,
     state: &mut Rep3State,
 ) -> eyre::Result<Rep3BigUintShare<F>> {
-    let delta = state.rngs.generate_random_garbler_delta(net.id());
+    let delta = state.rngs.generate_random_garbler_delta(state.id);
     let y = a2y(x, delta, net, state)?;
     y2b(y, net, state)
 }
@@ -551,7 +539,7 @@ pub fn a2y2b_streaming<F: PrimeField, N: Network>(
     net: &N,
     state: &mut Rep3State,
 ) -> eyre::Result<Rep3BigUintShare<F>> {
-    let delta = state.rngs.generate_random_garbler_delta(net.id());
+    let delta = state.rngs.generate_random_garbler_delta(state.id);
     let y = a2y_streaming(x, delta, net, state)?;
     y2b(y, net, state)
 }
@@ -565,7 +553,7 @@ pub fn b2y2a<F: PrimeField, N: Network>(
     net: &N,
     state: &mut Rep3State,
 ) -> eyre::Result<Rep3PrimeFieldShare<F>> {
-    let delta = state.rngs.generate_random_garbler_delta(net.id());
+    let delta = state.rngs.generate_random_garbler_delta(state.id);
     let y = b2y(x, delta, net, state)?;
     y2a(y, delta, net, state)
 }
@@ -579,7 +567,7 @@ pub fn b2y2a_streaming<F: PrimeField, N: Network>(
     net: &N,
     state: &mut Rep3State,
 ) -> eyre::Result<Rep3PrimeFieldShare<F>> {
-    let delta = state.rngs.generate_random_garbler_delta(net.id());
+    let delta = state.rngs.generate_random_garbler_delta(state.id);
     let y = b2y(x, delta, net, state)?;
     y2a_streaming(y, delta, net, state)
 }
@@ -607,8 +595,8 @@ where
     let r_x = state.rngs.rand.masking_field_element::<C::BaseField>();
     let r_y = state.rngs.rand.masking_field_element::<C::BaseField>();
 
-    match net.id() {
-        PARTY_0 => {
+    match state.id {
+        PartyID::ID0 => {
             x01_x.a = r_x;
             x01_y.a = r_y;
             if let Some((x, y)) = x.b.into_affine().xy() {
@@ -616,7 +604,7 @@ where
                 x2_y.b = y;
             }
         }
-        PARTY_1 => {
+        PartyID::ID1 => {
             let val = x.a + x.b;
             if let Some((x, y)) = val.into_affine().xy() {
                 x01_x.a = x + r_x;
@@ -626,7 +614,7 @@ where
                 x01_y.a = r_y;
             }
         }
-        PARTY_2 => {
+        PartyID::ID2 => {
             x01_x.a = r_x;
             x01_y.a = r_y;
             if let Some((x, y)) = x.a.into_affine().xy() {
@@ -634,7 +622,6 @@ where
                 x2_y.a = y;
             }
         }
-        _ => unreachable!(),
     }
 
     // reshare x01
@@ -685,22 +672,22 @@ where
     let r_x = state.rngs.rand.masking_field_element::<C::BaseField>();
     let r_y = state.rngs.rand.masking_field_element::<C::BaseField>();
 
-    match net.id() {
-        PARTY_0 => {
+    match state.id {
+        PartyID::ID0 => {
             let k3 = state.rngs.bitcomp2.random_curves_3keys::<C>();
 
             res.b = (k3.0 + k3.1 + k3.2).neg();
             y_x.a = r_x;
             y_y.a = r_y;
         }
-        PARTY_1 => {
+        PartyID::ID1 => {
             let k2 = state.rngs.bitcomp1.random_curves_3keys::<C>();
 
             res.a = (k2.0 + k2.1 + k2.2).neg();
             y_x.a = r_x;
             y_y.a = r_y;
         }
-        PARTY_2 => {
+        PartyID::ID2 => {
             let k2 = state.rngs.bitcomp1.random_curves_3keys::<C>();
             let k3 = state.rngs.bitcomp2.random_curves_3keys::<C>();
 
@@ -719,7 +706,6 @@ where
             res.a = k3_comp.neg();
             res.b = k2_comp.neg();
         }
-        _ => unreachable!(),
     }
 
     // reshare y
@@ -738,8 +724,8 @@ where
     let z_a = [cmux[0].a, cmux[1].a, z.2.a];
     let z_b = [cmux[0].b, cmux[1].b, z.2.b];
 
-    match net.id() {
-        PARTY_0 => {
+    match state.id {
+        PartyID::ID0 => {
             network::send_next_many(net, &z_b)?;
             let rcv = network::recv_prev_many::<_, C::BaseField>(net)?;
             if rcv.len() != 3 {
@@ -751,7 +737,7 @@ where
                 z_a[2] + z_b[2] + rcv[2],
             )?;
         }
-        PARTY_1 => {
+        PartyID::ID1 => {
             let rcv = network::recv_prev_many::<_, C::BaseField>(net)?;
             if rcv.len() != 3 {
                 eyre::bail!("Expected 3 elements");
@@ -762,10 +748,9 @@ where
                 z_a[2] + z_b[2] + rcv[2],
             )?;
         }
-        PARTY_2 => {
+        PartyID::ID2 => {
             network::send_next_many(net, &z_b)?;
         }
-        _ => unreachable!(),
     }
 
     Ok(res)

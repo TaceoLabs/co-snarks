@@ -2,12 +2,15 @@
 //!
 //! This module contains operations with arithmetic shares
 
-use crate::protocols::rep3::{network, Rep3State, PARTY_0, PARTY_1, PARTY_2};
+use crate::protocols::rep3::{network, Rep3State};
 use itertools::{izip, Itertools};
 use mpc_net::Network;
-use mpc_types::protocols::rep3_ring::{
-    ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
-    Rep3RingShare,
+use mpc_types::protocols::{
+    rep3::id::PartyID,
+    rep3_ring::{
+        ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
+        Rep3RingShare,
+    },
 };
 use num_traits::{One, Zero};
 use rand::{distributions::Standard, prelude::Distribution};
@@ -32,14 +35,13 @@ pub fn add_assign<T: IntRing2k>(shared: &mut RingShare<T>, b: RingShare<T>) {
 pub fn add_public<T: IntRing2k>(
     shared: RingShare<T>,
     public: RingElement<T>,
-    id: usize,
+    id: PartyID,
 ) -> RingShare<T> {
     let mut res = shared;
     match id {
-        PARTY_0 => res.a += public,
-        PARTY_1 => res.b += public,
-        PARTY_2 => {}
-        _ => unreachable!(),
+        PartyID::ID0 => res.a += public,
+        PartyID::ID1 => res.b += public,
+        PartyID::ID2 => {}
     }
     res
 }
@@ -48,13 +50,12 @@ pub fn add_public<T: IntRing2k>(
 pub fn add_assign_public<T: IntRing2k>(
     shared: &mut RingShare<T>,
     public: RingElement<T>,
-    id: usize,
+    id: PartyID,
 ) {
     match id {
-        PARTY_0 => shared.a += public,
-        PARTY_1 => shared.b += public,
-        PARTY_2 => {}
-        _ => unreachable!(),
+        PartyID::ID0 => shared.a += public,
+        PartyID::ID1 => shared.b += public,
+        PartyID::ID2 => {}
     }
 }
 
@@ -86,7 +87,7 @@ pub fn sub_vec_assign<T: IntRing2k>(lhs: &mut [RingShare<T>], rhs: &[RingShare<T
 pub fn sub_shared_by_public<T: IntRing2k>(
     shared: RingShare<T>,
     public: RingElement<T>,
-    id: usize,
+    id: PartyID,
 ) -> RingShare<T> {
     add_public(shared, -public, id)
 }
@@ -95,7 +96,7 @@ pub fn sub_shared_by_public<T: IntRing2k>(
 pub fn sub_public_by_shared<T: IntRing2k>(
     public: RingElement<T>,
     shared: RingShare<T>,
-    id: usize,
+    id: PartyID,
 ) -> RingShare<T> {
     add_public(-shared, public, id)
 }
@@ -271,14 +272,13 @@ where
 
 /// Transforms a public value into a shared value: \[a\] = a.
 pub fn promote_to_trivial_share<T: IntRing2k>(
-    id: usize,
+    id: PartyID,
     public_value: RingElement<T>,
 ) -> RingShare<T> {
     match id {
-        PARTY_0 => Rep3RingShare::new_ring(public_value, RingElement::zero()),
-        PARTY_1 => Rep3RingShare::new_ring(RingElement::zero(), public_value),
-        PARTY_2 => Rep3RingShare::zero_share(),
-        _ => unreachable!(),
+        PartyID::ID0 => Rep3RingShare::new_ring(public_value, RingElement::zero()),
+        PartyID::ID1 => Rep3RingShare::new_ring(RingElement::zero(), public_value),
+        PartyID::ID2 => Rep3RingShare::zero_share(),
     }
 }
 
@@ -335,7 +335,7 @@ where
     Standard: Distribution<T>,
 {
     // TODO: are negative exponents allowed in circom?
-    let mut res = promote_to_trivial_share(net.id(), RingElement::one());
+    let mut res = promote_to_trivial_share(state.id, RingElement::one());
     let mut shared: RingShare<T> = shared;
     while !public.is_zero() {
         if public.get_bit(0) == RingElement::one() {
@@ -360,7 +360,7 @@ where
 {
     // a < b is equivalent to !(a >= b)
     let tmp = ge(lhs, rhs, net, state)?;
-    Ok(sub_public_by_shared(RingElement::one(), tmp, net.id()))
+    Ok(sub_public_by_shared(RingElement::one(), tmp, state.id))
 }
 
 /// Returns 1 if lhs < rhs and 0 otherwise. Checks if a shared value is less than the public value. The result is a shared value that has value 1 if the shared value is less than the public value and 0 otherwise.
@@ -471,7 +471,7 @@ pub fn eq_public<T: IntRing2k, N: Network>(
 where
     Standard: Distribution<T>,
 {
-    let public = promote_to_trivial_share(net.id(), public);
+    let public = promote_to_trivial_share(state.id, public);
     eq(shared, public, net, state)
 }
 
@@ -515,7 +515,7 @@ pub fn neq_public<T: IntRing2k, N: Network>(
 where
     Standard: Distribution<T>,
 {
-    let public = promote_to_trivial_share(net.id(), public);
+    let public = promote_to_trivial_share(state.id, public);
     neq(shared, public, net, state)
 }
 

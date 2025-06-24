@@ -118,6 +118,7 @@ where
 mod plonk_utils {
     use ark_ec::pairing::Pairing;
     use circom_types::plonk::ZKey;
+    use mpc_core::MpcState;
     use rayon::prelude::*;
 
     use crate::mpc::CircomPlonkProver;
@@ -172,7 +173,7 @@ mod plonk_utils {
     pub(crate) use rayon_join8;
 
     pub(crate) fn get_witness<P: Pairing, T: CircomPlonkProver<P>>(
-        party_id: usize,
+        id: <T::State as MpcState>::PartyID,
         witness: &PlonkWitness<P, T>,
         zkey: &ZKey<P>,
         index: usize,
@@ -180,7 +181,7 @@ mod plonk_utils {
         tracing::trace!("get witness on {index}");
         let result = if index <= zkey.n_public {
             tracing::trace!("indexing public input!");
-            T::promote_to_trivial_share(party_id, witness.public_inputs[index])
+            T::promote_to_trivial_share(id, witness.public_inputs[index])
         } else if index < zkey.n_vars - zkey.n_additions {
             tracing::trace!("indexing private input!");
             witness.witness[index - zkey.n_public - 1]

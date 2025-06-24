@@ -5,6 +5,7 @@ use ark_ff::UniformRand;
 use ark_poly::univariate::DensePolynomial;
 use ark_poly::Polynomial;
 use itertools::izip;
+use mpc_core::MpcState;
 use mpc_net::Network;
 use num_traits::Zero;
 
@@ -33,7 +34,7 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
     }
 
     fn add_with_public(
-        _: usize,
+        _: <Self::State as MpcState>::PartyID,
         shared: Self::ArithmeticShare,
         public: P::ScalarField,
     ) -> Self::ArithmeticShare {
@@ -134,7 +135,10 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
         Ok(res)
     }
 
-    fn promote_to_trivial_share(_: usize, public_value: P::ScalarField) -> Self::ArithmeticShare {
+    fn promote_to_trivial_share(
+        _: <Self::State as MpcState>::PartyID,
+        public_value: P::ScalarField,
+    ) -> Self::ArithmeticShare {
         public_value
     }
 

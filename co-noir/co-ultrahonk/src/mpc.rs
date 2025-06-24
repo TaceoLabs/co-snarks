@@ -1,7 +1,7 @@
 use ark_ec::pairing::Pairing;
 use ark_poly::EvaluationDomain;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use mpc_core::ForkState;
+use mpc_core::MpcState;
 use mpc_net::Network;
 use rayon::prelude::*;
 
@@ -24,7 +24,7 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
     /// The G1 point share type
     type PointShare: std::fmt::Debug + Send + 'static;
     /// Internal state of used MPC protocol
-    type State: ForkState + Send;
+    type State: MpcState + Send;
 
     fn debug(_: Self::ArithmeticShare) -> String {
         panic!("not implemented for real protocol");
@@ -76,10 +76,18 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
     }
 
     /// Adds a public value to a share: \[c\] = \[a\] + b and stores the result in \[a\].
-    fn add_assign_public(a: &mut Self::ArithmeticShare, b: P::ScalarField, id: usize);
+    fn add_assign_public(
+        a: &mut Self::ArithmeticShare,
+        b: P::ScalarField,
+        id: <Self::State as MpcState>::PartyID,
+    );
 
     /// Elementwise addition of a public value to a share: \[c\] = \[a\] + b and stores the result in \[a\].
-    fn add_assign_public_many(a: &mut [Self::ArithmeticShare], b: &[P::ScalarField], id: usize) {
+    fn add_assign_public_many(
+        a: &mut [Self::ArithmeticShare],
+        b: &[P::ScalarField],
+        id: <Self::State as MpcState>::PartyID,
+    ) {
         a.par_iter_mut().zip(b.par_iter()).for_each(|(a, b)| {
             Self::add_assign_public(a, *b, id);
         })
@@ -89,7 +97,7 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
     fn add_with_public_many(
         public: &[P::ScalarField],
         shared: &[Self::ArithmeticShare],
-        id: usize,
+        id: <Self::State as MpcState>::PartyID,
     ) -> Vec<Self::ArithmeticShare> {
         public
             .iter()
@@ -103,7 +111,7 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
     fn add_with_public_many_iter(
         public: impl Iterator<Item = P::ScalarField>,
         shared: &[Self::ArithmeticShare],
-        id: usize,
+        id: <Self::State as MpcState>::PartyID,
     ) -> Vec<Self::ArithmeticShare> {
         public
             .zip(shared.iter())
@@ -143,7 +151,11 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
             .collect()
     }
 
-    fn add_assign_public_half_share(share: &mut P::ScalarField, public: P::ScalarField, id: usize);
+    fn add_assign_public_half_share(
+        share: &mut P::ScalarField,
+        public: P::ScalarField,
+        id: <Self::State as MpcState>::PartyID,
+    );
 
     fn mul_with_public_to_half_share(
         public: P::ScalarField,
@@ -177,7 +189,7 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
     fn add_scalar(
         shared: &[Self::ArithmeticShare],
         scalar: P::ScalarField,
-        id: usize,
+        id: <Self::State as MpcState>::PartyID,
     ) -> Vec<Self::ArithmeticShare> {
         shared
             .iter()
@@ -189,7 +201,7 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
     fn add_scalar_in_place(
         shared: &mut [Self::ArithmeticShare],
         scalar: P::ScalarField,
-        id: usize,
+        id: <Self::State as MpcState>::PartyID,
     ) {
         for x in shared.iter_mut() {
             Self::add_assign_public(x, scalar, id);
@@ -221,15 +233,18 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
     fn add_with_public(
         public: P::ScalarField,
         shared: Self::ArithmeticShare,
-        id: usize,
+        id: <Self::State as MpcState>::PartyID,
     ) -> Self::ArithmeticShare;
 
     /// Transforms a public value into a shared value: \[a\] = a.
-    fn promote_to_trivial_share(id: usize, public_value: P::ScalarField) -> Self::ArithmeticShare;
+    fn promote_to_trivial_share(
+        id: <Self::State as MpcState>::PartyID,
+        public_value: P::ScalarField,
+    ) -> Self::ArithmeticShare;
 
     /// Elementwise transformation of a vector of public values into a vector of shared values: \[a_i\] = a_i.
     fn promote_to_trivial_shares(
-        id: usize,
+        id: <Self::State as MpcState>::PartyID,
         public_values: &[P::ScalarField],
     ) -> Vec<Self::ArithmeticShare>;
 

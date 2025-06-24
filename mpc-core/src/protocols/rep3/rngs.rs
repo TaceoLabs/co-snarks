@@ -2,11 +2,12 @@
 //!
 //! This module contains implementations of rep3 rngs
 
-use super::{yao::GCUtils, PARTY_0, PARTY_1, PARTY_2};
+use super::yao::GCUtils;
 use crate::RngType;
 use ark_ec::CurveGroup;
 use ark_ff::{One, PrimeField};
 use fancy_garbling::WireMod2;
+use mpc_types::protocols::rep3::id::PartyID;
 use num_bigint::BigUint;
 use rand::{
     distributions::Standard, prelude::Distribution, seq::SliceRandom, Rng, RngCore, SeedableRng,
@@ -45,38 +46,35 @@ impl Rep3CorrelatedRng {
     }
 
     /// Generate a value that is equal on all three parties
-    pub fn generate_shared<T>(&mut self, id: usize) -> T
+    pub fn generate_shared<T>(&mut self, id: PartyID) -> T
     where
         Standard: Distribution<T>,
     {
         match id {
-            PARTY_0 => self.bitcomp1.rng2.gen(),
-            PARTY_1 => self.bitcomp1.rng2.gen(),
-            PARTY_2 => self.bitcomp1.rng1.gen(),
-            _ => unreachable!(),
+            PartyID::ID0 => self.bitcomp1.rng2.gen(),
+            PartyID::ID1 => self.bitcomp1.rng2.gen(),
+            PartyID::ID2 => self.bitcomp1.rng1.gen(),
         }
     }
 
     /// Generate a value that is equal on all two garbler parties
-    pub fn generate_garbler_randomness<T>(&mut self, id: usize) -> T
+    pub fn generate_garbler_randomness<T>(&mut self, id: PartyID) -> T
     where
         Standard: Distribution<T>,
     {
         match id {
-            PARTY_0 => panic!("Garbler should not be PartyID::ID0"),
-            PARTY_1 => self.rand.rng1.gen(),
-            PARTY_2 => self.rand.rng2.gen(),
-            _ => unreachable!(),
+            PartyID::ID0 => panic!("Garbler should not be PartyID::ID0"),
+            PartyID::ID1 => self.rand.rng1.gen(),
+            PartyID::ID2 => self.rand.rng2.gen(),
         }
     }
 
     /// Generate a random delta that is equal for the two garblers
-    pub fn generate_random_garbler_delta(&mut self, id: usize) -> Option<WireMod2> {
+    pub fn generate_random_garbler_delta(&mut self, id: PartyID) -> Option<WireMod2> {
         match id {
-            PARTY_0 => None,
-            PARTY_1 => Some(GCUtils::random_delta(&mut self.rand.rng1)),
-            PARTY_2 => Some(GCUtils::random_delta(&mut self.rand.rng2)),
-            _ => unreachable!(),
+            PartyID::ID0 => None,
+            PartyID::ID1 => Some(GCUtils::random_delta(&mut self.rand.rng1)),
+            PartyID::ID2 => Some(GCUtils::random_delta(&mut self.rand.rng2)),
         }
     }
 }

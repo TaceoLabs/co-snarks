@@ -2,9 +2,7 @@
 //!
 //! This module contains some oblivious sorting algorithms for the Rep3 protocol.
 
-use crate::protocols::rep3::{
-    network, Rep3BigUintShare, Rep3PrimeFieldShare, Rep3State, PARTY_0, PARTY_1, PARTY_2,
-};
+use crate::protocols::rep3::{network, Rep3BigUintShare, Rep3PrimeFieldShare, Rep3State};
 use crate::protocols::rep3_ring::ring::int_ring::IntRing2k;
 use crate::protocols::rep3_ring::ring::ring_impl::RingElement;
 use crate::protocols::rep3_ring::{arithmetic, conversion};
@@ -14,6 +12,7 @@ use crate::protocols::{
 };
 use ark_ff::{One, PrimeField, Zero};
 use mpc_net::Network;
+use mpc_types::protocols::rep3::id::PartyID;
 use num_bigint::BigUint;
 use rand::distributions::Standard;
 use rand::prelude::Distribution;
@@ -55,7 +54,7 @@ pub fn radix_sort_fields<F: PrimeField, N: Network>(
 
     // Does not matter whether inputs are shares or not
     for value in pub_inputs {
-        priv_inputs.push(rep3::arithmetic::promote_to_trivial_share(net0.id(), value));
+        priv_inputs.push(rep3::arithmetic::promote_to_trivial_share(state0.id, value));
     }
     apply_inv_field(&perm, &priv_inputs, net0, net1, state0, state1)
 }
@@ -175,7 +174,7 @@ fn order_and_promote_inputs(
     priv_inputs: Vec<Rep3RingShare<PermRing>>,
     pub_inputs: Vec<RingElement<PermRing>>,
     order: &[bool],
-    id: usize,
+    id: PartyID,
 ) -> Vec<Rep3RingShare<PermRing>> {
     assert_eq!(priv_inputs.len(), order.iter().filter(|x| **x).count());
     assert_eq!(pub_inputs.len(), order.iter().filter(|x| !**x).count());
@@ -210,13 +209,13 @@ fn gen_perm_ordered<F: PrimeField, N: Network>(
 
     let priv_bit_0 = inject_bit(&priv_bits, 0, net0, state0)?;
     let pub_bit_0 = inject_public_bit(pub_inputs, 0);
-    let perm = order_and_promote_inputs(priv_bit_0, pub_bit_0, order, net0.id());
+    let perm = order_and_promote_inputs(priv_bit_0, pub_bit_0, order, state0.id);
     let mut perm = gen_bit_perm(perm, vec![], net0, state0)?; // This first permutation could be optimized by not promoting the public bits
 
     for i in 1..bitsize {
         let priv_bit_i = inject_bit(&priv_bits, i, net0, state0)?;
         let pub_bit_i = inject_public_bit(pub_inputs, i);
-        let bit_i = order_and_promote_inputs(priv_bit_i, pub_bit_i, order, net0.id());
+        let bit_i = order_and_promote_inputs(priv_bit_i, pub_bit_i, order, state0.id);
         let bit_i = apply_inv(&perm, &bit_i, &[], net0, net1, state0, state1)?;
         let perm_i = gen_bit_perm(bit_i, vec![], net0, state0)?;
         perm = compose(perm, perm_i, net0, state0)?;
@@ -260,7 +259,7 @@ fn gen_bit_perm<N: Network>(
     let priv_len = priv_bits.len();
     let pub_len = pub_bits.len();
     let len = priv_len + pub_len;
-    let id = net.id();
+    let id = state.id;
 
     // Private inputs
     let mut priv_f0 = Vec::with_capacity(priv_len);
@@ -421,8 +420,8 @@ where
 {
     let len = pi.len();
     debug_assert_eq!(len, priv_input.len() + pub_input.len());
-    let result = match net.id() {
-        PARTY_0 => {
+    let result = match state.id {
+        PartyID::ID0 => {
             // has p1, p3
             let mut alpha_1 = Vec::with_capacity(len);
             let mut alpha_3 = Vec::with_capacity(len);
@@ -462,7 +461,7 @@ where
             }
             result
         }
-        PARTY_1 => {
+        PartyID::ID1 => {
             // has p2, p1
             let mut alpha_1 = Vec::with_capacity(len);
             let mut beta_2 = Vec::with_capacity(len);
@@ -500,13 +499,13 @@ where
                 result.push(Rep3RingShare::new_ring(RingElement::zero(), b));
             }
             let rcv: Vec<RingElement<T>> =
-                network::send_and_recv_many(net, PARTY_2, &rand, PARTY_2)?;
+                network::send_and_recv_many(net, PartyID::ID2, &rand, PartyID::ID2)?;
             for (res, (r1, r2)) in result.iter_mut().zip(rcv.into_iter().zip(rand)) {
                 res.a = r1 + r2;
             }
             result
         }
-        PARTY_2 => {
+        PartyID::ID2 => {
             // has p3, p2
             let mut alpha_3 = Vec::with_capacity(len);
             for _ in 0..len {
@@ -536,13 +535,12 @@ where
                 result.push(Rep3RingShare::new_ring(a, RingElement::zero()));
             }
             let rcv: Vec<RingElement<T>> =
-                network::send_and_recv_many(net, PARTY_1, &rand, PARTY_1)?;
+                network::send_and_recv_many(net, PartyID::ID1, &rand, PartyID::ID1)?;
             for (res, (r1, r2)) in result.iter_mut().zip(rcv.into_iter().zip(rand)) {
                 res.b = r1 + r2;
             }
             result
         }
-        _ => unreachable!(),
     };
     Ok(result)
 }
@@ -555,8 +553,8 @@ fn shuffle_field<F: PrimeField, N: Network>(
 ) -> eyre::Result<Vec<Rep3PrimeFieldShare<F>>> {
     let len = pi.len();
     debug_assert_eq!(len, input.len());
-    let result = match net.id() {
-        PARTY_0 => {
+    let result = match state.id {
+        PartyID::ID0 => {
             // has p1, p3
             let mut alpha_1 = Vec::with_capacity(len);
             let mut alpha_3 = Vec::with_capacity(len);
@@ -590,7 +588,7 @@ fn shuffle_field<F: PrimeField, N: Network>(
             }
             result
         }
-        PARTY_1 => {
+        PartyID::ID1 => {
             // has p2, p1
             let mut alpha_1 = Vec::with_capacity(len);
             let mut beta_2 = Vec::with_capacity(len);
@@ -622,13 +620,13 @@ fn shuffle_field<F: PrimeField, N: Network>(
                 rand.push(beta - b);
                 result.push(Rep3PrimeFieldShare::new(F::zero(), b));
             }
-            let rcv: Vec<F> = network::send_and_recv_many(net, PARTY_2, &rand, PARTY_2)?;
+            let rcv: Vec<F> = network::send_and_recv_many(net, PartyID::ID2, &rand, PartyID::ID2)?;
             for (res, (r1, r2)) in result.iter_mut().zip(rcv.into_iter().zip(rand)) {
                 res.a = r1 + r2;
             }
             result
         }
-        PARTY_2 => {
+        PartyID::ID2 => {
             // has p3, p2
             let mut alpha_3 = Vec::with_capacity(len);
             for _ in 0..len {
@@ -657,13 +655,12 @@ fn shuffle_field<F: PrimeField, N: Network>(
                 rand.push(beta - a);
                 result.push(Rep3PrimeFieldShare::new(a, F::zero()));
             }
-            let rcv: Vec<F> = network::send_and_recv_many(net, PARTY_1, &rand, PARTY_1)?;
+            let rcv: Vec<F> = network::send_and_recv_many(net, PartyID::ID1, &rand, PartyID::ID1)?;
             for (res, (r1, r2)) in result.iter_mut().zip(rcv.into_iter().zip(rand)) {
                 res.b = r1 + r2;
             }
             result
         }
-        _ => unreachable!(),
     };
     Ok(result)
 }
@@ -679,8 +676,8 @@ where
 {
     let len = pi.len();
     debug_assert_eq!(len, input.len());
-    let result = match net.id() {
-        PARTY_0 => {
+    let result = match state.id {
+        PartyID::ID0 => {
             // has p1, p3
             let mut alpha_1 = Vec::with_capacity(len);
             let mut beta_1 = Vec::with_capacity(len);
@@ -695,9 +692,9 @@ where
                 let pi_1 = pi.a.0 as usize;
                 shuffled.push(beta_1[pi_1] - alpha);
             }
-            network::send_and_recv_many(net, PARTY_2, &shuffled, PARTY_2)?
+            network::send_and_recv_many(net, PartyID::ID2, &shuffled, PartyID::ID2)?
         }
-        PARTY_1 => {
+        PartyID::ID1 => {
             // has p2, p1
             let mut alpha_1 = Vec::with_capacity(len);
             let mut beta_2 = Vec::with_capacity(len);
@@ -712,12 +709,12 @@ where
                 let pi_1 = pi.b.0 as usize;
                 shuffled.push(beta_2[pi_1] + alpha);
             }
-            network::send_and_recv_many(net, PARTY_2, &shuffled, PARTY_2)?
+            network::send_and_recv_many(net, PartyID::ID2, &shuffled, PartyID::ID2)?
         }
-        PARTY_2 => {
+        PartyID::ID2 => {
             let (delta, gamma) = rayon::join(
-                || network::recv_many(net, PARTY_0),
-                || network::recv_many(net, PARTY_1),
+                || network::recv_many(net, PartyID::ID0),
+                || network::recv_many(net, PartyID::ID1),
             );
             let delta: Vec<RingElement<T>> = delta?;
             let gamma: Vec<RingElement<T>> = gamma?;
@@ -729,14 +726,13 @@ where
                 shuffled.push(gamma[index] + delta[index]);
             }
             let (send0, send1) = rayon::join(
-                || network::send_many(net, PARTY_0, &shuffled),
-                || network::send_many(net, PARTY_1, &shuffled),
+                || network::send_many(net, PartyID::ID0, &shuffled),
+                || network::send_many(net, PartyID::ID1, &shuffled),
             );
             send0?;
             send1?;
             shuffled
         }
-        _ => unreachable!(),
     };
     Ok(result)
 }
@@ -752,15 +748,15 @@ where
 {
     let len = pi.len();
     debug_assert_eq!(len, input.len());
-    let result = match net.id() {
-        PARTY_0 => {
+    let result = match state.id {
+        PartyID::ID0 => {
             // has p1, p3
             let mut alpha_3 = Vec::with_capacity(len);
             for _ in 0..len {
                 let alpha_3_ = state.rngs.rand.random_element_rng2::<RingElement<T>>();
                 alpha_3.push(alpha_3_);
             }
-            let gamma: Vec<RingElement<T>> = network::recv_many(net, PARTY_1)?;
+            let gamma: Vec<RingElement<T>> = network::recv_many(net, PartyID::ID1)?;
             // first shuffle
             let mut shuffled_3 = vec![RingElement::zero(); len];
             for (pi, (alpha, gamma)) in pi.iter().zip(alpha_3.iter().zip(gamma)) {
@@ -783,13 +779,13 @@ where
                 result.push(Rep3RingShare::new_ring(RingElement::zero(), b));
             }
             let rcv: Vec<RingElement<T>> =
-                network::send_and_recv_many(net, PARTY_1, &rand, PARTY_1)?;
+                network::send_and_recv_many(net, PartyID::ID1, &rand, PartyID::ID1)?;
             for (res, (r1, r2)) in result.iter_mut().zip(rcv.into_iter().zip(rand)) {
                 res.a = r1 + r2;
             }
             result
         }
-        PARTY_1 => {
+        PartyID::ID1 => {
             // has p2, p1
             let mut alpha_2 = Vec::with_capacity(len);
             let mut beta_2 = Vec::with_capacity(len);
@@ -804,7 +800,7 @@ where
                 let pi_2 = pi.a.0 as usize;
                 shuffled_3[pi_2] = alpha + beta_2;
             }
-            let delta = network::send_and_recv_many(net, PARTY_0, &shuffled_3, PARTY_2)?;
+            let delta = network::send_and_recv_many(net, PartyID::ID0, &shuffled_3, PartyID::ID2)?;
             // second shuffle
             let mut beta_2_prime = beta_2;
             for (src, pi) in delta.into_iter().zip(pi) {
@@ -821,13 +817,13 @@ where
                 result.push(Rep3RingShare::new_ring(a, RingElement::zero()));
             }
             let rcv: Vec<RingElement<T>> =
-                network::send_and_recv_many(net, PARTY_0, &rand, PARTY_0)?;
+                network::send_and_recv_many(net, PartyID::ID0, &rand, PartyID::ID0)?;
             for (res, (r1, r2)) in result.iter_mut().zip(rcv.into_iter().zip(rand)) {
                 res.b = r1 + r2;
             }
             result
         }
-        PARTY_2 => {
+        PartyID::ID2 => {
             // has p3, p2
             let mut alpha_3 = Vec::with_capacity(len);
             let mut alpha_2 = Vec::with_capacity(len);
@@ -850,7 +846,7 @@ where
                 let pi_3 = pi.a.0 as usize;
                 shuffled_2[pi_3] = src - alpha;
             }
-            network::send_many(net, PARTY_1, &shuffled_2)?;
+            network::send_many(net, PartyID::ID1, &shuffled_2)?;
 
             // Opt Reshare
             let mut result = Vec::with_capacity(len);
@@ -860,7 +856,6 @@ where
             }
             result
         }
-        _ => unreachable!(),
     };
     Ok(result)
 }

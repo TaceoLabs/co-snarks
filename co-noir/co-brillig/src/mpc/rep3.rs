@@ -2,12 +2,12 @@ use super::{BrilligDriver, PlainBrilligDriver};
 use ark_ff::{One as _, PrimeField};
 use brillig::{BitSize, IntegerBitSize};
 use core::panic;
-use mpc_core::protocols::rep3::{self, Rep3PrimeFieldShare, Rep3State};
+use mpc_core::protocols::rep3::{self, PartyID, Rep3PrimeFieldShare, Rep3State};
 use mpc_core::protocols::rep3_ring::ring::bit::Bit;
 use mpc_core::protocols::rep3_ring::ring::int_ring::IntRing2k;
 use mpc_core::protocols::rep3_ring::ring::ring_impl::RingElement;
 use mpc_core::protocols::rep3_ring::{self, Rep3BitShare, Rep3RingShare};
-use mpc_core::ForkState;
+use mpc_core::MpcState;
 use mpc_net::Network;
 use num_bigint::BigUint;
 use num_traits::AsPrimitive;
@@ -18,7 +18,7 @@ use super::PlainBrilligType as Public;
 
 /// A driver for the coBrillig-VM that uses replicated secret sharing.
 pub struct Rep3BrilligDriver<'a, F: PrimeField, N: Network> {
-    id: usize,
+    id: PartyID,
     net: &'a N,
     state: Rep3State,
     plain_driver: PlainBrilligDriver<F>,
@@ -63,7 +63,7 @@ impl<'a, F: PrimeField, N: Network> Rep3BrilligDriver<'a, F, N> {
     /// Creates a new instance of the rep3 driver
     pub fn new(net: &'a N, state: Rep3State) -> Self {
         Self {
-            id: net.id(),
+            id: state.id,
             net,
             state,
             plain_driver: PlainBrilligDriver::default(),

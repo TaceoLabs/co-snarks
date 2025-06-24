@@ -13,6 +13,7 @@ use circom_types::{
     plonk::PlonkProof,
     traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
 };
+use mpc_core::MpcState;
 use mpc_net::Network;
 use num_traits::One;
 use num_traits::Zero;
@@ -124,7 +125,7 @@ where
 
     // The linearisation polynomial R(X) (see https://eprint.iacr.org/2019/953.pdf)
     fn compute_r(
-        party_id: usize,
+        id: <T::State as MpcState>::PartyID,
         domains: &Domains<P::ScalarField>,
         proof: &Round4Proof<P>,
         challenges: &Round5Challenges<P>,
@@ -186,7 +187,7 @@ where
         }
 
         for (inout, add) in poly_r_shared.iter_mut().zip(poly_r.iter()) {
-            *inout = T::add_with_public(party_id, *inout, *add);
+            *inout = T::add_with_public(id, *inout, *add);
         }
 
         let mut tmp_poly = vec![T::ArithmeticShare::default(); len];
@@ -210,14 +211,14 @@ where
 
         let r0 = eval_pi - (e3 * (proof.eval_c + challenges.gamma)) - e4;
 
-        poly_r_shared[0] = T::add_with_public(party_id, poly_r_shared[0], r0);
+        poly_r_shared[0] = T::add_with_public(id, poly_r_shared[0], r0);
         tracing::debug!("computing r polynomial done!");
         poly_r_shared
     }
 
     // The opening proof polynomial W_xi(X) (see https://eprint.iacr.org/2019/953.pdf)
     fn compute_wxi(
-        party_id: usize,
+        id: <T::State as MpcState>::PartyID,
         proof: &Round4Proof<P>,
         challenges: &Round5Challenges<P>,
         data: &PlonkData<P, T>,
@@ -250,18 +251,18 @@ where
         }
         // Sigma1
         for (inout, add) in res.iter_mut().zip(s1_poly_coeffs.iter()) {
-            *inout = T::add_with_public(party_id, *inout, challenges.v[3] * add);
+            *inout = T::add_with_public(id, *inout, challenges.v[3] * add);
         }
         // Sigma2
         for (inout, add) in res.iter_mut().zip(s2_poly_coeffs.iter()) {
-            *inout = T::add_with_public(party_id, *inout, challenges.v[4] * add);
+            *inout = T::add_with_public(id, *inout, challenges.v[4] * add);
         }
 
-        res[0] = T::add_with_public(party_id, res[0], -challenges.v[0] * proof.eval_a);
-        res[0] = T::add_with_public(party_id, res[0], -challenges.v[1] * proof.eval_b);
-        res[0] = T::add_with_public(party_id, res[0], -challenges.v[2] * proof.eval_c);
-        res[0] = T::add_with_public(party_id, res[0], -challenges.v[3] * proof.eval_s1);
-        res[0] = T::add_with_public(party_id, res[0], -challenges.v[4] * proof.eval_s2);
+        res[0] = T::add_with_public(id, res[0], -challenges.v[0] * proof.eval_a);
+        res[0] = T::add_with_public(id, res[0], -challenges.v[1] * proof.eval_b);
+        res[0] = T::add_with_public(id, res[0], -challenges.v[2] * proof.eval_c);
+        res[0] = T::add_with_public(id, res[0], -challenges.v[3] * proof.eval_s1);
+        res[0] = T::add_with_public(id, res[0], -challenges.v[4] * proof.eval_s2);
 
         Self::div_by_zerofier(&mut res, 1, challenges.xi);
 
@@ -271,7 +272,7 @@ where
 
     // The opening proof polynomial W_xiw(X) (see https://eprint.iacr.org/2019/953.pdf)
     fn compute_wxiw(
-        party_id: usize,
+        id: <T::State as MpcState>::PartyID,
         domains: &Domains<P::ScalarField>,
         proof: &Round4Proof<P>,
         challenges: &Round5Challenges<P>,
@@ -281,7 +282,7 @@ where
         let xiw = challenges.xi * domains.root_of_unity_pow;
 
         let mut res = polys.z.poly.clone();
-        res[0] = T::add_with_public(party_id, res[0], -proof.eval_zw);
+        res[0] = T::add_with_public(id, res[0], -proof.eval_zw);
         Self::div_by_zerofier(&mut res, 1, xiw);
 
         tracing::debug!("computing wxiw polynomial done!");
@@ -322,15 +323,15 @@ where
         tracing::debug!("v[3]: {}", v[3]);
         tracing::debug!("v[4]: {}", v[4]);
         let challenges = Round5Challenges::new(challenges, v);
-        let party_id = nets[0].id();
+        let id = state.id();
 
         // STEP 5.2 Compute linearisation polynomial r(X)
-        let r = Self::compute_r(party_id, &domains, &proof, &challenges, &data, &polys);
+        let r = Self::compute_r(id, &domains, &proof, &challenges, &data, &polys);
         //STEP 5.3 Compute opening proof polynomial Wxi(X)
-        let wxi = Self::compute_wxi(party_id, &proof, &challenges, &data, &polys, &r);
+        let wxi = Self::compute_wxi(id, &proof, &challenges, &data, &polys, &r);
 
         //STEP 5.4 Compute opening proof polynomial Wxiw(X)
-        let wxiw = Self::compute_wxiw(party_id, &domains, &proof, &challenges, &polys);
+        let wxiw = Self::compute_wxiw(id, &domains, &proof, &challenges, &polys);
         // Fifth output of the prover is ([Wxi]_1, [Wxiw]_1)
 
         let p_tau = &data.zkey.p_tau;

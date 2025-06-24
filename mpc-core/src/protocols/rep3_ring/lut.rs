@@ -190,7 +190,7 @@ impl<F: PrimeField> Rep3LookupTable<F> {
         match lut {
             PublicPrivateLut::Public(vec) => {
                 // There is not really a performance difference (i.e., more multiplications) when both lut and value are secret shared compared to public lut and private value. Thus we promote
-                let id = net0.id();
+                let id = state0.id;
                 let mut shared = vec
                     .iter()
                     .map(|v| arithmetic::promote_to_trivial_share(id, *v))

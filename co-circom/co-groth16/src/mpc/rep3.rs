@@ -1,7 +1,9 @@
 use ark_ec::{pairing::Pairing, CurveGroup};
-use mpc_core::protocols::rep3::{
-    arithmetic, network, pointshare, Rep3PointShare, Rep3PrimeFieldShare, Rep3State, PARTY_0,
-    PARTY_1, PARTY_2,
+use mpc_core::{
+    protocols::rep3::{
+        arithmetic, network, pointshare, PartyID, Rep3PointShare, Rep3PrimeFieldShare, Rep3State,
+    },
+    MpcState,
 };
 use mpc_net::Network;
 use rayon::prelude::*;
@@ -25,7 +27,7 @@ impl<P: Pairing> CircomGroth16Prover<P> for Rep3Groth16Driver {
     }
 
     fn evaluate_constraint(
-        party_id: usize,
+        id: <Self::State as MpcState>::PartyID,
         lhs: &[(P::ScalarField, usize)],
         public_inputs: &[P::ScalarField],
         private_witness: &[Self::ArithmeticShare],
@@ -35,7 +37,7 @@ impl<P: Pairing> CircomGroth16Prover<P> for Rep3Groth16Driver {
             if index < &public_inputs.len() {
                 let val = public_inputs[*index];
                 let mul_result = val * coeff;
-                arithmetic::add_assign_public(&mut acc, mul_result, party_id);
+                arithmetic::add_assign_public(&mut acc, mul_result, id);
             } else {
                 let current_witness = private_witness[*index - public_inputs.len()];
                 arithmetic::add_assign(&mut acc, arithmetic::mul_public(current_witness, *coeff));
@@ -45,7 +47,7 @@ impl<P: Pairing> CircomGroth16Prover<P> for Rep3Groth16Driver {
     }
 
     fn evaluate_constraint_half_share(
-        party_id: usize,
+        id: <Self::State as MpcState>::PartyID,
         lhs: &[(P::ScalarField, usize)],
         public_inputs: &[P::ScalarField],
         private_witness: &[Self::ArithmeticShare],
@@ -55,11 +57,10 @@ impl<P: Pairing> CircomGroth16Prover<P> for Rep3Groth16Driver {
             if index < &public_inputs.len() {
                 let val = public_inputs[*index];
                 let mul_result = val * coeff;
-                match party_id {
-                    PARTY_0 => acc += mul_result,
-                    PARTY_1 => {}
-                    PARTY_2 => {}
-                    _ => unreachable!(),
+                match id {
+                    PartyID::ID0 => acc += mul_result,
+                    PartyID::ID1 => {}
+                    PartyID::ID2 => {}
                 }
             } else {
                 let current_witness = private_witness[*index - public_inputs.len()];
@@ -71,7 +72,7 @@ impl<P: Pairing> CircomGroth16Prover<P> for Rep3Groth16Driver {
     }
 
     fn promote_to_trivial_shares(
-        id: usize,
+        id: <Self::State as MpcState>::PartyID,
         public_values: &[P::ScalarField],
     ) -> Vec<Self::ArithmeticShare> {
         public_values
@@ -103,15 +104,14 @@ impl<P: Pairing> CircomGroth16Prover<P> for Rep3Groth16Driver {
     }
 
     fn add_assign_points_public_hs<C: CurveGroup>(
-        id: usize,
+        id: <Self::State as MpcState>::PartyID,
         a: &mut Self::PointHalfShare<C>,
         b: &C,
     ) {
         match id {
-            PARTY_0 => *a += b,
-            PARTY_1 => {}
-            PARTY_2 => {}
-            _ => unreachable!(),
+            PartyID::ID0 => *a += b,
+            PartyID::ID1 => {}
+            PartyID::ID2 => {}
         }
     }
 
