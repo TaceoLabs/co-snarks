@@ -2,26 +2,26 @@ use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use co_builder::prelude::Polynomial;
 
-use crate::{mpc::NoirUltraHonkProver, NUM_ALPHAS};
+use crate::{mpc::NoirUltraHonkProver, mpc_prover_flavour::MPCProverFlavour};
 
-pub(crate) struct ProverMemory<T: NoirUltraHonkProver<P>, P: Pairing> {
+pub(crate) struct ProverMemory<T: NoirUltraHonkProver<P>, P: Pairing, L: MPCProverFlavour> {
     pub(crate) w_4: Polynomial<T::ArithmeticShare>, // column 3
     pub(crate) z_perm: Polynomial<T::ArithmeticShare>, // column 4
     pub(crate) lookup_inverses: Polynomial<T::ArithmeticShare>, // column 5
     pub(crate) public_input_delta: P::ScalarField,
-    pub(crate) challenges: Challenges<P::ScalarField>,
+    pub(crate) challenges: Challenges<P::ScalarField, L>,
 }
 
-pub(crate) struct Challenges<F: PrimeField> {
+pub(crate) struct Challenges<F: PrimeField, L: MPCProverFlavour> {
     pub(crate) eta_1: F,
     pub(crate) eta_2: F,
     pub(crate) eta_3: F,
     pub(crate) beta: F,
     pub(crate) gamma: F,
-    pub(crate) alphas: [F; NUM_ALPHAS], //TODO ALPHAS_ISSUE
+    pub(crate) alphas: L::Alphas<F>, //TODO ALPHAS_ISSUE
 }
 
-impl<F: PrimeField> Default for Challenges<F> {
+impl<F: PrimeField, L: MPCProverFlavour> Default for Challenges<F, L> {
     fn default() -> Self {
         Self {
             eta_1: Default::default(),
@@ -29,12 +29,12 @@ impl<F: PrimeField> Default for Challenges<F> {
             eta_3: Default::default(),
             beta: Default::default(),
             gamma: Default::default(),
-            alphas: [Default::default(); NUM_ALPHAS], //TODO ALPHAS_ISSUE
+            alphas: L::Alphas::default(), //TODO ALPHAS_ISSUE
         }
     }
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for ProverMemory<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: Pairing, L: MPCProverFlavour> Default for ProverMemory<T, P, L> {
     fn default() -> Self {
         Self {
             w_4: Default::default(),

@@ -4,7 +4,7 @@ use super::{
     small_subgroup_ipa::SharedSmallSubgroupIPAProver,
     types::ProverMemory,
 };
-use crate::{mpc::NoirUltraHonkProver, CoUtils};
+use crate::{mpc::NoirUltraHonkProver, mpc_prover_flavour::MPCProverFlavour, CoUtils};
 use co_builder::{
     prelude::{HonkCurve, ProverCrs, Utils},
     HonkProofResult,
@@ -18,9 +18,10 @@ pub(crate) struct CoDecider<
     T: NoirUltraHonkProver<P>,
     P: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
+    L: MPCProverFlavour,
 > {
     pub(crate) driver: T,
-    pub(super) memory: ProverMemory<T, P>,
+    pub(super) memory: ProverMemory<T, P, L>,
     pub(crate) has_zk: ZeroKnowledge,
     phantom_data: PhantomData<P>,
     phantom_hasher: PhantomData<H>,
@@ -30,9 +31,10 @@ impl<
         T: NoirUltraHonkProver<P>,
         P: HonkCurve<TranscriptFieldType>,
         H: TranscriptHasher<TranscriptFieldType>,
-    > CoDecider<T, P, H>
+        L: MPCProverFlavour,
+    > CoDecider<T, P, H, L>
 {
-    pub fn new(driver: T, memory: ProverMemory<T, P>, has_zk: ZeroKnowledge) -> Self {
+    pub fn new(driver: T, memory: ProverMemory<T, P, L>, has_zk: ZeroKnowledge) -> Self {
         Self {
             driver,
             memory,

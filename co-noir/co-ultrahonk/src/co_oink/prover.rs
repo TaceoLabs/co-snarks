@@ -26,10 +26,7 @@ use co_builder::{
 };
 use itertools::izip;
 use std::{array, marker::PhantomData};
-use ultrahonk::{
-    prelude::{Transcript, TranscriptFieldType, TranscriptHasher, ZeroKnowledge},
-    NUM_ALPHAS,
-};
+use ultrahonk::prelude::{Transcript, TranscriptFieldType, TranscriptHasher, ZeroKnowledge};
 
 pub(crate) struct CoOink<
     'a,

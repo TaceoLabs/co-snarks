@@ -110,7 +110,7 @@ impl<
         }
 
         let shared = partially_evaluated_polynomials
-            .into_shared_iter()
+            .shared_iter()
             .map(|x| x[0].to_owned())
             .collect::<Vec<_>>();
 

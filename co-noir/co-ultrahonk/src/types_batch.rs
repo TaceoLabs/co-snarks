@@ -1,13 +1,14 @@
 use ark_ec::pairing::Pairing;
-use co_builder::{
-    prelude::{HonkCurve, PrecomputedEntities},
-    TranscriptFieldType,
-};
-use ultrahonk::prelude::{ShiftedWitnessEntities, Univariate, WitnessEntities};
+use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
+use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
+use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
+use co_builder::{prelude::HonkCurve, prover_flavour::ProverFlavour, TranscriptFieldType};
+use ultrahonk::prelude::Univariate;
 
-pub(crate) type WitnessEntitiesBatch<T> = WitnessEntities<Vec<T>>;
-pub(crate) type PrecomputedEntitiesBatch<T> = PrecomputedEntities<Vec<T>>;
-pub(crate) type ShiftedWitnessEntitiesBatch<T> = ShiftedWitnessEntities<Vec<T>>;
+pub(crate) type WitnessEntitiesBatch<T, L> = <L as ProverFlavour>::WitnessEntities<Vec<T>>;
+pub(crate) type PrecomputedEntitiesBatch<T, L> = <L as ProverFlavour>::PrecomputedEntities<Vec<T>>;
+pub(crate) type ShiftedWitnessEntitiesBatch<T, L> =
+    <L as ProverFlavour>::ShiftedWitnessEntities<Vec<T>>;
 
 use crate::{
     co_decider::{
@@ -24,6 +25,7 @@ use crate::{
         univariates::SharedUnivariate,
     },
     mpc::NoirUltraHonkProver,
+    mpc_prover_flavour::MPCProverFlavour,
     types::AllEntities,
 };
 
@@ -31,47 +33,51 @@ type Shared<T, P> = SharedUnivariate<T, P, MAX_PARTIAL_RELATION_LENGTH>;
 type Public<P> = Univariate<<P as Pairing>::ScalarField, MAX_PARTIAL_RELATION_LENGTH>;
 
 #[derive(Default)]
-pub(crate) struct AllEntitiesBatch<T, P>
+pub(crate) struct AllEntitiesBatch<T, P, L>
 where
     T: NoirUltraHonkProver<P>,
     P: Pairing,
+    L: MPCProverFlavour,
 {
-    pub(crate) witness: WitnessEntitiesBatch<T::ArithmeticShare>,
-    pub(crate) precomputed: PrecomputedEntitiesBatch<P::ScalarField>,
-    pub(crate) shifted_witness: ShiftedWitnessEntitiesBatch<T::ArithmeticShare>,
+    pub(crate) witness: WitnessEntitiesBatch<T::ArithmeticShare, L>,
+    pub(crate) precomputed: PrecomputedEntitiesBatch<P::ScalarField, L>,
+    pub(crate) shifted_witness: ShiftedWitnessEntitiesBatch<T::ArithmeticShare, L>,
 }
 
 #[derive(Default)]
-pub(crate) struct SumCheckDataForRelation<T, P>
+pub(crate) struct SumCheckDataForRelation<T, P, L>
 where
     T: NoirUltraHonkProver<P>,
     P: Pairing,
+    L: MPCProverFlavour,
 {
     pub(crate) can_skip: bool,
-    pub(crate) all_entites: AllEntitiesBatch<T, P>,
+    pub(crate) all_entites: AllEntitiesBatch<T, P, L>,
     pub(crate) scaling_factors: Vec<P::ScalarField>,
 }
 
 #[derive(Default)]
-pub(crate) struct AllEntitiesBatchRelations<T, P>
+pub(crate) struct AllEntitiesBatchRelations<T, P, L>
 where
     T: NoirUltraHonkProver<P>,
     P: Pairing,
+    L: MPCProverFlavour,
 {
-    pub(crate) ultra_arith: SumCheckDataForRelation<T, P>,
-    pub(crate) ultra_perm: SumCheckDataForRelation<T, P>,
-    pub(crate) delta_range: SumCheckDataForRelation<T, P>,
-    pub(crate) elliptic: SumCheckDataForRelation<T, P>,
-    pub(crate) auxiliary: SumCheckDataForRelation<T, P>,
-    pub(crate) log_lookup: SumCheckDataForRelation<T, P>,
-    pub(crate) poseidon_ext: SumCheckDataForRelation<T, P>,
-    pub(crate) poseidon_int: SumCheckDataForRelation<T, P>,
+    pub(crate) ultra_arith: SumCheckDataForRelation<T, P, L>,
+    pub(crate) ultra_perm: SumCheckDataForRelation<T, P, L>,
+    pub(crate) delta_range: SumCheckDataForRelation<T, P, L>,
+    pub(crate) elliptic: SumCheckDataForRelation<T, P, L>,
+    pub(crate) auxiliary: SumCheckDataForRelation<T, P, L>,
+    pub(crate) log_lookup: SumCheckDataForRelation<T, P, L>,
+    pub(crate) poseidon_ext: SumCheckDataForRelation<T, P, L>,
+    pub(crate) poseidon_int: SumCheckDataForRelation<T, P, L>,
 }
 
-impl<T, P> SumCheckDataForRelation<T, P>
+impl<T, P, L> SumCheckDataForRelation<T, P, L>
 where
     T: NoirUltraHonkProver<P>,
     P: Pairing,
+    L: MPCProverFlavour,
 {
     fn new() -> Self {
         Self {
@@ -82,10 +88,11 @@ where
     }
 }
 
-impl<T, P> AllEntitiesBatchRelations<T, P>
+impl<T, P, L> AllEntitiesBatchRelations<T, P, L>
 where
     P: HonkCurve<TranscriptFieldType>,
     T: NoirUltraHonkProver<P>,
+    L: MPCProverFlavour,
 {
     pub fn new() -> Self {
         Self {
@@ -102,7 +109,7 @@ where
 
     pub fn fold_and_filter(
         &mut self,
-        entity: AllEntities<Shared<T, P>, Public<P>>,
+        entity: AllEntities<Shared<T, P>, Public<P>, L>,
         scaling_factor: P::ScalarField,
     ) {
         // 0xThemis TODO - for all (?) accumulator we don't need all 7 elements. Can we remove
@@ -127,251 +134,253 @@ where
     }
 }
 
-impl<T, P> AllEntitiesBatch<T, P>
+impl<T, P, L> AllEntitiesBatch<T, P, L>
 where
     P: Pairing,
     T: NoirUltraHonkProver<P>,
+    L: MPCProverFlavour,
 {
     pub fn new() -> Self {
-        let witness = WitnessEntitiesBatch::<T::ArithmeticShare>::new();
-        let precomputed = PrecomputedEntitiesBatch::<P::ScalarField>::new();
-        let shifted_witness = ShiftedWitnessEntitiesBatch::<T::ArithmeticShare>::new();
-        Self {
-            witness,
-            precomputed,
-            shifted_witness,
-        }
+        todo!("Florin   ")
+        // let witness = WitnessEntitiesBatch::<T::ArithmeticShare, L>::new();
+        // let precomputed = PrecomputedEntitiesBatch::<P::ScalarField, L>::new();
+        // let shifted_witness = ShiftedWitnessEntitiesBatch::<T::ArithmeticShare, L>::new();
+        // Self {
+        //     witness,
+        //     precomputed,
+        //     shifted_witness,
+        // }
     }
 
-    pub fn add_w_l(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_w_l(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.witness
             .w_l_mut()
             .extend(entity.witness.w_l().evaluations)
     }
 
-    pub fn add_w_r(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_w_r(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.witness
             .w_r_mut()
             .extend(entity.witness.w_r().evaluations)
     }
 
-    pub fn add_w_o(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_w_o(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.witness
             .w_o_mut()
             .extend(entity.witness.w_o().evaluations)
     }
 
-    pub fn add_w_4(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_w_4(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.witness
             .w_4_mut()
             .extend(entity.witness.w_4().evaluations)
     }
 
-    pub fn add_z_perm(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_z_perm(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.witness
             .z_perm_mut()
             .extend(entity.witness.z_perm().evaluations)
     }
 
-    pub fn add_lookup_read_tags(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_lookup_read_tags(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.witness
             .lookup_read_tags_mut()
             .extend(entity.witness.lookup_read_tags().evaluations)
     }
 
-    pub fn add_lookup_inverses(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_lookup_inverses(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.witness
             .lookup_inverses_mut()
             .extend(entity.witness.lookup_inverses().evaluations)
     }
 
-    pub fn add_lookup_read_counts(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_lookup_read_counts(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.witness
             .lookup_read_counts_mut()
             .extend(entity.witness.lookup_read_counts().evaluations)
     }
 
-    pub fn add_q_m(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_q_m(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.precomputed
             .q_m_mut()
             .extend(entity.precomputed.q_m().evaluations)
     }
 
-    pub fn add_q_l(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_q_l(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.precomputed
             .q_l_mut()
             .extend(entity.precomputed.q_l().evaluations)
     }
 
-    pub fn add_q_r(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_q_r(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.precomputed
             .q_r_mut()
             .extend(entity.precomputed.q_r().evaluations)
     }
 
-    pub fn add_q_o(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_q_o(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.precomputed
             .q_o_mut()
             .extend(entity.precomputed.q_o().evaluations)
     }
 
-    pub fn add_q_4(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_q_4(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.precomputed
             .q_4_mut()
             .extend(entity.precomputed.q_4().evaluations)
     }
 
-    pub fn add_q_c(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_q_c(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.precomputed
             .q_c_mut()
             .extend(entity.precomputed.q_c().evaluations)
     }
 
-    pub fn add_table_1(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_table_1(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.precomputed
             .table_1_mut()
             .extend(entity.precomputed.table_1().evaluations)
     }
 
-    pub fn add_table_2(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_table_2(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.precomputed
             .table_2_mut()
             .extend(entity.precomputed.table_2().evaluations)
     }
-    pub fn add_table_3(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_table_3(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.precomputed
             .table_3_mut()
             .extend(entity.precomputed.table_3().evaluations)
     }
-    pub fn add_table_4(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_table_4(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.precomputed
             .table_4_mut()
             .extend(entity.precomputed.table_4().evaluations)
     }
 
-    pub fn add_sigma_1(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_sigma_1(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.precomputed
             .sigma_1_mut()
             .extend(entity.precomputed.sigma_1().evaluations)
     }
 
-    pub fn add_sigma_2(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_sigma_2(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.precomputed
             .sigma_2_mut()
             .extend(entity.precomputed.sigma_2().evaluations)
     }
-    pub fn add_sigma_3(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_sigma_3(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.precomputed
             .sigma_3_mut()
             .extend(entity.precomputed.sigma_3().evaluations)
     }
-    pub fn add_sigma_4(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_sigma_4(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.precomputed
             .sigma_4_mut()
             .extend(entity.precomputed.sigma_4().evaluations)
     }
 
-    pub fn add_id_1(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_id_1(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.precomputed
             .id_1_mut()
             .extend(entity.precomputed.id_1().evaluations)
     }
 
-    pub fn add_id_2(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_id_2(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.precomputed
             .id_2_mut()
             .extend(entity.precomputed.id_2().evaluations)
     }
-    pub fn add_id_3(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_id_3(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.precomputed
             .id_3_mut()
             .extend(entity.precomputed.id_3().evaluations)
     }
-    pub fn add_id_4(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_id_4(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.precomputed
             .id_4_mut()
             .extend(entity.precomputed.id_4().evaluations)
     }
 
-    pub fn add_q_arith(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_q_arith(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.precomputed
             .q_arith_mut()
             .extend(entity.precomputed.q_arith().evaluations)
     }
 
-    pub fn add_q_aux(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_q_aux(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.precomputed
             .q_aux_mut()
             .extend(entity.precomputed.q_aux().evaluations)
     }
 
-    pub fn add_q_delta_range(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_q_delta_range(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.precomputed
             .q_delta_range_mut()
             .extend(entity.precomputed.q_delta_range().evaluations)
     }
 
-    pub fn add_q_elliptic(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_q_elliptic(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.precomputed
             .q_elliptic_mut()
             .extend(entity.precomputed.q_elliptic().evaluations)
     }
 
-    pub fn add_q_lookup(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_q_lookup(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.precomputed
             .q_lookup_mut()
             .extend(entity.precomputed.q_lookup().evaluations)
     }
 
-    pub fn add_q_poseidon2_external(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_q_poseidon2_external(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.precomputed
             .q_poseidon2_external_mut()
             .extend(entity.precomputed.q_poseidon2_external().evaluations)
     }
 
-    pub fn add_q_poseidon2_internal(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_q_poseidon2_internal(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.precomputed
             .q_poseidon2_internal_mut()
             .extend(entity.precomputed.q_poseidon2_internal().evaluations)
     }
 
-    pub fn add_lagrange_last(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_lagrange_last(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.precomputed
             .lagrange_last_mut()
             .extend(entity.precomputed.lagrange_last().evaluations)
     }
 
-    pub fn add_lagrange_first(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_lagrange_first(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.precomputed
             .lagrange_first_mut()
             .extend(entity.precomputed.lagrange_first().evaluations)
     }
 
-    pub fn add_shifted_w_l(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_shifted_w_l(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.shifted_witness
             .w_l_mut()
             .extend(entity.shifted_witness.w_l().evaluations)
     }
 
-    pub fn add_shifted_w_r(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_shifted_w_r(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.shifted_witness
             .w_r_mut()
             .extend(entity.shifted_witness.w_r().evaluations)
     }
 
-    pub fn add_shifted_w_o(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_shifted_w_o(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.shifted_witness
             .w_o_mut()
             .extend(entity.shifted_witness.w_o().evaluations)
     }
 
-    pub fn add_shifted_w_4(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_shifted_w_4(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.shifted_witness
             .w_4_mut()
             .extend(entity.shifted_witness.w_4().evaluations)
     }
 
-    pub fn add_shifted_z_perm(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_shifted_z_perm(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>, L>) {
         self.shifted_witness
             .z_perm_mut()
             .extend(entity.shifted_witness.z_perm().evaluations)
