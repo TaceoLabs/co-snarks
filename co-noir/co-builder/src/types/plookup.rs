@@ -1212,7 +1212,7 @@ impl<F: PrimeField> Plookup<F> {
         id: MultiTableId,
         key_a: T::AcvmType,
         key_b: T::AcvmType,
-    ) -> std::io::Result<(
+    ) -> eyre::Result<(
         Vec<(T::AcvmType, T::AcvmType)>,
         Vec<T::AcvmType>,
         Vec<T::AcvmType>,
@@ -1535,7 +1535,7 @@ impl<F: PrimeField> Plookup<F> {
         key_b_slices: &mut Vec<T::AcvmType>,
         results: &mut Vec<(T::AcvmType, T::AcvmType)>,
         driver: &mut T,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         assert!(multitable_index < FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES);
 
         let bitsize = bases[0].ilog2() as usize;
@@ -1575,7 +1575,7 @@ impl<F: PrimeField> Plookup<F> {
         key_a: T::AcvmType,
         key_b: T::AcvmType,
         is_2_to_1_lookup: bool,
-    ) -> std::io::Result<ReadData<T::AcvmType>> {
+    ) -> eyre::Result<ReadData<T::AcvmType>> {
         let mut lookup = ReadData::default();
         let values_sliced = Self::slice_and_get_values(builder, driver, id.clone(), key_a, key_b)?;
 
@@ -1699,7 +1699,7 @@ impl<F: PrimeField> Plookup<F> {
         key_a: &FieldCT<F>,
         key_b: &FieldCT<F>,
         is_2_to_1_lookup: bool,
-    ) -> std::io::Result<ReadData<FieldCT<F>>> {
+    ) -> eyre::Result<ReadData<FieldCT<F>>> {
         let key_a = key_a.normalize(builder, driver);
         let key_b = key_b.normalize(builder, driver);
 
@@ -1783,7 +1783,7 @@ impl<F: PrimeField> Plookup<F> {
         id: MultiTableId,
         key_a: &FieldCT<F>,
         key_b: &FieldCT<F>,
-    ) -> std::io::Result<FieldCT<F>> {
+    ) -> eyre::Result<FieldCT<F>> {
         let lookup = Self::get_lookup_accumulators_ct(builder, driver, id, key_a, key_b, true)?;
         Ok(lookup[ColumnIdx::C3][0].clone())
     }
@@ -1796,7 +1796,7 @@ impl<F: PrimeField> Plookup<F> {
         driver: &mut T,
         id: MultiTableId,
         key_a: &FieldCT<F>,
-    ) -> std::io::Result<FieldCT<F>> {
+    ) -> eyre::Result<FieldCT<F>> {
         let lookup = Plookup::<F>::get_lookup_accumulators_ct(
             builder,
             driver,

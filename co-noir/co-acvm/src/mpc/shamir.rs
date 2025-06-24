@@ -5,36 +5,35 @@ use co_brillig::mpc::{ShamirBrilligDriver, ShamirBrilligType};
 use mpc_core::{
     gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations},
     protocols::{
-        rep3::{network::Rep3MpcNet, yao::circuits::SHA256Table},
+        rep3::yao::circuits::SHA256Table,
         rep3_ring::lut::Rep3LookupTable,
         shamir::{
-            arithmetic, network::ShamirNetwork, pointshare, ShamirPointShare,
-            ShamirPrimeFieldShare, ShamirProtocol,
+            arithmetic, network, pointshare, ShamirPointShare, ShamirPrimeFieldShare, ShamirState,
         },
     },
+    MpcState,
 };
+use mpc_net::Network;
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 use std::{array, marker::PhantomData};
 
-pub struct ShamirAcvmSolver<F: PrimeField, N: ShamirNetwork> {
-    protocol: ShamirProtocol<F, N>,
+pub struct ShamirAcvmSolver<'a, F: PrimeField, N: Network> {
+    net: &'a N,
+    state: ShamirState<F>,
     plain_solver: PlainAcvmSolver<F>,
     phantom_data: PhantomData<F>,
 }
 
-impl<F: PrimeField, N: ShamirNetwork> ShamirAcvmSolver<F, N> {
-    pub fn new(protocol: ShamirProtocol<F, N>) -> Self {
-        let plain_solver = PlainAcvmSolver::<F>::default();
+impl<'a, F: PrimeField, N: Network> ShamirAcvmSolver<'a, F, N> {
+    /// Creates a new instance of the Shamir solver
+    pub fn new(net: &'a N, state: ShamirState<F>) -> Self {
         Self {
-            protocol,
-            plain_solver,
+            net,
+            state,
+            plain_solver: PlainAcvmSolver::default(),
             phantom_data: PhantomData,
         }
-    }
-
-    pub fn into_network(self) -> N {
-        self.protocol.network
     }
 }
 
@@ -145,20 +144,20 @@ impl<F: PrimeField> From<ShamirBrilligType<F>> for ShamirAcvmType<F> {
     }
 }
 
-impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for ShamirAcvmSolver<F, N> {
-    type Lookup = Rep3LookupTable<Rep3MpcNet>; // This is just a dummy and unused
+impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAcvmSolver<'a, F, N> {
+    type Lookup = Rep3LookupTable<F>; // This is just a dummy and unused
 
     type ArithmeticShare = ShamirPrimeFieldShare<F>;
 
     type AcvmType = ShamirAcvmType<F>;
     type AcvmPoint<C: CurveGroup<BaseField = F>> = ShamirAcvmPoint<C>;
 
-    type BrilligDriver = ShamirBrilligDriver<F, N>;
+    type BrilligDriver = ShamirBrilligDriver<'a, F, N>;
 
-    fn init_brillig_driver(&mut self) -> std::io::Result<Self::BrilligDriver> {
-        Ok(ShamirBrilligDriver::with_protocol(
-            self.protocol.fork_with_pairs(0)?, // TODO maybe have some pairs here
-        ))
+    fn init_brillig_driver(&mut self) -> eyre::Result<Self::BrilligDriver> {
+        // TODO we just copy the net ref here this is not safe if used concurrently
+        // TODO maybe take corr rand pairs here?
+        Ok(ShamirBrilligDriver::new(self.net, self.state.fork(0)?))
     }
 
     fn parse_brillig_result(
@@ -175,10 +174,10 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         Self::AcvmType::default()
     }
 
-    fn shared_zeros(&mut self, len: usize) -> std::io::Result<Vec<Self::AcvmType>> {
+    fn shared_zeros(&mut self, len: usize) -> eyre::Result<Vec<Self::AcvmType>> {
         // TODO: This is not the best implementaiton for shared zeros
         let trivial_zeros = vec![F::zero(); len];
-        let res = self.protocol.degree_reduce_vec(trivial_zeros)?;
+        let res = network::degree_reduce_many(self.net, &mut self.state, trivial_zeros)?;
         Ok(res.into_iter().map(ShamirAcvmType::from).collect())
     }
 
@@ -203,7 +202,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         cond: Self::AcvmType,
         truthy: Self::AcvmType,
         falsy: Self::AcvmType,
-    ) -> std::io::Result<Self::AcvmType> {
+    ) -> eyre::Result<Self::AcvmType> {
         match (cond, truthy, falsy) {
             (ShamirAcvmType::Public(cond), truthy, falsy) => {
                 assert!(cond.is_one() || cond.is_zero());
@@ -299,7 +298,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         &mut self,
         secret_1: Self::AcvmType,
         secret_2: Self::AcvmType,
-    ) -> std::io::Result<Self::AcvmType> {
+    ) -> eyre::Result<Self::AcvmType> {
         match (secret_1, secret_2) {
             (ShamirAcvmType::Public(secret_1), ShamirAcvmType::Public(secret_2)) => {
                 Ok(ShamirAcvmType::Public(secret_1 * secret_2))
@@ -311,22 +310,22 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
                 ShamirAcvmType::Shared(arithmetic::mul_public(secret_1, secret_2)),
             ),
             (ShamirAcvmType::Shared(secret_1), ShamirAcvmType::Shared(secret_2)) => {
-                let result = arithmetic::mul(secret_1, secret_2, &mut self.protocol)?;
+                let result = arithmetic::mul(secret_1, secret_2, self.net, &mut self.state)?;
                 Ok(ShamirAcvmType::Shared(result))
             }
         }
     }
 
-    fn invert(&mut self, secret: Self::AcvmType) -> std::io::Result<Self::AcvmType> {
+    fn invert(&mut self, secret: Self::AcvmType) -> eyre::Result<Self::AcvmType> {
         match secret {
             ShamirAcvmType::Public(secret) => {
-                let inv = secret.inverse().ok_or_else(|| {
-                    std::io::Error::new(std::io::ErrorKind::InvalidInput, "Cannot invert zero")
-                })?;
+                let inv = secret
+                    .inverse()
+                    .ok_or_else(|| eyre::eyre!("Cannot invert zero"))?;
                 Ok(ShamirAcvmType::Public(inv))
             }
             ShamirAcvmType::Shared(secret) => {
-                let inv = arithmetic::inv(secret, &mut self.protocol)?;
+                let inv = arithmetic::inv(secret, self.net, &mut self.state)?;
                 Ok(ShamirAcvmType::Shared(inv))
             }
         }
@@ -382,7 +381,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         c: F,
         lhs: Self::AcvmType,
         rhs: Self::AcvmType,
-    ) -> std::io::Result<Self::AcvmType> {
+    ) -> eyre::Result<Self::AcvmType> {
         let result = match (lhs, rhs) {
             (ShamirAcvmType::Public(lhs), ShamirAcvmType::Public(rhs)) => {
                 ShamirAcvmType::Public(lhs * rhs * c)
@@ -392,7 +391,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
                 ShamirAcvmType::Shared(arithmetic::mul_public(shared, public))
             }
             (ShamirAcvmType::Shared(lhs), ShamirAcvmType::Shared(rhs)) => {
-                let shared_mul = arithmetic::mul(lhs, rhs, &mut self.protocol)?;
+                let shared_mul = arithmetic::mul(lhs, rhs, self.net, &mut self.state)?;
                 ShamirAcvmType::Shared(arithmetic::mul_public(shared_mul, c))
             }
         };
@@ -413,11 +412,11 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
                 ShamirAcvmType::Shared(arithmetic::div_shared_by_public(arithmetic::neg(c), q_l)?)
             }
             (ShamirAcvmType::Shared(q_l), ShamirAcvmType::Public(c)) => {
-                let result = arithmetic::div_public_by_shared(-c, q_l, &mut self.protocol)?;
+                let result = arithmetic::div_public_by_shared(-c, q_l, self.net, &mut self.state)?;
                 ShamirAcvmType::Shared(result)
             }
             (ShamirAcvmType::Shared(q_l), ShamirAcvmType::Shared(c)) => {
-                let result = arithmetic::div(arithmetic::neg(c), q_l, &mut self.protocol)?;
+                let result = arithmetic::div(arithmetic::neg(c), q_l, self.net, &mut self.state)?;
                 ShamirAcvmType::Shared(result)
             }
         };
@@ -435,7 +434,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         &mut self,
         _index: Self::AcvmType,
         _lut: &<Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::LutType,
-    ) -> std::io::Result<Self::AcvmType> {
+    ) -> eyre::Result<Self::AcvmType> {
         panic!("read_lut_by_acvm_type: Operation atm not supported")
     }
 
@@ -443,7 +442,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         &mut self,
         _index: Self::AcvmType,
         _luts: &[Vec<F>],
-    ) -> std::io::Result<Vec<Self::AcvmType>> {
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
         panic!("read_from_public_luts: Operation atm not supported")
     }
 
@@ -452,7 +451,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         _index: Self::AcvmType,
         _value: Self::AcvmType,
         _lut: &mut <Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::LutType,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         panic!("write_lut_by_acvm_type: Operation atm not supported")
     }
 
@@ -460,7 +459,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         &mut self,
         _index: Self::ArithmeticShare,
         _len: usize,
-    ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
         panic!("one_hot_vector_from_shared_index: Operation atm not supported")
     }
 
@@ -469,7 +468,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         _ohv: &[Self::ArithmeticShare],
         _value: Self::ArithmeticShare,
         _lut: &mut [Self::ArithmeticShare],
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         panic!("write_to_shared_lut_from_ohv: Operation atm not supported")
     }
 
@@ -504,8 +503,8 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         }
     }
 
-    fn open_many(&mut self, a: &[Self::ArithmeticShare]) -> std::io::Result<Vec<F>> {
-        arithmetic::open_vec(a, &mut self.protocol)
+    fn open_many(&mut self, a: &[Self::ArithmeticShare]) -> eyre::Result<Vec<F>> {
+        arithmetic::open_vec(a, self.net, &mut self.state)
     }
 
     fn promote_to_trivial_share(&mut self, public_value: F) -> Self::ArithmeticShare {
@@ -521,7 +520,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         _input: Self::ArithmeticShare,
         _total_bit_size_per_field: usize,
         _decompose_bit_size: usize,
-    ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
         panic!("functionality decompose_arithmetic not feasible for Shamir")
     }
     fn decompose_arithmetic_many(
@@ -529,7 +528,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         _input: &[Self::ArithmeticShare],
         _total_bit_size_per_field: usize,
         _decompose_bit_size: usize,
-    ) -> std::io::Result<Vec<Vec<Self::ArithmeticShare>>> {
+    ) -> eyre::Result<Vec<Vec<Self::ArithmeticShare>>> {
         panic!("functionality decompose_arithmetic_many not feasible for Shamir")
     }
 
@@ -537,7 +536,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         &mut self,
         inputs: &[Self::AcvmType],
         bitsize: usize,
-    ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
         if inputs.iter().any(|x| Self::is_shared(x)) {
             panic!("functionality sort not feasible for Shamir")
         } else {
@@ -567,7 +566,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         _msb: u8,
         _lsb: u8,
         _bitsize: usize,
-    ) -> std::io::Result<[Self::ArithmeticShare; 3]> {
+    ) -> eyre::Result<[Self::ArithmeticShare; 3]> {
         panic!("functionality slice not feasible for Shamir")
     }
 
@@ -575,7 +574,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         &mut self,
         _input: Self::AcvmType,
         _shift: usize,
-    ) -> std::io::Result<Self::AcvmType> {
+    ) -> eyre::Result<Self::AcvmType> {
         panic!("functionality right_shift not feasible for Shamir")
     }
 
@@ -584,7 +583,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         lhs: Self::AcvmType,
         rhs: Self::AcvmType,
         num_bits: u32,
-    ) -> std::io::Result<Self::AcvmType> {
+    ) -> eyre::Result<Self::AcvmType> {
         debug_assert!(num_bits <= 128);
         let mask = (BigUint::one() << num_bits) - BigUint::one();
         match (lhs, rhs) {
@@ -604,7 +603,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         lhs: Self::AcvmType,
         rhs: Self::AcvmType,
         num_bits: u32,
-    ) -> std::io::Result<Self::AcvmType> {
+    ) -> eyre::Result<Self::AcvmType> {
         debug_assert!(num_bits <= 128);
         let mask = (BigUint::one() << num_bits) - BigUint::one();
         match (lhs, rhs) {
@@ -626,7 +625,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         _basis_bits: usize,
         _total_bitsize: usize,
         _rotation: usize,
-    ) -> std::io::Result<(
+    ) -> eyre::Result<(
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
@@ -641,7 +640,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         _basis_bits: usize,
         _total_bitsize: usize,
         _rotation: usize,
-    ) -> std::io::Result<(
+    ) -> eyre::Result<(
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
@@ -656,7 +655,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         _basis_bits: &[u64],
         _rotation: &[usize],
         _filter: &[bool],
-    ) -> std::io::Result<(
+    ) -> eyre::Result<(
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
@@ -669,7 +668,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         _key: &[Self::AcvmType],
         _inputs: Vec<&[Self::ArithmeticShare]>,
         _bitsize: usize,
-    ) -> std::io::Result<Vec<Vec<Self::ArithmeticShare>>> {
+    ) -> eyre::Result<Vec<Vec<Self::ArithmeticShare>>> {
         panic!("functionality sort_vec_by not feasible for Shamir")
     }
 
@@ -677,12 +676,9 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         &mut self,
         mut input: Vec<Self::AcvmType>,
         poseidon2: &Poseidon2<F, T, D>,
-    ) -> std::io::Result<Vec<Self::AcvmType>> {
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
         if input.len() != T {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!("Expected {} values but encountered {}", T, input.len(),),
-            ));
+            eyre::bail!("Expected {} values but encountered {}", T, input.len());
         }
 
         if input.iter().any(|x| Self::is_shared(x)) {
@@ -693,11 +689,12 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
                 }
                 ShamirAcvmType::Shared(shared) => shared,
             });
-            let mut precomp = poseidon2.precompute_shamir(1, &mut self.protocol)?;
+            let mut precomp = poseidon2.precompute_shamir(1, self.net, &mut self.state)?;
             poseidon2.shamir_permutation_in_place_with_precomputation(
                 &mut shared,
                 &mut precomp,
-                &mut self.protocol,
+                self.net,
+                &mut self.state,
             )?;
 
             for (src, des) in shared.into_iter().zip(input.iter_mut()) {
@@ -726,11 +723,11 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         &mut self,
         num_poseidon: usize,
         poseidon2: &Poseidon2<F, T, D>,
-    ) -> std::io::Result<Poseidon2Precomputations<Self::ArithmeticShare>> {
+    ) -> eyre::Result<Poseidon2Precomputations<Self::ArithmeticShare>> {
         // Prepare enough randomness
-        self.protocol
-            .buffer_triples(poseidon2.rand_required(num_poseidon, true))?;
-        poseidon2.precompute_shamir(num_poseidon, &mut self.protocol)
+        self.state
+            .buffer_triples(self.net, poseidon2.rand_required(num_poseidon, true))?;
+        poseidon2.precompute_shamir(num_poseidon, self.net, &mut self.state)
     }
 
     fn poseidon2_external_round_inplace_with_precomp<const T: usize, const D: u64>(
@@ -739,8 +736,8 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         r: usize,
         precomp: &mut Poseidon2Precomputations<Self::ArithmeticShare>,
         poseidon2: &Poseidon2<F, T, D>,
-    ) -> std::io::Result<()> {
-        poseidon2.shamir_external_round_precomp(input, r, precomp, &mut self.protocol)
+    ) -> eyre::Result<()> {
+        poseidon2.shamir_external_round_precomp(input, r, precomp, self.net, &mut self.state)
     }
 
     fn poseidon2_internal_round_inplace_with_precomp<const T: usize, const D: u64>(
@@ -749,13 +746,13 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         r: usize,
         precomp: &mut Poseidon2Precomputations<Self::ArithmeticShare>,
         poseidon2: &Poseidon2<F, T, D>,
-    ) -> std::io::Result<()> {
-        poseidon2.shamir_internal_round_precomp(input, r, precomp, &mut self.protocol)
+    ) -> eyre::Result<()> {
+        poseidon2.shamir_internal_round_precomp(input, r, precomp, self.net, &mut self.state)
     }
 
     fn get_public_lut(
         _lut: &<Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::LutType,
-    ) -> std::io::Result<&Vec<F>> {
+    ) -> eyre::Result<&Vec<F>> {
         panic!("functionality get_public_lut not feasible for Shamir")
     }
 
@@ -765,11 +762,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         panic!("functionality is_public_lut not feasible for Shamir")
     }
 
-    fn equal(
-        &mut self,
-        _a: &Self::AcvmType,
-        _b: &Self::AcvmType,
-    ) -> std::io::Result<Self::AcvmType> {
+    fn equal(&mut self, _a: &Self::AcvmType, _b: &Self::AcvmType) -> eyre::Result<Self::AcvmType> {
         panic!("functionality equal not feasible for Shamir")
     }
 
@@ -779,7 +772,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         _scalars_lo: &[Self::AcvmType],
         _scalars_hi: &[Self::AcvmType],
         _pedantic_solving: bool,
-    ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
+    ) -> eyre::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
         panic!("functionality multi_scalar_mul not feasible for Shamir")
     }
 
@@ -788,22 +781,18 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         _x: Self::AcvmType,
         _y: Self::AcvmType,
         _is_infinity: Self::AcvmType,
-    ) -> std::io::Result<Self::AcvmPoint<C>> {
+    ) -> eyre::Result<Self::AcvmPoint<C>> {
         panic!("functionality field_share_to_pointshare not feasible for Shamir")
     }
 
     fn pointshare_to_field_shares<C: CurveGroup<BaseField = F>>(
         &mut self,
         _point: Self::AcvmPoint<C>,
-    ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
+    ) -> eyre::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
         panic!("functionality pointshare_to_field_shares not feasible for Shamir")
     }
 
-    fn gt(
-        &mut self,
-        _lhs: Self::AcvmType,
-        _rhs: Self::AcvmType,
-    ) -> std::io::Result<Self::AcvmType> {
+    fn gt(&mut self, _lhs: Self::AcvmType, _rhs: Self::AcvmType) -> eyre::Result<Self::AcvmType> {
         panic!("functionality gt not feasible for Shamir")
     }
 
@@ -811,7 +800,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         &mut self,
         _point: Self::AcvmPoint<C>,
         _value: Self::AcvmPoint<C>,
-    ) -> std::io::Result<Self::AcvmPoint<C>> {
+    ) -> eyre::Result<Self::AcvmPoint<C>> {
         panic!("functionality set_point_to_value_if_zero not feasible for Shamir")
     }
 
@@ -819,14 +808,14 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         &mut self,
         _state: &[Self::AcvmType; 8],
         _message: &[Self::AcvmType; 16],
-    ) -> std::io::Result<Vec<Self::AcvmType>> {
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
         panic!("functionality sha256_compression not feasible for Shamir")
     }
 
     fn sha256_get_overflow_bit(
         &mut self,
         _input: Self::ArithmeticShare,
-    ) -> std::io::Result<Self::ArithmeticShare> {
+    ) -> eyre::Result<Self::ArithmeticShare> {
         panic!("functionality sha256_get_overflow_bit not feasible for Shamir")
     }
 
@@ -838,7 +827,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         _rotation: &[u32],
         _total_bitsize: usize,
         _base: u64,
-    ) -> std::io::Result<(
+    ) -> eyre::Result<(
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
@@ -857,7 +846,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         _base: u64,
         _total_output_bitlen_per_field: usize,
         _table_type: &SHA256Table,
-    ) -> std::io::Result<(
+    ) -> eyre::Result<(
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
@@ -869,7 +858,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         &mut self,
         _message_input: Vec<Self::AcvmType>,
         _num_bits: &[usize],
-    ) -> std::io::Result<Vec<Self::AcvmType>> {
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
         panic!("functionality blake2s_hash not feasible for Shamir")
     }
 
@@ -877,7 +866,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         &mut self,
         _message_input: Vec<Self::AcvmType>,
         _num_bits: &[usize],
-    ) -> std::io::Result<Vec<Self::AcvmType>> {
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
         panic!("functionality blake2s_hash not feasible for Shamir")
     }
 
@@ -889,7 +878,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         _input2_x: Self::AcvmType,
         _input2_y: Self::AcvmType,
         _input2_infinite: Self::AcvmType,
-    ) -> std::io::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
+    ) -> eyre::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
         panic!("functionality embedded_curve_add not feasible for Shamir")
     }
 }

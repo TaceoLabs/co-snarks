@@ -14,13 +14,14 @@ use co_acvm::{PlainAcvmSolver, Rep3AcvmSolver, ShamirAcvmSolver};
 use co_builder::prelude::GenericUltraCircuitBuilder;
 use co_builder::prelude::ProverCrs;
 use mpc::NoirUltraHonkProver;
+use mpc_net::Network;
 
 pub type PlainCoBuilder<P> =
     GenericUltraCircuitBuilder<P, PlainAcvmSolver<<P as Pairing>::ScalarField>>;
-pub type Rep3CoBuilder<P, N> =
-    GenericUltraCircuitBuilder<P, Rep3AcvmSolver<<P as Pairing>::ScalarField, N>>;
-pub type ShamirCoBuilder<P, N> =
-    GenericUltraCircuitBuilder<P, ShamirAcvmSolver<<P as Pairing>::ScalarField, N>>;
+pub type Rep3CoBuilder<'a, P, N> =
+    GenericUltraCircuitBuilder<P, Rep3AcvmSolver<'a, <P as Pairing>::ScalarField, N>>;
+pub type ShamirCoBuilder<'a, P, N> =
+    GenericUltraCircuitBuilder<P, ShamirAcvmSolver<'a, <P as Pairing>::ScalarField, N>>;
 
 pub(crate) const NUM_ALPHAS: usize = ultrahonk::NUM_ALPHAS;
 // The log of the max circuit size assumed in order to achieve constant sized Honk proofs
@@ -45,16 +46,19 @@ impl CoUtils {
         T::msm_public_points(&crs[..len], poly)
     }
 
-    pub(crate) fn batch_invert<T: NoirUltraHonkProver<P>, P: Pairing>(
-        driver: &mut T,
+    pub(crate) fn batch_invert<T: NoirUltraHonkProver<P>, P: Pairing, N: Network>(
         poly: &mut [T::ArithmeticShare],
-    ) -> std::io::Result<()> {
-        driver.inv_many_in_place(poly)
+        net: &N,
+        state: &mut T::State,
+    ) -> eyre::Result<()> {
+        T::inv_many_in_place(poly, net, state)
     }
-    pub(crate) fn batch_invert_leaking_zeros<T: NoirUltraHonkProver<P>, P: Pairing>(
-        driver: &mut T,
+
+    pub(crate) fn batch_invert_leaking_zeros<T: NoirUltraHonkProver<P>, P: Pairing, N: Network>(
         poly: &mut [T::ArithmeticShare],
-    ) -> std::io::Result<()> {
-        driver.inv_many_in_place_leaking_zeros(poly)
+        net: &N,
+        state: &mut T::State,
+    ) -> eyre::Result<()> {
+        T::inv_many_in_place_leaking_zeros(poly, net, state)
     }
 }

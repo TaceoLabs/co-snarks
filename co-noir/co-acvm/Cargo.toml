@@ -24,6 +24,7 @@ eyre.workspace = true
 intmap.workspace = true
 itertools.workspace = true
 mpc-core = { version = "0.9.0", path = "../../mpc-core" }
+mpc-net = { version = "0.4.0", path = "../../mpc-net" }
 noirc-abi.workspace = true
 noirc-artifacts.workspace = true
 serde.workspace = true

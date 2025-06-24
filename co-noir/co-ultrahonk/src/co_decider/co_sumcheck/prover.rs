@@ -15,6 +15,7 @@ use crate::{
 };
 use co_builder::prelude::{HonkCurve, RowDisablingPolynomial};
 use co_builder::HonkProofResult;
+use mpc_net::Network;
 use ultrahonk::{
     prelude::{
         GateSeparatorPolynomial, Transcript, TranscriptFieldType, TranscriptHasher, Univariate,
@@ -27,7 +28,8 @@ impl<
         T: NoirUltraHonkProver<P>,
         P: HonkCurve<TranscriptFieldType>,
         H: TranscriptHasher<TranscriptFieldType>,
-    > CoDecider<T, P, H>
+        N: Network,
+    > CoDecider<'_, T, P, H, N>
 {
     pub(crate) fn partially_evaluate_init(
         partially_evaluated_poly: &mut PartiallyEvaluatePolys<T, P>,
@@ -97,7 +99,8 @@ impl<
     }
 
     fn extract_claimed_evaluations(
-        driver: &mut T,
+        net: &N,
+        state: &mut T::State,
         partially_evaluated_polynomials: PartiallyEvaluatePolys<T, P>,
     ) -> HonkProofResult<ClaimedEvaluations<P::ScalarField>> {
         let mut multivariate_evaluations = ClaimedEvaluations::default();
@@ -114,7 +117,7 @@ impl<
             .map(|x| x[0].to_owned())
             .collect::<Vec<_>>();
 
-        let opened = driver.open_many(&shared)?;
+        let opened = T::open_many(&shared, net, state)?;
 
         for (src, des) in opened
             .into_iter()
@@ -151,14 +154,15 @@ impl<
         // In the first round, we compute the first univariate polynomial and populate the book-keeping table of
         // #partially_evaluated_polynomials, which has \f$ n/2 \f$ rows and \f$ N \f$ columns. When the Flavor has ZK,
         // compute_univariate also takes into account the zk_sumcheck_data.
-        let round_univariate = sum_check_round.compute_univariate::<T, P>(
-            &mut self.driver,
+        let round_univariate = sum_check_round.compute_univariate::<T, P, N>(
+            self.net,
+            self.state,
             round_idx,
             &self.memory.relation_parameters,
             &gate_separators,
             &self.memory.polys,
         )?;
-        let round_univariate = self.driver.open_many(&round_univariate.evaluations)?;
+        let round_univariate = T::open_many(&round_univariate.evaluations, self.net, self.state)?;
 
         // Place the evaluations of the round univariate into transcript.
         transcript.send_fr_iter_to_verifier::<P, _>(
@@ -188,15 +192,17 @@ impl<
             // Write the round univariate to the transcript
             tracing::trace!("Sumcheck prove round {}", round_idx);
 
-            let round_univariate = sum_check_round.compute_univariate::<T, P>(
-                &mut self.driver,
+            let round_univariate = sum_check_round.compute_univariate::<T, P, N>(
+                self.net,
+                self.state,
                 round_idx,
                 &self.memory.relation_parameters,
                 &gate_separators,
                 &partially_evaluated_polys,
             )?;
 
-            let round_univariate = self.driver.open_many(&round_univariate.evaluations)?;
+            let round_univariate =
+                T::open_many(&round_univariate.evaluations, self.net, self.state)?;
 
             // Place the evaluations of the round univariate into transcript.
             transcript.send_fr_iter_to_verifier::<P, _>(
@@ -232,7 +238,7 @@ impl<
         // Claimed evaluations of Prover polynomials are extracted and added to the transcript. When Flavor has ZK, the
         // evaluations of all witnesses are masked.
         let multivariate_evaluations =
-            Self::extract_claimed_evaluations(&mut self.driver, partially_evaluated_polys)?;
+            Self::extract_claimed_evaluations(self.net, self.state, partially_evaluated_polys)?;
         Self::add_evals_to_transcript(transcript, &multivariate_evaluations);
 
         let res = SumcheckOutput {
@@ -273,8 +279,9 @@ impl<
         // In the first round, we compute the first univariate polynomial and populate the book-keeping table of
         // #partially_evaluated_polynomials, which has \f$ n/2 \f$ rows and \f$ N \f$ columns. When the Flavor has ZK,
         // compute_univariate also takes into account the zk_sumcheck_data.
-        let round_univariate = sum_check_round.compute_univariate_zk::<T, P>(
-            &mut self.driver,
+        let round_univariate = sum_check_round.compute_univariate_zk::<T, P, N>(
+            self.net,
+            self.state,
             round_idx,
             &self.memory.relation_parameters,
             &gate_separators,
@@ -282,7 +289,7 @@ impl<
             zk_sumcheck_data,
             &mut row_disabling_polynomial,
         )?;
-        let round_univariate = self.driver.open_many(&round_univariate.evaluations)?;
+        let round_univariate = T::open_many(&round_univariate.evaluations, self.net, self.state)?;
 
         // Place the evaluations of the round univariate into transcript.
         transcript.send_fr_iter_to_verifier::<P, _>(
@@ -313,8 +320,9 @@ impl<
             tracing::trace!("Sumcheck prove round {}", round_idx);
             // Write the round univariate to the transcript
 
-            let round_univariate = sum_check_round.compute_univariate_zk::<T, P>(
-                &mut self.driver,
+            let round_univariate = sum_check_round.compute_univariate_zk::<T, P, N>(
+                self.net,
+                self.state,
                 round_idx,
                 &self.memory.relation_parameters,
                 &gate_separators,
@@ -322,7 +330,8 @@ impl<
                 zk_sumcheck_data,
                 &mut row_disabling_polynomial,
             )?;
-            let round_univariate = self.driver.open_many(&round_univariate.evaluations)?;
+            let round_univariate =
+                T::open_many(&round_univariate.evaluations, self.net, self.state)?;
 
             // Place the evaluations of the round univariate into transcript.
             transcript.send_fr_iter_to_verifier::<P, _>(
@@ -362,7 +371,7 @@ impl<
         // Claimed evaluations of Prover polynomials are extracted and added to the transcript. When Flavor has ZK, the
         // evaluations of all witnesses are masked.
         let multivariate_evaluations =
-            Self::extract_claimed_evaluations(&mut self.driver, partially_evaluated_polys)?;
+            Self::extract_claimed_evaluations(self.net, self.state, partially_evaluated_polys)?;
         Self::add_evals_to_transcript(transcript, &multivariate_evaluations);
 
         // The evaluations of Libra uninvariates at \f$ g_0(u_0), \ldots, g_{d-1} (u_{d-1}) \f$ are added to the
@@ -371,7 +380,7 @@ impl<
         for libra_eval in &zk_sumcheck_data.libra_evaluations {
             libra_evaluation = T::add(libra_evaluation, *libra_eval);
         }
-        let libra_evaluation = T::open_many(&mut self.driver, &[libra_evaluation])?[0];
+        let libra_evaluation = T::open_many(&[libra_evaluation], self.net, self.state)?[0];
         transcript
             .send_fr_to_verifier::<P>("Libra:claimed_evaluation".to_string(), libra_evaluation);
 

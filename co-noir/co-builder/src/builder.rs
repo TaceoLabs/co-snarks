@@ -745,7 +745,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         constraint: &BlockConstraint<P::ScalarField>,
         has_valid_witness_assignments: bool,
         driver: &mut T,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         let mut init = Vec::with_capacity(constraint.init.len());
         for inp in constraint.init.iter() {
             let value: FieldCT<<P as Pairing>::ScalarField> = self.poly_to_field_ct(inp);
@@ -836,7 +836,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         &mut self,
         driver: &mut T,
         constraint_system: &AcirFormat<P::ScalarField>,
-    ) -> std::io::Result<(
+    ) -> eyre::Result<(
         HashMap<u32, usize>,
         Vec<Vec<Vec<T::ArithmeticShare>>>,
         Vec<(bool, usize)>,
@@ -1063,7 +1063,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         self.public_inputs.push(witness_index);
     }
 
-    fn construct_default(&mut self, driver: &mut T) -> std::io::Result<AggregationState<P, T>> {
+    fn construct_default(&mut self, driver: &mut T) -> eyre::Result<AggregationState<P, T>> {
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/911): These are pairing points extracted from a valid
         // proof. This is a workaround because we can't represent the point at infinity in biggroup yet.
         let x0_val = Utils::field_from_hex_string::<P::ScalarField>(
@@ -1147,7 +1147,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         has_valid_witness_assignments: bool,
         init: Vec<FieldCT<P::ScalarField>>,
         driver: &mut T,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         let mut table = RamTable::new(init);
 
         for op in constraint.trace.iter() {
@@ -1188,7 +1188,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         driver: &mut T,
         min_wit_index: u32, // Specify to reduce LUT size
         max_wit_index: u32, // Specify to reduce LUT size
-    ) -> std::io::Result<T::AcvmType> {
+    ) -> eyre::Result<T::AcvmType> {
         debug_assert!(max_wit_index >= min_wit_index);
         let direct_variables = self
             .real_variable_index
@@ -1383,7 +1383,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         ram_id: usize,
         index_value: usize,
         value_witness: u32,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         assert!(self.ram_arrays.len() > ram_id);
         let index_witness = if index_value == 0 {
             self.zero_idx
@@ -1471,7 +1471,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         rom_id: usize,
         index_witness: u32,
         driver: &mut T,
-    ) -> std::io::Result<u32> {
+    ) -> eyre::Result<u32> {
         assert!(self.rom_arrays.len() > rom_id);
         let val = self.get_variable(index_witness as usize);
 
@@ -1516,7 +1516,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         rom_id: usize,
         index_witness: u32,
         driver: &mut T,
-    ) -> std::io::Result<[u32; 2]> {
+    ) -> eyre::Result<[u32; 2]> {
         assert!(self.rom_arrays.len() > rom_id);
         let val = self.get_variable(index_witness as usize);
 
@@ -1571,7 +1571,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         ram_id: usize,
         index_witness: u32,
         driver: &mut T,
-    ) -> std::io::Result<u32> {
+    ) -> eyre::Result<u32> {
         assert!(self.ram_arrays.len() > ram_id);
         let index = self.get_variable(index_witness as usize);
 
@@ -1644,7 +1644,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         ram_id: usize,
         index_witness: u32,
         value_witness: u32,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         assert!(self.ram_arrays.len() > ram_id);
         let index = self.get_variable(index_witness as usize);
 
@@ -1873,7 +1873,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         &mut self,
         constraint: &Poseidon2Constraint<P::ScalarField>,
         driver: &mut T,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         const STATE_T: usize = 4;
         const D: u64 = 5;
 
@@ -1903,21 +1903,21 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         Ok(())
     }
 
-    fn process_rom_arrays(&mut self, driver: &mut T) -> std::io::Result<()> {
+    fn process_rom_arrays(&mut self, driver: &mut T) -> eyre::Result<()> {
         for i in 0..self.rom_arrays.len() {
             self.process_rom_array(i, driver)?;
         }
         Ok(())
     }
 
-    fn process_ram_arrays(&mut self, driver: &mut T) -> std::io::Result<()> {
+    fn process_ram_arrays(&mut self, driver: &mut T) -> eyre::Result<()> {
         for i in 0..self.ram_arrays.len() {
             self.process_ram_array(i, driver)?;
         }
         Ok(())
     }
 
-    fn process_range_lists(&mut self, driver: &mut T) -> std::io::Result<()> {
+    fn process_range_lists(&mut self, driver: &mut T) -> eyre::Result<()> {
         // We copy due to mutability issues
         let mut lists = self
             .range_lists
@@ -1997,7 +1997,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         read_tag: u32,
         sorted_list_tag: u32,
         driver: &mut T,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         let records = &self.rom_arrays[rom_id].records;
         let key: Vec<_> = records.iter().map(|y| y.index.clone()).collect();
         let to_sort1: Vec<_> = records
@@ -2043,7 +2043,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         Ok(())
     }
 
-    fn process_rom_array(&mut self, rom_id: usize, driver: &mut T) -> std::io::Result<()> {
+    fn process_rom_array(&mut self, rom_id: usize, driver: &mut T) -> eyre::Result<()> {
         let read_tag = self.get_new_tag(); // current_tag + 1;
         let sorted_list_tag = self.get_new_tag(); // current_tag + 2;
         self.create_tag(read_tag, sorted_list_tag);
@@ -2239,7 +2239,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         access_tag: u32,
         sorted_list_tag: u32,
         driver: &mut T,
-    ) -> std::io::Result<(u32, u32, Vec<u32>)> {
+    ) -> eyre::Result<(u32, u32, Vec<u32>)> {
         let mut sorted_ram_records = Vec::with_capacity(self.ram_arrays[ram_id].records.len());
 
         let records = &self.ram_arrays[ram_id].records;
@@ -2378,7 +2378,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         Ok((last.index_witness, last.timestamp_witness, timestamp_deltas))
     }
 
-    fn process_ram_array(&mut self, ram_id: usize, driver: &mut T) -> std::io::Result<()> {
+    fn process_ram_array(&mut self, ram_id: usize, driver: &mut T) -> eyre::Result<()> {
         let access_tag = self.get_new_tag(); // current_tag + 1;
         let sorted_list_tag = self.get_new_tag(); // current_tag + 2;
         self.create_tag(access_tag, sorted_list_tag);
@@ -2501,7 +2501,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         );
     }
 
-    fn process_range_list(&mut self, list: &mut RangeList, driver: &mut T) -> std::io::Result<()> {
+    fn process_range_list(&mut self, list: &mut RangeList, driver: &mut T) -> eyre::Result<()> {
         self.assert_valid_variables(&list.variable_indices);
 
         assert!(
@@ -2655,7 +2655,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         driver: &mut T,
         variable_index: u32,
         num_bits: u32,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         if num_bits == 1 {
             self.create_bool_gate(variable_index);
         } else if num_bits <= Self::DEFAULT_PLOOKUP_RANGE_BITNUM as u32 {
@@ -2765,7 +2765,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         num_bits: u64,
         decompose: Option<&[T::ArithmeticShare]>, // If already decomposed, values are here
         target_range_bitnum: u64,
-    ) -> std::io::Result<Vec<u32>> {
+    ) -> eyre::Result<Vec<u32>> {
         assert!(self.is_valid_variable(variable_index as usize));
 
         assert!(num_bits > 0);
@@ -2931,7 +2931,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         &mut self,
         limb_idx: u32,
         num_limb_bits: usize,
-    ) -> std::io::Result<[u32; 2]> {
+    ) -> eyre::Result<[u32; 2]> {
         // we skip this assert
         // ASSERT(uint256_t(this->get_variable_reference(limb_idx)) < (uint256_t(1) << num_limb_bits));
 
@@ -2968,7 +2968,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         hi_idx: u32,
         lo_limb_bits: usize,
         hi_limb_bits: usize,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         // Validate limbs are <= 70 bits. If limbs are larger we require more witnesses and cannot use our limb accumulation
         // custom gate
         assert!(lo_limb_bits <= (14 * 5));
@@ -3482,7 +3482,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         witness: Vec<T::AcvmType>,
         honk_recursion: HonkRecursion, // 1 for ultrahonk
         driver: &mut T,
-    ) -> std::io::Result<Self> {
+    ) -> eyre::Result<Self> {
         tracing::trace!("Builder create circuit");
 
         let has_valid_witness_assignments = !witness.is_empty();
@@ -3539,11 +3539,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         Ok(builder.compute_dyadic_size())
     }
 
-    pub fn finalize_circuit(
-        &mut self,
-        ensure_nonzero: bool,
-        driver: &mut T,
-    ) -> std::io::Result<()> {
+    pub fn finalize_circuit(&mut self, ensure_nonzero: bool, driver: &mut T) -> eyre::Result<()> {
         // /**
         //  * First of all, add the gates related to ROM arrays and range lists.
         //  * Note that the total number of rows in an UltraPlonk program can be divided as following:
@@ -3593,7 +3589,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         constraint_system: &AcirFormat<P::ScalarField>,
         has_valid_witness_assignments: bool,
         metadata: &ProgramMetadata,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         tracing::trace!("Builder build constraints");
 
         // Add arithmetic gates
@@ -3904,7 +3900,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         constraint: &MultiScalarMul<P::ScalarField>,
         has_valid_witness_assignments: bool,
         driver: &mut T,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         let len = constraint.points.len() / 3;
         debug_assert_eq!(len * 3, constraint.points.len());
         debug_assert_eq!(len * 2, constraint.scalars.len());
@@ -3986,7 +3982,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         constraint: &EcAdd<P::ScalarField>,
         has_valid_witness_assignments: bool,
         driver: &mut T,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         // Input to cycle_group points
         let input1_point = WitnessOrConstant::to_grumpkin_point(
             &constraint.input1_x,
@@ -4060,7 +4056,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         &mut self,
         driver: &mut T,
         constraint: &Sha256Compression<P::ScalarField>,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         let mut inputs: [FieldCT<P::ScalarField>; 16] =
             array::from_fn(|_| FieldCT::<P::ScalarField>::default());
         let mut hash_inputs: [FieldCT<P::ScalarField>; 8] =
@@ -4108,7 +4104,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         &mut self,
         driver: &mut T,
         constraint: &Blake2sConstraint<P::ScalarField>,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         // Create byte array struct
         let mut arr = ByteArray::<P::ScalarField>::new();
 
@@ -4143,7 +4139,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         &mut self,
         driver: &mut T,
         constraint: &Blake3Constraint<P::ScalarField>,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         // Create byte array struct
         let mut arr = ByteArray::<P::ScalarField>::new();
 
@@ -4178,7 +4174,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         &mut self,
         driver: &mut T,
         constraint: &LogicConstraint<P::ScalarField>,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         let left = constraint.a.to_field_ct();
         let right = constraint.b.to_field_ct();
 
@@ -4201,7 +4197,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         b: FieldCT<P::ScalarField>,
         num_bits: usize,
         is_xor_gate: bool,
-    ) -> std::io::Result<FieldCT<P::ScalarField>> {
+    ) -> eyre::Result<FieldCT<P::ScalarField>> {
         // ensure the number of bits doesn't exceed field size and is not negative
         assert!(num_bits < 254);
         assert!(num_bits > 0);

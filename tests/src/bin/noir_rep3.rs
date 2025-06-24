@@ -4,11 +4,9 @@ use acir::{native_types::WitnessStack, FieldElement};
 
 use ark_bn254::Bn254;
 use co_acvm::solver::{PlainCoSolver, Rep3CoSolver};
+use mpc_net::TestNetwork;
 use noirc_artifacts::program::ProgramArtifact;
-use tests::{
-    rep3_network::{PartyTestNetwork, Rep3TestNetwork},
-    test_utils,
-};
+use tests::test_utils;
 
 fn install_tracing() {
     use tracing_subscriber::prelude::*;
@@ -51,7 +49,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         "{root}/../test_vectors/noir/{test_case}/Prover.toml",
     ));
     // read the input file
-    let inputs = Rep3CoSolver::<_, PartyTestNetwork>::partially_read_abi_bn254_fieldelement(
+    let inputs = Rep3CoSolver::<_, ()>::partially_read_abi_bn254_fieldelement(
         &input,
         &program_artifact.abi,
         &program_artifact.bytecode,
@@ -60,10 +58,12 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // create input shares
     let mut rng = rand::thread_rng();
     let shares = test_utils::share_input_rep3::<Bn254, _>(inputs, &mut rng);
-    let test_network = Rep3TestNetwork::default();
+    let nets0 = TestNetwork::new_3_parties();
+    let nets1 = TestNetwork::new_3_parties();
     let mut threads = vec![];
-    for (net, program_artifact, share) in itertools::izip!(
-        test_network.get_party_networks(),
+    for (net0, net1, program_artifact, share) in itertools::izip!(
+        nets0,
+        nets1,
         [
             program_artifact.clone(),
             program_artifact.clone(),
@@ -75,9 +75,9 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             let input_share =
                 test_utils::translate_witness_share_rep3(share, &program_artifact.abi);
             let solver =
-                Rep3CoSolver::from_network_with_witness(net, program_artifact, input_share)
+                Rep3CoSolver::new_with_witness(&net0, &net1, program_artifact, input_share)
                     .unwrap();
-            solver.solve().unwrap().0
+            solver.solve().unwrap()
         }));
     }
 

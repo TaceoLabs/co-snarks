@@ -3,7 +3,6 @@
 //! Contains the IntRing2k trait that specifies different datatypes for rings Z_{2^k}
 
 use super::bit::Bit;
-use crate::protocols::rep3::IoResult;
 use num_bigint::BigUint;
 use num_traits::{AsPrimitive, One, WrappingAdd, WrappingMul, WrappingNeg, WrappingSub, Zero};
 use serde::{Deserialize, Serialize};
@@ -56,10 +55,10 @@ pub trait IntRing2k:
     const BYTES: usize;
 
     /// Reads a value of this type from a reader
-    fn from_reader<R: std::io::Read>(reader: R) -> IoResult<Self>;
+    fn from_reader<R: std::io::Read>(reader: R) -> std::io::Result<Self>;
 
     /// Writes a value of this type to a writer
-    fn write<W: std::io::Write>(&self, writer: W) -> IoResult<()>;
+    fn write<W: std::io::Write>(&self, writer: W) -> std::io::Result<()>;
 
     /// Returns the effective number of bits (i.e., how many LSBs are set)
     fn bits(&self) -> usize;
@@ -101,11 +100,11 @@ impl IntRing2k for Bit {
     const K: usize = 1;
     const BYTES: usize = 1;
 
-    fn write<W: std::io::Write>(&self, mut writer: W) -> IoResult<()> {
+    fn write<W: std::io::Write>(&self, mut writer: W) -> std::io::Result<()> {
         writer.write_all(&[self.0 as u8])
     }
 
-    fn from_reader<R: std::io::Read>(mut reader: R) -> IoResult<Self> {
+    fn from_reader<R: std::io::Read>(mut reader: R) -> std::io::Result<Self> {
         let mut bytes = [0u8; Self::BYTES];
         reader.read_exact(&mut bytes)?;
         Bit::try_from(bytes[0])
@@ -129,11 +128,11 @@ impl IntRing2k for u8 {
     const K: usize = Self::BITS as usize;
     const BYTES: usize = Self::K / 8;
 
-    fn write<W: std::io::Write>(&self, mut writer: W) -> IoResult<()> {
+    fn write<W: std::io::Write>(&self, mut writer: W) -> std::io::Result<()> {
         writer.write_all(&self.to_le_bytes())
     }
 
-    fn from_reader<R: std::io::Read>(mut reader: R) -> IoResult<Self> {
+    fn from_reader<R: std::io::Read>(mut reader: R) -> std::io::Result<Self> {
         let mut bytes = [0u8; Self::BYTES];
         reader.read_exact(&mut bytes)?;
         Ok(Self::from_le_bytes(bytes))
@@ -160,11 +159,11 @@ impl IntRing2k for u16 {
     const K: usize = Self::BITS as usize;
     const BYTES: usize = Self::K / 8;
 
-    fn write<W: std::io::Write>(&self, mut writer: W) -> IoResult<()> {
+    fn write<W: std::io::Write>(&self, mut writer: W) -> std::io::Result<()> {
         writer.write_all(&self.to_le_bytes())
     }
 
-    fn from_reader<R: std::io::Read>(mut reader: R) -> IoResult<Self> {
+    fn from_reader<R: std::io::Read>(mut reader: R) -> std::io::Result<Self> {
         let mut bytes = [0u8; Self::BYTES];
         reader.read_exact(&mut bytes)?;
         Ok(Self::from_le_bytes(bytes))
@@ -191,11 +190,11 @@ impl IntRing2k for u32 {
     const K: usize = Self::BITS as usize;
     const BYTES: usize = Self::K / 8;
 
-    fn write<W: std::io::Write>(&self, mut writer: W) -> IoResult<()> {
+    fn write<W: std::io::Write>(&self, mut writer: W) -> std::io::Result<()> {
         writer.write_all(&self.to_le_bytes())
     }
 
-    fn from_reader<R: std::io::Read>(mut reader: R) -> IoResult<Self> {
+    fn from_reader<R: std::io::Read>(mut reader: R) -> std::io::Result<Self> {
         let mut bytes = [0u8; Self::BYTES];
         reader.read_exact(&mut bytes)?;
         Ok(Self::from_le_bytes(bytes))
@@ -222,11 +221,11 @@ impl IntRing2k for u64 {
     const K: usize = Self::BITS as usize;
     const BYTES: usize = Self::K / 8;
 
-    fn write<W: std::io::Write>(&self, mut writer: W) -> IoResult<()> {
+    fn write<W: std::io::Write>(&self, mut writer: W) -> std::io::Result<()> {
         writer.write_all(&self.to_le_bytes())
     }
 
-    fn from_reader<R: std::io::Read>(mut reader: R) -> IoResult<Self> {
+    fn from_reader<R: std::io::Read>(mut reader: R) -> std::io::Result<Self> {
         let mut bytes = [0u8; Self::BYTES];
         reader.read_exact(&mut bytes)?;
         Ok(Self::from_le_bytes(bytes))
@@ -253,11 +252,11 @@ impl IntRing2k for u128 {
     const K: usize = Self::BITS as usize;
     const BYTES: usize = Self::K / 8;
 
-    fn write<W: std::io::Write>(&self, mut writer: W) -> IoResult<()> {
+    fn write<W: std::io::Write>(&self, mut writer: W) -> std::io::Result<()> {
         writer.write_all(&self.to_le_bytes())
     }
 
-    fn from_reader<R: std::io::Read>(mut reader: R) -> IoResult<Self> {
+    fn from_reader<R: std::io::Read>(mut reader: R) -> std::io::Result<Self> {
         let mut bytes = [0u8; Self::BYTES];
         reader.read_exact(&mut bytes)?;
         Ok(Self::from_le_bytes(bytes))
