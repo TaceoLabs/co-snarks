@@ -2,26 +2,18 @@
 use ark_bn254::Bn254;
 use ark_ff::PrimeField;
 use co_builder::flavours::mega_flavour::MegaFlavour;
-use co_builder::flavours::ultra_flavour::UltraFlavour;
 use co_builder::prelude::ActiveRegionData;
 use co_builder::prelude::CrsParser;
-use co_builder::prelude::HonkRecursion;
 use co_builder::prelude::Polynomial;
 use co_builder::prelude::Polynomials;
-use co_builder::prelude::Serialize as FieldSerialize;
 use co_builder::prelude::ZeroKnowledge;
 use co_builder::prover_flavour::ProverFlavour;
 use serde::Deserialize;
 use serde::Serialize;
 use sha3::Keccak256;
+use ultrahonk::prelude::Poseidon2Sponge;
 use ultrahonk::prelude::ProvingKey;
-use ultrahonk::{
-    prelude::{
-        HonkProof, PlainAcvmSolver, Poseidon2Sponge, TranscriptFieldType, TranscriptHasher,
-        UltraCircuitBuilder, UltraHonk,
-    },
-    Utils,
-};
+use ultrahonk::prelude::{TranscriptFieldType, TranscriptHasher, UltraHonk};
 
 fn parse_proving_key_from_json(json_str: &str) -> Result<VeryUglyPk, serde_json::Error> {
     serde_json::from_str(json_str)
@@ -62,7 +54,6 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(has_zk: ZeroKnowledge) {
         precomp_polys.push(new_poly);
     }
     let mut witness_polys: Vec<Polynomial<ark_bn254::Fr>> = Vec::new();
-    // println!("w_l: {:?}", real_pk.witness_polynomials[0]);
     for poly in real_pk.witness_polynomials[..4].iter().cloned() {
         let new_poly: Polynomial<ark_bn254::Fr> = Polynomial { coefficients: poly };
         witness_polys.push(new_poly);
@@ -72,9 +63,6 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(has_zk: ZeroKnowledge) {
 
         witness_polys.push(new_poly);
     }
-
-    // println!("Precomputed Polynomials: {}", precomp_polys.len());
-    // println!("Witness Polynomials: {}", witness_polys.len());
     let precompentities =
         <MegaFlavour as ProverFlavour>::PrecomputedEntities::<Polynomial<ark_bn254::Fr>> {
             elements: precomp_polys.try_into().unwrap(),
@@ -90,14 +78,9 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(has_zk: ZeroKnowledge) {
         precomputed: precompentities,
     };
     pk.polynomials = polys_together;
-    let time = start.elapsed();
-    println!("Time taken to parse proving key: {:?}", time);
-    let start = std::time::Instant::now();
-    let (proof, public_inputs) = UltraHonk::<_, H, MegaFlavour>::prove(pk, has_zk).unwrap();
-    let time = start.elapsed();
-    println!("Time taken to prove: {:?}", time);
-    // println!("Public Inputs: {:?}", public_inputs.len());
-    // println!("Proof: {:?}", proof.inner());
+
+    let (_proof, _public_inputs) = UltraHonk::<_, H, MegaFlavour>::prove(pk, has_zk).unwrap();
+
     // assert_eq!(public_inputs.len(), proof.inner().len());
     // let is_valid =
     //     UltraHonk::<_, H, UltraFlavour<_>>::verify(proof, &public_inputs, &verifying_key, has_zk)

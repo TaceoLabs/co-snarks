@@ -90,12 +90,8 @@ impl<
         if self.has_zk == ZeroKnowledge::Yes {
             polynomial.mask(&mut self.rng)
         };
-        // println!("Committing to polynomial: {}", label);
-        // println!("Polynomial: {:?}", polynomial.len());
         // Commit to the polynomial
         let commitment = Utils::commit(polynomial.as_ref(), crs)?;
-        // println!("Label : {}", label);
-        // println!("Commitment: {:?}", commitment);
         // Send the commitment to the verifier
         transcript.send_point_to_verifier::<P>(label.to_string(), commitment.into());
 
