@@ -173,6 +173,100 @@ where
     Ok(res)
 }
 
+/// TODO
+pub fn b2a_many<T: IntRing2k, N: Rep3Network>(
+    x: &[Rep3RingShare<T>],
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<Rep3RingShare<T>>>
+where
+    Standard: Distribution<T>,
+{
+    // let mut y = vec![Rep3RingShare::zero_share(); x.len()];
+    let mut res = vec![Rep3RingShare::zero_share(); x.len()];
+
+    let mut r_vec = Vec::with_capacity(x.len());
+    for _ in 0..x.len() {
+        let (mut r, r2) = io_context.rngs.rand.random_elements::<RingElement<T>>();
+        r ^= r2;
+        r_vec.push(r);
+    }
+    match io_context.id {
+        PartyID::ID0 => {
+            for res in res.iter_mut() {
+                let k3 = io_context
+                    .rngs
+                    .bitcomp2
+                    .random_elements_3keys::<RingElement<T>>();
+
+                res.b = (k3.0 + k3.1 + k3.2).neg();
+            }
+        }
+        PartyID::ID1 => {
+            for res in res.iter_mut() {
+                let k2 = io_context
+                    .rngs
+                    .bitcomp1
+                    .random_elements_3keys::<RingElement<T>>();
+
+                res.a = (k2.0 + k2.1 + k2.2).neg();
+            }
+        }
+        PartyID::ID2 => {
+            for (res, y) in res.iter_mut().zip(r_vec.iter_mut()) {
+                let k2 = io_context
+                    .rngs
+                    .bitcomp1
+                    .random_elements_3keys::<RingElement<T>>();
+                let k3 = io_context
+                    .rngs
+                    .bitcomp2
+                    .random_elements_3keys::<RingElement<T>>();
+
+                let k2_comp = k2.0 + k2.1 + k2.2;
+                let k3_comp = k3.0 + k3.1 + k3.2;
+                let val = k2_comp + k3_comp;
+                *y ^= val;
+                res.a = k3_comp.neg();
+                res.b = k2_comp.neg();
+            }
+        }
+    }
+
+    // reshare y
+    let y_a = r_vec;
+    io_context.network.send_next_many(&y_a)?;
+    let local_b = io_context.network.recv_prev_many()?;
+
+    let y = izip!(y_a, local_b)
+        .map(|(a, b)| Rep3RingShare::new_ring(a, b))
+        .collect::<Vec<_>>();
+
+    let z = detail::low_depth_binary_add_many(x, &y, io_context)?;
+
+    match io_context.id {
+        PartyID::ID0 => {
+            let z_b = z.iter().cloned().map(|z| z.b).collect::<Vec<_>>();
+            io_context.network.send_next_many(&z_b)?;
+            let rcv: Vec<RingElement<T>> = io_context.network.recv_prev_many()?;
+
+            for (res, z, rcv) in izip!(res.iter_mut(), z, rcv.iter()) {
+                res.a = z.a ^ z.b ^ rcv;
+            }
+        }
+        PartyID::ID1 => {
+            let rcv: Vec<RingElement<T>> = io_context.network.recv_prev_many()?;
+            for (res, z, rcv) in izip!(res.iter_mut(), z, rcv.iter()) {
+                res.b = z.a ^ z.b ^ rcv;
+            }
+        }
+        PartyID::ID2 => {
+            let z_b = z.into_iter().map(|z| z.b).collect::<Vec<_>>();
+            io_context.network.send_next_many(&z_b)?;
+        }
+    }
+    Ok(res)
+}
+
 /// Translates one shared bit into an arithmetic sharing of the same bit. I.e., the shared bit x = x_1 xor x_2 xor x_3 gets transformed into x = x'_1 + x'_2 + x'_3, with x being either 0 or 1.
 pub fn bit_inject<T: IntRing2k, N: Rep3Network>(
     x: &Rep3RingShare<T>,

@@ -7,7 +7,7 @@ use crate::{
     protocols::rep3::network::{IoContext, Rep3Network},
     IoResult,
 };
-use itertools::izip;
+use itertools::{izip, Itertools};
 use mpc_types::protocols::{
     rep3::id::PartyID,
     rep3_ring::ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
@@ -74,6 +74,28 @@ where
     let local_a = (a & b) ^ mask;
     let local_b = io_context.network.reshare(local_a)?;
     Ok(RingShare::new_ring(local_a, local_b))
+}
+
+/// Performs element-wise bitwise AND operation on the provided shared values.
+pub fn and_vec<T: IntRing2k, N: Rep3Network>(
+    a: &[RingShare<T>],
+    b: &[RingShare<T>],
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<RingShare<T>>>
+where
+    Standard: Distribution<T>,
+{
+    let local_a = izip!(a, b)
+        .map(|(a, b)| {
+            let (mut mask, mask_b) = io_context.rngs.rand.random_elements::<RingElement<T>>();
+            mask ^= mask_b;
+            (a & b) ^ mask
+        })
+        .collect_vec();
+    let local_b = io_context.network.reshare(local_a.clone())?;
+    Ok(izip!(local_a, local_b)
+        .map(|(a, b)| RingShare::new_ring(a, b))
+        .collect_vec())
 }
 
 /// Performs a bitwise AND operation on a shared value and a public value.

@@ -3,12 +3,28 @@ use crate::{
     protocols::rep3::network::{IoContext, Rep3Network},
     IoResult,
 };
+use itertools::izip;
 use mpc_types::protocols::rep3_ring::{
     ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
     Rep3RingShare,
 };
 use num_traits::{One, Zero};
 use rand::{distributions::Standard, prelude::Distribution};
+
+pub(super) fn low_depth_binary_add_many<T: IntRing2k, N: Rep3Network>(
+    x1: &[Rep3RingShare<T>],
+    x2: &[Rep3RingShare<T>],
+    io_context: &mut IoContext<N>,
+) -> IoResult<Vec<Rep3RingShare<T>>>
+where
+    Standard: Distribution<T>,
+{
+    // Add x1 + x2 via a packed Kogge-Stone adder
+    let mut p = izip!(x1, x2).map(|(x1, x2)| x1 ^ x2).collect::<Vec<_>>();
+    let mut g = binary::and_vec(x1, x2, io_context)?;
+    kogge_stone_inner_many(&mut p, &mut g, io_context)?;
+    Ok(g)
+}
 
 pub(super) fn low_depth_binary_add<T: IntRing2k, N: Rep3Network>(
     x1: &Rep3RingShare<T>,
@@ -36,6 +52,42 @@ where
     g <<= 1;
     g ^= p;
     Ok(g)
+}
+
+fn kogge_stone_inner_many<T: IntRing2k, N: Rep3Network>(
+    p: &mut [Rep3RingShare<T>],
+    g: &mut [Rep3RingShare<T>],
+    io_context: &mut IoContext<N>,
+) -> IoResult<()>
+where
+    Standard: Distribution<T>,
+{
+    let bitlen = T::K;
+    let d: u32 = bitlen.ilog2(); // T is a ring with 2^k elements
+    debug_assert!(bitlen.is_power_of_two());
+
+    let s_ = p.to_owned();
+
+    for i in 0..d {
+        let shift = 1 << i;
+        let p_ = p.iter().map(|el| el << shift);
+        let g_ = g.iter().map(|el| el << shift);
+        // TODO: Make and more communication efficient, ATM we send the full element for each level, even though they reduce in size
+        // maybe just input the mask into AND?
+        let (r1, r2) = and_twice_many_iter(p, g_, p_, io_context)?;
+        for (p, r2) in izip!(p.iter_mut(), r2) {
+            *p = r2;
+        }
+        for (g, r1) in izip!(g.iter_mut(), r1) {
+            *g ^= r1;
+        }
+    }
+
+    for (g, s_) in izip!(g.iter_mut(), s_) {
+        *g <<= 1;
+        *g ^= s_;
+    }
+    Ok(())
 }
 
 fn kogge_stone_inner_with_carry<T: IntRing2k, N: Rep3Network>(
@@ -76,6 +128,44 @@ where
         g ^= r1;
     }
     Ok(g)
+}
+
+#[expect(clippy::type_complexity)]
+fn and_twice_many_iter<T: IntRing2k, N: Rep3Network>(
+    a: &[Rep3RingShare<T>],
+    b1: impl Iterator<Item = Rep3RingShare<T>>,
+    b2: impl Iterator<Item = Rep3RingShare<T>>,
+    io_context: &mut IoContext<N>,
+) -> IoResult<(Vec<Rep3RingShare<T>>, Vec<Rep3RingShare<T>>)>
+where
+    Standard: Distribution<T>,
+{
+    let mut local_a1 = Vec::with_capacity(a.len());
+    let mut local_a2 = Vec::with_capacity(a.len());
+    for (a, b1, b2) in izip!(a, b1, b2) {
+        let (mut mask1, mask_b) = io_context.rngs.rand.random_elements::<RingElement<T>>();
+        mask1 ^= mask_b;
+
+        let (mut mask2, mask_b) = io_context.rngs.rand.random_elements::<RingElement<T>>();
+        mask2 ^= mask_b;
+        local_a1.push((&b1 & a) ^ mask1);
+        local_a2.push((a & &b2) ^ mask2);
+    }
+
+    io_context
+        .network
+        .send_next([local_a1.to_owned(), local_a2.to_owned()])?;
+    let [local_b1, local_b2] = io_context.network.recv_prev::<[Vec<RingElement<T>>; 2]>()?;
+
+    let mut r1 = Vec::with_capacity(a.len());
+    let mut r2 = Vec::with_capacity(a.len());
+
+    for (local_a1, local_b1, local_a2, local_b2) in izip!(local_a1, local_b1, local_a2, local_b2) {
+        r1.push(Rep3RingShare::new_ring(local_a1, local_b1));
+        r2.push(Rep3RingShare::new_ring(local_a2, local_b2));
+    }
+
+    Ok((r1, r2))
 }
 
 fn and_twice<T: IntRing2k, N: Rep3Network>(
