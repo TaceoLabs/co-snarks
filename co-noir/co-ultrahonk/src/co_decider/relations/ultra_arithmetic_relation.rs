@@ -83,7 +83,7 @@ impl UltraArithmeticRelation {
 }
 
 impl UltraArithmeticRelation {
-    fn compute_r0<T, P, L>(
+    fn compute_r0<T, P, L, const SIZE: usize>(
         driver: &mut T,
         r0: &mut Univariate<P::ScalarField, 6>,
         input: &ProverUnivariatesBatch<T, P, L>,
@@ -166,14 +166,14 @@ impl UltraArithmeticRelation {
             )
             .enumerate()
             .fold(
-                || [P::ScalarField::default(); MAX_PARTIAL_RELATION_LENGTH],
+                || [P::ScalarField::default(); SIZE],
                 |mut acc, (idx, tmp)| {
-                    acc[idx % MAX_PARTIAL_RELATION_LENGTH] += tmp;
+                    acc[idx % SIZE] += tmp;
                     acc
                 },
             )
             .reduce(
-                || [P::ScalarField::default(); MAX_PARTIAL_RELATION_LENGTH],
+                || [P::ScalarField::default(); SIZE],
                 |mut acc, next| {
                     for (acc, next) in izip!(acc.iter_mut(), next) {
                         *acc += next;
@@ -186,7 +186,7 @@ impl UltraArithmeticRelation {
             *evaluations += new;
         }
     }
-    fn compute_r1<T, P, L>(
+    fn compute_r1<T, P, L, const SIZE: usize>(
         party_id: T::PartyID,
         r1: &mut SharedUnivariate<T, P, 5>,
         input: &ProverUnivariatesBatch<T, P, L>,
@@ -218,14 +218,14 @@ impl UltraArithmeticRelation {
             })
             .enumerate()
             .fold(
-                || [T::ArithmeticShare::default(); MAX_PARTIAL_RELATION_LENGTH],
+                || [T::ArithmeticShare::default(); SIZE],
                 |mut acc, (idx, tmp)| {
-                    T::add_assign(&mut acc[idx % MAX_PARTIAL_RELATION_LENGTH], tmp);
+                    T::add_assign(&mut acc[idx % SIZE], tmp);
                     acc
                 },
             )
             .reduce(
-                || [T::ArithmeticShare::default(); MAX_PARTIAL_RELATION_LENGTH],
+                || [T::ArithmeticShare::default(); SIZE],
                 |mut acc, next| {
                     for (acc, next) in izip!(acc.iter_mut(), next) {
                         T::add_assign(acc, next);
@@ -320,7 +320,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
      * @param parameters contains beta, gamma, and public_input_delta, ....
      * @param scaling_factor optional term to scale the evaluation before adding to evals.
      */
-    fn accumulate(
+    fn accumulate<const SIZE: usize>(
         driver: &mut T,
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesBatch<T, P, L>,
@@ -331,7 +331,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         let party_id = driver.get_party_id();
         rayon::join(
             || {
-                Self::compute_r0(
+                Self::compute_r0::<T, P, L, SIZE>(
                     driver,
                     &mut univariate_accumulator.r0,
                     input,
@@ -339,7 +339,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
                 )
             },
             || {
-                Self::compute_r1(
+                Self::compute_r1::<T, P, L, SIZE>(
                     party_id,
                     &mut univariate_accumulator.r1,
                     input,

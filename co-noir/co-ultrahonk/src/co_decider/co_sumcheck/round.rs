@@ -253,6 +253,7 @@ impl SumcheckRound {
         P: HonkCurve<TranscriptFieldType>,
         L: MPCProverFlavour,
         R: Relation<T, P, L>,
+        const SIZE: usize,
     >(
         driver: &mut T,
         univariate_accumulator: &mut R::Acc,
@@ -262,7 +263,7 @@ impl SumcheckRound {
         if sum_check_data.can_skip {
             return Ok(());
         }
-        R::accumulate(
+        R::accumulate::<SIZE>(
             driver,
             univariate_accumulator,
             &sum_check_data.all_entites,

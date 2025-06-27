@@ -141,7 +141,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
      * @param parameters contains beta, gamma, and public_input_delta, ....
      * @param scaling_factor optional term to scale the evaluation before adding to evals.
      */
-    fn accumulate(
+    fn accumulate<const SIZE: usize>(
         driver: &mut T,
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesBatch<T, P, L>,
@@ -206,26 +206,26 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         let mut tmp = T::sub_many(&v1, w_l_shift);
         T::mul_assign_with_public_many(&mut tmp, &q_pos_by_scaling);
 
-        fold_accumulator!(univariate_accumulator.r0, tmp);
+        fold_accumulator!(univariate_accumulator.r0, tmp, SIZE);
 
         ///////////////////////////////////////////////////////////////////////
 
         let mut tmp = T::sub_many(&v2, w_r_shift);
         T::mul_assign_with_public_many(&mut tmp, &q_pos_by_scaling);
 
-        fold_accumulator!(univariate_accumulator.r1, tmp);
+        fold_accumulator!(univariate_accumulator.r1, tmp, SIZE);
 
         ///////////////////////////////////////////////////////////////////////
         let mut tmp = T::sub_many(&v3, w_o_shift);
         T::mul_assign_with_public_many(&mut tmp, &q_pos_by_scaling);
 
-        fold_accumulator!(univariate_accumulator.r2, tmp);
+        fold_accumulator!(univariate_accumulator.r2, tmp, SIZE);
 
         ///////////////////////////////////////////////////////////////////////
         let mut tmp = T::sub_many(&v4, w_4_shift);
         T::mul_assign_with_public_many(&mut tmp, &q_pos_by_scaling);
 
-        fold_accumulator!(univariate_accumulator.r3, tmp);
+        fold_accumulator!(univariate_accumulator.r3, tmp, SIZE);
         Ok(())
     }
 }

@@ -103,11 +103,11 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
      * @param parameters contains beta, gamma, and public_input_delta, ....
      * @param scaling_factor optional term to scale the evaluation before adding to evals.
      */
-    fn accumulate(
+    fn accumulate<const SIZE: usize>(
         driver: &mut T,
         univariate_accumulator: &mut Self::Acc,
         input: &super::ProverUnivariatesBatch<T, P, L>,
-        _relation_parameters: &RelationParameters<<P>::ScalarField,L>,
+        _relation_parameters: &RelationParameters<<P>::ScalarField, L>,
         scaling_factors: &[<P>::ScalarField],
     ) -> HonkProofResult<()> {
         tracing::trace!("Accumulate EllipticRelation");
@@ -251,8 +251,8 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         let tmp = T::mul_with_public_many(&q_elliptic_q_double_scaling, &y_double_identity);
         T::add_assign_many(&mut tmp_2, &tmp);
 
-        fold_accumulator!(univariate_accumulator.r0, tmp_1);
-        fold_accumulator!(univariate_accumulator.r1, tmp_2);
+        fold_accumulator!(univariate_accumulator.r0, tmp_1, SIZE);
+        fold_accumulator!(univariate_accumulator.r1, tmp_2, SIZE);
         Ok(())
     }
 }

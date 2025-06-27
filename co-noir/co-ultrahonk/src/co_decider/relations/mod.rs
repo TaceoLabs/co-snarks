@@ -25,13 +25,13 @@ use ultra_arithmetic_relation::UltraArithmeticRelation;
 use ultrahonk::prelude::TranscriptFieldType;
 
 macro_rules! fold_accumulator {
-    ($acc: expr, $elements: expr) => {
+    ($acc: expr, $elements: expr, $size: expr) => {
         let evaluations_len = $acc.evaluations.len();
-        let mut acc = [T::ArithmeticShare::default(); L::MAX_PARTIAL_RELATION_LENGTH];
+        let mut acc = [T::ArithmeticShare::default(); $size];
         acc[..evaluations_len].clone_from_slice(&$acc.evaluations);
         for (idx, b) in $elements.iter().enumerate() {
-            let i = idx % L::MAX_PARTIAL_RELATION_LENGTH;
-            let a = &mut acc[idx % L::MAX_PARTIAL_RELATION_LENGTH];
+            let i = idx % $size;
+            let a = &mut acc[i];
             T::add_assign(a, *b);
         }
         $acc.evaluations.clone_from_slice(&acc[..evaluations_len]);
@@ -74,7 +74,7 @@ pub(crate) trait Relation<
         batch: &mut ProverUnivariatesBatch<T, P, L>,
     );
 
-    fn accumulate(
+    fn accumulate<const SIZE: usize>(
         driver: &mut T,
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesBatch<T, P, L>,

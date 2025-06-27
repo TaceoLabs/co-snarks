@@ -188,7 +188,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
      * @param parameters contains beta, gamma, and public_input_delta, ....
      * @param scaling_factor optional term to scale the evaluation before adding to evals.
      */
-    fn accumulate(
+    fn accumulate<const SIZE: usize>(
         driver: &mut T,
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesBatch<T, P, L>,
@@ -439,14 +439,14 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
             adjacent_values_match_if_adjacent_indices_match,
         ); // deg 5
 
-        fold_accumulator!(univariate_accumulator.r1, tmp);
+        fold_accumulator!(univariate_accumulator.r1, tmp, SIZE);
 
         let tmp = T::mul_with_public_many(
             &q_one_by_two_by_aux_by_scaling,
             &index_is_monotonically_increasing,
         ); // deg 5
 
-        fold_accumulator!(univariate_accumulator.r2, tmp);
+        fold_accumulator!(univariate_accumulator.r2, tmp, SIZE);
 
         let rom_consistency_check_identity =
             T::mul_with_public_many(&q_one_by_two, &memory_record_check); // deg 3 or 4
@@ -508,21 +508,21 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
 
         // Putting it all together...
 
-        fold_accumulator!(univariate_accumulator.r3, tmp);
+        fold_accumulator!(univariate_accumulator.r3, tmp, SIZE);
 
         let tmp = T::mul_with_public_many(
             &q_arith_by_aux_and_scaling,
             &index_is_monotonically_increasing,
         );
 
-        fold_accumulator!(univariate_accumulator.r4, tmp);
+        fold_accumulator!(univariate_accumulator.r4, tmp, SIZE);
 
         let tmp = T::mul_with_public_many(
             &q_arith_by_aux_and_scaling,
             &next_gate_access_type_is_boolean,
         );
 
-        fold_accumulator!(univariate_accumulator.r5, tmp);
+        fold_accumulator!(univariate_accumulator.r5, tmp, SIZE);
 
         T::mul_assign_with_public_many(&mut ram_consistency_check_identity, q_arith);
         /*
@@ -565,7 +565,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         T::add_assign_many(&mut memory_identity, &limb_accumulator_identity);
         T::mul_assign_with_public_many(&mut memory_identity, &q_aux_by_scaling);
 
-        fold_accumulator!(univariate_accumulator.r0, memory_identity);
+        fold_accumulator!(univariate_accumulator.r0, memory_identity, SIZE);
         Ok(())
     }
 }

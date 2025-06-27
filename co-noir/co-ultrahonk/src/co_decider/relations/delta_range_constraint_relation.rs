@@ -123,7 +123,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
      * @param parameters contains beta, gamma, and public_input_delta, ....
      * @param scaling_factor optional term to scale the evaluation before adding to evals.
      */
-    fn accumulate(
+    fn accumulate<const SIZE: usize>(
         driver: &mut T,
         univariate_accumulator: &mut Self::Acc,
         input: &super::ProverUnivariatesBatch<T, P, L>,
@@ -207,10 +207,10 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         let (contribution0, contribution1) = lhs.split_at(lhs.len() >> 1);
         let (contribution2, contribution3) = rhs.split_at(rhs.len() >> 1);
 
-        fold_accumulator!(univariate_accumulator.r0, contribution0);
-        fold_accumulator!(univariate_accumulator.r1, contribution1);
-        fold_accumulator!(univariate_accumulator.r2, contribution2);
-        fold_accumulator!(univariate_accumulator.r3, contribution3);
+        fold_accumulator!(univariate_accumulator.r0, contribution0, SIZE);
+        fold_accumulator!(univariate_accumulator.r1, contribution1, SIZE);
+        fold_accumulator!(univariate_accumulator.r2, contribution2, SIZE);
+        fold_accumulator!(univariate_accumulator.r3, contribution3, SIZE);
 
         Ok(())
     }

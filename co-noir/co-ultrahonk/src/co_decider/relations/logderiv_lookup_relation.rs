@@ -234,7 +234,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
      * @note This relation utilizes functionality in the log-derivative library to compute the polynomial of inverses
      *
      */
-    fn accumulate(
+    fn accumulate<const SIZE: usize>(
         driver: &mut T,
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesBatch<T, P, L>,
@@ -258,7 +258,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         T::sub_assign_many(&mut tmp, &inverse_exists);
         T::mul_assign_with_public_many(&mut tmp, scaling_factors);
 
-        fold_accumulator!(univariate_accumulator.r0, tmp);
+        fold_accumulator!(univariate_accumulator.r0, tmp, SIZE);
 
         ///////////////////////////////////////////////////////////////////////
 
@@ -270,7 +270,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         let mut tmp = T::mul_with_public_many(read_selector, &read_inverse);
         T::sub_assign_many(&mut tmp, &mul);
 
-        fold_accumulator!(univariate_accumulator.r1, tmp);
+        fold_accumulator!(univariate_accumulator.r1, tmp, SIZE);
 
         Ok(())
     }
