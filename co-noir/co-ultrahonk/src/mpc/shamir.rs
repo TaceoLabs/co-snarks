@@ -4,8 +4,8 @@ use ark_ff::Field;
 use ark_ff::PrimeField;
 use itertools::izip;
 use mpc_core::protocols::shamir::{
-    arithmetic, network::ShamirNetwork, pointshare, poly, ShamirPointShare, ShamirPrimeFieldShare,
-    ShamirProtocol,
+    ShamirPointShare, ShamirPrimeFieldShare, ShamirProtocol, arithmetic, network::ShamirNetwork,
+    pointshare, poly,
 };
 use num_traits::Zero;
 use rayon::prelude::*;

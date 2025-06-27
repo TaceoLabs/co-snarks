@@ -1,4 +1,4 @@
-use super::{downcast, NoirWitnessExtensionProtocol};
+use super::{NoirWitnessExtensionProtocol, downcast};
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{MontConfig, One, PrimeField};
 use blake2::{Blake2s256, Digest};
@@ -107,11 +107,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         falsy: Self::AcvmType,
     ) -> io::Result<Self::AcvmType> {
         assert!(cond.is_one() || cond.is_zero());
-        if cond.is_one() {
-            Ok(truthy)
-        } else {
-            Ok(falsy)
-        }
+        if cond.is_one() { Ok(truthy) } else { Ok(falsy) }
     }
 
     fn add(&self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> Self::AcvmType {
@@ -404,7 +400,9 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
     )> {
-        panic!("slice_and_get_and_rotate_values not implemented for plaindriver and normally should not be called");
+        panic!(
+            "slice_and_get_and_rotate_values not implemented for plaindriver and normally should not be called"
+        );
     }
 
     fn slice_and_get_xor_rotate_values(
@@ -419,7 +417,9 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
     )> {
-        panic!("slice_and_get_xor_rotate_values not implemented for plaindriver and normally should not be called");
+        panic!(
+            "slice_and_get_xor_rotate_values not implemented for plaindriver and normally should not be called"
+        );
     }
 
     fn slice_and_get_xor_rotate_values_with_filter(
@@ -434,7 +434,9 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
     )> {
-        panic!("slice_and_get_xor_rotate_values_with_filter not implemented for plaindriver and normally should not be called");
+        panic!(
+            "slice_and_get_xor_rotate_values_with_filter not implemented for plaindriver and normally should not be called"
+        );
     }
 
     fn sort_vec_by(
@@ -715,7 +717,9 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
     )> {
-        panic!("slice_and_get_sparse_table_with_rotation_values not implemented for plaindriver and normally should not be called");
+        panic!(
+            "slice_and_get_sparse_table_with_rotation_values not implemented for plaindriver and normally should not be called"
+        );
     }
 
     fn slice_and_get_sparse_normalization_values(
@@ -731,7 +735,9 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Vec<Self::AcvmType>,
         Vec<Self::AcvmType>,
     )> {
-        panic!("slice_and_get_sparse_normalization_values not implemented for plaindriver and normally should not be called");
+        panic!(
+            "slice_and_get_sparse_normalization_values not implemented for plaindriver and normally should not be called"
+        );
     }
 
     fn blake2s_hash(

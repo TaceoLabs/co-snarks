@@ -2,18 +2,18 @@ use super::zk_data::SharedZKSumcheckData;
 use crate::{
     co_decider::{
         relations::{
+            AllRelationAcc, AllRelationAccHalfShared, Relation,
             auxiliary_relation::AuxiliaryRelation,
             delta_range_constraint_relation::DeltaRangeConstraintRelation,
             elliptic_relation::EllipticRelation, logderiv_lookup_relation::LogDerivLookupRelation,
             permutation_relation::UltraPermutationRelation,
             poseidon2_external_relation::Poseidon2ExternalRelation,
             poseidon2_internal_relation::Poseidon2InternalRelation,
-            ultra_arithmetic_relation::UltraArithmeticRelation, AllRelationAcc,
-            AllRelationAccHalfShared, Relation,
+            ultra_arithmetic_relation::UltraArithmeticRelation,
         },
         types::{
-            ProverUnivariates, RelationParameters, BATCHED_RELATION_PARTIAL_LENGTH,
-            BATCHED_RELATION_PARTIAL_LENGTH_ZK,
+            BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK, ProverUnivariates,
+            RelationParameters,
         },
         univariates::SharedUnivariate,
     },
@@ -23,8 +23,8 @@ use crate::{
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
-use co_builder::prelude::{HonkCurve, RowDisablingPolynomial};
 use co_builder::HonkProofResult;
+use co_builder::prelude::{HonkCurve, RowDisablingPolynomial};
 use ultrahonk::prelude::{GateSeparatorPolynomial, TranscriptFieldType, Univariate};
 
 const MAX_ROUND_SIZE_PER_BATCH: usize = 1 << 20;

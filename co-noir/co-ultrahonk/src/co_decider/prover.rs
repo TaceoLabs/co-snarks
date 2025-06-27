@@ -1,13 +1,13 @@
 use super::{
     co_shplemini::ShpleminiOpeningClaim,
-    co_sumcheck::{zk_data::SharedZKSumcheckData, SumcheckOutput},
+    co_sumcheck::{SumcheckOutput, zk_data::SharedZKSumcheckData},
     small_subgroup_ipa::SharedSmallSubgroupIPAProver,
     types::ProverMemory,
 };
-use crate::{mpc::NoirUltraHonkProver, CoUtils};
+use crate::{CoUtils, mpc::NoirUltraHonkProver};
 use co_builder::{
-    prelude::{HonkCurve, ProverCrs, Utils},
     HonkProofResult,
+    prelude::{HonkCurve, ProverCrs, Utils},
 };
 use std::marker::PhantomData;
 use ultrahonk::prelude::{
@@ -27,10 +27,10 @@ pub(crate) struct CoDecider<
 }
 
 impl<
-        T: NoirUltraHonkProver<P>,
-        P: HonkCurve<TranscriptFieldType>,
-        H: TranscriptHasher<TranscriptFieldType>,
-    > CoDecider<T, P, H>
+    T: NoirUltraHonkProver<P>,
+    P: HonkCurve<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType>,
+> CoDecider<T, P, H>
 {
     pub fn new(driver: T, memory: ProverMemory<T, P>, has_zk: ZeroKnowledge) -> Self {
         Self {

@@ -4,7 +4,7 @@ use ark_ec::scalar_mul::variable_base::VariableBaseMSM;
 use ark_ff::Field;
 use ark_ff::UniformRand;
 use ark_poly::DenseUVPolynomial;
-use ark_poly::{univariate::DensePolynomial, Polynomial};
+use ark_poly::{Polynomial, univariate::DensePolynomial};
 use num_traits::Zero;
 use rand::thread_rng;
 use rayon::prelude::*;

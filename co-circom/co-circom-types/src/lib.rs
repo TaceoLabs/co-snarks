@@ -624,9 +624,5 @@ fn parse_boolean<F: PrimeField>(val: &serde_json::Value) -> eyre::Result<F> {
     let bool = val
         .as_bool()
         .with_context(|| format!("expected input to be a bool, got {val}"))?;
-    if bool {
-        Ok(F::ONE)
-    } else {
-        Ok(F::ZERO)
-    }
+    if bool { Ok(F::ONE) } else { Ok(F::ZERO) }
 }

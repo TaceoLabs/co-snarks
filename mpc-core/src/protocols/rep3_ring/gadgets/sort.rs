@@ -4,19 +4,19 @@
 
 use crate::protocols::rep3_ring::{arithmetic, conversion};
 use crate::{
+    IoResult,
     protocols::rep3::{
         self,
         arithmetic::FieldShare,
         network::{IoContext, Rep3Network},
     },
-    IoResult,
 };
 use ark_ff::{One, PrimeField, Zero};
 use mpc_types::protocols::rep3::id::PartyID;
 use mpc_types::protocols::rep3::{Rep3BigUintShare, Rep3PrimeFieldShare};
+use mpc_types::protocols::rep3_ring::Rep3RingShare;
 use mpc_types::protocols::rep3_ring::ring::int_ring::IntRing2k;
 use mpc_types::protocols::rep3_ring::ring::ring_impl::RingElement;
-use mpc_types::protocols::rep3_ring::Rep3RingShare;
 use num_bigint::BigUint;
 use rand::distributions::Standard;
 use rand::prelude::Distribution;

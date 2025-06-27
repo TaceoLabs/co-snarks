@@ -1,9 +1,9 @@
 use super::univariates::SharedUnivariate;
 use crate::{
+    NUM_ALPHAS,
     mpc::NoirUltraHonkProver,
     types::{AllEntities, Polynomials},
     types_batch::AllEntitiesBatch,
-    NUM_ALPHAS,
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;

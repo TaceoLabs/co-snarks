@@ -6,7 +6,7 @@ use std::{
 };
 
 use clap::Parser;
-use eyre::{bail, Context};
+use eyre::{Context, bail};
 use sha2::{Digest, Sha256};
 
 #[derive(Debug, Parser)]

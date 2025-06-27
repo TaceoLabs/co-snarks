@@ -7,7 +7,7 @@ use std::cmp::max;
 
 use ark_ff::PrimeField;
 
-use super::{arithmetic, Rep3PrimeFieldShare};
+use super::{Rep3PrimeFieldShare, arithmetic};
 
 type FieldShare<F> = Rep3PrimeFieldShare<F>;
 
@@ -54,7 +54,7 @@ pub fn eval_poly<F: PrimeField>(coeffs: &[FieldShare<F>], point: F) -> FieldShar
     // 2) Do polynomial evaluation via horner's method for the thread's coefficeints
     // 3) Scale the result point^{thread coefficient start index}
     // Then obtain the final polynomial evaluation by summing each threads result.
-    let result = coeffs
+    coeffs
         .par_chunks(num_elem_per_thread)
         .enumerate()
         .map(|(i, chunk)| {
@@ -64,6 +64,5 @@ pub fn eval_poly<F: PrimeField>(coeffs: &[FieldShare<F>], point: F) -> FieldShar
             thread_result.b *= power;
             thread_result
         })
-        .reduce(FieldShare::zero_share, |acc, e| arithmetic::add(acc, e));
-    result
+        .reduce(FieldShare::zero_share, |acc, e| arithmetic::add(acc, e))
 }

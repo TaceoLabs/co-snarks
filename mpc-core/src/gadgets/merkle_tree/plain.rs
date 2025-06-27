@@ -294,7 +294,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use rand::{thread_rng, Rng};
+    use rand::{Rng, thread_rng};
 
     fn next_power_of_n(size: usize, n: usize) -> usize {
         let log = size.ilog(n);

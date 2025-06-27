@@ -3,16 +3,16 @@
 //! This module contains some oblivious lookup table algorithms for the Rep3 protocol.
 
 use crate::{
+    IoResult,
     protocols::{
         rep3::network::{IoContext, Rep3Network},
         rep3_ring::{binary, conversion, gadgets},
     },
-    IoResult,
 };
 use ark_ff::PrimeField;
 use mpc_types::protocols::{
     rep3::{Rep3BigUintShare, Rep3PrimeFieldShare},
-    rep3_ring::{ring::int_ring::IntRing2k, Rep3RingShare},
+    rep3_ring::{Rep3RingShare, ring::int_ring::IntRing2k},
 };
 use num_bigint::BigUint;
 use rand::{distributions::Standard, prelude::Distribution};
@@ -85,7 +85,7 @@ where
 
     if k & 1 == 1 {
         k += 1; // Make even
-                // TODO is it possible to not needing to do that?
+        // TODO is it possible to not needing to do that?
     }
     assert!(k <= T::K);
     let k2 = k >> 1;
@@ -160,7 +160,7 @@ where
 
     if k & 1 == 1 {
         k += 1; // Make even
-                // TODO is it possible to not needing to do that?
+        // TODO is it possible to not needing to do that?
     }
     assert!(k <= T::K);
     let k2 = k >> 1;

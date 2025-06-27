@@ -2,7 +2,7 @@ use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use co_builder::prelude::Polynomial;
 
-use crate::{mpc::NoirUltraHonkProver, NUM_ALPHAS};
+use crate::{NUM_ALPHAS, mpc::NoirUltraHonkProver};
 
 pub(crate) struct ProverMemory<T: NoirUltraHonkProver<P>, P: Pairing> {
     pub(crate) w_4: Polynomial<T::ArithmeticShare>, // column 3

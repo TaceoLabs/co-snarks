@@ -1,7 +1,7 @@
 use ark_ec::pairing::Pairing;
 use co_builder::{
-    prelude::{HonkCurve, PrecomputedEntities},
     TranscriptFieldType,
+    prelude::{HonkCurve, PrecomputedEntities},
 };
 use ultrahonk::prelude::{ShiftedWitnessEntities, Univariate, WitnessEntities};
 
@@ -12,13 +12,13 @@ pub(crate) type ShiftedWitnessEntitiesBatch<T> = ShiftedWitnessEntities<Vec<T>>;
 use crate::{
     co_decider::{
         relations::{
-            auxiliary_relation::AuxiliaryRelation,
+            Relation as _, auxiliary_relation::AuxiliaryRelation,
             delta_range_constraint_relation::DeltaRangeConstraintRelation,
             elliptic_relation::EllipticRelation, logderiv_lookup_relation::LogDerivLookupRelation,
             permutation_relation::UltraPermutationRelation,
             poseidon2_external_relation::Poseidon2ExternalRelation,
             poseidon2_internal_relation::Poseidon2InternalRelation,
-            ultra_arithmetic_relation::UltraArithmeticRelation, Relation as _,
+            ultra_arithmetic_relation::UltraArithmeticRelation,
         },
         types::MAX_PARTIAL_RELATION_LENGTH,
         univariates::SharedUnivariate,

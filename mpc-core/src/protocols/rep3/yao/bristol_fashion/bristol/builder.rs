@@ -118,9 +118,10 @@ impl UnverifiedBristolFashionCircuit {
 
         if wires.len() != self.num_wires {
             return Err(CircuitBuilderError::InvalidCircuit(format!(
-                            "Circuit does not have the correct number of wires: {} specified, {} needed while executing",
-                            self.num_wires, wires.len()
-                        )));
+                "Circuit does not have the correct number of wires: {} specified, {} needed while executing",
+                self.num_wires,
+                wires.len()
+            )));
         }
 
         let UnverifiedBristolFashionCircuit {

@@ -2,8 +2,8 @@ use crate::{key::proving_key::ProvingKey, mpc::NoirUltraHonkProver};
 use ark_ec::pairing::Pairing;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_builder::prelude::{
-    ActiveRegionData, CycleNode, CyclicPermutation, GenericUltraCircuitBuilder, Polynomial,
-    NUM_SELECTORS, NUM_WIRES,
+    ActiveRegionData, CycleNode, CyclicPermutation, GenericUltraCircuitBuilder, NUM_SELECTORS,
+    NUM_WIRES, Polynomial,
 };
 
 pub(crate) struct TraceData<'a, T: NoirUltraHonkProver<P>, P: Pairing> {
@@ -72,7 +72,7 @@ impl<'a, T: NoirUltraHonkProver<P>, P: Pairing> TraceData<'a, T, P> {
         tracing::trace!("Construct trace data");
 
         let mut offset = 1; // Offset at which to place each block in the trace polynomials
-                            // For each block in the trace, populate wire polys, copy cycles and selector polys
+        // For each block in the trace, populate wire polys, copy cycles and selector polys
         for block in builder.blocks.get() {
             let block_size = block.len();
 

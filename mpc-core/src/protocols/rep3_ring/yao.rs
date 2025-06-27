@@ -3,32 +3,32 @@
 //! This module contains operations with Yao's garbled circuits
 
 use crate::{
+    IoResult,
     protocols::{
         rep3::{
             self,
             network::{IoContext, Rep3Network},
             yao::{
-                circuits::GarbledCircuits, evaluator::Rep3Evaluator, garbler::Rep3Garbler,
-                GCInputs, GCUtils,
+                GCInputs, GCUtils, circuits::GarbledCircuits, evaluator::Rep3Evaluator,
+                garbler::Rep3Garbler,
             },
         },
         rep3_ring::conversion,
     },
-    IoResult,
 };
 use ark_ff::PrimeField;
 use fancy_garbling::{BinaryBundle, WireLabel, WireMod2};
 use itertools::izip;
 use mpc_types::protocols::{
-    rep3::{id::PartyID, Rep3BigUintShare, Rep3PrimeFieldShare},
+    rep3::{Rep3BigUintShare, Rep3PrimeFieldShare, id::PartyID},
     rep3_ring::{
-        ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
         Rep3RingShare,
+        ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
     },
 };
 use num_bigint::BigUint;
 use num_traits::{One, Zero};
-use rand::{distributions::Standard, prelude::Distribution, CryptoRng, Rng};
+use rand::{CryptoRng, Rng, distributions::Standard, prelude::Distribution};
 use std::{any::TypeId, ops::Neg};
 
 mod garbler;

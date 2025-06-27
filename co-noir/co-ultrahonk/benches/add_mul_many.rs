@@ -4,7 +4,7 @@ use ark_bn254::Bn254 as B;
 use ark_ff::Zero as _;
 use co_ultrahonk::prelude::{NoirUltraHonkProver as P, PlainUltraHonkDriver as D};
 use itertools::izip;
-use rand::{thread_rng, RngCore};
+use rand::{RngCore, thread_rng};
 use rayon::prelude::*;
 
 type FieldType = ark_bn254::Fr;

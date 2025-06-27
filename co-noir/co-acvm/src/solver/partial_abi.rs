@@ -1,6 +1,6 @@
 use super::CoSolver;
 use crate::mpc::NoirWitnessExtensionProtocol;
-use acir::{circuit::PublicInputs, native_types::WitnessMap, FieldElement};
+use acir::{FieldElement, circuit::PublicInputs, native_types::WitnessMap};
 use eyre::eyre;
 use noirc_abi::Abi;
 use serde::{Deserialize, Serialize};

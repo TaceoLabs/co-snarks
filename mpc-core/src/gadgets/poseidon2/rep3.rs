@@ -2,9 +2,8 @@ use std::array;
 
 use super::{Poseidon2, Poseidon2Precomputations};
 use crate::protocols::rep3::{
-    arithmetic,
+    PartyID, Rep3PrimeFieldShare, arithmetic,
     network::{IoContext, Rep3Network},
-    PartyID, Rep3PrimeFieldShare,
 };
 use ark_ff::PrimeField;
 

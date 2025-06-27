@@ -2,7 +2,7 @@
 use std::io;
 
 use bytes::{Buf, BufMut, BytesMut};
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use tokio_util::codec::{Decoder, Encoder, LengthDelimitedCodec};
 
 /// A codec that serializes and deserializes messages using [bincode].

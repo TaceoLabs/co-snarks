@@ -5,8 +5,8 @@ use num_bigint::BigUint;
 
 use crate::mpc::plain::to_usize;
 
-use super::plain::CircomPlainVmWitnessExtension;
 use super::VmCircomWitnessExtension;
+use super::plain::CircomPlainVmWitnessExtension;
 
 macro_rules! bool_comp_op {
     ($driver: expr, $lhs: expr, $op: tt, $rhs: expr) => {{

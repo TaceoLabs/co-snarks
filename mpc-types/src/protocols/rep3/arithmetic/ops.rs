@@ -133,6 +133,8 @@ impl<F: PrimeField> ark_ff::Zero for Rep3PrimeFieldShare<F> {
     }
 
     fn is_zero(&self) -> bool {
-        panic!("is_zero is not a meaningful operation for Rep3PrimeFieldShare, use interative zero check instead");
+        panic!(
+            "is_zero is not a meaningful operation for Rep3PrimeFieldShare, use interative zero check instead"
+        );
     }
 }

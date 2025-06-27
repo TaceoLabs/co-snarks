@@ -7,8 +7,8 @@ use crate::protocols::rep3::IoResult;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Valid};
 use num_traits::{One, Zero};
 use rand::{
-    distributions::{Distribution, Standard},
     Rng,
+    distributions::{Distribution, Standard},
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -215,7 +215,7 @@ where
 {
     #[inline(always)]
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> RingElement<T> {
-        RingElement(rng.gen())
+        RingElement(rng.r#gen())
     }
 }
 
@@ -414,7 +414,7 @@ mod unsafe_test {
         Standard: Distribution<T>,
     {
         let mut rng = ChaCha12Rng::from_entropy();
-        let t_vec: Vec<T> = (0..ELEMENTS).map(|_| rng.gen()).collect();
+        let t_vec: Vec<T> = (0..ELEMENTS).map(|_| rng.r#gen()).collect();
 
         // Convert vec<T> to vec<R<T>>
         let t_conv = RingElement::convert_vec_rev(t_vec.to_owned());

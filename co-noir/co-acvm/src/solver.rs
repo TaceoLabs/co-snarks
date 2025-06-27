@@ -1,8 +1,8 @@
 use acir::{
+    FieldElement,
     acir_field::GenericFieldElement,
     circuit::{Circuit, ExpressionWidth, Opcode, Program},
     native_types::{WitnessMap, WitnessStack},
-    FieldElement,
 };
 use ark_ff::PrimeField;
 use co_brillig::CoBrilligVM;
@@ -11,18 +11,18 @@ use mpc_core::{
     lut::LookupTableProvider,
     protocols::{
         rep3::network::Rep3Network,
-        shamir::{network::ShamirNetwork, ShamirPreprocessing, ShamirProtocol},
+        shamir::{ShamirPreprocessing, ShamirProtocol, network::ShamirNetwork},
     },
 };
-use noirc_abi::{input_parser::Format, Abi, MAIN_RETURN_NAME};
+use noirc_abi::{Abi, MAIN_RETURN_NAME, input_parser::Format};
 use noirc_artifacts::program::ProgramArtifact;
 use partial_abi::PublicMarker;
 use std::{collections::BTreeMap, io, path::Path};
 
 use crate::{
     mpc::{
-        plain::PlainAcvmSolver, rep3::Rep3AcvmSolver, shamir::ShamirAcvmSolver,
-        NoirWitnessExtensionProtocol,
+        NoirWitnessExtensionProtocol, plain::PlainAcvmSolver, rep3::Rep3AcvmSolver,
+        shamir::ShamirAcvmSolver,
     },
     pss_store::PssStore,
 };

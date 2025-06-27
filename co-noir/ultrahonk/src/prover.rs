@@ -1,14 +1,14 @@
 use crate::{
+    CONST_PROOF_SIZE_LOG_N,
     decider::{prover::Decider, types::ProverMemory},
     oink::prover::Oink,
     transcript::{Transcript, TranscriptFieldType, TranscriptHasher},
     types::HonkProof,
-    CONST_PROOF_SIZE_LOG_N,
 };
 use ark_ec::pairing::Pairing;
 use co_builder::{
-    prelude::{HonkCurve, ProvingKey, ZeroKnowledge, PAIRING_POINT_ACCUMULATOR_SIZE},
     HonkProofResult,
+    prelude::{HonkCurve, PAIRING_POINT_ACCUMULATOR_SIZE, ProvingKey, ZeroKnowledge},
 };
 use std::marker::PhantomData;
 

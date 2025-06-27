@@ -9,6 +9,7 @@ use crate::decider::types::{BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PA
 use crate::{
     decider::{
         relations::{
+            AllRelationAcc, Relation,
             auxiliary_relation::AuxiliaryRelation,
             delta_range_constraint_relation::DeltaRangeConstraintRelation,
             elliptic_relation::{EllipticRelation, EllipticRelationAcc},
@@ -17,7 +18,6 @@ use crate::{
             poseidon2_external_relation::Poseidon2ExternalRelation,
             poseidon2_internal_relation::Poseidon2InternalRelation,
             ultra_arithmetic_relation::UltraArithmeticRelation,
-            AllRelationAcc, Relation,
         },
         types::ProverUnivariates,
     },

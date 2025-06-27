@@ -1,10 +1,10 @@
 use self::utils::Utils;
 use super::field_ct::FieldCT;
 use super::generators;
-use crate::prelude::HonkCurve;
 use crate::TranscriptFieldType;
+use crate::prelude::HonkCurve;
 use crate::{builder::GenericUltraCircuitBuilder, utils};
-use ark_ec::{pairing::Pairing, AffineRepr, CurveGroup};
+use ark_ec::{AffineRepr, CurveGroup, pairing::Pairing};
 use ark_ff::{PrimeField, Zero};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use itertools::izip;
@@ -1083,8 +1083,8 @@ impl<F: PrimeField> Plookup<F> {
         table
     }
 
-    fn init_multi_tables<P: HonkCurve<TranscriptFieldType, ScalarField = F>>(
-    ) -> [PlookupMultiTable<F>; MultiTableId::NumMultiTables as usize] {
+    fn init_multi_tables<P: HonkCurve<TranscriptFieldType, ScalarField = F>>()
+    -> [PlookupMultiTable<F>; MultiTableId::NumMultiTables as usize] {
         // TACEO TODO not all are initialized here! We should probably only initialize those we need here?!
         let mut multi_tables = from_fn(|_| PlookupMultiTable::default());
         multi_tables[usize::from(MultiTableId::HonkDummyMulti)] = Self::get_honk_dummy_multitable();

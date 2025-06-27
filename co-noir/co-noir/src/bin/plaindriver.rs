@@ -2,20 +2,20 @@ use acir::native_types::{WitnessMap, WitnessStack};
 use ark_bn254::Bn254;
 use ark_ff::PrimeField;
 use clap::{Parser, ValueEnum};
-use co_acvm::{solver::PlainCoSolver, PlainAcvmSolver};
+use co_acvm::{PlainAcvmSolver, solver::PlainCoSolver};
 use co_builder::prelude::Serialize as FieldSerialize;
 use co_noir::HonkRecursion;
 use co_ultrahonk::{
+    PlainCoBuilder,
     prelude::{
         CoUltraHonk, CrsParser, PlainUltraHonkDriver, Poseidon2Sponge, ProvingKey, UltraHonk,
         Utils, VerifyingKey, ZeroKnowledge,
     },
-    PlainCoBuilder,
 };
 use color_eyre::eyre::Context;
 use figment::{
-    providers::{Env, Format, Serialized, Toml},
     Figment,
+    providers::{Env, Format, Serialized, Toml},
 };
 use serde::{Deserialize, Serialize};
 use sha3::Keccak256;
@@ -124,7 +124,7 @@ impl Config {
 
 fn install_tracing() {
     use tracing_subscriber::prelude::*;
-    use tracing_subscriber::{fmt, EnvFilter};
+    use tracing_subscriber::{EnvFilter, fmt};
 
     let fmt_layer = fmt::layer()
         .with_target(false)

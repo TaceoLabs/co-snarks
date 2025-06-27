@@ -2,13 +2,13 @@ use std::{collections::HashMap, path::PathBuf};
 
 use clap::Parser;
 use color_eyre::{
-    eyre::{eyre, Context},
     Result,
+    eyre::{Context, eyre},
 };
 use mpc_net::{
+    MpcNetworkHandler,
     channel::ChannelHandle,
     config::{NetworkConfig, NetworkConfigFile},
-    MpcNetworkHandler,
 };
 
 #[derive(Parser)]

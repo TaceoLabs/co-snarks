@@ -1,13 +1,13 @@
 use crate::decider::prover::Decider;
-use crate::decider::sumcheck::round_prover::{SumcheckProverRound, SumcheckRoundOutput};
 use crate::decider::sumcheck::SumcheckOutput;
+use crate::decider::sumcheck::round_prover::{SumcheckProverRound, SumcheckRoundOutput};
 use crate::decider::types::{
-    ClaimedEvaluations, GateSeparatorPolynomial, PartiallyEvaluatePolys,
-    BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK,
+    BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK, ClaimedEvaluations,
+    GateSeparatorPolynomial, PartiallyEvaluatePolys,
 };
 use crate::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
 use crate::types::AllEntities;
-use crate::{Utils, CONST_PROOF_SIZE_LOG_N};
+use crate::{CONST_PROOF_SIZE_LOG_N, Utils};
 use co_builder::prelude::{HonkCurve, RowDisablingPolynomial};
 
 use super::zk_data::ZKSumcheckData;
@@ -124,8 +124,8 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         );
         gate_separators.partially_evaluate(round_challenge);
         sum_check_round.round_size >>= 1; // AZTEC TODO(#224)(Cody): Maybe partially_evaluate should do this and
-                                          // release memory?        // All but final round
-                                          // We operate on partially_evaluated_polynomials in place.
+        // release memory?        // All but final round
+        // We operate on partially_evaluated_polynomials in place.
 
         for round_idx in 1..multivariate_d as usize {
             tracing::trace!("Sumcheck prove round {}", round_idx);
@@ -241,8 +241,8 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
         gate_separators.partially_evaluate(round_challenge);
         sum_check_round.round_size >>= 1; // AZTEC TODO(#224)(Cody): Maybe partially_evaluate should do this and
-                                          // release memory?        // All but final round
-                                          // We operate on partially_evaluated_polynomials in place.
+        // release memory?        // All but final round
+        // We operate on partially_evaluated_polynomials in place.
         for round_idx in 1..multivariate_d as usize {
             tracing::trace!("Sumcheck prove round {}", round_idx);
             // Write the round univariate to the transcript

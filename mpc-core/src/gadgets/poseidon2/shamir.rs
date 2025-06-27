@@ -1,6 +1,6 @@
 use super::{Poseidon2, Poseidon2Precomputations};
 use crate::protocols::shamir::{
-    arithmetic, network::ShamirNetwork, ShamirPrimeFieldShare, ShamirProtocol,
+    ShamirPrimeFieldShare, ShamirProtocol, arithmetic, network::ShamirNetwork,
 };
 use ark_ff::PrimeField;
 

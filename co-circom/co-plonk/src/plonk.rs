@@ -4,8 +4,8 @@
 //! You will most likely need the plain PLONK implementation to verify a proof from co-PLONK. For that
 //! see the [`Plonk::verify`] method.
 
-use crate::{mpc::plain::PlainPlonkDriver, plonk_utils, types::Domains, CoPlonk};
-use ark_ec::{pairing::Pairing, PrimeGroup};
+use crate::{CoPlonk, mpc::plain::PlainPlonkDriver, plonk_utils, types::Domains};
+use ark_ec::{PrimeGroup, pairing::Pairing};
 use ark_ff::Field;
 use circom_types::{
     plonk::{JsonVerificationKey, PlonkProof, ZKey},

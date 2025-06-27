@@ -19,13 +19,13 @@ use circom_compiler::{
     compiler_interface::{Circuit as CircomCircuit, CompilationFlags, VCP},
     hir::very_concrete_program::Wire,
     intermediate_representation::{
+        InstructionList,
         ir_interface::{
             AccessType, AddressType, AssertBucket, BranchBucket, CallBucket, ComputeBucket,
             CreateCmpBucket, Instruction, LoadBucket, LocationRule, LogBucket, LogBucketArg,
             LoopBucket, OperatorType, ReturnBucket, ReturnType, SizeOption, StoreBucket,
             ValueBucket, ValueType,
         },
-        InstructionList,
     },
 };
 use circom_constraint_generation::BuildConfig;
@@ -40,7 +40,7 @@ use circom_type_analysis::check_types;
 use circom_types::traits::CircomArkworksPairingBridge;
 use circom_types::traits::CircomArkworksPrimeFieldBridge;
 use eyre::eyre;
-use eyre::{bail, Result};
+use eyre::{Result, bail};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, marker::PhantomData, path::PathBuf};
@@ -818,8 +818,10 @@ mod tests {
                 "159", "787", "389", "594", "189", "530", "748", "338", "462", "135"
             ]),
         );
-        assert!(finalized_witness
-            .get_output("SomeThingThatIsNotAnOutput")
-            .is_none());
+        assert!(
+            finalized_witness
+                .get_output("SomeThingThatIsNotAnOutput")
+                .is_none()
+        );
     }
 }

@@ -1,7 +1,7 @@
 use ark_ff::PrimeField;
 use co_builder::{
-    prelude::{PrecomputedEntities, Serialize, PRECOMPUTED_ENTITIES_SIZE},
     HonkProofResult,
+    prelude::{PRECOMPUTED_ENTITIES_SIZE, PrecomputedEntities, Serialize},
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]

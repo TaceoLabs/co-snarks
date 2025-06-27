@@ -443,7 +443,7 @@ pub fn reconstruct_point<C: CurveGroup>(shares: &[C], lagrange: &[C::ScalarField
 mod shamir_test {
     use super::*;
     use ark_ff::UniformRand;
-    use rand::{seq::IteratorRandom, SeedableRng};
+    use rand::{SeedableRng, seq::IteratorRandom};
     use rand_chacha::ChaCha12Rng;
 
     const TESTRUNS: usize = 5;

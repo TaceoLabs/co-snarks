@@ -3,7 +3,7 @@ use std::{marker::PhantomData, str::FromStr};
 
 use ark_ff::PrimeField;
 use serde::ser::SerializeSeq;
-use serde::{de, Serialize};
+use serde::{Serialize, de};
 
 /// Represents a public input for a Groth16 proof. Implements [`serde::Deserialize`] and [`serde::Serialize`] for loading/storing public inputs from/to JSON formats defined by circom.
 #[derive(Debug, PartialEq, Eq)]

@@ -670,7 +670,7 @@ mod tests {
         BoolBristolFashionEvaluator, CircuitLevel,
     };
 
-    use super::{parser, BristolFashionCircuit, BristolFashionGate};
+    use super::{BristolFashionCircuit, BristolFashionGate, parser};
 
     const SINGLE_XOR: &str = r#"1 3
 2 1 1

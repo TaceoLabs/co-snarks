@@ -24,14 +24,14 @@ mod tests {
     use ark_relations::r1cs::{ConstraintMatrices, Matrix};
     use ark_serialize::CanonicalDeserialize;
     use circom_types::{
+        Witness,
         groth16::{CircomGroth16Proof, JsonPublicInput, JsonVerificationKey, ZKey},
         traits::CheckElement,
-        Witness,
     };
     use co_circom_types::SharedWitness;
     use std::fs::{self, File};
 
-    use crate::{groth16::Groth16, CircomReduction, LibSnarkReduction};
+    use crate::{CircomReduction, LibSnarkReduction, groth16::Groth16};
 
     #[test]
     fn create_proof_and_verify_bn254() {

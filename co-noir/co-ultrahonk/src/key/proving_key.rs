@@ -10,6 +10,7 @@ use crate::types::Polynomials;
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use co_builder::HonkProofResult;
 use co_builder::prelude::Polynomial;
 use co_builder::prelude::PrecomputedEntities;
 use co_builder::prelude::ProverCrs;
@@ -18,15 +19,14 @@ use co_builder::prelude::ProvingKey as PlainProvingKey;
 use co_builder::prelude::VerifyingKey;
 use co_builder::prelude::{ActiveRegionData, HonkCurve};
 use co_builder::prelude::{GenericUltraCircuitBuilder, PublicComponentKey};
-use co_builder::HonkProofResult;
 use co_builder::{HonkProofError, TranscriptFieldType};
 use eyre::Result;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::marker::PhantomData;
-use ultrahonk::prelude::{VerifyingKeyBarretenberg, ZeroKnowledge};
 use ultrahonk::Utils;
+use ultrahonk::prelude::{VerifyingKeyBarretenberg, ZeroKnowledge};
 
 #[derive(Serialize, Deserialize)]
 #[serde(bound = "")]

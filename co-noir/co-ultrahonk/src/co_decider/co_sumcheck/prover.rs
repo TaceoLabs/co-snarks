@@ -1,33 +1,33 @@
-use super::{zk_data::SharedZKSumcheckData, SumcheckOutput};
+use super::{SumcheckOutput, zk_data::SharedZKSumcheckData};
 
 use crate::{
+    CONST_PROOF_SIZE_LOG_N,
     co_decider::{
         co_sumcheck::round::SumcheckRound,
         prover::CoDecider,
         types::{
-            ClaimedEvaluations, PartiallyEvaluatePolys, BATCHED_RELATION_PARTIAL_LENGTH_ZK,
-            MAX_PARTIAL_RELATION_LENGTH,
+            BATCHED_RELATION_PARTIAL_LENGTH_ZK, ClaimedEvaluations, MAX_PARTIAL_RELATION_LENGTH,
+            PartiallyEvaluatePolys,
         },
     },
     mpc::NoirUltraHonkProver,
     types::AllEntities,
-    CONST_PROOF_SIZE_LOG_N,
 };
-use co_builder::prelude::{HonkCurve, RowDisablingPolynomial};
 use co_builder::HonkProofResult;
+use co_builder::prelude::{HonkCurve, RowDisablingPolynomial};
 use ultrahonk::{
+    Utils,
     prelude::{
         GateSeparatorPolynomial, Transcript, TranscriptFieldType, TranscriptHasher, Univariate,
     },
-    Utils,
 };
 
 // Keep in mind, the UltraHonk protocol (UltraFlavor) does not per default have ZK
 impl<
-        T: NoirUltraHonkProver<P>,
-        P: HonkCurve<TranscriptFieldType>,
-        H: TranscriptHasher<TranscriptFieldType>,
-    > CoDecider<T, P, H>
+    T: NoirUltraHonkProver<P>,
+    P: HonkCurve<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType>,
+> CoDecider<T, P, H>
 {
     pub(crate) fn partially_evaluate_init(
         partially_evaluated_poly: &mut PartiallyEvaluatePolys<T, P>,
@@ -181,8 +181,8 @@ impl<
         gate_separators.partially_evaluate(round_challenge);
 
         sum_check_round.round_size >>= 1; // AZTEC TODO(#224)(Cody): Maybe partially_evaluate should do this and
-                                          // release memory?        // All but final round
-                                          // We operate on partially_evaluated_polynomials in place.
+        // release memory?        // All but final round
+        // We operate on partially_evaluated_polynomials in place.
 
         for round_idx in 1..multivariate_d as usize {
             // Write the round univariate to the transcript
@@ -306,8 +306,8 @@ impl<
 
         gate_separators.partially_evaluate(round_challenge);
         sum_check_round.round_size >>= 1; // AZTEC TODO(#224)(Cody): Maybe partially_evaluate should do this and
-                                          // release memory?        // All but final round
-                                          // We operate on partially_evaluated_polynomials in place.
+        // release memory?        // All but final round
+        // We operate on partially_evaluated_polynomials in place.
         for round_idx in 1..multivariate_d as usize {
             tracing::trace!("Sumcheck prove round {}", round_idx);
             // Write the round univariate to the transcript

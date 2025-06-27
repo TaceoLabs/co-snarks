@@ -1,12 +1,12 @@
 //  modified from barustenberg:
 
 use super::{Crs, ProverCrs};
+use crate::TranscriptFieldType;
 use crate::prelude::HonkCurve;
 use crate::types::types::ZeroKnowledge;
-use crate::TranscriptFieldType;
-use ark_ec::{pairing::Pairing, AffineRepr, CurveGroup};
+use ark_ec::{AffineRepr, CurveGroup, pairing::Pairing};
 use ark_serialize::CanonicalDeserialize;
-use eyre::{anyhow, Result};
+use eyre::{Result, anyhow};
 use std::cmp::max;
 use std::fs::File;
 use std::io::Read;
@@ -167,7 +167,7 @@ impl<P: Pairing> FileProcessor<P> for NewFileStructure<P> {
 mod tests {
     use super::*;
     use ark_bn254::{Bn254, Fq12, G1Affine, G2Affine};
-    use ark_ec::{pairing::Pairing, AffineRepr};
+    use ark_ec::{AffineRepr, pairing::Pairing};
     use ark_ff::AdditiveGroup;
     use ark_ff::Field;
 

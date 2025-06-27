@@ -72,8 +72,8 @@ where
                     Ok(*witness)
                 } else {
                     Err(eyre::eyre!(
-                    "value for mem op must be a degree one univariate polynomial with coef 1 and constant 0"
-                ))
+                        "value for mem op must be a degree one univariate polynomial with coef 1 and constant 0"
+                    ))
                 }
             } else {
                 Err(eyre::eyre!(

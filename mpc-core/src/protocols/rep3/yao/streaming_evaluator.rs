@@ -4,17 +4,17 @@
 //!
 //! This file is heavily inspired by [fancy-garbling](https://github.com/GaloisInc/swanky/blob/dev/fancy-garbling/src/garble/evaluator.rs)
 
-use super::{circuits::FancyBinaryConstant, GCUtils};
+use super::{GCUtils, circuits::FancyBinaryConstant};
 use crate::{
-    protocols::rep3::{
-        network::{IoContext, Rep3Network},
-        PartyID,
-    },
     IoResult,
+    protocols::rep3::{
+        PartyID,
+        network::{IoContext, Rep3Network},
+    },
 };
 use fancy_garbling::{
-    errors::EvaluatorError, util::output_tweak, BinaryBundle, Fancy, FancyBinary, WireLabel,
-    WireMod2,
+    BinaryBundle, Fancy, FancyBinary, WireLabel, WireMod2, errors::EvaluatorError,
+    util::output_tweak,
 };
 use scuttlebutt::Block;
 use sha3::{Digest, Sha3_256};

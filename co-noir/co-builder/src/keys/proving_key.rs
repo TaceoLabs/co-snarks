@@ -1,5 +1,6 @@
 use crate::polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK;
 use crate::{
+    HonkProofResult,
     builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder},
     crs::ProverCrs,
     polynomials::{
@@ -7,13 +8,12 @@ use crate::{
         polynomial_types::{Polynomials, PrecomputedEntities},
     },
     types::types::{
-        ActiveRegionData, CyclicPermutation, Mapping, PermutationMapping, TraceData, NUM_WIRES,
+        ActiveRegionData, CyclicPermutation, Mapping, NUM_WIRES, PermutationMapping, TraceData,
     },
-    HonkProofResult,
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
-use co_acvm::{mpc::NoirWitnessExtensionProtocol, PlainAcvmSolver};
+use co_acvm::{PlainAcvmSolver, mpc::NoirWitnessExtensionProtocol};
 use num_bigint::BigUint;
 use std::sync::Arc;
 

@@ -1,11 +1,11 @@
 use acir::{
+    AcirField,
     acir_field::GenericFieldElement,
     circuit::{
-        opcodes::{BlackBoxFuncCall, FunctionInput, MemOp},
         Circuit,
+        opcodes::{BlackBoxFuncCall, FunctionInput, MemOp},
     },
     native_types::{Expression, Witness, WitnessMap},
-    AcirField,
 };
 use ark_ff::{PrimeField, Zero};
 use std::{
@@ -302,12 +302,12 @@ impl<F: PrimeField> AcirFormat<F> {
 
         // If necessary, set values for quadratic term (q_m * w_l * w_r)
         assert!(arg.mul_terms.len() <= 1); // We can only accommodate 1 quadratic term
-                                           // Note: mul_terms are tuples of the form {selector_value, witness_idx_1, witness_idx_2}
+        // Note: mul_terms are tuples of the form {selector_value, witness_idx_1, witness_idx_2}
         if !arg.mul_terms.is_empty() {
             let mul_term = &arg.mul_terms[0];
             pt.q_m = mul_term.0.into_repr();
-            pt.a = mul_term.1 .0;
-            pt.b = mul_term.2 .0;
+            pt.a = mul_term.1.0;
+            pt.b = mul_term.2.0;
             a_set = true;
             b_set = true;
         }
@@ -316,7 +316,7 @@ impl<F: PrimeField> AcirFormat<F> {
         assert!(arg.linear_combinations.len() <= 3); // We can only accommodate 3 linear terms
         for linear_term in arg.linear_combinations.iter() {
             let selector_value = linear_term.0.into_repr();
-            let witness_idx = linear_term.1 .0;
+            let witness_idx = linear_term.1.0;
 
             // If the witness index has not yet been set or if the corresponding linear term is active, set the witness
             // index and the corresponding selector value.
@@ -381,19 +381,19 @@ impl<F: PrimeField> AcirFormat<F> {
         let mut c_set = false;
         let mut d_set = false;
         assert!(arg.mul_terms.len() <= 1); // We can only accommodate 1 quadratic term
-                                           // Note: mul_terms are tuples of the form {selector_value, witness_idx_1, witness_idx_2}
+        // Note: mul_terms are tuples of the form {selector_value, witness_idx_1, witness_idx_2}
         if !arg.mul_terms.is_empty() {
             let mul_term = &arg.mul_terms[0];
             quad.mul_scaling = mul_term.0.into_repr();
-            quad.a = mul_term.1 .0;
-            quad.b = mul_term.2 .0;
+            quad.a = mul_term.1.0;
+            quad.b = mul_term.2.0;
             a_set = true;
             b_set = true;
         }
         // If necessary, set values for linears terms q_l * w_l, q_r * w_r and q_o * w_o
         for linear_term in arg.linear_combinations.iter() {
             let selector_value = linear_term.0.into_repr();
-            let witness_idx = linear_term.1 .0;
+            let witness_idx = linear_term.1.0;
 
             // If the witness index has not yet been set or if the corresponding linear term is active, set the witness
             // index and the corresponding selector value.
@@ -454,8 +454,8 @@ impl<F: PrimeField> AcirFormat<F> {
         // list of witnesses that are part of mul terms
         let mut all_mul_terms = HashSet::new();
         for term in &arg.mul_terms {
-            all_mul_terms.insert(term.1 .0);
-            all_mul_terms.insert(term.2 .0);
+            all_mul_terms.insert(term.1.0);
+            all_mul_terms.insert(term.2.0);
         }
         // The 'mul term' witnesses that have been processed
         let mut processed_mul_terms = HashSet::new();
@@ -466,8 +466,8 @@ impl<F: PrimeField> AcirFormat<F> {
             // we add a mul term (if there are some) to every intermediate gate
             if let Some(mul_term) = current_mul_term {
                 mul_gate.mul_scaling = mul_term.0.into_repr();
-                mul_gate.a = mul_term.1 .0;
-                mul_gate.b = mul_term.2 .0;
+                mul_gate.a = mul_term.1.0;
+                mul_gate.b = mul_term.2.0;
                 mul_gate.a_scaling = F::zero();
                 mul_gate.b_scaling = F::zero();
                 // Try to add corresponding linear terms, only if they were not already added
@@ -475,7 +475,7 @@ impl<F: PrimeField> AcirFormat<F> {
                     || !processed_mul_terms.contains(&mul_gate.b)
                 {
                     for lin_term in &arg.linear_combinations {
-                        let w = lin_term.1 .0;
+                        let w = lin_term.1.0;
                         if w == mul_gate.a {
                             if !processed_mul_terms.contains(&mul_gate.a) {
                                 mul_gate.a_scaling = lin_term.0.into_repr();
@@ -502,7 +502,7 @@ impl<F: PrimeField> AcirFormat<F> {
             // Assign available wires with the remaining linear terms which are not also a 'mul term'
             while current_linear_term.is_some() {
                 let current_term = current_linear_term.unwrap();
-                let w = current_term.1 .0;
+                let w = current_term.1.0;
                 if !all_mul_terms.contains(&w) {
                     if i < max_size {
                         Self::assign_linear_term(&mut mul_gate, i, w, current_term.0.into_repr()); // * fr(-1)));
@@ -547,13 +547,13 @@ impl<F: PrimeField> AcirFormat<F> {
     }
     fn constrain_witnesses(arg: Expression<GenericFieldElement<F>>, af: &mut AcirFormat<F>) {
         for linear_term in arg.linear_combinations {
-            let witness_idx = linear_term.1 .0;
+            let witness_idx = linear_term.1.0;
             af.constrained_witness.insert(witness_idx);
         }
         for linear_term in arg.mul_terms {
-            let witness_idx = linear_term.1 .0;
+            let witness_idx = linear_term.1.0;
             af.constrained_witness.insert(witness_idx);
-            let witness_idx = linear_term.2 .0;
+            let witness_idx = linear_term.2.0;
             af.constrained_witness.insert(witness_idx);
         }
     }

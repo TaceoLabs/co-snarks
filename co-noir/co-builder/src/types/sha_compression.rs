@@ -1,5 +1,5 @@
 use crate::{
-    builder::GenericUltraCircuitBuilder, prelude::HonkCurve, utils::Utils, TranscriptFieldType,
+    TranscriptFieldType, builder::GenericUltraCircuitBuilder, prelude::HonkCurve, utils::Utils,
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;

@@ -4,7 +4,7 @@ use std::{
     ops::{AddAssign, MulAssign, SubAssign},
 };
 
-use ark_ec::{pairing::Pairing, CurveGroup};
+use ark_ec::{CurveGroup, pairing::Pairing};
 use ark_poly::domain::DomainCoeff;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 

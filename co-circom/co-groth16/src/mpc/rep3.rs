@@ -1,8 +1,8 @@
-use ark_ec::{pairing::Pairing, CurveGroup};
+use ark_ec::{CurveGroup, pairing::Pairing};
 use mpc_core::protocols::rep3::{
-    arithmetic,
+    PartyID, Rep3PointShare, Rep3PrimeFieldShare, arithmetic,
     network::{IoContext, Rep3Network},
-    pointshare, PartyID, Rep3PointShare, Rep3PrimeFieldShare,
+    pointshare,
 };
 use rayon::prelude::*;
 

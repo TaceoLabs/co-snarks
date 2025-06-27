@@ -1,15 +1,15 @@
-use super::{fold_accumulator, ProverUnivariatesBatch, Relation};
+use super::{ProverUnivariatesBatch, Relation, fold_accumulator};
 use crate::{
     co_decider::{
-        types::{RelationParameters, MAX_PARTIAL_RELATION_LENGTH},
+        types::{MAX_PARTIAL_RELATION_LENGTH, RelationParameters},
         univariates::SharedUnivariate,
     },
     mpc::NoirUltraHonkProver,
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::Zero;
-use co_builder::prelude::HonkCurve;
 use co_builder::HonkProofResult;
+use co_builder::prelude::HonkCurve;
 use itertools::Itertools as _;
 use mpc_core::gadgets::poseidon2::POSEIDON2_BN254_T4_PARAMS;
 use num_bigint::BigUint;

@@ -13,14 +13,14 @@ use codecs::BincodeCodec;
 use color_eyre::eyre::{self, Context, Report};
 use config::NetworkConfig;
 use quinn::{
-    crypto::rustls::QuicClientConfig,
-    rustls::{pki_types::CertificateDer, RootCertStore},
-};
-use quinn::{
     ClientConfig, Connection, Endpoint, IdleTimeout, RecvStream, SendStream, TransportConfig,
     VarInt,
 };
-use serde::{de::DeserializeOwned, Serialize};
+use quinn::{
+    crypto::rustls::QuicClientConfig,
+    rustls::{RootCertStore, pki_types::CertificateDer},
+};
+use serde::{Serialize, de::DeserializeOwned};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     runtime::Runtime,
@@ -174,24 +174,26 @@ impl MpcNetworkHandler {
                         );
                         let mut uni = conn.accept_uni().await?;
                         let other_party_id = uni.read_u32().await?;
-                        assert!(connections
-                            .insert(
-                                usize::try_from(other_party_id).expect("u32 fits into usize"),
-                                conn
-                            )
-                            .is_none());
+                        assert!(
+                            connections
+                                .insert(
+                                    usize::try_from(other_party_id).expect("u32 fits into usize"),
+                                    conn
+                                )
+                                .is_none()
+                        );
                     }
                     Ok(None) => {
                         return Err(eyre::eyre!(
                             "server endpoint did not accept a connection from party {}",
                             party.id
-                        ))
+                        ));
                     }
                     Err(_) => {
                         return Err(eyre::eyre!(
                             "party {} did not connect within 60 seconds - timeout",
                             party.id
-                        ))
+                        ));
                     }
                 }
             }

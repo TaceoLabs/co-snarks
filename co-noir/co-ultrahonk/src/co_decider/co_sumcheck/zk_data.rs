@@ -1,17 +1,17 @@
+use crate::CoUtils;
 use crate::co_decider::polynomial::SharedPolynomial;
 use crate::co_decider::univariates::SharedUnivariate;
 use crate::mpc::NoirUltraHonkProver;
 use crate::prelude::TranscriptHasher;
-use crate::CoUtils;
 use ark_ec::pairing::Pairing;
 use ark_ff::Field;
 use ark_ff::One;
 use ark_ff::Zero;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
-use co_builder::prelude::HonkCurve;
 use co_builder::HonkProofError;
 use co_builder::HonkProofResult;
 use co_builder::TranscriptFieldType;
+use co_builder::prelude::HonkCurve;
 use ultrahonk::prelude::Transcript;
 
 pub(crate) struct SharedZKSumcheckData<T: NoirUltraHonkProver<P>, P: Pairing> {

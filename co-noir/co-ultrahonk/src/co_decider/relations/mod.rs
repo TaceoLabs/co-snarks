@@ -9,15 +9,15 @@ pub(crate) mod ultra_arithmetic_relation;
 
 use super::{
     types::{
-        ProverUnivariates, ProverUnivariatesBatch, RelationParameters, MAX_PARTIAL_RELATION_LENGTH,
+        MAX_PARTIAL_RELATION_LENGTH, ProverUnivariates, ProverUnivariatesBatch, RelationParameters,
     },
     univariates::SharedUnivariate,
 };
 use crate::{mpc::NoirUltraHonkProver, types_batch::SumCheckDataForRelation};
 use ark_ec::pairing::Pairing;
 use auxiliary_relation::{AuxiliaryRelation, AuxiliaryRelationAcc};
-use co_builder::prelude::HonkCurve;
 use co_builder::HonkProofResult;
+use co_builder::prelude::HonkCurve;
 use delta_range_constraint_relation::{
     DeltaRangeConstraintRelation, DeltaRangeConstraintRelationAcc,
 };

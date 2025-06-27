@@ -1,8 +1,10 @@
 use super::{
-    types::{PolyF, PolyG, PolyGShift},
     ShpleminiVerifierOpeningClaim,
+    types::{PolyF, PolyG, PolyGShift},
 };
 use crate::{
+    CONST_PROOF_SIZE_LOG_N, NUM_INTERLEAVING_CLAIMS, NUM_LIBRA_COMMITMENTS,
+    NUM_SMALL_IPA_EVALUATIONS,
     decider::{
         types::{ClaimedEvaluations, VerifierCommitments},
         verifier::DeciderVerifier,
@@ -10,8 +12,6 @@ use crate::{
     prelude::TranscriptFieldType,
     transcript::{Transcript, TranscriptHasher},
     verifier::HonkVerifyResult,
-    CONST_PROOF_SIZE_LOG_N, NUM_INTERLEAVING_CLAIMS, NUM_LIBRA_COMMITMENTS,
-    NUM_SMALL_IPA_EVALUATIONS,
 };
 use ark_ec::AffineRepr;
 use ark_ff::{Field, One, Zero};
@@ -700,8 +700,8 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
         denominators[0] = r - one;
         let mut work_root = *inverse_root_of_unity; // g^{-1}
-                                                    //
-                                                    // Compute the denominators of the Lagrange polynomials evaluated at r
+        //
+        // Compute the denominators of the Lagrange polynomials evaluated at r
         for denominator in denominators.iter_mut().skip(1) {
             *denominator = work_root * r;
             *denominator -= one; // r * g^{-i} - 1

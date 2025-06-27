@@ -4,29 +4,29 @@
 
 use super::{detail, yao};
 use crate::{
+    IoResult,
     protocols::{
         rep3::{
             self,
             conversion::A2BType,
             network::{IoContext, Rep3Network},
             yao::{
-                circuits::GarbledCircuits, evaluator::Rep3Evaluator, garbler::Rep3Garbler,
+                GCUtils, circuits::GarbledCircuits, evaluator::Rep3Evaluator, garbler::Rep3Garbler,
                 streaming_evaluator::StreamingRep3Evaluator,
-                streaming_garbler::StreamingRep3Garbler, GCUtils,
+                streaming_garbler::StreamingRep3Garbler,
             },
         },
         rep3_ring::arithmetic,
     },
-    IoResult,
 };
 use ark_ff::PrimeField;
 use fancy_garbling::{BinaryBundle, WireMod2};
 use itertools::izip;
 use mpc_types::protocols::{
-    rep3::{id::PartyID, Rep3PrimeFieldShare},
+    rep3::{Rep3PrimeFieldShare, id::PartyID},
     rep3_ring::{
-        ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
         Rep3RingShare,
+        ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
     },
 };
 use rand::{distributions::Standard, prelude::Distribution};

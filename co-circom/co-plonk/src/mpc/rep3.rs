@@ -1,9 +1,9 @@
 use ark_ec::pairing::Pairing;
 use ark_poly::EvaluationDomain;
 use mpc_core::protocols::rep3::{
-    arithmetic,
+    PartyID, Rep3PointShare, Rep3PrimeFieldShare, arithmetic,
     network::{IoContext, Rep3Network},
-    pointshare, poly, PartyID, Rep3PointShare, Rep3PrimeFieldShare,
+    pointshare, poly,
 };
 
 use super::{CircomPlonkProver, IoResult};

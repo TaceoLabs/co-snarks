@@ -1,5 +1,5 @@
 use crate::mpc::NoirWitnessExtensionProtocol;
-use acir::{acir_field::GenericFieldElement, native_types::Expression, AcirField};
+use acir::{AcirField, acir_field::GenericFieldElement, native_types::Expression};
 use ark_ff::PrimeField;
 
 use crate::solver::solver_utils;

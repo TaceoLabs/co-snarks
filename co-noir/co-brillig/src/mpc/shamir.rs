@@ -2,7 +2,7 @@ use super::{BrilligDriver, PlainBrilligDriver};
 use ark_ff::{One, PrimeField};
 use brillig::{BitSize, IntegerBitSize};
 use mpc_core::protocols::shamir::{
-    self, network::ShamirNetwork, ShamirPrimeFieldShare, ShamirProtocol,
+    self, ShamirPrimeFieldShare, ShamirProtocol, network::ShamirNetwork,
 };
 use std::marker::PhantomData;
 

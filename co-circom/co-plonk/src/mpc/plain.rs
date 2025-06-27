@@ -3,8 +3,8 @@ use ark_ec::pairing::Pairing;
 use ark_ec::scalar_mul::variable_base::VariableBaseMSM;
 use ark_ff::Field;
 use ark_ff::UniformRand;
-use ark_poly::univariate::DensePolynomial;
 use ark_poly::Polynomial;
+use ark_poly::univariate::DensePolynomial;
 use itertools::izip;
 use num_traits::Zero;
 
@@ -228,11 +228,7 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
         for (unblind, open) in unblind.iter_mut().zip(open.into_iter()) {
             *unblind *= open;
         }
-        if inv {
-            inv_vec(&unblind)
-        } else {
-            Ok(unblind)
-        }
+        if inv { inv_vec(&unblind) } else { Ok(unblind) }
     }
 
     fn array_prod_mul2(

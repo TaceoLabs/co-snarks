@@ -1,12 +1,12 @@
 use crate::{
+    PlonkProofResult,
     mpc::CircomPlonkProver,
     round2::{Round2Challenges, Round2Polys, Round2Proof},
     round4::Round4,
     types::{Domains, Keccak256Transcript, PlonkData, PolyEval},
-    PlonkProofResult,
 };
-use ark_ec::pairing::Pairing;
 use ark_ec::CurveGroup;
+use ark_ec::pairing::Pairing;
 use ark_ff::Field;
 use circom_types::plonk::ZKey;
 use itertools::izip;
@@ -361,8 +361,9 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>> Round3<'a, P, T> {
         let [e2, e2z_0, e2z_1, e2z_2, e2z_3] =
             mul4vec!(driver, &e2a, &e2b, &e2c, &e2d, &ap, &bp, &cp, &zp, &domain1);
 
-        let [e3, e3z_0, e3z_1, e3z_2, e3z_3] =
-            mul4vec!(driver, &e3a, &e3b, &e3c, &e3d, &ap, &bp, &cp, &zwp, &domain1);
+        let [e3, e3z_0, e3z_1, e3z_2, e3z_3] = mul4vec!(
+            driver, &e3a, &e3b, &e3c, &e3d, &ap, &bp, &cp, &zwp, &domain1
+        );
 
         let mut t_vec = Vec::with_capacity(zkey.domain_size * 4);
         let mut tz_vec = Vec::with_capacity(zkey.domain_size * 4);
@@ -487,8 +488,8 @@ pub mod tests {
     use std::{fs::File, io::BufReader};
 
     use ark_bn254::Bn254;
-    use circom_types::plonk::ZKey;
     use circom_types::Witness;
+    use circom_types::plonk::ZKey;
     use co_circom_types::SharedWitness;
 
     use crate::{

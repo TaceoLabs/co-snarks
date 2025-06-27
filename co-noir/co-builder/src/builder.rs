@@ -1,3 +1,4 @@
+use crate::TranscriptFieldType;
 use crate::acir_format::{HonkRecursion, ProgramMetadata};
 use crate::keys::verification_key::PublicComponentKey;
 use crate::polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK;
@@ -10,8 +11,8 @@ use crate::types::sha_compression::SHA256;
 use crate::types::types::{
     AggregationState, EcAdd, EccAddGate, MultiScalarMul, Sha256Compression, WitnessOrConstant,
 };
-use crate::TranscriptFieldType;
 use crate::{
+    HonkProofResult,
     acir_format::AcirFormat,
     crs::ProverCrs,
     keys::{
@@ -29,16 +30,15 @@ use crate::{
         types::{
             AddQuad, AddTriple, AuxSelectors, Blake2sConstraint, Blake3Constraint, BlockConstraint,
             BlockType, CachedPartialNonNativeFieldMultiplication, EccDblGate, LogicConstraint,
-            MulQuad, PolyTriple, Poseidon2Constraint, Poseidon2ExternalGate, Poseidon2InternalGate,
-            RangeList, UltraTraceBlock, UltraTraceBlocks, NUM_WIRES,
+            MulQuad, NUM_WIRES, PolyTriple, Poseidon2Constraint, Poseidon2ExternalGate,
+            Poseidon2InternalGate, RangeList, UltraTraceBlock, UltraTraceBlocks,
         },
     },
     utils::Utils,
-    HonkProofResult,
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::{One, Zero};
-use co_acvm::{mpc::NoirWitnessExtensionProtocol, PlainAcvmSolver};
+use co_acvm::{PlainAcvmSolver, mpc::NoirWitnessExtensionProtocol};
 use itertools::izip;
 use mpc_core::gadgets::poseidon2::POSEIDON2_BN254_T4_PARAMS;
 use num_bigint::BigUint;

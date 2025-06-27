@@ -18,17 +18,17 @@
 // clang-format on
 
 use super::types::ProverMemory;
-use crate::{key::proving_key::ProvingKey, mpc::NoirUltraHonkProver, CoUtils};
+use crate::{CoUtils, key::proving_key::ProvingKey, mpc::NoirUltraHonkProver};
 use ark_ff::{One, Zero};
 use co_builder::{
-    prelude::{ActiveRegionData, HonkCurve, Polynomial, ProverCrs, NUM_MASKED_ROWS},
     HonkProofError, HonkProofResult,
+    prelude::{ActiveRegionData, HonkCurve, NUM_MASKED_ROWS, Polynomial, ProverCrs},
 };
 use itertools::izip;
 use std::{array, marker::PhantomData};
 use ultrahonk::{
-    prelude::{Transcript, TranscriptFieldType, TranscriptHasher, ZeroKnowledge},
     NUM_ALPHAS,
+    prelude::{Transcript, TranscriptFieldType, TranscriptHasher, ZeroKnowledge},
 };
 
 pub(crate) struct CoOink<
@@ -45,11 +45,11 @@ pub(crate) struct CoOink<
 }
 
 impl<
-        'a,
-        T: NoirUltraHonkProver<P>,
-        P: HonkCurve<TranscriptFieldType>,
-        H: TranscriptHasher<TranscriptFieldType>,
-    > CoOink<'a, T, P, H>
+    'a,
+    T: NoirUltraHonkProver<P>,
+    P: HonkCurve<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType>,
+> CoOink<'a, T, P, H>
 {
     pub(crate) fn new(driver: &'a mut T, has_zk: ZeroKnowledge) -> Self {
         Self {

@@ -1,5 +1,5 @@
-use crate::{prelude::HonkCurve, HonkProofError, HonkProofResult, TranscriptFieldType};
-use ark_ec::{pairing::Pairing, AffineRepr, CurveConfig, CurveGroup};
+use crate::{HonkProofError, HonkProofResult, TranscriptFieldType, prelude::HonkCurve};
+use ark_ec::{AffineRepr, CurveConfig, CurveGroup, pairing::Pairing};
 use ark_ff::{Field, PrimeField};
 use num_bigint::BigUint;
 

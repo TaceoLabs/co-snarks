@@ -1,8 +1,8 @@
 use crate::{
     gadgets::poseidon2::Poseidon2,
     protocols::rep3::{
-        network::{IoContext, Rep3Network},
         Rep3PrimeFieldShare,
+        network::{IoContext, Rep3Network},
     },
 };
 use ark_ff::{PrimeField, Zero};

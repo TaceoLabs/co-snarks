@@ -3,7 +3,7 @@
 //! Contains an implementation of a Bit type that can be used with the Ring traits of this crate
 
 use num_traits::{AsPrimitive, One, WrappingAdd, WrappingMul, WrappingNeg, WrappingSub, Zero};
-use rand::{distributions::Standard, prelude::Distribution, Rng};
+use rand::{Rng, distributions::Standard, prelude::Distribution};
 use serde::{Deserialize, Serialize};
 use std::ops::{
     Add, BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Mul, Neg, Not, Shl, Shr,
@@ -345,11 +345,7 @@ impl Shl<usize> for Bit {
     type Output = Self;
 
     fn shl(self, rhs: usize) -> Self {
-        if rhs == 0 {
-            self
-        } else {
-            Self(false)
-        }
+        if rhs == 0 { self } else { Self(false) }
     }
 }
 
@@ -357,18 +353,14 @@ impl Shr<usize> for Bit {
     type Output = Self;
 
     fn shr(self, rhs: usize) -> Self {
-        if rhs == 0 {
-            self
-        } else {
-            Self(false)
-        }
+        if rhs == 0 { self } else { Self(false) }
     }
 }
 
 impl Distribution<Bit> for Standard {
     #[inline(always)]
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Bit {
-        Bit(rng.gen())
+        Bit(rng.r#gen())
     }
 }
 

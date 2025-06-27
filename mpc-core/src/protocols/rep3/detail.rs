@@ -3,14 +3,14 @@ use super::arithmetic::BinaryShare;
 use super::binary;
 use super::conversion;
 use super::network::IoContext;
-use crate::protocols::rep3::{network::Rep3Network, Rep3BigUintShare, Rep3PrimeFieldShare};
 use crate::IoResult;
+use crate::protocols::rep3::{Rep3BigUintShare, Rep3PrimeFieldShare, network::Rep3Network};
 use ark_ec::CurveGroup;
 use ark_ff::One;
 use ark_ff::PrimeField;
 use ark_ff::Zero;
-use itertools::izip;
 use itertools::Itertools as _;
+use itertools::izip;
 use num_bigint::BigUint;
 use std::any::TypeId;
 

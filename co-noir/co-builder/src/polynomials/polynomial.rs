@@ -1,6 +1,6 @@
 use crate::utils::Utils;
 use ark_ff::PrimeField;
-use ark_poly::{univariate::DensePolynomial, DenseUVPolynomial, Polynomial as _};
+use ark_poly::{DenseUVPolynomial, Polynomial as _, univariate::DensePolynomial};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use num_traits::Zero;
 use rand::{CryptoRng, Rng};

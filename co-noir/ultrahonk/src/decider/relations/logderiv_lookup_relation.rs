@@ -1,7 +1,7 @@
 use super::Relation;
 use crate::decider::{
     types::{
-        ClaimedEvaluations, ProverUnivariates, RelationParameters, MAX_PARTIAL_RELATION_LENGTH,
+        ClaimedEvaluations, MAX_PARTIAL_RELATION_LENGTH, ProverUnivariates, RelationParameters,
     },
     univariate::Univariate,
 };

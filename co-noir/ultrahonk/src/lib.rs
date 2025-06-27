@@ -10,12 +10,12 @@ mod transcript;
 pub(crate) mod types;
 pub(crate) mod verifier;
 
-use acir::{native_types::WitnessStack, FieldElement};
+use acir::{FieldElement, native_types::WitnessStack};
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use co_builder::{
-    prelude::{AcirFormat, ProverCrs},
     HonkProofResult,
+    prelude::{AcirFormat, ProverCrs},
 };
 use noirc_artifacts::program::ProgramArtifact;
 use std::{io, path::Path};

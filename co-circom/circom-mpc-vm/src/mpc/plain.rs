@@ -1,8 +1,8 @@
 use super::VmCircomWitnessExtension;
 use crate::mpc_vm::VMConfig;
 use ark_ff::{One, PrimeField};
-use eyre::eyre;
 use eyre::Result;
+use eyre::eyre;
 use num_bigint::BigUint;
 
 /// Transforms a field element into an usize if possible.
@@ -208,11 +208,7 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtensio
         falsy: Self::VmType,
     ) -> Result<Self::VmType> {
         assert!(cond.is_one() || cond.is_zero());
-        if cond.is_one() {
-            Ok(truthy)
-        } else {
-            Ok(falsy)
-        }
+        if cond.is_one() { Ok(truthy) } else { Ok(falsy) }
     }
 
     fn bit_xor(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {

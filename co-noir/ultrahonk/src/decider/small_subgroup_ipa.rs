@@ -1,15 +1,15 @@
+use crate::CONST_PROOF_SIZE_LOG_N;
+use crate::Utils;
 use crate::prelude::TranscriptHasher;
 use crate::prelude::Univariate;
-use crate::Utils;
-use crate::CONST_PROOF_SIZE_LOG_N;
 use crate::{prelude::Transcript, transcript::TranscriptFieldType};
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use ark_ff::Zero;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
-use co_builder::prelude::{HonkCurve, Polynomial, ProverCrs};
 use co_builder::HonkProofError;
 use co_builder::HonkProofResult;
+use co_builder::prelude::{HonkCurve, Polynomial, ProverCrs};
 use rand::{CryptoRng, Rng};
 
 use super::sumcheck::zk_data::ZKSumcheckData;

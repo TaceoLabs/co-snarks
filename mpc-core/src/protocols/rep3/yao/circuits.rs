@@ -3,7 +3,7 @@
 //! This module contains some garbled circuit implementations.
 
 use super::bristol_fashion::BristolFashionEvaluator;
-use crate::protocols::rep3::yao::{bristol_fashion::BristolFashionCircuit, GCUtils};
+use crate::protocols::rep3::yao::{GCUtils, bristol_fashion::BristolFashionCircuit};
 use ark_ff::PrimeField;
 use fancy_garbling::{BinaryBundle, FancyBinary, FancyError};
 use itertools::izip;
@@ -3418,7 +3418,7 @@ mod test {
     use crate::protocols::rep3::yao::GCInputs;
     use fancy_garbling::BinaryGadgets;
     use fancy_garbling::{Evaluator, Fancy, Garbler, WireMod2};
-    use rand::{thread_rng, CryptoRng, Rng, SeedableRng};
+    use rand::{CryptoRng, Rng, SeedableRng, thread_rng};
     use rand_chacha::ChaCha12Rng;
     use scuttlebutt::{AbstractChannel, Channel};
     use std::{

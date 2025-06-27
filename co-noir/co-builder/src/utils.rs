@@ -1,7 +1,7 @@
 use std::any::Any;
 
-use crate::{crs::ProverCrs, HonkProofError, HonkProofResult};
-use ark_ec::{pairing::Pairing, VariableBaseMSM};
+use crate::{HonkProofError, HonkProofResult, crs::ProverCrs};
+use ark_ec::{VariableBaseMSM, pairing::Pairing};
 use ark_ff::{One, PrimeField, Zero};
 use eyre::Error;
 use mpc_core::gadgets;

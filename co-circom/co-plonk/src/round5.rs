@@ -1,13 +1,13 @@
 use crate::{
+    PlonkProofResult,
     mpc::CircomPlonkProver,
     plonk_utils,
     round3::FinalPolys,
     round4::{Round4Challenges, Round4Proof},
     types::{Domains, Keccak256Transcript, PlonkData},
-    PlonkProofResult,
 };
-use ark_ec::pairing::Pairing;
 use ark_ec::CurveGroup;
+use ark_ec::pairing::Pairing;
 use ark_ff::Field;
 use circom_types::{
     plonk::PlonkProof,

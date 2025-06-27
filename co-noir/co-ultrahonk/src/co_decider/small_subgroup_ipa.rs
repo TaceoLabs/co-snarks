@@ -1,9 +1,9 @@
 use std::marker::PhantomData;
 
+use crate::CONST_PROOF_SIZE_LOG_N;
+use crate::CoUtils;
 use crate::mpc::NoirUltraHonkProver;
 use crate::prelude::TranscriptHasher;
-use crate::CoUtils;
-use crate::CONST_PROOF_SIZE_LOG_N;
 use ultrahonk::prelude::Transcript;
 
 use super::co_sumcheck::zk_data::SharedZKSumcheckData;
@@ -13,10 +13,10 @@ use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use ark_ff::Zero;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
-use co_builder::prelude::{HonkCurve, Polynomial, ProverCrs};
 use co_builder::HonkProofError;
 use co_builder::HonkProofResult;
 use co_builder::TranscriptFieldType;
+use co_builder::prelude::{HonkCurve, Polynomial, ProverCrs};
 
 pub(crate) struct SharedSmallSubgroupIPAProver<T: NoirUltraHonkProver<P>, P: Pairing> {
     interpolation_domain: Vec<P::ScalarField>,
