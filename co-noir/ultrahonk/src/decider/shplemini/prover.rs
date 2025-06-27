@@ -1,20 +1,20 @@
 use super::{
     super::{prover::Decider, sumcheck::SumcheckOutput},
-    types::{PolyF, PolyG},
     ShpleminiOpeningClaim,
+    types::{PolyF, PolyG},
 };
 use crate::{
+    NUM_INTERLEAVING_CLAIMS, NUM_SMALL_IPA_EVALUATIONS, Utils,
     decider::{shplemini::OpeningPair, verifier::DeciderVerifier},
     transcript::{Transcript, TranscriptFieldType, TranscriptHasher},
     types::AllEntities,
-    Utils, NUM_INTERLEAVING_CLAIMS, NUM_SMALL_IPA_EVALUATIONS,
 };
 use ark_ec::AffineRepr;
 use ark_ff::{Field, One, Zero};
 use co_builder::prelude::ZeroKnowledge;
 use co_builder::{
-    prelude::{HonkCurve, Polynomial, ProverCrs},
     HonkProofError, HonkProofResult,
+    prelude::{HonkCurve, Polynomial, ProverCrs},
 };
 use itertools::izip;
 
@@ -517,7 +517,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
                 let mut tmp = claim.polynomial.clone();
                 tmp[0] -= gemini_fold_pos_evaluations[fold_idx];
                 let scaling_factor = current_nu * inverse_vanishing_evals[idx]; // = νʲ / (z − xⱼ )
-                                                                                // G -= νʲ ⋅ ( fⱼ(X) − vⱼ) / ( z − xⱼ )
+                // G -= νʲ ⋅ ( fⱼ(X) − vⱼ) / ( z − xⱼ )
                 g.add_scaled(&tmp, &-scaling_factor);
 
                 current_nu *= nu_challenge;

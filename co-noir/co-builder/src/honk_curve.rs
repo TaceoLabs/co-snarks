@@ -1,4 +1,4 @@
-use ark_ec::{pairing::Pairing, CurveGroup};
+use ark_ec::{CurveGroup, pairing::Pairing};
 use ark_ff::{BigInt, Field, One, PrimeField};
 use num_bigint::BigUint;
 use std::str::FromStr;

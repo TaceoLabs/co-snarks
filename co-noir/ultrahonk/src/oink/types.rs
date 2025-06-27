@@ -1,4 +1,4 @@
-use crate::{types::WitnessEntities, NUM_ALPHAS};
+use crate::{NUM_ALPHAS, types::WitnessEntities};
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use co_builder::prelude::Polynomial;

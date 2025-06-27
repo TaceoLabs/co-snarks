@@ -1,9 +1,9 @@
 use crate::{
+    PlonkProofResult,
     mpc::CircomPlonkProver,
     round3::{FinalPolys, Round3Challenges, Round3Proof},
     round5::Round5,
     types::{Domains, Keccak256Transcript, PlonkData},
-    PlonkProofResult,
 };
 use ark_ec::pairing::Pairing;
 
@@ -57,12 +57,7 @@ impl<P: Pairing> std::fmt::Display for Round4Proof<P> {
         write!(
             f,
             "Round4Proof(eval_a: {}, eval_b: {}, eval_c: {}, eval_s1: {}, eval_s2: {}, eval_zw: {})",
-            self.eval_a,
-            self.eval_b,
-            self.eval_c,
-            self.eval_s1,
-            self.eval_s2,
-            self.eval_zw,
+            self.eval_a, self.eval_b, self.eval_c, self.eval_s1, self.eval_s2, self.eval_zw,
         )
     }
 }
@@ -164,8 +159,8 @@ pub mod tests {
     use std::{fs::File, io::BufReader};
 
     use ark_bn254::Bn254;
-    use circom_types::plonk::ZKey;
     use circom_types::Witness;
+    use circom_types::plonk::ZKey;
     use co_circom_types::SharedWitness;
 
     use crate::{

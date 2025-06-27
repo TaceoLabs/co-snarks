@@ -1,10 +1,10 @@
 use super::{shplemini::ShpleminiVerifierOpeningClaim, types::VerifierMemory};
 use crate::{
+    CONST_PROOF_SIZE_LOG_N, NUM_LIBRA_COMMITMENTS, Utils,
     decider::types::{BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK},
     prelude::TranscriptFieldType,
     transcript::{Transcript, TranscriptHasher},
     verifier::HonkVerifyResult,
-    Utils, CONST_PROOF_SIZE_LOG_N, NUM_LIBRA_COMMITMENTS,
 };
 use ark_ec::AffineRepr;
 use ark_ff::{One, Zero};

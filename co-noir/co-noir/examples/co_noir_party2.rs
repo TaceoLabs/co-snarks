@@ -3,13 +3,13 @@ use co_noir::{
     Rep3CoUltraHonk, Rep3MpcNet, UltraHonk, Utils,
 };
 use co_ultrahonk::prelude::ZeroKnowledge;
-use color_eyre::{eyre::Context, Result};
+use color_eyre::{Result, eyre::Context};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use std::{collections::BTreeMap, path::PathBuf};
 use tracing_subscriber::{
+    EnvFilter,
     fmt::{self, format::FmtSpan},
     prelude::*,
-    EnvFilter,
 };
 
 fn main() -> Result<()> {

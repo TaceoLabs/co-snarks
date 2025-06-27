@@ -2,18 +2,18 @@ use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{MontConfig, One, PrimeField, Zero};
 use blake2::{Blake2s256, Digest};
 use co_brillig::mpc::{Rep3BrilligDriver, Rep3BrilligType};
-use itertools::{izip, Itertools};
+use itertools::{Itertools, izip};
 use mpc_core::gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations};
 use mpc_core::protocols::rep3::yao::circuits::SHA256Table;
 use mpc_core::protocols::rep3::{
-    arithmetic, binary, conversion, pointshare, yao, Rep3BigUintShare, Rep3PointShare,
+    Rep3BigUintShare, Rep3PointShare, arithmetic, binary, conversion, pointshare, yao,
 };
 use mpc_core::protocols::rep3_ring::gadgets::sort::{radix_sort_fields, radix_sort_fields_vec_by};
 use mpc_core::{
     lut::LookupTableProvider,
     protocols::rep3::{
-        network::{IoContext, Rep3Network},
         Rep3PrimeFieldShare,
+        network::{IoContext, Rep3Network},
     },
     protocols::rep3_ring::lut::Rep3LookupTable,
 };
@@ -25,7 +25,7 @@ use std::array;
 use std::marker::PhantomData;
 
 use super::plain::PlainAcvmSolver;
-use super::{downcast, NoirWitnessExtensionProtocol};
+use super::{NoirWitnessExtensionProtocol, downcast};
 type ArithmeticShare<F> = Rep3PrimeFieldShare<F>;
 
 macro_rules! join {
@@ -378,11 +378,7 @@ impl<F: PrimeField, N: Rep3Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         match (cond, truthy, falsy) {
             (Rep3AcvmType::Public(cond), truthy, falsy) => {
                 assert!(cond.is_one() || cond.is_zero());
-                if cond.is_one() {
-                    Ok(truthy)
-                } else {
-                    Ok(falsy)
-                }
+                if cond.is_one() { Ok(truthy) } else { Ok(falsy) }
             }
             (Rep3AcvmType::Shared(cond), truthy, falsy) => {
                 let b_min_a = self.sub(truthy, falsy.clone());

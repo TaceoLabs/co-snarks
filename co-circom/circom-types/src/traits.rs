@@ -2,12 +2,12 @@
 use std::io::Read;
 use std::marker::PhantomData;
 
-use ark_ec::{pairing::Pairing, AffineRepr};
+use ark_ec::{AffineRepr, pairing::Pairing};
 use ark_ff::{PrimeField, Zero};
 use ark_serialize::SerializationError;
 use rayon::prelude::*;
 use serde::ser::SerializeSeq;
-use serde::{de, Serializer};
+use serde::{Serializer, de};
 use std::str::FromStr;
 
 type IoResult<T> = Result<T, SerializationError>;

@@ -5,25 +5,25 @@
 //! ```
 
 use acir::{
+    FieldElement,
     acir_field::GenericFieldElement,
     native_types::{WitnessMap, WitnessStack},
-    FieldElement,
 };
 use ark_ff::PrimeField;
 use co_acvm::pss_store::PssStore;
 use co_acvm::{
-    solver::{partial_abi::PublicMarker, Rep3CoSolver},
     PlainAcvmSolver, Rep3AcvmSolver, ShamirAcvmSolver,
+    solver::{Rep3CoSolver, partial_abi::PublicMarker},
 };
 use co_ultrahonk::prelude::{
     HonkCurve, HonkProof, ProverCrs, ProverWitnessEntities, TranscriptFieldType, TranscriptHasher,
     ZeroKnowledge,
 };
-use color_eyre::eyre::{self, eyre, Context, Result};
+use color_eyre::eyre::{self, Context, Result, eyre};
 use mpc_core::protocols::{
     bridges::network::RepToShamirNetwork,
     rep3::{self, network::Rep3Network},
-    shamir::{self, network::ShamirNetwork, ShamirPreprocessing, ShamirProtocol},
+    shamir::{self, ShamirPreprocessing, ShamirProtocol, network::ShamirNetwork},
 };
 
 use noirc_abi::Abi;
@@ -35,16 +35,16 @@ pub use ark_bn254::Bn254;
 pub use ark_ec::pairing::Pairing;
 pub use co_acvm::{Rep3AcvmType, ShamirAcvmType};
 pub use co_ultrahonk::{
-    prelude::{
-        AcirFormat, CrsParser, HonkRecursion, PlainProvingKey, Polynomial, Polynomials,
-        Poseidon2Sponge, Rep3CoUltraHonk, Rep3ProvingKey, ShamirCoUltraHonk, ShamirProvingKey,
-        UltraCircuitBuilder, UltraHonk, Utils, VerifyingKey, VerifyingKeyBarretenberg,
-        PROVER_WITNESS_ENTITIES_SIZE,
-    },
     Rep3CoBuilder, ShamirCoBuilder,
+    prelude::{
+        AcirFormat, CrsParser, HonkRecursion, PROVER_WITNESS_ENTITIES_SIZE, PlainProvingKey,
+        Polynomial, Polynomials, Poseidon2Sponge, Rep3CoUltraHonk, Rep3ProvingKey,
+        ShamirCoUltraHonk, ShamirProvingKey, UltraCircuitBuilder, UltraHonk, Utils, VerifyingKey,
+        VerifyingKeyBarretenberg,
+    },
 };
 pub use mpc_core::protocols::{
-    rep3::{network::Rep3MpcNet, PartyID},
+    rep3::{PartyID, network::Rep3MpcNet},
     shamir::network::ShamirMpcNet,
 };
 pub use mpc_net::config::{Address, NetworkConfig, NetworkParty, ParseAddressError};
@@ -220,7 +220,7 @@ impl<F: Clone> PubShared<F> {
     }
 
     pub fn set_public(&mut self) {
-        if let Self::Shared(ref mut f) = self {
+        if let Self::Shared(f) = self {
             *self = Self::Public(f.clone());
         }
     }

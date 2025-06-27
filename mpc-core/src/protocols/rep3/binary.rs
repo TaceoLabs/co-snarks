@@ -3,17 +3,17 @@
 //! This module contains operations with binary shares
 
 use ark_ff::{One, PrimeField};
-use itertools::{izip, Itertools as _};
+use itertools::{Itertools as _, izip};
 use num_bigint::BigUint;
 
 use crate::{
+    IoResult,
     protocols::rep3::{
+        PartyID, Rep3BigUintShare, Rep3PrimeFieldShare,
         arithmetic::{self},
         conversion,
         network::Rep3Network,
-        PartyID, Rep3BigUintShare, Rep3PrimeFieldShare,
     },
-    IoResult,
 };
 
 use super::network::IoContext;

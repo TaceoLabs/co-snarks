@@ -12,7 +12,7 @@ pub mod lut;
 pub mod yao;
 
 pub use mpc_types::protocols::rep3_ring::{
-    combine_ring_element, combine_ring_element_binary, combine_ring_elements, ring,
-    share_ring_element, share_ring_element_binary, share_ring_elements, Rep3BitShare,
-    Rep3RingShare,
+    Rep3BitShare, Rep3RingShare, combine_ring_element, combine_ring_element_binary,
+    combine_ring_elements, ring, share_ring_element, share_ring_element_binary,
+    share_ring_elements,
 };

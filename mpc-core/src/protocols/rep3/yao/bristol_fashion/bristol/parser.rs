@@ -1,16 +1,16 @@
 use nom::{
+    Finish, IResult,
     branch::alt,
     bytes::complete::tag,
     character::complete::{line_ending, multispace0, one_of, space1, u32 as char_u32},
     combinator::{all_consuming, opt},
     multi::{count, length_count},
     sequence::{preceded, separated_pair, terminated, tuple},
-    Finish, IResult,
 };
 
 use crate::protocols::rep3::yao::bristol_fashion::CircuitBuilderError;
 
-use super::{builder::UnverifiedBristolFashionCircuit, BristolFashionGate};
+use super::{BristolFashionGate, builder::UnverifiedBristolFashionCircuit};
 
 fn wire_and_gate_count(input: &str) -> IResult<&str, (u32, u32)> {
     // 123 123/n

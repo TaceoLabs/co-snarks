@@ -1,18 +1,18 @@
 use super::{
     shplemini::ShpleminiOpeningClaim,
-    sumcheck::{zk_data::ZKSumcheckData, SumcheckOutput},
+    sumcheck::{SumcheckOutput, zk_data::ZKSumcheckData},
     types::ProverMemory,
 };
 
 use crate::{
+    Utils,
     decider::small_subgroup_ipa::SmallSubgroupIPAProver,
     transcript::{Transcript, TranscriptFieldType, TranscriptHasher},
     types::HonkProof,
-    Utils,
 };
 use co_builder::{
-    prelude::{HonkCurve, ProverCrs, ZeroKnowledge},
     HonkProofResult,
+    prelude::{HonkCurve, ProverCrs, ZeroKnowledge},
 };
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;

@@ -1,23 +1,21 @@
 use ark_ff::PrimeField;
 use clap::Parser;
 use co_circom::PartyID;
-use color_eyre::eyre::{eyre, Context};
+use color_eyre::eyre::{Context, eyre};
 use figment::{
-    providers::{Env, Format, Serialized, Toml},
     Figment,
+    providers::{Env, Format, Serialized, Toml},
 };
 use mpc_core::{
     gadgets::poseidon2::Poseidon2,
     protocols::{
         rep3::{
-            self,
+            self, Rep3PrimeFieldShare,
             network::{IoContext, Rep3MpcNet, Rep3Network},
-            Rep3PrimeFieldShare,
         },
         shamir::{
-            self,
+            self, ShamirPreprocessing, ShamirPrimeFieldShare, ShamirProtocol,
             network::{ShamirMpcNet, ShamirNetwork},
-            ShamirPreprocessing, ShamirPrimeFieldShare, ShamirProtocol,
         },
     },
 };
@@ -36,7 +34,7 @@ const SLEEP: Duration = Duration::from_millis(200);
 
 fn install_tracing() {
     use tracing_subscriber::prelude::*;
-    use tracing_subscriber::{fmt, EnvFilter};
+    use tracing_subscriber::{EnvFilter, fmt};
 
     let fmt_layer = fmt::layer()
         .with_target(false)

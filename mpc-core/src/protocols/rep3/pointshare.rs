@@ -3,15 +3,15 @@
 //! This module contains operations with point shares
 
 use super::{
+    PartyID, Rep3PointShare, Rep3PrimeFieldShare,
     network::{IoContext, Rep3Network},
     rngs::Rep3CorrelatedRng,
-    PartyID, Rep3PointShare, Rep3PrimeFieldShare,
 };
-use crate::protocols::rep3::{arithmetic, conversion};
 use crate::IoResult;
+use crate::protocols::rep3::{arithmetic, conversion};
 use ark_ec::CurveGroup;
 use ark_ff::{PrimeField, Zero};
-use itertools::{izip, Itertools};
+use itertools::{Itertools, izip};
 use rayon::prelude::*;
 
 /// Type alias for a [`Rep3PrimeFieldShare`]

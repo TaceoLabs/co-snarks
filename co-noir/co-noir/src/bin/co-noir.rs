@@ -1,7 +1,7 @@
 use ark_bn254::Bn254;
 use ark_ff::Zero;
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use co_acvm::{solver::Rep3CoSolver, Rep3AcvmType};
+use co_acvm::{Rep3AcvmType, solver::Rep3CoSolver};
 use co_builder::prelude::Serialize as FieldSerialize;
 use co_noir::PubShared;
 use co_ultrahonk::prelude::{
@@ -9,10 +9,10 @@ use co_ultrahonk::prelude::{
     ShamirCoUltraHonk, ShamirUltraHonkDriver, UltraHonk, Utils, VerifyingKey,
     VerifyingKeyBarretenberg, ZeroKnowledge,
 };
-use color_eyre::eyre::{eyre, Context, ContextCompat};
+use color_eyre::eyre::{Context, ContextCompat, eyre};
 use figment::{
-    providers::{Env, Format, Serialized, Toml},
     Figment,
+    providers::{Env, Format, Serialized, Toml},
 };
 use mpc_core::protocols::{rep3::network::Rep3MpcNet, shamir::network::ShamirMpcNet};
 use mpc_net::config::NetworkConfigFile;
@@ -770,8 +770,8 @@ enum Commands {
 fn install_tracing() {
     use tracing_subscriber::prelude::*;
     use tracing_subscriber::{
-        fmt::{self, format::FmtSpan},
         EnvFilter,
+        fmt::{self, format::FmtSpan},
     };
 
     let fmt_layer = fmt::layer()

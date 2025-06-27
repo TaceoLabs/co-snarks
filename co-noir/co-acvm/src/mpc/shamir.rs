@@ -1,4 +1,4 @@
-use super::{plain::PlainAcvmSolver, NoirWitnessExtensionProtocol};
+use super::{NoirWitnessExtensionProtocol, plain::PlainAcvmSolver};
 use ark_ec::CurveGroup;
 use ark_ff::{One, PrimeField};
 use co_brillig::mpc::{ShamirBrilligDriver, ShamirBrilligType};
@@ -8,8 +8,8 @@ use mpc_core::{
         rep3::{network::Rep3MpcNet, yao::circuits::SHA256Table},
         rep3_ring::lut::Rep3LookupTable,
         shamir::{
-            arithmetic, network::ShamirNetwork, pointshare, ShamirPointShare,
-            ShamirPrimeFieldShare, ShamirProtocol,
+            ShamirPointShare, ShamirPrimeFieldShare, ShamirProtocol, arithmetic,
+            network::ShamirNetwork, pointshare,
         },
     },
 };
@@ -207,11 +207,7 @@ impl<F: PrimeField, N: ShamirNetwork> NoirWitnessExtensionProtocol<F> for Shamir
         match (cond, truthy, falsy) {
             (ShamirAcvmType::Public(cond), truthy, falsy) => {
                 assert!(cond.is_one() || cond.is_zero());
-                if cond.is_one() {
-                    Ok(truthy)
-                } else {
-                    Ok(falsy)
-                }
+                if cond.is_one() { Ok(truthy) } else { Ok(falsy) }
             }
             (ShamirAcvmType::Shared(cond), truthy, falsy) => {
                 let b_min_a = self.sub(truthy, falsy.clone());

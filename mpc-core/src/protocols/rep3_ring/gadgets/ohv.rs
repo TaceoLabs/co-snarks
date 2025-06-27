@@ -4,17 +4,17 @@
 
 use ark_ff::{One, Zero};
 use mpc_types::protocols::rep3_ring::{
-    ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
     Rep3RingShare,
+    ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
 };
 use rand::{distributions::Standard, prelude::Distribution};
 
 use crate::{
+    IoResult,
     protocols::{
         rep3::network::{IoContext, Rep3Network},
         rep3_ring::binary,
     },
-    IoResult,
 };
 
 /// Generates a random one-hot-encoded vector of size k bits.

@@ -3,7 +3,7 @@ use super::{
     field_ct::{ByteArray, FieldCT},
     plookup::{ColumnIdx, MultiTableId, Plookup},
 };
-use crate::{builder::GenericUltraCircuitBuilder, prelude::HonkCurve, TranscriptFieldType};
+use crate::{TranscriptFieldType, builder::GenericUltraCircuitBuilder, prelude::HonkCurve};
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;

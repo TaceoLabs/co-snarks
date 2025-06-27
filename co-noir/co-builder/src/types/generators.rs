@@ -69,12 +69,12 @@ pub(crate) fn derive_generators<C: CurveGroup>(
     if domain_separator_bytes == DEFAULT_DOMAIN_SEPARATOR && starting_index < NUM_DEFAULT_GENERATORS
     {
         let default_gens = default_generators::<C>();
-        for gen in default_gens
+        for r#gen in default_gens
             .iter()
             .skip(starting_index)
             .take(num_generators)
         {
-            result.push(*gen);
+            result.push(*r#gen);
         }
     }
 
@@ -192,8 +192,8 @@ fn _hash_to_curve_bn254(seed: &[u8], attempt_count: u8) -> ark_bn254::G1Affine {
     }
 }
 
-pub(crate) fn generate_fixed_base_tables<C: CurveGroup>(
-) -> &'static [Vec<Vec<C::Affine>>; FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES] {
+pub(crate) fn generate_fixed_base_tables<C: CurveGroup>()
+-> &'static [Vec<Vec<C::Affine>>; FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES] {
     if TypeId::of::<C>() == TypeId::of::<ark_grumpkin::Projective>() {
         // Note: Cannot use C directly since I cannot use the `C` type as a const generic parameter for the OnceLock
         static INSTANCE: OnceLock<
@@ -253,8 +253,11 @@ fn generate_table<C: CurveGroup, const NUM_BITS: usize>(input: &C::Affine) -> Ve
     let offset_generators = derive_generators::<C>(&input_buf, num_tables, 0);
 
     let mut accumulator: C = input.to_owned().into();
-    for gen in offset_generators.iter().take(num_tables).cloned() {
-        result.push(generate_single_lookup_table::<C>(&accumulator, gen.into()));
+    for r#gen in offset_generators.iter().take(num_tables).cloned() {
+        result.push(generate_single_lookup_table::<C>(
+            &accumulator,
+            r#gen.into(),
+        ));
         for _ in 0..FixedBaseParams::BITS_PER_TABLE {
             accumulator += accumulator;
         }
@@ -279,8 +282,8 @@ fn generate_single_lookup_table<C: CurveGroup>(
     table
 }
 
-pub(crate) fn fixed_base_table_offset_generators<C: CurveGroup>(
-) -> &'static [C; FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES] {
+pub(crate) fn fixed_base_table_offset_generators<C: CurveGroup>()
+-> &'static [C; FixedBaseParams::NUM_FIXED_BASE_MULTI_TABLES] {
     if TypeId::of::<C>() == TypeId::of::<ark_grumpkin::Projective>() {
         // Note: Cannot use C directly since I cannot use the `C` type as a const generic parameter for the OnceLock
         static INSTANCE: OnceLock<
@@ -336,8 +339,8 @@ fn generate_generator_offset<C: CurveGroup, const NUM_BITS: usize>(input: &C::Af
 
     let offset_generators = derive_generators::<C>(&input_buf, num_tables, 0);
     let mut acc = C::zero();
-    for gen in offset_generators {
-        acc += gen;
+    for r#gen in offset_generators {
+        acc += r#gen;
     }
     acc
 }

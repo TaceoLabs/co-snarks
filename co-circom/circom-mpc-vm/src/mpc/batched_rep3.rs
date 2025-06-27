@@ -4,14 +4,13 @@ use std::io;
 use ark_ff::PrimeField;
 use itertools::Itertools;
 use mpc_core::protocols::rep3::{
-    arithmetic,
+    Rep3PrimeFieldShare, arithmetic,
     conversion::{self, A2BType},
     network::{IoContext, Rep3Network},
-    Rep3PrimeFieldShare,
 };
 use num_bigint::BigUint;
 
-use super::{batched_plain::BatchedCircomPlainVmWitnessExtension, VmCircomWitnessExtension};
+use super::{VmCircomWitnessExtension, batched_plain::BatchedCircomPlainVmWitnessExtension};
 
 type ArithmeticShare<F> = Rep3PrimeFieldShare<F>;
 

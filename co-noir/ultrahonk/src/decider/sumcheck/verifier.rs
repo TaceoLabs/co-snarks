@@ -1,5 +1,6 @@
 use super::SumcheckVerifierOutput;
 use crate::{
+    CONST_PROOF_SIZE_LOG_N,
     decider::{
         sumcheck::{round_prover::SumcheckRoundOutput, round_verifier::SumcheckVerifierRound},
         verifier::DeciderVerifier,
@@ -8,7 +9,6 @@ use crate::{
     transcript::{Transcript, TranscriptHasher},
     types::NUM_ALL_ENTITIES,
     verifier::HonkVerifyResult,
-    CONST_PROOF_SIZE_LOG_N,
 };
 use ark_ff::{One, Zero};
 use co_builder::prelude::RowDisablingPolynomial;

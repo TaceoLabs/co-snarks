@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 
 use ark_ff::PrimeField;
-use itertools::{izip, Itertools};
+use itertools::{Itertools, izip};
 
 use crate::RngType;
 use rand::{Rng, SeedableRng};
@@ -73,10 +73,10 @@ impl<F: PrimeField> ShamirRng<F> {
 
     /// Create a forked [`ShamirRng`] that consumes `amount` number of corr rand pairs from its parent
     pub(super) fn fork_with_pairs(&mut self, amount: usize) -> Self {
-        let rng = RngType::from_seed(self.rng.gen());
+        let rng = RngType::from_seed(self.rng.r#gen());
         let mut shared_rngs = Vec::with_capacity(self.shared_rngs.len());
         for rng in self.shared_rngs.iter_mut() {
-            shared_rngs.push(RngType::from_seed(rng.gen()));
+            shared_rngs.push(RngType::from_seed(rng.r#gen()));
         }
         Self {
             id: self.id,
@@ -111,7 +111,7 @@ impl<F: PrimeField> ShamirRng<F> {
         let receive = to_interact_with_parties - send;
         for id_off in 1..=send {
             let rcv_id = (id + id_off) % num_parties;
-            let seed: SeedType = rng.gen();
+            let seed: SeedType = rng.r#gen();
             seeds[rcv_id] = seed;
             network.send(rcv_id, seed)?;
         }

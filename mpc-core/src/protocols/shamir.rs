@@ -20,11 +20,11 @@ pub mod poly;
 mod rngs;
 
 pub use mpc_types::protocols::shamir::{
-    combine_curve_point, combine_field_element, combine_field_elements, evaluate_poly,
-    evaluate_poly_point, interpolation_poly_from_zero_points, lagrange_from_coeff,
-    poly_with_zeros_from_precomputed, poly_with_zeros_from_precomputed_point, reconstruct_point,
-    share_curve_point, share_field_element, share_field_elements, ShamirPointShare,
-    ShamirPrimeFieldShare,
+    ShamirPointShare, ShamirPrimeFieldShare, combine_curve_point, combine_field_element,
+    combine_field_elements, evaluate_poly, evaluate_poly_point,
+    interpolation_poly_from_zero_points, lagrange_from_coeff, poly_with_zeros_from_precomputed,
+    poly_with_zeros_from_precomputed_point, reconstruct_point, share_curve_point,
+    share_field_element, share_field_elements,
 };
 
 /// This type is used to construct a [`ShamirProtocol`].
@@ -44,7 +44,7 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirPreprocessing<F, N> {
             eyre::bail!("Threshold too large for number of parties")
         }
 
-        let seed: [u8; crate::SEED_SIZE] = RngType::from_entropy().gen();
+        let seed: [u8; crate::SEED_SIZE] = RngType::from_entropy().r#gen();
         let mut rng_buffer = ShamirRng::new(seed, threshold, &mut network)?;
 
         let start = Instant::now();
@@ -261,7 +261,8 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
                     let r = self.network.recv_many::<F>(other_id)?;
                     if r.len() != len {
                         return Err(std::io::Error::new(
-                            std::io::ErrorKind::InvalidData,"During execution of degree_reduce_vec in MPC: Invalid number of elements received",
+                            std::io::ErrorKind::InvalidData,
+                            "During execution of degree_reduce_vec in MPC: Invalid number of elements received",
                         ));
                     }
                     for (acc, muls) in izip!(&mut acc, r) {
@@ -307,8 +308,9 @@ impl<F: PrimeField, N: ShamirNetwork> ShamirProtocol<F, N> {
                 let r = self.network.recv_many::<F>(Self::KING_ID)?;
                 if r.len() != len {
                     return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,"During execution of degree_reduce_vec in MPC: Invalid number of elements received",
-                ));
+                        std::io::ErrorKind::InvalidData,
+                        "During execution of degree_reduce_vec in MPC: Invalid number of elements received",
+                    ));
                 }
                 r
             } else {

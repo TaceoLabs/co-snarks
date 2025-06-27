@@ -2,14 +2,14 @@ use super::{ProverUnivariatesBatch, Relation};
 use crate::{
     co_decider::{
         relations::fold_accumulator,
-        types::{RelationParameters, MAX_PARTIAL_RELATION_LENGTH},
+        types::{MAX_PARTIAL_RELATION_LENGTH, RelationParameters},
         univariates::SharedUnivariate,
     },
     mpc::NoirUltraHonkProver,
 };
 use ark_ec::pairing::Pairing;
-use co_builder::prelude::HonkCurve;
 use co_builder::HonkProofResult;
+use co_builder::prelude::HonkCurve;
 use ultrahonk::prelude::{TranscriptFieldType, Univariate};
 
 #[derive(Clone, Debug)]

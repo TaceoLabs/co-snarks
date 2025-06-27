@@ -3,9 +3,9 @@ use ark_ec::pairing::Pairing;
 use ark_ff::Field;
 use itertools::izip;
 use mpc_core::protocols::rep3::{
-    arithmetic,
+    PartyID, Rep3PointShare, Rep3PrimeFieldShare, arithmetic,
     network::{IoContext, Rep3Network},
-    pointshare, poly, PartyID, Rep3PointShare, Rep3PrimeFieldShare,
+    pointshare, poly,
 };
 use num_traits::Zero;
 use rayon::prelude::*;

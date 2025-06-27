@@ -3,12 +3,12 @@
 //! This module contains some oblivious sorting algorithms for the Rep3 protocol.
 
 use crate::{
+    IoResult,
     protocols::rep3::{
         arithmetic::FieldShare,
         network::{IoContext, Rep3Network},
         yao::{self, circuits::GarbledCircuits},
     },
-    IoResult,
 };
 use ark_ff::PrimeField;
 

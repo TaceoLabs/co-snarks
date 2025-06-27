@@ -4,9 +4,9 @@
 
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::{Bytes, BytesMut};
-use eyre::{bail, eyre, Report};
+use eyre::{Report, bail, eyre};
 use mpc_net::{
-    channel::ChannelHandle, config::NetworkConfig, MpcNetworkHandler, MpcNetworkHandlerWrapper,
+    MpcNetworkHandler, MpcNetworkHandlerWrapper, channel::ChannelHandle, config::NetworkConfig,
 };
 use std::{collections::HashMap, sync::Arc};
 

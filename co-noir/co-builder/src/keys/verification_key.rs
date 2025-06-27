@@ -2,15 +2,15 @@ use serde::{Deserialize, Serialize as SerdeSerialize};
 use std::sync::Arc;
 
 use crate::{
+    HonkProofError, HonkProofResult, TranscriptFieldType,
     builder::UltraCircuitBuilder,
     crs::ProverCrs,
     honk_curve::HonkCurve,
-    polynomials::polynomial_types::{PrecomputedEntities, PRECOMPUTED_ENTITIES_SIZE},
+    polynomials::polynomial_types::{PRECOMPUTED_ENTITIES_SIZE, PrecomputedEntities},
     serialize::{Serialize, SerializeP},
     utils::Utils,
-    HonkProofError, HonkProofResult, TranscriptFieldType,
 };
-use ark_ec::{pairing::Pairing, AffineRepr};
+use ark_ec::{AffineRepr, pairing::Pairing};
 use ark_ff::Zero;
 use co_acvm::PlainAcvmSolver;
 

@@ -4,11 +4,11 @@
 
 use ark_ff::PrimeField;
 use itertools::izip;
-use mpc_types::protocols::shamir::{reconstruct, ShamirPrimeFieldShare};
+use mpc_types::protocols::shamir::{ShamirPrimeFieldShare, reconstruct};
 
 use crate::IoResult;
 
-use super::{network::ShamirNetwork, ShamirProtocol};
+use super::{ShamirProtocol, network::ShamirNetwork};
 use rayon::prelude::*;
 
 type ShamirShare<F> = ShamirPrimeFieldShare<F>;

@@ -4,12 +4,12 @@
 
 use ark_ec::CurveGroup;
 use mpc_types::protocols::shamir::{
-    reconstruct, reconstruct_point, ShamirPointShare, ShamirPrimeFieldShare,
+    ShamirPointShare, ShamirPrimeFieldShare, reconstruct, reconstruct_point,
 };
 
 use crate::IoResult;
 
-use super::{network::ShamirNetwork, ShamirProtocol};
+use super::{ShamirProtocol, network::ShamirNetwork};
 
 type FieldShare<C> = ShamirPrimeFieldShare<C>;
 type PointShare<C> = ShamirPointShare<C>;

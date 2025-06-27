@@ -3,18 +3,18 @@
 //! This module contains operations with arithmetic shares
 
 use crate::{
+    IoResult,
     protocols::rep3::{
         network::{IoContext, Rep3Network},
         rngs::Rep3CorrelatedRng,
     },
-    IoResult,
 };
-use itertools::{izip, Itertools};
+use itertools::{Itertools, izip};
 use mpc_types::protocols::{
     rep3::id::PartyID,
     rep3_ring::{
-        ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
         Rep3RingShare,
+        ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
     },
 };
 use num_traits::{One, Zero};

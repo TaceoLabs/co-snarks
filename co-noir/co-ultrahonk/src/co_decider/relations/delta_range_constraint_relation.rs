@@ -1,7 +1,7 @@
-use super::{fold_accumulator, Relation};
+use super::{Relation, fold_accumulator};
 use crate::{
     co_decider::{
-        types::{RelationParameters, MAX_PARTIAL_RELATION_LENGTH},
+        types::{MAX_PARTIAL_RELATION_LENGTH, RelationParameters},
         univariates::SharedUnivariate,
     },
     mpc::NoirUltraHonkProver,
@@ -9,8 +9,8 @@ use crate::{
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use ark_ff::Zero;
-use co_builder::prelude::HonkCurve;
 use co_builder::HonkProofResult;
+use co_builder::prelude::HonkCurve;
 use itertools::Itertools as _;
 use ultrahonk::prelude::{TranscriptFieldType, Univariate};
 

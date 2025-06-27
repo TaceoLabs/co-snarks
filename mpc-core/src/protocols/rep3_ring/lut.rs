@@ -5,6 +5,7 @@
 use std::marker::PhantomData;
 
 use crate::{
+    IoResult,
     lut::LookupTableProvider,
     protocols::{
         rep3::{
@@ -13,14 +14,13 @@ use crate::{
         },
         rep3_ring::{conversion, gadgets},
     },
-    IoResult,
 };
 use ark_ff::PrimeField;
 use mpc_types::protocols::{
     rep3::{Rep3BigUintShare, Rep3PrimeFieldShare},
     rep3_ring::{
-        ring::{bit::Bit, int_ring::IntRing2k},
         Rep3RingShare,
+        ring::{bit::Bit, int_ring::IntRing2k},
     },
 };
 use rand::{distributions::Standard, prelude::Distribution};

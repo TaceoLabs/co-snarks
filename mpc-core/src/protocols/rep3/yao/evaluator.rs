@@ -4,14 +4,14 @@
 //!
 //! This file is heavily inspired by [fancy-garbling](https://github.com/GaloisInc/swanky/blob/dev/fancy-garbling/src/garble/evaluator.rs)
 
-use super::{bristol_fashion::BristolFashionEvaluator, circuits::FancyBinaryConstant, GCUtils};
+use super::{GCUtils, bristol_fashion::BristolFashionEvaluator, circuits::FancyBinaryConstant};
 use crate::{
-    protocols::rep3::network::{IoContext, Rep3Network},
     IoResult,
+    protocols::rep3::network::{IoContext, Rep3Network},
 };
 use fancy_garbling::{
-    errors::EvaluatorError, util::output_tweak, BinaryBundle, Fancy, FancyBinary, WireLabel,
-    WireMod2,
+    BinaryBundle, Fancy, FancyBinary, WireLabel, WireMod2, errors::EvaluatorError,
+    util::output_tweak,
 };
 use mpc_types::protocols::rep3::id::PartyID;
 use scuttlebutt::Block;

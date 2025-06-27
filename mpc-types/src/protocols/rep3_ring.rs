@@ -2,7 +2,7 @@
 //!
 //! This module implements the rep3 share and combine operations for rings
 
-use rand::{distributions::Standard, prelude::Distribution, CryptoRng, Rng};
+use rand::{CryptoRng, Rng, distributions::Standard, prelude::Distribution};
 use ring::{int_ring::IntRing2k, ring_impl::RingElement};
 
 pub mod arithmetic;
@@ -21,8 +21,8 @@ pub fn share_ring_element<T: IntRing2k, R: Rng + CryptoRng>(
 where
     Standard: Distribution<T>,
 {
-    let a = rng.gen::<RingElement<T>>();
-    let b = rng.gen::<RingElement<T>>();
+    let a = rng.r#gen::<RingElement<T>>();
+    let b = rng.r#gen::<RingElement<T>>();
 
     let c = val - a - b;
     let share1 = Rep3RingShare::new_ring(a, c);
@@ -59,8 +59,8 @@ pub fn share_ring_element_binary<T: IntRing2k, R: Rng + CryptoRng>(
 where
     Standard: Distribution<T>,
 {
-    let a = rng.gen::<RingElement<T>>();
-    let b = rng.gen::<RingElement<T>>();
+    let a = rng.r#gen::<RingElement<T>>();
+    let b = rng.r#gen::<RingElement<T>>();
     let c = val ^ a ^ b;
     let share1 = Rep3RingShare::new_ring(a, c);
     let share2 = Rep3RingShare::new_ring(b, a);

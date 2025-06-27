@@ -2,7 +2,7 @@ use ark_ff::PrimeField;
 use brillig::{BinaryIntOp, IntegerBitSize, MemoryAddress};
 use eyre::Context;
 
-use crate::{mpc::BrilligDriver, CoBrilligVM};
+use crate::{CoBrilligVM, mpc::BrilligDriver};
 
 impl<T, F> CoBrilligVM<T, F>
 where

@@ -19,8 +19,8 @@
 
 use super::types::ProverMemory;
 use crate::{
+    NUM_ALPHAS, Utils,
     transcript::{Transcript, TranscriptFieldType, TranscriptHasher},
-    Utils, NUM_ALPHAS,
 };
 use ark_ff::{One, Zero};
 use co_builder::prelude::{HonkCurve, Polynomial, ProverCrs, ProvingKey, ZeroKnowledge};

@@ -1,10 +1,10 @@
 use super::{CoAcvmResult, CoSolver};
 use crate::mpc::NoirWitnessExtensionProtocol;
 use acir::{
+    AcirField,
     acir_field::GenericFieldElement,
     circuit::opcodes::{BlackBoxFuncCall, ConstantOrWitnessEnum, FunctionInput},
     native_types::{Witness, WitnessMap},
-    AcirField,
 };
 
 use ark_ff::PrimeField;

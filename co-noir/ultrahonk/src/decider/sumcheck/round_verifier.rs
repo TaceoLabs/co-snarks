@@ -2,6 +2,7 @@ use super::round_prover::SumcheckRoundOutput;
 use crate::{
     decider::{
         relations::{
+            AllRelationEvaluations, Relation,
             auxiliary_relation::AuxiliaryRelation,
             delta_range_constraint_relation::DeltaRangeConstraintRelation,
             elliptic_relation::{EllipticRelation, EllipticRelationEvals},
@@ -10,7 +11,6 @@ use crate::{
             poseidon2_external_relation::Poseidon2ExternalRelation,
             poseidon2_internal_relation::Poseidon2InternalRelation,
             ultra_arithmetic_relation::UltraArithmeticRelation,
-            AllRelationEvaluations, Relation,
         },
         types::{ClaimedEvaluations, RelationParameters},
     },

@@ -7,8 +7,8 @@ mod r1cs;
 pub mod traits;
 mod witness;
 
-pub use r1cs::R1CSParserError;
 pub use r1cs::R1CS;
+pub use r1cs::R1CSParserError;
 
 pub use witness::Witness;
 pub use witness::WitnessParserError;

@@ -1,6 +1,6 @@
 use crate::{
     gadgets::poseidon2::Poseidon2,
-    protocols::shamir::{network::ShamirNetwork, ShamirPrimeFieldShare, ShamirProtocol},
+    protocols::shamir::{ShamirPrimeFieldShare, ShamirProtocol, network::ShamirNetwork},
 };
 use ark_ff::{PrimeField, Zero};
 

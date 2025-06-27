@@ -1,9 +1,9 @@
 use super::{CircomGroth16Prover, IoResult};
-use ark_ec::{pairing::Pairing, CurveGroup};
+use ark_ec::{CurveGroup, pairing::Pairing};
 use ark_ff::PrimeField;
 use mpc_core::protocols::shamir::{
-    arithmetic, network::ShamirNetwork, pointshare, reconstruct_point, ShamirPrimeFieldShare,
-    ShamirProtocol,
+    ShamirPrimeFieldShare, ShamirProtocol, arithmetic, network::ShamirNetwork, pointshare,
+    reconstruct_point,
 };
 use rayon::prelude::*;
 

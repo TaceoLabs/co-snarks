@@ -27,7 +27,7 @@
 //! This module defines the [`ZKey`] struct that implements deserialization of circom zkey files via [`ZKey::from_reader`].
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
-use ark_poly::{univariate::DensePolynomial, Polynomial};
+use ark_poly::{Polynomial, univariate::DensePolynomial};
 use ark_serialize::CanonicalDeserialize;
 use std::io::{Cursor, Read};
 

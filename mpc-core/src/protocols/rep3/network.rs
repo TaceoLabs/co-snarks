@@ -8,17 +8,17 @@ use crate::{IoResult, RngType};
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::{Bytes, BytesMut};
-use eyre::{bail, eyre, Report};
+use eyre::{Report, bail, eyre};
 use mpc_net::{
-    channel::ChannelHandle, config::NetworkConfig, MpcNetworkHandler, MpcNetworkHandlerWrapper,
+    MpcNetworkHandler, MpcNetworkHandlerWrapper, channel::ChannelHandle, config::NetworkConfig,
 };
 
 use super::{
+    PartyID,
     conversion::A2BType,
     rngs::{Rep3CorrelatedRng, Rep3Rand, Rep3RandBitComp},
-    PartyID,
 };
-use rand::{distributions::Standard, prelude::Distribution, CryptoRng, Rng, SeedableRng};
+use rand::{CryptoRng, Rng, SeedableRng, distributions::Standard, prelude::Distribution};
 
 // this will be moved later
 /// This struct handles networking and rng
@@ -37,7 +37,7 @@ pub struct IoContext<N: Rep3Network> {
 
 impl<N: Rep3Network> IoContext<N> {
     fn setup_prf<R: Rng + CryptoRng>(network: &mut N, rng: &mut R) -> IoResult<Rep3Rand> {
-        let seed1: [u8; crate::SEED_SIZE] = rng.gen();
+        let seed1: [u8; crate::SEED_SIZE] = rng.r#gen();
         network.send_next(seed1)?;
         let seed2: [u8; crate::SEED_SIZE] = network.recv_prev()?;
 
@@ -102,7 +102,7 @@ impl<N: Rep3Network> IoContext<N> {
     pub fn fork(&mut self) -> IoResult<Self> {
         let network = self.network.fork()?;
         let rngs = self.rngs.fork();
-        let rng = RngType::from_seed(self.rng.gen());
+        let rng = RngType::from_seed(self.rng.r#gen());
         let id = self.id;
         let a2b_type = self.a2b_type;
 

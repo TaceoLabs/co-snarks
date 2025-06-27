@@ -14,10 +14,10 @@ use num_traits::ToPrimitive;
 use std::marker::PhantomData;
 use tracing::instrument;
 
+use crate::mpc::CircomGroth16Prover;
 use crate::mpc::plain::PlainGroth16Driver;
 use crate::mpc::rep3::Rep3Groth16Driver;
 use crate::mpc::shamir::ShamirGroth16Driver;
-use crate::mpc::CircomGroth16Prover;
 
 pub use reduction::{CircomReduction, LibSnarkReduction, R1CSToQAP};
 mod reduction;

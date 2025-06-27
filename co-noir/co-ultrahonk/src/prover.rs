@@ -1,19 +1,19 @@
 use crate::{
+    CONST_PROOF_SIZE_LOG_N,
     co_decider::{prover::CoDecider, types::ProverMemory},
     co_oink::prover::CoOink,
     key::proving_key::ProvingKey,
     mpc::NoirUltraHonkProver,
     prelude::{PlainUltraHonkDriver, Rep3UltraHonkDriver, ShamirUltraHonkDriver},
-    CONST_PROOF_SIZE_LOG_N,
 };
 use ark_ec::pairing::Pairing;
 use co_builder::{
-    prelude::{HonkCurve, ProverCrs, PAIRING_POINT_ACCUMULATOR_SIZE},
     HonkProofResult,
+    prelude::{HonkCurve, PAIRING_POINT_ACCUMULATOR_SIZE, ProverCrs},
 };
 use mpc_core::protocols::{
     rep3::network::{IoContext, Rep3Network},
-    shamir::{network::ShamirNetwork, ShamirPreprocessing, ShamirProtocol},
+    shamir::{ShamirPreprocessing, ShamirProtocol, network::ShamirNetwork},
 };
 use std::marker::PhantomData;
 use ultrahonk::prelude::{
@@ -35,10 +35,10 @@ pub struct CoUltraHonk<
 }
 
 impl<
-        T: NoirUltraHonkProver<P>,
-        P: HonkCurve<TranscriptFieldType>,
-        H: TranscriptHasher<TranscriptFieldType>,
-    > CoUltraHonk<T, P, H>
+    T: NoirUltraHonkProver<P>,
+    P: HonkCurve<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType>,
+> CoUltraHonk<T, P, H>
 {
     pub fn new(driver: T) -> Self {
         Self {
@@ -88,11 +88,8 @@ impl<
     }
 }
 
-impl<
-        P: HonkCurve<TranscriptFieldType>,
-        H: TranscriptHasher<TranscriptFieldType>,
-        N: Rep3Network,
-    > Rep3CoUltraHonk<N, P, H>
+impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>, N: Rep3Network>
+    Rep3CoUltraHonk<N, P, H>
 {
     pub fn prove(
         net: N,
@@ -115,11 +112,8 @@ impl<
     }
 }
 
-impl<
-        P: HonkCurve<TranscriptFieldType>,
-        H: TranscriptHasher<TranscriptFieldType>,
-        N: ShamirNetwork,
-    > ShamirCoUltraHonk<N, P, H>
+impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>, N: ShamirNetwork>
+    ShamirCoUltraHonk<N, P, H>
 {
     pub fn prove(
         net: N,

@@ -4,7 +4,7 @@ use circom_types::plonk::ZKey;
 use co_circom_types::SharedWitness;
 use std::marker::PhantomData;
 
-use crate::{mpc::CircomPlonkProver, PlonkProofError, PlonkProofResult};
+use crate::{PlonkProofError, PlonkProofResult, mpc::CircomPlonkProver};
 use ark_ec::pairing::Pairing;
 use ark_ff::{FftField, LegendreSymbol, PrimeField};
 use ark_serialize::CanonicalSerialize;

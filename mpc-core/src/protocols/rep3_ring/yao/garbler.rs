@@ -1,6 +1,6 @@
 use crate::protocols::rep3::{
     network::Rep3Network,
-    yao::{garbler::Rep3Garbler, GCInputs, GCUtils},
+    yao::{GCInputs, GCUtils, garbler::Rep3Garbler},
 };
 use fancy_garbling::WireMod2;
 use mpc_types::protocols::rep3_ring::ring::{int_ring::IntRing2k, ring_impl::RingElement};

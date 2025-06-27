@@ -6,7 +6,7 @@ pub use crate::transcript::Poseidon2Sponge;
 pub use crate::transcript::{Transcript, TranscriptHasher};
 pub use crate::types::HonkProof;
 pub use crate::types::{ShiftedWitnessEntities, WitnessEntities};
+pub use co_builder::TranscriptFieldType;
 pub use co_builder::prelude::PlainAcvmSolver;
 pub use co_builder::prelude::VerifyingKeyBarretenberg;
 pub use co_builder::prelude::{ProvingKey, UltraCircuitBuilder, ZeroKnowledge};
-pub use co_builder::TranscriptFieldType;

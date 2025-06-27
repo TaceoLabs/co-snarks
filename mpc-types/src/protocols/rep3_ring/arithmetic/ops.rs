@@ -133,6 +133,8 @@ impl<T: IntRing2k> ark_ff::Zero for Rep3RingShare<T> {
     }
 
     fn is_zero(&self) -> bool {
-        panic!("is_zero is not a meaningful operation for Rep3PrimeFieldShare, use interative zero check instead");
+        panic!(
+            "is_zero is not a meaningful operation for Rep3PrimeFieldShare, use interative zero check instead"
+        );
     }
 }

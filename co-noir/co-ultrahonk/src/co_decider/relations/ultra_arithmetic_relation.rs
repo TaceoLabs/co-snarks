@@ -1,7 +1,7 @@
-use super::{ProverUnivariatesBatch, Relation, MIN_RAYON_ITER};
+use super::{MIN_RAYON_ITER, ProverUnivariatesBatch, Relation};
 use crate::{
     co_decider::{
-        types::{RelationParameters, MAX_PARTIAL_RELATION_LENGTH},
+        types::{MAX_PARTIAL_RELATION_LENGTH, RelationParameters},
         univariates::SharedUnivariate,
     },
     mpc::NoirUltraHonkProver,
@@ -10,7 +10,7 @@ use ark_ec::pairing::Pairing;
 use ark_ff::Field;
 use ark_ff::Zero;
 use co_builder::HonkProofResult;
-use co_builder::{prelude::HonkCurve, TranscriptFieldType};
+use co_builder::{TranscriptFieldType, prelude::HonkCurve};
 use itertools::izip;
 use rayon::prelude::*;
 use ultrahonk::prelude::Univariate;

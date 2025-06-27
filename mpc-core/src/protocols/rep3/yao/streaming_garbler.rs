@@ -4,18 +4,18 @@
 //!
 //! This implementation is heavily inspired by [fancy-garbling](https://github.com/GaloisInc/swanky/blob/dev/fancy-garbling/src/garble/garbler.rs)
 
-use super::{circuits::FancyBinaryConstant, GCInputs, GCUtils};
+use super::{GCInputs, GCUtils, circuits::FancyBinaryConstant};
 use crate::{
-    protocols::rep3::{
-        network::{IoContext, Rep3Network},
-        PartyID,
-    },
     IoResult, RngType,
+    protocols::rep3::{
+        PartyID,
+        network::{IoContext, Rep3Network},
+    },
 };
 use ark_ff::PrimeField;
 use core::panic;
 use fancy_garbling::{
-    errors::GarblerError, util::output_tweak, BinaryBundle, Fancy, FancyBinary, WireLabel, WireMod2,
+    BinaryBundle, Fancy, FancyBinary, WireLabel, WireMod2, errors::GarblerError, util::output_tweak,
 };
 use rand::SeedableRng;
 use scuttlebutt::Block;

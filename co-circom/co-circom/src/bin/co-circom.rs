@@ -4,15 +4,15 @@ use co_circom::{
     Bls12_381, Bn254, CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge,
     CircomGroth16Proof, CoCircomCompiler, CompilerConfig, Compression, Groth16,
     Groth16JsonVerificationKey, Groth16ZKey, Pairing, Plonk, PlonkJsonVerificationKey, PlonkProof,
-    PlonkZKey, Rep3CoGroth16, Rep3CoPlonk, Rep3MpcNet, Rep3SharedInput, ShamirCoGroth16,
-    ShamirCoPlonk, ShamirMpcNet, ShamirSharedWitness, SimplificationLevel, VMConfig, Witness, R1CS,
+    PlonkZKey, R1CS, Rep3CoGroth16, Rep3CoPlonk, Rep3MpcNet, Rep3SharedInput, ShamirCoGroth16,
+    ShamirCoPlonk, ShamirMpcNet, ShamirSharedWitness, SimplificationLevel, VMConfig, Witness,
 };
 use co_circom_types::{CompressedRep3SharedWitness, VerificationError};
 use co_groth16::CircomReduction;
-use color_eyre::eyre::{self, eyre, Context, ContextCompat};
+use color_eyre::eyre::{self, Context, ContextCompat, eyre};
 use figment::{
-    providers::{Env, Format, Serialized, Toml},
     Figment,
+    providers::{Env, Format, Serialized, Toml},
 };
 use mpc_net::config::NetworkConfigFile;
 use num_traits::Zero;
@@ -534,8 +534,8 @@ enum Commands {
 fn install_tracing() {
     use tracing_subscriber::prelude::*;
     use tracing_subscriber::{
-        fmt::{self, format::FmtSpan},
         EnvFilter,
+        fmt::{self, format::FmtSpan},
     };
 
     let fmt_layer = fmt::layer()

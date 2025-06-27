@@ -9,14 +9,14 @@ use circom_types::traits::CircomArkworksPrimeFieldBridge;
 use co_circom_types::Rep3SharedWitness;
 use co_circom_types::ShamirSharedWitness;
 use co_circom_types::SharedWitness;
+use mpc::CircomPlonkProver;
 use mpc::rep3::Rep3PlonkDriver;
 use mpc::shamir::ShamirPlonkDriver;
-use mpc::CircomPlonkProver;
 use mpc_core::protocols::rep3::network::IoContext;
 use mpc_core::protocols::rep3::network::Rep3Network;
-use mpc_core::protocols::shamir::network::ShamirNetwork;
 use mpc_core::protocols::shamir::ShamirPreprocessing;
 use mpc_core::protocols::shamir::ShamirProtocol;
+use mpc_core::protocols::shamir::network::ShamirNetwork;
 use round1::Round1;
 use std::io;
 use std::marker::PhantomData;
@@ -272,9 +272,9 @@ impl<P: Pairing, N: ShamirNetwork> ShamirCoPlonk<P, N> {
 #[cfg(test)]
 mod tests {
     use ark_bn254::Bn254;
+    use circom_types::Witness;
     use circom_types::groth16::JsonPublicInput;
     use circom_types::plonk::{JsonVerificationKey, ZKey};
-    use circom_types::Witness;
     use co_circom_types::SharedWitness;
     use std::sync::Arc;
     use std::{fs::File, io::BufReader};

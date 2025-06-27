@@ -14,7 +14,7 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use num_bigint::BigUint;
 
 use ark_ff::{One, PrimeField};
-use rand::{distributions::Standard, prelude::Distribution, CryptoRng, Rng, SeedableRng};
+use rand::{CryptoRng, Rng, SeedableRng, distributions::Standard, prelude::Distribution};
 
 pub use arithmetic::types::Rep3PrimeFieldShare;
 pub use binary::types::Rep3BigUintShare;
@@ -211,8 +211,8 @@ where
     U::Seed: std::fmt::Debug + Clone + Serialize + for<'a> Deserialize<'a>,
     Standard: Distribution<U::Seed>,
 {
-    let seed_b = rng.gen::<U::Seed>();
-    let seed_c = rng.gen::<U::Seed>();
+    let seed_b = rng.r#gen::<U::Seed>();
+    let seed_c = rng.r#gen::<U::Seed>();
 
     let mut rng_b = U::from_seed(seed_b.to_owned());
     let mut rng_c = U::from_seed(seed_c.to_owned());
@@ -250,8 +250,8 @@ where
     U::Seed: std::fmt::Debug + Clone + Serialize + for<'a> Deserialize<'a>,
     Standard: Distribution<U::Seed>,
 {
-    let seed_b = rng.gen::<U::Seed>();
-    let seed_c = rng.gen::<U::Seed>();
+    let seed_b = rng.r#gen::<U::Seed>();
+    let seed_c = rng.r#gen::<U::Seed>();
 
     let mut rng_b = U::from_seed(seed_b.to_owned());
     let mut rng_c = U::from_seed(seed_c.to_owned());
@@ -361,8 +361,8 @@ where
     Standard: Distribution<U::Seed>,
 {
     let len = vals.len();
-    let seed_b = rng.gen::<U::Seed>();
-    let seed_c = rng.gen::<U::Seed>();
+    let seed_b = rng.r#gen::<U::Seed>();
+    let seed_c = rng.r#gen::<U::Seed>();
 
     let mut rng_b = U::from_seed(seed_b.to_owned());
     let mut rng_c = U::from_seed(seed_c.to_owned());
@@ -406,8 +406,8 @@ where
     Standard: Distribution<U::Seed>,
 {
     let len = vals.len();
-    let seed_b = rng.gen::<U::Seed>();
-    let seed_c = rng.gen::<U::Seed>();
+    let seed_b = rng.r#gen::<U::Seed>();
+    let seed_c = rng.r#gen::<U::Seed>();
 
     let mut rng_b = U::from_seed(seed_b.to_owned());
     let mut rng_c = U::from_seed(seed_c.to_owned());
@@ -436,8 +436,8 @@ pub fn share_biguint<F: PrimeField, R: Rng + CryptoRng>(
     let val: BigUint = val.into();
     let limbsize = F::MODULUS_BIT_SIZE.div_ceil(32);
     let mask = (BigUint::from(1u32) << F::MODULUS_BIT_SIZE) - BigUint::one();
-    let a = BigUint::new((0..limbsize).map(|_| rng.gen()).collect()) & &mask;
-    let b = BigUint::new((0..limbsize).map(|_| rng.gen()).collect()) & mask;
+    let a = BigUint::new((0..limbsize).map(|_| rng.r#gen()).collect()) & &mask;
+    let b = BigUint::new((0..limbsize).map(|_| rng.r#gen()).collect()) & mask;
 
     let c = val ^ &a ^ &b;
     let share1 = Rep3BigUintShare::new(a.to_owned(), c.to_owned());

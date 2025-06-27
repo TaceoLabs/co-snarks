@@ -149,8 +149,8 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> MpcAccelerator<F, C> {
         &mut self,
         name: String,
         fun: impl Fn(&mut C, &[C::VmType], usize) -> eyre::Result<ComponentAcceleratorOutput<C::VmType>>
-            + Send
-            + 'static,
+        + Send
+        + 'static,
     ) {
         self.registered_component.insert(name, Box::new(fun));
     }

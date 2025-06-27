@@ -4,11 +4,11 @@ use co_builder::prelude::HonkRecursion;
 use co_builder::prelude::ZeroKnowledge;
 use sha3::Keccak256;
 use ultrahonk::{
+    Utils,
     prelude::{
         HonkProof, PlainAcvmSolver, Poseidon2Sponge, TranscriptFieldType, TranscriptHasher,
         UltraCircuitBuilder, UltraHonk,
     },
-    Utils,
 };
 
 fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(

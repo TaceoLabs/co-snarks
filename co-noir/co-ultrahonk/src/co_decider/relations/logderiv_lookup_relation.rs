@@ -1,15 +1,15 @@
-use super::{fold_accumulator, ProverUnivariatesBatch, Relation};
+use super::{ProverUnivariatesBatch, Relation, fold_accumulator};
 use crate::{
     co_decider::{
-        types::{RelationParameters, MAX_PARTIAL_RELATION_LENGTH},
+        types::{MAX_PARTIAL_RELATION_LENGTH, RelationParameters},
         univariates::SharedUnivariate,
     },
     mpc::NoirUltraHonkProver,
 };
 use ark_ec::pairing::Pairing;
-use co_builder::prelude::HonkCurve;
 use co_builder::HonkProofResult;
-use itertools::{izip, Itertools as _};
+use co_builder::prelude::HonkCurve;
+use itertools::{Itertools as _, izip};
 use ultrahonk::prelude::{TranscriptFieldType, Univariate};
 
 #[derive(Clone, Debug)]

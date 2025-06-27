@@ -24,12 +24,12 @@ pub use ark_ec::pairing::Pairing;
 pub use circom_mpc_compiler::{CoCircomCompiler, CompilerConfig, SimplificationLevel};
 pub use circom_mpc_vm::{mpc_vm::VMConfig, types::CoCircomCompilerParsed};
 pub use circom_types::{
+    R1CS, Witness,
     groth16::{
         CircomGroth16Proof, JsonVerificationKey as Groth16JsonVerificationKey, ZKey as Groth16ZKey,
     },
     plonk::{JsonVerificationKey as PlonkJsonVerificationKey, PlonkProof, ZKey as PlonkZKey},
     traits::{CheckElement, CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
-    Witness, R1CS,
 };
 pub use co_circom_types::{
     Compression, Input, Rep3SharedInput, Rep3SharedWitness, ShamirSharedWitness,
@@ -37,7 +37,7 @@ pub use co_circom_types::{
 pub use co_groth16::{Groth16, Rep3CoGroth16, ShamirCoGroth16};
 pub use co_plonk::{Plonk, Rep3CoPlonk, ShamirCoPlonk};
 pub use mpc_core::protocols::{
-    rep3::{network::Rep3MpcNet, PartyID},
+    rep3::{PartyID, network::Rep3MpcNet},
     shamir::network::ShamirMpcNet,
 };
 pub use mpc_net::config::{Address, NetworkConfig, NetworkParty, ParseAddressError};

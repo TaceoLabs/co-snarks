@@ -1,15 +1,15 @@
-use ark_ec::pairing::Pairing;
 use ark_ec::CurveGroup;
+use ark_ec::pairing::Pairing;
 use circom_types::plonk::ZKey;
 use co_circom_types::SharedWitness;
 use tracing::instrument;
 
 use crate::{
+    PlonkProofError, PlonkProofResult,
     mpc::CircomPlonkProver,
     plonk_utils::{self, rayon_join},
     round2::Round2,
     types::{Domains, PlonkData, PlonkWitness, PolyEval},
-    PlonkProofError, PlonkProofResult,
 };
 
 // Round 1 of https://eprint.iacr.org/2019/953.pdf (page 28)
@@ -292,7 +292,7 @@ pub mod tests {
     use crate::mpc::plain::PlainPlonkDriver;
 
     use super::{Round1, Round1Challenges};
-    use ark_ec::{pairing::Pairing, CurveGroup};
+    use ark_ec::{CurveGroup, pairing::Pairing};
     use circom_types::Witness;
     use std::str::FromStr;
 
@@ -380,26 +380,26 @@ pub mod tests {
             round1.challenges = challenges;
             let round2 = round1.round1().unwrap();
             assert_eq!(
-            round2.proof.commit_a.into_affine(),
-            g1_bls12_381_from_xy!(
-                "1998528185362278337803945478659945086542519630073413629642105010067028189206141975508238821825915421715338325238864",
-                "436066057394619309469331627881449668678557518497178283348448576242129245895320288313540996356612092203769711134939"
-            )
-        );
+                round2.proof.commit_a.into_affine(),
+                g1_bls12_381_from_xy!(
+                    "1998528185362278337803945478659945086542519630073413629642105010067028189206141975508238821825915421715338325238864",
+                    "436066057394619309469331627881449668678557518497178283348448576242129245895320288313540996356612092203769711134939"
+                )
+            );
             assert_eq!(
-            round2.proof.commit_b,
-            g1_bls12_381_from_xy!(
-                "905523078516729029387874920505888326057985585766807058529621596028494573503715980387105934346404133401227192848784",
-                "817813208457279034981972137280354075285704598923875006670861630006742541882069169563142367502699866422101983374962"
-            )
-        );
+                round2.proof.commit_b,
+                g1_bls12_381_from_xy!(
+                    "905523078516729029387874920505888326057985585766807058529621596028494573503715980387105934346404133401227192848784",
+                    "817813208457279034981972137280354075285704598923875006670861630006742541882069169563142367502699866422101983374962"
+                )
+            );
             assert_eq!(
-            round2.proof.commit_c,
-            g1_bls12_381_from_xy!(
-                "2045702311111033155343546707999313330868835292331631548140598745513449880984849831136790392158415943067742290277175",
-                "2263708941732971465915801396733005622347769540424301431567098497278413189155761949973582649025461644335372679621757"
-            )
-        );
+                round2.proof.commit_c,
+                g1_bls12_381_from_xy!(
+                    "2045702311111033155343546707999313330868835292331631548140598745513449880984849831136790392158415943067742290277175",
+                    "2263708941732971465915801396733005622347769540424301431567098497278413189155761949973582649025461644335372679621757"
+                )
+            );
         }
     }
 }

@@ -4,8 +4,8 @@
 
 use super::arithmetic::RingShare;
 use crate::{
-    protocols::rep3::network::{IoContext, Rep3Network},
     IoResult,
+    protocols::rep3::network::{IoContext, Rep3Network},
 };
 use itertools::izip;
 use mpc_types::protocols::{

@@ -1,5 +1,6 @@
 use super::types::{PolyF, PolyG};
 use crate::{
+    CoUtils,
     co_decider::{
         co_shplemini::{OpeningPair, ShpleminiOpeningClaim},
         co_sumcheck::SumcheckOutput,
@@ -8,26 +9,25 @@ use crate::{
     },
     mpc::NoirUltraHonkProver,
     types::AllEntities,
-    CoUtils,
 };
 use ark_ec::AffineRepr;
 use ark_ff::{Field, One, Zero};
 use co_builder::HonkProofResult;
 use co_builder::{
-    prelude::{HonkCurve, Polynomial, ProverCrs},
     HonkProofError,
+    prelude::{HonkCurve, Polynomial, ProverCrs},
 };
 use itertools::izip;
 use ultrahonk::{
+    NUM_INTERLEAVING_CLAIMS, NUM_SMALL_IPA_EVALUATIONS, Utils,
     prelude::{Transcript, TranscriptFieldType, TranscriptHasher, ZeroKnowledge},
-    Utils, NUM_INTERLEAVING_CLAIMS, NUM_SMALL_IPA_EVALUATIONS,
 };
 
 impl<
-        T: NoirUltraHonkProver<P>,
-        P: HonkCurve<TranscriptFieldType>,
-        H: TranscriptHasher<TranscriptFieldType>,
-    > CoDecider<T, P, H>
+    T: NoirUltraHonkProver<P>,
+    P: HonkCurve<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType>,
+> CoDecider<T, P, H>
 {
     fn get_f_polynomials(
         polys: &AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>>,
@@ -600,7 +600,7 @@ impl<
                 let sub = T::sub(tmp[0], gemini_fold_pos_evaluations[fold_idx]);
                 tmp[0] = sub;
                 let scaling_factor = current_nu * inverse_vanishing_evals[idx]; // = νʲ / (z − xⱼ )
-                                                                                // G -= νʲ ⋅ ( fⱼ(X) − vⱼ) / ( z − xⱼ )
+                // G -= νʲ ⋅ ( fⱼ(X) − vⱼ) / ( z − xⱼ )
                 g.add_scaled(&tmp, &-scaling_factor);
 
                 current_nu *= nu_challenge;

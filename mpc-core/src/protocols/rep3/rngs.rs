@@ -10,7 +10,7 @@ use fancy_garbling::WireMod2;
 use mpc_types::protocols::rep3::id::PartyID;
 use num_bigint::BigUint;
 use rand::{
-    distributions::Standard, prelude::Distribution, seq::SliceRandom, Rng, RngCore, SeedableRng,
+    Rng, RngCore, SeedableRng, distributions::Standard, prelude::Distribution, seq::SliceRandom,
 };
 use rayon::prelude::*;
 
@@ -50,9 +50,9 @@ impl Rep3CorrelatedRng {
         Standard: Distribution<T>,
     {
         match id {
-            PartyID::ID0 => self.bitcomp1.rng2.gen(),
-            PartyID::ID1 => self.bitcomp1.rng2.gen(),
-            PartyID::ID2 => self.bitcomp1.rng1.gen(),
+            PartyID::ID0 => self.bitcomp1.rng2.r#gen(),
+            PartyID::ID1 => self.bitcomp1.rng2.r#gen(),
+            PartyID::ID2 => self.bitcomp1.rng1.r#gen(),
         }
     }
 
@@ -63,8 +63,8 @@ impl Rep3CorrelatedRng {
     {
         match id {
             PartyID::ID0 => panic!("Garbler should not be PartyID::ID0"),
-            PartyID::ID1 => self.rand.rng1.gen(),
-            PartyID::ID2 => self.rand.rng2.gen(),
+            PartyID::ID1 => self.rand.rng1.r#gen(),
+            PartyID::ID2 => self.rand.rng2.r#gen(),
         }
     }
 
@@ -127,8 +127,8 @@ impl Rep3Rand {
     where
         Standard: Distribution<T>,
     {
-        let a = self.rng1.gen();
-        let b = self.rng2.gen();
+        let a = self.rng1.r#gen();
+        let b = self.rng2.r#gen();
         (a, b)
     }
 
@@ -163,8 +163,8 @@ impl Rep3Rand {
         T: Send + Sync + std::ops::Sub<Output = T>,
     {
         let (a, b) = rayon::join(
-            || (0..len).map(|_| self.rng1.gen()).collect::<Vec<_>>(),
-            || (0..len).map(|_| self.rng2.gen()).collect::<Vec<_>>(),
+            || (0..len).map(|_| self.rng1.r#gen()).collect::<Vec<_>>(),
+            || (0..len).map(|_| self.rng2.r#gen()).collect::<Vec<_>>(),
         );
         a.into_par_iter()
             .zip_eq(b.into_par_iter())
@@ -189,8 +189,8 @@ impl Rep3Rand {
     /// Generate two random [`BigUint`]s with given `bitlen`
     pub fn random_biguint(&mut self, bitlen: usize) -> (BigUint, BigUint) {
         let limbsize = bitlen.div_ceil(32);
-        let a = BigUint::new((0..limbsize).map(|_| self.rng1.gen()).collect());
-        let b = BigUint::new((0..limbsize).map(|_| self.rng2.gen()).collect());
+        let a = BigUint::new((0..limbsize).map(|_| self.rng1.r#gen()).collect());
+        let b = BigUint::new((0..limbsize).map(|_| self.rng2.r#gen()).collect());
         let mask = (BigUint::from(1u32) << bitlen) - BigUint::one();
         (a & &mask, b & mask)
     }
@@ -198,7 +198,7 @@ impl Rep3Rand {
     /// Generate a random [`BigUint`] with given `bitlen` from rng1
     pub fn random_biguint_rng1(&mut self, bitlen: usize) -> BigUint {
         let limbsize = bitlen.div_ceil(32);
-        let val = BigUint::new((0..limbsize).map(|_| self.rng1.gen()).collect());
+        let val = BigUint::new((0..limbsize).map(|_| self.rng1.r#gen()).collect());
         let mask = (BigUint::from(1u32) << bitlen) - BigUint::one();
         val & &mask
     }
@@ -206,7 +206,7 @@ impl Rep3Rand {
     /// Generate a random [`BigUint`] with given `bitlen` from rng2
     pub fn random_biguint_rng2(&mut self, bitlen: usize) -> BigUint {
         let limbsize = bitlen.div_ceil(32);
-        let val = BigUint::new((0..limbsize).map(|_| self.rng2.gen()).collect());
+        let val = BigUint::new((0..limbsize).map(|_| self.rng2.r#gen()).collect());
         let mask = (BigUint::from(1u32) << bitlen) - BigUint::one();
         val & &mask
     }
@@ -226,7 +226,7 @@ impl Rep3Rand {
     where
         Standard: Distribution<T>,
     {
-        self.rng1.gen()
+        self.rng1.r#gen()
     }
 
     /// Generate a random `T` from rng1
@@ -234,13 +234,13 @@ impl Rep3Rand {
     where
         Standard: Distribution<T>,
     {
-        self.rng2.gen()
+        self.rng2.r#gen()
     }
 
     /// Generate a seed from each rng
     pub fn random_seeds(&mut self) -> ([u8; crate::SEED_SIZE], [u8; crate::SEED_SIZE]) {
-        let seed1 = self.rng1.gen();
-        let seed2 = self.rng2.gen();
+        let seed1 = self.rng1.r#gen();
+        let seed2 = self.rng2.r#gen();
         (seed1, seed2)
     }
 
@@ -314,10 +314,10 @@ impl Rep3RandBitComp {
     where
         Standard: Distribution<T>,
     {
-        let a = self.rng1.gen();
-        let b = self.rng2.gen();
+        let a = self.rng1.r#gen();
+        let b = self.rng2.r#gen();
         let c = if let Some(rng3) = &mut self.rng3 {
-            rng3.gen()
+            rng3.r#gen()
         } else {
             unreachable!()
         };
@@ -326,9 +326,12 @@ impl Rep3RandBitComp {
 
     /// Create a fork of this rng
     pub fn fork(&mut self) -> Self {
-        let rng1 = RngType::from_seed(self.rng1.gen());
-        let rng2 = RngType::from_seed(self.rng2.gen());
-        let rng3 = self.rng3.as_mut().map(|rng| RngType::from_seed(rng.gen()));
+        let rng1 = RngType::from_seed(self.rng1.r#gen());
+        let rng2 = RngType::from_seed(self.rng2.r#gen());
+        let rng3 = self
+            .rng3
+            .as_mut()
+            .map(|rng| RngType::from_seed(rng.r#gen()));
         Self { rng1, rng2, rng3 }
     }
 }

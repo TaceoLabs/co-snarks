@@ -7,7 +7,7 @@ use num_bigint::BigUint;
 use num_traits::Zero;
 use rand::Rng;
 
-use super::{acir_field_utils, BrilligDriver, CHAR_BIT_SIZE};
+use super::{BrilligDriver, CHAR_BIT_SIZE, acir_field_utils};
 
 macro_rules! wrapping_op {
     ($lhs:expr, $op: tt, $rhs:expr, $bit_size:expr) => {
@@ -171,22 +171,22 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
         match other {
             PlainBrilligType::Field(_) => PlainBrilligType::Field(F::rand(&mut rng)),
             PlainBrilligType::Int(_, IntegerBitSize::U128) => {
-                PlainBrilligType::Int(rng.gen(), IntegerBitSize::U128)
+                PlainBrilligType::Int(rng.r#gen(), IntegerBitSize::U128)
             }
             PlainBrilligType::Int(_, IntegerBitSize::U64) => {
-                PlainBrilligType::Int(rng.gen::<u64>().into(), IntegerBitSize::U64)
+                PlainBrilligType::Int(rng.r#gen::<u64>().into(), IntegerBitSize::U64)
             }
             PlainBrilligType::Int(_, IntegerBitSize::U32) => {
-                PlainBrilligType::Int(rng.gen::<u32>().into(), IntegerBitSize::U32)
+                PlainBrilligType::Int(rng.r#gen::<u32>().into(), IntegerBitSize::U32)
             }
             PlainBrilligType::Int(_, IntegerBitSize::U16) => {
-                PlainBrilligType::Int(rng.gen::<u16>().into(), IntegerBitSize::U16)
+                PlainBrilligType::Int(rng.r#gen::<u16>().into(), IntegerBitSize::U16)
             }
             PlainBrilligType::Int(_, IntegerBitSize::U8) => {
-                PlainBrilligType::Int(rng.gen::<u8>().into(), IntegerBitSize::U8)
+                PlainBrilligType::Int(rng.r#gen::<u8>().into(), IntegerBitSize::U8)
             }
             PlainBrilligType::Int(_, IntegerBitSize::U1) => {
-                PlainBrilligType::Int(rng.gen::<bool>().into(), IntegerBitSize::U1)
+                PlainBrilligType::Int(rng.r#gen::<bool>().into(), IntegerBitSize::U1)
             }
         }
     }
@@ -437,11 +437,7 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
         falsy: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
         if let PlainBrilligType::Int(cond, IntegerBitSize::U1) = cond {
-            if cond.is_one() {
-                Ok(truthy)
-            } else {
-                Ok(falsy)
-            }
+            if cond.is_one() { Ok(truthy) } else { Ok(falsy) }
         } else {
             eyre::bail!("cmux where cond is a non bool value")
         }

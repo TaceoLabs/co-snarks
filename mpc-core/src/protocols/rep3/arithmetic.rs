@@ -6,18 +6,18 @@ use core::panic;
 use num_traits::cast::ToPrimitive;
 
 use ark_ff::PrimeField;
-use itertools::{izip, Itertools};
+use itertools::{Itertools, izip};
 use num_bigint::BigUint;
 use num_traits::One;
 use num_traits::Zero;
 
-use crate::protocols::rep3::{detail, network::Rep3Network, PartyID};
 use crate::IoResult;
+use crate::protocols::rep3::{PartyID, detail, network::Rep3Network};
 use rayon::prelude::*;
 
 use super::{
-    binary, conversion, network::IoContext, rngs::Rep3CorrelatedRng, Rep3BigUintShare,
-    Rep3PrimeFieldShare,
+    Rep3BigUintShare, Rep3PrimeFieldShare, binary, conversion, network::IoContext,
+    rngs::Rep3CorrelatedRng,
 };
 
 /// Type alias for a [`Rep3PrimeFieldShare`]

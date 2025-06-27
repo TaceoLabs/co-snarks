@@ -1,12 +1,12 @@
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
-use ark_poly::univariate::DensePolynomial;
 use ark_poly::EvaluationDomain;
 use ark_poly::Polynomial;
+use ark_poly::univariate::DensePolynomial;
 
 use mpc_core::protocols::shamir::{
-    arithmetic, network::ShamirNetwork, pointshare, ShamirPointShare, ShamirPrimeFieldShare,
-    ShamirProtocol,
+    ShamirPointShare, ShamirPrimeFieldShare, ShamirProtocol, arithmetic, network::ShamirNetwork,
+    pointshare,
 };
 
 use super::{CircomPlonkProver, IoResult};

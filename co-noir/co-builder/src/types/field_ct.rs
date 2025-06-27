@@ -1,11 +1,11 @@
 use super::types::{AddQuad, EccDblGate, MulQuad};
+use crate::TranscriptFieldType;
 use crate::builder::GenericUltraCircuitBuilder;
 use crate::prelude::HonkCurve;
 use crate::types::generators;
 use crate::types::plookup::{ColumnIdx, Plookup};
 use crate::types::types::{AddTriple, EccAddGate, PolyTriple};
 use crate::utils::Utils;
-use crate::TranscriptFieldType;
 use ark_ec::pairing::Pairing;
 use ark_ec::{AffineRepr, CurveConfig, CurveGroup, PrimeGroup};
 use ark_ff::PrimeField;
@@ -1129,11 +1129,8 @@ impl<F: PrimeField> From<F> for FieldCT<F> {
     }
 }
 
-impl<
-        F: PrimeField,
-        P: Pairing<ScalarField = F>,
-        T: NoirWitnessExtensionProtocol<P::ScalarField>,
-    > From<WitnessCT<P, T>> for FieldCT<F>
+impl<F: PrimeField, P: Pairing<ScalarField = F>, T: NoirWitnessExtensionProtocol<P::ScalarField>>
+    From<WitnessCT<P, T>> for FieldCT<F>
 {
     fn from(value: WitnessCT<P, T>) -> Self {
         Self {
@@ -2548,9 +2545,11 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
     ) -> std::io::Result<Self> {
         let x_delta = self.x.sub(&other.x, builder, driver);
         if x_delta.is_constant() {
-            assert!(!T::get_public(&x_delta.get_value(builder, driver))
-                .expect("Constants are public")
-                .is_zero());
+            assert!(
+                !T::get_public(&x_delta.get_value(builder, driver))
+                    .expect("Constants are public")
+                    .is_zero()
+            );
         } else {
             x_delta.assert_is_not_zero(builder, driver)?;
         }

@@ -1,13 +1,13 @@
 use crate::{
+    PlonkProofError, PlonkProofResult,
     mpc::CircomPlonkProver,
     plonk_utils,
     round1::{Round1Challenges, Round1Polys, Round1Proof},
     round3::Round3,
     types::{Domains, Keccak256Transcript, PlonkData, PolyEval},
-    PlonkProofError, PlonkProofResult,
 };
-use ark_ec::pairing::Pairing;
 use ark_ec::CurveGroup;
+use ark_ec::pairing::Pairing;
 use circom_types::plonk::ZKey;
 use num_traits::One;
 use tracing::instrument;
@@ -253,8 +253,8 @@ pub mod tests {
     use std::{fs::File, io::BufReader};
 
     use ark_bn254::Bn254;
-    use circom_types::plonk::ZKey;
     use circom_types::Witness;
+    use circom_types::plonk::ZKey;
     use co_circom_types::SharedWitness;
 
     use crate::mpc::plain::PlainPlonkDriver;

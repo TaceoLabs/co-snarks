@@ -12,8 +12,8 @@ use ark_ff::PrimeField;
 use mpc_types::protocols::{
     rep3::{Rep3BigUintShare, Rep3PrimeFieldShare},
     rep3_ring::{
-        ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
         Rep3RingShare,
+        ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
     },
 };
 use num_bigint::BigUint;

@@ -1,6 +1,6 @@
 use ark_bn254::Bn254;
 use circom_types::traits::CheckElement;
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use std::path::PathBuf;
 
 fn groth16_zkey_parse_check_elements(c: &mut Criterion) {

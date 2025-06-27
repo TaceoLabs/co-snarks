@@ -1,14 +1,14 @@
 use ark_bn254::Bn254;
 use ark_ff::PrimeField;
-use co_acvm::{mpc::NoirWitnessExtensionProtocol, PlainAcvmSolver};
+use co_acvm::{PlainAcvmSolver, mpc::NoirWitnessExtensionProtocol};
 use co_builder::prelude::{CrsParser, HonkRecursion};
 use co_ultrahonk::prelude::{CoUltraHonk, PlainCoBuilder, PlainUltraHonkDriver, ProvingKey};
 use sha3::Keccak256;
 use ultrahonk::{
+    Utils,
     prelude::{
         HonkProof, Poseidon2Sponge, TranscriptFieldType, TranscriptHasher, UltraHonk, ZeroKnowledge,
     },
-    Utils,
 };
 
 fn promote_public_witness_vector<F: PrimeField, T: NoirWitnessExtensionProtocol<F>>(

@@ -1,17 +1,18 @@
 use super::{
-    plain::{to_usize, CircomPlainVmWitnessExtension},
     VmCircomWitnessExtension,
+    plain::{CircomPlainVmWitnessExtension, to_usize},
 };
 use crate::mpc_vm::VMConfig;
 use ark_ff::{One, PrimeField};
 use eyre::{bail, eyre};
 use itertools::Itertools;
 use mpc_core::protocols::rep3::{
+    Rep3PrimeFieldShare,
     arithmetic::{self, promote_to_trivial_share},
     binary,
     conversion::{self, bit_inject_many},
     network::{IoContext, Rep3Network},
-    yao, Rep3PrimeFieldShare,
+    yao,
 };
 use num_bigint::BigUint;
 use std::io;
@@ -456,11 +457,7 @@ impl<F: PrimeField, N: Rep3Network> VmCircomWitnessExtension<F>
         match (cond, truthy, falsy) {
             (Rep3VmType::Public(cond), truthy, falsy) => {
                 assert!(cond.is_one() || cond.is_zero());
-                if cond.is_one() {
-                    Ok(truthy)
-                } else {
-                    Ok(falsy)
-                }
+                if cond.is_one() { Ok(truthy) } else { Ok(falsy) }
             }
             (Rep3VmType::Arithmetic(cond), truthy, falsy) => {
                 let b_min_a = self.sub(truthy, falsy.clone())?;
