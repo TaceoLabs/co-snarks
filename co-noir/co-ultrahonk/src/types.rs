@@ -10,8 +10,11 @@ use crate::mpc_prover_flavour::MPCProverFlavour;
 // #[derive(Default, Serialize, Deserialize)]
 // #[serde(bound = "")]
 // #[derive(Default)]
-pub struct Polynomials<Shared: Default, Public: Default + Clone, L: MPCProverFlavour>
-where
+pub struct Polynomials<
+    Shared: Default,
+    Public: Default + Clone + std::marker::Sync,
+    L: MPCProverFlavour,
+> where
     Polynomial<Shared>: Serialize + for<'a> Deserialize<'a>,
     Polynomial<Public>: Serialize + for<'a> Deserialize<'a>,
 {
@@ -19,7 +22,7 @@ where
     pub precomputed: L::PrecomputedEntities<Polynomial<Public>>,
 }
 
-impl<Shared: Clone + Default, Public: Clone + Default, L: MPCProverFlavour>
+impl<Shared: Clone + Default, Public: Clone + Default + std::marker::Sync, L: MPCProverFlavour>
     Polynomials<Shared, Public, L>
 where
     Polynomial<Shared>: Serialize + for<'a> Deserialize<'a>,
@@ -42,13 +45,22 @@ where
 }
 
 #[derive(Default, Clone)]
-pub(crate) struct AllEntities<Shared: Default, Public: Default + Clone, L: MPCProverFlavour> {
+pub(crate) struct AllEntities<
+    Shared: Default + std::marker::Sync,
+    Public: Default + Clone + std::marker::Sync,
+    L: MPCProverFlavour,
+> {
     pub(crate) witness: L::WitnessEntities<Shared>,
     pub(crate) precomputed: L::PrecomputedEntities<Public>,
     pub(crate) shifted_witness: L::ShiftedWitnessEntities<Shared>,
 }
 
-impl<Shared: Default, Public: Default + Clone, L: MPCProverFlavour> AllEntities<Shared, Public, L> {
+impl<
+        Shared: Default + std::marker::Sync,
+        Public: Default + Clone + std::marker::Sync,
+        L: MPCProverFlavour,
+    > AllEntities<Shared, Public, L>
+{
     pub(crate) fn public_iter(&self) -> impl Iterator<Item = &Public> {
         self.precomputed.iter()
     }
@@ -73,8 +85,11 @@ impl<Shared: Default, Public: Default + Clone, L: MPCProverFlavour> AllEntities<
     }
 }
 
-impl<Shared: Default + Clone, Public: Default + Clone, L: MPCProverFlavour>
-    AllEntities<Vec<Shared>, Vec<Public>, L>
+impl<
+        Shared: Default + Clone + std::marker::Sync,
+        Public: Default + Clone + std::marker::Sync,
+        L: MPCProverFlavour,
+    > AllEntities<Vec<Shared>, Vec<Public>, L>
 {
     pub(crate) fn new(circuit_size: usize) -> Self {
         let mut polynomials = Self::default();
@@ -90,7 +105,7 @@ impl<Shared: Default + Clone, Public: Default + Clone, L: MPCProverFlavour>
     }
 }
 
-impl<T: Default + Clone, L: MPCProverFlavour> AllEntities<T, T, L> {
+impl<T: Default + Clone + std::marker::Sync, L: MPCProverFlavour> AllEntities<T, T, L> {
     pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
         self.precomputed
             .iter()

@@ -18,9 +18,9 @@ pub struct MegaFlavour {
 }
 impl ProverFlavour for MegaFlavour {
     type ProverWitnessEntities<T: Default> = MegaProverWitnessEntities<T>;
-    type ShiftedWitnessEntities<T: Default> = MegaShiftedWitnessEntities<T>; //This is the same for Ultra and Mega
-    type WitnessEntities<T: Default> = MegaWitnessEntities<T>;
-    type PrecomputedEntities<T: Default + Clone> = MegaPrecomputedEntities<T>;
+    type ShiftedWitnessEntities<T: Default + std::marker::Sync> = MegaShiftedWitnessEntities<T>; //This is the same for Ultra and Mega
+    type WitnessEntities<T: Default + std::marker::Sync> = MegaWitnessEntities<T>;
+    type PrecomputedEntities<T: Default + Clone + std::marker::Sync> = MegaPrecomputedEntities<T>;
 
     const FLAVOUR: Flavour = Flavour::Mega;
     const WITNESS_ENTITIES_SIZE: usize = 24;

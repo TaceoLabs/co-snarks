@@ -83,14 +83,15 @@ impl UltraArithmeticRelation {
 }
 
 impl UltraArithmeticRelation {
-    fn compute_r0<T, P>(
+    fn compute_r0<T, P, L>(
         driver: &mut T,
         r0: &mut Univariate<P::ScalarField, 6>,
-        input: &ProverUnivariatesBatch<T, P,L>,
+        input: &ProverUnivariatesBatch<T, P, L>,
         scaling_factors: &[P::ScalarField],
     ) where
         T: NoirUltraHonkProver<P>,
         P: HonkCurve<TranscriptFieldType>,
+        L: MPCProverFlavour,
     {
         let w_l = input.witness.w_l();
         let w_r = input.witness.w_r();
@@ -185,14 +186,15 @@ impl UltraArithmeticRelation {
             *evaluations += new;
         }
     }
-    fn compute_r1<T, P>(
+    fn compute_r1<T, P, L>(
         party_id: T::PartyID,
         r1: &mut SharedUnivariate<T, P, 5>,
-        input: &ProverUnivariatesBatch<T, P,L>,
+        input: &ProverUnivariatesBatch<T, P, L>,
         scaling_factors: &[P::ScalarField],
     ) where
         T: NoirUltraHonkProver<P>,
         P: HonkCurve<TranscriptFieldType>,
+        L: MPCProverFlavour,
     {
         let w_l = input.witness.w_l();
         let w_4 = input.witness.w_4();
@@ -242,13 +244,13 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
 {
     type Acc = UltraArithmeticRelationAccHalfShared<T, P>;
 
-    fn can_skip(entity: &super::ProverUnivariates<T, P,L>) -> bool {
+    fn can_skip(entity: &super::ProverUnivariates<T, P, L>) -> bool {
         entity.precomputed.q_arith().is_zero()
     }
 
     fn add_entites(
-        entity: &super::ProverUnivariates<T, P,L>,
-        batch: &mut ProverUnivariatesBatch<T, P,L>,
+        entity: &super::ProverUnivariates<T, P, L>,
+        batch: &mut ProverUnivariatesBatch<T, P, L>,
     ) {
         batch.add_w_l(entity);
         batch.add_w_r(entity);
@@ -321,8 +323,8 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
     fn accumulate(
         driver: &mut T,
         univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariatesBatch<T, P,L>,
-        _relation_parameters: &RelationParameters<<P>::ScalarField,L>,
+        input: &ProverUnivariatesBatch<T, P, L>,
+        _relation_parameters: &RelationParameters<<P>::ScalarField, L>,
         scaling_factors: &[P::ScalarField],
     ) -> HonkProofResult<()> {
         tracing::trace!("Accumulate UltraArithmeticRelation");

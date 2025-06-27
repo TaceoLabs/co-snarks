@@ -44,13 +44,13 @@ impl<F: PrimeField> HonkProof<F> {
     }
 }
 
-pub struct AllEntities<T: Default + Clone, L: PlainProverFlavour> {
+pub struct AllEntities<T: Default + Clone + std::marker::Sync, L: PlainProverFlavour> {
     pub(crate) witness: L::WitnessEntities<T>,
     pub(crate) precomputed: L::PrecomputedEntities<T>,
     pub(crate) shifted_witness: L::ShiftedWitnessEntities<T>,
 }
 
-impl<T: Default + Clone, L: PlainProverFlavour> Default for AllEntities<T, L> {
+impl<T: Default + Clone + std::marker::Sync, L: PlainProverFlavour> Default for AllEntities<T, L> {
     fn default() -> Self {
         Self {
             witness: L::WitnessEntities::default(),
@@ -60,7 +60,7 @@ impl<T: Default + Clone, L: PlainProverFlavour> Default for AllEntities<T, L> {
     }
 }
 
-impl<T: Default + Clone, L: PlainProverFlavour> AllEntities<T, L> {
+impl<T: Default + Clone + std::marker::Sync, L: PlainProverFlavour> AllEntities<T, L> {
     pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
         self.precomputed
             .iter()
@@ -76,7 +76,7 @@ impl<T: Default + Clone, L: PlainProverFlavour> AllEntities<T, L> {
     }
 }
 
-impl<T: Default + Clone, L: PlainProverFlavour> AllEntities<Vec<T>, L> {
+impl<T: Default + Clone + std::marker::Sync, L: PlainProverFlavour> AllEntities<Vec<T>, L> {
     pub(crate) fn new(circuit_size: usize) -> Self {
         let mut polynomials = Self::default();
         // Shifting is done at a later point

@@ -42,6 +42,7 @@ pub trait MPCProverFlavour: Default + ProverFlavour {
     type ProverUnivariateShared<T: NoirUltraHonkProver<P>, P: Pairing>: SharedUnivariateTest<T, P>
         + Clone
         + Default
+        + std::marker::Sync
         + std::ops::MulAssign
         + std::ops::Add
         + std::ops::Mul
@@ -52,6 +53,7 @@ pub trait MPCProverFlavour: Default + ProverFlavour {
         + std::ops::MulAssign
         + std::ops::Add
         + std::ops::Mul
+        + std::marker::Sync
         + num_traits::identities::Zero;
     type Alphas<F: PrimeField>: Default + Clone + Copy + Debug;
 

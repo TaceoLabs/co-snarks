@@ -26,6 +26,7 @@ pub trait PlainProverFlavour: Default + ProverFlavour {
     type ProverUnivariate<F: PrimeField>: UnivariateTest<F>
         + Clone
         + Default
+        + std::marker::Sync
         + std::ops::MulAssign
         + std::ops::Add
         + std::ops::Mul

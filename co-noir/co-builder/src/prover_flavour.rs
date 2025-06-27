@@ -12,9 +12,16 @@ pub enum Flavour {
 pub trait ProverFlavour: Default {
     const FLAVOUR: Flavour;
 
-    type PrecomputedEntities<T: Default + Clone>: PrecomputedEntitiesFlavour<T> + Default + Clone;
-    type WitnessEntities<T: Default>: WitnessEntitiesFlavour<T> + Default;
-    type ShiftedWitnessEntities<T: Default>: ShiftedWitnessEntitiesFlavour<T> + Default;
+    type PrecomputedEntities<T: Default + Clone + std::marker::Sync>: PrecomputedEntitiesFlavour<T>
+        + Default
+        + Clone
+        + std::marker::Sync;
+    type WitnessEntities<T: Default + std::marker::Sync>: WitnessEntitiesFlavour<T>
+        + Default
+        + std::marker::Sync;
+    type ShiftedWitnessEntities<T: Default + std::marker::Sync>: ShiftedWitnessEntitiesFlavour<T>
+        + Default
+        + std::marker::Sync;
     type ProverWitnessEntities<T: Default>: ProverWitnessEntitiesFlavour<T> + Default;
     const WITNESS_ENTITIES_SIZE: usize;
     const SHIFTED_WITNESS_ENTITIES_SIZE: usize;
