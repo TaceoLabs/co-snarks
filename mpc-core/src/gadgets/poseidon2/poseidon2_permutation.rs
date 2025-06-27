@@ -246,7 +246,7 @@ impl<F: PrimeField, const T: usize> Default for Poseidon2<F, T, 5> {
                         )
                     }
                 }
-                _ => panic!("No Poseidon2 implementation for T={}", T),
+                _ => panic!("No Poseidon2 implementation for T={T}"),
             }
         } else {
             panic!("No Poseidon2 implementation for this field");

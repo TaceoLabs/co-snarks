@@ -38,13 +38,13 @@ impl<F: PrimeField> PlainAcvmSolver<F> {
         if !point.is_on_curve() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Point ({}, {}) is not on curve", x, y),
+                format!("Point ({x}, {y}) is not on curve"),
             ));
         };
         if !point.is_in_correct_subgroup_assuming_on_curve() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Point ({}, {}) is not in correct subgroup", x, y),
+                format!("Point ({x}, {y}) is not in correct subgroup"),
             ));
         };
         Ok(point)
@@ -55,7 +55,7 @@ impl<F: PrimeField> PlainAcvmSolver<F> {
         if inp_bigint.0[2] != 0 || inp_bigint.0[3] != 0 {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Scalar {} is not less than 2^128", inp),
+                format!("Scalar {inp} is not less than 2^128"),
             ));
         }
         let output = inp_bigint.0[0] as u128 + ((inp_bigint.0[1] as u128) << 64);

@@ -92,7 +92,7 @@ where
                 let name = if typ_field_len == 1 {
                     arg_name.to_owned()
                 } else {
-                    format!("{}[{}]", arg_name, i)
+                    format!("{arg_name}[{i}]")
                 };
 
                 let (_, el) = wit_iter
@@ -131,7 +131,7 @@ where
                 let should_name = if typ_field_len == 1 {
                     arg_name.to_owned()
                 } else {
-                    format!("{}[{}]", arg_name, i)
+                    format!("{arg_name}[{i}]")
                 };
                 let el = witness
                     .get(&should_name)

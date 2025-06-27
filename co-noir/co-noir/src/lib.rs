@@ -707,7 +707,7 @@ pub fn download_g1_crs(num_points: usize, crs_path: impl AsRef<Path>) -> color_e
     let g1_end = num_points * 64 - 1;
 
     let url = "https://aztec-ignition.s3.amazonaws.com/MAIN%20IGNITION/flat/g1.dat";
-    let command = format!("curl -s -H \"Range: bytes=0-{}\" '{}'", g1_end, url);
+    let command = format!("curl -s -H \"Range: bytes=0-{g1_end}\" '{url}'");
     let output = std::process::Command::new("sh")
         .arg("-c")
         .arg(&command)

@@ -258,7 +258,7 @@ impl<
             transcript.send_fr_to_verifier::<P>(format!("Gemini:a_{}", l + 1), claim);
         }
         for l in log_n + 1..=virtual_log_n {
-            transcript.send_fr_to_verifier::<P>(format!("Gemini:a_{}", l), P::ScalarField::zero());
+            transcript.send_fr_to_verifier::<P>(format!("Gemini:a_{l}"), P::ScalarField::zero());
         }
 
         Ok(claims)

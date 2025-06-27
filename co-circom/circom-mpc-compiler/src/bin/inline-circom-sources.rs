@@ -89,7 +89,7 @@ fn map_file_to_output(
                 continue;
             }
             already_inlined.insert(file_hash, rel_path.clone());
-            writeln!(output, "// Start of inlined file: {}", path)?;
+            writeln!(output, "// Start of inlined file: {path}")?;
             map_file_to_output(
                 rel_path,
                 output,
@@ -97,9 +97,9 @@ fn map_file_to_output(
                 true,
                 already_inlined,
             )?;
-            writeln!(output, "// End of inlined file: {}", path)?;
+            writeln!(output, "// End of inlined file: {path}")?;
         } else {
-            writeln!(output, "{}", line)?;
+            writeln!(output, "{line}")?;
         }
     }
     Ok(())

@@ -161,7 +161,7 @@ impl TryFrom<usize> for BasicTableId {
         if value > BasicTableId::KeccakRho9 as usize {
             Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Invalid BasicTableId: {}", value),
+                format!("Invalid BasicTableId: {value}"),
             ))
         } else {
             // Safety: Safe because BasicTableId is repr(usize) and we checked above it is a valid value
@@ -1140,8 +1140,7 @@ impl<F: PrimeField> Plookup<F> {
                     | MultiTableId::BlakeXorRotate7
                     | MultiTableId::BlakeXorRotate8
             ),
-            "Multitable for {:?} not implemented",
-            id
+            "Multitable for {id:?} not implemented"
         ); // The only ones implemented so far
         &self.multi_tables[usize::from(id)]
     }
@@ -2251,8 +2250,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                     | BasicTableId::BlakeXorRotate4
                     | BasicTableId::BlakeXorRotate0Slice5Mod4
             ),
-            "Create Basic Table for {:?} not implemented",
-            id
+            "Create Basic Table for {id:?} not implemented"
         );
 
         match id {

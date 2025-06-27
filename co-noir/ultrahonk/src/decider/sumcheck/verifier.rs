@@ -51,14 +51,13 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
         for (round_idx, &padding_value) in padding_indicator_array.iter().enumerate() {
             tracing::trace!("Sumcheck verify round {}", round_idx);
-            let round_univariate_label = format!("Sumcheck:univariate_{}", round_idx);
+            let round_univariate_label = format!("Sumcheck:univariate_{round_idx}");
 
             let evaluations =
                 transcript.receive_fr_array_from_verifier::<P, SIZE>(round_univariate_label)?;
             let round_univariate = SumcheckRoundOutput { evaluations };
 
-            let round_challenge =
-                transcript.get_challenge::<P>(format!("Sumcheck:u_{}", round_idx));
+            let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{round_idx}"));
 
             let checked = sum_check_round.check_sum(&round_univariate, padding_value);
             verified = verified && checked;

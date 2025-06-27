@@ -144,9 +144,9 @@ impl std::fmt::Display for MpcOpCode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let string = match self {
             MpcOpCode::PushConstant(constant_index) => {
-                format!("PUSH_CONSTANT_OP {}", constant_index)
+                format!("PUSH_CONSTANT_OP {constant_index}")
             }
-            MpcOpCode::PushIndex(index) => format!("PUSH_INDEX_OP {}", index),
+            MpcOpCode::PushIndex(index) => format!("PUSH_INDEX_OP {index}"),
             MpcOpCode::LoadSignals(amount) => format!("LOAD_SIGNALS_OP {amount}"),
             MpcOpCode::StoreSignals(amount) => format!("STORE_SIGNALS_OP {amount}"),
             MpcOpCode::LoadVars(amount) => format!("LOAD_VARS_OP {amount}"),
@@ -155,7 +155,7 @@ impl std::fmt::Display for MpcOpCode {
                 format!("CALL_OP {symbol} {return_vals}")
             }
             MpcOpCode::CreateCmp(header, amount) => {
-                format!("CREATE_CMP_OP {} [{amount}]", header)
+                format!("CREATE_CMP_OP {header} [{amount}]")
             }
             MpcOpCode::Assert(line) => format!("ASSERT_OP {line}"),
             MpcOpCode::If(jump) => format!("IF_OP {jump}"),

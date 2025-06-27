@@ -47,23 +47,20 @@ pub fn from_test_name(fn_name: &str) -> TestInputs {
     let mut i = 0;
     loop {
         if fs::metadata(format!(
-            "../test_vectors/WitnessExtension/kats/{}/witness{}.wtns",
-            fn_name, i
+            "../test_vectors/WitnessExtension/kats/{fn_name}/witness{i}.wtns"
         ))
         .is_err()
         {
             break;
         }
         let witness = File::open(format!(
-            "../test_vectors/WitnessExtension/kats/{}/witness{}.wtns",
-            fn_name, i
+            "../test_vectors/WitnessExtension/kats/{fn_name}/witness{i}.wtns"
         ))
         .unwrap();
         let should_witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
         witnesses.push(should_witness);
         let input_file = File::open(format!(
-            "../test_vectors/WitnessExtension/kats/{}/input{}.json",
-            fn_name, i
+            "../test_vectors/WitnessExtension/kats/{fn_name}/input{i}.json"
         ))
         .unwrap();
         let json_str: serde_json::Value = serde_json::from_reader(input_file).unwrap();
