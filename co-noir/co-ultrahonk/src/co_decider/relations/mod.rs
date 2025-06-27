@@ -30,7 +30,8 @@ macro_rules! fold_accumulator {
         let mut acc = [T::ArithmeticShare::default(); L::MAX_PARTIAL_RELATION_LENGTH];
         acc[..evaluations_len].clone_from_slice(&$acc.evaluations);
         for (idx, b) in $elements.iter().enumerate() {
-            let a = &mut acc[idx % MAX_PARTIAL_RELATION_LENGTH];
+            let i = idx % L::MAX_PARTIAL_RELATION_LENGTH;
+            let a = &mut acc[idx % L::MAX_PARTIAL_RELATION_LENGTH];
             T::add_assign(a, *b);
         }
         $acc.evaluations.clone_from_slice(&acc[..evaluations_len]);
@@ -58,10 +59,11 @@ pub(crate) trait Relation<
         data: &mut SumCheckDataForRelation<T, P, L>,
     ) {
         if !Self::can_skip(entity) {
-            let scaling_factors = vec![scaling_factor; MAX_PARTIAL_RELATION_LENGTH];
             data.can_skip = false;
             Self::add_entites(entity, &mut data.all_entites);
-            data.scaling_factors.extend(scaling_factors);
+            for _ in 0..L::MAX_PARTIAL_RELATION_LENGTH {
+                data.scaling_factors.push(scaling_factor);
+            }
         }
     }
 

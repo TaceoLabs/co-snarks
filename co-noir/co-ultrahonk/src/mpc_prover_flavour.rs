@@ -46,7 +46,7 @@ pub trait MPCProverFlavour: Default + ProverFlavour {
         + std::ops::Add
         + std::ops::Mul
         + num_traits::identities::Zero;
-    type ProverUnivariatePublic<F: PrimeField>: UnivariateTest<F>
+    type ProverUnivariatePublic<P: Pairing>: UnivariateTest<P::ScalarField>
         + Clone
         + Default
         + std::ops::MulAssign

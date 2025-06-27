@@ -24,7 +24,7 @@ pub(crate) struct ProverMemory<T: NoirUltraHonkProver<P>, P: Pairing, L: MPCProv
 
 pub(crate) type ProverUnivariates<T, P, L> = AllEntities<
     <L as MPCProverFlavour>::ProverUnivariateShared<T, P>,
-    <L as MPCProverFlavour>::ProverUnivariatePublic<<P as Pairing>::ScalarField>,
+    <L as MPCProverFlavour>::ProverUnivariatePublic<P>,
     L,
 >;
 
