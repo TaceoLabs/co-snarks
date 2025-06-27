@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/TaceoLabs/co-snarks/compare/circom-types-v0.9.0...circom-types-v0.10.0) (2025-06-27)
+
+
+### Features
+
+* update rust edition to 2024 ([6ea0ba9](https://github.com/TaceoLabs/co-snarks/commit/6ea0ba9f9f34063e8ab859c1d4ae41d05629a1c0))
+
 ## [0.9.0](https://github.com/TaceoLabs/co-snarks/compare/circom-types-v0.8.0...circom-types-v0.9.0) (2025-04-03)
 
 
