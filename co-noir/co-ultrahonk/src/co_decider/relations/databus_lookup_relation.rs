@@ -1,3 +1,4 @@
+use crate::co_decider::relations::fold_accumulator;
 use crate::co_decider::types::ProverUnivariatesBatch;
 use crate::co_decider::types::RelationParameters;
 use crate::co_decider::univariates::SharedUnivariate;
@@ -7,7 +8,6 @@ use crate::mpc_prover_flavour::MPCProverFlavour;
 use super::Relation;
 
 use ark_ec::pairing::Pairing;
-use ark_ff::PrimeField;
 use ark_ff::Zero;
 use co_builder::polynomials::polynomial_flavours::{
     PrecomputedEntitiesFlavour, WitnessEntitiesFlavour,
@@ -15,6 +15,7 @@ use co_builder::polynomials::polynomial_flavours::{
 use co_builder::prelude::HonkCurve;
 use co_builder::HonkProofResult;
 use co_builder::TranscriptFieldType;
+use itertools::Itertools;
 use ultrahonk::prelude::Univariate;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BusData {
@@ -212,7 +213,7 @@ impl DataBusLookupRelation {
         let column_selector = DataBusLookupRelation::selector(bus_idx, input).clone();
         q_busread
             .iter()
-            .zip(column_selector.iter())
+            .zip_eq(column_selector.iter())
             .map(|(a, b)| *a * *b)
             .collect()
     }
@@ -221,38 +222,48 @@ impl DataBusLookupRelation {
         T: NoirUltraHonkProver<P>,
         P: HonkCurve<TranscriptFieldType>,
         L: MPCProverFlavour,
-        const SIZE: usize,
     >(
+        driver: &mut T,
         bus_idx: BusData,
         input: &ProverUnivariatesBatch<T, P, L>,
         params: &RelationParameters<P::ScalarField, L>,
-    ) -> Univariate<P::ScalarField, SIZE> {
+    ) -> Vec<T::ArithmeticShare> {
         let id = input.precomputed.databus_id().clone();
         let value = DataBusLookupRelation::values(bus_idx, input).clone();
         let gamma = params.gamma;
         let beta = params.beta;
-
+        let mut tmp = Vec::with_capacity(id.len());
+        for val in id {
+            tmp.push(val * beta + gamma);
+        }
         // value_i + idx_i * beta + gamma
-        value + id * beta + &gamma
+        T::add_with_public_many(&tmp, &value, T::get_party_id(&driver))
     }
 
     fn compute_read_term<
         T: NoirUltraHonkProver<P>,
         P: HonkCurve<TranscriptFieldType>,
         L: MPCProverFlavour,
-        const SIZE: usize,
     >(
+        driver: &mut T,
         input: &ProverUnivariatesBatch<T, P, L>,
         params: &RelationParameters<P::ScalarField, L>,
-    ) -> Univariate<P::ScalarField, SIZE> {
+    ) -> Vec<T::ArithmeticShare> {
         // Bus value stored in w_l, index into bus column stored in w_r
         let w_1 = input.witness.w_l().clone();
         let w_2 = input.witness.w_r().clone();
         let gamma = params.gamma;
         let beta = params.beta;
-
+        let mut tmp = Vec::with_capacity(w_2.len());
+        for val in w_2 {
+            tmp.push(T::add_with_public(
+                gamma,
+                T::mul_with_public(beta, val),
+                T::get_party_id(&driver),
+            ));
+        }
         // value + index * beta + gamma
-        w_2 * beta + w_1 + &gamma
+        T::add_many(&tmp, &w_1)
     }
 
     fn accumulate_subrelation_contributions<
@@ -261,69 +272,77 @@ impl DataBusLookupRelation {
         L: MPCProverFlavour,
         const SIZE: usize,
     >(
+        driver: &mut T,
         univariate_accumulator: &mut DataBusLookupRelationAcc<T, P>,
         input: &ProverUnivariatesBatch<T, P, L>,
         params: &RelationParameters<P::ScalarField, L>,
-        scaling_factor: &P::ScalarField,
+        scaling_factors: &[P::ScalarField],
         bus_idx: BusData,
-    ) {
+    ) -> HonkProofResult<()> {
         let inverses = Self::inverses(bus_idx, input); // Degree 1
         let read_counts_m = Self::read_counts(bus_idx, input); // Degree 1
-        let read_term = Self::compute_read_term(input, params); // Degree 1 (2)
-        let write_term = Self::compute_write_term(bus_idx, input, params); // Degree 1 (2)
-        let inverse_exists = Self::compute_inverse_exists(bus_idx, input); // Degree 2
+        let read_term = Self::compute_read_term(driver, input, params); // Degree 1 (2)
+        let write_term = Self::compute_write_term(driver, bus_idx, input, params); // Degree 1 (2)
+        let inverse_exists = Self::compute_inverse_exists(driver, bus_idx, input); // Degree 2
         let read_selector = Self::get_read_selector(bus_idx, input); // Degree 2
 
         // Determine which pair of subrelations to update based on which bus column is being read
         let subrel_idx_1: u32 = 2u32 * (bus_idx as u32);
         let subrel_idx_2: u32 = 2u32 * (bus_idx as u32) + 1u32;
+        let mut lhs = Vec::with_capacity(read_term.len() + read_counts_m.len());
+        let mut rhs = Vec::with_capacity(write_term.len() + read_term.len());
+        lhs.extend(read_term.clone());
+        lhs.extend(read_counts_m);
+        rhs.extend(write_term.clone());
+        rhs.extend(read_term);
+        let mul = driver.mul_many(&lhs, &rhs)?;
+        let mul = mul.chunks_exact(mul.len() / 2).collect_vec();
+        debug_assert_eq!(mul.len(), 2);
 
         // Establish the correctness of the polynomial of inverses I. Note: inverses is computed so that the value
         // is 0 if !inverse_exists. Degree 3 (5)
-        let tmp =
-            (read_term.clone() * write_term.clone() * inverses - inverse_exists) * scaling_factor;
+        let mul_2 = driver.mul_many(&mul[0], &inverses)?; //TODO: can we batch the muls more?
+        let tmp = T::sub_many(&mul_2, &inverse_exists)
+            .iter()
+            .zip_eq(scaling_factors)
+            .map(|(a, b)| T::mul_with_public(*b, *a))
+            .collect_vec();
+
         match subrel_idx_1 {
             0 => {
-                for i in 0..univariate_accumulator.r0.evaluations.len() {
-                    univariate_accumulator.r0.evaluations[i] += tmp.evaluations[i];
-                }
+                fold_accumulator!(univariate_accumulator.r0, tmp, SIZE);
             }
             2 => {
-                for i in 0..univariate_accumulator.r2.evaluations.len() {
-                    univariate_accumulator.r2.evaluations[i] += tmp.evaluations[i];
-                }
+                fold_accumulator!(univariate_accumulator.r2, tmp, SIZE);
             }
             4 => {
-                for i in 0..univariate_accumulator.r4.evaluations.len() {
-                    univariate_accumulator.r4.evaluations[i] += tmp.evaluations[i];
-                }
+                fold_accumulator!(univariate_accumulator.r4, tmp, SIZE);
             }
             _ => panic!("unexpected subrel_idx_1"),
         }
 
         // Establish validity of the read. Note: no scaling factor here since this constraint is enforced across the
         // entire trace, not on a per-row basis.
-        let mut tmp = read_selector * write_term;
-        tmp -= read_counts_m.to_owned() * read_term;
-        tmp *= inverses;
+        let mut tmp = write_term
+            .iter()
+            .zip_eq(read_selector.iter())
+            .map(|(a, b)| T::mul_with_public(*b, *a))
+            .collect_vec();
+        T::sub_assign_many(&mut tmp, &mul[1]);
+        tmp = driver.mul_many(&tmp, inverses)?;
         match subrel_idx_2 {
             1 => {
-                for i in 0..univariate_accumulator.r1.evaluations.len() {
-                    univariate_accumulator.r1.evaluations[i] += tmp.evaluations[i];
-                }
+                fold_accumulator!(univariate_accumulator.r1, tmp, SIZE);
             }
             3 => {
-                for i in 0..univariate_accumulator.r3.evaluations.len() {
-                    univariate_accumulator.r3.evaluations[i] += tmp.evaluations[i];
-                }
+                fold_accumulator!(univariate_accumulator.r3, tmp, SIZE);
             }
             5 => {
-                for i in 0..univariate_accumulator.r5.evaluations.len() {
-                    univariate_accumulator.r5.evaluations[i] += tmp.evaluations[i];
-                }
+                fold_accumulator!(univariate_accumulator.r5, tmp, SIZE);
             }
             _ => panic!("unexpected subrel_idx_2"),
         } // Deg 4 (5)
+        Ok(())
     }
 }
 
@@ -365,7 +384,8 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         tracing::trace!("Accumulate DataBusLookupRelation");
         // Accumulate the subrelation contributions for each column of the databus
         for bus_idx in 0..Self::NUM_BUS_COLUMNS {
-            DataBusLookupRelation::accumulate_subrelation_contributions::<P::ScalarField, L, SIZE>(
+            DataBusLookupRelation::accumulate_subrelation_contributions::<T, P, L, SIZE>(
+                driver,
                 univariate_accumulator,
                 input,
                 _relation_parameters,
@@ -373,6 +393,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
                 BusData::from(bus_idx),
             );
         }
+        Ok(())
     }
 
     fn add_entites(

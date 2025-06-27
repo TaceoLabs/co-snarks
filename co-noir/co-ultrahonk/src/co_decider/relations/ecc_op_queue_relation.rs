@@ -1,3 +1,4 @@
+use crate::co_decider::relations::fold_accumulator;
 use crate::co_decider::relations::Relation;
 use crate::co_decider::types::ProverUnivariatesBatch;
 use crate::co_decider::types::RelationParameters;
@@ -10,13 +11,14 @@ use co_builder::polynomials::polynomial_flavours::{
 use co_builder::prelude::HonkCurve;
 use co_builder::HonkProofResult;
 use co_builder::TranscriptFieldType;
+use itertools::Itertools;
 use ultrahonk::prelude::Univariate;
 
 use crate::co_decider::univariates::SharedUnivariate;
 use crate::mpc::NoirUltraHonkProver;
 use crate::mpc_prover_flavour::MPCProverFlavour;
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub(crate) struct EccOpQueueRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing> {
     pub(crate) r0: SharedUnivariate<T, P, 3>,
     pub(crate) r1: SharedUnivariate<T, P, 3>,
@@ -28,17 +30,32 @@ pub(crate) struct EccOpQueueRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing> {
     pub(crate) r7: SharedUnivariate<T, P, 3>,
 }
 
+impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for EccOpQueueRelationAcc<T, P> {
+    fn default() -> Self {
+        Self {
+            r0: SharedUnivariate::default(),
+            r1: SharedUnivariate::default(),
+            r2: SharedUnivariate::default(),
+            r3: SharedUnivariate::default(),
+            r4: SharedUnivariate::default(),
+            r5: SharedUnivariate::default(),
+            r6: SharedUnivariate::default(),
+            r7: SharedUnivariate::default(),
+        }
+    }
+}
+
 impl<T: NoirUltraHonkProver<P>, P: Pairing> EccOpQueueRelationAcc<T, P> {
     pub(crate) fn scale(&mut self, elements: &[P::ScalarField]) {
         assert!(elements.len() == EccOpQueueRelation::NUM_RELATIONS);
-        self.r0 *= elements[0];
-        self.r1 *= elements[1];
-        self.r2 *= elements[2];
-        self.r3 *= elements[3];
-        self.r4 *= elements[4];
-        self.r5 *= elements[5];
-        self.r6 *= elements[6];
-        self.r7 *= elements[7];
+        self.r0.scale_inplace(elements[0]);
+        self.r1.scale_inplace(elements[1]);
+        self.r2.scale_inplace(elements[2]);
+        self.r3.scale_inplace(elements[3]);
+        self.r4.scale_inplace(elements[4]);
+        self.r5.scale_inplace(elements[5]);
+        self.r6.scale_inplace(elements[6]);
+        self.r7.scale_inplace(elements[7]);
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(
@@ -116,10 +133,10 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
     }
 
     fn accumulate<const SIZE: usize>(
-        driver: &mut T,
+        _driver: &mut T,
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesBatch<T, P, L>,
-        relation_parameters: &RelationParameters<<P>::ScalarField, L>,
+        _relation_parameters: &RelationParameters<<P>::ScalarField, L>,
         scaling_factors: &[P::ScalarField],
     ) -> HonkProofResult<()> {
         tracing::trace!("Accumulate EccOpQueueRelation");
@@ -142,60 +159,54 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         let lagrange_ecc_op = input.precomputed.lagrange_ecc_op();
 
         // If lagrange_ecc_op is the indicator for ecc_op_gates, this is the indicator for the complement
-        let lagrange_by_scaling = lagrange_ecc_op.to_owned() * scaling_factor;
-        let complement_ecc_op_by_scaling = -lagrange_by_scaling.clone() + scaling_factor;
+        let lagrange_by_scaling = lagrange_ecc_op
+            .to_owned()
+            .iter()
+            .zip_eq(scaling_factors.iter())
+            .map(|(a, b)| *a * *b)
+            .collect_vec();
+        let complement_ecc_op_by_scaling = lagrange_by_scaling
+            .to_owned()
+            .iter()
+            .zip_eq(scaling_factors.iter())
+            .map(|(a, b)| *b - *a)
+            .collect_vec();
 
         // Contribution (1)
-        let mut tmp = op_wire_1.to_owned() - w_1_shift.to_owned();
-        tmp *= lagrange_by_scaling.clone();
-        for i in 0..univariate_accumulator.r0.evaluations.len() {
-            univariate_accumulator.r0.evaluations[i] += tmp.evaluations[i];
-        }
+        let mut tmp = T::sub_many(&op_wire_1, &w_1_shift);
+        tmp = T::mul_with_public_many(&lagrange_by_scaling, &tmp);
+        fold_accumulator!(univariate_accumulator.r0, tmp, SIZE);
 
         // Contribution (2)
-        tmp = op_wire_2.to_owned() - w_2_shift.to_owned();
-        tmp *= lagrange_by_scaling.clone();
-        for i in 0..univariate_accumulator.r1.evaluations.len() {
-            univariate_accumulator.r1.evaluations[i] += tmp.evaluations[i];
-        }
+        tmp = T::sub_many(&op_wire_2, &w_2_shift);
+        tmp = T::mul_with_public_many(&lagrange_by_scaling, &tmp);
+        fold_accumulator!(univariate_accumulator.r1, tmp, SIZE);
 
         // Contribution (3)
-        tmp = op_wire_3.to_owned() - w_3_shift.to_owned();
-        tmp *= lagrange_by_scaling.clone();
-        for i in 0..univariate_accumulator.r2.evaluations.len() {
-            univariate_accumulator.r2.evaluations[i] += tmp.evaluations[i];
-        }
-
+        tmp = T::sub_many(&op_wire_3, &w_3_shift);
+        tmp = T::mul_with_public_many(&lagrange_by_scaling, &tmp);
+        fold_accumulator!(univariate_accumulator.r2, tmp, SIZE);
         // Contribution (4)
-        tmp = op_wire_4.to_owned() - w_4_shift.to_owned();
-        tmp *= lagrange_by_scaling;
-        for i in 0..univariate_accumulator.r3.evaluations.len() {
-            univariate_accumulator.r3.evaluations[i] += tmp.evaluations[i];
-        }
+        tmp = T::sub_many(&op_wire_4, &w_4_shift);
+        tmp = T::mul_with_public_many(&lagrange_by_scaling, &tmp);
+        fold_accumulator!(univariate_accumulator.r3, tmp, SIZE);
 
         // Contribution (5)
-        tmp = op_wire_1.to_owned() * complement_ecc_op_by_scaling.to_owned();
-        for i in 0..univariate_accumulator.r4.evaluations.len() {
-            univariate_accumulator.r4.evaluations[i] += tmp.evaluations[i];
-        }
+        tmp = T::mul_with_public_many(&complement_ecc_op_by_scaling, &op_wire_1);
+        fold_accumulator!(univariate_accumulator.r4, tmp, SIZE);
 
         // Contribution (6)
-        tmp = op_wire_2.to_owned() * complement_ecc_op_by_scaling.to_owned();
-        for i in 0..univariate_accumulator.r5.evaluations.len() {
-            univariate_accumulator.r5.evaluations[i] += tmp.evaluations[i];
-        }
+        tmp = T::mul_with_public_many(&complement_ecc_op_by_scaling, &op_wire_2);
+        fold_accumulator!(univariate_accumulator.r5, tmp, SIZE);
 
         // Contribution (7)
-        tmp = op_wire_3.to_owned() * complement_ecc_op_by_scaling.to_owned();
-        for i in 0..univariate_accumulator.r6.evaluations.len() {
-            univariate_accumulator.r6.evaluations[i] += tmp.evaluations[i];
-        }
+        tmp = T::mul_with_public_many(&complement_ecc_op_by_scaling, &op_wire_3);
+        fold_accumulator!(univariate_accumulator.r6, tmp, SIZE);
 
         // Contribution (8)
-        tmp = op_wire_4.to_owned() * complement_ecc_op_by_scaling.to_owned();
-        for i in 0..univariate_accumulator.r7.evaluations.len() {
-            univariate_accumulator.r7.evaluations[i] += tmp.evaluations[i];
-        }
+        tmp = T::mul_with_public_many(&complement_ecc_op_by_scaling, &op_wire_4);
+        fold_accumulator!(univariate_accumulator.r7, tmp, SIZE);
+        Ok(())
     }
 
     fn add_entites(
