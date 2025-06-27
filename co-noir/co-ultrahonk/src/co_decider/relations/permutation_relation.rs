@@ -1,13 +1,15 @@
 use super::{ProverUnivariatesBatch, Relation};
 use crate::{
     co_decider::{
-        relations::fold_accumulator,
-        types::{RelationParameters, MAX_PARTIAL_RELATION_LENGTH},
-        univariates::SharedUnivariate,
+        relations::fold_accumulator, types::RelationParameters, univariates::SharedUnivariate,
     },
     mpc::NoirUltraHonkProver,
+    mpc_prover_flavour::MPCProverFlavour,
 };
 use ark_ec::pairing::Pairing;
+use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
+use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
+use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::prelude::HonkCurve;
 use co_builder::HonkProofResult;
 use ultrahonk::prelude::{TranscriptFieldType, Univariate};
@@ -67,10 +69,11 @@ impl UltraPermutationRelation {
     fn compute_grand_product_numerator_and_denominator_batch<
         T: NoirUltraHonkProver<P>,
         P: Pairing,
+        L: MPCProverFlavour,
     >(
         driver: &mut T,
-        input: &ProverUnivariatesBatch<T, P>,
-        relation_parameters: &RelationParameters<P::ScalarField>,
+        input: &ProverUnivariatesBatch<T, P, L>,
+        relation_parameters: &RelationParameters<P::ScalarField, L>,
     ) -> HonkProofResult<Vec<T::ArithmeticShare>> {
         let w_1 = input.witness.w_l();
         let w_2 = input.witness.w_r();
@@ -149,18 +152,18 @@ impl UltraPermutationRelation {
     }
 }
 
-impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P>
-    for UltraPermutationRelation
+impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverFlavour>
+    Relation<T, P, L> for UltraPermutationRelation
 {
     type Acc = UltraPermutationRelationAcc<T, P>;
 
-    fn can_skip(_: &super::ProverUnivariates<T, P>) -> bool {
+    fn can_skip(_: &super::ProverUnivariates<T, P, L>) -> bool {
         false
     }
 
     fn add_entites(
-        entity: &super::ProverUnivariates<T, P>,
-        batch: &mut ProverUnivariatesBatch<T, P>,
+        entity: &super::ProverUnivariates<T, P, L>,
+        batch: &mut ProverUnivariatesBatch<T, P, L>,
     ) {
         batch.add_w_l(entity);
         batch.add_w_r(entity);
@@ -201,8 +204,8 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
     fn accumulate(
         driver: &mut T,
         univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariatesBatch<T, P>,
-        relation_parameters: &RelationParameters<P::ScalarField>,
+        input: &ProverUnivariatesBatch<T, P, L>,
+        relation_parameters: &RelationParameters<P::ScalarField, L>,
         scaling_factors: &[P::ScalarField],
     ) -> HonkProofResult<()> {
         let public_input_delta = &relation_parameters.public_input_delta;

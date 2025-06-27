@@ -1,6 +1,8 @@
-pub(crate) struct PolyF<'a, Shared: Default, Public: Default> {
-    pub(crate) precomputed: &'a PrecomputedEntities<Public>,
-    pub(crate) witness: &'a WitnessEntities<Shared>,
+use crate::mpc_prover_flavour::MPCProverFlavour;
+
+pub(crate) struct PolyF<'a, Shared: Default, Public: Default + Clone, L: MPCProverFlavour> {
+    pub(crate) precomputed: &'a L::PrecomputedEntities<Public>,
+    pub(crate) witness: &'a L::WitnessEntities<Shared>,
 }
 
 pub(crate) struct PolyG<'a, T: Default> {

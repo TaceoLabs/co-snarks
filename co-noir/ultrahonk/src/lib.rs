@@ -3,7 +3,7 @@ pub(crate) mod decider;
 pub(crate) mod keccak_hash;
 pub(crate) mod oink;
 pub(crate) mod plain_flavours;
-pub(crate) mod plain_prover_flavour;
+pub mod plain_prover_flavour;
 pub mod prelude;
 pub(crate) mod prover;
 pub(crate) mod sponge_hasher;

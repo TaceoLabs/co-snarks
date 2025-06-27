@@ -77,7 +77,7 @@ impl<
         crs: &ProverCrs<P>,
         circuit_size: u32,
     ) -> HonkProofResult<(
-        SumcheckOutput<P::ScalarField>,
+        SumcheckOutput<P::ScalarField, L>,
         Option<SharedZKSumcheckData<T, P>>,
     )> {
         if self.has_zk == ZeroKnowledge::Yes {
@@ -112,7 +112,7 @@ impl<
         transcript: &mut Transcript<TranscriptFieldType, H>,
         circuit_size: u32,
         crs: &ProverCrs<P>,
-        sumcheck_output: SumcheckOutput<P::ScalarField>,
+        sumcheck_output: SumcheckOutput<P::ScalarField, L>,
         zk_sumcheck_data: Option<SharedZKSumcheckData<T, P>>,
     ) -> HonkProofResult<()> {
         if self.has_zk == ZeroKnowledge::No {

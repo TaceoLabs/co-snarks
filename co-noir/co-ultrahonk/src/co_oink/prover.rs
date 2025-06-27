@@ -18,7 +18,10 @@
 // clang-format on
 
 use super::types::ProverMemory;
-use crate::{key::proving_key::ProvingKey, mpc::NoirUltraHonkProver, CoUtils};
+use crate::{
+    key::proving_key::ProvingKey, mpc::NoirUltraHonkProver, mpc_prover_flavour::MPCProverFlavour,
+    CoUtils,
+};
 use ark_ff::{One, Zero};
 use co_builder::{
     prelude::{ActiveRegionData, HonkCurve, Polynomial, ProverCrs, NUM_MASKED_ROWS},
@@ -33,9 +36,10 @@ pub(crate) struct CoOink<
     T: NoirUltraHonkProver<P>,
     P: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
+    L: MPCProverFlavour,
 > {
     driver: &'a mut T,
-    memory: ProverMemory<T, P>,
+    memory: ProverMemory<T, P, L>,
     phantom_data: PhantomData<P>,
     phantom_hasher: PhantomData<H>,
     has_zk: ZeroKnowledge,
@@ -46,7 +50,8 @@ impl<
         T: NoirUltraHonkProver<P>,
         P: HonkCurve<TranscriptFieldType>,
         H: TranscriptHasher<TranscriptFieldType>,
-    > CoOink<'a, T, P, H>
+        L: MPCProverFlavour,
+    > CoOink<'a, T, P, H, L>
 {
     pub(crate) fn new(driver: &'a mut T, has_zk: ZeroKnowledge) -> Self {
         Self {
@@ -505,11 +510,12 @@ impl<
     fn generate_alphas_round(&mut self, transcript: &mut Transcript<TranscriptFieldType, H>) {
         tracing::trace!("generate alpha round");
 
-        let args: [String; NUM_ALPHAS] = array::from_fn(|i| format!("alpha_{}", i));
-        self.memory
-            .challenges
-            .alphas
-            .copy_from_slice(&transcript.get_challenges::<P>(&args));
+        // TODO FLORIN
+        // let args: [String; NUM_ALPHAS] = array::from_fn(|i| format!("alpha_{}", i));
+        // self.memory
+        //     .challenges
+        //     .alphas
+        //     .copy_from_slice(&transcript.get_challenges::<P>(&args));
     }
 
     // Add circuit size public input size and public inputs to transcript
@@ -690,7 +696,7 @@ impl<
         proving_key: &mut ProvingKey<T, P>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         crs: &ProverCrs<P>,
-    ) -> HonkProofResult<ProverMemory<T, P>> {
+    ) -> HonkProofResult<ProverMemory<T, P, L>> {
         tracing::trace!("Oink prove");
 
         // Add circuit size public input size and public inputs to transcript

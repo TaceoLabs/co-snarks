@@ -1,14 +1,15 @@
 use super::{fold_accumulator, Relation};
 use crate::{
-    co_decider::{
-        types::{RelationParameters, MAX_PARTIAL_RELATION_LENGTH},
-        univariates::SharedUnivariate,
-    },
+    co_decider::{types::RelationParameters, univariates::SharedUnivariate},
     mpc::NoirUltraHonkProver,
+    mpc_prover_flavour::MPCProverFlavour,
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use ark_ff::Zero;
+use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
+use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
+use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::prelude::HonkCurve;
 use co_builder::HonkProofResult;
 use itertools::Itertools as _;
@@ -85,18 +86,18 @@ impl DeltaRangeConstraintRelation {
     pub(crate) const CRAND_PAIRS_FACTOR: usize = 12;
 }
 
-impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P>
-    for DeltaRangeConstraintRelation
+impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverFlavour>
+    Relation<T, P, L> for DeltaRangeConstraintRelation
 {
     type Acc = DeltaRangeConstraintRelationAcc<T, P>;
 
-    fn can_skip(entity: &super::ProverUnivariates<T, P>) -> bool {
+    fn can_skip(entity: &super::ProverUnivariates<T, P, L>) -> bool {
         entity.precomputed.q_delta_range().is_zero()
     }
 
     fn add_entites(
-        entity: &super::ProverUnivariates<T, P>,
-        batch: &mut super::ProverUnivariatesBatch<T, P>,
+        entity: &super::ProverUnivariates<T, P, L>,
+        batch: &mut super::ProverUnivariatesBatch<T, P, L>,
     ) {
         batch.add_w_l(entity);
         batch.add_w_r(entity);
@@ -125,8 +126,8 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
     fn accumulate(
         driver: &mut T,
         univariate_accumulator: &mut Self::Acc,
-        input: &super::ProverUnivariatesBatch<T, P>,
-        _relation_parameters: &RelationParameters<<P>::ScalarField>,
+        input: &super::ProverUnivariatesBatch<T, P, L>,
+        _relation_parameters: &RelationParameters<<P>::ScalarField, L>,
         scaling_factors: &[<P>::ScalarField],
     ) -> HonkProofResult<()> {
         let party_id = driver.get_party_id();

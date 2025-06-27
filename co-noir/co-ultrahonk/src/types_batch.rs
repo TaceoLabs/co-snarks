@@ -21,7 +21,6 @@ use crate::{
             poseidon2_internal_relation::Poseidon2InternalRelation,
             ultra_arithmetic_relation::UltraArithmeticRelation, Relation as _,
         },
-        types::MAX_PARTIAL_RELATION_LENGTH,
         univariates::SharedUnivariate,
     },
     mpc::NoirUltraHonkProver,
@@ -29,8 +28,8 @@ use crate::{
     types::AllEntities,
 };
 
-type Shared<T, P> = SharedUnivariate<T, P, MAX_PARTIAL_RELATION_LENGTH>;
-type Public<P> = Univariate<<P as Pairing>::ScalarField, MAX_PARTIAL_RELATION_LENGTH>;
+type Shared<T, P, L> = <L as MPCProverFlavour>::ProverUnivariateShared<T, P>;
+type Public<P, L> = <L as MPCProverFlavour>::ProverUnivariatePublic<P>;
 
 #[derive(Default)]
 pub(crate) struct AllEntitiesBatch<T, P, L>

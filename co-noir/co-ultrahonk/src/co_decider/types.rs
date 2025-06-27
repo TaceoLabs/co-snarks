@@ -1,4 +1,3 @@
-use super::univariates::SharedUnivariate;
 use crate::{
     mpc::NoirUltraHonkProver,
     mpc_prover_flavour::MPCProverFlavour,
@@ -9,22 +8,23 @@ use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
+use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
+use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use itertools::izip;
 use std::iter;
-use ultrahonk::prelude::Univariate;
 
 pub(crate) struct ProverMemory<T: NoirUltraHonkProver<P>, P: Pairing, L: MPCProverFlavour> {
     pub(crate) polys: AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>, L>,
     pub(crate) relation_parameters: RelationParameters<P::ScalarField, L>,
 }
 
-pub(crate) const MAX_PARTIAL_RELATION_LENGTH: usize = 7;
-pub(crate) const BATCHED_RELATION_PARTIAL_LENGTH: usize = MAX_PARTIAL_RELATION_LENGTH + 1;
-pub(crate) const BATCHED_RELATION_PARTIAL_LENGTH_ZK: usize = BATCHED_RELATION_PARTIAL_LENGTH + 1;
+// pub(crate) const MAX_PARTIAL_RELATION_LENGTH: usize = 7;
+// pub(crate) const BATCHED_RELATION_PARTIAL_LENGTH: usize = MAX_PARTIAL_RELATION_LENGTH + 1;
+// pub(crate) const BATCHED_RELATION_PARTIAL_LENGTH_ZK: usize = BATCHED_RELATION_PARTIAL_LENGTH + 1;
 
 pub(crate) type ProverUnivariates<T, P, L> = AllEntities<
-    SharedUnivariate<T, P, MAX_PARTIAL_RELATION_LENGTH>,
-    Univariate<<P as Pairing>::ScalarField, MAX_PARTIAL_RELATION_LENGTH>,
+    <L as MPCProverFlavour>::ProverUnivariateShared<T, P>,
+    <L as MPCProverFlavour>::ProverUnivariatePublic<<P as Pairing>::ScalarField>,
     L,
 >;
 
@@ -63,7 +63,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing, L: MPCProverFlavour> ProverMemory<T,
             gate_challenges: Default::default(),
         };
 
-        let mut memory = AllEntities::default();
+        let mut memory = AllEntities::<Vec<T::ArithmeticShare>, Vec<P::ScalarField>, L>::default();
 
         // TACEO TODO Barretenberg uses the same memory for the shifted polynomials as for the non-shifted ones
 
