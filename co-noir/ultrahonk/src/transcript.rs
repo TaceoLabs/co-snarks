@@ -335,7 +335,7 @@ pub(crate) struct RoundData {
 impl RoundData {
     pub(crate) fn print(&self) {
         for label in self.challenge_label.iter() {
-            println!("\tchallenge: {}", label);
+            println!("\tchallenge: {label}");
         }
         for entry in self.entries.iter() {
             println!("\telement ({}): {}", entry.1, entry.0);

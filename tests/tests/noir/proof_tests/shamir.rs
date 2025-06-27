@@ -15,8 +15,8 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     threshold: usize,
     has_zk: ZeroKnowledge,
 ) {
-    let circuit_file = format!("../test_vectors/noir/{}/kat/{}.json", name, name);
-    let witness_file = format!("../test_vectors/noir/{}/kat/{}.gz", name, name);
+    let circuit_file = format!("../test_vectors/noir/{name}/kat/{name}.json");
+    let witness_file = format!("../test_vectors/noir/{name}/kat/{name}.gz");
 
     let program_artifact = Utils::get_program_artifact_from_file(&circuit_file)
         .expect("failed to parse program artifact");

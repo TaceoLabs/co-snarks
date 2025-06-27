@@ -250,7 +250,7 @@ impl<C: CurveGroup> std::fmt::Display for Rep3AcvmPoint<C> {
             Self::Public(point) => f.write_str(&format!("Public ({point})")),
             Self::Shared(arithmetic) => {
                 let (a, b) = arithmetic.to_owned().ab();
-                f.write_str(&format!("Arithmetic (a: {}, b: {})", a, b))
+                f.write_str(&format!("Arithmetic (a: {a}, b: {b})"))
             }
         }
     }
@@ -297,7 +297,7 @@ impl<F: PrimeField> std::fmt::Display for Rep3AcvmType<F> {
             Self::Public(field) => f.write_str(&format!("Public ({field})")),
             Self::Shared(arithmetic) => {
                 let (a, b) = arithmetic.ab();
-                f.write_str(&format!("Arithmetic (a: {}, b: {})", a, b))
+                f.write_str(&format!("Arithmetic (a: {a}, b: {b})"))
             }
         }
     }

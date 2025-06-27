@@ -28,7 +28,7 @@ fn run_bench(c: &mut Criterion, num_threads: usize, todo_list: &[usize]) {
             })
             .collect();
 
-        let mut group = c.benchmark_group(format!("# threads {}, size {}", num_threads, amount));
+        let mut group = c.benchmark_group(format!("# threads {num_threads}, size {amount}"));
         group.throughput(Throughput::Elements(amount as u64));
         group.bench_function("current impl (with_min_len 1024)", |b| {
             b.iter(|| {

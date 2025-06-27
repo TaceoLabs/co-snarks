@@ -663,7 +663,7 @@ where
                 .to_str()
                 .context("witness file name is not valid UTF-8")?;
             for (i, share) in shares.iter().enumerate() {
-                let path = out_dir.join(format!("{}.{}.shared", base_name, i));
+                let path = out_dir.join(format!("{base_name}.{i}.shared"));
                 let out_file =
                     BufWriter::new(File::create(&path).context("while creating output file")?);
                 bincode::serialize_into(out_file, share)
@@ -685,7 +685,7 @@ where
                 .to_str()
                 .context("witness file name is not valid UTF-8")?;
             for (i, share) in shares.iter().enumerate() {
-                let path = out_dir.join(format!("{}.{}.shared", base_name, i));
+                let path = out_dir.join(format!("{base_name}.{i}.shared"));
                 let out_file =
                     BufWriter::new(File::create(&path).context("while creating output file")?);
                 bincode::serialize_into(out_file, share)
@@ -739,7 +739,7 @@ where
         .to_str()
         .context("input file name is not valid UTF-8")?;
     for (i, share) in shares.iter().enumerate() {
-        let path = out_dir.join(format!("{}.{}.shared", base_name, i));
+        let path = out_dir.join(format!("{base_name}.{i}.shared"));
         let out_file = BufWriter::new(File::create(&path).context("while creating output file")?);
         bincode::serialize_into(out_file, share).context("while serializing witness share")?;
         tracing::info!("Wrote input share {} to file {}", i, path.display());

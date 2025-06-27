@@ -55,8 +55,7 @@ fn add_mul_many(c: &mut Criterion, num_threads: usize, todo_list: &[usize]) {
         let q_arith_neg_2 = q_arith.iter().map(|q| *q - two).collect::<Vec<_>>();
 
         let mut group = c.benchmark_group(format!(
-            "assign_many_{}_elems_{}_threads",
-            num_elements, num_threads
+            "assign_many_{num_elements}_elems_{num_threads}_threads"
         ));
         group.throughput(Throughput::Elements(num_elements as u64));
         group.bench_function("go", |b| {
@@ -81,10 +80,8 @@ fn add_mul_many(c: &mut Criterion, num_threads: usize, todo_list: &[usize]) {
         });
         group.finish();
 
-        let mut group = c.benchmark_group(format!(
-            "loop_{}_elems_{}_threads",
-            num_elements, num_threads
-        ));
+        let mut group =
+            c.benchmark_group(format!("loop_{num_elements}_elems_{num_threads}_threads"));
         group.throughput(Throughput::Elements(num_elements as u64));
         group.bench_function("go", |b| {
             b.iter(|| {
@@ -107,8 +104,7 @@ fn add_mul_many(c: &mut Criterion, num_threads: usize, todo_list: &[usize]) {
         group.finish();
 
         let mut group = c.benchmark_group(format!(
-            "loop_rayon_{}_elems_{}_threads",
-            num_elements, num_threads
+            "loop_rayon_{num_elements}_elems_{num_threads}_threads"
         ));
         group.throughput(Throughput::Elements(num_elements as u64));
         group.bench_function("go", |b| {

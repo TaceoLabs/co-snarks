@@ -134,7 +134,7 @@ impl ShamirMpcNet {
         } else {
             Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("No channel found for party id={}", target),
+                format!("No channel found for party id={target}"),
             ))
         }
     }
@@ -146,7 +146,7 @@ impl ShamirMpcNet {
         } else {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("No channel found for party id={}", from),
+                format!("No channel found for party id={from}"),
             ));
         };
 

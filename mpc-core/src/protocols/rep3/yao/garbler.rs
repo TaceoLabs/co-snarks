@@ -316,10 +316,10 @@ impl<N: Rep3Network> BristolFashionEvaluator for Rep3Garbler<'_, N> {
         match input {
             true => Ok(self
                 .const_one()
-                .map_err(|e| std::io::Error::other(format!("{:?}", e)))?),
+                .map_err(|e| std::io::Error::other(format!("{e:?}")))?),
             false => Ok(self
                 .const_zero()
-                .map_err(|e| std::io::Error::other(format!("{:?}", e)))?),
+                .map_err(|e| std::io::Error::other(format!("{e:?}")))?),
         }
     }
 
@@ -328,7 +328,7 @@ impl<N: Rep3Network> BristolFashionEvaluator for Rep3Garbler<'_, N> {
         input: &Self::WireValue,
     ) -> Result<Self::WireValue, super::bristol_fashion::CircuitExecutionError> {
         Ok(<Self as FancyBinary>::negate(self, input)
-            .map_err(|e| std::io::Error::other(format!("{:?}", e)))?)
+            .map_err(|e| std::io::Error::other(format!("{e:?}")))?)
     }
 
     fn xor(
@@ -337,7 +337,7 @@ impl<N: Rep3Network> BristolFashionEvaluator for Rep3Garbler<'_, N> {
         input2: &Self::WireValue,
     ) -> Result<Self::WireValue, super::bristol_fashion::CircuitExecutionError> {
         Ok(<Self as FancyBinary>::xor(self, input1, input2)
-            .map_err(|e| std::io::Error::other(format!("{:?}", e)))?)
+            .map_err(|e| std::io::Error::other(format!("{e:?}")))?)
     }
 
     fn and(
@@ -346,6 +346,6 @@ impl<N: Rep3Network> BristolFashionEvaluator for Rep3Garbler<'_, N> {
         input2: &Self::WireValue,
     ) -> Result<Self::WireValue, super::bristol_fashion::CircuitExecutionError> {
         Ok(<Self as FancyBinary>::and(self, input1, input2)
-            .map_err(|e| std::io::Error::other(format!("{:?}", e)))?)
+            .map_err(|e| std::io::Error::other(format!("{e:?}")))?)
     }
 }

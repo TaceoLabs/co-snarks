@@ -27,7 +27,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             Vec::with_capacity(CONST_PROOF_SIZE_LOG_N);
 
         for idx in 0..CONST_PROOF_SIZE_LOG_N {
-            let chall = transcript.get_challenge::<P>(format!("Sumcheck:gate_challenge_{}", idx));
+            let chall = transcript.get_challenge::<P>(format!("Sumcheck:gate_challenge_{idx}"));
             gate_challenges.push(chall);
         }
         gate_challenges

@@ -140,11 +140,10 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
             // Place the evaluations of the round univariate into transcript.
             transcript.send_fr_iter_to_verifier::<P, _>(
-                format!("Sumcheck:univariate_{}", round_idx),
+                format!("Sumcheck:univariate_{round_idx}"),
                 &round_univariate.evaluations,
             );
-            let round_challenge =
-                transcript.get_challenge::<P>(format!("Sumcheck:u_{}", round_idx));
+            let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{round_idx}"));
             multivariate_challenge.push(round_challenge);
             // Prepare sumcheck book-keeping table for the next round
             Self::partially_evaluate_inplace(
@@ -161,10 +160,10 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             SumcheckRoundOutput::<P::ScalarField, BATCHED_RELATION_PARTIAL_LENGTH>::default();
         for idx in multivariate_d as usize..CONST_PROOF_SIZE_LOG_N {
             transcript.send_fr_iter_to_verifier::<P, _>(
-                format!("Sumcheck:univariate_{}", idx),
+                format!("Sumcheck:univariate_{idx}"),
                 &zero_univariate.evaluations,
             );
-            let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{}", idx));
+            let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{idx}"));
             multivariate_challenge.push(round_challenge);
         }
 
@@ -259,11 +258,10 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
             // Place the evaluations of the round univariate into transcript.
             transcript.send_fr_iter_to_verifier::<P, _>(
-                format!("Sumcheck:univariate_{}", round_idx),
+                format!("Sumcheck:univariate_{round_idx}"),
                 &round_univariate.evaluations,
             );
-            let round_challenge =
-                transcript.get_challenge::<P>(format!("Sumcheck:u_{}", round_idx));
+            let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{round_idx}"));
             multivariate_challenge.push(round_challenge);
             // Prepare sumcheck book-keeping table for the next round
             Self::partially_evaluate_inplace(
@@ -285,10 +283,10 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             SumcheckRoundOutput::<P::ScalarField, BATCHED_RELATION_PARTIAL_LENGTH_ZK>::default();
         for idx in multivariate_d as usize..CONST_PROOF_SIZE_LOG_N {
             transcript.send_fr_iter_to_verifier::<P, _>(
-                format!("Sumcheck:univariate_{}", idx),
+                format!("Sumcheck:univariate_{idx}"),
                 &zero_univariate.evaluations,
             );
-            let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{}", idx));
+            let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{idx}"));
             multivariate_challenge.push(round_challenge);
         }
 

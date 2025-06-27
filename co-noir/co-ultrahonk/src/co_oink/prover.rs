@@ -508,7 +508,7 @@ impl<
     fn generate_alphas_round(&mut self, transcript: &mut Transcript<TranscriptFieldType, H>) {
         tracing::trace!("generate alpha round");
 
-        let args: [String; NUM_ALPHAS] = array::from_fn(|i| format!("alpha_{}", i));
+        let args: [String; NUM_ALPHAS] = array::from_fn(|i| format!("alpha_{i}"));
         self.memory
             .challenges
             .alphas
@@ -541,7 +541,7 @@ impl<
 
         for (i, public_input) in proving_key.public_inputs.iter().enumerate() {
             // transcript.add_scalar(*public_input);
-            transcript.send_fr_to_verifier::<P>(format!("public_input_{}", i), *public_input);
+            transcript.send_fr_to_verifier::<P>(format!("public_input_{i}"), *public_input);
         }
         Ok(())
     }

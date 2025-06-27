@@ -102,7 +102,7 @@ impl ShamirNetwork for PartyTestNetwork {
         if target >= self.num_parties || target == self.id {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("No channel found for party id={}", target),
+                format!("No channel found for party id={target}"),
             ));
         }
         if target > self.id {
@@ -137,7 +137,7 @@ impl ShamirNetwork for PartyTestNetwork {
         if from >= self.num_parties || from == self.id {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("No channel found for party id={}", from),
+                format!("No channel found for party id={from}"),
             ));
         }
         if from > self.id {

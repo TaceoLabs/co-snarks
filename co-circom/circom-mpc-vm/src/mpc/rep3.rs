@@ -678,7 +678,7 @@ impl<F: PrimeField> std::fmt::Display for Rep3VmType<F> {
             Self::Public(field) => f.write_str(&format!("Public ({field})")),
             Self::Arithmetic(arithmetic) => {
                 let (a, b) = arithmetic.ab();
-                f.write_str(&format!("Arithmetic (a: {}, b: {})", a, b))
+                f.write_str(&format!("Arithmetic (a: {a}, b: {b})"))
             }
         }
     }

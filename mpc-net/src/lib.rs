@@ -80,7 +80,7 @@ impl MpcNetworkHandler {
         for (id, cert) in &certs {
             root_store
                 .add(cert.clone())
-                .with_context(|| format!("adding certificate for party {} to root store", id))?;
+                .with_context(|| format!("adding certificate for party {id} to root store"))?;
         }
         let crypto = quinn::rustls::ClientConfig::builder()
             .with_root_certificates(root_store)
