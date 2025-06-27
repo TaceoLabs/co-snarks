@@ -3,7 +3,6 @@ use crate::co_decider::relations::Relation;
 use crate::co_decider::types::ProverUnivariatesBatch;
 use crate::co_decider::types::RelationParameters;
 use ark_ec::pairing::Pairing;
-use ark_ff::PrimeField;
 use ark_ff::Zero;
 use co_builder::polynomials::polynomial_flavours::{
     PrecomputedEntitiesFlavour, ShiftedWitnessEntitiesFlavour, WitnessEntitiesFlavour,
@@ -213,6 +212,25 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         entity: &crate::co_decider::types::ProverUnivariates<T, P, L>,
         batch: &mut crate::co_decider::types::ProverUnivariatesBatch<T, P, L>,
     ) {
-        todo!()
+        // batch.add_w_l(entity);
+        // batch.add_w_r(entity);
+        // batch.add_w_o(entity);
+        // batch.add_w_4(entity);
+
+        batch.add_shifted_w_l(entity);
+        batch.add_shifted_w_r(entity);
+        batch.add_shifted_w_o(entity);
+        batch.add_shifted_w_4(entity);
+
+        // TODO add remaining ones
+
+        // batch.add_ecc(entity);
+        // batch.add_q_r(entity);
+        // batch.add_q_o(entity);
+        // batch.add_q_4(entity);
+        // batch.add_q_m(entity);
+        // batch.add_q_c(entity);
+        // batch.add_q_arith(entity);
+        // batch.add_q_aux(entity);
     }
 }

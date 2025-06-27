@@ -400,6 +400,11 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         entity: &crate::co_decider::types::ProverUnivariates<T, P, L>,
         batch: &mut crate::co_decider::types::ProverUnivariatesBatch<T, P, L>,
     ) {
-        todo!()
+        batch.add_shifted_w_l(entity);
+        batch.add_shifted_w_r(entity);
+        batch.add_shifted_w_o(entity);
+        batch.add_shifted_w_4(entity);
+
+        // TODO add remaining ones
     }
 }
