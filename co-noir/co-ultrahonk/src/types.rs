@@ -1,4 +1,5 @@
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
+use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::prelude::Polynomial;
@@ -22,6 +23,20 @@ pub struct Polynomials<
     pub precomputed: L::PrecomputedEntities<Polynomial<Public>>,
 }
 
+impl<Shared: Default, Public: Default + Clone + std::marker::Sync, L: MPCProverFlavour> Default
+    for Polynomials<Shared, Public, L>
+where
+    Polynomial<Shared>: Serialize + for<'a> Deserialize<'a>,
+    Polynomial<Public>: Serialize + for<'a> Deserialize<'a>,
+{
+    fn default() -> Self {
+        Self {
+            witness: L::ProverWitnessEntities::default(),
+            precomputed: L::PrecomputedEntities::default(),
+        }
+    }
+}
+
 impl<Shared: Clone + Default, Public: Clone + Default + std::marker::Sync, L: MPCProverFlavour>
     Polynomials<Shared, Public, L>
 where
@@ -29,18 +44,17 @@ where
     Polynomial<Public>: Serialize + for<'a> Deserialize<'a>,
 {
     pub(crate) fn new(circuit_size: usize) -> Self {
-        todo!()
-        // let mut polynomials = Self::default();
-        // // Shifting is done at a later point
-        // polynomials
-        //     .witness
-        //     .iter_mut()
-        //     .for_each(|el| el.resize(circuit_size, Default::default()));
-        // polynomials.precomputed.iter_mut().for_each(|el| {
-        //     el.resize(circuit_size, Default::default());
-        // });
+        let mut polynomials = Self::default();
+        // Shifting is done at a later point
+        polynomials
+            .witness
+            .iter_mut()
+            .for_each(|el| el.resize(circuit_size, Default::default()));
+        polynomials.precomputed.iter_mut().for_each(|el| {
+            el.resize(circuit_size, Default::default());
+        });
 
-        // polynomials
+        polynomials
     }
 }
 

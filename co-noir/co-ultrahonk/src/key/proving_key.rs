@@ -1,5 +1,4 @@
 use crate::co_decider::relations::CRAND_PAIRS_FACTOR;
-use crate::co_decider::types::MAX_PARTIAL_RELATION_LENGTH;
 use crate::co_oink::{
     CRAND_PAIRS_CONST, CRAND_PAIRS_FACTOR_DOMAIN_SIZE_MINUS_ONE, CRAND_PAIRS_FACTOR_N,
 };
@@ -11,9 +10,7 @@ use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_builder::prelude::Polynomial;
-use co_builder::prelude::PrecomputedEntities;
 use co_builder::prelude::ProverCrs;
-use co_builder::prelude::ProverWitnessEntities;
 use co_builder::prelude::ProvingKey as PlainProvingKey;
 use co_builder::prelude::VerifyingKey;
 use co_builder::prelude::{ActiveRegionData, HonkCurve};

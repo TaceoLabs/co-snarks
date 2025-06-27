@@ -28,7 +28,7 @@ use co_builder::{
     HonkProofError, HonkProofResult,
 };
 use itertools::izip;
-use std::{array, marker::PhantomData};
+use std::marker::PhantomData;
 use ultrahonk::prelude::{Transcript, TranscriptFieldType, TranscriptHasher, ZeroKnowledge};
 
 pub(crate) struct CoOink<

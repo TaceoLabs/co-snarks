@@ -3,15 +3,7 @@ use crate::mpc_prover_flavour::MPCProverFlavour;
 use crate::mpc_prover_flavour::SharedUnivariateTest;
 use crate::{
     co_decider::{
-        relations::{
-            auxiliary_relation::AuxiliaryRelation,
-            delta_range_constraint_relation::DeltaRangeConstraintRelation,
-            elliptic_relation::EllipticRelation, logderiv_lookup_relation::LogDerivLookupRelation,
-            permutation_relation::UltraPermutationRelation,
-            poseidon2_external_relation::Poseidon2ExternalRelation,
-            poseidon2_internal_relation::Poseidon2InternalRelation,
-            ultra_arithmetic_relation::UltraArithmeticRelation, Relation,
-        },
+        relations::Relation,
         types::{ProverUnivariates, RelationParameters},
         univariates::SharedUnivariate,
     },
@@ -24,7 +16,7 @@ use ark_ff::One;
 use co_builder::prelude::{HonkCurve, RowDisablingPolynomial};
 use co_builder::HonkProofResult;
 use ultrahonk::plain_prover_flavour::UnivariateTest;
-use ultrahonk::prelude::{GateSeparatorPolynomial, TranscriptFieldType, Univariate};
+use ultrahonk::prelude::{GateSeparatorPolynomial, TranscriptFieldType};
 
 const MAX_ROUND_SIZE_PER_BATCH: usize = 1 << 20;
 

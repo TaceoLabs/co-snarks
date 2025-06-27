@@ -11,20 +11,7 @@ pub(crate) type PrecomputedEntitiesBatch<T, L> = <L as ProverFlavour>::Precomput
 pub(crate) type ShiftedWitnessEntitiesBatch<T, L> =
     <L as ProverFlavour>::ShiftedWitnessEntities<Vec<T>>;
 
-use crate::{
-    co_decider::relations::{
-        auxiliary_relation::AuxiliaryRelation,
-        delta_range_constraint_relation::DeltaRangeConstraintRelation,
-        elliptic_relation::EllipticRelation, logderiv_lookup_relation::LogDerivLookupRelation,
-        permutation_relation::UltraPermutationRelation,
-        poseidon2_external_relation::Poseidon2ExternalRelation,
-        poseidon2_internal_relation::Poseidon2InternalRelation,
-        ultra_arithmetic_relation::UltraArithmeticRelation, Relation as _,
-    },
-    mpc::NoirUltraHonkProver,
-    mpc_prover_flavour::MPCProverFlavour,
-    types::AllEntities,
-};
+use crate::{ mpc::NoirUltraHonkProver, mpc_prover_flavour::MPCProverFlavour, types::AllEntities};
 
 type Shared<T, P, L> = <L as MPCProverFlavour>::ProverUnivariateShared<T, P>;
 type Public<P, L> = <L as MPCProverFlavour>::ProverUnivariatePublic<P>;
@@ -139,14 +126,14 @@ where
 {
     pub fn new() -> Self {
         todo!("Florin   ")
-        // let witness = WitnessEntitiesBatch::<T::ArithmeticShare, L>::new();
-        // let precomputed = PrecomputedEntitiesBatch::<P::ScalarField, L>::new();
-        // let shifted_witness = ShiftedWitnessEntitiesBatch::<T::ArithmeticShare, L>::new();
-        // Self {
-        //     witness,
-        //     precomputed,
-        //     shifted_witness,
-        // }
+        let witness = WitnessEntitiesBatch::<T::ArithmeticShare, L>::new();
+        let precomputed = PrecomputedEntitiesBatch::<P::ScalarField, L>::new();
+        let shifted_witness = ShiftedWitnessEntitiesBatch::<T::ArithmeticShare, L>::new();
+        Self {
+            witness,
+            precomputed,
+            shifted_witness,
+        }
     }
 
     pub fn add_w_l(&mut self, entity: &AllEntities<Shared<T, P, L>, Public<P, L>, L>) {
