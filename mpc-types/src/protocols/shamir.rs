@@ -5,6 +5,7 @@
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use itertools::izip;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use rand::{CryptoRng, Rng};
 
@@ -54,21 +55,27 @@ pub fn combine_field_element<F: PrimeField>(
     Ok(rec)
 }
 
-/// Secret shares a vector of field element using Shamir secret sharing and the provided random number generator. The field elements are split into num_parties shares each, where each party holds just one. The outputs are `Vecs` of `Vecs` of type [`ShamirPrimeFieldShare`]. The degree of the sharing polynomial (i.e., the threshold of maximum number of tolerated colluding parties) is specified by the degree parameter.
+/// Secret shares a vector of field element using Shamir secret sharing and a unique RNG per thread. The field elements are split into num_parties shares each, where each party holds just one. The outputs are `Vecs` of `Vecs` of type [`ShamirPrimeFieldShare`]. The degree of the sharing polynomial (i.e., the threshold of maximum number of tolerated colluding parties) is specified by the degree parameter.
 pub fn share_field_elements<F: PrimeField, R: Rng + CryptoRng>(
     vals: &[F],
     degree: usize,
     num_parties: usize,
-    rng: &mut R,
+    _rng: &mut R,
 ) -> Vec<Vec<ShamirShare<F>>> {
-    let mut result = (0..num_parties)
-        .map(|_| Vec::with_capacity(vals.len()))
-        .collect::<Vec<_>>();
+    let mut result = vec![Vec::with_capacity(vals.len()); num_parties];
 
-    for val in vals {
-        let shares = share(*val, num_parties, degree, rng);
-        let shares = ShamirShare::convert_vec_rev(shares);
-        for (r, s) in izip!(&mut result, shares) {
+    let shares_vec: Vec<Vec<ShamirShare<F>>> = vals.into_par_iter()
+        .map_init(
+            || rand::thread_rng(),
+            |mut rng, val| {
+                let shares = share(*val, num_parties, degree, &mut rng);
+                ShamirShare::convert_vec_rev(shares)
+            },
+        )
+        .collect();
+
+    for shares in shares_vec {
+        for (r, s) in result.iter_mut().zip(shares.into_iter()) {
             r.push(s);
         }
     }

@@ -22,6 +22,7 @@ ark-ff = { workspace = true }
 ark-grumpkin = { workspace = true }
 ark-serialize = { workspace = true }
 bytes = { workspace = true }
+criterion = { workspace = true }
 eyre = { workspace = true }
 fancy-garbling = { git = "https://github.com/GaloisInc/swanky", rev = "5ff648457218b74da9d8323b7ca47166ff5be4b3" }
 itertools = { workspace = true }
@@ -49,4 +50,8 @@ criterion.workspace = true
 
 [[bench]]
 name = "local_mul_vec"
+harness = false
+
+[[bench]]
+name = "share_field_elements_benchmark"
 harness = false
