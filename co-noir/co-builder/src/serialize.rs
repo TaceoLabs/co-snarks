@@ -20,10 +20,12 @@ impl<F: Field> Serialize<F> {
     const FIELDSIZE_BYTES: u32 = Self::NUM_64_LIMBS * 8;
     const VEC_LEN_BYTES: u32 = 4;
 
-    // TODO maybe change to impl Read?
-    pub fn from_buffer(buf: &[u8], size_included: bool) -> HonkProofResult<Vec<F>> {
-        let size = buf.len();
+    pub fn from_buffer(mut reader: impl std::io::Read, size_included: bool) -> HonkProofResult<Vec<F>> {
+        use std::io::Read;
         let mut offset = 0;
+        let mut buf = Vec::new();
+        reader.read_to_end(&mut buf).map_err(|_| HonkProofError::InvalidProofLength)?;
+        let size = buf.len();
 
         // Check sizes
         let num_elements = if size_included {
@@ -34,7 +36,7 @@ impl<F: Field> Serialize<F> {
                 return Err(HonkProofError::InvalidProofLength);
             }
 
-            let read_num_elements = Self::read_u32(buf, &mut offset);
+            let read_num_elements = Self::read_u32(&buf, &mut offset);
             if read_num_elements != num_elements as u32 {
                 return Err(HonkProofError::InvalidProofLength);
             }
@@ -50,7 +52,7 @@ impl<F: Field> Serialize<F> {
         // Read data
         let mut res = Vec::with_capacity(num_elements);
         for _ in 0..num_elements {
-            res.push(Self::read_field_element(buf, &mut offset));
+            res.push(Self::read_field_element(&buf, &mut offset));
         }
         debug_assert_eq!(offset, size);
         Ok(res)
