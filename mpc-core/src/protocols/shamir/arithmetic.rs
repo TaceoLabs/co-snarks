@@ -5,13 +5,15 @@
 use ark_ff::PrimeField;
 use itertools::izip;
 use mpc_net::Network;
-use mpc_types::protocols::shamir::reconstruct;
+use rayon::prelude::*;
 
 use super::{
     ShamirPrimeFieldShare, ShamirState,
     network::{self},
 };
-use rayon::prelude::*;
+
+mod ops;
+pub(super) mod types;
 
 type ShamirShare<F> = ShamirPrimeFieldShare<F>;
 
@@ -184,7 +186,7 @@ pub fn open<F: PrimeField, N: Network>(
     state: &mut ShamirState<F>,
 ) -> eyre::Result<F> {
     let rcv = network::broadcast_next(net, state.num_parties, state.threshold + 1, a.a)?;
-    let res = reconstruct(&rcv, &state.open_lagrange_t);
+    let res = super::reconstruct(&rcv, &state.open_lagrange_t);
     Ok(res)
 }
 
@@ -208,7 +210,7 @@ pub fn open_vec<F: PrimeField, N: Network>(
 
     let res = transposed
         .into_iter()
-        .map(|r| reconstruct(&r, &state.open_lagrange_t))
+        .map(|r| super::reconstruct(&r, &state.open_lagrange_t))
         .collect();
     Ok(res)
 }
@@ -256,7 +258,7 @@ fn mul_open<F: PrimeField, N: Network>(
 ) -> eyre::Result<F> {
     let mul = a * b;
     let rcv = network::broadcast_next(net, state.num_parties, 2 * state.threshold + 1, mul.a)?;
-    Ok(reconstruct(&rcv, &state.open_lagrange_2t))
+    Ok(super::reconstruct(&rcv, &state.open_lagrange_2t))
 }
 
 /// This function performs a multiplication directly followed, by an opening. This is preferred over Open(Mul(\[x\], \[y\])), since Mul performs resharing of the result for degree reduction. Thus, mul_open(\[x\], \[y\]) requires less communication in fewer rounds compared to Open(Mul(\[x\], \[y\])).
@@ -285,7 +287,7 @@ pub fn mul_open_vec<F: PrimeField, N: Network>(
 
     let res = transposed
         .into_iter()
-        .map(|r| reconstruct(&r, &state.open_lagrange_2t))
+        .map(|r| super::reconstruct(&r, &state.open_lagrange_2t))
         .collect();
     Ok(res)
 }

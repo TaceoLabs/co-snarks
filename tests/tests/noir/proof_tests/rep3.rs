@@ -7,7 +7,7 @@ use co_ultrahonk::prelude::{
     CrsParser, Poseidon2Sponge, Rep3CoUltraHonk, TranscriptFieldType, TranscriptHasher, UltraHonk,
     Utils, ZeroKnowledge,
 };
-use mpc_net::TestNetwork;
+use mpc_net::test::TestNetwork;
 use sha3::Keccak256;
 use std::sync::Arc;
 use tests::test_utils::spawn_pool;

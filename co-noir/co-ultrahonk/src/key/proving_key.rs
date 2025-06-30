@@ -34,8 +34,8 @@ use ultrahonk::prelude::{VerifyingKeyBarretenberg, ZeroKnowledge};
 pub struct ProvingKey<T: NoirUltraHonkProver<P>, P: Pairing> {
     pub circuit_size: u32,
     #[serde(
-        serialize_with = "mpc_core::ark_se",
-        deserialize_with = "mpc_core::ark_de"
+        serialize_with = "mpc_core::serde_compat::ark_se",
+        deserialize_with = "mpc_core::serde_compat::ark_de"
     )]
     pub public_inputs: Vec<P::ScalarField>,
     pub num_public_inputs: u32,
@@ -44,8 +44,8 @@ pub struct ProvingKey<T: NoirUltraHonkProver<P>, P: Pairing> {
     pub memory_read_records: Vec<u32>,
     pub memory_write_records: Vec<u32>,
     #[serde(
-        serialize_with = "mpc_core::ark_se",
-        deserialize_with = "mpc_core::ark_de"
+        serialize_with = "mpc_core::serde_compat::ark_se",
+        deserialize_with = "mpc_core::serde_compat::ark_de"
     )]
     pub memory_records_shared: BTreeMap<u32, T::ArithmeticShare>,
     pub final_active_wire_idx: usize,

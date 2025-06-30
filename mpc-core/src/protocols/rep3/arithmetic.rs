@@ -20,6 +20,9 @@ use super::Rep3State;
 use super::network;
 use super::{Rep3BigUintShare, Rep3PrimeFieldShare, binary, conversion};
 
+mod ops;
+pub(super) mod types;
+
 /// Type alias for a [`Rep3PrimeFieldShare`]
 pub type FieldShare<F> = Rep3PrimeFieldShare<F>;
 /// Type alias for a [`Rep3BigUintShare`]

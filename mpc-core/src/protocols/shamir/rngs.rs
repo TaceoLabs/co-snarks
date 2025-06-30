@@ -3,14 +3,15 @@ use std::cmp::Ordering;
 use ark_ff::PrimeField;
 use itertools::{Itertools, izip};
 use mpc_net::Network;
-use mpc_types::protocols::shamir::{
-    evaluate_poly, interpolate_poly_from_precomputed, precompute_interpolation_polys,
-};
 
-use crate::RngType;
+use crate::{RngType, protocols::shamir::interpolate_poly_from_precomputed};
 use rand::{Rng, SeedableRng};
 
-use super::network::{self};
+use super::{
+    evaluate_poly,
+    network::{self},
+    precompute_interpolation_polys,
+};
 
 pub(super) struct ShamirRng<F> {
     pub(super) id: usize,

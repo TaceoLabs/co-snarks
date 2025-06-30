@@ -1,6 +1,5 @@
 use ark_ff::PrimeField;
 use clap::Parser;
-use co_circom::NetworkConfig;
 use color_eyre::eyre::{Context, eyre};
 use figment::{
     Figment,
@@ -9,11 +8,14 @@ use figment::{
 use mpc_core::{
     gadgets::poseidon2::Poseidon2,
     protocols::{
-        rep3::{self, PartyID, Rep3PrimeFieldShare, Rep3State},
+        rep3::{self, Rep3PrimeFieldShare, Rep3State, id::PartyID},
         shamir::{self, ShamirPreprocessing, ShamirPrimeFieldShare, ShamirState},
     },
 };
-use mpc_net::{Network, TcpNetwork, config::NetworkConfigFile};
+use mpc_net::{
+    Network,
+    tcp::{NetworkConfig, TcpNetwork},
+};
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -87,7 +89,7 @@ pub struct Config {
     /// Statesize for the hash function
     pub statesize: usize,
     /// Network config
-    pub network: NetworkConfigFile,
+    pub network: NetworkConfig,
 }
 
 /// Prefix for config env variables
@@ -402,9 +404,7 @@ where
     let mut times = Vec::with_capacity(config.runs);
 
     // connect to network
-    let network_config = NetworkConfig::try_from(config.network.to_owned())
-        .context("while converting network config")?;
-    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+    let net = TcpNetwork::new(config.network.clone()).context("while connecting to network")?;
     let mut state = Rep3State::new(&net)?;
 
     for _ in 0..config.runs {
@@ -444,9 +444,7 @@ where
     let mut times = Vec::with_capacity(config.runs);
 
     // connect to network
-    let network_config = NetworkConfig::try_from(config.network.to_owned())
-        .context("while converting network config")?;
-    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+    let net = TcpNetwork::new(config.network.clone()).context("while connecting to network")?;
     let mut state = Rep3State::new(&net)?;
 
     for _ in 0..config.runs {
@@ -487,9 +485,7 @@ where
     let mut times = Vec::with_capacity(config.runs);
 
     // connect to network
-    let network_config = NetworkConfig::try_from(config.network.to_owned())
-        .context("while converting network config")?;
-    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+    let net = TcpNetwork::new(config.network.clone()).context("while connecting to network")?;
     let mut state = Rep3State::new(&net)?;
 
     for _ in 0..config.runs {
@@ -535,9 +531,7 @@ where
     let mut times = Vec::with_capacity(config.runs);
 
     // connect to network
-    let network_config = NetworkConfig::try_from(config.network.to_owned())
-        .context("while converting network config")?;
-    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+    let net = TcpNetwork::new(config.network.clone()).context("while connecting to network")?;
     let mut state = Rep3State::new(&net)?;
 
     for _ in 0..config.runs {
@@ -590,9 +584,7 @@ where
     let size = next_power_of_n(config.merkle_size, ARITY);
 
     // connect to network
-    let network_config = NetworkConfig::try_from(config.network.to_owned())
-        .context("while converting network config")?;
-    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+    let net = TcpNetwork::new(config.network.clone()).context("while connecting to network")?;
     let mut state = Rep3State::new(&net)?;
 
     for _ in 0..config.runs {
@@ -654,12 +646,10 @@ where
 
     let mut times = Vec::with_capacity(config.runs);
     let mut preprocess_times = Vec::with_capacity(config.runs);
+    let num_parties = config.network.parties.len();
 
     // connect to network
-    let network_config = NetworkConfig::try_from(config.network.to_owned())
-        .context("while converting network config")?;
-    let num_parties = network_config.parties.len();
-    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+    let net = TcpNetwork::new(config.network.clone()).context("while connecting to network")?;
 
     for _ in 0..config.runs {
         let mut share = share_random_input_shamir::<F, T, _, _>(
@@ -713,12 +703,10 @@ where
 
     let mut times = Vec::with_capacity(config.runs);
     let mut preprocess_times = Vec::with_capacity(config.runs);
+    let num_parties = config.network.parties.len();
 
     // connect to network
-    let network_config = NetworkConfig::try_from(config.network.to_owned())
-        .context("while converting network config")?;
-    let num_parties = network_config.parties.len();
-    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+    let net = TcpNetwork::new(config.network.clone()).context("while connecting to network")?;
 
     for _ in 0..config.runs {
         let mut share = share_random_input_shamir::<F, T, _, _>(
@@ -778,12 +766,10 @@ where
 
     let mut times = Vec::with_capacity(config.runs);
     let mut preprocess_times = Vec::with_capacity(config.runs);
+    let num_parties = config.network.parties.len();
 
     // connect to network
-    let network_config = NetworkConfig::try_from(config.network.to_owned())
-        .context("while converting network config")?;
-    let num_parties = network_config.parties.len();
-    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+    let net = TcpNetwork::new(config.network.clone()).context("while connecting to network")?;
 
     for _ in 0..config.runs {
         let mut share = share_random_input_shamir::<F, T, _, _>(
@@ -859,12 +845,10 @@ where
 
     let size = next_power_of_n(config.merkle_size, ARITY);
     let num_hashes = (size - 1) / (ARITY - 1);
+    let num_parties = config.network.parties.len();
 
     // connect to network
-    let network_config = NetworkConfig::try_from(config.network.to_owned())
-        .context("while converting network config")?;
-    let num_parties = network_config.parties.len();
-    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+    let net = TcpNetwork::new(config.network.clone()).context("while connecting to network")?;
 
     for _ in 0..config.runs {
         let share = share_random_input_shamir::<F, T, _, _>(

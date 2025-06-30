@@ -11,6 +11,9 @@ use super::{PartyID, Rep3BigUintShare, Rep3PrimeFieldShare, Rep3State, arithmeti
 use crate::protocols::rep3::network::{self};
 use num_traits::cast::ToPrimitive;
 
+mod ops;
+pub(super) mod types;
+
 type ArithmeticShare<F> = Rep3PrimeFieldShare<F>;
 type BinaryShare<F> = Rep3BigUintShare<F>;
 

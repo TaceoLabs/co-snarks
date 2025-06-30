@@ -4,7 +4,8 @@
 
 use crate::protocols::{
     rep3::{
-        self, Rep3State,
+        self, Rep3BigUintShare, Rep3PrimeFieldShare, Rep3State,
+        id::PartyID,
         yao::{
             GCInputs, GCUtils, circuits::GarbledCircuits, evaluator::Rep3Evaluator,
             garbler::Rep3Garbler,
@@ -16,13 +17,6 @@ use ark_ff::PrimeField;
 use fancy_garbling::{BinaryBundle, WireLabel, WireMod2};
 use itertools::izip;
 use mpc_net::Network;
-use mpc_types::protocols::{
-    rep3::{Rep3BigUintShare, Rep3PrimeFieldShare, id::PartyID},
-    rep3_ring::{
-        Rep3RingShare,
-        ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
-    },
-};
 use num_bigint::BigUint;
 use num_traits::{One, Zero};
 use rand::{CryptoRng, Rng, distributions::Standard, prelude::Distribution};
@@ -511,7 +505,7 @@ macro_rules! decompose_circuit_compose_blueprint {
     ($inputs:expr, $net:expr, $state:expr, $output_size:expr, $t:ty, $circuit:expr, ($( $args:expr ),*)) => {{
         use itertools::izip;
         use $crate::protocols::rep3_ring::yao;
-        use mpc_types::protocols::rep3_ring::Rep3RingShare;
+        use $crate::protocols::rep3_ring::Rep3RingShare;
 
         let delta = $state
             .rngs
@@ -1041,3 +1035,8 @@ macro_rules! decompose_circuit_compose_blueprint_2 {
 
 #[expect(unused_imports)]
 pub(crate) use decompose_circuit_compose_blueprint_2;
+
+use super::{
+    Rep3RingShare,
+    ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
+};

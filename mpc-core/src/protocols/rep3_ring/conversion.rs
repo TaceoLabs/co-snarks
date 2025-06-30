@@ -2,11 +2,16 @@
 //!
 //! This module contains conversions between share types
 
-use super::{detail, yao};
+use super::{
+    Rep3RingShare, detail,
+    ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
+    yao,
+};
 use crate::protocols::{
     rep3::{
-        self, Rep3State,
+        self, Rep3PrimeFieldShare, Rep3State,
         conversion::A2BType,
+        id::PartyID,
         network,
         yao::{
             GCUtils, circuits::GarbledCircuits, evaluator::Rep3Evaluator, garbler::Rep3Garbler,
@@ -19,13 +24,6 @@ use ark_ff::PrimeField;
 use fancy_garbling::{BinaryBundle, WireMod2};
 use itertools::izip;
 use mpc_net::Network;
-use mpc_types::protocols::{
-    rep3::{Rep3PrimeFieldShare, id::PartyID},
-    rep3_ring::{
-        Rep3RingShare,
-        ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
-    },
-};
 use rand::{distributions::Standard, prelude::Distribution};
 use std::ops::Neg;
 

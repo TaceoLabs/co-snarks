@@ -13,6 +13,7 @@ mod field_share {
     use mpc_core::gadgets::poseidon2::Poseidon2;
     use mpc_core::protocols::rep3::conversion;
     use mpc_core::protocols::rep3::gadgets;
+    use mpc_core::protocols::rep3::id::PartyID;
     use mpc_core::protocols::rep3::network;
     use mpc_core::protocols::rep3::yao;
     use mpc_core::protocols::rep3::yao::circuits::GarbledCircuits;
@@ -22,13 +23,12 @@ mod field_share {
     use mpc_core::protocols::rep3::yao::streaming_evaluator::StreamingRep3Evaluator;
     use mpc_core::protocols::rep3::yao::streaming_garbler::StreamingRep3Garbler;
     use mpc_core::protocols::rep3::yao::GCUtils;
-    use mpc_core::protocols::rep3::PartyID;
     use mpc_core::protocols::rep3::Rep3State;
     use mpc_core::protocols::rep3::{self, arithmetic};
     use mpc_core::protocols::rep3_ring;
     use mpc_core::MpcState as _;
+    use mpc_net::test::TestNetwork;
     use mpc_net::Network;
-    use mpc_net::TestNetwork;
     use num_bigint::BigUint;
     use rand::thread_rng;
     use rand::Rng;
@@ -3254,7 +3254,7 @@ mod curve_share {
     use ark_std::UniformRand;
     use itertools::{izip, Itertools};
     use mpc_core::protocols::rep3::{self, conversion, pointshare, Rep3BigUintShare, Rep3State};
-    use mpc_net::TestNetwork;
+    use mpc_net::test::TestNetwork;
     use num_bigint::BigUint;
     use rand::thread_rng;
     use std::sync::mpsc;

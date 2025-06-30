@@ -8,9 +8,10 @@ use itertools::{Itertools, izip};
 use libaes::Cipher;
 use mpc_core::MpcState as _;
 use mpc_core::gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations};
+use mpc_core::protocols::rep3::id::PartyID;
 use mpc_core::protocols::rep3::yao::circuits::SHA256Table;
 use mpc_core::protocols::rep3::{
-    PartyID, Rep3BigUintShare, Rep3PointShare, Rep3State, arithmetic, binary, conversion, network,
+    Rep3BigUintShare, Rep3PointShare, Rep3State, arithmetic, binary, conversion, network,
     pointshare, yao,
 };
 use mpc_core::protocols::rep3_ring::gadgets::sort::{radix_sort_fields, radix_sort_fields_vec_by};
@@ -253,15 +254,15 @@ impl<C: CurveGroup> From<C> for Rep3AcvmPoint<C> {
 pub enum Rep3AcvmType<F: PrimeField> {
     Public(
         #[serde(
-            serialize_with = "mpc_core::ark_se",
-            deserialize_with = "mpc_core::ark_de"
+            serialize_with = "mpc_core::serde_compat::ark_se",
+            deserialize_with = "mpc_core::serde_compat::ark_de"
         )]
         F,
     ),
     Shared(
         #[serde(
-            serialize_with = "mpc_core::ark_se",
-            deserialize_with = "mpc_core::ark_de"
+            serialize_with = "mpc_core::serde_compat::ark_se",
+            deserialize_with = "mpc_core::serde_compat::ark_de"
         )]
         ArithmeticShare<F>,
     ),

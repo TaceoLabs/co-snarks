@@ -6,7 +6,7 @@ use co_circom_types::{BatchedSharedInput, SharedInput};
 use co_noir::Bn254;
 use itertools::izip;
 use mpc_core::protocols::rep3;
-use mpc_net::TestNetwork;
+use mpc_net::test::TestNetwork;
 use rand::{thread_rng, Rng as _};
 use tests::test_utils::{self, spawn_pool};
 

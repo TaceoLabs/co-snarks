@@ -48,7 +48,6 @@ The project is built with pure Rust and consists of multiple libraries:
 The following libraries are agnostic to **coCircom**/**coNoir** and will be used in the future
 for other coSNARKs:
 
-- **mpc-types**: Implementation of types for MPC protocols.
 - **mpc-core**: Implementation of MPC protocols.
 - **mpc-net**: Network library for MPC protocols.
 

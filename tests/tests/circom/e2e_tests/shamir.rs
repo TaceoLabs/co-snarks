@@ -17,7 +17,7 @@ use co_groth16::{CircomReduction, ConstraintMatrices, Groth16, ProvingKey};
 use co_plonk::Plonk;
 use co_plonk::ShamirCoPlonk;
 use itertools::izip;
-use mpc_net::TestNetwork;
+use mpc_net::test::TestNetwork;
 use rand::thread_rng;
 use std::fs::File;
 use tests::test_utils::spawn_pool;

@@ -1,13 +1,10 @@
 use std::path::PathBuf;
 
 use clap::Parser;
-use color_eyre::{
-    Result,
-    eyre::{Context, eyre},
-};
+use color_eyre::{Result, eyre::Context};
 use mpc_net::{
-    Network as _, QuicNetwork,
-    config::{NetworkConfig, NetworkConfigFile},
+    Network as _,
+    tcp::{NetworkConfig, TcpNetwork},
 };
 
 #[derive(Parser)]
@@ -41,17 +38,13 @@ fn install_tracing() {
 fn main() -> Result<()> {
     let args = Args::parse();
     install_tracing();
-    rustls::crypto::aws_lc_rs::default_provider()
-        .install_default()
-        .map_err(|_| eyre!("Could not install default rustls crypto provider"))?;
 
-    let config: NetworkConfigFile =
+    let config: NetworkConfig =
         toml::from_str(&std::fs::read_to_string(args.config_file).context("opening config file")?)
             .context("parsing config file")?;
-    let config = NetworkConfig::try_from(config).context("converting network config")?;
     let my_id = config.my_id;
 
-    let network = QuicNetwork::new(config)?;
+    let network = TcpNetwork::new(config)?;
 
     // send to all parties
     for id in 0..3 {
@@ -69,8 +62,6 @@ fn main() -> Result<()> {
             tracing::info!("party {my_id} received from {id}");
         }
     }
-
-    network.print_connection_stats(&mut std::io::stdout())?;
 
     Ok(())
 }

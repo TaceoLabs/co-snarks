@@ -4,15 +4,14 @@
 
 use ark_ff::{One, Zero};
 use mpc_net::Network;
-use mpc_types::protocols::rep3_ring::{
-    Rep3RingShare,
-    ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
-};
 use rand::{distributions::Standard, prelude::Distribution};
 
 use crate::protocols::{
     rep3::{Rep3State, network},
-    rep3_ring::binary,
+    rep3_ring::{
+        Rep3RingShare, binary,
+        ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
+    },
 };
 
 /// Generates a random one-hot-encoded vector of size k bits.

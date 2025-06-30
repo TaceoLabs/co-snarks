@@ -7,20 +7,15 @@ use std::marker::PhantomData;
 use crate::{
     lut::LookupTableProvider,
     protocols::{
-        rep3::{self, Rep3State, arithmetic, network},
-        rep3_ring::{conversion, gadgets},
+        rep3::{self, Rep3BigUintShare, Rep3PrimeFieldShare, Rep3State, arithmetic, network},
+        rep3_ring::{conversion, gadgets, ring::bit::Bit},
     },
 };
 use ark_ff::PrimeField;
 use mpc_net::Network;
-use mpc_types::protocols::{
-    rep3::{Rep3BigUintShare, Rep3PrimeFieldShare},
-    rep3_ring::{
-        Rep3RingShare,
-        ring::{bit::Bit, int_ring::IntRing2k},
-    },
-};
 use rand::{distributions::Standard, prelude::Distribution};
+
+use super::{Rep3RingShare, ring::int_ring::IntRing2k};
 
 /// Implements an enum which stores a lookup table, either consisting of public or private values.
 pub enum PublicPrivateLut<F: PrimeField> {

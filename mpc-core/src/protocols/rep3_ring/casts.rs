@@ -2,17 +2,13 @@
 //!
 //! Implements casts for sharings of different datatypes
 
-use super::{conversion, yao};
-use crate::protocols::rep3::{self, Rep3State, conversion::A2BType};
+use super::{Rep3RingShare, conversion, ring::int_ring::IntRing2k, yao};
+use crate::protocols::{
+    rep3::{self, Rep3BigUintShare, Rep3PrimeFieldShare, Rep3State, conversion::A2BType},
+    rep3_ring::ring::{bit::Bit, ring_impl::RingElement},
+};
 use ark_ff::PrimeField;
 use mpc_net::Network;
-use mpc_types::protocols::{
-    rep3::{Rep3BigUintShare, Rep3PrimeFieldShare},
-    rep3_ring::{
-        Rep3RingShare,
-        ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
-    },
-};
 use num_bigint::BigUint;
 use num_traits::AsPrimitive;
 use rand::{distributions::Standard, prelude::Distribution};

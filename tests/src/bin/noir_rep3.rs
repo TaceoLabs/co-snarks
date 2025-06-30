@@ -4,7 +4,7 @@ use acir::{native_types::WitnessStack, FieldElement};
 
 use ark_bn254::Bn254;
 use co_acvm::solver::{PlainCoSolver, Rep3CoSolver};
-use mpc_net::TestNetwork;
+use mpc_net::test::TestNetwork;
 use noirc_artifacts::program::ProgramArtifact;
 use tests::test_utils;
 

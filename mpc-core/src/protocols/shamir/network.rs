@@ -9,7 +9,10 @@ use itertools::izip;
 use mpc_net::Network;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-use super::{ShamirPointShare, ShamirPrimeFieldShare, ShamirState};
+use super::{
+    ShamirPointShare, ShamirPrimeFieldShare, ShamirState, evaluate_poly, evaluate_poly_point,
+    poly_with_zeros_from_precomputed, poly_with_zeros_from_precomputed_point,
+};
 
 /// Sends data to the target party
 pub fn send<N: Network, F: CanonicalSerialize>(net: &N, to: usize, data: F) -> eyre::Result<()> {
@@ -177,10 +180,8 @@ pub fn degree_reduce_many<N: Network, F: PrimeField>(
 
         let mut polys = Vec::with_capacity(acc.len());
         for acc in acc {
-            let poly = mpc_types::protocols::shamir::poly_with_zeros_from_precomputed(
-                &acc,
-                state.mul_reconstruct_with_zeros.to_owned(),
-            );
+            let poly =
+                poly_with_zeros_from_precomputed(&acc, state.mul_reconstruct_with_zeros.to_owned());
             polys.push(poly);
         }
 
@@ -189,7 +190,7 @@ pub fn degree_reduce_many<N: Network, F: PrimeField>(
             let id_f = F::from(id as u64 + 1);
             let vals = polys
                 .iter()
-                .map(|poly| mpc_types::protocols::shamir::evaluate_poly(poly, id_f))
+                .map(|poly| evaluate_poly(poly, id_f))
                 .collect::<Vec<_>>();
             if id == my_id {
                 my_share = vals;
@@ -258,17 +259,11 @@ where
         // Since <acc> does not have to be private, we share it as a known polynomial, such that t parties know their share is 0. Consequently we can reduce the amount of communication.
         // Note: When expanding t+1 double shares to n double shares (Atlas) we cannot do this anymore, since <acc> needs to stay private. Atlas also requires rotating the King server.
 
-        let poly = mpc_types::protocols::shamir::poly_with_zeros_from_precomputed_point(
-            &acc,
-            &state.mul_reconstruct_with_zeros,
-        );
+        let poly = poly_with_zeros_from_precomputed_point(&acc, &state.mul_reconstruct_with_zeros);
 
         let mut my_share = C::default();
         for id in 0..num_non_zero {
-            let val = mpc_types::protocols::shamir::evaluate_poly_point(
-                &poly,
-                C::ScalarField::from(id as u64 + 1),
-            );
+            let val = evaluate_poly_point(&poly, C::ScalarField::from(id as u64 + 1));
             if id == my_id {
                 my_share = val;
             } else {

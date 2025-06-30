@@ -5,13 +5,15 @@
 //! This file is heavily inspired by [fancy-garbling](https://github.com/GaloisInc/swanky/blob/dev/fancy-garbling/src/garble/evaluator.rs)
 
 use super::{GCUtils, circuits::FancyBinaryConstant};
-use crate::protocols::rep3::network::{self};
+use crate::protocols::rep3::{
+    id::PartyID,
+    network::{self},
+};
 use fancy_garbling::{
     BinaryBundle, Fancy, FancyBinary, WireLabel, WireMod2, errors::EvaluatorError,
     util::output_tweak,
 };
 use mpc_net::Network;
-use mpc_types::protocols::rep3::id::PartyID;
 use scuttlebutt::Block;
 use sha3::{Digest, Sha3_256};
 
