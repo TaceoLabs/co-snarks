@@ -4,9 +4,13 @@
 
 use ark_ec::CurveGroup;
 use mpc_net::Network;
-use mpc_types::protocols::shamir::{reconstruct, reconstruct_point};
 
-use super::{ShamirPointShare, ShamirPrimeFieldShare, ShamirState, network};
+use super::{
+    ShamirPointShare, ShamirPrimeFieldShare, ShamirState, network, reconstruct, reconstruct_point,
+};
+
+mod ops;
+pub(super) mod types;
 
 type FieldShare<C> = ShamirPrimeFieldShare<C>;
 type PointShare<C> = ShamirPointShare<C>;

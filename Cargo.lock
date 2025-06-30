@@ -1097,7 +1097,6 @@ dependencies = [
  "figment",
  "mpc-core",
  "mpc-net",
- "mpc-types",
  "num-bigint 0.4.6",
  "num-traits",
  "rand 0.8.5",
@@ -1105,7 +1104,6 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.12",
- "tokio",
  "toml 0.8.20",
  "tracing",
  "tracing-subscriber 0.3.19",
@@ -1119,7 +1117,7 @@ dependencies = [
  "ark-serialize",
  "circom-types",
  "eyre",
- "mpc-types",
+ "mpc-core",
  "num-bigint 0.4.6",
  "num-traits",
  "rand 0.8.5",
@@ -1150,7 +1148,6 @@ dependencies = [
  "rand 0.8.5",
  "rayon",
  "serde_json",
- "tokio",
  "tracing",
 ]
 
@@ -1467,6 +1464,15 @@ checksum = "6b50826342786a51a89e2da3a28f1c32b06e387201bc2d19791f622c673706b1"
 dependencies = [
  "cast",
  "itertools 0.10.5",
+]
+
+[[package]]
+name = "crossbeam-channel"
+version = "0.5.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "82b8f8f868b36967f9606790d1903570de9ceaf870a7bf9fbbd3016d636a2cb2"
+dependencies = [
+ "crossbeam-utils",
 ]
 
 [[package]]
@@ -2213,6 +2219,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "humantime"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9b112acc8b3adf4b107a8ec20977da0273a8c386765a3ec0229bd500a1443f9f"
+
+[[package]]
+name = "humantime-serde"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57a3db5ea5923d99402c94e9feb261dc5ee9b4efa158b0315f788cf549cc200c"
+dependencies = [
+ "humantime",
+ "serde",
+]
+
+[[package]]
 name = "iana-time-zone"
 version = "0.1.63"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2810,7 +2832,6 @@ dependencies = [
  "fancy-garbling",
  "itertools 0.14.0",
  "mpc-net",
- "mpc-types",
  "nom",
  "num-bigint 0.4.6",
  "num-traits",
@@ -2823,7 +2844,6 @@ dependencies = [
  "sha3",
  "subtle",
  "thiserror 2.0.12",
- "tokio",
  "tracing",
 ]
 
@@ -2836,8 +2856,10 @@ dependencies = [
  "bytes",
  "clap",
  "color-eyre",
+ "crossbeam-channel",
  "eyre",
  "futures",
+ "humantime-serde",
  "intmap",
  "parking_lot",
  "quinn",
@@ -2849,23 +2871,6 @@ dependencies = [
  "toml 0.8.20",
  "tracing",
  "tracing-subscriber 0.3.19",
-]
-
-[[package]]
-name = "mpc-types"
-version = "0.1.0"
-dependencies = [
- "ark-bn254",
- "ark-ec",
- "ark-ff",
- "ark-serialize",
- "eyre",
- "itertools 0.14.0",
- "num-bigint 0.4.6",
- "num-traits",
- "rand 0.8.5",
- "rand_chacha 0.3.1",
- "serde",
 ]
 
 [[package]]

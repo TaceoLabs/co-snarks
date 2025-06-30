@@ -5,7 +5,7 @@ use itertools::izip;
 use mpc_core::{
     MpcState,
     protocols::rep3::{
-        PartyID, Rep3PointShare, Rep3PrimeFieldShare, Rep3State, arithmetic, pointshare, poly,
+        Rep3PointShare, Rep3PrimeFieldShare, Rep3State, arithmetic, id::PartyID, pointshare, poly,
     },
 };
 use mpc_net::Network;

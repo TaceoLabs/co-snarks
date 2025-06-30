@@ -4,7 +4,8 @@
 
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use mpc_net::Network;
-use mpc_types::protocols::rep3::id::PartyID;
+
+use super::id::PartyID;
 
 /// Sends `data` to the next party and receives from the previous party.
 pub fn reshare<N: Network, F: CanonicalSerialize + CanonicalDeserialize + Send>(

@@ -2,7 +2,8 @@ use ark_ec::{CurveGroup, pairing::Pairing};
 use mpc_core::{
     MpcState,
     protocols::rep3::{
-        PartyID, Rep3PointShare, Rep3PrimeFieldShare, Rep3State, arithmetic, network, pointshare,
+        Rep3PointShare, Rep3PrimeFieldShare, Rep3State, arithmetic, id::PartyID, network,
+        pointshare,
     },
 };
 use mpc_net::Network;

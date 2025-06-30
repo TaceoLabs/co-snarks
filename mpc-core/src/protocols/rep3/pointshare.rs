@@ -6,13 +6,16 @@ use ark_ec::CurveGroup;
 use ark_ff::{PrimeField, Zero};
 use itertools::{Itertools, izip};
 use mpc_net::Network;
-use mpc_types::protocols::rep3::id::PartyID;
 use rayon::prelude::*;
 
 use super::{
     Rep3PointShare, Rep3PrimeFieldShare, Rep3State, arithmetic, conversion,
+    id::PartyID,
     network::{self},
 };
+
+mod ops;
+pub(super) mod types;
 
 /// Type alias for a [`Rep3PrimeFieldShare`]
 pub type FieldShare<C> = Rep3PrimeFieldShare<C>;

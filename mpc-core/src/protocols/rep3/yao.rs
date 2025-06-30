@@ -11,6 +11,7 @@ pub mod streaming_garbler;
 
 use super::{
     Rep3BigUintShare, Rep3PrimeFieldShare, Rep3State,
+    id::PartyID,
     network::{self},
 };
 use ark_ff::{PrimeField, Zero};
@@ -18,7 +19,6 @@ use circuits::{GarbledCircuits, SHA256Table};
 use fancy_garbling::{BinaryBundle, WireLabel, WireMod2, hash_wires, util::tweak2};
 use itertools::{Itertools, izip};
 use mpc_net::Network;
-use mpc_types::protocols::rep3::id::PartyID;
 use num_bigint::BigUint;
 use rand::{CryptoRng, Rng};
 use scuttlebutt::Block;

@@ -3,10 +3,9 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use co_circom::{
     Bls12_381, Bn254, CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge,
     CircomGroth16Proof, CoCircomCompiler, CompilerConfig, Compression, Groth16,
-    Groth16JsonVerificationKey, Groth16ZKey, NetworkConfig, Pairing, Plonk,
-    PlonkJsonVerificationKey, PlonkProof, PlonkZKey, R1CS, Rep3CoGroth16, Rep3CoPlonk,
-    Rep3SharedInput, ShamirCoGroth16, ShamirCoPlonk, ShamirSharedWitness, SimplificationLevel,
-    VMConfig, Witness,
+    Groth16JsonVerificationKey, Groth16ZKey, Pairing, Plonk, PlonkJsonVerificationKey, PlonkProof,
+    PlonkZKey, R1CS, Rep3CoGroth16, Rep3CoPlonk, Rep3SharedInput, ShamirCoGroth16, ShamirCoPlonk,
+    ShamirSharedWitness, SimplificationLevel, VMConfig, Witness,
 };
 use co_circom_types::{CompressedRep3SharedWitness, VerificationError};
 use co_groth16::CircomReduction;
@@ -15,7 +14,7 @@ use figment::{
     Figment,
     providers::{Env, Format, Serialized, Toml},
 };
-use mpc_net::{TcpNetwork, config::NetworkConfigFile};
+use mpc_net::tcp::{NetworkConfig, TcpNetwork};
 use num_traits::Zero;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -289,7 +288,7 @@ pub struct GenerateWitnessConfig {
     #[serde(default)]
     pub vm: VMConfig,
     /// Network config
-    pub network: NetworkConfigFile,
+    pub network: NetworkConfig,
 }
 
 /// Cli arguments for `transalte_witness`
@@ -335,7 +334,7 @@ pub struct TranslateWitnessConfig {
     /// The output file where the final witness share is written to
     pub out: PathBuf,
     /// Network config
-    pub network: NetworkConfigFile,
+    pub network: NetworkConfig,
 }
 
 /// Cli arguments for `generate_proof`
@@ -402,7 +401,7 @@ pub struct GenerateProofConfig {
     /// The threshold of tolerated colluding parties
     pub threshold: usize,
     /// Network config
-    pub network: NetworkConfigFile,
+    pub network: NetworkConfig,
 }
 
 /// Cli arguments for `verify`
@@ -816,10 +815,8 @@ where
     }
 
     // connect to network
-    let network_config = NetworkConfig::try_from(config.network.to_owned())
-        .context("while converting network config")?;
     let [net0, net1] =
-        TcpNetwork::networks::<2>(network_config).context("while connecting to network")?;
+        TcpNetwork::networks::<2>(config.network).context("while connecting to network")?;
 
     // parse input shares
     let input_share_file =
@@ -873,9 +870,7 @@ where
         bincode::deserialize_from(witness_file)?;
 
     // connect to network
-    let network_config = NetworkConfig::try_from(config.network.to_owned())
-        .context("while converting network config")?;
-    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+    let net = TcpNetwork::new(config.network).context("while connecting to network")?;
 
     // Translate witness to shamir shares
     tracing::info!("Starting witness translation...");
@@ -920,14 +915,11 @@ where
     // parse Circom zkey file
     let zkey_file = File::open(zkey)?;
 
-    let network_config = NetworkConfig::try_from(config.network.to_owned())
-        .context("while converting network config")?;
-
     tracing::info!("Starting proof generation...");
     let public_input = match proof_system {
         ProofSystem::Groth16 => {
             let [net0, net1] =
-                TcpNetwork::networks::<2>(network_config).context("while connecting to network")?;
+                TcpNetwork::networks::<2>(config.network).context("while connecting to network")?;
 
             let zkey = Groth16ZKey::<P>::from_reader(zkey_file, check).context("reading zkey")?;
             let (matrices, pkey) = zkey.into();
@@ -995,7 +987,7 @@ where
         }
         ProofSystem::Plonk => {
             let nets =
-                TcpNetwork::networks::<8>(network_config).context("while connecting to network")?;
+                TcpNetwork::networks::<8>(config.network).context("while connecting to network")?;
             let zkey = Arc::new(
                 PlonkZKey::<P>::from_reader(zkey_file, check).context("while parsing zkey")?,
             );

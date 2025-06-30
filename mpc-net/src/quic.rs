@@ -1,0 +1,458 @@
+//! QUIC MPC network
+
+use std::{
+    collections::{BTreeMap, HashMap},
+    net::{SocketAddr, ToSocketAddrs},
+    path::PathBuf,
+    sync::Arc,
+    time::Duration,
+};
+
+use crate::{DEFAULT_CONNECTION_TIMEOUT, Network, config::Address};
+use bytes::Bytes;
+use eyre::{Context as _, ContextCompat};
+use futures::{SinkExt, StreamExt as _};
+use intmap::IntMap;
+use parking_lot::Mutex;
+use quinn::{
+    Connection, Endpoint, IdleTimeout, TransportConfig, VarInt, rustls::pki_types::PrivateKeyDer,
+};
+use quinn::{
+    crypto::rustls::QuicClientConfig,
+    rustls::{RootCertStore, pki_types::CertificateDer},
+};
+use serde::{Deserialize, Serialize};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    runtime::Runtime,
+};
+use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
+
+/// A party in the network config file.
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
+pub struct NetworkPartyConfig {
+    /// The id of the party, 0-based indexing.
+    pub id: usize,
+    /// The DNS name of the party.
+    pub dns_name: Address,
+    /// The path to the public certificate of the party.
+    pub cert_path: PathBuf,
+}
+
+/// A party in the network.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct NetworkParty {
+    /// The id of the party, 0-based indexing.
+    pub id: usize,
+    /// The DNS name of the party.
+    pub dns_name: Address,
+    /// The public certificate of the party.
+    pub cert: CertificateDer<'static>,
+}
+
+impl NetworkParty {
+    /// Construct a new [`NetworkParty`] type.
+    pub fn new(id: usize, address: Address, cert: CertificateDer<'static>) -> Self {
+        Self {
+            id,
+            dns_name: address,
+            cert,
+        }
+    }
+}
+
+impl TryFrom<NetworkPartyConfig> for NetworkParty {
+    type Error = std::io::Error;
+    fn try_from(value: NetworkPartyConfig) -> Result<Self, Self::Error> {
+        let cert = CertificateDer::from(std::fs::read(value.cert_path)?).into_owned();
+        Ok(NetworkParty {
+            id: value.id,
+            dns_name: value.dns_name,
+            cert,
+        })
+    }
+}
+
+/// The network configuration file.
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
+pub struct NetworkConfigFile {
+    /// The list of parties in the network.
+    pub parties: Vec<NetworkPartyConfig>,
+    /// Our own id in the network.
+    pub my_id: usize,
+    /// The [SocketAddr] we bind to.
+    pub bind_addr: SocketAddr,
+    /// The path to our private key file.
+    pub key_path: Option<PathBuf>,
+    /// The connection timeout
+    #[serde(with = "humantime_serde")]
+    pub timeout: Option<Duration>,
+}
+
+/// The network configuration.
+#[derive(Debug, Eq, PartialEq)]
+pub struct NetworkConfig {
+    /// The list of parties in the network.
+    pub parties: Vec<NetworkParty>,
+    /// Our own id in the network.
+    pub my_id: usize,
+    /// The [SocketAddr] we bind to.
+    pub bind_addr: SocketAddr,
+    /// The private key.
+    pub key: PrivateKeyDer<'static>,
+    /// The connection timeout
+    pub timeout: Option<Duration>,
+}
+
+impl NetworkConfig {
+    /// Construct a new [`NetworkConfig`] type.
+    pub fn new(
+        id: usize,
+        bind_addr: SocketAddr,
+        key: PrivateKeyDer<'static>,
+        parties: Vec<NetworkParty>,
+        timeout: Option<Duration>,
+    ) -> Self {
+        Self {
+            parties,
+            my_id: id,
+            bind_addr,
+            key,
+            timeout,
+        }
+    }
+}
+
+#[derive(Debug)]
+struct QuicConnectionHandler {
+    id: usize,
+    rt: Runtime,
+    // this is a btreemap because we rely on iteration order
+    connections: BTreeMap<usize, Connection>,
+    endpoints: Vec<Endpoint>,
+}
+
+impl QuicConnectionHandler {
+    pub fn new(config: NetworkConfig, rt: Runtime) -> eyre::Result<Self> {
+        let id = config.my_id;
+        let (connections, endpoints) = rt.block_on(Self::init(config))?;
+        Ok(Self {
+            id,
+            rt,
+            connections,
+            endpoints,
+        })
+    }
+
+    async fn init(
+        config: NetworkConfig,
+    ) -> eyre::Result<(BTreeMap<usize, Connection>, Vec<Endpoint>)> {
+        let id = config.my_id;
+        let certs: HashMap<usize, CertificateDer> = config
+            .parties
+            .iter()
+            .map(|p| (p.id, p.cert.clone()))
+            .collect();
+
+        let mut root_store = RootCertStore::empty();
+        for (id, cert) in &certs {
+            root_store
+                .add(cert.clone())
+                .with_context(|| format!("adding certificate for party {id} to root store"))?;
+        }
+        let crypto = quinn::rustls::ClientConfig::builder()
+            .with_root_certificates(root_store)
+            .with_no_client_auth();
+
+        let client_config = {
+            let mut transport_config = TransportConfig::default();
+            // we dont set this to timeout, because it is the timeout for a idle connection
+            // maybe we want to make this configurable too?
+            transport_config.max_idle_timeout(Some(
+                IdleTimeout::try_from(config.timeout.unwrap_or(DEFAULT_CONNECTION_TIMEOUT))
+                    .unwrap(),
+            ));
+            // atm clients send keepalive packets
+            transport_config.keep_alive_interval(Some(Duration::from_secs(1)));
+            let mut client_config =
+                quinn::ClientConfig::new(Arc::new(QuicClientConfig::try_from(crypto)?));
+            client_config.transport_config(Arc::new(transport_config));
+            client_config
+        };
+
+        let server_config =
+            quinn::ServerConfig::with_single_cert(vec![certs[&id].clone()], config.key)
+                .context("creating our server config")?;
+        let our_socket_addr = config.bind_addr;
+        let server_endpoint = quinn::Endpoint::server(server_config.clone(), our_socket_addr)?;
+
+        let mut endpoints = vec![server_endpoint.clone()];
+        let mut connections = BTreeMap::new();
+
+        for party in config.parties {
+            if party.id == id {
+                // skip self
+                continue;
+            }
+            if party.id < id {
+                // connect to party, we are client
+                let party_addresses: Vec<SocketAddr> = party
+                    .dns_name
+                    .to_socket_addrs()
+                    .with_context(|| format!("while resolving DNS name for {}", party.dns_name))?
+                    .collect();
+                if party_addresses.is_empty() {
+                    return Err(eyre::eyre!("could not resolve DNS name {}", party.dns_name));
+                }
+                let party_addr = party_addresses[0];
+                tracing::debug!("party {id} connecting to {} at {party_addr}", party.id);
+                let local_client_socket: SocketAddr = match party_addr {
+                    SocketAddr::V4(_) => {
+                        "0.0.0.0:0".parse().expect("hardcoded IP address is valid")
+                    }
+                    SocketAddr::V6(_) => "[::]:0".parse().expect("hardcoded IP address is valid"),
+                };
+                let endpoint = quinn::Endpoint::client(local_client_socket)
+                    .with_context(|| format!("creating client endpoint to party {}", party.id))?;
+                let conn = endpoint
+                    .connect_with(client_config.clone(), party_addr, &party.dns_name.hostname)
+                    .with_context(|| {
+                        format!("setting up client connection with party {}", party.id)
+                    })?
+                    .await
+                    .with_context(|| format!("connecting as a client to party {}", party.id))?;
+                let mut uni = conn.open_uni().await?;
+                uni.write_u32(u32::try_from(id).expect("party id fits into u32"))
+                    .await?;
+                uni.flush().await?;
+                uni.finish()?;
+                tracing::trace!(
+                    "Conn with id {} from {} to {}",
+                    conn.stable_id(),
+                    endpoint.local_addr().unwrap(),
+                    conn.remote_address(),
+                );
+                tracing::debug!("party {id} connected to {}", party.id);
+                assert!(connections.insert(party.id, conn).is_none());
+                endpoints.push(endpoint);
+            } else {
+                // we are the server, accept a connection
+                tracing::debug!("party {id} listening on {our_socket_addr}");
+                match tokio::time::timeout(
+                    config.timeout.unwrap_or(DEFAULT_CONNECTION_TIMEOUT),
+                    server_endpoint.accept(),
+                )
+                .await
+                {
+                    Ok(Some(maybe_conn)) => {
+                        let conn = maybe_conn.await?;
+                        tracing::trace!(
+                            "Conn with id {} from {} to {}",
+                            conn.stable_id(),
+                            server_endpoint.local_addr().unwrap(),
+                            conn.remote_address(),
+                        );
+                        let mut uni = conn.accept_uni().await?;
+                        let other_party_id = uni.read_u32().await?;
+                        tracing::debug!("party {id} got conn from {other_party_id}");
+                        assert!(
+                            connections
+                                .insert(
+                                    usize::try_from(other_party_id).expect("u32 fits into usize"),
+                                    conn
+                                )
+                                .is_none()
+                        );
+                    }
+                    Ok(None) => {
+                        eyre::bail!(
+                            "server endpoint did not accept a connection from party {}",
+                            party.id
+                        )
+                    }
+                    Err(_) => {
+                        eyre::bail!(
+                            "party {} did not connect within 60 seconds - timeout",
+                            party.id
+                        )
+                    }
+                }
+            }
+        }
+
+        Ok((connections, endpoints))
+    }
+
+    #[expect(clippy::complexity)]
+    pub fn get_streams(
+        &self,
+    ) -> eyre::Result<(
+        IntMap<usize, tokio::sync::mpsc::Sender<Vec<u8>>>,
+        IntMap<usize, Mutex<tokio::sync::mpsc::Receiver<Vec<u8>>>>,
+    )> {
+        let mut send = IntMap::with_capacity(self.connections.len() - 1);
+        let mut recv = IntMap::with_capacity(self.connections.len() - 1);
+        for (&id, conn) in self.connections.iter() {
+            let (send_stream, recv_stream) = self.rt.block_on(async {
+                if id < self.id {
+                    // we are the client, so we are the receiver
+                    let (mut send_stream, mut recv_stream) = conn.open_bi().await?;
+                    send_stream.write_u32(self.id as u32).await?;
+                    let their_id = recv_stream.read_u32().await?;
+                    assert!(their_id == id as u32);
+                    eyre::Ok((send_stream, recv_stream))
+                } else {
+                    // we are the server, so we are the sender
+                    let (mut send_stream, mut recv_stream) = conn.accept_bi().await?;
+                    let their_id = recv_stream.read_u32().await?;
+                    assert!(their_id == id as u32);
+                    send_stream.write_u32(self.id as u32).await?;
+                    eyre::Ok((send_stream, recv_stream))
+                }
+            })?;
+
+            // set max frame length to 1Tb and length_field_length to 5 bytes
+            const NUM_BYTES: usize = 5;
+            let codec = LengthDelimitedCodec::builder()
+                .length_field_type::<u64>() // u64 because this is the type the length is decoded into, and u32 doesnt fit 5 bytes
+                .length_field_length(NUM_BYTES)
+                .max_frame_length(1usize << (NUM_BYTES * 8))
+                .new_codec();
+
+            let mut write = FramedWrite::new(send_stream, codec.clone());
+            let mut read = FramedRead::new(recv_stream, codec);
+
+            let (send_tx, mut send_rx) = tokio::sync::mpsc::channel(32);
+            let (recv_tx, recv_rx) = tokio::sync::mpsc::channel(32);
+
+            self.rt.spawn(async move {
+                while let Some(frame) = send_rx.recv().await {
+                    write.send(Bytes::from(frame)).await?;
+                }
+                eyre::Ok(())
+            });
+
+            self.rt.spawn(async move {
+                while let Some(Ok(frame)) = read.next().await {
+                    recv_tx.send(frame.to_vec()).await?;
+                }
+                eyre::Ok(())
+            });
+
+            assert!(send.insert(id, send_tx).is_none());
+            assert!(recv.insert(id, Mutex::new(recv_rx)).is_none());
+        }
+        Ok((send, recv))
+    }
+
+    /// Shutdown all connections, and call [`quinn::Endpoint::wait_idle`] on all of them
+    pub async fn shutdown(&self) -> eyre::Result<()> {
+        for (id, conn) in self.connections.iter() {
+            if self.id < *id {
+                let mut send = conn.open_uni().await?;
+                send.write_all(b"done").await?;
+            } else {
+                let mut recv = conn.accept_uni().await?;
+                let mut buffer = vec![0u8; b"done".len()];
+                recv.read_exact(&mut buffer).await?;
+                tracing::debug!("party {} closing conn = {id}", self.id);
+                conn.close(
+                    0u32.into(),
+                    format!("close from party {}", self.id).as_bytes(),
+                );
+            }
+        }
+        for endpoint in self.endpoints.iter() {
+            endpoint.wait_idle().await;
+            endpoint.close(VarInt::from_u32(0), &[]);
+        }
+        Ok(())
+    }
+}
+
+impl Drop for QuicConnectionHandler {
+    fn drop(&mut self) {
+        // ignore errors in drop
+        let _ = self.rt.block_on(self.shutdown());
+    }
+}
+
+/// A MPC network using the QUIC protocol
+#[derive(Debug)]
+pub struct QuicNetwork {
+    id: usize,
+    send: IntMap<usize, tokio::sync::mpsc::Sender<Vec<u8>>>,
+    recv: IntMap<usize, Mutex<tokio::sync::mpsc::Receiver<Vec<u8>>>>,
+    conn_handler: Arc<QuicConnectionHandler>,
+    timeout: Duration,
+}
+
+impl QuicNetwork {
+    /// Create a new [QuicNetwork]
+    pub fn new(config: NetworkConfig) -> eyre::Result<Self> {
+        let id = config.my_id;
+        let timeout = config.timeout.unwrap_or(DEFAULT_CONNECTION_TIMEOUT);
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()?;
+        let conn_handler = QuicConnectionHandler::new(config, rt)?;
+        let (send, recv) = conn_handler.get_streams()?;
+        Ok(QuicNetwork {
+            id,
+            send,
+            recv,
+            conn_handler: Arc::new(conn_handler),
+            timeout,
+        })
+    }
+
+    /// Create a network fork with new streams for the same connections
+    pub fn fork(&self) -> eyre::Result<Self> {
+        let id = self.id;
+        let (send, recv) = self.conn_handler.get_streams()?;
+        let conn_handler = Arc::clone(&self.conn_handler);
+        let timeout = self.timeout;
+        Ok(QuicNetwork {
+            id,
+            send,
+            recv,
+            conn_handler,
+            timeout,
+        })
+    }
+
+    /// Prints the connection statistics.
+    pub fn print_connection_stats(&self, out: &mut impl std::io::Write) -> std::io::Result<()> {
+        for (i, conn) in &self.conn_handler.connections {
+            let stats = conn.stats();
+            writeln!(
+                out,
+                "Connection {} stats:\n\tSENT: {} bytes\n\tRECV: {} bytes",
+                i, stats.udp_tx.bytes, stats.udp_rx.bytes
+            )?;
+        }
+        Ok(())
+    }
+}
+
+impl Network for QuicNetwork {
+    fn id(&self) -> usize {
+        self.id
+    }
+
+    fn send(&self, to: usize, data: &[u8]) -> eyre::Result<()> {
+        let stream = self.send.get(to).context("while get stream in send")?;
+        tracing::info!("sending to {to}");
+        stream.blocking_send(data.to_vec())?;
+        Ok(())
+    }
+
+    fn recv(&self, from: usize) -> eyre::Result<Vec<u8>> {
+        let mut queue = self
+            .recv
+            .get(from)
+            .context("while get stream in recv")?
+            .lock();
+        queue.blocking_recv().context("while recv")
+    }
+}

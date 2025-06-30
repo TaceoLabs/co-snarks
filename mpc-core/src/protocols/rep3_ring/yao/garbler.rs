@@ -1,7 +1,9 @@
-use crate::protocols::rep3::yao::{GCInputs, GCUtils, garbler::Rep3Garbler};
+use crate::protocols::{
+    rep3::yao::{GCInputs, GCUtils, garbler::Rep3Garbler},
+    rep3_ring::ring::{int_ring::IntRing2k, ring_impl::RingElement},
+};
 use fancy_garbling::WireMod2;
 use mpc_net::Network;
-use mpc_types::protocols::rep3_ring::ring::{int_ring::IntRing2k, ring_impl::RingElement};
 
 impl<N: Network> Rep3Garbler<'_, N> {
     /// This puts the X_0 values into garbler_wires and X_c values into evaluator_wires

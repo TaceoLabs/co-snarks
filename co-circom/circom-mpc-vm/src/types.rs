@@ -99,8 +99,8 @@ pub struct CoCircomCompilerParsed<F: PrimeField> {
     pub(crate) main: String,
     pub(crate) amount_signals: usize,
     #[serde(
-        serialize_with = "mpc_core::ark_se",
-        deserialize_with = "mpc_core::ark_de"
+        serialize_with = "mpc_core::serde_compat::ark_se",
+        deserialize_with = "mpc_core::serde_compat::ark_de"
     )]
     pub(crate) constant_table: Vec<F>,
     pub(crate) string_table: Vec<String>,

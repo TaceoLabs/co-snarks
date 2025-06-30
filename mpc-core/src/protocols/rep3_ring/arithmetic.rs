@@ -2,21 +2,21 @@
 //!
 //! This module contains operations with arithmetic shares
 
-use crate::protocols::rep3::{Rep3State, network};
+use crate::protocols::rep3::{Rep3State, id::PartyID, network};
 use itertools::{Itertools, izip};
 use mpc_net::Network;
-use mpc_types::protocols::{
-    rep3::id::PartyID,
-    rep3_ring::{
-        Rep3RingShare,
-        ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
-    },
-};
 use num_traits::{One, Zero};
 use rand::{distributions::Standard, prelude::Distribution};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use types::Rep3RingShare;
 
-use super::{binary, conversion, detail};
+use super::{
+    binary, conversion, detail,
+    ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
+};
+
+mod ops;
+pub(super) mod types;
 
 /// Type alias for a [`Rep3RingShare`] which is used for both arithmetic and binary shares.
 pub type RingShare<F> = Rep3RingShare<F>;

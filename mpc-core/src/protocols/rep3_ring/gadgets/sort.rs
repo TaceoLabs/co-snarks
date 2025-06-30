@@ -2,6 +2,7 @@
 //!
 //! This module contains some oblivious sorting algorithms for the Rep3 protocol.
 
+use crate::protocols::rep3::id::PartyID;
 use crate::protocols::rep3::{Rep3BigUintShare, Rep3PrimeFieldShare, Rep3State, network};
 use crate::protocols::rep3_ring::ring::int_ring::IntRing2k;
 use crate::protocols::rep3_ring::ring::ring_impl::RingElement;
@@ -12,7 +13,6 @@ use crate::protocols::{
 };
 use ark_ff::{One, PrimeField, Zero};
 use mpc_net::Network;
-use mpc_types::protocols::rep3::id::PartyID;
 use num_bigint::BigUint;
 use rand::distributions::Standard;
 use rand::prelude::Distribution;

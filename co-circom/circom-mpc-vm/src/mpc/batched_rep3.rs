@@ -6,8 +6,9 @@ use itertools::Itertools;
 use mpc_core::{
     MpcState as _,
     protocols::rep3::{
-        PartyID, Rep3PrimeFieldShare, Rep3State, arithmetic,
+        Rep3PrimeFieldShare, Rep3State, arithmetic,
         conversion::{self},
+        id::PartyID,
         network,
     },
 };

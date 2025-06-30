@@ -14,7 +14,7 @@ use co_acvm::{
 use co_ultrahonk::prelude::{HonkCurve, ProverCrs, ProverWitnessEntities, TranscriptFieldType};
 use color_eyre::eyre::{self, Context, Result, eyre};
 use mpc_core::protocols::{
-    rep3::{self, PartyID},
+    rep3::{self, id::PartyID},
     shamir::{self, ShamirPreprocessing, ShamirState},
 };
 
@@ -36,7 +36,6 @@ pub use co_ultrahonk::{
         VerifyingKeyBarretenberg,
     },
 };
-pub use mpc_net::config::{Address, NetworkConfig, NetworkParty, ParseAddressError};
 pub use sha3::Keccak256;
 
 #[derive(Clone, Debug)]

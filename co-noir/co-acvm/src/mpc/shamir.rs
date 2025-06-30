@@ -75,15 +75,15 @@ impl<C: CurveGroup> From<C> for ShamirAcvmPoint<C> {
 pub enum ShamirAcvmType<F: PrimeField> {
     Public(
         #[serde(
-            serialize_with = "mpc_core::ark_se",
-            deserialize_with = "mpc_core::ark_de"
+            serialize_with = "mpc_core::serde_compat::ark_se",
+            deserialize_with = "mpc_core::serde_compat::ark_de"
         )]
         F,
     ),
     Shared(
         #[serde(
-            serialize_with = "mpc_core::ark_se",
-            deserialize_with = "mpc_core::ark_de"
+            serialize_with = "mpc_core::serde_compat::ark_se",
+            deserialize_with = "mpc_core::serde_compat::ark_de"
         )]
         ShamirPrimeFieldShare<F>,
     ),

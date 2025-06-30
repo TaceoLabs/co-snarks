@@ -5,7 +5,7 @@
 use crate::protocols::rep3::PartyID;
 
 use super::{
-    Rep3BigUintShare, Rep3PrimeFieldShare, Rep3State, arithmetic, detail,
+    Rep3BigUintShare, Rep3PointShare, Rep3PrimeFieldShare, Rep3State, arithmetic, detail,
     network::{self},
     yao::{
         self, GCUtils, circuits::GarbledCircuits, evaluator::Rep3Evaluator, garbler::Rep3Garbler,
@@ -17,7 +17,6 @@ use ark_ff::PrimeField;
 use fancy_garbling::{BinaryBundle, WireMod2};
 use itertools::{Itertools as _, izip};
 use mpc_net::Network;
-use mpc_types::protocols::rep3::Rep3PointShare;
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 

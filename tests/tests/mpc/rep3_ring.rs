@@ -4,13 +4,13 @@ mod ring_share {
     use itertools::izip;
     use itertools::Itertools;
     use mpc_core::protocols::rep3;
+    use mpc_core::protocols::rep3::id::PartyID;
     use mpc_core::protocols::rep3::yao::circuits::GarbledCircuits;
     use mpc_core::protocols::rep3::yao::evaluator::Rep3Evaluator;
     use mpc_core::protocols::rep3::yao::garbler::Rep3Garbler;
     use mpc_core::protocols::rep3::yao::streaming_evaluator::StreamingRep3Evaluator;
     use mpc_core::protocols::rep3::yao::streaming_garbler::StreamingRep3Garbler;
     use mpc_core::protocols::rep3::yao::GCUtils;
-    use mpc_core::protocols::rep3::PartyID;
     use mpc_core::protocols::rep3::Rep3State;
     use mpc_core::protocols::rep3_ring;
     use mpc_core::protocols::rep3_ring::arithmetic;
@@ -22,7 +22,7 @@ mod ring_share {
     use mpc_core::protocols::rep3_ring::ring::ring_impl::RingElement;
     use mpc_core::protocols::rep3_ring::yao;
     use mpc_core::MpcState;
-    use mpc_net::TestNetwork;
+    use mpc_net::test::TestNetwork;
     use num_bigint::BigUint;
     use num_traits::{AsPrimitive, One, Zero};
     use rand::distributions::Standard;

@@ -5,7 +5,7 @@ use ark_bn254::Bn254;
 use circom_mpc_compiler::{CoCircomCompiler, CompilerConfig};
 use itertools::izip;
 use mpc_core::protocols::rep3::{self, conversion::A2BType};
-use mpc_net::TestNetwork;
+use mpc_net::test::TestNetwork;
 use rand::thread_rng;
 use std::{fs::File, io::BufReader};
 use tests::test_utils::{self, spawn_pool};

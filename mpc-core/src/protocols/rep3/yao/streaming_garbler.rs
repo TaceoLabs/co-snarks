@@ -9,6 +9,7 @@ use crate::{
     RngType,
     protocols::rep3::{
         Rep3State,
+        id::PartyID,
         network::{self},
     },
 };
@@ -18,7 +19,6 @@ use fancy_garbling::{
     BinaryBundle, Fancy, FancyBinary, WireLabel, WireMod2, errors::GarblerError, util::output_tweak,
 };
 use mpc_net::Network;
-use mpc_types::protocols::rep3::id::PartyID;
 use rand::SeedableRng;
 use scuttlebutt::Block;
 use sha3::{Digest, Sha3_256};

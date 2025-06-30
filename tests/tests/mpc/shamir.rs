@@ -6,7 +6,7 @@ mod field_share {
         gadgets::poseidon2::Poseidon2,
         protocols::shamir::{self, arithmetic, ShamirPreprocessing},
     };
-    use mpc_net::TestNetwork;
+    use mpc_net::test::TestNetwork;
     use rand::thread_rng;
     use std::{str::FromStr, sync::mpsc};
     use tests::test_utils::spawn_pool;

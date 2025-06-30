@@ -9,10 +9,11 @@ use itertools::Itertools;
 use mpc_core::{
     MpcState,
     protocols::rep3::{
-        PartyID, Rep3PrimeFieldShare, Rep3State,
+        Rep3PrimeFieldShare, Rep3State,
         arithmetic::{self, promote_to_trivial_share},
         binary,
         conversion::{self, bit_inject_many},
+        id::PartyID,
         network, yao,
     },
 };

@@ -3,11 +3,11 @@ use std::array;
 use super::{Poseidon2, Poseidon2Precomputations};
 use crate::protocols::rep3::{
     Rep3PrimeFieldShare, Rep3State, arithmetic,
+    id::PartyID,
     network::{self},
 };
 use ark_ff::PrimeField;
 use mpc_net::Network;
-use mpc_types::protocols::rep3::id::PartyID;
 
 impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
     /// Create Poseidon2Precomputations for the Rep3 MPC protocol.

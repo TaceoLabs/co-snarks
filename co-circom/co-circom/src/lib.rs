@@ -7,11 +7,10 @@ use circom_mpc_vm::mpc_vm::Rep3WitnessExtension;
 use co_circom_types::{CompressedRep3SharedWitness, SharedWitness};
 use color_eyre::eyre::{self, Context};
 use mpc_core::protocols::{
-    rep3::{self},
+    rep3::{self, Rep3ShareVecType},
     shamir::{ShamirPreprocessing, ShamirState},
 };
 use mpc_net::Network;
-use mpc_types::protocols::rep3::Rep3ShareVecType;
 
 pub use ark_bls12_381::Bls12_381;
 pub use ark_bn254::Bn254;
@@ -32,7 +31,6 @@ pub use co_circom_types::{
 pub use co_groth16::{CircomReduction, ConstraintMatrices, ProvingKey};
 pub use co_groth16::{Groth16, Rep3CoGroth16, ShamirCoGroth16};
 pub use co_plonk::{Plonk, Rep3CoPlonk, ShamirCoPlonk};
-pub use mpc_net::config::{Address, NetworkConfig, NetworkParty, ParseAddressError};
 pub use serde_json::Number;
 pub use serde_json::Value;
 

@@ -5,7 +5,7 @@ mod translate_share {
         rep3::{self},
         shamir::{self, ShamirPreprocessing, ShamirState},
     };
-    use mpc_net::TestNetwork;
+    use mpc_net::test::TestNetwork;
     use rand::thread_rng;
     use std::{sync::mpsc, thread};
 

@@ -1,10 +1,9 @@
-use super::{binary, conversion};
-use crate::protocols::rep3::{Rep3State, network};
-use mpc_net::Network;
-use mpc_types::protocols::rep3_ring::{
-    Rep3RingShare,
+use super::{
+    Rep3RingShare, binary, conversion,
     ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
 };
+use crate::protocols::rep3::{Rep3State, network};
+use mpc_net::Network;
 use num_traits::{One, Zero};
 use rand::{distributions::Standard, prelude::Distribution};
 
