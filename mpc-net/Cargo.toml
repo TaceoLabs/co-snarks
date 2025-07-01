@@ -14,7 +14,7 @@ rust-version.workspace = true
 # 
 [features]
 default = ["tcp"]
-test = []
+thread = []
 tcp = ["dep:crossbeam-channel"]
 tls = ["dep:rustls", "dep:crossbeam-channel"]
 quic = ["dep:futures", "dep:quinn", "dep:tokio", "dep:tokio-util"]

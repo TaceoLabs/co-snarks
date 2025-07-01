@@ -7,7 +7,7 @@ use mpc_core::{
     MpcState as _,
     protocols::rep3::{
         Rep3PrimeFieldShare, Rep3State, arithmetic,
-        conversion::{self},
+        conversion::{self, A2BType},
         id::PartyID,
         network,
     },
@@ -36,9 +36,10 @@ impl<'a, F: PrimeField, N: Network> BatchedCircomRep3VmWitnessExtension<'a, F, N
     pub fn new(
         net0: &'a N,
         net1: &'a N,
-        mut state: Rep3State,
+        a2b_type: A2BType,
         batch_size: usize,
     ) -> eyre::Result<Self> {
+        let mut state = Rep3State::new(net0, a2b_type)?;
         let state1 = state.fork(0)?;
         Ok(Self {
             _id: state.id(),
@@ -318,8 +319,8 @@ impl<F: PrimeField, N: Network> VmCircomWitnessExtension<F>
     fn compare_vm_config(&mut self, config: &crate::mpc_vm::VMConfig) -> eyre::Result<()> {
         let ser = bincode::serialize(&config)?;
         network::send_next(self.net0, ser)?;
-        let rcv: Vec<u8> = network::recv_prev(self.net0)?;
-        let deser = bincode::deserialize(&rcv)?;
+        let recv: Vec<u8> = network::recv_prev(self.net0)?;
+        let deser = bincode::deserialize(&recv)?;
         if config != &deser {
             eyre::bail!("VM Config does not match: {:?} != {:?}", config, deser);
         }

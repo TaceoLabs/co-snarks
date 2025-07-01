@@ -16,7 +16,6 @@ use co_circom_types::{SharedInput, SharedWitness};
 use core::panic;
 use eyre::{Result, bail, eyre};
 use itertools::{Itertools, izip};
-use mpc_core::protocols::rep3::Rep3State;
 use mpc_core::protocols::rep3::conversion::A2BType;
 use mpc_net::Network;
 use serde::{Deserialize, Serialize};
@@ -1124,7 +1123,7 @@ impl<'a, F: PrimeField, N: Network> Rep3WitnessExtension<'a, F, N> {
         parser: &CoCircomCompilerParsed<F>,
         config: VMConfig,
     ) -> eyre::Result<Self> {
-        let driver = CircomRep3VmWitnessExtension::new(net0, net1)?;
+        let driver = CircomRep3VmWitnessExtension::new(net0, net1, config.a2b_type)?;
         let mut signals = vec![Rep3VmType::default(); parser.amount_signals];
         signals[0] = Rep3VmType::Public(F::one());
         let constant_table = parser
@@ -1163,8 +1162,8 @@ impl<'a, F: PrimeField, N: Network> BatchedRep3WitnessExtension<'a, F, N> {
         config: VMConfig,
         batch_size: usize,
     ) -> eyre::Result<Self> {
-        let state = Rep3State::new(net0)?;
-        let driver = BatchedCircomRep3VmWitnessExtension::new(net0, net1, state, batch_size)?;
+        let driver =
+            BatchedCircomRep3VmWitnessExtension::new(net0, net1, config.a2b_type, batch_size)?;
         let mut signals = vec![
             BatchedRep3VmType::from(Vec::<F>::with_capacity(batch_size));
             parser.amount_signals

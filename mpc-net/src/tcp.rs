@@ -117,19 +117,25 @@ impl TcpNetwork {
                         stream.set_nodelay(true)?;
                         stream.write_u64::<BigEndian>(i as u64)?;
                         stream.write_u64::<BigEndian>(id as u64)?;
-                        nets[i]
-                            .send
-                            .insert(other_id, Mutex::new(stream.try_clone().unwrap()));
+                        nets[i].send.insert(
+                            other_id,
+                            Mutex::new(stream.try_clone().expect("can clone stream")),
+                        );
                         let (tx, rx) = crossbeam_channel::bounded(32);
                         std::thread::spawn(move || {
                             loop {
-                                let len = stream.read_u32::<BigEndian>()? as usize;
-                                let mut data = vec![0; len];
-                                stream.read_exact(&mut data)?;
-                                tx.send(data)?;
+                                match read_next_frame(&mut stream) {
+                                    Ok(data) => {
+                                        if tx.send(data).is_err() {
+                                            tracing::warn!("recv receiver dropped");
+                                        }
+                                    }
+                                    Err(err) => {
+                                        tracing::warn!("failed to recv data: {err:?}");
+                                        break;
+                                    }
+                                }
                             }
-                            #[allow(unreachable_code)]
-                            eyre::Ok(())
                         });
                         nets[i].recv.insert(other_id, rx);
                     }
@@ -139,19 +145,25 @@ impl TcpNetwork {
                         stream.set_nodelay(true)?;
                         let i = stream.read_u64::<BigEndian>()? as usize;
                         let other_id = stream.read_u64::<BigEndian>()? as usize;
-                        nets[i]
-                            .send
-                            .insert(other_id, Mutex::new(stream.try_clone().unwrap()));
+                        nets[i].send.insert(
+                            other_id,
+                            Mutex::new(stream.try_clone().expect("can clone stream")),
+                        );
                         let (tx, rx) = crossbeam_channel::bounded(32);
                         std::thread::spawn(move || {
                             loop {
-                                let len = stream.read_u32::<BigEndian>()? as usize;
-                                let mut data = vec![0; len];
-                                stream.read_exact(&mut data)?;
-                                tx.send(data)?;
+                                match read_next_frame(&mut stream) {
+                                    Ok(data) => {
+                                        if tx.send(data).is_err() {
+                                            tracing::warn!("recv receiver dropped");
+                                        }
+                                    }
+                                    Err(err) => {
+                                        tracing::warn!("failed to recv data: {err:?}");
+                                        break;
+                                    }
+                                }
                             }
-                            #[allow(unreachable_code)]
-                            eyre::Ok(())
                         });
                         nets[i].recv.insert(other_id, rx);
                     }
@@ -170,18 +182,21 @@ impl Network for TcpNetwork {
     }
 
     fn send(&self, to: usize, data: &[u8]) -> eyre::Result<()> {
-        let mut stream = self
-            .send
-            .get(to)
-            .context("while get stream in send")?
-            .lock();
-        stream.write_u32::<BigEndian>(data.len() as u32)?;
+        let mut stream = self.send.get(to).context("party id out-of-bounds")?.lock();
+        stream.write_u64::<BigEndian>(data.len() as u64)?;
         stream.write_all(data)?;
         Ok(())
     }
 
     fn recv(&self, from: usize) -> eyre::Result<Vec<u8>> {
-        let queue = self.recv.get(from).context("while get stream in recv")?;
+        let queue = self.recv.get(from).context("party id out-of-bounds")?;
         Ok(queue.recv_timeout(self.timeout)?)
     }
+}
+
+fn read_next_frame(stream: &mut TcpStream) -> std::io::Result<Vec<u8>> {
+    let len = stream.read_u64::<BigEndian>()? as usize;
+    let mut data = vec![0; len];
+    stream.read_exact(&mut data)?;
+    Ok(data)
 }

@@ -15,6 +15,7 @@ use mpc::plain::PlainPlonkDriver;
 use mpc::rep3::Rep3PlonkDriver;
 use mpc::shamir::ShamirPlonkDriver;
 use mpc_core::protocols::rep3::Rep3State;
+use mpc_core::protocols::rep3::conversion::A2BType;
 use mpc_core::protocols::shamir::ShamirPreprocessing;
 use mpc_core::protocols::shamir::ShamirState;
 use mpc_net::Network;
@@ -263,7 +264,7 @@ impl<P: Pairing> Rep3CoPlonk<P> {
         P::BaseField: CircomArkworksPrimeFieldBridge,
         P::ScalarField: CircomArkworksPrimeFieldBridge,
     {
-        let mut state = Rep3State::new(&nets[0])?;
+        let mut state = Rep3State::new(&nets[0], A2BType::default())?;
         // execute prover in MPC
         Self::prove_inner(nets, &mut state, zkey, witness).context("while prove inner")
     }

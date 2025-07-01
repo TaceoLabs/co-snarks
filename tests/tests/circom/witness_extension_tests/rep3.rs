@@ -3,7 +3,7 @@ use circom_mpc_compiler::CoCircomCompiler;
 use circom_types::Witness;
 use itertools::izip;
 use mpc_core::protocols::rep3::{self};
-use mpc_net::test::TestNetwork;
+use mpc_net::thread::TestNetwork;
 use rand::thread_rng;
 use std::fs;
 use std::fs::File;

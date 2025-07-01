@@ -133,7 +133,6 @@ pub fn degree_reduce<N: Network, F: PrimeField>(
     }
 }
 
-// TODO use rayon
 /// Degree reduce many
 pub fn degree_reduce_many<N: Network, F: PrimeField>(
     net: &N,
@@ -223,7 +222,6 @@ pub fn degree_reduce_many<N: Network, F: PrimeField>(
     Ok(ShamirPrimeFieldShare::convert_vec_rev(my_shares))
 }
 
-// TODO use rayon
 /// Degree reduce point
 pub fn degree_reduce_point<N: Network, C, F: PrimeField>(
     net: &N,

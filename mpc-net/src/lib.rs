@@ -7,8 +7,8 @@ pub mod config;
 pub mod quic;
 #[cfg(feature = "tcp")]
 pub mod tcp;
-#[cfg(feature = "test")]
-pub mod test;
+#[cfg(feature = "thread")]
+pub mod thread;
 #[cfg(feature = "tls")]
 pub mod tls;
 
