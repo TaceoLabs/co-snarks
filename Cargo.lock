@@ -2851,7 +2851,6 @@ dependencies = [
 name = "mpc-net"
 version = "0.4.0"
 dependencies = [
- "bincode",
  "byteorder",
  "bytes",
  "clap",
