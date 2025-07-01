@@ -842,12 +842,8 @@ pub fn aes_from_bristol<F: PrimeField, N: Rep3Network>(
     combined_inputs.extend_from_slice(key);
     combined_inputs.extend_from_slice(iv);
 
-    let total_output_elements = plaintext.len()
-        + if plaintext.len() % AES_BLOCK_SIZE == 0 {
-            0
-        } else {
-            AES_BLOCK_SIZE - (plaintext.len() % AES_BLOCK_SIZE)
-        };
+    let total_output_elements =
+        plaintext.len() + AES_BLOCK_SIZE - (plaintext.len() % AES_BLOCK_SIZE);
     decompose_circuit_compose_blueprint!(
         &combined_inputs,
         io_context,
