@@ -9,7 +9,10 @@ use co_brillig::CoBrilligVM;
 use intmap::IntMap;
 use mpc_core::{
     lut::LookupTableProvider,
-    protocols::shamir::{ShamirPreprocessing, ShamirState},
+    protocols::{
+        rep3::conversion::A2BType,
+        shamir::{ShamirPreprocessing, ShamirState},
+    },
 };
 use mpc_net::Network;
 use noirc_abi::{Abi, MAIN_RETURN_NAME, input_parser::Format};
@@ -224,7 +227,7 @@ impl<'a, N: Network> Rep3CoSolver<'a, ark_bn254::Fr, N> {
         prover_path: impl AsRef<Path>,
     ) -> eyre::Result<Self> {
         Self::new_bn254(
-            Rep3AcvmSolver::new(net0, net1)?,
+            Rep3AcvmSolver::new(net0, net1, A2BType::default())?,
             compiled_program,
             prover_path,
         )
@@ -238,7 +241,11 @@ impl<'a, N: Network> Rep3CoSolver<'a, ark_bn254::Fr, N> {
             <Rep3AcvmSolver<ark_bn254::Fr, N> as NoirWitnessExtensionProtocol::<ark_bn254::Fr>>::AcvmType,
         >,
     ) -> eyre::Result<Self> {
-        Self::new_bn254_with_witness(Rep3AcvmSolver::new(net0, net1)?, compiled_program, witness)
+        Self::new_bn254_with_witness(
+            Rep3AcvmSolver::new(net0, net1, A2BType::default())?,
+            compiled_program,
+            witness,
+        )
     }
 }
 

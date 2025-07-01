@@ -8,6 +8,7 @@ use itertools::{Itertools, izip};
 use libaes::Cipher;
 use mpc_core::MpcState as _;
 use mpc_core::gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations};
+use mpc_core::protocols::rep3::conversion::A2BType;
 use mpc_core::protocols::rep3::id::PartyID;
 use mpc_core::protocols::rep3::yao::circuits::SHA256Table;
 use mpc_core::protocols::rep3::{
@@ -42,8 +43,8 @@ pub struct Rep3AcvmSolver<'a, F: PrimeField, N: Network> {
 }
 
 impl<'a, F: PrimeField, N: Network> Rep3AcvmSolver<'a, F, N> {
-    pub fn new(net0: &'a N, net1: &'a N) -> eyre::Result<Self> {
-        let mut state0 = Rep3State::new(net0)?;
+    pub fn new(net0: &'a N, net1: &'a N, a2b_type: A2BType) -> eyre::Result<Self> {
+        let mut state0 = Rep3State::new(net0, a2b_type)?;
         let state1 = state0.fork(0)?;
         Ok(Self {
             id: state0.id,

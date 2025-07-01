@@ -327,16 +327,28 @@ impl QuicConnectionHandler {
 
             self.rt.spawn(async move {
                 while let Some(frame) = send_rx.recv().await {
-                    write.send(Bytes::from(frame)).await?;
+                    if let Err(err) = write.send(Bytes::from(frame)).await {
+                        tracing::warn!("failed to send data: {err:?}");
+                        break;
+                    }
                 }
-                eyre::Ok(())
             });
 
             self.rt.spawn(async move {
-                while let Some(Ok(frame)) = read.next().await {
-                    recv_tx.send(frame.to_vec()).await?;
+                while let Some(frame) = read.next().await {
+                    match frame {
+                        Ok(frame) => {
+                            if recv_tx.send(frame.to_vec()).await.is_err() {
+                                tracing::warn!("recv receiver dropped");
+                                break;
+                            }
+                        }
+                        Err(err) => {
+                            tracing::warn!("failed to recv data: {err:?}");
+                            break;
+                        }
+                    }
                 }
-                eyre::Ok(())
             });
 
             assert!(send.insert(id, send_tx).is_none());
@@ -354,7 +366,9 @@ impl QuicConnectionHandler {
             } else {
                 let mut recv = conn.accept_uni().await?;
                 let mut buffer = vec![0u8; b"done".len()];
-                recv.read_exact(&mut buffer).await?;
+                if let Err(err) = recv.read_exact(&mut buffer).await {
+                    tracing::warn!("failed to recv from conn {id}: {err:?}");
+                }
                 tracing::debug!("party {} closing conn = {id}", self.id);
                 conn.close(
                     0u32.into(),
@@ -441,7 +455,7 @@ impl Network for QuicNetwork {
     }
 
     fn send(&self, to: usize, data: &[u8]) -> eyre::Result<()> {
-        let stream = self.send.get(to).context("while get stream in send")?;
+        let stream = self.send.get(to).context("party id out-of-bounds")?;
         tracing::info!("sending to {to}");
         stream.blocking_send(data.to_vec())?;
         Ok(())
@@ -451,7 +465,7 @@ impl Network for QuicNetwork {
         let mut queue = self
             .recv
             .get(from)
-            .context("while get stream in recv")?
+            .context("party id out-of-bounds")?
             .lock();
         queue.blocking_recv().context("while recv")
     }

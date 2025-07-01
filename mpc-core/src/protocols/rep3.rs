@@ -51,8 +51,8 @@ pub struct Rep3State {
 }
 
 impl Rep3State {
-    /// Create a new [Rep3State]
-    pub fn new<N: Network>(net: &N) -> eyre::Result<Self> {
+    /// Create a new [Rep3State] with the given [A2BType]
+    pub fn new<N: Network>(net: &N, a2b_type: A2BType) -> eyre::Result<Self> {
         let id = PartyID::try_from(net.id())?;
         let mut rng = rand_chacha::ChaCha12Rng::from_entropy();
         let mut rand = Self::setup_prf(net, &mut rng)?;
@@ -63,7 +63,7 @@ impl Rep3State {
             id,
             rngs,
             rng,
-            a2b_type: A2BType::default(),
+            a2b_type,
         })
     }
 

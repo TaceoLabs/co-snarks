@@ -9,6 +9,7 @@ use co_circom_types::{Rep3SharedWitness, ShamirSharedWitness, SharedWitness};
 use eyre::Result;
 use mpc_core::MpcState;
 use mpc_core::protocols::rep3::Rep3State;
+use mpc_core::protocols::rep3::conversion::A2BType;
 use mpc_core::protocols::shamir::{ShamirPreprocessing, ShamirState};
 use mpc_net::Network;
 use num_traits::ToPrimitive;
@@ -333,7 +334,7 @@ impl<P: Pairing> Rep3CoGroth16<P> {
         matrices: &ConstraintMatrices<P::ScalarField>,
         witness: Rep3SharedWitness<P::ScalarField>,
     ) -> eyre::Result<Proof<P>> {
-        let mut state0 = Rep3State::new(net0)?;
+        let mut state0 = Rep3State::new(net0, A2BType::default())?;
         let mut state1 = state0.fork(0)?;
         // execute prover in MPC
         Self::prove_inner::<N, R>(
@@ -363,8 +364,7 @@ impl<P: Pairing> ShamirCoGroth16<P> {
         let num_pairs = 3;
         let preprocessing = ShamirPreprocessing::new(num_parties, threshold, num_pairs, net0)?;
         let mut state0 = ShamirState::from(preprocessing);
-        // let mut state1 = state0.fork(1)?;
-        let mut state1 = state0.fork(0)?;
+        let mut state1 = state0.fork(1)?;
         // execute prover in MPC
         Self::prove_inner::<N, R>(
             net0,

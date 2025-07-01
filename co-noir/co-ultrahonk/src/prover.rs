@@ -12,7 +12,7 @@ use co_builder::{
     prelude::{HonkCurve, PAIRING_POINT_ACCUMULATOR_SIZE, ProverCrs},
 };
 use mpc_core::protocols::{
-    rep3::Rep3State,
+    rep3::{Rep3State, conversion::A2BType},
     shamir::{ShamirPreprocessing, ShamirState},
 };
 use mpc_net::Network;
@@ -90,7 +90,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         crs: &ProverCrs<P>,
         has_zk: ZeroKnowledge,
     ) -> eyre::Result<(HonkProof<TranscriptFieldType>, Vec<TranscriptFieldType>)> {
-        let mut state = Rep3State::new(net)?;
+        let mut state = Rep3State::new(net, A2BType::default())?;
         let num_public_inputs = proving_key.num_public_inputs - PAIRING_POINT_ACCUMULATOR_SIZE;
         let proof = Self::prove_inner(net, &mut state, proving_key, crs, has_zk)?;
         let (proof, public_inputs) =

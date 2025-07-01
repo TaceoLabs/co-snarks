@@ -12,7 +12,7 @@ use mpc_core::{
         Rep3PrimeFieldShare, Rep3State,
         arithmetic::{self, promote_to_trivial_share},
         binary,
-        conversion::{self, bit_inject_many},
+        conversion::{self, A2BType, bit_inject_many},
         id::PartyID,
         network, yao,
     },
@@ -61,8 +61,8 @@ pub struct CircomRep3VmWitnessExtension<'a, F: PrimeField, N: Network> {
 }
 
 impl<'a, F: PrimeField, N: Network> CircomRep3VmWitnessExtension<'a, F, N> {
-    pub fn new(net0: &'a N, net1: &'a N) -> eyre::Result<Self> {
-        let mut state0 = Rep3State::new(net0)?;
+    pub fn new(net0: &'a N, net1: &'a N, a2b_type: A2BType) -> eyre::Result<Self> {
+        let mut state0 = Rep3State::new(net0, a2b_type)?;
         let state1 = state0.fork(0)?;
         Ok(Self {
             id: state0.id,
@@ -576,8 +576,8 @@ impl<F: PrimeField, N: Network> VmCircomWitnessExtension<F>
     fn compare_vm_config(&mut self, config: &VMConfig) -> eyre::Result<()> {
         let ser = bincode::serialize(&config)?;
         network::send_next(self.net0, ser)?;
-        let rcv: Vec<u8> = network::recv_prev(self.net0)?;
-        let deser = bincode::deserialize(&rcv)?;
+        let recv: Vec<u8> = network::recv_prev(self.net0)?;
+        let deser = bincode::deserialize(&recv)?;
         if config != &deser {
             eyre::bail!("VM Config does not match: {:?} != {:?}", config, deser);
         }

@@ -58,7 +58,7 @@ impl Network for TestNetwork {
     fn send(&self, to: usize, data: &[u8]) -> eyre::Result<()> {
         self.send
             .get(to)
-            .context("while get stream in send")?
+            .context("party id out-of-bounds")?
             .send_timeout(data.to_owned(), DEFAULT_CONNECTION_TIMEOUT)?;
         Ok(())
     }
@@ -67,7 +67,7 @@ impl Network for TestNetwork {
         Ok(self
             .recv
             .get(from)
-            .context("while get stream in recv")?
+            .context("party id out-of-bounds")?
             .recv_timeout(DEFAULT_CONNECTION_TIMEOUT)?)
     }
 }

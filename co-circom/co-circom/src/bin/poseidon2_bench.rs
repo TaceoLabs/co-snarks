@@ -8,7 +8,7 @@ use figment::{
 use mpc_core::{
     gadgets::poseidon2::Poseidon2,
     protocols::{
-        rep3::{self, Rep3PrimeFieldShare, Rep3State, id::PartyID},
+        rep3::{self, Rep3PrimeFieldShare, Rep3State, conversion::A2BType, id::PartyID},
         shamir::{self, ShamirPreprocessing, ShamirPrimeFieldShare, ShamirState},
     },
 };
@@ -405,7 +405,7 @@ where
 
     // connect to network
     let net = TcpNetwork::new(config.network.clone()).context("while connecting to network")?;
-    let mut state = Rep3State::new(&net)?;
+    let mut state = Rep3State::new(&net, A2BType::default())?;
 
     for _ in 0..config.runs {
         let mut share = share_random_input_rep3::<F, T, _, _>(&net, T, &mut rng)?;
@@ -445,7 +445,7 @@ where
 
     // connect to network
     let net = TcpNetwork::new(config.network.clone()).context("while connecting to network")?;
-    let mut state = Rep3State::new(&net)?;
+    let mut state = Rep3State::new(&net, A2BType::default())?;
 
     for _ in 0..config.runs {
         let mut share = share_random_input_rep3::<F, T, _, _>(&net, T, &mut rng)?;
@@ -486,7 +486,7 @@ where
 
     // connect to network
     let net = TcpNetwork::new(config.network.clone()).context("while connecting to network")?;
-    let mut state = Rep3State::new(&net)?;
+    let mut state = Rep3State::new(&net, A2BType::default())?;
 
     for _ in 0..config.runs {
         let mut share = share_random_input_rep3::<F, T, _, _>(&net, T, &mut rng)?;
@@ -532,7 +532,7 @@ where
 
     // connect to network
     let net = TcpNetwork::new(config.network.clone()).context("while connecting to network")?;
-    let mut state = Rep3State::new(&net)?;
+    let mut state = Rep3State::new(&net, A2BType::default())?;
 
     for _ in 0..config.runs {
         let mut share =
@@ -585,7 +585,7 @@ where
 
     // connect to network
     let net = TcpNetwork::new(config.network.clone()).context("while connecting to network")?;
-    let mut state = Rep3State::new(&net)?;
+    let mut state = Rep3State::new(&net, A2BType::default())?;
 
     for _ in 0..config.runs {
         let share = share_random_input_rep3::<F, T, _, _>(&net, size, &mut rng)?;
