@@ -228,61 +228,67 @@ impl R1CSToQAP for LibSnarkReduction {
         let domain_size = domain.size();
         let party_id = driver.get_party_id();
 
-        let (mut a, mut b) = rayon::join(
+        let coset_domain = domain.get_coset(P::ScalarField::GENERATOR).unwrap();
+
+        let (mut ab, c) = rayon::join(
             || {
-                let mut result = evaluate_constraint::<P, T>(
+                let (a, b) = rayon::join(
+                    || {
+                        let mut a = evaluate_constraint::<P, T>(
+                            party_id,
+                            domain_size,
+                            &matrices.a,
+                            public_inputs,
+                            private_witness,
+                        );
+                        let promoted_public = T::promote_to_trivial_shares(party_id, public_inputs);
+                        a[num_constraints..num_constraints + num_inputs]
+                            .clone_from_slice(&promoted_public[..num_inputs]);
+                        domain.ifft_in_place(&mut a);
+                        coset_domain.fft_in_place(&mut a);
+                        a
+                    },
+                    || {
+                        let mut b = evaluate_constraint::<P, T>(
+                            party_id,
+                            domain_size,
+                            &matrices.b,
+                            public_inputs,
+                            private_witness,
+                        );
+                        domain.ifft_in_place(&mut b);
+                        coset_domain.fft_in_place(&mut b);
+                        b
+                    },
+                );
+                driver.local_mul_vec(a, b)
+            },
+            || {
+                let mut c = evaluate_constraint_half_share::<P, T>(
                     party_id,
                     domain_size,
-                    &matrices.a,
+                    &matrices.c,
                     public_inputs,
                     private_witness,
                 );
-                let promoted_public = T::promote_to_trivial_shares(party_id, public_inputs);
-                result[num_constraints..num_constraints + num_inputs]
-                    .clone_from_slice(&promoted_public[..num_inputs]);
-                result
-            },
-            || {
-                evaluate_constraint::<P, T>(
-                    party_id,
-                    domain_size,
-                    &matrices.b,
-                    public_inputs,
-                    private_witness,
-                )
+                domain.ifft_in_place(&mut c);
+                coset_domain.fft_in_place(&mut c);
+                c
             },
         );
-
-        domain.ifft_in_place(&mut a);
-        domain.ifft_in_place(&mut b);
-
-        let coset_domain = domain.get_coset(P::ScalarField::GENERATOR).unwrap();
-
-        coset_domain.fft_in_place(&mut a);
-        coset_domain.fft_in_place(&mut b);
-
-        let mut ab = driver.local_mul_vec(a, b);
-
-        let mut c = evaluate_constraint_half_share::<P, T>(
-            party_id,
-            domain_size,
-            &matrices.c,
-            public_inputs,
-            private_witness,
-        );
-
-        domain.ifft_in_place(&mut c);
-        coset_domain.fft_in_place(&mut c);
 
         let vanishing_polynomial_over_coset = domain
             .evaluate_vanishing_polynomial(P::ScalarField::GENERATOR)
             .inverse()
             .unwrap();
 
-        ab.iter_mut().zip(c.iter()).for_each(|(ab_i, c_i)| {
-            *ab_i -= *c_i;
-            *ab_i *= vanishing_polynomial_over_coset;
-        });
+        ab.par_iter_mut()
+            .zip(c.par_iter())
+            .with_min_len(512)
+            .for_each(|(ab_i, c_i)| {
+                *ab_i -= *c_i;
+                *ab_i *= vanishing_polynomial_over_coset;
+            });
 
         coset_domain.ifft_in_place(&mut ab);
 
