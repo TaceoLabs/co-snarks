@@ -3786,14 +3786,13 @@ impl GarbledCircuits {
             iv.extend(iv_bits);
         }
         // PKCS7 padding:
-        if pt_length % AES_BLOCK_SIZE != 0 {
-            let add = AES_BLOCK_SIZE - (pt_length % AES_BLOCK_SIZE);
-            let mut add_bundle = Self::constant_bundle_from_usize(g, add, bitsize)?;
-            add_bundle.reverse();
-            for _ in 0..add {
-                plaintext.extend(add_bundle.clone());
-            }
+        let add = AES_BLOCK_SIZE - (pt_length % AES_BLOCK_SIZE);
+        let mut add_bundle = Self::constant_bundle_from_usize(g, add, bitsize)?;
+        add_bundle.reverse();
+        for _ in 0..add {
+            plaintext.extend(add_bundle.clone());
         }
+
         for block in plaintext.chunks_mut(bitsize * AES_BLOCK_SIZE) {
             block.reverse();
         }
