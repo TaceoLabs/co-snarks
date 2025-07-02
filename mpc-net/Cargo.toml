@@ -15,8 +15,8 @@ rust-version.workspace = true
 [features]
 default = ["tcp"]
 thread = []
-tcp = ["dep:crossbeam-channel"]
-tls = ["dep:rustls", "dep:crossbeam-channel"]
+tcp = ["dep:crossbeam-channel", "dep:socket2"]
+tls = ["dep:rustls", "dep:crossbeam-channel", "dep:socket2"]
 quic = ["dep:futures", "dep:quinn", "dep:tokio", "dep:tokio-util"]
 
 [dependencies]
@@ -43,6 +43,7 @@ toml.workspace = true
 tracing = { workspace = true }
 crossbeam-channel = { version = "0.5.15", optional = true }
 humantime-serde = "1.1.1"
+socket2 = { version = "0.5.10", optional = true }
 
 [dev-dependencies]
 clap = { workspace = true }

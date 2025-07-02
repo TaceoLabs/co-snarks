@@ -4,8 +4,8 @@ use std::{
     array,
     cmp::Ordering,
     io::{Read, Write},
-    net::{SocketAddr, TcpListener, TcpStream},
-    time::Duration,
+    net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs},
+    time::{Duration, Instant},
 };
 
 use crate::{DEFAULT_CONNECTION_TIMEOUT, Network, config::Address};
@@ -15,6 +15,7 @@ use eyre::ContextCompat;
 use intmap::IntMap;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
+use socket2::{Domain, Socket, Type};
 
 /// A party in the network.
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
@@ -94,7 +95,19 @@ impl TcpNetwork {
             .collect::<Vec<_>>();
         let timeout = config.timeout.unwrap_or(DEFAULT_CONNECTION_TIMEOUT);
 
-        let listener = TcpListener::bind(bind_addr)?;
+        let domain = match bind_addr {
+            SocketAddr::V4(_) => Domain::IPV4,
+            SocketAddr::V6(_) => Domain::IPV6,
+        };
+        let socket = Socket::new(domain, Type::STREAM, None)?;
+        socket.set_reuse_address(true)?;
+        if bind_addr.is_ipv6() {
+            socket.set_only_v6(false)?;
+        }
+        socket.set_read_timeout(Some(timeout))?;
+        socket.bind(&bind_addr.into())?;
+        socket.listen(128)?;
+        let listener = TcpListener::from(socket);
 
         let mut nets = array::from_fn(|_| Self {
             id,
@@ -105,13 +118,21 @@ impl TcpNetwork {
 
         for i in 0..N {
             for (other_id, addr) in addrs.iter().enumerate() {
+                let addr = addr
+                    .to_socket_addrs()?
+                    .next()
+                    .context("while converting to SocketAddr")?;
                 match id.cmp(&other_id) {
                     Ordering::Less => {
+                        let start = Instant::now();
                         let mut stream = loop {
-                            if let Ok(stream) = TcpStream::connect(addr) {
+                            if let Ok(stream) = TcpStream::connect_timeout(&addr, timeout) {
                                 break stream;
                             }
                             std::thread::sleep(Duration::from_millis(50));
+                            if start.elapsed() > timeout {
+                                eyre::bail!("timeout while connecting to {addr}");
+                            }
                         };
                         stream.set_write_timeout(Some(timeout))?;
                         stream.set_nodelay(true)?;
