@@ -10,6 +10,7 @@ use ark_ec::pairing::Pairing;
 use co_builder::{
     HonkProofResult,
     prelude::{HonkCurve, PAIRING_POINT_ACCUMULATOR_SIZE, ProvingKey, ZeroKnowledge},
+    prover_flavour::Flavour,
 };
 use std::marker::PhantomData;
 
@@ -24,10 +25,10 @@ pub struct UltraHonk<
 }
 
 impl<
-        P: HonkCurve<TranscriptFieldType>,
-        H: TranscriptHasher<TranscriptFieldType>,
-        L: PlainProverFlavour,
-    > UltraHonk<P, H, L>
+    P: HonkCurve<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType>,
+    L: PlainProverFlavour,
+> UltraHonk<P, H, L>
 {
     pub(crate) fn generate_gate_challenges(
         transcript: &mut Transcript<TranscriptFieldType, H>,
@@ -63,7 +64,11 @@ impl<
         memory.relation_parameters.gate_challenges =
             Self::generate_gate_challenges(&mut transcript);
 
-        let num_public_inputs = proving_key.num_public_inputs - PAIRING_POINT_ACCUMULATOR_SIZE;
+        let num_public_inputs = if L::FLAVOUR == Flavour::Ultra {
+            proving_key.num_public_inputs - PAIRING_POINT_ACCUMULATOR_SIZE
+        } else {
+            proving_key.num_public_inputs
+        };
         let decider = Decider::new(memory, has_zk);
         let proof = decider.prove(cicruit_size, &crs, transcript)?;
         Ok(proof.separate_proof_and_public_inputs(num_public_inputs as usize))

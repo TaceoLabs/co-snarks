@@ -9,11 +9,10 @@ pub(crate) mod poseidon2_external_relation;
 pub(crate) mod poseidon2_internal_relation;
 pub(crate) mod ultra_arithmetic_relation;
 
-use super::types::{ClaimedEvaluations,  RelationParameters};
+use super::types::{ClaimedEvaluations, RelationParameters};
 use crate::decider::types::ProverUnivariatesSized;
-use crate::{plain_prover_flavour::PlainProverFlavour, };
+use crate::plain_prover_flavour::PlainProverFlavour;
 use ark_ff::PrimeField;
-
 
 pub(crate) trait Relation<F: PrimeField, L: PlainProverFlavour> {
     type Acc: Default;
@@ -42,15 +41,3 @@ pub(crate) trait Relation<F: PrimeField, L: PlainProverFlavour> {
         scaling_factor: &F,
     );
 }
-
-// // TODO FLORIN: THIS IS MEGA FN
-// pub(crate) const NUM_SUBRELATIONS_ONLY_VERIFIER: usize = UltraArithmeticRelation::NUM_RELATIONS
-//     + UltraPermutationRelation::NUM_RELATIONS
-//     + DeltaRangeConstraintRelation::NUM_RELATIONS
-//     + EllipticRelation::NUM_RELATIONS
-//     + AuxiliaryRelation::NUM_RELATIONS
-//     + LogDerivLookupRelation::NUM_RELATIONS
-//     + EccOpQueueRelation::NUM_RELATIONS
-//     + DataBusLookupRelation::NUM_RELATIONS
-//     + Poseidon2ExternalRelation::NUM_RELATIONS
-//     + Poseidon2InternalRelation::NUM_RELATIONS;

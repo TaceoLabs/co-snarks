@@ -293,12 +293,13 @@ impl DataBusLookupRelation {
         input: &ClaimedEvaluations<F, L>,
         params: &RelationParameters<F, L>,
     ) -> F {
+        let id = input.precomputed.databus_id();
         let value = DataBusLookupRelation::values_verifier(bus_idx, input);
         let gamma = params.gamma;
         let beta = params.beta;
 
         // value_i + idx_i * beta + gamma
-        value + (F::from(bus_idx as u64) * beta + gamma)
+        value + *id * beta + gamma
     }
 
     fn compute_read_term_verifier<F: PrimeField, L: PlainProverFlavour>(

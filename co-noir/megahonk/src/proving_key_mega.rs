@@ -3,10 +3,13 @@ use ark_bn254::Bn254;
 use ark_ff::PrimeField;
 use co_builder::TranscriptFieldType;
 use co_builder::flavours::mega_flavour::MegaFlavour;
+use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::prelude::ActiveRegionData;
 use co_builder::prelude::CrsParser;
 use co_builder::prelude::Polynomial;
 use co_builder::prelude::Polynomials;
+use co_builder::prelude::Utils;
+use co_builder::prelude::VerifyingKey;
 use co_builder::prelude::ZeroKnowledge;
 use co_builder::prover_flavour::ProverFlavour;
 use serde::Deserialize;
@@ -34,7 +37,7 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(has_zk: ZeroKnowledge) {
     let crs_size = real_pk.dyadic_circuit_size;
     let crs: co_builder::prelude::Crs<Bn254> =
         CrsParser::get_crs(CRS_PATH_G1, CRS_PATH_G2, crs_size, has_zk).unwrap();
-    let (prover_crs, _verifier_crs) = crs.split();
+    let (prover_crs, verifier_crs) = crs.split();
     let mut pk = ProvingKey::<_, MegaFlavour>::new(
         real_pk.circuit_size,
         real_pk.num_public_inputs,
@@ -80,13 +83,33 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(has_zk: ZeroKnowledge) {
     };
     pk.polynomials = polys_together;
 
-    let (_proof, _public_inputs) = UltraHonk::<_, H, MegaFlavour>::prove(pk, has_zk).unwrap();
+    let mut commitments =
+        <MegaFlavour as ProverFlavour>::PrecomputedEntities::<ark_bn254::G1Affine>::default();
 
-    // assert_eq!(public_inputs.len(), proof.inner().len());
-    // let is_valid =
-    //     UltraHonk::<_, H, UltraFlavour<_>>::verify(proof, &public_inputs, &verifying_key, has_zk)
-    //         .unwrap();
-    // assert!(is_valid);
+    for (des, src) in commitments
+        .iter_mut()
+        .zip(pk.polynomials.precomputed.iter())
+    {
+        let comm = Utils::commit(src.as_ref(), &pk.crs).unwrap();
+        *des = ark_bn254::G1Affine::from(comm);
+    }
+
+    // Create and return the VerifyingKey instance
+    let verifying_key = VerifyingKey::<Bn254, MegaFlavour> {
+        crs: verifier_crs,
+        circuit_size: pk.circuit_size,
+        num_public_inputs: pk.num_public_inputs,
+        pub_inputs_offset: pk.pub_inputs_offset,
+        commitments,
+        pairing_inputs_public_input_key: pk.pairing_inputs_public_input_key,
+    };
+
+    let (proof, public_inputs) = UltraHonk::<_, H, MegaFlavour>::prove(pk, has_zk).unwrap();
+
+    let is_valid =
+        UltraHonk::<_, H, MegaFlavour>::verify(proof, &public_inputs, &verifying_key, has_zk)
+            .unwrap();
+    assert!(is_valid);
 }
 
 #[test]
