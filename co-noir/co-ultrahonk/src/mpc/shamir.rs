@@ -259,4 +259,11 @@ impl<P: Pairing, N: ShamirNetwork> NoirUltraHonkProver<P>
     ) -> std::io::Result<(<P as Pairing>::G1, <P as Pairing>::ScalarField)> {
         pointshare::open_point_and_field(&a, &b, &mut self.protocol0)
     }
+
+    fn is_zero_many(
+        &mut self,
+        _a: &[Self::ArithmeticShare],
+    ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
+        panic!("ShamirUltraHonkDriver does not support is_zero_many");
+    }
 }

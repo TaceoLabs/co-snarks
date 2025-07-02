@@ -26,8 +26,7 @@ use ark_ff::{One, Zero};
 use co_builder::TranscriptFieldType;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
-use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
-use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
+
 use co_builder::{
     HonkProofError, HonkProofResult,
     prelude::{ActiveRegionData, HonkCurve, NUM_MASKED_ROWS, Polynomial, ProverCrs},
@@ -265,6 +264,8 @@ impl<
     ) -> HonkProofResult<()> {
         tracing::trace!("compute logderivative inverse");
 
+        let id = self.driver.get_party_id();
+
         debug_assert_eq!(
             proving_key.polynomials.precomputed.q_lookup().len(),
             proving_key.circuit_size as usize
@@ -315,80 +316,235 @@ impl<
             );
             // Compute inverse polynomial I in place by inverting the product at each row
             // Note: zeroes are ignored as they are not used anyway
+            // TACEO TODO: we leak 0s here, need to fix this (artifact of making lookup polys shared)
+            // TODO: negligible prob that read and write terms are zero
             CoUtils::batch_invert_leaking_zeros::<T, P>(
                 self.driver,
                 self.memory.lookup_inverses.as_mut(),
             )?;
         } else if L::FLAVOUR == Flavour::Mega {
-            let (read_1, write_1, indices_1) =
-                self.compute_logderivative_inverses_databus_all(proving_key, BusData::BusIdx0);
-            let (read_2, write_2, indices_2) =
-                self.compute_logderivative_inverses_databus_all(proving_key, BusData::BusIdx1);
-            let (read_3, write_3, indices_3) =
-                self.compute_logderivative_inverses_databus_all(proving_key, BusData::BusIdx2);
-            let first_mul_size = q_lookup_mul_read_tag.len();
-            let second_mul_size = read_1.len();
-            let third_mul_size = read_2.len();
-            let fourth_mul_size = read_3.len();
-            let mut lhs = Vec::with_capacity(
-                first_mul_size + second_mul_size + third_mul_size + fourth_mul_size,
+            //TODO FLORIN: Clean the following up once it works
+
+            let mut is_read_0: Vec<T::ArithmeticShare> =
+                vec![
+                    T::promote_to_trivial_share(id, P::ScalarField::one());
+                    proving_key.polynomials.precomputed.q_busread().len()
+                ];
+            let mut is_read_1: Vec<T::ArithmeticShare> =
+                vec![
+                    T::promote_to_trivial_share(id, P::ScalarField::one());
+                    proving_key.polynomials.precomputed.q_busread().len()
+                ];
+            let mut is_read_2: Vec<T::ArithmeticShare> =
+                vec![
+                    T::promote_to_trivial_share(id, P::ScalarField::one());
+                    proving_key.polynomials.precomputed.q_busread().len()
+                ];
+            let mut bus_idx_0_indices =
+                Vec::with_capacity(proving_key.polynomials.witness.calldata_read_counts().len());
+            let mut bus_idx_1_indices = Vec::with_capacity(
+                proving_key
+                    .polynomials
+                    .witness
+                    .secondary_calldata_read_counts()
+                    .len(),
             );
+            let mut bus_idx_2_indices = Vec::with_capacity(
+                proving_key
+                    .polynomials
+                    .witness
+                    .return_data_read_counts()
+                    .len(),
+            );
+            let mut to_cmp_0 =
+                Vec::with_capacity(proving_key.polynomials.precomputed.q_busread().len());
+            let mut to_cmp_1 =
+                Vec::with_capacity(proving_key.polynomials.precomputed.q_busread().len());
+            let mut to_cmp_2 =
+                Vec::with_capacity(proving_key.polynomials.precomputed.q_busread().len());
+
+            for (i, (wire_0, wire_1, wire_2)) in izip!(
+                proving_key.polynomials.precomputed.q_l().iter(),
+                proving_key.polynomials.precomputed.q_r().iter(),
+                proving_key.polynomials.precomputed.q_o().iter(),
+            )
+            .enumerate()
+            {
+                // Determine if the present row contains a databus operation
+                let q_busread = &proving_key.polynomials.precomputed.q_busread()[i];
+                let is_read_0_ = q_busread.is_one() && wire_0.is_one();
+                let is_read_1_ = q_busread.is_one() && wire_1.is_one();
+                let is_read_2_ = q_busread.is_one() && wire_2.is_one();
+
+                if !is_read_0_ {
+                    is_read_0.push(T::promote_to_trivial_share(id, P::ScalarField::zero()));
+                    to_cmp_0.push(proving_key.polynomials.witness.calldata_read_counts()[i]);
+                    bus_idx_0_indices.push(i);
+                }
+                if !is_read_1_ {
+                    is_read_1.push(T::promote_to_trivial_share(id, P::ScalarField::zero()));
+                    to_cmp_1.push(
+                        proving_key
+                            .polynomials
+                            .witness
+                            .secondary_calldata_read_counts()[i],
+                    );
+                    bus_idx_1_indices.push(i);
+                }
+                if !is_read_2_ {
+                    is_read_2.push(T::promote_to_trivial_share(id, P::ScalarField::zero()));
+                    to_cmp_2.push(proving_key.polynomials.witness.return_data_read_counts()[i]);
+                    bus_idx_2_indices.push(i);
+                }
+            }
+
+            let size_0 = to_cmp_0.len();
+            let size_1 = to_cmp_1.len();
+            let size_2 = to_cmp_2.len();
+            let mut batch = Vec::with_capacity(size_0 + size_1 + size_2);
+            batch.extend(to_cmp_0);
+            batch.extend(to_cmp_1);
+            batch.extend(to_cmp_2);
+            let is_zero = T::is_zero_many(&mut self.driver, &batch)?;
+            let mut idx_0_cmpared =
+                vec![
+                    T::ArithmeticShare::default();
+                    proving_key.polynomials.witness.calldata_read_counts().len()
+                ];
+            let mut idx_1_cmpared = vec![
+                T::ArithmeticShare::default();
+                proving_key
+                    .polynomials
+                    .witness
+                    .secondary_calldata_read_counts()
+                    .len()
+            ];
+            let mut idx_2_cmpared = vec![
+                T::ArithmeticShare::default();
+                proving_key
+                    .polynomials
+                    .witness
+                    .return_data_read_counts()
+                    .len()
+            ];
+            for (cmp, idx) in izip!(is_zero[..size_0].iter(), bus_idx_0_indices.iter()) {
+                idx_0_cmpared[*idx] = *cmp;
+            }
+            for (cmp, idx) in izip!(
+                is_zero[size_0..size_0 + size_1].iter(),
+                bus_idx_1_indices.iter()
+            ) {
+                idx_1_cmpared[*idx] = *cmp;
+            }
+            for (cmp, idx) in izip!(is_zero[size_0 + size_1..].iter(), bus_idx_2_indices.iter()) {
+                idx_2_cmpared[*idx] = *cmp;
+            }
+
+            let (read, write_0, write_1, write_2) =
+                self.compute_logderivative_inverses_databus_all(proving_key);
+            let first_mul_size = q_lookup_mul_read_tag.len();
+            let second_mul_size = read.len();
+
+            let mut lhs = Vec::with_capacity(first_mul_size + 3 * second_mul_size);
             let mut rhs = Vec::with_capacity(lhs.len());
 
-            lhs.extend(self.memory.lookup_inverses.clone().iter());
-            lhs.extend(read_1);
-            lhs.extend(read_2);
-            lhs.extend(read_3);
+            // lhs.extend(self.memory.lookup_inverses.clone().iter());
+            lhs.extend(read.clone());
+            lhs.extend(read.clone());
+            lhs.extend(read);
 
-            rhs.extend(q_lookup_mul_read_tag);
+            // rhs.extend(q_lookup_mul_read_tag);
+            rhs.extend(write_0);
             rhs.extend(write_1);
             rhs.extend(write_2);
-            rhs.extend(write_3);
 
-            let mul = self.driver.mul_many(&lhs, &rhs)?;
+            let mut mul = self.driver.mul_many(&lhs, &rhs)?;
+            mul.extend(self.memory.lookup_inverses.as_ref().to_vec());
 
-            self.memory.lookup_inverses = Polynomial::new(mul[..first_mul_size].to_vec());
-            for (i, idx) in indices_1.iter().enumerate() {
-                self.memory.calldata_inverses[*idx] = mul[first_mul_size + i];
-            }
-            for (i, idx) in indices_2.iter().enumerate() {
-                self.memory.secondary_calldata_inverses[*idx] =
-                    mul[first_mul_size + second_mul_size + i];
-            }
-            for (i, idx) in indices_3.iter().enumerate() {
-                self.memory.return_data_inverses[*idx] =
-                    mul[first_mul_size + second_mul_size + third_mul_size + i];
-            }
+            // self.memory.lookup_inverses = Polynomial::new(mul[..first_mul_size].to_vec());
+            // for (i, idx) in indices_1.iter().enumerate() {
+            //     self.memory.calldata_inverses[*idx] = mul[first_mul_size + i];
+            // }
+            // for (i, idx) in indices_2.iter().enumerate() {
+            //     self.memory.secondary_calldata_inverses[*idx] =
+            //         mul[first_mul_size + second_mul_size + i];
+            // }
+            // for (i, idx) in indices_3.iter().enumerate() {
+            //     self.memory.return_data_inverses[*idx] =
+            //         mul[first_mul_size + second_mul_size + third_mul_size + i];
+            // }
 
             // Compute inverse polynomial I in place by inverting the product at each row
             // Note: zeroes are ignored as they are not used anyway
-            let lookup_inverses = self.memory.lookup_inverses.clone().into_vec();
-            let calldata_inverses = self.memory.calldata_inverses.clone().into_vec();
-            let secondary_calldata_inverses =
-                self.memory.secondary_calldata_inverses.clone().into_vec();
-            let return_data_inverses = self.memory.return_data_inverses.clone().into_vec();
-            let mut batch_invert = Vec::with_capacity(4 * proving_key.circuit_size as usize);
-            batch_invert.extend(lookup_inverses);
-            batch_invert.extend(calldata_inverses);
-            batch_invert.extend(secondary_calldata_inverses);
-            batch_invert.extend(return_data_inverses);
+            // let lookup_inverses = self.memory.lookup_inverses.clone().into_vec();
+            // let calldata_inverses = self.memory.calldata_inverses.clone().into_vec();
+            // let secondary_calldata_inverses =
+            //     self.memory.secondary_calldata_inverses.clone().into_vec();
+            // let return_data_inverses = self.memory.return_data_inverses.clone().into_vec();
+            // let mut batch_invert = Vec::with_capacity(4 * proving_key.circuit_size as usize);
+            // batch_invert.extend(lookup_inverses);
+            // batch_invert.extend(calldata_inverses);
+            // batch_invert.extend(secondary_calldata_inverses);
+            // batch_invert.extend(return_data_inverses);
 
-            CoUtils::batch_invert_leaking_zeros::<T, P>(self.driver, &mut batch_invert)?;
-            self.memory.lookup_inverses =
-                Polynomial::new(batch_invert[..proving_key.circuit_size as usize].to_vec());
+            CoUtils::batch_invert_leaking_zeros::<T, P>(self.driver, &mut mul)?;
+
+            // Multiply the mul vec with q_lookup_mul_read_tag and the arithmetized is_zero||(q_busread==1 && wire==1) results
+
+            let mut mul_with = Vec::with_capacity(mul.len());
+            mul_with.extend(idx_0_cmpared);
+            mul_with.extend(idx_1_cmpared);
+            mul_with.extend(idx_2_cmpared);
+            mul_with.extend(q_lookup_mul_read_tag);
+
+            let mul = self.driver.mul_many(&mul, &mul_with)?;
+
             self.memory.calldata_inverses = Polynomial::new(
-                batch_invert
-                    [proving_key.circuit_size as usize..2 * proving_key.circuit_size as usize]
+                mul[..proving_key.polynomials.witness.calldata_read_counts().len() as usize]
                     .to_vec(),
             );
             self.memory.secondary_calldata_inverses = Polynomial::new(
-                batch_invert
-                    [2 * proving_key.circuit_size as usize..3 * proving_key.circuit_size as usize]
+                mul[proving_key.polynomials.witness.calldata_read_counts().len()
+                    ..proving_key.polynomials.witness.calldata_read_counts().len()
+                        + proving_key
+                            .polynomials
+                            .witness
+                            .secondary_calldata_read_counts()
+                            .len()]
                     .to_vec(),
             );
             self.memory.return_data_inverses = Polynomial::new(
-                batch_invert
-                    [3 * proving_key.circuit_size as usize..4 * proving_key.circuit_size as usize]
+                mul[proving_key.polynomials.witness.calldata_read_counts().len()
+                    + proving_key
+                        .polynomials
+                        .witness
+                        .secondary_calldata_read_counts()
+                        .len()
+                    ..proving_key.polynomials.witness.calldata_read_counts().len()
+                        + proving_key
+                            .polynomials
+                            .witness
+                            .secondary_calldata_read_counts()
+                            .len()
+                        + proving_key
+                            .polynomials
+                            .witness
+                            .return_data_read_counts()
+                            .len()]
+                    .to_vec(),
+            );
+            self.memory.lookup_inverses = Polynomial::new(
+                mul[proving_key.polynomials.witness.calldata_read_counts().len()
+                    + proving_key
+                        .polynomials
+                        .witness
+                        .secondary_calldata_read_counts()
+                        .len()
+                    + proving_key
+                        .polynomials
+                        .witness
+                        .return_data_read_counts()
+                        .len()..]
                     .to_vec(),
             );
         }
@@ -398,8 +554,15 @@ impl<
     fn compute_logderivative_inverses_databus_all(
         &mut self,
         proving_key: &ProvingKey<T, P, L>,
-        bus_idx: BusData,
-    ) -> (Vec<T::ArithmeticShare>, Vec<T::ArithmeticShare>, Vec<usize>) {
+        // bus_idx: BusData,
+        // witness_is_zeroes: Vec<T::ArithmeticShare>,
+        // is_read_vec: Vec<bool>,
+    ) -> (
+        Vec<T::ArithmeticShare>,
+        Vec<T::ArithmeticShare>,
+        Vec<T::ArithmeticShare>,
+        Vec<T::ArithmeticShare>,
+    ) {
         tracing::trace!("compute logderivative inverse for Databus");
 
         self.memory
@@ -411,46 +574,52 @@ impl<
         self.memory
             .return_data_inverses
             .resize(proving_key.circuit_size as usize, Default::default());
-        let wire = match bus_idx {
-            BusData::BusIdx0 => &proving_key.polynomials.precomputed.q_l(),
-            BusData::BusIdx1 => &proving_key.polynomials.precomputed.q_r(),
-            BusData::BusIdx2 => &proving_key.polynomials.precomputed.q_o(),
-        };
-        let read_count = match bus_idx {
-            BusData::BusIdx0 => &proving_key.polynomials.witness.calldata_read_counts(),
-            BusData::BusIdx1 => &proving_key
-                .polynomials
-                .witness
-                .secondary_calldata_read_counts(),
-            BusData::BusIdx2 => &proving_key.polynomials.witness.return_data_read_counts(),
-        };
+        // let wire = match bus_idx {
+        //     BusData::BusIdx0 => &proving_key.polynomials.precomputed.q_l(),
+        //     BusData::BusIdx1 => &proving_key.polynomials.precomputed.q_r(),
+        //     BusData::BusIdx2 => &proving_key.polynomials.precomputed.q_o(),
+        // };
+        // let read_count = match bus_idx {
+        //     BusData::BusIdx0 => &proving_key.polynomials.witness.calldata_read_counts(),
+        //     BusData::BusIdx1 => &proving_key
+        //         .polynomials
+        //         .witness
+        //         .secondary_calldata_read_counts(),
+        //     BusData::BusIdx2 => &proving_key.polynomials.witness.return_data_read_counts(),
+        // };
 
-        debug_assert_eq!(
-            proving_key.polynomials.precomputed.q_lookup().len(),
-            proving_key.circuit_size as usize
-        );
-        debug_assert_eq!(
-            proving_key.polynomials.witness.lookup_read_tags().len(),
-            proving_key.circuit_size as usize
-        );
+        // TODO FLORIN:
+        // debug_assert_eq!(
+        //     proving_key.polynomials.precomputed.q_lookup().len(),
+        //     proving_key.circuit_size as usize
+        // );
+        // debug_assert_eq!(
+        //     proving_key.polynomials.witness.lookup_read_tags().len(),
+        //     proving_key.circuit_size as usize
+        // );
         let mut read = Vec::with_capacity(proving_key.polynomials.precomputed.q_busread().len());
-        let mut write = Vec::with_capacity(proving_key.polynomials.precomputed.q_busread().len());
-        let mut indices = Vec::with_capacity(proving_key.polynomials.precomputed.q_busread().len());
-        for (i, (w, read)) in izip!(wire.iter(), read_count.iter(),).enumerate() {
+        let mut write_1 = Vec::with_capacity(proving_key.polynomials.precomputed.q_busread().len());
+        let mut write_2 = Vec::with_capacity(proving_key.polynomials.precomputed.q_busread().len());
+        let mut write_3 = Vec::with_capacity(proving_key.polynomials.precomputed.q_busread().len());
+        // let mut indices = Vec::with_capacity(proving_key.polynomials.precomputed.q_busread().len());
+        // let mut to_mul = Vec::with_capacity(proving_key.polynomials.precomputed.q_busread().len());
+        // let mut to_mul_indices =
+        //     Vec::with_capacity(proving_key.polynomials.precomputed.q_busread().len());
+        for i in 0..proving_key.polynomials.precomputed.q_busread().len() {
             // Determine if the present row contains a databus operation
-            let q_busread = &proving_key.polynomials.precomputed.q_busread()[i];
-            let is_read = q_busread.is_one() && w.is_one();
-            let nonzero_read_count = !read.is_zero();
+            // let q_busread = &proving_key.polynomials.precomputed.q_busread()[i];
+            // let is_read = q_busread.is_one() && wire_.is_one();
+            // let nonzero_read_count = !read_count_.is_zero();
 
             // We only compute the inverse if this row contains a read gate or data that has been read
 
-            if is_read || nonzero_read_count {
-                read.push(self.compute_read_term_databus(proving_key, i));
-                write.push(self.compute_write_term_databus(proving_key, i, bus_idx));
-                indices.push(i);
-            }
+            //|| nonzero_read_count {
+            read.push(self.compute_read_term_databus(proving_key, i));
+            write_1.push(self.compute_write_term_databus(proving_key, i, BusData::BusIdx0));
+            write_2.push(self.compute_write_term_databus(proving_key, i, BusData::BusIdx1));
+            write_3.push(self.compute_write_term_databus(proving_key, i, BusData::BusIdx2));
         }
-        (read, write, indices)
+        (read, write_1, write_2, write_3)
     }
 
     fn compute_public_input_delta(&self, proving_key: &ProvingKey<T, P, L>) -> P::ScalarField {

@@ -255,4 +255,12 @@ impl<P: Pairing, N: Rep3Network> NoirUltraHonkProver<P> for Rep3UltraHonkDriver<
     ) -> std::io::Result<(<P as Pairing>::G1, <P as Pairing>::ScalarField)> {
         pointshare::open_point_and_field(&a, &b, &mut self.io_context0)
     }
+
+    fn is_zero_many(
+        &mut self,
+        a: &[Self::ArithmeticShare],
+    ) -> std::io::Result<Vec<Self::ArithmeticShare>> {
+        let zeroes = vec![P::ScalarField::zero(); a.len()];
+        arithmetic::eq_public_many(a, &zeroes, &mut self.io_context0)
+    }
 }

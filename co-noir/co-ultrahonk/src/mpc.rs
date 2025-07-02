@@ -301,4 +301,9 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
         data: &[Self::ArithmeticShare],
         domain: &D,
     ) -> Vec<Self::ArithmeticShare>;
+
+    fn is_zero_many(
+        &mut self,
+        a: &[Self::ArithmeticShare],
+    ) -> std::io::Result<Vec<Self::ArithmeticShare>>;
 }
