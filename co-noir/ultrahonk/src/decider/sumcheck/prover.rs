@@ -99,8 +99,7 @@ impl<
 
         tracing::trace!("Sumcheck prove round {}", round_idx);
         // In the first round, we compute the first univariate polynomial and populate the book-keeping table of
-        // #partially_evaluated_polynomials, which has \f$ n/2 \f$ rows and \f$ N \f$ columns. When the Flavor has ZK,
-
+        // #partially_evaluated_polynomials, which has \f$ n/2 \f$ rows and \f$ N \f$ columns.
         let round_univariate = sum_check_round.compute_univariate::<P>(
             round_idx,
             &self.memory.relation_parameters,
@@ -197,7 +196,9 @@ impl<
         let multivariate_d = Utils::get_msb64(multivariate_n as u64);
 
         let mut sum_check_round = SumcheckProverRound::new(multivariate_n as usize);
+
         let mut row_disabling_polynomial = RowDisablingPolynomial::<P::ScalarField>::default();
+
         let mut gate_separators = GateSeparatorPolynomial::new(
             self.memory.relation_parameters.gate_challenges.to_owned(),
             multivariate_d as usize,

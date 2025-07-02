@@ -37,10 +37,10 @@ use crate::plain_prover_flavour::PlainProverFlavour;
 use crate::prelude::{Transcript, TranscriptHasher, Univariate};
 use crate::transcript::TranscriptFieldType;
 use ark_ff::PrimeField;
+use co_builder::HonkProofResult;
 use co_builder::flavours::mega_flavour::MegaFlavour;
 use co_builder::prelude::HonkCurve;
 use co_builder::prover_flavour::ProverFlavour;
-use co_builder::HonkProofResult;
 
 #[derive(Default)]
 pub struct AllRelationAccMega<F: PrimeField> {
@@ -378,6 +378,20 @@ impl PlainProverFlavour for MegaFlavour {
             relation_parameters,
             scaling_factor,
         );
+        SumcheckVerifierRound::<P, Self>::accumulate_one_relation_evaluations::<EccOpQueueRelation>(
+            &mut univariate_accumulators.r_ecc_op_queue,
+            extended_edges,
+            relation_parameters,
+            scaling_factor,
+        );
+        SumcheckVerifierRound::<P, Self>::accumulate_one_relation_evaluations::<
+            DataBusLookupRelation,
+        >(
+            &mut univariate_accumulators.r_databus,
+            extended_edges,
+            relation_parameters,
+            scaling_factor,
+        );
         SumcheckVerifierRound::<P, Self>::accumulate_one_relation_evaluations::<
             Poseidon2ExternalRelation,
         >(
@@ -390,20 +404,6 @@ impl PlainProverFlavour for MegaFlavour {
             Poseidon2InternalRelation,
         >(
             &mut univariate_accumulators.r_pos_int,
-            extended_edges,
-            relation_parameters,
-            scaling_factor,
-        );
-        SumcheckVerifierRound::<P, Self>::accumulate_one_relation_evaluations::<EccOpQueueRelation>(
-            &mut univariate_accumulators.r_ecc_op_queue,
-            extended_edges,
-            relation_parameters,
-            scaling_factor,
-        );
-        SumcheckVerifierRound::<P, Self>::accumulate_one_relation_evaluations::<
-            DataBusLookupRelation,
-        >(
-            &mut univariate_accumulators.r_databus,
             extended_edges,
             relation_parameters,
             scaling_factor,
