@@ -2865,6 +2865,7 @@ dependencies = [
  "rcgen",
  "rustls",
  "serde",
+ "socket2",
  "tokio",
  "tokio-util",
  "toml 0.8.20",
@@ -4412,9 +4413,9 @@ dependencies = [
 
 [[package]]
 name = "socket2"
-version = "0.5.9"
+version = "0.5.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f5fd57c80058a56cf5c777ab8a126398ece8e442983605d280a44ce79d0edef"
+checksum = "e22376abed350d73dd1cd119b57ffccad95b4e585a7cda43e286245ce23c0678"
 dependencies = [
  "libc",
  "windows-sys 0.52.0",

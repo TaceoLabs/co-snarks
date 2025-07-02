@@ -4,10 +4,10 @@ use std::{
     array,
     cmp::Ordering,
     io::{Read, Write},
-    net::{SocketAddr, TcpListener, TcpStream},
+    net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs as _},
     path::PathBuf,
     sync::Arc,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use crate::{DEFAULT_CONNECTION_TIMEOUT, Network, config::Address};
@@ -21,6 +21,7 @@ use rustls::{
     pki_types::{CertificateDer, PrivateKeyDer, ServerName},
 };
 use serde::{Deserialize, Serialize};
+use socket2::{Domain, Socket, Type};
 
 /// A party in the network config file.
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
@@ -211,7 +212,19 @@ impl TlsNetwork {
         let client_config = Arc::new(client_config);
         let server_config = Arc::new(server_config);
 
-        let listener = TcpListener::bind(bind_addr)?;
+        let domain = match bind_addr {
+            SocketAddr::V4(_) => Domain::IPV4,
+            SocketAddr::V6(_) => Domain::IPV6,
+        };
+        let socket = Socket::new(domain, Type::STREAM, None)?;
+        socket.set_reuse_address(true)?;
+        if bind_addr.is_ipv6() {
+            socket.set_only_v6(false)?;
+        }
+        socket.set_read_timeout(Some(timeout))?;
+        socket.bind(&bind_addr.into())?;
+        socket.listen(128)?;
+        let listener = TcpListener::from(socket);
 
         let mut nets = array::from_fn(|_| Self {
             id,
@@ -226,18 +239,27 @@ impl TlsNetwork {
         for i in 0..N {
             for s in [STREAM_0, STREAM_1] {
                 for (other_id, addr) in addrs.iter().enumerate() {
+                    let host_name = addr.hostname.clone();
+                    let addr = addr
+                        .to_socket_addrs()?
+                        .next()
+                        .context("while converting to SocketAddr")?;
                     match id.cmp(&other_id) {
                         Ordering::Less => {
+                            let start = Instant::now();
                             let stream = loop {
-                                if let Ok(stream) = TcpStream::connect(addr) {
+                                if let Ok(stream) = TcpStream::connect_timeout(&addr, timeout) {
                                     break stream;
                                 }
                                 std::thread::sleep(Duration::from_millis(50));
+                                if start.elapsed() > timeout {
+                                    eyre::bail!("timeout while connecting to {addr}");
+                                }
                             };
                             stream.set_write_timeout(Some(timeout))?;
                             stream.set_nodelay(true)?;
 
-                            let name = ServerName::try_from(addr.hostname.clone())?.to_owned();
+                            let name = ServerName::try_from(host_name)?.to_owned();
                             let conn = ClientConnection::new(client_config.clone(), name.clone())?;
                             let mut stream = TlsStream::Client(StreamOwned::new(conn, stream));
 
