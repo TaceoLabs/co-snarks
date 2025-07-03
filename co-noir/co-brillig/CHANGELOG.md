@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.4.0](https://github.com/TaceoLabs/co-snarks/compare/co-brillig-v0.3.0...co-brillig-v0.4.0) (2025-07-03)
+
+
+### Features
+
+* bump to Noir-1.0.0-beta.4 ([9403dae](https://github.com/TaceoLabs/co-snarks/commit/9403daeaf977120a581d9265bea9ed5df8203f3a))
+* update rust edition to 2024 ([6ea0ba9](https://github.com/TaceoLabs/co-snarks/commit/6ea0ba9f9f34063e8ab859c1d4ae41d05629a1c0))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * mpc-core bumped from 0.9.0 to 0.10.0
+
 ## [0.3.0](https://github.com/TaceoLabs/co-snarks/compare/co-brillig-v0.2.0...co-brillig-v0.3.0) (2025-04-03)
 
 

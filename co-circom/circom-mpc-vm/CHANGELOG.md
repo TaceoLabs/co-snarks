@@ -10,6 +10,32 @@
     * co-circom-snarks bumped from 0.1.1 to 0.1.2
     * mpc-core bumped from 0.4.0 to 0.5.0
 
+## [0.9.0](https://github.com/TaceoLabs/co-snarks/compare/circom-mpc-vm-v0.8.0...circom-mpc-vm-v0.9.0) (2025-07-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* move MPC types and share/combine into new mpc-types crate, rename co-circom-snarks to co-circom-types
+
+### Features
+
+* added calls so that mpc-vm doesnt consume compiled circuit ([6fee634](https://github.com/TaceoLabs/co-snarks/commit/6fee634ed4b2ea2f047675471a1e6795478497bf))
+* update rust edition to 2024 ([6ea0ba9](https://github.com/TaceoLabs/co-snarks/commit/6ea0ba9f9f34063e8ab859c1d4ae41d05629a1c0))
+
+
+### Code Refactoring
+
+* move MPC types and share/combine into new mpc-types crate, rename co-circom-snarks to co-circom-types ([31b773a](https://github.com/TaceoLabs/co-snarks/commit/31b773aa71a5e872c25754de7805b02647b65688))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * co-circom-types bumped from 0.5.0 to 0.6.0
+    * mpc-core bumped from 0.9.0 to 0.10.0
+    * mpc-net bumped from 0.4.0 to 0.5.0
+
 ## [0.8.0](https://github.com/TaceoLabs/co-snarks/compare/circom-mpc-vm-v0.7.0...circom-mpc-vm-v0.8.0) (2025-04-03)
 
 
