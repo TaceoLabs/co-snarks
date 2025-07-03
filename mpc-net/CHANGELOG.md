@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/TaceoLabs/co-snarks/compare/mpc-net-v0.4.0...mpc-net-v0.5.0) (2025-07-03)
+
+
+### Features
+
+* update rust edition to 2024 ([6ea0ba9](https://github.com/TaceoLabs/co-snarks/commit/6ea0ba9f9f34063e8ab859c1d4ae41d05629a1c0))
+
 ## [0.4.0](https://github.com/TaceoLabs/co-snarks/compare/mpc-net-v0.3.0...mpc-net-v0.4.0) (2025-04-03)
 
 

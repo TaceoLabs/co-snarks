@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.7.0](https://github.com/TaceoLabs/co-snarks/compare/co-acvm-v0.6.0...co-acvm-v0.7.0) (2025-07-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* bump to Barretenberg 0.86.0 ([#373](https://github.com/TaceoLabs/co-snarks/issues/373))
+* Add support for the embedded_curve_add blackbox function to co-noir ([#367](https://github.com/TaceoLabs/co-snarks/issues/367))
+* Performance improvements and cleanup for blake2/blake3
+* add BLAKE3 blackbox function to coNoir
+* add BLAKE2s blackbox function to coNoir
+* add Bristol Fashion parsing for GC, also adds the SHA256 blackbox ([#359](https://github.com/TaceoLabs/co-snarks/issues/359))
+* Add the MSM blackbox function to co-noir, which allows to use pedersen hash/commitment
+
+### Features
+
+* Add AES blackbox functionality ([fd7cd49](https://github.com/TaceoLabs/co-snarks/commit/fd7cd496a1fd21e85aa70c0bd2c5cd7aed69fece))
+* add BLAKE2s blackbox function to coNoir ([e98fb7d](https://github.com/TaceoLabs/co-snarks/commit/e98fb7dd60f52d936f07b3e3a74797dfb091e9f3))
+* add BLAKE3 blackbox function to coNoir ([ddcb10e](https://github.com/TaceoLabs/co-snarks/commit/ddcb10e5d685072279b8f11b6935636fb74ecaf0))
+* add Bristol Fashion parsing for GC, also adds the SHA256 blackbox ([#359](https://github.com/TaceoLabs/co-snarks/issues/359)) ([f8509ef](https://github.com/TaceoLabs/co-snarks/commit/f8509ef8147bf29072ba67b4ac0f489546eea2c9))
+* Add support for the embedded_curve_add blackbox function to co-noir ([#367](https://github.com/TaceoLabs/co-snarks/issues/367)) ([0533f22](https://github.com/TaceoLabs/co-snarks/commit/0533f22a8a50e14eb756ee9bf82cfad857dd9722))
+* Add the MSM blackbox function to co-noir, which allows to use pedersen hash/commitment ([ffeaa32](https://github.com/TaceoLabs/co-snarks/commit/ffeaa32f754fa16c77bf050486ce871a77908653))
+* bump to Barretenberg 0.86.0 ([#373](https://github.com/TaceoLabs/co-snarks/issues/373)) ([55f4ca3](https://github.com/TaceoLabs/co-snarks/commit/55f4ca3211a944cb755e541cfabc4519697ce665))
+* Performance improvements and cleanup for blake2/blake3 ([435fcd3](https://github.com/TaceoLabs/co-snarks/commit/435fcd333080201c7c0274519ff6f6b26fb62d50))
+* update rust edition to 2024 ([6ea0ba9](https://github.com/TaceoLabs/co-snarks/commit/6ea0ba9f9f34063e8ab859c1d4ae41d05629a1c0))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * co-brillig bumped from 0.3.0 to 0.4.0
+    * mpc-core bumped from 0.9.0 to 0.10.0
+
 ## [0.6.0](https://github.com/TaceoLabs/co-snarks/compare/co-acvm-v0.5.0...co-acvm-v0.6.0) (2025-04-03)
 
 
