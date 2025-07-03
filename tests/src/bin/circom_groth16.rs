@@ -5,7 +5,7 @@ use ark_bn254::Bn254;
 use circom_mpc_compiler::{CoCircomCompiler, CompilerConfig};
 use itertools::izip;
 use mpc_core::protocols::rep3::{self, conversion::A2BType};
-use mpc_net::thread::TestNetwork;
+use mpc_net::local::LocalNetwork;
 use rand::thread_rng;
 use std::{fs::File, io::BufReader};
 use tests::test_utils::{self, spawn_pool};
@@ -46,8 +46,8 @@ fn main() -> eyre::Result<()> {
     let public_inputs =
         CoCircomCompiler::<Bn254>::get_public_inputs(&chacha_circuit, compiler_config).unwrap();
 
-    let nets0 = TestNetwork::new_3_parties();
-    let nets1 = TestNetwork::new_3_parties();
+    let nets0 = LocalNetwork::new_3_parties();
+    let nets1 = LocalNetwork::new_3_parties();
 
     let batch_size = 2;
     let mut rng = thread_rng();

@@ -9,7 +9,7 @@ use co_ultrahonk::prelude::{
     ShamirCoUltraHonk, ShamirUltraHonkDriver, UltraHonk, Utils, VerifyingKey,
     VerifyingKeyBarretenberg, ZeroKnowledge,
 };
-use color_eyre::eyre::{Context, ContextCompat, eyre};
+use color_eyre::eyre::{self, Context, ContextCompat};
 use figment::{
     Figment,
     providers::{Env, Format, Serialized, Toml},
@@ -791,7 +791,7 @@ fn main() -> color_eyre::Result<ExitCode> {
     install_tracing();
     rustls::crypto::aws_lc_rs::default_provider()
         .install_default()
-        .map_err(|_| eyre!("Could not install default rustls crypto provider"))?;
+        .map_err(|_| eyre::eyre!("Could not install default rustls crypto provider"))?;
     let args = Cli::parse();
 
     match args.command {
@@ -882,7 +882,7 @@ fn run_split_witness(config: SplitWitnessConfig) -> color_eyre::Result<ExitCode>
     {
         let index = index.0 as usize;
         if index >= witness.len() {
-            return Err(eyre!("Public input index out of bounds"));
+            eyre::bail!("Public input index out of bounds");
         }
         PubShared::set_public(&mut witness[index]);
     }
@@ -893,10 +893,10 @@ fn run_split_witness(config: SplitWitnessConfig) -> color_eyre::Result<ExitCode>
     match protocol {
         MPCProtocol::REP3 => {
             if t != 1 {
-                return Err(eyre!("REP3 only allows the threshold to be 1"));
+                eyre::bail!("REP3 only allows the threshold to be 1");
             }
             if n != 3 {
-                return Err(eyre!("REP3 only allows the number of parties to be 3"));
+                eyre::bail!("REP3 only allows the number of parties to be 3");
             }
             // create witness shares
             let start = Instant::now();
@@ -978,10 +978,10 @@ fn run_split_proving_key(config: SplitProvingKeyConfig) -> color_eyre::Result<Ex
     match protocol {
         MPCProtocol::REP3 => {
             if t != 1 {
-                return Err(eyre!("REP3 only allows the threshold to be 1"));
+                eyre::bail!("REP3 only allows the threshold to be 1");
             }
             if n != 3 {
-                return Err(eyre!("REP3 only allows the number of parties to be 3"));
+                eyre::bail!("REP3 only allows the number of parties to be 3");
             }
 
             // create shares
@@ -1032,9 +1032,7 @@ fn run_split_input(config: SplitInputConfig) -> color_eyre::Result<ExitCode> {
     let out_dir = config.out_dir;
 
     if protocol != MPCProtocol::REP3 {
-        return Err(eyre!(
-            "Only REP3 protocol is supported for splitting inputs"
-        ));
+        eyre::bail!("Only REP3 protocol is supported for splitting inputs");
     }
     let circuit_path = PathBuf::from(&circuit);
 
@@ -1081,13 +1079,11 @@ fn run_merge_input_shares(config: MergeInputSharesConfig) -> color_eyre::Result<
     let out = config.out;
 
     if protocol != MPCProtocol::REP3 {
-        return Err(eyre!(
-            "Only REP3 protocol is supported for splitting/merging inputs"
-        ));
+        eyre::bail!("Only REP3 protocol is supported for splitting/merging inputs");
     }
 
     if inputs.len() < 2 {
-        return Err(eyre!("Need at least two input shares to merge"));
+        eyre::bail!("Need at least two input shares to merge");
     }
 
     let input_shares = inputs
@@ -1126,9 +1122,7 @@ fn run_generate_witness(config: GenerateWitnessConfig) -> color_eyre::Result<Exi
     let out = config.out;
 
     if protocol != MPCProtocol::REP3 {
-        return Err(eyre!(
-            "Only REP3 protocol is supported for witness generation"
-        ));
+        eyre::bail!("Only REP3 protocol is supported for witness generation");
     }
     let circuit_path = PathBuf::from(&circuit);
 
@@ -1169,7 +1163,7 @@ fn run_translate_witness(config: TranslateWitnessConfig) -> color_eyre::Result<E
     let out = config.out;
 
     if src_protocol != MPCProtocol::REP3 || target_protocol != MPCProtocol::SHAMIR {
-        return Err(eyre!("Only REP3 to SHAMIR translation is supported"));
+        eyre::bail!("Only REP3 to SHAMIR translation is supported");
     }
 
     // parse witness shares
@@ -1203,7 +1197,7 @@ fn run_translate_proving_key(config: TranslateProvingKeyConfig) -> color_eyre::R
     let out = config.out;
 
     if src_protocol != MPCProtocol::REP3 || target_protocol != MPCProtocol::SHAMIR {
-        return Err(eyre!("Only REP3 to SHAMIR translation is supported"));
+        eyre::bail!("Only REP3 to SHAMIR translation is supported");
     }
 
     // parse proving_key shares
@@ -1255,7 +1249,7 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
     match protocol {
         MPCProtocol::REP3 => {
             if t != 1 {
-                return Err(eyre!("REP3 only allows the threshold to be 1"));
+                eyre::bail!("REP3 only allows the threshold to be 1");
             }
             let witness_share = bincode::deserialize_from(witness_file)
                 .context("while deserializing witness share")?;
@@ -1327,7 +1321,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
     let (proof, public_input) = match protocol {
         MPCProtocol::REP3 => {
             if t != 1 {
-                return Err(eyre!("REP3 only allows the threshold to be 1"));
+                eyre::bail!("REP3 only allows the threshold to be 1");
             }
             // Get the proving key and prover
             let proving_key: ProvingKey<Rep3UltraHonkDriver, Bn254> =
@@ -1535,7 +1529,7 @@ fn run_build_and_generate_proof(
     let (proof, public_input) = match protocol {
         MPCProtocol::REP3 => {
             if t != 1 {
-                return Err(eyre!("REP3 only allows the threshold to be 1"));
+                eyre::bail!("REP3 only allows the threshold to be 1");
             }
             let witness_share = bincode::deserialize_from(witness_file)
                 .context("while deserializing witness share")?;

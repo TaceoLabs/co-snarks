@@ -302,7 +302,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P> {
         let pairing_inputs_public_input_key = plain_key.pairing_inputs_public_input_key.to_owned();
 
         if shares.len() != circuit_size as usize * 6 {
-            return Err(eyre::eyre!("Share length is not 6 times circuit size"));
+            eyre::bail!("Share length is not 6 times circuit size");
         }
 
         let mut polynomials = Polynomials::default();

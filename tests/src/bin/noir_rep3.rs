@@ -4,7 +4,7 @@ use acir::{native_types::WitnessStack, FieldElement};
 
 use ark_bn254::Bn254;
 use co_acvm::solver::{PlainCoSolver, Rep3CoSolver};
-use mpc_net::thread::TestNetwork;
+use mpc_net::local::LocalNetwork;
 use noirc_artifacts::program::ProgramArtifact;
 use tests::test_utils;
 
@@ -58,8 +58,8 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // create input shares
     let mut rng = rand::thread_rng();
     let shares = test_utils::share_input_rep3::<Bn254, _>(inputs, &mut rng);
-    let nets0 = TestNetwork::new_3_parties();
-    let nets1 = TestNetwork::new_3_parties();
+    let nets0 = LocalNetwork::new_3_parties();
+    let nets1 = LocalNetwork::new_3_parties();
     let mut threads = vec![];
     for (net0, net1, program_artifact, share) in itertools::izip!(
         nets0,

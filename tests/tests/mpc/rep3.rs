@@ -28,7 +28,7 @@ mod field_share {
     use mpc_core::protocols::rep3::{self, arithmetic};
     use mpc_core::protocols::rep3_ring;
     use mpc_core::MpcState as _;
-    use mpc_net::thread::TestNetwork;
+    use mpc_net::local::LocalNetwork;
     use mpc_net::Network;
     use num_bigint::BigUint;
     use rand::thread_rng;
@@ -148,7 +148,7 @@ mod field_share {
 
     #[test]
     fn rep3_mul() {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let y = ark_bn254::Fr::rand(&mut rng);
@@ -179,7 +179,7 @@ mod field_share {
 
     #[test]
     fn rep3_div() {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let y = ark_bn254::Fr::rand(&mut rng);
@@ -210,8 +210,8 @@ mod field_share {
 
     #[test]
     fn rep3_fork_mul() {
-        let nets0 = TestNetwork::new_3_parties();
-        let nets1 = TestNetwork::new_3_parties();
+        let nets0 = LocalNetwork::new_3_parties();
+        let nets1 = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x0 = ark_bn254::Fr::rand(&mut rng);
         let x1 = ark_bn254::Fr::rand(&mut rng);
@@ -251,7 +251,7 @@ mod field_share {
 
     #[test]
     fn rep3_mul2_then_add() {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let y = ark_bn254::Fr::rand(&mut rng);
@@ -283,7 +283,7 @@ mod field_share {
 
     #[test]
     fn rep3_mul_vec_bn() {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = [
             ark_bn254::Fr::from_str(
@@ -367,7 +367,7 @@ mod field_share {
 
     #[test]
     fn rep3_mul_vec() {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..1)
             .map(|_| ark_bn254::Fr::from_str("2").unwrap())
@@ -427,7 +427,7 @@ mod field_share {
 
     #[test]
     fn rep3_inv() {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let mut x = ark_bn254::Fr::rand(&mut rng);
         while x.is_zero() {
@@ -457,7 +457,7 @@ mod field_share {
 
     #[test]
     fn rep3_sqrt() {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x_ = ark_bn254::Fr::rand(&mut rng);
         let x = x_.square(); // Guarantees a square root exists
@@ -480,7 +480,7 @@ mod field_share {
 
     #[test]
     fn rep3_bit_inject() {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::from(rng.gen::<bool>() as u64);
         let mut x_shares = rep3::share_biguint(x, &mut rng);
@@ -514,7 +514,7 @@ mod field_share {
     fn rep3_bit_inject_many() {
         const VEC_SIZE: usize = 10;
 
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let mut should_result = Vec::with_capacity(VEC_SIZE);
         let mut x0_shares = Vec::with_capacity(VEC_SIZE);
@@ -566,7 +566,7 @@ mod field_share {
                     let constant_number = ark_bn254::Fr::from_str("50").unwrap();
                     for i in -1..=1 {
                         let compare = constant_number + ark_bn254::Fr::from(i);
-                        let nets =TestNetwork::new_3_parties();
+                        let nets =LocalNetwork::new_3_parties();
                         let mut rng = thread_rng();
                         let x_shares = rep3::share_field_element(constant_number, &mut rng);
                         let y_shares = rep3::share_field_element(compare, &mut rng);
@@ -608,7 +608,7 @@ mod field_share {
 
     #[test]
     fn rep3_a2b_zero() {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::zero();
         let x_shares = rep3::share_field_element(x, &mut rng);
@@ -638,7 +638,7 @@ mod field_share {
 
     #[test]
     fn rep3_a2y2b_zero() {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::zero();
         let x_shares = rep3::share_field_element(x, &mut rng);
@@ -668,7 +668,7 @@ mod field_share {
 
     #[test]
     fn rep3_a2y2b_streaming_zero() {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::zero();
         let x_shares = rep3::share_field_element(x, &mut rng);
@@ -698,7 +698,7 @@ mod field_share {
 
     #[test]
     fn rep3_a2b() {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let x_shares = rep3::share_field_element(x, &mut rng);
@@ -729,7 +729,7 @@ mod field_share {
 
     #[test]
     fn rep3_a2y2b() {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let x_shares = rep3::share_field_element(x, &mut rng);
@@ -760,7 +760,7 @@ mod field_share {
 
     #[test]
     fn rep3_a2y2b_streaming() {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let x_shares = rep3::share_field_element(x, &mut rng);
@@ -791,7 +791,7 @@ mod field_share {
 
     #[test]
     fn rep3_b2a() {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let x_shares = rep3::share_biguint(x, &mut rng);
@@ -818,7 +818,7 @@ mod field_share {
 
     #[test]
     fn rep3_b2y2a() {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let x_shares = rep3::share_biguint(x, &mut rng);
@@ -845,7 +845,7 @@ mod field_share {
 
     #[test]
     fn rep3_b2y2a_streaming() {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let x_shares = rep3::share_biguint(x, &mut rng);
@@ -872,7 +872,7 @@ mod field_share {
 
     #[test]
     fn rep3_gc() {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let y = ark_bn254::Fr::rand(&mut rng);
@@ -939,7 +939,7 @@ mod field_share {
 
     #[test]
     fn rep3_gc_streaming() {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let y = ark_bn254::Fr::rand(&mut rng);
@@ -1005,7 +1005,7 @@ mod field_share {
 
     #[test]
     fn rep3_a2y() {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let x_shares = rep3::share_field_element(x, &mut rng);
@@ -1050,7 +1050,7 @@ mod field_share {
 
     #[test]
     fn rep3_a2y_streaming() {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let x_shares = rep3::share_field_element(x, &mut rng);
@@ -1094,7 +1094,7 @@ mod field_share {
 
     #[test]
     fn rep3_y2a() {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let delta = GCUtils::random_delta(&mut rng);
         let x = ark_bn254::Fr::rand(&mut rng);
@@ -1127,7 +1127,7 @@ mod field_share {
 
     #[test]
     fn rep3_y2a_streaming() {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let delta = GCUtils::random_delta(&mut rng);
         let x = ark_bn254::Fr::rand(&mut rng);
@@ -1161,7 +1161,7 @@ mod field_share {
 
     #[test]
     fn rep3_b2y() {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let x_shares = rep3::share_biguint(x, &mut rng);
@@ -1208,7 +1208,7 @@ mod field_share {
 
     #[test]
     fn rep3_b2y_streaming() {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let x_shares = rep3::share_biguint(x, &mut rng);
@@ -1254,7 +1254,7 @@ mod field_share {
 
     #[test]
     fn rep3_y2b() {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let delta = GCUtils::random_delta(&mut rng);
         let x = ark_bn254::Fr::rand(&mut rng);
@@ -1294,7 +1294,7 @@ mod field_share {
         const TOTAL_BIT_SIZE: usize = 64;
         const CHUNK_SIZE: usize = 14;
 
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| ark_bn254::Fr::rand(&mut rng))
@@ -1345,7 +1345,7 @@ mod field_share {
     fn rep3_slice_shared_field_many_via_yao_inner(msb: usize, lsb: usize, bitsize: usize) {
         const VEC_SIZE: usize = 10;
 
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| ark_bn254::Fr::rand(&mut rng))
@@ -1408,7 +1408,7 @@ mod field_share {
         const BASE: usize = 1 << BASE_BIT;
         const NUM_DECOMPS: usize = TOTAL_BIT_SIZE.div_ceil(BASE_BIT);
 
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let mask: BigUint = (BigUint::one() << TOTAL_BIT_SIZE) - BigUint::one();
         let x = (0..VEC_SIZE)
@@ -1493,7 +1493,7 @@ mod field_share {
         const BASE: usize = 1 << BASE_BIT;
         const NUM_DECOMPS: usize = TOTAL_BIT_SIZE.div_ceil(BASE_BIT);
 
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let mask: BigUint = (BigUint::one() << TOTAL_BIT_SIZE) - BigUint::one();
         let x = (0..VEC_SIZE)
@@ -1574,7 +1574,7 @@ mod field_share {
         const VEC_SIZE: usize = 10;
         const CHUNK_SIZE: usize = 14;
 
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| ark_bn254::Fr::rand(&mut rng))
@@ -1618,8 +1618,8 @@ mod field_share {
         const VEC_SIZE: usize = 20;
         const CHUNK_SIZE: usize = 14;
 
-        let nets0 = TestNetwork::new_3_parties();
-        let nets1 = TestNetwork::new_3_parties();
+        let nets0 = LocalNetwork::new_3_parties();
+        let nets1 = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| ark_bn254::Fr::rand(&mut rng))
@@ -1678,7 +1678,7 @@ mod field_share {
 
     #[test]
     fn rep3_sha256() {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let mut state: Vec<u32> = (0..8).map(|_| rng.gen()).collect();
         let message: Vec<u32> = (0..16).map(|_| rng.gen()).collect();
@@ -1744,7 +1744,7 @@ mod field_share {
         const VEC_SIZE: usize = 10;
         const TOTAL_BIT_SIZE: usize = 128;
 
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let mask: BigUint = (BigUint::one() << TOTAL_BIT_SIZE) - BigUint::one();
         let keys_a = (0..VEC_SIZE)
@@ -1882,7 +1882,7 @@ mod field_share {
         const VEC_SIZE: usize = 1;
         const TOTAL_BIT_SIZE: usize = 128;
 
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let mask: BigUint = (BigUint::one() << TOTAL_BIT_SIZE) - BigUint::one();
         let keys_a = (0..VEC_SIZE)
@@ -2015,7 +2015,7 @@ mod field_share {
         const VEC_SIZE: usize = 3;
         const TOTAL_BIT_SIZE: usize = 64;
 
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let mask: BigUint = (BigUint::one() << TOTAL_BIT_SIZE) - BigUint::one();
         let keys_a = (0..VEC_SIZE)
@@ -2128,8 +2128,8 @@ mod field_share {
         const TOTAL_BIT_SIZE: usize = 64;
         let s_box = AES128_SBOX;
 
-        let nets0 = TestNetwork::new_3_parties();
-        let nets1 = TestNetwork::new_3_parties();
+        let nets0 = LocalNetwork::new_3_parties();
+        let nets1 = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let mask: BigUint = (BigUint::one() << TOTAL_BIT_SIZE) - BigUint::one();
         let keys_a = (0..VEC_SIZE)
@@ -2313,7 +2313,7 @@ mod field_share {
 
     fn accumulate_from_sparse_bytes<const BASE: u64>(input_bitsize: usize, output_bitsize: usize) {
         const VEC_SIZE: usize = 16;
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let mask: BigUint = (BigUint::one() << input_bitsize) - BigUint::one();
         let input = (0..VEC_SIZE)
@@ -2374,7 +2374,7 @@ mod field_share {
 
     #[test]
     fn rep3_aes() {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let plaintext_size: usize = rng.gen::<u8>() as usize % 1024;
         let key: Vec<u8> = (0..16).map(|_| rng.gen()).collect();
@@ -2451,7 +2451,7 @@ mod field_share {
     }
 
     fn rep3_mod_red(a: u64, b: u64) {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let should_result = ark_bn254::Fr::from(a % b);
         let a = ark_bn254::Fr::from(a);
         let (tx1, rx1) = mpsc::channel();
@@ -2525,7 +2525,7 @@ mod field_share {
         modulus: u64,
         num_decomps_per_field: usize,
     ) {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let bases = vec![modulus; num_decomps_per_field];
         fn slice_input_using_variable_bases(input: BigUint, bases: &[u64]) -> Vec<ark_bn254::Fr> {
             let mut target = input;
@@ -2628,7 +2628,7 @@ mod field_share {
     fn rep3_int_div_power_2_via_yao() {
         const VEC_SIZE: usize = 10;
 
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| ark_bn254::Fr::rand(&mut rng))
@@ -2669,7 +2669,7 @@ mod field_share {
     fn rep3_int_div_via_yao() {
         const VEC_SIZE: usize = 10;
 
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| ark_bn254::Fr::rand(&mut rng))
@@ -2717,7 +2717,7 @@ mod field_share {
     fn rep3_int_div_by_public_via_yao() {
         const VEC_SIZE: usize = 10;
 
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| ark_bn254::Fr::rand(&mut rng))
@@ -2759,7 +2759,7 @@ mod field_share {
     fn rep3_int_div_by_shared_via_yao() {
         const VEC_SIZE: usize = 10;
 
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| ark_bn254::Fr::rand(&mut rng))
@@ -2800,7 +2800,7 @@ mod field_share {
 
     fn reshare_from_2_to_3_parties_test_internal(recipient: PartyID) {
         const VEC_SIZE: usize = 10;
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| ark_bn254::Fr::rand(&mut rng))
@@ -2839,7 +2839,7 @@ mod field_share {
 
     #[test]
     fn rep3_poseidon2_gadget_kat1() {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let input = [
             ark_bn254::Fr::from(0),
@@ -2895,7 +2895,7 @@ mod field_share {
 
     #[test]
     fn rep3_poseidon2_gadget_kat1_precomp() {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let input = [
             ark_bn254::Fr::from(0),
@@ -2958,7 +2958,7 @@ mod field_share {
     fn rep3_poseidon2_gadget_kat1_precomp_packed() {
         const NUM_POSEIDON: usize = 10;
 
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let mut input = vec![ark_bn254::Fr::default(); NUM_POSEIDON * 4];
         for input in input.chunks_exact_mut(4) {
@@ -3020,7 +3020,7 @@ mod field_share {
 
     #[test]
     fn rep3_poseidon2_gadget_kat1_precomp_additive() {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let input = [
             ark_bn254::Fr::from(0),
@@ -3086,7 +3086,7 @@ mod field_share {
     fn rep3_poseidon2_merkle_tree() {
         const NUM_LEAVES: usize = 4usize.pow(3);
 
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let input = (0..NUM_LEAVES)
             .map(|_| ark_bn254::Fr::rand(&mut rng))
@@ -3129,7 +3129,7 @@ mod field_share {
 
     #[test]
     fn rep3_field_mod_pow2() {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let bit = rng.gen_range(1..ark_bn254::Fr::MODULUS_BIT_SIZE);
@@ -3164,7 +3164,7 @@ mod field_share {
 
     #[test]
     fn rep3_blake2s() {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         const INPUT_SIZE: usize = 64;
         let input: Vec<u8> = (0..INPUT_SIZE).map(|_| rng.gen()).collect();
@@ -3207,7 +3207,7 @@ mod field_share {
 
     #[test]
     fn rep3_blake3() {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         const INPUT_SIZE: usize = 64;
         let input: Vec<u8> = (0..INPUT_SIZE).map(|_| rng.gen()).collect();
@@ -3259,7 +3259,7 @@ mod curve_share {
         conversion::{self, A2BType},
         pointshare, Rep3BigUintShare, Rep3State,
     };
-    use mpc_net::thread::TestNetwork;
+    use mpc_net::local::LocalNetwork;
     use num_bigint::BigUint;
     use rand::thread_rng;
     use std::sync::mpsc;
@@ -3361,7 +3361,7 @@ mod curve_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
 
         for (tx, x, net) in izip!([tx1, tx2, tx3], x_shares.into_iter(), nets) {
             spawn_pool(move || {
@@ -3392,7 +3392,7 @@ mod curve_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
 
         for (tx, x, net) in izip!([tx1, tx2, tx3], batch_shares.into_iter(), nets) {
             spawn_pool(move || {
@@ -3430,7 +3430,7 @@ mod curve_share {
         let mut rng = thread_rng();
         let point_shares = rep3::share_curve_point(point, &mut rng);
 
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
@@ -3489,7 +3489,7 @@ mod curve_share {
             rep3::share_field_element(C::BaseField::zero(), &mut rng)
         };
 
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
@@ -3539,7 +3539,7 @@ mod curve_share {
         let mut rng = thread_rng();
         let shares = rep3::share_curve_point(point, &mut rng);
 
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();

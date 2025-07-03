@@ -12,7 +12,7 @@ use co_acvm::{
     solver::{Rep3CoSolver, partial_abi::PublicMarker},
 };
 use co_ultrahonk::prelude::{HonkCurve, ProverCrs, ProverWitnessEntities, TranscriptFieldType};
-use color_eyre::eyre::{self, Context, Result, eyre};
+use color_eyre::eyre::{self, Context, Result};
 use mpc_core::protocols::{
     rep3::{self, conversion::A2BType, id::PartyID},
     shamir::{self, ShamirPreprocessing, ShamirState},
@@ -220,7 +220,7 @@ pub fn translate_proving_key<P: Pairing, N: Network>(
     let translated_shares = state.translate_primefield_repshare_vec(shares, net)?;
 
     if translated_shares.len() != PROVER_WITNESS_ENTITIES_SIZE * proving_key.circuit_size as usize {
-        return Err(eyre!("Invalid number of shares translated"));
+        eyre::bail!("Invalid number of shares translated");
     };
 
     let mut chunks = translated_shares.chunks_exact(proving_key.circuit_size as usize);
@@ -465,7 +465,7 @@ pub fn merge_input_shares<P: Pairing>(
     for input_share in input_shares.into_iter() {
         for (wit, share) in input_share.into_iter() {
             if result.contains_key(&wit) {
-                return Err(eyre!("Duplicate witness found in input shares"));
+                eyre::bail!("Duplicate witness found in input shares");
             }
             result.insert(wit, share);
         }
@@ -533,7 +533,7 @@ pub fn download_g1_crs(num_points: usize, crs_path: impl AsRef<Path>) -> color_e
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(eyre!("Could not download CRS: {}", stderr));
+        eyre::bail!("Could not download CRS: {}", stderr);
     }
 
     let data = output.stdout;
@@ -542,11 +542,11 @@ pub fn download_g1_crs(num_points: usize, crs_path: impl AsRef<Path>) -> color_e
         .wrap_err("Failed to write data to CRS file")?;
 
     if data.len() < (g1_end + 1) {
-        return Err(eyre!(
+        eyre::bail!(
             "Downloaded CRS is incomplete: expected {} bytes, got {} bytes",
             g1_end + 1,
             data.len()
-        ));
+        );
     }
 
     Ok(())

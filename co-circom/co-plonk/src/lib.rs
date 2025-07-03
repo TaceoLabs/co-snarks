@@ -70,8 +70,7 @@ pub enum PlonkProofError {
 
 /// A Plonk proof protocol that uses a collaborative MPC protocol to generate the proof.
 pub struct CoPlonk<P: Pairing, T: CircomPlonkProver<P>> {
-    phantom_data0: PhantomData<P>,
-    phantom_data1: PhantomData<T>,
+    phantom_data: PhantomData<(P, T)>,
 }
 
 impl<P, T> CoPlonk<P, T>

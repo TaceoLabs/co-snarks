@@ -21,6 +21,7 @@ use quinn::{
     crypto::rustls::QuicClientConfig,
     rustls::{RootCertStore, pki_types::CertificateDer},
 };
+use rustls::pki_types::PrivatePkcs8KeyDer;
 use serde::{Deserialize, Serialize};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -83,8 +84,9 @@ pub struct NetworkConfigFile {
     /// The [SocketAddr] we bind to.
     pub bind_addr: SocketAddr,
     /// The path to our private key file.
-    pub key_path: Option<PathBuf>,
+    pub key_path: PathBuf,
     /// The connection timeout
+    #[serde(default)]
     #[serde(with = "humantime_serde")]
     pub timeout: Option<Duration>,
 }
@@ -120,6 +122,26 @@ impl NetworkConfig {
             key,
             timeout,
         }
+    }
+}
+
+impl TryFrom<NetworkConfigFile> for NetworkConfig {
+    type Error = std::io::Error;
+    fn try_from(value: NetworkConfigFile) -> Result<Self, Self::Error> {
+        let parties = value
+            .parties
+            .into_iter()
+            .map(NetworkParty::try_from)
+            .collect::<Result<Vec<_>, _>>()?;
+        let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(std::fs::read(value.key_path)?))
+            .clone_key();
+        Ok(NetworkConfig {
+            parties,
+            my_id: value.my_id,
+            bind_addr: value.bind_addr,
+            key,
+            timeout: value.timeout,
+        })
     }
 }
 
@@ -202,7 +224,7 @@ impl QuicConnectionHandler {
                     .with_context(|| format!("while resolving DNS name for {}", party.dns_name))?
                     .collect();
                 if party_addresses.is_empty() {
-                    return Err(eyre::eyre!("could not resolve DNS name {}", party.dns_name));
+                    eyre::bail!("could not resolve DNS name {}", party.dns_name);
                 }
                 let party_addr = party_addresses[0];
                 tracing::debug!("party {id} connecting to {} at {party_addr}", party.id);
@@ -437,12 +459,12 @@ impl QuicNetwork {
 
     /// Prints the connection statistics.
     pub fn print_connection_stats(&self, out: &mut impl std::io::Write) -> std::io::Result<()> {
-        for (i, conn) in &self.conn_handler.connections {
+        for (id, conn) in &self.conn_handler.connections {
             let stats = conn.stats();
             writeln!(
                 out,
-                "Connection {} stats:\n\tSENT: {} bytes\n\tRECV: {} bytes",
-                i, stats.udp_tx.bytes, stats.udp_rx.bytes
+                "Party {} <-> Party {} SENT: {} bytes RECV: {} bytes",
+                self.id, id, stats.udp_tx.bytes, stats.udp_rx.bytes
             )?;
         }
         Ok(())
@@ -456,7 +478,6 @@ impl Network for QuicNetwork {
 
     fn send(&self, to: usize, data: &[u8]) -> eyre::Result<()> {
         let stream = self.send.get(to).context("party id out-of-bounds")?;
-        tracing::info!("sending to {to}");
         stream.blocking_send(data.to_vec())?;
         Ok(())
     }

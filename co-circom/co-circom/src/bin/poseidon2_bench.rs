@@ -1,6 +1,6 @@
 use ark_ff::PrimeField;
 use clap::Parser;
-use color_eyre::eyre::{Context, eyre};
+use color_eyre::eyre::{self, Context};
 use figment::{
     Figment,
     providers::{Env, Format, Serialized, Toml},
@@ -117,7 +117,7 @@ fn main() -> color_eyre::Result<ExitCode> {
     install_tracing();
     rustls::crypto::aws_lc_rs::default_provider()
         .install_default()
-        .map_err(|_| eyre!("Could not install default rustls crypto provider"))?;
+        .map_err(|_| eyre::eyre!("Could not install default rustls crypto provider"))?;
 
     let cli = Cli::parse();
     let config = Config::parse(cli).context("while parsing config")?;
@@ -135,7 +135,7 @@ fn main() -> color_eyre::Result<ExitCode> {
             benches::<F, 4, D, ARITY, COMPRESSION_MODE>(&config)?;
         }
         t => {
-            return Err(eyre!("Unsupported statesize: {}", t));
+            eyre::bail!("Unsupported statesize: {}", t);
         }
     }
 
@@ -396,7 +396,7 @@ where
     Poseidon2<F, T, D>: Default,
 {
     if config.threshold != 1 {
-        return Err(color_eyre::Report::msg("Threshold must be 1 for rep3"));
+        eyre::bail!("Threshold must be 1 for rep3");
     }
 
     let mut rng = rand::thread_rng();
@@ -436,7 +436,7 @@ where
     Poseidon2<F, T, D>: Default,
 {
     if config.threshold != 1 {
-        return Err(color_eyre::Report::msg("Threshold must be 1 for rep3"));
+        eyre::bail!("Threshold must be 1 for rep3");
     }
 
     let mut rng = rand::thread_rng();
@@ -477,7 +477,7 @@ where
     Poseidon2<F, T, D>: Default,
 {
     if config.threshold != 1 {
-        return Err(color_eyre::Report::msg("Threshold must be 1 for rep3"));
+        eyre::bail!("Threshold must be 1 for rep3");
     }
 
     let mut rng = rand::thread_rng();
@@ -523,7 +523,7 @@ where
     Poseidon2<F, T, D>: Default,
 {
     if config.threshold != 1 {
-        return Err(color_eyre::Report::msg("Threshold must be 1 for rep3"));
+        eyre::bail!("Threshold must be 1 for rep3");
     }
 
     let mut rng = rand::thread_rng();
@@ -575,7 +575,7 @@ where
     Poseidon2<F, T, D>: Default,
 {
     if config.threshold != 1 {
-        return Err(color_eyre::Report::msg("Threshold must be 1 for rep3"));
+        eyre::bail!("Threshold must be 1 for rep3");
     }
 
     let mut rng = rand::thread_rng();

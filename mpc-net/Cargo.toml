@@ -14,10 +14,22 @@ rust-version.workspace = true
 # 
 [features]
 default = ["tcp"]
-thread = []
+local = []
 tcp = ["dep:crossbeam-channel", "dep:socket2"]
 tls = ["dep:rustls", "dep:crossbeam-channel", "dep:socket2"]
 quic = ["dep:futures", "dep:quinn", "dep:tokio", "dep:tokio-util"]
+
+[[example]]
+name = "three_party_tcp"
+required-features = ["tcp"]
+
+[[example]]
+name = "three_party_tls"
+required-features = ["tls"]
+
+[[example]]
+name = "three_party_quic"
+required-features = ["quic"]
 
 [dependencies]
 byteorder.workspace = true

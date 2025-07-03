@@ -5,7 +5,7 @@ mod translate_share {
         rep3::{self},
         shamir::{self, ShamirPreprocessing, ShamirState},
     };
-    use mpc_net::thread::TestNetwork;
+    use mpc_net::local::LocalNetwork;
     use rand::thread_rng;
     use std::{sync::mpsc, thread};
 
@@ -13,7 +13,7 @@ mod translate_share {
 
     #[test]
     fn fieldshare() {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let x_shares = rep3::share_field_element(x, &mut rng);
@@ -45,7 +45,7 @@ mod translate_share {
 
     #[test]
     fn fieldshare_vec() {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| ark_bn254::Fr::rand(&mut rng))
@@ -79,7 +79,7 @@ mod translate_share {
 
     #[test]
     fn pointshare() {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::G1Projective::rand(&mut rng);
         let x_shares = rep3::share_curve_point(x, &mut rng);

@@ -4,14 +4,14 @@ use clap::Parser;
 use color_eyre::{Result, eyre::Context};
 use mpc_net::{
     Network as _,
-    tcp::{NetworkConfig, TcpNetwork},
+    quic::{NetworkConfig, NetworkConfigFile, QuicNetwork},
 };
 
 #[derive(Parser)]
 struct Args {
     /// The config file path
-    #[clap(short, long, value_name = "FILE")]
-    config_file: PathBuf,
+    #[clap(short, long, value_name = "CONFIG")]
+    config: PathBuf,
 }
 
 fn install_tracing() {
@@ -38,13 +38,17 @@ fn install_tracing() {
 fn main() -> Result<()> {
     let args = Args::parse();
     install_tracing();
+    rustls::crypto::aws_lc_rs::default_provider()
+        .install_default()
+        .unwrap();
 
-    let config: NetworkConfig =
-        toml::from_str(&std::fs::read_to_string(args.config_file).context("opening config file")?)
+    let config: NetworkConfigFile =
+        toml::from_str(&std::fs::read_to_string(args.config).context("opening config file")?)
             .context("parsing config file")?;
+    let config = NetworkConfig::try_from(config)?;
     let my_id = config.my_id;
 
-    let network = TcpNetwork::new(config)?;
+    let network = QuicNetwork::new(config)?;
 
     // send to all parties
     for id in 0..3 {
@@ -54,7 +58,7 @@ fn main() -> Result<()> {
             network.send(id, &buf)?;
         }
     }
-    // recv from all channels
+    // recv from all parties
     for id in 0..3 {
         if id != my_id {
             let buf = network.recv(id)?;
@@ -62,6 +66,8 @@ fn main() -> Result<()> {
             tracing::info!("party {my_id} received from {id}");
         }
     }
+
+    network.print_connection_stats(&mut std::io::stdout())?;
 
     Ok(())
 }

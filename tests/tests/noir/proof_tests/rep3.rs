@@ -7,7 +7,7 @@ use co_ultrahonk::prelude::{
     CrsParser, Poseidon2Sponge, Rep3CoUltraHonk, TranscriptFieldType, TranscriptHasher, UltraHonk,
     Utils, ZeroKnowledge,
 };
-use mpc_net::thread::TestNetwork;
+use mpc_net::local::LocalNetwork;
 use sha3::Keccak256;
 use std::sync::Arc;
 use tests::test_utils::spawn_pool;
@@ -56,8 +56,8 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str, has_zk: Zero
         .map(Rep3AcvmType::from)
         .collect::<Vec<_>>();
 
-    let nets0 = TestNetwork::new_3_parties();
-    let nets1 = TestNetwork::new_3_parties();
+    let nets0 = LocalNetwork::new_3_parties();
+    let nets1 = LocalNetwork::new_3_parties();
     let mut threads = Vec::with_capacity(3);
     let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
     let crs_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, false).unwrap();
@@ -121,8 +121,8 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     let program_artifact = Utils::get_program_artifact_from_file(&circuit_file)
         .expect("failed to parse program artifact");
 
-    let nets0 = TestNetwork::new_3_parties();
-    let nets1 = TestNetwork::new_3_parties();
+    let nets0 = LocalNetwork::new_3_parties();
+    let nets1 = LocalNetwork::new_3_parties();
     let mut threads = Vec::with_capacity(3);
     let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
     let crs_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, false).unwrap();

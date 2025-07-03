@@ -6,7 +6,7 @@ use co_circom_types::{BatchedSharedInput, SharedInput};
 use co_noir::Bn254;
 use itertools::izip;
 use mpc_core::protocols::rep3;
-use mpc_net::thread::TestNetwork;
+use mpc_net::local::LocalNetwork;
 use rand::{thread_rng, Rng as _};
 use tests::test_utils::{self, spawn_pool};
 
@@ -19,8 +19,8 @@ fn batched_add_1() -> eyre::Result<()> {
     compiler_config.simplification = circom_mpc_compiler::SimplificationLevel::O2(usize::MAX);
     let parsed = CoCircomCompiler::<Bn254>::parse(&add_circuit, compiler_config)?;
 
-    let nets0 = TestNetwork::new_3_parties();
-    let nets1 = TestNetwork::new_3_parties();
+    let nets0 = LocalNetwork::new_3_parties();
+    let nets1 = LocalNetwork::new_3_parties();
 
     let batch_size = 1;
     let mut rng = thread_rng();
@@ -109,8 +109,8 @@ fn batched_add_100() -> eyre::Result<()> {
     compiler_config.simplification = circom_mpc_compiler::SimplificationLevel::O2(usize::MAX);
     let parsed = CoCircomCompiler::<Bn254>::parse(&add_circuit, compiler_config)?;
 
-    let nets0 = TestNetwork::new_3_parties();
-    let nets1 = TestNetwork::new_3_parties();
+    let nets0 = LocalNetwork::new_3_parties();
+    let nets1 = LocalNetwork::new_3_parties();
 
     let batch_size = 100;
     let mut rng = thread_rng();
@@ -203,8 +203,8 @@ fn batched_chacha20_1() -> eyre::Result<()> {
     let public_inputs =
         CoCircomCompiler::<Bn254>::get_public_inputs(&chacha_circuit, compiler_config).unwrap();
 
-    let nets0 = TestNetwork::new_3_parties();
-    let nets1 = TestNetwork::new_3_parties();
+    let nets0 = LocalNetwork::new_3_parties();
+    let nets1 = LocalNetwork::new_3_parties();
 
     let batch_size = 1;
     let mut rng = thread_rng();
@@ -298,8 +298,8 @@ fn batched_chacha20_30() -> eyre::Result<()> {
     let public_inputs =
         CoCircomCompiler::<Bn254>::get_public_inputs(&chacha_circuit, compiler_config).unwrap();
 
-    let nets0 = TestNetwork::new_3_parties();
-    let nets1 = TestNetwork::new_3_parties();
+    let nets0 = LocalNetwork::new_3_parties();
+    let nets1 = LocalNetwork::new_3_parties();
 
     let batch_size = 30;
     let mut rng = thread_rng();

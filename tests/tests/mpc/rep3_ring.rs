@@ -23,7 +23,7 @@ mod ring_share {
     use mpc_core::protocols::rep3_ring::ring::ring_impl::RingElement;
     use mpc_core::protocols::rep3_ring::yao;
     use mpc_core::MpcState;
-    use mpc_net::thread::TestNetwork;
+    use mpc_net::local::LocalNetwork;
     use num_bigint::BigUint;
     use num_traits::{AsPrimitive, One, Zero};
     use rand::distributions::Standard;
@@ -190,7 +190,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = rng.gen::<RingElement<T>>();
         let y = rng.gen::<RingElement<T>>();
@@ -228,8 +228,8 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let nets0 = TestNetwork::new_3_parties();
-        let nets1 = TestNetwork::new_3_parties();
+        let nets0 = LocalNetwork::new_3_parties();
+        let nets1 = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x0 = rng.gen::<RingElement<T>>();
         let x1 = rng.gen::<RingElement<T>>();
@@ -276,7 +276,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = rng.gen::<RingElement<T>>();
         let y = rng.gen::<RingElement<T>>();
@@ -315,7 +315,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..1)
             .map(|_| rng.gen::<RingElement<T>>())
@@ -389,7 +389,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = rng.gen::<RingElement<T>>() & RingElement::one();
         let mut x_shares = rep3_ring::share_ring_element_binary(x, &mut rng);
@@ -430,7 +430,7 @@ mod ring_share {
     {
         const VEC_SIZE: usize = 10;
 
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let mut should_result = Vec::with_capacity(VEC_SIZE);
         let mut x0_shares = Vec::with_capacity(VEC_SIZE);
@@ -487,7 +487,7 @@ mod ring_share {
                         let compare = constant_number - RingElement::one();
                         for i in 0u64..3 {
                             let compare = compare + RingElement(T::try_from(i).unwrap());
-                            let nets = TestNetwork::new_3_parties();
+                            let nets = LocalNetwork::new_3_parties();
                             let mut rng = thread_rng();
                             let x_shares = rep3_ring::share_ring_element(constant_number, &mut rng);
                             let y_shares = rep3_ring::share_ring_element(compare, &mut rng);
@@ -537,7 +537,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = RingElement::<T>::zero();
         let x_shares = rep3_ring::share_ring_element(x, &mut rng);
@@ -571,7 +571,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = RingElement::<T>::zero();
         let x_shares = rep3_ring::share_ring_element(x, &mut rng);
@@ -605,7 +605,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = RingElement::<T>::zero();
         let x_shares = rep3_ring::share_ring_element(x, &mut rng);
@@ -639,7 +639,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = rng.gen::<RingElement<T>>();
         let x_shares = rep3_ring::share_ring_element(x, &mut rng);
@@ -673,7 +673,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = rng.gen::<RingElement<T>>();
         let x_shares = rep3_ring::share_ring_element(x, &mut rng);
@@ -707,7 +707,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = rng.gen::<RingElement<T>>();
         let x_shares = rep3_ring::share_ring_element(x, &mut rng);
@@ -741,7 +741,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = rng.gen::<RingElement<T>>();
         let x_shares = rep3_ring::share_ring_element_binary(x, &mut rng);
@@ -775,7 +775,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = rng.gen::<RingElement<T>>();
         let x_shares = rep3_ring::share_ring_element_binary(x, &mut rng);
@@ -809,7 +809,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = rng.gen::<RingElement<T>>();
         let x_shares = rep3_ring::share_ring_element_binary(x, &mut rng);
@@ -843,7 +843,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = rng.gen::<RingElement<T>>();
         let y = rng.gen::<RingElement<T>>();
@@ -917,7 +917,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = rng.gen::<RingElement<T>>();
         let y = rng.gen::<RingElement<T>>();
@@ -990,7 +990,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = rng.gen::<RingElement<T>>();
         let x_shares = rep3_ring::share_ring_element(x, &mut rng);
@@ -1042,7 +1042,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = rng.gen::<RingElement<T>>();
         let x_shares = rep3_ring::share_ring_element(x, &mut rng);
@@ -1093,7 +1093,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let delta = GCUtils::random_delta(&mut rng);
         let x = rng.gen::<RingElement<T>>();
@@ -1132,7 +1132,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let delta = GCUtils::random_delta(&mut rng);
         let x = rng.gen::<RingElement<T>>();
@@ -1172,7 +1172,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = rng.gen::<RingElement<T>>();
         let x_shares = rep3_ring::share_ring_element_binary(x, &mut rng);
@@ -1226,7 +1226,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = rng.gen::<RingElement<T>>();
         let x_shares = rep3_ring::share_ring_element_binary(x, &mut rng);
@@ -1279,7 +1279,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let delta = GCUtils::random_delta(&mut rng);
         let x = rng.gen::<RingElement<T>>();
@@ -1320,7 +1320,7 @@ mod ring_share {
         T: IntRing2k + AsPrimitive<U>,
         U: IntRing2k,
     {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = rng.gen::<RingElement<T>>();
         let x_shares = rep3_ring::share_ring_element(x, &mut rng);
@@ -1355,7 +1355,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let x_shares = rep3::share_field_element(x, &mut rng);
@@ -1390,7 +1390,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = rng.gen::<RingElement<T>>();
         let x_shares = rep3_ring::share_ring_element(x, &mut rng);
@@ -1427,7 +1427,7 @@ mod ring_share {
     {
         const VEC_SIZE: usize = 10;
 
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| ark_bn254::Fr::rand(&mut rng))
@@ -1468,7 +1468,7 @@ mod ring_share {
     {
         const VEC_SIZE: usize = 10;
 
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| rng.gen::<RingElement<T>>())
@@ -1512,7 +1512,7 @@ mod ring_share {
         if U::K <= T::K {
             return;
         }
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| rng.gen::<RingElement<T>>())
@@ -1554,7 +1554,7 @@ mod ring_share {
         T: IntRing2k + AsPrimitive<U>,
         U: IntRing2k,
     {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = rng.gen::<RingElement<T>>();
         let x_shares = rep3_ring::share_ring_element(x, &mut rng);
@@ -1592,7 +1592,7 @@ mod ring_share {
         const VEC_SIZE: usize = 10;
         let num_chunks = (ark_bn254::Fr::MODULUS_BIT_SIZE as usize).div_ceil(T::K);
 
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| ark_bn254::Fr::rand(&mut rng))
@@ -1646,7 +1646,7 @@ mod ring_share {
     {
         const VEC_SIZE: usize = 10;
 
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| rng.gen::<RingElement<T>>())
@@ -1691,7 +1691,7 @@ mod ring_share {
     {
         const VEC_SIZE: usize = 10;
 
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| rng.gen::<RingElement<T>>())
@@ -1743,7 +1743,7 @@ mod ring_share {
     {
         const VEC_SIZE: usize = 10;
 
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| rng.gen::<RingElement<T>>())
@@ -1790,7 +1790,7 @@ mod ring_share {
     {
         const VEC_SIZE: usize = 10;
 
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| rng.gen::<RingElement<T>>())
@@ -1835,7 +1835,7 @@ mod ring_share {
     where
         Standard: Distribution<T>,
     {
-        let nets = TestNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
@@ -1907,7 +1907,7 @@ mod ring_share {
             let x_shares = rep3_ring::share_ring_element_binary(x_, &mut rng);
             let should_result_f = lut[x].to_owned();
 
-            let nets = TestNetwork::new_3_parties();
+            let nets = LocalNetwork::new_3_parties();
             let (tx1, rx1) = mpsc::channel();
             let (tx2, rx2) = mpsc::channel();
             let (tx3, rx3) = mpsc::channel();
@@ -1952,8 +1952,8 @@ mod ring_share {
             let x_shares = rep3_ring::share_ring_element_binary(x_, &mut rng);
             let should_result_f = lut[x].to_owned();
 
-            let nets0 = TestNetwork::new_3_parties();
-            let nets1 = TestNetwork::new_3_parties();
+            let nets0 = LocalNetwork::new_3_parties();
+            let nets1 = LocalNetwork::new_3_parties();
             let (tx1, rx1) = mpsc::channel();
             let (tx2, rx2) = mpsc::channel();
             let (tx3, rx3) = mpsc::channel();
@@ -2013,7 +2013,7 @@ mod ring_share {
             let lut_shares = rep3::share_field_elements(&lut, &mut rng);
             let should_result = lut[x].to_owned();
 
-            let nets = TestNetwork::new_3_parties();
+            let nets = LocalNetwork::new_3_parties();
             let (tx1, rx1) = mpsc::channel();
             let (tx2, rx2) = mpsc::channel();
             let (tx3, rx3) = mpsc::channel();
@@ -2064,7 +2064,7 @@ mod ring_share {
             let mut should_result = lut;
             should_result[x] = y;
 
-            let nets = TestNetwork::new_3_parties();
+            let nets = LocalNetwork::new_3_parties();
             let (tx1, rx1) = mpsc::channel();
             let (tx2, rx2) = mpsc::channel();
             let (tx3, rx3) = mpsc::channel();

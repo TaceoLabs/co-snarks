@@ -6,7 +6,7 @@ use std::{
     io::{Read, Write},
     net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs as _},
     path::PathBuf,
-    sync::Arc,
+    sync::{Arc, atomic::AtomicUsize},
     time::{Duration, Instant},
 };
 
@@ -18,10 +18,10 @@ use intmap::IntMap;
 use parking_lot::Mutex;
 use rustls::{
     ClientConfig, ClientConnection, RootCertStore, ServerConfig, ServerConnection, StreamOwned,
-    pki_types::{CertificateDer, PrivateKeyDer, ServerName},
+    pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer, ServerName},
 };
 use serde::{Deserialize, Serialize};
-use socket2::{Domain, Socket, Type};
+use socket2::{Domain, Socket, TcpKeepalive, Type};
 
 /// A party in the network config file.
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
@@ -78,8 +78,9 @@ pub struct NetworkConfigFile {
     /// The [SocketAddr] we bind to.
     pub bind_addr: SocketAddr,
     /// The path to our private key file.
-    pub key_path: Option<PathBuf>,
+    pub key_path: PathBuf,
     /// The connection timeout
+    #[serde(default)]
     #[serde(with = "humantime_serde")]
     pub timeout: Option<Duration>,
 }
@@ -115,6 +116,26 @@ impl NetworkConfig {
             key,
             timeout,
         }
+    }
+}
+
+impl TryFrom<NetworkConfigFile> for NetworkConfig {
+    type Error = std::io::Error;
+    fn try_from(value: NetworkConfigFile) -> Result<Self, Self::Error> {
+        let parties = value
+            .parties
+            .into_iter()
+            .map(NetworkParty::try_from)
+            .collect::<Result<Vec<_>, _>>()?;
+        let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(std::fs::read(value.key_path)?))
+            .clone_key();
+        Ok(NetworkConfig {
+            parties,
+            my_id: value.my_id,
+            bind_addr: value.bind_addr,
+            key,
+            timeout: value.timeout,
+        })
     }
 }
 
@@ -166,10 +187,11 @@ impl Write for TlsStream {
 
 /// A MPC network using [TlsStream]s
 #[derive(Debug)]
+#[expect(clippy::complexity)]
 pub struct TlsNetwork {
     id: usize,
-    send: IntMap<usize, Mutex<TlsStream>>,
-    recv: IntMap<usize, Receiver<Vec<u8>>>,
+    send: IntMap<usize, (Mutex<TlsStream>, AtomicUsize)>,
+    recv: IntMap<usize, (Receiver<std::io::Result<Vec<u8>>>, AtomicUsize)>,
     timeout: Duration,
 }
 
@@ -222,6 +244,8 @@ impl TlsNetwork {
             socket.set_only_v6(false)?;
         }
         socket.set_read_timeout(Some(timeout))?;
+        let keepalive = TcpKeepalive::new().with_interval(Duration::from_secs(1));
+        socket.set_tcp_keepalive(&keepalive)?;
         socket.bind(&bind_addr.into())?;
         socket.listen(128)?;
         let listener = TcpListener::from(socket);
@@ -268,25 +292,20 @@ impl TlsNetwork {
                             stream.write_u8(s)?;
 
                             if s == STREAM_0 {
-                                nets[i].send.insert(other_id, Mutex::new(stream));
+                                nets[i]
+                                    .send
+                                    .insert(other_id, (Mutex::new(stream), AtomicUsize::default()));
                             } else {
                                 let (tx, rx) = crossbeam_channel::bounded(32);
                                 std::thread::spawn(move || {
                                     loop {
-                                        match read_next_frame(&mut stream) {
-                                            Ok(data) => {
-                                                if tx.send(data).is_err() {
-                                                    tracing::warn!("recv receiver dropped");
-                                                }
-                                            }
-                                            Err(err) => {
-                                                tracing::warn!("failed to recv data: {err:?}");
-                                                break;
-                                            }
+                                        let data = read_next_frame(&mut stream);
+                                        if tx.send(data).is_err() {
+                                            break;
                                         }
                                     }
                                 });
-                                nets[i].recv.insert(other_id, rx);
+                                nets[i].recv.insert(other_id, (rx, AtomicUsize::default()));
                             }
                         }
                         Ordering::Greater => {
@@ -305,22 +324,17 @@ impl TlsNetwork {
                                 let (tx, rx) = crossbeam_channel::bounded(32);
                                 std::thread::spawn(move || {
                                     loop {
-                                        match read_next_frame(&mut stream) {
-                                            Ok(data) => {
-                                                if tx.send(data).is_err() {
-                                                    tracing::warn!("recv receiver dropped");
-                                                }
-                                            }
-                                            Err(err) => {
-                                                tracing::warn!("failed to recv data: {err:?}");
-                                                break;
-                                            }
+                                        let data = read_next_frame(&mut stream);
+                                        if tx.send(data).is_err() {
+                                            break;
                                         }
                                     }
                                 });
-                                nets[i].recv.insert(other_id, rx);
+                                nets[i].recv.insert(other_id, (rx, AtomicUsize::default()));
                             } else {
-                                nets[i].send.insert(other_id, Mutex::new(stream));
+                                nets[i]
+                                    .send
+                                    .insert(other_id, (Mutex::new(stream), AtomicUsize::default()));
                             }
                         }
                         Ordering::Equal => continue,
@@ -331,6 +345,22 @@ impl TlsNetwork {
 
         Ok(nets)
     }
+
+    /// Prints the connection statistics.
+    pub fn print_connection_stats(&self, out: &mut impl std::io::Write) -> std::io::Result<()> {
+        for (id, (_, sent_bytes)) in self.send.iter() {
+            let recv_bytes = &self.recv.get(id).expect("was in send so must be in recv").1;
+            writeln!(
+                out,
+                "Party {} <-> Party {} SENT: {} bytes RECV: {} bytes",
+                self.id,
+                id,
+                sent_bytes.load(std::sync::atomic::Ordering::Relaxed),
+                recv_bytes.load(std::sync::atomic::Ordering::Relaxed),
+            )?;
+        }
+        Ok(())
+    }
 }
 
 impl Network for TlsNetwork {
@@ -339,20 +369,24 @@ impl Network for TlsNetwork {
     }
 
     fn send(&self, to: usize, data: &[u8]) -> eyre::Result<()> {
-        let mut stream = self.send.get(to).context("party id out-of-bounds")?.lock();
-        stream.write_u64::<BigEndian>(data.len() as u64)?;
+        let (stream, sent_bytes) = self.send.get(to).context("party id out-of-bounds")?;
+        sent_bytes.fetch_add(data.len(), std::sync::atomic::Ordering::Relaxed);
+        let mut stream = stream.lock();
+        stream.write_u48::<BigEndian>(data.len() as u64)?;
         stream.write_all(data)?;
         Ok(())
     }
 
     fn recv(&self, from: usize) -> eyre::Result<Vec<u8>> {
-        let queue = self.recv.get(from).context("party id out-of-bounds")?;
-        Ok(queue.recv_timeout(self.timeout)?)
+        let (queue, recv_bytes) = self.recv.get(from).context("party id out-of-bounds")?;
+        let data = queue.recv_timeout(self.timeout)??;
+        recv_bytes.fetch_add(data.len(), std::sync::atomic::Ordering::Relaxed);
+        Ok(data)
     }
 }
 
 fn read_next_frame(stream: &mut TlsStream) -> std::io::Result<Vec<u8>> {
-    let len = stream.read_u64::<BigEndian>()? as usize;
+    let len = stream.read_u48::<BigEndian>()? as usize;
     let mut data = vec![0; len];
     stream.read_exact(&mut data)?;
     Ok(data)
