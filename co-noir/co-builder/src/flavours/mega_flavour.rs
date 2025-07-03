@@ -182,11 +182,11 @@ impl<T: Default + Serialize> Serialize for MegaProverWitnessEntities<T> {
         self.elements.serialize(serializer)
     }
 }
-impl<T: Default + Serialize> Serialize for MegaWitnessEntities<T> {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        self.elements.serialize(serializer)
-    }
-}
+// impl<T: Default + Serialize> Serialize for MegaWitnessEntities<T> {
+//     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+//         self.elements.serialize(serializer)
+//     }
+// }
 impl<'de, T: Default + Clone + Deserialize<'de>> Deserialize<'de> for MegaPrecomputedEntities<T> {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let elements = Vec::<T>::deserialize(deserializer)?;
@@ -229,27 +229,27 @@ impl<'de, T: Default + Clone + Deserialize<'de>> Deserialize<'de> for MegaProver
         })
     }
 }
-impl<'de, T: Default + Clone + Deserialize<'de>> Deserialize<'de> for MegaWitnessEntities<T> {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let elements = Vec::<T>::deserialize(deserializer)?;
-        if elements.len() != MegaFlavour::WITNESS_ENTITIES_SIZE {
-            return Err(serde::de::Error::custom(format!(
-                "Expected {} elements, got {}",
-                MegaFlavour::WITNESS_ENTITIES_SIZE,
-                elements.len()
-            )));
-        }
-        Ok(Self {
-            elements: elements.clone().try_into().map_err(|_| {
-                serde::de::Error::custom(format!(
-                    "Expected {} elements, got {}",
-                    MegaFlavour::WITNESS_ENTITIES_SIZE,
-                    elements.len()
-                ))
-            })?,
-        })
-    }
-}
+// impl<'de, T: Default + Clone + Deserialize<'de>> Deserialize<'de> for MegaWitnessEntities<T> {
+//     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+//         let elements = Vec::<T>::deserialize(deserializer)?;
+//         if elements.len() != MegaFlavour::WITNESS_ENTITIES_SIZE {
+//             return Err(serde::de::Error::custom(format!(
+//                 "Expected {} elements, got {}",
+//                 MegaFlavour::WITNESS_ENTITIES_SIZE,
+//                 elements.len()
+//             )));
+//         }
+//         Ok(Self {
+//             elements: elements.clone().try_into().map_err(|_| {
+//                 serde::de::Error::custom(format!(
+//                     "Expected {} elements, got {}",
+//                     MegaFlavour::WITNESS_ENTITIES_SIZE,
+//                     elements.len()
+//                 ))
+//             })?,
+//         })
+//     }
+// }
 
 impl<T: Default> PrecomputedEntitiesFlavour<T> for MegaPrecomputedEntities<T> {
     fn iter<'a>(&'a self) -> impl Iterator<Item = &'a T>

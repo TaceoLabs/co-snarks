@@ -18,10 +18,6 @@ pub(crate) struct ProverMemory<T: NoirUltraHonkProver<P>, P: Pairing, L: MPCProv
     pub(crate) relation_parameters: RelationParameters<P::ScalarField, L>,
 }
 
-// pub(crate) const MAX_PARTIAL_RELATION_LENGTH: usize = 7;
-// pub(crate) const BATCHED_RELATION_PARTIAL_LENGTH: usize = MAX_PARTIAL_RELATION_LENGTH + 1;
-// pub(crate) const BATCHED_RELATION_PARTIAL_LENGTH_ZK: usize = BATCHED_RELATION_PARTIAL_LENGTH + 1;
-
 pub(crate) type ProverUnivariates<T, P, L> = AllEntities<
     <L as MPCProverFlavour>::ProverUnivariateShared<T, P>,
     <L as MPCProverFlavour>::ProverUnivariatePublic<P>,
@@ -36,7 +32,7 @@ pub(crate) type PartiallyEvaluatePolys<T, P, L> = AllEntities<
 >;
 pub(crate) type ClaimedEvaluations<F, L> = AllEntities<F, F, L>;
 
-pub(crate) struct RelationParameters<F: PrimeField, L: MPCProverFlavour> {
+pub struct RelationParameters<F: PrimeField, L: MPCProverFlavour> {
     pub(crate) eta_1: F,
     pub(crate) eta_2: F,
     pub(crate) eta_3: F,

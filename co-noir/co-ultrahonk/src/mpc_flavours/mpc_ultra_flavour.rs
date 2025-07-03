@@ -396,15 +396,6 @@ impl MPCProverFlavour for UltraFlavour {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct UltraAlphas<F: PrimeField>([F; UltraFlavour::NUM_ALPHAS]);
-
-impl<F: PrimeField + Default> Default for UltraAlphas<F> {
-    fn default() -> Self {
-        Self(std::array::from_fn(|_| F::default()))
-    }
-}
-
 impl<T, P> AllEntitiesBatchRelationsTrait<T, P, UltraFlavour>
     for AllEntitiesBatchRelationsUltra<T, P>
 where

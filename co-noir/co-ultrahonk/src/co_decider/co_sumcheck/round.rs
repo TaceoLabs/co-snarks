@@ -6,7 +6,6 @@ use crate::{
     co_decider::{
         relations::Relation,
         types::{ProverUnivariates, RelationParameters},
-        univariates::SharedUnivariate,
     },
     mpc::NoirUltraHonkProver,
     types::AllEntities,
@@ -21,8 +20,6 @@ use ultrahonk::plain_prover_flavour::UnivariateTest;
 use ultrahonk::prelude::GateSeparatorPolynomial;
 
 const MAX_ROUND_SIZE_PER_BATCH: usize = 1 << 20;
-
-pub(crate) type SumcheckRoundOutput<T, P, const U: usize> = SharedUnivariate<T, P, U>;
 
 pub(crate) struct SumcheckRound {
     pub(crate) round_size: usize,
@@ -461,7 +458,7 @@ impl SumcheckRound {
             // Note: Currently not happening
             let mut libra_round_univariate_extended = L::SumcheckRoundOutputZK::<T, P>::default();
             libra_round_univariate_extended
-                .extend_from(&libra_round_univariate.evaluations_as_ref());
+                .extend_from(libra_round_univariate.evaluations_as_ref());
             libra_round_univariate_extended
         }
     }

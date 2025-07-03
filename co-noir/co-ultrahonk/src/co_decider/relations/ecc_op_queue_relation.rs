@@ -1,15 +1,15 @@
-use crate::co_decider::relations::fold_accumulator;
 use crate::co_decider::relations::Relation;
+use crate::co_decider::relations::fold_accumulator;
 use crate::co_decider::types::ProverUnivariatesBatch;
 use crate::co_decider::types::RelationParameters;
 use ark_ec::pairing::Pairing;
 use ark_ff::Zero;
+use co_builder::HonkProofResult;
+use co_builder::TranscriptFieldType;
 use co_builder::polynomials::polynomial_flavours::{
     PrecomputedEntitiesFlavour, ShiftedWitnessEntitiesFlavour, WitnessEntitiesFlavour,
 };
 use co_builder::prelude::HonkCurve;
-use co_builder::HonkProofResult;
-use co_builder::TranscriptFieldType;
 use itertools::Itertools;
 use ultrahonk::prelude::Univariate;
 
@@ -173,38 +173,38 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
             .collect_vec();
 
         // Contribution (1)
-        let mut tmp = T::sub_many(&op_wire_1, &w_1_shift);
+        let mut tmp = T::sub_many(op_wire_1, w_1_shift);
         tmp = T::mul_with_public_many(&lagrange_by_scaling, &tmp);
         fold_accumulator!(univariate_accumulator.r0, tmp, SIZE);
 
         // Contribution (2)
-        tmp = T::sub_many(&op_wire_2, &w_2_shift);
+        tmp = T::sub_many(op_wire_2, w_2_shift);
         tmp = T::mul_with_public_many(&lagrange_by_scaling, &tmp);
         fold_accumulator!(univariate_accumulator.r1, tmp, SIZE);
 
         // Contribution (3)
-        tmp = T::sub_many(&op_wire_3, &w_3_shift);
+        tmp = T::sub_many(op_wire_3, w_3_shift);
         tmp = T::mul_with_public_many(&lagrange_by_scaling, &tmp);
         fold_accumulator!(univariate_accumulator.r2, tmp, SIZE);
         // Contribution (4)
-        tmp = T::sub_many(&op_wire_4, &w_4_shift);
+        tmp = T::sub_many(op_wire_4, w_4_shift);
         tmp = T::mul_with_public_many(&lagrange_by_scaling, &tmp);
         fold_accumulator!(univariate_accumulator.r3, tmp, SIZE);
 
         // Contribution (5)
-        tmp = T::mul_with_public_many(&complement_ecc_op_by_scaling, &op_wire_1);
+        tmp = T::mul_with_public_many(&complement_ecc_op_by_scaling, op_wire_1);
         fold_accumulator!(univariate_accumulator.r4, tmp, SIZE);
 
         // Contribution (6)
-        tmp = T::mul_with_public_many(&complement_ecc_op_by_scaling, &op_wire_2);
+        tmp = T::mul_with_public_many(&complement_ecc_op_by_scaling, op_wire_2);
         fold_accumulator!(univariate_accumulator.r5, tmp, SIZE);
 
         // Contribution (7)
-        tmp = T::mul_with_public_many(&complement_ecc_op_by_scaling, &op_wire_3);
+        tmp = T::mul_with_public_many(&complement_ecc_op_by_scaling, op_wire_3);
         fold_accumulator!(univariate_accumulator.r6, tmp, SIZE);
 
         // Contribution (8)
-        tmp = T::mul_with_public_many(&complement_ecc_op_by_scaling, &op_wire_4);
+        tmp = T::mul_with_public_many(&complement_ecc_op_by_scaling, op_wire_4);
         fold_accumulator!(univariate_accumulator.r7, tmp, SIZE);
         Ok(())
     }

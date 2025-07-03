@@ -2,8 +2,8 @@ use crate::proof_tests::{CRS_PATH_G1, CRS_PATH_G2};
 use ark_bn254::Bn254;
 use co_acvm::ShamirAcvmType;
 use co_ultrahonk::prelude::{
-    CrsParser, Poseidon2Sponge, ShamirCoUltraHonk, TranscriptFieldType, TranscriptHasher,
-    UltraHonk, Utils, ZeroKnowledge,
+    CrsParser, Poseidon2Sponge, ShamirCoUltraHonk, TranscriptHasher, UltraHonk, Utils,
+    ZeroKnowledge,
 };
 use sha3::Keccak256;
 use std::{sync::Arc, thread};
@@ -48,9 +48,14 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
                 false,
             )
             .unwrap();
-            let (proof, public_inputs, _) =
-                ShamirCoUltraHonk::<_, _, H>::prove(net, threshold, pk, &prover_crs, has_zk)
-                    .unwrap();
+            let (proof, public_inputs, _) = ShamirCoUltraHonk::<_, _, H, UltraFlavour>::prove(
+                net,
+                threshold,
+                pk,
+                &prover_crs,
+                has_zk,
+            )
+            .unwrap();
             (proof, public_inputs)
         }));
     }
@@ -79,7 +84,8 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     let verifier_crs = CrsParser::<Bn254>::get_crs_g2(CRS_PATH_G2).unwrap();
     let vk = co_noir::generate_vk(&constraint_system, prover_crs, verifier_crs, false).unwrap();
 
-    let is_valid = UltraHonk::<_, H>::verify(proof, &public_input, &vk, has_zk).unwrap();
+    let is_valid =
+        UltraHonk::<_, H, UltraFlavour>::verify(proof, &public_input, &vk, has_zk).unwrap();
     assert!(is_valid);
 }
 

@@ -11,6 +11,8 @@ use crate::mpc_prover_flavour::MPCProverFlavour;
 // #[derive(Default, Serialize, Deserialize)]
 // #[serde(bound = "")]
 // #[derive(Default)]
+#[derive(Serialize, Deserialize)]
+#[serde(bound = "")]
 pub struct Polynomials<
     Shared: Default,
     Public: Default + Clone + std::marker::Sync,
@@ -70,10 +72,10 @@ pub(crate) struct AllEntities<
 }
 
 impl<
-        Shared: Default + std::marker::Sync,
-        Public: Default + Clone + std::marker::Sync,
-        L: MPCProverFlavour,
-    > AllEntities<Shared, Public, L>
+    Shared: Default + std::marker::Sync,
+    Public: Default + Clone + std::marker::Sync,
+    L: MPCProverFlavour,
+> AllEntities<Shared, Public, L>
 {
     pub(crate) fn public_iter(&self) -> impl Iterator<Item = &Public> {
         self.precomputed.iter()
@@ -100,10 +102,10 @@ impl<
 }
 
 impl<
-        Shared: Default + Clone + std::marker::Sync,
-        Public: Default + Clone + std::marker::Sync,
-        L: MPCProverFlavour,
-    > AllEntities<Vec<Shared>, Vec<Public>, L>
+    Shared: Default + Clone + std::marker::Sync,
+    Public: Default + Clone + std::marker::Sync,
+    L: MPCProverFlavour,
+> AllEntities<Vec<Shared>, Vec<Public>, L>
 {
     pub(crate) fn new(circuit_size: usize) -> Self {
         let mut polynomials = Self::default();

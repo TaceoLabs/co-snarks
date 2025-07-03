@@ -405,7 +405,7 @@ impl<
             batch.extend(to_cmp_0);
             batch.extend(to_cmp_1);
             batch.extend(to_cmp_2);
-            let is_zero = T::is_zero_many(&mut self.driver, &batch)?;
+            let is_zero = T::is_zero_many(self.driver, &batch)?;
             let mut idx_0_cmpared =
                 vec![
                     T::ArithmeticShare::default();
@@ -500,8 +500,7 @@ impl<
             let mul = self.driver.mul_many(&mul, &mul_with)?;
 
             self.memory.calldata_inverses = Polynomial::new(
-                mul[..proving_key.polynomials.witness.calldata_read_counts().len() as usize]
-                    .to_vec(),
+                mul[..proving_key.polynomials.witness.calldata_read_counts().len()].to_vec(),
             );
             self.memory.secondary_calldata_inverses = Polynomial::new(
                 mul[proving_key.polynomials.witness.calldata_read_counts().len()
@@ -550,13 +549,10 @@ impl<
         }
         Ok(())
     }
-
+    #[expect(clippy::type_complexity)]
     fn compute_logderivative_inverses_databus_all(
         &mut self,
         proving_key: &ProvingKey<T, P, L>,
-        // bus_idx: BusData,
-        // witness_is_zeroes: Vec<T::ArithmeticShare>,
-        // is_read_vec: Vec<bool>,
     ) -> (
         Vec<T::ArithmeticShare>,
         Vec<T::ArithmeticShare>,

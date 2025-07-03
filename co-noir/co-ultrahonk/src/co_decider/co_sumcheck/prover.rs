@@ -159,7 +159,7 @@ impl<
         )?;
         let round_univariate = self
             .driver
-            .open_many(&round_univariate.evaluations_as_ref())?;
+            .open_many(round_univariate.evaluations_as_ref())?;
 
         // Place the evaluations of the round univariate into transcript.
         transcript.send_fr_iter_to_verifier::<P, _>(
@@ -199,7 +199,7 @@ impl<
 
             let round_univariate = self
                 .driver
-                .open_many(&round_univariate.evaluations_as_ref())?;
+                .open_many(round_univariate.evaluations_as_ref())?;
 
             // Place the evaluations of the round univariate into transcript.
             transcript.send_fr_iter_to_verifier::<P, _>(
@@ -223,7 +223,7 @@ impl<
         let zero_univariate = L::SumcheckRoundOutputPublic::default();
         for idx in multivariate_d as usize..CONST_PROOF_SIZE_LOG_N {
             transcript.send_fr_iter_to_verifier::<P, _>(
-                format!("Sumcheck:univariate_{}", idx),
+                format!("Sumcheck:univariate_{idx}"),
                 zero_univariate.evaluations_as_ref(),
             );
             let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{idx}"));
@@ -285,7 +285,7 @@ impl<
         )?;
         let round_univariate = self
             .driver
-            .open_many(&round_univariate.evaluations_as_ref())?;
+            .open_many(round_univariate.evaluations_as_ref())?;
 
         // Place the evaluations of the round univariate into transcript.
         transcript.send_fr_iter_to_verifier::<P, _>(
@@ -327,7 +327,7 @@ impl<
             )?;
             let round_univariate = self
                 .driver
-                .open_many(&round_univariate.evaluations_as_ref())?;
+                .open_many(round_univariate.evaluations_as_ref())?;
 
             // Place the evaluations of the round univariate into transcript.
             transcript.send_fr_iter_to_verifier::<P, _>(
@@ -355,7 +355,7 @@ impl<
         let zero_univariate = L::SumcheckRoundOutputZKPublic::default();
         for idx in multivariate_d as usize..CONST_PROOF_SIZE_LOG_N {
             transcript.send_fr_iter_to_verifier::<P, _>(
-                format!("Sumcheck:univariate_{}", idx),
+                format!("Sumcheck:univariate_{idx}"),
                 zero_univariate.evaluations_as_ref(),
             );
             let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{idx}"));

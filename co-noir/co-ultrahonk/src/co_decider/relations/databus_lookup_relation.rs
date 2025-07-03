@@ -6,12 +6,12 @@ use crate::co_decider::univariates::SharedUnivariate;
 use crate::mpc::NoirUltraHonkProver;
 use crate::mpc_prover_flavour::MPCProverFlavour;
 use ark_ec::pairing::Pairing;
+use co_builder::HonkProofResult;
+use co_builder::TranscriptFieldType;
 use co_builder::polynomials::polynomial_flavours::{
     PrecomputedEntitiesFlavour, WitnessEntitiesFlavour,
 };
 use co_builder::prelude::HonkCurve;
-use co_builder::HonkProofResult;
-use co_builder::TranscriptFieldType;
 use itertools::Itertools;
 use ultrahonk::prelude::Univariate;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -193,7 +193,7 @@ impl DataBusLookupRelation {
     ) -> Vec<T::ArithmeticShare> {
         let is_read_gate = DataBusLookupRelation::get_read_selector(bus_idx, input);
         let read_tag = DataBusLookupRelation::read_tags(bus_idx, input).clone();
-        let add = T::add_with_public_many(&is_read_gate, &read_tag, T::get_party_id(&driver));
+        let add = T::add_with_public_many(&is_read_gate, &read_tag, T::get_party_id(driver));
         let mul = T::mul_with_public_many(&is_read_gate, &read_tag);
         T::sub_many(&add, &mul)
     }
@@ -234,7 +234,7 @@ impl DataBusLookupRelation {
             tmp.push(val * beta + gamma);
         }
         // value_i + idx_i * beta + gamma
-        T::add_with_public_many(&tmp, &value, T::get_party_id(&driver))
+        T::add_with_public_many(&tmp, &value, T::get_party_id(driver))
     }
 
     fn compute_read_term<
@@ -256,7 +256,7 @@ impl DataBusLookupRelation {
             tmp.push(T::add_with_public(
                 gamma,
                 T::mul_with_public(beta, val),
-                T::get_party_id(&driver),
+                T::get_party_id(driver),
             ));
         }
         // value + index * beta + gamma
@@ -298,7 +298,7 @@ impl DataBusLookupRelation {
 
         // Establish the correctness of the polynomial of inverses I. Note: inverses is computed so that the value
         // is 0 if !inverse_exists. Degree 3 (5)
-        let mul_2 = driver.mul_many(&mul[0], &inverses)?; //TODO: can we batch the muls more?
+        let mul_2 = driver.mul_many(mul[0], inverses)?; //TODO: can we batch the muls more?
         let tmp = T::sub_many(&mul_2, &inverse_exists)
             .iter()
             .zip_eq(scaling_factors)
@@ -325,7 +325,7 @@ impl DataBusLookupRelation {
             .zip_eq(read_selector.iter())
             .map(|(a, b)| T::mul_with_public(*b, *a))
             .collect_vec();
-        T::sub_assign_many(&mut tmp, &mul[1]);
+        T::sub_assign_many(&mut tmp, mul[1]);
         tmp = driver.mul_many(&tmp, inverses)?;
         match subrel_idx_2 {
             1 => {
@@ -385,7 +385,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
                 _relation_parameters,
                 scaling_factors,
                 BusData::from(bus_idx),
-            );
+            )?;
         }
         Ok(())
     }

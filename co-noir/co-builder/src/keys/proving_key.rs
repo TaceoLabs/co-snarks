@@ -19,8 +19,6 @@ use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use co_acvm::{PlainAcvmSolver, mpc::NoirWitnessExtensionProtocol};
 use num_bigint::BigUint;
-use serde::Deserialize;
-use serde::Serialize;
 use std::sync::Arc;
 
 pub struct ProvingKey<P: Pairing, L: ProverFlavour> {

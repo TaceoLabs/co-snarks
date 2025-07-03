@@ -41,7 +41,7 @@ where
     pub(crate) scaling_factors: Vec<P::ScalarField>,
 }
 
-pub(crate) trait AllEntitiesBatchRelationsTrait<T, P, L>
+pub trait AllEntitiesBatchRelationsTrait<T, P, L>
 where
     T: NoirUltraHonkProver<P>,
     P: Pairing,
