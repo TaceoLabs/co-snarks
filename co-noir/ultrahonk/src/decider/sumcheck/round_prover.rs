@@ -15,6 +15,7 @@ use crate::{
     transcript::TranscriptFieldType,
     types::AllEntities,
 };
+use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 
 use ark_ff::PrimeField;
 use co_builder::prelude::{HonkCurve, RowDisablingPolynomial};
@@ -125,6 +126,7 @@ impl<F: PrimeField, L: PlainProverFlavour> SumcheckProverRound<F, L> {
         Self::extend_and_batch_univariates(&mut res, univariate_accumulators, gate_separators);
         res
     }
+
     fn batch_over_relations_univariates_zk(
         mut univariate_accumulators: L::AllRelationAcc<F>,
         alphas: &L::Alphas<F>,

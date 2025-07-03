@@ -21,7 +21,6 @@ impl<F: PrimeField, const SIZE: usize> Univariate<F, SIZE> {
     ) {
         let mut extended = Univariate::<F, SIZE2>::default();
         extended.extend_from(&self.evaluations);
-
         if linear_independent {
             *result += extended * extended_random_poly * partial_evaluation_result;
         } else {

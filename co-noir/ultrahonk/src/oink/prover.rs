@@ -595,53 +595,63 @@ impl<
             let has_zk = self.has_zk;
             self.has_zk = ZeroKnowledge::No; // MegaZKFlavor does not mask the wires, so we set has_zk to No
             // Commit to Goblin ECC op wires.
-            // To avoid possible issues with the current work on the merge protocol, they are not
+            // To avoid possible issues with the current work on the merge protocol, they (the ecc_op_wires) are not
             // masked in MegaZKFlavor
             self.commit_to_witness_polynomial(
                 proving_key.polynomials.witness.ecc_op_wire_1_mut(),
-                "ecc_op_wire_1",
+                "ECC_OP_WIRE_1",
                 &proving_key.crs,
                 transcript,
             )?;
             self.commit_to_witness_polynomial(
                 proving_key.polynomials.witness.ecc_op_wire_2_mut(),
-                "ecc_op_wire_2",
+                "ECC_OP_WIRE_2",
                 &proving_key.crs,
                 transcript,
             )?;
             self.commit_to_witness_polynomial(
                 proving_key.polynomials.witness.ecc_op_wire_3_mut(),
-                "ecc_op_wire_3",
+                "ECC_OP_WIRE_3",
                 &proving_key.crs,
                 transcript,
             )?;
             self.commit_to_witness_polynomial(
                 proving_key.polynomials.witness.ecc_op_wire_4_mut(),
-                "ecc_op_wire_4",
+                "ECC_OP_WIRE_4",
                 &proving_key.crs,
                 transcript,
             )?;
+            self.has_zk = has_zk;
             self.commit_to_witness_polynomial(
                 proving_key.polynomials.witness.calldata_mut(),
-                "calldata",
+                "CALLDATA",
                 &proving_key.crs,
                 transcript,
             )?;
             self.commit_to_witness_polynomial(
                 proving_key.polynomials.witness.calldata_read_counts_mut(),
-                "calldata_read_counts",
+                "CALLDATA_READ_COUNTS",
                 &proving_key.crs,
                 transcript,
             )?;
             self.commit_to_witness_polynomial(
                 proving_key.polynomials.witness.calldata_read_tags_mut(),
-                "calldata_read_tags",
+                "CALLDATA_READ_TAGS",
                 &proving_key.crs,
                 transcript,
             )?;
             self.commit_to_witness_polynomial(
                 proving_key.polynomials.witness.secondary_calldata_mut(),
-                "secondary_calldata",
+                "SECONDARY_CALLDATA",
+                &proving_key.crs,
+                transcript,
+            )?;
+            self.commit_to_witness_polynomial(
+                proving_key
+                    .polynomials
+                    .witness
+                    .secondary_calldata_read_counts_mut(),
+                "SECONDARY_CALLDATA_READ_COUNTS",
                 &proving_key.crs,
                 transcript,
             )?;
@@ -650,22 +660,13 @@ impl<
                     .polynomials
                     .witness
                     .secondary_calldata_read_tags_mut(),
-                "secondary_calldata_read_counts",
-                &proving_key.crs,
-                transcript,
-            )?;
-            self.commit_to_witness_polynomial(
-                proving_key
-                    .polynomials
-                    .witness
-                    .secondary_calldata_read_tags_mut(),
-                "secondary_calldata_read_tags",
+                "SECONDARY_CALLDATA_READ_TAGS",
                 &proving_key.crs,
                 transcript,
             )?;
             self.commit_to_witness_polynomial(
                 proving_key.polynomials.witness.return_data_mut(),
-                "return_data",
+                "RETURN_DATA",
                 &proving_key.crs,
                 transcript,
             )?;
@@ -674,13 +675,13 @@ impl<
                     .polynomials
                     .witness
                     .return_data_read_counts_mut(),
-                "return_data_read_counts",
+                "RETURN_DATA_READ_COUNTS",
                 &proving_key.crs,
                 transcript,
             )?;
             self.commit_to_witness_polynomial(
                 proving_key.polynomials.witness.return_data_read_tags_mut(),
-                "return_data_read_tags",
+                "RETURN_DATA_READ_TAGS",
                 &proving_key.crs,
                 transcript,
             )?;
@@ -700,9 +701,9 @@ impl<
         tracing::trace!("executing sorted list accumulator round");
 
         let challs = transcript.get_challenges::<P>(&[
-            "eta".to_string(),
-            "eta_two".to_string(),
-            "eta_three".to_string(),
+            "ETA".to_string(),
+            "ETA_TWO".to_string(),
+            "ETA_THREE".to_string(),
         ]);
         self.memory.challenges.eta_1 = challs[0];
         self.memory.challenges.eta_2 = challs[1];
@@ -765,7 +766,7 @@ impl<
             let mut calldata_inverses_tmp = std::mem::take(&mut self.memory.calldata_inverses);
             self.commit_to_witness_polynomial(
                 &mut calldata_inverses_tmp,
-                "calldata_inverses",
+                "CALLDATA_INVERSES",
                 &proving_key.crs,
                 transcript,
             )?;
@@ -778,7 +779,7 @@ impl<
 
             self.commit_to_witness_polynomial(
                 &mut secondary_calldata_inverses_tmp,
-                "secondary_calldata_inverses",
+                "SECONDARY_CALLDATA_INVERSES",
                 &proving_key.crs,
                 transcript,
             )?;
@@ -790,7 +791,7 @@ impl<
                 std::mem::take(&mut self.memory.return_data_inverses);
             self.commit_to_witness_polynomial(
                 &mut return_data_inverses_tmp,
-                "return_data_inverses",
+                "RETURN_DATA_INVERSES",
                 &proving_key.crs,
                 transcript,
             )?;

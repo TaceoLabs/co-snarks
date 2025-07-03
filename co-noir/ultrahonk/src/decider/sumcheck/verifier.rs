@@ -99,23 +99,6 @@ impl<
                     padding_indicator_array[round_idx],
                 );
             };
-
-            // let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{round_idx}"));
-
-            // let checked = sum_check_round.check_sum(&round_univariate, padding_value);
-            // verified = verified && checked;
-
-            // multivariate_challenge.push(round_challenge);
-
-            // sum_check_round.compute_next_target_sum(
-            //     &round_univariate,
-            //     round_challenge,
-            //     padding_value,
-            // );
-            // gate_separators.partially_evaluate_with_padding(
-            //     round_challenge,
-            //     padding_indicator_array[round_idx],
-            // );
         }
 
         // Final round
