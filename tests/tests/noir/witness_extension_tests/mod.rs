@@ -65,8 +65,8 @@ macro_rules! add_rep3_acvm_test {
                 // create input shares
                 let mut rng = rand::thread_rng();
                 let shares = co_noir::split_input_rep3::<Bn254, _>(inputs, &mut rng);
-                let nets0 = TestNetwork::new_3_parties();
-                let nets1 = TestNetwork::new_3_parties();
+                let nets0 = LocalNetwork::new_3_parties();
+                let nets1 = LocalNetwork::new_3_parties();
                 let mut threads = vec![];
                 for (net0, net1, program_artifact, share) in izip!(
                     nets0,

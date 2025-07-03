@@ -3,7 +3,7 @@ use circom_mpc_compiler::CoCircomCompiler;
 use circom_types::Witness;
 use itertools::izip;
 use mpc_core::protocols::rep3::{self};
-use mpc_net::thread::TestNetwork;
+use mpc_net::local::LocalNetwork;
 use rand::thread_rng;
 use std::fs;
 use std::fs::File;
@@ -91,8 +91,8 @@ macro_rules! run_test {
         //install_tracing();
         let mut rng = thread_rng();
         let inputs = rep3::share_field_elements($input, &mut rng);
-        let nets0 = TestNetwork::new_3_parties();
-        let nets1 = TestNetwork::new_3_parties();
+        let nets0 = LocalNetwork::new_3_parties();
+        let nets1 = LocalNetwork::new_3_parties();
         let mut threads = vec![];
 
         for (net0, net1, input) in izip!(nets0, nets1, inputs) {

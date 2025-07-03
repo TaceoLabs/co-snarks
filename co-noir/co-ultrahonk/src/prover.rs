@@ -29,9 +29,7 @@ pub struct CoUltraHonk<
     P: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
 > {
-    phantom_data0: PhantomData<P>,
-    phantom_data1: PhantomData<H>,
-    phantom_data2: PhantomData<T>,
+    phantom_data: PhantomData<(P, H, T)>,
 }
 
 impl<

@@ -5,7 +5,7 @@ use co_ultrahonk::prelude::{
     CrsParser, Poseidon2Sponge, ShamirCoUltraHonk, TranscriptFieldType, TranscriptHasher,
     UltraHonk, Utils, ZeroKnowledge,
 };
-use mpc_net::thread::TestNetwork;
+use mpc_net::local::LocalNetwork;
 use sha3::Keccak256;
 use std::sync::Arc;
 use tests::test_utils::spawn_pool;
@@ -29,7 +29,7 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
         .map(ShamirAcvmType::from)
         .collect::<Vec<_>>();
 
-    let nets = TestNetwork::new(num_parties);
+    let nets = LocalNetwork::new(num_parties);
     let mut threads = Vec::with_capacity(num_parties);
     let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
     let crs_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, false).unwrap();

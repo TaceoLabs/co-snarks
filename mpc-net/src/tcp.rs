@@ -5,6 +5,7 @@ use std::{
     cmp::Ordering,
     io::{Read, Write},
     net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs},
+    sync::atomic::AtomicUsize,
     time::{Duration, Instant},
 };
 
@@ -15,7 +16,7 @@ use eyre::ContextCompat;
 use intmap::IntMap;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use socket2::{Domain, Socket, Type};
+use socket2::{Domain, Socket, TcpKeepalive, Type};
 
 /// A party in the network.
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
@@ -70,10 +71,11 @@ impl NetworkConfig {
 
 /// A MPC network using [TcpStream]s
 #[derive(Debug)]
+#[expect(clippy::complexity)]
 pub struct TcpNetwork {
     id: usize,
-    send: IntMap<usize, Mutex<TcpStream>>,
-    recv: IntMap<usize, Receiver<Vec<u8>>>,
+    send: IntMap<usize, (Mutex<TcpStream>, AtomicUsize)>,
+    recv: IntMap<usize, (Receiver<std::io::Result<Vec<u8>>>, AtomicUsize)>,
     timeout: Duration,
 }
 
@@ -105,6 +107,8 @@ impl TcpNetwork {
             socket.set_only_v6(false)?;
         }
         socket.set_read_timeout(Some(timeout))?;
+        let keepalive = TcpKeepalive::new().with_interval(Duration::from_secs(1));
+        socket.set_tcp_keepalive(&keepalive)?;
         socket.bind(&bind_addr.into())?;
         socket.listen(128)?;
         let listener = TcpListener::from(socket);
@@ -140,25 +144,21 @@ impl TcpNetwork {
                         stream.write_u64::<BigEndian>(id as u64)?;
                         nets[i].send.insert(
                             other_id,
-                            Mutex::new(stream.try_clone().expect("can clone stream")),
+                            (
+                                Mutex::new(stream.try_clone().expect("can clone stream")),
+                                AtomicUsize::default(),
+                            ),
                         );
                         let (tx, rx) = crossbeam_channel::bounded(32);
                         std::thread::spawn(move || {
                             loop {
-                                match read_next_frame(&mut stream) {
-                                    Ok(data) => {
-                                        if tx.send(data).is_err() {
-                                            tracing::warn!("recv receiver dropped");
-                                        }
-                                    }
-                                    Err(err) => {
-                                        tracing::warn!("failed to recv data: {err:?}");
-                                        break;
-                                    }
+                                let data = read_next_frame(&mut stream);
+                                if tx.send(data).is_err() {
+                                    break;
                                 }
                             }
                         });
-                        nets[i].recv.insert(other_id, rx);
+                        nets[i].recv.insert(other_id, (rx, AtomicUsize::default()));
                     }
                     Ordering::Greater => {
                         let (mut stream, _) = listener.accept()?;
@@ -168,25 +168,21 @@ impl TcpNetwork {
                         let other_id = stream.read_u64::<BigEndian>()? as usize;
                         nets[i].send.insert(
                             other_id,
-                            Mutex::new(stream.try_clone().expect("can clone stream")),
+                            (
+                                Mutex::new(stream.try_clone().expect("can clone stream")),
+                                AtomicUsize::default(),
+                            ),
                         );
                         let (tx, rx) = crossbeam_channel::bounded(32);
                         std::thread::spawn(move || {
                             loop {
-                                match read_next_frame(&mut stream) {
-                                    Ok(data) => {
-                                        if tx.send(data).is_err() {
-                                            tracing::warn!("recv receiver dropped");
-                                        }
-                                    }
-                                    Err(err) => {
-                                        tracing::warn!("failed to recv data: {err:?}");
-                                        break;
-                                    }
+                                let data = read_next_frame(&mut stream);
+                                if tx.send(data).is_err() {
+                                    break;
                                 }
                             }
                         });
-                        nets[i].recv.insert(other_id, rx);
+                        nets[i].recv.insert(other_id, (rx, AtomicUsize::default()));
                     }
                     Ordering::Equal => continue,
                 }
@@ -194,6 +190,22 @@ impl TcpNetwork {
         }
 
         Ok(nets)
+    }
+
+    /// Prints the connection statistics.
+    pub fn print_connection_stats(&self, out: &mut impl std::io::Write) -> std::io::Result<()> {
+        for (id, (_, sent_bytes)) in self.send.iter() {
+            let recv_bytes = &self.recv.get(id).expect("was in send so must be in recv").1;
+            writeln!(
+                out,
+                "Party {} <-> Party {} SENT: {} bytes RECV: {} bytes",
+                self.id,
+                id,
+                sent_bytes.load(std::sync::atomic::Ordering::Relaxed),
+                recv_bytes.load(std::sync::atomic::Ordering::Relaxed),
+            )?;
+        }
+        Ok(())
     }
 }
 
@@ -203,20 +215,24 @@ impl Network for TcpNetwork {
     }
 
     fn send(&self, to: usize, data: &[u8]) -> eyre::Result<()> {
-        let mut stream = self.send.get(to).context("party id out-of-bounds")?.lock();
-        stream.write_u64::<BigEndian>(data.len() as u64)?;
+        let (stream, sent_bytes) = self.send.get(to).context("party id out-of-bounds")?;
+        sent_bytes.fetch_add(data.len(), std::sync::atomic::Ordering::Relaxed);
+        let mut stream = stream.lock();
+        stream.write_u48::<BigEndian>(data.len() as u64)?;
         stream.write_all(data)?;
         Ok(())
     }
 
     fn recv(&self, from: usize) -> eyre::Result<Vec<u8>> {
-        let queue = self.recv.get(from).context("party id out-of-bounds")?;
-        Ok(queue.recv_timeout(self.timeout)?)
+        let (queue, recv_bytes) = self.recv.get(from).context("party id out-of-bounds")?;
+        let data = queue.recv_timeout(self.timeout)??;
+        recv_bytes.fetch_add(data.len(), std::sync::atomic::Ordering::Relaxed);
+        Ok(data)
     }
 }
 
 fn read_next_frame(stream: &mut TcpStream) -> std::io::Result<Vec<u8>> {
-    let len = stream.read_u64::<BigEndian>()? as usize;
+    let len = stream.read_u48::<BigEndian>()? as usize;
     let mut data = vec![0; len];
     stream.read_exact(&mut data)?;
     Ok(data)

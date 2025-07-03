@@ -17,7 +17,7 @@ use co_groth16::{CircomReduction, ConstraintMatrices, Groth16, ProvingKey};
 use co_plonk::Plonk;
 use co_plonk::ShamirCoPlonk;
 use itertools::izip;
-use mpc_net::thread::TestNetwork;
+use mpc_net::local::LocalNetwork;
 use rand::thread_rng;
 use std::fs::File;
 use tests::test_utils::spawn_pool;
@@ -54,8 +54,8 @@ macro_rules! add_test_impl_g16 {
                 let mut rng = thread_rng();
                 let witness_shares =
                     SharedWitness::share_shamir(witness, r1cs.num_inputs, 1, 3, &mut rng);
-                let nets0 = TestNetwork::new_3_parties();
-                let nets1 = TestNetwork::new_3_parties();
+                let nets0 = LocalNetwork::new_3_parties();
+                let nets1 = LocalNetwork::new_3_parties();
                 let mut threads = vec![];
                 for (net0, net1, x, zkey) in izip!(
                     nets0,
@@ -131,7 +131,7 @@ macro_rules! add_test_impl_plonk {
                     SharedWitness::share_shamir(witness, r1cs.num_inputs, 1, 3, &mut rng);
                 let mut nets = vec![Vec::with_capacity(8), Vec::with_capacity(8), Vec::with_capacity(8)];
                 for _ in 0..8 {
-                    let [n0, n1, n2] = TestNetwork::new_3_parties();
+                    let [n0, n1, n2] = LocalNetwork::new_3_parties();
                     nets[0].push(n0);
                     nets[1].push(n1);
                     nets[2].push(n2);

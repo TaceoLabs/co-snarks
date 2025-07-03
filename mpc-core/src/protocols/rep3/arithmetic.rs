@@ -275,7 +275,6 @@ pub fn open_vec<F: PrimeField, N: Network>(a: &[FieldShare<F>], net: &N) -> eyre
 }
 
 /// Computes a CMUX: If cond is 1, returns truthy, otherwise returns falsy.
-/// Implementations should not overwrite this method.
 pub fn cmux<F: PrimeField, N: Network>(
     cond: FieldShare<F>,
     truthy: FieldShare<F>,
@@ -289,7 +288,6 @@ pub fn cmux<F: PrimeField, N: Network>(
 }
 
 /// Computes a CMUX: If cond is 1, returns truthy, otherwise returns falsy.
-/// Implementations should not overwrite this method.
 pub fn cmux_vec<F: PrimeField, N: Network>(
     cond: FieldShare<F>,
     truthy: &[FieldShare<F>],

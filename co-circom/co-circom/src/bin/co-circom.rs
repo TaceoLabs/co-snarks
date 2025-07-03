@@ -641,10 +641,10 @@ where
     match protocol {
         MPCProtocol::REP3 => {
             if t != 1 {
-                return Err(eyre!("REP3 only allows the threshold to be 1"));
+                eyre::bail!("REP3 only allows the threshold to be 1");
             }
             if n != 3 {
-                return Err(eyre!("REP3 only allows the number of parties to be 3"));
+                eyre::bail!("REP3 only allows the number of parties to be 3");
             }
             // create witness shares
             let start = Instant::now();
@@ -712,9 +712,7 @@ where
     let out_dir = config.out_dir;
 
     if protocol != MPCProtocol::REP3 {
-        return Err(eyre!(
-            "Only REP3 protocol is supported for splitting inputs"
-        ));
+        eyre::bail!("Only REP3 protocol is supported for splitting inputs");
     }
     let circuit_path = PathBuf::from(&circuit);
 
@@ -761,13 +759,11 @@ where
     let out = config.out;
 
     if protocol != MPCProtocol::REP3 {
-        return Err(eyre!(
-            "Only REP3 protocol is supported for merging input shares"
-        ));
+        eyre::bail!("Only REP3 protocol is supported for merging input shares");
     }
 
     if inputs.len() < 2 {
-        return Err(eyre!("Need at least two input shares to merge"));
+        eyre::bail!("Need at least two input shares to merge");
     }
 
     let input_shares = inputs
@@ -809,9 +805,7 @@ where
     let out = config.out;
 
     if protocol != MPCProtocol::REP3 {
-        return Err(eyre!(
-            "Only REP3 protocol is supported for witness generation"
-        ));
+        eyre::bail!("Only REP3 protocol is supported for witness generation");
     }
 
     // connect to network
@@ -860,7 +854,7 @@ where
     let out = config.out;
 
     if src_protocol != MPCProtocol::REP3 || target_protocol != MPCProtocol::SHAMIR {
-        return Err(eyre!("Only REP3 to SHAMIR translation is supported"));
+        eyre::bail!("Only REP3 to SHAMIR translation is supported");
     }
 
     // parse witness shares
@@ -927,7 +921,7 @@ where
             let (proof, public_input) = match protocol {
                 MPCProtocol::REP3 => {
                     if t != 1 {
-                        return Err(eyre!("REP3 only allows the threshold to be 1"));
+                        eyre::bail!("REP3 only allows the threshold to be 1");
                     }
 
                     let witness_share: CompressedRep3SharedWitness<P::ScalarField> =
@@ -995,7 +989,7 @@ where
             let (proof, public_input) = match protocol {
                 MPCProtocol::REP3 => {
                     if t != 1 {
-                        return Err(eyre!("REP3 only allows the threshold to be 1"));
+                        eyre::bail!("REP3 only allows the threshold to be 1");
                     }
 
                     let witness_share: CompressedRep3SharedWitness<P::ScalarField> =

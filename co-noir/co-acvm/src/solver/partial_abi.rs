@@ -107,7 +107,7 @@ where
             }
         }
         if wit_iter.next().is_some() {
-            return Err(eyre!("Corrupted Witness: Too much witnesses"));
+            eyre::bail!("Corrupted Witness: Too much witnesses");
         }
 
         Ok(res_map)
@@ -142,7 +142,7 @@ where
             }
         }
         if index as usize != witness.len() {
-            return Err(eyre!("Corrupted Witness: Too many witnesses"));
+            eyre::bail!("Corrupted Witness: Too many witnesses");
         }
 
         Ok(result)

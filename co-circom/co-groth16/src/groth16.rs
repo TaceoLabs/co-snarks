@@ -109,8 +109,7 @@ fn root_of_unity_for_groth16<F: PrimeField + FftField>(
 
 /// A Groth16 proof protocol that uses a collaborative MPC protocol to generate the proof.
 pub struct CoGroth16<P: Pairing, T: CircomGroth16Prover<P>> {
-    phantom_data0: PhantomData<P>,
-    phantom_data1: PhantomData<T>,
+    phantom_data: PhantomData<(P, T)>,
 }
 
 impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {

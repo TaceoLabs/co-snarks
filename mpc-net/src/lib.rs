@@ -3,12 +3,12 @@
 use std::time::Duration;
 
 pub mod config;
+#[cfg(feature = "local")]
+pub mod local;
 #[cfg(feature = "quic")]
 pub mod quic;
 #[cfg(feature = "tcp")]
 pub mod tcp;
-#[cfg(feature = "thread")]
-pub mod thread;
 #[cfg(feature = "tls")]
 pub mod tls;
 

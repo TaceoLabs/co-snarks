@@ -230,7 +230,6 @@ pub fn open_vec<T: IntRing2k, N: Network>(
 }
 
 /// Computes a CMUX: If cond is 1, returns truthy, otherwise returns falsy.
-/// Implementations should not overwrite this method.
 pub fn cmux<T: IntRing2k, N: Network>(
     cond: RingShare<T>,
     truthy: RingShare<T>,
