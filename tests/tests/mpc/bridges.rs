@@ -2,35 +2,33 @@ mod translate_share {
     use ark_std::UniformRand;
     use itertools::Itertools;
     use mpc_core::protocols::{
-        bridges::network::RepToShamirNetwork,
         rep3::{self},
-        shamir::{self, ShamirPreprocessing, ShamirProtocol},
+        shamir::{self, ShamirPreprocessing, ShamirState},
     };
+    use mpc_net::local::LocalNetwork;
     use rand::thread_rng;
     use std::{sync::mpsc, thread};
-    use tests::rep3_network::Rep3TestNetwork;
 
     const VEC_SIZE: usize = 10;
 
     #[test]
     fn fieldshare() {
-        let test_network = Rep3TestNetwork::default();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let x_shares = rep3::share_field_element(x, &mut rng);
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in test_network
-            .get_party_networks()
+        for ((net, tx), x) in nets
             .into_iter()
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
             thread::spawn(move || {
-                let preprocessing = ShamirPreprocessing::new(1, net.to_shamir_net(), 1).unwrap();
-                let mut shamir = ShamirProtocol::from(preprocessing);
-                let share = shamir.translate_primefield_repshare(x);
+                let preprocessing = ShamirPreprocessing::new(3, 1, 1, &net).unwrap();
+                let mut shamir = ShamirState::from(preprocessing);
+                let share = shamir.translate_primefield_repshare(x, &net);
                 tx.send(share.unwrap())
             });
         }
@@ -47,7 +45,7 @@ mod translate_share {
 
     #[test]
     fn fieldshare_vec() {
-        let test_network = Rep3TestNetwork::default();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| ark_bn254::Fr::rand(&mut rng))
@@ -56,17 +54,15 @@ mod translate_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in test_network
-            .get_party_networks()
+        for ((net, tx), x) in nets
             .into_iter()
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
             thread::spawn(move || {
-                let preprecessing =
-                    ShamirPreprocessing::new(1, net.to_shamir_net(), x.len()).unwrap();
-                let mut shamir = ShamirProtocol::from(preprecessing);
-                let share = shamir.translate_primefield_repshare_vec(x);
+                let preprecessing = ShamirPreprocessing::new(3, 1, x.len(), &net).unwrap();
+                let mut shamir = ShamirState::from(preprecessing);
+                let share = shamir.translate_primefield_repshare_vec(x, &net);
                 tx.send(share.unwrap())
             });
         }
@@ -83,23 +79,22 @@ mod translate_share {
 
     #[test]
     fn pointshare() {
-        let test_network = Rep3TestNetwork::default();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::G1Projective::rand(&mut rng);
         let x_shares = rep3::share_curve_point(x, &mut rng);
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in test_network
-            .get_party_networks()
+        for ((net, tx), x) in nets
             .into_iter()
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
             thread::spawn(move || {
-                let preprecessing = ShamirPreprocessing::new(1, net.to_shamir_net(), 1).unwrap();
-                let mut shamir = ShamirProtocol::from(preprecessing);
-                let share = shamir.translate_point_repshare(x);
+                let preprecessing = ShamirPreprocessing::new(3, 1, 1, &net).unwrap();
+                let mut shamir = ShamirState::from(preprecessing);
+                let share = shamir.translate_point_repshare(x, &net);
                 tx.send(share.unwrap())
             });
         }

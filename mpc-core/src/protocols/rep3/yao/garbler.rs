@@ -8,10 +8,11 @@ use super::{
     GCInputs, GCUtils, bristol_fashion::BristolFashionEvaluator, circuits::FancyBinaryConstant,
 };
 use crate::{
-    IoResult, RngType,
+    RngType,
     protocols::rep3::{
-        PartyID,
-        network::{IoContext, Rep3Network},
+        Rep3State,
+        id::PartyID,
+        network::{self},
     },
 };
 use ark_ff::PrimeField;
@@ -19,13 +20,15 @@ use core::panic;
 use fancy_garbling::{
     BinaryBundle, Fancy, FancyBinary, WireLabel, WireMod2, errors::GarblerError, util::output_tweak,
 };
+use mpc_net::Network;
 use rand::SeedableRng;
 use scuttlebutt::Block;
 use sha3::{Digest, Sha3_256};
 
 /// This struct implements the garbler for replicated 3-party garbled circuits as described in [ABY3](https://eprint.iacr.org/2018/403.pdf).
-pub struct Rep3Garbler<'a, N: Rep3Network> {
-    io_context: &'a mut IoContext<N>,
+pub struct Rep3Garbler<'a, N: Network> {
+    id: PartyID,
+    net: &'a N,
     pub(crate) delta: WireMod2,
     current_output: usize,
     current_gate: usize,
@@ -36,22 +39,23 @@ pub struct Rep3Garbler<'a, N: Rep3Network> {
     const_one: Option<WireMod2>,
 }
 
-impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
+impl<'a, N: Network> Rep3Garbler<'a, N> {
     /// Create a new garbler.
-    pub fn new(io_context: &'a mut IoContext<N>) -> Self {
-        let mut res = Self::new_with_delta(io_context, WireMod2::default());
+    pub fn new(net: &'a N, state: &mut Rep3State) -> Self {
+        let mut res = Self::new_with_delta(net, state, WireMod2::default());
         res.delta = GCUtils::random_delta(&mut res.rng);
         res
     }
 
     /// Create a new garbler with existing delta.
-    pub fn new_with_delta(io_context: &'a mut IoContext<N>, delta: WireMod2) -> Self {
-        let id = io_context.id;
-        let seed = io_context.rngs.generate_garbler_randomness(id);
+    pub fn new_with_delta(net: &'a N, state: &mut Rep3State, delta: WireMod2) -> Self {
+        let id = state.id;
+        let seed = state.rngs.generate_garbler_randomness(state.id);
         let rng = RngType::from_seed(seed);
 
         Self {
-            io_context,
+            id,
+            net,
             delta,
             current_output: 0,
             current_gate: 0,
@@ -65,7 +69,7 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
 
     /// Add the gate to the circuit
     fn add_block_to_circuit(&mut self, block: &Block) {
-        match self.io_context.id {
+        match self.id {
             PartyID::ID0 => {
                 panic!("Garbler should not be PartyID::ID0");
             }
@@ -81,27 +85,20 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
     }
 
     /// Sends the circuit to the evaluator
-    pub fn send_circuit(&mut self) -> IoResult<()> {
-        match self.io_context.id {
+    pub fn send_circuit(&self) -> eyre::Result<()> {
+        match self.id {
             PartyID::ID0 => {
                 panic!("Garbler should not be PartyID::ID0");
             }
             PartyID::ID1 => {
                 // Send the prepared circuit over the network to the evaluator
-                let mut empty_circuit = Vec::new();
-                std::mem::swap(&mut empty_circuit, &mut self.circuit);
-                self.io_context
-                    .network
-                    .send_many(PartyID::ID0, &empty_circuit)?;
+                network::send_many(self.net, PartyID::ID0, &self.circuit)?;
             }
             PartyID::ID2 => {
                 // Send the hash of the circuit to the evaluator
-                let mut hash = Sha3_256::default();
-                std::mem::swap(&mut hash, &mut self.hash);
-                let digest = hash.finalize();
-                self.io_context
-                    .network
-                    .send(PartyID::ID0, digest.as_slice())?;
+                let digest = self.hash.clone().finalize();
+
+                network::send(self.net, PartyID::ID0, digest.as_slice())?;
             }
         }
         Ok(())
@@ -132,22 +129,16 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
     }
 
     /// Outputs the values to the evaluator.
-    fn output_evaluator(&mut self, x: &[WireMod2]) -> IoResult<()> {
-        self.outputs(x).or(Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "Output failed",
-        )))?;
+    fn output_evaluator(&mut self, x: &[WireMod2]) -> eyre::Result<()> {
+        self.outputs(x).or(Err(eyre::eyre!("Output failed")))?;
         Ok(())
     }
 
     /// Outputs the values to the garbler.
-    fn output_garbler(&mut self, x: &[WireMod2]) -> IoResult<Vec<bool>> {
+    fn output_garbler(&self, x: &[WireMod2]) -> eyre::Result<Vec<bool>> {
         let blocks = self.read_blocks()?;
         if blocks.len() != x.len() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "Invalid number of blocks received",
-            ));
+            eyre::bail!("Invalid number of blocks received");
         }
 
         let mut result = Vec::with_capacity(x.len());
@@ -157,17 +148,14 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
             } else if block == zero.plus(&self.delta).as_block() {
                 result.push(true);
             } else {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "Invalid block received",
-                ));
+                eyre::bail!("Invalid block received",);
             }
         }
         Ok(result)
     }
 
     /// Outputs the value to all parties
-    pub fn output_all_parties(&mut self, x: &[WireMod2]) -> IoResult<Vec<bool>> {
+    pub fn output_all_parties(&mut self, x: &[WireMod2]) -> eyre::Result<Vec<bool>> {
         // Garbler's to evaluator
         self.output_evaluator(x)?;
 
@@ -179,7 +167,7 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
     }
 
     /// Outputs the value to parties ID0 and ID1
-    pub fn output_to_id0_and_id1(&mut self, x: &[WireMod2]) -> IoResult<Option<Vec<bool>>> {
+    pub fn output_to_id0_and_id1(&mut self, x: &[WireMod2]) -> eyre::Result<Option<Vec<bool>>> {
         // Garbler's to evaluator
         self.output_evaluator(x)?;
 
@@ -187,7 +175,7 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
         self.send_circuit()?;
 
         // Evaluator to garbler
-        if self.io_context.id == PartyID::ID1 {
+        if self.id == PartyID::ID1 {
             Ok(Some(self.output_garbler(x)?))
         } else {
             Ok(None)
@@ -196,8 +184,8 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
 
     // Read `Block`s from the channel.
     #[inline(always)]
-    fn read_blocks(&mut self) -> IoResult<Vec<Block>> {
-        let rcv: Vec<[u8; 16]> = self.io_context.network.recv_many(PartyID::ID0)?;
+    fn read_blocks(&self) -> eyre::Result<Vec<Block>> {
+        let rcv: Vec<[u8; 16]> = network::recv_many(self.net, PartyID::ID0)?;
         let mut result = Vec::with_capacity(rcv.len());
         for block in rcv {
             let mut v = Block::default();
@@ -236,7 +224,7 @@ impl<'a, N: Rep3Network> Rep3Garbler<'a, N> {
     }
 }
 
-impl<N: Rep3Network> Fancy for Rep3Garbler<'_, N> {
+impl<N: Network> Fancy for Rep3Garbler<'_, N> {
     type Item = WireMod2;
     type Error = GarblerError;
 
@@ -258,7 +246,7 @@ impl<N: Rep3Network> Fancy for Rep3Garbler<'_, N> {
     }
 }
 
-impl<N: Rep3Network> FancyBinary for Rep3Garbler<'_, N> {
+impl<N: Network> FancyBinary for Rep3Garbler<'_, N> {
     fn and(&mut self, a: &Self::Item, b: &Self::Item) -> Result<Self::Item, Self::Error> {
         let (gate0, gate1, c) = self.garble_and_gate(a, b);
         self.add_block_to_circuit(&gate0);
@@ -280,7 +268,7 @@ impl<N: Rep3Network> FancyBinary for Rep3Garbler<'_, N> {
     }
 }
 
-impl<N: Rep3Network> FancyBinaryConstant for Rep3Garbler<'_, N> {
+impl<N: Network> FancyBinaryConstant for Rep3Garbler<'_, N> {
     fn const_zero(&mut self) -> Result<Self::Item, Self::Error> {
         let zero = match self.const_zero {
             Some(zero) => zero,
@@ -306,7 +294,8 @@ impl<N: Rep3Network> FancyBinaryConstant for Rep3Garbler<'_, N> {
         Ok(zero)
     }
 }
-impl<N: Rep3Network> BristolFashionEvaluator for Rep3Garbler<'_, N> {
+
+impl<N: Network> BristolFashionEvaluator for Rep3Garbler<'_, N> {
     type WireValue = WireMod2;
 
     fn constant(

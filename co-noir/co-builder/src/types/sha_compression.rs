@@ -69,7 +69,7 @@ impl<F: PrimeField> SparseWitnessLimbs<F> {
         w: &FieldCT<F>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<Self> {
+    ) -> eyre::Result<Self> {
         let mut result = SparseWitnessLimbs::new(w.clone());
 
         let lookup = Plookup::get_lookup_accumulators_ct(
@@ -110,7 +110,7 @@ impl<F: PrimeField> SHA256<F> {
         input: [FieldCT<F>; 16],
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<[FieldCT<F>; 8]> {
+    ) -> eyre::Result<[FieldCT<F>; 8]> {
         const ROUND_CONSTANTS: [u32; 64] = [
             0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4,
             0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe,
@@ -179,7 +179,7 @@ impl<F: PrimeField> SHA256<F> {
         w_in: [FieldCT<F>; 16],
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<[FieldCT<F>; 64]> {
+    ) -> eyre::Result<[FieldCT<F>; 64]> {
         let mut w_sparse: [SparseWitnessLimbs<F>; 64] =
             array::from_fn(|_| SparseWitnessLimbs::new(FieldCT::default()));
 
@@ -342,7 +342,7 @@ impl<F: PrimeField> SHA256<F> {
         g: &SparseValue<F>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<FieldCT<F>> {
+    ) -> eyre::Result<FieldCT<F>> {
         let lookup = Plookup::get_lookup_accumulators_ct(
             builder,
             driver,
@@ -408,7 +408,7 @@ impl<F: PrimeField> SHA256<F> {
         c: &SparseValue<F>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<FieldCT<F>> {
+    ) -> eyre::Result<FieldCT<F>> {
         let lookup = Plookup::get_lookup_accumulators_ct(
             builder,
             driver,
@@ -462,7 +462,7 @@ impl<F: PrimeField> SHA256<F> {
         b: &FieldCT<F>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<FieldCT<F>> {
+    ) -> eyre::Result<FieldCT<F>> {
         if a.is_constant() && b.is_constant() {
             let a_value = a.get_value(builder, driver);
             let b_value = b.get_value(builder, driver);
@@ -511,7 +511,7 @@ impl<F: PrimeField> SHA256<F> {
         e: FieldCT<F>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<SparseValue<F>> {
+    ) -> eyre::Result<SparseValue<F>> {
         let sparse =
             Plookup::read_from_1_to_2_table(builder, driver, MultiTableId::Sha256MajInput, &e)?;
         let normal = e;
@@ -526,7 +526,7 @@ impl<F: PrimeField> SHA256<F> {
         e: FieldCT<F>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<SparseValue<F>> {
+    ) -> eyre::Result<SparseValue<F>> {
         let sparse =
             Plookup::read_from_1_to_2_table(builder, driver, MultiTableId::Sha256ChInput, &e)?;
         let normal = e;

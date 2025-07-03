@@ -369,7 +369,7 @@ impl<P: Pairing> ProvingKey<P> {
         driver: &mut T,
         witness: &mut [Polynomial<T::ArithmeticShare>; 2],
         circuit: &mut GenericUltraCircuitBuilder<P, T>,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1033): construct tables and counts at top of trace
         let mut table_offset = circuit.blocks.lookup.trace_offset as usize;
         for table in circuit.lookup_tables.iter_mut() {

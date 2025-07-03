@@ -4,8 +4,8 @@ use co_circom::{
     Bls12_381, Bn254, CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge,
     CircomGroth16Proof, CoCircomCompiler, CompilerConfig, Compression, Groth16,
     Groth16JsonVerificationKey, Groth16ZKey, Pairing, Plonk, PlonkJsonVerificationKey, PlonkProof,
-    PlonkZKey, R1CS, Rep3CoGroth16, Rep3CoPlonk, Rep3MpcNet, Rep3SharedInput, ShamirCoGroth16,
-    ShamirCoPlonk, ShamirMpcNet, ShamirSharedWitness, SimplificationLevel, VMConfig, Witness,
+    PlonkZKey, R1CS, Rep3CoGroth16, Rep3CoPlonk, Rep3SharedInput, ShamirCoGroth16, ShamirCoPlonk,
+    ShamirSharedWitness, SimplificationLevel, VMConfig, Witness,
 };
 use co_circom_types::{CompressedRep3SharedWitness, VerificationError};
 use co_groth16::CircomReduction;
@@ -14,7 +14,7 @@ use figment::{
     Figment,
     providers::{Env, Format, Serialized, Toml},
 };
-use mpc_net::config::NetworkConfigFile;
+use mpc_net::tcp::{NetworkConfig, TcpNetwork};
 use num_traits::Zero;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -288,7 +288,7 @@ pub struct GenerateWitnessConfig {
     #[serde(default)]
     pub vm: VMConfig,
     /// Network config
-    pub network: NetworkConfigFile,
+    pub network: NetworkConfig,
 }
 
 /// Cli arguments for `transalte_witness`
@@ -334,7 +334,7 @@ pub struct TranslateWitnessConfig {
     /// The output file where the final witness share is written to
     pub out: PathBuf,
     /// Network config
-    pub network: NetworkConfigFile,
+    pub network: NetworkConfig,
 }
 
 /// Cli arguments for `generate_proof`
@@ -401,7 +401,7 @@ pub struct GenerateProofConfig {
     /// The threshold of tolerated colluding parties
     pub threshold: usize,
     /// Network config
-    pub network: NetworkConfigFile,
+    pub network: NetworkConfig,
 }
 
 /// Cli arguments for `verify`
@@ -641,10 +641,10 @@ where
     match protocol {
         MPCProtocol::REP3 => {
             if t != 1 {
-                return Err(eyre!("REP3 only allows the threshold to be 1"));
+                eyre::bail!("REP3 only allows the threshold to be 1");
             }
             if n != 3 {
-                return Err(eyre!("REP3 only allows the number of parties to be 3"));
+                eyre::bail!("REP3 only allows the number of parties to be 3");
             }
             // create witness shares
             let start = Instant::now();
@@ -712,9 +712,7 @@ where
     let out_dir = config.out_dir;
 
     if protocol != MPCProtocol::REP3 {
-        return Err(eyre!(
-            "Only REP3 protocol is supported for splitting inputs"
-        ));
+        eyre::bail!("Only REP3 protocol is supported for splitting inputs");
     }
     let circuit_path = PathBuf::from(&circuit);
 
@@ -761,13 +759,11 @@ where
     let out = config.out;
 
     if protocol != MPCProtocol::REP3 {
-        return Err(eyre!(
-            "Only REP3 protocol is supported for merging input shares"
-        ));
+        eyre::bail!("Only REP3 protocol is supported for merging input shares");
     }
 
     if inputs.len() < 2 {
-        return Err(eyre!("Need at least two input shares to merge"));
+        eyre::bail!("Need at least two input shares to merge");
     }
 
     let input_shares = inputs
@@ -809,18 +805,12 @@ where
     let out = config.out;
 
     if protocol != MPCProtocol::REP3 {
-        return Err(eyre!(
-            "Only REP3 protocol is supported for witness generation"
-        ));
+        eyre::bail!("Only REP3 protocol is supported for witness generation");
     }
 
     // connect to network
-    let network_config = config
-        .network
-        .to_owned()
-        .try_into()
-        .context("while converting network config")?;
-    let mpc_net = Rep3MpcNet::new(network_config).context("while connecting to network")?;
+    let [net0, net1] =
+        TcpNetwork::networks::<2>(config.network).context("while connecting to network")?;
 
     // parse input shares
     let input_share_file =
@@ -835,12 +825,10 @@ where
     // Extend the witness
     tracing::info!("Starting witness generation...");
     let start = Instant::now();
-    let (result_witness_share, mpc_net) =
-        co_circom::generate_witness_rep3::<P>(circuit, input_share, mpc_net, config.vm)?;
+    let result_witness_share =
+        co_circom::generate_witness_rep3::<P, _>(&circuit, input_share, config.vm, &net0, &net1)?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Generate witness took {duration_ms} ms");
-    // network is shutdown in drop, which can take seom time with quinn
-    drop(mpc_net);
 
     // write result to output file
     let out_file = BufWriter::new(std::fs::File::create(&out)?);
@@ -866,7 +854,7 @@ where
     let out = config.out;
 
     if src_protocol != MPCProtocol::REP3 || target_protocol != MPCProtocol::SHAMIR {
-        return Err(eyre!("Only REP3 to SHAMIR translation is supported"));
+        eyre::bail!("Only REP3 to SHAMIR translation is supported");
     }
 
     // parse witness shares
@@ -876,21 +864,14 @@ where
         bincode::deserialize_from(witness_file)?;
 
     // connect to network
-    let network_config = config
-        .network
-        .to_owned()
-        .try_into()
-        .context("while converting network config")?;
-    let net = Rep3MpcNet::new(network_config).context("while connecting to network")?;
+    let net = TcpNetwork::new(config.network).context("while connecting to network")?;
 
     // Translate witness to shamir shares
     tracing::info!("Starting witness translation...");
     let start = Instant::now();
-    let (shamir_witness_share, mpc_net) = co_circom::translate_witness::<P>(witness_share, net)?;
+    let shamir_witness_share = co_circom::translate_witness::<P, _>(witness_share, &net)?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Translate witness took {duration_ms} ms");
-    // network is shutdown in drop, which can take seom time with quinn
-    drop(mpc_net);
 
     // write result to output file
     let out_file = BufWriter::new(std::fs::File::create(&out)?);
@@ -914,6 +895,7 @@ where
     let out = config.out;
     let public_input_filename = config.public_input;
     let t = config.threshold;
+    let n = config.network.parties.len();
     let check = if config.check_zkey {
         CheckElement::Yes
     } else {
@@ -927,54 +909,49 @@ where
     // parse Circom zkey file
     let zkey_file = File::open(zkey)?;
 
-    let network_config = config
-        .network
-        .to_owned()
-        .try_into()
-        .context("while converting network config")?;
-
     tracing::info!("Starting proof generation...");
     let public_input = match proof_system {
         ProofSystem::Groth16 => {
+            let [net0, net1] =
+                TcpNetwork::networks::<2>(config.network).context("while connecting to network")?;
+
             let zkey = Groth16ZKey::<P>::from_reader(zkey_file, check).context("reading zkey")?;
             let (matrices, pkey) = zkey.into();
 
             let (proof, public_input) = match protocol {
                 MPCProtocol::REP3 => {
                     if t != 1 {
-                        return Err(eyre!("REP3 only allows the threshold to be 1"));
+                        eyre::bail!("REP3 only allows the threshold to be 1");
                     }
 
-                    let mpc_net = Rep3MpcNet::new(network_config)?;
                     let witness_share: CompressedRep3SharedWitness<P::ScalarField> =
                         bincode::deserialize_from(witness_file)?;
-                    let (witness_share, mpc_net) =
-                        co_circom::uncompress_shared_witness(witness_share, mpc_net)?;
+                    let witness_share = co_circom::uncompress_shared_witness(witness_share, &net0)?;
                     let public_input = witness_share.public_inputs.clone();
 
                     let start = Instant::now();
-                    let (proof, mpc_net) = Rep3CoGroth16::prove::<CircomReduction>(
-                        mpc_net,
+                    let proof = Rep3CoGroth16::prove::<_, CircomReduction>(
+                        &net0,
+                        &net1,
                         &pkey,
                         &matrices,
                         witness_share,
                     )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
-                    // network is shutdown in drop, which can take seom time with quinn
-                    drop(mpc_net);
 
                     (proof, public_input)
                 }
                 MPCProtocol::SHAMIR => {
-                    let mpc_net = ShamirMpcNet::new(network_config)?;
                     let witness_share: ShamirSharedWitness<P::ScalarField> =
                         bincode::deserialize_from(witness_file)?;
                     let public_input = witness_share.public_inputs.clone();
 
                     let start = Instant::now();
-                    let (proof, mpc_net) = ShamirCoGroth16::prove::<CircomReduction>(
-                        mpc_net,
+                    let proof = ShamirCoGroth16::prove::<_, CircomReduction>(
+                        &net0,
+                        &net1,
+                        n,
                         t,
                         &pkey,
                         &matrices,
@@ -982,8 +959,6 @@ where
                     )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
-                    // network is shutdown in drop, which can take seom time with quinn
-                    drop(mpc_net);
 
                     (proof, public_input)
                 }
@@ -1005,6 +980,8 @@ where
             public_input
         }
         ProofSystem::Plonk => {
+            let nets =
+                TcpNetwork::networks::<8>(config.network).context("while connecting to network")?;
             let zkey = Arc::new(
                 PlonkZKey::<P>::from_reader(zkey_file, check).context("while parsing zkey")?,
             );
@@ -1012,38 +989,30 @@ where
             let (proof, public_input) = match protocol {
                 MPCProtocol::REP3 => {
                     if t != 1 {
-                        return Err(eyre!("REP3 only allows the threshold to be 1"));
+                        eyre::bail!("REP3 only allows the threshold to be 1");
                     }
 
-                    let mpc_net = Rep3MpcNet::new(network_config)?;
                     let witness_share: CompressedRep3SharedWitness<P::ScalarField> =
                         bincode::deserialize_from(witness_file)?;
-                    let (witness_share, mpc_net) =
-                        co_circom::uncompress_shared_witness(witness_share, mpc_net)?;
+                    let witness_share =
+                        co_circom::uncompress_shared_witness(witness_share, &nets[0])?;
                     let public_input = witness_share.public_inputs.clone();
 
                     let start = Instant::now();
-                    let (proof, mpc_net) = Rep3CoPlonk::prove(mpc_net, zkey, witness_share)?;
+                    let proof = Rep3CoPlonk::prove(&nets, zkey, witness_share)?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
-                    // network is shutdown in drop, which can take seom time with quinn
-                    drop(mpc_net);
-
                     (proof, public_input)
                 }
                 MPCProtocol::SHAMIR => {
-                    let mpc_net = ShamirMpcNet::new(network_config)?;
                     let witness_share: ShamirSharedWitness<P::ScalarField> =
                         bincode::deserialize_from(witness_file)?;
                     let public_input = witness_share.public_inputs.clone();
 
                     let start = Instant::now();
-                    let (proof, mpc_net) = ShamirCoPlonk::prove(mpc_net, t, zkey, witness_share)?;
+                    let proof = ShamirCoPlonk::prove(&nets, n, t, zkey, witness_share)?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
-                    // network is shutdown in drop, which can take seom time with quinn
-                    drop(mpc_net);
-
                     (proof, public_input)
                 }
             };

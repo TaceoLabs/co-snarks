@@ -3,14 +3,18 @@ use circom_mpc_compiler::CoCircomCompiler;
 use circom_types::Witness;
 use itertools::izip;
 use mpc_core::protocols::rep3::{self};
+use mpc_net::local::LocalNetwork;
 use rand::thread_rng;
 use std::fs;
+use std::fs::File;
 use std::str::FromStr;
-use std::{fs::File, thread};
-use tests::rep3_network::Rep3TestNetwork;
+use tests::test_utils::spawn_pool;
 
 use circom_mpc_compiler::CompilerConfig;
-use circom_mpc_vm::{mpc_vm::VMConfig, Rep3VmType};
+use circom_mpc_vm::{
+    mpc_vm::{Rep3WitnessExtension, VMConfig},
+    Rep3VmType,
+};
 
 #[expect(dead_code)]
 fn install_tracing() {
@@ -87,22 +91,22 @@ macro_rules! run_test {
         //install_tracing();
         let mut rng = thread_rng();
         let inputs = rep3::share_field_elements($input, &mut rng);
-        let test_network = Rep3TestNetwork::default();
+        let nets0 = LocalNetwork::new_3_parties();
+        let nets1 = LocalNetwork::new_3_parties();
         let mut threads = vec![];
 
-        for (net, input) in izip!(test_network.get_party_networks(), inputs) {
-            threads.push(thread::spawn(move || {
+        for (net0, net1, input) in izip!(nets0, nets1, inputs) {
+            threads.push(spawn_pool(move || {
                 let mut compiler_config = CompilerConfig::default();
                 compiler_config.simplification =
                     circom_mpc_compiler::SimplificationLevel::O2(usize::MAX);
                 compiler_config
                     .link_library
                     .push("../test_vectors/WitnessExtension/tests/libs/".into());
+                let circuit =
+                    CoCircomCompiler::<Bn254>::parse($file.to_owned(), compiler_config).unwrap();
                 let witness_extension =
-                    CoCircomCompiler::<Bn254>::parse($file.to_owned(), compiler_config)
-                        .unwrap()
-                        .to_rep3_vm_with_network(net, VMConfig::default())
-                        .unwrap();
+                    Rep3WitnessExtension::new(&net0, &net1, &circuit, VMConfig::default()).unwrap();
                 witness_extension
                     .run_with_flat(
                         input

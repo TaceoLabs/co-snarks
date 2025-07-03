@@ -1,6 +1,8 @@
 use ark_ec::pairing::Pairing;
 use ark_ff::{Field, Zero};
 use co_builder::prelude::{Polynomial, Utils};
+use mpc_core::MpcState;
+use mpc_net::Network;
 use std::{
     fmt::Debug,
     ops::{Index, IndexMut},
@@ -19,8 +21,11 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> SharedPolynomial<T, P> {
         }
     }
 
-    pub(crate) fn promote_poly(driver: &T, poly: Polynomial<P::ScalarField>) -> Self {
-        let coefficients = T::promote_to_trivial_shares(driver.get_party_id(), poly.as_ref());
+    pub(crate) fn promote_poly(
+        id: <T::State as MpcState>::PartyID,
+        poly: Polynomial<P::ScalarField>,
+    ) -> Self {
+        let coefficients = T::promote_to_trivial_shares(id, poly.as_ref());
         Self { coefficients }
     }
 
@@ -52,7 +57,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> SharedPolynomial<T, P> {
 
     pub(crate) fn add_scaled_slice_public(
         &mut self,
-        id: T::PartyID,
+        id: <T::State as MpcState>::PartyID,
         src: &[P::ScalarField],
         scalar: &P::ScalarField,
     ) {
@@ -125,8 +130,8 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> SharedPolynomial<T, P> {
         self.coefficients.pop();
     }
 
-    pub fn random(size: usize, driver: &mut T) -> std::io::Result<Self> {
-        let coefficients: Result<Vec<_>, _> = (0..size).map(|_| driver.rand()).collect();
+    pub fn random<N: Network>(size: usize, net: &N, state: &mut T::State) -> eyre::Result<Self> {
+        let coefficients: Result<Vec<_>, _> = (0..size).map(|_| T::rand(net, state)).collect();
         let coefficients = coefficients?;
         Ok(Self { coefficients })
     }

@@ -1,8 +1,4 @@
-//! # Example:
-//!
-//! ```no_run
-#![doc = include_str!("../examples/co_noir_party0.rs")]
-//! ```
+//! # CoNoir:
 
 use acir::{
     FieldElement,
@@ -15,17 +11,14 @@ use co_acvm::{
     PlainAcvmSolver, Rep3AcvmSolver, ShamirAcvmSolver,
     solver::{Rep3CoSolver, partial_abi::PublicMarker},
 };
-use co_ultrahonk::prelude::{
-    HonkCurve, HonkProof, ProverCrs, ProverWitnessEntities, TranscriptFieldType, TranscriptHasher,
-    ZeroKnowledge,
-};
-use color_eyre::eyre::{self, Context, Result, eyre};
+use co_ultrahonk::prelude::{HonkCurve, ProverCrs, ProverWitnessEntities, TranscriptFieldType};
+use color_eyre::eyre::{self, Context, Result};
 use mpc_core::protocols::{
-    bridges::network::RepToShamirNetwork,
-    rep3::{self, network::Rep3Network},
-    shamir::{self, ShamirPreprocessing, ShamirProtocol, network::ShamirNetwork},
+    rep3::{self, conversion::A2BType, id::PartyID},
+    shamir::{self, ShamirPreprocessing, ShamirState},
 };
 
+use mpc_net::Network;
 use noirc_abi::Abi;
 use noirc_artifacts::program::ProgramArtifact;
 use rand::{CryptoRng, Rng};
@@ -43,170 +36,7 @@ pub use co_ultrahonk::{
         VerifyingKeyBarretenberg,
     },
 };
-pub use mpc_core::protocols::{
-    rep3::{PartyID, network::Rep3MpcNet},
-    shamir::network::ShamirMpcNet,
-};
-pub use mpc_net::config::{Address, NetworkConfig, NetworkParty, ParseAddressError};
 pub use sha3::Keccak256;
-
-/// State with a rep3 proving key
-pub struct Rep3ProvingKeyState {
-    net: Rep3MpcNet,
-    /// The proving key
-    proving_key: Rep3ProvingKey<Bn254, Rep3MpcNet>,
-}
-
-impl Rep3ProvingKeyState {
-    /// Translate the rep3 proving key into a shamir proving key
-    pub fn translate(self) -> eyre::Result<ShamirProvingKeyState> {
-        let (proving_key, net) = translate_proving_key(self.proving_key, self.net)?;
-        Ok(ShamirProvingKeyState {
-            proving_key,
-            threshold: 1,
-            net,
-        })
-    }
-
-    /// Generate a proof with the given [TranscriptHasher]
-    pub fn prove<H: TranscriptHasher<TranscriptFieldType>>(
-        self,
-        prover_crs: &ProverCrs<Bn254>,
-        has_zk: ZeroKnowledge,
-    ) -> eyre::Result<HonkProof<ark_bn254::Fr>> {
-        let (proof, _public_inputs, _net) =
-            Rep3CoUltraHonk::<_, _, H>::prove(self.net, self.proving_key, prover_crs, has_zk)?;
-        Ok(proof)
-    }
-}
-
-/// State with a shamir proving key
-pub struct ShamirProvingKeyState {
-    net: ShamirMpcNet,
-    threshold: usize,
-    /// The proving key
-    pub proving_key: ShamirProvingKey<Bn254, ShamirMpcNet>,
-}
-
-impl ShamirProvingKeyState {
-    /// Generate a proof with the given [TranscriptHasher]
-    pub fn prove<H: TranscriptHasher<TranscriptFieldType>>(
-        self,
-        prover_crs: &ProverCrs<Bn254>,
-        has_zk: ZeroKnowledge,
-    ) -> eyre::Result<HonkProof<ark_bn254::Fr>> {
-        let (proof, _public_inputs, _net) = ShamirCoUltraHonk::<_, _, H>::prove(
-            self.net,
-            self.threshold,
-            self.proving_key,
-            prover_crs,
-            has_zk,
-        )?;
-        Ok(proof)
-    }
-}
-
-/// State with a rep3 shared witness
-pub struct Rep3SharedWitnessState {
-    net: Rep3MpcNet,
-    /// The shared witness
-    pub witness: Vec<Rep3AcvmType<ark_bn254::Fr>>,
-}
-
-impl Rep3SharedWitnessState {
-    /// Create a new [Rep3SharedWitnessState ]
-    pub fn new(net: Rep3MpcNet, witness: Vec<Rep3AcvmType<ark_bn254::Fr>>) -> Self {
-        Self { net, witness }
-    }
-
-    /// Translate the rep3 shared witness into a shamir shared witness
-    pub fn translate(self) -> eyre::Result<ShamirSharedWitnessState> {
-        let (witness, net) =
-            translate_witness::<Bn254, Rep3MpcNet, ShamirMpcNet>(self.witness, self.net)?;
-        Ok(ShamirSharedWitnessState {
-            witness,
-            threshold: 1,
-            net,
-        })
-    }
-
-    /// Generate the proving key and advance to the next state
-    pub fn generate_proving_key(
-        self,
-        constraint_system: &AcirFormat<ark_bn254::Fr>,
-        recursive: bool,
-    ) -> eyre::Result<Rep3ProvingKeyState> {
-        let (proving_key, net) =
-            generate_proving_key_rep3(self.net, constraint_system, self.witness, recursive)?;
-        Ok(Rep3ProvingKeyState { net, proving_key })
-    }
-}
-
-/// State with a shamir shared witness
-pub struct ShamirSharedWitnessState {
-    net: ShamirMpcNet,
-    threshold: usize,
-    /// The shared witness
-    pub witness: Vec<ShamirAcvmType<ark_bn254::Fr>>,
-}
-
-impl ShamirSharedWitnessState {
-    /// Create a new [ShamirSharedWitnessState ]
-    pub fn new(
-        net: ShamirMpcNet,
-        threshold: usize,
-        witness: Vec<ShamirAcvmType<ark_bn254::Fr>>,
-    ) -> Self {
-        Self {
-            net,
-            threshold,
-            witness,
-        }
-    }
-
-    /// Generate the proving key and advance to the next state
-    pub fn generate_proving_key(
-        self,
-        constraint_system: &AcirFormat<ark_bn254::Fr>,
-        recursive: bool,
-    ) -> eyre::Result<ShamirProvingKeyState> {
-        let (proving_key, net) = generate_proving_key_shamir(
-            self.net,
-            self.threshold,
-            constraint_system,
-            self.witness,
-            recursive,
-        )?;
-        Ok(ShamirProvingKeyState {
-            net,
-            threshold: self.threshold,
-            proving_key,
-        })
-    }
-}
-
-/// Initial state for the type-state pattern
-pub struct CoNoirRep3 {
-    net: Rep3MpcNet,
-}
-
-impl CoNoirRep3 {
-    /// Create a new initial state
-    pub fn new(net: Rep3MpcNet) -> Self {
-        Self { net }
-    }
-
-    /// Perform the witness generation advance to the next state
-    pub fn generate_witness(
-        self,
-        compiled_program: ProgramArtifact,
-        shared_input: BTreeMap<String, Rep3AcvmType<ark_bn254::Fr>>,
-    ) -> eyre::Result<Rep3SharedWitnessState> {
-        let (witness, net) =
-            generate_witness_rep3::<Rep3MpcNet>(shared_input, compiled_program, self.net)?;
-        Ok(Rep3SharedWitnessState { net, witness })
-    }
-}
 
 #[derive(Clone, Debug)]
 pub enum PubShared<F: Clone> {
@@ -230,7 +60,7 @@ pub fn parse_input(
     input_path: impl AsRef<Path>,
     program: &ProgramArtifact,
 ) -> eyre::Result<BTreeMap<String, PublicMarker<FieldElement>>> {
-    Rep3CoSolver::<_, Rep3MpcNet>::partially_read_abi_bn254_fieldelement(
+    Rep3CoSolver::<_, ()>::partially_read_abi_bn254_fieldelement(
         input_path,
         &program.abi,
         &program.bytecode,
@@ -293,52 +123,45 @@ pub fn split_witness_shamir<F: PrimeField, R: Rng + CryptoRng>(
 
 #[allow(clippy::type_complexity)]
 /// Executes the noir circuit with REP3 protocol
-pub fn execute_circuit_rep3<N: Rep3Network>(
+pub fn execute_circuit_rep3<'a, N: Network>(
     input_share: BTreeMap<String, Rep3AcvmType<ark_bn254::Fr>>,
     compiled_program: ProgramArtifact,
-    net: N,
+    net0: &'a N,
+    net1: &'a N,
 ) -> Result<(
     Vec<Rep3AcvmType<ark_bn254::Fr>>,
-    PssStore<Rep3AcvmSolver<ark_bn254::Fr, N>, ark_bn254::Fr>,
-    N,
+    PssStore<Rep3AcvmSolver<'a, ark_bn254::Fr, N>, ark_bn254::Fr>,
 )> {
     let input_share = witness_to_witness_map(input_share, &compiled_program.abi)?;
 
     // init MPC protocol
-    let rep3_vm = Rep3CoSolver::from_network_with_witness(net, compiled_program, input_share)
+    let rep3_vm = Rep3CoSolver::new_with_witness(net0, net1, compiled_program, input_share)
         .context("while creating VM")?;
 
     // execute witness generation in MPC
-    let (result_witness_share, value_store, driver) = rep3_vm
+    let (result_witness_share, value_store) = rep3_vm
         .solve_with_output()
         .context("while running witness generation")?;
 
-    Ok((
-        witness_stack_to_vec_rep3(result_witness_share),
-        value_store,
-        driver.into_network(),
-    ))
+    Ok((witness_stack_to_vec_rep3(result_witness_share), value_store))
 }
 
 /// Generate a witness from REP3 input shares
-pub fn generate_witness_rep3<N: Rep3Network>(
+pub fn generate_witness_rep3<N: Network>(
     input_share: BTreeMap<String, Rep3AcvmType<ark_bn254::Fr>>,
     compiled_program: ProgramArtifact,
-    net: N,
-) -> Result<(Vec<Rep3AcvmType<ark_bn254::Fr>>, N)> {
-    let (witness_stack, _, network) = execute_circuit_rep3(input_share, compiled_program, net)?;
-    Ok((witness_stack, network))
+    net0: &N,
+    net1: &N,
+) -> Result<Vec<Rep3AcvmType<ark_bn254::Fr>>> {
+    let (witness_stack, _) = execute_circuit_rep3(input_share, compiled_program, net0, net1)?;
+    Ok(witness_stack)
 }
 
 /// Translate a REP3 shared witness to a shamir shared witness
-pub fn translate_witness<
-    P: Pairing,
-    NA: Rep3Network + RepToShamirNetwork<NB>,
-    NB: ShamirNetwork,
->(
+pub fn translate_witness<P: Pairing, N: Network>(
     witness_share: Vec<Rep3AcvmType<P::ScalarField>>,
-    net: NA,
-) -> Result<(Vec<ShamirAcvmType<P::ScalarField>>, NB)> {
+    net: &N,
+) -> Result<Vec<ShamirAcvmType<P::ScalarField>>> {
     // extract shares only
     let mut shares = vec![];
     for share in witness_share.iter() {
@@ -347,14 +170,15 @@ pub fn translate_witness<
         }
     }
 
+    let num_parties = 3;
     let threshold = 1;
     let num_pairs = shares.len();
-    let preprocessing = ShamirPreprocessing::new(threshold, net.to_shamir_net(), num_pairs)
+    let preprocessing = ShamirPreprocessing::new(num_parties, threshold, num_pairs, net)
         .context("while shamir preprocessing")?;
-    let mut protocol = ShamirProtocol::from(preprocessing);
+    let mut state = ShamirState::from(preprocessing);
 
     // Translate witness to shamir shares
-    let translated_shares = protocol.translate_primefield_repshare_vec(shares)?;
+    let translated_shares = state.translate_primefield_repshare_vec(shares, net)?;
 
     let mut result = Vec::with_capacity(witness_share.len());
     let mut iter = translated_shares.into_iter();
@@ -368,19 +192,15 @@ pub fn translate_witness<
         }
     }
 
-    Ok((result, protocol.network))
+    Ok(result)
 }
 
 /// Translate a REP3 shared proving key to a shamir shared proving key
 #[allow(clippy::complexity)]
-pub fn translate_proving_key<
-    P: Pairing,
-    NA: Rep3Network + RepToShamirNetwork<NB>,
-    NB: ShamirNetwork,
->(
-    proving_key: Rep3ProvingKey<P, NA>,
-    net: NA,
-) -> Result<(ShamirProvingKey<P, NB>, NB)> {
+pub fn translate_proving_key<P: Pairing, N: Network>(
+    proving_key: Rep3ProvingKey<P>,
+    net: &N,
+) -> Result<ShamirProvingKey<P>> {
     // extract shares
     let shares = proving_key
         .polynomials
@@ -389,17 +209,18 @@ pub fn translate_proving_key<
         .flat_map(|el| el.into_vec().into_iter())
         .collect::<Vec<_>>();
 
+    let num_parties = 3;
     let threshold = 1;
     let num_pairs = shares.len();
-    let preprocessing = ShamirPreprocessing::new(threshold, net.to_shamir_net(), num_pairs)
+    let preprocessing = ShamirPreprocessing::new(num_parties, threshold, num_pairs, net)
         .context("while shamir preprocessing")?;
-    let mut protocol = ShamirProtocol::from(preprocessing);
+    let mut state = ShamirState::from(preprocessing);
 
     // Translate witness to shamir shares
-    let translated_shares = protocol.translate_primefield_repshare_vec(shares)?;
+    let translated_shares = state.translate_primefield_repshare_vec(shares, net)?;
 
     if translated_shares.len() != PROVER_WITNESS_ENTITIES_SIZE * proving_key.circuit_size as usize {
-        return Err(eyre!("Invalid number of shares translated"));
+        eyre::bail!("Invalid number of shares translated");
     };
 
     let mut chunks = translated_shares.chunks_exact(proving_key.circuit_size as usize);
@@ -428,7 +249,7 @@ pub fn translate_proving_key<
         pairing_inputs_public_input_key: proving_key.pairing_inputs_public_input_key,
     };
 
-    Ok((result, protocol.network))
+    Ok(result)
 }
 
 /// Compute the circuit size that is needed to load the prover crs
@@ -446,14 +267,15 @@ pub fn compute_circuit_size<P: HonkCurve<TranscriptFieldType>>(
 }
 
 /// Generate a REP3 shared proving key
-pub fn generate_proving_key_rep3<N: Rep3Network>(
-    net: N,
+pub fn generate_proving_key_rep3<N: Network>(
     constraint_system: &AcirFormat<ark_bn254::Fr>,
     witness_share: Vec<Rep3AcvmType<ark_bn254::Fr>>,
     recursive: bool,
-) -> Result<(Rep3ProvingKey<Bn254, N>, N)> {
-    let id = net.get_id();
-    let mut driver = Rep3AcvmSolver::new(net);
+    net0: &N,
+    net1: &N,
+) -> Result<Rep3ProvingKey<Bn254>> {
+    let id = PartyID::try_from(net0.id())?;
+    let mut driver = Rep3AcvmSolver::new(net0, net1, A2BType::default())?;
     // create the circuit
     let builder = Rep3CoBuilder::create_circuit(
         constraint_system,
@@ -463,27 +285,25 @@ pub fn generate_proving_key_rep3<N: Rep3Network>(
         HonkRecursion::UltraHonk,
         &mut driver,
     )?;
-
     // generate pk
-    let proving_key = Rep3ProvingKey::create(id, builder, &mut driver)?;
-
-    Ok((proving_key, driver.into_network()))
+    Ok(Rep3ProvingKey::create(id, builder, &mut driver)?)
 }
 
 /// Generate a shamir shared proving key
 #[allow(clippy::complexity)]
-pub fn generate_proving_key_shamir<N: ShamirNetwork>(
-    net: N,
+pub fn generate_proving_key_shamir<N: Network>(
+    num_parties: usize,
     threshold: usize,
     constraint_system: &AcirFormat<ark_bn254::Fr>,
     witness_share: Vec<ShamirAcvmType<ark_bn254::Fr>>,
     recursive: bool,
-) -> Result<(ShamirProvingKey<Bn254, N>, N)> {
-    let id = net.get_id();
+    net: &N,
+) -> Result<ShamirProvingKey<Bn254>> {
+    let id = net.id();
     // We have to handle precomputation on the fly, so amount is 0 initially
-    let preprocessing = ShamirPreprocessing::new(threshold, net, 0)?;
-    let protocol = ShamirProtocol::from(preprocessing);
-    let mut driver = ShamirAcvmSolver::new(protocol);
+    let preprocessing = ShamirPreprocessing::new(num_parties, threshold, 0, net)?;
+    let state = ShamirState::from(preprocessing);
+    let mut driver = ShamirAcvmSolver::new(net, state);
     // create the circuit
     let builder = ShamirCoBuilder::create_circuit(
         constraint_system,
@@ -493,11 +313,8 @@ pub fn generate_proving_key_shamir<N: ShamirNetwork>(
         HonkRecursion::UltraHonk,
         &mut driver,
     )?;
-
     // generate pk
-    let proving_key = ShamirProvingKey::create(id, builder, &mut driver)?;
-
-    Ok((proving_key, driver.into_network()))
+    Ok(ShamirProvingKey::create(id, builder, &mut driver)?)
 }
 
 /// Generate a plain proving key
@@ -567,10 +384,10 @@ pub fn generate_vk_barretenberg<P: HonkCurve<TranscriptFieldType>>(
 }
 
 /// Split a proving key into RPE3 shares
-pub fn split_proving_key_rep3<P: Pairing, R: Rng + CryptoRng, N: Rep3Network>(
+pub fn split_proving_key_rep3<P: Pairing, R: Rng + CryptoRng>(
     proving_key: PlainProvingKey<P>,
     rng: &mut R,
-) -> Result<[Rep3ProvingKey<P, N>; 3]> {
+) -> Result<[Rep3ProvingKey<P>; 3]> {
     let witness_entities = proving_key
         .polynomials
         .witness
@@ -594,12 +411,12 @@ pub fn split_proving_key_rep3<P: Pairing, R: Rng + CryptoRng, N: Rep3Network>(
 }
 
 /// Split a proving key into shamir shares
-pub fn split_proving_key_shamir<P: Pairing, R: Rng + CryptoRng, N: ShamirNetwork>(
+pub fn split_proving_key_shamir<P: Pairing, R: Rng + CryptoRng>(
     proving_key: PlainProvingKey<P>,
     degree: usize,
     num_parties: usize,
     rng: &mut R,
-) -> Result<Vec<ShamirProvingKey<P, N>>> {
+) -> Result<Vec<ShamirProvingKey<P>>> {
     let witness_entities = proving_key
         .polynomials
         .witness
@@ -616,7 +433,7 @@ pub fn split_proving_key_shamir<P: Pairing, R: Rng + CryptoRng, N: ShamirNetwork
 }
 
 /// Split input into REP3 shares
-pub fn split_input_rep3<P: Pairing, N: Rep3Network, R: Rng + CryptoRng>(
+pub fn split_input_rep3<P: Pairing, R: Rng + CryptoRng>(
     initial_witness: BTreeMap<String, PublicMarker<GenericFieldElement<P::ScalarField>>>,
     rng: &mut R,
 ) -> [BTreeMap<String, Rep3AcvmType<P::ScalarField>>; 3] {
@@ -648,7 +465,7 @@ pub fn merge_input_shares<P: Pairing>(
     for input_share in input_shares.into_iter() {
         for (wit, share) in input_share.into_iter() {
             if result.contains_key(&wit) {
-                return Err(eyre!("Duplicate witness found in input shares"));
+                eyre::bail!("Duplicate witness found in input shares");
             }
             result.insert(wit, share);
         }
@@ -673,7 +490,7 @@ pub fn witness_to_witness_map(
     witness: BTreeMap<String, Rep3AcvmType<ark_bn254::Fr>>,
     abi: &Abi,
 ) -> color_eyre::Result<WitnessMap<Rep3AcvmType<ark_bn254::Fr>>> {
-    Rep3CoSolver::<ark_bn254::Fr, Rep3MpcNet>::witness_map_from_string_map(witness, abi)
+    Rep3CoSolver::<ark_bn254::Fr, ()>::witness_map_from_string_map(witness, abi)
 }
 
 pub fn witness_stack_to_vec_rep3<F: PrimeField>(
@@ -716,7 +533,7 @@ pub fn download_g1_crs(num_points: usize, crs_path: impl AsRef<Path>) -> color_e
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(eyre!("Could not download CRS: {}", stderr));
+        eyre::bail!("Could not download CRS: {}", stderr);
     }
 
     let data = output.stdout;
@@ -725,11 +542,11 @@ pub fn download_g1_crs(num_points: usize, crs_path: impl AsRef<Path>) -> color_e
         .wrap_err("Failed to write data to CRS file")?;
 
     if data.len() < (g1_end + 1) {
-        return Err(eyre!(
+        eyre::bail!(
             "Downloaded CRS is incomplete: expected {} bytes, got {} bytes",
             g1_end + 1,
             data.len()
-        ));
+        );
     }
 
     Ok(())

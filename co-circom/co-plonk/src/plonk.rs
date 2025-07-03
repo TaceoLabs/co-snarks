@@ -4,31 +4,18 @@
 //! You will most likely need the plain PLONK implementation to verify a proof from co-PLONK. For that
 //! see the [`Plonk::verify`] method.
 
-use crate::{CoPlonk, mpc::plain::PlainPlonkDriver, plonk_utils, types::Domains};
+use crate::{Plonk, plonk_utils, types::Domains};
 use ark_ec::{PrimeGroup, pairing::Pairing};
 use ark_ff::Field;
 use circom_types::{
-    plonk::{JsonVerificationKey, PlonkProof, ZKey},
+    plonk::{JsonVerificationKey, PlonkProof},
     traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
 };
-use co_circom_types::{SharedWitness, VerificationError};
+use co_circom_types::VerificationError;
 use num_traits::One;
 use num_traits::Zero;
-use std::{marker::PhantomData, sync::Arc};
 
 use crate::types::Keccak256Transcript;
-
-/// The plain [`Plonk`] type.
-///
-/// This type is actually the [`CoPlonk`] type initialized with
-/// the [`PlainPlonkDriver`], a single party (you) MPC protocol (i.e., your everyday PLONK).
-/// You can use this instance to create a proof, but we recommend against it for a real use-case.
-/// The co-PLONK prover uses some MPC optimizations (for the product check), which are not optimal
-/// for a plain run.
-///
-/// More interesting is the [`Plonk::verify`] method. You can verify any circom PLONK proof, be it
-/// from snarkjs or one created by this project.
-pub type Plonk<P> = CoPlonk<P, PlainPlonkDriver>;
 
 pub(crate) struct VerifierChallenges<P: Pairing> {
     pub(super) alpha: P::ScalarField,
@@ -269,29 +256,6 @@ where
         let rhs = P::pairing(b1, P::G2::generator());
 
         lhs == rhs
-    }
-}
-
-impl<P: Pairing> Plonk<P>
-where
-    P: CircomArkworksPairingBridge,
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-{
-    /// *Locally* create a `Plonk` proof. This is just the [`CoPlonk`] prover
-    /// initialized with the [`PlainPlonkDriver`].
-    ///
-    /// DOES NOT PERFORM ANY MPC. For a plain prover checkout the [Groth16 implementation of arkworks](https://docs.rs/ark-groth16/latest/ark_groth16/).
-    pub fn plain_prove(
-        zkey: Arc<ZKey<P>>,
-        private_witness: SharedWitness<P::ScalarField, P::ScalarField>,
-    ) -> eyre::Result<PlonkProof<P>> {
-        let prover = Self {
-            driver: PlainPlonkDriver,
-            phantom_data: PhantomData,
-        };
-        let (proof, _) = prover.prove_inner(zkey, private_witness)?;
-        Ok(proof)
     }
 }
 

@@ -1,24 +1,26 @@
 use crate::{
     gadgets::poseidon2::Poseidon2,
-    protocols::shamir::{ShamirPrimeFieldShare, ShamirProtocol, network::ShamirNetwork},
+    protocols::shamir::{ShamirPrimeFieldShare, ShamirState},
 };
 use ark_ff::{PrimeField, Zero};
+use mpc_net::Network;
 
 impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
     /// Create a Merkle tree with a given arity using Poseidon2 in sponge mode and with the Shamir MPC protocol.
-    pub fn merkle_tree_sponge_shamir<const ARITY: usize, N: ShamirNetwork>(
+    pub fn merkle_tree_sponge_shamir<const ARITY: usize, N: Network>(
         &self,
         input_: Vec<ShamirPrimeFieldShare<F>>,
-        driver: &mut ShamirProtocol<F, N>,
-    ) -> std::io::Result<ShamirPrimeFieldShare<F>> {
+        net: &N,
+        state: &mut ShamirState<F>,
+    ) -> eyre::Result<ShamirPrimeFieldShare<F>> {
         assert!(T > ARITY);
         let mut len = input_.len();
         let log = len.ilog(ARITY);
         assert_eq!(len, ARITY.pow(log));
 
         let num_hashes = (len - 1) / (ARITY - 1);
-        driver.buffer_triples(self.rand_required(num_hashes, true))?;
-        let mut precomp = self.precompute_shamir(num_hashes, driver)?;
+        state.buffer_triples(net, self.rand_required(num_hashes, true))?;
+        let mut precomp = self.precompute_shamir(num_hashes, net, state)?;
 
         // Prepare for sponge mode
         let mut input = Vec::with_capacity(T * len / ARITY);
@@ -38,7 +40,8 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
             self.shamir_permutation_in_place_with_precomputation_packed(
                 &mut input[..T * len],
                 &mut precomp,
-                driver,
+                net,
+                state,
             )?;
             // Only take first element as output and pad with 0 for sponge
             for i in 0..len / ARITY {
@@ -55,19 +58,20 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
     }
 
     /// Create a Merkle tree with a given arity using Poseidon2 in compression mode and with the Shamir MPC protocol.
-    pub fn merkle_tree_compression_shamir<const ARITY: usize, N: ShamirNetwork>(
+    pub fn merkle_tree_compression_shamir<const ARITY: usize, N: Network>(
         &self,
         input_: Vec<ShamirPrimeFieldShare<F>>,
-        driver: &mut ShamirProtocol<F, N>,
-    ) -> std::io::Result<ShamirPrimeFieldShare<F>> {
+        net: &N,
+        state: &mut ShamirState<F>,
+    ) -> eyre::Result<ShamirPrimeFieldShare<F>> {
         assert!(T >= ARITY);
         let mut len = input_.len();
         let log = len.ilog(ARITY);
         assert_eq!(len, ARITY.pow(log));
 
         let num_hashes = (len - 1) / (ARITY - 1);
-        driver.buffer_triples(self.rand_required(num_hashes, true))?;
-        let mut precomp = self.precompute_shamir(num_hashes, driver)?;
+        state.buffer_triples(net, self.rand_required(num_hashes, true))?;
+        let mut precomp = self.precompute_shamir(num_hashes, net, state)?;
 
         // Prepare padding
         let mut input = if T == ARITY {
@@ -93,7 +97,8 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
             self.shamir_permutation_in_place_with_precomputation_packed(
                 &mut input[..T * len],
                 &mut precomp,
-                driver,
+                net,
+                state,
             )?;
             // Feedforward
             for i in 0..len {

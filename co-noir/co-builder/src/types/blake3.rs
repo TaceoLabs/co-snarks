@@ -82,7 +82,7 @@ impl<F: PrimeField> Blake3Hasher<F> {
         input_len: usize,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         if input_len == 0 {
             return Ok(());
         }
@@ -121,7 +121,7 @@ impl<F: PrimeField> Blake3Hasher<F> {
         out: &mut ByteArray<F>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         let block_flags = self.flags | self.maybe_start_flag() | Blake3Flags::ChunkEnd as u8;
         let output = self.make_output(&self.cv, &self.buf, self.buf_len, block_flags);
 
@@ -160,7 +160,7 @@ impl<F: PrimeField> Blake3Hasher<F> {
         flags: u8,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         let mut state: [FieldCT<F>; BLAKE3_STATE_SIZE] =
             array::from_fn(|_| FieldCT::<F>::default());
         self.compress_pre(
@@ -201,7 +201,7 @@ impl<F: PrimeField> Blake3Hasher<F> {
         out: &mut ByteArray<F>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         let mut state: [FieldCT<F>; BLAKE3_STATE_SIZE] =
             array::from_fn(|_| FieldCT::<F>::default());
         self.compress_pre(&mut state, cv, block, block_len, flags, builder, driver)?;
@@ -255,7 +255,7 @@ impl<F: PrimeField> Blake3Hasher<F> {
         flags: u8,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         let mut block_words: [FieldCT<F>; BLAKE3_STATE_SIZE] =
             array::from_fn(|_| FieldCT::<F>::default());
         for (i, word) in block_words.iter_mut().enumerate() {
@@ -327,7 +327,7 @@ pub fn blake3s<
     input: &ByteArray<P::ScalarField>,
     builder: &mut GenericUltraCircuitBuilder<P, T>,
     driver: &mut T,
-) -> std::io::Result<ByteArray<P::ScalarField>> {
+) -> eyre::Result<ByteArray<P::ScalarField>> {
     let mut hasher = Blake3Hasher::blake3_hasher_init();
     hasher.blake3_hasher_update(input, input.values.len(), builder, driver)?;
     let mut result = ByteArray::default_with_length(BLAKE3_OUT_LEN);

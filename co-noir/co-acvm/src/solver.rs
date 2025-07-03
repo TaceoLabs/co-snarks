@@ -10,10 +10,11 @@ use intmap::IntMap;
 use mpc_core::{
     lut::LookupTableProvider,
     protocols::{
-        rep3::network::Rep3Network,
-        shamir::{ShamirPreprocessing, ShamirProtocol, network::ShamirNetwork},
+        rep3::conversion::A2BType,
+        shamir::{ShamirPreprocessing, ShamirState},
     },
 };
+use mpc_net::Network;
 use noirc_abi::{Abi, MAIN_RETURN_NAME, input_parser::Format};
 use noirc_artifacts::program::ProgramArtifact;
 use partial_abi::PublicMarker;
@@ -37,8 +38,8 @@ mod memory_solver;
 pub mod partial_abi;
 
 pub type PlainCoSolver<F> = CoSolver<PlainAcvmSolver<F>, F>;
-pub type Rep3CoSolver<F, N> = CoSolver<Rep3AcvmSolver<F, N>, F>;
-pub type ShamirCoSolver<F, N> = CoSolver<ShamirAcvmSolver<F, N>, F>;
+pub type Rep3CoSolver<'a, F, N> = CoSolver<Rep3AcvmSolver<'a, F, N>, F>;
+pub type ShamirCoSolver<'a, F, N> = CoSolver<ShamirAcvmSolver<'a, F, N>, F>;
 
 type CoAcvmResult<T> = std::result::Result<T, CoAcvmError>;
 
@@ -218,46 +219,58 @@ where
     }
 }
 
-impl<N: Rep3Network> Rep3CoSolver<ark_bn254::Fr, N> {
-    pub fn from_network(
-        network: N,
+impl<'a, N: Network> Rep3CoSolver<'a, ark_bn254::Fr, N> {
+    pub fn new(
+        net0: &'a N,
+        net1: &'a N,
         compiled_program: ProgramArtifact,
         prover_path: impl AsRef<Path>,
     ) -> eyre::Result<Self> {
-        Self::new_bn254(Rep3AcvmSolver::new(network), compiled_program, prover_path)
-    }
-
-    pub fn from_network_with_witness(
-        network: N,
-        compiled_program: ProgramArtifact,
-        witness: WitnessMap<
-            <Rep3AcvmSolver<ark_bn254::Fr, N> as NoirWitnessExtensionProtocol::<ark_bn254::Fr>>::AcvmType,
-        >,
-    ) -> eyre::Result<Self> {
-        Self::new_bn254_with_witness(Rep3AcvmSolver::new(network), compiled_program, witness)
-    }
-}
-
-impl<N: ShamirNetwork> ShamirCoSolver<ark_bn254::Fr, N> {
-    pub fn from_network<P>(
-        network: N,
-        threshold: usize,
-        compiled_program: ProgramArtifact,
-        prover_path: impl AsRef<Path>,
-    ) -> eyre::Result<Self> {
-        // TODO we are not creating any randomness here
-        let shamir_prepr = ShamirPreprocessing::new(threshold, network, 0)?;
-        let protocol = ShamirProtocol::from(shamir_prepr);
-
         Self::new_bn254(
-            ShamirAcvmSolver::new(protocol),
+            Rep3AcvmSolver::new(net0, net1, A2BType::default())?,
             compiled_program,
             prover_path,
         )
     }
 
-    pub fn from_network_with_witness(
-        network: N,
+    pub fn new_with_witness(
+        net0: &'a N,
+        net1: &'a N,
+        compiled_program: ProgramArtifact,
+        witness: WitnessMap<
+            <Rep3AcvmSolver<ark_bn254::Fr, N> as NoirWitnessExtensionProtocol::<ark_bn254::Fr>>::AcvmType,
+        >,
+    ) -> eyre::Result<Self> {
+        Self::new_bn254_with_witness(
+            Rep3AcvmSolver::new(net0, net1, A2BType::default())?,
+            compiled_program,
+            witness,
+        )
+    }
+}
+
+impl<'a, N: Network> ShamirCoSolver<'a, ark_bn254::Fr, N> {
+    pub fn new(
+        net: &'a N,
+        num_parties: usize,
+        threshold: usize,
+        compiled_program: ProgramArtifact,
+        prover_path: impl AsRef<Path>,
+    ) -> eyre::Result<Self> {
+        // TODO we are not creating any randomness here
+        let preprocessing = ShamirPreprocessing::new(num_parties, threshold, 0, net)?;
+        let state = ShamirState::from(preprocessing);
+
+        Self::new_bn254(
+            ShamirAcvmSolver::new(net, state),
+            compiled_program,
+            prover_path,
+        )
+    }
+
+    pub fn new_with_witness(
+        net: &'a N,
+        num_parties: usize,
         threshold: usize,
         compiled_program: ProgramArtifact,
         witness: WitnessMap<
@@ -265,10 +278,10 @@ impl<N: ShamirNetwork> ShamirCoSolver<ark_bn254::Fr, N> {
         >,
     ) -> eyre::Result<Self> {
         // TODO we are not creating any randomness here
-        let shamir_prepr = ShamirPreprocessing::new(threshold, network, 0)?;
-        let protocol = ShamirProtocol::from(shamir_prepr);
+        let preprocessing = ShamirPreprocessing::new(num_parties, threshold, 0, net)?;
+        let state = ShamirState::from(preprocessing);
 
-        Self::new_bn254_with_witness(ShamirAcvmSolver::new(protocol), compiled_program, witness)
+        Self::new_bn254_with_witness(ShamirAcvmSolver::new(net, state), compiled_program, witness)
     }
 }
 
@@ -308,7 +321,7 @@ impl PlainCoSolver<ark_bn254::Fr> {
 
     pub fn solve_and_print_output(self) {
         let abi = self.abi.clone();
-        let (result, _) = self.solve().unwrap();
+        let result = self.solve().unwrap();
         let mut result = Self::convert_to_plain_acvm_witness(result);
         let main_witness = result.pop().unwrap();
         let (_, ret_val) = abi.decode(&main_witness.witness).unwrap();
@@ -366,7 +379,7 @@ where
     #[allow(clippy::type_complexity)]
     pub fn solve_with_output(
         mut self,
-    ) -> CoAcvmResult<(WitnessStack<T::AcvmType>, PssStore<T, F>, T)> {
+    ) -> CoAcvmResult<(WitnessStack<T::AcvmType>, PssStore<T, F>)> {
         let functions = std::mem::take(&mut self.functions);
 
         for opcode in functions[self.function_index].opcodes.iter() {
@@ -401,11 +414,11 @@ where
         for (idx, witness) in self.witness_map.into_iter().rev().enumerate() {
             witness_stack.push(u32::try_from(idx).expect("usize fits into u32"), witness);
         }
-        Ok((witness_stack, self.value_store, self.driver))
+        Ok((witness_stack, self.value_store))
     }
 
-    pub fn solve(self) -> CoAcvmResult<(WitnessStack<T::AcvmType>, T)> {
-        let (witness_stack, _, driver) = self.solve_with_output()?;
-        Ok((witness_stack, driver))
+    pub fn solve(self) -> CoAcvmResult<WitnessStack<T::AcvmType>> {
+        let (witness_stack, _) = self.solve_with_output()?;
+        Ok(witness_stack)
     }
 }

@@ -1,16 +1,20 @@
 use super::{BrilligDriver, PlainBrilligDriver};
 use ark_ff::{One, PrimeField};
 use brillig::{BitSize, IntegerBitSize};
-use mpc_core::protocols::shamir::{
-    self, ShamirPrimeFieldShare, ShamirProtocol, network::ShamirNetwork,
+use mpc_core::{
+    MpcState as _,
+    protocols::shamir::{self, ShamirPrimeFieldShare, ShamirState},
 };
+use mpc_net::Network;
 use std::marker::PhantomData;
 
 use super::PlainBrilligType as Public;
 
 /// A driver for the coBrillig-VM that uses Shamir secret sharing.
-pub struct ShamirBrilligDriver<F: PrimeField, N: ShamirNetwork> {
-    protocol: ShamirProtocol<F, N>,
+pub struct ShamirBrilligDriver<'a, F: PrimeField, N: Network> {
+    id: usize,
+    net: &'a N,
+    state: ShamirState<F>,
     plain_driver: PlainBrilligDriver<F>,
     phantom_data: PhantomData<F>,
 }
@@ -39,35 +43,44 @@ impl<F: PrimeField> Default for ShamirBrilligType<F> {
     }
 }
 
-impl<F: PrimeField, N: ShamirNetwork> ShamirBrilligDriver<F, N> {
-    /// Creates a new instance of the Shamir driver with the provided
-    /// protocol.
-    pub fn with_protocol(protocol: ShamirProtocol<F, N>) -> Self {
+impl<'a, F: PrimeField, N: Network> ShamirBrilligDriver<'a, F, N> {
+    /// Creates a new instance of the Shamir driver
+    pub fn new(net: &'a N, state: ShamirState<F>) -> Self {
         Self {
-            protocol,
+            id: net.id(),
+            net,
+            state,
             plain_driver: PlainBrilligDriver::default(),
             phantom_data: PhantomData,
         }
     }
 }
 
-impl<F: PrimeField, N: ShamirNetwork> BrilligDriver<F> for ShamirBrilligDriver<F, N> {
+impl<F: PrimeField, N: Network> BrilligDriver<F> for ShamirBrilligDriver<'_, F, N> {
     type BrilligType = ShamirBrilligType<F>;
 
     fn fork(&mut self) -> eyre::Result<(Self, Self)> {
-        let protocol1 = self.protocol.fork_with_pairs(0)?; // TODO 0 for now...
-        let protocol2 = self.protocol.fork_with_pairs(0)?; // TODO 0 for now...
+        // TODO currently this is only used for branches and each fork is used for 1 case
+        // because they are run in sequence we can just clone the net ref, but if we run them in parallel in the future we must fork the networks
+        let net0 = self.net;
+        let net1 = self.net;
+        let state0 = self.state.fork(0)?; // TODO 0 for now ...
+        let state1 = self.state.fork(0)?; // TODO 0 for now ...
+        let fork0 = Self {
+            id: self.id,
+            net: net0,
+            state: state0,
+            plain_driver: PlainBrilligDriver::default(),
+            phantom_data: PhantomData,
+        };
         let fork1 = Self {
-            protocol: protocol1,
+            id: self.id,
+            net: net1,
+            state: state1,
             plain_driver: PlainBrilligDriver::default(),
             phantom_data: PhantomData,
         };
-        let fork2 = Self {
-            protocol: protocol2,
-            plain_driver: PlainBrilligDriver::default(),
-            phantom_data: PhantomData,
-        };
-        Ok((fork1, fork2))
+        Ok((fork0, fork1))
     }
 
     fn cast(
@@ -120,8 +133,8 @@ impl<F: PrimeField, N: ShamirNetwork> BrilligDriver<F> for ShamirBrilligDriver<F
                 ShamirBrilligType::Public(self.plain_driver.random(other))
             }
             ShamirBrilligType::Shared(_) => ShamirBrilligType::Shared(
-                self.protocol
-                    .rand()
+                self.state
+                    .rand(self.net)
                     .expect("TODO: replace with error handling"),
             ),
         }
@@ -203,7 +216,12 @@ impl<F: PrimeField, N: ShamirNetwork> BrilligDriver<F> for ShamirBrilligDriver<F
                 }
             }
             (ShamirBrilligType::Shared(s1), ShamirBrilligType::Shared(s2)) => {
-                ShamirBrilligType::Shared(shamir::arithmetic::mul(s1, s2, &mut self.protocol)?)
+                ShamirBrilligType::Shared(shamir::arithmetic::mul(
+                    s1,
+                    s2,
+                    self.net,
+                    &mut self.state,
+                )?)
             }
         };
         Ok(result)
@@ -232,14 +250,20 @@ impl<F: PrimeField, N: ShamirNetwork> BrilligDriver<F> for ShamirBrilligDriver<F
                     ShamirBrilligType::Shared(shamir::arithmetic::div_public_by_shared(
                         public,
                         secret,
-                        &mut self.protocol,
+                        self.net,
+                        &mut self.state,
                     )?)
                 } else {
                     panic!("type mismatch. Can only div matching values")
                 }
             }
             (ShamirBrilligType::Shared(s1), ShamirBrilligType::Shared(s2)) => {
-                ShamirBrilligType::Shared(shamir::arithmetic::div(s1, s2, &mut self.protocol)?)
+                ShamirBrilligType::Shared(shamir::arithmetic::div(
+                    s1,
+                    s2,
+                    self.net,
+                    &mut self.state,
+                )?)
             }
         };
         Ok(result)

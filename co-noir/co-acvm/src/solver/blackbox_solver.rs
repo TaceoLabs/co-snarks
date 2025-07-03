@@ -196,7 +196,7 @@ where
         b: &FunctionInput<GenericFieldElement<F>>,
         result: Witness,
         pedantic_solving: bool,
-        logic_op: impl Fn(&mut T, T::AcvmType, T::AcvmType) -> std::io::Result<T::AcvmType>,
+        logic_op: impl Fn(&mut T, T::AcvmType, T::AcvmType) -> eyre::Result<T::AcvmType>,
     ) -> CoAcvmResult<()> {
         // TODO(https://github.com/noir-lang/noir/issues/5985): re-enable these by
         // default once we figure out how to combine these with existing

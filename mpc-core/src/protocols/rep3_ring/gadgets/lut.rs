@@ -2,38 +2,23 @@
 //!
 //! This module contains some oblivious lookup table algorithms for the Rep3 protocol.
 
-use crate::{
-    IoResult,
-    protocols::{
-        rep3::network::{IoContext, Rep3Network},
-        rep3_ring::{binary, conversion, gadgets},
-    },
+use crate::protocols::{
+    rep3::{Rep3BigUintShare, Rep3PrimeFieldShare, Rep3State, network},
+    rep3_ring::{Rep3RingShare, binary, conversion, gadgets, ring::int_ring::IntRing2k},
 };
 use ark_ff::PrimeField;
-use mpc_types::protocols::{
-    rep3::{Rep3BigUintShare, Rep3PrimeFieldShare},
-    rep3_ring::{Rep3RingShare, ring::int_ring::IntRing2k},
-};
+use mpc_net::Network;
 use num_bigint::BigUint;
 use rand::{distributions::Standard, prelude::Distribution};
 
-macro_rules! join {
-    ($t1: expr, $t2: expr) => {{
-        std::thread::scope(|s| {
-            let t1 = s.spawn(|| $t1);
-            let t2 = $t2;
-            (t1.join().expect("can join"), t2)
-        })
-    }};
-}
-
 /// Takes a public lookup table containing field elements, and a replicated binary share of an index and returns a replicated binary sharing of the looked up value lut`\[`index`\]`. The table size needs to be a power of two. If this is not the case, the table is implicitly padded with 0.
 /// The algorithm is a rewrite of Protocol 4 from [https://eprint.iacr.org/2024/1317.pdf](https://eprint.iacr.org/2024/1317.pdf) for rep3.
-pub fn read_public_lut<F: PrimeField, T: IntRing2k, N: Rep3Network>(
+pub fn read_public_lut<F: PrimeField, T: IntRing2k, N: Network>(
     lut: &[F],
     index: Rep3RingShare<T>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<Rep3BigUintShare<F>>
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Rep3BigUintShare<F>>
 where
     Standard: Distribution<T>,
 {
@@ -42,10 +27,10 @@ where
 
     assert!(k <= T::K);
 
-    let (r, e) = gadgets::ohv::rand_ohv::<T, _>(k, io_context)?;
+    let (r, e) = gadgets::ohv::rand_ohv::<T, _>(k, net, state)?;
 
     // Open the xor of the index and r
-    let c = binary::open(&(r ^ index), io_context)?;
+    let c = binary::open(&(r ^ index), net)?;
     let c: usize =
         c.0.try_into()
             .expect("This transformation should work, otherwise we have another issue")
@@ -71,12 +56,14 @@ where
 
 /// Takes a public lookup table containing field elements, and a replicated binary share of an index and returns a non-replicated binary sharing of the looked up value lut`\[`index`\]`. The table size needs to be a power of two where the power is even. If this is not the case, the table is implicitly padded with 0.
 /// The algorithm is a rewrite of Protocol 10 from [https://eprint.iacr.org/2024/1317.pdf](https://eprint.iacr.org/2024/1317.pdf) for rep3.
-pub fn read_public_lut_low_depth<F: PrimeField, T: IntRing2k, N: Rep3Network>(
+pub fn read_public_lut_low_depth<F: PrimeField, T: IntRing2k, N: Network>(
     lut: &[F],
     index: Rep3RingShare<T>,
-    io_context0: &mut IoContext<N>,
-    io_context1: &mut IoContext<N>,
-) -> IoResult<BigUint>
+    net0: &N,
+    net1: &N,
+    state0: &mut Rep3State,
+    state1: &mut Rep3State,
+) -> eyre::Result<BigUint>
 where
     Standard: Distribution<T>,
 {
@@ -91,9 +78,9 @@ where
     let k2 = k >> 1;
 
     // create two ohv's with half the bitsize in parallel
-    let (a, b) = join!(
-        gadgets::ohv::rand_ohv::<T, _>(k2, io_context0),
-        gadgets::ohv::rand_ohv::<T, _>(k2, io_context1)
+    let (a, b) = rayon::join(
+        || gadgets::ohv::rand_ohv::<T, _>(k2, net0, state0),
+        || gadgets::ohv::rand_ohv::<T, _>(k2, net1, state1),
     );
     let (mut r, e) = a?;
     let (r_, e_) = b?;
@@ -103,14 +90,14 @@ where
     r += r_;
 
     // Open the xor of the index and r
-    let c = binary::open(&(r ^ index), io_context0)?;
+    let c = binary::open(&(r ^ index), net0)?;
     let c: usize =
         c.0.try_into()
             .expect("This transformation should work, otherwise we have another issue")
             & ((1 << k) - 1); // Mask potential overflows from non-well-defined input
 
     // Start the result with a random mask (for potential resharing later)
-    let (mut t, mask_b) = io_context0
+    let (mut t, mask_b) = state0
         .rngs
         .rand
         .random_biguint(usize::try_from(F::MODULUS_BIT_SIZE).expect("u32 fits into usize"));
@@ -146,12 +133,14 @@ where
 
 /// Takes many public lookup tables containing field elements, and a replicated binary share of an index and returns a non-replicated binary sharing of the looked up value lut`\[`index`\]`. The table sizes needs to be a power of two where the power is even. If this is not the case, the table is implicitly padded with 0.
 /// The algorithm is a rewrite of Protocol 10 from [https://eprint.iacr.org/2024/1317.pdf](https://eprint.iacr.org/2024/1317.pdf) for rep3.
-pub fn read_multiple_public_lut_low_depth<F: PrimeField, T: IntRing2k, N: Rep3Network>(
+pub fn read_multiple_public_lut_low_depth<F: PrimeField, T: IntRing2k, N: Network>(
     luts: &[Vec<F>],
     index: Rep3RingShare<T>,
-    io_context0: &mut IoContext<N>,
-    io_context1: &mut IoContext<N>,
-) -> IoResult<Vec<BigUint>>
+    net0: &N,
+    net1: &N,
+    state0: &mut Rep3State,
+    state1: &mut Rep3State,
+) -> eyre::Result<Vec<BigUint>>
 where
     Standard: Distribution<T>,
 {
@@ -166,9 +155,9 @@ where
     let k2 = k >> 1;
 
     // create two ohv's with half the bitsize in parallel
-    let (a, b) = join!(
-        gadgets::ohv::rand_ohv::<T, _>(k2, io_context0),
-        gadgets::ohv::rand_ohv::<T, _>(k2, io_context1)
+    let (a, b) = rayon::join(
+        || gadgets::ohv::rand_ohv::<T, _>(k2, net0, state0),
+        || gadgets::ohv::rand_ohv::<T, _>(k2, net1, state1),
     );
     let (mut r, e) = a?;
     let (r_, e_) = b?;
@@ -178,7 +167,7 @@ where
     r += r_;
 
     // Open the xor of the index and r
-    let c = binary::open(&(r ^ index), io_context0)?;
+    let c = binary::open(&(r ^ index), net0)?;
     let c: usize =
         c.0.try_into()
             .expect("This transformation should work, otherwise we have another issue")
@@ -187,7 +176,7 @@ where
     let mut results = Vec::with_capacity(luts.len());
     for lut in luts {
         // Start the result with a random mask (for potential resharing later)
-        let (mut t, mask_b) = io_context0
+        let (mut t, mask_b) = state0
             .rngs
             .rand
             .random_biguint(usize::try_from(F::MODULUS_BIT_SIZE).expect("u32 fits into usize"));
@@ -225,11 +214,12 @@ where
 
 /// Takes a secret-shared lookup table containing field elements, and a replicated binary share of an index and returns a non-replicated additive sharing of the looked up value lut`\[`index`\]`.
 /// The algorithm is inspired by Protocol 4 from [https://eprint.iacr.org/2024/1317.pdf](https://eprint.iacr.org/2024/1317.pdf).
-pub fn read_shared_lut<F: PrimeField, T: IntRing2k, N: Rep3Network>(
+pub fn read_shared_lut<F: PrimeField, T: IntRing2k, N: Network>(
     lut: &[Rep3PrimeFieldShare<F>],
     index: Rep3RingShare<T>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<F>
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<F>
 where
     Standard: Distribution<T>,
 {
@@ -237,11 +227,11 @@ where
     let k = n.next_power_of_two().ilog2() as usize;
     assert!(k <= T::K);
 
-    let e = gadgets::ohv::ohv::<T, _>(k, index, io_context)?;
-    let injected = conversion::bit_inject_from_bits_to_field_many::<F, _>(&e, io_context)?;
+    let e = gadgets::ohv::ohv::<T, _>(k, index, net, state)?;
+    let injected = conversion::bit_inject_from_bits_to_field_many::<F, _>(&e, net, state)?;
 
     // Start the result with a random mask (for potential resharing later)
-    let mut t = io_context.rngs.rand.masking_field_element::<F>();
+    let mut t = state.rngs.rand.masking_field_element::<F>();
     for (l, e) in lut.iter().zip(injected.into_iter()) {
         let mul = &e * l;
         t += mul;
@@ -251,12 +241,13 @@ where
 
 /// Takes a secret-shared lookup table containing field elements, and a replicated binary share of an index and puts another secret-shared field element (value) and puts it at lut`\[`index`\]`.
 /// The algorithm is inspired by Protocol 4 from [https://eprint.iacr.org/2024/1317.pdf](https://eprint.iacr.org/2024/1317.pdf).
-pub fn write_lut<F: PrimeField, T: IntRing2k, N: Rep3Network>(
+pub fn write_lut<F: PrimeField, T: IntRing2k, N: Network>(
     value: &Rep3PrimeFieldShare<F>,
     lut: &mut [Rep3PrimeFieldShare<F>],
     index: Rep3RingShare<T>,
-    io_context: &mut IoContext<N>,
-) -> IoResult<()>
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<()>
 where
     Standard: Distribution<T>,
 {
@@ -264,26 +255,27 @@ where
     let k = n.next_power_of_two().ilog2() as usize;
     assert!(k <= T::K);
 
-    let e = gadgets::ohv::ohv::<T, _>(k, index, io_context)?;
-    let injected = conversion::bit_inject_from_bits_to_field_many::<F, _>(&e, io_context)?;
+    let e = gadgets::ohv::ohv::<T, _>(k, index, net, state)?;
+    let injected = conversion::bit_inject_from_bits_to_field_many::<F, _>(&e, net, state)?;
 
-    write_lut_from_ohv(value, lut, &injected, io_context)
+    write_lut_from_ohv(value, lut, &injected, net, state)
 }
 
 /// The second part of writing to a shared lookup table, i.e, takes the shared value, the shared LUT and and one_hot_vector (all elements 0 except for the index to write to which is set to one) and writes to the shared LUT.
-pub fn write_lut_from_ohv<F: PrimeField, N: Rep3Network>(
+pub fn write_lut_from_ohv<F: PrimeField, N: Network>(
     value: &Rep3PrimeFieldShare<F>,
     lut: &mut [Rep3PrimeFieldShare<F>],
     ohv: &[Rep3PrimeFieldShare<F>],
-    io_context: &mut IoContext<N>,
-) -> IoResult<()> {
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<()> {
     let n = lut.len();
     assert!(n <= ohv.len());
     let mut local_a = Vec::with_capacity(n);
     for (l, e) in lut.iter().zip(ohv.iter()) {
-        local_a.push(e * &(value - l) + l.a + io_context.rngs.rand.masking_field_element::<F>());
+        local_a.push(e * &(value - l) + l.a + state.rngs.rand.masking_field_element::<F>());
     }
-    let local_b = io_context.network.reshare_many(&local_a)?;
+    let local_b = network::reshare_many(net, &local_a)?;
 
     for (des, (src_a, src_b)) in lut.iter_mut().zip(local_a.into_iter().zip(local_b)) {
         des.a = src_a;

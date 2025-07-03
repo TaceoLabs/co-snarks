@@ -46,7 +46,7 @@ impl<F: PrimeField> AES128<F> {
         byte: &FieldCT<F>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<FieldCT<F>> {
+    ) -> eyre::Result<FieldCT<F>> {
         Plookup::read_from_1_to_2_table(builder, driver, MultiTableId::AesNormalize, byte)
     }
 
@@ -57,7 +57,7 @@ impl<F: PrimeField> AES128<F> {
         input: &FieldCT<F>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<(FieldCT<F>, FieldCT<F>)> {
+    ) -> eyre::Result<(FieldCT<F>, FieldCT<F>)> {
         Plookup::read_pair_from_table(builder, driver, MultiTableId::AesSbox, input)
     }
 
@@ -68,7 +68,7 @@ impl<F: PrimeField> AES128<F> {
         block_data: &FieldCT<F>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<[FieldCT<F>; 16]> {
+    ) -> eyre::Result<[FieldCT<F>; 16]> {
         // `block_data` must be a 128-bit variable
         let mut sparse_bytes: [FieldCT<F>; 16] = array::from_fn(|_| FieldCT::<F>::default());
         let lookup = Plookup::get_lookup_accumulators_ct(
@@ -93,7 +93,7 @@ impl<F: PrimeField> AES128<F> {
         sparse_bytes: &[FieldCT<F>],
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<FieldCT<F>> {
+    ) -> eyre::Result<FieldCT<F>> {
         debug_assert_eq!(sparse_bytes.len(), 16);
         let sparse_slice: Vec<_> = sparse_bytes[..16]
             .iter()
@@ -139,7 +139,7 @@ impl<F: PrimeField> AES128<F> {
         key: &FieldCT<F>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<[FieldCT<F>; 176]> {
+    ) -> eyre::Result<[FieldCT<F>; 176]> {
         const ROUND_CONSTANTS: [u8; 11] = [
             0x8d, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36,
         ];
@@ -257,7 +257,7 @@ impl<F: PrimeField> AES128<F> {
         state_pairs: &mut [(FieldCT<F>, FieldCT<F>); 16],
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         for pair in state_pairs.iter_mut() {
             *pair = Self::apply_aes_sbox_map(&pair.0, builder, driver)?;
         }
@@ -297,7 +297,7 @@ impl<F: PrimeField> AES128<F> {
         sparse_round_key: &[FieldCT<F>],
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<()> {
+    ) -> eyre::Result<()> {
         Self::add_round_key(state, sparse_round_key, 0, builder, driver);
         for pair in state.iter_mut() {
             pair.0 = Self::normalize_sparse_form(&pair.0, builder, driver)?;
@@ -326,7 +326,7 @@ impl<F: PrimeField> AES128<F> {
         key: &FieldCT<F>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> std::io::Result<Vec<FieldCT<F>>> {
+    ) -> eyre::Result<Vec<FieldCT<F>>> {
         let round_key = Self::expand_key(key, builder, driver)?;
 
         let num_blocks = input.len();
@@ -380,7 +380,7 @@ pub(crate) fn pack_input_bytes_into_field<
     padding: usize,
     builder: &mut GenericUltraCircuitBuilder<P, T>,
     driver: &mut T,
-) -> std::io::Result<FieldCT<P::ScalarField>> {
+) -> eyre::Result<FieldCT<P::ScalarField>> {
     let mut converted = FieldCT::default();
     for input in &inputs[..(16 - padding)] {
         converted = converted.multiply(
@@ -411,7 +411,7 @@ pub(crate) fn pack_output_bytes_into_field<
     outputs: &[u32; 16],
     builder: &mut GenericUltraCircuitBuilder<P, T>,
     driver: &mut T,
-) -> std::io::Result<FieldCT<P::ScalarField>> {
+) -> eyre::Result<FieldCT<P::ScalarField>> {
     let mut converted = FieldCT::default();
     for &output in outputs {
         converted = converted.multiply(

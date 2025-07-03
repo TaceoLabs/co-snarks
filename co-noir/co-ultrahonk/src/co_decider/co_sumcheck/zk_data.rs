@@ -12,6 +12,8 @@ use co_builder::HonkProofError;
 use co_builder::HonkProofResult;
 use co_builder::TranscriptFieldType;
 use co_builder::prelude::HonkCurve;
+use mpc_core::MpcState as _;
+use mpc_net::Network;
 use ultrahonk::prelude::Transcript;
 
 pub(crate) struct SharedZKSumcheckData<T: NoirUltraHonkProver<P>, P: Pairing> {
@@ -29,15 +31,20 @@ pub(crate) struct SharedZKSumcheckData<T: NoirUltraHonkProver<P>, P: Pairing> {
 }
 
 impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> SharedZKSumcheckData<T, P> {
-    pub(crate) fn new<H: TranscriptHasher<TranscriptFieldType>>(
+    pub(crate) fn new<H: TranscriptHasher<TranscriptFieldType>, N: Network>(
         multivariate_d: usize,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         commitment_key: &[P::G1Affine],
-        driver: &mut T,
+        net: &N,
+        state: &mut T::State,
     ) -> HonkProofResult<Self> {
-        let constant_term = driver.rand()?;
-        let libra_univariates =
-            Self::generate_libra_univariates(multivariate_d, P::LIBRA_UNIVARIATES_LENGTH, driver)?;
+        let constant_term = T::rand(net, state)?;
+        let libra_univariates = Self::generate_libra_univariates(
+            multivariate_d,
+            P::LIBRA_UNIVARIATES_LENGTH,
+            net,
+            state,
+        )?;
         let log_circuit_size = multivariate_d;
 
         let mut data = SharedZKSumcheckData {
@@ -55,14 +62,14 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> SharedZKSumch
         };
 
         data.create_interpolation_domain();
-        data.compute_concatenated_libra_polynomial(driver)?;
+        data.compute_concatenated_libra_polynomial(net, state)?;
         // If proving_key is provided, commit to the concatenated and masked libra polynomial
         if !commitment_key.is_empty() {
             let libra_commitment_shared = CoUtils::msm::<T, P>(
                 data.libra_concatenated_monomial_form.coefficients.as_ref(),
                 commitment_key,
             );
-            let libra_commitment = T::open_point(driver, libra_commitment_shared)?;
+            let libra_commitment = T::open_point(libra_commitment_shared, net, state)?;
             transcript.send_point_to_verifier::<P>(
                 "Libra:concatenation_commitment".to_string(),
                 libra_commitment.into(),
@@ -76,14 +83,12 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> SharedZKSumch
             data.constant_term,
         );
         // Send the Libra total sum to the transcript
-        data.libra_total_sum = T::open_many(driver, &[libra_total_sum])?[0];
+        data.libra_total_sum = T::open_many(&[libra_total_sum], net, state)?[0];
         transcript.send_fr_to_verifier::<P>("Libra:Sum".to_string(), data.libra_total_sum);
         data.libra_challenge = transcript.get_challenge::<P>("Libra:Challenge".to_string());
 
-        data.libra_running_sum = T::promote_to_trivial_share(
-            driver.get_party_id(),
-            data.libra_total_sum * data.libra_challenge,
-        );
+        data.libra_running_sum =
+            T::promote_to_trivial_share(state.id(), data.libra_total_sum * data.libra_challenge);
         data.setup_auxiliary_data();
 
         Ok(data)
@@ -95,13 +100,14 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> SharedZKSumch
      * independent uniformly random coefficients.
      *
      */
-    fn generate_libra_univariates(
+    fn generate_libra_univariates<N: Network>(
         number_of_polynomials: usize,
         univariate_length: usize,
-        driver: &mut T,
-    ) -> std::io::Result<Vec<SharedPolynomial<T, P>>> {
+        net: &N,
+        state: &mut T::State,
+    ) -> eyre::Result<Vec<SharedPolynomial<T, P>>> {
         (0..number_of_polynomials)
-            .map(|_| SharedPolynomial::random(univariate_length, driver))
+            .map(|_| SharedPolynomial::random(univariate_length, net, state))
             .collect()
     }
 
@@ -181,7 +187,11 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> SharedZKSumch
      * + m_1
      *
      */
-    fn compute_concatenated_libra_polynomial(&mut self, driver: &mut T) -> HonkProofResult<()> {
+    fn compute_concatenated_libra_polynomial<N: Network>(
+        &mut self,
+        net: &N,
+        state: &mut T::State,
+    ) -> HonkProofResult<()> {
         let mut coeffs_lagrange_subgroup = vec![T::ArithmeticShare::default(); P::SUBGROUP_SIZE];
         coeffs_lagrange_subgroup[0] = self.constant_term;
 
@@ -197,7 +207,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> SharedZKSumch
             coefficients: coeffs_lagrange_subgroup,
         };
 
-        let masking_scalars = SharedUnivariate::<T, P, 2>::get_random(driver)?;
+        let masking_scalars = SharedUnivariate::<T, P, 2>::get_random(net, state)?;
 
         let domain = GeneralEvaluationDomain::<P::ScalarField>::new(P::SUBGROUP_SIZE)
             .ok_or(HonkProofError::LargeSubgroup)?;

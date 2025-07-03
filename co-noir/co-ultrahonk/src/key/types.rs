@@ -5,6 +5,7 @@ use co_builder::prelude::{
     ActiveRegionData, CycleNode, CyclicPermutation, GenericUltraCircuitBuilder, NUM_SELECTORS,
     NUM_WIRES, Polynomial,
 };
+use mpc_core::MpcState;
 
 pub(crate) struct TraceData<'a, T: NoirUltraHonkProver<P>, P: Pairing> {
     pub(crate) wires: [&'a mut Polynomial<T::ArithmeticShare>; NUM_WIRES],
@@ -64,7 +65,7 @@ impl<'a, T: NoirUltraHonkProver<P>, P: Pairing> TraceData<'a, T, P> {
         U: NoirWitnessExtensionProtocol<P::ScalarField, ArithmeticShare = T::ArithmeticShare>,
     >(
         &mut self,
-        id: T::PartyID,
+        id: <T::State as MpcState>::PartyID,
         builder: &mut GenericUltraCircuitBuilder<P, U>,
         is_structured: bool,
         active_region_data: &mut ActiveRegionData,
