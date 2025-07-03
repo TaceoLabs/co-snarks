@@ -913,6 +913,36 @@ impl<
             self.mask_polynomial(proving_key.polynomials.witness.w_l_mut())?;
             self.mask_polynomial(proving_key.polynomials.witness.w_r_mut())?;
             self.mask_polynomial(proving_key.polynomials.witness.w_o_mut())?;
+            if L::FLAVOUR == Flavour::Mega {
+                self.mask_polynomial(proving_key.polynomials.witness.ecc_op_wire_1_mut())?;
+                self.mask_polynomial(proving_key.polynomials.witness.ecc_op_wire_2_mut())?;
+                self.mask_polynomial(proving_key.polynomials.witness.ecc_op_wire_3_mut())?;
+                self.mask_polynomial(proving_key.polynomials.witness.ecc_op_wire_4_mut())?;
+                self.mask_polynomial(proving_key.polynomials.witness.calldata_mut())?;
+                self.mask_polynomial(proving_key.polynomials.witness.calldata_read_counts_mut())?;
+                self.mask_polynomial(proving_key.polynomials.witness.calldata_read_tags_mut())?;
+                self.mask_polynomial(proving_key.polynomials.witness.secondary_calldata_mut())?;
+                self.mask_polynomial(
+                    proving_key
+                        .polynomials
+                        .witness
+                        .secondary_calldata_read_counts_mut(),
+                )?;
+                self.mask_polynomial(
+                    proving_key
+                        .polynomials
+                        .witness
+                        .secondary_calldata_read_tags_mut(),
+                )?;
+                self.mask_polynomial(proving_key.polynomials.witness.return_data_mut())?;
+                self.mask_polynomial(
+                    proving_key
+                        .polynomials
+                        .witness
+                        .return_data_read_counts_mut(),
+                )?;
+                self.mask_polynomial(proving_key.polynomials.witness.return_data_read_tags_mut())?;
+            }
         };
 
         if L::FLAVOUR == Flavour::Ultra {
@@ -979,7 +1009,7 @@ impl<
                 proving_key
                     .polynomials
                     .witness
-                    .secondary_calldata_read_tags()
+                    .secondary_calldata_read_counts()
                     .as_ref(),
                 crs,
             );
