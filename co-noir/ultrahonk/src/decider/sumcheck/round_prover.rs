@@ -15,7 +15,6 @@ use crate::{
     transcript::TranscriptFieldType,
     types::AllEntities,
 };
-use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 
 use ark_ff::PrimeField;
 use co_builder::prelude::{HonkCurve, RowDisablingPolynomial};
