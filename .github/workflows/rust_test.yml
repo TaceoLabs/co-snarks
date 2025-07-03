@@ -28,6 +28,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Test with default features
         run: cargo test --workspace --profile ci-dev --all-features
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   test-groth16-examples:
     name: Test groth16 examples
     runs-on: ubuntu-latest
@@ -40,6 +42,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Test groth16 examples
         run: cd co-circom/co-circom/examples/groth16 && ./run.sh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   test-plonk-examples:
     name: Test plonk examples
     runs-on: ubuntu-latest
@@ -52,6 +56,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Test plonk examples
         run: cd co-circom/co-circom/examples/plonk && ./run.sh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   test-noir-examples:
     name: Test noir examples
     runs-on: ubuntu-latest
@@ -64,3 +70,5 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Test noir examples
         run: cd co-noir/co-noir/examples && ./run.sh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
