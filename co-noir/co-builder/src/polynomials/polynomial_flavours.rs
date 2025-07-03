@@ -242,6 +242,7 @@ pub trait ProverWitnessEntitiesFlavour<T: Default> {
     fn iter_mut<'a>(&'a mut self) -> impl Iterator<Item = &'a mut T>
     where
         T: 'a;
+    fn into_iter(self) -> impl Iterator<Item = T>;
     fn into_wires(self) -> impl Iterator<Item = T>;
     fn get_wires(&self) -> &[T];
     fn get_wires_mut(&mut self) -> &mut [T];

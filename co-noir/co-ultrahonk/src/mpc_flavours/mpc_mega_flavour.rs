@@ -31,14 +31,14 @@ use crate::{
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
+use co_builder::TranscriptFieldType;
 use co_builder::flavours::mega_flavour::MegaFlavour;
 use co_builder::prelude::HonkCurve;
 use co_builder::prover_flavour::ProverFlavour;
-use co_builder::TranscriptFieldType;
 use std::array;
 use ultrahonk::prelude::Univariate;
 
-pub(crate) struct AllRelationAccMega<T: NoirUltraHonkProver<P>, P: Pairing> {
+pub struct AllRelationAccMega<T: NoirUltraHonkProver<P>, P: Pairing> {
     pub(crate) r_arith: UltraArithmeticRelationAcc<T, P>,
     pub(crate) r_perm: UltraPermutationRelationAcc<T, P>,
     pub(crate) r_lookup: LogDerivLookupRelationAcc<T, P>,
@@ -51,7 +51,7 @@ pub(crate) struct AllRelationAccMega<T: NoirUltraHonkProver<P>, P: Pairing> {
     pub(crate) r_pos_int: Poseidon2InternalRelationAcc<T, P>,
 }
 
-pub(crate) struct AllRelationAccHalfSharedMega<T: NoirUltraHonkProver<P>, P: Pairing> {
+pub struct AllRelationAccHalfSharedMega<T: NoirUltraHonkProver<P>, P: Pairing> {
     pub(crate) r_arith: UltraArithmeticRelationAccHalfShared<T, P>,
     pub(crate) r_perm: UltraPermutationRelationAcc<T, P>,
     pub(crate) r_lookup: LogDerivLookupRelationAcc<T, P>,
@@ -81,7 +81,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for AllRelationAccHalfShared
     }
 }
 
-pub(crate) struct AllEntitiesBatchRelationsMega<T, P>
+pub struct AllEntitiesBatchRelationsMega<T, P>
 where
     T: NoirUltraHonkProver<P>,
     P: Pairing,

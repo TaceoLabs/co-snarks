@@ -2,7 +2,7 @@ use ark_bn254::Bn254;
 use ark_ff::Zero;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use co_acvm::{Rep3AcvmType, solver::Rep3CoSolver};
-use co_builder::prelude::Serialize as FieldSerialize;
+use co_builder::{flavours::ultra_flavour::UltraFlavour, prelude::Serialize as FieldSerialize};
 use co_noir::PubShared;
 use co_ultrahonk::prelude::{
     CrsParser, HonkProof, Poseidon2Sponge, ProvingKey, Rep3CoUltraHonk, Rep3UltraHonkDriver,
@@ -1230,7 +1230,7 @@ fn run_translate_proving_key(config: TranslateProvingKeyConfig) -> color_eyre::R
     // parse proving_key shares
     let proving_key_file =
         BufReader::new(File::open(proving_key).context("trying to open witness share file")?);
-    let proving_key: ProvingKey<Rep3UltraHonkDriver<Rep3MpcNet>, Bn254> =
+    let proving_key: ProvingKey<Rep3UltraHonkDriver<Rep3MpcNet>, Bn254, UltraFlavour> =
         bincode::deserialize_from(proving_key_file).context("while deserializing witness share")?;
 
     // connect to network
@@ -1369,7 +1369,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             let net = Rep3MpcNet::new(network_config)?;
 
             // Get the proving key and prover
-            let proving_key: ProvingKey<Rep3UltraHonkDriver<Rep3MpcNet>, Bn254> =
+            let proving_key: ProvingKey<Rep3UltraHonkDriver<Rep3MpcNet>, Bn254, UltraFlavour> =
                 bincode::deserialize_from(proving_key_file)
                     .context("while deserializing input share")?;
             let prover_crs = CrsParser::<Bn254>::get_crs_g1(
@@ -1398,12 +1398,13 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
                 TranscriptHash::KECCAK => {
                     // execute prover in MPC
                     let start = Instant::now();
-                    let (proof, public_inputs, net) = Rep3CoUltraHonk::<_, _, Keccak256>::prove(
-                        net,
-                        proving_key,
-                        &prover_crs,
-                        has_zk,
-                    )?;
+                    let (proof, public_inputs, net) =
+                        Rep3CoUltraHonk::<_, _, Keccak256, UltraFlavour>::prove(
+                            net,
+                            proving_key,
+                            &prover_crs,
+                            has_zk,
+                        )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
                     // network is shutdown in drop, which can take seom time with quinn
@@ -1417,9 +1418,12 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             let net = ShamirMpcNet::new(network_config)?;
 
             // Get the proving key and prover
-            let proving_key: ProvingKey<ShamirUltraHonkDriver<ark_bn254::Fr, ShamirMpcNet>, Bn254> =
-                bincode::deserialize_from(proving_key_file)
-                    .context("while deserializing input share")?;
+            let proving_key: ProvingKey<
+                ShamirUltraHonkDriver<ark_bn254::Fr, ShamirMpcNet>,
+                Bn254,
+                UltraFlavour,
+            > = bincode::deserialize_from(proving_key_file)
+                .context("while deserializing input share")?;
             let prover_crs = CrsParser::<Bn254>::get_crs_g1(
                 crs_path,
                 proving_key.circuit_size as usize,
@@ -1430,14 +1434,14 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             match hasher {
                 TranscriptHash::POSEIDON2 => {
                     let start = Instant::now();
-                    let (proof, public_input, net) =
-                        ShamirCoUltraHonk::<_, _, Poseidon2Sponge>::prove(
-                            net,
-                            t,
-                            proving_key,
-                            &prover_crs,
-                            has_zk,
-                        )?;
+                    let (proof, public_input, net) = ShamirCoUltraHonk::<
+                        _,
+                        _,
+                        Poseidon2Sponge,
+                        UltraFlavour,
+                    >::prove(
+                        net, t, proving_key, &prover_crs, has_zk
+                    )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
                     // network is shutdown in drop, which can take seom time with quinn
@@ -1447,12 +1451,13 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
                 }
                 TranscriptHash::KECCAK => {
                     let start = Instant::now();
-                    let (proof, public_input, net) = ShamirCoUltraHonk::<_, _, Keccak256>::prove(
-                        net,
-                        t,
-                        proving_key,
-                        &prover_crs,
-                        has_zk,
+                    let (proof, public_input, net) = ShamirCoUltraHonk::<
+                        _,
+                        _,
+                        Keccak256,
+                        UltraFlavour,
+                    >::prove(
+                        net, t, proving_key, &prover_crs, has_zk
                     )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
@@ -1611,7 +1616,7 @@ fn run_build_and_generate_proof(
                 TranscriptHash::POSEIDON2 => {
                     let start = Instant::now();
                     let (proof, public_input, net) =
-                        Rep3CoUltraHonk::<_, _, Poseidon2Sponge>::prove(
+                        Rep3CoUltraHonk::<_, _, Poseidon2Sponge, UltraFlavour>::prove(
                             net,
                             proving_key,
                             &prover_crs,
@@ -1625,12 +1630,13 @@ fn run_build_and_generate_proof(
                 }
                 TranscriptHash::KECCAK => {
                     let start = Instant::now();
-                    let (proof, public_input, net) = Rep3CoUltraHonk::<_, _, Keccak256>::prove(
-                        net,
-                        proving_key,
-                        &prover_crs,
-                        has_zk,
-                    )?;
+                    let (proof, public_input, net) =
+                        Rep3CoUltraHonk::<_, _, Keccak256, UltraFlavour>::prove(
+                            net,
+                            proving_key,
+                            &prover_crs,
+                            has_zk,
+                        )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
                     // network is shutdown in drop, which can take seom time with quinn
@@ -1662,14 +1668,14 @@ fn run_build_and_generate_proof(
             let (proof, public_input) = match hasher {
                 TranscriptHash::POSEIDON2 => {
                     let start = Instant::now();
-                    let (proof, public_input, net) =
-                        ShamirCoUltraHonk::<_, _, Poseidon2Sponge>::prove(
-                            net,
-                            t,
-                            proving_key,
-                            &prover_crs,
-                            has_zk,
-                        )?;
+                    let (proof, public_input, net) = ShamirCoUltraHonk::<
+                        _,
+                        _,
+                        Poseidon2Sponge,
+                        UltraFlavour,
+                    >::prove(
+                        net, t, proving_key, &prover_crs, has_zk
+                    )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
                     // network is shutdown in drop, which can take seom time with quinn
@@ -1679,12 +1685,13 @@ fn run_build_and_generate_proof(
                 TranscriptHash::KECCAK => {
                     // execute prover in MPC
                     let start = Instant::now();
-                    let (proof, public_input, net) = ShamirCoUltraHonk::<_, _, Keccak256>::prove(
-                        net,
-                        t,
-                        proving_key,
-                        &prover_crs,
-                        has_zk,
+                    let (proof, public_input, net) = ShamirCoUltraHonk::<
+                        _,
+                        _,
+                        Keccak256,
+                        UltraFlavour,
+                    >::prove(
+                        net, t, proving_key, &prover_crs, has_zk
                     )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
@@ -1871,7 +1878,7 @@ fn run_verify(config: VerifyConfig) -> color_eyre::Result<ExitCode> {
 
     // parse verification key file
     let vk_u8 = std::fs::read(&vk_path).context("while reading vk file")?;
-    let vk = VerifyingKeyBarretenberg::<Bn254>::from_buffer(&vk_u8)
+    let vk = VerifyingKeyBarretenberg::<Bn254, UltraFlavour>::from_buffer(&vk_u8)
         .context("while deserializing verification key")?;
 
     let vk = VerifyingKey::from_barrettenberg_and_crs(vk, verifier_crs);
@@ -1879,12 +1886,15 @@ fn run_verify(config: VerifyConfig) -> color_eyre::Result<ExitCode> {
     tracing::info!("Starting proof verification...");
     let start = Instant::now();
     let res = match hasher {
-        TranscriptHash::POSEIDON2 => {
-            UltraHonk::<_, Poseidon2Sponge>::verify(proof, &public_inputs, &vk, has_zk)
-                .context("while verifying proof")?
-        }
+        TranscriptHash::POSEIDON2 => UltraHonk::<_, Poseidon2Sponge, UltraFlavour>::verify(
+            proof,
+            &public_inputs,
+            &vk,
+            has_zk,
+        )
+        .context("while verifying proof")?,
         TranscriptHash::KECCAK => {
-            UltraHonk::<_, Keccak256>::verify(proof, &public_inputs, &vk, has_zk)
+            UltraHonk::<_, Keccak256, UltraFlavour>::verify(proof, &public_inputs, &vk, has_zk)
                 .context("while verifying proof")?
         }
     };

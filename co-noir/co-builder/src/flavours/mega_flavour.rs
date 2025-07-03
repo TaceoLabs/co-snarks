@@ -506,6 +506,9 @@ impl<T: Default> ProverWitnessEntitiesFlavour<T> for MegaProverWitnessEntities<T
     {
         self.elements.iter_mut()
     }
+    fn into_iter(self) -> impl Iterator<Item = T> {
+        self.elements.into_iter()
+    }
     fn into_wires(self) -> impl Iterator<Item = T> {
         self.elements
             .into_iter()

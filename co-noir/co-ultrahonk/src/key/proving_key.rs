@@ -22,8 +22,6 @@ use co_builder::prelude::{GenericUltraCircuitBuilder, PublicComponentKey};
 use co_builder::prover_flavour::ProverFlavour;
 use co_builder::{HonkProofError, TranscriptFieldType};
 use eyre::Result;
-use serde::Deserialize;
-use serde::Serialize;
 use std::collections::BTreeMap;
 use std::marker::PhantomData;
 use ultrahonk::Utils;

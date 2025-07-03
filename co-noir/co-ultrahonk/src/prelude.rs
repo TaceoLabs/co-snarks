@@ -12,6 +12,7 @@ pub use co_builder::prelude::{
     AcirFormat, HonkRecursion, NUM_MASKED_ROWS, ProvingKey as PlainProvingKey, VerifyingKey,
 };
 pub use co_builder::prelude::{Crs, CrsParser, HonkCurve, Polynomial, ProverCrs};
+pub use ultrahonk::Utils;
 pub use ultrahonk::prelude::HonkProof;
 pub use ultrahonk::prelude::Poseidon2Sponge;
 pub use ultrahonk::prelude::TranscriptHasher;

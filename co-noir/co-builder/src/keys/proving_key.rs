@@ -1,3 +1,4 @@
+use super::verification_key::PublicComponentKey;
 use crate::flavours::mega_flavour::MegaFlavour;
 use crate::flavours::ultra_flavour::UltraFlavour;
 use crate::polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK;
@@ -18,9 +19,9 @@ use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use co_acvm::{PlainAcvmSolver, mpc::NoirWitnessExtensionProtocol};
 use num_bigint::BigUint;
+use serde::Deserialize;
+use serde::Serialize;
 use std::sync::Arc;
-
-use super::verification_key::PublicComponentKey;
 
 pub struct ProvingKey<P: Pairing, L: ProverFlavour> {
     pub crs: Arc<ProverCrs<P>>,

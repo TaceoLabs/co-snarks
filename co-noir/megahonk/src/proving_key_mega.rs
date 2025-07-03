@@ -1,3 +1,5 @@
+use std::io::BufWriter;
+
 // This is just a temporary file and will be removed
 use ark_bn254::Bn254;
 use ark_ff::PrimeField;
@@ -82,6 +84,7 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(has_zk: ZeroKnowledge) {
         precomputed: precompentities,
     };
     pk.polynomials = polys_together;
+    //PK IS DONE HERE:
 
     let mut commitments =
         <MegaFlavour as ProverFlavour>::PrecomputedEntities::<ark_bn254::G1Affine>::default();
@@ -115,12 +118,13 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(has_zk: ZeroKnowledge) {
 #[test]
 fn mega_tester_keccak256() {
     plain_test::<Keccak256>(ZeroKnowledge::No);
+    plain_test::<Keccak256>(ZeroKnowledge::Yes);
 }
 
 #[test]
 fn mega_tester_poseidon() {
     plain_test::<Poseidon2Sponge>(ZeroKnowledge::No);
-    // plain_test::<Poseidon2Sponge>(ZeroKnowledge::Yes);
+    plain_test::<Poseidon2Sponge>(ZeroKnowledge::Yes);
 }
 
 #[derive(Serialize, Deserialize)]
