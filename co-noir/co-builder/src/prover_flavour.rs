@@ -2,6 +2,7 @@ use crate::polynomials::polynomial_flavours::{
     PrecomputedEntitiesFlavour, ProverWitnessEntitiesFlavour, ShiftedWitnessEntitiesFlavour,
     WitnessEntitiesFlavour,
 };
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Flavour {
@@ -11,10 +12,11 @@ pub enum Flavour {
 
 pub trait ProverFlavour: Default {
     const FLAVOUR: Flavour;
-
-    type PrecomputedEntities<T: Default + Clone + std::marker::Sync>: PrecomputedEntitiesFlavour<T>
+    type PrecomputedEntities<T: Default + DeserializeOwned+ Clone + std::marker::Sync>: PrecomputedEntitiesFlavour<T>
         + Default
         + Clone
+        + Serialize
+      + DeserializeOwned
         + std::marker::Sync;
     type WitnessEntities<T: Default + std::marker::Sync>: WitnessEntitiesFlavour<T>
         + Default
@@ -22,7 +24,11 @@ pub trait ProverFlavour: Default {
     type ShiftedWitnessEntities<T: Default + std::marker::Sync>: ShiftedWitnessEntitiesFlavour<T>
         + Default
         + std::marker::Sync;
-    type ProverWitnessEntities<T: Default>: ProverWitnessEntitiesFlavour<T> + Default;
+    type ProverWitnessEntities<T: Default + std::marker::Sync+ Serialize+ DeserializeOwned>: ProverWitnessEntitiesFlavour<T>
+        + Default
+        + Serialize
+   + DeserializeOwned
+        + std::marker::Sync;
     const WITNESS_ENTITIES_SIZE: usize;
     const SHIFTED_WITNESS_ENTITIES_SIZE: usize;
     const PRECOMPUTED_ENTITIES_SIZE: usize;

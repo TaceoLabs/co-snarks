@@ -10,12 +10,12 @@ use serde::{Deserialize, Serialize};
 // #[derive(Default, Serialize, Deserialize)]
 // #[serde(bound = "")]
 // #[derive(Default)]
-// #[derive(Serialize, Deserialize)]
-// #[serde(bound = "")]
+#[derive(Serialize, Deserialize)]
+#[serde(bound = "")]
 pub struct Polynomials<
     Shared: Default,
     Public: Default + Clone + std::marker::Sync,
-    L: MPCProverFlavour,
+    L: ProverFlavour,
 > where
     Polynomial<Shared>: Serialize + for<'a> Deserialize<'a>,
     Polynomial<Public>: Serialize + for<'a> Deserialize<'a>,
