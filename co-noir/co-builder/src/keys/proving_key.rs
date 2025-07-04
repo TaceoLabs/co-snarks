@@ -115,30 +115,29 @@ impl<P: Pairing> ProvingKey<P, UltraFlavour> {
         Ok(proving_key)
     }
 
-    //TODO FLORIN REMOVE PUBLIC AGAIN
-    pub fn new(
-        circuit_size: usize,
-        num_public_inputs: usize,
-        crs: Arc<ProverCrs<P>>,
-        final_active_wire_idx: usize,
-    ) -> Self {
-        tracing::trace!("ProvingKey new");
-        let polynomials = Polynomials::new(circuit_size);
+    // pub fn new(
+    //     circuit_size: usize,
+    //     num_public_inputs: usize,
+    //     crs: Arc<ProverCrs<P>>,
+    //     final_active_wire_idx: usize,
+    // ) -> Self {
+    //     tracing::trace!("ProvingKey new");
+    //     let polynomials = Polynomials::new(circuit_size);
 
-        Self {
-            crs,
-            circuit_size: circuit_size as u32,
-            public_inputs: Vec::with_capacity(num_public_inputs),
-            num_public_inputs: num_public_inputs as u32,
-            pub_inputs_offset: 0,
-            polynomials,
-            memory_read_records: Vec::new(),
-            memory_write_records: Vec::new(),
-            final_active_wire_idx,
-            active_region_data: ActiveRegionData::new(),
-            pairing_inputs_public_input_key: Default::default(),
-        }
-    }
+    //     Self {
+    //         crs,
+    //         circuit_size: circuit_size as u32,
+    //         public_inputs: Vec::with_capacity(num_public_inputs),
+    //         num_public_inputs: num_public_inputs as u32,
+    //         pub_inputs_offset: 0,
+    //         polynomials,
+    //         memory_read_records: Vec::new(),
+    //         memory_write_records: Vec::new(),
+    //         final_active_wire_idx,
+    //         active_region_data: ActiveRegionData::new(),
+    //         pairing_inputs_public_input_key: Default::default(),
+    //     }
+    // }
 
     fn populate_trace(&mut self, builder: &mut UltraCircuitBuilder<P>, is_structured: bool) {
         tracing::trace!("Populating trace");
@@ -477,7 +476,7 @@ impl<P: Pairing> ProvingKey<P, UltraFlavour> {
         Ok(())
     }
 }
-impl<P: Pairing> ProvingKey<P, MegaFlavour> {
+impl<P: Pairing, L: ProverFlavour> ProvingKey<P, L> {
     //TODO FLORIN REMOVE PUBLIC AGAIN
     pub fn new(
         circuit_size: usize,

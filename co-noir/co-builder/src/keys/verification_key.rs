@@ -71,7 +71,7 @@ pub struct VerifyingKeyBarretenberg<P: Pairing, L: ProverFlavour> {
     pub commitments: L::PrecomputedEntities<P::G1Affine>,
 }
 
-#[derive(Clone, Copy, Debug, SerdeSerialize, Deserialize)]
+#[derive(Clone, Copy, Debug, SerdeSerialize, Deserialize, PartialEq)]
 pub struct PublicComponentKey {
     start_idx: u32,
 }

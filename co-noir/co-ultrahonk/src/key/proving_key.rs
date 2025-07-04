@@ -4,7 +4,7 @@ use crate::co_oink::{
 use crate::key::types::TraceData;
 use crate::mpc::NoirUltraHonkProver;
 use crate::mpc_prover_flavour::MPCProverFlavour;
-use crate::prelude::{Rep3UltraHonkDriver, ShamirUltraHonkDriver};
+use crate::prelude::{PlainUltraHonkDriver, Rep3UltraHonkDriver, ShamirUltraHonkDriver};
 use crate::types::Polynomials;
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
@@ -14,6 +14,7 @@ use co_builder::flavours::ultra_flavour::UltraFlavour;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
 use co_builder::prelude::Polynomial;
+use co_builder::prelude::Polynomials as PlainPolynomials;
 use co_builder::prelude::ProverCrs;
 use co_builder::prelude::ProvingKey as PlainProvingKey;
 use co_builder::prelude::VerifyingKey;
@@ -59,6 +60,52 @@ pub struct ProvingKey<T: NoirUltraHonkProver<P>, P: Pairing, L: MPCProverFlavour
     pub active_region_data: ActiveRegionData,
     pub pairing_inputs_public_input_key: PublicComponentKey,
     pub phantom: PhantomData<T>,
+}
+
+pub fn from_test_to<P: Pairing, L: MPCProverFlavour>(
+    proving_key: ProvingKey<PlainUltraHonkDriver, P, L>,
+    crs: ProverCrs<P>,
+) -> PlainProvingKey<P, L> {
+    let mut pk = PlainProvingKey::<P, L>::new(
+        proving_key.circuit_size as usize,
+        proving_key.num_public_inputs as usize,
+        crs.into(),
+        proving_key.final_active_wire_idx,
+    );
+    let polys = PlainPolynomials {
+        witness: proving_key.polynomials.witness,
+        precomputed: proving_key.polynomials.precomputed,
+    };
+    pk.pub_inputs_offset = proving_key.pub_inputs_offset;
+    pk.polynomials = polys;
+    pk.public_inputs = proving_key.public_inputs;
+    pk.memory_read_records = proving_key.memory_read_records;
+    pk.memory_write_records = proving_key.memory_write_records;
+    pk.active_region_data = proving_key.active_region_data;
+
+    pk
+}
+
+pub fn to_test_from<P: Pairing, L: MPCProverFlavour>(
+    proving_key: PlainProvingKey<P, L>,
+) -> ProvingKey<PlainUltraHonkDriver, P, L> {
+    ProvingKey {
+        circuit_size: proving_key.circuit_size,
+        public_inputs: proving_key.public_inputs,
+        num_public_inputs: proving_key.num_public_inputs,
+        pub_inputs_offset: proving_key.pub_inputs_offset,
+        polynomials: Polynomials {
+            witness: proving_key.polynomials.witness,
+            precomputed: proving_key.polynomials.precomputed,
+        },
+        memory_read_records: proving_key.memory_read_records,
+        memory_write_records: proving_key.memory_write_records,
+        memory_records_shared: BTreeMap::new(),
+        final_active_wire_idx: proving_key.final_active_wire_idx,
+        active_region_data: proving_key.active_region_data,
+        pairing_inputs_public_input_key: proving_key.pairing_inputs_public_input_key,
+        phantom: PhantomData,
+    }
 }
 
 fn ark_se_test_poly<T, P, L, S>(
@@ -151,25 +198,6 @@ where
         _marker: std::marker::PhantomData,
     })
 }
-
-// impl<T: NoirUltraHonkProver<P>, P: Pairing> Serialize for ProvingKey<T, P, UltraFlavour> {
-//     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-//     where
-//         S: serde::Serializer,
-//     {
-//         todo!()
-//     }
-// }
-// impl<'de, T: NoirUltraHonkProver<P>, P: Pairing> Deserialize<'de>
-//     for ProvingKey<T, P, UltraFlavour>
-// {
-//     fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-//     where
-//         D: serde::Deserializer<'de>,
-//     {
-//         todo!()
-//     }
-// }
 
 pub type Rep3ProvingKey<P, N, L> = ProvingKey<Rep3UltraHonkDriver<N>, P, L>;
 pub type ShamirProvingKey<P, N, L> =
@@ -405,56 +433,56 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P, UltraFlavour> {
         );
     }
 
-    pub fn from_plain_key_and_shares(
-        plain_key: &PlainProvingKey<P, UltraFlavour>,
-        shares: Vec<T::ArithmeticShare>,
-    ) -> Result<Self> {
-        let circuit_size = plain_key.circuit_size;
-        let public_inputs = plain_key.public_inputs.to_owned();
-        let num_public_inputs = plain_key.num_public_inputs;
-        let pub_inputs_offset = plain_key.pub_inputs_offset;
-        let memory_read_records = plain_key.memory_read_records.to_owned();
-        let memory_write_records = plain_key.memory_write_records.to_owned();
-        let final_active_wire_idx = plain_key.final_active_wire_idx;
-        let active_region_data = plain_key.active_region_data.to_owned();
-        let pairing_inputs_public_input_key = plain_key.pairing_inputs_public_input_key.to_owned();
+    // pub fn from_plain_key_and_shares(
+    //     plain_key: &PlainProvingKey<P, UltraFlavour>,
+    //     shares: Vec<T::ArithmeticShare>,
+    // ) -> Result<Self> {
+    //     let circuit_size = plain_key.circuit_size;
+    //     let public_inputs = plain_key.public_inputs.to_owned();
+    //     let num_public_inputs = plain_key.num_public_inputs;
+    //     let pub_inputs_offset = plain_key.pub_inputs_offset;
+    //     let memory_read_records = plain_key.memory_read_records.to_owned();
+    //     let memory_write_records = plain_key.memory_write_records.to_owned();
+    //     let final_active_wire_idx = plain_key.final_active_wire_idx;
+    //     let active_region_data = plain_key.active_region_data.to_owned();
+    //     let pairing_inputs_public_input_key = plain_key.pairing_inputs_public_input_key.to_owned();
 
-        if shares.len() != circuit_size as usize * 6 {
-            return Err(eyre::eyre!("Share length is not 6 times circuit size"));
-        }
+    //     if shares.len() != circuit_size as usize * 6 {
+    //         return Err(eyre::eyre!("Share length is not 6 times circuit size"));
+    //     }
 
-        let mut polynomials = Polynomials::default();
-        for (src, des) in plain_key.polynomials.precomputed.iter().zip(
-            <UltraFlavour as ProverFlavour>::PrecomputedEntities::<
-                Polynomial<<P as Pairing>::ScalarField>,
-            >::iter_mut(&mut polynomials.precomputed),
-        ) {
-            *des = src.to_owned();
-        }
+    //     let mut polynomials = Polynomials::default();
+    //     for (src, des) in plain_key.polynomials.precomputed.iter().zip(
+    //         <UltraFlavour as ProverFlavour>::PrecomputedEntities::<
+    //             Polynomial<<P as Pairing>::ScalarField>,
+    //         >::iter_mut(&mut polynomials.precomputed),
+    //     ) {
+    //         *des = src.to_owned();
+    //     }
 
-        for (src, des) in shares
-            .chunks_exact(circuit_size as usize)
-            .zip(<UltraFlavour as ProverFlavour>::ProverWitnessEntities::<
-            Polynomial<T::ArithmeticShare>,
-        >::iter_mut(&mut polynomials.witness))
-        {
-            *des = Polynomial::new(src.to_owned());
-        }
-        Ok(Self {
-            circuit_size,
-            public_inputs,
-            num_public_inputs,
-            pub_inputs_offset,
-            polynomials,
-            memory_read_records,
-            memory_write_records,
-            final_active_wire_idx,
-            phantom: PhantomData,
-            memory_records_shared: BTreeMap::new(),
-            active_region_data,
-            pairing_inputs_public_input_key,
-        })
-    }
+    //     for (src, des) in shares
+    //         .chunks_exact(circuit_size as usize)
+    //         .zip(<UltraFlavour as ProverFlavour>::ProverWitnessEntities::<
+    //         Polynomial<T::ArithmeticShare>,
+    //     >::iter_mut(&mut polynomials.witness))
+    //     {
+    //         *des = Polynomial::new(src.to_owned());
+    //     }
+    //     Ok(Self {
+    //         circuit_size,
+    //         public_inputs,
+    //         num_public_inputs,
+    //         pub_inputs_offset,
+    //         polynomials,
+    //         memory_read_records,
+    //         memory_write_records,
+    //         final_active_wire_idx,
+    //         phantom: PhantomData,
+    //         memory_records_shared: BTreeMap::new(),
+    //         active_region_data,
+    //         pairing_inputs_public_input_key,
+    //     })
+    // }
 
     pub fn ultrahonk_num_randomness(&self, has_zk: ZeroKnowledge) -> usize
     where
@@ -519,6 +547,65 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P, UltraFlavour> {
             pub_inputs_offset: self.pub_inputs_offset,
             commitments,
             pairing_inputs_public_input_key: self.pairing_inputs_public_input_key,
+        })
+    }
+}
+
+impl<T: NoirUltraHonkProver<P>, P: Pairing, L: MPCProverFlavour> ProvingKey<T, P, L> {
+    pub fn from_plain_key_and_shares(
+        plain_key: &PlainProvingKey<P, L>,
+        shares: Vec<T::ArithmeticShare>,
+    ) -> Result<Self> {
+        let circuit_size = plain_key.circuit_size;
+        let public_inputs = plain_key.public_inputs.to_owned();
+        let num_public_inputs = plain_key.num_public_inputs;
+        let pub_inputs_offset = plain_key.pub_inputs_offset;
+        let memory_read_records = plain_key.memory_read_records.to_owned();
+        let memory_write_records = plain_key.memory_write_records.to_owned();
+        let final_active_wire_idx = plain_key.final_active_wire_idx;
+        let active_region_data = plain_key.active_region_data.to_owned();
+        let pairing_inputs_public_input_key = plain_key.pairing_inputs_public_input_key.to_owned();
+
+        if shares.len() != circuit_size as usize * L::PROVER_WITNESS_ENTITIES_SIZE {
+            return Err(eyre::eyre!("Share length is not 6 times circuit size"));
+        }
+
+        let mut polynomials = Polynomials::default();
+        for (src, des) in plain_key
+            .polynomials
+            .precomputed
+            .iter()
+            .zip(L::PrecomputedEntities::<
+                Polynomial<<P as Pairing>::ScalarField>,
+            >::iter_mut(&mut polynomials.precomputed))
+        {
+            *des = src.to_owned();
+        }
+
+        for (src, des) in
+            shares
+                .chunks_exact(circuit_size as usize)
+                .zip(
+                    L::ProverWitnessEntities::<Polynomial<T::ArithmeticShare>>::iter_mut(
+                        &mut polynomials.witness,
+                    ),
+                )
+        {
+            *des = Polynomial::new(src.to_owned());
+        }
+        Ok(Self {
+            circuit_size,
+            public_inputs,
+            num_public_inputs,
+            pub_inputs_offset,
+            polynomials,
+            memory_read_records,
+            memory_write_records,
+            final_active_wire_idx,
+            phantom: PhantomData,
+            memory_records_shared: BTreeMap::new(),
+            active_region_data,
+            pairing_inputs_public_input_key,
         })
     }
 }

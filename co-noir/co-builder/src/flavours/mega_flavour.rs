@@ -1,7 +1,12 @@
 use crate::{
-    polynomials::polynomial_flavours::{
-        PrecomputedEntitiesFlavour, ProverWitnessEntitiesFlavour, ShiftedWitnessEntitiesFlavour,
-        WitnessEntitiesFlavour,
+    polynomials::{
+        polynomial_flavours::{
+            PrecomputedEntitiesFlavour, ProverWitnessEntitiesFlavour,
+            ShiftedWitnessEntitiesFlavour, WitnessEntitiesFlavour,
+        },
+        polynomial_types::{
+            PrecomputedEntities, ProverWitnessEntities, ShiftedWitnessEntities, WitnessEntities,
+        },
     },
     prover_flavour::{Flavour, ProverFlavour},
 };
@@ -173,22 +178,13 @@ impl ProverFlavour for MegaFlavour {
         }
     }
 }
-#[derive(Default, Clone)]
-pub struct MegaPrecomputedEntities<T: Default> {
-    pub elements: [T; MegaFlavour::PRECOMPUTED_ENTITIES_SIZE],
-}
-#[derive(Default)]
-pub struct MegaProverWitnessEntities<T: Default> {
-    pub elements: [T; MegaFlavour::WITNESS_ENTITIES_SIZE],
-}
-#[derive(Default)]
-pub struct MegaShiftedWitnessEntities<T: Default> {
-    pub elements: [T; MegaFlavour::SHIFTED_WITNESS_ENTITIES_SIZE],
-}
-#[derive(Default)]
-pub struct MegaWitnessEntities<T: Default> {
-    pub elements: [T; MegaFlavour::WITNESS_ENTITIES_SIZE],
-}
+type MegaPrecomputedEntities<T> =
+    PrecomputedEntities<T, { MegaFlavour::PRECOMPUTED_ENTITIES_SIZE }>;
+type MegaProverWitnessEntities<T> =
+    ProverWitnessEntities<T, { MegaFlavour::PROVER_WITNESS_ENTITIES_SIZE }>;
+type MegaShiftedWitnessEntities<T> =
+    ShiftedWitnessEntities<T, { MegaFlavour::SHIFTED_WITNESS_ENTITIES_SIZE }>;
+type MegaWitnessEntities<T> = WitnessEntities<T, { MegaFlavour::WITNESS_ENTITIES_SIZE }>;
 
 impl<T: Default> PrecomputedEntitiesFlavour<T> for MegaPrecomputedEntities<T> {
     fn iter<'a>(&'a self) -> impl Iterator<Item = &'a T>
@@ -1023,57 +1019,5 @@ impl<T: Default> WitnessEntitiesFlavour<T> for MegaWitnessEntities<T> {
         } else {
             panic!("This should not be called with the MegaFlavor");
         }
-    }
-}
-impl<T: Default> ShiftedWitnessEntitiesFlavour<T> for MegaShiftedWitnessEntities<T> {
-    fn new() -> Self {
-        Self {
-            elements: std::array::from_fn(|_| T::default()),
-        }
-    }
-    fn iter<'a>(&'a self) -> impl Iterator<Item = &'a T>
-    where
-        T: 'a,
-    {
-        self.elements.iter()
-    }
-    fn iter_mut<'a>(&'a mut self) -> impl Iterator<Item = &'a mut T>
-    where
-        T: 'a,
-    {
-        self.elements.iter_mut()
-    }
-    fn into_iter(self) -> impl Iterator<Item = T> {
-        self.elements.into_iter()
-    }
-    fn w_l(&self) -> &T {
-        &self.elements[MegaFlavour::WITNESS_W_L]
-    }
-    fn w_r(&self) -> &T {
-        &self.elements[MegaFlavour::WITNESS_W_R]
-    }
-    fn w_o(&self) -> &T {
-        &self.elements[MegaFlavour::WITNESS_W_O]
-    }
-    fn w_4(&self) -> &T {
-        &self.elements[MegaFlavour::WITNESS_W_4]
-    }
-    fn z_perm(&self) -> &T {
-        &self.elements[MegaFlavour::WITNESS_Z_PERM]
-    }
-    fn w_l_mut(&mut self) -> &mut T {
-        &mut self.elements[MegaFlavour::WITNESS_W_L]
-    }
-    fn w_r_mut(&mut self) -> &mut T {
-        &mut self.elements[MegaFlavour::WITNESS_W_R]
-    }
-    fn w_o_mut(&mut self) -> &mut T {
-        &mut self.elements[MegaFlavour::WITNESS_W_O]
-    }
-    fn w_4_mut(&mut self) -> &mut T {
-        &mut self.elements[MegaFlavour::WITNESS_W_4]
-    }
-    fn z_perm_mut(&mut self) -> &mut T {
-        &mut self.elements[MegaFlavour::WITNESS_Z_PERM]
     }
 }

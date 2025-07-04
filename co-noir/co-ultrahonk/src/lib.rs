@@ -2,7 +2,7 @@
 
 pub(crate) mod co_decider;
 pub(crate) mod co_oink;
-pub(crate) mod key;
+pub mod key;
 pub(crate) mod mpc;
 pub(crate) mod mpc_flavours;
 pub(crate) mod mpc_prover_flavour;

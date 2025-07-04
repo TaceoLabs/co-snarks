@@ -13,7 +13,7 @@ use std::fmt;
 use std::marker::PhantomData;
 
 // This is what we get from the proving key, we shift at a later point
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Polynomials<F: PrimeField, L: ProverFlavour> {
     pub witness: L::ProverWitnessEntities<Polynomial<F>>,
     pub precomputed: L::PrecomputedEntities<Polynomial<F>>,
@@ -34,12 +34,12 @@ impl<F: PrimeField, L: ProverFlavour> Polynomials<F, L> {
         self.witness.iter_mut().chain(self.precomputed.iter_mut())
     }
 }
-
+#[derive(Debug)]
 pub struct ProverWitnessEntities<T: Default, const SIZE: usize> {
     pub elements: [T; SIZE],
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PrecomputedEntities<T: Default, const SIZE: usize> {
     pub elements: [T; SIZE],
 }

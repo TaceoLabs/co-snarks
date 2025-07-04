@@ -1,10 +1,16 @@
 use crate::{
-    polynomials::polynomial_flavours::{
-        PrecomputedEntitiesFlavour, ProverWitnessEntitiesFlavour, ShiftedWitnessEntitiesFlavour,
-        WitnessEntitiesFlavour,
+    polynomials::{
+        polynomial_flavours::{
+            PrecomputedEntitiesFlavour, ProverWitnessEntitiesFlavour,
+            ShiftedWitnessEntitiesFlavour, WitnessEntitiesFlavour,
+        },
+        polynomial_types::{
+            PrecomputedEntities, ProverWitnessEntities, ShiftedWitnessEntities, WitnessEntities,
+        },
     },
     prover_flavour::{Flavour, ProverFlavour},
 };
+use std::fmt::Debug;
 
 #[derive(Default, Clone)]
 pub struct UltraFlavour {}
@@ -171,22 +177,13 @@ impl ProverFlavour for UltraFlavour {
         }
     }
 }
-#[derive(Default, Clone)]
-pub struct UltraPrecomputedEntities<T: Default> {
-    pub elements: [T; UltraFlavour::PRECOMPUTED_ENTITIES_SIZE],
-}
-#[derive(Default)]
-pub struct UltraProverWitnessEntities<T: Default> {
-    pub elements: [T; UltraFlavour::WITNESS_ENTITIES_SIZE],
-}
-#[derive(Default)]
-pub struct UltraShiftedWitnessEntities<T: Default> {
-    pub elements: [T; UltraFlavour::SHIFTED_WITNESS_ENTITIES_SIZE],
-}
-#[derive(Default)]
-pub struct UltraWitnessEntities<T: Default> {
-    pub elements: [T; UltraFlavour::WITNESS_ENTITIES_SIZE],
-}
+type UltraPrecomputedEntities<T> =
+    PrecomputedEntities<T, { UltraFlavour::PRECOMPUTED_ENTITIES_SIZE }>;
+type UltraProverWitnessEntities<T> =
+    ProverWitnessEntities<T, { UltraFlavour::PROVER_WITNESS_ENTITIES_SIZE }>;
+type UltraShiftedWitnessEntities<T> =
+    ShiftedWitnessEntities<T, { UltraFlavour::SHIFTED_WITNESS_ENTITIES_SIZE }>;
+type UltraWitnessEntities<T> = WitnessEntities<T, { UltraFlavour::WITNESS_ENTITIES_SIZE }>;
 impl<T: Default> PrecomputedEntitiesFlavour<T> for UltraPrecomputedEntities<T> {
     fn new() -> Self {
         Self {

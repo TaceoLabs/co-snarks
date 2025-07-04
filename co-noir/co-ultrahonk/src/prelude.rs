@@ -6,7 +6,9 @@ pub use crate::mpc::shamir::ShamirUltraHonkDriver;
 // Re-exporting the following types from `ultrahonk` and `co_builder` crates:
 pub use crate::prover::{CoUltraHonk, Rep3CoUltraHonk, ShamirCoUltraHonk};
 pub use crate::types::Polynomials;
-pub use crate::{PlainCoBuilder, Rep3CoBuilder, ShamirCoBuilder};
+pub use crate::{
+    PlainCoBuilder, Rep3CoBuilder, ShamirCoBuilder, mpc_prover_flavour::MPCProverFlavour,
+};
 // Re-exporting the following types from `ultrahonk` and `co_builder` crates:
 pub use co_builder::prelude::{
     AcirFormat, HonkRecursion, NUM_MASKED_ROWS, ProvingKey as PlainProvingKey, VerifyingKey,

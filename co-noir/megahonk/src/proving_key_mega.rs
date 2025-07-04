@@ -1,3 +1,5 @@
+use std::fs::File;
+use std::io::BufReader;
 use std::io::BufWriter;
 
 // This is just a temporary file and will be removed
@@ -6,6 +8,7 @@ use ark_ff::PrimeField;
 use co_builder::TranscriptFieldType;
 use co_builder::flavours::mega_flavour::MegaFlavour;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
+use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
 use co_builder::prelude::ActiveRegionData;
 use co_builder::prelude::CrsParser;
 use co_builder::prelude::Polynomial;
@@ -29,7 +32,6 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(has_zk: ZeroKnowledge) {
     const CRS_PATH_G1: &str = "../co-builder/src/crs/bn254_g1.dat";
     const CRS_PATH_G2: &str = "../co-builder/src/crs/bn254_g2.dat";
 
-    let start = std::time::Instant::now();
     let path = "src/finalpk.json";
     let json_str = std::fs::read_to_string(path).expect("failed to read file");
     let proving_key: VeryUglyPk =
@@ -113,6 +115,163 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(has_zk: ZeroKnowledge) {
         UltraHonk::<_, H, MegaFlavour>::verify(proof, &public_inputs, &verifying_key, has_zk)
             .unwrap();
     assert!(is_valid);
+}
+
+#[test]
+fn proving_key_shit() {
+    const CRS_PATH_G1: &str = "../co-builder/src/crs/bn254_g1.dat";
+    const CRS_PATH_G2: &str = "../co-builder/src/crs/bn254_g2.dat";
+
+    let path = "src/finalpk.json";
+    let has_zk = ZeroKnowledge::No;
+    let json_str = std::fs::read_to_string(path).expect("failed to read file");
+    let proving_key: VeryUglyPk =
+        parse_proving_key_from_json(&json_str).expect("failed to parse proving key from JSON");
+    let real_pk: RealMegaProvingKey<ark_bn254::Fr> = RealMegaProvingKey::from_ugly(proving_key);
+
+    let crs_size = real_pk.dyadic_circuit_size;
+    let crs: co_builder::prelude::Crs<Bn254> =
+        CrsParser::get_crs(CRS_PATH_G1, CRS_PATH_G2, crs_size, has_zk).unwrap();
+    let (prover_crs, verifier_crs) = crs.split();
+    let mut pk = ProvingKey::<_, MegaFlavour>::new(
+        real_pk.circuit_size,
+        real_pk.num_public_inputs,
+        prover_crs.into(),
+        real_pk.final_active_wire_idx,
+    );
+    pk.public_inputs = real_pk.public_inputs;
+    pk.pub_inputs_offset = real_pk.pub_inputs_offset as u32;
+
+    pk.active_region_data = ActiveRegionData {
+        ranges: real_pk.ranges,
+        idxs: real_pk.idxs,
+        current_end: real_pk.current_end,
+    };
+    let mut precomp_polys: Vec<Polynomial<ark_bn254::Fr>> = Vec::new();
+    for poly in real_pk.precomputed_polynomials {
+        let new_poly: Polynomial<ark_bn254::Fr> = Polynomial { coefficients: poly };
+        precomp_polys.push(new_poly);
+    }
+    let mut witness_polys: Vec<Polynomial<ark_bn254::Fr>> = Vec::new();
+    for poly in real_pk.witness_polynomials[..4].iter().cloned() {
+        let new_poly: Polynomial<ark_bn254::Fr> = Polynomial { coefficients: poly };
+        witness_polys.push(new_poly);
+    }
+    for poly in real_pk.witness_polynomials[6..].iter().cloned() {
+        let new_poly: Polynomial<ark_bn254::Fr> = Polynomial { coefficients: poly };
+
+        witness_polys.push(new_poly);
+    }
+    let precompentities =
+        <MegaFlavour as ProverFlavour>::PrecomputedEntities::<Polynomial<ark_bn254::Fr>> {
+            elements: precomp_polys.try_into().unwrap(),
+        };
+
+    let witness_entities =
+        <MegaFlavour as ProverFlavour>::ProverWitnessEntities::<Polynomial<ark_bn254::Fr>> {
+            elements: witness_polys.try_into().unwrap(),
+        };
+
+    let polys_together = Polynomials {
+        witness: witness_entities,
+        precomputed: precompentities,
+    };
+    pk.polynomials = polys_together;
+
+    let new_pk = co_ultrahonk::key::proving_key::to_test_from::<_, _>(pk);
+    let out = "src/serialized_proving_key";
+    let out_file = BufWriter::new(std::fs::File::create(&out).unwrap());
+    bincode::serialize_into(out_file, &new_pk).unwrap();
+
+    let path = "src/finalpk.json";
+    let has_zk = ZeroKnowledge::No;
+    let json_str = std::fs::read_to_string(path).expect("failed to read file");
+    let proving_key: VeryUglyPk =
+        parse_proving_key_from_json(&json_str).expect("failed to parse proving key from JSON");
+    let real_pk: RealMegaProvingKey<ark_bn254::Fr> = RealMegaProvingKey::from_ugly(proving_key);
+
+    let crs_size = real_pk.dyadic_circuit_size;
+    let crs: co_builder::prelude::Crs<Bn254> =
+        CrsParser::get_crs(CRS_PATH_G1, CRS_PATH_G2, crs_size, has_zk).unwrap();
+    let (prover_crs, verifier_crs) = crs.split();
+    let mut pk = ProvingKey::<_, MegaFlavour>::new(
+        real_pk.circuit_size,
+        real_pk.num_public_inputs,
+        prover_crs.clone().into(),
+        real_pk.final_active_wire_idx,
+    );
+    pk.public_inputs = real_pk.public_inputs;
+    pk.pub_inputs_offset = real_pk.pub_inputs_offset as u32;
+
+    pk.active_region_data = ActiveRegionData {
+        ranges: real_pk.ranges,
+        idxs: real_pk.idxs,
+        current_end: real_pk.current_end,
+    };
+    let mut precomp_polys: Vec<Polynomial<ark_bn254::Fr>> = Vec::new();
+    for poly in real_pk.precomputed_polynomials {
+        let new_poly: Polynomial<ark_bn254::Fr> = Polynomial { coefficients: poly };
+        precomp_polys.push(new_poly);
+    }
+    let mut witness_polys: Vec<Polynomial<ark_bn254::Fr>> = Vec::new();
+    for poly in real_pk.witness_polynomials[..4].iter().cloned() {
+        let new_poly: Polynomial<ark_bn254::Fr> = Polynomial { coefficients: poly };
+        witness_polys.push(new_poly);
+    }
+    for poly in real_pk.witness_polynomials[6..].iter().cloned() {
+        let new_poly: Polynomial<ark_bn254::Fr> = Polynomial { coefficients: poly };
+
+        witness_polys.push(new_poly);
+    }
+    let precompentities =
+        <MegaFlavour as ProverFlavour>::PrecomputedEntities::<Polynomial<ark_bn254::Fr>> {
+            elements: precomp_polys.try_into().unwrap(),
+        };
+
+    let witness_entities =
+        <MegaFlavour as ProverFlavour>::ProverWitnessEntities::<Polynomial<ark_bn254::Fr>> {
+            elements: witness_polys.try_into().unwrap(),
+        };
+
+    let polys_together = Polynomials {
+        witness: witness_entities,
+        precomputed: precompentities,
+    };
+    pk.polynomials = polys_together;
+
+    let proving_key_file = BufReader::new(File::open("src/serialized_proving_key").unwrap());
+
+    let proving_key = bincode::deserialize_from(proving_key_file).unwrap();
+
+    let to_cmp =
+        co_ultrahonk::key::proving_key::from_test_to::<_, MegaFlavour>(proving_key, prover_crs);
+
+    // assert_eq!(to_cmp.circuit_size, pk.circuit_size);
+    // assert_eq!(to_cmp.public_inputs, pk.public_inputs);
+    // assert_eq!(to_cmp.num_public_inputs, pk.num_public_inputs);
+    // assert_eq!(to_cmp.pub_inputs_offset, pk.pub_inputs_offset);
+    // assert_eq!(to_cmp.polynomials.precomputed, pk.polynomials.precomputed);
+    // assert_eq!(to_cmp.polynomials.witness, pk.polynomials.witness);
+    // assert_eq!(to_cmp.final_active_wire_idx, pk.final_active_wire_idx);
+    // assert_eq!(to_cmp.memory_read_records, pk.memory_read_records);
+    // assert_eq!(to_cmp.memory_write_records, pk.memory_write_records);
+    // assert_eq!(to_cmp.active_region_data, pk.active_region_data);
+    to_cmp
+        .polynomials
+        .precomputed
+        .iter()
+        .zip(pk.polynomials.precomputed.iter())
+        .for_each(|(a, b)| {
+            assert_eq!(a.coefficients, b.coefficients);
+        });
+    to_cmp
+        .polynomials
+        .witness
+        .iter()
+        .zip(pk.polynomials.witness.iter())
+        .for_each(|(a, b)| {
+            assert_eq!(a.coefficients, b.coefficients);
+        });
 }
 
 #[test]

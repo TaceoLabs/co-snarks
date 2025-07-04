@@ -876,7 +876,7 @@ impl<F: PrimeField> WitnessOrConstant<F> {
     }
 }
 
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
 pub struct ActiveRegionData {
     //todo florin remove these pubs
     pub ranges: Vec<(usize, usize)>, // active ranges [start_i, end_i) of the execution trace
