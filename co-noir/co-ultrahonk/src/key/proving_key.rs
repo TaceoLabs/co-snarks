@@ -8,6 +8,7 @@ use crate::prelude::{Rep3UltraHonkDriver, ShamirUltraHonkDriver};
 use crate::types::Polynomials;
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
+use ark_serialize::CanonicalSerialize;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_builder::HonkProofResult;
 use co_builder::flavours::ultra_flavour::UltraFlavour;
@@ -40,6 +41,11 @@ pub struct ProvingKey<T: NoirUltraHonkProver<P>, P: Pairing, L: MPCProverFlavour
     pub public_inputs: Vec<P::ScalarField>,
     pub num_public_inputs: u32,
     pub pub_inputs_offset: u32,
+
+    #[serde(
+        serialize_with = "ark_se_test_poly::<T, P, L, _>",
+        deserialize_with = "ark_de_test_poly::<T, P, L,_>"
+    )]
     pub polynomials: Polynomials<T::ArithmeticShare, P::ScalarField, L>,
     pub memory_read_records: Vec<u32>,
     pub memory_write_records: Vec<u32>,
@@ -52,6 +58,31 @@ pub struct ProvingKey<T: NoirUltraHonkProver<P>, P: Pairing, L: MPCProverFlavour
     pub active_region_data: ActiveRegionData,
     pub pairing_inputs_public_input_key: PublicComponentKey,
     pub phantom: PhantomData<T>,
+}
+
+fn ark_se_test_poly<T, P, L, S>(
+    polys: &Polynomials<T::ArithmeticShare, P::ScalarField, L>,
+    s: S,
+) -> Result<S::Ok, S::Error>
+where
+    T: NoirUltraHonkProver<P>,
+    P: Pairing,
+    L: MPCProverFlavour,
+    S: serde::Serializer,
+{
+    todo!()
+}
+
+fn ark_de_test_poly<'de, T, P, L, D>(
+    data: D,
+) -> Result<Polynomials<T::ArithmeticShare, P::ScalarField, L>, D::Error>
+where
+    T: NoirUltraHonkProver<P>,
+    P: Pairing,
+    L: MPCProverFlavour,
+    D: serde::de::Deserializer<'de>,
+{
+    todo!()
 }
 
 // impl<T: NoirUltraHonkProver<P>, P: Pairing> Serialize for ProvingKey<T, P, UltraFlavour> {

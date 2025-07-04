@@ -4,16 +4,15 @@ use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::prelude::Polynomial;
+use co_builder::prover_flavour::ProverFlavour;
 use serde::{Deserialize, Serialize};
 
 // This is what we get from the proving key, we shift at a later point
 // #[derive(Default, Serialize, Deserialize)]
 // #[serde(bound = "")]
 // #[derive(Default)]
-#[derive(Serialize, Deserialize)]
-#[serde(bound = "")]
 pub struct Polynomials<
-    Shared: Default,
+    Shared: Default + Sync,
     Public: Default + Clone + std::marker::Sync,
     L: ProverFlavour,
 > where
@@ -24,8 +23,8 @@ pub struct Polynomials<
     pub precomputed: L::PrecomputedEntities<Polynomial<Public>>,
 }
 
-impl<Shared: Default, Public: Default + Clone + std::marker::Sync, L: MPCProverFlavour> Default
-    for Polynomials<Shared, Public, L>
+impl<Shared: Default + Sync, Public: Default + Clone + std::marker::Sync, L: MPCProverFlavour>
+    Default for Polynomials<Shared, Public, L>
 where
     Polynomial<Shared>: Serialize + for<'a> Deserialize<'a>,
     Polynomial<Public>: Serialize + for<'a> Deserialize<'a>,
@@ -38,8 +37,11 @@ where
     }
 }
 
-impl<Shared: Clone + Default, Public: Clone + Default + std::marker::Sync, L: MPCProverFlavour>
-    Polynomials<Shared, Public, L>
+impl<
+    Shared: Clone + Default + Sync,
+    Public: Clone + Default + std::marker::Sync,
+    L: MPCProverFlavour,
+> Polynomials<Shared, Public, L>
 where
     Polynomial<Shared>: Serialize + for<'a> Deserialize<'a>,
     Polynomial<Public>: Serialize + for<'a> Deserialize<'a>,

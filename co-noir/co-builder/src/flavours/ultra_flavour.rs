@@ -164,19 +164,19 @@ impl ProverFlavour for UltraFlavour {
     const WITNESS_RETURN_DATA_INVERSES: Option<usize> = None;
 }
 #[derive(Default, Serialize, Clone, Deserialize)]
-struct UltraPrecomputedEntities<T: Default> {
+pub struct UltraPrecomputedEntities<T: Default> {
     pub elements: [T; UltraFlavour::PRECOMPUTED_ENTITIES_SIZE],
 }
 #[derive(Default, Serialize, Deserialize)]
-struct UltraProverWitnessEntities<T: Default> {
+pub struct UltraProverWitnessEntities<T: Default> {
     pub elements: [T; UltraFlavour::WITNESS_ENTITIES_SIZE],
 }
 #[derive(Default, Serialize, Deserialize)]
-struct UltraShiftedWitnessEntities<T: Default> {
+pub struct UltraShiftedWitnessEntities<T: Default> {
     pub elements: [T; UltraFlavour::SHIFTED_WITNESS_ENTITIES_SIZE],
 }
 #[derive(Default, Serialize, Deserialize)]
-struct UltraWitnessEntities<T: Default> {
+pub struct UltraWitnessEntities<T: Default> {
     pub elements: [T; UltraFlavour::WITNESS_ENTITIES_SIZE],
 }
 impl<T: Default> PrecomputedEntitiesFlavour<T> for UltraPrecomputedEntities<T> {

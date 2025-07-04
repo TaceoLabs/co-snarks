@@ -17,8 +17,7 @@ pub struct MegaFlavour {
     // phantom_data: PhantomData<F>,
 }
 impl ProverFlavour for MegaFlavour {
-    type ProverWitnessEntities<T: Default + std::marker::Sync + Serialize + DeserializeOwned> =
-        MegaProverWitnessEntities<T>;
+    type ProverWitnessEntities<T: Default + std::marker::Sync> = MegaProverWitnessEntities<T>;
     type ShiftedWitnessEntities<T: Default + std::marker::Sync> = MegaShiftedWitnessEntities<T>; //This is the same for Ultra and Mega
     type WitnessEntities<T: Default + std::marker::Sync> = MegaWitnessEntities<T>;
     type PrecomputedEntities<T: Default + Clone + std::marker::Sync> = MegaPrecomputedEntities<T>;
@@ -166,19 +165,19 @@ impl ProverFlavour for MegaFlavour {
     const WITNESS_RETURN_DATA_INVERSES: Option<usize> = Some(23);
 }
 #[derive(Default, Clone, Serialize, Deserialize)]
-struct MegaPrecomputedEntities<T: Default> {
+pub struct MegaPrecomputedEntities<T: Default> {
     pub elements: [T; MegaFlavour::PRECOMPUTED_ENTITIES_SIZE],
 }
 #[derive(Default, Serialize, Deserialize)]
-struct MegaProverWitnessEntities<T: Default> {
+pub struct MegaProverWitnessEntities<T: Default> {
     pub elements: [T; MegaFlavour::WITNESS_ENTITIES_SIZE],
 }
 #[derive(Default, Serialize, Deserialize)]
-struct MegaShiftedWitnessEntities<T: Default> {
+pub struct MegaShiftedWitnessEntities<T: Default> {
     pub elements: [T; MegaFlavour::SHIFTED_WITNESS_ENTITIES_SIZE],
 }
 #[derive(Default, Serialize, Deserialize)]
-struct MegaWitnessEntities<T: Default> {
+pub struct MegaWitnessEntities<T: Default> {
     pub elements: [T; MegaFlavour::WITNESS_ENTITIES_SIZE],
 }
 
