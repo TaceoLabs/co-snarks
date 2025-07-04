@@ -8,7 +8,6 @@ use crate::prelude::{Rep3UltraHonkDriver, ShamirUltraHonkDriver};
 use crate::types::Polynomials;
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
-use ark_serialize::CanonicalSerialize;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_builder::HonkProofResult;
 use co_builder::flavours::ultra_flavour::UltraFlavour;
@@ -20,11 +19,13 @@ use co_builder::prelude::ProvingKey as PlainProvingKey;
 use co_builder::prelude::VerifyingKey;
 use co_builder::prelude::{ActiveRegionData, HonkCurve};
 use co_builder::prelude::{GenericUltraCircuitBuilder, PublicComponentKey};
-use co_builder::prover_flavour::ProverFlavour;
+use co_builder::prover_flavour::{Flavour, ProverFlavour};
 use co_builder::{HonkProofError, TranscriptFieldType};
 use eyre::Result;
 use serde::Deserialize;
 use serde::Serialize;
+use serde::de::{SeqAccess, Visitor};
+use serde::ser::SerializeSeq;
 use std::collections::BTreeMap;
 use std::marker::PhantomData;
 use ultrahonk::Utils;
@@ -70,11 +71,21 @@ where
     L: MPCProverFlavour,
     S: serde::Serializer,
 {
-    todo!()
+    // Serialize the polynomials using the provided serializer
+    let mut seq = s.serialize_seq(Some(
+        L::PROVER_WITNESS_ENTITIES_SIZE + L::PRECOMPUTED_ENTITIES_SIZE,
+    ))?;
+    for poly in polys.witness.iter() {
+        seq.serialize_element(&poly)?;
+    }
+    for poly in polys.precomputed.iter() {
+        seq.serialize_element(&poly)?;
+    }
+    seq.end()
 }
 
 fn ark_de_test_poly<'de, T, P, L, D>(
-    data: D,
+    deserializer: D,
 ) -> Result<Polynomials<T::ArithmeticShare, P::ScalarField, L>, D::Error>
 where
     T: NoirUltraHonkProver<P>,
@@ -82,7 +93,63 @@ where
     L: MPCProverFlavour,
     D: serde::de::Deserializer<'de>,
 {
-    todo!()
+    struct PolyVisitor<T, P, L>
+    where
+        T: NoirUltraHonkProver<P>,
+        P: Pairing,
+        L: MPCProverFlavour,
+    {
+        _marker: std::marker::PhantomData<(T, P, L)>,
+    }
+
+    impl<'de, T, P, L> Visitor<'de> for PolyVisitor<T, P, L>
+    where
+        T: NoirUltraHonkProver<P>,
+        P: Pairing,
+        L: MPCProverFlavour,
+    {
+        type Value = Polynomials<T::ArithmeticShare, P::ScalarField, L>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a sequence of witness and precomputed polynomials")
+        }
+
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+        where
+            A: SeqAccess<'de>,
+        {
+            if L::FLAVOUR != Flavour::Ultra && L::FLAVOUR != Flavour::Mega {
+                return Err(serde::de::Error::custom(
+                    "ProvingKey deserialization only supported for Ultra and Mega flavour",
+                ));
+            }
+            let mut witness_polys = Vec::with_capacity(L::PROVER_WITNESS_ENTITIES_SIZE);
+            let mut precomputed_polys = Vec::with_capacity(L::PRECOMPUTED_ENTITIES_SIZE);
+
+            for _ in 0..L::PROVER_WITNESS_ENTITIES_SIZE {
+                let poly: Polynomial<T::ArithmeticShare> = seq
+                    .next_element()?
+                    .ok_or_else(|| serde::de::Error::custom("Expected more witness polynomials"))?;
+                witness_polys.push(poly);
+            }
+
+            for _ in 0..L::PRECOMPUTED_ENTITIES_SIZE {
+                let poly: Polynomial<P::ScalarField> = seq.next_element()?.ok_or_else(|| {
+                    serde::de::Error::custom("Expected more precomputed polynomials")
+                })?;
+                precomputed_polys.push(poly);
+            }
+
+            Ok(Polynomials {
+                witness: L::prover_witness_entity_from_vec(witness_polys),
+                precomputed: L::precomputed_entity_from_vec(precomputed_polys),
+            })
+        }
+    }
+
+    deserializer.deserialize_seq(PolyVisitor::<T, P, L> {
+        _marker: std::marker::PhantomData,
+    })
 }
 
 // impl<T: NoirUltraHonkProver<P>, P: Pairing> Serialize for ProvingKey<T, P, UltraFlavour> {

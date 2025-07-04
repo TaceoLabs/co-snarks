@@ -1,18 +1,10 @@
 use crate::{
-    polynomials::{
-        polynomial_flavours::{
-            PrecomputedEntitiesFlavour, ProverWitnessEntitiesFlavour,
-            ShiftedWitnessEntitiesFlavour, WitnessEntitiesFlavour,
-        },
-        polynomial_types::{
-            PrecomputedEntities, ProverWitnessEntities, ShiftedWitnessEntities, WitnessEntities,
-        },
+    polynomials::polynomial_flavours::{
+        PrecomputedEntitiesFlavour, ProverWitnessEntitiesFlavour, ShiftedWitnessEntitiesFlavour,
+        WitnessEntitiesFlavour,
     },
     prover_flavour::{Flavour, ProverFlavour},
 };
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use serde::Deserialize;
-use serde::Serialize;
 
 #[derive(Default, Clone)]
 pub struct UltraFlavour {}
@@ -162,20 +154,36 @@ impl ProverFlavour for UltraFlavour {
     const WITNESS_RETURN_DATA_READ_COUNTS: Option<usize> = None;
     const WITNESS_RETURN_DATA_READ_TAGS: Option<usize> = None;
     const WITNESS_RETURN_DATA_INVERSES: Option<usize> = None;
+
+    fn prover_witness_entity_from_vec<T: Default + Sync + Clone>(
+        vec: Vec<crate::prelude::Polynomial<T>>,
+    ) -> Self::ProverWitnessEntities<crate::prelude::Polynomial<T>> {
+        UltraProverWitnessEntities {
+            elements: std::array::from_fn(|i| vec[i].clone()),
+        }
+    }
+
+    fn precomputed_entity_from_vec<T: Default + Clone + Sync>(
+        vec: Vec<crate::prelude::Polynomial<T>>,
+    ) -> Self::PrecomputedEntities<crate::prelude::Polynomial<T>> {
+        UltraPrecomputedEntities {
+            elements: std::array::from_fn(|i| vec[i].clone()),
+        }
+    }
 }
-#[derive(Default, Serialize, Clone, Deserialize)]
+#[derive(Default, Clone)]
 pub struct UltraPrecomputedEntities<T: Default> {
     pub elements: [T; UltraFlavour::PRECOMPUTED_ENTITIES_SIZE],
 }
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct UltraProverWitnessEntities<T: Default> {
     pub elements: [T; UltraFlavour::WITNESS_ENTITIES_SIZE],
 }
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct UltraShiftedWitnessEntities<T: Default> {
     pub elements: [T; UltraFlavour::SHIFTED_WITNESS_ENTITIES_SIZE],
 }
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct UltraWitnessEntities<T: Default> {
     pub elements: [T; UltraFlavour::WITNESS_ENTITIES_SIZE],
 }

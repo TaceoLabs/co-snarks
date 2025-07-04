@@ -1,14 +1,7 @@
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
-
 use crate::{
-    polynomials::{
-        polynomial_flavours::{
-            PrecomputedEntitiesFlavour, ProverWitnessEntitiesFlavour,
-            ShiftedWitnessEntitiesFlavour, WitnessEntitiesFlavour,
-        },
-        polynomial_types::{
-            PrecomputedEntities, ProverWitnessEntities, ShiftedWitnessEntities, WitnessEntities,
-        },
+    polynomials::polynomial_flavours::{
+        PrecomputedEntitiesFlavour, ProverWitnessEntitiesFlavour, ShiftedWitnessEntitiesFlavour,
+        WitnessEntitiesFlavour,
     },
     prover_flavour::{Flavour, ProverFlavour},
 };
@@ -18,7 +11,7 @@ pub struct MegaFlavour {
 }
 impl ProverFlavour for MegaFlavour {
     type ProverWitnessEntities<T: Default + std::marker::Sync> = MegaProverWitnessEntities<T>;
-    type ShiftedWitnessEntities<T: Default + std::marker::Sync> = MegaShiftedWitnessEntities<T>; //This is the same for Ultra and Mega
+    type ShiftedWitnessEntities<T: Default + std::marker::Sync> = MegaShiftedWitnessEntities<T>; //This is the same for Mega and Mega
     type WitnessEntities<T: Default + std::marker::Sync> = MegaWitnessEntities<T>;
     type PrecomputedEntities<T: Default + Clone + std::marker::Sync> = MegaPrecomputedEntities<T>;
 
@@ -163,20 +156,36 @@ impl ProverFlavour for MegaFlavour {
     const WITNESS_RETURN_DATA_READ_COUNTS: Option<usize> = Some(21);
     const WITNESS_RETURN_DATA_READ_TAGS: Option<usize> = Some(22);
     const WITNESS_RETURN_DATA_INVERSES: Option<usize> = Some(23);
+
+    fn prover_witness_entity_from_vec<T: Default + Sync + Clone>(
+        vec: Vec<crate::prelude::Polynomial<T>>,
+    ) -> Self::ProverWitnessEntities<crate::prelude::Polynomial<T>> {
+        MegaProverWitnessEntities {
+            elements: std::array::from_fn(|i| vec[i].clone()),
+        }
+    }
+
+    fn precomputed_entity_from_vec<T: Default + Clone + Sync>(
+        vec: Vec<crate::prelude::Polynomial<T>>,
+    ) -> Self::PrecomputedEntities<crate::prelude::Polynomial<T>> {
+        MegaPrecomputedEntities {
+            elements: std::array::from_fn(|i| vec[i].clone()),
+        }
+    }
 }
-#[derive(Default, Clone, Serialize, Deserialize)]
+#[derive(Default, Clone)]
 pub struct MegaPrecomputedEntities<T: Default> {
     pub elements: [T; MegaFlavour::PRECOMPUTED_ENTITIES_SIZE],
 }
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct MegaProverWitnessEntities<T: Default> {
     pub elements: [T; MegaFlavour::WITNESS_ENTITIES_SIZE],
 }
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct MegaShiftedWitnessEntities<T: Default> {
     pub elements: [T; MegaFlavour::SHIFTED_WITNESS_ENTITIES_SIZE],
 }
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct MegaWitnessEntities<T: Default> {
     pub elements: [T; MegaFlavour::WITNESS_ENTITIES_SIZE],
 }
@@ -234,7 +243,7 @@ impl<T: Default> PrecomputedEntitiesFlavour<T> for MegaPrecomputedEntities<T> {
         if let Some(idx) = MegaFlavour::Q_BUSREAD {
             &self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn q_arith(&self) -> &T {
@@ -304,14 +313,14 @@ impl<T: Default> PrecomputedEntitiesFlavour<T> for MegaPrecomputedEntities<T> {
         if let Some(idx) = MegaFlavour::LAGRANGE_ECC_OP {
             &self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn databus_id(&self) -> &T {
         if let Some(idx) = MegaFlavour::DATABUS_ID {
             &self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn lagrange_first_mut(&mut self) -> &mut T {
@@ -324,14 +333,14 @@ impl<T: Default> PrecomputedEntitiesFlavour<T> for MegaPrecomputedEntities<T> {
         if let Some(idx) = MegaFlavour::LAGRANGE_ECC_OP {
             &mut self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn databus_id_mut(&mut self) -> &mut T {
         if let Some(idx) = MegaFlavour::DATABUS_ID {
             &mut self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn q_m_mut(&mut self) -> &mut T {
@@ -356,7 +365,7 @@ impl<T: Default> PrecomputedEntitiesFlavour<T> for MegaPrecomputedEntities<T> {
         if let Some(idx) = MegaFlavour::Q_BUSREAD {
             &mut self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn q_arith_mut(&mut self) -> &mut T {
@@ -494,224 +503,224 @@ impl<T: Default> ProverWitnessEntitiesFlavour<T> for MegaProverWitnessEntities<T
         if let Some(idx) = MegaFlavour::CALLDATA {
             &self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn calldata_mut(&mut self) -> &mut T {
         if let Some(idx) = MegaFlavour::CALLDATA {
             &mut self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn secondary_calldata(&self) -> &T {
         if let Some(idx) = MegaFlavour::SECONDARY_CALLDATA {
             &self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn secondary_calldata_mut(&mut self) -> &mut T {
         if let Some(idx) = MegaFlavour::SECONDARY_CALLDATA {
             &mut self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn return_data(&self) -> &T {
         if let Some(idx) = MegaFlavour::RETURN_DATA {
             &self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn return_data_mut(&mut self) -> &mut T {
         if let Some(idx) = MegaFlavour::RETURN_DATA {
             &mut self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn ecc_op_wire_1(&self) -> &T {
         if let Some(idx) = MegaFlavour::ECC_OP_WIRE_1 {
             &self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn ecc_op_wire_1_mut(&mut self) -> &mut T {
         if let Some(idx) = MegaFlavour::ECC_OP_WIRE_1 {
             &mut self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn ecc_op_wire_2(&self) -> &T {
         if let Some(idx) = MegaFlavour::ECC_OP_WIRE_2 {
             &self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn ecc_op_wire_2_mut(&mut self) -> &mut T {
         if let Some(idx) = MegaFlavour::ECC_OP_WIRE_2 {
             &mut self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn ecc_op_wire_3(&self) -> &T {
         if let Some(idx) = MegaFlavour::ECC_OP_WIRE_3 {
             &self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn ecc_op_wire_3_mut(&mut self) -> &mut T {
         if let Some(idx) = MegaFlavour::ECC_OP_WIRE_3 {
             &mut self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn ecc_op_wire_4(&self) -> &T {
         if let Some(idx) = MegaFlavour::ECC_OP_WIRE_4 {
             &self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn ecc_op_wire_4_mut(&mut self) -> &mut T {
         if let Some(idx) = MegaFlavour::ECC_OP_WIRE_4 {
             &mut self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn calldata_read_counts(&self) -> &T {
         if let Some(idx) = MegaFlavour::CALLDATA_READ_COUNTS {
             &self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn calldata_read_counts_mut(&mut self) -> &mut T {
         if let Some(idx) = MegaFlavour::CALLDATA_READ_COUNTS {
             &mut self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn calldata_read_tags(&self) -> &T {
         if let Some(idx) = MegaFlavour::CALLDATA_READ_TAGS {
             &self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn calldata_read_tags_mut(&mut self) -> &mut T {
         if let Some(idx) = MegaFlavour::CALLDATA_READ_TAGS {
             &mut self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn calldata_inverses(&self) -> &T {
         if let Some(idx) = MegaFlavour::CALLDATA_INVERSES {
             &self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn calldata_inverses_mut(&mut self) -> &mut T {
         if let Some(idx) = MegaFlavour::CALLDATA_INVERSES {
             &mut self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn secondary_calldata_read_counts(&self) -> &T {
         if let Some(idx) = MegaFlavour::SECONDARY_CALLDATA_READ_COUNTS {
             &self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn secondary_calldata_read_counts_mut(&mut self) -> &mut T {
         if let Some(idx) = MegaFlavour::SECONDARY_CALLDATA_READ_COUNTS {
             &mut self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn secondary_calldata_read_tags(&self) -> &T {
         if let Some(idx) = MegaFlavour::SECONDARY_CALLDATA_READ_TAGS {
             &self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn secondary_calldata_read_tags_mut(&mut self) -> &mut T {
         if let Some(idx) = MegaFlavour::SECONDARY_CALLDATA_READ_TAGS {
             &mut self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn secondary_calldata_inverses(&self) -> &T {
         if let Some(idx) = MegaFlavour::SECONDARY_CALLDATA_INVERSES {
             &self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn secondary_calldata_inverses_mut(&mut self) -> &mut T {
         if let Some(idx) = MegaFlavour::SECONDARY_CALLDATA_INVERSES {
             &mut self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn return_data_read_counts(&self) -> &T {
         if let Some(idx) = MegaFlavour::RETURN_DATA_READ_COUNTS {
             &self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn return_data_read_counts_mut(&mut self) -> &mut T {
         if let Some(idx) = MegaFlavour::RETURN_DATA_READ_COUNTS {
             &mut self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn return_data_read_tags(&self) -> &T {
         if let Some(idx) = MegaFlavour::RETURN_DATA_READ_TAGS {
             &self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn return_data_read_tags_mut(&mut self) -> &mut T {
         if let Some(idx) = MegaFlavour::RETURN_DATA_READ_TAGS {
             &mut self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn return_data_inverses(&self) -> &T {
         if let Some(idx) = MegaFlavour::RETURN_DATA_INVERSES {
             &self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn return_data_inverses_mut(&mut self) -> &mut T {
         if let Some(idx) = MegaFlavour::RETURN_DATA_INVERSES {
             &mut self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
 }
@@ -795,224 +804,224 @@ impl<T: Default> WitnessEntitiesFlavour<T> for MegaWitnessEntities<T> {
         if let Some(idx) = MegaFlavour::WITNESS_CALLDATA {
             &self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn calldata_mut(&mut self) -> &mut T {
         if let Some(idx) = MegaFlavour::WITNESS_CALLDATA {
             &mut self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn secondary_calldata(&self) -> &T {
         if let Some(idx) = MegaFlavour::WITNESS_SECONDARY_CALLDATA {
             &self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn secondary_calldata_mut(&mut self) -> &mut T {
         if let Some(idx) = MegaFlavour::WITNESS_SECONDARY_CALLDATA {
             &mut self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn return_data(&self) -> &T {
         if let Some(idx) = MegaFlavour::WITNESS_RETURN_DATA {
             &self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn return_data_mut(&mut self) -> &mut T {
         if let Some(idx) = MegaFlavour::WITNESS_RETURN_DATA {
             &mut self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn ecc_op_wire_1(&self) -> &T {
         if let Some(idx) = MegaFlavour::WITNESS_ECC_OP_WIRE_1 {
             &self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn ecc_op_wire_1_mut(&mut self) -> &mut T {
         if let Some(idx) = MegaFlavour::WITNESS_ECC_OP_WIRE_1 {
             &mut self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn ecc_op_wire_2(&self) -> &T {
         if let Some(idx) = MegaFlavour::WITNESS_ECC_OP_WIRE_2 {
             &self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn ecc_op_wire_2_mut(&mut self) -> &mut T {
         if let Some(idx) = MegaFlavour::WITNESS_ECC_OP_WIRE_2 {
             &mut self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn ecc_op_wire_3(&self) -> &T {
         if let Some(idx) = MegaFlavour::WITNESS_ECC_OP_WIRE_3 {
             &self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn ecc_op_wire_3_mut(&mut self) -> &mut T {
         if let Some(idx) = MegaFlavour::WITNESS_ECC_OP_WIRE_3 {
             &mut self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn ecc_op_wire_4(&self) -> &T {
         if let Some(idx) = MegaFlavour::WITNESS_ECC_OP_WIRE_4 {
             &self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn ecc_op_wire_4_mut(&mut self) -> &mut T {
         if let Some(idx) = MegaFlavour::WITNESS_ECC_OP_WIRE_4 {
             &mut self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn calldata_read_counts(&self) -> &T {
         if let Some(idx) = MegaFlavour::WITNESS_CALLDATA_READ_COUNTS {
             &self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn calldata_read_counts_mut(&mut self) -> &mut T {
         if let Some(idx) = MegaFlavour::WITNESS_CALLDATA_READ_COUNTS {
             &mut self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn calldata_read_tags(&self) -> &T {
         if let Some(idx) = MegaFlavour::WITNESS_CALLDATA_READ_TAGS {
             &self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn calldata_read_tags_mut(&mut self) -> &mut T {
         if let Some(idx) = MegaFlavour::WITNESS_CALLDATA_READ_TAGS {
             &mut self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn calldata_inverses(&self) -> &T {
         if let Some(idx) = MegaFlavour::WITNESS_CALLDATA_INVERSES {
             &self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn calldata_inverses_mut(&mut self) -> &mut T {
         if let Some(idx) = MegaFlavour::WITNESS_CALLDATA_INVERSES {
             &mut self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn secondary_calldata_read_counts(&self) -> &T {
         if let Some(idx) = MegaFlavour::WITNESS_SECONDARY_CALLDATA_READ_COUNTS {
             &self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn secondary_calldata_read_counts_mut(&mut self) -> &mut T {
         if let Some(idx) = MegaFlavour::WITNESS_SECONDARY_CALLDATA_READ_COUNTS {
             &mut self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn secondary_calldata_read_tags(&self) -> &T {
         if let Some(idx) = MegaFlavour::WITNESS_SECONDARY_CALLDATA_READ_TAGS {
             &self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn secondary_calldata_read_tags_mut(&mut self) -> &mut T {
         if let Some(idx) = MegaFlavour::WITNESS_SECONDARY_CALLDATA_READ_TAGS {
             &mut self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn secondary_calldata_inverses(&self) -> &T {
         if let Some(idx) = MegaFlavour::WITNESS_SECONDARY_CALLDATA_INVERSES {
             &self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn secondary_calldata_inverses_mut(&mut self) -> &mut T {
         if let Some(idx) = MegaFlavour::WITNESS_SECONDARY_CALLDATA_INVERSES {
             &mut self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn return_data_read_counts(&self) -> &T {
         if let Some(idx) = MegaFlavour::WITNESS_RETURN_DATA_READ_COUNTS {
             &self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn return_data_read_counts_mut(&mut self) -> &mut T {
         if let Some(idx) = MegaFlavour::WITNESS_RETURN_DATA_READ_COUNTS {
             &mut self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn return_data_read_tags(&self) -> &T {
         if let Some(idx) = MegaFlavour::WITNESS_RETURN_DATA_READ_TAGS {
             &self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn return_data_read_tags_mut(&mut self) -> &mut T {
         if let Some(idx) = MegaFlavour::WITNESS_RETURN_DATA_READ_TAGS {
             &mut self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn return_data_inverses(&self) -> &T {
         if let Some(idx) = MegaFlavour::WITNESS_RETURN_DATA_INVERSES {
             &self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
     fn return_data_inverses_mut(&mut self) -> &mut T {
         if let Some(idx) = MegaFlavour::WITNESS_RETURN_DATA_INVERSES {
             &mut self.elements[idx]
         } else {
-            panic!("This should not be called with the UltraFlavor");
+            panic!("This should not be called with the MegaFlavor");
         }
     }
 }

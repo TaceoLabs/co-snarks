@@ -1,8 +1,10 @@
-use crate::polynomials::polynomial_flavours::{
-    PrecomputedEntitiesFlavour, ProverWitnessEntitiesFlavour, ShiftedWitnessEntitiesFlavour,
-    WitnessEntitiesFlavour,
+use crate::{
+    polynomials::polynomial_flavours::{
+        PrecomputedEntitiesFlavour, ProverWitnessEntitiesFlavour, ShiftedWitnessEntitiesFlavour,
+        WitnessEntitiesFlavour,
+    },
+    prelude::Polynomial,
 };
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Flavour {
@@ -129,13 +131,11 @@ pub trait ProverFlavour: Default {
     const WITNESS_RETURN_DATA_READ_TAGS: Option<usize>;
     const WITNESS_RETURN_DATA_INVERSES: Option<usize>;
 
-    // const NUM_SUBRELATIONS: usize;
-
-    // fn scale(acc: &mut Self::AllRelationAcc, first_scalar: F, elements: &[F]);
-    // fn extend_and_batch_univariates<const SIZE: usize>(
-    //     acc: &Self::AllRelationAcc,
-    //     result: &mut Univariate<F, SIZE>,
-    //     extended_random_poly: &Univariate<F, SIZE>,
-    //     partial_evaluation_result: &F,
-    // );
+    //TODO FLORIN REMOVE UNWRAP
+    fn prover_witness_entity_from_vec<T: Default + Sync + Clone>(
+        vec: Vec<Polynomial<T>>,
+    ) -> Self::ProverWitnessEntities<Polynomial<T>>;
+    fn precomputed_entity_from_vec<T: Default + Clone + Sync>(
+        vec: Vec<Polynomial<T>>,
+    ) -> Self::PrecomputedEntities<Polynomial<T>>;
 }
