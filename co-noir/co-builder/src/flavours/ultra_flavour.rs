@@ -181,16 +181,16 @@ impl<T: Default + Serialize> Serialize for UltraProverWitnessEntities<T> {
         self.elements.serialize(serializer)
     }
 }
-// impl<T: Default + Serialize> Serialize for UltraShiftedWitnessEntities<T> {
-//     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-//         self.elements.serialize(serializer)
-//     }
-// }
-// impl<T: Default + Serialize> Serialize for UltraWitnessEntities<T> {
-//     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-//         self.elements.serialize(serializer)
-//     }
-// }
+impl<T: Default + Serialize> Serialize for UltraShiftedWitnessEntities<T> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.elements.serialize(serializer)
+    }
+}
+impl<T: Default + Serialize> Serialize for UltraWitnessEntities<T> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.elements.serialize(serializer)
+    }
+}
 impl<'de, T: Default + Clone + Deserialize<'de>> Deserialize<'de> for UltraPrecomputedEntities<T> {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let elements = Vec::<T>::deserialize(deserializer)?;
@@ -235,50 +235,50 @@ impl<'de, T: Default + Clone + Deserialize<'de>> Deserialize<'de>
         })
     }
 }
-// impl<'de, T: Default + Clone + Deserialize<'de>> Deserialize<'de>
-//     for UltraShiftedWitnessEntities<T>
-// {
-//     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-//         let elements = Vec::<T>::deserialize(deserializer)?;
-//         if elements.len() != UltraFlavour::SHIFTED_WITNESS_ENTITIES_SIZE {
-//             return Err(serde::de::Error::custom(format!(
-//                 "Expected {} elements, got {}",
-//                 UltraFlavour::SHIFTED_WITNESS_ENTITIES_SIZE,
-//                 elements.len()
-//             )));
-//         }
-//         Ok(Self {
-//             elements: elements.clone().try_into().map_err(|_| {
-//                 serde::de::Error::custom(format!(
-//                     "Expected {} elements, got {}",
-//                     UltraFlavour::SHIFTED_WITNESS_ENTITIES_SIZE,
-//                     elements.len()
-//                 ))
-//             })?,
-//         })
-//     }
-// }
-// impl<'de, T: Default + Clone + Deserialize<'de>> Deserialize<'de> for UltraWitnessEntities<T> {
-//     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-//         let elements = Vec::<T>::deserialize(deserializer)?;
-//         if elements.len() != UltraFlavour::WITNESS_ENTITIES_SIZE {
-//             return Err(serde::de::Error::custom(format!(
-//                 "Expected {} elements, got {}",
-//                 UltraFlavour::WITNESS_ENTITIES_SIZE,
-//                 elements.len()
-//             )));
-//         }
-//         Ok(Self {
-//             elements: elements.clone().try_into().map_err(|_| {
-//                 serde::de::Error::custom(format!(
-//                     "Expected {} elements, got {}",
-//                     UltraFlavour::WITNESS_ENTITIES_SIZE,
-//                     elements.len()
-//                 ))
-//             })?,
-//         })
-//     }
-// }
+impl<'de, T: Default + Clone + Deserialize<'de>> Deserialize<'de>
+    for UltraShiftedWitnessEntities<T>
+{
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let elements = Vec::<T>::deserialize(deserializer)?;
+        if elements.len() != UltraFlavour::SHIFTED_WITNESS_ENTITIES_SIZE {
+            return Err(serde::de::Error::custom(format!(
+                "Expected {} elements, got {}",
+                UltraFlavour::SHIFTED_WITNESS_ENTITIES_SIZE,
+                elements.len()
+            )));
+        }
+        Ok(Self {
+            elements: elements.clone().try_into().map_err(|_| {
+                serde::de::Error::custom(format!(
+                    "Expected {} elements, got {}",
+                    UltraFlavour::SHIFTED_WITNESS_ENTITIES_SIZE,
+                    elements.len()
+                ))
+            })?,
+        })
+    }
+}
+impl<'de, T: Default + Clone + Deserialize<'de>> Deserialize<'de> for UltraWitnessEntities<T> {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let elements = Vec::<T>::deserialize(deserializer)?;
+        if elements.len() != UltraFlavour::WITNESS_ENTITIES_SIZE {
+            return Err(serde::de::Error::custom(format!(
+                "Expected {} elements, got {}",
+                UltraFlavour::WITNESS_ENTITIES_SIZE,
+                elements.len()
+            )));
+        }
+        Ok(Self {
+            elements: elements.clone().try_into().map_err(|_| {
+                serde::de::Error::custom(format!(
+                    "Expected {} elements, got {}",
+                    UltraFlavour::WITNESS_ENTITIES_SIZE,
+                    elements.len()
+                ))
+            })?,
+        })
+    }
+}
 
 impl<T: Default> PrecomputedEntitiesFlavour<T> for UltraPrecomputedEntities<T> {
     fn new() -> Self {

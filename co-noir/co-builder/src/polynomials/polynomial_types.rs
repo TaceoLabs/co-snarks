@@ -3,7 +3,7 @@ use crate::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use crate::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
 use crate::prover_flavour::ProverFlavour;
 use ark_ff::PrimeField;
-// use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 
 // This is what we get from the proving key, we shift at a later point
 #[derive(Default)]

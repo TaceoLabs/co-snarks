@@ -29,29 +29,38 @@ use std::marker::PhantomData;
 use ultrahonk::Utils;
 use ultrahonk::prelude::{VerifyingKeyBarretenberg, ZeroKnowledge};
 
-#[derive(Serialize, Deserialize)]
-#[serde(bound = "")]
 pub struct ProvingKey<T: NoirUltraHonkProver<P>, P: Pairing, L: MPCProverFlavour> {
     pub circuit_size: u32,
-    #[serde(
-        serialize_with = "mpc_core::ark_se",
-        deserialize_with = "mpc_core::ark_de"
-    )]
     pub public_inputs: Vec<P::ScalarField>,
     pub num_public_inputs: u32,
     pub pub_inputs_offset: u32,
     pub polynomials: Polynomials<T::ArithmeticShare, P::ScalarField, L>,
     pub memory_read_records: Vec<u32>,
     pub memory_write_records: Vec<u32>,
-    #[serde(
-        serialize_with = "mpc_core::ark_se",
-        deserialize_with = "mpc_core::ark_de"
-    )]
     pub memory_records_shared: BTreeMap<u32, T::ArithmeticShare>,
     pub final_active_wire_idx: usize,
     pub active_region_data: ActiveRegionData,
     pub pairing_inputs_public_input_key: PublicComponentKey,
     pub phantom: PhantomData<T>,
+}
+
+impl<T: NoirUltraHonkProver<P>, P: Pairing> Serialize for ProvingKey<T, P, UltraFlavour> {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        todo!()
+    }
+}
+impl<'de, T: NoirUltraHonkProver<P>, P: Pairing> Deserialize<'de>
+    for ProvingKey<T, P, UltraFlavour>
+{
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        todo!()
+    }
 }
 
 pub type Rep3ProvingKey<P, N, L> = ProvingKey<Rep3UltraHonkDriver<N>, P, L>;
@@ -73,7 +82,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P, UltraFlavour> {
 
         assert!(
             circuit.circuit_finalized,
-            "the circuit must be finalized before creating the  proving key"
+            "the circuit must be finalized before creating the proving key"
         );
 
         let dyadic_circuit_size = circuit.compute_dyadic_size();

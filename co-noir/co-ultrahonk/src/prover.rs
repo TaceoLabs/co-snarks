@@ -8,11 +8,11 @@ use crate::{
     prelude::{PlainUltraHonkDriver, Rep3UltraHonkDriver, ShamirUltraHonkDriver},
 };
 use ark_ec::pairing::Pairing;
-use co_builder::TranscriptFieldType;
 use co_builder::{
     HonkProofResult,
     prelude::{HonkCurve, PAIRING_POINT_ACCUMULATOR_SIZE, ProverCrs},
 };
+use co_builder::{TranscriptFieldType, flavours::ultra_flavour::UltraFlavour};
 use mpc_core::protocols::{
     rep3::network::{IoContext, Rep3Network},
     shamir::{ShamirPreprocessing, ShamirProtocol, network::ShamirNetwork},
@@ -121,17 +121,17 @@ impl<
     }
 }
 
-impl<
-    P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
-    N: ShamirNetwork,
-    L: MPCProverFlavour,
-> ShamirCoUltraHonk<N, P, H, L>
+impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>, N: ShamirNetwork>
+    ShamirCoUltraHonk<N, P, H, UltraFlavour> // TODO FLORIN COMMENT:
 {
     pub fn prove(
         net: N,
         threshold: usize,
-        proving_key: ProvingKey<ShamirUltraHonkDriver<<P as Pairing>::ScalarField, N>, P, L>,
+        proving_key: ProvingKey<
+            ShamirUltraHonkDriver<<P as Pairing>::ScalarField, N>,
+            P,
+            UltraFlavour,
+        >,
         crs: &ProverCrs<P>,
         has_zk: ZeroKnowledge,
     ) -> eyre::Result<(HonkProof<TranscriptFieldType>, Vec<TranscriptFieldType>, N)> {
@@ -139,7 +139,7 @@ impl<
         let num_pairs = if net.get_num_parties() == 3 {
             0 // Precomputation is done on the fly since it requires no communication
         } else {
-            0 //  proving_key.ultrahonk_num_randomness(has_zk)
+            proving_key.ultrahonk_num_randomness(has_zk)
         };
         let preprocessing = ShamirPreprocessing::new(threshold, net, num_pairs)?;
         let mut protocol0 = ShamirProtocol::from(preprocessing);

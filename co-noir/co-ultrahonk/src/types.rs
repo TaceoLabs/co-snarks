@@ -1,3 +1,4 @@
+use crate::mpc_prover_flavour::MPCProverFlavour;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
@@ -5,14 +6,12 @@ use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::prelude::Polynomial;
 use serde::{Deserialize, Serialize};
 
-use crate::mpc_prover_flavour::MPCProverFlavour;
-
 // This is what we get from the proving key, we shift at a later point
 // #[derive(Default, Serialize, Deserialize)]
 // #[serde(bound = "")]
 // #[derive(Default)]
-#[derive(Serialize, Deserialize)]
-#[serde(bound = "")]
+// #[derive(Serialize, Deserialize)]
+// #[serde(bound = "")]
 pub struct Polynomials<
     Shared: Default,
     Public: Default + Clone + std::marker::Sync,
