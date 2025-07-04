@@ -1,8 +1,9 @@
+use co_builder::flavours::ultra_flavour::UltraFlavour;
 use co_noir::{
     Address, Bn254, CrsParser, NetworkConfig, NetworkParty, PartyID, Poseidon2Sponge, Rep3AcvmType,
-    Rep3CoUltraHonk, Rep3MpcNet, UltraHonk, Utils,
+    Rep3CoUltraHonk, Rep3MpcNet, UltraHonk,
 };
-use co_ultrahonk::prelude::ZeroKnowledge;
+use co_ultrahonk::prelude::{Utils, ZeroKnowledge};
 use color_eyre::{Result, eyre::Context};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use std::{collections::BTreeMap, path::PathBuf};
@@ -89,12 +90,16 @@ fn main() -> Result<()> {
     let vk = pk.create_vk(&prover_crs, verifier_crs)?;
 
     // generate proof
-    let (proof, public_inputs, _) =
-        Rep3CoUltraHonk::<_, _, Poseidon2Sponge>::prove(net, pk, &prover_crs, has_zk)?;
+    let (proof, public_inputs, _) = Rep3CoUltraHonk::<_, _, Poseidon2Sponge, UltraFlavour>::prove(
+        net,
+        pk,
+        &prover_crs,
+        has_zk,
+    )?;
 
     // verify proof
     assert!(
-        UltraHonk::<_, Poseidon2Sponge>::verify(proof, &public_inputs, &vk, has_zk)
+        UltraHonk::<_, Poseidon2Sponge, UltraFlavour>::verify(proof, &public_inputs, &vk, has_zk)
             .context("while verifying proof")?
     );
 

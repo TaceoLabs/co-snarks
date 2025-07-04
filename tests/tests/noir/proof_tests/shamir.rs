@@ -1,6 +1,8 @@
 use crate::proof_tests::{CRS_PATH_G1, CRS_PATH_G2};
 use ark_bn254::Bn254;
 use co_acvm::ShamirAcvmType;
+use co_builder::flavours::ultra_flavour::UltraFlavour;
+use co_builder::TranscriptFieldType;
 use co_ultrahonk::prelude::{
     CrsParser, Poseidon2Sponge, ShamirCoUltraHonk, TranscriptHasher, UltraHonk, Utils,
     ZeroKnowledge,

@@ -3,6 +3,7 @@ use acir::native_types::{WitnessMap, WitnessStack};
 use ark_bn254::Bn254;
 use ark_ff::PrimeField;
 use co_acvm::{solver::Rep3CoSolver, Rep3AcvmType};
+use co_builder::{flavours::ultra_flavour::UltraFlavour, TranscriptFieldType};
 use co_ultrahonk::prelude::{
     CrsParser, Poseidon2Sponge, Rep3CoUltraHonk, TranscriptHasher, UltraHonk, Utils, ZeroKnowledge,
 };
@@ -169,7 +170,8 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     let verifier_crs = CrsParser::<Bn254>::get_crs_g2(CRS_PATH_G2).unwrap();
     let vk = co_noir::generate_vk(&constraint_system, prover_crs, verifier_crs, false).unwrap();
 
-    let is_valid = UltraHonk::<_, H>::verify(proof, &public_input, &vk, has_zk).unwrap();
+    let is_valid =
+        UltraHonk::<_, H, UltraFlavour>::verify(proof, &public_input, &vk, has_zk).unwrap();
     assert!(is_valid);
 }
 
