@@ -13,6 +13,6 @@ pub mod yao;
 
 pub use mpc_types::protocols::rep3_ring::{
     combine_ring_element, combine_ring_element_binary, combine_ring_elements, ring,
-    share_ring_element, share_ring_element_binary, share_ring_elements, Rep3BitShare,
-    Rep3RingShare,
+    share_ring_element, share_ring_element_binary, share_ring_elements, share_ring_elements_binary,
+    Rep3BitShare, Rep3RingShare,
 };
