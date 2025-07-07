@@ -14,7 +14,7 @@ use figment::{
     Figment,
     providers::{Env, Format, Serialized, Toml},
 };
-use mpc_net::tcp::{NetworkConfig, TcpNetwork};
+use mpc_net::tls::{NetworkConfigFile, TlsNetwork};
 use num_traits::Zero;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -288,7 +288,7 @@ pub struct GenerateWitnessConfig {
     #[serde(default)]
     pub vm: VMConfig,
     /// Network config
-    pub network: NetworkConfig,
+    pub network: NetworkConfigFile,
 }
 
 /// Cli arguments for `transalte_witness`
@@ -334,7 +334,7 @@ pub struct TranslateWitnessConfig {
     /// The output file where the final witness share is written to
     pub out: PathBuf,
     /// Network config
-    pub network: NetworkConfig,
+    pub network: NetworkConfigFile,
 }
 
 /// Cli arguments for `generate_proof`
@@ -401,7 +401,7 @@ pub struct GenerateProofConfig {
     /// The threshold of tolerated colluding parties
     pub threshold: usize,
     /// Network config
-    pub network: NetworkConfig,
+    pub network: NetworkConfigFile,
 }
 
 /// Cli arguments for `verify`
@@ -809,8 +809,8 @@ where
     }
 
     // connect to network
-    let [net0, net1] =
-        TcpNetwork::networks::<2>(config.network).context("while connecting to network")?;
+    let [net0, net1] = TlsNetwork::networks::<2>(config.network.try_into()?)
+        .context("while connecting to network")?;
 
     // parse input shares
     let input_share_file =
@@ -864,7 +864,7 @@ where
         bincode::deserialize_from(witness_file)?;
 
     // connect to network
-    let net = TcpNetwork::new(config.network).context("while connecting to network")?;
+    let net = TlsNetwork::new(config.network.try_into()?).context("while connecting to network")?;
 
     // Translate witness to shamir shares
     tracing::info!("Starting witness translation...");
@@ -912,8 +912,8 @@ where
     tracing::info!("Starting proof generation...");
     let public_input = match proof_system {
         ProofSystem::Groth16 => {
-            let [net0, net1] =
-                TcpNetwork::networks::<2>(config.network).context("while connecting to network")?;
+            let [net0, net1] = TlsNetwork::networks::<2>(config.network.try_into()?)
+                .context("while connecting to network")?;
 
             let zkey = Groth16ZKey::<P>::from_reader(zkey_file, check).context("reading zkey")?;
             let (matrices, pkey) = zkey.into();
@@ -980,8 +980,8 @@ where
             public_input
         }
         ProofSystem::Plonk => {
-            let nets =
-                TcpNetwork::networks::<8>(config.network).context("while connecting to network")?;
+            let nets = TlsNetwork::networks::<8>(config.network.try_into()?)
+                .context("while connecting to network")?;
             let zkey = Arc::new(
                 PlonkZKey::<P>::from_reader(zkey_file, check).context("while parsing zkey")?,
             );

@@ -14,7 +14,7 @@ use figment::{
     Figment,
     providers::{Env, Format, Serialized, Toml},
 };
-use mpc_net::tcp::{NetworkConfig, TcpNetwork};
+use mpc_net::tls::{NetworkConfigFile, TlsNetwork};
 use serde::{Deserialize, Serialize};
 use sha3::Keccak256;
 use std::{
@@ -285,7 +285,7 @@ pub struct GenerateWitnessConfig {
     /// The output file where the final witness share is written to
     pub out: PathBuf,
     /// Network config
-    pub network: NetworkConfig,
+    pub network: NetworkConfigFile,
 }
 
 /// Cli arguments for `translate_witness`
@@ -325,7 +325,7 @@ pub struct TranslateWitnessConfig {
     /// The output file where the final witness share is written to
     pub out: PathBuf,
     /// Network config
-    pub network: NetworkConfig,
+    pub network: NetworkConfigFile,
 }
 
 /// Cli arguments for `translate_witness`
@@ -365,7 +365,7 @@ pub struct TranslateProvingKeyConfig {
     /// The output file where the final witness share is written to
     pub out: PathBuf,
     /// Network config
-    pub network: NetworkConfig,
+    pub network: NetworkConfigFile,
 }
 
 /// Cli arguments for `build_proving_key`
@@ -413,7 +413,7 @@ pub struct BuildProvingKeyConfig {
     /// The threshold of tolerated colluding parties
     pub threshold: usize,
     /// Network config
-    pub network: NetworkConfig,
+    pub network: NetworkConfigFile,
     /// Generate a recursive proof
     pub recursive: bool,
 }
@@ -479,7 +479,7 @@ pub struct GenerateProofConfig {
     /// The threshold of tolerated colluding parties
     pub threshold: usize,
     /// Network config
-    pub network: NetworkConfig,
+    pub network: NetworkConfigFile,
     /// Generate a recursive friendly proof
     pub recursive: bool,
     /// The path to the prover crs file
@@ -559,7 +559,7 @@ pub struct BuildAndGenerateProofConfig {
     /// The threshold of tolerated colluding parties
     pub threshold: usize,
     /// Network config
-    pub network: NetworkConfig,
+    pub network: NetworkConfigFile,
     /// Generate a recursive proof
     pub recursive: bool,
     /// Prove with or without the zero knowledge property
@@ -1137,8 +1137,8 @@ fn run_generate_witness(config: GenerateWitnessConfig) -> color_eyre::Result<Exi
         bincode::deserialize_from(input_share_file).context("while deserializing input share")?;
 
     // connect to network
-    let [net0, net1] =
-        TcpNetwork::networks::<2>(config.network).context("while connecting to network")?;
+    let [net0, net1] = TlsNetwork::networks::<2>(config.network.try_into()?)
+        .context("while connecting to network")?;
 
     tracing::info!("Starting witness generation...");
     let start = Instant::now();
@@ -1173,7 +1173,7 @@ fn run_translate_witness(config: TranslateWitnessConfig) -> color_eyre::Result<E
         bincode::deserialize_from(witness_file).context("while deserializing witness share")?;
 
     // connect to network
-    let net = TcpNetwork::new(config.network).context("while connecting to network")?;
+    let net = TlsNetwork::new(config.network.try_into()?).context("while connecting to network")?;
 
     // Translate witness to shamir shares
     tracing::info!("Starting witness translation...");
@@ -1207,7 +1207,7 @@ fn run_translate_proving_key(config: TranslateProvingKeyConfig) -> color_eyre::R
         bincode::deserialize_from(proving_key_file).context("while deserializing witness share")?;
 
     // connect to network
-    let net = TcpNetwork::new(config.network).context("while connecting to network")?;
+    let net = TlsNetwork::new(config.network.try_into()?).context("while connecting to network")?;
 
     // Translate proving key to shamir shares
     tracing::info!("Starting proving key translation...");
@@ -1242,8 +1242,8 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
         .context("while parsing program artifact")?;
 
     // connect to network
-    let [net0, net1] =
-        TcpNetwork::networks::<2>(config.network).context("while connecting to network")?;
+    let [net0, net1] = TlsNetwork::networks::<2>(config.network.try_into()?)
+        .context("while connecting to network")?;
 
     tracing::info!("Starting proving key generation...");
     match protocol {
@@ -1311,7 +1311,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
     let has_zk = ZeroKnowledge::from(config.zk);
 
     // connect to network
-    let net = TcpNetwork::new(config.network).context("while connecting to network")?;
+    let net = TlsNetwork::new(config.network.try_into()?).context("while connecting to network")?;
 
     // parse proving_key file
     let proving_key_file =
@@ -1519,8 +1519,8 @@ fn run_build_and_generate_proof(
         .context("while parsing program artifact")?;
 
     // connect to network
-    let [net0, net1] =
-        TcpNetwork::networks::<2>(config.network).context("while connecting to network")?;
+    let [net0, net1] = TlsNetwork::networks::<2>(config.network.try_into()?)
+        .context("while connecting to network")?;
 
     let circuit_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, recursive)?;
     let prover_crs = CrsParser::get_crs_g1(crs_path, circuit_size, has_zk)?;

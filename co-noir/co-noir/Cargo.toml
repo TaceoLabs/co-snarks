@@ -25,7 +25,7 @@ co-builder = { version = "0.4.0", path = "../co-builder" }
 color-eyre.workspace = true
 figment.workspace = true
 mpc-core = { version = "0.9.0", path = "../../mpc-core" }
-mpc-net = { version = "0.4.0", path = "../../mpc-net" }
+mpc-net = { version = "0.4.0", path = "../../mpc-net", features = ["tls"] }
 noirc-abi.workspace = true
 noirc-artifacts.workspace = true
 rand.workspace = true

@@ -30,7 +30,7 @@ co-plonk = { version = "0.6.1", path = "../co-plonk" }
 color-eyre.workspace = true
 figment.workspace = true
 mpc-core = { version = "0.9.0", path = "../../mpc-core" }
-mpc-net = { version = "0.4.0", path = "../../mpc-net" }
+mpc-net = { version = "0.4.0", path = "../../mpc-net", features = ["tls"] }
 num-bigint.workspace = true
 num-traits.workspace = true
 rand.workspace = true
