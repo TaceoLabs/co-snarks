@@ -1,6 +1,6 @@
 use super::{
     super::{decider_prover::Decider, sumcheck::SumcheckOutput},
-    types::{PolyF, PolyG},
+    types::PolyF,
 };
 use crate::plain_prover_flavour::PlainProverFlavour;
 use crate::{
@@ -9,6 +9,7 @@ use crate::{
 };
 use ark_ec::AffineRepr;
 use ark_ff::{Field, One, Zero};
+use co_builder::polynomials::polynomial_flavours::PolyGFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::prelude::ZeroKnowledge;
 use co_builder::{
@@ -36,12 +37,10 @@ impl<
         }
     }
 
-    fn get_g_polynomials(
-        polys: &AllEntities<Vec<P::ScalarField>, L>,
-    ) -> PolyG<Vec<P::ScalarField>> {
-        PolyG {
-            wires: polys.witness.to_be_shifted().try_into().unwrap(),
-        }
+    fn get_g_polynomials<'a>(
+        polys: &'a AllEntities<Vec<P::ScalarField>, L>,
+    ) -> L::PolyG<'a, Vec<P::ScalarField>> {
+        L::PolyG::from_slice(polys.witness.to_be_shifted())
     }
 
     #[expect(clippy::type_complexity)]
@@ -99,7 +98,8 @@ impl<
         }
         let mut batched_to_be_shifted = Polynomial::new_zero(n); // batched to-be-shifted polynomials
 
-        for g_poly in g_polynomials.iter() {
+        let iter = g_polynomials.iter();
+        for g_poly in iter {
             batched_to_be_shifted.add_scaled_slice(g_poly, &running_scalar);
             running_scalar *= rho;
         }
@@ -145,7 +145,7 @@ impl<
     //  */
     pub(crate) fn gemini_prove(
         &mut self,
-        multilinear_challenge: Vec<P::ScalarField>,
+        multilinear_challenge: &[P::ScalarField],
         log_n: usize,
         commitment_key: &ProverCrs<P>,
         has_zk: ZeroKnowledge,
@@ -156,7 +156,7 @@ impl<
         let virtual_log_n: usize = multilinear_challenge.len();
         // Compute batched polynomials
         let (batched_unshifted, batched_to_be_shifted) =
-            self.compute_batched_polys(transcript, &multilinear_challenge, log_n, commitment_key)?;
+            self.compute_batched_polys(transcript, multilinear_challenge, log_n, commitment_key)?;
 
         // We do not have any concatenated polynomials in UltraHonk
 
@@ -216,7 +216,7 @@ impl<
 
     pub(crate) fn compute_fold_polynomials(
         log_n: usize,
-        multilinear_challenge: Vec<P::ScalarField>,
+        multilinear_challenge: &[P::ScalarField],
         a_0: Polynomial<P::ScalarField>,
     ) -> Vec<Polynomial<P::ScalarField>> {
         tracing::trace!("Compute fold polynomials");
@@ -228,11 +228,7 @@ impl<
         // in the next iteration, it is the previously folded one
         let mut a_l = a_0.coefficients;
         debug_assert!(multilinear_challenge.len() >= log_n - 1);
-        for (l, u_l) in multilinear_challenge
-            .into_iter()
-            .take(log_n - 1)
-            .enumerate()
-        {
+        for (l, u_l) in multilinear_challenge.iter().take(log_n - 1).enumerate() {
             // size of the previous polynomial/2
             let n_l = 1 << (log_n - l - 1);
 
@@ -244,7 +240,7 @@ impl<
                 // fold(Aₗ)[j] = (1-uₗ)⋅even(Aₗ)[j] + uₗ⋅odd(Aₗ)[j]
                 //            = (1-uₗ)⋅Aₗ[2j]      + uₗ⋅Aₗ[2j+1]
                 //            = Aₗ₊₁[j]
-                a_l_fold[j] = a_l[j << 1] + u_l * (a_l[(j << 1) + 1] - a_l[j << 1]);
+                a_l_fold[j] = a_l[j << 1] + *u_l * (a_l[(j << 1) + 1] - a_l[j << 1]);
             }
 
             // Set Aₗ₊₁ = Aₗ for the next iteration
@@ -380,21 +376,14 @@ impl<
         gemini_fold_pos_evaluations
     }
 
-    /**
-     * @brief Returns a batched opening claim equivalent to a set of opening claims consisting of polynomials, each
-     * opened at a single point.
-     *
-     * @param commitment_key
-     * @param opening_claims
-     * @param transcript
-     * @return ProverOpeningClaim<Curve>
-     */
-    pub(crate) fn shplonk_prove(
+    /// Returns a batched opening claim equivalent to a set of opening claims consisting of polynomials, each opened at a single point.
+    pub fn shplonk_prove(
         &self,
         opening_claims: Vec<ShpleminiOpeningClaim<P::ScalarField>>,
         commitment_key: &ProverCrs<P>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         libra_opening_claims: Option<Vec<ShpleminiOpeningClaim<P::ScalarField>>>,
+        sumcheck_round_claims: Option<Vec<ShpleminiOpeningClaim<P::ScalarField>>>,
         virtual_log_n: usize,
     ) -> HonkProofResult<ShpleminiOpeningClaim<P::ScalarField>> {
         tracing::trace!("Shplonk prove");
@@ -408,6 +397,7 @@ impl<
             nu,
             &gemini_fold_pos_evaluations,
             &libra_opening_claims,
+            &sumcheck_round_claims,
         );
         let batched_quotient_commitment =
             Utils::commit(&batched_quotient.coefficients, commitment_key)?;
@@ -426,10 +416,12 @@ impl<
             z,
             &gemini_fold_pos_evaluations,
             libra_opening_claims,
+            sumcheck_round_claims,
         ))
     }
 
-    pub(crate) fn shplemini_prove(
+    /// Computes a Shplemini proof which is a combination of Gemini and Shplonk (Shplonk reduces multiple openings into one).
+    pub fn shplemini_prove(
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         circuit_size: u32,
@@ -445,7 +437,7 @@ impl<
         tracing::trace!("Shplemini prove");
         let log_circuit_size = Utils::get_msb32(circuit_size);
         let opening_claims = self.gemini_prove(
-            sumcheck_output.challenges,
+            &sumcheck_output.challenges,
             log_circuit_size as usize,
             crs,
             has_zk,
@@ -464,11 +456,26 @@ impl<
             None
         };
 
+        let sumcheck_round_claims = if let (Some(univariates), Some(evaluations)) = (
+            sumcheck_output.round_univariates.as_ref(),
+            sumcheck_output.round_univariate_evaluations.as_ref(),
+        ) {
+            Some(Self::compute_sumcheck_round_claims(
+                circuit_size,
+                &sumcheck_output.challenges,
+                univariates,
+                evaluations,
+            ))
+        } else {
+            None
+        };
+
         self.shplonk_prove(
             opening_claims,
             crs,
             transcript,
             libra_opening_claims,
+            sumcheck_round_claims,
             virtual_log_n,
         )
     }
@@ -483,6 +490,7 @@ impl<
      * @param z_challenge
      * @return Output{OpeningPair, Polynomial}
      */
+    #[expect(clippy::too_many_arguments)]
     pub(crate) fn compute_partially_evaluated_batched_quotient(
         virtual_log_n: usize,
         opening_claims: Vec<ShpleminiOpeningClaim<P::ScalarField>>,
@@ -491,6 +499,7 @@ impl<
         z_challenge: P::ScalarField,
         gemini_fold_pos_evaluations: &[P::ScalarField],
         libra_opening_claims: Option<Vec<ShpleminiOpeningClaim<P::ScalarField>>>,
+        sumcheck_round_claims: Option<Vec<ShpleminiOpeningClaim<P::ScalarField>>>,
     ) -> ShpleminiOpeningClaim<P::ScalarField> {
         tracing::trace!("Compute partially evaluated batched quotient");
         let has_zk = ZeroKnowledge::from(libra_opening_claims.is_some());
@@ -513,6 +522,12 @@ impl<
         // Add the terms (z - uₖ) for k = 0, …, d−1 where d is the number of rounds in Sumcheck
         if let Some(libra_opening_claims) = &libra_opening_claims {
             for claim in libra_opening_claims.iter() {
+                inverse_vanishing_evals.push(z_challenge - claim.opening_pair.challenge);
+            }
+        }
+
+        if let Some(sumcheck_round_claims) = &sumcheck_round_claims {
+            for claim in sumcheck_round_claims.iter() {
                 inverse_vanishing_evals.push(z_challenge - claim.opening_pair.challenge);
             }
         }
@@ -567,6 +582,20 @@ impl<
             }
         }
 
+        if let Some(sumcheck_round_claims) = sumcheck_round_claims {
+            for claim in sumcheck_round_claims.into_iter() {
+                // Compute individual claim quotient tmp = ( fⱼ(X) − vⱼ) / ( X − xⱼ )
+                let mut tmp = claim.polynomial;
+                tmp[0] -= claim.opening_pair.evaluation;
+                let scaling_factor = current_nu * inverse_vanishing_evals[idx]; // = νʲ / (z − xⱼ )
+
+                // Add the claim quotient to the batched quotient polynomial
+                g.add_scaled(&tmp, &-scaling_factor);
+                current_nu *= nu_challenge;
+                idx += 1;
+            }
+        }
+
         ShpleminiOpeningClaim {
             polynomial: g,
             opening_pair: OpeningPair {
@@ -590,6 +619,7 @@ impl<
         nu_challenge: P::ScalarField,
         gemini_fold_pos_evaluations: &[P::ScalarField],
         libra_opening_claims: &Option<Vec<ShpleminiOpeningClaim<P::ScalarField>>>,
+        sumcheck_round_claims: &Option<Vec<ShpleminiOpeningClaim<P::ScalarField>>>,
     ) -> Polynomial<P::ScalarField> {
         tracing::trace!("Compute batched quotient");
         let has_zk = ZeroKnowledge::from(libra_opening_claims.is_some());
@@ -602,6 +632,11 @@ impl<
 
         if let Some(libra_claims) = libra_opening_claims {
             for claim in libra_claims.iter() {
+                max_poly_size = max_poly_size.max(claim.polynomial.len());
+            }
+        }
+        if let Some(sumcheck_claims) = sumcheck_round_claims {
+            for claim in sumcheck_claims.iter() {
                 max_poly_size = max_poly_size.max(claim.polynomial.len());
             }
         }
@@ -656,6 +691,18 @@ impl<
                 current_nu *= nu_challenge;
             }
         }
+        if let Some(sumcheck_claim) = sumcheck_round_claims {
+            for claim in sumcheck_claim.iter() {
+                // Compute individual claim quotient tmp = ( fⱼ(X) − vⱼ) / ( X − xⱼ )
+                let mut tmp = claim.polynomial.clone();
+                tmp[0] -= claim.opening_pair.evaluation;
+                tmp.factor_roots(&claim.opening_pair.challenge);
+
+                // Add the claim quotient to the batched quotient polynomial
+                q.add_scaled(&tmp, &current_nu);
+                current_nu *= nu_challenge;
+            }
+        }
 
         // Return batched quotient polynomial Q(X)
         q
@@ -700,5 +747,38 @@ impl<
         }
 
         libra_opening_claims
+    }
+
+    // Create a vector of 3*log_n opening claims for the evaluations of Sumcheck Round Univariates at
+    //  0, 1, and a round challenge.
+    fn compute_sumcheck_round_claims(
+        circuit_size: u32,
+        multilinear_challenge: &[P::ScalarField],
+        sumcheck_round_univariates: &[Polynomial<P::ScalarField>],
+        sumcheck_round_evaluations: &[[P::ScalarField; 3]],
+    ) -> Vec<ShpleminiOpeningClaim<P::ScalarField>> {
+        let log_n = Utils::get_msb32(circuit_size) as usize;
+        let mut sumcheck_round_claims = Vec::with_capacity(2 * log_n);
+        for (idx, univariate) in sumcheck_round_univariates.iter().enumerate().take(log_n) {
+            let evaluation_points = [
+                P::ScalarField::zero(),
+                P::ScalarField::one(),
+                multilinear_challenge[idx],
+            ];
+
+            for (eval_idx, eval_point) in evaluation_points.iter().enumerate() {
+                let new_claim = ShpleminiOpeningClaim {
+                    polynomial: univariate.clone(),
+                    opening_pair: OpeningPair {
+                        challenge: *eval_point,
+                        evaluation: sumcheck_round_evaluations[idx][eval_idx],
+                    },
+                    gemini_fold: false,
+                };
+                sumcheck_round_claims.push(new_claim);
+            }
+        }
+
+        sumcheck_round_claims
     }
 }

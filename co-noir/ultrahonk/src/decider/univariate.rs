@@ -241,6 +241,11 @@ impl<F: PrimeField, const SIZE: usize> UnivariateTrait<F> for Univariate<F, SIZE
     fn evaluations_as_ref(&self) -> &[F] {
         &self.evaluations
     }
+
+    fn value_at(&self, i: usize) -> F {
+        assert!(i < SIZE, "Index out of bounds for univariate evaluations");
+        self.evaluations[i]
+    }
 }
 
 impl<F: PrimeField, const SIZE: usize> Default for Univariate<F, SIZE> {

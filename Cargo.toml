@@ -19,6 +19,7 @@ members = [
     "mpc-core",
     "mpc-net",
     "tests",
+    "co-noir/goblin",
 ]
 resolver = "2"
 

@@ -33,6 +33,11 @@ pub trait HonkCurve<Des: PrimeField>: CurveGroup<BaseField: PrimeField> {
     fn get_subgroup_generator_inverse() -> Self::ScalarField {
         Self::get_subgroup_generator().inverse().unwrap()
     }
+
+    fn get_cube_root_of_unity() -> Self::BaseField;
+
+    //this is how the x coordinate of the infinity point is set in BB in certain cases
+    fn get_bb_infinity_default() -> Self::BaseField;
 }
 
 impl HonkCurve<ark_bn254::Fr> for ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config> {
@@ -107,6 +112,21 @@ impl HonkCurve<ark_bn254::Fr> for ark_ec::short_weierstrass::Projective<ark_bn25
         debug_assert_eq!(val, Self::get_subgroup_generator().inverse().unwrap());
         val
     }
+
+    fn get_cube_root_of_unity() -> Self::BaseField {
+        ark_bn254::Fq::from(BigInt::new([
+            6296954981786320894,
+            15344436770043026511,
+            6476857749317913516,
+            0,
+        ]))
+    }
+
+    fn get_bb_infinity_default() -> Self::BaseField {
+        let set_bit = BigUint::one() << (ark_bn254::Fq::MODULUS_BIT_SIZE.next_power_of_two() - 1);
+        let mont_r = ark_bn254::Fq::from(ark_bn254::Fq::MODULUS.montgomery_r());
+        ark_bn254::Fq::from(set_bit) / mont_r
+    }
 }
 
 impl HonkCurve<ark_bn254::Fr> for short_weierstrass::Projective<GrumpkinConfig> {
@@ -125,24 +145,27 @@ impl HonkCurve<ark_bn254::Fr> for short_weierstrass::Projective<GrumpkinConfig> 
         (p.x, p.y)
     }
 
-    fn convert_scalarfield_into(_src: &Self::ScalarField) -> Vec<ark_bn254::Fr> {
-        todo!("Implement HonkCurve for ark_grumpkin::Projective")
+    fn convert_scalarfield_into(src: &Self::ScalarField) -> Vec<ark_bn254::Fr> {
+        let (a, b) = convert_grumpkin_fr_to_bn254_frs(src);
+        vec![a, b]
     }
 
-    fn convert_scalarfield_back(_src: &[ark_bn254::Fr]) -> Self::ScalarField {
-        todo!("Implement HonkCurve for ark_grumpkin::Projective")
+    fn convert_scalarfield_back(src: &[ark_bn254::Fr]) -> Self::ScalarField {
+        debug_assert_eq!(src.len(), Self::NUM_BASEFIELD_ELEMENTS);
+        bn254_fq_to_fr_rev(&src[0], &src[1])
     }
 
-    fn convert_basefield_into(_src: &Self::BaseField) -> Vec<ark_bn254::Fr> {
-        todo!("Implement HonkCurve for ark_grumpkin::Projective")
+    fn convert_basefield_into(src: &Self::BaseField) -> Vec<ark_bn254::Fr> {
+        vec![ark_bn254::Fr::from(*src)]
     }
 
-    fn convert_basefield_back(_src: &[ark_bn254::Fr]) -> Self::BaseField {
-        todo!("Implement HonkCurve for ark_grumpkin::Projective")
+    fn convert_basefield_back(src: &[ark_bn254::Fr]) -> Self::BaseField {
+        debug_assert_eq!(src.len(), Self::NUM_SCALARFIELD_ELEMENTS);
+        src[0].to_owned()
     }
 
-    fn convert_destinationfield_to_scalarfield(_des: &ark_bn254::Fr) -> Self::ScalarField {
-        todo!("Implement HonkCurve for ark_grumpkin::Projective")
+    fn convert_destinationfield_to_scalarfield(des: &ark_bn254::Fr) -> Self::ScalarField {
+        convert_to_grumpkin_fr(des)
     }
 
     fn get_curve_b() -> Self::ScalarField {
@@ -150,7 +173,41 @@ impl HonkCurve<ark_bn254::Fr> for short_weierstrass::Projective<GrumpkinConfig> 
     }
 
     fn get_subgroup_generator() -> Self::ScalarField {
-        todo!("Implement HonkCurve for ark_grumpkin::Projective")
+        // 9266039526417139266040601060442016598255985496235718633420974982172445857899
+        let val = ark_grumpkin::Fr::from(BigInt::new([
+            8945551602226911339,
+            13953598326038888636,
+            1481858683227075358,
+            1476165261776872341,
+        ]));
+        debug_assert_eq!(
+            val,
+            ark_grumpkin::Fr::from_str(
+                "9266039526417139266040601060442016598255985496235718633420974982172445857899",
+            )
+            .unwrap()
+        );
+        val
+    }
+    fn get_subgroup_generator_inverse() -> Self::ScalarField {
+        let val = ark_grumpkin::Fr::from(BigInt::new([
+            14836326461244840328,
+            12137613447679210578,
+            18066067572638974063,
+            894213515885537164,
+        ]));
+        debug_assert_eq!(val, Self::get_subgroup_generator().inverse().unwrap());
+        val
+    }
+    fn get_cube_root_of_unity() -> Self::BaseField {
+        todo!("cube root of unity for grumpkin::Fq")
+    }
+
+    fn get_bb_infinity_default() -> Self::BaseField {
+        let set_bit =
+            BigUint::one() << (ark_grumpkin::Fq::MODULUS_BIT_SIZE.next_power_of_two() - 1);
+        let mont_r = ark_grumpkin::Fq::from(ark_grumpkin::Fq::MODULUS.montgomery_r());
+        ark_grumpkin::Fq::from(set_bit) / mont_r
     }
 }
 
@@ -201,4 +258,36 @@ fn bn254_fq_to_fr_rev(res0: &ark_bn254::Fr, res1: &ark_bn254::Fr) -> ark_bn254::
 
     let value = res0 + (res1 << (NUM_LIMB_BITS * 2));
     ark_bn254::Fq::from(value)
+}
+
+fn convert_grumpkin_fr_to_bn254_frs(val: &ark_grumpkin::Fr) -> (ark_bn254::Fr, ark_bn254::Fr) {
+    // Convert grumpkin::fr to 2 bb::fr elements
+    let (res0, res1) = bn254_fq_to_fr(&ark_bn254::Fq::from(*val));
+    (res0, res1)
+}
+
+fn convert_to_grumpkin_fr(f: &ark_bn254::Fr) -> ark_grumpkin::Fr {
+    const NUM_BITS_IN_TWO_LIMBS: u32 = 2 * NUM_LIMB_BITS; // the number of bits in 2 bigfield limbs which is 136
+
+    let limb_mask = (BigUint::one() << NUM_BITS_IN_TWO_LIMBS) - BigUint::one(); // split bn254_fr into two 136 bit pieces
+    let value = BigUint::from(*f);
+    let low = &value & &limb_mask;
+    let hi = &value >> NUM_BITS_IN_TWO_LIMBS;
+
+    debug_assert_eq!(&low + (&hi << NUM_BITS_IN_TWO_LIMBS), value);
+
+    let fr_vec = [ark_grumpkin::Fr::from(low), ark_grumpkin::Fr::from(hi)];
+
+    // Combines the two elements into one uint256_t, and then convert that to a grumpkin::fr
+    debug_assert!(
+        BigUint::from(fr_vec[0]) < (BigUint::one() << (NUM_LIMB_BITS * 2)),
+        "Conversion error here usually implies some bad proof serde or parsing"
+    );
+    debug_assert!(
+        BigUint::from(fr_vec[1]) < (BigUint::one() << (TOTAL_BITS - NUM_LIMB_BITS * 2)),
+        "Conversion error here usually implies some bad proof serde or parsing"
+    );
+
+    let value = BigUint::from(fr_vec[0]) + (BigUint::from(fr_vec[1]) << (NUM_LIMB_BITS * 2));
+    ark_grumpkin::Fr::from(value)
 }
