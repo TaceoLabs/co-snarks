@@ -57,7 +57,7 @@ fn _default_generators_bn254() -> &'static [ark_bn254::G1Affine; NUM_DEFAULT_GEN
     })
 }
 
-pub(crate) fn derive_generators<C: CurveGroup>(
+pub fn derive_generators<C: CurveGroup>(
     domain_separator_bytes: &[u8],
     num_generators: usize,
     starting_index: usize,

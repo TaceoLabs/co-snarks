@@ -180,7 +180,7 @@ impl<
         }
     }
 
-    pub(crate) fn sumcheck_prove_zk(
+    pub fn sumcheck_prove_zk(
         &self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         circuit_size: u32,

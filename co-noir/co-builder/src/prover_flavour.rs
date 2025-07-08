@@ -10,6 +10,7 @@ use crate::{
 pub enum Flavour {
     Ultra,
     Mega,
+    ECCVM,
 }
 
 pub trait ProverFlavour: Default {

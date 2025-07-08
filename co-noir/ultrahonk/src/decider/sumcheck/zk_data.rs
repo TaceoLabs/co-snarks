@@ -17,7 +17,7 @@ use co_builder::prelude::Polynomial;
 use rand::CryptoRng;
 use rand::Rng;
 
-pub(crate) struct ZKSumcheckData<P: Pairing> {
+pub struct ZKSumcheckData<P: Pairing> {
     pub(crate) constant_term: P::ScalarField,
     pub(crate) interpolation_domain: Vec<P::ScalarField>,
     pub(crate) libra_concatenated_lagrange_form: Polynomial<P::ScalarField>,
@@ -32,7 +32,7 @@ pub(crate) struct ZKSumcheckData<P: Pairing> {
 }
 
 impl<P: HonkCurve<TranscriptFieldType>> ZKSumcheckData<P> {
-    pub(crate) fn new<H: TranscriptHasher<TranscriptFieldType>, R: Rng + CryptoRng>(
+    pub fn new<H: TranscriptHasher<TranscriptFieldType>, R: Rng + CryptoRng>(
         multivariate_d: usize,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         commitment_key: &[P::G1Affine],

@@ -388,7 +388,7 @@ impl<
      * @param transcript
      * @return ProverOpeningClaim<Curve>
      */
-    pub(crate) fn shplonk_prove(
+    pub fn shplonk_prove(
         &self,
         opening_claims: Vec<ShpleminiOpeningClaim<P::ScalarField>>,
         commitment_key: &ProverCrs<P>,
@@ -428,7 +428,7 @@ impl<
         ))
     }
 
-    pub(crate) fn shplemini_prove(
+    pub fn shplemini_prove(
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         circuit_size: u32,

@@ -683,7 +683,7 @@ impl<
 
         let has_active_ranges = proving_key.active_region_data.size() > 0;
 
-        // Barratenberg uses multithreading here
+        // Barretenberg uses multithreading here
 
         // Set the domain over which the grand product must be computed. This may be less than the dyadic circuit size, e.g
         // the permutation grand product does not need to be computed beyond the index of the last active wire

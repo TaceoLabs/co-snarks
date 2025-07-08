@@ -15,7 +15,7 @@ use rand::{CryptoRng, Rng};
 
 use super::sumcheck::zk_data::ZKSumcheckData;
 
-pub(crate) struct SmallSubgroupIPAProver<P: Pairing> {
+pub struct SmallSubgroupIPAProver<P: Pairing> {
     interpolation_domain: Vec<P::ScalarField>,
     concatenated_polynomial: Polynomial<P::ScalarField>,
     libra_concatenated_lagrange_form: Polynomial<P::ScalarField>,
@@ -27,6 +27,8 @@ pub(crate) struct SmallSubgroupIPAProver<P: Pairing> {
     grand_sum_identity_polynomial: Polynomial<P::ScalarField>,
     grand_sum_identity_quotient: Polynomial<P::ScalarField>,
     domain: GeneralEvaluationDomain<P::ScalarField>,
+    claimed_inner_product: P::ScalarField,
+    prefix_label: String,
 }
 
 impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
@@ -43,13 +45,12 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
     // Length of the big sum identity polynomial C. It is equal to the length of the highest degree term X * F(X) * G(X)
     const GRAND_SUM_IDENTITY_LENGTH: usize =
         Self::MASKED_CONCATENATED_WITNESS_LENGTH + Self::SUBGROUP_SIZE;
-    pub(crate) fn new<H: TranscriptHasher<TranscriptFieldType>, R: Rng + CryptoRng>(
+
+    pub fn new<H: TranscriptHasher<TranscriptFieldType>>(
         zk_sumcheck_data: ZKSumcheckData<P>,
+        claimed_inner_product: P::ScalarField,
+        prefix_label: String,
         multivariate_challenge: &[P::ScalarField],
-        claimed_ipa_eval: P::ScalarField,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
-        commitment_key: &ProverCrs<P>,
-        rng: &mut R,
     ) -> HonkProofResult<Self> {
         let mut prover = SmallSubgroupIPAProver {
             interpolation_domain: zk_sumcheck_data.interpolation_domain,
@@ -65,32 +66,42 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
             // TACEO TODO the ZKSumcheckData also creates the same domain
             domain: GeneralEvaluationDomain::<P::ScalarField>::new(Self::SUBGROUP_SIZE)
                 .ok_or(HonkProofError::LargeSubgroup)?,
+            claimed_inner_product,
+            prefix_label,
         };
-
         prover.compute_challenge_polynomial(multivariate_challenge);
-        prover.compute_grand_sum_polynomial(rng);
-        let libra_grand_sum_commitment =
-            Utils::commit(&prover.grand_sum_polynomial.coefficients, commitment_key)?;
-        transcript.send_point_to_verifier::<P>(
-            "Libra:grand_sum_commitment".to_string(),
-            libra_grand_sum_commitment.into(),
-        );
-
-        prover.compute_grand_sum_identity_polynomial(claimed_ipa_eval);
-        prover.compute_batched_quotient();
-
-        let libra_quotient_commitment = Utils::commit(
-            &prover.grand_sum_identity_quotient.coefficients,
-            commitment_key,
-        )?;
-        transcript.send_point_to_verifier::<P>(
-            "Libra:quotient_commitment".to_string(),
-            libra_quotient_commitment.into(),
-        );
-
         Ok(prover)
     }
 
+    pub fn prove<H: TranscriptHasher<TranscriptFieldType>, R: Rng + CryptoRng>(
+        &mut self,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
+        commitment_key: &ProverCrs<P>,
+        rng: &mut R,
+    ) -> HonkProofResult<()> {
+        //PROVE STARTS HERE
+        self.compute_grand_sum_polynomial(rng);
+        let libra_grand_sum_commitment =
+            Utils::commit(&self.grand_sum_polynomial.coefficients, commitment_key)?;
+        transcript.send_point_to_verifier::<P>(
+            self.prefix_label.clone() + "grand_sum_commitment",
+            libra_grand_sum_commitment.into(),
+        );
+
+        self.compute_grand_sum_identity_polynomial();
+        self.compute_batched_quotient();
+
+        let libra_quotient_commitment = Utils::commit(
+            &self.grand_sum_identity_quotient.coefficients,
+            commitment_key,
+        )?;
+        transcript.send_point_to_verifier::<P>(
+            self.prefix_label.clone() + "quotient_commitment",
+            libra_quotient_commitment.into(),
+        );
+
+        Ok(())
+    }
     /**
      * @brief Computes the challenge polynomial F(X) based on the provided multivariate challenges.
      *
@@ -198,7 +209,7 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
      * \f$ is the fixed generator of \f$ H \f$.
      *
      */
-    fn compute_grand_sum_identity_polynomial(&mut self, claimed_evaluation: P::ScalarField) {
+    fn compute_grand_sum_identity_polynomial(&mut self) {
         // Compute shifted big sum polynomial A(gX)
         let mut shifted_grand_sum = Polynomial::new_zero(Self::SUBGROUP_SIZE + 3);
 
@@ -251,7 +262,7 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
         // Subtract L_{|H|} * s
         for idx in 0..Self::SUBGROUP_SIZE {
             self.grand_sum_identity_polynomial.coefficients[idx] -=
-                lagrange_last.coefficients[idx] * claimed_evaluation;
+                lagrange_last.coefficients[idx] * self.claimed_inner_product;
         }
     }
 
@@ -302,7 +313,7 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
     }
 
     // Getter to pass the witnesses to ShpleminiProver. Big sum polynomial is evaluated at 2 points (and is small)
-    pub(crate) fn into_witness_polynomials(self) -> [Polynomial<P::ScalarField>; 4] {
+    pub fn into_witness_polynomials(self) -> [Polynomial<P::ScalarField>; 4] {
         [
             self.concatenated_polynomial,
             self.grand_sum_polynomial.to_owned(),
