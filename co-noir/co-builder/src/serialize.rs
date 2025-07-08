@@ -75,7 +75,7 @@ impl<F: Field> Serialize<F> {
         res
     }
 
-    pub(crate) fn read_u32(buf: &[u8], offset: &mut usize) -> u32 {
+    pub fn read_u32(buf: &[u8], offset: &mut usize) -> u32 {
         const BYTES: usize = 4;
         let res = u32::from_be_bytes(buf[*offset..*offset + BYTES].try_into().unwrap());
         *offset += BYTES;
@@ -87,6 +87,16 @@ impl<F: Field> Serialize<F> {
         let res = u64::from_be_bytes(buf[*offset..*offset + BYTES].try_into().unwrap());
         *offset += BYTES;
         res
+    }
+
+    pub fn read_biguint(buf: &[u8], num_64_limbs: usize, offset: &mut usize) -> BigUint {
+        let mut bigint = BigUint::default();
+        for _ in 0..num_64_limbs {
+            let data = Self::read_u64(buf, offset);
+            bigint <<= 64;
+            bigint += data;
+        }
+        bigint
     }
 
     pub fn write_u32(buf: &mut Vec<u8>, val: u32) {
@@ -172,11 +182,13 @@ impl<P: HonkCurve<TranscriptFieldType>> SerializeP<P> {
     }
 
     pub fn read_g1_element(buf: &[u8], offset: &mut usize, read_x_first: bool) -> P::Affine {
-        if buf.iter().all(|&x| x == 255) {
+        if buf[*offset..*offset + Self::FIELDSIZE_BYTES as usize * 2]
+            .iter()
+            .all(|&x| x == 255)
+        {
             *offset += Self::FIELDSIZE_BYTES as usize * 2;
             return P::Affine::zero();
         }
-
         let first = Serialize::<P::BaseField>::read_field_element(buf, offset);
         let second = Serialize::<P::BaseField>::read_field_element(buf, offset);
 

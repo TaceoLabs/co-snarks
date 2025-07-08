@@ -206,7 +206,7 @@ mod tests {
     use co_builder::prelude::CrsParser;
     use common::mpc::rep3::Rep3UltraHonkDriver;
     use common::transcript::Poseidon2Sponge;
-    use goblin::eccvm::ecc_op_queue::{EccOpCode, EccOpsTable, EccvmRowTracker, UltraOp};
+    use goblin::prelude::{EccOpCode, EccOpsTable, EccvmRowTracker, UltraOp};
     use mpc_core::{
         gadgets::field_from_hex_string,
         protocols::rep3::{Rep3State, conversion::A2BType, share_field_element},
@@ -370,7 +370,8 @@ mod tests {
         let queue: [CoECCOpQueue<Driver, Bn254G1>; 3] = core::array::from_fn(|_| get_queues());
 
         let crs =
-            CrsParser::<Bn254>::get_crs(CRS_PATH_G1, CRS_PATH_G2, 5, ZeroKnowledge::No).unwrap();
+            CrsParser::<Bn254G1>::get_crs::<Bn254>(CRS_PATH_G1, CRS_PATH_G2, 5, ZeroKnowledge::No)
+                .unwrap();
         let (prover_crs, _) = crs.split();
 
         let nets = LocalNetwork::new_3_parties();

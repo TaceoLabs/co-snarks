@@ -19,35 +19,29 @@ pub type CrsParser<P> = NewFileStructure<P>;
 // the new one (when installing) barretenberg can be found under ~/.bb-crs (or downloaded from https://aztec-ignition.s3.amazonaws.com/MAIN%20IGNITION/flat/g1.dat or g2.dat, but the first one is 6 gb large)
 // the older ones can be downloaded with ~/aztec-packages/barretenberg/cpp/srs_db/download_srs.sh (iirc), these are separated into 20 files, for info see also ~/aztec-packages/barretenberg/cpp/srs_db/transcript_spec.md
 
-pub struct NewFileStructure<P: Pairing>
-where
-    P::G1: HonkCurve<TranscriptFieldType>,
-{
+pub struct NewFileStructure<P: HonkCurve<TranscriptFieldType>> {
     phantom_data: PhantomData<P>,
 }
 
-impl<P: Pairing> NewFileStructure<P>
-where
-    P::G1: HonkCurve<TranscriptFieldType>,
-{
+impl<P: HonkCurve<TranscriptFieldType>> NewFileStructure<P> {
     fn crs_size_from_circuit_size(circuit_size: usize, has_zk: ZeroKnowledge) -> usize {
         if has_zk == ZeroKnowledge::No {
             circuit_size
         } else {
-            max(circuit_size, P::G1::SUBGROUP_SIZE * 2)
+            max(circuit_size, P::SUBGROUP_SIZE * 2)
         }
     }
 
-    pub fn get_crs(
+    pub fn get_crs<P_: Pairing<G1 = P, G1Affine = P::Affine>>(
         path_g1: impl AsRef<Path>,
         path_g2: impl AsRef<Path>,
         circuit_size: usize,
         has_zk: ZeroKnowledge,
-    ) -> Result<Crs<P>> {
+    ) -> Result<Crs<P_>> {
         let crs_size = Self::crs_size_from_circuit_size(circuit_size, has_zk);
-        let mut monomials = vec![P::G1Affine::default(); crs_size];
-        let mut g2_x = P::G2Affine::default();
-        Self::read_transcript(&mut monomials, &mut g2_x, crs_size, path_g1, path_g2)?;
+        let mut monomials = vec![P_::G1Affine::default(); crs_size];
+        let mut g2_x = P_::G2Affine::default();
+        Self::read_transcript::<P_>(&mut monomials, &mut g2_x, crs_size, path_g1, path_g2)?;
         Ok(Crs { monomials, g2_x })
     }
 
@@ -55,16 +49,16 @@ where
         path_g1: impl AsRef<Path>,
         circuit_size: usize,
         has_zk: ZeroKnowledge,
-    ) -> Result<ProverCrs<P::G1>> {
+    ) -> Result<ProverCrs<P>> {
         let crs_size = Self::crs_size_from_circuit_size(circuit_size, has_zk);
-        let mut monomials = vec![P::G1Affine::default(); crs_size];
+        let mut monomials = vec![P::Affine::default(); crs_size];
         Self::read_transcript_g1(&mut monomials, crs_size, path_g1)?;
-        Ok(ProverCrs::<P::G1> { monomials })
+        Ok(ProverCrs::<P> { monomials })
     }
 
-    pub fn get_crs_g2(path_g2: impl AsRef<Path>) -> Result<P::G2Affine> {
-        let mut g2_x = P::G2Affine::default();
-        Self::read_transcript_g2(&mut g2_x, path_g2)?;
+    pub fn get_crs_g2<P_: Pairing<G1 = P>>(path_g2: impl AsRef<Path>) -> Result<P_::G2Affine> {
+        let mut g2_x = P_::G2Affine::default();
+        Self::read_transcript_g2::<P_>(&mut g2_x, path_g2)?;
 
         Ok(g2_x)
     }
@@ -75,22 +69,25 @@ fn get_file_size(filename: impl AsRef<Path>) -> std::io::Result<u64> {
     Ok(metadata.len())
 }
 
-trait FileProcessor<P: Pairing> {
+trait FileProcessor<P: HonkCurve<TranscriptFieldType>> {
     fn read_transcript_g1(
-        monomials: &mut [P::G1Affine],
+        monomials: &mut [P::Affine],
         degree: usize,
         path: impl AsRef<Path>,
     ) -> Result<()>;
-    fn read_transcript_g2(g2_x: &mut P::G2Affine, path: impl AsRef<Path>) -> Result<()>;
-    fn read_transcript(
-        monomials: &mut [<P as Pairing>::G1Affine],
-        g2_x: &mut <P as Pairing>::G2Affine,
+    fn read_transcript_g2<P_: Pairing<G1 = P>>(
+        g2_x: &mut P_::G2Affine,
+        path: impl AsRef<Path>,
+    ) -> Result<()>;
+    fn read_transcript<P_: Pairing<G1 = P, G1Affine = P::Affine>>(
+        monomials: &mut [<P_ as Pairing>::G1Affine],
+        g2_x: &mut <P_ as Pairing>::G2Affine,
         degree: usize,
         path_g1: impl AsRef<Path>,
         path_g2: impl AsRef<Path>,
     ) -> Result<()> {
         Self::read_transcript_g1(monomials, degree, path_g1)?;
-        Self::read_transcript_g2(g2_x, path_g2)?;
+        Self::read_transcript_g2::<P_>(g2_x, path_g2)?;
         Ok(())
     }
     fn read_elements_from_buffer<G: AffineRepr>(elements: &mut [G], buffer: &mut [u8]) {
@@ -105,20 +102,16 @@ trait FileProcessor<P: Pairing> {
     fn convert_endianness_inplace(buffer: &mut [u8]);
 }
 
-impl<P: Pairing> FileProcessor<P> for NewFileStructure<P>
-where
-    P::G1: HonkCurve<TranscriptFieldType>,
-{
+impl<P: HonkCurve<TranscriptFieldType>> FileProcessor<P> for NewFileStructure<P> {
     fn read_transcript_g1(
-        monomials: &mut [<P as Pairing>::G1Affine],
+        monomials: &mut [P::Affine],
         degree: usize,
         path: impl AsRef<Path>,
     ) -> Result<()> {
         let g1_file_size = get_file_size(&path)? as usize;
         assert!(g1_file_size % 64 == 0); //g1_file_size >= num_points * 64 &&
         let num_to_read = degree; //g1_file_size / 64;
-        let g1_buffer_size =
-            std::mem::size_of::<<P::G1 as CurveGroup>::BaseField>() * 2 * num_to_read;
+        let g1_buffer_size = std::mem::size_of::<P::BaseField>() * 2 * num_to_read;
         let mut buffer = vec![0_u8; g1_buffer_size];
 
         let file = File::open(path)?;
@@ -141,17 +134,20 @@ where
         Ok(())
     }
 
-    fn read_transcript_g2(g2_x: &mut P::G2Affine, path: impl AsRef<Path>) -> Result<()> {
-        let g2_size = std::mem::size_of::<<P::G2 as CurveGroup>::BaseField>() * 2;
+    fn read_transcript_g2<P_: Pairing<G1 = P>>(
+        g2_x: &mut P_::G2Affine,
+        path: impl AsRef<Path>,
+    ) -> Result<()> {
+        let g2_size = std::mem::size_of::<<P_::G2 as CurveGroup>::BaseField>() * 2;
 
-        assert!(std::mem::size_of::<P::G2Affine>() >= g2_size);
+        assert!(std::mem::size_of::<P_::G2Affine>() >= g2_size);
         let mut buffer = vec![0; g2_size];
 
         let file = File::open(path)?;
         let mut file = file.take(g2_size as u64);
         file.read_exact(&mut buffer[..])?;
         Self::convert_endianness_inplace(&mut buffer);
-        *g2_x = P::G2Affine::deserialize_uncompressed(&mut &buffer[..])
+        *g2_x = P_::G2Affine::deserialize_uncompressed(&mut &buffer[..])
             .map_err(|e| anyhow!("Failed to deserialize G2Affine from transcript file: {}", e))?;
         Ok(())
     }
@@ -176,7 +172,7 @@ mod tests {
         let degree = 1000;
         let mut monomials: Vec<G1Affine> = vec![G1Affine::default(); degree + 2];
         let mut g2_x = G2Affine::default();
-        NewFileStructure::<Bn254>::read_transcript(
+        NewFileStructure::<<ark_ec::bn::Bn<ark_bn254::Config> as ark_ec::pairing::Pairing>::G1>::read_transcript::<Bn254>(
             &mut monomials,
             &mut g2_x,
             degree,

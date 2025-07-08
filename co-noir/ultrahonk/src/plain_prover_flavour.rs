@@ -29,6 +29,7 @@ pub trait PlainProverFlavour: Default + ProverFlavour {
         + std::marker::Sync
         + std::ops::MulAssign
         + std::ops::Add
+        + std::ops::Sub
         + std::ops::Mul
         + num_traits::identities::Zero;
 
@@ -110,4 +111,6 @@ pub trait UnivariateTrait<F: PrimeField> {
     fn evaluations(&mut self) -> &mut [F];
 
     fn evaluations_as_ref(&self) -> &[F];
+
+    fn value_at(&self, i: usize) -> F;
 }

@@ -15,6 +15,7 @@ use co_builder::prover_flavour::Flavour;
 use itertools::izip;
 use std::{iter, vec};
 
+#[derive(Default)]
 pub struct ProverMemory<P: CurveGroup, L: PlainProverFlavour> {
     pub polys: AllEntities<Vec<P::ScalarField>, L>,
     pub relation_parameters: RelationParameters<P::ScalarField, L>,
@@ -30,18 +31,26 @@ pub type ProverUnivariates<F, L> = AllEntities<<L as PlainProverFlavour>::Prover
 pub(crate) type ProverUnivariatesSized<F, L, const SIZE: usize> =
     AllEntities<Univariate<F, SIZE>, L>;
 pub(crate) type PartiallyEvaluatePolys<F, L> = AllEntities<Vec<F>, L>;
-pub(crate) type ClaimedEvaluations<F, L> = AllEntities<F, L>;
+pub type ClaimedEvaluations<F, L> = AllEntities<F, L>;
 pub(crate) type VerifierCommitments<P, L> = AllEntities<P, L>;
 
+#[derive(Default)]
 pub struct RelationParameters<F: PrimeField, L: PlainProverFlavour> {
-    pub(crate) eta_1: F,
-    pub(crate) eta_2: F,
-    pub(crate) eta_3: F,
-    pub(crate) beta: F,
-    pub(crate) gamma: F,
-    pub(crate) public_input_delta: F,
-    pub(crate) alphas: L::Alphas<F>, // TODO: Can we just make this a Vec<F>?
-    pub(crate) gate_challenges: Vec<F>,
+    pub eta_1: F,
+    pub eta_2: F,
+    pub eta_3: F,
+    pub beta: F,
+    pub gamma: F,
+    pub public_input_delta: F,
+    pub alphas: L::Alphas<F>, // TODO: Can we just make this a Vec<F>?
+    pub gate_challenges: Vec<F>,
+    pub lookup_grand_product_delta: F,
+    pub beta_sqr: F,
+    pub beta_cube: F,
+    pub eccvm_set_permutation_delta: F,
+    pub accumulated_result: [F; 4],
+    pub evaluation_input_x: [F; 5],
+    pub batching_challenge_v: [F; 20],
 }
 
 pub struct GateSeparatorPolynomial<F: PrimeField> {
@@ -129,6 +138,13 @@ impl<P: CurveGroup, L: PlainProverFlavour> ProverMemory<P, L> {
             public_input_delta: prover_memory.public_input_delta,
             alphas: prover_memory.challenges.alphas,
             gate_challenges: Default::default(),
+            lookup_grand_product_delta: Default::default(),
+            beta_sqr: Default::default(),
+            beta_cube: Default::default(),
+            eccvm_set_permutation_delta: Default::default(),
+            accumulated_result: [Default::default(); 4],
+            evaluation_input_x: [Default::default(); 5],
+            batching_challenge_v: [Default::default(); 20],
         };
 
         let mut memory = AllEntities::<Vec<P::ScalarField>, L>::default();
@@ -143,15 +159,8 @@ impl<P: CurveGroup, L: PlainProverFlavour> ProverMemory<P, L> {
             polynomials.witness.lookup_read_tags().as_ref().to_vec();
         if L::FLAVOUR == Flavour::Mega {
             for (des, src) in izip!(
-                memory
-                    .witness
-                    .iter_mut()
-                    .skip(L::WITNESS_ECC_OP_WIRE_1.expect("ECC_OP_WIRE_1 is not set")),
-                polynomials
-                    .witness
-                    .iter()
-                    .skip(L::ECC_OP_WIRE_1.expect("ECC_OP_WIRE_1 is not set"))
-                    .take(7)
+                memory.witness.iter_mut().skip(L::WITNESS_ECC_OP_WIRE_1),
+                polynomials.witness.iter().skip(L::ECC_OP_WIRE_1).take(7)
             ) {
                 *des = src.as_ref().to_vec();
             }
@@ -162,11 +171,11 @@ impl<P: CurveGroup, L: PlainProverFlavour> ProverMemory<P, L> {
                 memory
                     .witness
                     .iter_mut()
-                    .skip(L::WITNESS_SECONDARY_CALLDATA.expect("SECONDARY_CALLDATA is not set")),
+                    .skip(L::WITNESS_SECONDARY_CALLDATA),
                 polynomials
                     .witness
                     .iter()
-                    .skip(L::SECONDARY_CALLDATA.expect("SECONDARY_CALLDATA is not set"))
+                    .skip(L::SECONDARY_CALLDATA)
                     .take(3)
             ) {
                 *des = src.as_ref().to_vec();
@@ -176,15 +185,8 @@ impl<P: CurveGroup, L: PlainProverFlavour> ProverMemory<P, L> {
                 prover_memory.secondary_calldata_inverses.into_vec();
 
             for (des, src) in izip!(
-                memory
-                    .witness
-                    .iter_mut()
-                    .skip(L::WITNESS_RETURN_DATA.expect("RETURN_DATA is not set")),
-                polynomials
-                    .witness
-                    .iter()
-                    .skip(L::RETURN_DATA.expect("RETURN_DATA is not set"))
-                    .take(3)
+                memory.witness.iter_mut().skip(L::WITNESS_RETURN_DATA),
+                polynomials.witness.iter().skip(L::RETURN_DATA).take(3)
             ) {
                 *des = src.as_ref().to_vec();
             }
@@ -239,6 +241,13 @@ impl<C: CurveGroup, L: PlainProverFlavour> VerifierMemory<C, L> {
             public_input_delta: verifier_memory.public_input_delta,
             alphas: verifier_memory.challenges.alphas,
             gate_challenges: Default::default(),
+            lookup_grand_product_delta: Default::default(),
+            beta_sqr: Default::default(),
+            beta_cube: Default::default(),
+            eccvm_set_permutation_delta: Default::default(),
+            accumulated_result: [Default::default(); 4],
+            evaluation_input_x: [Default::default(); 5],
+            batching_challenge_v: [Default::default(); 20],
         };
 
         let mut memory = AllEntities::<C::Affine, _>::default();
