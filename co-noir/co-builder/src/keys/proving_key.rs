@@ -7,12 +7,12 @@ use crate::polynomials::polynomial_flavours::{
 use crate::prover_flavour::ProverFlavour;
 use crate::{
     HonkProofResult,
-    builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder},
     crs::ProverCrs,
     polynomials::{polynomial::Polynomial, polynomial_types::Polynomials},
     types::types::{
         ActiveRegionData, CyclicPermutation, Mapping, NUM_WIRES, PermutationMapping, TraceData,
     },
+    ultra_builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder},
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::One;

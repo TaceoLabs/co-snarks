@@ -4,9 +4,9 @@ pub(crate) mod oink;
 pub(crate) mod plain_flavours;
 pub mod plain_prover_flavour;
 pub mod prelude;
-pub(crate) mod prover;
 pub(crate) mod types;
-pub(crate) mod verifier;
+pub(crate) mod ultra_prover;
+pub(crate) mod ultra_verifier;
 
 use acir::{FieldElement, native_types::WitnessStack};
 use ark_ec::pairing::Pairing;

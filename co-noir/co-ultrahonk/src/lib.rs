@@ -2,11 +2,11 @@
 
 pub(crate) mod co_decider;
 pub(crate) mod co_oink;
+pub(crate) mod co_ultra_prover;
 pub mod key;
 pub(crate) mod mpc_flavours;
 pub(crate) mod mpc_prover_flavour;
 pub mod prelude;
-pub(crate) mod prover;
 pub(crate) mod types;
 pub(crate) mod types_batch;
 

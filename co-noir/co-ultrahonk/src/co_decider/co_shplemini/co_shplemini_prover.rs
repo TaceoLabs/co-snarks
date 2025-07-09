@@ -1,7 +1,7 @@
 use super::types::{PolyF, PolyG};
 use crate::mpc_prover_flavour::MPCProverFlavour;
 use crate::{
-    co_decider::{co_sumcheck::SumcheckOutput, prover::CoDecider},
+    co_decider::{co_decider_prover::CoDecider, co_sumcheck::SumcheckOutput},
     types::AllEntities,
 };
 use ark_ec::AffineRepr;

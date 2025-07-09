@@ -1,6 +1,7 @@
 use super::types::VerifierMemory;
 use crate::{
-    oink::prover::Oink, plain_prover_flavour::PlainProverFlavour, verifier::HonkVerifyResult,
+    oink::oink_prover::Oink, plain_prover_flavour::PlainProverFlavour,
+    ultra_verifier::HonkVerifyResult,
 };
 use co_builder::prelude::{HonkCurve, VerifyingKey};
 use co_builder::{

@@ -2,7 +2,7 @@ use crate::co_decider::relations::Relation;
 use crate::types_batch::{AllEntitiesBatchRelationsTrait, Public, Shared, SumCheckDataForRelation};
 use crate::{
     co_decider::{
-        co_sumcheck::round::SumcheckRound,
+        co_sumcheck::co_sumcheck_round::SumcheckRound,
         relations::{
             auxiliary_relation::{AuxiliaryRelation, AuxiliaryRelationAcc},
             databus_lookup_relation::{DataBusLookupRelation, DataBusLookupRelationAcc},

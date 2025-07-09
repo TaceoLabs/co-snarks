@@ -4,7 +4,7 @@ use super::generators;
 use crate::TranscriptFieldType;
 use crate::prelude::HonkCurve;
 use crate::types::aes128::{AES128_BASE, AES128_SBOX};
-use crate::{builder::GenericUltraCircuitBuilder, utils};
+use crate::{ultra_builder::GenericUltraCircuitBuilder, utils};
 use ark_ec::{AffineRepr, CurveGroup, pairing::Pairing};
 use ark_ff::{PrimeField, Zero};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;

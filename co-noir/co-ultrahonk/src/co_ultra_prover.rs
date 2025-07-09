@@ -1,7 +1,7 @@
 use crate::{
     CONST_PROOF_SIZE_LOG_N,
-    co_decider::{prover::CoDecider, types::ProverMemory},
-    co_oink::prover::CoOink,
+    co_decider::{co_decider_prover::CoDecider, types::ProverMemory},
+    co_oink::co_oink_prover::CoOink,
     key::proving_key::ProvingKey,
     mpc_prover_flavour::MPCProverFlavour,
 };

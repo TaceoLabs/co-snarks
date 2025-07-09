@@ -1,11 +1,11 @@
 use super::{
-    super::{prover::Decider, sumcheck::SumcheckOutput},
+    super::{decider_prover::Decider, sumcheck::SumcheckOutput},
     types::{PolyF, PolyG},
 };
 use crate::plain_prover_flavour::PlainProverFlavour;
 use crate::{
-    NUM_INTERLEAVING_CLAIMS, NUM_SMALL_IPA_EVALUATIONS, Utils, decider::verifier::DeciderVerifier,
-    types::AllEntities,
+    NUM_INTERLEAVING_CLAIMS, NUM_SMALL_IPA_EVALUATIONS, Utils,
+    decider::decider_verifier::DeciderVerifier, types::AllEntities,
 };
 use ark_ec::AffineRepr;
 use ark_ff::{Field, One, Zero};

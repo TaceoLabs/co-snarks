@@ -1,9 +1,9 @@
 use crate::{
-    builder::GenericUltraCircuitBuilder,
     types::{
         field_ct::FieldCT,
         types::{AddQuad, Poseidon2ExternalGate, Poseidon2InternalGate},
     },
+    ultra_builder::GenericUltraCircuitBuilder,
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
