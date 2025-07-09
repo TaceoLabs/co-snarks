@@ -90,7 +90,7 @@ pub fn a2b<F: PrimeField, N: Network>(
     detail::low_depth_binary_add_mod_p::<F, N>(&x01, &x2, net, state, F::MODULUS_BIT_SIZE as usize)
 }
 
-/// Transforms the provided replicated shared values from an arithmetic sharing to a binary sharing. I.e., x = x_1 + x_2 + x_3 gets transformed into x = x'_1 xor x'_2 xor x'_3. Reduces the mul-depth by batching all elements together.
+/// A variant of [a2b] that operates on vectors of shared values instead.
 pub fn a2b_many<F: PrimeField, N: Network>(
     x: &[Rep3PrimeFieldShare<F>],
     net: &N,
@@ -99,12 +99,10 @@ pub fn a2b_many<F: PrimeField, N: Network>(
     let mut x2 = vec![Rep3BigUintShare::zero_share(); x.len()];
 
     let mut r_vec = Vec::with_capacity(x.len());
-    // let mut r2_vec = Vec::with_capacity(x.len());
     for _ in 0..x.len() {
         let (mut r, r2) = state.rngs.rand.random_biguint(F::MODULUS_BIT_SIZE as usize);
         r ^= &r2;
         r_vec.push(r);
-        // r2_vec.push(r2);
     }
 
     let x01_a = match state.id {
@@ -213,13 +211,12 @@ pub fn b2a<F: PrimeField, N: Network>(
     Ok(res)
 }
 
-/// TODO
+/// A variant of [b2a] that operates on vectors of shared values instead.
 pub fn b2a_many<F: PrimeField, N: Network>(
     x: &[Rep3BigUintShare<F>],
     net: &N,
     state: &mut Rep3State,
 ) -> eyre::Result<Vec<Rep3PrimeFieldShare<F>>> {
-    // let mut y = vec![Rep3BigUintShare::zero_share(); x.len()];
     let mut res = vec![Rep3PrimeFieldShare::zero_share(); x.len()];
 
     let mut r_vec = Vec::with_capacity(x.len());

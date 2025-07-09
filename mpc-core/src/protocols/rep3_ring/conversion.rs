@@ -218,7 +218,7 @@ where
     Ok(res)
 }
 
-/// TODO
+/// A variant of [b2a] that operates on vectors of shared values instead.
 pub fn b2a_many<T: IntRing2k, N: Network>(
     x: &[Rep3RingShare<T>],
     net: &N,
@@ -227,7 +227,6 @@ pub fn b2a_many<T: IntRing2k, N: Network>(
 where
     Standard: Distribution<T>,
 {
-    // let mut y = vec![Rep3RingShare::zero_share(); x.len()];
     let mut res = vec![Rep3RingShare::zero_share(); x.len()];
 
     let mut r_vec = Vec::with_capacity(x.len());
