@@ -8,7 +8,9 @@ use std::{
     time::Duration,
 };
 
-use crate::{DEFAULT_CONNECTION_TIMEOUT, DEFAULT_MAX_FRAME_LENTH, Network, config::Address};
+use crate::{
+    ConnectionStats, DEFAULT_CONNECTION_TIMEOUT, DEFAULT_MAX_FRAME_LENTH, Network, config::Address,
+};
 use bytes::Bytes;
 use eyre::{Context as _, ContextCompat};
 use futures::{SinkExt, StreamExt as _};
@@ -464,19 +466,6 @@ impl QuicNetwork {
             timeout,
         })
     }
-
-    /// Prints the connection statistics.
-    pub fn print_connection_stats(&self, out: &mut impl std::io::Write) -> std::io::Result<()> {
-        for (id, conn) in &self.conn_handler.connections {
-            let stats = conn.stats();
-            writeln!(
-                out,
-                "Party {} <-> Party {} SENT: {} bytes RECV: {} bytes",
-                self.id, id, stats.udp_tx.bytes, stats.udp_rx.bytes
-            )?;
-        }
-        Ok(())
-    }
 }
 
 impl Network for QuicNetwork {
@@ -504,5 +493,23 @@ impl Network for QuicNetwork {
             .context("party id out-of-bounds")?
             .lock();
         queue.blocking_recv().context("while recv")
+    }
+
+    fn get_connection_stats(&self) -> ConnectionStats {
+        let mut stats = std::collections::BTreeMap::new();
+        for (id, conn) in &self.conn_handler.connections {
+            let conn_stats = conn.stats();
+            stats.insert(
+                *id,
+                (
+                    conn_stats.udp_tx.bytes as usize,
+                    conn_stats.udp_rx.bytes as usize,
+                ),
+            );
+        }
+        ConnectionStats {
+            my_id: self.id,
+            stats,
+        }
     }
 }

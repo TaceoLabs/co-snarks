@@ -6,7 +6,7 @@ use crossbeam_channel::{Receiver, Sender};
 use eyre::ContextCompat;
 use intmap::IntMap;
 
-use crate::{DEFAULT_CONNECTION_TIMEOUT, Network};
+use crate::{ConnectionStats, DEFAULT_CONNECTION_TIMEOUT, Network};
 
 /// A MPC network using channels. Used for testing.
 #[derive(Debug)]
@@ -50,22 +50,6 @@ impl LocalNetwork {
     pub fn new_3_parties() -> [Self; 3] {
         Self::new(3).try_into().expect("correct len")
     }
-
-    /// Prints the connection statistics.
-    pub fn print_connection_stats(&self, out: &mut impl std::io::Write) -> std::io::Result<()> {
-        for (id, (_, sent_bytes)) in self.send.iter() {
-            let recv_bytes = &self.recv.get(id).expect("was in send so must be in recv").1;
-            writeln!(
-                out,
-                "Party {} <-> Party {} SENT: {} bytes RECV: {} bytes",
-                self.id,
-                id,
-                sent_bytes.load(std::sync::atomic::Ordering::Relaxed),
-                recv_bytes.load(std::sync::atomic::Ordering::Relaxed),
-            )?;
-        }
-        Ok(())
-    }
 }
 
 impl Network for LocalNetwork {
@@ -85,5 +69,23 @@ impl Network for LocalNetwork {
         let data = receiver.recv_timeout(DEFAULT_CONNECTION_TIMEOUT)?;
         recv_bytes.fetch_add(data.len(), std::sync::atomic::Ordering::Relaxed);
         Ok(data)
+    }
+
+    fn get_connection_stats(&self) -> ConnectionStats {
+        let mut stats = std::collections::BTreeMap::new();
+        for (id, (_, sent_bytes)) in self.send.iter() {
+            let recv_bytes = &self.recv.get(id).expect("was in send so must be in recv").1;
+            stats.insert(
+                id,
+                (
+                    sent_bytes.load(std::sync::atomic::Ordering::Relaxed),
+                    recv_bytes.load(std::sync::atomic::Ordering::Relaxed),
+                ),
+            );
+        }
+        ConnectionStats {
+            my_id: self.id,
+            stats,
+        }
     }
 }

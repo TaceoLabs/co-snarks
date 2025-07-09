@@ -10,7 +10,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{DEFAULT_CONNECTION_TIMEOUT, DEFAULT_MAX_FRAME_LENTH, Network, config::Address};
+use crate::{
+    ConnectionStats, DEFAULT_CONNECTION_TIMEOUT, DEFAULT_MAX_FRAME_LENTH, Network, config::Address,
+};
 use byteorder::{BigEndian, ReadBytesExt as _, WriteBytesExt as _};
 use crossbeam_channel::Receiver;
 use eyre::ContextCompat;
@@ -361,22 +363,6 @@ impl TlsNetwork {
 
         Ok(nets)
     }
-
-    /// Prints the connection statistics.
-    pub fn print_connection_stats(&self, out: &mut impl std::io::Write) -> std::io::Result<()> {
-        for (id, (_, sent_bytes)) in self.send.iter() {
-            let recv_bytes = &self.recv.get(id).expect("was in send so must be in recv").1;
-            writeln!(
-                out,
-                "Party {} <-> Party {} SENT: {} bytes RECV: {} bytes",
-                self.id,
-                id,
-                sent_bytes.load(std::sync::atomic::Ordering::Relaxed),
-                recv_bytes.load(std::sync::atomic::Ordering::Relaxed),
-            )?;
-        }
-        Ok(())
-    }
 }
 
 impl Network for TlsNetwork {
@@ -401,6 +387,24 @@ impl Network for TlsNetwork {
         let data = queue.recv_timeout(self.timeout)??;
         recv_bytes.fetch_add(data.len(), std::sync::atomic::Ordering::Relaxed);
         Ok(data)
+    }
+
+    fn get_connection_stats(&self) -> ConnectionStats {
+        let mut stats = std::collections::BTreeMap::new();
+        for (id, (_, sent_bytes)) in self.send.iter() {
+            let recv_bytes = &self.recv.get(id).expect("was in send so must be in recv").1;
+            stats.insert(
+                id,
+                (
+                    sent_bytes.load(std::sync::atomic::Ordering::Relaxed),
+                    recv_bytes.load(std::sync::atomic::Ordering::Relaxed),
+                ),
+            );
+        }
+        ConnectionStats {
+            my_id: self.id,
+            stats,
+        }
     }
 }
 
