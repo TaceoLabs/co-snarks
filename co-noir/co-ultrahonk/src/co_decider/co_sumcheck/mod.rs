@@ -1,5 +1,5 @@
-pub(crate) mod prover;
-pub(crate) mod round;
+pub(crate) mod co_sumcheck_prover;
+pub(crate) mod co_sumcheck_round;
 pub(crate) mod zk_data;
 
 use crate::mpc_prover_flavour::MPCProverFlavour;

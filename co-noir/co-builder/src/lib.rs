@@ -1,7 +1,6 @@
 #![warn(clippy::iter_over_hash_type)]
 
 pub(crate) mod acir_format;
-pub(crate) mod builder;
 pub(crate) mod crs;
 pub mod flavours;
 pub(crate) mod honk_curve;
@@ -11,6 +10,7 @@ pub mod prelude;
 pub mod prover_flavour;
 pub(crate) mod serialize;
 pub(crate) mod types;
+pub(crate) mod ultra_builder;
 pub(crate) mod utils;
 
 pub type TranscriptFieldType = ark_bn254::Fr;

@@ -5,7 +5,7 @@ use crate::{
     Utils,
     plain_prover_flavour::PlainProverFlavour,
     transcript::{Transcript, TranscriptHasher},
-    verifier::HonkVerifyResult,
+    ultra_verifier::HonkVerifyResult,
 };
 use ark_ec::AffineRepr;
 use ark_ff::{One, Zero};

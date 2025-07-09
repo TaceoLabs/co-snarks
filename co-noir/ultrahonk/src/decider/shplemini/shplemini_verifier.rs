@@ -7,12 +7,12 @@ use crate::{
     CONST_PROOF_SIZE_LOG_N, NUM_INTERLEAVING_CLAIMS, NUM_LIBRA_COMMITMENTS,
     NUM_SMALL_IPA_EVALUATIONS,
     decider::{
+        decider_verifier::DeciderVerifier,
         types::{ClaimedEvaluations, VerifierCommitments},
-        verifier::DeciderVerifier,
     },
     transcript::TranscriptFieldType,
     transcript::{Transcript, TranscriptHasher},
-    verifier::HonkVerifyResult,
+    ultra_verifier::HonkVerifyResult,
 };
 use ark_ec::AffineRepr;
 use ark_ff::{Field, One, Zero};

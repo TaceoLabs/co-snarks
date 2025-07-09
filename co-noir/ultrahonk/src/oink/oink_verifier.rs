@@ -1,9 +1,9 @@
 use super::types::VerifierMemory;
 use crate::{
-    oink::prover::Oink,
+    oink::oink_prover::Oink,
     plain_prover_flavour::PlainProverFlavour,
     transcript::{Transcript, TranscriptHasher},
-    verifier::HonkVerifyResult,
+    ultra_verifier::HonkVerifyResult,
 };
 use co_builder::TranscriptFieldType;
 use co_builder::prelude::{HonkCurve, VerifyingKey};

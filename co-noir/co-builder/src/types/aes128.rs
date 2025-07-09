@@ -3,8 +3,8 @@ use super::{
     types::WitnessOrConstant,
 };
 use crate::{
-    TranscriptFieldType, builder::GenericUltraCircuitBuilder, prelude::HonkCurve,
-    types::field_ct::FieldCT, utils::Utils,
+    TranscriptFieldType, prelude::HonkCurve, types::field_ct::FieldCT,
+    ultra_builder::GenericUltraCircuitBuilder, utils::Utils,
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;

@@ -1,5 +1,5 @@
 use super::field_ct::FieldCT;
-use crate::builder::GenericUltraCircuitBuilder;
+use crate::ultra_builder::GenericUltraCircuitBuilder;
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;

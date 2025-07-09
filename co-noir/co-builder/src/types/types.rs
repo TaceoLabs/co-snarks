@@ -1,6 +1,5 @@
 use super::big_field::BigGroup;
 use super::field_ct::{CycleGroupCT, FieldCT};
-use crate::builder::UltraCircuitBuilder;
 use crate::flavours::ultra_flavour::UltraFlavour;
 use crate::keys::proving_key::ProvingKey;
 use crate::polynomials::polynomial::Polynomial;
@@ -9,6 +8,7 @@ use crate::polynomials::polynomial_flavours::{
 };
 use crate::prelude::GenericUltraCircuitBuilder;
 use crate::prover_flavour::ProverFlavour;
+use crate::ultra_builder::UltraCircuitBuilder;
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
