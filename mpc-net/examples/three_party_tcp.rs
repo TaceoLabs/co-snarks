@@ -63,7 +63,10 @@ fn main() -> Result<()> {
         }
     }
 
-    network.print_connection_stats(&mut std::io::stdout())?;
+    println!(
+        "Network connection stats:\n{}",
+        network.get_connection_stats()
+    );
 
     Ok(())
 }
