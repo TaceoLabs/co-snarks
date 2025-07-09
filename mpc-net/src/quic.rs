@@ -346,7 +346,6 @@ impl QuicConnectionHandler {
 
             let codec = LengthDelimitedCodec::builder()
                 .length_field_type::<u64>()
-                .length_field_length(self.max_frame_length.ilog2() as usize)
                 .max_frame_length(self.max_frame_length)
                 .new_codec();
 
