@@ -1,4 +1,4 @@
-use crate::{builder::GenericUltraCircuitBuilder, types::field_ct::FieldCT};
+use crate::{types::field_ct::FieldCT, ultra_builder::GenericUltraCircuitBuilder};
 use ark_ec::pairing::Pairing;
 use ark_ff::{One, PrimeField};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;

@@ -1,6 +1,6 @@
-pub(crate) mod prover;
+pub(crate) mod shplemini_prover;
+pub(crate) mod shplemini_verifier;
 pub(crate) mod types;
-pub(crate) mod verifier;
 
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;

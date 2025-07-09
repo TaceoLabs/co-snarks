@@ -1,10 +1,10 @@
 use super::types::{AddQuad, EccDblGate, MulQuad};
 use crate::TranscriptFieldType;
-use crate::builder::GenericUltraCircuitBuilder;
 use crate::prelude::HonkCurve;
 use crate::types::generators;
 use crate::types::plookup::{ColumnIdx, Plookup};
 use crate::types::types::{AddTriple, EccAddGate, PolyTriple};
+use crate::ultra_builder::GenericUltraCircuitBuilder;
 use crate::utils::Utils;
 use ark_ec::pairing::Pairing;
 use ark_ec::{AffineRepr, CurveConfig, CurveGroup, PrimeGroup};

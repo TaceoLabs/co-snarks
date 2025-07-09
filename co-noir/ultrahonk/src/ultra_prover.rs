@@ -1,7 +1,7 @@
 use crate::{
     CONST_PROOF_SIZE_LOG_N,
-    decider::{prover::Decider, types::ProverMemory},
-    oink::prover::Oink,
+    decider::{decider_prover::Decider, types::ProverMemory},
+    oink::oink_prover::Oink,
     plain_prover_flavour::PlainProverFlavour,
     transcript::{Transcript, TranscriptFieldType, TranscriptHasher},
     types::HonkProof,

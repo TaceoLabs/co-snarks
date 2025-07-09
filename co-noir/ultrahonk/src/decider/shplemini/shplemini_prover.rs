@@ -1,12 +1,12 @@
 use super::{
-    super::{prover::Decider, sumcheck::SumcheckOutput},
+    super::{decider_prover::Decider, sumcheck::SumcheckOutput},
     ShpleminiOpeningClaim,
     types::{PolyF, PolyG},
 };
 use crate::plain_prover_flavour::PlainProverFlavour;
 use crate::{
     NUM_INTERLEAVING_CLAIMS, NUM_SMALL_IPA_EVALUATIONS, Utils,
-    decider::{shplemini::OpeningPair, verifier::DeciderVerifier},
+    decider::{decider_verifier::DeciderVerifier, shplemini::OpeningPair},
     transcript::{Transcript, TranscriptFieldType, TranscriptHasher},
     types::AllEntities,
 };

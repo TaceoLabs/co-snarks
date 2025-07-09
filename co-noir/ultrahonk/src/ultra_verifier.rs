@@ -1,11 +1,11 @@
 use crate::{
-    decider::{types::VerifierMemory, verifier::DeciderVerifier},
-    oink::verifier::OinkVerifier,
+    decider::{decider_verifier::DeciderVerifier, types::VerifierMemory},
+    oink::oink_verifier::OinkVerifier,
     plain_prover_flavour::PlainProverFlavour,
-    prover::UltraHonk,
     transcript::TranscriptFieldType,
     transcript::{Transcript, TranscriptHasher},
     types::HonkProof,
+    ultra_prover::UltraHonk,
 };
 use co_builder::prelude::{HonkCurve, VerifyingKey, ZeroKnowledge};
 

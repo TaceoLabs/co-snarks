@@ -1,12 +1,12 @@
 use crate::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use crate::{
     HonkProofError, HonkProofResult, TranscriptFieldType,
-    builder::UltraCircuitBuilder,
     crs::ProverCrs,
     flavours::ultra_flavour::UltraFlavour,
     honk_curve::HonkCurve,
     prover_flavour::ProverFlavour,
     serialize::{Serialize, SerializeP},
+    ultra_builder::UltraCircuitBuilder,
     utils::Utils,
 };
 use ark_ec::{AffineRepr, pairing::Pairing};

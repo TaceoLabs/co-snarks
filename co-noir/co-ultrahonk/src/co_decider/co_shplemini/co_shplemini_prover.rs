@@ -3,10 +3,10 @@ use crate::mpc_prover_flavour::MPCProverFlavour;
 use crate::{
     CoUtils,
     co_decider::{
+        co_decider_prover::CoDecider,
         co_shplemini::{OpeningPair, ShpleminiOpeningClaim},
         co_sumcheck::SumcheckOutput,
         polynomial::SharedPolynomial,
-        prover::CoDecider,
     },
     mpc::NoirUltraHonkProver,
     types::AllEntities,
