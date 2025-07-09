@@ -94,6 +94,54 @@ where
     detail::low_depth_binary_add(&x01, &x2, net, state)
 }
 
+/// Transforms the replicated shared value x from an arithmetic sharing to a binary sharing. I.e., x = x_1 + x_2 + x_3 gets transformed into x = x'_1 xor x'_2 xor x'_3.
+pub fn a2b_many<T: IntRing2k, N: Network>(
+    x: &[Rep3RingShare<T>],
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Vec<Rep3RingShare<T>>>
+where
+    Standard: Distribution<T>,
+{
+    let mut x2 = vec![Rep3RingShare::zero_share(); x.len()];
+
+    let mut r_vec = Vec::with_capacity(x.len());
+    for _ in 0..x.len() {
+        let (mut r, r2) = state.rngs.rand.random_elements::<RingElement<T>>();
+        r ^= &r2;
+        r_vec.push(r);
+    }
+
+    let x01_a = match state.id {
+        PartyID::ID0 => {
+            for (x2, x) in izip!(x2.iter_mut(), x) {
+                x2.b = x.b;
+            }
+            r_vec
+        }
+
+        PartyID::ID1 => izip!(x, r_vec)
+            .map(|(x, r)| {
+                let tmp = x.a + x.b;
+                tmp ^ r
+            })
+            .collect(),
+        PartyID::ID2 => {
+            for (x2, x) in izip!(x2.iter_mut(), x) {
+                x2.a = x.a;
+            }
+            r_vec
+        }
+    };
+
+    // reshare x01
+    let x01_b = network::reshare_many(net, &x01_a)?;
+    let x01 = izip!(x01_a, x01_b)
+        .map(|(a, b)| Rep3RingShare::new_ring(a, b))
+        .collect::<Vec<_>>();
+    detail::low_depth_binary_add_many(&x01, &x2, net, state)
+}
+
 /// Transforms the replicated shared value x from a binary sharing to an arithmetic sharing. I.e., x = x_1 xor x_2 xor x_3 gets transformed into x = x'_1 + x'_2 + x'_3.
 pub fn b2a<T: IntRing2k, N: Network>(
     x: &Rep3RingShare<T>,
@@ -165,6 +213,100 @@ where
         }
         PartyID::ID2 => {
             network::send_next(net, z.b)?;
+        }
+    }
+    Ok(res)
+}
+
+/// A variant of [b2a] that operates on vectors of shared values instead.
+pub fn b2a_many<T: IntRing2k, N: Network>(
+    x: &[Rep3RingShare<T>],
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Vec<Rep3RingShare<T>>>
+where
+    Standard: Distribution<T>,
+{
+    let mut res = vec![Rep3RingShare::zero_share(); x.len()];
+
+    let mut r_vec = Vec::with_capacity(x.len());
+    for _ in 0..x.len() {
+        let (mut r, r2) = state.rngs.rand.random_elements::<RingElement<T>>();
+        r ^= r2;
+        r_vec.push(r);
+    }
+    match state.id {
+        PartyID::ID0 => {
+            for res in res.iter_mut() {
+                let k3 = state
+                    .rngs
+                    .bitcomp2
+                    .random_elements_3keys::<RingElement<T>>();
+
+                res.b = (k3.0 + k3.1 + k3.2).neg();
+            }
+        }
+        PartyID::ID1 => {
+            for res in res.iter_mut() {
+                let k2 = state
+                    .rngs
+                    .bitcomp1
+                    .random_elements_3keys::<RingElement<T>>();
+
+                res.a = (k2.0 + k2.1 + k2.2).neg();
+            }
+        }
+        PartyID::ID2 => {
+            for (res, y) in res.iter_mut().zip(r_vec.iter_mut()) {
+                let k2 = state
+                    .rngs
+                    .bitcomp1
+                    .random_elements_3keys::<RingElement<T>>();
+                let k3 = state
+                    .rngs
+                    .bitcomp2
+                    .random_elements_3keys::<RingElement<T>>();
+
+                let k2_comp = k2.0 + k2.1 + k2.2;
+                let k3_comp = k3.0 + k3.1 + k3.2;
+                let val = k2_comp + k3_comp;
+                *y ^= val;
+                res.a = k3_comp.neg();
+                res.b = k2_comp.neg();
+            }
+        }
+    }
+
+    // reshare y
+    let y_a = r_vec;
+    network::send_next_many(net, &y_a)?;
+    let local_b = network::recv_prev_many(net)?;
+
+    let y = izip!(y_a, local_b)
+        .map(|(a, b)| Rep3RingShare::new_ring(a, b))
+        .collect::<Vec<_>>();
+
+    let z = detail::low_depth_binary_add_many(x, &y, net, state)?;
+
+    match state.id {
+        PartyID::ID0 => {
+            let z_b = z.iter().cloned().map(|z| z.b).collect::<Vec<_>>();
+            network::send_next_many(net, &z_b)?;
+            let rcv: Vec<RingElement<T>> = network::recv_prev_many(net)?;
+
+            for (res, z, rcv) in izip!(res.iter_mut(), z, rcv.iter()) {
+                res.a = z.a ^ z.b ^ rcv;
+            }
+        }
+        PartyID::ID1 => {
+            let rcv: Vec<RingElement<T>> = network::recv_prev_many(net)?;
+            for (res, z, rcv) in izip!(res.iter_mut(), z, rcv.iter()) {
+                res.b = z.a ^ z.b ^ rcv;
+            }
+        }
+        PartyID::ID2 => {
+            let z_b = z.into_iter().map(|z| z.b).collect::<Vec<_>>();
+            network::send_next_many(net, &z_b)?;
         }
     }
     Ok(res)

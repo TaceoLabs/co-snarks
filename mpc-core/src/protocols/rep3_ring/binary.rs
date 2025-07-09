@@ -7,7 +7,7 @@ use super::{
     ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
 };
 use crate::protocols::rep3::{Rep3State, id::PartyID, network};
-use itertools::izip;
+use itertools::{Itertools, izip};
 use mpc_net::Network;
 use num_traits::{One, Zero};
 use rand::{distributions::Standard, prelude::Distribution};
@@ -75,6 +75,29 @@ where
     let local_a = (a & b) ^ mask;
     let local_b = network::reshare(net, local_a)?;
     Ok(RingShare::new_ring(local_a, local_b))
+}
+
+/// Performs element-wise bitwise AND operation on the provided shared values.
+pub fn and_vec<T: IntRing2k, N: Network>(
+    a: &[RingShare<T>],
+    b: &[RingShare<T>],
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Vec<RingShare<T>>>
+where
+    Standard: Distribution<T>,
+{
+    let local_a = izip!(a, b)
+        .map(|(a, b)| {
+            let (mut mask, mask_b) = state.rngs.rand.random_elements::<RingElement<T>>();
+            mask ^= mask_b;
+            (a & b) ^ mask
+        })
+        .collect_vec();
+    let local_b = network::reshare(net, local_a.clone())?;
+    Ok(izip!(local_a, local_b)
+        .map(|(a, b)| RingShare::new_ring(a, b))
+        .collect_vec())
 }
 
 /// Performs a bitwise AND operation on a shared value and a public value.

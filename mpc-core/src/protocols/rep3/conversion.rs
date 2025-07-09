@@ -2,7 +2,7 @@
 //!
 //! This module contains conversions between share types
 
-use crate::protocols::rep3::PartyID;
+use crate::protocols::rep3::{PartyID, arithmetic::BinaryShare};
 
 use super::{
     Rep3BigUintShare, Rep3PointShare, Rep3PrimeFieldShare, Rep3State, arithmetic, detail,
@@ -90,7 +90,7 @@ pub fn a2b<F: PrimeField, N: Network>(
     detail::low_depth_binary_add_mod_p::<F, N>(&x01, &x2, net, state, F::MODULUS_BIT_SIZE as usize)
 }
 
-/// Transforms the provided replicated shared values from an arithmetic sharing to a binary sharing. I.e., x = x_1 + x_2 + x_3 gets transformed into x = x'_1 xor x'_2 xor x'_3. Reduces the mul-depth by batching all elements together.
+/// A variant of [a2b] that operates on vectors of shared values instead.
 pub fn a2b_many<F: PrimeField, N: Network>(
     x: &[Rep3PrimeFieldShare<F>],
     net: &N,
@@ -99,12 +99,10 @@ pub fn a2b_many<F: PrimeField, N: Network>(
     let mut x2 = vec![Rep3BigUintShare::zero_share(); x.len()];
 
     let mut r_vec = Vec::with_capacity(x.len());
-    let mut r2_vec = Vec::with_capacity(x.len());
     for _ in 0..x.len() {
         let (mut r, r2) = state.rngs.rand.random_biguint(F::MODULUS_BIT_SIZE as usize);
         r ^= &r2;
         r_vec.push(r);
-        r2_vec.push(r2);
     }
 
     let x01_a = match state.id {
@@ -208,6 +206,91 @@ pub fn b2a<F: PrimeField, N: Network>(
         }
         PartyID::ID2 => {
             network::send_next(net, z.b)?;
+        }
+    }
+    Ok(res)
+}
+
+/// A variant of [b2a] that operates on vectors of shared values instead.
+pub fn b2a_many<F: PrimeField, N: Network>(
+    x: &[Rep3BigUintShare<F>],
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Vec<Rep3PrimeFieldShare<F>>> {
+    let mut res = vec![Rep3PrimeFieldShare::zero_share(); x.len()];
+
+    let mut r_vec = Vec::with_capacity(x.len());
+    for _ in 0..x.len() {
+        let (mut r, r2) = state.rngs.rand.random_biguint(F::MODULUS_BIT_SIZE as usize);
+        r ^= r2;
+        r_vec.push(r);
+    }
+    match state.id {
+        PartyID::ID0 => {
+            for res in res.iter_mut() {
+                let k3 = state.rngs.bitcomp2.random_fes_3keys::<F>();
+
+                res.b = (k3.0 + k3.1 + k3.2).neg();
+            }
+        }
+        PartyID::ID1 => {
+            for res in res.iter_mut() {
+                let k2 = state.rngs.bitcomp1.random_fes_3keys::<F>();
+
+                res.a = (k2.0 + k2.1 + k2.2).neg();
+            }
+        }
+        PartyID::ID2 => {
+            for (res, y) in res.iter_mut().zip(r_vec.iter_mut()) {
+                let k2 = state.rngs.bitcomp1.random_fes_3keys::<F>();
+                let k3 = state.rngs.bitcomp2.random_fes_3keys::<F>();
+
+                let k2_comp = k2.0 + k2.1 + k2.2;
+                let k3_comp = k3.0 + k3.1 + k3.2;
+                let val: BigUint = (k2_comp + k3_comp).into();
+                *y ^= val;
+                res.a = k3_comp.neg();
+                res.b = k2_comp.neg();
+            }
+        }
+    }
+
+    // reshare y
+    let y_a = r_vec;
+    network::send_next_many(net, &y_a)?;
+    let local_b = network::recv_prev_many(net)?;
+
+    let y = izip!(y_a, local_b)
+        .map(|(a, b)| BinaryShare::new(a, b))
+        .collect_vec();
+
+    let z = detail::low_depth_binary_add_mod_p_many::<F, N>(
+        x,
+        &y,
+        net,
+        state,
+        F::MODULUS_BIT_SIZE as usize,
+    )?;
+
+    match state.id {
+        PartyID::ID0 => {
+            let z_b = z.iter().cloned().map(|z| z.b).collect::<Vec<_>>();
+            network::send_next_many(net, &z_b)?;
+            let rcv: Vec<BigUint> = network::recv_prev_many(net)?;
+
+            for (res, z, rcv) in izip!(res.iter_mut(), z, rcv.iter()) {
+                res.a = (z.a ^ z.b ^ rcv).into();
+            }
+        }
+        PartyID::ID1 => {
+            let rcv: Vec<BigUint> = network::recv_prev_many(net)?;
+            for (res, z, rcv) in izip!(res.iter_mut(), z, rcv.iter()) {
+                res.b = (z.a ^ z.b ^ rcv).into();
+            }
+        }
+        PartyID::ID2 => {
+            let z_b = z.into_iter().map(|z| z.b).collect::<Vec<_>>();
+            network::send_next_many(net, &z_b)?;
         }
     }
     Ok(res)
