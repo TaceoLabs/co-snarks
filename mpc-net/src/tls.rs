@@ -107,6 +107,19 @@ pub struct NetworkConfig {
     pub max_frame_length: Option<usize>,
 }
 
+impl Clone for NetworkConfig {
+    fn clone(&self) -> Self {
+        Self {
+            parties: self.parties.clone(),
+            my_id: self.my_id,
+            bind_addr: self.bind_addr,
+            key: self.key.clone_key(),
+            timeout: self.timeout,
+            max_frame_length: self.max_frame_length,
+        }
+    }
+}
+
 impl NetworkConfig {
     /// Construct a new [`NetworkConfig`] type.
     pub fn new(
