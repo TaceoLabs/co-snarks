@@ -1,9 +1,14 @@
 use crate::{key::proving_key::ProvingKey, mpc::NoirUltraHonkProver};
 use ark_ec::pairing::Pairing;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use co_builder::prelude::{
-    ActiveRegionData, CycleNode, CyclicPermutation, GenericUltraCircuitBuilder, NUM_SELECTORS,
-    NUM_WIRES, Polynomial,
+use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
+use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
+use co_builder::{
+    flavours::ultra_flavour::UltraFlavour,
+    prelude::{
+        ActiveRegionData, CycleNode, CyclicPermutation, GenericUltraCircuitBuilder, NUM_SELECTORS,
+        NUM_WIRES, Polynomial,
+    },
 };
 use mpc_core::MpcState;
 
@@ -20,7 +25,7 @@ impl<'a, T: NoirUltraHonkProver<P>, P: Pairing> TraceData<'a, T, P> {
         U: NoirWitnessExtensionProtocol<P::ScalarField, ArithmeticShare = T::ArithmeticShare>,
     >(
         builder: &GenericUltraCircuitBuilder<P, U>,
-        proving_key: &'a mut ProvingKey<T, P>,
+        proving_key: &'a mut ProvingKey<T, P, UltraFlavour>,
     ) -> Self {
         let mut iter = proving_key.polynomials.witness.get_wires_mut().iter_mut();
         let wires = [

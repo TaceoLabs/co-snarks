@@ -1,22 +1,27 @@
 use super::{ProverUnivariatesBatch, Relation};
 use crate::{
     co_decider::{
-        relations::fold_accumulator,
-        types::{MAX_PARTIAL_RELATION_LENGTH, RelationParameters},
-        univariates::SharedUnivariate,
+        relations::fold_accumulator, types::RelationParameters, univariates::SharedUnivariate,
     },
     mpc::NoirUltraHonkProver,
+    mpc_prover_flavour::MPCProverFlavour,
 };
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use ark_ff::Zero;
-use co_builder::HonkProofResult;
+use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::prelude::HonkCurve;
+use co_builder::{
+    HonkProofResult, polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour,
+};
+use co_builder::{
+    TranscriptFieldType, polynomials::polynomial_flavours::PrecomputedEntitiesFlavour,
+};
 use itertools::Itertools as _;
 use mpc_core::MpcState as _;
 use mpc_net::Network;
 use num_bigint::BigUint;
-use ultrahonk::prelude::{TranscriptFieldType, Univariate};
+use ultrahonk::prelude::Univariate;
 
 /**
  * AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/757): Investigate optimizations.
@@ -121,18 +126,18 @@ impl AuxiliaryRelation {
     pub(crate) const CRAND_PAIRS_FACTOR: usize = 12;
 }
 
-impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P>
-    for AuxiliaryRelation
+impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverFlavour>
+    Relation<T, P, L> for AuxiliaryRelation
 {
     type Acc = AuxiliaryRelationAcc<T, P>;
 
-    fn can_skip(entity: &super::ProverUnivariates<T, P>) -> bool {
+    fn can_skip(entity: &super::ProverUnivariates<T, P, L>) -> bool {
         entity.precomputed.q_aux().is_zero()
     }
 
-    fn add_entites(
-        entity: &super::ProverUnivariates<T, P>,
-        batch: &mut ProverUnivariatesBatch<T, P>,
+    fn add_entities(
+        entity: &super::ProverUnivariates<T, P, L>,
+        batch: &mut ProverUnivariatesBatch<T, P, L>,
     ) {
         batch.add_w_l(entity);
         batch.add_w_r(entity);
@@ -188,12 +193,12 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
      * @param parameters contains beta, gamma, and public_input_delta, ....
      * @param scaling_factor optional term to scale the evaluation before adding to evals.
      */
-    fn accumulate<N: Network>(
+    fn accumulate<N: Network, const SIZE: usize>(
         net: &N,
         state: &mut T::State,
         univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariatesBatch<T, P>,
-        relation_parameters: &RelationParameters<<P>::ScalarField>,
+        input: &ProverUnivariatesBatch<T, P, L>,
+        relation_parameters: &RelationParameters<<P>::ScalarField, L>,
         scaling_factors: &[P::ScalarField],
     ) -> HonkProofResult<()> {
         let id = state.id();
@@ -440,14 +445,14 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
             adjacent_values_match_if_adjacent_indices_match,
         ); // deg 5
 
-        fold_accumulator!(univariate_accumulator.r1, tmp);
+        fold_accumulator!(univariate_accumulator.r1, tmp, SIZE);
 
         let tmp = T::mul_with_public_many(
             &q_one_by_two_by_aux_by_scaling,
             &index_is_monotonically_increasing,
         ); // deg 5
 
-        fold_accumulator!(univariate_accumulator.r2, tmp);
+        fold_accumulator!(univariate_accumulator.r2, tmp, SIZE);
 
         let rom_consistency_check_identity =
             T::mul_with_public_many(&q_one_by_two, &memory_record_check); // deg 3 or 4
@@ -509,21 +514,21 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
 
         // Putting it all together...
 
-        fold_accumulator!(univariate_accumulator.r3, tmp);
+        fold_accumulator!(univariate_accumulator.r3, tmp, SIZE);
 
         let tmp = T::mul_with_public_many(
             &q_arith_by_aux_and_scaling,
             &index_is_monotonically_increasing,
         );
 
-        fold_accumulator!(univariate_accumulator.r4, tmp);
+        fold_accumulator!(univariate_accumulator.r4, tmp, SIZE);
 
         let tmp = T::mul_with_public_many(
             &q_arith_by_aux_and_scaling,
             &next_gate_access_type_is_boolean,
         );
 
-        fold_accumulator!(univariate_accumulator.r5, tmp);
+        fold_accumulator!(univariate_accumulator.r5, tmp, SIZE);
 
         T::mul_assign_with_public_many(&mut ram_consistency_check_identity, q_arith);
         /*
@@ -566,7 +571,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         T::add_assign_many(&mut memory_identity, &limb_accumulator_identity);
         T::mul_assign_with_public_many(&mut memory_identity, &q_aux_by_scaling);
 
-        fold_accumulator!(univariate_accumulator.r0, memory_identity);
+        fold_accumulator!(univariate_accumulator.r0, memory_identity, SIZE);
         Ok(())
     }
 }

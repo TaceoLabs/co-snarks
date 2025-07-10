@@ -11,11 +11,14 @@ use co_acvm::{
     PlainAcvmSolver, Rep3AcvmSolver, ShamirAcvmSolver,
     solver::{Rep3CoSolver, partial_abi::PublicMarker},
 };
-use co_ultrahonk::prelude::{HonkCurve, ProverCrs, ProverWitnessEntities, TranscriptFieldType};
+use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
+use co_builder::prover_flavour::ProverFlavour;
+use co_builder::{TranscriptFieldType, flavours::ultra_flavour::UltraFlavour};
+use co_ultrahonk::prelude::{HonkCurve, ProverCrs};
 use color_eyre::eyre::{self, Context, Result};
 use mpc_core::protocols::{
     rep3::{self, conversion::A2BType, id::PartyID},
-    shamir::{self, ShamirPreprocessing, ShamirState},
+    shamir::{self, ShamirPreprocessing, ShamirPrimeFieldShare, ShamirState},
 };
 
 use mpc_net::Network;
@@ -30,10 +33,9 @@ pub use co_acvm::{Rep3AcvmType, ShamirAcvmType};
 pub use co_ultrahonk::{
     Rep3CoBuilder, ShamirCoBuilder,
     prelude::{
-        AcirFormat, CrsParser, HonkRecursion, PROVER_WITNESS_ENTITIES_SIZE, PlainProvingKey,
-        Polynomial, Polynomials, Poseidon2Sponge, Rep3CoUltraHonk, Rep3ProvingKey,
-        ShamirCoUltraHonk, ShamirProvingKey, UltraCircuitBuilder, UltraHonk, Utils, VerifyingKey,
-        VerifyingKeyBarretenberg,
+        AcirFormat, CrsParser, HonkRecursion, PlainProvingKey, Polynomial, Polynomials,
+        Poseidon2Sponge, Rep3CoUltraHonk, Rep3ProvingKey, ShamirCoUltraHonk, ShamirProvingKey,
+        UltraCircuitBuilder, UltraHonk, VerifyingKey, VerifyingKeyBarretenberg,
     },
 };
 pub use sha3::Keccak256;
@@ -195,12 +197,15 @@ pub fn translate_witness<P: Pairing, N: Network>(
     Ok(result)
 }
 
+type ShamirProverWitnessEntities<T> =
+    <UltraFlavour as ProverFlavour>::ProverWitnessEntities<Polynomial<ShamirPrimeFieldShare<T>>>;
+
 /// Translate a REP3 shared proving key to a shamir shared proving key
 #[allow(clippy::complexity)]
 pub fn translate_proving_key<P: Pairing, N: Network>(
-    proving_key: Rep3ProvingKey<P>,
+    proving_key: Rep3ProvingKey<P, UltraFlavour>,
     net: &N,
-) -> Result<ShamirProvingKey<P>> {
+) -> Result<ShamirProvingKey<P, UltraFlavour>> {
     // extract shares
     let shares = proving_key
         .polynomials
@@ -219,7 +224,9 @@ pub fn translate_proving_key<P: Pairing, N: Network>(
     // Translate witness to shamir shares
     let translated_shares = state.translate_primefield_repshare_vec(shares, net)?;
 
-    if translated_shares.len() != PROVER_WITNESS_ENTITIES_SIZE * proving_key.circuit_size as usize {
+    if translated_shares.len()
+        != UltraFlavour::PROVER_WITNESS_ENTITIES_SIZE * proving_key.circuit_size as usize
+    {
         eyre::bail!("Invalid number of shares translated");
     };
 
@@ -229,7 +236,7 @@ pub fn translate_proving_key<P: Pairing, N: Network>(
     });
 
     let polynomials = Polynomials {
-        witness: ProverWitnessEntities {
+        witness: ShamirProverWitnessEntities::<_> {
             elements: translated_shares,
         },
         precomputed: proving_key.polynomials.precomputed,
@@ -273,7 +280,7 @@ pub fn generate_proving_key_rep3<N: Network>(
     recursive: bool,
     net0: &N,
     net1: &N,
-) -> Result<Rep3ProvingKey<Bn254>> {
+) -> Result<Rep3ProvingKey<Bn254, UltraFlavour>> {
     let id = PartyID::try_from(net0.id())?;
     let mut driver = Rep3AcvmSolver::new(net0, net1, A2BType::default())?;
     // create the circuit
@@ -298,7 +305,7 @@ pub fn generate_proving_key_shamir<N: Network>(
     witness_share: Vec<ShamirAcvmType<ark_bn254::Fr>>,
     recursive: bool,
     net: &N,
-) -> Result<ShamirProvingKey<Bn254>> {
+) -> Result<ShamirProvingKey<Bn254, UltraFlavour>> {
     let id = net.id();
     // We have to handle precomputation on the fly, so amount is 0 initially
     let preprocessing = ShamirPreprocessing::new(num_parties, threshold, 0, net)?;
@@ -323,7 +330,7 @@ pub fn generate_proving_key_plain<P: HonkCurve<TranscriptFieldType>>(
     witness: Vec<P::ScalarField>,
     prover_crs: Arc<ProverCrs<P>>,
     recursive: bool,
-) -> Result<PlainProvingKey<P>> {
+) -> Result<PlainProvingKey<P, UltraFlavour>> {
     let mut driver = PlainAcvmSolver::new();
     let builder = UltraCircuitBuilder::create_circuit(
         constraint_system,
@@ -346,7 +353,7 @@ pub fn generate_vk<P: HonkCurve<TranscriptFieldType>>(
     prover_crs: Arc<ProverCrs<P>>,
     verifier_crs: P::G2Affine,
     recursive: bool,
-) -> Result<VerifyingKey<P>> {
+) -> Result<VerifyingKey<P, UltraFlavour>> {
     let mut driver = PlainAcvmSolver::new();
     let circuit = UltraCircuitBuilder::<P>::create_circuit(
         constraint_system,
@@ -370,7 +377,7 @@ pub fn generate_vk_barretenberg<P: HonkCurve<TranscriptFieldType>>(
     constraint_system: &AcirFormat<P::ScalarField>,
     prover_crs: Arc<ProverCrs<P>>,
     recursive: bool,
-) -> Result<VerifyingKeyBarretenberg<P>> {
+) -> Result<VerifyingKeyBarretenberg<P, UltraFlavour>> {
     let mut driver = PlainAcvmSolver::new();
     let circuit = UltraCircuitBuilder::create_circuit(
         constraint_system,
@@ -385,9 +392,9 @@ pub fn generate_vk_barretenberg<P: HonkCurve<TranscriptFieldType>>(
 
 /// Split a proving key into RPE3 shares
 pub fn split_proving_key_rep3<P: Pairing, R: Rng + CryptoRng>(
-    proving_key: PlainProvingKey<P>,
+    proving_key: PlainProvingKey<P, UltraFlavour>,
     rng: &mut R,
-) -> Result<[Rep3ProvingKey<P>; 3]> {
+) -> Result<[Rep3ProvingKey<P, UltraFlavour>; 3]> {
     let witness_entities = proving_key
         .polynomials
         .witness
@@ -412,11 +419,11 @@ pub fn split_proving_key_rep3<P: Pairing, R: Rng + CryptoRng>(
 
 /// Split a proving key into shamir shares
 pub fn split_proving_key_shamir<P: Pairing, R: Rng + CryptoRng>(
-    proving_key: PlainProvingKey<P>,
+    proving_key: PlainProvingKey<P, UltraFlavour>,
     degree: usize,
     num_parties: usize,
     rng: &mut R,
-) -> Result<Vec<ShamirProvingKey<P>>> {
+) -> Result<Vec<ShamirProvingKey<P, UltraFlavour>>> {
     let witness_entities = proving_key
         .polynomials
         .witness
@@ -477,7 +484,7 @@ pub fn merge_input_shares<P: Pairing>(
 pub fn parse_barretenberg_vk<P>(
     vk: &[u8],
     verifier_crs: P::G2Affine,
-) -> eyre::Result<VerifyingKey<P>>
+) -> eyre::Result<VerifyingKey<P, UltraFlavour>>
 where
     P: Pairing + HonkCurve<TranscriptFieldType>,
 {

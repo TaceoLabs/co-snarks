@@ -10,10 +10,6 @@ pub use crate::keys::verification_key::{
 };
 pub use crate::polynomials::polynomial::{NUM_MASKED_ROWS, Polynomial, RowDisablingPolynomial};
 pub use crate::polynomials::polynomial_types::Polynomials;
-pub use crate::polynomials::polynomial_types::{
-    PRECOMPUTED_ENTITIES_SIZE, PROVER_WITNESS_ENTITIES_SIZE, PrecomputedEntities,
-    ProverWitnessEntities,
-};
 pub use crate::serialize::{Serialize, SerializeP};
 pub use crate::types::aes128::AES128_SBOX;
 pub use crate::types::types::{

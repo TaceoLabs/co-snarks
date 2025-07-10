@@ -18,6 +18,7 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
         + Clone
         + Default
         + Send
+        + Sync
         + PartialEq
         + std::fmt::Debug
         + 'static;
@@ -328,4 +329,10 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
         data: &[Self::ArithmeticShare],
         domain: &D,
     ) -> Vec<Self::ArithmeticShare>;
+
+    fn is_zero_many<N: Network>(
+        a: &[Self::ArithmeticShare],
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>>;
 }
