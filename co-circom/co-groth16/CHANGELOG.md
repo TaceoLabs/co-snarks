@@ -11,6 +11,36 @@
     * co-circom-snarks bumped from 0.1.1 to 0.1.2
     * mpc-core bumped from 0.4.0 to 0.5.0
 
+## [0.10.0](https://github.com/TaceoLabs/co-snarks/compare/co-groth16-v0.9.0...co-groth16-v0.10.0) (2025-07-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* unify MPC networks, split protocol state and networking to allow fork of state without network, replace io::Error with eyre, merge mpc-core and mpc-types with feature gated mpc-net
+* move MPC types and share/combine into new mpc-types crate, rename co-circom-snarks to co-circom-types
+
+### Features
+
+* libsnark reduction multithreading ([3b2b4e0](https://github.com/TaceoLabs/co-snarks/commit/3b2b4e0e46410719cf91294b2629406396e8aa11))
+* update rust edition to 2024 ([6ea0ba9](https://github.com/TaceoLabs/co-snarks/commit/6ea0ba9f9f34063e8ab859c1d4ae41d05629a1c0))
+
+
+### Code Refactoring
+
+* move MPC types and share/combine into new mpc-types crate, rename co-circom-snarks to co-circom-types ([31b773a](https://github.com/TaceoLabs/co-snarks/commit/31b773aa71a5e872c25754de7805b02647b65688))
+* unify MPC networks, split protocol state and networking to allow fork of state without network, replace io::Error with eyre, merge mpc-core and mpc-types with feature gated mpc-net ([16dbf54](https://github.com/TaceoLabs/co-snarks/commit/16dbf546d8f2d80ad4fa9f5053da19edc7270d3c))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * co-circom-types bumped from 0.5.0 to 0.6.0
+    * mpc-core bumped from 0.9.0 to 0.10.0
+    * mpc-net bumped from 0.4.0 to 0.5.0
+  * dev-dependencies
+    * circom-types bumped from 0.9.0 to 0.10.0
+
 ## [0.9.0](https://github.com/TaceoLabs/co-snarks/compare/co-groth16-v0.8.0...co-groth16-v0.9.0) (2025-04-03)
 
 
