@@ -14,7 +14,8 @@ use mpc_core::{
         binary,
         conversion::{self, A2BType, bit_inject_many},
         id::PartyID,
-        network, yao,
+        network::Rep3NetworkExt,
+        yao,
     },
 };
 use mpc_net::Network;
@@ -575,8 +576,8 @@ impl<F: PrimeField, N: Network> VmCircomWitnessExtension<F>
 
     fn compare_vm_config(&mut self, config: &VMConfig) -> eyre::Result<()> {
         let ser = bincode::serialize(&config)?;
-        network::send_next(self.net0, ser)?;
-        let recv: Vec<u8> = network::recv_prev(self.net0)?;
+        self.net0.send_next(ser)?;
+        let recv: Vec<u8> = self.net0.recv_prev()?;
         let deser = bincode::deserialize(&recv)?;
         if config != &deser {
             eyre::bail!("VM Config does not match: {:?} != {:?}", config, deser);

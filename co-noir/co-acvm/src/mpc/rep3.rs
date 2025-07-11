@@ -12,8 +12,8 @@ use mpc_core::protocols::rep3::conversion::A2BType;
 use mpc_core::protocols::rep3::id::PartyID;
 use mpc_core::protocols::rep3::yao::circuits::SHA256Table;
 use mpc_core::protocols::rep3::{
-    Rep3BigUintShare, Rep3PointShare, Rep3State, arithmetic, binary, conversion, network,
-    pointshare, yao,
+    Rep3BigUintShare, Rep3PointShare, Rep3State, arithmetic, binary, conversion,
+    network::Rep3NetworkExt, pointshare, yao,
 };
 use mpc_core::protocols::rep3_ring::gadgets::sort::{radix_sort_fields, radix_sort_fields_vec_by};
 use mpc_core::{
@@ -391,7 +391,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         let a = (0..len)
             .map(|_| self.state0.rngs.rand.masking_field_element())
             .collect::<Vec<_>>();
-        let b = network::reshare_many(self.net0, &a)?;
+        let b = self.net0.reshare_many(&a)?;
         let result = izip!(a, b)
             .map(|(a, b)| Rep3AcvmType::Shared(Rep3PrimeFieldShare::new(a, b)))
             .collect();
@@ -836,7 +836,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
 
     fn open_many(&mut self, a: &[Self::ArithmeticShare]) -> eyre::Result<Vec<F>> {
         let bs = a.iter().map(|x| x.b).collect_vec();
-        let mut cs = network::reshare(self.net0, bs)?;
+        let mut cs = self.net0.reshare(bs)?;
 
         izip!(a, cs.iter_mut()).for_each(|(x, c)| *c += x.a + x.b);
 

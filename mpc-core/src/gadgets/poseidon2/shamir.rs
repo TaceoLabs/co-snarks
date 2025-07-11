@@ -1,7 +1,6 @@
 use super::{Poseidon2, Poseidon2Precomputations};
 use crate::protocols::shamir::{
-    ShamirPrimeFieldShare, ShamirState, arithmetic,
-    network::{self},
+    ShamirPrimeFieldShare, ShamirState, arithmetic, network::ShamirNetworkExt,
 };
 use ark_ff::PrimeField;
 use mpc_net::Network;
@@ -161,19 +160,17 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         assert_eq!(D, 5);
         // Square
         let inp = input.iter().map(|i| i.square()).collect();
-        let mut sq =
-            ShamirPrimeFieldShare::convert_vec(network::degree_reduce_many(net, state, inp)?);
+        let mut sq = ShamirPrimeFieldShare::convert_vec(net.degree_reduce_many(state, inp)?);
 
         // Quad
         sq.iter_mut().for_each(|x| {
             x.square_in_place();
         });
-        let mut qu =
-            ShamirPrimeFieldShare::convert_vec(network::degree_reduce_many(net, state, sq)?);
+        let mut qu = ShamirPrimeFieldShare::convert_vec(net.degree_reduce_many(state, sq)?);
 
         // Quint
         qu.iter_mut().zip(input.iter()).for_each(|(x, y)| *x *= y);
-        let res = ShamirPrimeFieldShare::convert_vec(network::degree_reduce_many(net, state, qu)?);
+        let res = ShamirPrimeFieldShare::convert_vec(net.degree_reduce_many(state, qu)?);
 
         input.clone_from_slice(&res);
         Ok(())
@@ -186,15 +183,15 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
     ) -> eyre::Result<()> {
         assert_eq!(D, 5);
         // Square
-        let mut sq = network::degree_reduce(net, state, input.square())?.a;
+        let mut sq = net.degree_reduce(state, input.square())?.a;
 
         // Quad
         sq.square_in_place();
-        let mut qu = network::degree_reduce(net, state, sq)?.a;
+        let mut qu = net.degree_reduce(state, sq)?.a;
 
         // Quint
         qu *= &*input;
-        *input = network::degree_reduce(net, state, qu)?.a;
+        *input = net.degree_reduce(state, qu)?.a;
 
         Ok(())
     }

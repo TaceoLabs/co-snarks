@@ -7,11 +7,7 @@ use mpc_net::Network;
 use crate::{RngType, protocols::shamir::interpolate_poly_from_precomputed};
 use rand::{Rng, SeedableRng};
 
-use super::{
-    evaluate_poly,
-    network::{self},
-    precompute_interpolation_polys,
-};
+use super::{evaluate_poly, network::ShamirNetworkExt, precompute_interpolation_polys};
 
 pub(super) struct ShamirRng<F> {
     pub(super) id: usize,
@@ -120,11 +116,11 @@ impl<F: PrimeField> ShamirRng<F> {
             let rcv_id = (id + id_off) % num_parties;
             let seed: SeedType = rng.r#gen();
             seeds[rcv_id] = seed;
-            network::send(net, rcv_id, seed)?;
+            net.send_to(rcv_id, seed)?;
         }
         for id_off in 1..=receive {
             let send_id = (id + num_parties - id_off) % num_parties;
-            let seed = network::recv(net, send_id)?;
+            let seed = net.recv_from(send_id)?;
             seeds[send_id] = seed;
         }
 
@@ -309,7 +305,7 @@ impl<F: PrimeField> ShamirRng<F> {
             for (des, p) in to_send.iter_mut().zip(polys.iter()) {
                 *des = evaluate_poly(p, rcv_id_f);
             }
-            network::send_many(net, rcv_id, &to_send)?;
+            net.send_many(rcv_id, &to_send)?;
         }
         Ok(())
     }
@@ -326,7 +322,7 @@ impl<F: PrimeField> ShamirRng<F> {
         }
         for i in 1..=receiving {
             let send_id = (self.id + self.num_parties - seeded - i) % self.num_parties;
-            let shares = network::recv_many(net, send_id)?;
+            let shares = net.recv_many(send_id)?;
             for (r, s) in output.iter_mut().zip(shares.iter()) {
                 r[send_id] = *s;
             }

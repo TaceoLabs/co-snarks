@@ -4,7 +4,7 @@ use ark_poly::Polynomial;
 use ark_poly::univariate::DensePolynomial;
 
 use mpc_core::MpcState;
-use mpc_core::protocols::shamir::network;
+use mpc_core::protocols::shamir::network::ShamirNetworkExt;
 use mpc_core::protocols::shamir::{
     ShamirPointShare, ShamirPrimeFieldShare, ShamirState, arithmetic, pointshare,
 };
@@ -67,7 +67,7 @@ impl<P: Pairing> CircomPlonkProver<P> for ShamirPlonkDriver {
         net: &N,
         state: &mut Self::State,
     ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
-        network::degree_reduce_many(net, state, a)
+        net.degree_reduce_many(state, a)
     }
 
     fn mul_vec<N: Network>(
