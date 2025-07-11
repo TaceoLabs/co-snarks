@@ -7,10 +7,7 @@ use itertools::izip;
 use mpc_net::Network;
 use rayon::prelude::*;
 
-use super::{
-    ShamirPrimeFieldShare, ShamirState,
-    network::{self},
-};
+use super::{ShamirPrimeFieldShare, ShamirState, network::ShamirNetworkExt};
 
 mod ops;
 pub(super) mod types;
@@ -69,7 +66,7 @@ pub fn mul<F: PrimeField, N: Network>(
     state: &mut ShamirState<F>,
 ) -> eyre::Result<ShamirShare<F>> {
     let mul = a.a * b.a;
-    network::degree_reduce(net, state, mul)
+    net.degree_reduce(state, mul)
 }
 
 /// Performs multiplication between two shares. *DOES NOT REDUCE DEGREE*
@@ -96,7 +93,7 @@ pub fn mul_vec<F: PrimeField, N: Network>(
         .zip(b.iter())
         .map(|(a, b)| a.a * b.a)
         .collect::<Vec<_>>();
-    network::degree_reduce_many(net, state, mul)
+    net.degree_reduce_many(state, mul)
 }
 
 /// Performs multiplication between a share and a public value.
@@ -185,7 +182,7 @@ pub fn open<F: PrimeField, N: Network>(
     net: &N,
     state: &mut ShamirState<F>,
 ) -> eyre::Result<F> {
-    let rcv = network::broadcast_next(net, state.num_parties, state.threshold + 1, a.a)?;
+    let rcv = net.broadcast_next(state.num_parties, state.threshold + 1, a.a)?;
     let res = super::reconstruct(&rcv, &state.open_lagrange_t);
     Ok(res)
 }
@@ -198,7 +195,7 @@ pub fn open_vec<F: PrimeField, N: Network>(
 ) -> eyre::Result<Vec<F>> {
     let a_a = ShamirShare::convert_slice(a);
 
-    let rcv = network::broadcast_next(net, state.num_parties, state.threshold + 1, a_a.to_owned())?;
+    let rcv = net.broadcast_next(state.num_parties, state.threshold + 1, a_a.to_owned())?;
 
     let mut transposed = vec![vec![F::zero(); state.threshold + 1]; a.len()];
 
@@ -257,7 +254,7 @@ fn mul_open<F: PrimeField, N: Network>(
     state: &mut ShamirState<F>,
 ) -> eyre::Result<F> {
     let mul = a * b;
-    let rcv = network::broadcast_next(net, state.num_parties, 2 * state.threshold + 1, mul.a)?;
+    let rcv = net.broadcast_next(state.num_parties, 2 * state.threshold + 1, mul.a)?;
     Ok(super::reconstruct(&rcv, &state.open_lagrange_2t))
 }
 
@@ -275,7 +272,7 @@ pub fn mul_open_vec<F: PrimeField, N: Network>(
         .collect::<Vec<_>>();
     let mul = ShamirShare::convert_vec(mul);
 
-    let rcv = network::broadcast_next(net, state.num_parties, 2 * state.threshold + 1, mul)?;
+    let rcv = net.broadcast_next(state.num_parties, 2 * state.threshold + 1, mul)?;
 
     let mut transposed = vec![vec![F::zero(); 2 * state.threshold + 1]; a.len()];
 

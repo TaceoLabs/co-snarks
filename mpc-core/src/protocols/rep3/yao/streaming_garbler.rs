@@ -7,11 +7,7 @@
 use super::{GCInputs, GCUtils, circuits::FancyBinaryConstant};
 use crate::{
     RngType,
-    protocols::rep3::{
-        Rep3State,
-        id::PartyID,
-        network::{self},
-    },
+    protocols::rep3::{Rep3State, id::PartyID, network::Rep3NetworkExt},
 };
 use ark_ff::PrimeField;
 use core::panic;
@@ -142,7 +138,7 @@ impl<'a, N: Network> StreamingRep3Garbler<'a, N> {
     pub fn send_hash(&self) -> eyre::Result<()> {
         if self.id == PartyID::ID2 {
             let digest = self.hash.clone().finalize();
-            network::send(self.net, PartyID::ID0, digest.as_slice())?;
+            self.net.send_to(PartyID::ID0, digest.as_slice())?;
         }
         Ok(())
     }
@@ -154,7 +150,7 @@ impl<'a, N: Network> StreamingRep3Garbler<'a, N> {
                 panic!("Garbler should not be PartyID::ID0");
             }
             PartyID::ID1 => {
-                network::send(self.net, PartyID::ID0, block.as_ref())?;
+                self.net.send_to(PartyID::ID0, block.as_ref())?;
             }
             PartyID::ID2 => {
                 self.hash.update(block.as_ref());

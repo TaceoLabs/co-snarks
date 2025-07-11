@@ -5,10 +5,7 @@
 //! This file is heavily inspired by [fancy-garbling](https://github.com/GaloisInc/swanky/blob/dev/fancy-garbling/src/garble/evaluator.rs)
 
 use super::{GCUtils, bristol_fashion::BristolFashionEvaluator, circuits::FancyBinaryConstant};
-use crate::protocols::rep3::{
-    id::PartyID,
-    network::{self},
-};
+use crate::protocols::rep3::{id::PartyID, network::Rep3NetworkExt};
 use fancy_garbling::{
     BinaryBundle, Fancy, FancyBinary, WireLabel, WireMod2, errors::EvaluatorError,
     util::output_tweak,
@@ -63,7 +60,7 @@ impl<'a, N: Network> Rep3Evaluator<'a, N> {
     /// Receive the garbled circuit from the garblers.
     pub fn receive_circuit(&mut self) -> eyre::Result<()> {
         debug_assert!(self.circuit.is_empty());
-        self.circuit = network::recv_many(self.net, PartyID::ID1)?;
+        self.circuit = self.net.recv_many(PartyID::ID1)?;
         self.current_circuit_element = 0;
 
         let mut hasher = Sha3_256::default();
@@ -71,7 +68,7 @@ impl<'a, N: Network> Rep3Evaluator<'a, N> {
             hasher.update(block);
         }
         let is_hash = hasher.finalize();
-        let should_hash: Vec<u8> = network::recv(self.net, PartyID::ID2)?;
+        let should_hash: Vec<u8> = self.net.recv_from(PartyID::ID2)?;
 
         if should_hash != is_hash.as_slice() {
             eyre::bail!("Inconsistent Garbled Circuits: Hashes do not match!",);
@@ -122,8 +119,8 @@ impl<'a, N: Network> Rep3Evaluator<'a, N> {
             blocks.push(gate);
         }
         let (send1, send2) = rayon::join(
-            || network::send_many(self.net, PartyID::ID1, &blocks),
-            || network::send_many(self.net, PartyID::ID2, &blocks),
+            || self.net.send_many(PartyID::ID1, &blocks),
+            || self.net.send_many(PartyID::ID2, &blocks),
         );
         send1?;
         send2?;
@@ -140,7 +137,7 @@ impl<'a, N: Network> Rep3Evaluator<'a, N> {
             gate.copy_from_slice(block.as_ref());
             blocks.push(gate);
         }
-        network::send_many(self.net, PartyID::ID1, &blocks)?;
+        self.net.send_many(PartyID::ID1, &blocks)?;
 
         Ok(())
     }

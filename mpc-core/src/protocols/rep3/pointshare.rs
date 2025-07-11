@@ -9,9 +9,8 @@ use mpc_net::Network;
 use rayon::prelude::*;
 
 use super::{
-    Rep3PointShare, Rep3PrimeFieldShare, Rep3State, arithmetic, conversion,
-    id::PartyID,
-    network::{self},
+    Rep3PointShare, Rep3PrimeFieldShare, Rep3State, arithmetic, conversion, id::PartyID,
+    network::Rep3NetworkExt,
 };
 
 mod ops;
@@ -87,7 +86,7 @@ pub fn scalar_mul<C: CurveGroup, N: Network>(
     state: &mut Rep3State,
 ) -> eyre::Result<PointShare<C>> {
     let local_a = b * a + state.rngs.rand.masking_ec_element::<C>();
-    let local_b = network::reshare(net, local_a)?;
+    let local_b = net.reshare(local_a)?;
     Ok(PointShare {
         a: local_a,
         b: local_b,
@@ -105,13 +104,13 @@ pub fn scalar_mul_local<C: CurveGroup>(
 
 /// Open the shared point
 pub fn open_point<C: CurveGroup, N: Network>(a: &PointShare<C>, net: &N) -> eyre::Result<C> {
-    let c = network::reshare(net, a.b)?;
+    let c = net.reshare(a.b)?;
     Ok(a.a + a.b + c)
 }
 
 /// Open the shared point
 pub fn open_half_point<C: CurveGroup, N: Network>(a: C, net: &N) -> eyre::Result<C> {
-    let (b, c) = network::broadcast(net, a)?;
+    let (b, c) = net.broadcast(a)?;
     Ok(a + b + c)
 }
 
@@ -121,7 +120,7 @@ pub fn open_point_many<C: CurveGroup, N: Network>(
     net: &N,
 ) -> eyre::Result<Vec<C>> {
     let bs = a.iter().map(|x| x.b).collect_vec();
-    let cs = network::reshare(net, bs)?;
+    let cs = net.reshare(bs)?;
     Ok(izip!(a, cs).map(|(x, c)| x.a + x.b + c).collect_vec())
 }
 
@@ -131,7 +130,7 @@ pub fn open_point_and_field<C: CurveGroup, N: Network>(
     b: &FieldShare<C::ScalarField>,
     net: &N,
 ) -> eyre::Result<(C, C::ScalarField)> {
-    let c = network::reshare(net, (a.b, b.b))?;
+    let c = net.reshare((a.b, b.b))?;
     Ok((a.a + a.b + c.0, b.a + b.b + c.1))
 }
 

@@ -2,9 +2,7 @@ use std::array;
 
 use super::{Poseidon2, Poseidon2Precomputations};
 use crate::protocols::rep3::{
-    Rep3PrimeFieldShare, Rep3State, arithmetic,
-    id::PartyID,
-    network::{self},
+    Rep3PrimeFieldShare, Rep3State, arithmetic, id::PartyID, network::Rep3NetworkExt,
 };
 use ark_ff::PrimeField;
 use mpc_net::Network;
@@ -211,7 +209,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         input.iter_mut().for_each(|x| {
             *x += state.rngs.rand.masking_field_element::<F>();
         });
-        let b = network::reshare_many(net, input)?;
+        let b = net.reshare_many(input)?;
         let shares = array::from_fn(|i| Rep3PrimeFieldShare::new(input[i], b[i]));
 
         Ok(shares)
@@ -255,7 +253,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         let id = PartyID::try_from(net.id())?;
 
         // Open
-        let (b, c) = network::broadcast_many(net, input)?;
+        let (b, c) = net.broadcast_many(input)?;
         let mut y = b;
         for (y, (c, i)) in y.iter_mut().zip(c.into_iter().zip(input.iter())) {
             *y += c + i;
@@ -317,7 +315,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         assert_eq!(D, 5);
         // Reshare (with re-randomization):
         let input_a = input.to_owned() + state.rngs.rand.masking_field_element::<F>();
-        let input_b = network::reshare(net, input_a.to_owned())?;
+        let input_b = net.reshare(input_a.to_owned())?;
         let share = Rep3PrimeFieldShare::new(input_a, input_b);
 
         // Square
@@ -345,7 +343,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         let id = PartyID::try_from(net.id())?;
 
         // Open
-        let (b, c) = network::broadcast(net, *input)?;
+        let (b, c) = net.broadcast(*input)?;
         let mut y = b;
         y += c + *input;
 

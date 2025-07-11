@@ -2,7 +2,9 @@ use super::CircomGroth16Prover;
 use ark_ec::{CurveGroup, pairing::Pairing};
 use mpc_core::{
     MpcState,
-    protocols::shamir::{ShamirPrimeFieldShare, ShamirState, arithmetic, network, pointshare},
+    protocols::shamir::{
+        ShamirPrimeFieldShare, ShamirState, arithmetic, network::ShamirNetworkExt, pointshare,
+    },
 };
 use mpc_net::Network;
 use rayon::prelude::*;
@@ -139,7 +141,7 @@ impl<P: Pairing> CircomGroth16Prover<P> for ShamirGroth16Driver {
         net: &N,
         state: &mut Self::State,
     ) -> eyre::Result<Self::PointHalfShare<<P as Pairing>::G1>> {
-        let a = network::degree_reduce_point(net, state, *a)?;
+        let a = net.degree_reduce_point(state, *a)?;
         Ok(pointshare::scalar_mul_local(&a, b))
     }
 }

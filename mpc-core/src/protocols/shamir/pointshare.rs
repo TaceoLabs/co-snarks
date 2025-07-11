@@ -6,7 +6,8 @@ use ark_ec::CurveGroup;
 use mpc_net::Network;
 
 use super::{
-    ShamirPointShare, ShamirPrimeFieldShare, ShamirState, network, reconstruct, reconstruct_point,
+    ShamirPointShare, ShamirPrimeFieldShare, ShamirState, network::ShamirNetworkExt, reconstruct,
+    reconstruct_point,
 };
 
 mod ops;
@@ -87,7 +88,7 @@ pub fn scalar_mul<C: CurveGroup, N: Network>(
     state: &mut ShamirState<C::ScalarField>,
 ) -> eyre::Result<PointShare<C>> {
     let mul = (b * a).a;
-    network::degree_reduce_point(net, state, mul)
+    net.degree_reduce_point(state, mul)
 }
 
 /// Performs local part of scalar multiplication between a point share and a field share.
@@ -101,7 +102,7 @@ pub fn open_half_point<C: CurveGroup, N: Network>(
     net: &N,
     state: &mut ShamirState<C::ScalarField>,
 ) -> eyre::Result<C> {
-    let rcv = network::broadcast_next(net, state.num_parties, state.threshold * 2 + 1, a)?;
+    let rcv = net.broadcast_next(state.num_parties, state.threshold * 2 + 1, a)?;
     let res = reconstruct_point(&rcv, &state.open_lagrange_2t);
     Ok(res)
 }
@@ -112,7 +113,7 @@ pub fn open_point<C: CurveGroup, N: Network>(
     net: &N,
     state: &mut ShamirState<C::ScalarField>,
 ) -> eyre::Result<C> {
-    let rcv = network::broadcast_next(net, state.num_parties, state.threshold + 1, a.a)?;
+    let rcv = net.broadcast_next(state.num_parties, state.threshold + 1, a.a)?;
     let res = reconstruct_point(&rcv, &state.open_lagrange_t);
     Ok(res)
 }
@@ -125,7 +126,7 @@ pub fn open_point_many<C: CurveGroup, N: Network>(
 ) -> eyre::Result<Vec<C>> {
     let a_a = ShamirPointShare::convert_slice(a);
 
-    let rcv = network::broadcast_next(net, state.num_parties, state.threshold + 1, a_a.to_owned())?;
+    let rcv = net.broadcast_next(state.num_parties, state.threshold + 1, a_a.to_owned())?;
 
     let mut transposed = vec![vec![C::zero(); state.threshold + 1]; a.len()];
 
@@ -149,7 +150,7 @@ pub fn open_point_and_field<C: CurveGroup, N: Network>(
     net: &N,
     state: &mut ShamirState<C::ScalarField>,
 ) -> eyre::Result<(C, C::ScalarField)> {
-    let rcv = network::broadcast_next(net, state.num_parties, state.threshold + 1, (a.a, b.a))?;
+    let rcv = net.broadcast_next(state.num_parties, state.threshold + 1, (a.a, b.a))?;
     let (points, fields): (Vec<_>, Vec<_>) = rcv.into_iter().unzip();
     let res_point = reconstruct_point(&points, &state.open_lagrange_t);
     let res_field = reconstruct(&fields, &state.open_lagrange_t);

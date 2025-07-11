@@ -4,7 +4,7 @@ use ark_ff::Field;
 use itertools::izip;
 use mpc_core::MpcState;
 use mpc_core::protocols::shamir::ShamirState;
-use mpc_core::protocols::shamir::network;
+use mpc_core::protocols::shamir::network::ShamirNetworkExt;
 use mpc_core::protocols::shamir::{
     ShamirPointShare, ShamirPrimeFieldShare, arithmetic, pointshare, poly,
 };
@@ -12,7 +12,7 @@ use mpc_net::Network;
 use num_traits::Zero;
 use rayon::prelude::*;
 
-/// A UltraHonk dirver unsing shamir secret sharing
+/// A UltraHonk driver using shamir secret sharing
 pub struct ShamirUltraHonkDriver;
 
 impl<P: Pairing> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
@@ -91,7 +91,7 @@ impl<P: Pairing> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
         net: &N,
         state: &mut Self::State,
     ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
-        network::degree_reduce_many(net, state, a)
+        net.degree_reduce_many(state, a)
     }
 
     fn mul_many<N: Network>(

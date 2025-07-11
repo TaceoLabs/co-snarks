@@ -6,7 +6,7 @@ use super::{
     arithmetic::RingShare,
     ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
 };
-use crate::protocols::rep3::{Rep3State, id::PartyID, network};
+use crate::protocols::rep3::{Rep3State, id::PartyID, network::Rep3NetworkExt};
 use itertools::{Itertools, izip};
 use mpc_net::Network;
 use num_traits::{One, Zero};
@@ -73,7 +73,7 @@ where
     let (mut mask, mask_b) = state.rngs.rand.random_elements::<RingElement<T>>();
     mask ^= mask_b;
     let local_a = (a & b) ^ mask;
-    let local_b = network::reshare(net, local_a)?;
+    let local_b = net.reshare(local_a)?;
     Ok(RingShare::new_ring(local_a, local_b))
 }
 
@@ -94,7 +94,7 @@ where
             (a & b) ^ mask
         })
         .collect_vec();
-    let local_b = network::reshare(net, local_a.clone())?;
+    let local_b = net.reshare(local_a.clone())?;
     Ok(izip!(local_a, local_b)
         .map(|(a, b)| RingShare::new_ring(a, b))
         .collect_vec())
@@ -144,7 +144,7 @@ pub fn shift_l_public<T: IntRing2k>(shared: &RingShare<T>, public: RingElement<T
 
 /// Performs the opening of a shared value and returns the equivalent public value.
 pub fn open<T: IntRing2k, N: Network>(a: &RingShare<T>, net: &N) -> eyre::Result<RingElement<T>> {
-    let c = network::reshare(net, a.b)?;
+    let c = net.reshare(a.b)?;
     Ok(a.a ^ a.b ^ c)
 }
 

@@ -2,8 +2,8 @@ use ark_ec::{CurveGroup, pairing::Pairing};
 use mpc_core::{
     MpcState,
     protocols::rep3::{
-        Rep3PointShare, Rep3PrimeFieldShare, Rep3State, arithmetic, id::PartyID, network,
-        pointshare,
+        Rep3PointShare, Rep3PrimeFieldShare, Rep3State, arithmetic, id::PartyID,
+        network::Rep3NetworkExt, pointshare,
     },
 };
 use mpc_net::Network;
@@ -154,7 +154,7 @@ impl<P: Pairing> CircomGroth16Prover<P> for Rep3Groth16Driver {
         net: &N,
         state: &mut Self::State,
     ) -> eyre::Result<Self::PointHalfShare<<P as Pairing>::G1>> {
-        let a_hs = network::reshare(net, *a)?;
+        let a_hs = net.reshare(*a)?;
         let point = Rep3PointShare::new(*a, a_hs);
         Ok(pointshare::scalar_mul_local(&point, b, state))
     }

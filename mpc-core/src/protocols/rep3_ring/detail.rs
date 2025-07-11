@@ -2,7 +2,7 @@ use super::{
     Rep3RingShare, binary, conversion,
     ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
 };
-use crate::protocols::rep3::{Rep3State, network};
+use crate::protocols::rep3::{Rep3State, network::Rep3NetworkExt};
 use itertools::izip;
 use mpc_net::Network;
 use num_traits::{One, Zero};
@@ -156,8 +156,8 @@ where
         local_a2.push((a & &b2) ^ mask2);
     }
 
-    network::send_next(net, [local_a1.to_owned(), local_a2.to_owned()])?;
-    let [local_b1, local_b2] = network::recv_prev::<_, [Vec<RingElement<T>>; 2]>(net)?;
+    net.send_next([local_a1.to_owned(), local_a2.to_owned()])?;
+    let [local_b1, local_b2] = net.recv_prev::<[Vec<RingElement<T>>; 2]>()?;
 
     let mut r1 = Vec::with_capacity(a.len());
     let mut r2 = Vec::with_capacity(a.len());
@@ -188,7 +188,7 @@ where
 
     let local_a1 = (b1 & a) ^ mask1;
     let local_a2 = (a & b2) ^ mask2;
-    let [local_b1, local_b2] = network::reshare(net, [local_a1.to_owned(), local_a2.to_owned()])?;
+    let [local_b1, local_b2] = net.reshare([local_a1.to_owned(), local_a2.to_owned()])?;
 
     let r1 = Rep3RingShare {
         a: local_a1,

@@ -10,9 +10,7 @@ pub mod streaming_evaluator;
 pub mod streaming_garbler;
 
 use super::{
-    Rep3BigUintShare, Rep3PrimeFieldShare, Rep3State,
-    id::PartyID,
-    network::{self},
+    Rep3BigUintShare, Rep3PrimeFieldShare, Rep3State, id::PartyID, network::Rep3NetworkExt,
 };
 use ark_ff::{PrimeField, Zero};
 use circuits::{GarbledCircuits, SHA256Table};
@@ -135,7 +133,7 @@ impl GCUtils {
     }
 
     fn receive_block_from<N: Network>(net: &N, id: PartyID) -> eyre::Result<Block> {
-        let data: Vec<u8> = network::recv(net, id)?;
+        let data: Vec<u8> = net.recv_from(id)?;
         if data.len() != 16 {
             eyre::bail!("To little elements received");
         }
@@ -150,7 +148,7 @@ impl GCUtils {
         net: &N,
         id: PartyID,
     ) -> eyre::Result<BinaryBundle<WireMod2>> {
-        let rcv: Vec<[u8; 16]> = network::recv_many(net, id)?;
+        let rcv: Vec<[u8; 16]> = net.recv_many(id)?;
         if rcv.len() != n_bits {
             eyre::bail!("Invalid number of elements received",);
         }
@@ -175,7 +173,7 @@ impl GCUtils {
             gate.copy_from_slice(block.as_ref());
             blocks.push(gate);
         }
-        network::send_many(net, id, &blocks)
+        net.send_many(id, &blocks)
     }
 
     pub(crate) fn send_inputs<N: Network>(

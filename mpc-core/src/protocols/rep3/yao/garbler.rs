@@ -9,11 +9,7 @@ use super::{
 };
 use crate::{
     RngType,
-    protocols::rep3::{
-        Rep3State,
-        id::PartyID,
-        network::{self},
-    },
+    protocols::rep3::{Rep3State, id::PartyID, network::Rep3NetworkExt},
 };
 use ark_ff::PrimeField;
 use core::panic;
@@ -92,13 +88,13 @@ impl<'a, N: Network> Rep3Garbler<'a, N> {
             }
             PartyID::ID1 => {
                 // Send the prepared circuit over the network to the evaluator
-                network::send_many(self.net, PartyID::ID0, &self.circuit)?;
+                self.net.send_many(PartyID::ID0, &self.circuit)?;
             }
             PartyID::ID2 => {
                 // Send the hash of the circuit to the evaluator
                 let digest = self.hash.clone().finalize();
 
-                network::send(self.net, PartyID::ID0, digest.as_slice())?;
+                self.net.send_to(PartyID::ID0, digest.as_slice())?;
             }
         }
         Ok(())
@@ -185,7 +181,7 @@ impl<'a, N: Network> Rep3Garbler<'a, N> {
     // Read `Block`s from the channel.
     #[inline(always)]
     fn read_blocks(&self) -> eyre::Result<Vec<Block>> {
-        let rcv: Vec<[u8; 16]> = network::recv_many(self.net, PartyID::ID0)?;
+        let rcv: Vec<[u8; 16]> = self.net.recv_many(PartyID::ID0)?;
         let mut result = Vec::with_capacity(rcv.len());
         for block in rcv {
             let mut v = Block::default();

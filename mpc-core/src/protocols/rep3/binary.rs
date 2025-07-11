@@ -8,7 +8,7 @@ use mpc_net::Network;
 use num_bigint::BigUint;
 
 use super::{PartyID, Rep3BigUintShare, Rep3PrimeFieldShare, Rep3State, arithmetic, conversion};
-use crate::protocols::rep3::network::{self};
+use crate::protocols::rep3::network::Rep3NetworkExt;
 use num_traits::cast::ToPrimitive;
 
 mod ops;
@@ -96,7 +96,7 @@ pub fn and<F: PrimeField, N: Network>(
         .random_biguint(usize::try_from(F::MODULUS_BIT_SIZE).expect("u32 fits into usize"));
     mask ^= mask_b;
     let local_a = (a & b) ^ mask;
-    let local_b = network::reshare(net, local_a.clone())?;
+    let local_b = net.reshare(local_a.clone())?;
     Ok(BinaryShare::new(local_a, local_b))
 }
 
@@ -118,7 +118,7 @@ pub fn and_vec<F: PrimeField, N: Network>(
             (a & b) ^ mask
         })
         .collect_vec();
-    let local_b = network::reshare(net, local_a.clone())?;
+    let local_b = net.reshare(local_a.clone())?;
     Ok(izip!(local_a, local_b)
         .map(|(a, b)| BinaryShare::new(a, b))
         .collect_vec())
@@ -202,7 +202,7 @@ pub fn shift_l_public_by_shared<F: PrimeField, N: Network>(
 
 /// Performs the opening of a shared value and returns the equivalent public value.
 pub fn open<F: PrimeField, N: Network>(a: &BinaryShare<F>, net: &N) -> eyre::Result<BigUint> {
-    let c = network::reshare(net, a.b.clone())?;
+    let c = net.reshare(a.b.clone())?;
     Ok(&a.a ^ &a.b ^ c)
 }
 

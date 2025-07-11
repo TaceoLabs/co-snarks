@@ -12,7 +12,7 @@ use crate::protocols::{
         self, Rep3PrimeFieldShare, Rep3State,
         conversion::A2BType,
         id::PartyID,
-        network,
+        network::Rep3NetworkExt,
         yao::{
             GCUtils, circuits::GarbledCircuits, evaluator::Rep3Evaluator, garbler::Rep3Garbler,
             streaming_evaluator::StreamingRep3Evaluator, streaming_garbler::StreamingRep3Garbler,
@@ -88,7 +88,7 @@ where
     }
 
     // reshare x01
-    let local_b = network::reshare(net, x01.a.to_owned())?;
+    let local_b = net.reshare(x01.a.to_owned())?;
     x01.b = local_b;
 
     detail::low_depth_binary_add(&x01, &x2, net, state)
@@ -135,7 +135,7 @@ where
     };
 
     // reshare x01
-    let x01_b = network::reshare_many(net, &x01_a)?;
+    let x01_b = net.reshare_many(&x01_a)?;
     let x01 = izip!(x01_a, x01_b)
         .map(|(a, b)| Rep3RingShare::new_ring(a, b))
         .collect::<Vec<_>>();
@@ -196,23 +196,23 @@ where
     }
 
     // reshare y
-    let local_b = network::reshare(net, y.a.to_owned())?;
+    let local_b = net.reshare(y.a.to_owned())?;
     y.b = local_b;
 
     let z = detail::low_depth_binary_add(x, &y, net, state)?;
 
     match state.id {
         PartyID::ID0 => {
-            network::send_next(net, z.b.to_owned())?;
-            let rcv: RingElement<T> = network::recv_prev(net)?;
+            net.send_next(z.b.to_owned())?;
+            let rcv: RingElement<T> = net.recv_prev()?;
             res.a = z.a ^ z.b ^ rcv;
         }
         PartyID::ID1 => {
-            let rcv: RingElement<T> = network::recv_prev(net)?;
+            let rcv: RingElement<T> = net.recv_prev()?;
             res.b = z.a ^ z.b ^ rcv;
         }
         PartyID::ID2 => {
-            network::send_next(net, z.b)?;
+            net.send_next(z.b)?;
         }
     }
     Ok(res)
@@ -279,8 +279,8 @@ where
 
     // reshare y
     let y_a = r_vec;
-    network::send_next_many(net, &y_a)?;
-    let local_b = network::recv_prev_many(net)?;
+    net.send_next_many(&y_a)?;
+    let local_b = net.recv_prev_many()?;
 
     let y = izip!(y_a, local_b)
         .map(|(a, b)| Rep3RingShare::new_ring(a, b))
@@ -291,22 +291,22 @@ where
     match state.id {
         PartyID::ID0 => {
             let z_b = z.iter().cloned().map(|z| z.b).collect::<Vec<_>>();
-            network::send_next_many(net, &z_b)?;
-            let rcv: Vec<RingElement<T>> = network::recv_prev_many(net)?;
+            net.send_next_many(&z_b)?;
+            let rcv: Vec<RingElement<T>> = net.recv_prev_many()?;
 
             for (res, z, rcv) in izip!(res.iter_mut(), z, rcv.iter()) {
                 res.a = z.a ^ z.b ^ rcv;
             }
         }
         PartyID::ID1 => {
-            let rcv: Vec<RingElement<T>> = network::recv_prev_many(net)?;
+            let rcv: Vec<RingElement<T>> = net.recv_prev_many()?;
             for (res, z, rcv) in izip!(res.iter_mut(), z, rcv.iter()) {
                 res.b = z.a ^ z.b ^ rcv;
             }
         }
         PartyID::ID2 => {
             let z_b = z.into_iter().map(|z| z.b).collect::<Vec<_>>();
-            network::send_next_many(net, &z_b)?;
+            net.send_next_many(&z_b)?;
         }
     }
     Ok(res)
@@ -729,7 +729,7 @@ where
             let x_xor_px = collapsed;
             let r = state.rngs.rand.random_element_rng1::<RingElement<T>>();
             let r_xor_x_xor_px = x_xor_px ^ r;
-            network::send(net, PartyID::ID2, r_xor_x_xor_px.to_owned())?;
+            net.send_to(PartyID::ID2, r_xor_x_xor_px.to_owned())?;
             Rep3RingShare::new_ring(r, r_xor_x_xor_px)
         }
         PartyID::ID1 => {
@@ -739,7 +739,7 @@ where
         }
         PartyID::ID2 => {
             let px = collapsed;
-            let r_xor_x_xor_px = network::recv(net, PartyID::ID0)?;
+            let r_xor_x_xor_px = net.recv_from(PartyID::ID0)?;
             Rep3RingShare::new_ring(r_xor_x_xor_px, px)
         }
     };

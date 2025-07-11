@@ -3,7 +3,7 @@
 //! This module contains some oblivious lookup table algorithms for the Rep3 protocol.
 
 use crate::protocols::{
-    rep3::{Rep3BigUintShare, Rep3PrimeFieldShare, Rep3State, network},
+    rep3::{Rep3BigUintShare, Rep3PrimeFieldShare, Rep3State, network::Rep3NetworkExt},
     rep3_ring::{Rep3RingShare, binary, conversion, gadgets, ring::int_ring::IntRing2k},
 };
 use ark_ff::PrimeField;
@@ -275,7 +275,7 @@ pub fn write_lut_from_ohv<F: PrimeField, N: Network>(
     for (l, e) in lut.iter().zip(ohv.iter()) {
         local_a.push(e * &(value - l) + l.a + state.rngs.rand.masking_field_element::<F>());
     }
-    let local_b = network::reshare_many(net, &local_a)?;
+    let local_b = net.reshare_many(&local_a)?;
 
     for (des, (src_a, src_b)) in lut.iter_mut().zip(local_a.into_iter().zip(local_b)) {
         des.a = src_a;

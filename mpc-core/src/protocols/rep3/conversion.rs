@@ -6,7 +6,7 @@ use crate::protocols::rep3::{PartyID, arithmetic::BinaryShare};
 
 use super::{
     Rep3BigUintShare, Rep3PointShare, Rep3PrimeFieldShare, Rep3State, arithmetic, detail,
-    network::{self},
+    network::Rep3NetworkExt,
     yao::{
         self, GCUtils, circuits::GarbledCircuits, evaluator::Rep3Evaluator, garbler::Rep3Garbler,
         streaming_evaluator::StreamingRep3Evaluator, streaming_garbler::StreamingRep3Garbler,
@@ -84,7 +84,7 @@ pub fn a2b<F: PrimeField, N: Network>(
     }
 
     // reshare x01
-    let local_b = network::reshare(net, x01.a.to_owned())?;
+    let local_b = net.reshare(x01.a.to_owned())?;
     x01.b = local_b;
 
     detail::low_depth_binary_add_mod_p::<F, N>(&x01, &x2, net, state, F::MODULUS_BIT_SIZE as usize)
@@ -128,7 +128,7 @@ pub fn a2b_many<F: PrimeField, N: Network>(
     };
 
     // reshare x01
-    let x01_b = network::reshare_many(net, &x01_a)?;
+    let x01_b = net.reshare_many(&x01_a)?;
     let x01 = izip!(x01_a, x01_b)
         .map(|(a, b)| Rep3BigUintShare::new(a, b))
         .collect_vec();
@@ -184,7 +184,7 @@ pub fn b2a<F: PrimeField, N: Network>(
     }
 
     // reshare y
-    let local_b = network::reshare(net, y.a.to_owned())?;
+    let local_b = net.reshare(y.a.to_owned())?;
     y.b = local_b;
 
     let z = detail::low_depth_binary_add_mod_p::<F, N>(
@@ -197,15 +197,15 @@ pub fn b2a<F: PrimeField, N: Network>(
 
     match state.id {
         PartyID::ID0 => {
-            let rcv: BigUint = network::reshare(net, z.b.to_owned())?;
+            let rcv: BigUint = net.reshare(z.b.to_owned())?;
             res.a = (z.a ^ z.b ^ rcv).into();
         }
         PartyID::ID1 => {
-            let rcv: BigUint = network::recv_prev(net)?;
+            let rcv: BigUint = net.recv_prev()?;
             res.b = (z.a ^ z.b ^ rcv).into();
         }
         PartyID::ID2 => {
-            network::send_next(net, z.b)?;
+            net.send_next(z.b)?;
         }
     }
     Ok(res)
@@ -257,8 +257,8 @@ pub fn b2a_many<F: PrimeField, N: Network>(
 
     // reshare y
     let y_a = r_vec;
-    network::send_next_many(net, &y_a)?;
-    let local_b = network::recv_prev_many(net)?;
+    net.send_next_many(&y_a)?;
+    let local_b = net.recv_prev_many()?;
 
     let y = izip!(y_a, local_b)
         .map(|(a, b)| BinaryShare::new(a, b))
@@ -275,22 +275,22 @@ pub fn b2a_many<F: PrimeField, N: Network>(
     match state.id {
         PartyID::ID0 => {
             let z_b = z.iter().cloned().map(|z| z.b).collect::<Vec<_>>();
-            network::send_next_many(net, &z_b)?;
-            let rcv: Vec<BigUint> = network::recv_prev_many(net)?;
+            net.send_next_many(&z_b)?;
+            let rcv: Vec<BigUint> = net.recv_prev_many()?;
 
             for (res, z, rcv) in izip!(res.iter_mut(), z, rcv.iter()) {
                 res.a = (z.a ^ z.b ^ rcv).into();
             }
         }
         PartyID::ID1 => {
-            let rcv: Vec<BigUint> = network::recv_prev_many(net)?;
+            let rcv: Vec<BigUint> = net.recv_prev_many()?;
             for (res, z, rcv) in izip!(res.iter_mut(), z, rcv.iter()) {
                 res.b = (z.a ^ z.b ^ rcv).into();
             }
         }
         PartyID::ID2 => {
             let z_b = z.into_iter().map(|z| z.b).collect::<Vec<_>>();
-            network::send_next_many(net, &z_b)?;
+            net.send_next_many(&z_b)?;
         }
     }
     Ok(res)
@@ -584,7 +584,7 @@ pub fn y2b<F: PrimeField, N: Network>(
             let x_xor_px = collapsed;
             let r = state.rngs.rand.random_biguint_rng1(bitlen);
             let r_xor_x_xor_px = x_xor_px ^ &r;
-            network::send(net, PartyID::ID2, r_xor_x_xor_px.to_owned())?;
+            net.send_to(PartyID::ID2, r_xor_x_xor_px.to_owned())?;
             Rep3BigUintShare::new(r, r_xor_x_xor_px)
         }
         PartyID::ID1 => {
@@ -594,7 +594,7 @@ pub fn y2b<F: PrimeField, N: Network>(
         }
         PartyID::ID2 => {
             let px = collapsed;
-            let r_xor_x_xor_px = network::recv(net, PartyID::ID0)?;
+            let r_xor_x_xor_px = net.recv_from(PartyID::ID0)?;
             Rep3BigUintShare::new(r_xor_x_xor_px, px)
         }
     };
@@ -629,7 +629,7 @@ pub fn y2b_many<F: PrimeField, N: Network>(
                 r.push(r_);
             }
 
-            network::send_many(net, PartyID::ID2, &r_xor_x_xor_px)?;
+            net.send_many(PartyID::ID2, &r_xor_x_xor_px)?;
             for (r_xor_x_xor_px_, r_) in izip!(r_xor_x_xor_px, r) {
                 result.push(Rep3BigUintShare::new(r_xor_x_xor_px_, r_));
             }
@@ -643,7 +643,7 @@ pub fn y2b_many<F: PrimeField, N: Network>(
             }
         }
         PartyID::ID2 => {
-            let r_xor_x_xor_px = network::recv_many(net, PartyID::ID0)?;
+            let r_xor_x_xor_px = net.recv_many(PartyID::ID0)?;
 
             for (px, r_xor_x_xor_px_) in izip!(collapsed, r_xor_x_xor_px) {
                 result.push(Rep3BigUintShare::new(px, r_xor_x_xor_px_));
@@ -757,7 +757,7 @@ where
     }
 
     // reshare x01
-    let local_b = network::reshare_many(net, &[x01_x.a.to_owned(), x01_y.a.to_owned()])?;
+    let local_b = net.reshare_many(&[x01_x.a.to_owned(), x01_y.a.to_owned()])?;
     if local_b.len() != 2 {
         eyre::bail!("Expected 2 elements");
     }
@@ -841,7 +841,7 @@ where
     }
 
     // reshare y
-    let local_b = network::reshare_many(net, &[y_x.a.to_owned(), y_y.a.to_owned()])?;
+    let local_b = net.reshare_many(&[y_x.a.to_owned(), y_y.a.to_owned()])?;
     if local_b.len() != 2 {
         eyre::bail!("Expected 2 elements");
     }
@@ -858,8 +858,8 @@ where
 
     match state.id {
         PartyID::ID0 => {
-            network::send_next_many(net, &z_b)?;
-            let rcv = network::recv_prev_many::<_, C::BaseField>(net)?;
+            net.send_next_many(&z_b)?;
+            let rcv = net.recv_prev_many::<C::BaseField>()?;
             if rcv.len() != 3 {
                 eyre::bail!("Expected 3 elements");
             }
@@ -870,7 +870,7 @@ where
             )?;
         }
         PartyID::ID1 => {
-            let rcv = network::recv_prev_many::<_, C::BaseField>(net)?;
+            let rcv = net.recv_prev_many::<C::BaseField>()?;
             if rcv.len() != 3 {
                 eyre::bail!("Expected 3 elements");
             }
@@ -881,7 +881,7 @@ where
             )?;
         }
         PartyID::ID2 => {
-            network::send_next_many(net, &z_b)?;
+            net.send_next_many(&z_b)?;
         }
     }
 

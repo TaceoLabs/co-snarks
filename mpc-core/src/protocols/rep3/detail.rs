@@ -3,7 +3,7 @@ use super::arithmetic;
 use super::arithmetic::BinaryShare;
 use super::binary;
 use super::conversion;
-use crate::protocols::rep3::network;
+use crate::protocols::rep3::network::Rep3NetworkExt;
 use crate::protocols::rep3::{Rep3BigUintShare, Rep3PrimeFieldShare};
 use ark_ec::CurveGroup;
 use ark_ff::One;
@@ -248,7 +248,7 @@ fn and_twice_many_iter<F: PrimeField, N: Network>(
         local_a2.push((a & b2) ^ mask2);
     }
 
-    let [local_b1, local_b2] = network::reshare(net, [local_a1.to_owned(), local_a2.to_owned()])?;
+    let [local_b1, local_b2] = net.reshare([local_a1.to_owned(), local_a2.to_owned()])?;
 
     let mut r1 = Vec::with_capacity(len);
     let mut r2 = Vec::with_capacity(len);
@@ -280,7 +280,7 @@ fn and_twice<F: PrimeField, N: Network>(
 
     let local_a1 = (b1 & a) ^ mask1;
     let local_a2 = (a & b2) ^ mask2;
-    let [local_b1, local_b2] = network::reshare(net, [local_a1.to_owned(), local_a2.to_owned()])?;
+    let [local_b1, local_b2] = net.reshare([local_a1.to_owned(), local_a2.to_owned()])?;
 
     let r1 = Rep3BigUintShare::new(local_a1, local_b1);
     let r2 = Rep3BigUintShare::new(local_a2, local_b2);

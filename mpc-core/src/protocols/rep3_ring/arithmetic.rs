@@ -2,7 +2,7 @@
 //!
 //! This module contains operations with arithmetic shares
 
-use crate::protocols::rep3::{Rep3State, id::PartyID, network};
+use crate::protocols::rep3::{Rep3State, id::PartyID, network::Rep3NetworkExt};
 use itertools::{Itertools, izip};
 use mpc_net::Network;
 use num_traits::{One, Zero};
@@ -112,7 +112,7 @@ where
     Standard: Distribution<T>,
 {
     let local_a = a * b + state.rngs.rand.masking_element::<RingElement<T>>();
-    let local_b = network::reshare(net, local_a)?;
+    let local_b = net.reshare(local_a)?;
     Ok(RingShare {
         a: local_a,
         b: local_b,
@@ -161,7 +161,7 @@ pub fn reshare_vec<T: IntRing2k, N: Network>(
     local_a: Vec<RingElement<T>>,
     net: &N,
 ) -> eyre::Result<Vec<RingShare<T>>> {
-    let local_b = network::reshare_many(net, &local_a)?;
+    let local_b = net.reshare_many(&local_a)?;
     if local_b.len() != local_a.len() {
         eyre::bail!("Invalid number of elements received");
     }
@@ -200,7 +200,7 @@ pub fn neg<T: IntRing2k>(a: RingShare<T>) -> RingShare<T> {
 
 /// Performs the opening of a shared value and returns the equivalent public value.
 pub fn open<T: IntRing2k, N: Network>(a: RingShare<T>, net: &N) -> eyre::Result<RingElement<T>> {
-    let c = network::reshare(net, a.b)?;
+    let c = net.reshare(a.b)?;
     Ok(a.a + a.b + c)
 }
 
@@ -209,7 +209,7 @@ pub fn open_bit<T: IntRing2k, N: Network>(
     a: RingShare<T>,
     net: &N,
 ) -> eyre::Result<RingElement<T>> {
-    let c = network::reshare(net, a.b.to_owned())?;
+    let c = net.reshare(a.b.to_owned())?;
     Ok(a.a ^ a.b ^ c)
 }
 
@@ -225,7 +225,7 @@ pub fn open_vec<T: IntRing2k, N: Network>(
         .iter()
         .map(|share| (share.a, share.b))
         .collect::<(Vec<RingElement<T>>, Vec<RingElement<T>>)>();
-    let c = network::reshare_many(net, &b)?;
+    let c = net.reshare_many(&b)?;
     Ok(izip!(a, b, c).map(|(a, b, c)| a + b + c).collect_vec())
 }
 
@@ -292,7 +292,7 @@ where
     Standard: Distribution<T>,
 {
     let a = a * b + state.rngs.rand.masking_element::<RingElement<T>>();
-    let (b, c) = network::broadcast(net, a)?;
+    let (b, c) = net.broadcast(a)?;
     Ok(a + b + c)
 }
 
@@ -309,7 +309,7 @@ where
     let mut a = izip!(a, b)
         .map(|(a, b)| a * b + state.rngs.rand.masking_element::<RingElement<T>>())
         .collect_vec();
-    let (b, c) = network::broadcast_many(net, &a)?;
+    let (b, c) = net.broadcast_many(&a)?;
     izip!(a.iter_mut(), b, c).for_each(|(a, b, c)| *a += b + c);
     Ok(a)
 }
@@ -575,7 +575,7 @@ where
     let e = x.a + y.a;
     let res_a = e - d;
 
-    let res_b = network::reshare(net, res_a)?;
+    let res_b = net.reshare(res_a)?;
     Ok(RingShare { a: res_a, b: res_b })
 }
 
@@ -599,7 +599,7 @@ where
         a.push(res_a);
     }
 
-    let b = network::reshare_many(net, &a)?;
+    let b = net.reshare_many(&a)?;
     let res = a
         .into_iter()
         .zip(b)
