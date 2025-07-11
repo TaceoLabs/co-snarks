@@ -7,7 +7,7 @@ use mpc_net::Network;
 use rand::{distributions::Standard, prelude::Distribution};
 
 use crate::protocols::{
-    rep3::{Rep3State, network},
+    rep3::{Rep3State, network::Rep3NetworkExt},
     rep3_ring::{
         Rep3RingShare, binary,
         ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
@@ -130,31 +130,31 @@ fn pack_and<N: Network>(
             2 | 4 | 8 => {
                 let packed = pack::<u8>(input);
                 let local_a = and_pre_bit(&packed, rhs, state);
-                let local_b = network::reshare(net, local_a)?;
+                let local_b = net.reshare(local_a)?;
                 unpack(Rep3RingShare::new_ring(local_a, local_b), len)
             }
             16 => {
                 let packed = pack::<u16>(input);
                 let local_a = and_pre_bit(&packed, rhs, state);
-                let local_b = network::reshare(net, local_a)?;
+                let local_b = net.reshare(local_a)?;
                 unpack(Rep3RingShare::new_ring(local_a, local_b), len)
             }
             32 => {
                 let packed = pack::<u32>(input);
                 let local_a = and_pre_bit(&packed, rhs, state);
-                let local_b = network::reshare(net, local_a)?;
+                let local_b = net.reshare(local_a)?;
                 unpack(Rep3RingShare::new_ring(local_a, local_b), len)
             }
             64 => {
                 let packed = pack::<u64>(input);
                 let local_a = and_pre_bit(&packed, rhs, state);
-                let local_b = network::reshare(net, local_a)?;
+                let local_b = net.reshare(local_a)?;
                 unpack(Rep3RingShare::new_ring(local_a, local_b), len)
             }
             128 => {
                 let packed = pack::<u128>(input);
                 let local_a = and_pre_bit(&packed, rhs, state);
-                let local_b = network::reshare(net, local_a)?;
+                let local_b = net.reshare(local_a)?;
                 unpack(Rep3RingShare::new_ring(local_a, local_b), len)
             }
             _ => {
@@ -173,7 +173,7 @@ fn pack_and<N: Network>(
             let u64_a = and_pre_bit(&packed, rhs, state);
             to_send.push(u64_a);
         }
-        let received = network::reshare(net, to_send.to_owned())?;
+        let received = net.reshare(to_send.to_owned())?;
 
         let mut remeining = len;
         for (a, b) in to_send.into_iter().zip(received) {

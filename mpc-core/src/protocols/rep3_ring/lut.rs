@@ -7,7 +7,10 @@ use std::marker::PhantomData;
 use crate::{
     lut::LookupTableProvider,
     protocols::{
-        rep3::{self, Rep3BigUintShare, Rep3PrimeFieldShare, Rep3State, arithmetic, network},
+        rep3::{
+            self, Rep3BigUintShare, Rep3PrimeFieldShare, Rep3State, arithmetic,
+            network::Rep3NetworkExt,
+        },
         rep3_ring::{conversion, gadgets, ring::bit::Bit},
     },
 };
@@ -115,7 +118,7 @@ impl<F: PrimeField> Rep3LookupTable<F> {
         let bins_a = gadgets::lut::read_multiple_public_lut_low_depth(
             luts, share, net0, net1, state0, state1,
         )?;
-        let bins_b = network::reshare_many(net0, &bins_a)?;
+        let bins_b = net0.reshare_many(&bins_a)?;
 
         let mut result = Vec::with_capacity(luts.len());
 
@@ -153,13 +156,13 @@ impl<F: PrimeField> Rep3LookupTable<F> {
                     state0,
                     state1,
                 )?;
-                let bin_b = network::reshare(net0, bin_a.to_owned())?;
+                let bin_b = net0.reshare(bin_a.to_owned())?;
                 let bin = Rep3BigUintShare::new(bin_a, bin_b);
                 rep3::conversion::b2a_selector(&bin, net0, state0)?
             }
             PublicPrivateLut::Shared(vec) => {
                 let f_a = gadgets::lut::read_shared_lut(vec.as_ref(), share, net0, state0)?;
-                let f_b = network::reshare(net0, f_a)?;
+                let f_b = net0.reshare(f_a)?;
                 Rep3PrimeFieldShare::new(f_a, f_b)
             }
         };
@@ -193,7 +196,7 @@ impl<F: PrimeField> Rep3LookupTable<F> {
                     state0,
                     state1,
                 )?;
-                let bin_b = network::reshare(net0, bin_a.to_owned())?;
+                let bin_b = net0.reshare(bin_a.to_owned())?;
                 Ok(Rep3BigUintShare::new(bin_a, bin_b))
             }
             PublicPrivateLut::Shared(_) => {

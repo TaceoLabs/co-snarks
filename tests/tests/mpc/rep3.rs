@@ -15,7 +15,7 @@ mod field_share {
     use mpc_core::protocols::rep3::conversion::A2BType;
     use mpc_core::protocols::rep3::gadgets;
     use mpc_core::protocols::rep3::id::PartyID;
-    use mpc_core::protocols::rep3::network;
+    use mpc_core::protocols::rep3::network::Rep3NetworkExt;
     use mpc_core::protocols::rep3::yao;
     use mpc_core::protocols::rep3::yao::circuits::GarbledCircuits;
     use mpc_core::protocols::rep3::yao::circuits::SHA256Table;
@@ -46,8 +46,8 @@ mod field_share {
         a: Vec<crate::rep3::field_share::rep3::Rep3PrimeFieldShare<F>>,
     ) -> eyre::Result<Vec<F>> {
         let bs = a.iter().map(|x| x.b).collect_vec();
-        network::send_next(net, bs)?;
-        let mut cs = network::recv_prev::<_, Vec<F>>(net)?;
+        net.send_next(bs)?;
+        let mut cs = net.recv_prev::<Vec<F>>()?;
 
         izip!(a, cs.iter_mut()).for_each(|(x, c)| *c += x.a + x.b);
 

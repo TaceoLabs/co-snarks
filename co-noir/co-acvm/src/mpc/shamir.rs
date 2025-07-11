@@ -10,7 +10,8 @@ use mpc_core::{
         rep3::yao::circuits::SHA256Table,
         rep3_ring::lut::Rep3LookupTable,
         shamir::{
-            ShamirPointShare, ShamirPrimeFieldShare, ShamirState, arithmetic, network, pointshare,
+            ShamirPointShare, ShamirPrimeFieldShare, ShamirState, arithmetic,
+            network::ShamirNetworkExt, pointshare,
         },
     },
 };
@@ -178,7 +179,9 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
     fn shared_zeros(&mut self, len: usize) -> eyre::Result<Vec<Self::AcvmType>> {
         // TODO: This is not the best implementaiton for shared zeros
         let trivial_zeros = vec![F::zero(); len];
-        let res = network::degree_reduce_many(self.net, &mut self.state, trivial_zeros)?;
+        let res = self
+            .net
+            .degree_reduce_many(&mut self.state, trivial_zeros)?;
         Ok(res.into_iter().map(ShamirAcvmType::from).collect())
     }
 

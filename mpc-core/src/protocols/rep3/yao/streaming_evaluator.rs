@@ -5,10 +5,7 @@
 //! This file is heavily inspired by [fancy-garbling](https://github.com/GaloisInc/swanky/blob/dev/fancy-garbling/src/garble/evaluator.rs)
 
 use super::{GCUtils, circuits::FancyBinaryConstant};
-use crate::protocols::rep3::{
-    id::PartyID,
-    network::{self},
-};
+use crate::protocols::rep3::{id::PartyID, network::Rep3NetworkExt};
 use fancy_garbling::{
     BinaryBundle, Fancy, FancyBinary, WireLabel, WireMod2, errors::EvaluatorError,
     util::output_tweak,
@@ -90,7 +87,7 @@ impl<'a, N: Network> StreamingRep3Evaluator<'a, N> {
     fn output_garbler_id1(&mut self, x: &[WireMod2]) -> eyre::Result<()> {
         for val in x {
             let block = val.as_block();
-            network::send(self.net, PartyID::ID1, block.as_ref())?;
+            self.net.send_to(PartyID::ID1, block.as_ref())?;
         }
         Ok(())
     }
@@ -125,7 +122,7 @@ impl<'a, N: Network> StreamingRep3Evaluator<'a, N> {
 
     /// Receive a hash of ID2 (the second garbler) to verify the garbled circuit.
     pub fn receive_hash(&mut self) -> eyre::Result<()> {
-        let data: Vec<u8> = network::recv(self.net, PartyID::ID2)?;
+        let data: Vec<u8> = self.net.recv_from(PartyID::ID2)?;
         let mut hash = Sha3_256::default();
         std::mem::swap(&mut hash, &mut self.hash);
         let digest = hash.finalize();
@@ -138,8 +135,8 @@ impl<'a, N: Network> StreamingRep3Evaluator<'a, N> {
 
     /// Send a block over the network to the garblers.
     fn send_block(&mut self, block: &Block) -> eyre::Result<()> {
-        network::send(self.net, PartyID::ID1, block.as_ref())?;
-        network::send(self.net, PartyID::ID2, block.as_ref())?;
+        self.net.send_to(PartyID::ID1, block.as_ref())?;
+        self.net.send_to(PartyID::ID2, block.as_ref())?;
         Ok(())
     }
 

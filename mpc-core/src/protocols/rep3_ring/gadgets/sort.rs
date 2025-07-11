@@ -3,7 +3,9 @@
 //! This module contains some oblivious sorting algorithms for the Rep3 protocol.
 
 use crate::protocols::rep3::id::PartyID;
-use crate::protocols::rep3::{Rep3BigUintShare, Rep3PrimeFieldShare, Rep3State, network};
+use crate::protocols::rep3::{
+    Rep3BigUintShare, Rep3PrimeFieldShare, Rep3State, network::Rep3NetworkExt,
+};
 use crate::protocols::rep3_ring::ring::int_ring::IntRing2k;
 use crate::protocols::rep3_ring::ring::ring_impl::RingElement;
 use crate::protocols::rep3_ring::{arithmetic, conversion};
@@ -451,7 +453,7 @@ where
                 let pi_3 = pi.b.0 as usize;
                 *des = shuffled_1[pi_3] - alpha;
             }
-            network::send_next_many(net, &shuffled_3)?;
+            net.send_next_many(&shuffled_3)?;
 
             // Opt Reshare
             let mut result = Vec::with_capacity(len);
@@ -482,7 +484,7 @@ where
                 let pi_1 = pi.b.0 as usize;
                 shuffled_1.push(beta_2[pi_1] + alpha);
             }
-            let delta = network::reshare_many(net, &shuffled_1)?;
+            let delta = net.reshare_many(&shuffled_1)?;
             // second shuffle
             let mut beta_2_prime = beta_2;
             for (des, pi) in beta_2_prime.iter_mut().zip(pi) {
@@ -499,7 +501,7 @@ where
                 result.push(Rep3RingShare::new_ring(RingElement::zero(), b));
             }
             let rcv: Vec<RingElement<T>> =
-                network::send_and_recv_many(net, PartyID::ID2, &rand, PartyID::ID2)?;
+                net.send_and_recv_many(PartyID::ID2, &rand, PartyID::ID2)?;
             for (res, (r1, r2)) in result.iter_mut().zip(rcv.into_iter().zip(rand)) {
                 res.a = r1 + r2;
             }
@@ -512,7 +514,7 @@ where
                 let alpha_3_ = state.rngs.rand.random_element_rng1::<RingElement<T>>();
                 alpha_3.push(alpha_3_);
             }
-            let gamma: Vec<RingElement<T>> = network::recv_prev_many(net)?;
+            let gamma: Vec<RingElement<T>> = net.recv_prev_many()?;
             // first shuffle
             let mut shuffled_1 = Vec::with_capacity(len);
             for (pi, alpha) in pi.iter().zip(alpha_3.iter()) {
@@ -535,7 +537,7 @@ where
                 result.push(Rep3RingShare::new_ring(a, RingElement::zero()));
             }
             let rcv: Vec<RingElement<T>> =
-                network::send_and_recv_many(net, PartyID::ID1, &rand, PartyID::ID1)?;
+                net.send_and_recv_many(PartyID::ID1, &rand, PartyID::ID1)?;
             for (res, (r1, r2)) in result.iter_mut().zip(rcv.into_iter().zip(rand)) {
                 res.b = r1 + r2;
             }
@@ -578,7 +580,7 @@ fn shuffle_field<F: PrimeField, N: Network>(
                 let pi_3 = pi.b.0 as usize;
                 *des = shuffled_1[pi_3] - alpha;
             }
-            network::send_next_many(net, &shuffled_3)?;
+            net.send_next_many(&shuffled_3)?;
 
             // Opt Reshare
             let mut result = Vec::with_capacity(len);
@@ -604,7 +606,7 @@ fn shuffle_field<F: PrimeField, N: Network>(
                 let pi_1 = pi.b.0 as usize;
                 shuffled_1.push(beta_2[pi_1] + alpha);
             }
-            let delta = network::reshare_many(net, &shuffled_1)?;
+            let delta = net.reshare_many(&shuffled_1)?;
             // second shuffle
             let mut beta_2_prime = beta_2;
             for (des, pi) in beta_2_prime.iter_mut().zip(pi) {
@@ -620,7 +622,7 @@ fn shuffle_field<F: PrimeField, N: Network>(
                 rand.push(beta - b);
                 result.push(Rep3PrimeFieldShare::new(F::zero(), b));
             }
-            let rcv: Vec<F> = network::send_and_recv_many(net, PartyID::ID2, &rand, PartyID::ID2)?;
+            let rcv: Vec<F> = net.send_and_recv_many(PartyID::ID2, &rand, PartyID::ID2)?;
             for (res, (r1, r2)) in result.iter_mut().zip(rcv.into_iter().zip(rand)) {
                 res.a = r1 + r2;
             }
@@ -633,7 +635,7 @@ fn shuffle_field<F: PrimeField, N: Network>(
                 let alpha_3_ = state.rngs.rand.random_field_element_rng1::<F>();
                 alpha_3.push(alpha_3_);
             }
-            let gamma: Vec<F> = network::recv_prev_many(net)?;
+            let gamma: Vec<F> = net.recv_prev_many()?;
             // first shuffle
             let mut shuffled_1 = Vec::with_capacity(len);
             for (pi, alpha) in pi.iter().zip(alpha_3.iter()) {
@@ -655,7 +657,7 @@ fn shuffle_field<F: PrimeField, N: Network>(
                 rand.push(beta - a);
                 result.push(Rep3PrimeFieldShare::new(a, F::zero()));
             }
-            let rcv: Vec<F> = network::send_and_recv_many(net, PartyID::ID1, &rand, PartyID::ID1)?;
+            let rcv: Vec<F> = net.send_and_recv_many(PartyID::ID1, &rand, PartyID::ID1)?;
             for (res, (r1, r2)) in result.iter_mut().zip(rcv.into_iter().zip(rand)) {
                 res.b = r1 + r2;
             }
@@ -692,7 +694,7 @@ where
                 let pi_1 = pi.a.0 as usize;
                 shuffled.push(beta_1[pi_1] - alpha);
             }
-            network::send_and_recv_many(net, PartyID::ID2, &shuffled, PartyID::ID2)?
+            net.send_and_recv_many(PartyID::ID2, &shuffled, PartyID::ID2)?
         }
         PartyID::ID1 => {
             // has p2, p1
@@ -709,12 +711,12 @@ where
                 let pi_1 = pi.b.0 as usize;
                 shuffled.push(beta_2[pi_1] + alpha);
             }
-            network::send_and_recv_many(net, PartyID::ID2, &shuffled, PartyID::ID2)?
+            net.send_and_recv_many(PartyID::ID2, &shuffled, PartyID::ID2)?
         }
         PartyID::ID2 => {
             let (delta, gamma) = rayon::join(
-                || network::recv_many(net, PartyID::ID0),
-                || network::recv_many(net, PartyID::ID1),
+                || net.recv_many(PartyID::ID0),
+                || net.recv_many(PartyID::ID1),
             );
             let delta: Vec<RingElement<T>> = delta?;
             let gamma: Vec<RingElement<T>> = gamma?;
@@ -726,8 +728,8 @@ where
                 shuffled.push(gamma[index] + delta[index]);
             }
             let (send0, send1) = rayon::join(
-                || network::send_many(net, PartyID::ID0, &shuffled),
-                || network::send_many(net, PartyID::ID1, &shuffled),
+                || net.send_many(PartyID::ID0, &shuffled),
+                || net.send_many(PartyID::ID1, &shuffled),
             );
             send0?;
             send1?;
@@ -756,7 +758,7 @@ where
                 let alpha_3_ = state.rngs.rand.random_element_rng2::<RingElement<T>>();
                 alpha_3.push(alpha_3_);
             }
-            let gamma: Vec<RingElement<T>> = network::recv_many(net, PartyID::ID1)?;
+            let gamma: Vec<RingElement<T>> = net.recv_many(PartyID::ID1)?;
             // first shuffle
             let mut shuffled_3 = vec![RingElement::zero(); len];
             for (pi, (alpha, gamma)) in pi.iter().zip(alpha_3.iter().zip(gamma)) {
@@ -779,7 +781,7 @@ where
                 result.push(Rep3RingShare::new_ring(RingElement::zero(), b));
             }
             let rcv: Vec<RingElement<T>> =
-                network::send_and_recv_many(net, PartyID::ID1, &rand, PartyID::ID1)?;
+                net.send_and_recv_many(PartyID::ID1, &rand, PartyID::ID1)?;
             for (res, (r1, r2)) in result.iter_mut().zip(rcv.into_iter().zip(rand)) {
                 res.a = r1 + r2;
             }
@@ -800,7 +802,7 @@ where
                 let pi_2 = pi.a.0 as usize;
                 shuffled_3[pi_2] = alpha + beta_2;
             }
-            let delta = network::send_and_recv_many(net, PartyID::ID0, &shuffled_3, PartyID::ID2)?;
+            let delta = net.send_and_recv_many(PartyID::ID0, &shuffled_3, PartyID::ID2)?;
             // second shuffle
             let mut beta_2_prime = beta_2;
             for (src, pi) in delta.into_iter().zip(pi) {
@@ -817,7 +819,7 @@ where
                 result.push(Rep3RingShare::new_ring(a, RingElement::zero()));
             }
             let rcv: Vec<RingElement<T>> =
-                network::send_and_recv_many(net, PartyID::ID0, &rand, PartyID::ID0)?;
+                net.send_and_recv_many(PartyID::ID0, &rand, PartyID::ID0)?;
             for (res, (r1, r2)) in result.iter_mut().zip(rcv.into_iter().zip(rand)) {
                 res.b = r1 + r2;
             }
@@ -846,7 +848,7 @@ where
                 let pi_3 = pi.a.0 as usize;
                 shuffled_2[pi_3] = src - alpha;
             }
-            network::send_many(net, PartyID::ID1, &shuffled_2)?;
+            net.send_many(PartyID::ID1, &shuffled_2)?;
 
             // Opt Reshare
             let mut result = Vec::with_capacity(len);

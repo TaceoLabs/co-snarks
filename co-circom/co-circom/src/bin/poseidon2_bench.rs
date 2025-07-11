@@ -8,8 +8,14 @@ use figment::{
 use mpc_core::{
     gadgets::poseidon2::Poseidon2,
     protocols::{
-        rep3::{self, Rep3PrimeFieldShare, Rep3State, conversion::A2BType, id::PartyID},
-        shamir::{self, ShamirPreprocessing, ShamirPrimeFieldShare, ShamirState},
+        rep3::{
+            self, Rep3PrimeFieldShare, Rep3State, conversion::A2BType, id::PartyID,
+            network::Rep3NetworkExt,
+        },
+        shamir::{
+            self, ShamirPreprocessing, ShamirPrimeFieldShare, ShamirState,
+            network::ShamirNetworkExt,
+        },
     },
 };
 use mpc_net::{
@@ -362,7 +368,12 @@ where
 }
 
 #[allow(dead_code)]
-fn share_random_input_rep3<F: PrimeField, const T: usize, R: Rng + CryptoRng, N: Network>(
+fn share_random_input_rep3<
+    F: PrimeField,
+    const T: usize,
+    R: Rng + CryptoRng,
+    N: Network + Rep3NetworkExt,
+>(
     net: &N,
     num_elements: usize,
     rng: &mut R,
@@ -377,12 +388,12 @@ fn share_random_input_rep3<F: PrimeField, const T: usize, R: Rng + CryptoRng, N:
                 .map(|s| s.into_iter().collect::<Vec<_>>())
                 .collect::<Vec<_>>();
 
-            rep3::network::send_next_many(net, &shares[1])?;
-            rep3::network::send_many(net, id.prev(), &shares[2])?;
+            net.send_next_many(&shares[1])?;
+            net.send_many(id.prev(), &shares[2])?;
             shares[0].clone()
         }
-        PartyID::ID1 => rep3::network::recv_prev_many(net)?,
-        PartyID::ID2 => rep3::network::recv_many(net, id.next())?,
+        PartyID::ID1 => net.recv_prev_many()?,
+        PartyID::ID2 => net.recv_many(id.next())?,
     };
 
     Ok(share)
@@ -613,7 +624,12 @@ where
 }
 
 #[allow(dead_code)]
-fn share_random_input_shamir<F: PrimeField, const T: usize, R: Rng + CryptoRng, N: Network>(
+fn share_random_input_shamir<
+    F: PrimeField,
+    const T: usize,
+    R: Rng + CryptoRng,
+    N: Network + ShamirNetworkExt,
+>(
     net: &N,
     num_parties: usize,
     threshold: usize,
@@ -625,11 +641,11 @@ fn share_random_input_shamir<F: PrimeField, const T: usize, R: Rng + CryptoRng, 
         let shares = shamir::share_field_elements(&input, threshold, num_parties, rng);
         let myshare = shares[0].clone();
         for (i, val) in shares.into_iter().enumerate().skip(1) {
-            shamir::network::send_many(net, i, &val)?;
+            net.send_many(i, &val)?;
         }
         myshare
     } else {
-        shamir::network::recv_many(net, 0)?
+        net.recv_many(0)?
     };
 
     Ok(share)

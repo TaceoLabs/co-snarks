@@ -24,6 +24,7 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use conversion::A2BType;
 use id::PartyID;
 use mpc_net::Network;
+use network::Rep3NetworkExt;
 use num_bigint::BigUint;
 use rand::distributions::Standard;
 use rand::prelude::Distribution;
@@ -69,7 +70,7 @@ impl Rep3State {
 
     fn setup_prf<N: Network, R: Rng + CryptoRng>(net: &N, rng: &mut R) -> eyre::Result<Rep3Rand> {
         let seed1: [u8; crate::SEED_SIZE] = rng.r#gen();
-        let seed2: [u8; crate::SEED_SIZE] = network::reshare(net, seed1)?;
+        let seed2: [u8; crate::SEED_SIZE] = net.reshare(seed1)?;
 
         Ok(Rep3Rand::new(seed1, seed2))
     }
@@ -85,22 +86,22 @@ impl Rep3State {
         match id {
             PartyID::ID0 => {
                 let k2b: [u8; crate::SEED_SIZE] =
-                    network::send_and_recv(net, PartyID::ID1, k1c, PartyID::ID2)?;
+                    net.send_and_recv(PartyID::ID1, k1c, PartyID::ID2)?;
                 let bitcomp1 = Rep3RandBitComp::new_2keys(k1a, k1c);
                 let bitcomp2 = Rep3RandBitComp::new_3keys(k2a, k2b, k2c);
                 Ok((bitcomp1, bitcomp2))
             }
             PartyID::ID1 => {
-                network::send_next(net, (k1c, k2c))?;
-                let k1b: [u8; crate::SEED_SIZE] = network::recv_prev(net)?;
+                net.send_next((k1c, k2c))?;
+                let k1b: [u8; crate::SEED_SIZE] = net.recv_prev()?;
                 let bitcomp1 = Rep3RandBitComp::new_3keys(k1a, k1b, k1c);
                 let bitcomp2 = Rep3RandBitComp::new_2keys(k2a, k2c);
                 Ok((bitcomp1, bitcomp2))
             }
             PartyID::ID2 => {
-                network::send_next(net, k2c)?;
+                net.send_next(k2c)?;
                 let (k1b, k2b): ([u8; crate::SEED_SIZE], [u8; crate::SEED_SIZE]) =
-                    network::recv_prev(net)?;
+                    net.recv_prev()?;
                 let bitcomp1 = Rep3RandBitComp::new_3keys(k1a, k1b, k1c);
                 let bitcomp2 = Rep3RandBitComp::new_3keys(k2a, k2b, k2c);
                 Ok((bitcomp1, bitcomp2))

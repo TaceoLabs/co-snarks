@@ -17,7 +17,7 @@ use rayon::prelude::*;
 
 use super::PartyID;
 use super::Rep3State;
-use super::network;
+use super::network::Rep3NetworkExt;
 use super::{Rep3BigUintShare, Rep3PrimeFieldShare, binary, conversion};
 
 mod ops;
@@ -108,7 +108,7 @@ pub fn mul<F: PrimeField, N: Network>(
     state: &mut Rep3State,
 ) -> eyre::Result<FieldShare<F>> {
     let local_a = a * b + state.rngs.rand.masking_field_element::<F>();
-    let local_b = network::reshare(net, local_a)?;
+    let local_b = net.reshare(local_a)?;
     Ok(FieldShare {
         a: local_a,
         b: local_b,
@@ -151,7 +151,7 @@ pub fn reshare_vec<F: PrimeField, N: Network>(
     local_a: Vec<F>,
     net: &N,
 ) -> eyre::Result<Vec<FieldShare<F>>> {
-    let local_b = network::reshare_many(net, &local_a)?;
+    let local_b = net.reshare_many(&local_a)?;
     if local_b.len() != local_a.len() {
         eyre::bail!("During execution of mul_vec in MPC: Invalid number of elements received",);
     }
@@ -248,7 +248,7 @@ pub fn inv_vec<F: PrimeField, N: Network>(
 
 /// Performs the opening of a shared value and returns the equivalent public value.
 pub fn open<F: PrimeField, N: Network>(a: FieldShare<F>, net: &N) -> eyre::Result<F> {
-    let c = network::reshare(net, a.b)?;
+    let c = net.reshare(a.b)?;
     Ok(a.a + a.b + c)
 }
 
@@ -257,7 +257,7 @@ pub fn open_bit<F: PrimeField, N: Network>(
     a: Rep3BigUintShare<F>,
     net: &N,
 ) -> eyre::Result<BigUint> {
-    let c = network::reshare(net, a.b.to_owned())?;
+    let c = net.reshare(a.b.to_owned())?;
     Ok(a.a ^ a.b ^ c)
 }
 
@@ -270,7 +270,7 @@ pub fn open_vec<F: PrimeField, N: Network>(a: &[FieldShare<F>], net: &N) -> eyre
         .iter()
         .map(|share| (share.a, share.b))
         .collect::<(Vec<F>, Vec<F>)>();
-    let c = network::reshare_many(net, &b)?;
+    let c = net.reshare_many(&b)?;
     Ok(izip!(a, b, c).map(|(a, b, c)| a + b + c).collect_vec())
 }
 
@@ -338,7 +338,7 @@ pub fn mul_open<F: PrimeField, N: Network>(
     state: &mut Rep3State,
 ) -> eyre::Result<F> {
     let a = a * b + state.rngs.rand.masking_field_element::<F>();
-    let (b, c) = network::broadcast(net, a)?;
+    let (b, c) = net.broadcast(a)?;
     Ok(a + b + c)
 }
 
@@ -352,7 +352,7 @@ pub fn mul_open_vec<F: PrimeField, N: Network>(
     let mut a = izip!(a, b)
         .map(|(a, b)| a * b + state.rngs.rand.masking_field_element::<F>())
         .collect_vec();
-    let (b, c) = network::broadcast_many(net, &a)?;
+    let (b, c) = net.broadcast_many(&a)?;
     izip!(a.iter_mut(), b, c).for_each(|(a, b, c)| *a += b + c);
     Ok(a)
 }
@@ -380,7 +380,7 @@ pub fn sqrt<F: PrimeField, N: Network>(
     let mul = mul_vec(&lhs, &rhs, net, state)?;
 
     // Open mul
-    let c = network::reshare_many(net, &mul.iter().map(|s| s.b.to_owned()).collect_vec())?;
+    let c = net.reshare_many(&mul.iter().map(|s| s.b.to_owned()).collect_vec())?;
     if c.len() != 2 {
         eyre::bail!("During execution of square root in MPC: invalid number of elements received",);
     }
@@ -753,7 +753,7 @@ pub(crate) fn arithmetic_xor<F: PrimeField, N: Network>(
     let e = x.a + y.a;
     let res_a = e - d;
 
-    let res_b = network::reshare(net, res_a)?;
+    let res_b = net.reshare(res_a)?;
     Ok(FieldShare { a: res_a, b: res_b })
 }
 
@@ -774,7 +774,7 @@ pub(crate) fn arithmetic_xor_many<F: PrimeField, N: Network>(
         a.push(res_a);
     }
 
-    let b = network::reshare_many(net, &a)?;
+    let b = net.reshare_many(&a)?;
     let res = a
         .into_iter()
         .zip(b)
@@ -823,7 +823,7 @@ pub fn reshare_from_2_to_3_parties<F: PrimeField, N: Network>(
             result.push(Rep3PrimeFieldShare::new(r, b));
         }
         let comm_id = state.id.next();
-        let rcv = network::send_and_recv_many::<_, F>(net, comm_id, &rand, comm_id)?;
+        let rcv = net.send_and_recv_many(comm_id, &rand, comm_id)?;
         for (res, r) in result.iter_mut().zip(rcv) {
             res.a += r;
         }
@@ -836,7 +836,7 @@ pub fn reshare_from_2_to_3_parties<F: PrimeField, N: Network>(
             result.push(Rep3PrimeFieldShare::new(a, r));
         }
         let comm_id = state.id.prev();
-        let rcv = network::send_and_recv_many::<_, F>(net, comm_id, &rand, comm_id)?;
+        let rcv = net.send_and_recv_many(comm_id, &rand, comm_id)?;
         for (res, r) in result.iter_mut().zip(rcv) {
             res.b += r;
         }
