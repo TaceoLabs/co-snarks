@@ -201,12 +201,12 @@ impl<F: PrimeField> Relation<F, ECCVMFlavour> for EccLookupRelation {
 
     type VerifyAcc = EccLookupRelationEvals<F>;
 
-    const SKIPPABLE: bool = false; //TODO FLORIN: Where does this come from?
+    const SKIPPABLE: bool = false;
 
     fn skip<const SIZE: usize>(
-        input: &crate::decider::types::ProverUnivariatesSized<F, ECCVMFlavour, SIZE>,
+        _input: &crate::decider::types::ProverUnivariatesSized<F, ECCVMFlavour, SIZE>,
     ) -> bool {
-        todo!() //TODO FLORIN: Where does this come from?
+        false
     }
 
     fn accumulate<const SIZE: usize>(

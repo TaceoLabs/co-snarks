@@ -8,7 +8,8 @@ pub use crate::keys::verification_key::{
     PublicComponentKey, VerifyingKey, VerifyingKeyBarretenberg,
 };
 pub use crate::polynomials::polynomial::{
-    NUM_DISABLED_ROWS_IN_SUMCHECK, NUM_MASKED_ROWS, Polynomial, RowDisablingPolynomial,
+    NUM_DISABLED_ROWS_IN_SUMCHECK, NUM_MASKED_ROWS, NUM_TRANSLATION_EVALUATIONS, Polynomial,
+    RowDisablingPolynomial,
 };
 pub use crate::polynomials::polynomial_types::{
     Polynomials, PrecomputedEntities, ProverWitnessEntities, ShiftedWitnessEntities,

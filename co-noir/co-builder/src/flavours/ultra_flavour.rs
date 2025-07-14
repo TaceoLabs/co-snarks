@@ -54,7 +54,7 @@ impl ProverFlavour for UltraFlavour {
     const Q_O: usize = 4;
     /// column 5
     const Q_4: usize = 5;
-    const Q_BUSREAD: Option<usize> = None; //Not used in Ultra
+    const Q_BUSREAD: usize = usize::MAX; //Not used in Ultra
     /// column 6
     const Q_LOOKUP: usize = 6;
     /// column 7
@@ -97,8 +97,8 @@ impl ProverFlavour for UltraFlavour {
     const LAGRANGE_FIRST: usize = 25;
     /// column 26
     const LAGRANGE_LAST: usize = 26;
-    const LAGRANGE_ECC_OP: Option<usize> = None; //Not used in Ultra
-    const DATABUS_ID: Option<usize> = None; //Not used in Ultra
+    const LAGRANGE_ECC_OP: usize = usize::MAX; //Not used in Ultra
+    const DATABUS_ID: usize = usize::MAX; //Not used in Ultra
 
     // Prover Witness entities:
     /// column 0
@@ -117,22 +117,22 @@ impl ProverFlavour for UltraFlavour {
     const LOOKUP_READ_COUNTS: usize = 4;
     /// column 7
     const LOOKUP_READ_TAGS: usize = 5;
-    const ECC_OP_WIRE_1: Option<usize> = None;
-    const ECC_OP_WIRE_2: Option<usize> = None;
-    const ECC_OP_WIRE_3: Option<usize> = None;
-    const ECC_OP_WIRE_4: Option<usize> = None;
-    const CALLDATA: Option<usize> = None;
-    const CALLDATA_READ_COUNTS: Option<usize> = None;
-    const CALLDATA_READ_TAGS: Option<usize> = None;
-    const CALLDATA_INVERSES: Option<usize> = None;
-    const SECONDARY_CALLDATA: Option<usize> = None;
-    const SECONDARY_CALLDATA_READ_COUNTS: Option<usize> = None;
-    const SECONDARY_CALLDATA_READ_TAGS: Option<usize> = None;
-    const SECONDARY_CALLDATA_INVERSES: Option<usize> = None;
-    const RETURN_DATA: Option<usize> = None;
-    const RETURN_DATA_READ_COUNTS: Option<usize> = None;
-    const RETURN_DATA_READ_TAGS: Option<usize> = None;
-    const RETURN_DATA_INVERSES: Option<usize> = None;
+    const ECC_OP_WIRE_1: usize = usize::MAX;
+    const ECC_OP_WIRE_2: usize = usize::MAX;
+    const ECC_OP_WIRE_3: usize = usize::MAX;
+    const ECC_OP_WIRE_4: usize = usize::MAX;
+    const CALLDATA: usize = usize::MAX;
+    const CALLDATA_READ_COUNTS: usize = usize::MAX;
+    const CALLDATA_READ_TAGS: usize = usize::MAX;
+    const CALLDATA_INVERSES: usize = usize::MAX;
+    const SECONDARY_CALLDATA: usize = usize::MAX;
+    const SECONDARY_CALLDATA_READ_COUNTS: usize = usize::MAX;
+    const SECONDARY_CALLDATA_READ_TAGS: usize = usize::MAX;
+    const SECONDARY_CALLDATA_INVERSES: usize = usize::MAX;
+    const RETURN_DATA: usize = usize::MAX;
+    const RETURN_DATA_READ_COUNTS: usize = usize::MAX;
+    const RETURN_DATA_READ_TAGS: usize = usize::MAX;
+    const RETURN_DATA_INVERSES: usize = usize::MAX;
 
     //  Witness entities:
     /// column 0
@@ -151,22 +151,22 @@ impl ProverFlavour for UltraFlavour {
     const WITNESS_LOOKUP_READ_COUNTS: usize = 6;
     /// column 7
     const WITNESS_LOOKUP_READ_TAGS: usize = 7;
-    const WITNESS_ECC_OP_WIRE_1: Option<usize> = None;
-    const WITNESS_ECC_OP_WIRE_2: Option<usize> = None;
-    const WITNESS_ECC_OP_WIRE_3: Option<usize> = None;
-    const WITNESS_ECC_OP_WIRE_4: Option<usize> = None;
-    const WITNESS_CALLDATA: Option<usize> = None;
-    const WITNESS_CALLDATA_READ_COUNTS: Option<usize> = None;
-    const WITNESS_CALLDATA_READ_TAGS: Option<usize> = None;
-    const WITNESS_CALLDATA_INVERSES: Option<usize> = None;
-    const WITNESS_SECONDARY_CALLDATA: Option<usize> = None;
-    const WITNESS_SECONDARY_CALLDATA_READ_COUNTS: Option<usize> = None;
-    const WITNESS_SECONDARY_CALLDATA_READ_TAGS: Option<usize> = None;
-    const WITNESS_SECONDARY_CALLDATA_INVERSES: Option<usize> = None;
-    const WITNESS_RETURN_DATA: Option<usize> = None;
-    const WITNESS_RETURN_DATA_READ_COUNTS: Option<usize> = None;
-    const WITNESS_RETURN_DATA_READ_TAGS: Option<usize> = None;
-    const WITNESS_RETURN_DATA_INVERSES: Option<usize> = None;
+    const WITNESS_ECC_OP_WIRE_1: usize = usize::MAX;
+    const WITNESS_ECC_OP_WIRE_2: usize = usize::MAX;
+    const WITNESS_ECC_OP_WIRE_3: usize = usize::MAX;
+    const WITNESS_ECC_OP_WIRE_4: usize = usize::MAX;
+    const WITNESS_CALLDATA: usize = usize::MAX;
+    const WITNESS_CALLDATA_READ_COUNTS: usize = usize::MAX;
+    const WITNESS_CALLDATA_READ_TAGS: usize = usize::MAX;
+    const WITNESS_CALLDATA_INVERSES: usize = usize::MAX;
+    const WITNESS_SECONDARY_CALLDATA: usize = usize::MAX;
+    const WITNESS_SECONDARY_CALLDATA_READ_COUNTS: usize = usize::MAX;
+    const WITNESS_SECONDARY_CALLDATA_READ_TAGS: usize = usize::MAX;
+    const WITNESS_SECONDARY_CALLDATA_INVERSES: usize = usize::MAX;
+    const WITNESS_RETURN_DATA: usize = usize::MAX;
+    const WITNESS_RETURN_DATA_READ_COUNTS: usize = usize::MAX;
+    const WITNESS_RETURN_DATA_READ_TAGS: usize = usize::MAX;
+    const WITNESS_RETURN_DATA_INVERSES: usize = usize::MAX;
 
     fn prover_witness_entity_from_vec<T: Default + Sync + Clone>(
         vec: Vec<crate::prelude::Polynomial<T>>,
@@ -240,11 +240,7 @@ impl<T: Default> PrecomputedEntitiesFlavour<T> for UltraPrecomputedEntities<T> {
         &self.elements[UltraFlavour::Q_4]
     }
     fn q_busread(&self) -> &T {
-        if let Some(idx) = UltraFlavour::Q_BUSREAD {
-            &self.elements[idx]
-        } else {
-            panic!("This should not be called with the UltraFlavor");
-        }
+        panic!("This should not be called with the UltraFlavor");
     }
     fn q_arith(&self) -> &T {
         &self.elements[UltraFlavour::Q_ARITH]

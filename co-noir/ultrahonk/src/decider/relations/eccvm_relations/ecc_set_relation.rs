@@ -3,6 +3,7 @@ use crate::{
     prelude::Univariate,
 };
 use ark_ff::PrimeField;
+use ark_ff::Zero;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::{
     flavours::eccvm_flavour::ECCVMFlavour,
@@ -415,12 +416,14 @@ impl<F: PrimeField> Relation<F, ECCVMFlavour> for EccSetRelation {
 
     type VerifyAcc = EccSetRelationEvals<F>;
 
-    const SKIPPABLE: bool = false; //TODO FLORIN: Where does this come from?
+    const SKIPPABLE: bool = false;
 
     fn skip<const SIZE: usize>(
         input: &crate::decider::types::ProverUnivariatesSized<F, ECCVMFlavour, SIZE>,
     ) -> bool {
-        todo!() //TODO FLORIN: Where does this come from?
+        (input.witness.z_perm().to_owned()
+            + input.shifted_witness.z_perm_shift().to_owned() * F::from(-1))
+        .is_zero()
     }
 
     fn accumulate<const SIZE: usize>(
@@ -439,11 +442,9 @@ impl<F: PrimeField> Relation<F, ECCVMFlavour> for EccSetRelation {
 
         let lagrange_first = input.precomputed.lagrange_first();
         let lagrange_last = input.precomputed.lagrange_last();
-        //  const auto& lagrange_last_short = ShortView(in.lagrange_last); TODO FLORIN: Is this relevant?
 
         let z_perm = input.witness.z_perm();
         let z_perm_shift = input.shifted_witness.z_perm_shift();
-        // const auto& z_perm_shift_short = ShortView(in.z_perm_shift); TODO FLORIN: Is this relevant?
 
         // degree-21
         let mut tmp = ((z_perm.to_owned() + lagrange_first) * numerator_evaluation
@@ -461,10 +462,10 @@ impl<F: PrimeField> Relation<F, ECCVMFlavour> for EccSetRelation {
     }
 
     fn verify_accumulate(
-        univariate_accumulator: &mut Self::VerifyAcc,
-        input: &crate::prelude::ClaimedEvaluations<F, ECCVMFlavour>,
-        relation_parameters: &crate::prelude::RelationParameters<F, ECCVMFlavour>,
-        scaling_factor: &F,
+        _univariate_accumulator: &mut Self::VerifyAcc,
+        _input: &crate::prelude::ClaimedEvaluations<F, ECCVMFlavour>,
+        _relation_parameters: &crate::prelude::RelationParameters<F, ECCVMFlavour>,
+        _scaling_factor: &F,
     ) {
         todo!()
     }

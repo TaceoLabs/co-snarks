@@ -359,15 +359,15 @@ impl<F: PrimeField> EccMsmRelationAcc<F> {
 impl EccMsmRelation {
     pub(crate) const NUM_RELATIONS: usize = 36;
 
-    const SKIPPABLE: bool = false; //TODO FLORIN: Where does this come from?
+    pub(crate) const SKIPPABLE: bool = false;
 
-    fn skip<F: PrimeField, const SIZE: usize>(
-        input: &crate::decider::types::ProverUnivariatesSized<F, ECCVMFlavour, SIZE>,
+    pub(crate) fn skip<F: PrimeField, const SIZE: usize>(
+        _input: &crate::decider::types::ProverUnivariatesSized<F, ECCVMFlavour, SIZE>,
     ) -> bool {
-        todo!() //TODO FLORIN: Where does this come from?
+        false
     }
 
-    fn accumulate<P: HonkCurve<TranscriptFieldType>, const SIZE: usize>(
+    pub(crate) fn accumulate<P: HonkCurve<TranscriptFieldType>, const SIZE: usize>(
         univariate_accumulator: &mut EccMsmRelationAcc<P::ScalarField>,
         input: &crate::decider::types::ProverUnivariatesSized<P::ScalarField, ECCVMFlavour, SIZE>,
         _relation_parameters: &crate::prelude::RelationParameters<P::ScalarField, ECCVMFlavour>,
@@ -547,7 +547,7 @@ impl EccMsmRelation {
         for i in domain_separator.chars() {
             domain_bytes.push(i as u8);
         }
-        let offset_generator = derive_generators::<P::CycleGroup>(&domain_bytes, 1, 0)[0];
+        let offset_generator = derive_generators::<P::CycleGroup>(&domain_bytes, 1, 0)[0]; //TODO FLORIN is this really CycleGroup?
         let oxu = offset_generator
             .x()
             .expect("Offset generator x coordinate should not be None");

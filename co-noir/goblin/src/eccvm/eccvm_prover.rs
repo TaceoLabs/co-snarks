@@ -1,5 +1,5 @@
 #![expect(unused)]
-use crate::eccvm::types::TranslationData;
+use crate::eccvm::eccvm_types::TranslationData;
 use crate::ipa::compute_ipa_opening_proof;
 use ark_ec::CurveGroup;
 use ark_ff::FftField;
@@ -31,6 +31,7 @@ use ultrahonk::{
 
 //TODO FLORIN MOVE THIS SOMEWHERE ELSE LATER
 pub(crate) const CONST_ECCVM_LOG_N: usize = 16;
+pub(crate) const ECCVM_FIXED_SIZE: usize = 1usize << CONST_ECCVM_LOG_N;
 const NUM_RELATIONS: usize = 7;
 const NUM_TRANSLATION_OPENING_CLAIMS: usize = NUM_SMALL_IPA_EVALUATIONS + 1;
 const NUM_OPENING_CLAIMS: usize = NUM_TRANSLATION_OPENING_CLAIMS + 1;
@@ -47,7 +48,6 @@ struct Eccvm<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFi
     memory: ProverMemory<P>, //This is somewhat equivalent to the Oink Memory (i.e stores the lookup_inverses and z_perm)
 }
 
-// BIG TODO FLORIN: we still need to think about how to do all this with Grumpkin (also different crs)
 // This happens when we construct the eccvm prover from the eccopqueue
 impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> Eccvm<P, H> {
     /// A uniform method to mask, commit, and send the corresponding commitment to the verifier.
@@ -71,7 +71,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     fn construct_proof(
         &mut self,
         mut transcript: Transcript<TranscriptFieldType, H>,
-        proving_key: &mut ProvingKey<P, ECCVMFlavour>, //TODO FLORIN: This has to be Grumpkin, so we need the Grumpkin CRS as well
+        proving_key: &mut ProvingKey<P, ECCVMFlavour>,
     ) -> HonkProofResult<(
         HonkProof<TranscriptFieldType>,
         HonkProof<TranscriptFieldType>,
@@ -822,11 +822,11 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         SumcheckOutput<P::ScalarField, ECCVMFlavour>,
         ZKSumcheckData<P>,
     )> {
-        // using Sumcheck = SumcheckProver<Flavor, CONST_ECCVM_LOG_N>;
-
-        // Sumcheck sumcheck(key->circuit_size, transcript);
-        let alpha = transcript.get_challenge::<P>("Sumcheck:alpha".to_string()); //TODO FLORIN ADD ALPHAS TO THE RELATION PARAMETERS
+        self.decider.memory.relation_parameters.alphas =
+            transcript.get_challenge::<P>("Sumcheck:alpha".to_string());
         let mut gate_challenges: Vec<P::ScalarField> = Vec::with_capacity(CONST_ECCVM_LOG_N);
+
+        todo!("Add polynomials to the decider memory");
 
         for idx in 0..CONST_ECCVM_LOG_N {
             let chall = transcript.get_challenge::<P>(format!("Sumcheck:gate_challenge_{idx}"));
@@ -901,7 +901,6 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         proving_key: &ProvingKey<P, ECCVMFlavour>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
     ) -> HonkProofResult<()> {
-        //TODO FLORIN RETURN VALUE
         tracing::trace!("compute translation opening claims");
 
         // Collect the polynomials to be batched
@@ -922,8 +921,12 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
         // Extract the masking terms of `translation_polynomials`, concatenate them in the Lagrange basis over SmallSubgroup
         // H, mask the resulting polynomial, and commit to it
-        let mut translation_data =
-            TranslationData::new(&translation_polynomials, transcript, &proving_key.crs);
+        let mut translation_data = TranslationData::new(
+            &translation_polynomials,
+            transcript,
+            &proving_key.crs,
+            &mut self.decider.rng,
+        )?;
 
         // Get a challenge to evaluate the `translation_polynomials` as univariates
         let evaluation_challenge_x: P::ScalarField =
@@ -968,7 +971,6 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             small_ipa_evaluation_challenge,
         ];
 
-        //TODO FLORIN PREFIX LABEL:
         let evaluation_labels = [
             "Translation:concatenation_eval".to_string(),
             "Translation:grand_sum_shift_eval".to_string(),
@@ -990,7 +992,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
                     challenge: evaluation_points[idx],
                     evaluation,
                 },
-                gemini_fold: false, //TODO FLORIN CHECK
+                gemini_fold: false,
             };
         }
 
@@ -1019,7 +1021,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
                 challenge: evaluation_challenge_x,
                 evaluation: batched_translation_evaluation,
             },
-            gemini_fold: false, //TODO FLORIN CHECK
+            gemini_fold: false,
         };
         Ok(())
     }

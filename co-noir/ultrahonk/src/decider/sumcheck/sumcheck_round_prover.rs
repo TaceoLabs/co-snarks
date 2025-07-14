@@ -2,7 +2,13 @@ use super::{
     super::types::{GateSeparatorPolynomial, RelationParameters},
     zk_data::ZKSumcheckData,
 };
-use crate::{decider::types::ProverUnivariates, plain_prover_flavour::PlainProverFlavour};
+use crate::{
+    decider::{
+        relations::eccvm_relations::ecc_msm_relation::{EccMsmRelation, EccMsmRelationAcc},
+        types::ProverUnivariates,
+    },
+    plain_prover_flavour::PlainProverFlavour,
+};
 use crate::{
     decider::{
         relations::{
@@ -17,7 +23,10 @@ use crate::{
 };
 
 use ark_ff::PrimeField;
-use co_builder::prelude::{HonkCurve, RowDisablingPolynomial};
+use co_builder::{
+    flavours::eccvm_flavour::ECCVMFlavour,
+    prelude::{HonkCurve, RowDisablingPolynomial},
+};
 
 pub(crate) struct SumcheckProverRound<F: PrimeField, L: PlainProverFlavour> {
     pub(crate) round_size: usize,
@@ -169,6 +178,26 @@ impl<F: PrimeField, L: PlainProverFlavour> SumcheckProverRound<F, L> {
         }
 
         EllipticRelation::accumulate::<P, L, SIZE>(
+            univariate_accumulator,
+            extended_edges,
+            relation_parameters,
+            scaling_factor,
+        );
+    }
+    pub(crate) fn accumulate_ecc_msm_relation<
+        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
+        const SIZE: usize,
+    >(
+        univariate_accumulator: &mut EccMsmRelationAcc<F>,
+        extended_edges: &ProverUnivariatesSized<F, ECCVMFlavour, SIZE>,
+        relation_parameters: &RelationParameters<F, ECCVMFlavour>,
+        scaling_factor: &F,
+    ) {
+        if EccMsmRelation::SKIPPABLE && EccMsmRelation::skip::<F, SIZE>(extended_edges) {
+            return;
+        }
+
+        EccMsmRelation::accumulate::<P, SIZE>(
             univariate_accumulator,
             extended_edges,
             relation_parameters,

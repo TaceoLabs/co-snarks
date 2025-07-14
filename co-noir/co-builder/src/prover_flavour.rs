@@ -11,6 +11,7 @@ pub enum Flavour {
     Ultra,
     Mega,
     ECCVM,
+    Translator,
 }
 
 pub trait ProverFlavour: Default {
@@ -47,7 +48,7 @@ pub trait ProverFlavour: Default {
     const Q_R: usize;
     const Q_O: usize;
     const Q_4: usize;
-    const Q_BUSREAD: Option<usize>;
+    const Q_BUSREAD: usize;
     const Q_LOOKUP: usize;
     const Q_ARITH: usize;
     const Q_DELTA_RANGE: usize;
@@ -69,8 +70,8 @@ pub trait ProverFlavour: Default {
     const TABLE_4: usize;
     const LAGRANGE_FIRST: usize;
     const LAGRANGE_LAST: usize;
-    const LAGRANGE_ECC_OP: Option<usize>;
-    const DATABUS_ID: Option<usize>;
+    const LAGRANGE_ECC_OP: usize;
+    const DATABUS_ID: usize;
 
     // Prover Witness entities:
     const W_L: usize;
@@ -81,22 +82,22 @@ pub trait ProverFlavour: Default {
     // const LOOKUP_INVERSES: usize;
     const LOOKUP_READ_COUNTS: usize;
     const LOOKUP_READ_TAGS: usize;
-    const ECC_OP_WIRE_1: Option<usize>;
-    const ECC_OP_WIRE_2: Option<usize>;
-    const ECC_OP_WIRE_3: Option<usize>;
-    const ECC_OP_WIRE_4: Option<usize>;
-    const CALLDATA: Option<usize>;
-    const CALLDATA_READ_COUNTS: Option<usize>;
-    const CALLDATA_READ_TAGS: Option<usize>;
-    const CALLDATA_INVERSES: Option<usize>;
-    const SECONDARY_CALLDATA: Option<usize>;
-    const SECONDARY_CALLDATA_READ_COUNTS: Option<usize>;
-    const SECONDARY_CALLDATA_READ_TAGS: Option<usize>;
-    const SECONDARY_CALLDATA_INVERSES: Option<usize>;
-    const RETURN_DATA: Option<usize>;
-    const RETURN_DATA_READ_COUNTS: Option<usize>;
-    const RETURN_DATA_READ_TAGS: Option<usize>;
-    const RETURN_DATA_INVERSES: Option<usize>;
+    const ECC_OP_WIRE_1: usize;
+    const ECC_OP_WIRE_2: usize;
+    const ECC_OP_WIRE_3: usize;
+    const ECC_OP_WIRE_4: usize;
+    const CALLDATA: usize;
+    const CALLDATA_READ_COUNTS: usize;
+    const CALLDATA_READ_TAGS: usize;
+    const CALLDATA_INVERSES: usize;
+    const SECONDARY_CALLDATA: usize;
+    const SECONDARY_CALLDATA_READ_COUNTS: usize;
+    const SECONDARY_CALLDATA_READ_TAGS: usize;
+    const SECONDARY_CALLDATA_INVERSES: usize;
+    const RETURN_DATA: usize;
+    const RETURN_DATA_READ_COUNTS: usize;
+    const RETURN_DATA_READ_TAGS: usize;
+    const RETURN_DATA_INVERSES: usize;
 
     //  Witness entities:
     /// column 0
@@ -115,22 +116,22 @@ pub trait ProverFlavour: Default {
     const WITNESS_LOOKUP_READ_COUNTS: usize;
     /// column 7
     const WITNESS_LOOKUP_READ_TAGS: usize;
-    const WITNESS_ECC_OP_WIRE_1: Option<usize>;
-    const WITNESS_ECC_OP_WIRE_2: Option<usize>;
-    const WITNESS_ECC_OP_WIRE_3: Option<usize>;
-    const WITNESS_ECC_OP_WIRE_4: Option<usize>;
-    const WITNESS_CALLDATA: Option<usize>;
-    const WITNESS_CALLDATA_READ_COUNTS: Option<usize>;
-    const WITNESS_CALLDATA_READ_TAGS: Option<usize>;
-    const WITNESS_CALLDATA_INVERSES: Option<usize>;
-    const WITNESS_SECONDARY_CALLDATA: Option<usize>;
-    const WITNESS_SECONDARY_CALLDATA_READ_COUNTS: Option<usize>;
-    const WITNESS_SECONDARY_CALLDATA_READ_TAGS: Option<usize>;
-    const WITNESS_SECONDARY_CALLDATA_INVERSES: Option<usize>;
-    const WITNESS_RETURN_DATA: Option<usize>;
-    const WITNESS_RETURN_DATA_READ_COUNTS: Option<usize>;
-    const WITNESS_RETURN_DATA_READ_TAGS: Option<usize>;
-    const WITNESS_RETURN_DATA_INVERSES: Option<usize>;
+    const WITNESS_ECC_OP_WIRE_1: usize;
+    const WITNESS_ECC_OP_WIRE_2: usize;
+    const WITNESS_ECC_OP_WIRE_3: usize;
+    const WITNESS_ECC_OP_WIRE_4: usize;
+    const WITNESS_CALLDATA: usize;
+    const WITNESS_CALLDATA_READ_COUNTS: usize;
+    const WITNESS_CALLDATA_READ_TAGS: usize;
+    const WITNESS_CALLDATA_INVERSES: usize;
+    const WITNESS_SECONDARY_CALLDATA: usize;
+    const WITNESS_SECONDARY_CALLDATA_READ_COUNTS: usize;
+    const WITNESS_SECONDARY_CALLDATA_READ_TAGS: usize;
+    const WITNESS_SECONDARY_CALLDATA_INVERSES: usize;
+    const WITNESS_RETURN_DATA: usize;
+    const WITNESS_RETURN_DATA_READ_COUNTS: usize;
+    const WITNESS_RETURN_DATA_READ_TAGS: usize;
+    const WITNESS_RETURN_DATA_INVERSES: usize;
 
     fn prover_witness_entity_from_vec<T: Default + Sync + Clone>(
         vec: Vec<Polynomial<T>>,
