@@ -11,6 +11,7 @@ pub enum Flavour {
     Ultra,
     Mega,
     ECCVM,
+    Translator,
 }
 
 pub trait ProverFlavour: Default {

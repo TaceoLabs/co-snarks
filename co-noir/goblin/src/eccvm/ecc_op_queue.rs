@@ -5,6 +5,8 @@ use co_builder::prelude::Polynomial;
 use num_bigint::BigUint;
 use std::array;
 
+// TODO FLORIN: Find out which functions in this are actually needed
+
 const NUM_LIMB_BITS_IN_FIELD_SIMULATION: usize = 68;
 const NUM_SCALAR_BITS: usize = 128; // The length of scalars handled by the ECCVVM
 const NUM_WNAF_DIGIT_BITS: usize = 4; // Scalars are decompose into base 16 in wNAF form
