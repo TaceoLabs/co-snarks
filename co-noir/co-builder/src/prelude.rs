@@ -8,7 +8,8 @@ pub use crate::keys::verification_key::{
     PublicComponentKey, VerifyingKey, VerifyingKeyBarretenberg,
 };
 pub use crate::polynomials::polynomial::{
-    NUM_DISABLED_ROWS_IN_SUMCHECK, NUM_MASKED_ROWS, Polynomial, RowDisablingPolynomial,
+    NUM_DISABLED_ROWS_IN_SUMCHECK, NUM_MASKED_ROWS, NUM_TRANSLATION_EVALUATIONS, Polynomial,
+    RowDisablingPolynomial,
 };
 pub use crate::polynomials::polynomial_types::{
     Polynomials, PrecomputedEntities, ProverWitnessEntities, ShiftedWitnessEntities,
@@ -16,7 +17,7 @@ pub use crate::polynomials::polynomial_types::{
 };
 pub use crate::serialize::{Serialize, SerializeP};
 pub use crate::types::aes128::AES128_SBOX;
-pub use crate::types::generators::derive_generators;
+pub use crate::types::generators::{derive_generators, offset_generator, offset_generator_scaled};
 pub use crate::types::types::{
     AGGREGATION_OBJECT_SIZE, ActiveRegionData, CycleNode, CyclicPermutation, NUM_SELECTORS,
     NUM_WIRES, PAIRING_POINT_ACCUMULATOR_SIZE, ZeroKnowledge,

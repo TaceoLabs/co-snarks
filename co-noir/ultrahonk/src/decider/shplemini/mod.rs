@@ -11,13 +11,13 @@ pub(crate) struct ShpleminiVerifierOpeningClaim<P: CurveGroup> {
     pub(crate) scalars: Vec<P::ScalarField>,
     pub(crate) commitments: Vec<P::Affine>,
 }
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct ShpleminiOpeningClaim<F: PrimeField> {
     pub polynomial: Polynomial<F>,
     pub opening_pair: OpeningPair<F>,
     pub gemini_fold: bool,
 }
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct OpeningPair<F: PrimeField> {
     pub challenge: F,
     pub evaluation: F,

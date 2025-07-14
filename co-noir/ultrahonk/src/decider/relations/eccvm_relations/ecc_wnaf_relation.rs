@@ -26,9 +26,9 @@ pub(crate) struct EccWnafRelationAcc<F: PrimeField> {
     pub(crate) r18: Univariate<F, 5>,
     pub(crate) r19: Univariate<F, 5>,
     pub(crate) r20: Univariate<F, 5>,
-    pub(crate) r21: Univariate<F, 5>,
 }
 #[derive(Clone, Debug, Default)]
+#[expect(dead_code)]
 pub(crate) struct EccWnafRelationEvals<F: PrimeField> {
     pub(crate) r0: F,
     pub(crate) r1: F,
@@ -51,39 +51,57 @@ pub(crate) struct EccWnafRelationEvals<F: PrimeField> {
     pub(crate) r18: F,
     pub(crate) r19: F,
     pub(crate) r20: F,
-    pub(crate) r21: F,
 }
 
 pub(crate) struct EccWnafRelation {}
 impl EccWnafRelation {
-    pub(crate) const NUM_RELATIONS: usize = 19;
+    pub(crate) const NUM_RELATIONS: usize = 21;
 }
 
 impl<F: PrimeField> EccWnafRelationAcc<F> {
-    pub(crate) fn scale(&mut self, elements: &[F]) {
-        assert!(elements.len() == EccWnafRelation::NUM_RELATIONS);
-        self.r0 *= elements[0];
-        self.r1 *= elements[1];
-        self.r2 *= elements[2];
-        self.r3 *= elements[3];
-        self.r4 *= elements[4];
-        self.r5 *= elements[5];
-        self.r6 *= elements[6];
-        self.r7 *= elements[7];
-        self.r8 *= elements[8];
-        self.r9 *= elements[9];
-        self.r10 *= elements[10];
-        self.r11 *= elements[11];
-        self.r12 *= elements[12];
-        self.r13 *= elements[13];
-        self.r14 *= elements[14];
-        self.r15 *= elements[15];
-        self.r16 *= elements[16];
-        self.r17 *= elements[17];
-        self.r18 *= elements[18];
-        self.r19 *= elements[19];
-        self.r20 *= elements[20];
-        self.r21 *= elements[21];
+    pub(crate) fn scale(&mut self, current_scalar: &mut F, challenge: &F) {
+        self.r0 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r1 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r2 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r3 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r4 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r5 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r6 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r7 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r8 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r9 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r10 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r11 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r12 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r13 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r14 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r15 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r16 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r17 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r18 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r19 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r20 *= *current_scalar;
+        *current_scalar *= challenge;
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(
@@ -218,12 +236,6 @@ impl<F: PrimeField> EccWnafRelationAcc<F> {
             partial_evaluation_result,
             true,
         );
-        self.r21.extend_and_batch_univariates(
-            result,
-            extended_random_poly,
-            partial_evaluation_result,
-            true,
-        );
     }
 }
 
@@ -232,18 +244,18 @@ impl<F: PrimeField> Relation<F, ECCVMFlavour> for EccWnafRelation {
 
     type VerifyAcc = EccWnafRelationEvals<F>;
 
-    const SKIPPABLE: bool = false; //TODO FLORIN: Where does this come from?
+    const SKIPPABLE: bool = false;
 
     fn skip<const SIZE: usize>(
-        input: &crate::decider::types::ProverUnivariatesSized<F, ECCVMFlavour, SIZE>,
+        _input: &crate::decider::types::ProverUnivariatesSized<F, ECCVMFlavour, SIZE>,
     ) -> bool {
-        todo!() //TODO FLORIN: Where does this come from?
+        false
     }
 
     fn accumulate<const SIZE: usize>(
         univariate_accumulator: &mut Self::Acc,
         input: &crate::decider::types::ProverUnivariatesSized<F, ECCVMFlavour, SIZE>,
-        relation_parameters: &crate::prelude::RelationParameters<F, ECCVMFlavour>,
+        _relation_parameters: &crate::prelude::RelationParameters<F, ECCVMFlavour>,
         scaling_factor: &F,
     ) {
         let scalar_sum = input.witness.precompute_scalar_sum();
@@ -282,7 +294,7 @@ impl<F: PrimeField> Relation<F, ECCVMFlavour> for EccWnafRelation {
                     * ((s.to_owned() + &minus_two).sqr() + &minus_one)
                     * scaling_factor;
                 for i in 0..acc.evaluations.len() {
-                    acc.evaluations[i] = tmp.evaluations[i];
+                    acc.evaluations[i] += tmp.evaluations[i];
                 }
             };
 
@@ -298,9 +310,14 @@ impl<F: PrimeField> Relation<F, ECCVMFlavour> for EccWnafRelation {
         let scaled_transition = q_transition.to_owned() * scaling_factor;
         let scaled_transition_is_zero = -scaled_transition.clone() + scaling_factor;
 
-        for slice in slices.iter() {
-            range_constraint_slice_to_2_bits(slice, &mut univariate_accumulator.r0);
-        }
+        range_constraint_slice_to_2_bits(slices[0], &mut univariate_accumulator.r0);
+        range_constraint_slice_to_2_bits(slices[1], &mut univariate_accumulator.r1);
+        range_constraint_slice_to_2_bits(slices[2], &mut univariate_accumulator.r2);
+        range_constraint_slice_to_2_bits(slices[3], &mut univariate_accumulator.r3);
+        range_constraint_slice_to_2_bits(slices[4], &mut univariate_accumulator.r4);
+        range_constraint_slice_to_2_bits(slices[5], &mut univariate_accumulator.r5);
+        range_constraint_slice_to_2_bits(slices[6], &mut univariate_accumulator.r6);
+        range_constraint_slice_to_2_bits(slices[7], &mut univariate_accumulator.r7);
 
         let s1_shift = input.shifted_witness.precompute_s1hi_shift();
         let s1_shift_msb_set =
@@ -356,9 +373,9 @@ impl<F: PrimeField> Relation<F, ECCVMFlavour> for EccWnafRelation {
             univariate_accumulator.r11.evaluations[i] += tmp.evaluations[i];
         }
 
-        let pc_delta = pc.to_owned() * minus_one + pc_shift;
+        let pc_delta = pc_shift.to_owned() - pc;
         tmp = precompute_select.to_owned()
-            * (scaled_transition * (pc_delta.to_owned() * minus_one + &minus_one)
+            * (scaled_transition * (pc_delta.to_owned() * minus_two + &minus_one)
                 + pc_delta * scaling_factor);
         for i in 0..univariate_accumulator.r12.evaluations.len() {
             univariate_accumulator.r12.evaluations[i] += tmp.evaluations[i];

@@ -10,7 +10,6 @@ use ark_ff::One;
 use ark_ff::UniformRand;
 use ark_ff::Zero;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
-use co_builder::HonkProofError;
 use co_builder::HonkProofResult;
 use co_builder::prelude::HonkCurve;
 use co_builder::prelude::Polynomial;
@@ -191,14 +190,17 @@ impl<P: HonkCurve<TranscriptFieldType>> ZKSumcheckData<P> {
 
         let masking_scalars = Univariate::<P::ScalarField, 2>::get_random(rng);
 
-        let domain = GeneralEvaluationDomain::<P::ScalarField>::new(P::SUBGROUP_SIZE)
-            .ok_or(HonkProofError::LargeSubgroup)?;
-
-        let coeffs_lagrange_subgroup_ifft =
-            domain.ifft(&self.libra_concatenated_lagrange_form.coefficients);
-        let libra_concatenated_monomial_form_unmasked = Polynomial::<P::ScalarField> {
-            coefficients: coeffs_lagrange_subgroup_ifft,
-        };
+        let libra_concatenated_monomial_form_unmasked =
+            match GeneralEvaluationDomain::<P::ScalarField>::new(P::SUBGROUP_SIZE) {
+                Some(domain) => Polynomial::<P::ScalarField> {
+                    coefficients: domain.ifft(&self.libra_concatenated_lagrange_form.coefficients),
+                },
+                None => Polynomial::<P::ScalarField>::interpolate_from_evals(
+                    &self.interpolation_domain,
+                    &self.libra_concatenated_lagrange_form.coefficients,
+                    P::SUBGROUP_SIZE,
+                ),
+            };
 
         for idx in 0..P::SUBGROUP_SIZE {
             self.libra_concatenated_monomial_form.coefficients[idx] =

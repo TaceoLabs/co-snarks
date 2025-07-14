@@ -1,10 +1,10 @@
+use crate::plain_prover_flavour::UnivariateTrait;
 use crate::prelude::Univariate;
 use crate::transcript::TranscriptFieldType;
 use ark_ec::AffineRepr;
 use ark_ff::Field;
 use ark_ff::One;
 use ark_ff::PrimeField;
-use ark_ff::Zero;
 use co_builder::flavours::eccvm_flavour::ECCVMFlavour;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::prelude::{HonkCurve, derive_generators};
@@ -49,6 +49,7 @@ pub(crate) struct EccMsmRelationAcc<F: PrimeField> {
     pub(crate) r35: Univariate<F, 8>,
 }
 #[derive(Clone, Debug, Default)]
+#[expect(dead_code)]
 pub(crate) struct EccMsmRelationEvals<F: PrimeField> {
     pub(crate) r0: F,
     pub(crate) r1: F,
@@ -91,44 +92,79 @@ pub(crate) struct EccMsmRelationEvals<F: PrimeField> {
 pub(crate) struct EccMsmRelation {}
 
 impl<F: PrimeField> EccMsmRelationAcc<F> {
-    pub(crate) fn scale(&mut self, elements: &[F]) {
-        assert!(elements.len() == EccMsmRelation::NUM_RELATIONS);
-        self.r0 *= elements[0];
-        self.r1 *= elements[1];
-        self.r2 *= elements[2];
-        self.r3 *= elements[3];
-        self.r4 *= elements[4];
-        self.r5 *= elements[5];
-        self.r6 *= elements[6];
-        self.r7 *= elements[7];
-        self.r8 *= elements[8];
-        self.r9 *= elements[9];
-        self.r10 *= elements[10];
-        self.r11 *= elements[11];
-        self.r12 *= elements[12];
-        self.r13 *= elements[13];
-        self.r14 *= elements[14];
-        self.r15 *= elements[15];
-        self.r16 *= elements[16];
-        self.r17 *= elements[17];
-        self.r18 *= elements[18];
-        self.r19 *= elements[0];
-        self.r20 *= elements[1];
-        self.r21 *= elements[2];
-        self.r22 *= elements[3];
-        self.r23 *= elements[4];
-        self.r24 *= elements[5];
-        self.r25 *= elements[6];
-        self.r26 *= elements[7];
-        self.r27 *= elements[8];
-        self.r28 *= elements[9];
-        self.r29 *= elements[10];
-        self.r30 *= elements[11];
-        self.r31 *= elements[12];
-        self.r32 *= elements[13];
-        self.r33 *= elements[14];
-        self.r34 *= elements[15];
-        self.r35 *= elements[16];
+    pub(crate) fn scale(&mut self, current_scalar: &mut F, challenge: &F) {
+        self.r0 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r1 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r2 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r3 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r4 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r5 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r6 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r7 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r8 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r9 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r10 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r11 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r12 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r13 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r14 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r15 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r16 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r17 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r18 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r19 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r20 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r21 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r22 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r23 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r24 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r25 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r26 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r27 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r28 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r29 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r30 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r31 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r32 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r33 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r34 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r35 *= *current_scalar;
+        *current_scalar *= challenge;
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(
@@ -287,6 +323,7 @@ impl<F: PrimeField> EccMsmRelationAcc<F> {
             partial_evaluation_result,
             true,
         );
+
         self.r25.extend_and_batch_univariates(
             result,
             extended_random_poly,
@@ -359,15 +396,15 @@ impl<F: PrimeField> EccMsmRelationAcc<F> {
 impl EccMsmRelation {
     pub(crate) const NUM_RELATIONS: usize = 36;
 
-    const SKIPPABLE: bool = false; //TODO FLORIN: Where does this come from?
+    pub(crate) const SKIPPABLE: bool = false;
 
-    fn skip<F: PrimeField, const SIZE: usize>(
-        input: &crate::decider::types::ProverUnivariatesSized<F, ECCVMFlavour, SIZE>,
+    pub(crate) fn skip<F: PrimeField, const SIZE: usize>(
+        _input: &crate::decider::types::ProverUnivariatesSized<F, ECCVMFlavour, SIZE>,
     ) -> bool {
-        todo!() //TODO FLORIN: Where does this come from?
+        false
     }
 
-    fn accumulate<P: HonkCurve<TranscriptFieldType>, const SIZE: usize>(
+    pub(crate) fn accumulate<P: HonkCurve<TranscriptFieldType>, const SIZE: usize>(
         univariate_accumulator: &mut EccMsmRelationAcc<P::ScalarField>,
         input: &crate::decider::types::ProverUnivariatesSized<P::ScalarField, ECCVMFlavour, SIZE>,
         _relation_parameters: &crate::prelude::RelationParameters<P::ScalarField, ECCVMFlavour>,
@@ -391,34 +428,34 @@ impl EccMsmRelation {
         let lambda4 = input.witness.msm_lambda4();
         let lagrange_first = input.precomputed.lagrange_first();
         let add1 = input.witness.msm_add1();
-        let add1_shift = input.witness.msm_add1_shift();
+        let add1_shift = input.shifted_witness.msm_add1_shift();
         let add2 = input.witness.msm_add2();
         let add3 = input.witness.msm_add3();
         let add4 = input.witness.msm_add4();
         let acc_x = input.witness.msm_accumulator_x();
         let acc_y = input.witness.msm_accumulator_y();
-        let acc_x_shift = input.witness.msm_accumulator_x_shift();
-        let acc_y_shift = input.witness.msm_accumulator_y_shift();
+        let acc_x_shift = input.shifted_witness.msm_accumulator_x_shift();
+        let acc_y_shift = input.shifted_witness.msm_accumulator_y_shift();
         let slice1 = input.witness.msm_slice1();
         let slice2 = input.witness.msm_slice2();
         let slice3 = input.witness.msm_slice3();
         let slice4 = input.witness.msm_slice4();
         let msm_transition = input.witness.msm_transition();
-        let msm_transition_shift = input.witness.msm_transition_shift();
+        let msm_transition_shift = input.shifted_witness.msm_transition_shift();
         let round = input.witness.msm_round();
-        let round_shift = input.witness.msm_round_shift();
+        let round_shift = input.shifted_witness.msm_round_shift();
         let q_add = input.witness.msm_add();
-        let q_add_shift = input.witness.msm_add_shift();
+        let q_add_shift = input.shifted_witness.msm_add_shift();
         let q_skew = input.witness.msm_skew();
-        let q_skew_shift = input.witness.msm_skew_shift();
+        let q_skew_shift = input.shifted_witness.msm_skew_shift();
         let q_double = input.witness.msm_double();
-        let q_double_shift = input.witness.msm_double_shift();
+        let q_double_shift = input.shifted_witness.msm_double_shift();
         let msm_size = input.witness.msm_size_of_msm();
         // const auto& msm_size_shift = View(in.msm_size_of_msm_shift);
         let pc = input.witness.msm_pc();
-        let pc_shift = input.witness.msm_pc_shift();
+        let pc_shift = input.shifted_witness.msm_pc_shift();
         let count = input.witness.msm_count();
-        let count_shift = input.witness.msm_count_shift();
+        let count_shift = input.shifted_witness.msm_count_shift();
         let minus_one = -P::ScalarField::one();
         let one = P::ScalarField::one();
         let is_not_first_row = lagrange_first.to_owned() * minus_one + &P::ScalarField::one();
@@ -509,14 +546,13 @@ impl EccMsmRelation {
             // L * (1 - s) = 0
             // (combine) (L * (xb - xa - 1) - yb - ya) * s + L = 0
             *relation += selector.to_owned()
-                * (lambda.to_owned() * (xb.to_owned() - xa - &one - yb - ya))
+                * (lambda.to_owned() * (xb.to_owned() - xa - &one) - yb + ya)
                 + lambda;
             *collision_relation += selector.to_owned() * (xb.to_owned() - xa);
 
             // x3 = L.L + (-xb - xa) * q + (1 - q) xa
-            let x_out = lambda.to_owned() * lambda.to_owned()
-                + (xb.to_owned() * minus_one - xa - xa) * selector
-                + xa;
+            let x_out =
+                lambda.to_owned().sqr() + (xb.to_owned() * minus_one - xa - xa) * selector + xa;
 
             // y3 = L . (xa - x3) - ya * q + (1 - q) ya
             let y_out = lambda.to_owned() * (xa.to_owned() - &x_out)
@@ -547,7 +583,7 @@ impl EccMsmRelation {
         for i in domain_separator.chars() {
             domain_bytes.push(i as u8);
         }
-        let offset_generator = derive_generators::<P::CycleGroup>(&domain_bytes, 1, 0)[0];
+        let offset_generator = derive_generators::<P::CycleGroup>(&domain_bytes, 1, 0)[0]; // we need CycleGroup here because all this happens in Grumpkin, thus offset_generator is a BN254 Curve point and therefore oxu and oyu are BN254 BaseField elements = Grumpkin ScalarField elements
         let oxu = offset_generator
             .x()
             .expect("Offset generator x coordinate should not be None");
@@ -555,17 +591,10 @@ impl EccMsmRelation {
             .y()
             .expect("Offset generator y coordinate should not be None");
 
-        let xo = Univariate {
-            evaluations: [oxu; SIZE],
-        };
-        let yo = Univariate {
-            evaluations: [oyu; SIZE],
-        };
-
-        let x = xo.to_owned() * msm_transition
+        let x = msm_transition.to_owned() * oxu
             + acc_x.to_owned() * (msm_transition.to_owned() * minus_one + &one);
-        let y =
-            yo * msm_transition + acc_y.to_owned() * (msm_transition.to_owned() * minus_one + &one);
+        let y = msm_transition.to_owned() * oyu
+            + acc_y.to_owned() * (msm_transition.to_owned() * minus_one + &one);
         let mut add_relation = lambda1.to_owned() * (x.clone() - x1) - (y - y1); // degree 3
         let x1_collision_relation = x1.to_owned() - x.clone();
         let x_t1 = lambda1.to_owned() * lambda1 + (-x - x1);
@@ -573,15 +602,9 @@ impl EccMsmRelation {
 
         // ADD operations (if row represents ADD round, not SKEW or DOUBLE)
 
-        let mut x2_collision_relation = Univariate {
-            evaluations: [P::ScalarField::zero(); SIZE],
-        };
-        let mut x3_collision_relation = Univariate {
-            evaluations: [P::ScalarField::zero(); SIZE],
-        };
-        let mut x4_collision_relation = Univariate {
-            evaluations: [P::ScalarField::zero(); SIZE],
-        };
+        let mut x2_collision_relation = Univariate::default();
+        let mut x3_collision_relation = Univariate::default();
+        let mut x4_collision_relation = Univariate::default();
         // If msm_transition = 1, we have started a new MSM. We need to treat the current value of [Acc] as the point at
         // infinity!
         let (x_t2, y_t2) = add(
@@ -662,9 +685,7 @@ impl EccMsmRelation {
          * The value of `msm_round` can only update when `q_double = 1` and we use this to ensure Prover correctly sets
          * `q_double`. (see round transition relations further down)
          */
-        let mut double_relation = Univariate {
-            evaluations: [P::ScalarField::zero(); SIZE],
-        };
+        let mut double_relation = Univariate::default();
         let (x_d1, y_d1) = dbl(acc_x, acc_y, lambda1, &mut double_relation);
         let (x_d2, y_d2) = dbl(&x_d1, &y_d1, lambda2, &mut double_relation);
         let (x_d3, y_d3) = dbl(&x_d2, &y_d2, lambda3, &mut double_relation);
@@ -691,9 +712,7 @@ impl EccMsmRelation {
          * If scalar slice == 0, we do not add into accumulator
          * i.e. for the skew round we can use the slice values as our "selector" when doing conditional point adds
          */
-        let mut skew_relation = Univariate {
-            evaluations: [P::ScalarField::zero(); SIZE],
-        };
+        let mut skew_relation = Univariate::default();
         let inverse_seven = P::ScalarField::from(7)
             .inverse()
             .expect("Let's hope we are never in F_7");
@@ -701,18 +720,10 @@ impl EccMsmRelation {
         let skew2_select = slice2.to_owned() * inverse_seven;
         let skew3_select = slice3.to_owned() * inverse_seven;
         let skew4_select = slice4.to_owned() * inverse_seven;
-        let mut x1_skew_collision_relation = Univariate {
-            evaluations: [P::ScalarField::zero(); SIZE],
-        };
-        let mut x2_skew_collision_relation = Univariate {
-            evaluations: [P::ScalarField::zero(); SIZE],
-        };
-        let mut x3_skew_collision_relation = Univariate {
-            evaluations: [P::ScalarField::zero(); SIZE],
-        };
-        let mut x4_skew_collision_relation = Univariate {
-            evaluations: [P::ScalarField::zero(); SIZE],
-        };
+        let mut x1_skew_collision_relation = Univariate::default();
+        let mut x2_skew_collision_relation = Univariate::default();
+        let mut x3_skew_collision_relation = Univariate::default();
+        let mut x4_skew_collision_relation = Univariate::default();
         // add skew points iff row is a SKEW row AND slice = 7 (point_table[7] maps to -[P])
         // N.B. while it would be nice to have one `add` relation for both ADD and SKEW rounds,
         // this would increase degree of sumcheck identity vs evaluating them separately.
@@ -971,6 +982,7 @@ impl EccMsmRelation {
         // perform lookups on (pc / slice_i / x / y)
     }
 
+    #[expect(dead_code)]
     fn verify_accumulate<P: HonkCurve<TranscriptFieldType>>(
         _univariate_accumulator: &mut EccMsmRelationEvals<P::ScalarField>,
         _input: &crate::prelude::ClaimedEvaluations<P::ScalarField, ECCVMFlavour>,

@@ -6,7 +6,9 @@ use crate::plain_prover_flavour::{PlainProverFlavour, UnivariateTrait};
 use crate::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
 use crate::types::AllEntities;
 use crate::{CONST_PROOF_SIZE_LOG_N, Utils};
-use co_builder::prelude::{HonkCurve, RowDisablingPolynomial};
+use ark_ff::Zero;
+use co_builder::HonkProofResult;
+use co_builder::prelude::{HonkCurve, Polynomial, ProverCrs, RowDisablingPolynomial};
 
 use super::zk_data::ZKSumcheckData;
 
@@ -177,21 +179,31 @@ impl<
             _claimed_evaluations: multivariate_evaluations,
             challenges: multivariate_challenge,
             claimed_libra_evaluation: None,
+            round_univariates: None,
+            round_univariate_evaluations: None,
         }
     }
 
-    pub fn sumcheck_prove_zk(
+    pub fn sumcheck_prove_zk<const VIRTUAL_LOG_N: usize>(
         &self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         circuit_size: u32,
         zk_sumcheck_data: &mut ZKSumcheckData<P>,
-    ) -> SumcheckOutput<P::ScalarField, L> {
+        crs: &ProverCrs<P>,
+    ) -> HonkProofResult<SumcheckOutput<P::ScalarField, L>> {
         tracing::trace!("Sumcheck prove");
-
-        // Ensure that the length of Sumcheck Round Univariates does not exceed the length of Libra masking
-        // polynomials.
-        assert!(L::BATCHED_RELATION_PARTIAL_LENGTH_ZK <= P::LIBRA_UNIVARIATES_LENGTH);
-
+        let mut eval_domain = Vec::new();
+        let mut round_univariates: Vec<Polynomial<P::ScalarField>> = Vec::new();
+        let mut round_univariate_evaluations: Vec<[P::ScalarField; 3]> = Vec::new();
+        if L::IS_GRUMPKIN_FLAVOUR {
+            for i in 0..L::BATCHED_RELATION_PARTIAL_LENGTH_ZK {
+                eval_domain.push(P::ScalarField::from(i as u32));
+            }
+        } else {
+            // Ensure that the length of Sumcheck Round Univariates does not exceed the length of Libra masking
+            // polynomials.
+            assert!(L::BATCHED_RELATION_PARTIAL_LENGTH_ZK <= P::LIBRA_UNIVARIATES_LENGTH);
+        }
         let multivariate_n = circuit_size;
         let multivariate_d = Utils::get_msb64(multivariate_n as u64);
 
@@ -212,7 +224,7 @@ impl<
         // In the first round, we compute the first univariate polynomial and populate the book-keeping table of
         // #partially_evaluated_polynomials, which has \f$ n/2 \f$ rows and \f$ N \f$ columns. When the Flavor has ZK,
         // compute_univariate also takes into account the zk_sumcheck_data.
-        let round_univariate = sum_check_round.compute_univariate_zk::<P>(
+        let mut round_univariate = sum_check_round.compute_univariate_zk::<P>(
             round_idx,
             &self.memory.relation_parameters,
             &gate_separators,
@@ -220,12 +232,23 @@ impl<
             zk_sumcheck_data,
             &mut row_disabling_polynomial,
         );
-
-        // Place the evaluations of the round univariate into transcript.
-        transcript.send_fr_iter_to_verifier::<P, _>(
-            "Sumcheck:univariate_0".to_string(),
-            round_univariate.evaluations_as_ref(),
-        );
+        if L::IS_GRUMPKIN_FLAVOUR {
+            Self::commit_to_round_univariate(
+                round_idx,
+                &round_univariate,
+                &eval_domain,
+                transcript,
+                crs,
+                &mut round_univariates,
+                &mut round_univariate_evaluations,
+            )?;
+        } else {
+            // Place the evaluations of the round univariate into transcript.
+            transcript.send_fr_iter_to_verifier::<P, _>(
+                "Sumcheck:univariate_0".to_string(),
+                round_univariate.evaluations_as_ref(),
+            );
+        }
         let round_challenge = transcript.get_challenge::<P>("Sumcheck:u_0".to_string());
         multivariate_challenge.push(round_challenge);
 
@@ -250,7 +273,7 @@ impl<
             tracing::trace!("Sumcheck prove round {}", round_idx);
             // Write the round univariate to the transcript
 
-            let round_univariate = sum_check_round.compute_univariate_zk::<P>(
+            round_univariate = sum_check_round.compute_univariate_zk::<P>(
                 round_idx,
                 &self.memory.relation_parameters,
                 &gate_separators,
@@ -258,12 +281,25 @@ impl<
                 zk_sumcheck_data,
                 &mut row_disabling_polynomial,
             );
-
-            // Place the evaluations of the round univariate into transcript.
-            transcript.send_fr_iter_to_verifier::<P, _>(
-                format!("Sumcheck:univariate_{round_idx}"),
-                round_univariate.evaluations_as_ref(),
-            );
+            if L::IS_GRUMPKIN_FLAVOUR {
+                // Compute monomial coefficients of the round univariate, commit to it, populate an auxiliary structure
+                // needed in the PCS round
+                Self::commit_to_round_univariate(
+                    round_idx,
+                    &round_univariate,
+                    &eval_domain,
+                    transcript,
+                    crs,
+                    &mut round_univariates,
+                    &mut round_univariate_evaluations,
+                )?;
+            } else {
+                // Place the evaluations of the round univariate into transcript.
+                transcript.send_fr_iter_to_verifier::<P, _>(
+                    format!("Sumcheck:univariate_{round_idx}"),
+                    round_univariate.evaluations_as_ref(),
+                );
+            }
             let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{round_idx}"));
             multivariate_challenge.push(round_challenge);
             // Prepare sumcheck book-keeping table for the next round
@@ -279,15 +315,34 @@ impl<
             gate_separators.partially_evaluate(round_challenge);
             sum_check_round.round_size >>= 1;
         }
+        if L::IS_GRUMPKIN_FLAVOUR {
+            round_univariate_evaluations[multivariate_d as usize - 1][2] =
+                round_univariate.evaluate(multivariate_challenge[multivariate_d as usize - 1]);
+        }
         tracing::trace!("Completed {multivariate_d} rounds of sumcheck");
-
         // Zero univariates are used to pad the proof to the fixed size CONST_PROOF_SIZE_LOG_N.
         let zero_univariate = L::SumcheckRoundOutputZK::default();
-        for idx in multivariate_d as usize..CONST_PROOF_SIZE_LOG_N {
-            transcript.send_fr_iter_to_verifier::<P, _>(
-                format!("Sumcheck:univariate_{idx}"),
-                zero_univariate.evaluations_as_ref(),
-            );
+        for idx in multivariate_d as usize..VIRTUAL_LOG_N {
+            if L::IS_GRUMPKIN_FLAVOUR {
+                let commitment = Utils::commit(zero_univariate.evaluations_as_ref(), crs)?;
+                transcript.send_point_to_verifier::<P>(
+                    format!("Sumcheck:univariate_comm_{}", idx),
+                    commitment.into(),
+                );
+                transcript.send_fr_to_verifier::<P>(
+                    format!("Sumcheck:univariate_{}_eval_0", idx),
+                    P::ScalarField::zero(),
+                );
+                transcript.send_fr_to_verifier::<P>(
+                    format!("Sumcheck:univariate_{}_eval_1", idx),
+                    P::ScalarField::zero(),
+                );
+            } else {
+                transcript.send_fr_iter_to_verifier::<P, _>(
+                    format!("Sumcheck:univariate_{idx}"),
+                    zero_univariate.evaluations_as_ref(),
+                );
+            }
             let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{idx}"));
             multivariate_challenge.push(round_challenge);
         }
@@ -306,10 +361,70 @@ impl<
         transcript
             .send_fr_to_verifier::<P>("Libra:claimed_evaluation".to_string(), libra_evaluation);
 
-        SumcheckOutput {
-            _claimed_evaluations: multivariate_evaluations,
-            challenges: multivariate_challenge,
-            claimed_libra_evaluation: Some(libra_evaluation),
+        if L::IS_GRUMPKIN_FLAVOUR {
+            Ok(SumcheckOutput {
+                _claimed_evaluations: multivariate_evaluations,
+                challenges: multivariate_challenge,
+                claimed_libra_evaluation: Some(libra_evaluation),
+                round_univariates: Some(round_univariates),
+                round_univariate_evaluations: Some(round_univariate_evaluations),
+            })
+        } else {
+            Ok(SumcheckOutput {
+                _claimed_evaluations: multivariate_evaluations,
+                challenges: multivariate_challenge,
+                claimed_libra_evaluation: Some(libra_evaluation),
+                round_univariates: None,
+                round_univariate_evaluations: None,
+            })
         }
+    }
+    // this is a helper function for committing in Grumpkin Flavours
+    fn commit_to_round_univariate(
+        round_idx: usize,
+        round_univariate: &L::SumcheckRoundOutputZK<P::ScalarField>,
+        eval_domain: &[P::ScalarField],
+        transcript: &mut Transcript<TranscriptFieldType, H>,
+        crs: &ProverCrs<P>,
+        round_univariates: &mut Vec<Polynomial<P::ScalarField>>,
+        round_univariate_evaluations: &mut Vec<[P::ScalarField; 3]>,
+    ) -> HonkProofResult<()> {
+        // Transform to monomial form and commit to it
+        let round_poly_monomial = Polynomial::interpolate_from_evals(
+            eval_domain,
+            round_univariate.evaluations_as_ref(),
+            L::BATCHED_RELATION_PARTIAL_LENGTH_ZK,
+        );
+
+        let commitment = Utils::commit(round_poly_monomial.as_ref(), crs)?;
+        transcript.send_point_to_verifier::<P>(
+            format!("Sumcheck:univariate_comm_{round_idx}"),
+            commitment.into(),
+        );
+
+        // Store round univariate in monomial, as it is required by Shplemini
+        round_univariates.push(round_poly_monomial);
+
+        // Send the evaluations of the round univariate at 0 and 1
+        transcript.send_fr_to_verifier::<P>(
+            format!("Sumcheck:univariate_{round_idx}_eval_0"),
+            round_univariate.value_at(0),
+        );
+        transcript.send_fr_to_verifier::<P>(
+            format!("Sumcheck:univariate_{round_idx}_eval_1"),
+            round_univariate.value_at(1),
+        );
+
+        // Store the evaluations to be used by ShpleminiProver
+        round_univariate_evaluations.push([
+            round_univariate.value_at(0),
+            round_univariate.value_at(1),
+            P::ScalarField::zero(),
+        ]);
+        if round_idx > 0 {
+            round_univariate_evaluations[round_idx - 1][2] =
+                round_univariate.value_at(0) + round_univariate.value_at(1);
+        }
+        Ok(())
     }
 }

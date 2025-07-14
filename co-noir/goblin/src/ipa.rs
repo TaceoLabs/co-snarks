@@ -1,3 +1,5 @@
+use ark_ec::AffineRepr;
+use ark_ff::One;
 use ark_ff::{Field, Zero};
 use co_builder::{
     HonkProofResult, TranscriptFieldType,
@@ -6,7 +8,7 @@ use co_builder::{
 use ultrahonk::Utils as UltraHonkUtils;
 use ultrahonk::prelude::{ShpleminiOpeningClaim, Transcript, TranscriptHasher};
 
-use crate::eccvm::eccvm_prover::CONST_ECCVM_LOG_N;
+use crate::CONST_ECCVM_LOG_N;
 
 pub(crate) fn compute_ipa_opening_proof<
     P: HonkCurve<TranscriptFieldType>,
@@ -36,7 +38,7 @@ pub(crate) fn compute_ipa_opening_proof<
 
     // Step 3.
     // Compute auxiliary generator U
-    let aux_generator = commitment_key.monomials[0] * generator_challenge;
+    let aux_generator = P::Affine::generator() * generator_challenge;
 
     // Checks poly_degree is greater than zero and a power of two
     // In the future, we might want to consider if non-powers of two are needed
@@ -58,7 +60,7 @@ pub(crate) fn compute_ipa_opening_proof<
     // Step 5.
     // Compute vector b (vector of the powers of the challenge)
     let mut b_vec = Vec::with_capacity(poly_length);
-    let mut b_power = opening_claim.opening_pair.challenge.pow([0u64]);
+    let mut b_power = P::ScalarField::one();
     for _ in 0..poly_length {
         b_vec.push(b_power);
         b_power *= opening_claim.opening_pair.challenge;
@@ -144,21 +146,20 @@ pub(crate) fn compute_ipa_opening_proof<
             b_vec[j] += tmp * round_challenge_inv;
         }
     }
+    // For dummy rounds, send commitments of zero()
+    for i in log_poly_length..CONST_ECCVM_LOG_N as u32 {
+        let index = CONST_ECCVM_LOG_N - i as usize - 1;
+        transcript.send_point_to_verifier::<P>(format!("IPA:L_{}", index), P::Affine::generator());
+        transcript.send_point_to_verifier::<P>(format!("IPA:R_{}", index), P::Affine::generator());
+        transcript.get_challenge::<P>(format!("IPA:round_challenge_{}", index));
+    }
+
+    // Step 7
+    // Send G_0 to the verifier
+    transcript.send_point_to_verifier::<P>("IPA:G_0".to_string(), g_vec_local[0]);
+
+    // Step 8
+    // Send a_0 to the verifier
+    transcript.send_fr_to_verifier::<P>("IPA:a_0".to_string(), a_vec[0]);
     Ok(())
 }
-
-// // For dummy rounds, send commitments of zero()
-// for i in log_poly_length..CONST_ECCVM_LOG_N as u32 {
-//     let index = CONST_ECCVM_LOG_N - i as usize - 1;
-//     transcript.send_to_verifier(format!("IPA:L_{}", index), P::G1::zero());
-//     transcript.send_to_verifier(format!("IPA:R_{}", index), P::G1::zero());
-//     transcript.get_challenge::<P::ScalarField>(format!("IPA:round_challenge_{}", index));
-// }
-
-// // Step 7
-// // Send G_0 to the verifier
-// transcript.send_to_verifier("IPA:G_0".to_string(), g_vec_local[0]);
-
-// // Step 8
-// // Send a_0 to the verifier
-// transcript.send_to_verifier("IPA:a_0".to_string(), a_vec[0]);

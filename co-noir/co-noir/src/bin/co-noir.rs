@@ -966,7 +966,12 @@ fn run_split_proving_key(config: SplitProvingKeyConfig) -> color_eyre::Result<Ex
     let circuit_size = co_noir::compute_circuit_size::<
         <ark_ec::models::bn::Bn<ark_bn254::Config> as co_noir::Pairing>::G1,
     >(&constraint_system, recursive)?;
-    let prover_crs = CrsParser::<Bn254>::get_crs_g1(crs_path, circuit_size, has_zk)?;
+    let prover_crs =
+        CrsParser::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>::get_crs_g1(
+            crs_path,
+            circuit_size,
+            has_zk,
+        )?;
     let proving_key = co_noir::generate_proving_key_plain(
         &constraint_system,
         witness,
@@ -1329,10 +1334,10 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             let proving_key: ProvingKey<Rep3UltraHonkDriver, Bn254G1, UltraFlavour> =
                 bincode::deserialize_from(proving_key_file)
                     .context("while deserializing input share")?;
-            let prover_crs = CrsParser::<Bn254>::get_crs_g1(
-                crs_path,
-                proving_key.circuit_size as usize,
-                has_zk,
+            let prover_crs = CrsParser::<
+                ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>,
+            >::get_crs_g1(
+                crs_path, proving_key.circuit_size as usize, has_zk
             )?;
 
             match hasher {
@@ -1371,10 +1376,10 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             let proving_key: ProvingKey<ShamirUltraHonkDriver, Bn254G1, UltraFlavour> =
                 bincode::deserialize_from(proving_key_file)
                     .context("while deserializing input share")?;
-            let prover_crs = CrsParser::<Bn254>::get_crs_g1(
-                crs_path,
-                proving_key.circuit_size as usize,
-                has_zk,
+            let prover_crs = CrsParser::<
+                ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>,
+            >::get_crs_g1(
+                crs_path, proving_key.circuit_size as usize, has_zk
             )?;
 
             // execute prover in MPC
@@ -1527,7 +1532,12 @@ fn run_build_and_generate_proof(
         TcpNetwork::networks::<2>(config.network).context("while connecting to network")?;
 
     let circuit_size = co_noir::compute_circuit_size::<Bn254G1>(&constraint_system, recursive)?;
-    let prover_crs = CrsParser::<Bn254>::get_crs_g1(crs_path, circuit_size, has_zk)?;
+    let prover_crs =
+        CrsParser::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>::get_crs_g1(
+            crs_path,
+            circuit_size,
+            has_zk,
+        )?;
 
     tracing::info!("Starting proving key generation...");
     let (proof, public_input) = match protocol {
@@ -1733,7 +1743,12 @@ fn run_generate_vk(config: CreateVKConfig) -> color_eyre::Result<ExitCode> {
         .context("while parsing program artifact")?;
 
     let circuit_size = co_noir::compute_circuit_size::<Bn254G1>(&constraint_system, recursive)?;
-    let prover_crs = CrsParser::<Bn254>::get_crs_g1(crs_path, circuit_size, ZeroKnowledge::No)?;
+    let prover_crs =
+        CrsParser::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>::get_crs_g1(
+            crs_path,
+            circuit_size,
+            ZeroKnowledge::No,
+        )?;
 
     tracing::info!("Starting to generate verification key...");
     let start = Instant::now();
@@ -1803,7 +1818,10 @@ fn run_verify(config: VerifyConfig) -> color_eyre::Result<ExitCode> {
         .context("while deserializing public_inputs")?;
 
     // parse the crs
-    let verifier_crs = CrsParser::<Bn254>::get_crs_g2(crs_path)?;
+    let verifier_crs =
+        CrsParser::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>::get_crs_g2::<
+            Bn254,
+        >(crs_path)?;
 
     // parse verification key file
     let vk_u8 = std::fs::read(&vk_path).context("while reading vk file")?;

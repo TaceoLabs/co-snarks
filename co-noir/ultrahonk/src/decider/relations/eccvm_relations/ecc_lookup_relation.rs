@@ -10,6 +10,7 @@ pub(crate) struct EccLookupRelationAcc<F: PrimeField> {
     pub(crate) r1: Univariate<F, 9>,
 }
 #[derive(Clone, Debug, Default)]
+#[expect(dead_code)]
 pub(crate) struct EccLookupRelationEvals<F: PrimeField> {
     pub(crate) r0: F,
     pub(crate) r1: F,
@@ -17,7 +18,7 @@ pub(crate) struct EccLookupRelationEvals<F: PrimeField> {
 
 pub(crate) struct EccLookupRelation {}
 impl EccLookupRelation {
-    pub(crate) const NUM_RELATIONS: usize = 19;
+    pub(crate) const NUM_RELATIONS: usize = 2;
     pub(crate) const READ_TERMS: usize = 4;
     pub(crate) const WRITE_TERMS: usize = 2;
 
@@ -95,31 +96,31 @@ impl EccLookupRelation {
             "WRITE_INDEX must be less than 2"
         );
 
-        let precompute_pc = input.witness.msm_pc();
-        let tx = input.witness.msm_x1(); // Assuming tx corresponds to msm_x1
-        let ty = input.witness.msm_y1(); // Assuming ty corresponds to msm_y1
-        let precompute_round = input.witness.msm_slice1(); // Assuming precompute_round corresponds to msm_slice1
+        let precompute_pc = input.witness.precompute_pc();
+        let tx = input.witness.precompute_tx();
+        let ty = input.witness.precompute_ty();
+        let precompute_round = input.witness.precompute_round();
         let gamma = relation_parameters.gamma;
         let beta = relation_parameters.beta;
         let beta_sqr = beta * beta;
         let beta_cube = beta_sqr * beta;
 
-        let negative_term = precompute_pc.to_owned()
-            + &gamma
-            + precompute_round.to_owned() * beta
-            + tx.to_owned() * beta_sqr
-            - ty.to_owned() * beta_cube;
-
-        let positive_slice_value = -precompute_round.to_owned() + &F::from(15);
-        let positive_term = positive_slice_value * beta
-            + tx.to_owned() * beta_sqr
-            + ty.to_owned() * beta_cube
-            + precompute_pc
-            + &gamma;
-
         match write_index {
-            0 => positive_term, // degree 1
-            1 => negative_term, // degree 1
+            0 => {
+                let positive_slice_value = -precompute_round.to_owned() + &F::from(15);
+                positive_slice_value * beta
+                    + tx.to_owned() * beta_sqr
+                    + ty.to_owned() * beta_cube
+                    + precompute_pc
+                    + &gamma
+            } // degree 1
+            1 => {
+                precompute_pc.to_owned()
+                    + &gamma
+                    + precompute_round.to_owned() * beta
+                    + tx.to_owned() * beta_sqr
+                    - ty.to_owned() * beta_cube
+            } // degree 1
             _ => unreachable!(),
         }
     }
@@ -169,10 +170,11 @@ impl EccLookupRelation {
 }
 
 impl<F: PrimeField> EccLookupRelationAcc<F> {
-    pub(crate) fn scale(&mut self, elements: &[F]) {
-        assert!(elements.len() == EccLookupRelation::NUM_RELATIONS);
-        self.r0 *= elements[0];
-        self.r1 *= elements[1];
+    pub(crate) fn scale(&mut self, current_scalar: &mut F, challenge: &F) {
+        self.r0 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r1 *= *current_scalar;
+        *current_scalar *= challenge;
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(
@@ -191,7 +193,7 @@ impl<F: PrimeField> EccLookupRelationAcc<F> {
             result,
             extended_random_poly,
             partial_evaluation_result,
-            true,
+            false,
         );
     }
 }
@@ -201,12 +203,12 @@ impl<F: PrimeField> Relation<F, ECCVMFlavour> for EccLookupRelation {
 
     type VerifyAcc = EccLookupRelationEvals<F>;
 
-    const SKIPPABLE: bool = false; //TODO FLORIN: Where does this come from?
+    const SKIPPABLE: bool = false;
 
     fn skip<const SIZE: usize>(
-        input: &crate::decider::types::ProverUnivariatesSized<F, ECCVMFlavour, SIZE>,
+        _input: &crate::decider::types::ProverUnivariatesSized<F, ECCVMFlavour, SIZE>,
     ) -> bool {
-        todo!() //TODO FLORIN: Where does this come from?
+        false
     }
 
     fn accumulate<const SIZE: usize>(
@@ -217,22 +219,26 @@ impl<F: PrimeField> Relation<F, ECCVMFlavour> for EccLookupRelation {
     ) {
         const NUM_TOTAL_TERMS: usize =
             EccLookupRelation::READ_TERMS + EccLookupRelation::WRITE_TERMS;
-        let mut lookup_inverses = input.witness.lookup_inverses().clone(); // Degree 1
+        let mut lookup_inverses = input.witness.lookup_inverses().to_owned(); // Degree 1
 
-        let mut lookup_terms = Vec::with_capacity(NUM_TOTAL_TERMS);
+        let mut lookup_terms = vec![Univariate::default(); NUM_TOTAL_TERMS];
 
         for (i, term) in lookup_terms.iter_mut().take(Self::READ_TERMS).enumerate() {
             *term = Self::compute_read_term::<_, _>(input, relation_parameters, i);
         }
 
-        for i in 0..Self::WRITE_TERMS {
-            lookup_terms[i + Self::READ_TERMS] =
-                Self::compute_write_term::<_, _>(input, relation_parameters, i);
+        for (i, term) in lookup_terms
+            .iter_mut()
+            .skip(Self::READ_TERMS)
+            .take(Self::WRITE_TERMS)
+            .enumerate()
+        {
+            *term = Self::compute_write_term::<_, _>(input, relation_parameters, i);
         }
 
         let mut denominator_accumulator = lookup_terms.clone();
 
-        for i in 0..NUM_TOTAL_TERMS {
+        for i in 0..NUM_TOTAL_TERMS - 1 {
             let tmp = denominator_accumulator[i].clone();
             denominator_accumulator[i + 1] *= tmp;
         }
@@ -240,8 +246,7 @@ impl<F: PrimeField> Relation<F, ECCVMFlavour> for EccLookupRelation {
         let inverse_exists = Self::compute_inverse_exists(input); // Degree 2
 
         // Note: the lookup_inverses are computed so that the value is 0 if !inverse_exists
-        let tmp = (denominator_accumulator[NUM_TOTAL_TERMS - 1].clone()
-            * input.witness.lookup_inverses().clone()
+        let tmp = (denominator_accumulator[NUM_TOTAL_TERMS - 1].clone() * &lookup_inverses
             - inverse_exists.clone())
             * scaling_factor;
         for i in 0..univariate_accumulator.r0.evaluations.len() {
@@ -252,17 +257,13 @@ impl<F: PrimeField> Relation<F, ECCVMFlavour> for EccLookupRelation {
         for i in 0..NUM_TOTAL_TERMS - 1 {
             denominator_accumulator[NUM_TOTAL_TERMS - 1 - i] =
                 denominator_accumulator[NUM_TOTAL_TERMS - 2 - i].clone() * lookup_inverses.clone();
-
-            lookup_inverses =
-                lookup_inverses.clone() * lookup_terms[NUM_TOTAL_TERMS - 1 - i].clone();
+            lookup_inverses = lookup_terms[NUM_TOTAL_TERMS - 1 - i].clone() * &lookup_inverses;
         }
         denominator_accumulator[0] = lookup_inverses;
 
         // Each predicate is degree-1
         // Degree of relation at this point = NUM_TOTAL_TERMS + 1
-        let mut tmp = Univariate {
-            evaluations: [F::zero(); SIZE],
-        };
+        let mut tmp = Univariate::default();
         for (i, denuminator) in denominator_accumulator
             .iter()
             .enumerate()
@@ -270,15 +271,13 @@ impl<F: PrimeField> Relation<F, ECCVMFlavour> for EccLookupRelation {
         {
             tmp += Self::compute_read_term_predicate::<_, _>(input, i).to_owned() * denuminator;
         }
-        for i in 0..univariate_accumulator.r0.evaluations.len() {
-            univariate_accumulator.r0.evaluations[i] += tmp.evaluations[i];
+        for i in 0..univariate_accumulator.r1.evaluations.len() {
+            univariate_accumulator.r1.evaluations[i] += tmp.evaluations[i];
         }
 
         // Each predicate is degree-1, `lookup_read_counts` is degree-1
         // Degree of relation = NUM_TOTAL_TERMS + 2
-        tmp = Univariate {
-            evaluations: [F::zero(); SIZE],
-        };
+        tmp = Univariate::default();
         for i in 0..Self::WRITE_TERMS {
             let p = Self::compute_write_term_predicate::<_, _>(input, i);
             let lookup_read_count = Self::lookup_read_counts::<_, _>(input, i);

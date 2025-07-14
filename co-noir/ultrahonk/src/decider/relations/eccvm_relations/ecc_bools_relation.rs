@@ -25,6 +25,7 @@ pub(crate) struct EccBoolsRelationAcc<F: PrimeField> {
     pub(crate) r18: Univariate<F, 3>,
 }
 #[derive(Clone, Debug, Default)]
+#[expect(dead_code)]
 pub(crate) struct EccBoolsRelationEvals<F: PrimeField> {
     pub(crate) r0: F,
     pub(crate) r1: F,
@@ -53,27 +54,45 @@ impl EccBoolsRelation {
 }
 
 impl<F: PrimeField> EccBoolsRelationAcc<F> {
-    pub(crate) fn scale(&mut self, elements: &[F]) {
-        assert!(elements.len() == EccBoolsRelation::NUM_RELATIONS);
-        self.r0 *= elements[0];
-        self.r1 *= elements[1];
-        self.r2 *= elements[2];
-        self.r3 *= elements[3];
-        self.r4 *= elements[4];
-        self.r5 *= elements[5];
-        self.r6 *= elements[6];
-        self.r7 *= elements[7];
-        self.r8 *= elements[8];
-        self.r9 *= elements[9];
-        self.r10 *= elements[10];
-        self.r11 *= elements[11];
-        self.r12 *= elements[12];
-        self.r13 *= elements[13];
-        self.r14 *= elements[14];
-        self.r15 *= elements[15];
-        self.r16 *= elements[16];
-        self.r17 *= elements[17];
-        self.r18 *= elements[18];
+    pub(crate) fn scale(&mut self, current_scalar: &mut F, challenge: &F) {
+        self.r0 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r1 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r2 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r3 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r4 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r5 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r6 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r7 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r8 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r9 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r10 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r11 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r12 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r13 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r14 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r15 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r16 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r17 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r18 *= *current_scalar;
+        *current_scalar *= challenge;
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(
@@ -204,18 +223,18 @@ impl<F: PrimeField> Relation<F, ECCVMFlavour> for EccBoolsRelation {
 
     type VerifyAcc = EccBoolsRelationEvals<F>;
 
-    const SKIPPABLE: bool = false; //TODO FLORIN: Where does this come from?
+    const SKIPPABLE: bool = false;
 
     fn skip<const SIZE: usize>(
-        input: &crate::decider::types::ProverUnivariatesSized<F, ECCVMFlavour, SIZE>,
+        _input: &crate::decider::types::ProverUnivariatesSized<F, ECCVMFlavour, SIZE>,
     ) -> bool {
-        todo!() //TODO FLORIN: Where does this come from?
+        false
     }
 
     fn accumulate<const SIZE: usize>(
         univariate_accumulator: &mut Self::Acc,
         input: &crate::decider::types::ProverUnivariatesSized<F, ECCVMFlavour, SIZE>,
-        relation_parameters: &crate::prelude::RelationParameters<F, ECCVMFlavour>,
+        _relation_parameters: &crate::prelude::RelationParameters<F, ECCVMFlavour>,
         scaling_factor: &F,
     ) {
         let z1_zero = input.witness.transcript_z1zero();

@@ -56,10 +56,13 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str, has_zk: Zero
     .unwrap();
 
     let crs_size = builder.compute_dyadic_size();
-    let (prover_crs, verifier_crs) =
-        CrsParser::<Bn254>::get_crs(CRS_PATH_G1, CRS_PATH_G2, crs_size, has_zk)
-            .expect("failed to get crs")
-            .split();
+    let (prover_crs, verifier_crs) = CrsParser::<
+        <ark_ec::bn::Bn<ark_bn254::Config> as ark_ec::pairing::Pairing>::G1,
+    >::get_crs::<Bn254>(
+        CRS_PATH_G1, CRS_PATH_G2, crs_size, has_zk
+    )
+    .expect("failed to get crs")
+    .split();
     let (proving_key, verifying_key) =
         ProvingKey::create_keys(0, builder, &prover_crs, verifier_crs, &mut driver).unwrap();
 
@@ -107,10 +110,13 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     .unwrap();
 
     let crs_size = builder.compute_dyadic_size();
-    let (prover_crs, verifier_crs) =
-        CrsParser::<Bn254>::get_crs(CRS_PATH_G1, CRS_PATH_G2, crs_size, has_zk)
-            .expect("failed to get crs")
-            .split();
+    let (prover_crs, verifier_crs) = CrsParser::<
+        <ark_ec::bn::Bn<ark_bn254::Config> as ark_ec::pairing::Pairing>::G1,
+    >::get_crs::<Bn254>(
+        CRS_PATH_G1, CRS_PATH_G2, crs_size, has_zk
+    )
+    .expect("failed to get crs")
+    .split();
     let (proving_key, verifying_key) =
         ProvingKey::create_keys(0, builder, &prover_crs, verifier_crs, &mut driver).unwrap();
 

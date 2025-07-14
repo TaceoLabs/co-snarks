@@ -1,9 +1,11 @@
-use crate::{
-    decider::{relations::Relation, types::ProverUnivariatesSized},
-    prelude::Univariate,
-};
+use crate::{decider::types::ProverUnivariatesSized, prelude::Univariate};
+use ark_ff::One;
 use ark_ff::PrimeField;
-use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
+use ark_ff::Zero;
+use co_builder::{
+    TranscriptFieldType, polynomials::polynomial_flavours::WitnessEntitiesFlavour,
+    prelude::HonkCurve,
+};
 use co_builder::{
     flavours::eccvm_flavour::ECCVMFlavour,
     polynomials::polynomial_flavours::PrecomputedEntitiesFlavour,
@@ -15,6 +17,7 @@ pub(crate) struct EccSetRelationAcc<F: PrimeField> {
     pub(crate) r1: Univariate<F, 3>,
 }
 #[derive(Clone, Debug, Default)]
+#[expect(dead_code)]
 pub(crate) struct EccSetRelationEvals<F: PrimeField> {
     pub(crate) r0: F,
     pub(crate) r1: F,
@@ -23,6 +26,7 @@ pub(crate) struct EccSetRelationEvals<F: PrimeField> {
 pub(crate) struct EccSetRelation {}
 impl EccSetRelation {
     pub(crate) const NUM_RELATIONS: usize = 2;
+    pub(crate) const SKIPPABLE: bool = true;
 
     fn compute_grand_product_numerator<F: PrimeField, const SIZE: usize>(
         input: &ProverUnivariatesSized<F, ECCVMFlavour, SIZE>,
@@ -177,7 +181,7 @@ impl EccSetRelation {
         row_slice += row_slice.clone();
         row_slice += w3;
 
-        let mut scalar_sum_full = wnaf_scalar_sum.to_owned();
+        let mut scalar_sum_full = wnaf_scalar_sum.to_owned() * F::from(2);
         scalar_sum_full += scalar_sum_full.clone();
         scalar_sum_full += scalar_sum_full.clone();
         scalar_sum_full += scalar_sum_full.clone();
@@ -213,13 +217,13 @@ impl EccSetRelation {
         // multi-scalar multiplication of size `msm-size`, starting at `point-counter`.
 
         let lagrange_first = input.precomputed.lagrange_first();
-        let partial_msm_transition_shift = input.witness.msm_transition_shift();
+        let partial_msm_transition_shift = input.shifted_witness.msm_transition_shift();
         let msm_transition_shift =
             (lagrange_first.to_owned() * minus_one + &F::one()) * partial_msm_transition_shift;
-        let msm_pc_shift = input.witness.msm_pc_shift();
+        let msm_pc_shift = input.shifted_witness.msm_pc_shift();
 
-        let msm_x_shift = input.witness.msm_accumulator_x_shift();
-        let msm_y_shift = input.witness.msm_accumulator_y_shift();
+        let msm_x_shift = input.shifted_witness.msm_accumulator_x_shift();
+        let msm_y_shift = input.shifted_witness.msm_accumulator_y_shift();
         let msm_size = input.witness.msm_size_of_msm();
 
         let mut msm_result_write = msm_x_shift.to_owned() * beta
@@ -234,10 +238,10 @@ impl EccSetRelation {
         numerator
     }
 
-    fn compute_grand_product_denominator<F: PrimeField, const SIZE: usize>(
-        input: &ProverUnivariatesSized<F, ECCVMFlavour, SIZE>,
-        relation_parameters: &crate::prelude::RelationParameters<F, ECCVMFlavour>,
-    ) -> Univariate<F, SIZE> {
+    fn compute_grand_product_denominator<P: HonkCurve<TranscriptFieldType>, const SIZE: usize>(
+        input: &ProverUnivariatesSized<P::ScalarField, ECCVMFlavour, SIZE>,
+        relation_parameters: &crate::prelude::RelationParameters<P::ScalarField, ECCVMFlavour>,
+    ) -> Univariate<P::ScalarField, SIZE> {
         tracing::trace!("compute grand product denominator");
 
         // AZTEC TODO(@zac-williamson). The degree of this contribution is 17! makes overall relation degree 19.
@@ -249,7 +253,7 @@ impl EccSetRelation {
         let msm_pc = input.witness.msm_pc();
         let msm_count = input.witness.msm_count();
         let msm_round = input.witness.msm_round();
-        let minus_one = F::from(-1);
+        let minus_one = P::ScalarField::from(-1);
 
         /*
          * @brief First term: tuple of (pc, round, wnaf_slice), used to determine which points we extract from lookup tables
@@ -257,7 +261,7 @@ impl EccSetRelation {
          * These values must be equivalent to the values computed in the 1st term of `compute_grand_product_numerator`
          */
         let mut denominator = Univariate {
-            evaluations: [F::one(); SIZE],
+            evaluations: [P::ScalarField::one(); SIZE],
         }; // degree-0
 
         let add1 = input.witness.msm_add1();
@@ -268,7 +272,7 @@ impl EccSetRelation {
                 + &gamma
                 + (msm_pc.to_owned() - msm_count) * beta
                 + msm_round.to_owned() * beta_sqr)
-            + (add1.to_owned() * minus_one + &F::one());
+            + (add1.to_owned() * minus_one + &P::ScalarField::one());
         denominator *= wnaf_slice_output1; // degree-2
 
         let add2 = input.witness.msm_add2();
@@ -279,7 +283,7 @@ impl EccSetRelation {
                 + &gamma
                 + (msm_pc.to_owned() - msm_count + &minus_one) * beta
                 + msm_round.to_owned() * beta_sqr)
-            + (add2.to_owned() * minus_one + &F::one());
+            + (add2.to_owned() * minus_one + &P::ScalarField::one());
         denominator *= wnaf_slice_output2; // degree-4
 
         let add3 = input.witness.msm_add3();
@@ -288,9 +292,9 @@ impl EccSetRelation {
         let wnaf_slice_output3 = add3.to_owned()
             * (msm_slice3.to_owned()
                 + &gamma
-                + (msm_pc.to_owned() - msm_count + &F::from(-2)) * beta
+                + (msm_pc.to_owned() - msm_count + &P::ScalarField::from(-2)) * beta
                 + msm_round.to_owned() * beta_sqr)
-            + (add3.to_owned() * minus_one + &F::one());
+            + (add3.to_owned() * minus_one + &P::ScalarField::one());
         denominator *= wnaf_slice_output3; // degree-6
 
         let add4 = input.witness.msm_add4();
@@ -299,9 +303,9 @@ impl EccSetRelation {
         let wnaf_slice_output4 = add4.to_owned()
             * (msm_slice4.to_owned()
                 + &gamma
-                + (msm_pc.to_owned() - msm_count + &F::from(-3)) * beta
+                + (msm_pc.to_owned() - msm_count + &P::ScalarField::from(-3)) * beta
                 + msm_round.to_owned() * beta_sqr)
-            + (add4.to_owned() * minus_one + &F::one());
+            + (add4.to_owned() * minus_one + &P::ScalarField::one());
         denominator *= wnaf_slice_output4; // degree-8
 
         /*
@@ -320,10 +324,9 @@ impl EccSetRelation {
         let base_infinity = input.witness.transcript_base_infinity();
         let transcript_mul = input.witness.transcript_mul();
 
-        let lookup_first = z1_zero.to_owned() * minus_one + &F::one();
-        let lookup_second = z2_zero.to_owned() * minus_one + &F::one();
-        let endomorphism_base_field_shift =
-            F::get_root_of_unity(3).expect("3rd root of unity should exist in the field");
+        let lookup_first = z1_zero.to_owned() * minus_one + &P::ScalarField::one();
+        let lookup_second = z2_zero.to_owned() * minus_one + &P::ScalarField::one();
+        let endomorphism_base_field_shift = P::CycleGroup::get_cube_root_of_unity();
 
         let mut transcript_input1 = transcript_px.to_owned() * beta
             + transcript_pc
@@ -336,16 +339,16 @@ impl EccSetRelation {
             + z2.to_owned() * beta_cube; // degree = 2
 
         transcript_input1 = (transcript_input1 + &gamma) * lookup_first.clone()
-            + (lookup_first.to_owned() * minus_one + &F::one()); // degree 2
+            + (lookup_first.to_owned() * minus_one + &P::ScalarField::one()); // degree 2
         transcript_input2 = (transcript_input2 + &gamma) * lookup_second.clone()
-            + (lookup_second.to_owned() * minus_one + &F::one()); // degree 3
+            + (lookup_second.to_owned() * minus_one + &P::ScalarField::one()); // degree 3
 
         let transcript_product = (transcript_input1 * transcript_input2)
-            * (base_infinity.to_owned() * minus_one + &F::one())
+            * (base_infinity.to_owned() * minus_one + &P::ScalarField::one())
             + base_infinity; // degree 6
 
         let point_table_init_write = transcript_mul.to_owned() * transcript_product
-            + (transcript_mul.to_owned() * minus_one + &F::one());
+            + (transcript_mul.to_owned() * minus_one + &P::ScalarField::one());
         denominator *= point_table_init_write; // degree 17
 
         /*
@@ -355,7 +358,7 @@ impl EccSetRelation {
          * in `transcript_msm_output_x, transcript_msm_output_y`, for a given multi-scalar multiplication starting at
          * `transcript_pc` and has size `transcript_msm_count`
          */
-        let transcript_pc_shift = input.witness.transcript_pc_shift();
+        let transcript_pc_shift = input.shifted_witness.transcript_pc_shift();
         let transcript_msm_x = input.witness.transcript_msm_x();
         let transcript_msm_y = input.witness.transcript_msm_y();
         let transcript_msm_transition = input.witness.transcript_msm_transition();
@@ -366,9 +369,9 @@ impl EccSetRelation {
         let base_infinity = input.witness.transcript_base_infinity();
 
         let full_msm_count = transcript_mul.to_owned()
-            * ((z1_zero.to_owned() * minus_one + &F::one())
-                + (z2_zero.to_owned() * minus_one + &F::one()))
-            * (base_infinity.to_owned() * minus_one + &F::one())
+            * ((z1_zero.to_owned() * minus_one + &P::ScalarField::one())
+                + (z2_zero.to_owned() * minus_one + &P::ScalarField::one()))
+            * (base_infinity.to_owned() * minus_one + &P::ScalarField::one())
             + transcript_msm_count;
 
         let mut msm_result_read = transcript_msm_x.to_owned() * beta
@@ -376,18 +379,71 @@ impl EccSetRelation {
             + full_msm_count.to_owned() * beta_cube
             + transcript_pc_shift;
         msm_result_read = transcript_msm_transition.to_owned() * (msm_result_read + &gamma)
-            + (transcript_msm_transition.to_owned() * minus_one + &F::one());
+            + (transcript_msm_transition.to_owned() * minus_one + &P::ScalarField::one());
         denominator *= msm_result_read; // degree-20
 
         denominator
     }
+    pub(crate) fn skip<F: PrimeField, const SIZE: usize>(
+        input: &crate::decider::types::ProverUnivariatesSized<F, ECCVMFlavour, SIZE>,
+    ) -> bool {
+        (input.witness.z_perm().to_owned() - input.shifted_witness.z_perm_shift().to_owned())
+            .is_zero()
+    }
+
+    pub(crate) fn accumulate<P: HonkCurve<TranscriptFieldType>, const SIZE: usize>(
+        univariate_accumulator: &mut EccSetRelationAcc<P::ScalarField>,
+        input: &crate::decider::types::ProverUnivariatesSized<P::ScalarField, ECCVMFlavour, SIZE>,
+        relation_parameters: &crate::prelude::RelationParameters<P::ScalarField, ECCVMFlavour>,
+        scaling_factor: &P::ScalarField,
+    ) {
+        // degree-11
+        let numerator_evaluation =
+            EccSetRelation::compute_grand_product_numerator(input, relation_parameters);
+
+        // degree-20
+        let denominator_evaluation = EccSetRelation::compute_grand_product_denominator::<P, SIZE>(
+            input,
+            relation_parameters,
+        );
+
+        let lagrange_first = input.precomputed.lagrange_first();
+        let lagrange_last = input.precomputed.lagrange_last();
+
+        let z_perm = input.witness.z_perm();
+        let z_perm_shift = input.shifted_witness.z_perm_shift();
+
+        // degree-21
+        let mut tmp = ((z_perm.to_owned() + lagrange_first) * numerator_evaluation
+            - (z_perm_shift.to_owned() + lagrange_last) * denominator_evaluation)
+            * scaling_factor;
+        for i in 0..univariate_accumulator.r0.evaluations.len() {
+            univariate_accumulator.r0.evaluations[i] += tmp.evaluations[i];
+        }
+
+        // Contribution (2)
+        tmp = lagrange_last.to_owned() * z_perm_shift * scaling_factor;
+        for i in 0..univariate_accumulator.r1.evaluations.len() {
+            univariate_accumulator.r1.evaluations[i] += tmp.evaluations[i];
+        }
+    }
+
+    fn _verify_accumulate<F: PrimeField>(
+        _univariate_accumulator: &mut EccSetRelationEvals<F>,
+        _input: &crate::prelude::ClaimedEvaluations<F, ECCVMFlavour>,
+        _relation_parameters: &crate::prelude::RelationParameters<F, ECCVMFlavour>,
+        _scaling_factor: &F,
+    ) {
+        todo!()
+    }
 }
 
 impl<F: PrimeField> EccSetRelationAcc<F> {
-    pub(crate) fn scale(&mut self, elements: &[F]) {
-        assert!(elements.len() == EccSetRelation::NUM_RELATIONS);
-        self.r0 *= elements[0];
-        self.r1 *= elements[1];
+    pub(crate) fn scale(&mut self, current_scalar: &mut F, challenge: &F) {
+        self.r0 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r1 *= *current_scalar;
+        *current_scalar *= challenge;
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(
@@ -408,64 +464,5 @@ impl<F: PrimeField> EccSetRelationAcc<F> {
             partial_evaluation_result,
             true,
         );
-    }
-}
-impl<F: PrimeField> Relation<F, ECCVMFlavour> for EccSetRelation {
-    type Acc = EccSetRelationAcc<F>;
-
-    type VerifyAcc = EccSetRelationEvals<F>;
-
-    const SKIPPABLE: bool = false; //TODO FLORIN: Where does this come from?
-
-    fn skip<const SIZE: usize>(
-        input: &crate::decider::types::ProverUnivariatesSized<F, ECCVMFlavour, SIZE>,
-    ) -> bool {
-        todo!() //TODO FLORIN: Where does this come from?
-    }
-
-    fn accumulate<const SIZE: usize>(
-        univariate_accumulator: &mut Self::Acc,
-        input: &crate::decider::types::ProverUnivariatesSized<F, ECCVMFlavour, SIZE>,
-        relation_parameters: &crate::prelude::RelationParameters<F, ECCVMFlavour>,
-        scaling_factor: &F,
-    ) {
-        // degree-11
-        let numerator_evaluation =
-            EccSetRelation::compute_grand_product_numerator(input, relation_parameters);
-
-        // degree-20
-        let denominator_evaluation =
-            EccSetRelation::compute_grand_product_denominator(input, relation_parameters);
-
-        let lagrange_first = input.precomputed.lagrange_first();
-        let lagrange_last = input.precomputed.lagrange_last();
-        //  const auto& lagrange_last_short = ShortView(in.lagrange_last); TODO FLORIN: Is this relevant?
-
-        let z_perm = input.witness.z_perm();
-        let z_perm_shift = input.shifted_witness.z_perm_shift();
-        // const auto& z_perm_shift_short = ShortView(in.z_perm_shift); TODO FLORIN: Is this relevant?
-
-        // degree-21
-        let mut tmp = ((z_perm.to_owned() + lagrange_first) * numerator_evaluation
-            - (z_perm_shift.to_owned() + lagrange_last) * denominator_evaluation)
-            * scaling_factor;
-        for i in 0..univariate_accumulator.r0.evaluations.len() {
-            univariate_accumulator.r0.evaluations[i] += tmp.evaluations[i];
-        }
-
-        // Contribution (2)
-        tmp = lagrange_last.to_owned() * z_perm_shift * scaling_factor;
-        for i in 0..univariate_accumulator.r1.evaluations.len() {
-            univariate_accumulator.r1.evaluations[i] += tmp.evaluations[i];
-        }
-    }
-
-    fn verify_accumulate(
-        univariate_accumulator: &mut Self::VerifyAcc,
-        input: &crate::prelude::ClaimedEvaluations<F, ECCVMFlavour>,
-        relation_parameters: &crate::prelude::RelationParameters<F, ECCVMFlavour>,
-        scaling_factor: &F,
-    ) {
-        todo!()
     }
 }

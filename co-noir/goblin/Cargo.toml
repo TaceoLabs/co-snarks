@@ -23,6 +23,7 @@ eyre.workspace = true
 itertools.workspace = true
 num-bigint.workspace = true
 num-traits.workspace = true
+ark-grumpkin.workspace = true
 tracing.workspace = true
 rand.workspace = true
 rayon.workspace = true

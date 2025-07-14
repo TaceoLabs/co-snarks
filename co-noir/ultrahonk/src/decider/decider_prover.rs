@@ -5,7 +5,7 @@ use super::{
 };
 
 use crate::{
-    Utils,
+    CONST_PROOF_SIZE_LOG_N, Utils,
     decider::small_subgroup_ipa::SmallSubgroupIPAProver,
     plain_prover_flavour::PlainProverFlavour,
     transcript::{Transcript, TranscriptFieldType, TranscriptHasher},
@@ -36,7 +36,7 @@ impl<
     L: PlainProverFlavour,
 > Decider<P, H, L>
 {
-    pub(crate) fn new(memory: ProverMemory<P, L>, has_zk: ZeroKnowledge) -> Self {
+    pub fn new(memory: ProverMemory<P, L>, has_zk: ZeroKnowledge) -> Self {
         Self {
             memory,
             rng: ChaCha12Rng::from_entropy(),
@@ -85,7 +85,12 @@ impl<
                 &mut self.rng,
             )?;
             Ok((
-                self.sumcheck_prove_zk(transcript, circuit_size, &mut zk_sumcheck_data),
+                self.sumcheck_prove_zk::<CONST_PROOF_SIZE_LOG_N>(
+                    transcript,
+                    circuit_size,
+                    &mut zk_sumcheck_data,
+                    crs,
+                )?,
                 Some(zk_sumcheck_data),
             ))
         } else {
@@ -109,8 +114,13 @@ impl<
         zk_sumcheck_data: Option<ZKSumcheckData<P>>,
     ) -> HonkProofResult<()> {
         if self.has_zk == ZeroKnowledge::No {
-            let prover_opening_claim =
-                self.shplemini_prove(transcript, circuit_size, crs, sumcheck_output, None)?;
+            let prover_opening_claim = self.shplemini_prove(
+                transcript,
+                circuit_size,
+                crs,
+                sumcheck_output,
+                None, // This is only for ZK
+            )?;
             Self::compute_opening_proof(prover_opening_claim, transcript, crs)
         } else {
             let mut small_subgroup_ipa_prover = SmallSubgroupIPAProver::<_>::new::<H>(

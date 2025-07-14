@@ -14,6 +14,7 @@ pub(crate) mod ultra_builder;
 pub(crate) mod utils;
 
 pub type TranscriptFieldType = ark_bn254::Fr;
+pub type TranscriptFieldTypeGrumpkin = ark_grumpkin::Fr;
 pub type HonkProofResult<T> = std::result::Result<T, HonkProofError>;
 
 /// The errors that may arise during the computation of a HONK proof.

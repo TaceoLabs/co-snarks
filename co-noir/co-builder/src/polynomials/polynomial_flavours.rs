@@ -559,3 +559,11 @@ pub trait ProverWitnessEntitiesFlavour<T: Default> {
         panic!("This should not be called with this Flavour");
     }
 }
+
+pub trait PolyGFlavour<'a, T: Default> {
+    fn iter(&self) -> impl Iterator<Item = &'a T>
+    where
+        T: 'a;
+
+    fn from_slice(input: &'a [T]) -> Self;
+}

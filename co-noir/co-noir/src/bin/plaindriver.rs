@@ -209,7 +209,10 @@ fn main() -> color_eyre::Result<ExitCode> {
     .context("while creating the circuit")?;
     // Read the Crs
     let crs_size = co_noir::compute_circuit_size::<Bn254G1>(&constraint_system, false)?;
-    let crs = CrsParser::<Bn254>::get_crs(&prover_crs_path, &verifier_crs_path, crs_size, has_zk)?;
+    let crs =
+        CrsParser::<<ark_ec::bn::Bn<ark_bn254::Config> as ark_ec::pairing::Pairing>::G1>::get_crs::<
+            Bn254,
+        >(&prover_crs_path, &verifier_crs_path, crs_size, has_zk)?;
     let (prover_crs, verifier_crs) = crs.split();
     // Create the proving key and the barretenberg-compatible verifying key
     let (proving_key, vk_barretenberg) =
