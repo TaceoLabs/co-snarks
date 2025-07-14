@@ -72,8 +72,8 @@ confidence-threshold = 0.8
 # aren't accepted for every possible crate as with the normal allow list
 exceptions = [
     # Each entry is the crate and version constraint, and its specific allow
-    { crate = "webpki-roots", allow = ["MPL-2.0"] },
-    { crate = "webpki-root-certs", allow = ["MPL-2.0"] },
+    { crate = "webpki-roots", allow = ["MPL-2.0", "CDLA-Permissive-2.0"] },
+    { crate = "webpki-root-certs", allow = ["MPL-2.0", "CDLA-Permissive-2.0"] },
     { crate = "type_analysis", allow = ["GPL-3.0"] },
     { crate = "program_structure", allow = ["GPL-3.0"] },
     { crate = "parser", allow = ["GPL-3.0"] },
