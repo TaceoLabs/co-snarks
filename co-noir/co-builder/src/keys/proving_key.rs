@@ -14,13 +14,13 @@ use crate::{
     },
     ultra_builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder},
 };
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_ff::One;
 use co_acvm::{PlainAcvmSolver, mpc::NoirWitnessExtensionProtocol};
 use num_bigint::BigUint;
 use std::sync::Arc;
 
-pub struct ProvingKey<P: Pairing, L: ProverFlavour> {
+pub struct ProvingKey<P: CurveGroup, L: ProverFlavour> {
     pub crs: Arc<ProverCrs<P>>,
     pub circuit_size: u32,
     pub public_inputs: Vec<P::ScalarField>,
@@ -34,7 +34,7 @@ pub struct ProvingKey<P: Pairing, L: ProverFlavour> {
     pub active_region_data: ActiveRegionData,
 }
 
-impl<P: Pairing> ProvingKey<P, UltraFlavour> {
+impl<P: CurveGroup> ProvingKey<P, UltraFlavour> {
     // We ignore the TraceStructure for now (it is None in barretenberg for UltraHonk)
     pub fn create<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
         mut circuit: UltraCircuitBuilder<P>,
@@ -451,8 +451,7 @@ impl<P: Pairing> ProvingKey<P, UltraFlavour> {
         Ok(())
     }
 }
-
-impl<P: Pairing, L: ProverFlavour> ProvingKey<P, L> {
+impl<P: CurveGroup, L: ProverFlavour> ProvingKey<P, L> {
     pub fn new(
         circuit_size: usize,
         num_public_inputs: usize,

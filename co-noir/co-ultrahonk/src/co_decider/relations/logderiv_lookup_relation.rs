@@ -4,7 +4,7 @@ use crate::{
     mpc::NoirUltraHonkProver,
     mpc_prover_flavour::MPCProverFlavour,
 };
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::prelude::HonkCurve;
@@ -18,12 +18,12 @@ use mpc_net::Network;
 use ultrahonk::prelude::Univariate;
 
 #[derive(Clone, Debug)]
-pub(crate) struct LogDerivLookupRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing> {
+pub(crate) struct LogDerivLookupRelationAcc<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) r0: SharedUnivariate<T, P, 5>,
     pub(crate) r1: SharedUnivariate<T, P, 5>,
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for LogDerivLookupRelationAcc<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for LogDerivLookupRelationAcc<T, P> {
     fn default() -> Self {
         Self {
             r0: Default::default(),
@@ -32,7 +32,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for LogDerivLookupRelationAc
     }
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing> LogDerivLookupRelationAcc<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> LogDerivLookupRelationAcc<T, P> {
     pub(crate) fn scale(&mut self, elements: &[P::ScalarField]) {
         assert!(elements.len() == LogDerivLookupRelation::NUM_RELATIONS);
         self.r0.scale_inplace(elements[0]);
@@ -69,7 +69,7 @@ impl LogDerivLookupRelation {
 }
 
 impl LogDerivLookupRelation {
-    fn compute_inverse_exists<T: NoirUltraHonkProver<P>, P: Pairing, L: MPCProverFlavour>(
+    fn compute_inverse_exists<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCProverFlavour>(
         id: <T::State as MpcState>::PartyID,
         input: &ProverUnivariatesBatch<T, P, L>,
         // ) -> Univariate<P::ScalarField, MAX_PARTIAL_RELATION_LENGTH> {
@@ -84,7 +84,7 @@ impl LogDerivLookupRelation {
         res
     }
 
-    fn compute_read_term<T: NoirUltraHonkProver<P>, P: Pairing, L: MPCProverFlavour>(
+    fn compute_read_term<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCProverFlavour>(
         id: <T::State as MpcState>::PartyID,
         input: &ProverUnivariatesBatch<T, P, L>,
         relation_parameters: &RelationParameters<P::ScalarField, L>,
@@ -134,7 +134,7 @@ impl LogDerivLookupRelation {
     }
 
     // Compute table_1 + gamma + table_2 * eta + table_3 * eta_2 + table_4 * eta_3
-    fn compute_write_term<T: NoirUltraHonkProver<P>, P: Pairing, L: MPCProverFlavour>(
+    fn compute_write_term<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCProverFlavour>(
         input: &ProverUnivariatesBatch<T, P, L>,
         relation_parameters: &RelationParameters<P::ScalarField, L>,
     ) -> Vec<P::ScalarField> {

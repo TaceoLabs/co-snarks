@@ -5,7 +5,7 @@ use crate::{
     },
     ultra_builder::GenericUltraCircuitBuilder,
 };
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use mpc_core::gadgets::poseidon2::{Poseidon2, Poseidon2Params};
@@ -35,7 +35,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
 
     /// Constraints the external matrix multiplication
     fn matrix_multiplication_external<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         WT: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         state: &mut [FieldCT<F>; T],
@@ -179,7 +179,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
     }
 
     fn create_external_gate<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         WT: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         state: &[FieldCT<F>; T],
@@ -197,7 +197,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
     }
 
     fn create_internal_gate<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         WT: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         state: &[FieldCT<F>; T],
@@ -215,7 +215,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
     }
 
     fn permutation_in_place_plain<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         WT: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &self,
@@ -276,7 +276,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
     }
 
     fn permutation_in_place_shared<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         WT: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &self,
@@ -356,7 +356,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
 
     /// Performs the Poseidon2 Permutation on the given state.
     pub fn permutation_in_place<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         WT: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &self,
@@ -384,7 +384,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
     /// Performs the Poseidon2 Permutation on the given state.
     #[expect(dead_code)]
     pub fn permutation<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         WT: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &self,

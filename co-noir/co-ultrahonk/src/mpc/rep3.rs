@@ -1,5 +1,5 @@
 use super::NoirUltraHonkProver;
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_ff::Field;
 use itertools::izip;
 use mpc_core::{
@@ -14,9 +14,9 @@ use rayon::prelude::*;
 
 pub struct Rep3UltraHonkDriver;
 
-impl<P: Pairing> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
+impl<P: CurveGroup> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
     type ArithmeticShare = Rep3PrimeFieldShare<P::ScalarField>;
-    type PointShare = Rep3PointShare<P::G1>;
+    type PointShare = Rep3PointShare<P>;
     type State = Rep3State;
 
     fn rand<N: Network>(_: &N, state: &mut Self::State) -> eyre::Result<Self::ArithmeticShare> {
@@ -41,7 +41,7 @@ impl<P: Pairing> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
 
     fn add_assign_public(
         a: &mut Self::ArithmeticShare,
-        b: <P as Pairing>::ScalarField,
+        b: P::ScalarField,
         id: <Self::State as MpcState>::PartyID,
     ) {
         arithmetic::add_assign_public(a, b, id);
@@ -52,7 +52,7 @@ impl<P: Pairing> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
     }
 
     fn mul_with_public(
-        public: <P as Pairing>::ScalarField,
+        public: P::ScalarField,
         shared: Self::ArithmeticShare,
     ) -> Self::ArithmeticShare {
         arithmetic::mul_public(shared, public)
@@ -105,7 +105,7 @@ impl<P: Pairing> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
     }
 
     fn add_with_public(
-        public: <P as Pairing>::ScalarField,
+        public: P::ScalarField,
         shared: Self::ArithmeticShare,
         id: <Self::State as MpcState>::PartyID,
     ) -> Self::ArithmeticShare {
@@ -114,14 +114,14 @@ impl<P: Pairing> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
 
     fn promote_to_trivial_share(
         id: <Self::State as MpcState>::PartyID,
-        public_value: <P as Pairing>::ScalarField,
+        public_value: P::ScalarField,
     ) -> Self::ArithmeticShare {
         arithmetic::promote_to_trivial_share(id, public_value)
     }
 
     fn promote_to_trivial_shares(
         id: <Self::State as MpcState>::PartyID,
-        public_values: &[<P as Pairing>::ScalarField],
+        public_values: &[P::ScalarField],
     ) -> Vec<Self::ArithmeticShare> {
         public_values
             .par_iter()
@@ -134,7 +134,7 @@ impl<P: Pairing> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
         a: Self::PointShare,
         net: &N,
         _: &mut Self::State,
-    ) -> eyre::Result<<P as Pairing>::G1> {
+    ) -> eyre::Result<P> {
         pointshare::open_point(&a, net)
     }
 
@@ -142,7 +142,7 @@ impl<P: Pairing> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
         a: &[Self::PointShare],
         net: &N,
         _: &mut Self::State,
-    ) -> eyre::Result<Vec<<P as Pairing>::G1>> {
+    ) -> eyre::Result<Vec<P>> {
         pointshare::open_point_many(a, net)
     }
 
@@ -150,7 +150,7 @@ impl<P: Pairing> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
         a: &[Self::ArithmeticShare],
         net: &N,
         _: &mut Self::State,
-    ) -> eyre::Result<Vec<<P as Pairing>::ScalarField>> {
+    ) -> eyre::Result<Vec<P::ScalarField>> {
         arithmetic::open_vec(a, net)
     }
 
@@ -159,7 +159,7 @@ impl<P: Pairing> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
         b: Self::ArithmeticShare,
         net: &N,
         _: &mut Self::State,
-    ) -> eyre::Result<(<P as Pairing>::G1, <P as Pairing>::ScalarField)> {
+    ) -> eyre::Result<(P, P::ScalarField)> {
         pointshare::open_point_and_field(&a, &b, net)
     }
 
@@ -168,7 +168,7 @@ impl<P: Pairing> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
         b: &[Self::ArithmeticShare],
         net: &N,
         state: &mut Self::State,
-    ) -> eyre::Result<Vec<<P as Pairing>::ScalarField>> {
+    ) -> eyre::Result<Vec<P::ScalarField>> {
         arithmetic::mul_open_vec(a, b, net, state)
     }
 
@@ -224,27 +224,24 @@ impl<P: Pairing> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
     }
 
     fn msm_public_points(
-        points: &[<P as Pairing>::G1Affine],
+        points: &[P::Affine],
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShare {
         pointshare::msm_public_points(points, scalars)
     }
 
-    fn eval_poly(
-        coeffs: &[Self::ArithmeticShare],
-        point: <P as Pairing>::ScalarField,
-    ) -> Self::ArithmeticShare {
+    fn eval_poly(coeffs: &[Self::ArithmeticShare], point: P::ScalarField) -> Self::ArithmeticShare {
         poly::eval_poly(coeffs, point)
     }
 
-    fn fft<D: ark_poly::EvaluationDomain<<P as Pairing>::ScalarField>>(
+    fn fft<D: ark_poly::EvaluationDomain<P::ScalarField>>(
         data: &[Self::ArithmeticShare],
         domain: &D,
     ) -> Vec<Self::ArithmeticShare> {
         domain.fft(data)
     }
 
-    fn ifft<D: ark_poly::EvaluationDomain<<P as Pairing>::ScalarField>>(
+    fn ifft<D: ark_poly::EvaluationDomain<P::ScalarField>>(
         data: &[Self::ArithmeticShare],
         domain: &D,
     ) -> Vec<Self::ArithmeticShare> {

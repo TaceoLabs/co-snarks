@@ -4,7 +4,8 @@ use crate::{
     types::{AllEntities, Polynomials},
     types_batch::AllEntitiesBatch,
 };
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
+use ark_ec::PrimeGroup;
 use ark_ff::PrimeField;
 use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
@@ -15,7 +16,7 @@ use co_builder::{
 use itertools::izip;
 use std::iter;
 
-pub(crate) struct ProverMemory<T: NoirUltraHonkProver<P>, P: Pairing, L: MPCProverFlavour> {
+pub(crate) struct ProverMemory<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCProverFlavour> {
     pub(crate) polys: AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>, L>,
     pub(crate) relation_parameters: RelationParameters<P::ScalarField, L>,
 }
@@ -29,7 +30,7 @@ pub(crate) type ProverUnivariates<T, P, L> = AllEntities<
 pub(crate) type ProverUnivariatesBatch<T, P, L> = AllEntitiesBatch<T, P, L>;
 pub(crate) type PartiallyEvaluatePolys<T, P, L> = AllEntities<
     Vec<<T as NoirUltraHonkProver<P>>::ArithmeticShare>,
-    Vec<<P as Pairing>::ScalarField>,
+    Vec<<P as PrimeGroup>::ScalarField>,
     L,
 >;
 pub(crate) type ClaimedEvaluations<F, L> = AllEntities<F, F, L>;
@@ -45,7 +46,7 @@ pub struct RelationParameters<F: PrimeField, L: MPCProverFlavour> {
     pub(crate) gate_challenges: Vec<F>,
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing, L: MPCProverFlavour> ProverMemory<T, P, L> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCProverFlavour> ProverMemory<T, P, L> {
     pub(crate) fn from_memory_and_polynomials(
         prover_memory: crate::co_oink::types::ProverMemory<T, P, L>,
         polynomials: Polynomials<T::ArithmeticShare, P::ScalarField, L>,

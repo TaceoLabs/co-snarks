@@ -1,10 +1,10 @@
-use ark_ec::{CurveGroup, pairing::Pairing};
+use ark_ec::CurveGroup;
 use ark_ff::{BigInt, Field, One, PrimeField};
 use num_bigint::BigUint;
 use std::str::FromStr;
 
 // Des describes the PrimeField used for the Transcript
-pub trait HonkCurve<Des: PrimeField>: Pairing {
+pub trait HonkCurve<Des: PrimeField>: CurveGroup<BaseField: PrimeField> {
     type CycleGroup: CurveGroup<BaseField = Self::ScalarField>;
 
     const NUM_BASEFIELD_ELEMENTS: usize;
@@ -12,8 +12,8 @@ pub trait HonkCurve<Des: PrimeField>: Pairing {
     const SUBGROUP_SIZE: usize;
     const LIBRA_UNIVARIATES_LENGTH: usize;
 
-    fn g1_affine_from_xy(x: Self::BaseField, y: Self::BaseField) -> Self::G1Affine;
-    fn g1_affine_to_xy(p: &Self::G1Affine) -> (Self::BaseField, Self::BaseField);
+    fn g1_affine_from_xy(x: Self::BaseField, y: Self::BaseField) -> Self::Affine;
+    fn g1_affine_to_xy(p: &Self::Affine) -> (Self::BaseField, Self::BaseField);
 
     fn convert_scalarfield_into(src: &Self::ScalarField) -> Vec<Des>;
     fn convert_scalarfield_back(src: &[Des]) -> Self::ScalarField;
@@ -34,7 +34,9 @@ pub trait HonkCurve<Des: PrimeField>: Pairing {
     }
 }
 
-impl HonkCurve<ark_bn254::Fr> for ark_bn254::Bn254 {
+impl HonkCurve<ark_bn254::Fr>
+    for <ark_ec::bn::Bn<ark_bn254::Config> as ark_ec::pairing::Pairing>::G1
+{
     type CycleGroup = ark_grumpkin::Projective;
 
     const NUM_BASEFIELD_ELEMENTS: usize = 2;
@@ -46,7 +48,7 @@ impl HonkCurve<ark_bn254::Fr> for ark_bn254::Bn254 {
         ark_bn254::G1Affine::new(x, y)
     }
 
-    fn g1_affine_to_xy(p: &Self::G1Affine) -> (Self::BaseField, Self::BaseField) {
+    fn g1_affine_to_xy(p: &Self::Affine) -> (Self::BaseField, Self::BaseField) {
         (p.x, p.y)
     }
 

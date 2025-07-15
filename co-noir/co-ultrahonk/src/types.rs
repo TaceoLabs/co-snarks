@@ -1,6 +1,6 @@
 use crate::mpc::NoirUltraHonkProver;
 use crate::mpc_prover_flavour::MPCProverFlavour;
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
@@ -140,7 +140,7 @@ pub(crate) fn ark_se_polynomials<T, P, L, S>(
 ) -> Result<S::Ok, S::Error>
 where
     T: NoirUltraHonkProver<P>,
-    P: Pairing,
+    P: CurveGroup,
     L: MPCProverFlavour,
     S: serde::Serializer,
 {
@@ -162,14 +162,14 @@ pub(crate) fn ark_de_polynomials<'de, T, P, L, D>(
 ) -> Result<Polynomials<T::ArithmeticShare, P::ScalarField, L>, D::Error>
 where
     T: NoirUltraHonkProver<P>,
-    P: Pairing,
+    P: CurveGroup,
     L: MPCProverFlavour,
     D: serde::de::Deserializer<'de>,
 {
     struct PolyVisitor<T, P, L>
     where
         T: NoirUltraHonkProver<P>,
-        P: Pairing,
+        P: CurveGroup,
         L: MPCProverFlavour,
     {
         _marker: std::marker::PhantomData<(T, P, L)>,
@@ -178,7 +178,7 @@ where
     impl<'de, T, P, L> Visitor<'de> for PolyVisitor<T, P, L>
     where
         T: NoirUltraHonkProver<P>,
-        P: Pairing,
+        P: CurveGroup,
         L: MPCProverFlavour,
     {
         type Value = Polynomials<T::ArithmeticShare, P::ScalarField, L>;

@@ -6,7 +6,7 @@ use crate::{
     mpc::NoirUltraHonkProver,
     mpc_prover_flavour::MPCProverFlavour,
 };
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::prelude::HonkCurve;
 use co_builder::{HonkProofResult, polynomials::polynomial_flavours::PrecomputedEntitiesFlavour};
@@ -18,12 +18,12 @@ use mpc_net::Network;
 use ultrahonk::prelude::Univariate;
 
 #[derive(Clone, Debug)]
-pub(crate) struct UltraPermutationRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing> {
+pub(crate) struct UltraPermutationRelationAcc<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) r0: SharedUnivariate<T, P, 6>,
     pub(crate) r1: SharedUnivariate<T, P, 3>,
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for UltraPermutationRelationAcc<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for UltraPermutationRelationAcc<T, P> {
     fn default() -> Self {
         Self {
             r0: Default::default(),
@@ -32,7 +32,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for UltraPermutationRelation
     }
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing> UltraPermutationRelationAcc<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> UltraPermutationRelationAcc<T, P> {
     pub(crate) fn scale(&mut self, elements: &[P::ScalarField]) {
         assert!(elements.len() == UltraPermutationRelation::NUM_RELATIONS);
         self.r0.scale_inplace(elements[0]);
@@ -71,7 +71,7 @@ impl UltraPermutationRelation {
 impl UltraPermutationRelation {
     fn compute_grand_product_numerator_and_denominator_batch<
         T: NoirUltraHonkProver<P>,
-        P: Pairing,
+        P: CurveGroup,
         N: Network,
         L: MPCProverFlavour,
     >(

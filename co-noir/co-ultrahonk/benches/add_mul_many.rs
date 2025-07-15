@@ -1,11 +1,11 @@
-use criterion::*;
-
-use ark_bn254::Bn254 as B;
 use ark_ff::Zero as _;
 use co_ultrahonk::prelude::{NoirUltraHonkProver as P, PlainUltraHonkDriver as D};
+use criterion::*;
 use itertools::izip;
 use rand::{RngCore, thread_rng};
 use rayon::prelude::*;
+
+type B = <ark_ec::bn::Bn<ark_bn254::Config> as ark_ec::pairing::Pairing>::G1;
 
 type FieldType = ark_bn254::Fr;
 const MAX_PARTIAL_RELATION_LENGTH: usize = 7;

@@ -19,19 +19,22 @@ pub type CrsParser<P> = NewFileStructure<P>;
 // the new one (when installing) barretenberg can be found under ~/.bb-crs (or downloaded from https://aztec-ignition.s3.amazonaws.com/MAIN%20IGNITION/flat/g1.dat or g2.dat, but the first one is 6 gb large)
 // the older ones can be downloaded with ~/aztec-packages/barretenberg/cpp/srs_db/download_srs.sh (iirc), these are separated into 20 files, for info see also ~/aztec-packages/barretenberg/cpp/srs_db/transcript_spec.md
 
-pub struct NewFileStructure<P: Pairing> {
+pub struct NewFileStructure<P: Pairing>
+where
+    P::G1: HonkCurve<TranscriptFieldType>,
+{
     phantom_data: PhantomData<P>,
 }
 
-impl<P: Pairing> NewFileStructure<P> {
-    fn crs_size_from_circuit_size(circuit_size: usize, has_zk: ZeroKnowledge) -> usize
-    where
-        P: HonkCurve<TranscriptFieldType>,
-    {
+impl<P: Pairing> NewFileStructure<P>
+where
+    P::G1: HonkCurve<TranscriptFieldType>,
+{
+    fn crs_size_from_circuit_size(circuit_size: usize, has_zk: ZeroKnowledge) -> usize {
         if has_zk == ZeroKnowledge::No {
             circuit_size
         } else {
-            max(circuit_size, P::SUBGROUP_SIZE * 2)
+            max(circuit_size, P::G1::SUBGROUP_SIZE * 2)
         }
     }
 
@@ -40,10 +43,7 @@ impl<P: Pairing> NewFileStructure<P> {
         path_g2: impl AsRef<Path>,
         circuit_size: usize,
         has_zk: ZeroKnowledge,
-    ) -> Result<Crs<P>>
-    where
-        P: HonkCurve<TranscriptFieldType>,
-    {
+    ) -> Result<Crs<P>> {
         let crs_size = Self::crs_size_from_circuit_size(circuit_size, has_zk);
         let mut monomials = vec![P::G1Affine::default(); crs_size];
         let mut g2_x = P::G2Affine::default();
@@ -55,14 +55,11 @@ impl<P: Pairing> NewFileStructure<P> {
         path_g1: impl AsRef<Path>,
         circuit_size: usize,
         has_zk: ZeroKnowledge,
-    ) -> Result<ProverCrs<P>>
-    where
-        P: HonkCurve<TranscriptFieldType>,
-    {
+    ) -> Result<ProverCrs<P::G1>> {
         let crs_size = Self::crs_size_from_circuit_size(circuit_size, has_zk);
         let mut monomials = vec![P::G1Affine::default(); crs_size];
         Self::read_transcript_g1(&mut monomials, crs_size, path_g1)?;
-        Ok(ProverCrs { monomials })
+        Ok(ProverCrs::<P::G1> { monomials })
     }
 
     pub fn get_crs_g2(path_g2: impl AsRef<Path>) -> Result<P::G2Affine> {
@@ -108,7 +105,10 @@ trait FileProcessor<P: Pairing> {
     fn convert_endianness_inplace(buffer: &mut [u8]);
 }
 
-impl<P: Pairing> FileProcessor<P> for NewFileStructure<P> {
+impl<P: Pairing> FileProcessor<P> for NewFileStructure<P>
+where
+    P::G1: HonkCurve<TranscriptFieldType>,
+{
     fn read_transcript_g1(
         monomials: &mut [<P as Pairing>::G1Affine],
         degree: usize,

@@ -8,6 +8,7 @@ use crate::prelude::{PlainUltraHonkDriver, Rep3UltraHonkDriver, ShamirUltraHonkD
 use crate::types::Polynomials;
 use crate::types::ark_de_polynomials;
 use crate::types::ark_se_polynomials;
+use ark_ec::CurveGroup;
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
@@ -35,7 +36,7 @@ use ultrahonk::prelude::{VerifyingKeyBarretenberg, ZeroKnowledge};
 
 #[derive(Serialize, Deserialize)]
 #[serde(bound = "")]
-pub struct ProvingKey<T: NoirUltraHonkProver<P>, P: Pairing, L: MPCProverFlavour> {
+pub struct ProvingKey<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCProverFlavour> {
     pub circuit_size: u32,
     #[serde(
         serialize_with = "mpc_core::serde_compat::ark_se",
@@ -67,7 +68,7 @@ pub type Rep3ProvingKey<P, L> = ProvingKey<Rep3UltraHonkDriver, P, L>;
 pub type ShamirProvingKey<P, L> = ProvingKey<ShamirUltraHonkDriver, P, L>;
 
 //The following we need only for the UltraFlavour, as we don't have a MegaCircuitBuilder
-impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P, UltraFlavour> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> ProvingKey<T, P, UltraFlavour> {
     const PUBLIC_INPUT_WIRE_INDEX: usize = UltraFlavour::W_R;
 
     // We ignore the TraceStructure for now (it is None in barretenberg for UltraHonk)
@@ -154,13 +155,14 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P, UltraFlavour> {
 
     pub fn create_keys<
         U: NoirWitnessExtensionProtocol<P::ScalarField, ArithmeticShare = T::ArithmeticShare>,
+        P_: Pairing<G1 = P, G1Affine = P::Affine>,
     >(
         id: <T::State as MpcState>::PartyID,
         circuit: GenericUltraCircuitBuilder<P, U>,
         prover_crs: &ProverCrs<P>,
-        verifier_crs: P::G2Affine,
+        verifier_crs: P_::G2Affine,
         driver: &mut U,
-    ) -> HonkProofResult<(Self, VerifyingKey<P, UltraFlavour>)> {
+    ) -> HonkProofResult<(Self, VerifyingKey<P_, UltraFlavour>)> {
         let pk = ProvingKey::create(id, circuit, driver)?;
         let circuit_size = pk.circuit_size;
 
@@ -170,7 +172,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P, UltraFlavour> {
             .zip(pk.polynomials.precomputed.iter())
         {
             let comm = Utils::commit(src.as_ref(), prover_crs)?;
-            *des = P::G1Affine::from(comm);
+            *des = P::Affine::from(comm);
         }
 
         // Create and return the VerifyingKey instance
@@ -203,7 +205,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P, UltraFlavour> {
             .zip(pk.polynomials.precomputed.iter())
         {
             let comm = Utils::commit(src.as_ref(), crs)?;
-            *des = P::G1Affine::from(comm);
+            *des = P::Affine::from(comm);
         }
 
         // Create and return the VerifyingKey instance
@@ -340,18 +342,18 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P, UltraFlavour> {
             + num_zk_randomness
     }
 
-    pub fn create_vk(
+    pub fn create_vk<P_: Pairing<G1 = P, G1Affine = P::Affine>>(
         &self,
         prover_crs: &ProverCrs<P>,
-        verifier_crs: P::G2Affine,
-    ) -> Result<VerifyingKey<P, UltraFlavour>> {
+        verifier_crs: P_::G2Affine,
+    ) -> Result<VerifyingKey<P_, UltraFlavour>> {
         let mut commitments = <UltraFlavour as ProverFlavour>::PrecomputedEntities::default();
         for (des, src) in commitments
             .iter_mut()
             .zip(self.polynomials.precomputed.iter())
         {
             let comm = Utils::commit(src.as_ref(), prover_crs)?;
-            *des = P::G1Affine::from(comm);
+            *des = P::Affine::from(comm);
         }
         Ok(VerifyingKey {
             crs: verifier_crs,
@@ -364,7 +366,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> ProvingKey<T, P, UltraFlavour> {
     }
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing, L: MPCProverFlavour> ProvingKey<T, P, L> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCProverFlavour> ProvingKey<T, P, L> {
     pub fn from_plain_key_and_shares(
         plain_key: &PlainProvingKey<P, L>,
         shares: Vec<T::ArithmeticShare>,
@@ -391,9 +393,11 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing, L: MPCProverFlavour> ProvingKey<T, P
             .polynomials
             .precomputed
             .iter()
-            .zip(L::PrecomputedEntities::<
-                Polynomial<<P as Pairing>::ScalarField>,
-            >::iter_mut(&mut polynomials.precomputed))
+            .zip(
+                L::PrecomputedEntities::<Polynomial<P::ScalarField>>::iter_mut(
+                    &mut polynomials.precomputed,
+                ),
+            )
         {
             *des = src.to_owned();
         }
@@ -426,7 +430,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing, L: MPCProverFlavour> ProvingKey<T, P
     }
 }
 
-pub fn to_plain_pk<P: Pairing, L: MPCProverFlavour>(
+pub fn to_plain_pk<P: CurveGroup, L: MPCProverFlavour>(
     proving_key: ProvingKey<PlainUltraHonkDriver, P, L>,
     crs: ProverCrs<P>,
 ) -> PlainProvingKey<P, L> {

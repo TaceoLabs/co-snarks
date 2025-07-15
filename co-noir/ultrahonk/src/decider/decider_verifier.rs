@@ -8,6 +8,7 @@ use crate::{
     ultra_verifier::HonkVerifyResult,
 };
 use ark_ec::AffineRepr;
+use ark_ec::pairing::Pairing;
 use ark_ff::{One, Zero};
 use co_builder::{
     TranscriptFieldType,
@@ -40,7 +41,7 @@ impl<
     pub(crate) fn reduce_verify_shplemini(
         opening_pair: &mut ShpleminiVerifierOpeningClaim<P>,
         mut transcript: Transcript<TranscriptFieldType, H>,
-    ) -> HonkVerifyResult<(P::G1Affine, P::G1Affine)> {
+    ) -> HonkVerifyResult<(P::Affine, P::Affine)> {
         tracing::trace!("Reduce and verify opening pair");
 
         let quotient_commitment = transcript.receive_point_from_prover::<P>("KZG:W".to_string())?;
@@ -52,22 +53,22 @@ impl<
         Ok((p_0.into(), p_1.into()))
     }
 
-    pub fn pairing_check(
-        p0: P::G1Affine,
-        p1: P::G1Affine,
-        g2_x: P::G2Affine,
-        g2_gen: P::G2Affine,
+    pub fn pairing_check<P_: Pairing<G1 = P>>(
+        p0: P_::G1Affine,
+        p1: P_::G1Affine,
+        g2_x: P_::G2Affine,
+        g2_gen: P_::G2Affine,
     ) -> bool {
         tracing::trace!("Pairing check");
         let p = [g2_gen, g2_x];
-        let g1_prepared = [P::G1Prepared::from(p0), P::G1Prepared::from(p1)];
-        P::multi_pairing(g1_prepared, p).0 == P::TargetField::one()
+        let g1_prepared = [P_::G1Prepared::from(p0), P_::G1Prepared::from(p1)];
+        P_::multi_pairing(g1_prepared, p).0 == P_::TargetField::one()
     }
 
-    pub(crate) fn verify(
+    pub(crate) fn verify<P_: Pairing<G1 = P, G1Affine = P::Affine>>(
         mut self,
         circuit_size: u32,
-        crs: &P::G2Affine,
+        crs: &P_::G2Affine,
         mut transcript: Transcript<TranscriptFieldType, H>,
         has_zk: ZeroKnowledge,
     ) -> HonkVerifyResult<bool> {
@@ -130,11 +131,11 @@ impl<
         )?;
 
         let pairing_points = Self::reduce_verify_shplemini(&mut opening_claim, transcript)?;
-        let pcs_verified = Self::pairing_check(
+        let pcs_verified = Self::pairing_check::<P_>(
             pairing_points.0,
             pairing_points.1,
             *crs,
-            P::G2Affine::generator(),
+            P_::G2Affine::generator(),
         );
         Ok(sumcheck_output.verified && pcs_verified && consistency_checked)
     }

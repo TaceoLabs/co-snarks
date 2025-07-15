@@ -3,6 +3,7 @@ use ark_bn254::Bn254;
 use co_acvm::ShamirAcvmType;
 use co_builder::flavours::ultra_flavour::UltraFlavour;
 use co_builder::TranscriptFieldType;
+use co_noir::Bn254G1;
 use co_ultrahonk::prelude::{
     CrsParser, Poseidon2Sponge, ShamirCoUltraHonk, TranscriptHasher, UltraHonk, Utils,
     ZeroKnowledge,
@@ -34,7 +35,7 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     let nets = LocalNetwork::new(num_parties);
     let mut threads = Vec::with_capacity(num_parties);
     let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
-    let crs_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, false).unwrap();
+    let crs_size = co_noir::compute_circuit_size::<Bn254G1>(&constraint_system, false).unwrap();
     let prover_crs =
         Arc::new(CrsParser::<Bn254>::get_crs_g1(CRS_PATH_G1, crs_size, has_zk).unwrap());
     for net in nets {
@@ -87,7 +88,8 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
 
     // Get vk
     let verifier_crs = CrsParser::<Bn254>::get_crs_g2(CRS_PATH_G2).unwrap();
-    let vk = co_noir::generate_vk(&constraint_system, prover_crs, verifier_crs, false).unwrap();
+    let vk =
+        co_noir::generate_vk::<Bn254>(&constraint_system, prover_crs, verifier_crs, false).unwrap();
 
     let is_valid =
         UltraHonk::<_, H, UltraFlavour>::verify(proof, &public_input, &vk, has_zk).unwrap();

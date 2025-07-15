@@ -4,7 +4,7 @@ use ark_bn254::Bn254;
 use ark_ff::PrimeField;
 use co_acvm::{solver::PlainCoSolver, PlainAcvmSolver};
 use co_builder::{flavours::ultra_flavour::UltraFlavour, TranscriptFieldType};
-use co_noir::HonkRecursion;
+use co_noir::{Bn254G1, HonkRecursion};
 use co_ultrahonk::prelude::{
     CoUltraHonk, CrsParser, PlainCoBuilder, PlainUltraHonkDriver, Poseidon2Sponge, ProvingKey,
     TranscriptHasher, UltraHonk, Utils, ZeroKnowledge,
@@ -45,7 +45,7 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str, has_zk: Zero
     let witness = Utils::get_witness_from_file(&witness_file).expect("failed to parse witness");
 
     let mut driver = PlainAcvmSolver::new();
-    let builder = PlainCoBuilder::<Bn254>::create_circuit(
+    let builder = PlainCoBuilder::<Bn254G1>::create_circuit(
         &constraint_system,
         false, // We don't support recursive atm
         0,
@@ -56,9 +56,10 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str, has_zk: Zero
     .unwrap();
 
     let crs_size = builder.compute_dyadic_size();
-    let (prover_crs, verifier_crs) = CrsParser::get_crs(CRS_PATH_G1, CRS_PATH_G2, crs_size, has_zk)
-        .expect("failed to get crs")
-        .split();
+    let (prover_crs, verifier_crs) =
+        CrsParser::<Bn254>::get_crs(CRS_PATH_G1, CRS_PATH_G2, crs_size, has_zk)
+            .expect("failed to get crs")
+            .split();
     let (proving_key, verifying_key) =
         ProvingKey::create_keys(0, builder, &prover_crs, verifier_crs, &mut driver).unwrap();
 
@@ -69,9 +70,13 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str, has_zk: Zero
     )
     .unwrap();
 
-    let is_valid =
-        UltraHonk::<_, H, UltraFlavour>::verify(proof, &public_input, &verifying_key, has_zk)
-            .unwrap();
+    let is_valid = UltraHonk::<_, H, UltraFlavour>::verify::<Bn254>(
+        proof,
+        &public_input,
+        &verifying_key,
+        has_zk,
+    )
+    .unwrap();
     assert!(is_valid);
 }
 
@@ -91,7 +96,7 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     let witness = convert_witness_plain(witness);
 
     let mut driver = PlainAcvmSolver::new();
-    let builder = PlainCoBuilder::<Bn254>::create_circuit(
+    let builder = PlainCoBuilder::<Bn254G1>::create_circuit(
         &constraint_system,
         false, // We don't support recursive atm
         0,
@@ -102,9 +107,10 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     .unwrap();
 
     let crs_size = builder.compute_dyadic_size();
-    let (prover_crs, verifier_crs) = CrsParser::get_crs(CRS_PATH_G1, CRS_PATH_G2, crs_size, has_zk)
-        .expect("failed to get crs")
-        .split();
+    let (prover_crs, verifier_crs) =
+        CrsParser::<Bn254>::get_crs(CRS_PATH_G1, CRS_PATH_G2, crs_size, has_zk)
+            .expect("failed to get crs")
+            .split();
     let (proving_key, verifying_key) =
         ProvingKey::create_keys(0, builder, &prover_crs, verifier_crs, &mut driver).unwrap();
 
@@ -115,9 +121,13 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     )
     .unwrap();
 
-    let is_valid =
-        UltraHonk::<_, H, UltraFlavour>::verify(proof, &public_input, &verifying_key, has_zk)
-            .unwrap();
+    let is_valid = UltraHonk::<_, H, UltraFlavour>::verify::<Bn254>(
+        proof,
+        &public_input,
+        &verifying_key,
+        has_zk,
+    )
+    .unwrap();
     assert!(is_valid);
 }
 

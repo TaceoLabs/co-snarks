@@ -26,7 +26,9 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(
 
     let witness = Utils::get_witness_from_file(witness_file).unwrap();
     let mut driver = PlainAcvmSolver::new();
-    let builder = UltraCircuitBuilder::<Bn254>::create_circuit(
+    let builder = UltraCircuitBuilder::<
+        <ark_ec::models::bn::Bn<ark_bn254::Config> as ark_ec::pairing::Pairing>::G1,
+    >::create_circuit(
         &constraint_system,
         false, // We don't support recursive atm
         0,
@@ -36,11 +38,11 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(
     )
     .unwrap();
     let crs_size = builder.compute_dyadic_size();
-    let crs = CrsParser::get_crs(CRS_PATH_G1, CRS_PATH_G2, crs_size, has_zk).unwrap();
+    let crs = CrsParser::<Bn254>::get_crs(CRS_PATH_G1, CRS_PATH_G2, crs_size, has_zk).unwrap();
     let (prover_crs, verifier_crs) = crs.split();
 
     let (proving_key, verifying_key) = builder
-        .create_keys(prover_crs.into(), verifier_crs, &mut driver)
+        .create_keys::<Bn254>(prover_crs.into(), verifier_crs, &mut driver)
         .unwrap();
 
     let (proof, public_inputs) =

@@ -1,7 +1,7 @@
 use std::any::Any;
 
 use crate::{HonkProofError, HonkProofResult, crs::ProverCrs};
-use ark_ec::{VariableBaseMSM, pairing::Pairing};
+use ark_ec::CurveGroup;
 use ark_ff::{One, PrimeField, Zero};
 use eyre::Error;
 use mpc_core::gadgets;
@@ -19,18 +19,18 @@ impl Utils {
         ark_ff::batch_inversion(coeffs);
     }
 
-    pub fn commit<P: Pairing>(
+    pub fn commit<P: CurveGroup>(
         poly: &[P::ScalarField],
         crs: &ProverCrs<P>,
-    ) -> HonkProofResult<P::G1> {
+    ) -> HonkProofResult<P> {
         Self::msm::<P>(poly, crs.monomials.as_slice())
     }
 
-    pub fn msm<P: Pairing>(poly: &[P::ScalarField], crs: &[P::G1Affine]) -> HonkProofResult<P::G1> {
+    pub fn msm<P: CurveGroup>(poly: &[P::ScalarField], crs: &[P::Affine]) -> HonkProofResult<P> {
         if poly.len() > crs.len() {
             return Err(HonkProofError::CrsTooSmall);
         }
-        Ok(P::G1::msm_unchecked(crs, poly))
+        Ok(P::msm_unchecked(crs, poly))
     }
 
     pub fn get_msb32(inp: u32) -> u32 {
