@@ -302,31 +302,54 @@ pub fn bit_inject<F: PrimeField, N: Network>(
     net: &N,
     state: &mut Rep3State,
 ) -> eyre::Result<Rep3PrimeFieldShare<F>> {
-    // standard bit inject
     assert!(x.a.bits() <= 1);
+    assert!(x.b.bits() <= 1);
 
-    let mut b0 = Rep3PrimeFieldShare::<F>::default();
-    let mut b1 = Rep3PrimeFieldShare::<F>::default();
-    let mut b2 = Rep3PrimeFieldShare::<F>::default();
+    // Approach: Split the value into x and y and compute an arithmetic xor.
+    // The multiplication in the arithmetic xor is done in a special way according to https://eprint.iacr.org/2025/919.pdf
 
     match state.id {
         PartyID::ID0 => {
-            b0.a = x.a.to_owned().into();
-            b2.b = x.b.to_owned().into();
+            let x0: F = state.rngs.rand.masking_field_element();
+            let y = if x.b.bit(0) { F::one() } else { F::zero() };
+            let z0 = y * x0;
+            let r0 = x0 + y - z0 - z0;
+            let res_a = r0;
+            // Send to P1
+            net.send_next(res_a)?;
+
+            // Receive from P2
+            let res_b: F = net.recv_prev()?;
+            Ok(Rep3PrimeFieldShare::new(res_a, res_b))
         }
         PartyID::ID1 => {
-            b1.a = x.a.to_owned().into();
-            b0.b = x.b.to_owned().into();
+            let x1: F = state.rngs.rand.masking_field_element();
+            let res_a = if x.a.bit(0) ^ x.b.bit(0) {
+                x1 + F::one()
+            } else {
+                x1
+            };
+            // Send to P2
+            net.send_next(res_a)?;
+
+            // Receive from P0
+            let res_b: F = net.recv_prev()?;
+            Ok(Rep3PrimeFieldShare::new(res_a, res_b))
         }
         PartyID::ID2 => {
-            b2.a = x.a.to_owned().into();
-            b1.b = x.b.to_owned().into();
-        }
-    };
+            // Receive from P1
+            let res_b: F = net.recv_prev()?;
+            let x2: F = state.rngs.rand.masking_field_element();
+            let y = if x.a.bit(0) { F::one() } else { F::zero() };
+            let z2 = y * (res_b + x2);
+            let r2 = x2 - z2 - z2;
+            let res_a = r2;
 
-    let d = arithmetic::arithmetic_xor(b0, b1, net, state)?;
-    let e = arithmetic::arithmetic_xor(d, b2, net, state)?;
-    Ok(e)
+            // Send to P0
+            net.send_next(res_a)?;
+            Ok(Rep3PrimeFieldShare::new(res_a, res_b))
+        }
+    }
 }
 
 /// Translates a vector of shared bit into a vector of arithmetic sharings of the same bits. See [bit_inject] for details.
@@ -335,37 +358,78 @@ pub fn bit_inject_many<F: PrimeField, N: Network>(
     net: &N,
     state: &mut Rep3State,
 ) -> eyre::Result<Vec<Rep3PrimeFieldShare<F>>> {
-    // standard bit inject
     assert!(x.iter().all(|a| a.a.bits() <= 1));
+    assert!(x.iter().all(|a| a.b.bits() <= 1));
 
-    let mut b0 = vec![Rep3PrimeFieldShare::<F>::default(); x.len()];
-    let mut b1 = vec![Rep3PrimeFieldShare::<F>::default(); x.len()];
-    let mut b2 = vec![Rep3PrimeFieldShare::<F>::default(); x.len()];
+    let mut res_a = Vec::with_capacity(x.len());
 
-    match state.id {
+    // Approach: Split the value into x and y and compute an arithmetic xor.
+    // The multiplication in the arithmetic xor is done in a special way according to https://eprint.iacr.org/2025/919.pdf
+
+    let res_b = match state.id {
         PartyID::ID0 => {
-            for (b0, b2, x) in izip!(&mut b0, &mut b2, x.iter().cloned()) {
-                b0.a = x.a.into();
-                b2.b = x.b.into();
+            for el in x.iter() {
+                let x0: F = state.rngs.rand.masking_field_element();
+                let y = if el.b.bit(0) { F::one() } else { F::zero() };
+                let z0 = y * x0;
+                let r0 = x0 + y - z0 - z0;
+                res_a.push(r0);
             }
+            // Send to P1
+            net.send_next_many(&res_a)?;
+
+            // Receive from P2
+            let res_b: Vec<F> = net.recv_prev_many()?;
+            if res_b.len() != x.len() {
+                eyre::bail!("Received wrong number of elements");
+            }
+            res_b
         }
         PartyID::ID1 => {
-            for (b1, b0, x) in izip!(&mut b1, &mut b0, x.iter().cloned()) {
-                b1.a = x.a.into();
-                b0.b = x.b.into();
+            for el in x.iter() {
+                let x1: F = state.rngs.rand.masking_field_element();
+                res_a.push(if el.a.bit(0) ^ el.b.bit(0) {
+                    x1 + F::one()
+                } else {
+                    x1
+                });
             }
+            // Send to P2
+            net.send_next_many(&res_a)?;
+
+            // Receive from P0
+            let res_b: Vec<F> = net.recv_prev_many()?;
+            if res_b.len() != x.len() {
+                eyre::bail!("Received wrong number of elements");
+            }
+            res_b
         }
         PartyID::ID2 => {
-            for (b2, b1, x) in izip!(&mut b2, &mut b1, x.iter().cloned()) {
-                b2.a = x.a.into();
-                b1.b = x.b.into();
+            // Receive from P1
+            let res_b: Vec<F> = net.recv_prev_many()?;
+            if res_b.len() != x.len() {
+                eyre::bail!("Received wrong number of elements");
             }
+
+            for (el, x1) in izip!(x.iter(), res_b.iter()) {
+                let x2: F = state.rngs.rand.masking_field_element();
+                let y = if el.a.bit(0) { F::one() } else { F::zero() };
+                let z2 = y * (*x1 + x2);
+                let r2 = x2 - z2 - z2;
+                res_a.push(r2);
+            }
+
+            // Send to P0
+            net.send_next_many(&res_a)?;
+            res_b
         }
     };
 
-    let d = arithmetic::arithmetic_xor_many(&b0, &b1, net, state)?;
-    let e = arithmetic::arithmetic_xor_many(&d, &b2, net, state)?;
-    Ok(e)
+    Ok(res_a
+        .into_iter()
+        .zip(res_b)
+        .map(|(a, b)| Rep3PrimeFieldShare::new(a, b))
+        .collect())
 }
 
 /// Transforms the replicated shared value x from an arithmetic sharing to a yao sharing. I.e., x = x_1 + x_2 + x_3 gets transformed into wires, such that the garbler have keys (k_0, delta) for each bit of x, while the evaluator has k_x = k_0 xor delta * x.
