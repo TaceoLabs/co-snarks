@@ -901,7 +901,6 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         proving_key: &ProvingKey<P, ECCVMFlavour>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
     ) -> HonkProofResult<()> {
-        //TODO FLORIN RETURN VALUE
         tracing::trace!("compute translation opening claims");
 
         // Collect the polynomials to be batched

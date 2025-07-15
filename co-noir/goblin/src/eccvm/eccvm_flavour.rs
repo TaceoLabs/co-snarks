@@ -1,4 +1,49 @@
-// todo!("implement this function");
+use ark_ff::PrimeField;
+use num_bigint::BigUint;
+
+struct TranscriptRow<F: PrimeField> {
+    // These fields are populated in the first loop
+    transcript_msm_infinity: bool,
+    accumulator_empty: bool,
+    q_add: bool,
+    q_mul: bool,
+    q_eq: bool,
+    q_reset_accumulator: bool,
+    msm_transition: bool,
+    pc: u32,
+    msm_count: u32,
+    msm_count_zero_at_transition: bool,
+    base_x: F,
+    base_y: F,
+    base_infinity: bool,
+    z1: BigUint, // Assuming uint256_t can be represented as two u128s
+    z2: BigUint, // Adjust as needed for your implementation
+    z1_zero: bool,
+    z2_zero: bool,
+    opcode: u32,
+
+    // These fields are populated after converting Jacobian to affine coordinates
+    accumulator_x: F,
+    accumulator_y: F,
+    msm_output_x: F,
+    msm_output_y: F,
+    transcript_msm_intermediate_x: F,
+    transcript_msm_intermediate_y: F,
+
+    // Computed during the lambda numerator and denominator computation
+    transcript_add_x_equal: bool,
+    transcript_add_y_equal: bool,
+
+    // Computed after the batch inversion
+    base_x_inverse: F,
+    base_y_inverse: F,
+    transcript_add_lambda: F,
+    transcript_msm_x_inverse: F,
+    msm_count_at_transition_inverse: F,
+}
+
+// This is a placeholder struct
+struct CircuitBuilder {}
 
 //  ProverPolynomials(const CircuitBuilder& builder)
 //         {

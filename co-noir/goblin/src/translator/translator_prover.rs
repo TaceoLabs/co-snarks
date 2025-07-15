@@ -98,9 +98,10 @@
 //         transcript: &mut Transcript<TranscriptFieldType, H>,
 //         proving_key: &mut ProvingKey<P, TranslatorFlavour>,
 //     ) -> HonkProofResult<()> {
-//         const SHIFT: BigUint = BigUint::one() << TranslatorFlavour::NUM_LIMB_BITS;
-//         const SHIFT_X2: u128 = 1 << (TranslatorFlavour::NUM_LIMB_BITS * 2);
-//         const SHIFT_X3: u128 = 1 << (TranslatorFlavour::NUM_LIMB_BITS * 3);
+//         let shift: BigUint = BigUint::one() << TranslatorFlavour::NUM_LIMB_BITS;
+//         let SHIFT_X2: BigUint = BigUint::one() << (TranslatorFlavour::NUM_LIMB_BITS * 2);
+//         let SHIFT_X3: BigUint = BigUint::one() << (TranslatorFlavour::NUM_LIMB_BITS * 3);
+//         let accumulated_result:P::BaseField=proving_key.polynomials.witness.accumulators_binary_limbs_0()[TranslatorFlavour:RESULT]
 
 //         todo!();
 //         Ok(())
