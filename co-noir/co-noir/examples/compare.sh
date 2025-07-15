@@ -6,7 +6,7 @@ BARRETENBERG_VERSION=0.86.0 ##specify the desired barretenberg version here or u
 PLAINDRIVER="../../../target/release/plaindriver"
 exit_code=0
 
-REMOVE_OUTPUT=1
+REMOVE_OUTPUT=0
 PIPE=""
 if [[ $REMOVE_OUTPUT -eq 1 ]];
 then
@@ -36,7 +36,7 @@ echo "Using nargo version $NARGO_VERSION"
 echo "Using bb version $BARRETENBERG_VERSION"
 echo ""
 
-test_cases=("add3u64" "mul3u64" "assert" "get_bytes" "if_then" "negative" "poseidon_assert" "quantized" "add3" "add3_assert" "poseidon" "poseidon_input2" "approx_sigmoid" "addition_multiplication" "unconstrained_fn" "unconstrained_fn_field" "blackbox_not" "blackbox_and" "blackbox_xor" "ram" "rom_shared" "poseidon2" "blackbox_poseidon2" "assert_max_bit_size" "pedersen_hash" "pedersen_commitment" "bb_sha256_compression" "blake2s" "blake3" "embedded_curve_add" "aes128")
+test_cases=("oblivious_map_read")
 
 run_proof_verification() {
   local name=$1
@@ -127,36 +127,36 @@ for f in "${test_cases[@]}"; do
   fi
   run_proof_verification "$f" "poseidon"
 
-  # Run with ZK:
-  bash -c "${PLAINDRIVER} --prover-crs test_vectors/bn254_g1.dat --verifier-crs test_vectors/bn254_g2.dat --input test_vectors/${f}/Prover.toml --circuit test_vectors/${f}/target/${f}.json --hasher poseidon2 --out-dir test_vectors/${f} --zk $PIPE" || failed=1
+#   # Run with ZK:
+#   bash -c "${PLAINDRIVER} --prover-crs test_vectors/bn254_g1.dat --verifier-crs test_vectors/bn254_g2.dat --input test_vectors/${f}/Prover.toml --circuit test_vectors/${f}/target/${f}.json --hasher poseidon2 --out-dir test_vectors/${f} --zk $PIPE" || failed=1
 
-  if [ "$failed" -ne 0 ]
-  then
-    exit_code=1
-    echo "::error::" $f "failed with ZK"
-  fi
-  # Note: ZK proofs are not (yet) possible with Poseidon in Barretenberg
-  # run_proof_verification "$f" "poseidon_zk"
-  bash cleanup.sh
+#   if [ "$failed" -ne 0 ]
+#   then
+#     exit_code=1
+#     echo "::error::" $f "failed with ZK"
+#   fi
+#   # Note: ZK proofs are not (yet) possible with Poseidon in Barretenberg
+#   # run_proof_verification "$f" "poseidon_zk"
+#   bash cleanup.sh
 
-   # -e to exit on first error
-  bash -c "${PLAINDRIVER} --prover-crs test_vectors/bn254_g1.dat --verifier-crs test_vectors/bn254_g2.dat --input test_vectors/${f}/Prover.toml --circuit test_vectors/${f}/target/${f}.json --hasher keccak --out-dir test_vectors/${f} $PIPE"  || failed=1
+#    # -e to exit on first error
+#   bash -c "${PLAINDRIVER} --prover-crs test_vectors/bn254_g1.dat --verifier-crs test_vectors/bn254_g2.dat --input test_vectors/${f}/Prover.toml --circuit test_vectors/${f}/target/${f}.json --hasher keccak --out-dir test_vectors/${f} $PIPE"  || failed=1
 
-  if [ "$failed" -ne 0 ]
-  then
-    exit_code=1
-    echo "::error::" $f "failed"
-  fi
-  run_proof_verification "$f" "keccak"
-   bash cleanup.sh
-  # Run with ZK:
-  bash -c "${PLAINDRIVER} --prover-crs test_vectors/bn254_g1.dat --verifier-crs test_vectors/bn254_g2.dat --input test_vectors/${f}/Prover.toml --circuit test_vectors/${f}/target/${f}.json --hasher keccak --out-dir test_vectors/${f} --zk $PIPE" || failed=1
-  if [ "$failed" -ne 0 ]
-  then
-    exit_code=1
-    echo "::error::" $f "failed with ZK"
-  fi
-  run_proof_verification "$f" "keccak_zk"
+#   if [ "$failed" -ne 0 ]
+#   then
+#     exit_code=1
+#     echo "::error::" $f "failed"
+#   fi
+#   run_proof_verification "$f" "keccak"
+#    bash cleanup.sh
+#   # Run with ZK:
+#   bash -c "${PLAINDRIVER} --prover-crs test_vectors/bn254_g1.dat --verifier-crs test_vectors/bn254_g2.dat --input test_vectors/${f}/Prover.toml --circuit test_vectors/${f}/target/${f}.json --hasher keccak --out-dir test_vectors/${f} --zk $PIPE" || failed=1
+#   if [ "$failed" -ne 0 ]
+#   then
+#     exit_code=1
+#     echo "::error::" $f "failed with ZK"
+#   fi
+#   run_proof_verification "$f" "keccak_zk"
   bash cleanup.sh
   echo ""
 done

@@ -18,6 +18,7 @@ use figment::{
     Figment,
     providers::{Env, Format, Serialized, Toml},
 };
+use noirc_artifacts::program::ProgramArtifact;
 use serde::{Deserialize, Serialize};
 use sha3::Keccak256;
 use std::{
@@ -163,7 +164,26 @@ fn convert_witness<F: PrimeField>(mut witness_stack: WitnessStack<F>) -> Vec<F> 
         .pop()
         .expect("Witness should be present")
         .witness;
+    for witness in witness_map.clone() {
+        println!("Witness: {witness:?}");
+    }
     witness_map_to_witness_vector(witness_map)
+}
+
+fn plain_code<const N: usize>(input_path: &PathBuf, program_artifact: &ProgramArtifact) {
+    let inputs = PlainCoSolver::read_abi_bn254(input_path, &program_artifact.abi).unwrap();
+    for input in inputs.clone() {
+        println!("Input: {input:?}");
+    }
+    let leaf = inputs.get_index(0);
+    let key_bits = (0..N)
+        .map(|i| inputs.get_index(i as u32 + 1).unwrap())
+        .collect::<Vec<_>>();
+    let hash_path = (0..N)
+        .map(|i| inputs.get_index(i as u32 + N as u32 + 1).unwrap())
+        .collect::<Vec<_>>();
+
+    println!();
 }
 
 fn main() -> color_eyre::Result<ExitCode> {
@@ -185,6 +205,8 @@ fn main() -> color_eyre::Result<ExitCode> {
     let program_artifact = Utils::get_program_artifact_from_file(&circuit_path)
         .context("while parsing program artifact")?;
     let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
+
+    plain_code::<2>(&input_path, &program_artifact);
 
     // Create witness
     let witness = if let Some(witness_path) = witness_file {

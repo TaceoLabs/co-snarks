@@ -1,0 +1,8 @@
+[package]
+name = "oblivious_map_read"
+type = "bin"
+authors = ["TACEO"]
+compiler_version = ">=1.0.0"
+
+[dependencies]
+oblivious_map = { path = "../oblivious_map" }
