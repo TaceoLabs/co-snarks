@@ -18,6 +18,7 @@ use figment::{
     Figment,
     providers::{Env, Format, Serialized, Toml},
 };
+use mpc_core::gadgets::poseidon2::Poseidon2;
 use noirc_artifacts::program::ProgramArtifact;
 use serde::{Deserialize, Serialize};
 use sha3::Keccak256;
@@ -164,24 +165,56 @@ fn convert_witness<F: PrimeField>(mut witness_stack: WitnessStack<F>) -> Vec<F> 
         .pop()
         .expect("Witness should be present")
         .witness;
-    for witness in witness_map.clone() {
-        println!("Witness: {witness:?}");
+    for (key, val) in witness_map.clone().into_iter().skip(6) {
+        println!("Witness {}: {val:?}", key.0);
     }
     witness_map_to_witness_vector(witness_map)
 }
 
 fn plain_code<const N: usize>(input_path: &PathBuf, program_artifact: &ProgramArtifact) {
     let inputs = PlainCoSolver::read_abi_bn254(input_path, &program_artifact.abi).unwrap();
-    for input in inputs.clone() {
-        println!("Input: {input:?}");
-    }
-    let leaf = inputs.get_index(0);
+
+    // Input parsing
+    let leaf = *inputs.get_index(0).unwrap();
     let key_bits = (0..N)
-        .map(|i| inputs.get_index(i as u32 + 1).unwrap())
+        .map(|i| *inputs.get_index(i as u32 + 1).unwrap())
         .collect::<Vec<_>>();
     let hash_path = (0..N)
-        .map(|i| inputs.get_index(i as u32 + N as u32 + 1).unwrap())
+        .map(|i| *inputs.get_index(i as u32 + N as u32 + 1).unwrap())
         .collect::<Vec<_>>();
+
+    let mut result_witness = Vec::new();
+    result_witness.push(leaf);
+    result_witness.extend_from_slice(&key_bits);
+    result_witness.extend_from_slice(&hash_path);
+    let output_index = result_witness.len();
+    result_witness.push(Default::default()); // Placeholder for the output
+
+    let poseidon2 = Poseidon2::<ark_bn254::Fr, 2, 5>::default();
+
+    // The actual program
+    let mut current = leaf;
+    for i in 0..N {
+        let path_bit = key_bits[i];
+        let path_hash = hash_path[i];
+
+        let mul = path_bit * (path_hash - current);
+        let hash_left = mul + current;
+        let hash_right = path_hash - mul;
+
+        current = poseidon2.permutation(&[hash_left, hash_right])[0] + hash_left;
+        println!("current: {current:?}");
+
+        println!("mul: {mul}, hash_left: {hash_left}, hash_right: {hash_right}",);
+    }
+
+    result_witness[output_index] = current;
+
+    println!();
+
+    for (i, witness) in result_witness.into_iter().enumerate() {
+        println!("Result {i},  {witness:?}");
+    }
 
     println!();
 }
