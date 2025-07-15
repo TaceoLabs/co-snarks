@@ -165,13 +165,14 @@ fn convert_witness<F: PrimeField>(mut witness_stack: WitnessStack<F>) -> Vec<F> 
         .pop()
         .expect("Witness should be present")
         .witness;
-    for (key, val) in witness_map.clone().into_iter().skip(6) {
-        println!("Witness {}: {val:?}", key.0);
-    }
     witness_map_to_witness_vector(witness_map)
 }
 
-fn plain_code<const N: usize>(input_path: &PathBuf, program_artifact: &ProgramArtifact) {
+fn plain_code<const N: usize>(
+    input_path: &PathBuf,
+    actual_witness: &[ark_bn254::Fr],
+    program_artifact: &ProgramArtifact,
+) {
     let inputs = PlainCoSolver::read_abi_bn254(input_path, &program_artifact.abi).unwrap();
 
     // Input parsing
@@ -183,14 +184,20 @@ fn plain_code<const N: usize>(input_path: &PathBuf, program_artifact: &ProgramAr
         .map(|i| *inputs.get_index(i as u32 + N as u32 + 1).unwrap())
         .collect::<Vec<_>>();
 
-    let mut result_witness = Vec::new();
+    let poseidon2 = Poseidon2::<ark_bn254::Fr, 2, 5>::default();
+
+    // 2 * N + 1 for the input
+    // + 1 for the output
+    // + (N - 1) for the left/right cmux (-1 for the first cmux not producing a variable)
+    // + N * 3 * poseidon2.num_sbox() for the trace of the Poseidon2 permutations
+    let witness_size = 2 * N + 1 + 1 + (N - 1) + N * 3 * poseidon2.num_sbox();
+
+    let mut result_witness = Vec::with_capacity(witness_size);
     result_witness.push(leaf);
     result_witness.extend_from_slice(&key_bits);
     result_witness.extend_from_slice(&hash_path);
     let output_index = result_witness.len();
     result_witness.push(Default::default()); // Placeholder for the output
-
-    let poseidon2 = Poseidon2::<ark_bn254::Fr, 2, 5>::default();
 
     // The actual program
     let mut current = leaf;
@@ -198,25 +205,27 @@ fn plain_code<const N: usize>(input_path: &PathBuf, program_artifact: &ProgramAr
         let path_bit = key_bits[i];
         let path_hash = hash_path[i];
 
+        if i != 0 {
+            // Seems like inputs of multiplications are pushed as new witness elements if they are not already present
+            result_witness.push(path_hash - current);
+        }
+
         let mul = path_bit * (path_hash - current);
         let hash_left = mul + current;
         let hash_right = path_hash - mul;
 
-        current = poseidon2.permutation(&[hash_left, hash_right])[0] + hash_left;
-        println!("current: {current:?}");
+        let (state, trace) = poseidon2.permutation_with_trace(&[hash_left, hash_right]);
+        current = state[0] + hash_left; // Feed forward
 
-        println!("mul: {mul}, hash_left: {hash_left}, hash_right: {hash_right}",);
+        result_witness.extend(trace);
     }
 
     result_witness[output_index] = current;
 
-    println!();
-
-    for (i, witness) in result_witness.into_iter().enumerate() {
-        println!("Result {i},  {witness:?}");
+    assert_eq!(result_witness.len(), witness_size);
+    for (i, (w, a)) in result_witness.iter().zip(actual_witness.iter()).enumerate() {
+        assert_eq!(w, a, "Witness mismatch at index {i}");
     }
-
-    println!();
 }
 
 fn main() -> color_eyre::Result<ExitCode> {
@@ -239,17 +248,17 @@ fn main() -> color_eyre::Result<ExitCode> {
         .context("while parsing program artifact")?;
     let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
 
-    plain_code::<2>(&input_path, &program_artifact);
-
     // Create witness
     let witness = if let Some(witness_path) = witness_file {
         Utils::get_witness_from_file(&witness_path).expect("failed to parse witness")
     } else {
-        let solver = PlainCoSolver::init_plain_driver(program_artifact, input_path)
+        let solver = PlainCoSolver::init_plain_driver(program_artifact.to_owned(), &input_path)
             .context("while initializing plain driver")?;
         let witness = solver.solve().context("while solving")?;
         convert_witness(witness)
     };
+
+    plain_code::<40>(&input_path, &witness, &program_artifact);
 
     // Build the circuit
     let mut driver = PlainAcvmSolver::new();

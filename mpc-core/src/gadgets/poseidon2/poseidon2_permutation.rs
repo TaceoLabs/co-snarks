@@ -16,12 +16,19 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Self { params }
     }
 
-    pub(crate) fn num_sbox(&self) -> usize {
+    /// Returns how many S-boxes are used in the Poseidon2 permutation.
+    pub fn num_sbox(&self) -> usize {
         (self.params.rounds_f_beginning + self.params.rounds_f_end) * T + self.params.rounds_p
     }
 
     fn sbox(input: &mut [F; T]) {
         input.iter_mut().for_each(Self::single_sbox);
+    }
+
+    fn sbox_with_trace(input: &mut [F; T], trace: &mut Vec<F>) {
+        input
+            .iter_mut()
+            .for_each(|x| Self::single_sbox_with_trace(x, trace));
     }
 
     fn single_sbox(input: &mut F) {
@@ -38,6 +45,35 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
             7 => {
                 let input2 = input.square();
                 let input4 = input2.square();
+                *input *= input4;
+                *input *= input2;
+            }
+            _ => {
+                *input = input.pow([D]);
+            }
+        }
+    }
+
+    fn single_sbox_with_trace(input: &mut F, trace: &mut Vec<F>) {
+        trace.push(*input);
+        match D {
+            3 => {
+                let input2 = input.square();
+                trace.push(input2);
+                *input *= input2;
+            }
+            5 => {
+                let input2 = input.square();
+                trace.push(input2);
+                let input4 = input2.square();
+                trace.push(input4);
+                *input *= input4;
+            }
+            7 => {
+                let input2 = input.square();
+                trace.push(input2);
+                let input4 = input2.square();
+                trace.push(input4);
                 *input *= input4;
                 *input *= input2;
             }
@@ -174,10 +210,24 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Self::matmul_external(state);
     }
 
+    /// One external round of the Poseidon2 permuation.
+    pub fn external_round_with_trace(&self, state: &mut [F; T], r: usize, trace: &mut Vec<F>) {
+        self.add_rc_external(state, r);
+        Self::sbox_with_trace(state, trace);
+        Self::matmul_external(state);
+    }
+
     /// One internal round of the Poseidon2 permuation.
     pub fn internal_round(&self, state: &mut [F; T], r: usize) {
         self.add_rc_internal(state, r);
         Self::single_sbox(&mut state[0]);
+        self.matmul_internal(state);
+    }
+
+    /// One internal round of the Poseidon2 permuation.
+    pub fn internal_round_with_trace(&self, state: &mut [F; T], r: usize, trace: &mut Vec<F>) {
+        self.add_rc_internal(state, r);
+        Self::single_sbox_with_trace(&mut state[0], trace);
         self.matmul_internal(state);
     }
 
@@ -209,6 +259,40 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         let mut state = *input;
         self.permutation_in_place(&mut state);
         state
+    }
+
+    /// Performs the Poseidon2 Permutation on the given state.
+    pub fn permutation_in_place_with_trace(&self, state: &mut [F; T]) -> Vec<F> {
+        assert_eq!(D, 5);
+        let mut trace = Vec::with_capacity(self.num_sbox() * 3);
+        // Linear layer at beginning
+        Self::matmul_external(state);
+
+        // First set of external rounds
+        for r in 0..self.params.rounds_f_beginning {
+            self.external_round_with_trace(state, r, &mut trace);
+        }
+
+        // Internal rounds
+        for r in 0..self.params.rounds_p {
+            self.internal_round_with_trace(state, r, &mut trace);
+        }
+
+        // Remaining external rounds
+        for r in self.params.rounds_f_beginning
+            ..self.params.rounds_f_beginning + self.params.rounds_f_end
+        {
+            self.external_round_with_trace(state, r, &mut trace);
+        }
+        debug_assert_eq!(trace.len(), self.num_sbox() * 3);
+        trace
+    }
+
+    /// Performs the Poseidon2 Permutation on the given state.
+    pub fn permutation_with_trace(&self, input: &[F; T]) -> ([F; T], Vec<F>) {
+        let mut state = *input;
+        let trace = self.permutation_in_place_with_trace(&mut state);
+        (state, trace)
     }
 }
 
