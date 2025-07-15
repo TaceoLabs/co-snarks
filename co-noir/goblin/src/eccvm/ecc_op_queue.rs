@@ -1,5 +1,5 @@
 #![expect(unused)]
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_ff::Zero;
 use co_builder::prelude::Polynomial;
 use num_bigint::BigUint;
@@ -19,11 +19,11 @@ pub(crate) const TABLE_WIDTH: usize = 4; // dictated by the number of wires in t
 pub(crate) const NUM_ROWS_PER_OP: usize = 2; // A single ECC op is split across two width-4 rows
 
 pub(crate) type EccvmOpsTable<P> = EccOpsTable<ECCVMOperation<P>>;
-pub(crate) struct UltraEccOpsTable<P: Pairing> {
+pub(crate) struct UltraEccOpsTable<P: CurveGroup> {
     table: EccOpsTable<UltraOp<P>>,
 }
 
-impl<P: Pairing> UltraEccOpsTable<P> {
+impl<P: CurveGroup> UltraEccOpsTable<P> {
     pub fn new() -> Self {
         Self {
             table: EccOpsTable::new(),
@@ -195,15 +195,15 @@ impl<OpFormat> std::ops::Index<usize> for EccOpsTable<OpFormat> {
     }
 }
 #[derive(Clone, Default)]
-pub struct ECCVMOperation<P: Pairing> {
+pub struct ECCVMOperation<P: CurveGroup> {
     pub op_code: EccOpCode,
-    pub base_point: P::G1Affine,
+    pub base_point: P::Affine,
     pub z1: BigUint,
     pub z2: BigUint,
     pub mul_scalar_full: P::ScalarField,
 }
 
-impl<P: Pairing> PartialEq for ECCVMOperation<P> {
+impl<P: CurveGroup> PartialEq for ECCVMOperation<P> {
     fn eq(&self, other: &Self) -> bool {
         self.op_code == other.op_code
             && self.base_point == other.base_point
@@ -213,7 +213,7 @@ impl<P: Pairing> PartialEq for ECCVMOperation<P> {
     }
 }
 #[derive(Clone)]
-pub(crate) struct UltraOp<P: Pairing> {
+pub(crate) struct UltraOp<P: CurveGroup> {
     pub op_code: EccOpCode,
     pub x_lo: P::ScalarField,
     pub x_hi: P::ScalarField,
@@ -224,7 +224,7 @@ pub(crate) struct UltraOp<P: Pairing> {
     pub return_is_infinity: bool,
 }
 
-impl<P: Pairing> UltraOp<P> {
+impl<P: CurveGroup> UltraOp<P> {
     /**
      * @brief Get the point in standard form i.e. as two coordinates x and y in the base field or as a point at
      * infinity whose coordinates are set to (0,0).
@@ -316,7 +316,7 @@ impl EccvmRowTracker {
         std::cmp::max(transcript_rows, std::cmp::max(msm_rows, precompute_rows))
     }
 
-    pub fn update_cached_msms<P: Pairing>(&mut self, op: &ECCVMOperation<P>) {
+    pub fn update_cached_msms<P: CurveGroup>(&mut self, op: &ECCVMOperation<P>) {
         // self.num_transcript_rows += 1;
         // if op.op_code.mul {
         //     if op.z1 != P::ScalarField::zero().into() && !op.base_point.is_point_at_infinity() {
@@ -342,9 +342,9 @@ impl EccvmRowTracker {
     }
 }
 
-pub struct ECCOpQueue<P: Pairing> {
-    point_at_infinity: P::G1Affine,
-    accumulator: P::G1Affine,
+pub struct ECCOpQueue<P: CurveGroup> {
+    point_at_infinity: P::Affine,
+    accumulator: P::Affine,
     eccvm_ops_table: EccvmOpsTable<P>,
     ultra_ops_table: UltraEccOpsTable<P>,
     eccvm_ops_reconstructed: Vec<ECCVMOperation<P>>,
@@ -352,7 +352,7 @@ pub struct ECCOpQueue<P: Pairing> {
     eccvm_row_tracker: EccvmRowTracker,
 }
 
-impl<P: Pairing> ECCOpQueue<P> {
+impl<P: CurveGroup> ECCOpQueue<P> {
     // Constructor that instantiates an initial ECC op subtable
     // pub fn new() -> Self {
     //     let mut queue = Self {
@@ -459,7 +459,7 @@ impl<P: Pairing> ECCOpQueue<P> {
         self.eccvm_ops_reconstructed = eccvm_ops_in;
     }
 
-    pub fn get_accumulator(&self) -> P::G1Affine {
+    pub fn get_accumulator(&self) -> P::Affine {
         self.accumulator
     }
 
