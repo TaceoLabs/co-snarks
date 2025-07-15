@@ -1,5 +1,3 @@
-use std::array;
-
 use crate::decider::sumcheck::sumcheck_round_prover::SumcheckProverRound;
 use crate::decider::sumcheck::sumcheck_round_verifier::SumcheckVerifierRound;
 use crate::decider::types::{ClaimedEvaluations, ProverUnivariates, RelationParameters};

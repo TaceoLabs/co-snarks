@@ -41,6 +41,7 @@ use crate::{
     utils::Utils,
 };
 use ark_ec::pairing::Pairing;
+use ark_ec::{CurveGroup, PrimeGroup};
 use ark_ff::{One, Zero};
 use co_acvm::{PlainAcvmSolver, mpc::NoirWitnessExtensionProtocol};
 use itertools::izip;
@@ -55,9 +56,9 @@ use std::{
 type GateBlocks<F> = UltraTraceBlocks<UltraTraceBlock<F>>;
 
 pub type UltraCircuitBuilder<P> =
-    GenericUltraCircuitBuilder<P, PlainAcvmSolver<<P as Pairing>::ScalarField>>;
+    GenericUltraCircuitBuilder<P, PlainAcvmSolver<<P as PrimeGroup>::ScalarField>>;
 
-impl<P: Pairing> UltraCircuitBuilder<P> {
+impl<P: CurveGroup> UltraCircuitBuilder<P> {
     pub fn create_vk_barretenberg(
         self,
         crs: Arc<ProverCrs<P>>,
@@ -67,13 +68,13 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         let circuit_size = pk.circuit_size;
 
         let mut commitments =
-            <UltraFlavour as ProverFlavour>::PrecomputedEntities::<P::G1Affine>::default();
+            <UltraFlavour as ProverFlavour>::PrecomputedEntities::<P::Affine>::default();
         for (des, src) in commitments
             .iter_mut()
             .zip(pk.polynomials.precomputed.iter())
         {
             let comm = Utils::commit(src.as_ref(), &pk.crs)?;
-            *des = P::G1Affine::from(comm);
+            *des = P::Affine::from(comm);
         }
 
         let vk = VerifyingKeyBarretenberg {
@@ -88,24 +89,24 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         Ok(vk)
     }
 
-    pub fn create_keys(
+    pub fn create_keys<P_: Pairing<G1 = P>>(
         self,
         prover_crs: Arc<ProverCrs<P>>,
-        verifier_crs: P::G2Affine,
+        verifier_crs: P_::G2Affine,
         driver: &mut PlainAcvmSolver<P::ScalarField>,
-    ) -> HonkProofResult<(ProvingKey<P, UltraFlavour>, VerifyingKey<P, UltraFlavour>)> {
+    ) -> HonkProofResult<(ProvingKey<P, UltraFlavour>, VerifyingKey<P_, UltraFlavour>)> {
         let pk = ProvingKey::create::<PlainAcvmSolver<_>>(self, prover_crs, driver)?;
         let circuit_size = pk.circuit_size;
 
         let mut commitments =
-            <UltraFlavour as ProverFlavour>::PrecomputedEntities::<P::G1Affine>::default();
+            <UltraFlavour as ProverFlavour>::PrecomputedEntities::<P_::G1Affine>::default();
 
         for (des, src) in commitments
             .iter_mut()
             .zip(pk.polynomials.precomputed.iter())
         {
             let comm = Utils::commit(src.as_ref(), &pk.crs)?;
-            *des = P::G1Affine::from(comm);
+            *des = P_::G1Affine::from(comm);
         }
 
         // Create and return the VerifyingKey instance
@@ -133,13 +134,13 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
         let circuit_size = pk.circuit_size;
 
         let mut commitments =
-            <UltraFlavour as ProverFlavour>::PrecomputedEntities::<P::G1Affine>::default();
+            <UltraFlavour as ProverFlavour>::PrecomputedEntities::<P::Affine>::default();
         for (des, src) in commitments
             .iter_mut()
             .zip(pk.polynomials.precomputed.iter())
         {
             let comm = Utils::commit(src.as_ref(), &pk.crs)?;
-            *des = P::G1Affine::from(comm);
+            *des = P::Affine::from(comm);
         }
 
         // Create and return the VerifyingKey instance
@@ -156,7 +157,10 @@ impl<P: Pairing> UltraCircuitBuilder<P> {
     }
 }
 
-pub struct GenericUltraCircuitBuilder<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
+pub struct GenericUltraCircuitBuilder<
+    P: CurveGroup,
+    T: NoirWitnessExtensionProtocol<P::ScalarField>,
+> {
     pub variables: Vec<T::AcvmType>,
     _variable_names: BTreeMap<u32, String>,
     next_var_index: Vec<u32>,
@@ -199,7 +203,9 @@ macro_rules! create_dummy_gate {
     };
 }
 
-impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCircuitBuilder<P, T> {
+impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
+    GenericUltraCircuitBuilder<P, T>
+{
     pub(crate) const DUMMY_TAG: u32 = 0;
     pub(crate) const REAL_VARIABLE: u32 = u32::MAX - 1;
     pub(crate) const FIRST_VARIABLE_IN_CLASS: u32 = u32::MAX - 2;
@@ -759,7 +765,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
     ) -> eyre::Result<()> {
         let mut init = Vec::with_capacity(constraint.init.len());
         for inp in constraint.init.iter() {
-            let value: FieldCT<<P as Pairing>::ScalarField> = self.poly_to_field_ct(inp);
+            let value: FieldCT<P::ScalarField> = self.poly_to_field_ct(inp);
             init.push(value);
         }
 

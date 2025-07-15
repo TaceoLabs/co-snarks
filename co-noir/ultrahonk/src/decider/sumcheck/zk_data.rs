@@ -4,7 +4,7 @@ use crate::prelude::Transcript;
 use crate::prelude::TranscriptHasher;
 use crate::prelude::Univariate;
 use crate::transcript::TranscriptFieldType;
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_ff::Field;
 use ark_ff::One;
 use ark_ff::UniformRand;
@@ -17,7 +17,7 @@ use co_builder::prelude::Polynomial;
 use rand::CryptoRng;
 use rand::Rng;
 
-pub struct ZKSumcheckData<P: Pairing> {
+pub struct ZKSumcheckData<P: CurveGroup> {
     pub(crate) constant_term: P::ScalarField,
     pub(crate) interpolation_domain: Vec<P::ScalarField>,
     pub(crate) libra_concatenated_lagrange_form: Polynomial<P::ScalarField>,
@@ -35,7 +35,7 @@ impl<P: HonkCurve<TranscriptFieldType>> ZKSumcheckData<P> {
     pub fn new<H: TranscriptHasher<TranscriptFieldType>, R: Rng + CryptoRng>(
         multivariate_d: usize,
         transcript: &mut Transcript<TranscriptFieldType, H>,
-        commitment_key: &[P::G1Affine],
+        commitment_key: &[P::Affine],
         rng: &mut R,
     ) -> HonkProofResult<Self> {
         let constant_term = P::ScalarField::rand(rng);

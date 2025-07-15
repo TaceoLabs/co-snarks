@@ -1,4 +1,3 @@
-use ark_ec::pairing::Pairing;
 use ark_ff::{Field, Zero};
 use co_builder::{
     HonkProofResult, TranscriptFieldType,
@@ -14,7 +13,7 @@ pub(crate) fn compute_ipa_opening_proof<
     H: TranscriptHasher<TranscriptFieldType>,
 >(
     transcript: &mut Transcript<TranscriptFieldType, H>,
-    opening_claim: ShpleminiOpeningClaim<<P as Pairing>::ScalarField>,
+    opening_claim: ShpleminiOpeningClaim<P::ScalarField>,
     commitment_key: &ProverCrs<P>,
 ) -> HonkProofResult<()> {
     // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1150): Hash more things here.
@@ -66,8 +65,8 @@ pub(crate) fn compute_ipa_opening_proof<
     }
 
     // Allocate space for L_i and R_i elements
-    let mut l_i: P::G1;
-    let mut r_i: P::G1;
+    let mut l_i: P;
+    let mut r_i: P;
     let mut round_size = poly_length;
 
     // Step 6.

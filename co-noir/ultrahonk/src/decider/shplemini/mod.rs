@@ -2,14 +2,14 @@ pub(crate) mod shplemini_prover;
 pub(crate) mod shplemini_verifier;
 pub(crate) mod types;
 
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_builder::prelude::Polynomial;
 
-pub(crate) struct ShpleminiVerifierOpeningClaim<P: Pairing> {
+pub(crate) struct ShpleminiVerifierOpeningClaim<P: CurveGroup> {
     pub(crate) challenge: P::ScalarField,
     pub(crate) scalars: Vec<P::ScalarField>,
-    pub(crate) commitments: Vec<P::G1Affine>,
+    pub(crate) commitments: Vec<P::Affine>,
 }
 #[derive(Clone)]
 pub struct ShpleminiOpeningClaim<F: PrimeField> {

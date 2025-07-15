@@ -11,7 +11,7 @@ use crate::{
     types::AllEntities,
     types_batch::SumCheckDataForRelation,
 };
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_ff::One;
 use co_builder::HonkProofResult;
 use co_builder::TranscriptFieldType;
@@ -71,7 +71,11 @@ impl SumcheckRound {
      * @param result Round univariate \f$ \tilde{S}^i\f$ represented by its evaluations over \f$ \{0,\ldots, D\} \f$.
      * @param gate_separators Round \f$pow_{\beta}\f$-factor  \f$ ( (1−X_i) + X_i\cdot \beta_i )\f$.
      */
-    fn extend_and_batch_univariates<T: NoirUltraHonkProver<P>, P: Pairing, L: MPCProverFlavour>(
+    fn extend_and_batch_univariates<
+        T: NoirUltraHonkProver<P>,
+        P: CurveGroup,
+        L: MPCProverFlavour,
+    >(
         result: &mut L::SumcheckRoundOutput<T, P>,
         univariate_accumulators: L::AllRelationAcc<T, P>,
         gate_separators: &GateSeparatorPolynomial<P::ScalarField>,
@@ -91,7 +95,7 @@ impl SumcheckRound {
 
     fn extend_and_batch_univariates_zk<
         T: NoirUltraHonkProver<P>,
-        P: Pairing,
+        P: CurveGroup,
         L: MPCProverFlavour,
     >(
         result: &mut L::SumcheckRoundOutputZK<T, P>,
@@ -129,7 +133,7 @@ impl SumcheckRound {
      */
     fn batch_over_relations_univariates<
         T: NoirUltraHonkProver<P>,
-        P: Pairing,
+        P: CurveGroup,
         L: MPCProverFlavour,
     >(
         mut univariate_accumulators: L::AllRelationAcc<T, P>,
@@ -151,7 +155,7 @@ impl SumcheckRound {
 
     fn batch_over_relations_univariates_zk<
         T: NoirUltraHonkProver<P>,
-        P: Pairing,
+        P: CurveGroup,
         L: MPCProverFlavour,
     >(
         mut univariate_accumulators: L::AllRelationAcc<T, P>,

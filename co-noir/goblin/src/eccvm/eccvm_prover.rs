@@ -1,7 +1,7 @@
 #![expect(unused)]
 use crate::eccvm::types::TranslationData;
 use crate::ipa::compute_ipa_opening_proof;
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_ff::FftField;
 use ark_ff::Field;
 use ark_ff::One;
@@ -35,7 +35,7 @@ const NUM_RELATIONS: usize = 7;
 const NUM_TRANSLATION_OPENING_CLAIMS: usize = NUM_SMALL_IPA_EVALUATIONS + 1;
 const NUM_OPENING_CLAIMS: usize = NUM_TRANSLATION_OPENING_CLAIMS + 1;
 
-pub(crate) struct ProverMemory<P: Pairing> {
+pub(crate) struct ProverMemory<P: CurveGroup> {
     pub(crate) z_perm: Polynomial<P::ScalarField>,
     pub(crate) lookup_inverses: Polynomial<P::ScalarField>,
     pub(crate) opening_claims: [ShpleminiOpeningClaim<P::ScalarField>; NUM_OPENING_CLAIMS],
@@ -819,15 +819,14 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         crs: &ProverCrs<P>,
         circuit_size: u32,
     ) -> HonkProofResult<(
-        SumcheckOutput<<P as Pairing>::ScalarField, ECCVMFlavour>,
+        SumcheckOutput<P::ScalarField, ECCVMFlavour>,
         ZKSumcheckData<P>,
     )> {
         // using Sumcheck = SumcheckProver<Flavor, CONST_ECCVM_LOG_N>;
 
         // Sumcheck sumcheck(key->circuit_size, transcript);
         let alpha = transcript.get_challenge::<P>("Sumcheck:alpha".to_string()); //TODO FLORIN ADD ALPHAS TO THE RELATION PARAMETERS
-        let mut gate_challenges: Vec<<P as Pairing>::ScalarField> =
-            Vec::with_capacity(CONST_ECCVM_LOG_N);
+        let mut gate_challenges: Vec<P::ScalarField> = Vec::with_capacity(CONST_ECCVM_LOG_N);
 
         for idx in 0..CONST_ECCVM_LOG_N {
             let chall = transcript.get_challenge::<P>(format!("Sumcheck:gate_challenge_{idx}"));

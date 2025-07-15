@@ -5,6 +5,7 @@ use crate::{
     transcript::{Transcript, TranscriptHasher},
     ultra_verifier::HonkVerifyResult,
 };
+use ark_ec::pairing::Pairing;
 use co_builder::TranscriptFieldType;
 use co_builder::prelude::{HonkCurve, VerifyingKey};
 use co_builder::{
@@ -46,9 +47,9 @@ impl<
         }
     }
 
-    fn execute_preamble_round(
+    fn execute_preamble_round<P_: Pairing<G1 = P>>(
         &mut self,
-        verifying_key: &VerifyingKey<P, L>,
+        verifying_key: &VerifyingKey<P_, L>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
     ) -> HonkVerifyResult<()> {
         tracing::trace!("executing (verifying) preamble round");
@@ -180,9 +181,9 @@ impl<
         Ok(())
     }
 
-    fn execute_grand_product_computation_round(
+    fn execute_grand_product_computation_round<P_: Pairing<G1 = P>>(
         &mut self,
-        verifying_key: &VerifyingKey<P, L>,
+        verifying_key: &VerifyingKey<P_, L>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
     ) -> HonkVerifyResult<()> {
         tracing::trace!("executing (verifying) grand product computation round");
@@ -198,9 +199,9 @@ impl<
         Ok(())
     }
 
-    pub(crate) fn verify(
+    pub(crate) fn verify<P_: Pairing<G1 = P>>(
         mut self,
-        verifying_key: &VerifyingKey<P, L>,
+        verifying_key: &VerifyingKey<P_, L>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
     ) -> HonkVerifyResult<VerifierMemory<P, L>> {
         tracing::trace!("Oink verify");

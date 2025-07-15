@@ -27,7 +27,7 @@ use crate::{
     mpc::NoirUltraHonkProver,
     mpc_prover_flavour::MPCProverFlavour,
 };
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_builder::TranscriptFieldType;
 use co_builder::flavours::ultra_flavour::UltraFlavour;
@@ -37,7 +37,7 @@ use mpc_net::Network;
 use std::array;
 use ultrahonk::prelude::Univariate;
 
-pub struct AllRelationAccUltra<T: NoirUltraHonkProver<P>, P: Pairing> {
+pub struct AllRelationAccUltra<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) r_arith: UltraArithmeticRelationAcc<T, P>,
     pub(crate) r_perm: UltraPermutationRelationAcc<T, P>,
     pub(crate) r_lookup: LogDerivLookupRelationAcc<T, P>,
@@ -48,7 +48,7 @@ pub struct AllRelationAccUltra<T: NoirUltraHonkProver<P>, P: Pairing> {
     pub(crate) r_pos_int: Poseidon2InternalRelationAcc<T, P>,
 }
 
-pub struct AllRelationAccHalfSharedUltra<T: NoirUltraHonkProver<P>, P: Pairing> {
+pub struct AllRelationAccHalfSharedUltra<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) r_arith: UltraArithmeticRelationAccHalfShared<T, P>,
     pub(crate) r_perm: UltraPermutationRelationAcc<T, P>,
     pub(crate) r_lookup: LogDerivLookupRelationAcc<T, P>,
@@ -59,7 +59,7 @@ pub struct AllRelationAccHalfSharedUltra<T: NoirUltraHonkProver<P>, P: Pairing> 
     pub(crate) r_pos_int: Poseidon2InternalRelationAcc<T, P>,
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for AllRelationAccHalfSharedUltra<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for AllRelationAccHalfSharedUltra<T, P> {
     fn default() -> Self {
         AllRelationAccHalfSharedUltra {
             r_arith: UltraArithmeticRelationAccHalfShared::default(),
@@ -78,7 +78,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for AllRelationAccHalfShared
 pub struct AllEntitiesBatchRelationsUltra<T, P>
 where
     T: NoirUltraHonkProver<P>,
-    P: Pairing,
+    P: CurveGroup,
 {
     pub(crate) ultra_arith: SumCheckDataForRelation<T, P, UltraFlavour>,
     pub(crate) ultra_perm: SumCheckDataForRelation<T, P, UltraFlavour>,
@@ -92,7 +92,7 @@ where
 
 fn extend_and_batch_univariates_template<
     T: NoirUltraHonkProver<P>,
-    P: Pairing,
+    P: CurveGroup,
     const SIZE: usize,
 >(
     acc: &AllRelationAccUltra<T, P>,
@@ -140,15 +140,15 @@ fn extend_and_batch_univariates_template<
 }
 
 impl MPCProverFlavour for UltraFlavour {
-    type AllRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing> = AllRelationAccUltra<T, P>;
+    type AllRelationAcc<T: NoirUltraHonkProver<P>, P: CurveGroup> = AllRelationAccUltra<T, P>;
 
-    type AllRelationAccHalfShared<T: NoirUltraHonkProver<P>, P: Pairing> =
+    type AllRelationAccHalfShared<T: NoirUltraHonkProver<P>, P: CurveGroup> =
         AllRelationAccHalfSharedUltra<T, P>;
 
-    type SumcheckRoundOutput<T: NoirUltraHonkProver<P>, P: Pairing> =
+    type SumcheckRoundOutput<T: NoirUltraHonkProver<P>, P: CurveGroup> =
         SharedUnivariate<T, P, { Self::BATCHED_RELATION_PARTIAL_LENGTH }>;
 
-    type SumcheckRoundOutputZK<T: NoirUltraHonkProver<P>, P: Pairing> =
+    type SumcheckRoundOutputZK<T: NoirUltraHonkProver<P>, P: CurveGroup> =
         SharedUnivariate<T, P, { Self::BATCHED_RELATION_PARTIAL_LENGTH_ZK }>;
 
     type SumcheckRoundOutputPublic<F: PrimeField> =
@@ -157,11 +157,11 @@ impl MPCProverFlavour for UltraFlavour {
     type SumcheckRoundOutputZKPublic<F: PrimeField> =
         Univariate<F, { Self::BATCHED_RELATION_PARTIAL_LENGTH_ZK }>;
 
-    type ProverUnivariateShared<T: NoirUltraHonkProver<P>, P: Pairing> =
+    type ProverUnivariateShared<T: NoirUltraHonkProver<P>, P: CurveGroup> =
         SharedUnivariate<T, P, { Self::MAX_PARTIAL_RELATION_LENGTH }>;
 
-    type ProverUnivariatePublic<P: Pairing> =
-        Univariate<<P as Pairing>::ScalarField, { Self::MAX_PARTIAL_RELATION_LENGTH }>;
+    type ProverUnivariatePublic<P: CurveGroup> =
+        Univariate<P::ScalarField, { Self::MAX_PARTIAL_RELATION_LENGTH }>;
 
     type Alphas<F: PrimeField> = [F; Self::NUM_ALPHAS];
 
@@ -186,7 +186,7 @@ impl MPCProverFlavour for UltraFlavour {
         + Poseidon2InternalRelation::CRAND_PAIRS_FACTOR
         + UltraArithmeticRelation::CRAND_PAIRS_FACTOR;
 
-    fn scale<T: NoirUltraHonkProver<P>, P: Pairing>(
+    fn scale<T: NoirUltraHonkProver<P>, P: CurveGroup>(
         acc: &mut Self::AllRelationAcc<T, P>,
         first_scalar: P::ScalarField,
         elements: &Self::Alphas<P::ScalarField>,
@@ -203,7 +203,7 @@ impl MPCProverFlavour for UltraFlavour {
         acc.r_pos_int.scale(&elements[21..]);
     }
 
-    fn extend_and_batch_univariates<T: NoirUltraHonkProver<P>, P: Pairing>(
+    fn extend_and_batch_univariates<T: NoirUltraHonkProver<P>, P: CurveGroup>(
         acc: &Self::AllRelationAcc<T, P>,
         result: &mut Self::SumcheckRoundOutput<T, P>,
         extended_random_poly: &Self::SumcheckRoundOutputPublic<P::ScalarField>,
@@ -217,7 +217,7 @@ impl MPCProverFlavour for UltraFlavour {
         );
     }
 
-    fn extend_and_batch_univariates_zk<T: NoirUltraHonkProver<P>, P: Pairing>(
+    fn extend_and_batch_univariates_zk<T: NoirUltraHonkProver<P>, P: CurveGroup>(
         acc: &Self::AllRelationAcc<T, P>,
         result: &mut Self::SumcheckRoundOutputZK<T, P>,
         extended_random_poly: &Self::SumcheckRoundOutputZKPublic<P::ScalarField>,
@@ -374,7 +374,7 @@ impl MPCProverFlavour for UltraFlavour {
         alphas.copy_from_slice(&transcript.get_challenges::<P>(&args));
     }
 
-    fn reshare<T: NoirUltraHonkProver<P>, P: Pairing, N: Network>(
+    fn reshare<T: NoirUltraHonkProver<P>, P: CurveGroup, N: Network>(
         acc: Self::AllRelationAccHalfShared<T, P>,
         net: &N,
         state: &mut T::State,
@@ -422,7 +422,7 @@ where
             Public<P, UltraFlavour>,
             UltraFlavour,
         >,
-        scaling_factor: <P as Pairing>::ScalarField,
+        scaling_factor: P::ScalarField,
     ) {
         // 0xThemis TODO - for all (?) accumulator we don't need all 7 elements. Can we remove
         // somehow skip those to decrease work even further?

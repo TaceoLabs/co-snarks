@@ -4,7 +4,7 @@ use crate::co_decider::univariates::SharedUnivariate;
 use crate::mpc::NoirUltraHonkProver;
 use crate::mpc_prover_flavour::SharedUnivariateTrait;
 use crate::prelude::TranscriptHasher;
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_ff::Field;
 use ark_ff::One;
 use ark_ff::Zero;
@@ -17,7 +17,7 @@ use mpc_core::MpcState as _;
 use mpc_net::Network;
 use ultrahonk::prelude::Transcript;
 
-pub(crate) struct SharedZKSumcheckData<T: NoirUltraHonkProver<P>, P: Pairing> {
+pub(crate) struct SharedZKSumcheckData<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) constant_term: T::ArithmeticShare,
     pub(crate) interpolation_domain: Vec<P::ScalarField>,
     pub(crate) libra_concatenated_lagrange_form: SharedPolynomial<T, P>,
@@ -35,7 +35,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> SharedZKSumch
     pub(crate) fn new<H: TranscriptHasher<TranscriptFieldType>, N: Network>(
         multivariate_d: usize,
         transcript: &mut Transcript<TranscriptFieldType, H>,
-        commitment_key: &[P::G1Affine],
+        commitment_key: &[P::Affine],
         net: &N,
         state: &mut T::State,
     ) -> HonkProofResult<Self> {

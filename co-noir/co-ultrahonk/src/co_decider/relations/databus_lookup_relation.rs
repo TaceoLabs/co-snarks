@@ -5,7 +5,7 @@ use crate::co_decider::types::RelationParameters;
 use crate::co_decider::univariates::SharedUnivariate;
 use crate::mpc::NoirUltraHonkProver;
 use crate::mpc_prover_flavour::MPCProverFlavour;
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use co_builder::HonkProofResult;
 use co_builder::TranscriptFieldType;
 use co_builder::polynomials::polynomial_flavours::{
@@ -35,7 +35,7 @@ impl From<usize> for BusData {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct DataBusLookupRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing> {
+pub(crate) struct DataBusLookupRelationAcc<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) r0: SharedUnivariate<T, P, 5>,
     pub(crate) r1: SharedUnivariate<T, P, 5>,
     pub(crate) r2: SharedUnivariate<T, P, 5>,
@@ -44,7 +44,7 @@ pub(crate) struct DataBusLookupRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing
     pub(crate) r5: SharedUnivariate<T, P, 5>,
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for DataBusLookupRelationAcc<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for DataBusLookupRelationAcc<T, P> {
     fn default() -> Self {
         Self {
             r0: SharedUnivariate::default(),
@@ -57,7 +57,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for DataBusLookupRelationAcc
     }
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing> DataBusLookupRelationAcc<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> DataBusLookupRelationAcc<T, P> {
     pub(crate) fn scale(&mut self, elements: &[P::ScalarField]) {
         assert!(elements.len() == DataBusLookupRelation::NUM_RELATIONS);
         self.r0.scale_inplace(elements[0]);

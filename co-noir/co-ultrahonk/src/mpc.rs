@@ -1,4 +1,4 @@
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_poly::EvaluationDomain;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use mpc_core::MpcState;
@@ -10,7 +10,7 @@ pub(crate) mod rep3;
 pub(crate) mod shamir;
 
 /// This trait represents the operations used during UltraHonk proof generation
-pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
+pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
     /// The arithmetic share type
     type ArithmeticShare: CanonicalSerialize
         + CanonicalDeserialize
@@ -254,14 +254,14 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
         a: Self::PointShare,
         net: &N,
         state: &mut Self::State,
-    ) -> eyre::Result<P::G1>;
+    ) -> eyre::Result<P>;
 
     /// Reconstructs many shared points: A = Open(\[A\]).
     fn open_point_many<N: Network>(
         a: &[Self::PointShare],
         net: &N,
         state: &mut Self::State,
-    ) -> eyre::Result<Vec<P::G1>>;
+    ) -> eyre::Result<Vec<P>>;
 
     /// Reconstructs many shared values: a = Open(\[a\]).
     fn open_many<N: Network>(
@@ -276,7 +276,7 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
         b: Self::ArithmeticShare,
         net: &N,
         state: &mut Self::State,
-    ) -> eyre::Result<(P::G1, P::ScalarField)>;
+    ) -> eyre::Result<(P, P::ScalarField)>;
 
     /// This function performs a multiplication directly followed by an opening. This safes one round of communication in some MPC protocols compared to calling `mul` and `open` separately.
     fn mul_open_many<N: Network>(
@@ -311,7 +311,7 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
 
     /// Perform msm between `points` and `scalars`
     fn msm_public_points(
-        points: &[P::G1Affine],
+        points: &[P::Affine],
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShare;
 

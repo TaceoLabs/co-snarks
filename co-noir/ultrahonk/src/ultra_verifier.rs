@@ -7,6 +7,7 @@ use crate::{
     types::HonkProof,
     ultra_prover::UltraHonk,
 };
+use ark_ec::pairing::Pairing;
 use co_builder::prelude::{HonkCurve, VerifyingKey, ZeroKnowledge};
 
 pub(crate) type HonkVerifyResult<T> = std::result::Result<T, eyre::Report>;
@@ -17,10 +18,10 @@ impl<
     L: PlainProverFlavour,
 > UltraHonk<P, H, L>
 {
-    pub fn verify(
+    pub fn verify<P_: Pairing<G1 = P, G1Affine = P::Affine>>(
         honk_proof: HonkProof<TranscriptFieldType>,
         public_inputs: &[TranscriptFieldType],
-        verifying_key: &VerifyingKey<P, L>,
+        verifying_key: &VerifyingKey<P_, L>,
         has_zk: ZeroKnowledge,
     ) -> HonkVerifyResult<bool> {
         tracing::trace!("UltraHonk verification");
@@ -38,6 +39,6 @@ impl<
         memory.relation_parameters.gate_challenges =
             Self::generate_gate_challenges(&mut transcript);
         let decider_verifier = DeciderVerifier::new(memory);
-        decider_verifier.verify(circuit_size, &crs, transcript, has_zk)
+        decider_verifier.verify::<P_>(circuit_size, &crs, transcript, has_zk)
     }
 }

@@ -4,7 +4,7 @@ use crate::plain_prover_flavour::UnivariateTrait;
 use crate::prelude::TranscriptHasher;
 use crate::prelude::Univariate;
 use crate::{prelude::Transcript, transcript::TranscriptFieldType};
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_ff::One;
 use ark_ff::Zero;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
@@ -15,7 +15,7 @@ use rand::{CryptoRng, Rng};
 
 use super::sumcheck::zk_data::ZKSumcheckData;
 
-pub struct SmallSubgroupIPAProver<P: Pairing> {
+pub struct SmallSubgroupIPAProver<P: CurveGroup> {
     interpolation_domain: Vec<P::ScalarField>,
     concatenated_polynomial: Polynomial<P::ScalarField>,
     libra_concatenated_lagrange_form: Polynomial<P::ScalarField>,

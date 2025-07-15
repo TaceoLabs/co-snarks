@@ -6,7 +6,6 @@ use crate::{
     transcript::{Transcript, TranscriptFieldType, TranscriptHasher},
     types::HonkProof,
 };
-use ark_ec::pairing::Pairing;
 use co_builder::{
     HonkProofResult,
     prelude::{HonkCurve, PAIRING_POINT_ACCUMULATOR_SIZE, ProvingKey, ZeroKnowledge},
@@ -33,8 +32,7 @@ impl<
     ) -> Vec<P::ScalarField> {
         tracing::trace!("generate gate challenges");
 
-        let mut gate_challenges: Vec<<P as Pairing>::ScalarField> =
-            Vec::with_capacity(CONST_PROOF_SIZE_LOG_N);
+        let mut gate_challenges: Vec<P::ScalarField> = Vec::with_capacity(CONST_PROOF_SIZE_LOG_N);
 
         for idx in 0..CONST_PROOF_SIZE_LOG_N {
             let chall = transcript.get_challenge::<P>(format!("Sumcheck:gate_challenge_{idx}"));

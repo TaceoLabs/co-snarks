@@ -6,7 +6,7 @@ use crate::{
     mpc::NoirUltraHonkProver,
     mpc_prover_flavour::MPCProverFlavour,
 };
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_ff::Zero;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::prelude::HonkCurve;
@@ -20,12 +20,12 @@ use mpc_net::Network;
 use ultrahonk::prelude::Univariate;
 
 #[derive(Clone, Debug)]
-pub(crate) struct EllipticRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing> {
+pub(crate) struct EllipticRelationAcc<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) r0: SharedUnivariate<T, P, 6>,
     pub(crate) r1: SharedUnivariate<T, P, 6>,
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for EllipticRelationAcc<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for EllipticRelationAcc<T, P> {
     fn default() -> Self {
         Self {
             r0: Default::default(),
@@ -34,7 +34,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for EllipticRelationAcc<T, P
     }
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing> EllipticRelationAcc<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> EllipticRelationAcc<T, P> {
     pub(crate) fn scale(&mut self, elements: &[P::ScalarField]) {
         assert!(elements.len() == EllipticRelation::NUM_RELATIONS);
         self.r0.scale_inplace(elements[0]);
