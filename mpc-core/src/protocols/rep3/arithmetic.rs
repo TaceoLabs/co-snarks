@@ -742,7 +742,7 @@ pub fn pow_2_public<F: PrimeField>(shared: FieldShare<F>, public: F) -> FieldSha
 }
 
 /// computes XOR using arithmetic operations, only valid when x and y are known to be 0 or 1.
-pub(crate) fn arithmetic_xor<F: PrimeField, N: Network>(
+pub fn arithmetic_xor<F: PrimeField, N: Network>(
     x: Rep3PrimeFieldShare<F>,
     y: Rep3PrimeFieldShare<F>,
     net: &N,
@@ -757,7 +757,8 @@ pub(crate) fn arithmetic_xor<F: PrimeField, N: Network>(
     Ok(FieldShare { a: res_a, b: res_b })
 }
 
-pub(crate) fn arithmetic_xor_many<F: PrimeField, N: Network>(
+/// computes XOR on many inputs using arithmetic operations, only valid when x and y are known to be 0 or 1.
+pub fn arithmetic_xor_many<F: PrimeField, N: Network>(
     x: &[Rep3PrimeFieldShare<F>],
     y: &[Rep3PrimeFieldShare<F>],
     net: &N,

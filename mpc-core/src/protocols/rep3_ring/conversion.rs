@@ -7,18 +7,15 @@ use super::{
     ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
     yao,
 };
-use crate::protocols::{
-    rep3::{
-        self, Rep3PrimeFieldShare, Rep3State,
-        conversion::A2BType,
-        id::PartyID,
-        network::Rep3NetworkExt,
-        yao::{
-            GCUtils, circuits::GarbledCircuits, evaluator::Rep3Evaluator, garbler::Rep3Garbler,
-            streaming_evaluator::StreamingRep3Evaluator, streaming_garbler::StreamingRep3Garbler,
-        },
+use crate::protocols::rep3::{
+    Rep3PrimeFieldShare, Rep3State,
+    conversion::A2BType,
+    id::PartyID,
+    network::Rep3NetworkExt,
+    yao::{
+        GCUtils, circuits::GarbledCircuits, evaluator::Rep3Evaluator, garbler::Rep3Garbler,
+        streaming_evaluator::StreamingRep3Evaluator, streaming_garbler::StreamingRep3Garbler,
     },
-    rep3_ring::arithmetic,
 };
 use ark_ff::PrimeField;
 use fancy_garbling::{BinaryBundle, WireMod2};
@@ -321,31 +318,50 @@ pub fn bit_inject<T: IntRing2k, N: Network>(
 where
     Standard: Distribution<T>,
 {
-    // standard bit inject
     assert!(x.a.bits() <= 1);
+    assert!(x.b.bits() <= 1);
 
-    let mut b0 = Rep3RingShare::default();
-    let mut b1 = Rep3RingShare::default();
-    let mut b2 = Rep3RingShare::default();
+    // Approach: Split the value into x and y and compute an arithmetic xor.
+    // The multiplication in the arithmetic xor is done in a special way according to https://eprint.iacr.org/2025/919.pdf
 
     match state.id {
         PartyID::ID0 => {
-            b0.a = x.a.to_owned();
-            b2.b = x.b.to_owned();
+            let x0 = state.rngs.rand.masking_element::<RingElement<T>>();
+            let y = x.b;
+            let z0 = y * x0;
+            let r0 = x0 + y - z0 - z0;
+            let res_a = r0;
+            // Send to P1
+            net.send_next(res_a)?;
+
+            // Receive from P2
+            let res_b: RingElement<T> = net.recv_prev()?;
+            Ok(Rep3RingShare::new_ring(res_a, res_b))
         }
         PartyID::ID1 => {
-            b1.a = x.a.to_owned();
-            b0.b = x.b.to_owned();
+            let x1 = state.rngs.rand.masking_element::<RingElement<T>>();
+            let res_a = x1 + (x.a ^ x.b);
+            // Send to P2
+            net.send_next(res_a)?;
+
+            // Receive from P0
+            let res_b: RingElement<T> = net.recv_prev()?;
+            Ok(Rep3RingShare::new_ring(res_a, res_b))
         }
         PartyID::ID2 => {
-            b2.a = x.a.to_owned();
-            b1.b = x.b.to_owned();
-        }
-    };
+            // Receive from P1
+            let res_b: RingElement<T> = net.recv_prev()?;
+            let x2 = state.rngs.rand.masking_element::<RingElement<T>>();
+            let y = x.a;
+            let z2 = y * (res_b + x2);
+            let r2 = x2 - z2 - z2;
+            let res_a = r2;
 
-    let d = arithmetic::arithmetic_xor(b0, b1, net, state)?;
-    let e = arithmetic::arithmetic_xor(d, b2, net, state)?;
-    Ok(e)
+            // Send to P0
+            net.send_next(res_a)?;
+            Ok(Rep3RingShare::new_ring(res_a, res_b))
+        }
+    }
 }
 
 /// Translates a vector of shared bits into a vector of arithmetic sharings of the same bits. See [bit_inject] for details.
@@ -357,37 +373,74 @@ pub fn bit_inject_many<T: IntRing2k, N: Network>(
 where
     Standard: Distribution<T>,
 {
-    // standard bit inject
     assert!(x.iter().all(|a| a.a.bits() <= 1));
+    assert!(x.iter().all(|a| a.b.bits() <= 1));
 
-    let mut b0 = vec![Rep3RingShare::default(); x.len()];
-    let mut b1 = vec![Rep3RingShare::default(); x.len()];
-    let mut b2 = vec![Rep3RingShare::default(); x.len()];
+    let mut res_a = Vec::with_capacity(x.len());
 
-    match state.id {
+    // Approach: Split the value into x and y and compute an arithmetic xor.
+    // The multiplication in the arithmetic xor is done in a special way according to https://eprint.iacr.org/2025/919.pdf
+
+    let res_b = match state.id {
         PartyID::ID0 => {
-            for (b0, b2, x) in izip!(&mut b0, &mut b2, x.iter().cloned()) {
-                b0.a = x.a;
-                b2.b = x.b;
+            for el in x.iter() {
+                let x0 = state.rngs.rand.masking_element::<RingElement<T>>();
+                let y = el.b;
+                let z0 = y * x0;
+                let r0 = x0 + y - z0 - z0;
+                res_a.push(r0);
             }
+            // Send to P1
+            net.send_next_many(&res_a)?;
+
+            // Receive from P2
+            let res_b: Vec<RingElement<T>> = net.recv_prev_many()?;
+            if res_b.len() != x.len() {
+                eyre::bail!("Received wrong number of elements");
+            }
+            res_b
         }
         PartyID::ID1 => {
-            for (b1, b0, x) in izip!(&mut b1, &mut b0, x.iter().cloned()) {
-                b1.a = x.a;
-                b0.b = x.b;
+            for el in x.iter() {
+                let x1 = state.rngs.rand.masking_element::<RingElement<T>>();
+                res_a.push(x1 + (el.a ^ el.b));
             }
+            // Send to P2
+            net.send_next_many(&res_a)?;
+
+            // Receive from P0
+            let res_b: Vec<RingElement<T>> = net.recv_prev_many()?;
+            if res_b.len() != x.len() {
+                eyre::bail!("Received wrong number of elements");
+            }
+            res_b
         }
         PartyID::ID2 => {
-            for (b2, b1, x) in izip!(&mut b2, &mut b1, x.iter().cloned()) {
-                b2.a = x.a;
-                b1.b = x.b;
+            // Receive from P1
+            let res_b: Vec<RingElement<T>> = net.recv_prev_many()?;
+            if res_b.len() != x.len() {
+                eyre::bail!("Received wrong number of elements");
             }
+
+            for (el, x1) in izip!(x.iter(), res_b.iter()) {
+                let x2 = state.rngs.rand.masking_element::<RingElement<T>>();
+                let y = el.a;
+                let z2 = y * (*x1 + x2);
+                let r2 = x2 - z2 - z2;
+                res_a.push(r2);
+            }
+
+            // Send to P0
+            net.send_next_many(&res_a)?;
+            res_b
         }
     };
 
-    let d = arithmetic::arithmetic_xor_many(&b0, &b1, net, state)?;
-    let e = arithmetic::arithmetic_xor_many(&d, &b2, net, state)?;
-    Ok(e)
+    Ok(res_a
+        .into_iter()
+        .zip(res_b)
+        .map(|(a, b)| Rep3RingShare::new_ring(a, b))
+        .collect())
 }
 
 /// Translates one shared bit into an arithmetic sharing of the same bit. I.e., the shared bit x = x_1 xor x_2 xor x_3 gets transformed into x = x'_1 + x'_2 + x'_3, with x being either 0 or 1.
@@ -399,30 +452,47 @@ pub fn bit_inject_from_bit<T: IntRing2k, N: Network>(
 where
     Standard: Distribution<T>,
 {
-    // standard bit inject
-
-    let mut b0 = Rep3RingShare::default();
-    let mut b1 = Rep3RingShare::default();
-    let mut b2 = Rep3RingShare::default();
+    // Approach: Split the value into x and y and compute an arithmetic xor.
+    // The multiplication in the arithmetic xor is done in a special way according to https://eprint.iacr.org/2025/919.pdf
 
     match state.id {
         PartyID::ID0 => {
-            b0.a = RingElement(T::from(x.a.0.convert()));
-            b2.b = RingElement(T::from(x.b.0.convert()));
+            let x0 = state.rngs.rand.masking_element::<RingElement<T>>();
+            let y = RingElement(T::from(x.b.0.convert()));
+            let z0 = y * x0;
+            let r0 = x0 + y - z0 - z0;
+            let res_a = r0;
+            // Send to P1
+            net.send_next(res_a)?;
+
+            // Receive from P2
+            let res_b: RingElement<T> = net.recv_prev()?;
+            Ok(Rep3RingShare::new_ring(res_a, res_b))
         }
         PartyID::ID1 => {
-            b1.a = RingElement(T::from(x.a.0.convert()));
-            b0.b = RingElement(T::from(x.b.0.convert()));
+            let x1 = state.rngs.rand.masking_element::<RingElement<T>>();
+            let res_a = x1 + RingElement(T::from(x.a.0.convert() ^ x.b.0.convert()));
+            // Send to P2
+            net.send_next(res_a)?;
+
+            // Receive from P0
+            let res_b: RingElement<T> = net.recv_prev()?;
+            Ok(Rep3RingShare::new_ring(res_a, res_b))
         }
         PartyID::ID2 => {
-            b2.a = RingElement(T::from(x.a.0.convert()));
-            b1.b = RingElement(T::from(x.b.0.convert()));
-        }
-    };
+            // Receive from P1
+            let res_b: RingElement<T> = net.recv_prev()?;
+            let x2 = state.rngs.rand.masking_element::<RingElement<T>>();
+            let y = RingElement(T::from(x.a.0.convert()));
+            let z2 = y * (res_b + x2);
+            let r2 = x2 - z2 - z2;
+            let res_a = r2;
 
-    let d = arithmetic::arithmetic_xor(b0, b1, net, state)?;
-    let e = arithmetic::arithmetic_xor(d, b2, net, state)?;
-    Ok(e)
+            // Send to P0
+            net.send_next(res_a)?;
+            Ok(Rep3RingShare::new_ring(res_a, res_b))
+        }
+    }
 }
 
 /// Translates a vector of shared bits into a vector of arithmetic sharings of the same bits. See [bit_inject] for details.
@@ -434,34 +504,71 @@ pub fn bit_inject_from_bits_many<T: IntRing2k, N: Network>(
 where
     Standard: Distribution<T>,
 {
-    let mut b0 = vec![Rep3RingShare::default(); x.len()];
-    let mut b1 = vec![Rep3RingShare::default(); x.len()];
-    let mut b2 = vec![Rep3RingShare::default(); x.len()];
+    let mut res_a = Vec::with_capacity(x.len());
 
-    match state.id {
+    // Approach: Split the value into x and y and compute an arithmetic xor.
+    // The multiplication in the arithmetic xor is done in a special way according to https://eprint.iacr.org/2025/919.pdf
+
+    let res_b = match state.id {
         PartyID::ID0 => {
-            for (b0, b2, x) in izip!(&mut b0, &mut b2, x.iter().cloned()) {
-                b0.a = RingElement(T::from(x.a.0.convert()));
-                b2.b = RingElement(T::from(x.b.0.convert()));
+            for el in x.iter() {
+                let x0 = state.rngs.rand.masking_element::<RingElement<T>>();
+                let y = RingElement(T::from(el.b.0.convert()));
+                let z0 = y * x0;
+                let r0 = x0 + y - z0 - z0;
+                res_a.push(r0);
             }
+            // Send to P1
+            net.send_next_many(&res_a)?;
+
+            // Receive from P2
+            let res_b: Vec<RingElement<T>> = net.recv_prev_many()?;
+            if res_b.len() != x.len() {
+                eyre::bail!("Received wrong number of elements");
+            }
+            res_b
         }
         PartyID::ID1 => {
-            for (b1, b0, x) in izip!(&mut b1, &mut b0, x.iter().cloned()) {
-                b1.a = RingElement(T::from(x.a.0.convert()));
-                b0.b = RingElement(T::from(x.b.0.convert()));
+            for el in x.iter() {
+                let x1 = state.rngs.rand.masking_element::<RingElement<T>>();
+                res_a.push(x1 + RingElement(T::from(el.a.0.convert() ^ el.b.0.convert())));
             }
+            // Send to P2
+            net.send_next_many(&res_a)?;
+
+            // Receive from P0
+            let res_b: Vec<RingElement<T>> = net.recv_prev_many()?;
+            if res_b.len() != x.len() {
+                eyre::bail!("Received wrong number of elements");
+            }
+            res_b
         }
         PartyID::ID2 => {
-            for (b2, b1, x) in izip!(&mut b2, &mut b1, x.iter().cloned()) {
-                b2.a = RingElement(T::from(x.a.0.convert()));
-                b1.b = RingElement(T::from(x.b.0.convert()));
+            // Receive from P1
+            let res_b: Vec<RingElement<T>> = net.recv_prev_many()?;
+            if res_b.len() != x.len() {
+                eyre::bail!("Received wrong number of elements");
             }
+
+            for (el, x1) in izip!(x.iter(), res_b.iter()) {
+                let x2 = state.rngs.rand.masking_element::<RingElement<T>>();
+                let y = RingElement(T::from(el.a.0.convert()));
+                let z2 = y * (*x1 + x2);
+                let r2 = x2 - z2 - z2;
+                res_a.push(r2);
+            }
+
+            // Send to P0
+            net.send_next_many(&res_a)?;
+            res_b
         }
     };
 
-    let d = arithmetic::arithmetic_xor_many(&b0, &b1, net, state)?;
-    let e = arithmetic::arithmetic_xor_many(&d, &b2, net, state)?;
-    Ok(e)
+    Ok(res_a
+        .into_iter()
+        .zip(res_b)
+        .map(|(a, b)| Rep3RingShare::new_ring(a, b))
+        .collect())
 }
 
 /// Translates a vector of shared bits into a vector of arithmetic sharings of the same bits. See [bit_inject] for details.
@@ -470,34 +577,84 @@ pub fn bit_inject_from_bits_to_field_many<F: PrimeField, N: Network>(
     net: &N,
     state: &mut Rep3State,
 ) -> eyre::Result<Vec<Rep3PrimeFieldShare<F>>> {
-    let mut b0 = vec![Rep3PrimeFieldShare::default(); x.len()];
-    let mut b1 = vec![Rep3PrimeFieldShare::default(); x.len()];
-    let mut b2 = vec![Rep3PrimeFieldShare::default(); x.len()];
+    let mut res_a = Vec::with_capacity(x.len());
 
-    match state.id {
+    // Approach: Split the value into x and y and compute an arithmetic xor.
+    // The multiplication in the arithmetic xor is done in a special way according to https://eprint.iacr.org/2025/919.pdf
+
+    let res_b = match state.id {
         PartyID::ID0 => {
-            for (b0, b2, x) in izip!(&mut b0, &mut b2, x.iter().cloned()) {
-                b0.a = F::from(x.a.0.convert() as u64);
-                b2.b = F::from(x.b.0.convert() as u64);
+            for el in x.iter() {
+                let x0: F = state.rngs.rand.masking_field_element();
+                let y = if el.b.0.convert() {
+                    F::one()
+                } else {
+                    F::zero()
+                };
+
+                let z0 = y * x0;
+                let r0 = x0 + y - z0 - z0;
+                res_a.push(r0);
             }
+            // Send to P1
+            net.send_next_many(&res_a)?;
+
+            // Receive from P2
+            let res_b: Vec<F> = net.recv_prev_many()?;
+            if res_b.len() != x.len() {
+                eyre::bail!("Received wrong number of elements");
+            }
+            res_b
         }
         PartyID::ID1 => {
-            for (b1, b0, x) in izip!(&mut b1, &mut b0, x.iter().cloned()) {
-                b1.a = F::from(x.a.0.convert() as u64);
-                b0.b = F::from(x.b.0.convert() as u64);
+            for el in x.iter() {
+                let x1: F = state.rngs.rand.masking_field_element();
+                res_a.push(if el.a.0.convert() ^ el.b.0.convert() {
+                    x1 + F::one()
+                } else {
+                    x1
+                });
             }
+            // Send to P2
+            net.send_next_many(&res_a)?;
+
+            // Receive from P0
+            let res_b: Vec<F> = net.recv_prev_many()?;
+            if res_b.len() != x.len() {
+                eyre::bail!("Received wrong number of elements");
+            }
+            res_b
         }
         PartyID::ID2 => {
-            for (b2, b1, x) in izip!(&mut b2, &mut b1, x.iter().cloned()) {
-                b2.a = F::from(x.a.0.convert() as u64);
-                b1.b = F::from(x.b.0.convert() as u64);
+            // Receive from P1
+            let res_b: Vec<F> = net.recv_prev_many()?;
+            if res_b.len() != x.len() {
+                eyre::bail!("Received wrong number of elements");
             }
+
+            for (el, x1) in izip!(x.iter(), res_b.iter()) {
+                let x2: F = state.rngs.rand.masking_field_element();
+                let y = if el.a.0.convert() {
+                    F::one()
+                } else {
+                    F::zero()
+                };
+                let z2 = y * (*x1 + x2);
+                let r2 = x2 - z2 - z2;
+                res_a.push(r2);
+            }
+
+            // Send to P0
+            net.send_next_many(&res_a)?;
+            res_b
         }
     };
 
-    let d = rep3::arithmetic::arithmetic_xor_many(&b0, &b1, net, state)?;
-    let e = rep3::arithmetic::arithmetic_xor_many(&d, &b2, net, state)?;
-    Ok(e)
+    Ok(res_a
+        .into_iter()
+        .zip(res_b)
+        .map(|(a, b)| Rep3PrimeFieldShare::<F>::new(a, b))
+        .collect())
 }
 
 /// Transforms the replicated shared value x from an arithmetic sharing to a yao sharing. I.e., x = x_1 + x_2 + x_3 gets transformed into wires, such that the garbler have keys (k_0, delta) for each bit of x, while the evaluator has k_x = k_0 xor delta * x.

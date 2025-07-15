@@ -561,7 +561,7 @@ pub fn pow_2_public<T: IntRing2k>(shared: RingShare<T>, public: RingElement<T>) 
 }
 
 /// computes XOR using arithmetic operations, only valid when x and y are known to be 0 or 1.
-pub(crate) fn arithmetic_xor<T: IntRing2k, N: Network>(
+pub fn arithmetic_xor<T: IntRing2k, N: Network>(
     x: RingShare<T>,
     y: RingShare<T>,
     net: &N,
@@ -579,7 +579,8 @@ where
     Ok(RingShare { a: res_a, b: res_b })
 }
 
-pub(crate) fn arithmetic_xor_many<T: IntRing2k, N: Network>(
+/// computes XOR on many inputs using arithmetic operations, only valid when x and y are known to be 0 or 1.
+pub fn arithmetic_xor_many<T: IntRing2k, N: Network>(
     x: &[RingShare<T>],
     y: &[RingShare<T>],
     net: &N,
