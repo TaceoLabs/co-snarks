@@ -1,15 +1,12 @@
 use super::types::VerifierMemory;
 use crate::{
-    oink::prover::Oink,
-    plain_prover_flavour::PlainProverFlavour,
-    transcript::{Transcript, TranscriptHasher},
-    verifier::HonkVerifyResult,
+    oink::prover::Oink, plain_prover_flavour::PlainProverFlavour, verifier::HonkVerifyResult,
 };
-use co_builder::TranscriptFieldType;
 use co_builder::prelude::{HonkCurve, VerifyingKey};
 use co_builder::{
     polynomials::polynomial_flavours::WitnessEntitiesFlavour, prover_flavour::Flavour,
 };
+use common::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
 
 pub(crate) struct OinkVerifier<
     P: HonkCurve<TranscriptFieldType>,

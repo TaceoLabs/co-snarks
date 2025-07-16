@@ -3,11 +3,13 @@ use ark_poly::EvaluationDomain;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use mpc_core::MpcState;
 use mpc_net::Network;
-use rayon::prelude::*;
+use rayon::iter::{
+    IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator,
+};
 
-pub(crate) mod plain;
-pub(crate) mod rep3;
-pub(crate) mod shamir;
+pub mod plain;
+pub mod rep3;
+pub mod shamir;
 
 /// This trait represents the operations used during UltraHonk proof generation
 pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {

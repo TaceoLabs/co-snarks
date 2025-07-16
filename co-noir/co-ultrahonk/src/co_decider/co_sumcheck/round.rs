@@ -7,7 +7,6 @@ use crate::{
         relations::Relation,
         types::{ProverUnivariates, RelationParameters},
     },
-    mpc::NoirUltraHonkProver,
     types::AllEntities,
     types_batch::SumCheckDataForRelation,
 };
@@ -16,6 +15,7 @@ use ark_ff::One;
 use co_builder::HonkProofResult;
 use co_builder::TranscriptFieldType;
 use co_builder::prelude::{HonkCurve, RowDisablingPolynomial};
+use common::mpc::NoirUltraHonkProver;
 use mpc_net::Network;
 use ultrahonk::plain_prover_flavour::UnivariateTrait;
 use ultrahonk::prelude::GateSeparatorPolynomial;

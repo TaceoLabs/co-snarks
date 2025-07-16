@@ -8,18 +8,17 @@ use crate::{
         prover::CoDecider,
         types::{ClaimedEvaluations, PartiallyEvaluatePolys},
     },
-    mpc::NoirUltraHonkProver,
     types::AllEntities,
 };
 use co_builder::HonkProofResult;
 use co_builder::TranscriptFieldType;
 use co_builder::prelude::{HonkCurve, RowDisablingPolynomial};
+use common::mpc::NoirUltraHonkProver;
+use common::transcript::{Transcript, TranscriptHasher};
 use mpc_net::Network;
+use ultrahonk::Utils;
 use ultrahonk::plain_prover_flavour::UnivariateTrait;
-use ultrahonk::{
-    Utils,
-    prelude::{GateSeparatorPolynomial, Transcript, TranscriptHasher},
-};
+use ultrahonk::prelude::GateSeparatorPolynomial;
 
 // Keep in mind, the UltraHonk protocol (UltraFlavor) does not per default have ZK
 impl<

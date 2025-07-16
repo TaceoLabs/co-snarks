@@ -4,7 +4,8 @@ use mpc_net::Network;
 use std::array;
 use ultrahonk::prelude::{Barycentric, Univariate};
 
-use crate::{mpc::NoirUltraHonkProver, mpc_prover_flavour::SharedUnivariateTrait};
+use crate::mpc_prover_flavour::SharedUnivariateTrait;
+use common::mpc::NoirUltraHonkProver;
 
 pub struct SharedUnivariate<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> {
     pub(crate) evaluations: [T::ArithmeticShare; SIZE],

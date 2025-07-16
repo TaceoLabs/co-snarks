@@ -1,9 +1,10 @@
 use super::{ProverUnivariatesBatch, Relation, fold_accumulator};
 use crate::{
     co_decider::{types::RelationParameters, univariates::SharedUnivariate},
-    mpc::NoirUltraHonkProver,
     mpc_prover_flavour::MPCProverFlavour,
 };
+use common::mpc::NoirUltraHonkProver;
+
 use ark_ec::pairing::Pairing;
 use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;

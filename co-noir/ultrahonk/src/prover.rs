@@ -3,8 +3,6 @@ use crate::{
     decider::{prover::Decider, types::ProverMemory},
     oink::prover::Oink,
     plain_prover_flavour::PlainProverFlavour,
-    transcript::{Transcript, TranscriptFieldType, TranscriptHasher},
-    types::HonkProof,
 };
 use ark_ec::pairing::Pairing;
 use co_builder::{
@@ -12,6 +10,8 @@ use co_builder::{
     prelude::{HonkCurve, PAIRING_POINT_ACCUMULATOR_SIZE, ProvingKey, ZeroKnowledge},
     prover_flavour::Flavour,
 };
+use common::HonkProof;
+use common::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
 use std::marker::PhantomData;
 
 pub struct UltraHonk<

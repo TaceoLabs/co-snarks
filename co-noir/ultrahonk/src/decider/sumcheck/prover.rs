@@ -3,10 +3,11 @@ use crate::decider::sumcheck::SumcheckOutput;
 use crate::decider::sumcheck::round_prover::SumcheckProverRound;
 use crate::decider::types::{ClaimedEvaluations, GateSeparatorPolynomial, PartiallyEvaluatePolys};
 use crate::plain_prover_flavour::{PlainProverFlavour, UnivariateTrait};
-use crate::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
 use crate::types::AllEntities;
 use crate::{CONST_PROOF_SIZE_LOG_N, Utils};
 use co_builder::prelude::{HonkCurve, RowDisablingPolynomial};
+use common::transcript::TranscriptFieldType;
+use common::transcript::{Transcript, TranscriptHasher};
 
 use super::zk_data::ZKSumcheckData;
 

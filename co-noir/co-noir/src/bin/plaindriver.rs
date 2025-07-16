@@ -8,12 +8,10 @@ use co_builder::prelude::Serialize as FieldSerialize;
 use co_noir::HonkRecursion;
 use co_ultrahonk::{
     PlainCoBuilder,
-    prelude::{
-        CoUltraHonk, CrsParser, PlainUltraHonkDriver, Poseidon2Sponge, ProvingKey, UltraHonk,
-        Utils, VerifyingKey, ZeroKnowledge,
-    },
+    prelude::{CoUltraHonk, CrsParser, ProvingKey, UltraHonk, Utils, VerifyingKey, ZeroKnowledge},
 };
 use color_eyre::eyre::Context;
+use common::{mpc::plain::PlainUltraHonkDriver, transcript::Poseidon2Sponge};
 use figment::{
     Figment,
     providers::{Env, Format, Serialized, Toml},

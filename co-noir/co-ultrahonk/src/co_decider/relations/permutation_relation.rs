@@ -3,7 +3,6 @@ use crate::{
     co_decider::{
         relations::fold_accumulator, types::RelationParameters, univariates::SharedUnivariate,
     },
-    mpc::NoirUltraHonkProver,
     mpc_prover_flavour::MPCProverFlavour,
 };
 use ark_ec::pairing::Pairing;
@@ -13,6 +12,7 @@ use co_builder::{HonkProofResult, polynomials::polynomial_flavours::PrecomputedE
 use co_builder::{
     TranscriptFieldType, polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour,
 };
+use common::mpc::NoirUltraHonkProver;
 use mpc_core::MpcState as _;
 use mpc_net::Network;
 use ultrahonk::prelude::Univariate;

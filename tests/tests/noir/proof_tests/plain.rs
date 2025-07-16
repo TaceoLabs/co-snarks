@@ -6,8 +6,11 @@ use co_acvm::{solver::PlainCoSolver, PlainAcvmSolver};
 use co_builder::{flavours::ultra_flavour::UltraFlavour, TranscriptFieldType};
 use co_noir::HonkRecursion;
 use co_ultrahonk::prelude::{
-    CoUltraHonk, CrsParser, PlainCoBuilder, PlainUltraHonkDriver, Poseidon2Sponge, ProvingKey,
-    TranscriptHasher, UltraHonk, Utils, ZeroKnowledge,
+    CoUltraHonk, CrsParser, PlainCoBuilder, ProvingKey, UltraHonk, Utils, ZeroKnowledge,
+};
+use common::{
+    mpc::plain::PlainUltraHonkDriver,
+    transcript::{Poseidon2Sponge, TranscriptHasher},
 };
 use sha3::Keccak256;
 

@@ -2,9 +2,7 @@ use crate::co_oink::{
     CRAND_PAIRS_CONST, CRAND_PAIRS_FACTOR_DOMAIN_SIZE_MINUS_ONE, CRAND_PAIRS_FACTOR_N,
 };
 use crate::key::types::TraceData;
-use crate::mpc::NoirUltraHonkProver;
 use crate::mpc_prover_flavour::MPCProverFlavour;
-use crate::prelude::{PlainUltraHonkDriver, Rep3UltraHonkDriver, ShamirUltraHonkDriver};
 use crate::types::Polynomials;
 use crate::types::ark_de_polynomials;
 use crate::types::ark_se_polynomials;
@@ -24,6 +22,10 @@ use co_builder::prelude::{ActiveRegionData, HonkCurve};
 use co_builder::prelude::{GenericUltraCircuitBuilder, PublicComponentKey};
 use co_builder::prover_flavour::ProverFlavour;
 use co_builder::{HonkProofError, TranscriptFieldType};
+use common::mpc::{
+    NoirUltraHonkProver, plain::PlainUltraHonkDriver, rep3::Rep3UltraHonkDriver,
+    shamir::ShamirUltraHonkDriver,
+};
 use eyre::Result;
 use mpc_core::MpcState;
 use serde::Deserialize;

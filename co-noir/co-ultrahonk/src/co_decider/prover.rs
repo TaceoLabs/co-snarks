@@ -1,18 +1,18 @@
 use super::{
-    co_shplemini::ShpleminiOpeningClaim,
     co_sumcheck::{SumcheckOutput, zk_data::SharedZKSumcheckData},
     small_subgroup_ipa::SharedSmallSubgroupIPAProver,
     types::ProverMemory,
 };
-use crate::{CoUtils, mpc::NoirUltraHonkProver, mpc_prover_flavour::MPCProverFlavour};
+use crate::mpc_prover_flavour::MPCProverFlavour;
 use co_builder::{
     HonkProofResult, TranscriptFieldType,
     prelude::{HonkCurve, ProverCrs, Utils},
 };
+use common::transcript::{Transcript, TranscriptHasher};
+use common::{HonkProof, mpc::NoirUltraHonkProver};
 use mpc_net::Network;
 use std::marker::PhantomData;
-use ultrahonk::prelude::{HonkProof, Transcript, TranscriptHasher, ZeroKnowledge};
-
+use ultrahonk::prelude::ZeroKnowledge;
 pub(crate) struct CoDecider<
     'a,
     T: NoirUltraHonkProver<P>,
@@ -50,28 +50,6 @@ impl<
             has_zk,
             phantom_data: PhantomData,
         }
-    }
-
-    fn compute_opening_proof(
-        net: &N,
-        state: &mut T::State,
-        opening_claim: ShpleminiOpeningClaim<T, P>,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
-        crs: &ProverCrs<P>,
-    ) -> HonkProofResult<()> {
-        let mut quotient = opening_claim.polynomial;
-        let pair = opening_claim.opening_pair;
-
-        quotient[0] = T::sub(quotient[0], pair.evaluation);
-        // Computes the coefficients for the quotient polynomial q(X) = (p(X) - v) / (X - r) through an FFT
-        quotient.factor_roots(&pair.challenge);
-        let quotient_commitment = CoUtils::commit::<T, P>(&quotient.coefficients, crs);
-        // AZTEC TODO(#479): for now we compute the KZG commitment directly to unify the KZG and IPA interfaces but in the
-        // future we might need to adjust this to use the incoming alternative to work queue (i.e. variation of
-        // pthreads) or even the work queue itself
-        let quotient_commitment = T::open_point(quotient_commitment, net, state)?;
-        transcript.send_point_to_verifier::<P>("KZG:W".to_string(), quotient_commitment.into());
-        Ok(())
     }
 
     /**
@@ -128,7 +106,13 @@ impl<
         if self.has_zk == ZeroKnowledge::No {
             let prover_opening_claim =
                 self.shplemini_prove(transcript, circuit_size, crs, sumcheck_output, None)?;
-            Self::compute_opening_proof(self.net, self.state, prover_opening_claim, transcript, crs)
+            common::compute_co_opening_proof(
+                self.net,
+                self.state,
+                prover_opening_claim,
+                transcript,
+                crs,
+            )
         } else {
             let small_subgroup_ipa_prover = SharedSmallSubgroupIPAProver::<T, P>::new(
                 self.net,
@@ -149,7 +133,13 @@ impl<
                 sumcheck_output,
                 Some(witness_polynomials),
             )?;
-            Self::compute_opening_proof(self.net, self.state, prover_opening_claim, transcript, crs)
+            common::compute_co_opening_proof(
+                self.net,
+                self.state,
+                prover_opening_claim,
+                transcript,
+                crs,
+            )
         }
     }
 

@@ -12,12 +12,12 @@ use crate::{
         types::ProverUnivariatesSized,
     },
     plain_prover_flavour::UnivariateTrait,
-    transcript::TranscriptFieldType,
     types::AllEntities,
 };
 
 use ark_ff::PrimeField;
 use co_builder::prelude::{HonkCurve, RowDisablingPolynomial};
+use common::transcript::TranscriptFieldType;
 
 pub(crate) struct SumcheckProverRound<F: PrimeField, L: PlainProverFlavour> {
     pub(crate) round_size: usize,

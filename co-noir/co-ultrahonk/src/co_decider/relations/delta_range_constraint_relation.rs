@@ -1,9 +1,10 @@
 use super::{Relation, fold_accumulator};
 use crate::{
     co_decider::{types::RelationParameters, univariates::SharedUnivariate},
-    mpc::NoirUltraHonkProver,
     mpc_prover_flavour::MPCProverFlavour,
 };
+use common::mpc::NoirUltraHonkProver;
+
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use ark_ff::Zero;

@@ -4,9 +4,8 @@ use ark_bn254::Bn254;
 use ark_ff::PrimeField;
 use co_acvm::{solver::Rep3CoSolver, Rep3AcvmType};
 use co_builder::{flavours::ultra_flavour::UltraFlavour, TranscriptFieldType};
-use co_ultrahonk::prelude::{
-    CrsParser, Poseidon2Sponge, Rep3CoUltraHonk, TranscriptHasher, UltraHonk, Utils, ZeroKnowledge,
-};
+use co_ultrahonk::prelude::{CrsParser, Rep3CoUltraHonk, UltraHonk, Utils, ZeroKnowledge};
+use common::transcript::{Poseidon2Sponge, TranscriptHasher};
 use mpc_net::local::LocalNetwork;
 use sha3::Keccak256;
 use std::sync::Arc;

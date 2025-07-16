@@ -4,12 +4,12 @@ use crate::{
     decider::{sumcheck::round_verifier::SumcheckVerifierRound, verifier::DeciderVerifier},
     plain_prover_flavour::PlainProverFlavour,
     prelude::GateSeparatorPolynomial,
-    transcript::{Transcript, TranscriptHasher},
     verifier::HonkVerifyResult,
 };
 use ark_ff::{One, Zero};
 use co_builder::prelude::{HonkCurve, ZeroKnowledge};
 use co_builder::{TranscriptFieldType, prelude::RowDisablingPolynomial};
+use common::transcript::{Transcript, TranscriptHasher};
 
 // Keep in mind, the UltraHonk protocol (UltraFlavor) does not per default have ZK
 impl<

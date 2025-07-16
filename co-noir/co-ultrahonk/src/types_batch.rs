@@ -12,7 +12,8 @@ pub(crate) type PrecomputedEntitiesBatch<T, L> = <L as ProverFlavour>::Precomput
 pub(crate) type ShiftedWitnessEntitiesBatch<T, L> =
     <L as ProverFlavour>::ShiftedWitnessEntities<Vec<T>>;
 
-use crate::{mpc::NoirUltraHonkProver, mpc_prover_flavour::MPCProverFlavour, types::AllEntities};
+use crate::{mpc_prover_flavour::MPCProverFlavour, types::AllEntities};
+use common::mpc::NoirUltraHonkProver;
 
 pub(crate) type Shared<T, P, L> = <L as MPCProverFlavour>::ProverUnivariateShared<T, P>;
 pub(crate) type Public<P, L> = <L as MPCProverFlavour>::ProverUnivariatePublic<P>;

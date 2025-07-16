@@ -1,15 +1,14 @@
+use crate::co_decider::types::RelationParameters;
+use crate::types_batch::AllEntitiesBatchRelationsTrait;
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use co_builder::{HonkProofResult, TranscriptFieldType};
 use co_builder::{prelude::HonkCurve, prover_flavour::ProverFlavour};
+use common::mpc::NoirUltraHonkProver;
+use common::transcript::{Transcript, TranscriptHasher};
 use mpc_net::Network;
 use std::fmt::Debug;
 use ultrahonk::plain_prover_flavour::UnivariateTrait;
-use ultrahonk::prelude::{Transcript, TranscriptHasher};
-
-use crate::co_decider::types::RelationParameters;
-use crate::mpc::NoirUltraHonkProver;
-use crate::types_batch::AllEntitiesBatchRelationsTrait;
 
 pub trait MPCProverFlavour: Default + ProverFlavour {
     type AllRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing>;

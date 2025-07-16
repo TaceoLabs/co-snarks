@@ -4,11 +4,14 @@ use co_acvm::{PlainAcvmSolver, mpc::NoirWitnessExtensionProtocol};
 use co_builder::TranscriptFieldType;
 use co_builder::flavours::ultra_flavour::UltraFlavour;
 use co_builder::prelude::{CrsParser, HonkRecursion};
-use co_ultrahonk::prelude::{CoUltraHonk, PlainCoBuilder, PlainUltraHonkDriver, ProvingKey};
+use co_ultrahonk::prelude::{CoUltraHonk, PlainCoBuilder, ProvingKey};
+use common::HonkProof;
+use common::mpc::plain::PlainUltraHonkDriver;
+use common::transcript::{Poseidon2Sponge, TranscriptHasher};
 use sha3::Keccak256;
 use ultrahonk::{
     Utils,
-    prelude::{HonkProof, Poseidon2Sponge, TranscriptHasher, UltraHonk, ZeroKnowledge},
+    prelude::{UltraHonk, ZeroKnowledge},
 };
 
 fn promote_public_witness_vector<F: PrimeField, T: NoirWitnessExtensionProtocol<F>>(

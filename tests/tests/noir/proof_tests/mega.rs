@@ -6,12 +6,15 @@ use co_builder::prover_flavour::ProverFlavour;
 use co_builder::{flavours::mega_flavour::MegaFlavour, TranscriptFieldType};
 use co_noir::Pairing;
 use co_noir::VerifyingKey;
-use co_ultrahonk::prelude::HonkProof;
 pub use co_ultrahonk::prelude::PlainProvingKey;
 use co_ultrahonk::prelude::{
-    CrsParser, MPCProverFlavour, PlainUltraHonkDriver, Poseidon2Sponge, ProvingKey,
-    Rep3CoUltraHonk, Rep3UltraHonkDriver, TranscriptHasher, UltraHonk, Utils, ZeroKnowledge,
+    CrsParser, MPCProverFlavour, ProvingKey, Rep3CoUltraHonk, UltraHonk, Utils, ZeroKnowledge,
 };
+use common::mpc::plain::PlainUltraHonkDriver;
+use common::mpc::rep3::Rep3UltraHonkDriver;
+use common::transcript::Poseidon2Sponge;
+use common::transcript::TranscriptHasher;
+use common::HonkProof;
 use itertools::izip;
 use mpc_core::protocols::rep3;
 use mpc_net::local::LocalNetwork;

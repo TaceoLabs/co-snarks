@@ -1,14 +1,7 @@
 use super::types::{PolyF, PolyG};
 use crate::mpc_prover_flavour::MPCProverFlavour;
 use crate::{
-    CoUtils,
-    co_decider::{
-        co_shplemini::{OpeningPair, ShpleminiOpeningClaim},
-        co_sumcheck::SumcheckOutput,
-        polynomial::SharedPolynomial,
-        prover::CoDecider,
-    },
-    mpc::NoirUltraHonkProver,
+    co_decider::{co_sumcheck::SumcheckOutput, prover::CoDecider},
     types::AllEntities,
 };
 use ark_ec::AffineRepr;
@@ -21,13 +14,16 @@ use co_builder::{
     HonkProofError,
     prelude::{HonkCurve, Polynomial, ProverCrs},
 };
+use common::CoUtils;
+use common::co_shplemini::{OpeningPair, ShpleminiOpeningClaim};
+use common::mpc::NoirUltraHonkProver;
+use common::shared_polynomial::SharedPolynomial;
+use common::transcript::{Transcript, TranscriptHasher};
 use itertools::izip;
 use mpc_core::MpcState as _;
 use mpc_net::Network;
-use ultrahonk::{
-    NUM_INTERLEAVING_CLAIMS, NUM_SMALL_IPA_EVALUATIONS, Utils,
-    prelude::{Transcript, TranscriptHasher, ZeroKnowledge},
-};
+use ultrahonk::prelude::ZeroKnowledge;
+use ultrahonk::{NUM_INTERLEAVING_CLAIMS, NUM_SMALL_IPA_EVALUATIONS, Utils};
 
 impl<
     T: NoirUltraHonkProver<P>,

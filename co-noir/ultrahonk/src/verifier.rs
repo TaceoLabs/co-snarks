@@ -3,11 +3,10 @@ use crate::{
     oink::verifier::OinkVerifier,
     plain_prover_flavour::PlainProverFlavour,
     prover::UltraHonk,
-    transcript::TranscriptFieldType,
-    transcript::{Transcript, TranscriptHasher},
-    types::HonkProof,
 };
 use co_builder::prelude::{HonkCurve, VerifyingKey, ZeroKnowledge};
+use common::HonkProof;
+use common::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
 
 pub(crate) type HonkVerifyResult<T> = std::result::Result<T, eyre::Report>;
 

@@ -1,7 +1,7 @@
 pub(crate) mod barycentric;
 pub(crate) mod prover;
 pub(crate) mod relations;
-pub(crate) mod shplemini;
+pub mod shplemini;
 pub(crate) mod small_subgroup_ipa;
 pub(crate) mod sumcheck;
 pub(crate) mod types;

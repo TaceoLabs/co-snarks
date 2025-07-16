@@ -19,8 +19,8 @@
 
 use super::types::ProverMemory;
 use crate::{
-    CoUtils, co_decider::relations::databus_lookup_relation::BusData, key::proving_key::ProvingKey,
-    mpc::NoirUltraHonkProver, mpc_prover_flavour::MPCProverFlavour,
+    co_decider::relations::databus_lookup_relation::BusData, key::proving_key::ProvingKey,
+    mpc_prover_flavour::MPCProverFlavour,
 };
 use ark_ff::{One, Zero};
 use co_builder::TranscriptFieldType;
@@ -32,12 +32,14 @@ use co_builder::{
     prelude::{ActiveRegionData, HonkCurve, NUM_MASKED_ROWS, Polynomial, ProverCrs},
     prover_flavour::Flavour,
 };
+use common::CoUtils;
+use common::mpc::NoirUltraHonkProver;
+use common::transcript::{Transcript, TranscriptHasher};
 use itertools::izip;
 use mpc_core::MpcState as _;
 use mpc_net::Network;
 use std::marker::PhantomData;
-use ultrahonk::prelude::{Transcript, TranscriptHasher, ZeroKnowledge};
-
+use ultrahonk::prelude::ZeroKnowledge;
 pub(crate) struct CoOink<
     'a,
     T: NoirUltraHonkProver<P>,

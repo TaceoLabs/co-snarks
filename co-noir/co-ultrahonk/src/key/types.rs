@@ -1,4 +1,4 @@
-use crate::{key::proving_key::ProvingKey, mpc::NoirUltraHonkProver};
+use crate::key::proving_key::ProvingKey;
 use ark_ec::pairing::Pairing;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
@@ -10,6 +10,7 @@ use co_builder::{
         NUM_WIRES, Polynomial,
     },
 };
+use common::mpc::NoirUltraHonkProver;
 use mpc_core::MpcState;
 
 pub(crate) struct TraceData<'a, T: NoirUltraHonkProver<P>, P: Pairing> {
