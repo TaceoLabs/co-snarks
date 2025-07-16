@@ -135,42 +135,7 @@ mod plonk_utils {
         }};
     }
 
-    macro_rules! rayon_join4 {
-        ($f0: expr, $f1: expr, $f2: expr, $f3: expr) => {{
-            let (r0, (r1, (r2, r3))) =
-                rayon::join($f0, || rayon::join($f1, || rayon::join($f2, $f3)));
-            (r0, r1, r2, r3)
-        }};
-    }
-
-    macro_rules! rayon_join5 {
-        ($f0: expr, $f1: expr, $f2: expr, $f3: expr, $f4: expr) => {{
-            let (r0, (r1, (r2, (r3, r4)))) = rayon::join($f0, || {
-                rayon::join($f1, || rayon::join($f2, || rayon::join($f3, $f4)))
-            });
-            (r0, r1, r2, r3, r4)
-        }};
-    }
-
-    macro_rules! rayon_join8 {
-        ($f0: expr, $f1: expr, $f2: expr, $f3: expr, $f4: expr, $f5: expr, $f6: expr, $f7: expr) => {{
-            let (r0, (r1, (r2, (r3, (r4, (r5, (r6, r7))))))) = rayon::join($f0, || {
-                rayon::join($f1, || {
-                    rayon::join($f2, || {
-                        rayon::join($f3, || {
-                            rayon::join($f4, || rayon::join($f5, || rayon::join($f6, $f7)))
-                        })
-                    })
-                })
-            });
-            (r0, r1, r2, r3, r4, r5, r6, r7)
-        }};
-    }
-
     pub(crate) use rayon_join3;
-    pub(crate) use rayon_join4;
-    pub(crate) use rayon_join5;
-    pub(crate) use rayon_join8;
 
     pub(crate) fn get_witness<P: Pairing, T: CircomPlonkProver<P>>(
         id: <T::State as MpcState>::PartyID,

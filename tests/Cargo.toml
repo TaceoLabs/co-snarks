@@ -44,7 +44,6 @@ libaes = { workspace = true }
 noirc-abi = { workspace = true }
 tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
-rayon.workspace = true
 
 [dev-dependencies]
 paste.workspace = true

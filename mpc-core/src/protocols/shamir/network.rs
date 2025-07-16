@@ -7,7 +7,6 @@ use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use itertools::izip;
 use mpc_net::Network;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use super::{
     ShamirPointShare, ShamirPrimeFieldShare, ShamirState, evaluate_poly, evaluate_poly_point,
@@ -68,22 +67,26 @@ pub trait ShamirNetworkExt: Network {
         let mut ser_data = Vec::with_capacity(size);
         data.to_owned().serialize_uncompressed(&mut ser_data)?;
 
-        (0..num_parties)
-            .into_par_iter()
-            .map(|other_id| {
-                // Send
-                if other_id != self.id() {
-                    self.send(other_id, &ser_data)?;
-                }
-                // Receive
-                if other_id != self.id() {
-                    let data = self.recv(other_id)?;
-                    eyre::Ok(F::deserialize_uncompressed_unchecked(&data[..])?)
-                } else {
-                    eyre::Ok(data.to_owned())
-                }
-            })
-            .collect::<eyre::Result<Vec<_>>>()
+        // Send
+        for other_id in 0..num_parties {
+            if other_id != self.id() {
+                self.send(other_id, &ser_data)?;
+            }
+        }
+
+        // Receive
+        let mut res = Vec::with_capacity(num_parties);
+        for other_id in 0..num_parties {
+            if other_id != self.id() {
+                let data = self.recv(other_id)?;
+                let deser = F::deserialize_uncompressed_unchecked(&data[..])?;
+                res.push(deser);
+            } else {
+                res.push(data.to_owned());
+            }
+        }
+
+        Ok(res)
     }
 
     /// Send and reveive a vector of data to and from all parties.
@@ -100,23 +103,21 @@ pub trait ShamirNetworkExt: Network {
         let mut ser_data = Vec::with_capacity(size);
         data.to_owned().serialize_uncompressed(&mut ser_data)?;
 
+        // Send
+        for s in 1..num {
+            let other_id = (self.id() + s) % num_parties;
+            self.send(other_id, &ser_data)?;
+        }
+
+        // Receive
         let mut res = Vec::with_capacity(num);
         res.push(data);
-
-        let remaining = (1..num)
-            .into_par_iter()
-            .map(|i| {
-                // Send
-                let other_id = (self.id() + i) % num_parties;
-                self.send(other_id, &ser_data)?;
-                // Receive
-                let other_id = (self.id() + num_parties - i) % num_parties;
-                let data = self.recv(other_id)?;
-                eyre::Ok(F::deserialize_uncompressed_unchecked(&data[..])?)
-            })
-            .collect::<eyre::Result<Vec<_>>>()?;
-
-        res.extend(remaining);
+        for r in 1..num {
+            let other_id = (self.id() + num_parties - r) % num_parties;
+            let data = self.recv(other_id)?;
+            let deser = F::deserialize_uncompressed_unchecked(&data[..])?;
+            res.push(deser);
+        }
 
         Ok(res)
     }

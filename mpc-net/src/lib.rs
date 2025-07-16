@@ -101,3 +101,176 @@ impl std::fmt::Display for ConnectionStats {
         Ok(())
     }
 }
+
+/// Run 2 network closures
+#[inline(always)]
+pub fn join<R0: Send, R1: Send>(
+    f0: impl FnOnce() -> R0 + Send,
+    f1: impl FnOnce() -> R1 + Send,
+) -> (R0, R1) {
+    std::thread::scope(|s| {
+        let r0 = s.spawn(f0);
+        let r1 = f1();
+        (r0.join().expect("can join"), r1)
+    })
+}
+
+/// Run 3 network closures
+#[inline(always)]
+pub fn join3<R0: Send, R1: Send, R2: Send>(
+    f0: impl FnOnce() -> R0 + Send,
+    f1: impl FnOnce() -> R1 + Send,
+    f2: impl FnOnce() -> R2 + Send,
+) -> (R0, R1, R2) {
+    std::thread::scope(|s| {
+        let r0 = s.spawn(f0);
+        let r1 = s.spawn(f1);
+        let r2 = f2();
+        (
+            r0.join().expect("can join"),
+            r1.join().expect("can join"),
+            r2,
+        )
+    })
+}
+
+/// Run 4 network closures
+#[inline(always)]
+pub fn join4<R0: Send, R1: Send, R2: Send, R3: Send>(
+    f0: impl FnOnce() -> R0 + Send,
+    f1: impl FnOnce() -> R1 + Send,
+    f2: impl FnOnce() -> R2 + Send,
+    f3: impl FnOnce() -> R3 + Send,
+) -> (R0, R1, R2, R3) {
+    std::thread::scope(|s| {
+        let r0 = s.spawn(f0);
+        let r1 = s.spawn(f1);
+        let r2 = s.spawn(f2);
+        let r3 = f3();
+        (
+            r0.join().expect("can join"),
+            r1.join().expect("can join"),
+            r2.join().expect("can join"),
+            r3,
+        )
+    })
+}
+
+/// Run 5 network closures
+#[inline(always)]
+pub fn join5<R0: Send, R1: Send, R2: Send, R3: Send, R4: Send>(
+    f0: impl FnOnce() -> R0 + Send,
+    f1: impl FnOnce() -> R1 + Send,
+    f2: impl FnOnce() -> R2 + Send,
+    f3: impl FnOnce() -> R3 + Send,
+    f4: impl FnOnce() -> R4 + Send,
+) -> (R0, R1, R2, R3, R4) {
+    std::thread::scope(|s| {
+        let r0 = s.spawn(f0);
+        let r1 = s.spawn(f1);
+        let r2 = s.spawn(f2);
+        let r3 = s.spawn(f3);
+        let r4 = f4();
+        (
+            r0.join().expect("can join"),
+            r1.join().expect("can join"),
+            r2.join().expect("can join"),
+            r3.join().expect("can join"),
+            r4,
+        )
+    })
+}
+
+/// Run 6 network closures
+#[inline(always)]
+pub fn join6<R0: Send, R1: Send, R2: Send, R3: Send, R4: Send, R5: Send>(
+    f0: impl FnOnce() -> R0 + Send,
+    f1: impl FnOnce() -> R1 + Send,
+    f2: impl FnOnce() -> R2 + Send,
+    f3: impl FnOnce() -> R3 + Send,
+    f4: impl FnOnce() -> R4 + Send,
+    f5: impl FnOnce() -> R5 + Send,
+) -> (R0, R1, R2, R3, R4, R5) {
+    std::thread::scope(|s| {
+        let r0 = s.spawn(f0);
+        let r1 = s.spawn(f1);
+        let r2 = s.spawn(f2);
+        let r3 = s.spawn(f3);
+        let r4 = s.spawn(f4);
+        let r5 = f5();
+        (
+            r0.join().expect("can join"),
+            r1.join().expect("can join"),
+            r2.join().expect("can join"),
+            r3.join().expect("can join"),
+            r4.join().expect("can join"),
+            r5,
+        )
+    })
+}
+
+/// Run 7 network closures
+#[inline(always)]
+pub fn join7<R0: Send, R1: Send, R2: Send, R3: Send, R4: Send, R5: Send, R6: Send>(
+    f0: impl FnOnce() -> R0 + Send,
+    f1: impl FnOnce() -> R1 + Send,
+    f2: impl FnOnce() -> R2 + Send,
+    f3: impl FnOnce() -> R3 + Send,
+    f4: impl FnOnce() -> R4 + Send,
+    f5: impl FnOnce() -> R5 + Send,
+    f6: impl FnOnce() -> R6 + Send,
+) -> (R0, R1, R2, R3, R4, R5, R6) {
+    std::thread::scope(|s| {
+        let r0 = s.spawn(f0);
+        let r1 = s.spawn(f1);
+        let r2 = s.spawn(f2);
+        let r3 = s.spawn(f3);
+        let r4 = s.spawn(f4);
+        let r5 = s.spawn(f5);
+        let r6 = f6();
+        (
+            r0.join().expect("can join"),
+            r1.join().expect("can join"),
+            r2.join().expect("can join"),
+            r3.join().expect("can join"),
+            r4.join().expect("can join"),
+            r5.join().expect("can join"),
+            r6,
+        )
+    })
+}
+
+/// Run 8 network closures
+#[inline(always)]
+#[allow(clippy::too_many_arguments)]
+pub fn join8<R0: Send, R1: Send, R2: Send, R3: Send, R4: Send, R5: Send, R6: Send, R7: Send>(
+    f0: impl FnOnce() -> R0 + Send,
+    f1: impl FnOnce() -> R1 + Send,
+    f2: impl FnOnce() -> R2 + Send,
+    f3: impl FnOnce() -> R3 + Send,
+    f4: impl FnOnce() -> R4 + Send,
+    f5: impl FnOnce() -> R5 + Send,
+    f6: impl FnOnce() -> R6 + Send,
+    f7: impl FnOnce() -> R7 + Send,
+) -> (R0, R1, R2, R3, R4, R5, R6, R7) {
+    std::thread::scope(|s| {
+        let r0 = s.spawn(f0);
+        let r1 = s.spawn(f1);
+        let r2 = s.spawn(f2);
+        let r3 = s.spawn(f3);
+        let r4 = s.spawn(f4);
+        let r5 = s.spawn(f5);
+        let r6 = s.spawn(f6);
+        let r7 = f7();
+        (
+            r0.join().expect("can join"),
+            r1.join().expect("can join"),
+            r2.join().expect("can join"),
+            r3.join().expect("can join"),
+            r4.join().expect("can join"),
+            r5.join().expect("can join"),
+            r6.join().expect("can join"),
+            r7,
+        )
+    })
+}

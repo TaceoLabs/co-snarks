@@ -182,7 +182,7 @@ impl GCUtils {
         garbler_id: PartyID,
     ) -> eyre::Result<()> {
         debug_assert_ne!(garbler_id, PartyID::ID0);
-        let (send0, send1) = rayon::join(
+        let (send0, send1) = mpc_net::join(
             || Self::send_bundle_to(&input.garbler_wires, net, garbler_id),
             || Self::send_bundle_to(&input.evaluator_wires, net, PartyID::ID0),
         );

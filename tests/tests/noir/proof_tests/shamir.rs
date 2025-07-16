@@ -10,7 +10,6 @@ use co_ultrahonk::prelude::{
 use mpc_net::local::LocalNetwork;
 use sha3::Keccak256;
 use std::sync::Arc;
-use tests::test_utils::spawn_pool;
 
 fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     name: &str,
@@ -41,7 +40,7 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
         let witness = witness.clone();
         let prover_crs = prover_crs.clone();
         let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
-        threads.push(spawn_pool(move || {
+        threads.push(std::thread::spawn(move || {
             // generate proving key and vk
             let pk = co_noir::generate_proving_key_shamir(
                 num_parties,

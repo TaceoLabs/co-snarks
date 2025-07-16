@@ -31,7 +31,6 @@ mod ring_share {
     use rand::thread_rng;
     use rand::Rng;
     use std::sync::mpsc;
-    use tests::test_utils::spawn_pool;
 
     macro_rules! apply_to_all {
         ($expr:ident,[$($t:ty),*]) => {
@@ -82,7 +81,7 @@ mod ring_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
         for (tx, x, y) in izip!([tx1, tx2, tx3], x_shares.into_iter(), y_shares.into_iter()) {
-            spawn_pool(move || tx.send(arithmetic::add(x, y)));
+            std::thread::spawn(move || tx.send(arithmetic::add(x, y)));
         }
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
@@ -110,7 +109,7 @@ mod ring_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
         for (tx, x, y) in izip!([tx1, tx2, tx3], x_shares.into_iter(), y_shares.into_iter()) {
-            spawn_pool(move || tx.send(arithmetic::sub(x, y)));
+            std::thread::spawn(move || tx.send(arithmetic::sub(x, y)));
         }
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
@@ -141,7 +140,7 @@ mod ring_share {
             x_shares.into_iter(),
             [PartyID::ID0, PartyID::ID1, PartyID::ID2]
         ) {
-            spawn_pool(move || tx.send(arithmetic::sub_shared_by_public(x, y, id)));
+            std::thread::spawn(move || tx.send(arithmetic::sub_shared_by_public(x, y, id)));
         }
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
@@ -172,7 +171,7 @@ mod ring_share {
             y_shares.into_iter(),
             [PartyID::ID0, PartyID::ID1, PartyID::ID2]
         ) {
-            spawn_pool(move || tx.send(arithmetic::sub_public_by_shared(x, y, id)));
+            std::thread::spawn(move || tx.send(arithmetic::sub_public_by_shared(x, y, id)));
         }
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
@@ -206,7 +205,7 @@ mod ring_share {
             x_shares.into_iter(),
             y_shares.into_iter()
         ) {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 let mul = arithmetic::mul(x, y, &net, &mut state).unwrap();
                 tx.send(mul)
@@ -248,10 +247,10 @@ mod ring_share {
             x_shares0.into_iter().zip(y_shares0),
             x_shares1.into_iter().zip(y_shares1)
         ) {
-            threads.push(spawn_pool(move || {
+            threads.push(std::thread::spawn(move || {
                 let mut state0 = Rep3State::new(&net0, A2BType::default()).unwrap();
                 let mut state1 = state0.fork(0).unwrap();
-                let (mul0, mul1) = rayon::join(
+                let (mul0, mul1) = mpc_net::join(
                     || arithmetic::mul(x0, y0, &net0, &mut state0),
                     || arithmetic::mul(x1, y1, &net1, &mut state1),
                 );
@@ -292,7 +291,7 @@ mod ring_share {
             x_shares.into_iter(),
             y_shares.into_iter()
         ) {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 let mul = arithmetic::mul(x, y, &net, &mut state).unwrap();
                 let mul = arithmetic::mul(mul, y, &net, &mut state).unwrap();
@@ -340,7 +339,7 @@ mod ring_share {
             x_shares.into_iter(),
             y_shares.into_iter()
         ) {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 let mul = arithmetic::mul_vec(&x, &y, &net, &mut state).unwrap();
                 let mul = arithmetic::mul_vec(&mul, &y, &net, &mut state).unwrap();
@@ -371,7 +370,7 @@ mod ring_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
         for (tx, x) in izip!([tx1, tx2, tx3], x_shares.into_iter()) {
-            spawn_pool(move || tx.send(arithmetic::neg(x)));
+            std::thread::spawn(move || tx.send(arithmetic::neg(x)));
         }
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
@@ -407,7 +406,7 @@ mod ring_share {
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 tx.send(conversion::bit_inject(&x, &net, &mut state).unwrap())
             });
@@ -458,7 +457,7 @@ mod ring_share {
             .zip([tx1, tx2, tx3])
             .zip([x0_shares, x1_shares, x2_shares].into_iter())
         {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 tx.send(conversion::bit_inject_many(&x, &net, &mut state).unwrap())
             });
@@ -502,7 +501,7 @@ mod ring_share {
                                 y_shares,
                                 vec![compare; 3]
                             ) {
-                            spawn_pool(move || {
+                            std::thread::spawn(move || {
                                     let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                                     let shared_compare = arithmetic::$name(x, y, &net, &mut state).unwrap();
                                     let rhs_const =[< $name _public >](x, public, &net, &mut state).unwrap();
@@ -550,7 +549,7 @@ mod ring_share {
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 tx.send(conversion::a2b(x, &net, &mut state).unwrap())
             });
@@ -584,7 +583,7 @@ mod ring_share {
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 tx.send(conversion::a2y2b(x, &net, &mut state).unwrap())
             });
@@ -618,7 +617,7 @@ mod ring_share {
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 tx.send(conversion::a2y2b_streaming(x, &net, &mut state).unwrap())
             });
@@ -652,7 +651,7 @@ mod ring_share {
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 tx.send(conversion::a2b(x, &net, &mut state).unwrap())
             });
@@ -686,7 +685,7 @@ mod ring_share {
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 tx.send(conversion::a2y2b(x, &net, &mut state).unwrap())
             });
@@ -720,7 +719,7 @@ mod ring_share {
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 tx.send(conversion::a2y2b_streaming(x, &net, &mut state).unwrap())
             });
@@ -754,7 +753,7 @@ mod ring_share {
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 tx.send(conversion::b2a(&x, &net, &mut state).unwrap())
             });
@@ -788,7 +787,7 @@ mod ring_share {
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 tx.send(conversion::b2y2a(&x, &net, &mut state).unwrap())
             });
@@ -822,7 +821,7 @@ mod ring_share {
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 tx.send(conversion::b2y2a_streaming(&x, &net, &mut state).unwrap())
             });
@@ -856,7 +855,7 @@ mod ring_share {
 
         // Both Garblers
         for (net, tx) in izip!([net2, net3], [tx2, tx3]) {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
 
                 let mut garbler = Rep3Garbler::new(&net, &mut state);
@@ -881,7 +880,7 @@ mod ring_share {
         }
 
         // The evaluator (ID0)
-        spawn_pool(move || {
+        std::thread::spawn(move || {
             let _state = Rep3State::new(&net1, A2BType::default()).unwrap(); // DONT REMOVE
             let mut evaluator = Rep3Evaluator::new(&net1);
             let n_bits = T::K;
@@ -930,7 +929,7 @@ mod ring_share {
 
         // Both Garblers
         for (net, tx) in izip!([net2, net3], [tx2, tx3]) {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
 
                 let mut garbler = StreamingRep3Garbler::new(&net, &mut state);
@@ -955,7 +954,7 @@ mod ring_share {
         }
 
         // The evaluator (ID0)
-        spawn_pool(move || {
+        std::thread::spawn(move || {
             let _state = Rep3State::new(&net1, A2BType::default()).unwrap(); // DONT REMOVE
             let mut evaluator = StreamingRep3Evaluator::new(&net1);
             let n_bits = T::K;
@@ -1000,7 +999,7 @@ mod ring_share {
         let (tx3, rx3) = mpsc::channel();
 
         for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter()) {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 let id = state.id;
                 let delta = state.rngs.generate_random_garbler_delta(id);
@@ -1052,7 +1051,7 @@ mod ring_share {
         let (tx3, rx3) = mpsc::channel();
 
         for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter()) {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 let id = state.id;
                 let delta = state.rngs.generate_random_garbler_delta(id);
@@ -1109,7 +1108,7 @@ mod ring_share {
         let (tx3, rx3) = mpsc::channel();
 
         for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter()) {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 let converted = conversion::y2a::<T, _>(x, Some(delta), &net, &mut state).unwrap();
                 tx.send(converted).unwrap();
@@ -1148,7 +1147,7 @@ mod ring_share {
         let (tx3, rx3) = mpsc::channel();
 
         for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter()) {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 let converted =
                     conversion::y2a_streaming::<T, _>(x, Some(delta), &net, &mut state).unwrap();
@@ -1185,7 +1184,7 @@ mod ring_share {
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 let id = state.id;
                 let delta = state.rngs.generate_random_garbler_delta(id);
@@ -1239,7 +1238,7 @@ mod ring_share {
             .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
         {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 let id = state.id;
                 let delta = state.rngs.generate_random_garbler_delta(id);
@@ -1295,7 +1294,7 @@ mod ring_share {
         let (tx3, rx3) = mpsc::channel();
 
         for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter()) {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 let converted = conversion::y2b::<T, _>(x, &net, &mut state).unwrap();
                 tx.send(converted).unwrap();
@@ -1329,7 +1328,7 @@ mod ring_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
         for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter(),) {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 let y = casts::cast_a2b(x, &net, &mut state).unwrap();
                 tx.send(y)
@@ -1365,7 +1364,7 @@ mod ring_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
         for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter(),) {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 let y = casts::field_to_ring_a2b(x, &net, &mut state).unwrap();
                 tx.send(y)
@@ -1399,7 +1398,7 @@ mod ring_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
         for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter(),) {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 let y =
                     casts::ring_to_field_a2b::<_, ark_bn254::Fr, _>(x, &net, &mut state).unwrap();
@@ -1444,7 +1443,7 @@ mod ring_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
         for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter(),) {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 let y = yao::field_to_ring_many::<_, T, _>(&x, &net, &mut state).unwrap();
                 tx.send(y)
@@ -1482,7 +1481,7 @@ mod ring_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
         for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter(),) {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 let y =
                     yao::ring_to_field_many::<_, ark_bn254::Fr, _>(&x, &net, &mut state).unwrap();
@@ -1526,7 +1525,7 @@ mod ring_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
         for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter(),) {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 let y = yao::upcast_many(&x, &net, &mut state).unwrap();
                 tx.send(y)
@@ -1563,7 +1562,7 @@ mod ring_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
         for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter(),) {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 let y = casts::cast_gc(x, &net, &mut state).unwrap();
                 tx.send(y)
@@ -1615,7 +1614,7 @@ mod ring_share {
         let (tx3, rx3) = mpsc::channel();
 
         for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter()) {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
 
                 let decomposed =
@@ -1664,7 +1663,7 @@ mod ring_share {
         let (tx3, rx3) = mpsc::channel();
 
         for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter()) {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
 
                 let decomposed =
@@ -1717,7 +1716,7 @@ mod ring_share {
             x_shares.into_iter(),
             y_shares.into_iter()
         ) {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
 
                 let div = yao::ring_div_many(&x, &y, &net, &mut state).unwrap();
@@ -1764,7 +1763,7 @@ mod ring_share {
 
         for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter(),) {
             let y_ = y.to_owned();
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
 
                 let div = yao::ring_div_by_public_many(&x, &y_, &net, &mut state).unwrap();
@@ -1811,7 +1810,7 @@ mod ring_share {
 
         for (net, tx, y_c) in izip!(nets, [tx1, tx2, tx3], y_shares.into_iter(),) {
             let x_ = x.to_owned();
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
 
                 let div = yao::ring_div_by_shared_many(&x_, &y_c, &net, &mut state).unwrap();
@@ -1841,7 +1840,7 @@ mod ring_share {
         let (tx3, rx3) = mpsc::channel();
 
         for (net, tx) in izip!(nets, [tx1, tx2, tx3],) {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
 
                 // First run, get one of size K
@@ -1914,7 +1913,7 @@ mod ring_share {
 
             for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter(),) {
                 let lut = lut.clone();
-                spawn_pool(move || {
+                std::thread::spawn(move || {
                     let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                     let res = gadgets::lut::read_public_lut(&lut, x, &net, &mut state).unwrap();
                     tx.send(res)
@@ -1958,28 +1957,29 @@ mod ring_share {
             let (tx2, rx2) = mpsc::channel();
             let (tx3, rx3) = mpsc::channel();
 
-            rayon::scope(|s| {
-                let lut_ = &lut;
-                for (net0, net1, tx, x) in
-                    izip!(nets0, nets1, [tx1, tx2, tx3], x_shares.into_iter(),)
-                {
-                    s.spawn(move |_| {
-                        let mut state0 = Rep3State::new(&net0, A2BType::default()).unwrap();
-                        let mut state1 = state0.fork(0).unwrap();
+            for (net0, net1, tx, x, lut) in izip!(
+                nets0,
+                nets1,
+                [tx1, tx2, tx3],
+                x_shares.into_iter(),
+                [lut.clone(), lut.clone(), lut]
+            ) {
+                std::thread::spawn(move || {
+                    let mut state0 = Rep3State::new(&net0, A2BType::default()).unwrap();
+                    let mut state1 = state0.fork(0).unwrap();
 
-                        let res = gadgets::lut::read_public_lut_low_depth(
-                            lut_,
-                            x,
-                            &net0,
-                            &net1,
-                            &mut state0,
-                            &mut state1,
-                        )
-                        .unwrap();
-                        tx.send(res).unwrap();
-                    });
-                }
-            });
+                    let res = gadgets::lut::read_public_lut_low_depth(
+                        &lut,
+                        x,
+                        &net0,
+                        &net1,
+                        &mut state0,
+                        &mut state1,
+                    )
+                    .unwrap();
+                    tx.send(res).unwrap();
+                });
+            }
 
             let result1 = rx1.recv().unwrap();
             let result2 = rx2.recv().unwrap();
@@ -2024,7 +2024,7 @@ mod ring_share {
                 x_shares.into_iter(),
                 lut_shares.into_iter()
             ) {
-                spawn_pool(move || {
+                std::thread::spawn(move || {
                     let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
 
                     let res = gadgets::lut::read_shared_lut(&lut, x, &net, &mut state).unwrap();
@@ -2076,7 +2076,7 @@ mod ring_share {
                 y_shares.into_iter(),
                 lut_shares.into_iter()
             ) {
-                spawn_pool(move || {
+                std::thread::spawn(move || {
                     let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
 
                     gadgets::lut::write_lut(&y, &mut lut, x, &net, &mut state).unwrap();

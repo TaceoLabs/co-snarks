@@ -1,7 +1,7 @@
 use crate::{
     PlonkProofResult,
     mpc::CircomPlonkProver,
-    plonk_utils::{rayon_join3, rayon_join4, rayon_join5, rayon_join8},
+    plonk_utils::rayon_join3,
     round2::{Round2Challenges, Round2Polys, Round2Proof},
     round4::Round4,
     types::{Domains, Keccak256Transcript, PlonkData, PolyEval},
@@ -28,7 +28,7 @@ macro_rules! mul4vec {
         let mut state6 = $state.fork($len)?;
         let mut state7 = $state.fork($len)?;
 
-        let (a_b, a_bp, ap_b, ap_bp, c_d, c_dp, cp_d, cp_dp) = rayon_join8!(
+        let (a_b, a_bp, ap_b, ap_bp, c_d, c_dp, cp_d, cp_dp) = mpc_net::join8(
             || T::mul_vec($a, $b, &$nets[0], &mut state0),
             || T::mul_vec($a, $bp, &$nets[1], &mut state1),
             || T::mul_vec($ap, $b, &$nets[2], &mut state2),
@@ -36,7 +36,7 @@ macro_rules! mul4vec {
             || T::mul_vec($c, $d, &$nets[4], &mut state4),
             || T::mul_vec($c, $dp, &$nets[5], &mut state5),
             || T::mul_vec($cp, $d, &$nets[6], &mut state6),
-            || T::mul_vec($cp, $dp, &$nets[7], &mut state7)
+            || T::mul_vec($cp, $dp, &$nets[7], &mut state7),
         );
         let a_b = a_b?;
         let a_bp = a_bp?;
@@ -53,7 +53,7 @@ macro_rules! mul4vec {
         let mut state3 = $state.fork($len * 4)?;
         let mut state4 = $state.fork($len)?;
 
-        let (r, a0, a1, a2, a3) = rayon_join5!(
+        let (r, a0, a1, a2, a3) = mpc_net::join5(
             || T::mul_vec(&a_b, &c_d, &$nets[0], &mut state0),
             || {
                 let mut a0 = T::mul_vec(&ap_b, &c_d, &$nets[1], &mut state1)?;
@@ -78,7 +78,7 @@ macro_rules! mul4vec {
                 a2 = T::add_mul_vec(&a2, &ap_bp, &cp_d, &$nets[3], &mut state3)?;
                 eyre::Ok(a2)
             },
-            || T::mul_vec(&ap_bp, &cp_dp, &$nets[4], &mut state4)
+            || T::mul_vec(&ap_bp, &cp_dp, &$nets[4], &mut state4),
         );
 
         eyre::Ok([r?, a0?, a1?, a2?, a3?])
@@ -280,7 +280,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round3<'a, P
         let mut state1 = state.fork(len)?;
         let mut state2 = state.fork(len)?;
         let mut state3 = state.fork(len)?;
-        let (a_b, a_bp, ap_b, ap_bp) = rayon_join4!(
+        let (a_b, a_bp, ap_b, ap_bp) = mpc_net::join4(
             || {
                 T::mul_vec(
                     &polys.poly_eval_a.eval,
@@ -291,7 +291,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round3<'a, P
             },
             || T::mul_vec(&polys.poly_eval_a.eval, &bp, &nets[1], &mut state1),
             || T::mul_vec(&polys.poly_eval_b.eval, &ap, &nets[2], &mut state2),
-            || T::mul_vec(&ap, &bp, &nets[3], &mut state3)
+            || T::mul_vec(&ap, &bp, &nets[3], &mut state3),
         );
         let a_b = a_b?;
         let a_bp = a_bp?;

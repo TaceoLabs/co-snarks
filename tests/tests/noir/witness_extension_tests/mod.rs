@@ -78,7 +78,7 @@ macro_rules! add_rep3_acvm_test {
                     ],
                     shares
                 ) {
-                    threads.push(spawn_pool(move || {
+                    threads.push(std::thread::spawn(move || {
                         let input_share = co_noir::witness_to_witness_map(share, &program_artifact.abi).expect("can translate witness for noir witness extension");
                         let solver =
                             Rep3CoSolver::new_with_witness(&net0, &net1, program_artifact, input_share).unwrap();

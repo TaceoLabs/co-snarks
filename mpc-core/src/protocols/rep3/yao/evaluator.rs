@@ -118,7 +118,7 @@ impl<'a, N: Network> Rep3Evaluator<'a, N> {
             gate.copy_from_slice(block.as_ref());
             blocks.push(gate);
         }
-        let (send1, send2) = rayon::join(
+        let (send1, send2) = mpc_net::join(
             || self.net.send_many(PartyID::ID1, &blocks),
             || self.net.send_many(PartyID::ID2, &blocks),
         );

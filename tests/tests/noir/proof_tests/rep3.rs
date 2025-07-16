@@ -10,7 +10,6 @@ use co_ultrahonk::prelude::{
 use mpc_net::local::LocalNetwork;
 use sha3::Keccak256;
 use std::sync::Arc;
-use tests::test_utils::spawn_pool;
 
 fn witness_map_to_witness_vector<F: PrimeField>(
     witness_map: WitnessMap<Rep3AcvmType<F>>,
@@ -67,7 +66,7 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str, has_zk: Zero
         let witness = witness.clone();
         let prover_crs = prover_crs.clone();
         let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
-        threads.push(spawn_pool(move || {
+        threads.push(std::thread::spawn(move || {
             // generate proving key and vk
             let pk = co_noir::generate_proving_key_rep3(
                 &constraint_system,
@@ -135,7 +134,7 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(
         let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
         let artifact = program_artifact.clone();
         let prover_toml = prover_toml.clone();
-        threads.push(spawn_pool(move || {
+        threads.push(std::thread::spawn(move || {
             let solver = Rep3CoSolver::new(&net0, &net1, artifact, prover_toml).unwrap();
             let witness = solver.solve().unwrap();
             let witness = convert_witness_rep3(witness);

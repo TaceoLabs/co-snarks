@@ -1,5 +1,5 @@
 pub mod test_utils {
-    use std::{array, collections::BTreeMap, thread::JoinHandle};
+    use std::{array, collections::BTreeMap};
 
     use acir::{
         acir_field::GenericFieldElement,
@@ -18,18 +18,6 @@ pub mod test_utils {
     use num_bigint::BigUint;
     use num_traits::Num as _;
     use rand::{CryptoRng, Rng};
-    use rayon::ThreadPoolBuilder;
-
-    pub fn spawn_pool<T: Send + 'static>(op: impl FnOnce() -> T + Send + 'static) -> JoinHandle<T> {
-        std::thread::spawn(|| {
-            let pool = ThreadPoolBuilder::new()
-                .num_threads(4)
-                .use_current_thread()
-                .build()
-                .unwrap();
-            pool.install(op)
-        })
-    }
 
     pub fn share_input_rep3<P: Pairing, R: Rng + CryptoRng>(
         initial_witness: BTreeMap<String, PublicMarker<GenericFieldElement<P::ScalarField>>>,

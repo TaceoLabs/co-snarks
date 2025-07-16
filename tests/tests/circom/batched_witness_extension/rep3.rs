@@ -8,7 +8,7 @@ use itertools::izip;
 use mpc_core::protocols::rep3;
 use mpc_net::local::LocalNetwork;
 use rand::{thread_rng, Rng as _};
-use tests::test_utils::{self, spawn_pool};
+use tests::test_utils::{self};
 
 #[test]
 fn batched_add_1() -> eyre::Result<()> {
@@ -63,7 +63,7 @@ fn batched_add_1() -> eyre::Result<()> {
 
     let mut threads = vec![];
     for (net0, net1, input, parsed) in izip!(nets0, nets1, batch, compiler) {
-        threads.push(spawn_pool(move || {
+        threads.push(std::thread::spawn(move || {
             let witness_extension = BatchedRep3WitnessExtension::new(
                 &net0,
                 &net1,
@@ -153,7 +153,7 @@ fn batched_add_100() -> eyre::Result<()> {
 
     let mut threads = vec![];
     for (net0, net1, input, parsed) in izip!(nets0, nets1, batch, compiler) {
-        threads.push(spawn_pool(move || {
+        threads.push(std::thread::spawn(move || {
             let witness_extension = BatchedRep3WitnessExtension::new(
                 &net0,
                 &net1,
@@ -254,7 +254,7 @@ fn batched_chacha20_1() -> eyre::Result<()> {
 
     let mut threads = vec![];
     for (net0, net1, input, parsed) in izip!(nets0, nets1, batch, compiler) {
-        threads.push(spawn_pool(move || {
+        threads.push(std::thread::spawn(move || {
             let witness_extension = BatchedRep3WitnessExtension::new(
                 &net0,
                 &net1,
@@ -349,7 +349,7 @@ fn batched_chacha20_30() -> eyre::Result<()> {
 
     let mut threads = vec![];
     for (net0, net1, input, parsed) in izip!(nets0, nets1, batch, compiler) {
-        threads.push(spawn_pool(move || {
+        threads.push(std::thread::spawn(move || {
             let witness_extension = BatchedRep3WitnessExtension::new(
                 &net0,
                 &net1,
