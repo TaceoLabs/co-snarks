@@ -35,7 +35,7 @@ where
         }
     }
 
-    pub fn prove(&self) -> MergeProof<C::G1Affine> {
+    pub fn construct_proof(&self) -> MergeProof<C::G1Affine> {
         let T_current = self.ecc_op_queue.construct_ultra_ops_table_columns();
         let T_prev = self.ecc_op_queue.construct_previous_ultra_ops_table_columns();
         let t_current = self.ecc_op_queue.construct_current_ultra_ops_subtable_columns();
@@ -88,7 +88,7 @@ where
             });
         }
 
-                for i in 0..NUM_WIRES {
+        for i in 0..NUM_WIRES {
             let evaluation = T_prev[i].eval_poly(kappa);
             self.transcript.send_fr_to_verifier(
                 format!("previous_table_evaluation_{i}"),
