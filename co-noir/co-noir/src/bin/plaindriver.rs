@@ -168,6 +168,7 @@ fn convert_witness<F: PrimeField>(mut witness_stack: WitnessStack<F>) -> Vec<F> 
     witness_map_to_witness_vector(witness_map)
 }
 
+// Compiled with --bounded-codegen
 fn plain_code<const N: usize>(
     input_path: &PathBuf,
     actual_witness: &[ark_bn254::Fr],
@@ -188,9 +189,15 @@ fn plain_code<const N: usize>(
 
     // 2 * N + 1 for the input
     // + 1 for the output
-    // + (N - 1) for the left/right cmux (-1 for the first cmux not producing a variable)
-    // + N * 3 * poseidon2.num_sbox() for the trace of the Poseidon2 permutations
-    let witness_size = 2 * N + 1 + 1 + (N - 1) + N * 3 * poseidon2.num_sbox();
+    // + N for the is_zero checks
+    // + 4 * (N - 1) for the left/right cmux (-1 for the first cmux not producing a variable)
+    // + N * (3 * poseidon2.num_sbox() + poseidon2.num_rounds() - 1) for the trace of the Poseidon2 permutations
+    let witness_size = 2 * N
+        + 1
+        + 1
+        + N
+        + 4 * (N - 1)
+        + N * (3 * poseidon2.num_sbox() + poseidon2.num_rounds() - 1);
 
     let mut result_witness = Vec::with_capacity(witness_size);
     result_witness.push(leaf);
@@ -199,22 +206,33 @@ fn plain_code<const N: usize>(
     let output_index = result_witness.len();
     result_witness.push(Default::default()); // Placeholder for the output
 
+    let mut state0 = Default::default();
+    let mut wit = Default::default();
+
     // The actual program
     let mut current = leaf;
     for i in 0..N {
         let path_bit = key_bits[i];
         let path_hash = hash_path[i];
 
-        if i != 0 {
-            // Seems like inputs of multiplications are pushed as new witness elements if they are not already present
-            result_witness.push(path_hash - current);
-        }
+        result_witness.push(Default::default()); // For the is_zero check
 
         let mul = path_bit * (path_hash - current);
         let hash_left = mul + current;
         let hash_right = path_hash - mul;
 
+        if i != 0 {
+            // Seems like inputs of multiplications are pushed as new witness elements if they are not already present
+
+            result_witness.push(state0);
+            result_witness.push(mul); // Could be mul as well
+            result_witness.push(wit + path_hash + state0);
+            result_witness.push(hash_left);
+        }
+
         let (state, trace) = poseidon2.permutation_with_trace(&[hash_left, hash_right]);
+        state0 = state[0];
+        wit = current;
         current = state[0] + hash_left; // Feed forward
 
         result_witness.extend(trace);
@@ -229,7 +247,11 @@ fn plain_code<const N: usize>(
         "Witness size mismatch"
     );
     for (i, (w, a)) in result_witness.iter().zip(actual_witness.iter()).enumerate() {
+        // println!("Witness at index {i}: {w} vs {a}");
         assert_eq!(w, a, "Witness mismatch at index {i}");
+    }
+    for (i, w) in actual_witness.iter().enumerate().skip(result_witness.len()) {
+        println!("Witness at index {i}: {w}");
     }
 }
 
@@ -263,7 +285,7 @@ fn main() -> color_eyre::Result<ExitCode> {
         convert_witness(witness)
     };
 
-    plain_code::<40>(&input_path, &witness, &program_artifact);
+    plain_code::<2>(&input_path, &witness, &program_artifact);
 
     // Build the circuit
     let mut driver = PlainAcvmSolver::new();

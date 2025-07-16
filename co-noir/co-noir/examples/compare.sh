@@ -115,7 +115,7 @@ for f in "${test_cases[@]}"; do
 
   # compile witnesses and bytecode with specified nargo version
   echo "computing witnesses with nargo"
-  bash -c "(cd test_vectors/${f} && nargo execute) $PIPE"
+  bash -c "(cd test_vectors/${f} && nargo execute --bounded-codegen) $PIPE"
 
   # -e to exit on first error
   bash -c "${PLAINDRIVER} --prover-crs test_vectors/bn254_g1.dat --verifier-crs test_vectors/bn254_g2.dat --input test_vectors/${f}/Prover.toml --circuit test_vectors/${f}/target/${f}.json --hasher poseidon2 --out-dir test_vectors/${f} $PIPE" || failed=1

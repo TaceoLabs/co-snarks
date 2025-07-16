@@ -21,6 +21,11 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         (self.params.rounds_f_beginning + self.params.rounds_f_end) * T + self.params.rounds_p
     }
 
+    /// Returns the number of rounds in the Poseidon2 permutation.
+    pub fn num_rounds(&self) -> usize {
+        self.params.rounds_f_beginning + self.params.rounds_p + self.params.rounds_f_end
+    }
+
     fn sbox(input: &mut [F; T]) {
         input.iter_mut().for_each(Self::single_sbox);
     }
@@ -214,6 +219,9 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
     pub fn external_round_with_trace(&self, state: &mut [F; T], r: usize, trace: &mut Vec<F>) {
         self.add_rc_external(state, r);
         Self::sbox_with_trace(state, trace);
+        if r != self.params.rounds_f_beginning + self.params.rounds_f_end - 1 {
+            trace.push(state[0]);
+        }
         Self::matmul_external(state);
     }
 
@@ -228,6 +236,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
     pub fn internal_round_with_trace(&self, state: &mut [F; T], r: usize, trace: &mut Vec<F>) {
         self.add_rc_internal(state, r);
         Self::single_sbox_with_trace(&mut state[0], trace);
+        trace.push(state[1]);
         self.matmul_internal(state);
     }
 
