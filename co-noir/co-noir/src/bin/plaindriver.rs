@@ -223,6 +223,11 @@ fn plain_code<const N: usize>(
     result_witness[output_index] = current;
 
     assert_eq!(result_witness.len(), witness_size);
+    assert_eq!(
+        result_witness.len(),
+        actual_witness.len(),
+        "Witness size mismatch"
+    );
     for (i, (w, a)) in result_witness.iter().zip(actual_witness.iter()).enumerate() {
         assert_eq!(w, a, "Witness mismatch at index {i}");
     }
