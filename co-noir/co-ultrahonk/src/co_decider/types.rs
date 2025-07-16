@@ -1,5 +1,4 @@
 use crate::{
-    mpc::NoirUltraHonkProver,
     mpc_prover_flavour::MPCProverFlavour,
     types::{AllEntities, Polynomials},
     types_batch::AllEntitiesBatch,
@@ -12,6 +11,7 @@ use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::{
     polynomials::polynomial_flavours::PrecomputedEntitiesFlavour, prover_flavour::Flavour,
 };
+use common::mpc::NoirUltraHonkProver;
 use itertools::izip;
 use std::iter;
 

@@ -3,9 +3,10 @@ use crate::{
     co_decider::{
         relations::fold_accumulator, types::RelationParameters, univariates::SharedUnivariate,
     },
-    mpc::NoirUltraHonkProver,
     mpc_prover_flavour::MPCProverFlavour,
 };
+use common::mpc::NoirUltraHonkProver;
+
 use ark_ec::pairing::Pairing;
 use ark_ff::Zero;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;

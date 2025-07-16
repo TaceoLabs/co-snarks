@@ -1,4 +1,4 @@
-use crate::prelude::TranscriptHasher;
+use crate::transcript::TranscriptHasher;
 use ark_ff::PrimeField;
 use co_builder::prelude::Serialize;
 use sha3::{Digest, Keccak256};

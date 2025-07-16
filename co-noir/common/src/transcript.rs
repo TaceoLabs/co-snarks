@@ -1,6 +1,6 @@
 use crate::{
+    HonkProof,
     sponge_hasher::{FieldHash, FieldSponge},
-    types::HonkProof,
 };
 use ark_ec::AffineRepr;
 use ark_ff::{One, PrimeField, Zero};
@@ -178,7 +178,7 @@ where
         Ok(elements)
     }
 
-    pub(super) fn receive_fr_from_prover<P: HonkCurve<F>>(
+    pub fn receive_fr_from_prover<P: HonkCurve<F>>(
         &mut self,
         label: String,
     ) -> HonkProofResult<P::ScalarField> {
@@ -187,7 +187,7 @@ where
         Ok(P::convert_scalarfield_back(&elements))
     }
 
-    pub(super) fn receive_point_from_prover<P: HonkCurve<F>>(
+    pub fn receive_point_from_prover<P: HonkCurve<F>>(
         &mut self,
         label: String,
     ) -> HonkProofResult<P::G1Affine> {
@@ -210,7 +210,7 @@ where
         Ok(res)
     }
 
-    pub(super) fn receive_fr_vec_from_prover<P: HonkCurve<F>>(
+    pub fn receive_fr_vec_from_prover<P: HonkCurve<F>>(
         &mut self,
         label: String,
         n: usize,
@@ -225,7 +225,7 @@ where
         Ok(elements)
     }
 
-    pub(super) fn receive_fr_array_from_prover<P: HonkCurve<F>, const SIZE: usize>(
+    pub fn receive_fr_array_from_prover<P: HonkCurve<F>, const SIZE: usize>(
         &mut self,
         label: String,
     ) -> HonkProofResult<[P::ScalarField; SIZE]> {

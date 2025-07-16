@@ -1,13 +1,10 @@
 use super::{
     super::{prover::Decider, sumcheck::SumcheckOutput},
-    ShpleminiOpeningClaim,
     types::{PolyF, PolyG},
 };
 use crate::plain_prover_flavour::PlainProverFlavour;
 use crate::{
-    NUM_INTERLEAVING_CLAIMS, NUM_SMALL_IPA_EVALUATIONS, Utils,
-    decider::{shplemini::OpeningPair, verifier::DeciderVerifier},
-    transcript::{Transcript, TranscriptFieldType, TranscriptHasher},
+    NUM_INTERLEAVING_CLAIMS, NUM_SMALL_IPA_EVALUATIONS, Utils, decider::verifier::DeciderVerifier,
     types::AllEntities,
 };
 use ark_ec::AffineRepr;
@@ -18,6 +15,10 @@ use co_builder::{
     HonkProofError, HonkProofResult,
     prelude::{HonkCurve, Polynomial, ProverCrs},
 };
+use common::shplemini::OpeningPair;
+use common::shplemini::ShpleminiOpeningClaim;
+use common::transcript::TranscriptFieldType;
+use common::transcript::{Transcript, TranscriptHasher};
 use itertools::izip;
 
 impl<

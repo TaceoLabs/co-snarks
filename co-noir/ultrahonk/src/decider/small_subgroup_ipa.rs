@@ -1,9 +1,9 @@
 use crate::CONST_PROOF_SIZE_LOG_N;
 use crate::Utils;
 use crate::plain_prover_flavour::UnivariateTrait;
-use crate::prelude::TranscriptHasher;
+use common::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
+
 use crate::prelude::Univariate;
-use crate::{prelude::Transcript, transcript::TranscriptFieldType};
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use ark_ff::Zero;

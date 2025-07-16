@@ -1,7 +1,6 @@
 use super::{ProverUnivariatesBatch, Relation, fold_accumulator};
 use crate::{
     co_decider::{types::RelationParameters, univariates::SharedUnivariate},
-    mpc::NoirUltraHonkProver,
     mpc_prover_flavour::MPCProverFlavour,
 };
 use ark_ec::pairing::Pairing;
@@ -13,6 +12,7 @@ use co_builder::{
     HonkProofResult, TranscriptFieldType,
     polynomials::polynomial_flavours::PrecomputedEntitiesFlavour,
 };
+use common::mpc::NoirUltraHonkProver;
 use itertools::Itertools as _;
 use mpc_core::{MpcState as _, gadgets::poseidon2::POSEIDON2_BN254_T4_PARAMS};
 use mpc_net::Network;

@@ -1,24 +1,21 @@
 use super::{
-    shplemini::ShpleminiOpeningClaim,
     sumcheck::{SumcheckOutput, zk_data::ZKSumcheckData},
     types::ProverMemory,
 };
 
 use crate::{
-    Utils,
-    decider::small_subgroup_ipa::SmallSubgroupIPAProver,
+    Utils, decider::small_subgroup_ipa::SmallSubgroupIPAProver,
     plain_prover_flavour::PlainProverFlavour,
-    transcript::{Transcript, TranscriptFieldType, TranscriptHasher},
-    types::HonkProof,
 };
 use co_builder::{
     HonkProofResult,
     prelude::{HonkCurve, ProverCrs, ZeroKnowledge},
 };
+use common::HonkProof;
+use common::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
 use std::marker::PhantomData;
-
 pub(crate) struct Decider<
     P: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
@@ -43,24 +40,6 @@ impl<
             has_zk,
             phantom_data: PhantomData,
         }
-    }
-
-    fn compute_opening_proof(
-        opening_claim: ShpleminiOpeningClaim<P::ScalarField>,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
-        crs: &ProverCrs<P>,
-    ) -> HonkProofResult<()> {
-        let mut quotient = opening_claim.polynomial;
-        let pair = opening_claim.opening_pair;
-        quotient[0] -= pair.evaluation;
-        // Computes the coefficients for the quotient polynomial q(X) = (p(X) - v) / (X - r) through an FFT
-        quotient.factor_roots(&pair.challenge);
-        let quotient_commitment = Utils::commit(&quotient.coefficients, crs)?;
-        // AZTEC TODO(#479): compute_opening_proof
-        // future we might need to adjust this to use the incoming alternative to work queue (i.e. variation of
-        // pthreads) or even the work queue itself
-        transcript.send_point_to_verifier::<P>("KZG:W".to_string(), quotient_commitment.into());
-        Ok(())
     }
 
     /**
@@ -111,7 +90,7 @@ impl<
         if self.has_zk == ZeroKnowledge::No {
             let prover_opening_claim =
                 self.shplemini_prove(transcript, circuit_size, crs, sumcheck_output, None)?;
-            Self::compute_opening_proof(prover_opening_claim, transcript, crs)
+            common::compute_opening_proof(prover_opening_claim, transcript, crs)
         } else {
             let small_subgroup_ipa_prover = SmallSubgroupIPAProver::<_>::new::<H, _>(
                 zk_sumcheck_data.expect("We have ZK"),
@@ -131,7 +110,7 @@ impl<
                 sumcheck_output,
                 Some(witness_polynomials),
             )?;
-            Self::compute_opening_proof(prover_opening_claim, transcript, crs)
+            common::compute_opening_proof(prover_opening_claim, transcript, crs)
         }
     }
 

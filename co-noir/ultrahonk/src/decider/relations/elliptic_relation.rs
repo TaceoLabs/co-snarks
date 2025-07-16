@@ -2,13 +2,13 @@ use crate::decider::types::{ClaimedEvaluations, ProverUnivariatesSized, Relation
 use crate::decider::univariate::Univariate;
 use crate::plain_prover_flavour::PlainProverFlavour;
 use crate::plain_prover_flavour::UnivariateTrait;
-use crate::transcript::TranscriptFieldType;
 use ark_ff::AdditiveGroup;
 use ark_ff::{Field, PrimeField, Zero};
 use co_builder::polynomials::polynomial_flavours::{
     PrecomputedEntitiesFlavour, ShiftedWitnessEntitiesFlavour, WitnessEntitiesFlavour,
 };
 use co_builder::prelude::HonkCurve;
+use common::transcript::TranscriptFieldType;
 #[derive(Clone, Debug, Default)]
 pub(crate) struct EllipticRelationAcc<F: PrimeField> {
     pub(crate) r0: Univariate<F, 6>,

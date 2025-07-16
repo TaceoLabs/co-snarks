@@ -2,8 +2,8 @@ use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use co_builder::prelude::Polynomial;
 
-use crate::{mpc::NoirUltraHonkProver, mpc_prover_flavour::MPCProverFlavour};
-
+use crate::mpc_prover_flavour::MPCProverFlavour;
+use common::mpc::NoirUltraHonkProver;
 pub(crate) struct ProverMemory<T: NoirUltraHonkProver<P>, P: Pairing, L: MPCProverFlavour> {
     pub(crate) w_4: Polynomial<T::ArithmeticShare>, // column 3
     pub(crate) z_perm: Polynomial<T::ArithmeticShare>, // column 4

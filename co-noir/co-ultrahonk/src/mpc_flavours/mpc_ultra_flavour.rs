@@ -24,7 +24,6 @@ use crate::{
         },
         univariates::SharedUnivariate,
     },
-    mpc::NoirUltraHonkProver,
     mpc_prover_flavour::MPCProverFlavour,
 };
 use ark_ec::pairing::Pairing;
@@ -33,6 +32,7 @@ use co_builder::TranscriptFieldType;
 use co_builder::flavours::ultra_flavour::UltraFlavour;
 use co_builder::prelude::HonkCurve;
 use co_builder::prover_flavour::ProverFlavour;
+use common::mpc::NoirUltraHonkProver;
 use mpc_net::Network;
 use std::array;
 use ultrahonk::prelude::Univariate;
@@ -364,10 +364,10 @@ impl MPCProverFlavour for UltraFlavour {
     }
     fn get_alpha_challenges<
         F: ark_ff::PrimeField,
-        H: ultrahonk::prelude::TranscriptHasher<F>,
+        H: common::transcript::TranscriptHasher<F>,
         P: co_builder::prelude::HonkCurve<F>,
     >(
-        transcript: &mut ultrahonk::prelude::Transcript<F, H>,
+        transcript: &mut common::transcript::Transcript<F, H>,
         alphas: &mut Self::Alphas<P::ScalarField>,
     ) {
         let args: [String; Self::NUM_ALPHAS] = array::from_fn(|i| format!("alpha_{i}"));

@@ -34,8 +34,8 @@ pub use co_ultrahonk::{
     Rep3CoBuilder, ShamirCoBuilder,
     prelude::{
         AcirFormat, CrsParser, HonkRecursion, PlainProvingKey, Polynomial, Polynomials,
-        Poseidon2Sponge, Rep3CoUltraHonk, Rep3ProvingKey, ShamirCoUltraHonk, ShamirProvingKey,
-        UltraCircuitBuilder, UltraHonk, VerifyingKey, VerifyingKeyBarretenberg,
+        Rep3CoUltraHonk, Rep3ProvingKey, ShamirCoUltraHonk, ShamirProvingKey, UltraCircuitBuilder,
+        UltraHonk, VerifyingKey, VerifyingKeyBarretenberg,
     },
 };
 pub use sha3::Keccak256;

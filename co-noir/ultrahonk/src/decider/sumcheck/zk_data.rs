@@ -1,9 +1,8 @@
 use crate::Utils;
 use crate::plain_prover_flavour::UnivariateTrait;
-use crate::prelude::Transcript;
-use crate::prelude::TranscriptHasher;
+use common::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
+
 use crate::prelude::Univariate;
-use crate::transcript::TranscriptFieldType;
 use ark_ec::pairing::Pairing;
 use ark_ff::Field;
 use ark_ff::One;

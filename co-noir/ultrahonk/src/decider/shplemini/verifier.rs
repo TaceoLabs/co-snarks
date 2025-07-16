@@ -1,7 +1,4 @@
-use super::{
-    ShpleminiVerifierOpeningClaim,
-    types::{PolyF, PolyG, PolyGShift},
-};
+use super::types::{PolyF, PolyG, PolyGShift};
 use crate::plain_prover_flavour::PlainProverFlavour;
 use crate::{
     CONST_PROOF_SIZE_LOG_N, NUM_INTERLEAVING_CLAIMS, NUM_LIBRA_COMMITMENTS,
@@ -10,8 +7,6 @@ use crate::{
         types::{ClaimedEvaluations, VerifierCommitments},
         verifier::DeciderVerifier,
     },
-    transcript::TranscriptFieldType,
-    transcript::{Transcript, TranscriptHasher},
     verifier::HonkVerifyResult,
 };
 use ark_ec::AffineRepr;
@@ -19,6 +14,9 @@ use ark_ff::{Field, One, Zero};
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::prelude::HonkCurve;
 use co_builder::prelude::ZeroKnowledge;
+use common::shplemini::ShpleminiVerifierOpeningClaim;
+use common::transcript::TranscriptFieldType;
+use common::transcript::{Transcript, TranscriptHasher};
 
 impl<
     P: HonkCurve<TranscriptFieldType>,

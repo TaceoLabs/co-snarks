@@ -1,7 +1,6 @@
 use super::{MIN_RAYON_ITER, ProverUnivariatesBatch, Relation};
 use crate::{
     co_decider::{types::RelationParameters, univariates::SharedUnivariate},
-    mpc::NoirUltraHonkProver,
     mpc_prover_flavour::MPCProverFlavour,
 };
 use ark_ec::pairing::Pairing;
@@ -12,6 +11,7 @@ use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::{TranscriptFieldType, prelude::HonkCurve};
+use common::mpc::NoirUltraHonkProver;
 use itertools::izip;
 use mpc_core::MpcState;
 use mpc_net::Network;

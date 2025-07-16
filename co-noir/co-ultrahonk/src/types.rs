@@ -1,4 +1,3 @@
-use crate::mpc::NoirUltraHonkProver;
 use crate::mpc_prover_flavour::MPCProverFlavour;
 use ark_ec::pairing::Pairing;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
@@ -8,6 +7,7 @@ use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::prelude::Polynomial;
 use co_builder::prover_flavour::Flavour;
 use co_builder::prover_flavour::ProverFlavour;
+use common::mpc::NoirUltraHonkProver;
 use serde::de::{SeqAccess, Visitor};
 use serde::ser::SerializeSeq;
 use serde::{Deserialize, Serialize};

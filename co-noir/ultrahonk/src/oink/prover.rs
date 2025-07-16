@@ -19,11 +19,11 @@
 
 use super::types::ProverMemory;
 use crate::{
-    Utils,
-    decider::relations::databus_lookup_relation::BusData,
+    Utils, decider::relations::databus_lookup_relation::BusData,
     plain_prover_flavour::PlainProverFlavour,
-    transcript::{Transcript, TranscriptFieldType, TranscriptHasher},
 };
+use common::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
+
 use ark_ff::{One, Zero};
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;

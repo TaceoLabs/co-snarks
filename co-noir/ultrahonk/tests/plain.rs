@@ -4,13 +4,12 @@ use co_builder::flavours::ultra_flavour::UltraFlavour;
 use co_builder::prelude::CrsParser;
 use co_builder::prelude::HonkRecursion;
 use co_builder::prelude::ZeroKnowledge;
+use common::HonkProof;
+use common::transcript::{Poseidon2Sponge, TranscriptHasher};
 use sha3::Keccak256;
 use ultrahonk::{
     Utils,
-    prelude::{
-        HonkProof, PlainAcvmSolver, Poseidon2Sponge, TranscriptHasher, UltraCircuitBuilder,
-        UltraHonk,
-    },
+    prelude::{PlainAcvmSolver, UltraCircuitBuilder, UltraHonk},
 };
 
 fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(

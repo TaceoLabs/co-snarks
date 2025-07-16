@@ -5,11 +5,15 @@ use co_acvm::{Rep3AcvmType, solver::Rep3CoSolver};
 use co_builder::{flavours::ultra_flavour::UltraFlavour, prelude::Serialize as FieldSerialize};
 use co_noir::PubShared;
 use co_ultrahonk::prelude::{
-    CrsParser, HonkProof, Poseidon2Sponge, ProvingKey, Rep3CoUltraHonk, Rep3UltraHonkDriver,
-    ShamirCoUltraHonk, ShamirUltraHonkDriver, UltraHonk, Utils, VerifyingKey,
+    CrsParser, ProvingKey, Rep3CoUltraHonk, ShamirCoUltraHonk, UltraHonk, Utils, VerifyingKey,
     VerifyingKeyBarretenberg, ZeroKnowledge,
 };
 use color_eyre::eyre::{self, Context, ContextCompat};
+use common::{
+    HonkProof,
+    mpc::{rep3::Rep3UltraHonkDriver, shamir::ShamirUltraHonkDriver},
+    transcript::Poseidon2Sponge,
+};
 use figment::{
     Figment,
     providers::{Env, Format, Serialized, Toml},

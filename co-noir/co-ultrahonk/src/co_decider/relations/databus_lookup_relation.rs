@@ -3,7 +3,8 @@ use crate::co_decider::relations::fold_accumulator;
 use crate::co_decider::types::ProverUnivariatesBatch;
 use crate::co_decider::types::RelationParameters;
 use crate::co_decider::univariates::SharedUnivariate;
-use crate::mpc::NoirUltraHonkProver;
+use common::mpc::NoirUltraHonkProver;
+
 use crate::mpc_prover_flavour::MPCProverFlavour;
 use ark_ec::pairing::Pairing;
 use co_builder::HonkProofResult;

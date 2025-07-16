@@ -10,8 +10,8 @@ use std::{
 
 use crate::mpc::NoirUltraHonkProver;
 
-pub(crate) struct SharedPolynomial<T: NoirUltraHonkProver<P>, P: Pairing> {
-    pub(crate) coefficients: Vec<T::ArithmeticShare>,
+pub struct SharedPolynomial<T: NoirUltraHonkProver<P>, P: Pairing> {
+    pub coefficients: Vec<T::ArithmeticShare>,
 }
 
 impl<T: NoirUltraHonkProver<P>, P: Pairing> SharedPolynomial<T, P> {
@@ -21,7 +21,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> SharedPolynomial<T, P> {
         }
     }
 
-    pub(crate) fn promote_poly(
+    pub fn promote_poly(
         id: <T::State as MpcState>::PartyID,
         poly: Polynomial<P::ScalarField>,
     ) -> Self {
@@ -29,21 +29,21 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> SharedPolynomial<T, P> {
         Self { coefficients }
     }
 
-    pub(crate) fn add_assign_slice(&mut self, other: &[T::ArithmeticShare]) {
+    pub fn add_assign_slice(&mut self, other: &[T::ArithmeticShare]) {
         // Barrettenberg uses multithreading here
         for (des, src) in self.coefficients.iter_mut().zip(other.iter()) {
             *des = T::add(*des, *src);
         }
     }
 
-    pub(crate) fn sub_assign_slice(&mut self, other: &[T::ArithmeticShare]) {
+    pub fn sub_assign_slice(&mut self, other: &[T::ArithmeticShare]) {
         // Barrettenberg uses multithreading here
         for (des, src) in self.coefficients.iter_mut().zip(other.iter()) {
             *des = T::sub(*des, *src);
         }
     }
 
-    pub(crate) fn add_scaled_slice(&mut self, src: &[T::ArithmeticShare], scalar: &P::ScalarField) {
+    pub fn add_scaled_slice(&mut self, src: &[T::ArithmeticShare], scalar: &P::ScalarField) {
         // Barrettenberg uses multithreading here
         for (des, src) in self.coefficients.iter_mut().zip(src.iter()) {
             let tmp = T::mul_with_public(*scalar, *src);
@@ -51,11 +51,11 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> SharedPolynomial<T, P> {
         }
     }
 
-    pub(crate) fn add_scaled(&mut self, src: &SharedPolynomial<T, P>, scalar: &P::ScalarField) {
+    pub fn add_scaled(&mut self, src: &SharedPolynomial<T, P>, scalar: &P::ScalarField) {
         self.add_scaled_slice(&src.coefficients, scalar);
     }
 
-    pub(crate) fn add_scaled_slice_public(
+    pub fn add_scaled_slice_public(
         &mut self,
         id: <T::State as MpcState>::PartyID,
         src: &[P::ScalarField],
@@ -68,12 +68,16 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> SharedPolynomial<T, P> {
         }
     }
 
-    pub(crate) fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.coefficients.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.coefficients.is_empty()
+    }
+
     // Can only shift by 1
-    pub(crate) fn shifted(&self) -> &[T::ArithmeticShare] {
+    pub fn shifted(&self) -> &[T::ArithmeticShare] {
         assert!(!self.coefficients.is_empty());
         &self.coefficients[1..]
     }
@@ -81,7 +85,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> SharedPolynomial<T, P> {
     /**
      * @brief Divides p(X) by (X-r) in-place.
      */
-    pub(crate) fn factor_roots(&mut self, root: &P::ScalarField) {
+    pub fn factor_roots(&mut self, root: &P::ScalarField) {
         if root.is_zero() {
             // if one of the roots is 0 after having divided by all other roots,
             // then p(X) = a₁⋅X + ⋯ + aₙ₋₁⋅Xⁿ⁻¹
@@ -136,7 +140,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> SharedPolynomial<T, P> {
         Ok(Self { coefficients })
     }
 
-    pub(crate) fn mul_assign(&mut self, rhs: P::ScalarField) {
+    pub fn mul_assign(&mut self, rhs: P::ScalarField) {
         for l in self.coefficients.iter_mut() {
             *l = T::mul_with_public(rhs, *l);
         }

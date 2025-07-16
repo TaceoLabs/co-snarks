@@ -2,7 +2,7 @@ use criterion::*;
 
 use ark_bn254::Bn254 as B;
 use ark_ff::Zero as _;
-use co_ultrahonk::prelude::{NoirUltraHonkProver as P, PlainUltraHonkDriver as D};
+use common::mpc::{NoirUltraHonkProver as P, plain::PlainUltraHonkDriver as D};
 use itertools::izip;
 use rand::{RngCore, thread_rng};
 use rayon::prelude::*;

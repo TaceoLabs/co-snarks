@@ -1,18 +1,15 @@
-use super::{shplemini::ShpleminiVerifierOpeningClaim, types::VerifierMemory};
+use super::types::VerifierMemory;
 use crate::CONST_PROOF_SIZE_LOG_N;
 use crate::NUM_LIBRA_COMMITMENTS;
-use crate::{
-    Utils,
-    plain_prover_flavour::PlainProverFlavour,
-    transcript::{Transcript, TranscriptHasher},
-    verifier::HonkVerifyResult,
-};
+use crate::{Utils, plain_prover_flavour::PlainProverFlavour, verifier::HonkVerifyResult};
 use ark_ec::AffineRepr;
 use ark_ff::{One, Zero};
 use co_builder::{
     TranscriptFieldType,
     prelude::{HonkCurve, ZeroKnowledge},
 };
+use common::shplemini::ShpleminiVerifierOpeningClaim;
+use common::transcript::{Transcript, TranscriptHasher};
 use std::marker::PhantomData;
 
 pub(crate) struct DeciderVerifier<

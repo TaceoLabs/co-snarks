@@ -3,9 +3,7 @@ use crate::{
     co_decider::{prover::CoDecider, types::ProverMemory},
     co_oink::prover::CoOink,
     key::proving_key::ProvingKey,
-    mpc::NoirUltraHonkProver,
     mpc_prover_flavour::MPCProverFlavour,
-    prelude::{PlainUltraHonkDriver, Rep3UltraHonkDriver, ShamirUltraHonkDriver},
 };
 use ark_ec::pairing::Pairing;
 use co_builder::{
@@ -14,13 +12,19 @@ use co_builder::{
     prover_flavour::Flavour,
 };
 use co_builder::{TranscriptFieldType, flavours::ultra_flavour::UltraFlavour};
+use common::HonkProof;
+use common::mpc::{
+    NoirUltraHonkProver, plain::PlainUltraHonkDriver, rep3::Rep3UltraHonkDriver,
+    shamir::ShamirUltraHonkDriver,
+};
+use common::transcript::{Transcript, TranscriptHasher};
 use mpc_core::protocols::{
     rep3::{Rep3State, conversion::A2BType},
     shamir::{ShamirPreprocessing, ShamirState},
 };
 use mpc_net::Network;
 use std::marker::PhantomData;
-use ultrahonk::prelude::{HonkProof, Transcript, TranscriptHasher, ZeroKnowledge};
+use ultrahonk::prelude::ZeroKnowledge;
 
 pub type Rep3CoUltraHonk<P, H, L> = CoUltraHonk<Rep3UltraHonkDriver, P, H, L>;
 pub type ShamirCoUltraHonk<P, H, L> = CoUltraHonk<ShamirUltraHonkDriver, P, H, L>;

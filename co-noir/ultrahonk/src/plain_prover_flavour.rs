@@ -1,9 +1,9 @@
+use crate::decider::types::RelationParameters;
 use crate::decider::types::{ClaimedEvaluations, ProverUnivariates};
-use crate::prelude::{Transcript, TranscriptHasher};
-use crate::{decider::types::RelationParameters, transcript::TranscriptFieldType};
 use ark_ff::PrimeField;
 use co_builder::HonkProofResult;
 use co_builder::{prelude::HonkCurve, prover_flavour::ProverFlavour};
+use common::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
 use rand::{CryptoRng, Rng};
 use std::fmt::Debug;
 

@@ -14,8 +14,9 @@ use mpc_net::Network;
 use ultrahonk::prelude::Univariate;
 
 use crate::co_decider::univariates::SharedUnivariate;
-use crate::mpc::NoirUltraHonkProver;
+
 use crate::mpc_prover_flavour::MPCProverFlavour;
+use common::mpc::NoirUltraHonkProver;
 
 #[derive(Clone, Debug)]
 pub(crate) struct EccOpQueueRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing> {
