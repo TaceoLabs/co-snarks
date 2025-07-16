@@ -6,7 +6,6 @@ use itertools::izip;
 use mpc_net::local::LocalNetwork;
 use noirc_artifacts::program::ProgramArtifact;
 use std::path::PathBuf;
-use tests::test_utils::spawn_pool;
 
 use super::add_rep3_acvm_test;
 

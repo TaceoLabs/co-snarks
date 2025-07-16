@@ -108,7 +108,7 @@ fn decompose<F: PrimeField, N: Network>(
     let mut result2 = None;
 
     // TODO: This step could be optimized (I: Pack the a2b's, II: only reconstruct bitsize bits)
-    rayon::join(
+    mpc_net::join(
         || {
             for (i, inp) in priv_inputs.iter().take(priv_inputs.len() / 2).enumerate() {
                 let binary = rep3::conversion::a2b_selector(inp.to_owned(), net0, state0);
@@ -344,7 +344,7 @@ where
         .map(|(a, b)| Rep3RingShare::new(a, b))
         .collect();
 
-    let (opened, bits_shuffled) = rayon::join(
+    let (opened, bits_shuffled) = mpc_net::join(
         || shuffle_reveal::<PermRing, _>(&perm, rho, net0, state0),
         || shuffle(&perm, priv_bits, pub_bits, net1, state1),
     );
@@ -374,7 +374,7 @@ fn apply_inv_field<F: PrimeField, N: Network>(
         .map(|(a, b)| Rep3RingShare::new(a, b))
         .collect();
 
-    let (opened, bits_shuffled) = rayon::join(
+    let (opened, bits_shuffled) = mpc_net::join(
         || shuffle_reveal(&perm, rho, net0, state0),
         || shuffle_field(&perm, bits, net1, state1),
     );
@@ -714,12 +714,8 @@ where
             net.send_and_recv_many(PartyID::ID2, &shuffled, PartyID::ID2)?
         }
         PartyID::ID2 => {
-            let (delta, gamma) = rayon::join(
-                || net.recv_many(PartyID::ID0),
-                || net.recv_many(PartyID::ID1),
-            );
-            let delta: Vec<RingElement<T>> = delta?;
-            let gamma: Vec<RingElement<T>> = gamma?;
+            let delta = net.recv_many::<RingElement<T>>(PartyID::ID0)?;
+            let gamma = net.recv_many::<RingElement<T>>(PartyID::ID1)?;
             // shuffle
             let mut shuffled = Vec::with_capacity(len);
             for p in pi {
@@ -727,7 +723,7 @@ where
                 let index = pi[pi_2].a.0 as usize;
                 shuffled.push(gamma[index] + delta[index]);
             }
-            let (send0, send1) = rayon::join(
+            let (send0, send1) = mpc_net::join(
                 || net.send_many(PartyID::ID0, &shuffled),
                 || net.send_many(PartyID::ID1, &shuffled),
             );

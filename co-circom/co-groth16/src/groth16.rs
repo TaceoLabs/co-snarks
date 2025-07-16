@@ -288,7 +288,7 @@ impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
         let g1_b = s_g1;
 
         let network_round = tracing::debug_span!("network round after calc coeff").entered();
-        let (g_a_opened, r_g1_b) = rayon::join(
+        let (g_a_opened, r_g1_b) = mpc_net::join(
             || T::open_half_point(g_a, net0, state0),
             || T::scalar_mul(&g1_b, r, net1, state1),
         );
@@ -308,7 +308,7 @@ impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
         g_c += h_acc;
 
         let g2_b = s_g2;
-        let (g_c_opened, g2_b_opened) = rayon::join(
+        let (g_c_opened, g2_b_opened) = mpc_net::join(
             || T::open_half_point(g_c, net0, state0),
             || T::open_half_point(g2_b, net1, state1),
         );

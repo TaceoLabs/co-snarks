@@ -8,7 +8,6 @@ use rand::thread_rng;
 use std::fs;
 use std::fs::File;
 use std::str::FromStr;
-use tests::test_utils::spawn_pool;
 
 use circom_mpc_compiler::CompilerConfig;
 use circom_mpc_vm::{
@@ -96,7 +95,7 @@ macro_rules! run_test {
         let mut threads = vec![];
 
         for (net0, net1, input) in izip!(nets0, nets1, inputs) {
-            threads.push(spawn_pool(move || {
+            threads.push(std::thread::spawn(move || {
                 let mut compiler_config = CompilerConfig::default();
                 compiler_config.simplification =
                     circom_mpc_compiler::SimplificationLevel::O2(usize::MAX);

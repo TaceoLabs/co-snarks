@@ -474,7 +474,7 @@ impl<F: PrimeField, N: Network> VmCircomWitnessExtension<F>
                 Ok(conversion::b2a_selector(&binary, self.net0, &mut self.state0)?.into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
-                let (a, b) = rayon::join(
+                let (a, b) = mpc_net::join(
                     || conversion::a2b_selector(a, self.net0, &mut self.state0),
                     || conversion::a2b_selector(b, self.net1, &mut self.state1),
                 );
@@ -496,7 +496,7 @@ impl<F: PrimeField, N: Network> VmCircomWitnessExtension<F>
                 Ok(result.into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
-                let (a, b) = rayon::join(
+                let (a, b) = mpc_net::join(
                     || conversion::a2b_selector(a, self.net0, &mut self.state0),
                     || conversion::a2b_selector(b, self.net1, &mut self.state1),
                 );
@@ -517,7 +517,7 @@ impl<F: PrimeField, N: Network> VmCircomWitnessExtension<F>
                 Ok(result.into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
-                let (a, b) = rayon::join(
+                let (a, b) = mpc_net::join(
                     || conversion::a2b_selector(a, self.net0, &mut self.state0),
                     || conversion::a2b_selector(b, self.net1, &mut self.state1),
                 );

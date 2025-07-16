@@ -8,7 +8,7 @@ use mpc_core::protocols::rep3::{self, conversion::A2BType};
 use mpc_net::local::LocalNetwork;
 use rand::thread_rng;
 use std::{fs::File, io::BufReader};
-use tests::test_utils::{self, spawn_pool};
+use tests::test_utils::{self};
 
 fn install_tracing() {
     use tracing_subscriber::prelude::*;
@@ -98,7 +98,7 @@ fn main() -> eyre::Result<()> {
     tracing::info!("starting threads");
     let mut threads = vec![];
     for (net0, net1, input, parsed) in izip!(nets0, nets1, batch, compiler) {
-        threads.push(spawn_pool(move || {
+        threads.push(std::thread::spawn(move || {
             let mut vm_config = VMConfig::new();
             vm_config.a2b_type = A2BType::Direct;
             let vm = BatchedRep3WitnessExtension::new(&net0, &net1, &parsed, vm_config, batch_size)

@@ -78,7 +78,7 @@ where
     let k2 = k >> 1;
 
     // create two ohv's with half the bitsize in parallel
-    let (a, b) = rayon::join(
+    let (a, b) = mpc_net::join(
         || gadgets::ohv::rand_ohv::<T, _>(k2, net0, state0),
         || gadgets::ohv::rand_ohv::<T, _>(k2, net1, state1),
     );
@@ -155,7 +155,7 @@ where
     let k2 = k >> 1;
 
     // create two ohv's with half the bitsize in parallel
-    let (a, b) = rayon::join(
+    let (a, b) = mpc_net::join(
         || gadgets::ohv::rand_ohv::<T, _>(k2, net0, state0),
         || gadgets::ohv::rand_ohv::<T, _>(k2, net1, state1),
     );

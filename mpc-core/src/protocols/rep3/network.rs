@@ -60,14 +60,10 @@ pub trait Rep3NetworkExt: Network {
         let id = PartyID::try_from(self.id())?;
         let next_id = id.next();
         let prev_id = id.prev();
-
-        debug_assert!(rayon::current_num_threads() >= 4);
-
-        let (prev_res, next_res) = rayon::join(
+        let (prev_res, next_res) = mpc_net::join(
             || self.send_and_recv_many(prev_id, data, prev_id),
             || self.send_and_recv_many(next_id, data, next_id),
         );
-
         Ok((prev_res?, next_res?))
     }
 

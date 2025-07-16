@@ -160,7 +160,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round2<'a, P
         // TODO check and explain numbers
         let mut state0 = state.fork(zkey.domain_size * 6 + 2)?;
         let mut state1 = state.fork(zkey.domain_size * 7 + 2)?;
-        let (num, den) = rayon::join(
+        let (num, den) = mpc_net::join(
             || T::array_prod_mul(false, &n1, &n2, &n3, &nets[0], &mut state0),
             || T::array_prod_mul(true, &d1, &d2, &d3, &nets[1], &mut state1),
         );

@@ -9,7 +9,6 @@ mod field_share {
     use mpc_net::local::LocalNetwork;
     use rand::thread_rng;
     use std::{str::FromStr, sync::mpsc};
-    use tests::test_utils::spawn_pool;
 
     fn shamir_add_inner(num_parties: usize, threshold: usize) {
         let mut rng = thread_rng();
@@ -28,7 +27,7 @@ mod field_share {
         }
 
         for (tx, x, y) in izip!(tx, x_shares, y_shares) {
-            spawn_pool(move || tx.send(arithmetic::add(x, y)));
+            std::thread::spawn(move || tx.send(arithmetic::add(x, y)));
         }
 
         let mut results = Vec::with_capacity(num_parties);
@@ -66,7 +65,7 @@ mod field_share {
         }
 
         for (tx, x, y) in izip!(tx, x_shares, y_shares) {
-            spawn_pool(move || tx.send(arithmetic::sub(x, y)));
+            std::thread::spawn(move || tx.send(arithmetic::sub(x, y)));
         }
 
         let mut results = Vec::with_capacity(num_parties);
@@ -105,7 +104,7 @@ mod field_share {
         }
 
         for (net, tx, x, y) in izip!(nets, tx, x_shares, y_shares) {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = ShamirPreprocessing::new(num_parties, threshold, 2, &net)
                     .unwrap()
                     .into();
@@ -203,7 +202,7 @@ mod field_share {
         }
 
         for (net, tx, x, y) in izip!(nets, tx, x_shares, y_shares) {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = ShamirPreprocessing::new(num_parties, threshold, x.len(), &net)
                     .unwrap()
                     .into();
@@ -257,7 +256,7 @@ mod field_share {
         }
 
         for (net, tx, x, y) in izip!(nets, tx, x_shares, y_shares) {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = ShamirPreprocessing::new(num_parties, threshold, x.len() * 2, &net)
                     .unwrap()
                     .into();
@@ -300,7 +299,7 @@ mod field_share {
         }
 
         for (tx, x) in izip!(tx, x_shares) {
-            spawn_pool(move || tx.send(arithmetic::neg(x)));
+            std::thread::spawn(move || tx.send(arithmetic::neg(x)));
         }
 
         let mut results = Vec::with_capacity(num_parties);
@@ -340,7 +339,7 @@ mod field_share {
         }
 
         for (net, tx, x) in izip!(nets, tx, x_shares) {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = ShamirPreprocessing::new(num_parties, threshold, 1, &net)
                     .unwrap()
                     .into();
@@ -406,7 +405,7 @@ mod field_share {
         }
 
         for (net, tx, x) in izip!(nets, tx, input_shares) {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let poseidon = Poseidon2::<_, 4, 5>::default();
                 let mut state = ShamirPreprocessing::new(
                     num_parties,
@@ -483,7 +482,7 @@ mod field_share {
         }
 
         for (net, tx, x) in izip!(nets, tx, input_shares) {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let poseidon = Poseidon2::<_, 4, 5>::default();
                 let mut state = ShamirPreprocessing::new(
                     num_parties,
@@ -569,7 +568,7 @@ mod field_share {
         }
 
         for (net, tx, x) in izip!(nets, tx, input_shares) {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let poseidon = Poseidon2::<_, 4, 5>::default();
                 let mut state = ShamirPreprocessing::new(
                     num_parties,
@@ -641,7 +640,7 @@ mod field_share {
         }
 
         for (net, tx, x) in izip!(nets, tx, input_shares) {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 let mut state = ShamirPreprocessing::new(num_parties, threshold, 0, &net)
                     .unwrap()
                     .into();
@@ -685,7 +684,6 @@ mod curve_share {
     use itertools::{izip, Itertools};
     use mpc_core::protocols::shamir::{self, pointshare};
     use rand::thread_rng;
-    use tests::test_utils::spawn_pool;
 
     fn shamir_add_inner(num_parties: usize, threshold: usize) {
         let mut rng = thread_rng();
@@ -704,7 +702,7 @@ mod curve_share {
         }
 
         for (tx, x, y) in izip!(tx, x_shares, y_shares) {
-            spawn_pool(move || tx.send(pointshare::add(&x, &y)));
+            std::thread::spawn(move || tx.send(pointshare::add(&x, &y)));
         }
 
         let mut results = Vec::with_capacity(num_parties);
@@ -742,7 +740,7 @@ mod curve_share {
         }
 
         for (tx, x, y) in izip!(tx, x_shares, y_shares) {
-            spawn_pool(move || tx.send(pointshare::sub(&x, &y)));
+            std::thread::spawn(move || tx.send(pointshare::sub(&x, &y)));
         }
 
         let mut results = Vec::with_capacity(num_parties);
@@ -779,7 +777,9 @@ mod curve_share {
         }
 
         for (tx, scalar) in izip!(tx, scalar_shares) {
-            spawn_pool(move || tx.send(pointshare::scalar_mul_public_point(scalar, &public_point)));
+            std::thread::spawn(move || {
+                tx.send(pointshare::scalar_mul_public_point(scalar, &public_point))
+            });
         }
 
         let mut results = Vec::with_capacity(num_parties);
@@ -816,7 +816,7 @@ mod curve_share {
         }
 
         for (tx, point) in izip!(tx, point_shares) {
-            spawn_pool(move || {
+            std::thread::spawn(move || {
                 tx.send(pointshare::scalar_mul_public_scalar(&point, &public_scalar))
             });
         }

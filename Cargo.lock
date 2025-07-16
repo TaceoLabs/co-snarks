@@ -4758,7 +4758,6 @@ dependencies = [
  "num-traits",
  "paste",
  "rand 0.8.5",
- "rayon",
  "serde_json",
  "sha2",
  "sha3",

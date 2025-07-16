@@ -967,7 +967,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 Ok(Rep3AcvmType::Shared(result))
             }
             (Rep3AcvmType::Shared(lhs), Rep3AcvmType::Shared(rhs)) => {
-                let (lhs, rhs) = rayon::join(
+                let (lhs, rhs) = mpc_net::join(
                     || conversion::a2b_selector(lhs, self.net0, &mut self.state0),
                     || conversion::a2b_selector(rhs, self.net1, &mut self.state1),
                 );
@@ -1003,7 +1003,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 Ok(Rep3AcvmType::Shared(result))
             }
             (Rep3AcvmType::Shared(lhs), Rep3AcvmType::Shared(rhs)) => {
-                let (lhs, rhs) = rayon::join(
+                let (lhs, rhs) = mpc_net::join(
                     || conversion::a2b_selector(lhs, self.net0, &mut self.state0),
                     || conversion::a2b_selector(rhs, self.net1, &mut self.state1),
                 );
@@ -1404,7 +1404,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
 
         // TODO parallelize all points?
         for i in (0..points.len()).step_by(3) {
-            let (point, grumpkin_integer) = rayon::join(
+            let (point, grumpkin_integer) = mpc_net::join(
                 || {
                     Self::create_grumpkin_point(
                         &points[i],

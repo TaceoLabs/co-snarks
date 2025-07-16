@@ -20,7 +20,6 @@ use itertools::izip;
 use mpc_net::local::LocalNetwork;
 use rand::thread_rng;
 use std::fs::File;
-use tests::test_utils::spawn_pool;
 
 macro_rules! e2e_test {
     ($name: expr) => {
@@ -63,7 +62,7 @@ macro_rules! add_test_impl_g16 {
                     [witness_share1, witness_share2, witness_share3].into_iter(),
                     [zkey1, zkey2, zkey3].into_iter()
                 ) {
-                    threads.push(spawn_pool(move || {
+                    threads.push(std::thread::spawn(move || {
                         Rep3CoGroth16::<$curve>::prove::<_, CircomReduction>(&net0, &net1, &zkey.1, &zkey.0, x).unwrap()
                     }));
                 }
@@ -142,7 +141,7 @@ macro_rules! add_test_impl_plonk {
                     [witness_share1, witness_share2, witness_share3].into_iter(),
                     [zkey1, zkey2, zkey3].into_iter()
                 ) {
-                    threads.push(spawn_pool(move || {
+                    threads.push(std::thread::spawn(move || {
                         Rep3CoPlonk::<$curve>::prove(&nets.try_into().unwrap(), zkey, x).unwrap()
                     }));
                 }
