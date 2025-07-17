@@ -137,7 +137,8 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         }
     }
 
-    fn matmul_internal_rep3(&self, input: &mut [Rep3PrimeFieldShare<F>; T]) {
+    /// The matrix multiplication in the internal rounds of the Poseidon2 permutation. Implemented for the Rep3 MPC protocol.
+    pub fn matmul_internal_rep3(&self, input: &mut [Rep3PrimeFieldShare<F>; T]) {
         match T {
             2 => {
                 // Matrix [[2, 1], [1, 3]]
@@ -178,7 +179,8 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         }
     }
 
-    fn add_rc_external_rep3(
+    /// Adds the round constant for the external rounds of the Poseidon2 permutation. Implemented for the Rep3 MPC protocol.
+    pub fn add_rc_external_rep3(
         &self,
         input: &mut [Rep3PrimeFieldShare<F>; T],
         rc_offset: usize,
