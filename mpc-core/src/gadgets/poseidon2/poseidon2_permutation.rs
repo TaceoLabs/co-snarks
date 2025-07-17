@@ -16,7 +16,13 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Self { params }
     }
 
-    pub(crate) fn num_sbox(&self) -> usize {
+    /// Returns the number of rounds in the Poseidon2 permutation.
+    pub fn num_rounds(&self) -> usize {
+        self.params.rounds_f_beginning + self.params.rounds_f_end + self.params.rounds_p
+    }
+
+    /// Returns the number of S-boxes used in the Poseidon2 permutation.
+    pub fn num_sbox(&self) -> usize {
         (self.params.rounds_f_beginning + self.params.rounds_f_end) * T + self.params.rounds_p
     }
 
@@ -116,7 +122,8 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         }
     }
 
-    pub(crate) fn matmul_internal(&self, input: &mut [F; T]) {
+    /// The matrix multiplication in the internal rounds of the Poseidon2 permutation.
+    pub fn matmul_internal(&self, input: &mut [F; T]) {
         match T {
             2 => {
                 // Matrix [[2, 1], [1, 3]]
@@ -154,7 +161,8 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         }
     }
 
-    pub(crate) fn add_rc_external(&self, input: &mut [F; T], rc_offset: usize) {
+    /// The round constant additon in the external rounds of the Poseidon2 permutation.
+    pub fn add_rc_external(&self, input: &mut [F; T], rc_offset: usize) {
         for (s, rc) in input
             .iter_mut()
             .zip(self.params.round_constants_external[rc_offset].iter())
@@ -163,7 +171,8 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         }
     }
 
-    pub(crate) fn add_rc_internal(&self, input: &mut [F; T], rc_offset: usize) {
+    /// The round constant additon in the internal rounds of the Poseidon2 permutation.
+    pub fn add_rc_internal(&self, input: &mut [F; T], rc_offset: usize) {
         input[0] += &self.params.round_constants_internal[rc_offset];
     }
 

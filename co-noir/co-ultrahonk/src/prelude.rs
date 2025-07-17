@@ -19,6 +19,7 @@ pub use ultrahonk::prelude::HonkProof;
 pub use ultrahonk::prelude::Poseidon2Sponge;
 pub use ultrahonk::prelude::TranscriptHasher;
 pub use ultrahonk::prelude::UltraCircuitBuilder;
+pub use ultrahonk::prelude::UltraFlavour;
 pub use ultrahonk::prelude::UltraHonk;
 pub use ultrahonk::prelude::VerifyingKeyBarretenberg;
 pub use ultrahonk::prelude::ZeroKnowledge;
