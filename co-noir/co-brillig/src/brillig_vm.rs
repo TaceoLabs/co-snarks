@@ -390,6 +390,8 @@ where
                 inputs,
                 input_value_type,
             )?;
+        } else if name.starts_with("__debug") {
+            // Do NOTHING
         } else {
             eyre::bail!("unsupported oracle function: {name}")
         }

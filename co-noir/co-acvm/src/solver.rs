@@ -1,8 +1,8 @@
 use acir::{
     FieldElement,
     acir_field::GenericFieldElement,
-    circuit::{Circuit, ExpressionWidth, Opcode, Program},
-    native_types::{WitnessMap, WitnessStack},
+    circuit::{Circuit, ExpressionWidth, Opcode, Program, brillig::BrilligInputs},
+    native_types::{Witness, WitnessMap, WitnessStack},
 };
 use ark_ff::PrimeField;
 use co_brillig::CoBrilligVM;
@@ -419,6 +419,119 @@ where
 
     pub fn solve(self) -> CoAcvmResult<WitnessStack<T::AcvmType>> {
         let (witness_stack, _) = self.solve_with_output()?;
+        Ok(witness_stack)
+    }
+
+    #[allow(clippy::type_complexity)]
+    pub fn solve_r1cs_with_helper(
+        mut self,
+        mut traces: Vec<Vec<T::AcvmType>>,
+    ) -> CoAcvmResult<WitnessStack<T::AcvmType>> {
+        let functions = std::mem::take(&mut self.functions);
+
+        let mut current_trace = vec![];
+        let mut current_trace_idx = 0;
+        let mut manual_trace = false;
+        for opcode in functions[self.function_index].opcodes.iter() {
+            match opcode {
+                Opcode::AssertZero(expr) => {
+                    if manual_trace && !current_trace.is_empty() {
+                        let witness = current_trace.remove(0);
+                        self.witness().insert(Witness(current_trace_idx), witness);
+                        current_trace_idx += 1;
+                        continue;
+                    }
+                    self.solve_assert_zero(expr)?
+                }
+                Opcode::BrilligCall {
+                    id,
+                    inputs,
+                    outputs,
+                    predicate,
+                } => {
+                    assert!(
+                        predicate.is_none(),
+                        "Predicate should be None in R1CS solving"
+                    );
+                    assert!(
+                        outputs.is_empty(),
+                        "Outputs should be empty in R1CS solving"
+                    );
+                    match id.as_usize() {
+                        0 => {
+                            if manual_trace {
+                                Err(eyre::eyre!("Order of marker functions is not correct"))?;
+                            }
+                            assert_eq!(
+                                inputs.len(),
+                                1,
+                                "Inputs should not be empty in R1CS solving when opening marker functions"
+                            );
+                            let mut max_witness = 0;
+                            match &inputs[0] {
+                                BrilligInputs::Single(expr) => {
+                                    for el in expr.mul_terms.iter() {
+                                        max_witness = max_witness.max(el.1.0);
+                                        max_witness = max_witness.max(el.2.0);
+                                    }
+                                    for el in expr.linear_combinations.iter() {
+                                        max_witness = max_witness.max(el.1.0);
+                                    }
+                                }
+                                BrilligInputs::Array(array) => {
+                                    for expr in array.iter() {
+                                        for el in expr.mul_terms.iter() {
+                                            max_witness = max_witness.max(el.1.0);
+                                            max_witness = max_witness.max(el.2.0);
+                                        }
+                                        for el in expr.linear_combinations.iter() {
+                                            max_witness = max_witness.max(el.1.0);
+                                        }
+                                    }
+                                }
+                                _ => Err(eyre::eyre!(
+                                    "Unexpected input type for marker function: {inputs:?}"
+                                ))?,
+                            }
+
+                            current_trace = traces.remove(0);
+                            manual_trace = true;
+                            current_trace_idx = max_witness + 1;
+                        }
+                        1 => {
+                            assert!(
+                                inputs.is_empty(),
+                                "Inputs should be empty in R1CS solving when closing marker functions"
+                            );
+                            if !manual_trace {
+                                Err(eyre::eyre!("Order of marker functions is not correct"))?;
+                            }
+                            manual_trace = false;
+                        }
+                        _ => {
+                            Err(eyre::eyre!(
+                                "Brillig call with id {} is not supported in R1CS solving",
+                                id
+                            ))?;
+                        }
+                    }
+                }
+                _ => todo!("opcode {} detected, not supported", opcode),
+            }
+        }
+        assert!(
+            traces.is_empty(),
+            "There should be no traces left after solving R1CS"
+        );
+        tracing::trace!("we are done! Opening results...");
+        let output = self.open_results(&functions[self.function_index])?;
+        self.value_store.set_output(output);
+        tracing::trace!("Done! Wrap things up.");
+
+        let mut witness_stack = WitnessStack::default();
+        for (idx, witness) in self.witness_map.into_iter().rev().enumerate() {
+            witness_stack.push(u32::try_from(idx).expect("usize fits into u32"), witness);
+        }
         Ok(witness_stack)
     }
 }
