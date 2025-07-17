@@ -1,10 +1,9 @@
 //! Local MPC network
 
-use std::sync::atomic::AtomicUsize;
-
 use crossbeam_channel::{Receiver, Sender};
 use eyre::ContextCompat;
 use intmap::IntMap;
+use std::{sync::atomic::AtomicUsize, time::Duration};
 
 use crate::{ConnectionStats, DEFAULT_CONNECTION_TIMEOUT, Network};
 
@@ -12,6 +11,7 @@ use crate::{ConnectionStats, DEFAULT_CONNECTION_TIMEOUT, Network};
 #[derive(Debug)]
 pub struct LocalNetwork {
     id: usize,
+    timeout: std::time::Duration,
     send: IntMap<usize, (Sender<Vec<u8>>, AtomicUsize)>,
     recv: IntMap<usize, (Receiver<Vec<u8>>, AtomicUsize)>,
 }
@@ -19,6 +19,11 @@ pub struct LocalNetwork {
 impl LocalNetwork {
     /// Create new [LocalNetwork]s for `num_parties`.
     pub fn new(num_parties: usize) -> Vec<Self> {
+        Self::new_with_timeout(num_parties, DEFAULT_CONNECTION_TIMEOUT)
+    }
+
+    /// Create new [LocalNetwork]s for `num_parties`, setting a timeout.
+    pub fn new_with_timeout(num_parties: usize, timeout: Duration) -> Vec<Self> {
         let mut networks = Vec::with_capacity(num_parties);
         let mut senders = Vec::new();
         let mut receivers = Vec::new();
@@ -40,7 +45,12 @@ impl LocalNetwork {
         }
 
         for (id, (send, recv)) in senders.into_iter().zip(receivers).enumerate() {
-            networks.push(LocalNetwork { id, send, recv });
+            networks.push(LocalNetwork {
+                id,
+                timeout,
+                send,
+                recv,
+            });
         }
 
         networks
@@ -60,13 +70,13 @@ impl Network for LocalNetwork {
     fn send(&self, to: usize, data: &[u8]) -> eyre::Result<()> {
         let (sender, sent_bytes) = self.send.get(to).context("party id out-of-bounds")?;
         sent_bytes.fetch_add(data.len(), std::sync::atomic::Ordering::Relaxed);
-        sender.send_timeout(data.to_owned(), DEFAULT_CONNECTION_TIMEOUT)?;
+        sender.send_timeout(data.to_owned(), self.timeout)?;
         Ok(())
     }
 
     fn recv(&self, from: usize) -> eyre::Result<Vec<u8>> {
         let (receiver, recv_bytes) = self.recv.get(from).context("party id out-of-bounds")?;
-        let data = receiver.recv_timeout(DEFAULT_CONNECTION_TIMEOUT)?;
+        let data = receiver.recv_timeout(self.timeout)?;
         recv_bytes.fetch_add(data.len(), std::sync::atomic::Ordering::Relaxed);
         Ok(data)
     }
