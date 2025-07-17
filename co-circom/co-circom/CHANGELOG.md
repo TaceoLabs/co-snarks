@@ -9,6 +9,45 @@
     * co-plonk bumped from 0.3.0 to 0.3.1
     * mpc-core bumped from 0.4.0 to 0.5.0
 
+## [0.10.0](https://github.com/TaceoLabs/co-snarks/compare/co-circom-v0.9.0...co-circom-v0.10.0) (2025-07-17)
+
+
+### ⚠ BREAKING CHANGES
+
+* unify MPC networks, split protocol state and networking to allow fork of state without network, replace io::Error with eyre, merge mpc-core and mpc-types with feature gated mpc-net
+* co-circom split_witness_* fns now take num_inputs directly instead of r1cs
+* rename io_mul_vec to reshare_vec
+* move uncompress_shared_witness to co-circom
+* move MPC types and share/combine into new mpc-types crate, rename co-circom-snarks to co-circom-types
+
+### Features
+
+* add extension traits for REP3 and Shamir networks ([0c15da8](https://github.com/TaceoLabs/co-snarks/commit/0c15da81550f35c7aaef77d5143824a9436d5731))
+* update rust edition to 2024 ([6ea0ba9](https://github.com/TaceoLabs/co-snarks/commit/6ea0ba9f9f34063e8ab859c1d4ae41d05629a1c0))
+
+
+### Code Refactoring
+
+* co-circom split_witness_* fns now take num_inputs directly instead of r1cs ([36d73df](https://github.com/TaceoLabs/co-snarks/commit/36d73df2a412b675abccb2f32ce1ba0ea6f45591))
+* move MPC types and share/combine into new mpc-types crate, rename co-circom-snarks to co-circom-types ([31b773a](https://github.com/TaceoLabs/co-snarks/commit/31b773aa71a5e872c25754de7805b02647b65688))
+* move uncompress_shared_witness to co-circom ([0462a2f](https://github.com/TaceoLabs/co-snarks/commit/0462a2fc2dd145e5306e353a227f66d8862712cb))
+* rename io_mul_vec to reshare_vec ([7067486](https://github.com/TaceoLabs/co-snarks/commit/70674869e91950a59b68272127781ecf56d77094))
+* unify MPC networks, split protocol state and networking to allow fork of state without network, replace io::Error with eyre, merge mpc-core and mpc-types with feature gated mpc-net ([16dbf54](https://github.com/TaceoLabs/co-snarks/commit/16dbf546d8f2d80ad4fa9f5053da19edc7270d3c))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * circom-mpc-compiler bumped from 0.9.1 to 0.10.0
+    * circom-mpc-vm bumped from 0.8.0 to 0.9.0
+    * circom-types bumped from 0.9.0 to 0.10.0
+    * co-circom-types bumped from 0.5.0 to 0.6.0
+    * co-groth16 bumped from 0.9.0 to 0.10.0
+    * co-plonk bumped from 0.6.1 to 0.7.0
+    * mpc-core bumped from 0.9.0 to 0.10.0
+    * mpc-net bumped from 0.4.0 to 0.5.0
+
 ## [0.9.0](https://github.com/TaceoLabs/co-snarks/compare/co-circom-v0.8.0...co-circom-v0.9.0) (2025-04-03)
 
 
