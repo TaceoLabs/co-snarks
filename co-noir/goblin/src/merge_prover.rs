@@ -156,7 +156,6 @@ where
     }
 }
 
-// TESTS
 #[cfg(test)]
 mod tests {
     use crate::eccvm::ecc_op_queue::{EccOpCode, EccOpsTable, EccvmOpsTable, EccvmRowTracker, UltraEccOpsTable, UltraOp};

@@ -243,7 +243,7 @@ impl<P: CurveGroup> UltraOp<P> {
     }
 }
 
-#[derive(Default, PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
+#[derive(Default, PartialEq, Eq, Clone, Debug)]
 pub struct EccOpCode {
     pub(crate) add: bool,
     pub(crate) mul: bool,
