@@ -14,6 +14,14 @@ pub struct TranslatorFlavour {}
 impl TranslatorFlavour {
     pub const NUM_LIMB_BITS: usize = 68;
     pub const RESULT_ROW: usize = 2;
+    pub const CONST_TRANSLATOR_LOG_N: usize = 18;
+
+    pub fn wire_to_be_shifted_labels() -> &'static [&'static str] {
+        todo!()
+    }
+    pub fn get_ordered_range_constraints_labels() -> &'static [&'static str] {
+        todo!()
+    }
 }
 
 impl ProverFlavour for TranslatorFlavour {
@@ -220,6 +228,30 @@ impl<T: Default> ShiftedWitnessEntitiesFlavour<T> for TranslatorShiftedWitnessEn
         self.elements.into_iter()
     }
 }
+impl<T: Default> TranslatorPrecomputedEntities<T> {
+    pub fn ordered_extra_range_constraints_numerator(&self) -> &T {
+        todo!()
+    }
+
+    pub fn lagrange_odd_in_minicircuit(&self) -> &T {
+        todo!()
+    }
+    pub fn lagrange_even_in_minicircuit(&self) -> &T {
+        todo!()
+    }
+    pub fn lagrange_result_row(&self) -> &T {
+        todo!()
+    }
+    pub fn lagrange_last_in_minicircuit(&self) -> &T {
+        todo!()
+    }
+    pub fn lagrange_masking(&self) -> &T {
+        todo!()
+    }
+    pub fn lagrange_real_last(&self) -> &T {
+        todo!()
+    }
+}
 
 impl<T: Default> TranslatorProverWitnessEntities<T> {
     pub fn accumulators_binary_limbs_0(&self) -> &T {
@@ -232,6 +264,41 @@ impl<T: Default> TranslatorProverWitnessEntities<T> {
         todo!()
     }
     pub fn accumulators_binary_limbs_3(&self) -> &T {
+        todo!()
+    }
+
+    pub fn wire_to_be_shifted_mut(&mut self) -> &mut [T] {
+        todo!()
+    }
+    pub fn get_ordered_range_constraints_mut(&mut self) -> &mut [T] {
+        todo!()
+    }
+    pub fn interleaved_range_constraints_0(&self) -> &T {
+        todo!()
+    }
+    pub fn interleaved_range_constraints_1(&self) -> &T {
+        todo!()
+    }
+    pub fn interleaved_range_constraints_2(&self) -> &T {
+        todo!()
+    }
+    pub fn interleaved_range_constraints_3(&self) -> &T {
+        todo!()
+    }
+
+    pub fn ordered_range_constraints_0(&self) -> &T {
+        todo!()
+    }
+    pub fn ordered_range_constraints_1(&self) -> &T {
+        todo!()
+    }
+    pub fn ordered_range_constraints_2(&self) -> &T {
+        todo!()
+    }
+    pub fn ordered_range_constraints_3(&self) -> &T {
+        todo!()
+    }
+    pub fn ordered_range_constraints_4(&self) -> &T {
         todo!()
     }
 }

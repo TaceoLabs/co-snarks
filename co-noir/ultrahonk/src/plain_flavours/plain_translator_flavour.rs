@@ -12,7 +12,7 @@ impl PlainProverFlavour for TranslatorFlavour {
 
     type AllRelationEvaluations<F: ark_ff::PrimeField> = ();
 
-    type Alphas<F: ark_ff::PrimeField> = ();
+    type Alphas<F: ark_ff::PrimeField> = F;
 
     type SumcheckRoundOutput<F: ark_ff::PrimeField> =
         Univariate<F, { TranslatorFlavour::BATCHED_RELATION_PARTIAL_LENGTH }>;
