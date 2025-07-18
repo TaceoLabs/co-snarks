@@ -15,7 +15,7 @@ use num_bigint::BigUint;
 use std::array;
 use std::ops::Neg;
 
-// TODO FLORIN: Find out which functions in this are actually needed
+// TODO: Remove unneeded functions from this file
 
 pub(crate) const NUM_LIMB_BITS_IN_FIELD_SIMULATION: usize = 68;
 pub(crate) const NUM_SCALAR_BITS: usize = 128; // The length of scalars handled by the ECCVVM

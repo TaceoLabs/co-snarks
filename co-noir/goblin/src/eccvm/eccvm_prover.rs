@@ -1,4 +1,6 @@
 #![expect(unused)]
+use crate::CONST_ECCVM_LOG_N;
+use crate::NUM_OPENING_CLAIMS;
 use crate::eccvm::eccvm_types::TranslationData;
 use crate::ipa::compute_ipa_opening_proof;
 use ark_ec::CurveGroup;
@@ -28,13 +30,6 @@ use ultrahonk::{
         ZKSumcheckData,
     },
 };
-
-//TODO FLORIN MOVE THIS SOMEWHERE ELSE LATER
-pub(crate) const CONST_ECCVM_LOG_N: usize = 16;
-pub(crate) const ECCVM_FIXED_SIZE: usize = 1usize << CONST_ECCVM_LOG_N;
-const NUM_RELATIONS: usize = 7;
-const NUM_TRANSLATION_OPENING_CLAIMS: usize = NUM_SMALL_IPA_EVALUATIONS + 1;
-const NUM_OPENING_CLAIMS: usize = NUM_TRANSLATION_OPENING_CLAIMS + 1;
 
 pub(crate) struct ProverMemory<P: CurveGroup> {
     pub(crate) z_perm: Polynomial<P::ScalarField>,

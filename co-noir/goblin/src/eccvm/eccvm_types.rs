@@ -1,4 +1,5 @@
 #![expect(unused)]
+use crate::ECCVM_FIXED_SIZE;
 use crate::eccvm::ecc_op_queue::ECCOpQueue;
 use crate::eccvm::ecc_op_queue::MSMRow;
 use crate::eccvm::ecc_op_queue::NUM_WNAF_DIGIT_BITS;
@@ -7,7 +8,6 @@ use crate::eccvm::ecc_op_queue::POINT_TABLE_SIZE;
 use crate::eccvm::ecc_op_queue::ScalarMul;
 use crate::eccvm::ecc_op_queue::VMOperation;
 use crate::eccvm::ecc_op_queue::WNAF_DIGITS_PER_ROW;
-use crate::eccvm::eccvm_prover::ECCVM_FIXED_SIZE;
 use ark_ec::AffineRepr;
 use ark_ec::CurveGroup;
 use ark_ff::One;

@@ -547,7 +547,7 @@ impl EccMsmRelation {
         for i in domain_separator.chars() {
             domain_bytes.push(i as u8);
         }
-        let offset_generator = derive_generators::<P::CycleGroup>(&domain_bytes, 1, 0)[0]; //TODO FLORIN is this really CycleGroup?
+        let offset_generator = derive_generators::<P::CycleGroup>(&domain_bytes, 1, 0)[0]; // we need CycleGroup here because all this happens in Grumpkin, thus offset_generator is a BN254 Curve point and therefore oxu and oyu are BN254 BaseField elements = Grumpkin ScalarField elements
         let oxu = offset_generator
             .x()
             .expect("Offset generator x coordinate should not be None");

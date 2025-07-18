@@ -6,7 +6,7 @@ use co_builder::{
 use ultrahonk::Utils as UltraHonkUtils;
 use ultrahonk::prelude::{ShpleminiOpeningClaim, Transcript, TranscriptHasher};
 
-use crate::eccvm::eccvm_prover::CONST_ECCVM_LOG_N;
+use crate::CONST_ECCVM_LOG_N;
 
 pub(crate) fn compute_ipa_opening_proof<
     P: HonkCurve<TranscriptFieldType>,
