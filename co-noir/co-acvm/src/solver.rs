@@ -1,7 +1,7 @@
 use acir::{
     FieldElement,
     acir_field::GenericFieldElement,
-    circuit::{Circuit, ExpressionWidth, Opcode, Program, brillig::BrilligInputs},
+    circuit::{Circuit, ExpressionWidth, Opcode, Program},
     native_types::{Witness, WitnessMap, WitnessStack},
 };
 use ark_ff::PrimeField;
@@ -432,7 +432,7 @@ where
         let mut current_trace = vec![];
         let mut current_trace_idx = 0;
         let mut manual_trace = false;
-        for opcode in functions[self.function_index].opcodes.iter() {
+        for (i, opcode) in functions[self.function_index].opcodes.iter().enumerate() {
             match opcode {
                 Opcode::AssertZero(expr) => {
                     if manual_trace && !current_trace.is_empty() {
@@ -445,31 +445,20 @@ where
                 }
                 Opcode::BrilligCall {
                     id,
-                    inputs,
-                    outputs,
-                    predicate,
+                    inputs: _,
+                    outputs: _,
+                    predicate: _,
                 } => {
-                    assert!(
-                        predicate.is_none(),
-                        "Predicate should be None in R1CS solving"
-                    );
-                    assert!(
-                        outputs.is_empty(),
-                        "Outputs should be empty in R1CS solving"
-                    );
                     match id.as_usize() {
                         0 => {
                             if manual_trace {
                                 Err(eyre::eyre!("Order of marker functions is not correct"))?;
                             }
-                            assert_eq!(
-                                inputs.len(),
-                                1,
-                                "Inputs should not be empty in R1CS solving when opening marker functions"
-                            );
+                            // We get the trace index from the next opcode
+                            let next_expression = &functions[self.function_index].opcodes[i + 1];
                             let mut max_witness = 0;
-                            match &inputs[0] {
-                                BrilligInputs::Single(expr) => {
+                            match next_expression {
+                                Opcode::AssertZero(expr) => {
                                     for el in expr.mul_terms.iter() {
                                         max_witness = max_witness.max(el.1.0);
                                         max_witness = max_witness.max(el.2.0);
@@ -478,31 +467,16 @@ where
                                         max_witness = max_witness.max(el.1.0);
                                     }
                                 }
-                                BrilligInputs::Array(array) => {
-                                    for expr in array.iter() {
-                                        for el in expr.mul_terms.iter() {
-                                            max_witness = max_witness.max(el.1.0);
-                                            max_witness = max_witness.max(el.2.0);
-                                        }
-                                        for el in expr.linear_combinations.iter() {
-                                            max_witness = max_witness.max(el.1.0);
-                                        }
-                                    }
-                                }
                                 _ => Err(eyre::eyre!(
-                                    "Unexpected input type for marker function: {inputs:?}"
+                                    "Expected AssertZero after opening marker function, got {next_expression:?}"
                                 ))?,
                             }
 
                             current_trace = traces.remove(0);
                             manual_trace = true;
-                            current_trace_idx = max_witness + 1;
+                            current_trace_idx = max_witness;
                         }
                         1 => {
-                            assert!(
-                                inputs.is_empty(),
-                                "Inputs should be empty in R1CS solving when closing marker functions"
-                            );
                             if !manual_trace {
                                 Err(eyre::eyre!("Order of marker functions is not correct"))?;
                             }
