@@ -8,7 +8,6 @@ use ark_ff::Field;
 
 use crate::eccvm::ecc_op_queue::ECCOpQueue;
 
-pub(crate) type MergeProof<F> = Vec<F>;
 const NUM_WIRES: usize = 4;
 
 pub(crate) struct MergeProver<C, H>
@@ -76,53 +75,10 @@ where
         let kappa = self.transcript.get_challenge::<C>("kappa".to_owned());
 
         let mut opening_claims = Vec::with_capacity(3 * NUM_WIRES);
-        for i in 0..NUM_WIRES {
-            let evaluation = t_current[i].eval_poly(kappa);
-            self.transcript.send_fr_to_verifier::<C>(
-                format!("subtable_evaluation_{i}"),
-                evaluation,
-            );
-            opening_claims.push(ShpleminiOpeningClaim {
-                polynomial: t_current[i].clone(),
-                opening_pair: OpeningPair {
-                    challenge: kappa,
-                    evaluation,
-                },
-                gemini_fold: false,
-            });
-        }
 
-        for i in 0..NUM_WIRES {
-            let evaluation = T_prev[i].eval_poly(kappa);
-            self.transcript.send_fr_to_verifier::<C>(
-                format!("previous_table_evaluation_{i}"),
-                evaluation,
-            );
-            opening_claims.push(ShpleminiOpeningClaim {
-                polynomial: T_prev[i].clone(),
-                opening_pair: OpeningPair {
-                    challenge: kappa,
-                    evaluation,
-                },
-                gemini_fold: false,
-            });
-        }
-
-        for i in 0..NUM_WIRES {
-            let evaluation = T_current[i].eval_poly(kappa); 
-            self.transcript.send_fr_to_verifier::<C>(
-                format!("current_table_evaluation_{i}"),
-                evaluation,
-            );
-            opening_claims.push(ShpleminiOpeningClaim {
-                polynomial: T_current[i].clone(),
-                opening_pair: OpeningPair {
-                    challenge: kappa,
-                    evaluation,
-                },
-                gemini_fold: false,
-            });
-        }
+        self.compute_opening_claims(&t_current, "subtable", &mut opening_claims, kappa);
+        self.compute_opening_claims(&T_prev, "previous_table", &mut opening_claims, kappa);
+        self.compute_opening_claims(&T_current, "current_table", &mut opening_claims, kappa);
 
         let alpha = self.transcript.get_challenge::<C>("alpha".to_owned());
 
@@ -156,7 +112,31 @@ where
         self.transcript.get_proof()
     }
 
-    // CESAR TODO: Avoid duplicate code in co-noir/ultrahonk/src/decider/decider_prover.rs#48
+    fn compute_opening_claims(
+        &mut self,
+        polynomials: &[Polynomial<C::ScalarField>],
+        label: &str,
+        opening_claims: &mut Vec<ShpleminiOpeningClaim<C::ScalarField>>,
+        kappa: C::ScalarField,
+    ) {
+        (0..NUM_WIRES).for_each(move |i| {
+            let evaluation = polynomials[i].eval_poly(kappa);
+            self.transcript.send_fr_to_verifier::<C>(
+                format!("{label}_evaluation_{i}"),
+                evaluation,
+            );
+            opening_claims.push(ShpleminiOpeningClaim {
+                polynomial: polynomials[i].clone(),
+                opening_pair: OpeningPair {
+                    challenge: kappa,
+                    evaluation,
+                },
+                gemini_fold: false,
+            });
+        });
+    }
+
+    // TACEO TODO: Avoid duplicate code in co-noir/ultrahonk/src/decider/decider_prover.rs#48
     fn compute_opening_proof(
         opening_claim: ShpleminiOpeningClaim<C::ScalarField>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
@@ -185,18 +165,15 @@ mod tests {
     use ark_bn254::Bn254;
     use ark_ec::bn::Bn;
     use ark_ec::pairing::Pairing;
-    use ark_ff::BigInt;
-    use co_builder::prelude::{CrsParser, ProverCrs};
-    use mpc_core::gadgets::poseidon2::Poseidon2;
-    use num_bigint::{BigUint, ToBigUint};
-    use rayon::vec;
+    use co_builder::prelude::CrsParser;
+    use num_bigint::BigUint;
     use ultrahonk::prelude::{Poseidon2Sponge, ZeroKnowledge};
-    use std::str::FromStr;
 
     type Bn254G1 = <Bn<ark_bn254::Config> as Pairing>::G1;
     type F = <Bn<ark_bn254::Config> as Pairing>::ScalarField;
     const CRS_PATH_G1: &str = "../co-builder/src/crs/bn254_g1.dat";
     const CRS_PATH_G2: &str = "../co-builder/src/crs/bn254_g2.dat";
+    const PROOF_FILE: &str = "../../test_vectors/noir/merge_prover/merge_proof";
     
     fn hex_to_field_element(hex: &str) -> F {
         let bytes = (2..hex.len())
@@ -274,9 +251,12 @@ mod tests {
         let crs = CrsParser::<Bn254>::get_crs(CRS_PATH_G1, CRS_PATH_G2, 5, ZeroKnowledge::No).unwrap();
         let (prover_crs, _) = crs.split();
 
-        let merge_prover = MergeProver::<Bn254G1, Poseidon2Sponge>::new(queue, prover_crs);
+        let proof = MergeProver::<Bn254G1, Poseidon2Sponge>::new(queue, prover_crs).construct_proof();
 
-        merge_prover.construct_proof();
+        let expected_proof = HonkProof::<TranscriptFieldType>::from_buffer(
+            &std::fs::read(PROOF_FILE).expect("Failed to read expected proof from file"),
+        ).expect("Failed to deserialize expected proof");
 
+        assert_eq!(proof, expected_proof, "The constructed proof does not match the expected proof.");
     }
 }

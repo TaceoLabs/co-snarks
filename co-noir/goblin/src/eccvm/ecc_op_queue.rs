@@ -3,6 +3,7 @@ use ark_ec::CurveGroup;
 use ark_ff::Zero;
 use co_builder::prelude::Polynomial;
 use num_bigint::BigUint;
+use serde::{Deserialize, Serialize};
 use std::array;
 
 // TODO FLORIN: Find out which functions in this are actually needed
@@ -124,12 +125,6 @@ impl<P: CurveGroup> UltraEccOpsTable<P> {
                 i += 1;
             }
         }
-
-        // Print the column polynomials
-        println!("Constructed column polynomials:");
-        for (i, poly) in column_polynomials.iter().enumerate() {
-            println!("Column {i}: {:?}", poly);
-        }
         column_polynomials
     }
 }
@@ -248,7 +243,7 @@ impl<P: CurveGroup> UltraOp<P> {
     }
 }
 
-#[derive(Default, PartialEq, Eq, Clone, Debug)]
+#[derive(Default, PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
 pub struct EccOpCode {
     pub(crate) add: bool,
     pub(crate) mul: bool,
