@@ -60,15 +60,15 @@ where
                             .expect("Failed to commit to current table column");
 
             self.transcript.send_point_to_verifier::<C>(
-                format!("subtable_commitment_{i}"),
+                format!("t_CURRENT_{i}"),
                 t_commitment.into(),
             );
             self.transcript.send_point_to_verifier::<C>(
-                format!("previous_table_commitment_{i}"),
+                format!("T_PREV_{i}"),
                 T_prev_commitment.into(),
             );
             self.transcript.send_point_to_verifier::<C>(
-                format!("current_table_commitment_{i}"),
+                format!("T_CURRENT_{i}"),
                 T_commitment.into(),
             );
         }
@@ -173,5 +173,110 @@ where
         // pthreads) or even the work queue itself
         transcript.send_point_to_verifier::<C>("KZG:W".to_string(), quotient_commitment.into());
         Ok(())
+    }
+}
+
+// TESTS
+#[cfg(test)]
+mod tests {
+    use crate::eccvm::ecc_op_queue::{EccOpCode, EccOpsTable, EccvmOpsTable, EccvmRowTracker, UltraEccOpsTable, UltraOp};
+
+    use super::*;
+    use ark_bn254::Bn254;
+    use ark_ec::bn::Bn;
+    use ark_ec::pairing::Pairing;
+    use ark_ff::BigInt;
+    use co_builder::prelude::{CrsParser, ProverCrs};
+    use mpc_core::gadgets::poseidon2::Poseidon2;
+    use num_bigint::{BigUint, ToBigUint};
+    use rayon::vec;
+    use ultrahonk::prelude::{Poseidon2Sponge, ZeroKnowledge};
+    use std::str::FromStr;
+
+    type Bn254G1 = <Bn<ark_bn254::Config> as Pairing>::G1;
+    type F = <Bn<ark_bn254::Config> as Pairing>::ScalarField;
+    const CRS_PATH_G1: &str = "../co-builder/src/crs/bn254_g1.dat";
+    const CRS_PATH_G2: &str = "../co-builder/src/crs/bn254_g2.dat";
+    
+    fn hex_to_field_element(hex: &str) -> F {
+        let bytes = (2..hex.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap())
+            .collect::<Vec<u8>>();
+
+        let bigint = BigUint::from_bytes_be(&bytes);
+        F::from(bigint)
+    }
+
+    #[test]
+    fn test_merge_prover_construct_proof() {
+
+        // Op code: 4
+        //   x_lo: 0x0000000000000000000000000000000000000000000000000000000000000001
+        //   x_hi: 0x0000000000000000000000000000000000000000000000000000000000000000
+        //   y_lo: 0x0000000000000000000000000000000000000000000000000000000000000002
+        //   y_hi: 0x0000000000000000000000000000000000000000000000000000000000000000
+        //   z_1:  0x0000000000000000000000000000000000000000000000000000000000000002
+        //   z_2:  0x0000000000000000000000000000000000000000000000000000000000000000
+        let ultra_op_1 = UltraOp {
+            op_code: EccOpCode {
+                mul: true,
+                ..Default::default()
+            },
+            x_lo: hex_to_field_element("0x0000000000000000000000000000000000000000000000000000000000000001"),
+            x_hi: hex_to_field_element("0x0000000000000000000000000000000000000000000000000000000000000000"),
+            y_lo: hex_to_field_element("0x0000000000000000000000000000000000000000000000000000000000000002"),
+            y_hi: hex_to_field_element("0x0000000000000000000000000000000000000000000000000000000000000000"),
+            z_1: hex_to_field_element("0x0000000000000000000000000000000000000000000000000000000000000002"),
+            z_2: hex_to_field_element("0x0000000000000000000000000000000000000000000000000000000000000000"),
+            return_is_infinity: false,
+        };
+
+        // Op code: 3
+        //   x_lo: 0x00000000000000000000000000000085d97816a916871ca8d3c208c16d87cfd3
+        //   x_hi: 0x0000000000000000000000000000000000030644e72e131a029b85045b681815
+        //   y_lo: 0x0000000000000000000000000000000a68a6a449e3538fc7ff3ebf7a5a18a2c4
+        //   y_hi: 0x000000000000000000000000000000000015ed738c0e0a7c92e7845f96b2ae9c
+        //   z_1:  0x0000000000000000000000000000000000000000000000000000000000000000
+        //   z_2:  0x0000000000000000000000000000000000000000000000000000000000000000
+        let ultra_op_2 = UltraOp {
+            op_code: EccOpCode {
+                eq: true,
+                reset: true,
+                ..Default::default()
+            },
+            x_lo: hex_to_field_element("0x00000000000000000000000000000085d97816a916871ca8d3c208c16d87cfd3"),
+            x_hi: hex_to_field_element("0x0000000000000000000000000000000000030644e72e131a029b85045b681815"),
+            y_lo: hex_to_field_element("0x0000000000000000000000000000000a68a6a449e3538fc7ff3ebf7a5a18a2c4"),
+            y_hi: hex_to_field_element("0x0000000000000000000000000000000015ed738c0e0a7c92e7845f96b2ae9c"),
+            z_1: hex_to_field_element("0x0000000000000000000000000000000000000000000000000000000000000000"),
+            z_2: hex_to_field_element("0x0000000000000000000000000000000000000000000000000000000000000000"),
+            return_is_infinity: false,
+        };
+
+        let queue = ECCOpQueue::<Bn254G1> {
+            point_at_infinity: Bn254G1::ZERO.into(),
+            accumulator: Bn254G1::ZERO.into(),
+            eccvm_ops_table: EccvmOpsTable::new(),
+            ultra_ops_table: UltraEccOpsTable {
+                table: EccOpsTable {
+                    table: vec![vec![
+                        ultra_op_1,
+                        ultra_op_2,
+                    ]],
+                }
+            },
+            eccvm_ops_reconstructed: Vec::new(),
+            ultra_ops_reconstructed: Vec::new(),
+            eccvm_row_tracker: EccvmRowTracker::new(),
+        };
+        
+        let crs = CrsParser::<Bn254>::get_crs(CRS_PATH_G1, CRS_PATH_G2, 5, ZeroKnowledge::No).unwrap();
+        let (prover_crs, _) = crs.split();
+
+        let merge_prover = MergeProver::<Bn254G1, Poseidon2Sponge>::new(queue, prover_crs);
+
+        merge_prover.construct_proof();
+
     }
 }

@@ -127,6 +127,8 @@ where
     }
 
     fn send_to_verifier(&mut self, label: String, elements: &[F]) {
+        println!("Sending {label} to verifier:");
+        elements.iter().for_each(|el| println!("\t{el}"));
         self.proof_data.extend(elements);
         self.add_element_frs_to_hash_buffer(label, elements);
     }

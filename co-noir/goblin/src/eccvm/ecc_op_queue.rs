@@ -20,7 +20,7 @@ pub(crate) const NUM_ROWS_PER_OP: usize = 2; // A single ECC op is split across 
 
 pub(crate) type EccvmOpsTable<P> = EccOpsTable<ECCVMOperation<P>>;
 pub(crate) struct UltraEccOpsTable<P: CurveGroup> {
-    table: EccOpsTable<UltraOp<P>>,
+    pub(crate) table: EccOpsTable<UltraOp<P>>,
 }
 
 impl<P: CurveGroup> UltraEccOpsTable<P> {
@@ -124,12 +124,18 @@ impl<P: CurveGroup> UltraEccOpsTable<P> {
                 i += 1;
             }
         }
+
+        // Print the column polynomials
+        println!("Constructed column polynomials:");
+        for (i, poly) in column_polynomials.iter().enumerate() {
+            println!("Column {i}: {:?}", poly);
+        }
         column_polynomials
     }
 }
 
 pub(crate) struct EccOpsTable<OpFormat> {
-    table: Vec<Vec<OpFormat>>,
+    pub(crate) table: Vec<Vec<OpFormat>>,
 }
 
 impl<OpFormat> EccOpsTable<OpFormat> {
@@ -244,10 +250,10 @@ impl<P: CurveGroup> UltraOp<P> {
 
 #[derive(Default, PartialEq, Eq, Clone, Debug)]
 pub struct EccOpCode {
-    add: bool,
-    mul: bool,
-    eq: bool,
-    reset: bool,
+    pub(crate) add: bool,
+    pub(crate) mul: bool,
+    pub(crate) eq: bool,
+    pub(crate) reset: bool,
 }
 
 impl EccOpCode {
@@ -343,13 +349,13 @@ impl EccvmRowTracker {
 }
 
 pub struct ECCOpQueue<P: CurveGroup> {
-    point_at_infinity: P::Affine,
-    accumulator: P::Affine,
-    eccvm_ops_table: EccvmOpsTable<P>,
-    ultra_ops_table: UltraEccOpsTable<P>,
-    eccvm_ops_reconstructed: Vec<ECCVMOperation<P>>,
-    ultra_ops_reconstructed: Vec<UltraOp<P>>,
-    eccvm_row_tracker: EccvmRowTracker,
+    pub(crate) point_at_infinity: P::Affine,
+    pub(crate) accumulator: P::Affine,
+    pub(crate) eccvm_ops_table: EccvmOpsTable<P>,
+    pub(crate) ultra_ops_table: UltraEccOpsTable<P>,
+    pub(crate) eccvm_ops_reconstructed: Vec<ECCVMOperation<P>>,
+    pub(crate) ultra_ops_reconstructed: Vec<UltraOp<P>>,
+    pub(crate) eccvm_row_tracker: EccvmRowTracker,
 }
 
 impl<P: CurveGroup> ECCOpQueue<P> {
