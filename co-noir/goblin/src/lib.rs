@@ -4,6 +4,7 @@ pub(crate) mod eccvm;
 pub(crate) mod ipa;
 pub mod merge_prover;
 pub mod prelude;
+pub(crate) mod translator;
 
 pub(crate) const CONST_ECCVM_LOG_N: usize = 16;
 pub(crate) const ECCVM_FIXED_SIZE: usize = 1usize << CONST_ECCVM_LOG_N;
