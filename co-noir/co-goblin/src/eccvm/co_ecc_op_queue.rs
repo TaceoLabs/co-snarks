@@ -2,9 +2,13 @@
 use ark_ec::CurveGroup;
 use ark_ff::Zero;
 use co_builder::prelude::Polynomial;
+use co_ultrahonk::prelude::{NoirUltraHonkProver, SharedPolynomial};
+use mpc_core::protocols::rep3::conversion::b2a;
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
-use std::array;
+use std::{array, ops::Shl};
+use mpc_net::Network;
+use ark_ec::AdditiveGroup;
 
 // TODO FLORIN: Find out which functions in this are actually needed
 
@@ -19,12 +23,13 @@ const ADDITIONS_PER_ROW: usize = 4;
 pub(crate) const TABLE_WIDTH: usize = 4; // dictated by the number of wires in the Ultra arithmetization
 pub(crate) const NUM_ROWS_PER_OP: usize = 2; // A single ECC op is split across two width-4 rows
 
-pub(crate) type EccvmOpsTable<P> = EccOpsTable<ECCVMOperation<P>>;
-pub(crate) struct UltraEccOpsTable<P: CurveGroup> {
-    pub(crate) table: EccOpsTable<UltraOp<P>>,
+pub(crate) type CoEccvmOpsTable<T, C> = EccOpsTable<CoECCVMOperation<T, C>>;
+
+pub(crate) struct CoUltraEccOpsTable<T: NoirUltraHonkProver<C>, C: CurveGroup> {
+    pub(crate) table: EccOpsTable<CoUltraOp<T, C>>,
 }
 
-impl<P: CurveGroup> UltraEccOpsTable<P> {
+impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoUltraEccOpsTable<T, C> {
     pub fn new() -> Self {
         Self {
             table: EccOpsTable::new(),
@@ -51,18 +56,22 @@ impl<P: CurveGroup> UltraEccOpsTable<P> {
         self.table.create_new_subtable(size_hint);
     }
 
-    pub fn push(&mut self, op: UltraOp<P>) {
+    pub fn push(&mut self, op: CoUltraOp<T, C>) {
         self.table.push(op);
     }
 
-    pub fn get_reconstructed(&self) -> Vec<UltraOp<P>>
+    pub fn get_reconstructed(&self) -> Vec<CoUltraOp<T, C>>
     where
-        UltraOp<P>: Clone,
+        CoUltraOp<T, C>: Clone,
     {
         self.table.get_reconstructed()
     }
 
-    pub fn construct_table_columns(&self) -> [Polynomial<P::ScalarField>; TABLE_WIDTH] {
+    pub fn construct_table_columns<N: Network>(
+        &self,
+        network: &N,
+        state: &mut T::State,
+    ) -> [SharedPolynomial<T, C>; TABLE_WIDTH] {
         let poly_size = self.ultra_table_size();
         let subtable_start_idx = 0; // include all subtables
         let subtable_end_idx = self.table.num_subtables();
@@ -71,10 +80,16 @@ impl<P: CurveGroup> UltraEccOpsTable<P> {
             poly_size,
             subtable_start_idx,
             subtable_end_idx,
+            network,
+            state,
         )
     }
 
-    pub fn construct_previous_table_columns(&self) -> [Polynomial<P::ScalarField>; TABLE_WIDTH] {
+    pub fn construct_previous_table_columns<N: Network>(
+        &self,
+        network: &N,
+        state: &mut T::State,
+    ) -> [SharedPolynomial<T, C>; TABLE_WIDTH] {
         let poly_size = self.previous_ultra_table_size();
         let subtable_start_idx = 1; // exclude the 0th subtable
         let subtable_end_idx = self.table.num_subtables();
@@ -83,12 +98,16 @@ impl<P: CurveGroup> UltraEccOpsTable<P> {
             poly_size,
             subtable_start_idx,
             subtable_end_idx,
+            network,
+            state,
         )
     }
 
-    pub fn construct_current_ultra_ops_subtable_columns(
+    pub fn construct_current_ultra_ops_subtable_columns<N: Network>(
         &self,
-    ) -> [Polynomial<P::ScalarField>; TABLE_WIDTH] {
+        network: &N,
+        state: &mut T::State,
+    ) -> [SharedPolynomial<T, C>; TABLE_WIDTH] {
         let poly_size = self.current_ultra_subtable_size();
         let subtable_start_idx = 0;
         let subtable_end_idx = 1; // include only the 0th subtable
@@ -97,28 +116,32 @@ impl<P: CurveGroup> UltraEccOpsTable<P> {
             poly_size,
             subtable_start_idx,
             subtable_end_idx,
+            network,
+            state,
         )
     }
 
-    fn construct_column_polynomials_from_subtables(
+    fn construct_column_polynomials_from_subtables<N: Network>(
         &self,
         poly_size: usize,
         subtable_start_idx: usize,
         subtable_end_idx: usize,
-    ) -> [Polynomial<P::ScalarField>; TABLE_WIDTH] {
-        let mut column_polynomials: [Polynomial<P::ScalarField>; TABLE_WIDTH] =
-            array::from_fn(|_| Polynomial::new(vec![P::ScalarField::zero(); poly_size]));
+        network: &N,
+        state: &mut T::State,
+    ) -> [SharedPolynomial<T, C>; TABLE_WIDTH] {
+        let mut column_polynomials: [SharedPolynomial<T, C>; TABLE_WIDTH] =
+            array::from_fn(|_| SharedPolynomial::new_zero( poly_size));
 
         let mut i = 0;
         for subtable_idx in subtable_start_idx..subtable_end_idx {
             let subtable = &self.table.get()[subtable_idx];
             for op in subtable {
-                column_polynomials[0][i] = P::ScalarField::from(op.op_code.value());
+                column_polynomials[0][i] = op.op_code.value(network, state);
                 column_polynomials[1][i] = op.x_lo;
                 column_polynomials[2][i] = op.x_hi;
                 column_polynomials[3][i] = op.y_lo;
                 i += 1;
-                column_polynomials[0][i] = P::ScalarField::zero(); // only the first 'op' field is utilized
+                column_polynomials[0][i] = T::ArithmeticShare::default(); // only the first 'op' field is utilized
                 column_polynomials[1][i] = op.y_hi;
                 column_polynomials[2][i] = op.z_1;
                 column_polynomials[3][i] = op.z_2;
@@ -129,11 +152,11 @@ impl<P: CurveGroup> UltraEccOpsTable<P> {
     }
 }
 
-pub(crate) struct EccOpsTable<OpFormat> {
-    pub(crate) table: Vec<Vec<OpFormat>>,
+pub(crate) struct EccOpsTable<T> {
+    pub(crate) table: Vec<Vec<T>>,
 }
 
-impl<OpFormat> EccOpsTable<OpFormat> {
+impl<T> EccOpsTable<T> {
     pub fn new() -> Self {
         Self { table: Vec::new() }
     }
@@ -146,11 +169,11 @@ impl<OpFormat> EccOpsTable<OpFormat> {
         self.table.len()
     }
 
-    pub fn get(&self) -> &Vec<Vec<OpFormat>> {
+    pub fn get(&self) -> &Vec<Vec<T>> {
         &self.table
     }
 
-    pub fn push(&mut self, op: OpFormat) {
+    pub fn push(&mut self, op: T) {
         if let Some(front) = self.table.first_mut() {
             front.push(op);
         }
@@ -170,9 +193,9 @@ impl<OpFormat> EccOpsTable<OpFormat> {
         self.table.insert(0, new_subtable);
     }
 
-    pub fn get_reconstructed(&self) -> Vec<OpFormat>
+    pub fn get_reconstructed(&self) -> Vec<T>
     where
-        OpFormat: Clone,
+        T: Clone,
     {
         let mut reconstructed_table = Vec::with_capacity(self.size());
         for subtable in &self.table {
@@ -182,8 +205,8 @@ impl<OpFormat> EccOpsTable<OpFormat> {
     }
 }
 
-impl<OpFormat> std::ops::Index<usize> for EccOpsTable<OpFormat> {
-    type Output = OpFormat;
+impl<T> std::ops::Index<usize> for EccOpsTable<T> {
+    type Output = T;
 
     fn index(&self, mut index: usize) -> &Self::Output {
         for subtable in &self.table {
@@ -195,45 +218,46 @@ impl<OpFormat> std::ops::Index<usize> for EccOpsTable<OpFormat> {
         panic!("Index out of bounds");
     }
 }
-#[derive(Clone, Default)]
-pub struct ECCVMOperation<P: CurveGroup> {
-    pub op_code: EccOpCode,
-    pub base_point: P::Affine,
+#[derive(Default)]
+pub struct CoECCVMOperation<T: NoirUltraHonkProver<C>, C: CurveGroup> {
+    pub op_code: CoEccOpCode<T, C>,
+    pub base_point: C::Affine,
     pub z1: BigUint,
     pub z2: BigUint,
-    pub mul_scalar_full: P::ScalarField,
+    pub mul_scalar_full: C::ScalarField,
 }
 
-impl<P: CurveGroup> PartialEq for ECCVMOperation<P> {
-    fn eq(&self, other: &Self) -> bool {
-        self.op_code == other.op_code
-            && self.base_point == other.base_point
-            && self.z1 == other.z1
-            && self.z2 == other.z2
-            && self.mul_scalar_full == other.mul_scalar_full
-    }
-}
+// impl<T: NoirUltraHonkProver<C>, C: CurveGroup> PartialEq for CoECCVMOperation<T, C> {
+//     fn eq(&self, other: &Self) -> bool {
+//         self.op_code == other.op_code
+//             && self.base_point == other.base_point
+//             && self.z1 == other.z1
+//             && self.z2 == other.z2
+//             && self.mul_scalar_full == other.mul_scalar_full
+//     }
+// }
+
 #[derive(Clone)]
-pub struct UltraOp<P: CurveGroup> {
-    pub op_code: EccOpCode,
-    pub x_lo: P::ScalarField,
-    pub x_hi: P::ScalarField,
-    pub y_lo: P::ScalarField,
-    pub y_hi: P::ScalarField,
-    pub z_1: P::ScalarField,
-    pub z_2: P::ScalarField,
+pub(crate) struct CoUltraOp<T: NoirUltraHonkProver<C>, C: CurveGroup> {
+    pub op_code: CoEccOpCode<T, C>,
+    pub x_lo: T::ArithmeticShare,
+    pub x_hi: T::ArithmeticShare,
+    pub y_lo: T::ArithmeticShare,
+    pub y_hi: T::ArithmeticShare,
+    pub z_1: T::ArithmeticShare,
+    pub z_2: T::ArithmeticShare,
     pub return_is_infinity: bool,
 }
 
-impl<P: CurveGroup> UltraOp<P> {
+impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoUltraOp<T, C> {
     /**
      * @brief Get the point in standard form i.e. as two coordinates x and y in the base field or as a point at
      * infinity whose coordinates are set to (0,0).
      *
      */
-    pub fn get_base_point_standard_form(&self) -> [P::BaseField; 2] {
+    pub fn get_base_point_standard_form(&self) -> [C::BaseField; 2] {
         if self.return_is_infinity {
-            return [P::BaseField::zero(), P::BaseField::zero()];
+            return [C::BaseField::zero(), C::BaseField::zero()];
         }
         todo!()
         // auto x = Fq((uint256_t(x_hi) << 2 * stdlib::NUM_LIMB_BITS_IN_FIELD_SIMULATION) + uint256_t(x_lo));
@@ -243,21 +267,39 @@ impl<P: CurveGroup> UltraOp<P> {
     }
 }
 
-#[derive(Default, PartialEq, Eq, Clone, Debug)]
-pub struct EccOpCode {
-    pub add: bool,
-    pub mul: bool,
-    pub eq: bool,
-    pub reset: bool,
+#[derive(Default, PartialEq, Eq, Debug, Clone)]
+// TACEO TODO: Fields should be BinaryShare
+pub struct CoEccOpCode<T, C> 
+where 
+    T: NoirUltraHonkProver<C>, 
+    C: CurveGroup,
+{
+    pub(crate) add: T::ArithmeticShare,
+    pub(crate) mul: T::ArithmeticShare,
+    pub(crate) eq: T::ArithmeticShare,
+    pub(crate) reset: T::ArithmeticShare,
 }
 
-impl EccOpCode {
+impl<T, C> CoEccOpCode<T, C> 
+where
+    T: NoirUltraHonkProver<C>,
+    C: CurveGroup,
+{
     /// Returns the value of the opcode as a 32-bit integer.
-    pub fn value(&self) -> u32 {
-        let mut res = self.add as u32;
-        res = (res << 1) + self.mul as u32;
-        res = (res << 1) + self.eq as u32;
-        res = (res << 1) + self.reset as u32;
+    pub fn value<N: Network>(&self, net: &N, state: &mut T::State) -> T::ArithmeticShare {
+        let mut res = self.add;
+        res = T::add( 
+            T::mul_with_public(C::ScalarField::from(2), res),
+            self.mul
+        );
+        res = T::add(
+            T::mul_with_public(C::ScalarField::from(2), res),
+            self.eq
+        );
+        res = T::add(
+            T::mul_with_public(C::ScalarField::from(2), res),
+            self.reset
+        );
         res
     }
 }
@@ -317,7 +359,7 @@ impl EccvmRowTracker {
         std::cmp::max(transcript_rows, std::cmp::max(msm_rows, precompute_rows))
     }
 
-    pub fn update_cached_msms<P: CurveGroup>(&mut self, op: &ECCVMOperation<P>) {
+    pub fn update_cached_msms<T: NoirUltraHonkProver<C>, C: CurveGroup>(&mut self, op: &CoECCVMOperation<T, C>) {
         // self.num_transcript_rows += 1;
         // if op.op_code.mul {
         //     if op.z1 != P::ScalarField::zero().into() && !op.base_point.is_point_at_infinity() {
@@ -343,17 +385,17 @@ impl EccvmRowTracker {
     }
 }
 
-pub struct ECCOpQueue<P: CurveGroup> {
-    pub(crate) point_at_infinity: P::Affine,
-    pub(crate) accumulator: P::Affine,
-    pub(crate) eccvm_ops_table: EccvmOpsTable<P>,
-    pub(crate) ultra_ops_table: UltraEccOpsTable<P>,
-    pub(crate) eccvm_ops_reconstructed: Vec<ECCVMOperation<P>>,
-    pub(crate) ultra_ops_reconstructed: Vec<UltraOp<P>>,
+pub struct CoECCOpQueue<T: NoirUltraHonkProver<C>, C: CurveGroup> {
+    pub(crate) ultra_ops_table: CoUltraEccOpsTable<T, C>,
+    pub(crate) eccvm_ops_table: CoEccvmOpsTable<T, C>,
+    pub(crate) point_at_infinity: C::Affine,
+    pub(crate) accumulator: C::Affine,
+    pub(crate) eccvm_ops_reconstructed: Vec<CoECCVMOperation<T, C>>,
+    pub(crate) ultra_ops_reconstructed: Vec<CoUltraOp<T, C>>,
     pub(crate) eccvm_row_tracker: EccvmRowTracker,
 }
 
-impl<P: CurveGroup> ECCOpQueue<P> {
+impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoECCOpQueue<T, C> {
     // Constructor that instantiates an initial ECC op subtable
     // pub fn new() -> Self {
     //     let mut queue = Self {
@@ -376,34 +418,42 @@ impl<P: CurveGroup> ECCOpQueue<P> {
     }
 
     // Construct polynomials corresponding to the columns of the full aggregate ultra ecc ops table
-    pub fn construct_ultra_ops_table_columns(&self) -> [Polynomial<P::ScalarField>; TABLE_WIDTH] {
-        self.ultra_ops_table.construct_table_columns()
+    pub fn construct_ultra_ops_table_columns<N: Network>(
+        &self,
+        network: &N,
+        state: &mut T::State,
+    ) -> [SharedPolynomial<T, C>; TABLE_WIDTH] {
+        self.ultra_ops_table.construct_table_columns(network, state)
     }
 
     // Construct polys corresponding to the columns of the aggregate ultra ops table, excluding the most recent subtable
-    pub fn construct_previous_ultra_ops_table_columns(
+    pub fn construct_previous_ultra_ops_table_columns<N: Network>(
         &self,
-    ) -> [Polynomial<P::ScalarField>; TABLE_WIDTH] {
-        self.ultra_ops_table.construct_previous_table_columns()
+        network: &N,
+        state: &mut T::State,
+    ) -> [SharedPolynomial<T, C>; TABLE_WIDTH] {
+        self.ultra_ops_table.construct_previous_table_columns(network, state)
     }
 
     // Construct polynomials corresponding to the columns of the current subtable of ultra ecc ops
-    pub fn construct_current_ultra_ops_subtable_columns(
+    pub fn construct_current_ultra_ops_subtable_columns<N: Network>(
         &self,
-    ) -> [Polynomial<P::ScalarField>; TABLE_WIDTH] {
+        network: &N,
+        state: &mut T::State,
+    ) -> [SharedPolynomial<T, C>; TABLE_WIDTH] {
         self.ultra_ops_table
-            .construct_current_ultra_ops_subtable_columns()
+            .construct_current_ultra_ops_subtable_columns(network, state)
     }
 
-    // Reconstruct the full table of eccvm ops in contiguous memory from the independent subtables
-    pub fn construct_full_eccvm_ops_table(&mut self) {
-        self.eccvm_ops_reconstructed = self.eccvm_ops_table.get_reconstructed();
-    }
+    // // Reconstruct the full table of eccvm ops in contiguous memory from the independent subtables
+    // pub fn construct_full_eccvm_ops_table(&mut self) {
+    //     self.eccvm_ops_reconstructed = self.eccvm_ops_table.get_reconstructed();
+    // }
 
-    // Reconstruct the full table of ultra ops in contiguous memory from the independent subtables
-    pub fn construct_full_ultra_ops_table(&mut self) {
-        self.ultra_ops_reconstructed = self.ultra_ops_table.get_reconstructed();
-    }
+    // // Reconstruct the full table of ultra ops in contiguous memory from the independent subtables
+    // pub fn construct_full_ultra_ops_table(&mut self) {
+    //     self.ultra_ops_reconstructed = self.ultra_ops_table.get_reconstructed();
+    // }
 
     pub fn get_ultra_ops_table_num_rows(&self) -> usize {
         self.ultra_ops_table.ultra_table_size()
@@ -416,20 +466,20 @@ impl<P: CurveGroup> ECCOpQueue<P> {
     // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1339): Consider making the ultra and eccvm ops getters
     // more memory efficient
 
-    // Get the full table of ECCVM ops in contiguous memory; construct it if it has not been constructed already
-    pub fn get_eccvm_ops(&mut self) -> &Vec<ECCVMOperation<P>> {
-        if self.eccvm_ops_reconstructed.is_empty() {
-            self.construct_full_eccvm_ops_table();
-        }
-        &self.eccvm_ops_reconstructed
-    }
+    // // Get the full table of ECCVM ops in contiguous memory; construct it if it has not been constructed already
+    // pub fn get_eccvm_ops(&mut self) -> &Vec<CoECCVMOperation<T, C>> {
+    //     if self.eccvm_ops_reconstructed.is_empty() {
+    //         self.construct_full_eccvm_ops_table();
+    //     }
+    //     &self.eccvm_ops_reconstructed
+    // }
 
-    pub fn get_ultra_ops(&mut self) -> &Vec<UltraOp<P>> {
-        if self.ultra_ops_reconstructed.is_empty() {
-            self.construct_full_ultra_ops_table();
-        }
-        &self.ultra_ops_reconstructed
-    }
+    // pub fn get_ultra_ops(&mut self) -> &Vec<CoUltraOp<T, C>> {
+    //     if self.ultra_ops_reconstructed.is_empty() {
+    //         self.construct_full_ultra_ops_table();
+    //     }
+    //     &self.ultra_ops_reconstructed
+    // }
 
     /**
      * @brief Get the number of rows in the 'msm' column section, for all msms in the circuit
@@ -456,11 +506,11 @@ impl<P: CurveGroup> ECCOpQueue<P> {
      * @brief A fuzzing only method for setting eccvm ops directly
      *
      */
-    pub fn set_eccvm_ops_for_fuzzing(&mut self, eccvm_ops_in: Vec<ECCVMOperation<P>>) {
+    pub fn set_eccvm_ops_for_fuzzing(&mut self, eccvm_ops_in: Vec<CoECCVMOperation<T, C>>) {
         self.eccvm_ops_reconstructed = eccvm_ops_in;
     }
 
-    pub fn get_accumulator(&self) -> P::Affine {
+    pub fn get_accumulator(&self) -> C::Affine {
         self.accumulator
     }
 
@@ -561,7 +611,7 @@ impl<P: CurveGroup> ECCOpQueue<P> {
      * @brief Append an eccvm operation to the eccvm ops table; update the eccvm row tracker
      *
      */
-    fn append_eccvm_op(&mut self, op: ECCVMOperation<P>) {
+    fn append_eccvm_op(&mut self, op: CoECCVMOperation<T, C>) {
         self.eccvm_row_tracker.update_cached_msms(&op);
         self.eccvm_ops_table.push(op);
     }

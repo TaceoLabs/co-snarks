@@ -17,6 +17,7 @@ pub struct ShamirUltraHonkDriver;
 
 impl<P: CurveGroup> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
     type ArithmeticShare = ShamirPrimeFieldShare<P::ScalarField>;
+    type BinaryShare = ();
     type PointShare = ShamirPointShare<P>;
     type State = ShamirState<P::ScalarField>;
 
@@ -76,6 +77,13 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
         shared: Self::ArithmeticShare,
     ) -> P::ScalarField {
         public * shared.inner()
+    }
+
+    fn shl(
+        share: Self::BinaryShare,
+        shift: usize,
+    ) -> Self::BinaryShare {
+        unimplemented!("ShamirUltraHonkDriver does not support shl operation");
     }
 
     fn local_mul_vec(

@@ -3,19 +3,20 @@ use ark_ec::CurveGroup;
 use ark_ff::Field;
 use itertools::izip;
 use mpc_core::{
-    MpcState,
     protocols::rep3::{
-        Rep3PointShare, Rep3PrimeFieldShare, Rep3State, arithmetic, id::PartyID, pointshare, poly,
-    },
+        arithmetic, id::PartyID, pointshare, poly, Rep3BigUintShare, Rep3PointShare, Rep3PrimeFieldShare, Rep3State
+    }, MpcState
 };
 use mpc_net::Network;
 use num_traits::Zero;
 use rayon::prelude::*;
 
+#[derive(Clone)]
 pub struct Rep3UltraHonkDriver;
 
 impl<P: CurveGroup> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
     type ArithmeticShare = Rep3PrimeFieldShare<P::ScalarField>;
+    type BinaryShare = Rep3BigUintShare<P::ScalarField>;
     type PointShare = Rep3PointShare<P>;
     type State = Rep3State;
 
@@ -77,6 +78,13 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
         shared: Self::ArithmeticShare,
     ) -> P::ScalarField {
         public * shared.a
+    }
+
+    fn shl(
+        share: Self::BinaryShare,
+        shift: usize,
+    ) -> Self::BinaryShare {
+        share << shift
     }
 
     fn local_mul_vec(

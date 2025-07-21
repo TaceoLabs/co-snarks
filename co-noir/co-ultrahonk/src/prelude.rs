@@ -9,6 +9,9 @@ pub use crate::types::Polynomials;
 pub use crate::{
     PlainCoBuilder, Rep3CoBuilder, ShamirCoBuilder, mpc_prover_flavour::MPCProverFlavour,
 };
+pub use crate::co_decider::polynomial::SharedPolynomial;
+pub use crate::CoUtils;
+pub use crate::co_decider::co_shplemini::{ShpleminiOpeningClaim, OpeningPair};
 // Re-exporting the following types from `ultrahonk` and `co_builder` crates:
 pub use co_builder::prelude::{
     AcirFormat, HonkRecursion, NUM_MASKED_ROWS, ProvingKey as PlainProvingKey, VerifyingKey,

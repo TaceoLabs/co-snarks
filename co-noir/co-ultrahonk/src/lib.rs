@@ -30,10 +30,10 @@ pub type ShamirCoBuilder<'a, P, N> =
 // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1046): Remove the need for const sized proofs
 pub(crate) const CONST_PROOF_SIZE_LOG_N: usize = ultrahonk::CONST_PROOF_SIZE_LOG_N;
 
-pub(crate) struct CoUtils {}
+pub struct CoUtils {}
 
 impl CoUtils {
-    pub(crate) fn commit<T: NoirUltraHonkProver<P>, P: CurveGroup>(
+    pub fn commit<T: NoirUltraHonkProver<P>, P: CurveGroup>(
         poly: &[T::ArithmeticShare],
         crs: &ProverCrs<P>,
     ) -> T::PointShare {

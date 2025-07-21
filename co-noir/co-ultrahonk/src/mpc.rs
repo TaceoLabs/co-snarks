@@ -22,6 +22,9 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
         + PartialEq
         + std::fmt::Debug
         + 'static;
+    type BinaryShare: std::fmt::Debug
+        + Send
+        + 'static;
     /// The G1 point share type
     type PointShare: std::fmt::Debug + Send + 'static;
     /// Internal state of used MPC protocol
@@ -208,6 +211,11 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
             Self::add_assign_public(x, scalar, id);
         }
     }
+
+    fn shl(
+        share: Self::BinaryShare,
+        shift: usize,
+    ) -> Self::BinaryShare;
 
     fn local_mul_vec(
         a: &[Self::ArithmeticShare],

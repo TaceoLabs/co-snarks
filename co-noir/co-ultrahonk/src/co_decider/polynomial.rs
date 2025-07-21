@@ -10,8 +10,8 @@ use std::{
 
 use crate::mpc::NoirUltraHonkProver;
 
-pub(crate) struct SharedPolynomial<T: NoirUltraHonkProver<P>, P: CurveGroup> {
-    pub(crate) coefficients: Vec<T::ArithmeticShare>,
+pub struct SharedPolynomial<T: NoirUltraHonkProver<P>, P: CurveGroup> {
+    pub coefficients: Vec<T::ArithmeticShare>,
 }
 
 impl<T: NoirUltraHonkProver<P>, P: CurveGroup> SharedPolynomial<T, P> {
@@ -51,7 +51,7 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup> SharedPolynomial<T, P> {
         }
     }
 
-    pub(crate) fn add_scaled(&mut self, src: &SharedPolynomial<T, P>, scalar: &P::ScalarField) {
+    pub fn add_scaled(&mut self, src: &SharedPolynomial<T, P>, scalar: &P::ScalarField) {
         self.add_scaled_slice(&src.coefficients, scalar);
     }
 
@@ -81,7 +81,7 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup> SharedPolynomial<T, P> {
     /**
      * @brief Divides p(X) by (X-r) in-place.
      */
-    pub(crate) fn factor_roots(&mut self, root: &P::ScalarField) {
+    pub fn factor_roots(&mut self, root: &P::ScalarField) {
         if root.is_zero() {
             // if one of the roots is 0 after having divided by all other roots,
             // then p(X) = a₁⋅X + ⋯ + aₙ₋₁⋅Xⁿ⁻¹

@@ -62,7 +62,7 @@ impl<
         commitment_key: &ProverCrs<P>,
         has_zk: ZeroKnowledge,
     ) -> HonkProofResult<(SharedPolynomial<T, P>, SharedPolynomial<T, P>)> {
-        let f_polynomials = Self::get_f_polynomials(&self.memory.polys);
+        let f_polynomials: PolyF<'_, Vec<<T as NoirUltraHonkProver<P>>::ArithmeticShare>, Vec<_>, L> = Self::get_f_polynomials(&self.memory.polys);
         let g_polynomials = Self::get_g_polynomials(&self.memory.polys);
         let n = 1 << log_n;
         let mut batched_unshifted = SharedPolynomial::new_zero(n); // batched unshifted polynomials

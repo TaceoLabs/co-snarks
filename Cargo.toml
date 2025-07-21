@@ -13,6 +13,7 @@ members = [
     "co-noir/ultrahonk",
     "co-noir/co-ultrahonk",
     "co-noir/co-noir",
+    "co-noir/co-goblin",
     "mpc-core",
     "mpc-net",
     "tests",

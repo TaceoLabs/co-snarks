@@ -15,6 +15,7 @@ pub struct PlainUltraHonkDriver;
 
 impl<P: CurveGroup> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
     type ArithmeticShare = P::ScalarField;
+    type BinaryShare = usize;
     type PointShare = P;
     type State = ();
 
@@ -86,6 +87,13 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         shared: Self::ArithmeticShare,
     ) -> P::ScalarField {
         <Self as NoirUltraHonkProver<P>>::mul_with_public(public, shared)
+    }
+
+    fn shl(
+        share: Self::BinaryShare,
+        shift: usize,
+    ) -> Self::BinaryShare {
+        share << shift
     }
 
     fn local_mul_vec(
