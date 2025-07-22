@@ -1,15 +1,11 @@
-use std::io::SeekFrom;
-use std::marker::PhantomData;
-
-use ark_ec::AdditiveGroup;
+use std::collections::VecDeque;
 use ark_ff::Field;
 use co_builder::TranscriptFieldType;
-use co_builder::prelude::{HonkCurve, Polynomial, ProverCrs, Utils};
+use co_builder::prelude::{HonkCurve, ProverCrs};
 use co_ultrahonk::CoUtils;
 use co_ultrahonk::prelude::{NoirUltraHonkProver, SharedPolynomial};
 use co_ultrahonk::prelude::{OpeningPair, ShpleminiOpeningClaim};
-use itertools::{Interleave, Itertools, interleave, izip};
-use mpc_core::protocols::rep3::poly;
+use itertools::{Itertools, izip};
 use mpc_net::Network;
 use ultrahonk::prelude::HonkProof;
 use ultrahonk::prelude::{Transcript, TranscriptHasher};
@@ -45,7 +41,6 @@ where
         net: &'a N,
         state: &'a mut T::State,
     ) -> Self {
-        println!("Creating CoMergeProver with {} wires", NUM_WIRES);
         Self {
             ecc_op_queue,
             commitment_key,
@@ -56,8 +51,6 @@ where
     }
 
     pub fn construct_proof(mut self) -> HonkProof<TranscriptFieldType> {
-        println!("Constructing proof with {} wires", NUM_WIRES);
-
         self.transcript = Transcript::new();
 
         let T_current = self
@@ -89,33 +82,24 @@ where
             .map(|i| CoUtils::commit::<T, C>(&T_current[i].coefficients, &self.commitment_key))
             .collect_vec();
 
-        // Open commitments
-        let t_commitments =
-            T::open_point_many(t_shared_commitments.as_slice(), self.net, self.state)
-                .expect("Failed to open t_current commitments");
-        let T_prev_commitments =
-            T::open_point_many(T_shared_prev_commitments.as_slice(), self.net, self.state)
-                .expect("Failed to open T_prev commitments");
-        let T_commitments =
-            T::open_point_many(T_shared_commitments.as_slice(), self.net, self.state)
-                .expect("Failed to open T_current commitments");
+        // Interleave the commitments and open them
+        let shared_commitments = izip!(t_shared_commitments, T_shared_prev_commitments, T_shared_commitments)
+            .flat_map(|(a, b, c)| vec![a, b, c])
+            .collect_vec();
 
-        // Interleave the commitments and send them to the verifier
-        izip!(t_commitments, T_prev_commitments, T_commitments)
-            .enumerate()
-            .flat_map(|(i, (a, b, c))| {
-                vec![
-                    (format!("t_CURRENT_{i}"), a),
-                    (format!("T_PREV_{i}"), b),
-                    (format!("T_CURRENT_{i}"), c),
-                ]
-            })
-            .for_each(|(i, commitment)| {
+        let mut commitments: VecDeque<_> = T::open_point_many(shared_commitments.as_slice(), self.net, self.state)
+            .expect("Failed to open commitments").into();
+
+        // Send commitments to the verifier
+        let num_chunks = commitments.len() / 3;
+        for i in 0..num_chunks {
+            for label in ["t_CURRENT_", "T_PREV_", "T_CURRENT_"] {
                 self.transcript.send_point_to_verifier::<C>(
-                    format!("t_CURRENT_{i}"),
-                    commitment.clone().into(),
+                    format!("{}{i}", label),
+                    commitments.pop_front().unwrap().into(),
                 );
-            });
+            }
+        }
 
         let kappa = self.transcript.get_challenge::<C>("kappa".to_owned());
 
@@ -230,15 +214,14 @@ mod tests {
     use ark_bn254::Bn254;
     use ark_ec::bn::Bn;
     use ark_ec::pairing::Pairing;
+    use ark_ff::AdditiveGroup;
     use co_builder::prelude::CrsParser;
     use co_ultrahonk::prelude::Rep3UltraHonkDriver;
     use goblin::eccvm::ecc_op_queue::{EccOpCode, UltraOp};
     use mpc_core::protocols::{
         rep3::{
-            Rep3State, conversion::A2BType, id::PartyID, network::Rep3NetworkExt,
-            share_field_element,
+            Rep3State, conversion::A2BType, share_field_element,
         },
-        shamir::share,
     };
     use mpc_net::local::LocalNetwork;
     use num_bigint::BigUint;

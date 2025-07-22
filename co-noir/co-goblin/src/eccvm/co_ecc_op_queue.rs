@@ -227,16 +227,6 @@ pub struct CoECCVMOperation<T: NoirUltraHonkProver<C>, C: CurveGroup> {
     pub mul_scalar_full: C::ScalarField,
 }
 
-// impl<T: NoirUltraHonkProver<C>, C: CurveGroup> PartialEq for CoECCVMOperation<T, C> {
-//     fn eq(&self, other: &Self) -> bool {
-//         self.op_code == other.op_code
-//             && self.base_point == other.base_point
-//             && self.z1 == other.z1
-//             && self.z2 == other.z2
-//             && self.mul_scalar_full == other.mul_scalar_full
-//     }
-// }
-
 #[derive(Clone)]
 pub(crate) struct CoUltraOp<T: NoirUltraHonkProver<C>, C: CurveGroup> {
     pub op_code: CoEccOpCode<T, C>,
@@ -247,24 +237,6 @@ pub(crate) struct CoUltraOp<T: NoirUltraHonkProver<C>, C: CurveGroup> {
     pub z_1: T::ArithmeticShare,
     pub z_2: T::ArithmeticShare,
     pub return_is_infinity: bool,
-}
-
-impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoUltraOp<T, C> {
-    /**
-     * @brief Get the point in standard form i.e. as two coordinates x and y in the base field or as a point at
-     * infinity whose coordinates are set to (0,0).
-     *
-     */
-    pub fn get_base_point_standard_form(&self) -> [C::BaseField; 2] {
-        if self.return_is_infinity {
-            return [C::BaseField::zero(), C::BaseField::zero()];
-        }
-        todo!()
-        // auto x = Fq((uint256_t(x_hi) << 2 * stdlib::NUM_LIMB_BITS_IN_FIELD_SIMULATION) + uint256_t(x_lo));
-        // auto y = Fq((uint256_t(y_hi) << 2 * stdlib::NUM_LIMB_BITS_IN_FIELD_SIMULATION) + uint256_t(y_lo));
-
-        // return { x, y };
-    }
 }
 
 #[derive(Default, PartialEq, Eq, Debug, Clone)]
@@ -350,29 +322,6 @@ impl EccvmRowTracker {
         std::cmp::max(transcript_rows, std::cmp::max(msm_rows, precompute_rows))
     }
 
-    pub fn update_cached_msms<T: NoirUltraHonkProver<C>, C: CurveGroup>(
-        &mut self,
-        op: &CoECCVMOperation<T, C>,
-    ) {
-        // self.num_transcript_rows += 1;
-        // if op.op_code.mul {
-        //     if op.z1 != P::ScalarField::zero().into() && !op.base_point.is_point_at_infinity() {
-        //         self.cached_active_msm_count += 1;
-        //     }
-        //     if op.z2 != P::ScalarField::zero().into() && !op.base_point.is_point_at_infinity() {
-        //         self.cached_active_msm_count += 1;
-        //     }
-        // } else if self.cached_active_msm_count != 0 {
-        //     self.num_msm_rows += Self::num_eccvm_msm_rows(self.cached_active_msm_count as usize);
-        //     self.num_precompute_table_rows += Self::get_precompute_table_row_count_for_single_msm(
-        //         self.cached_active_msm_count as usize,
-        //     );
-        //     self.cached_num_muls += self.cached_active_msm_count;
-        //     self.cached_active_msm_count = 0;
-        // }
-        todo!()
-    }
-
     pub fn get_precompute_table_row_count_for_single_msm(msm_count: usize) -> u32 {
         let num_precompute_rows_per_scalar = NUM_WNAF_DIGITS_PER_SCALAR / WNAF_DIGITS_PER_ROW;
         (msm_count * num_precompute_rows_per_scalar) as u32
@@ -390,21 +339,6 @@ pub struct CoECCOpQueue<T: NoirUltraHonkProver<C>, C: CurveGroup> {
 }
 
 impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoECCOpQueue<T, C> {
-    // Constructor that instantiates an initial ECC op subtable
-    // pub fn new() -> Self {
-    //     let mut queue = Self {
-    //         point_at_infinity: P::Group::affine_point_at_infinity(),
-    //         accumulator: P::Group::affine_point_at_infinity(),
-    //         eccvm_ops_table: EccvmOpsTable::new(),
-    //         ultra_ops_table: UltraEccOpsTable::new(),
-    //         eccvm_ops_reconstructed: Vec::new(),
-    //         ultra_ops_reconstructed: Vec::new(),
-    //         eccvm_row_tracker: EccvmRowTracker::new(),
-    //     };
-    //     queue.initialize_new_subtable();
-    //     queue
-    // }
-
     // Initialize a new subtable of ECCVM ops and Ultra ops corresponding to an individual circuit
     pub fn initialize_new_subtable(&mut self) {
         self.eccvm_ops_table.create_new_subtable(0);
@@ -440,16 +374,6 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoECCOpQueue<T, C> {
             .construct_current_ultra_ops_subtable_columns(network, state)
     }
 
-    // // Reconstruct the full table of eccvm ops in contiguous memory from the independent subtables
-    // pub fn construct_full_eccvm_ops_table(&mut self) {
-    //     self.eccvm_ops_reconstructed = self.eccvm_ops_table.get_reconstructed();
-    // }
-
-    // // Reconstruct the full table of ultra ops in contiguous memory from the independent subtables
-    // pub fn construct_full_ultra_ops_table(&mut self) {
-    //     self.ultra_ops_reconstructed = self.ultra_ops_table.get_reconstructed();
-    // }
-
     pub fn get_ultra_ops_table_num_rows(&self) -> usize {
         self.ultra_ops_table.ultra_table_size()
     }
@@ -457,24 +381,6 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoECCOpQueue<T, C> {
     pub fn get_current_ultra_ops_subtable_num_rows(&self) -> usize {
         self.ultra_ops_table.current_ultra_subtable_size()
     }
-
-    // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1339): Consider making the ultra and eccvm ops getters
-    // more memory efficient
-
-    // // Get the full table of ECCVM ops in contiguous memory; construct it if it has not been constructed already
-    // pub fn get_eccvm_ops(&mut self) -> &Vec<CoECCVMOperation<T, C>> {
-    //     if self.eccvm_ops_reconstructed.is_empty() {
-    //         self.construct_full_eccvm_ops_table();
-    //     }
-    //     &self.eccvm_ops_reconstructed
-    // }
-
-    // pub fn get_ultra_ops(&mut self) -> &Vec<CoUltraOp<T, C>> {
-    //     if self.ultra_ops_reconstructed.is_empty() {
-    //         self.construct_full_ultra_ops_table();
-    //     }
-    //     &self.ultra_ops_reconstructed
-    // }
 
     /**
      * @brief Get the number of rows in the 'msm' column section, for all msms in the circuit
@@ -508,159 +414,4 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoECCOpQueue<T, C> {
     pub fn get_accumulator(&self) -> C::Affine {
         self.accumulator
     }
-
-    /*
-     * @brief Write point addition op to queue and natively perform addition
-     *
-     * @param to_add
-     */
-    // pub fn add_accumulate(&mut self, to_add: &P::G1Affine) -> UltraOp<P> {
-    //     // Update the accumulator natively
-    //     self.accumulator = (self.accumulator + *to_add).into();
-    //     let op_code = EccOpCode {
-    //         add: true,
-    //         ..Default::default()
-    //     };
-    //     // Store the eccvm operation
-    //     self.append_eccvm_op(ECCVMOperation {
-    //         op_code,
-    //         base_point: *to_add,
-    //         ..Default::default()
-    //     });
-
-    //     // Construct and store the operation in the ultra op format
-    //     self.construct_and_populate_ultra_ops(op_code, to_add, &P::ScalarField::zero())
-    // }
-
-    /*
-     * @brief Write multiply and add op to queue and natively perform operation
-     *
-     * @param to_add
-     */
-    // pub fn mul_accumulate(&mut self, to_mul: &P::G1Affine, scalar: &P::ScalarField) -> UltraOp<P> {
-    //     // Update the accumulator natively
-    //     self.accumulator = (self.accumulator + *to_mul * *scalar).into();
-    //     let op_code = EccOpCode {
-    //         mul: true,
-    //         ..Default::default()
-    //     };
-
-    //     // Construct and store the operation in the ultra op format
-    //     let ultra_op = self.construct_and_populate_ultra_ops(op_code, to_mul, scalar);
-
-    //     // Store the eccvm operation
-    //     self.append_eccvm_op(ECCVMOperation {
-    //         op_code,
-    //         base_point: *to_mul,
-    //         z1: ultra_op.z_1.into(),
-    //         z2: ultra_op.z_2.into(),
-    //         mul_scalar_full: *scalar,
-    //     });
-
-    //     ultra_op
-    // }
-
-    /*
-     * @brief Writes a no op (i.e. two zero rows) to the ultra ops table but adds no eccvm operations.
-     *
-     * @details We want to be able to add zero rows (and, eventually, random rows
-     * https://github.com/AztecProtocol/barretenberg/issues/1360) to the ultra ops table without affecting the
-     * operations in the ECCVM.
-     */
-    // pub fn no_op_ultra_only(&mut self) -> UltraOp<P> {
-    //     let op_code = EccOpCode::default();
-
-    //     // Construct and store the operation in the ultra op format
-    //     self.construct_and_populate_ultra_ops(
-    //         op_code,
-    //         &self.accumulator.to_owned(),
-    //         &P::ScalarField::zero(),
-    //     )
-    // }
-
-    /*
-     * @brief Write equality op using internal accumulator point
-     *
-     * @return current internal accumulator point (prior to reset to 0)
-     */
-    // pub fn eq_and_reset(&mut self) -> UltraOp<P> {
-    //     let expected = self.accumulator;
-    //     // self.accumulator = P::Group::affine_point_at_infinity(); TODO FLORIN
-    //     let op_code = EccOpCode {
-    //         eq: true,
-    //         reset: true,
-    //         ..Default::default()
-    //     };
-    //     // Store eccvm operation
-    //     self.append_eccvm_op(ECCVMOperation {
-    //         op_code,
-    //         base_point: expected,
-    //         ..Default::default()
-    //     });
-
-    //     // Construct and store the operation in the ultra op format
-    //     self.construct_and_populate_ultra_ops(&op_code, &expected, &P::ScalarField::zero())
-    // }
-
-    /**
-     * @brief Append an eccvm operation to the eccvm ops table; update the eccvm row tracker
-     *
-     */
-    fn append_eccvm_op(&mut self, op: CoECCVMOperation<T, C>) {
-        self.eccvm_row_tracker.update_cached_msms(&op);
-        self.eccvm_ops_table.push(op);
-    }
-
-    // /**
-    //  * @brief Given an ecc operation and its inputs, decompose into ultra format and populate ultra_ops
-    //  *
-    //  * @param op_code
-    //  * @param point
-    //  * @param scalar
-    //  * @return UltraOp
-    //  */
-    // fn construct_and_populate_ultra_ops(
-    //     &mut self,
-    //     op_code: &EccOpCode,
-    //     point: &P::G1Affine,
-    //     scalar: &P::ScalarField,
-    // ) -> UltraOp<P> {
-    //     let mut ultra_op = UltraOp::default();
-    //     ultra_op.op_code = op_code;
-
-    //     // Decompose point coordinates (Fq) into hi-lo chunks (Fr)
-    //     const CHUNK_SIZE: usize = 2 * NUM_LIMB_BITS_IN_FIELD_SIMULATION;
-    //     let x_256 = uint256_t::from(point.x);
-    //     let y_256 = uint256_t::from(point.y);
-    //     ultra_op.return_is_infinity = point.is_point_at_infinity();
-    //     // if we have a point at infinity, set x/y to zero
-    //     // in the biggroup_goblin class we use `assert_equal` statements to validate
-    //     // the original in-circuit coordinate values are also zero
-    //     if point.is_point_at_infinity() {
-    //         x_256 = uint256_t::zero();
-    //         y_256 = uint256_t::zero();
-    //     }
-    //     ultra_op.x_lo = P::ScalarField::from(x_256.slice(0, CHUNK_SIZE));
-    //     ultra_op.x_hi = P::ScalarField::from(x_256.slice(CHUNK_SIZE, CHUNK_SIZE * 2));
-    //     ultra_op.y_lo = P::ScalarField::from(y_256.slice(0, CHUNK_SIZE));
-    //     ultra_op.y_hi = P::ScalarField::from(y_256.slice(CHUNK_SIZE, CHUNK_SIZE * 2));
-
-    //     // Split scalar into 128 bit endomorphism scalars
-    //     let mut z_1 = P::ScalarField::zero();
-    //     let mut z_2 = P::ScalarField::zero();
-    //     let converted = scalar.from_montgomery_form();
-    //     let converted_u256 = uint256_t::from(*scalar);
-    //     if converted_u256.get_msb() <= 128 {
-    //         ultra_op.z_1 = *scalar;
-    //         ultra_op.z_2 = P::ScalarField::zero();
-    //     } else {
-    //         P::ScalarField::split_into_endomorphism_scalars(&converted, &mut z_1, &mut z_2);
-    //         ultra_op.z_1 = z_1.to_montgomery_form();
-    //         ultra_op.z_2 = z_2.to_montgomery_form();
-    //     }
-
-    //     self.ultra_ops_table.push(ultra_op.clone());
-
-    //     ultra_op
-    // }
 }
