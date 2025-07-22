@@ -1,14 +1,14 @@
 #![expect(unused)]
+use ark_ec::AdditiveGroup;
 use ark_ec::CurveGroup;
 use ark_ff::Zero;
 use co_builder::prelude::Polynomial;
 use co_ultrahonk::prelude::{NoirUltraHonkProver, SharedPolynomial};
 use mpc_core::protocols::rep3::conversion::b2a;
+use mpc_net::Network;
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 use std::{array, ops::Shl};
-use mpc_net::Network;
-use ark_ec::AdditiveGroup;
 
 // TODO FLORIN: Find out which functions in this are actually needed
 
@@ -130,7 +130,7 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoUltraEccOpsTable<T, C> {
         state: &mut T::State,
     ) -> [SharedPolynomial<T, C>; TABLE_WIDTH] {
         let mut column_polynomials: [SharedPolynomial<T, C>; TABLE_WIDTH] =
-            array::from_fn(|_| SharedPolynomial::new_zero( poly_size));
+            array::from_fn(|_| SharedPolynomial::new_zero(poly_size));
 
         let mut i = 0;
         for subtable_idx in subtable_start_idx..subtable_end_idx {
@@ -269,9 +269,9 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoUltraOp<T, C> {
 
 #[derive(Default, PartialEq, Eq, Debug, Clone)]
 // TACEO TODO: Fields should be BinaryShare
-pub struct CoEccOpCode<T, C> 
-where 
-    T: NoirUltraHonkProver<C>, 
+pub struct CoEccOpCode<T, C>
+where
+    T: NoirUltraHonkProver<C>,
     C: CurveGroup,
 {
     pub(crate) add: T::ArithmeticShare,
@@ -280,7 +280,7 @@ where
     pub(crate) reset: T::ArithmeticShare,
 }
 
-impl<T, C> CoEccOpCode<T, C> 
+impl<T, C> CoEccOpCode<T, C>
 where
     T: NoirUltraHonkProver<C>,
     C: CurveGroup,
@@ -288,18 +288,9 @@ where
     /// Returns the value of the opcode as a 32-bit integer.
     pub fn value<N: Network>(&self, net: &N, state: &mut T::State) -> T::ArithmeticShare {
         let mut res = self.add;
-        res = T::add( 
-            T::mul_with_public(C::ScalarField::from(2), res),
-            self.mul
-        );
-        res = T::add(
-            T::mul_with_public(C::ScalarField::from(2), res),
-            self.eq
-        );
-        res = T::add(
-            T::mul_with_public(C::ScalarField::from(2), res),
-            self.reset
-        );
+        res = T::add(T::mul_with_public(C::ScalarField::from(2), res), self.mul);
+        res = T::add(T::mul_with_public(C::ScalarField::from(2), res), self.eq);
+        res = T::add(T::mul_with_public(C::ScalarField::from(2), res), self.reset);
         res
     }
 }
@@ -359,7 +350,10 @@ impl EccvmRowTracker {
         std::cmp::max(transcript_rows, std::cmp::max(msm_rows, precompute_rows))
     }
 
-    pub fn update_cached_msms<T: NoirUltraHonkProver<C>, C: CurveGroup>(&mut self, op: &CoECCVMOperation<T, C>) {
+    pub fn update_cached_msms<T: NoirUltraHonkProver<C>, C: CurveGroup>(
+        &mut self,
+        op: &CoECCVMOperation<T, C>,
+    ) {
         // self.num_transcript_rows += 1;
         // if op.op_code.mul {
         //     if op.z1 != P::ScalarField::zero().into() && !op.base_point.is_point_at_infinity() {
@@ -432,7 +426,8 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoECCOpQueue<T, C> {
         network: &N,
         state: &mut T::State,
     ) -> [SharedPolynomial<T, C>; TABLE_WIDTH] {
-        self.ultra_ops_table.construct_previous_table_columns(network, state)
+        self.ultra_ops_table
+            .construct_previous_table_columns(network, state)
     }
 
     // Construct polynomials corresponding to the columns of the current subtable of ultra ecc ops
