@@ -160,10 +160,10 @@ pub fn generate_witness_rep3<N: Network>(
 }
 
 /// Translate a REP3 shared witness to a shamir shared witness
-pub fn translate_witness<P: Pairing, N: Network>(
+pub fn translate_witness<P: Pairing>(
     witness_share: Vec<Rep3AcvmType<P::ScalarField>>,
-    net: &N,
-) -> Result<Vec<ShamirAcvmType<P::ScalarField>>> {
+    id: PartyID,
+) -> Vec<ShamirAcvmType<P::ScalarField>> {
     // extract shares only
     let mut shares = vec![];
     for share in witness_share.iter() {
@@ -172,15 +172,8 @@ pub fn translate_witness<P: Pairing, N: Network>(
         }
     }
 
-    let num_parties = 3;
-    let threshold = 1;
-    let num_pairs = shares.len();
-    let preprocessing = ShamirPreprocessing::new(num_parties, threshold, num_pairs, net)
-        .context("while shamir preprocessing")?;
-    let mut state = ShamirState::from(preprocessing);
-
     // Translate witness to shamir shares
-    let translated_shares = state.translate_primefield_repshare_vec(shares, net)?;
+    let translated_shares = ShamirState::translate_primefield_repshare_vec(shares, id);
 
     let mut result = Vec::with_capacity(witness_share.len());
     let mut iter = translated_shares.into_iter();
@@ -193,8 +186,7 @@ pub fn translate_witness<P: Pairing, N: Network>(
             }
         }
     }
-
-    Ok(result)
+    result
 }
 
 type ShamirProverWitnessEntities<T> =
@@ -202,9 +194,9 @@ type ShamirProverWitnessEntities<T> =
 
 /// Translate a REP3 shared proving key to a shamir shared proving key
 #[allow(clippy::complexity)]
-pub fn translate_proving_key<P: Pairing, N: Network>(
+pub fn translate_proving_key<P: Pairing>(
     proving_key: Rep3ProvingKey<P, UltraFlavour>,
-    net: &N,
+    id: PartyID,
 ) -> Result<ShamirProvingKey<P, UltraFlavour>> {
     // extract shares
     let shares = proving_key
@@ -214,15 +206,8 @@ pub fn translate_proving_key<P: Pairing, N: Network>(
         .flat_map(|el| el.into_vec().into_iter())
         .collect::<Vec<_>>();
 
-    let num_parties = 3;
-    let threshold = 1;
-    let num_pairs = shares.len();
-    let preprocessing = ShamirPreprocessing::new(num_parties, threshold, num_pairs, net)
-        .context("while shamir preprocessing")?;
-    let mut state = ShamirState::from(preprocessing);
-
     // Translate witness to shamir shares
-    let translated_shares = state.translate_primefield_repshare_vec(shares, net)?;
+    let translated_shares = ShamirState::translate_primefield_repshare_vec(shares, id);
 
     if translated_shares.len()
         != UltraFlavour::PROVER_WITNESS_ENTITIES_SIZE * proving_key.circuit_size as usize

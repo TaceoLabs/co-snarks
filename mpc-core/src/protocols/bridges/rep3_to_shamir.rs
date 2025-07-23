@@ -1,5 +1,5 @@
 use crate::protocols::{
-    rep3::{Rep3PointShare, Rep3PrimeFieldShare},
+    rep3::{Rep3PointShare, Rep3PrimeFieldShare, id::PartyID},
     shamir::{ShamirPointShare, ShamirPrimeFieldShare, ShamirState, network::ShamirNetworkExt},
 };
 use ark_ec::CurveGroup;
@@ -7,37 +7,47 @@ use ark_ff::PrimeField;
 use mpc_net::Network;
 
 impl<F: PrimeField> ShamirState<F> {
+    fn get_translation_points(id: PartyID) -> (F, F) {
+        let id: usize = id.into();
+        let eval_point = F::from(id as u64 + 1);
+        let poly1_x = if id == 0 { 3 } else { id };
+        let poly2_x = if id == 2 { 1 } else { id + 2 };
+
+        let f1 =
+            crate::protocols::shamir::interpolate_poly_from_secret_and_zeros(&F::one(), &[poly1_x]);
+        let f2 =
+            crate::protocols::shamir::interpolate_poly_from_secret_and_zeros(&F::one(), &[poly2_x]);
+
+        let x = crate::protocols::shamir::evaluate_poly(&f1, eval_point);
+        let y = crate::protocols::shamir::evaluate_poly(&f2, eval_point);
+        (x, y)
+    }
+
     /// Translate a Rep3 prime field share into a 3-party Shamir prime field share, where the underlying sharing polynomial is of degree 1 (i.e., the threshold t = 1).
-    pub fn translate_primefield_repshare<N: Network>(
-        &mut self,
+    pub fn translate_primefield_repshare(
         input: Rep3PrimeFieldShare<F>,
-        net: &N,
-    ) -> eyre::Result<ShamirPrimeFieldShare<F>> {
-        // Essentially, a mul function
-        let my_lagrange_coeff = self.open_lagrange_2t[0]
-            .inverse()
-            .expect("lagrange coeff must be invertible");
-        let mul = input.a * my_lagrange_coeff;
-        net.degree_reduce(self, mul)
+        id: PartyID,
+    ) -> ShamirPrimeFieldShare<F> {
+        let (x, y) = Self::get_translation_points(id);
+
+        ShamirPrimeFieldShare {
+            a: input.a * x + input.b * y,
+        }
     }
 
     /// Translate a Rep3 prime field share vector into a 3-party Shamir prime field share vector, where the underlying sharing polynomial is of degree 1 (i.e., the threshold t = 1).
-    pub fn translate_primefield_repshare_vec<N: Network>(
-        &mut self,
+    pub fn translate_primefield_repshare_vec(
         input: Vec<Rep3PrimeFieldShare<F>>,
-        net: &N,
-    ) -> eyre::Result<Vec<ShamirPrimeFieldShare<F>>> {
-        // Essentially, a mul_vec function
-        let my_lagrange_coeff = self.open_lagrange_2t[0]
-            .inverse()
-            .expect("lagrange coeff must be invertible");
-        // TODO maybe we do not collect here? we can just provide the iter
-        // to the next function?
-        let muls = input
+        id: PartyID,
+    ) -> Vec<ShamirPrimeFieldShare<F>> {
+        let (x, y) = Self::get_translation_points(id);
+
+        input
             .into_iter()
-            .map(|rep_share| rep_share.a * my_lagrange_coeff)
-            .collect::<Vec<_>>();
-        net.degree_reduce_many(self, muls)
+            .map(|rep_share| ShamirPrimeFieldShare {
+                a: rep_share.a * x + rep_share.b * y,
+            })
+            .collect::<Vec<_>>()
     }
 
     /// Translate a 3-party additive prime field share into a 3-party Shamir prime field share, where the underlying sharing polynomial is of degree 1 (i.e., the threshold t = 1).
@@ -74,19 +84,14 @@ impl<F: PrimeField> ShamirState<F> {
     }
 
     /// Translate a Rep3 point share into a 3-party Shamir point share, where the underlying sharing polynomial is of degree 1 (i.e., the threshold t = 1).
-    pub fn translate_point_repshare<C, N: Network>(
-        &mut self,
-        input: Rep3PointShare<C>,
-        net: &N,
-    ) -> eyre::Result<ShamirPointShare<C>>
+    pub fn translate_point_repshare<C>(input: Rep3PointShare<C>, id: PartyID) -> ShamirPointShare<C>
     where
         C: CurveGroup + std::ops::Mul<F, Output = C> + for<'a> std::ops::Mul<&'a F, Output = C>,
     {
-        // Essentially, a scalar_mul function
-        let my_lagrange_coeff = self.open_lagrange_2t[0]
-            .inverse()
-            .expect("lagrange coeff must be invertible");
-        let mul = input.a * my_lagrange_coeff;
-        net.degree_reduce_point(self, mul)
+        let (x, y) = Self::get_translation_points(id);
+
+        ShamirPointShare {
+            a: input.a * x + input.b * y,
+        }
     }
 }

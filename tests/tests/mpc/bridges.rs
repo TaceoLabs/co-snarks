@@ -2,10 +2,9 @@ mod translate_share {
     use ark_std::UniformRand;
     use itertools::Itertools;
     use mpc_core::protocols::{
-        rep3::{self},
-        shamir::{self, ShamirPreprocessing, ShamirState},
+        rep3::{self, id::PartyID},
+        shamir::{self, ShamirState},
     };
-    use mpc_net::local::LocalNetwork;
     use rand::thread_rng;
     use std::{sync::mpsc, thread};
 
@@ -13,39 +12,40 @@ mod translate_share {
 
     #[test]
     fn fieldshare() {
-        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let x_shares = rep3::share_field_element(x, &mut rng);
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in nets
+        for (i, (tx, x)) in [tx1, tx2, tx3]
             .into_iter()
-            .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
+            .enumerate()
         {
             thread::spawn(move || {
-                let preprocessing = ShamirPreprocessing::new(3, 1, 1, &net).unwrap();
-                let mut shamir = ShamirState::from(preprocessing);
-                let share = shamir.translate_primefield_repshare(x, &net);
-                tx.send(share.unwrap())
+                let share =
+                    ShamirState::translate_primefield_repshare(x, PartyID::try_from(i).unwrap());
+                tx.send(share)
             });
         }
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
 
-        let is_result =
-            shamir::combine_field_element(&[result1, result2, result3], &(1..=3).collect_vec(), 1)
-                .unwrap();
+        let is_result0 =
+            shamir::combine_field_element(&[result1, result2], &(1..3).collect_vec(), 1).unwrap();
+        let is_result1 =
+            shamir::combine_field_element(&[result2, result3], &(2..=3).collect_vec(), 1).unwrap();
+        let is_result2 = shamir::combine_field_element(&[result1, result3], &[1, 3], 1).unwrap();
 
-        assert_eq!(is_result, x);
+        assert_eq!(is_result0, x);
+        assert_eq!(is_result1, x);
+        assert_eq!(is_result2, x);
     }
 
     #[test]
     fn fieldshare_vec() {
-        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| ark_bn254::Fr::rand(&mut rng))
@@ -54,58 +54,74 @@ mod translate_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in nets
+        for (i, (tx, x)) in [tx1, tx2, tx3]
             .into_iter()
-            .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
+            .enumerate()
         {
             thread::spawn(move || {
-                let preprecessing = ShamirPreprocessing::new(3, 1, x.len(), &net).unwrap();
-                let mut shamir = ShamirState::from(preprecessing);
-                let share = shamir.translate_primefield_repshare_vec(x, &net);
-                tx.send(share.unwrap())
+                let share = ShamirState::translate_primefield_repshare_vec(
+                    x,
+                    PartyID::try_from(i).unwrap(),
+                );
+                tx.send(share)
             });
         }
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
 
-        let is_result =
-            shamir::combine_field_elements(&[result1, result2, result3], &(1..=3).collect_vec(), 1)
+        let is_result0 = shamir::combine_field_elements(
+            &[result1.clone(), result2.clone()],
+            &(1..3).collect_vec(),
+            1,
+        )
+        .unwrap();
+        let is_result1 =
+            shamir::combine_field_elements(&[result2, result3.clone()], &(2..=3).collect_vec(), 1)
                 .unwrap();
+        let is_result2 = shamir::combine_field_elements(&[result1, result3], &[1, 3], 1).unwrap();
 
-        assert_eq!(is_result, x);
+        assert_eq!(is_result0, x);
+        assert_eq!(is_result1, x);
+        assert_eq!(is_result2, x);
     }
 
     #[test]
     fn pointshare() {
-        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::G1Projective::rand(&mut rng);
         let x_shares = rep3::share_curve_point(x, &mut rng);
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in nets
+        for (i, (tx, x)) in [tx1, tx2, tx3]
             .into_iter()
-            .zip([tx1, tx2, tx3])
             .zip(x_shares.into_iter())
+            .enumerate()
         {
             thread::spawn(move || {
-                let preprecessing = ShamirPreprocessing::new(3, 1, 1, &net).unwrap();
-                let mut shamir = ShamirState::from(preprecessing);
-                let share = shamir.translate_point_repshare(x, &net);
-                tx.send(share.unwrap())
+                let share = ShamirState::translate_point_repshare(x, PartyID::try_from(i).unwrap());
+                tx.send(share)
             });
         }
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
 
-        let is_result =
-            shamir::combine_curve_point(&[result1, result2, result3], &(1..=3).collect_vec(), 1)
+        let is_result0 = shamir::combine_curve_point(
+            &[result1.clone(), result2.clone()],
+            &(1..3).collect_vec(),
+            1,
+        )
+        .unwrap();
+        let is_result1 =
+            shamir::combine_curve_point(&[result2, result3.clone()], &(2..=3).collect_vec(), 1)
                 .unwrap();
+        let is_result2 = shamir::combine_curve_point(&[result1, result3], &[1, 3], 1).unwrap();
 
-        assert_eq!(is_result, x);
+        assert_eq!(is_result0, x);
+        assert_eq!(is_result1, x);
+        assert_eq!(is_result2, x);
     }
 }
