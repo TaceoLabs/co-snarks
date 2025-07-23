@@ -90,10 +90,10 @@ pub fn generate_witness_rep3<N: Network>(
 }
 
 /// Translate a REP3 shared witness to a shamir shared witness
-pub fn translate_witness<F: PrimeField, N: Network>(
+pub fn translate_witness<F: PrimeField>(
     witness_share: Rep3SharedWitness<F>,
-    net: &N,
-) -> Result<ShamirSharedWitness<F>> {
+    id: PartyID,
+) -> ShamirSharedWitness<F> {
     // extract shares only
     let mut shares = vec![];
     for share in witness_share.iter() {
@@ -102,15 +102,8 @@ pub fn translate_witness<F: PrimeField, N: Network>(
         }
     }
 
-    let num_parties = 3;
-    let threshold = 1;
-    let num_pairs = shares.len();
-    let preprocessing = ShamirPreprocessing::new(num_parties, threshold, num_pairs, net)
-        .context("while shamir preprocessing")?;
-    let mut state = ShamirState::from(preprocessing);
-
     // Translate witness to shamir shares
-    let translated_shares = state.translate_primefield_repshare_vec(shares, net)?;
+    let translated_shares = ShamirState::translate_primefield_repshare_vec(shares, id);
 
     let mut result = Vec::with_capacity(witness_share.len());
     let mut iter = translated_shares.into_iter();
@@ -123,15 +116,14 @@ pub fn translate_witness<F: PrimeField, N: Network>(
             }
         }
     }
-
-    Ok(result)
+    result
 }
 
 /// Translate a REP3 shared proving key to a shamir shared proving key
 #[allow(clippy::complexity)]
-pub fn translate_proving_key<P: HonkCurve<TranscriptFieldType>, N: Network>(
+pub fn translate_proving_key<P: HonkCurve<TranscriptFieldType>>(
     proving_key: Rep3ProvingKey<P>,
-    net: &N,
+    id: PartyID,
 ) -> Result<ShamirProvingKey<P>>
 where
     P::ScalarField: FieldUint,
@@ -145,15 +137,8 @@ where
         .flat_map(|el| el.into_vec().into_iter())
         .collect::<Vec<_>>();
 
-    let num_parties = 3;
-    let threshold = 1;
-    let num_pairs = shares.len();
-    let preprocessing = ShamirPreprocessing::new(num_parties, threshold, num_pairs, net)
-        .context("while shamir preprocessing")?;
-    let mut state = ShamirState::from(preprocessing);
-
     // Translate witness to shamir shares
-    let translated_shares = state.translate_primefield_repshare_vec(shares, net)?;
+    let translated_shares = ShamirState::translate_primefield_repshare_vec(shares, id);
 
     if translated_shares.len() != PROVER_WITNESS_ENTITIES_SIZE * proving_key.circuit_size as usize {
         eyre::bail!("Invalid number of shares translated");
