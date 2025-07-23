@@ -18,6 +18,7 @@ use figment::{
     Figment,
     providers::{Env, Format, Serialized, Toml},
 };
+use mpc_core::protocols::rep3::id::PartyID;
 use mpc_net::config::NetworkConfig;
 use mpc_net::config::NetworkConfigFile;
 use mpc_net::tcp::TcpNetwork;
@@ -1230,13 +1231,11 @@ fn run_translate_witness(config: TranslateWitnessConfig) -> color_eyre::Result<E
     let witness_share: Vec<Rep3Type<ark_bn254::Fr>> =
         bincode::deserialize_from(witness_file).context("while deserializing witness share")?;
 
-    // connect to network
-    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
-
     // Translate witness to shamir shares
     tracing::info!("Starting witness translation...");
+    let id = PartyID::try_from(network_config.my_id)?;
     let start = Instant::now();
-    let shamir_witness_shares = co_noir::translate_witness(witness_share, &net)?;
+    let shamir_witness_shares = co_noir::translate_witness(witness_share, id);
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Translate witness took {duration_ms} ms");
 
@@ -1265,13 +1264,11 @@ fn run_translate_proving_key(config: TranslateProvingKeyConfig) -> color_eyre::R
     let proving_key: ProvingKey<Rep3UltraHonkDriver, Bn254G1> =
         bincode::deserialize_from(proving_key_file).context("while deserializing witness share")?;
 
-    // connect to network
-    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
-
     // Translate proving key to shamir shares
+    let id = PartyID::try_from(network_config.my_id)?;
     tracing::info!("Starting proving key translation...");
     let start = Instant::now();
-    let shamir_proving_key = co_noir::translate_proving_key(proving_key, &net)?;
+    let shamir_proving_key = co_noir::translate_proving_key(proving_key, id)?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Translate proving key took {duration_ms} ms");
 

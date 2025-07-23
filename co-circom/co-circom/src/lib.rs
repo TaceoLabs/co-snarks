@@ -10,7 +10,7 @@ use circom_mpc_vm::{
 use co_circom_types::{CompressedRep3SharedWitness, Rep3InputType, ShamirInputType, SharedWitness};
 use color_eyre::eyre::{self, Context};
 use mpc_core::protocols::{
-    rep3::{self, Rep3ShareVecType},
+    rep3::{self, Rep3ShareVecType, id::PartyID},
     shamir::{ShamirPreprocessing, ShamirState},
 };
 use mpc_core::uint::FieldUint;
@@ -95,20 +95,40 @@ pub fn translate_witness<F: PrimeField, N: Network>(
     witness: CompressedRep3SharedWitness<F>,
     net: &N,
 ) -> eyre::Result<ShamirSharedWitness<F>> {
-    let witness = SharedWitness::from(witness);
-    // init MPC protocol
-    let num_parties = 3;
-    let threshold = 1;
-    let num_pairs = witness.witness.len();
-    let preprocessing = ShamirPreprocessing::new(num_parties, threshold, num_pairs, net)
-        .context("while shamir preprocessing")?;
-    let mut protocol = ShamirState::from(preprocessing);
-    // Translate witness to shamir shares
-    let translated_witness = protocol
-        .translate_primefield_addshare_vec(witness.witness, net)
-        .context("while translating witness")?;
-    let shamir_witness_share: ShamirSharedWitness<F> = SharedWitness {
-        public_inputs: witness.public_inputs,
+    let public_inputs = witness.public_inputs;
+    let translated_witness = match witness.witness {
+        Rep3ShareVecType::Replicated(vec) => {
+            ShamirState::translate_primefield_repshare_vec(vec, PartyID::try_from(net.id())?)
+        }
+        Rep3ShareVecType::SeededReplicated(replicated_seed_type) => {
+            let vec = replicated_seed_type.expand_vec()?;
+            ShamirState::translate_primefield_repshare_vec(vec, PartyID::try_from(net.id())?)
+        }
+        Rep3ShareVecType::Additive(vec) => {
+            // init MPC protocol
+            let preprocessing = ShamirPreprocessing::new(3, 1, vec.len(), net)
+                .context("while shamir preprocessing")?;
+            let mut protocol = ShamirState::from(preprocessing);
+            // Translate witness to shamir shares
+            protocol
+                .translate_primefield_addshare_vec(vec, net)
+                .context("while translating witness")?
+        }
+        Rep3ShareVecType::SeededAdditive(seeded_type) => {
+            let vec = seeded_type.expand_vec();
+            // init MPC protocol
+            let preprocessing = ShamirPreprocessing::new(3, 1, vec.len(), net)
+                .context("while shamir preprocessing")?;
+            let mut protocol = ShamirState::from(preprocessing);
+            // Translate witness to shamir shares
+            protocol
+                .translate_primefield_addshare_vec(vec, net)
+                .context("while translating witness")?
+        }
+    };
+
+    let shamir_witness_share = SharedWitness {
+        public_inputs,
         witness: translated_witness,
     };
 
