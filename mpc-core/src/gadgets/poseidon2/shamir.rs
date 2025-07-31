@@ -196,7 +196,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok(())
     }
 
-    /// One external round of the Poseidon2 permuation using Poseidon2Precomputations. Implemented for the Shamir MPC protocol.
+    /// One external round of the Poseidon2 permutation using Poseidon2Precomputations. Implemented for the Shamir MPC protocol.
     #[inline(always)]
     pub fn shamir_external_round_precomp<N: Network>(
         &self,
@@ -210,7 +210,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         self.shamir_external_round_precomp_inner(state, r, precomp, net, shamir_state)
     }
 
-    /// One external round of the Poseidon2 permuation using Poseidon2Precomputations. Implemented for the Shamir MPC protocol.
+    /// One external round of the Poseidon2 permutation using Poseidon2Precomputations. Implemented for the Shamir MPC protocol.
     fn shamir_external_round_precomp_inner<N: Network>(
         &self,
         state: &mut [F; T],
@@ -225,7 +225,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok(())
     }
 
-    /// One internal round of the Poseidon2 permuation using Poseidon2Precomputations. Implemented for the Shamir MPC protocol.
+    /// One internal round of the Poseidon2 permutation using Poseidon2Precomputations. Implemented for the Shamir MPC protocol.
     #[inline(always)]
     pub fn shamir_internal_round_precomp<N: Network>(
         &self,
@@ -239,7 +239,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         self.shamir_internal_round_precomp_inner(state, r, precomp, net, shamir_state)
     }
 
-    /// One internal round of the Poseidon2 permuation using Poseidon2Precomputations. Implemented for the Shamir MPC protocol.
+    /// One internal round of the Poseidon2 permutation using Poseidon2Precomputations. Implemented for the Shamir MPC protocol.
     fn shamir_internal_round_precomp_inner<N: Network>(
         &self,
         state: &mut [F; T],
@@ -254,7 +254,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok(())
     }
 
-    /// One external round of the Poseidon2 permuation using Poseidon2Precomputations. Implemented for the Shamir MPC protocol.
+    /// One external round of the Poseidon2 permutation using Poseidon2Precomputations. Implemented for the Shamir MPC protocol.
     fn shamir_external_round_precomp_inner_packed<N: Network>(
         &self,
         state: &mut [F],
@@ -274,7 +274,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok(())
     }
 
-    /// One internal round of the Poseidon2 permuation using Poseidon2Precomputations. Implemented for the Shamir MPC protocol.
+    /// One internal round of the Poseidon2 permutation using Poseidon2Precomputations. Implemented for the Shamir MPC protocol.
     fn shamir_internal_round_precomp_inner_packed<N: Network>(
         &self,
         state: &mut [F],
@@ -294,7 +294,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok(())
     }
 
-    /// One external round of the Poseidon2 permuation. Implemented for the Shamir MPC protocol.
+    /// One external round of the Poseidon2 permutation. Implemented for the Shamir MPC protocol.
     fn shamir_external_round<N: Network>(
         &self,
         state: &mut [F; T],
@@ -308,7 +308,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok(())
     }
 
-    /// One internal round of the Poseidon2 permuation. Implemented for the Shamir MPC protocol.
+    /// One internal round of the Poseidon2 permutation. Implemented for the Shamir MPC protocol.
     fn shamir_internal_round<N: Network>(
         &self,
         state: &mut [F; T],
@@ -322,7 +322,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok(())
     }
 
-    /// Computes multiple Poseidon2 permuations in parallel using the Shamir MPC protocol while overwriting the input. Thereby, a preprocessing technique is used to reduce the depth of the computation.
+    /// Computes multiple Poseidon2 permutations in parallel using the Shamir MPC protocol while overwriting the input. Thereby, a preprocessing technique is used to reduce the depth of the computation.
     pub fn shamir_permutation_in_place_with_precomputation_packed<N: Network>(
         &self,
         state: &mut [ShamirPrimeFieldShare<F>],
@@ -363,7 +363,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok(())
     }
 
-    /// Computes the Poseidon2 permuation using the Shamir MPC protocol while overwriting the input. Thereby, a preprocessing technique is used to reduce the depth of the computation.
+    /// Computes the Poseidon2 permutation using the Shamir MPC protocol while overwriting the input. Thereby, a preprocessing technique is used to reduce the depth of the computation.
     pub fn shamir_permutation_in_place_with_precomputation<N: Network>(
         &self,
         state: &mut [ShamirPrimeFieldShare<F>; T],
@@ -398,7 +398,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok(())
     }
 
-    /// Computes the Poseidon2 permuation using the Shamir MPC protocol while overwriting the input.
+    /// Computes the Poseidon2 permutation using the Shamir MPC protocol while overwriting the input.
     pub fn shamir_permutation_in_place<N: Network>(
         &self,
         state: &mut [ShamirPrimeFieldShare<F>; T],
@@ -428,7 +428,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok(())
     }
 
-    /// Computes the Poseidon2 permuation using the Shamir MPC protocol.
+    /// Computes the Poseidon2 permutation using the Shamir MPC protocol.
     pub fn shamir_permutation<N: Network>(
         &self,
         state: &[ShamirPrimeFieldShare<F>; T],
@@ -440,7 +440,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok(state)
     }
 
-    /// Computes the Poseidon2 permuation using the Shamir MPC protocol. Thereby, a preprocessing technique is used to reduce the depth of the computation.
+    /// Computes the Poseidon2 permutation using the Shamir MPC protocol. Thereby, a preprocessing technique is used to reduce the depth of the computation.
     pub fn shamir_permutation_with_precomputation<N: Network>(
         &self,
         state: &[ShamirPrimeFieldShare<F>; T],
@@ -458,7 +458,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok(state)
     }
 
-    /// Computes multiple Poseidon2 permuations in parallel using the Shamir MPC protocol. Thereby, a preprocessing technique is used to reduce the depth of the computation.
+    /// Computes multiple Poseidon2 permutations in parallel using the Shamir MPC protocol. Thereby, a preprocessing technique is used to reduce the depth of the computation.
     pub fn shamir_permutation_with_precomputation_packed<N: Network>(
         &self,
         state: &[ShamirPrimeFieldShare<F>],
