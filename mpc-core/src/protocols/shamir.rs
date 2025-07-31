@@ -1,6 +1,6 @@
 //! # Shamir
 //!
-//! This module implements the shamir share and combine opertions and shamir preprocessing
+//! This module implements the shamir share and combine operations and shamir preprocessing
 
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
