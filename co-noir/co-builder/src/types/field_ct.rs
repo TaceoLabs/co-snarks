@@ -261,7 +261,7 @@ impl<F: PrimeField> FieldCT<F> {
             result.multiplicative_constant = other.multiplicative_constant * self.additive_constant;
             result.witness_index = other.witness_index;
         } else {
-            // Both inputs map to circuit varaibles: create a `*` constraint.
+            // Both inputs map to circuit variables: create a `*` constraint.
 
             // /**
             //  * Value of this   = a.v * a.mul + a.add;
