@@ -1136,7 +1136,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             // For a ROM table, constant read should be optimized out:
             // The rom_table won't work with a constant read because the table may not be initialized
             assert!(!op.index.q_l.is_zero());
-            // We create a new witness w to avoid issues with non-valid witness assignements:
+            // We create a new witness w to avoid issues with non-valid witness assignments:
             // if witness are not assigned, then w will be zero and table[w] will work
             let w_value = if has_valid_witness_assignments {
                 // If witness are assigned, we use the correct value for w
@@ -1165,7 +1165,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             let value = self.poly_to_field_ct(&op.value);
             let index = self.poly_to_field_ct(&op.index);
 
-            // We create a new witness w to avoid issues with non-valid witness assignements.
+            // We create a new witness w to avoid issues with non-valid witness assignments.
             // If witness are not assigned, then index will be zero and table[index] won't hit bounds check.
             // If witness are assigned, we use the correct value for index
             let index_value = if has_valid_witness_assignments {
