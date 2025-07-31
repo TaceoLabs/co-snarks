@@ -154,7 +154,7 @@ impl<F: PrimeField> AcirFormat<F> {
                 } => {
                     let block = block_id_to_block_constraint.get_mut(&block_id.0);
                     if block.is_none() {
-                        panic!("unitialized MemoryOp");
+                        panic!("uninitialized MemoryOp");
                     }
                     let block = block.unwrap();
                     Self::handle_memory_op(op, &mut block.0);
