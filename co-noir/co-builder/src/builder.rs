@@ -2478,7 +2478,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
     ) {
         record.record_witness = self.add_variable(T::public_zero());
         // Note: record the index into the block that contains the RAM/ROM gates
-        record.gate_index = self.blocks.aux.len(); // no -1 since we havent added the gate yet
+        record.gate_index = self.blocks.aux.len(); // no -1 since we haven't added the gate yet
 
         // Aztec TODO(https://github.com/AztecProtocol/barretenberg/issues/879): This method used to add a single arithmetic gate
         // with two purposes: (1) to provide wire values to the previous RAM gate via shifts, and (2) to perform a
@@ -2545,7 +2545,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
             Utils::get_msb64((list.target_range + 1).next_power_of_two()) as usize,
         )?;
 
-        // list must be padded to a multipe of 4 and larger than 4 (gate_width)
+        // list must be padded to a multiple of 4 and larger than 4 (gate_width)
         const GATE_WIDTH: usize = NUM_WIRES;
         let mut padding = (GATE_WIDTH - (list.variable_indices.len() % GATE_WIDTH)) % GATE_WIDTH;
         let mut indices = Vec::with_capacity(padding + sorted_list.len());
@@ -3405,7 +3405,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
      * @param varnum number of known witness
      *
      * @note The size of witness_values may be less than varnum. The former is the set of actual witness values known at
-     * the time of acir generation. The latter may be larger and essentially acounts for placeholders for witnesses that
+     * the time of acir generation. The latter may be larger and essentially accounts for placeholders for witnesses that
      * we know will exist but whose values are not known during acir generation. Both are in general less than the total
      * number of variables/witnesses that might be present for a circuit generated from acir, since many gates will
      * depend on the details of the bberg implementation (or more generally on the backend used to process acir).
