@@ -155,7 +155,7 @@ pub fn msm_public_points<C: CurveGroup>(
 }
 
 /// Checks whether the shared point is zero/infinity.
-/// The strategy is that we split the point into two random shares (as for point_share_to_fieldshares) and check for equal x-coordinates. This works, since the two random shares, with overwhelming probability, will have different x-coordinates if the underyling value is not zero.
+/// The strategy is that we split the point into two random shares (as for point_share_to_fieldshares) and check for equal x-coordinates. This works, since the two random shares, with overwhelming probability, will have different x-coordinates if the underlying value is not zero.
 /// Returns a replicated boolean share in two separate parts.
 pub fn is_zero<C: CurveGroup, N: Network>(
     x: PointShare<C>,
