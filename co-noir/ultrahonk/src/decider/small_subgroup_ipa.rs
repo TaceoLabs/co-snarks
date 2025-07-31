@@ -224,7 +224,7 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
                 shifted_grand_sum.coefficients[idx] - self.grand_sum_polynomial.coefficients[idx];
         }
 
-        // Mutiply - F(X) * G(X) + A(gX) - A(X) by X-g:
+        // Multiply - F(X) * G(X) + A(gX) - A(X) by X-g:
         // 1. Multiply by X
         for idx in (1..self.grand_sum_identity_polynomial.coefficients.len()).rev() {
             self.grand_sum_identity_polynomial.coefficients[idx] =
