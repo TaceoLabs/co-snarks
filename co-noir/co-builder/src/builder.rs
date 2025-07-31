@@ -984,7 +984,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 }
             }
             *romcount += rom_array.records.len();
-            *romcount += 1; // we add an addition gate after procesing a rom array
+            *romcount += 1; // we add an addition gate after processing a rom array
         }
 
         // each RAM gate adds +2 extra gates due to the ram reads being copied to a sorted list set,
@@ -993,7 +993,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
         let mut ram_range_sizes = Vec::with_capacity(self.ram_arrays.len());
         let mut ram_range_exists = Vec::with_capacity(self.ram_arrays.len());
         for ram_array in self.ram_arrays.iter() {
-            // If the LUT is not public, then it is definetly not uninitialized, since it gets initialized with every read/write
+            // If the LUT is not public, then it is definitely not uninitialized, since it gets initialized with every read/write
             if T::is_public_lut(&ram_array.state) {
                 let lut_pub =
                     T::get_public_lut(&ram_array.state).expect("Already checked it is public");
@@ -1004,7 +1004,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericUltraCi
                 }
             }
             *ramcount += ram_array.records.len() * Self::NUMBER_OF_GATES_PER_RAM_ACCESS;
-            *ramcount += Self::NUMBER_OF_ARITHMETIC_GATES_PER_RAM_ARRAY; // we add an addition gate after procesing a ram array
+            *ramcount += Self::NUMBER_OF_ARITHMETIC_GATES_PER_RAM_ARRAY; // we add an addition gate after processing a ram array
 
             // there will be 'max_timestamp' number of range checks, need to calculate.
             let max_timestamp = ram_array.access_count - 1;
