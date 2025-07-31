@@ -1745,7 +1745,7 @@ fn run_generate_vk(config: CreateVKConfig) -> color_eyre::Result<ExitCode> {
         recursive,
     )?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-    tracing::info!("Verfication key generation took {} ms", duration_ms);
+    tracing::info!("Verification key generation took {} ms", duration_ms);
 
     let mut out_file =
         BufWriter::new(std::fs::File::create(&vk_path).context("while creating output file")?);
