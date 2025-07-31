@@ -1456,7 +1456,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T> {
             result.witness_index = builder.add_variable(value);
             // result = A + B - AB, where A,B are the "real" values of the variables. But according to whether
             // witness_inverted flag is true, we need to invert the input. Hence, we look at four cases, and compute the
-            // relevent coefficients of the selector q_1,q_2,q_m,q_c in each case
+            // relevant coefficients of the selector q_1,q_2,q_m,q_c in each case
             let multiplicative_coefficient;
             let left_coefficient;
             let right_coefficient;
@@ -2351,7 +2351,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             CycleGroupCT::from_group_element(offset_generators[0].to_owned().into());
 
         // populate the set of points we are going to add into our accumulator, *before* we do any ECC operations
-        // this way we are able to fuse mutliple ecc add / ecc double operations and reduce total gate count.
+        // this way we are able to fuse multiple ecc add / ecc double operations and reduce total gate count.
         // (ecc add/ecc double gates normally cost 2 UltraPlonk gates. However if we chain add->add, add->double,
         // double->add, double->double, they only cost one)
         let mut points_to_add = Vec::with_capacity(num_rounds * num_points);
