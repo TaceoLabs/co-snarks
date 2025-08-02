@@ -59,7 +59,7 @@ pub fn add_assign_public<F: PrimeField>(shared: &mut FieldShare<F>, public: F, i
 }
 
 /// Performs element-wise addition of two vectors of shared values in place.
-pub fn add_vec_assign<F: PrimeField>(lhs: &mut [FieldShare<F>], rhs: &[FieldShare<F>]) {
+pub fn add_many_assign<F: PrimeField>(lhs: &mut [FieldShare<F>], rhs: &[FieldShare<F>]) {
     for (a, b) in izip!(lhs.iter_mut(), rhs.iter()) {
         *a += b;
     }
@@ -76,7 +76,7 @@ pub fn sub_assign<F: PrimeField>(shared: &mut FieldShare<F>, b: FieldShare<F>) {
 }
 
 /// Performs element-wise subtraction of two vectors of shared values in place.
-pub fn sub_vec_assign<F: PrimeField>(lhs: &mut [FieldShare<F>], rhs: &[FieldShare<F>]) {
+pub fn sub_many_assign<F: PrimeField>(lhs: &mut [FieldShare<F>], rhs: &[FieldShare<F>]) {
     for (a, b) in izip!(lhs.iter_mut(), rhs.iter()) {
         *a -= *b;
     }
@@ -130,7 +130,7 @@ pub fn mul_assign_public<F: PrimeField>(shared: &mut FieldShare<F>, public: F) {
 /// # Security
 /// If you want to perform additional non-linear operations on the result of this function,
 /// you *MUST* call [`reshare_vec`] first. Only then, a reshare is performed.
-pub fn local_mul_vec<F: PrimeField>(
+pub fn local_mul_many<F: PrimeField>(
     lhs: &[FieldShare<F>],
     rhs: &[FieldShare<F>],
     state: &mut Rep3State,
@@ -153,7 +153,7 @@ pub fn reshare_vec<F: PrimeField, N: Network>(
 ) -> eyre::Result<Vec<FieldShare<F>>> {
     let local_b = net.reshare_many(&local_a)?;
     if local_b.len() != local_a.len() {
-        eyre::bail!("During execution of mul_vec in MPC: Invalid number of elements received",);
+        eyre::bail!("During execution of mul_many in MPC: Invalid number of elements received",);
     }
     Ok(izip!(local_a, local_b)
         .map(|(a, b)| FieldShare::new(a, b))
@@ -162,8 +162,8 @@ pub fn reshare_vec<F: PrimeField, N: Network>(
 
 /// Performs element-wise multiplication of two vectors of shared values.
 ///
-/// Use this function for small vecs. For large vecs see [`local_mul_vec`] and [`reshare_vec`]
-pub fn mul_vec<F: PrimeField, N: Network>(
+/// Use this function for small vecs. For large vecs see [`local_mul_many`] and [`reshare_vec`]
+pub fn mul_many<F: PrimeField, N: Network>(
     lhs: &[FieldShare<F>],
     rhs: &[FieldShare<F>],
     net: &N,
@@ -377,7 +377,7 @@ pub fn sqrt<F: PrimeField, N: Network>(
     // parallel mul of rr with a and r_squ with r_inv
     let lhs = vec![rr, r_squ];
     let rhs = vec![share, r_inv];
-    let mul = mul_vec(&lhs, &rhs, net, state)?;
+            let mul = mul_many(&lhs, &rhs, net, state)?;
 
     // Open mul
     let c = net.reshare_many(&mul.iter().map(|s| s.b.to_owned()).collect_vec())?;
