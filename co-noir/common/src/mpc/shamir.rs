@@ -29,7 +29,7 @@ impl<P: Pairing> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
     }
 
     fn sub_assign_many(a: &mut [Self::ArithmeticShare], b: &[Self::ArithmeticShare]) {
-        arithmetic::sub_vec_assign(a, b);
+        arithmetic::sub_many_assign(a, b);
     }
 
     fn add(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare {
@@ -78,12 +78,12 @@ impl<P: Pairing> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
         public * shared.inner()
     }
 
-    fn local_mul_vec(
+    fn local_mul_many(
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
         _: &mut Self::State,
     ) -> Vec<P::ScalarField> {
-        arithmetic::local_mul_vec(a, b)
+        arithmetic::local_mul_many(a, b)
     }
 
     fn reshare<N: Network>(
@@ -100,7 +100,7 @@ impl<P: Pairing> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
         net: &N,
         state: &mut Self::State,
     ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
-        arithmetic::mul_vec(a, b, net, state)
+        arithmetic::mul_many(a, b, net, state)
     }
 
     fn add_with_public(
