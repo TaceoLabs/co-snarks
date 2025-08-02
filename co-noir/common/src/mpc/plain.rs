@@ -89,7 +89,7 @@ impl<P: Pairing> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         <Self as NoirUltraHonkProver<P>>::mul_with_public(public, shared)
     }
 
-    fn local_mul_vec(
+    fn local_mul_many(
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
         _state: &mut Self::State,
