@@ -51,7 +51,7 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
         }
     }
 
-    fn local_mul_vec(
+    fn local_mul_many(
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
         _: &mut Self::State,
@@ -59,7 +59,7 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
         izip!(a, b).map(|(a, b)| *a * *b).collect()
     }
 
-    fn io_round_mul_vec<N: Network>(
+    fn io_round_mul_many<N: Network>(
         a: Vec<P::ScalarField>,
         _: &N,
         _: &mut Self::State,
@@ -74,7 +74,7 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
         shared * public
     }
 
-    fn mul_vec<N: Network>(
+    fn mul_many<N: Network>(
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
         _: &N,
@@ -83,7 +83,7 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
         Ok(izip!(a, b).map(|(a, b)| *a * *b).collect())
     }
 
-    fn mul_vecs<N: Network>(
+    fn mul_many_pairs<N: Network>(
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
         c: &[Self::ArithmeticShare],
@@ -93,7 +93,7 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
         Ok(izip!(a, b, c).map(|(a, b, c)| *a * *b * *c).collect())
     }
 
-    fn add_mul_vec<N: Network>(
+    fn add_mul_many<N: Network>(
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
         c: &[Self::ArithmeticShare],
