@@ -73,12 +73,12 @@ impl<P: Pairing> CircomGroth16Prover<P> for ShamirGroth16Driver {
         arithmetic::promote_to_trivial_shares(public_values)
     }
 
-    fn local_mul_vec(
+    fn local_mul_many(
         a: Vec<Self::ArithmeticShare>,
         b: Vec<Self::ArithmeticShare>,
         _: &mut Self::State,
     ) -> Vec<P::ScalarField> {
-        arithmetic::local_mul_vec(&a, &b)
+        arithmetic::local_mul_many(&a, &b)
     }
 
     fn distribute_powers_and_mul_by_const(
