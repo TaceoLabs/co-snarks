@@ -211,7 +211,7 @@ pub trait NoirUltraHonkProver<P: Pairing>: Send + Sized {
         }
     }
 
-    fn local_mul_vec(
+    fn local_mul_many(
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
         state: &mut Self::State,
