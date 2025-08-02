@@ -154,7 +154,7 @@ impl<F: PrimeField, N: Network> VmCircomWitnessExtension<F>
                 .collect_vec()
                 .into()),
             (BatchedRep3VmType::Arithmetic(a), BatchedRep3VmType::Arithmetic(b)) => {
-                Ok(arithmetic::mul_vec(&a, &b, self.net0, &mut self.state0)?.into())
+                Ok(arithmetic::mul_many(&a, &b, self.net0, &mut self.state0)?.into())
             }
         }
     }
