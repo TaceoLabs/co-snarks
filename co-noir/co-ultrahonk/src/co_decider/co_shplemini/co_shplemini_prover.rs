@@ -217,7 +217,7 @@ impl<
         for (l, res) in commitments.into_iter().enumerate() {
             transcript.send_point_to_verifier::<P>(format!("Gemini:FOLD_{}", l + 1), res.into());
         }
-        let res = P::G1Affine::generator();
+        let res = P::Affine::generator();
         for l in log_n - 1..virtual_log_n - 1 {
             transcript.send_point_to_verifier::<P>(format!("Gemini:FOLD_{}", l + 1), res);
         }

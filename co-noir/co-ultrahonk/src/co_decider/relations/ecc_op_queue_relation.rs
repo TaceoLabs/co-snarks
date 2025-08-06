@@ -1,7 +1,7 @@
 use crate::co_decider::relations::Relation;
 use crate::co_decider::relations::fold_accumulator;
 use crate::co_decider::types::RelationParameters;
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_ff::Zero;
 use co_builder::HonkProofResult;
 use co_builder::TranscriptFieldType;
@@ -19,7 +19,7 @@ use crate::mpc_prover_flavour::MPCProverFlavour;
 use common::mpc::NoirUltraHonkProver;
 
 #[derive(Clone, Debug)]
-pub(crate) struct EccOpQueueRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing> {
+pub(crate) struct EccOpQueueRelationAcc<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) r0: SharedUnivariate<T, P, 3>,
     pub(crate) r1: SharedUnivariate<T, P, 3>,
     pub(crate) r2: SharedUnivariate<T, P, 3>,
@@ -30,7 +30,7 @@ pub(crate) struct EccOpQueueRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing> {
     pub(crate) r7: SharedUnivariate<T, P, 3>,
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for EccOpQueueRelationAcc<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for EccOpQueueRelationAcc<T, P> {
     fn default() -> Self {
         Self {
             r0: SharedUnivariate::default(),
@@ -45,7 +45,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for EccOpQueueRelationAcc<T,
     }
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing> EccOpQueueRelationAcc<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> EccOpQueueRelationAcc<T, P> {
     pub(crate) fn scale(&mut self, elements: &[P::ScalarField]) {
         assert!(elements.len() == EccOpQueueRelation::NUM_RELATIONS);
         self.r0.scale_inplace(elements[0]);

@@ -215,7 +215,8 @@ mod tests {
     use rand::thread_rng;
     use ultrahonk::prelude::ZeroKnowledge;
 
-    type Bn254G1 = ark_bn254::G1Affine;
+    type Bn254G1 = ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>;
+    type Bn254G1Affine = ark_bn254::G1Affine;
     type F = <Bn<ark_bn254::Config> as Pairing>::ScalarField;
     type Driver = Rep3UltraHonkDriver;
 
@@ -232,7 +233,7 @@ mod tests {
         "/../../test_vectors/noir/merge_prover/merge_proof"
     );
 
-    fn co_ultra_ops_from_ultra_op(ultra_op: UltraOp<Bn254>) -> Vec<CoUltraOp<Driver, Bn254>> {
+    fn co_ultra_ops_from_ultra_op(ultra_op: UltraOp<Bn254G1>) -> Vec<CoUltraOp<Driver, Bn254G1>> {
         let mut rng = thread_rng();
         izip!(
             share_field_element(F::from(ultra_op.op_code.add as u8), &mut rng),
@@ -351,8 +352,8 @@ mod tests {
 
         let mut co_ultra_ops_2: VecDeque<_> = co_ultra_ops_from_ultra_op(ultra_op_2).into();
 
-        let mut get_queues = || CoECCOpQueue::<Driver, Bn254> {
-            accumulator: Bn254G1::identity(),
+        let mut get_queues = || CoECCOpQueue::<Driver, Bn254G1> {
+            accumulator: Bn254G1Affine::identity(),
             eccvm_ops_table: CoEccvmOpsTable::new(),
             ultra_ops_table: CoUltraEccOpsTable {
                 table: EccOpsTable {
@@ -366,7 +367,7 @@ mod tests {
             eccvm_row_tracker: EccvmRowTracker::new(),
         };
 
-        let queue: [CoECCOpQueue<Driver, Bn254>; 3] = core::array::from_fn(|_| get_queues());
+        let queue: [CoECCOpQueue<Driver, Bn254G1>; 3] = core::array::from_fn(|_| get_queues());
 
         let crs =
             CrsParser::<Bn254>::get_crs(CRS_PATH_G1, CRS_PATH_G2, 5, ZeroKnowledge::No).unwrap();
@@ -379,7 +380,7 @@ mod tests {
             let crs = prover_crs.clone();
             threads.push(thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
-                let prover = CoMergeProver::<Bn254, Poseidon2Sponge, Driver, _>::new(
+                let prover = CoMergeProver::<Bn254G1, Poseidon2Sponge, Driver, _>::new(
                     queue, &net, &mut state,
                 );
                 prover.construct_proof(&crs)

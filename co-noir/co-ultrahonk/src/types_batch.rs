@@ -1,5 +1,5 @@
 use crate::mpc_prover_flavour::SharedUnivariateTrait;
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
@@ -22,7 +22,7 @@ pub(crate) type Public<P, L> = <L as MPCProverFlavour>::ProverUnivariatePublic<P
 pub(crate) struct AllEntitiesBatch<T, P, L>
 where
     T: NoirUltraHonkProver<P>,
-    P: Pairing,
+    P: CurveGroup,
     L: MPCProverFlavour,
 {
     pub(crate) witness: WitnessEntitiesBatch<T::ArithmeticShare, L>,
@@ -34,7 +34,7 @@ where
 pub(crate) struct SumCheckDataForRelation<T, P, L>
 where
     T: NoirUltraHonkProver<P>,
-    P: Pairing,
+    P: CurveGroup,
     L: MPCProverFlavour,
 {
     pub(crate) can_skip: bool,
@@ -45,7 +45,7 @@ where
 pub trait AllEntitiesBatchRelationsTrait<T, P, L>
 where
     T: NoirUltraHonkProver<P>,
-    P: Pairing,
+    P: CurveGroup,
     L: MPCProverFlavour,
 {
     fn new() -> Self;
@@ -59,7 +59,7 @@ where
 impl<T, P, L> SumCheckDataForRelation<T, P, L>
 where
     T: NoirUltraHonkProver<P>,
-    P: Pairing,
+    P: CurveGroup,
     L: MPCProverFlavour,
 {
     pub(crate) fn new() -> Self {
@@ -73,7 +73,7 @@ where
 
 impl<T, P, L> AllEntitiesBatch<T, P, L>
 where
-    P: Pairing,
+    P: CurveGroup,
     T: NoirUltraHonkProver<P>,
     L: MPCProverFlavour,
 {

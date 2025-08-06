@@ -3,7 +3,7 @@ use crate::{
     co_decider::{types::RelationParameters, univariates::SharedUnivariate},
     mpc_prover_flavour::MPCProverFlavour,
 };
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_ff::Field;
 use ark_ff::Zero;
 use co_builder::HonkProofResult;
@@ -19,18 +19,18 @@ use rayon::prelude::*;
 use ultrahonk::prelude::Univariate;
 
 #[derive(Clone, Debug)]
-pub(crate) struct UltraArithmeticRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing> {
+pub(crate) struct UltraArithmeticRelationAcc<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) r0: SharedUnivariate<T, P, 6>,
     pub(crate) r1: SharedUnivariate<T, P, 5>,
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct UltraArithmeticRelationAccHalfShared<T: NoirUltraHonkProver<P>, P: Pairing> {
+pub(crate) struct UltraArithmeticRelationAccHalfShared<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) r0: Univariate<P::ScalarField, 6>,
     pub(crate) r1: SharedUnivariate<T, P, 5>,
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for UltraArithmeticRelationAcc<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for UltraArithmeticRelationAcc<T, P> {
     fn default() -> Self {
         Self {
             r0: Default::default(),
@@ -39,7 +39,9 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for UltraArithmeticRelationA
     }
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for UltraArithmeticRelationAccHalfShared<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default
+    for UltraArithmeticRelationAccHalfShared<T, P>
+{
     fn default() -> Self {
         Self {
             r0: Default::default(),
@@ -48,7 +50,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for UltraArithmeticRelationA
     }
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing> UltraArithmeticRelationAcc<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> UltraArithmeticRelationAcc<T, P> {
     pub(crate) fn scale(&mut self, elements: &[P::ScalarField]) {
         assert!(elements.len() == UltraArithmeticRelation::NUM_RELATIONS);
         self.r0.scale_inplace(elements[0]);

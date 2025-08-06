@@ -3,6 +3,7 @@ use crate::CONST_PROOF_SIZE_LOG_N;
 use crate::NUM_LIBRA_COMMITMENTS;
 use crate::{Utils, plain_prover_flavour::PlainProverFlavour, ultra_verifier::HonkVerifyResult};
 use ark_ec::AffineRepr;
+use ark_ec::pairing::Pairing;
 use ark_ff::{One, Zero};
 use co_builder::{
     TranscriptFieldType,
@@ -22,12 +23,12 @@ pub(crate) struct DeciderVerifier<
 }
 
 impl<
-    P: HonkCurve<TranscriptFieldType>,
+    C: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
     L: PlainProverFlavour,
-> DeciderVerifier<P, H, L>
+> DeciderVerifier<C, H, L>
 {
-    pub(crate) fn new(memory: VerifierMemory<P, L>) -> Self {
+    pub(crate) fn new(memory: VerifierMemory<C, L>) -> Self {
         Self {
             memory,
             phantom_data: PhantomData,
@@ -35,21 +36,21 @@ impl<
     }
 
     pub(crate) fn reduce_verify_shplemini(
-        opening_pair: &mut ShpleminiVerifierOpeningClaim<P>,
+        opening_pair: &mut ShpleminiVerifierOpeningClaim<C>,
         mut transcript: Transcript<TranscriptFieldType, H>,
-    ) -> HonkVerifyResult<(P::G1Affine, P::G1Affine)> {
+    ) -> HonkVerifyResult<(C::Affine, C::Affine)> {
         tracing::trace!("Reduce and verify opening pair");
 
-        let quotient_commitment = transcript.receive_point_from_prover::<P>("KZG:W".to_string())?;
+        let quotient_commitment = transcript.receive_point_from_prover::<C>("KZG:W".to_string())?;
         opening_pair.commitments.push(quotient_commitment);
         opening_pair.scalars.push(opening_pair.challenge);
         let p_1 = -quotient_commitment.into_group();
-        let p_0 = Utils::msm::<P>(&opening_pair.scalars, &opening_pair.commitments)?;
+        let p_0 = Utils::msm::<C>(&opening_pair.scalars, &opening_pair.commitments)?;
 
         Ok((p_0.into(), p_1.into()))
     }
 
-    pub fn pairing_check(
+    pub fn pairing_check<P: Pairing<G1 = C>>(
         p0: P::G1Affine,
         p1: P::G1Affine,
         g2_x: P::G2Affine,
@@ -61,7 +62,7 @@ impl<
         P::multi_pairing(g1_prepared, p).0 == P::TargetField::one()
     }
 
-    pub(crate) fn verify(
+    pub(crate) fn verify<P: Pairing<G1 = C, G1Affine = C::Affine>>(
         mut self,
         circuit_size: u32,
         crs: &P::G2Affine,
@@ -71,20 +72,20 @@ impl<
         tracing::trace!("Decider verification");
         let log_circuit_size = Utils::get_msb32(circuit_size);
 
-        let mut padding_indicator_array = [P::ScalarField::zero(); CONST_PROOF_SIZE_LOG_N];
+        let mut padding_indicator_array = [C::ScalarField::zero(); CONST_PROOF_SIZE_LOG_N];
 
         for (idx, value) in padding_indicator_array.iter_mut().enumerate() {
             *value = if idx < log_circuit_size as usize {
-                P::ScalarField::one()
+                C::ScalarField::one()
             } else {
-                P::ScalarField::zero()
+                C::ScalarField::zero()
             };
         }
         let (sumcheck_output, libra_commitments) = if has_zk == ZeroKnowledge::Yes {
             let mut libra_commitments = Vec::with_capacity(NUM_LIBRA_COMMITMENTS);
 
             libra_commitments
-                .push(transcript.receive_point_from_prover::<P>(
+                .push(transcript.receive_point_from_prover::<C>(
                     "Libra:concatenation_commitment".to_string(),
                 )?);
 
@@ -97,11 +98,11 @@ impl<
 
             libra_commitments.push(
                 transcript
-                    .receive_point_from_prover::<P>("Libra:grand_sum_commitment".to_string())?,
+                    .receive_point_from_prover::<C>("Libra:grand_sum_commitment".to_string())?,
             );
             libra_commitments.push(
                 transcript
-                    .receive_point_from_prover::<P>("Libra:quotient_commitment".to_string())?,
+                    .receive_point_from_prover::<C>("Libra:quotient_commitment".to_string())?,
             );
 
             (sumcheck_output, Some(libra_commitments))
@@ -127,7 +128,7 @@ impl<
         )?;
 
         let pairing_points = Self::reduce_verify_shplemini(&mut opening_claim, transcript)?;
-        let pcs_verified = Self::pairing_check(
+        let pcs_verified = Self::pairing_check::<P>(
             pairing_points.0,
             pairing_points.1,
             *crs,

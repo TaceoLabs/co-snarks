@@ -1,4 +1,4 @@
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_ff::{Field, Zero};
 use co_builder::prelude::{Polynomial, Utils};
 use mpc_core::MpcState;
@@ -10,11 +10,11 @@ use std::{
 
 use crate::mpc::NoirUltraHonkProver;
 
-pub struct SharedPolynomial<T: NoirUltraHonkProver<P>, P: Pairing> {
+pub struct SharedPolynomial<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub coefficients: Vec<T::ArithmeticShare>,
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing> SharedPolynomial<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> SharedPolynomial<T, P> {
     pub fn new_zero(size: usize) -> Self {
         Self {
             coefficients: vec![Default::default(); size],
@@ -194,7 +194,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> SharedPolynomial<T, P> {
     }
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing> Clone for SharedPolynomial<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Clone for SharedPolynomial<T, P> {
     fn clone(&self) -> Self {
         Self {
             coefficients: self.coefficients.clone(),
@@ -202,7 +202,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> Clone for SharedPolynomial<T, P> {
     }
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for SharedPolynomial<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for SharedPolynomial<T, P> {
     fn default() -> Self {
         Self {
             coefficients: Default::default(),
@@ -210,26 +210,28 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for SharedPolynomial<T, P> {
     }
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing> Debug for SharedPolynomial<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Debug for SharedPolynomial<T, P> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SharedPolynomial")
             .field("coefficients", &self.coefficients)
             .finish()
     }
 }
-impl<T: NoirUltraHonkProver<P>, P: Pairing> AsRef<[T::ArithmeticShare]> for SharedPolynomial<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> AsRef<[T::ArithmeticShare]>
+    for SharedPolynomial<T, P>
+{
     fn as_ref(&self) -> &[T::ArithmeticShare] {
         &self.coefficients
     }
 }
-impl<T: NoirUltraHonkProver<P>, P: Pairing> Index<usize> for SharedPolynomial<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Index<usize> for SharedPolynomial<T, P> {
     type Output = T::ArithmeticShare;
 
     fn index(&self, index: usize) -> &Self::Output {
         &self.coefficients[index]
     }
 }
-impl<T: NoirUltraHonkProver<P>, P: Pairing> IndexMut<usize> for SharedPolynomial<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> IndexMut<usize> for SharedPolynomial<T, P> {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         &mut self.coefficients[index]
     }

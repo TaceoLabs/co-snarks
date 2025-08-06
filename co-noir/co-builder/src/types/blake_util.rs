@@ -1,5 +1,5 @@
 use crate::{TranscriptFieldType, prelude::HonkCurve, ultra_builder::GenericUltraCircuitBuilder};
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use num_bigint::BigUint;
@@ -337,7 +337,7 @@ impl<F: PrimeField> BlakeUtils<F> {
      * This is to ascertain that the additions of two 32-bit scalars in blake2s and blake3s do not exceed 35 bits.
      */
     fn add_normalize<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         a: &FieldCT<F>,

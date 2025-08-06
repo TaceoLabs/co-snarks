@@ -1,6 +1,6 @@
 use crate::co_decider::types::RelationParameters;
 use crate::types_batch::AllEntitiesBatchRelationsTrait;
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_builder::{HonkProofResult, TranscriptFieldType};
 use co_builder::{prelude::HonkCurve, prover_flavour::ProverFlavour};
@@ -11,12 +11,12 @@ use std::fmt::Debug;
 use ultrahonk::plain_prover_flavour::UnivariateTrait;
 
 pub trait MPCProverFlavour: Default + ProverFlavour {
-    type AllRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing>;
-    type AllRelationAccHalfShared<T: NoirUltraHonkProver<P>, P: Pairing>: Default;
+    type AllRelationAcc<T: NoirUltraHonkProver<P>, P: CurveGroup>;
+    type AllRelationAccHalfShared<T: NoirUltraHonkProver<P>, P: CurveGroup>: Default;
 
-    type SumcheckRoundOutput<T: NoirUltraHonkProver<P>, P: Pairing>: Default
+    type SumcheckRoundOutput<T: NoirUltraHonkProver<P>, P: CurveGroup>: Default
         + SharedUnivariateTrait<T, P>;
-    type SumcheckRoundOutputZK<T: NoirUltraHonkProver<P>, P: Pairing>: Default
+    type SumcheckRoundOutputZK<T: NoirUltraHonkProver<P>, P: CurveGroup>: Default
         + SharedUnivariateTrait<T, P>;
     type SumcheckRoundOutputPublic<F: PrimeField>: Default
         + std::ops::MulAssign
@@ -30,11 +30,11 @@ pub trait MPCProverFlavour: Default + ProverFlavour {
         + std::ops::AddAssign
         + std::ops::SubAssign
         + UnivariateTrait<F>;
-    type ProverUnivariateShared<T: NoirUltraHonkProver<P>, P: Pairing>: SharedUnivariateTrait<T, P>
+    type ProverUnivariateShared<T: NoirUltraHonkProver<P>, P: CurveGroup>: SharedUnivariateTrait<T, P>
         + Clone
         + Default
         + std::marker::Sync;
-    type ProverUnivariatePublic<P: Pairing>: UnivariateTrait<P::ScalarField>
+    type ProverUnivariatePublic<P: CurveGroup>: UnivariateTrait<P::ScalarField>
         + Clone
         + Default
         + std::ops::MulAssign
@@ -50,18 +50,18 @@ pub trait MPCProverFlavour: Default + ProverFlavour {
     const NUM_ALPHAS: usize = Self::NUM_SUBRELATIONS - 1;
     const CRAND_PAIRS_FACTOR: usize;
 
-    fn scale<T: NoirUltraHonkProver<P>, P: Pairing>(
+    fn scale<T: NoirUltraHonkProver<P>, P: CurveGroup>(
         acc: &mut Self::AllRelationAcc<T, P>,
         first_scalar: P::ScalarField,
         elements: &Self::Alphas<P::ScalarField>,
     );
-    fn extend_and_batch_univariates<T: NoirUltraHonkProver<P>, P: Pairing>(
+    fn extend_and_batch_univariates<T: NoirUltraHonkProver<P>, P: CurveGroup>(
         acc: &Self::AllRelationAcc<T, P>,
         result: &mut Self::SumcheckRoundOutput<T, P>,
         extended_random_poly: &Self::SumcheckRoundOutputPublic<P::ScalarField>,
         partial_evaluation_result: &P::ScalarField,
     );
-    fn extend_and_batch_univariates_zk<T: NoirUltraHonkProver<P>, P: Pairing>(
+    fn extend_and_batch_univariates_zk<T: NoirUltraHonkProver<P>, P: CurveGroup>(
         acc: &Self::AllRelationAcc<T, P>,
         result: &mut Self::SumcheckRoundOutputZK<T, P>,
         extended_random_poly: &Self::SumcheckRoundOutputZKPublic<P::ScalarField>,
@@ -83,14 +83,14 @@ pub trait MPCProverFlavour: Default + ProverFlavour {
         transcript: &mut Transcript<F, H>,
         alphas: &mut Self::Alphas<P::ScalarField>,
     );
-    fn reshare<T: NoirUltraHonkProver<P>, P: Pairing, N: Network>(
+    fn reshare<T: NoirUltraHonkProver<P>, P: CurveGroup, N: Network>(
         acc: Self::AllRelationAccHalfShared<T, P>,
         net: &N,
         state: &mut T::State,
     ) -> HonkProofResult<Self::AllRelationAcc<T, P>>;
 }
 
-pub trait SharedUnivariateTrait<T: NoirUltraHonkProver<P>, P: Pairing> {
+pub trait SharedUnivariateTrait<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     fn extend_from(&mut self, poly: &[T::ArithmeticShare]);
 
     fn get_random<N: Network>(net: &N, state: &mut T::State) -> eyre::Result<Self>

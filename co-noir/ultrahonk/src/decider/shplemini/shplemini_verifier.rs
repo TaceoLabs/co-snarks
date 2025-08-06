@@ -32,9 +32,7 @@ impl<
         }
     }
 
-    pub fn get_g_shift_comms(
-        evaluations: &VerifierCommitments<P::G1Affine, L>,
-    ) -> PolyG<P::G1Affine> {
+    pub fn get_g_shift_comms(evaluations: &VerifierCommitments<P::Affine, L>) -> PolyG<P::Affine> {
         PolyG {
             wires: evaluations.witness.to_be_shifted().try_into().unwrap(),
         }
@@ -48,7 +46,7 @@ impl<
             witness: &evaluations.witness,
         }
     }
-    pub fn get_f_comms(evaluations: &ClaimedEvaluations<P::G1Affine, L>) -> PolyF<P::G1Affine, L> {
+    pub fn get_f_comms(evaluations: &ClaimedEvaluations<P::Affine, L>) -> PolyF<P::Affine, L> {
         PolyF {
             precomputed: &evaluations.precomputed,
             witness: &evaluations.witness,
@@ -58,7 +56,7 @@ impl<
     pub fn get_fold_commitments(
         virtual_log_n: u32,
         transcript: &mut Transcript<TranscriptFieldType, H>,
-    ) -> HonkVerifyResult<Vec<P::G1Affine>> {
+    ) -> HonkVerifyResult<Vec<P::Affine>> {
         let fold_commitments: Vec<_> = (0..virtual_log_n - 1)
             .map(|i| transcript.receive_point_from_prover::<P>(format!("Gemini:FOLD_{}", i + 1)))
             .collect::<Result<_, _>>()?;
@@ -111,7 +109,7 @@ impl<
         &self,
         multivariate_challenge: Vec<P::ScalarField>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
-        libra_commitments: Option<Vec<P::G1Affine>>,
+        libra_commitments: Option<Vec<P::Affine>>,
         libra_univariate_evaluation: Option<P::ScalarField>,
         consistency_checked: &mut bool,
         padding_indicator_array: &[P::ScalarField; CONST_PROOF_SIZE_LOG_N],
@@ -124,7 +122,7 @@ impl<
 
         let has_zk = ZeroKnowledge::from(libra_commitments.is_some());
 
-        let mut hiding_polynomial_commitment = P::G1Affine::default();
+        let mut hiding_polynomial_commitment = P::Affine::default();
         let mut batched_evaluation = P::ScalarField::zero();
         if has_zk == ZeroKnowledge::Yes {
             hiding_polynomial_commitment = transcript
@@ -327,7 +325,7 @@ impl<
         }
 
         // Finalize the batch opening claim
-        opening_claim.commitments.push(P::G1Affine::generator());
+        opening_claim.commitments.push(P::Affine::generator());
         opening_claim.scalars.push(constant_term_accumulator);
         Ok(opening_claim)
     }
@@ -430,7 +428,7 @@ impl<
     #[expect(clippy::too_many_arguments)]
     fn batch_gemini_claims_received_from_prover(
         padding_indicator_array: &[P::ScalarField; CONST_PROOF_SIZE_LOG_N],
-        fold_commitments: &[P::G1Affine],
+        fold_commitments: &[P::Affine],
         gemini_neg_evaluations: &[P::ScalarField],
         gemini_pos_evaluations: &[P::ScalarField],
         inverse_vanishing_evals: &[P::ScalarField],
@@ -564,10 +562,10 @@ impl<
     #[expect(clippy::too_many_arguments)]
     fn add_zk_data(
         virtual_log_n: usize,
-        commitments: &mut Vec<P::G1Affine>,
+        commitments: &mut Vec<P::Affine>,
         scalars: &mut Vec<P::ScalarField>,
         constant_term_accumulator: &mut P::ScalarField,
-        libra_commitments: &[P::G1Affine; NUM_LIBRA_COMMITMENTS],
+        libra_commitments: &[P::Affine; NUM_LIBRA_COMMITMENTS],
         libra_evaluations: &[P::ScalarField; NUM_SMALL_IPA_EVALUATIONS],
         gemini_evaluation_challenge: &P::ScalarField,
         shplonk_batching_challenge_powers: &[P::ScalarField],

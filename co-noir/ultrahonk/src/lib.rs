@@ -9,7 +9,7 @@ pub(crate) mod ultra_prover;
 pub(crate) mod ultra_verifier;
 
 use acir::{FieldElement, native_types::WitnessStack};
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_builder::{
     HonkProofResult,
@@ -94,14 +94,14 @@ impl Utils {
         co_builder::prelude::Utils::batch_invert(coeffs);
     }
 
-    pub fn commit<P: Pairing>(
+    pub fn commit<P: CurveGroup>(
         poly: &[P::ScalarField],
         crs: &ProverCrs<P>,
-    ) -> HonkProofResult<P::G1> {
+    ) -> HonkProofResult<P> {
         co_builder::prelude::Utils::commit(poly, crs)
     }
 
-    pub fn msm<P: Pairing>(poly: &[P::ScalarField], crs: &[P::G1Affine]) -> HonkProofResult<P::G1> {
+    pub fn msm<P: CurveGroup>(poly: &[P::ScalarField], crs: &[P::Affine]) -> HonkProofResult<P> {
         co_builder::prelude::Utils::msm::<P>(poly, crs)
     }
 }

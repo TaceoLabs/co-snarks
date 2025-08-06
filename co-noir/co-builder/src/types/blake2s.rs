@@ -4,7 +4,7 @@ use super::{
     plookup::{ColumnIdx, MultiTableId, Plookup},
 };
 use crate::{TranscriptFieldType, prelude::HonkCurve, ultra_builder::GenericUltraCircuitBuilder};
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use itertools::izip;
@@ -73,7 +73,7 @@ pub(crate) struct Blake2s<F: PrimeField> {
 
 impl<F: PrimeField> Blake2s<F> {
     pub(crate) fn blake2s_increment_counter<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         s: &mut Blake2sState<F>,

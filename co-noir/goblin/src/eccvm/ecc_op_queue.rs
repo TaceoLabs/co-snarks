@@ -174,7 +174,7 @@ impl<OpFormat> std::ops::Index<usize> for EccOpsTable<OpFormat> {
 #[derive(Clone, Default)]
 pub struct ECCVMOperation<C: HonkCurve<TranscriptFieldType>> {
     pub op_code: EccOpCode,
-    pub base_point: C::G1Affine,
+    pub base_point: C::Affine,
     pub z1: BigUint,
     pub z2: BigUint,
     pub mul_scalar_full: C::ScalarField,
@@ -284,7 +284,7 @@ impl EccvmRowTracker {
 }
 
 pub struct ECCOpQueue<C: HonkCurve<TranscriptFieldType>> {
-    pub(crate) accumulator: C::G1Affine,
+    pub(crate) accumulator: C::Affine,
     pub(crate) eccvm_ops_table: EccvmOpsTable<C>,
     pub(crate) ultra_ops_table: UltraEccOpsTable<C>,
     pub(crate) eccvm_ops_reconstructed: Vec<ECCVMOperation<C>>,
@@ -384,7 +384,7 @@ impl<C: HonkCurve<TranscriptFieldType>> ECCOpQueue<C> {
         self.eccvm_ops_reconstructed = eccvm_ops_in;
     }
 
-    pub fn get_accumulator(&self) -> C::G1Affine {
+    pub fn get_accumulator(&self) -> C::Affine {
         self.accumulator
     }
 }

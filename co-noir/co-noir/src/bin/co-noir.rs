@@ -3,7 +3,7 @@ use ark_ff::Zero;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use co_acvm::{Rep3AcvmType, solver::Rep3CoSolver};
 use co_builder::{flavours::ultra_flavour::UltraFlavour, prelude::Serialize as FieldSerialize};
-use co_noir::PubShared;
+use co_noir::{Bn254G1, PubShared};
 use co_ultrahonk::prelude::{
     CrsParser, ProvingKey, Rep3CoUltraHonk, ShamirCoUltraHonk, UltraHonk, Utils, VerifyingKey,
     VerifyingKeyBarretenberg, ZeroKnowledge,
@@ -967,7 +967,7 @@ fn run_split_proving_key(config: SplitProvingKeyConfig) -> color_eyre::Result<Ex
         .context("while parsing program artifact")?;
     // parse witness
     let witness = Utils::get_witness_from_file(&witness_path).context("while parsing witness")?;
-    let circuit_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, recursive)?;
+    let circuit_size = co_noir::compute_circuit_size::<Bn254G1>(&constraint_system, recursive)?;
     let prover_crs = CrsParser::<Bn254>::get_crs_g1(crs_path, circuit_size, has_zk)?;
     let proving_key = co_noir::generate_proving_key_plain(
         &constraint_system,
@@ -1207,7 +1207,7 @@ fn run_translate_proving_key(config: TranslateProvingKeyConfig) -> color_eyre::R
     // parse proving_key shares
     let proving_key_file =
         BufReader::new(File::open(proving_key).context("trying to open witness share file")?);
-    let proving_key: ProvingKey<Rep3UltraHonkDriver, Bn254, UltraFlavour> =
+    let proving_key: ProvingKey<Rep3UltraHonkDriver, Bn254G1, UltraFlavour> =
         bincode::deserialize_from(proving_key_file).context("while deserializing witness share")?;
 
     // connect to network
@@ -1328,7 +1328,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
                 eyre::bail!("REP3 only allows the threshold to be 1");
             }
             // Get the proving key and prover
-            let proving_key: ProvingKey<Rep3UltraHonkDriver, Bn254, UltraFlavour> =
+            let proving_key: ProvingKey<Rep3UltraHonkDriver, Bn254G1, UltraFlavour> =
                 bincode::deserialize_from(proving_key_file)
                     .context("while deserializing input share")?;
             let prover_crs = CrsParser::<Bn254>::get_crs_g1(
@@ -1370,7 +1370,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
         }
         MPCProtocol::SHAMIR => {
             // Get the proving key and prover
-            let proving_key: ProvingKey<ShamirUltraHonkDriver, Bn254, UltraFlavour> =
+            let proving_key: ProvingKey<ShamirUltraHonkDriver, Bn254G1, UltraFlavour> =
                 bincode::deserialize_from(proving_key_file)
                     .context("while deserializing input share")?;
             let prover_crs = CrsParser::<Bn254>::get_crs_g1(
@@ -1528,8 +1528,8 @@ fn run_build_and_generate_proof(
     let [net0, net1] =
         TcpNetwork::networks::<2>(config.network).context("while connecting to network")?;
 
-    let circuit_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, recursive)?;
-    let prover_crs = CrsParser::get_crs_g1(crs_path, circuit_size, has_zk)?;
+    let circuit_size = co_noir::compute_circuit_size::<Bn254G1>(&constraint_system, recursive)?;
+    let prover_crs = CrsParser::<Bn254>::get_crs_g1(crs_path, circuit_size, has_zk)?;
 
     tracing::info!("Starting proving key generation...");
     let (proof, public_input) = match protocol {
@@ -1734,12 +1734,12 @@ fn run_generate_vk(config: CreateVKConfig) -> color_eyre::Result<ExitCode> {
     let constraint_system = Utils::get_constraint_system_from_file(&circuit_path, true)
         .context("while parsing program artifact")?;
 
-    let circuit_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, recursive)?;
-    let prover_crs = CrsParser::get_crs_g1(crs_path, circuit_size, ZeroKnowledge::No)?;
+    let circuit_size = co_noir::compute_circuit_size::<Bn254G1>(&constraint_system, recursive)?;
+    let prover_crs = CrsParser::<Bn254>::get_crs_g1(crs_path, circuit_size, ZeroKnowledge::No)?;
 
     tracing::info!("Starting to generate verification key...");
     let start = Instant::now();
-    let vk = co_noir::generate_vk_barretenberg::<Bn254>(
+    let vk = co_noir::generate_vk_barretenberg::<Bn254G1>(
         &constraint_system,
         prover_crs.into(),
         recursive,
@@ -1809,10 +1809,10 @@ fn run_verify(config: VerifyConfig) -> color_eyre::Result<ExitCode> {
 
     // parse verification key file
     let vk_u8 = std::fs::read(&vk_path).context("while reading vk file")?;
-    let vk = VerifyingKeyBarretenberg::<Bn254, UltraFlavour>::from_buffer(&vk_u8)
+    let vk = VerifyingKeyBarretenberg::<Bn254G1, UltraFlavour>::from_buffer(&vk_u8)
         .context("while deserializing verification key")?;
 
-    let vk = VerifyingKey::from_barrettenberg_and_crs(vk, verifier_crs);
+    let vk = VerifyingKey::<Bn254, UltraFlavour>::from_barrettenberg_and_crs(vk, verifier_crs);
     // The actual verifier
     tracing::info!("Starting proof verification...");
     let start = Instant::now();

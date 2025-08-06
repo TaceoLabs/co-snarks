@@ -165,7 +165,8 @@ mod tests {
     use mpc_core::gadgets::field_from_hex_string;
     use ultrahonk::prelude::ZeroKnowledge;
 
-    type Bn254G1 = ark_bn254::G1Affine;
+    type Bn254G1 = ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>;
+    type Bn254G1Affine = ark_bn254::G1Affine;
 
     const CRS_PATH_G1: &str = concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -261,8 +262,8 @@ mod tests {
             return_is_infinity: false,
         };
 
-        let queue = ECCOpQueue::<Bn254> {
-            accumulator: Bn254G1::identity(),
+        let queue = ECCOpQueue::<Bn254G1> {
+            accumulator: Bn254G1Affine::identity(),
             eccvm_ops_table: EccvmOpsTable::new(),
             ultra_ops_table: UltraEccOpsTable {
                 table: EccOpsTable {
@@ -278,7 +279,7 @@ mod tests {
             CrsParser::<Bn254>::get_crs(CRS_PATH_G1, CRS_PATH_G2, 5, ZeroKnowledge::No).unwrap();
         let (prover_crs, _) = crs.split();
 
-        let proof = MergeProver::<Bn254, Poseidon2Sponge>::new(queue)
+        let proof = MergeProver::<Bn254G1, Poseidon2Sponge>::new(queue)
             .construct_proof(&prover_crs)
             .unwrap();
 
