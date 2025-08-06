@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use std::{marker::PhantomData, vec};
 
 use ark_ec::AdditiveGroup;
 
@@ -12,12 +12,13 @@ use co_builder::{
 use itertools::Itertools;
 
 use ultrahonk::{
-    oink::prover::Oink,
+    oink::{self, prover::Oink},
     plain_prover_flavour::{PlainProverFlavour, UnivariateTrait},
     prelude::{
         GateSeparatorPolynomial, HonkProof, Transcript, TranscriptHasher, Univariate, ZeroKnowledge,
     },
 };
+use ultrahonk::decider::types::RelationParameters;
 
 use crate::protogalaxy_prover_internal::{
     compute_and_extend_alphas, compute_combiner_quotient, compute_perturbator,
@@ -36,70 +37,7 @@ pub(crate) const BATCHED_EXTENDED_LENGTH: usize =
 pub(crate) type OinkProverMemory<C, L> = ultrahonk::oink::types::ProverMemory<C, L>;
 pub(crate) type DeciderProverMemory<C, L> = ultrahonk::decider::types::ProverMemory<C, L>;
 
-#[derive(Default, PartialEq, Debug)]
-pub struct ExtendedRelationParameters<F: PrimeField> {
-    pub eta: Univariate<F, EXTENDED_LENGTH>,
-    pub eta_two: Univariate<F, EXTENDED_LENGTH>,
-    pub eta_three: Univariate<F, EXTENDED_LENGTH>,
-    pub beta: Univariate<F, EXTENDED_LENGTH>,
-    pub gamma: Univariate<F, EXTENDED_LENGTH>,
-    pub public_input_delta: Univariate<F, EXTENDED_LENGTH>,
-    pub lookup_grand_product_delta: Univariate<F, EXTENDED_LENGTH>,
-}
-
-impl<F: PrimeField> ExtendedRelationParameters<F> {
-    pub fn get_params_as_mut(&mut self) -> Vec<&mut Univariate<F, EXTENDED_LENGTH>> {
-        vec![
-            &mut self.eta,
-            &mut self.eta_two,
-            &mut self.eta_three,
-            &mut self.beta,
-            &mut self.gamma,
-            &mut self.public_input_delta,
-            &mut self.lookup_grand_product_delta,
-        ]
-    }
-
-    pub fn from_vec(univariates: &Vec<Univariate<F, EXTENDED_LENGTH>>) -> Self {
-        assert_eq!(
-            univariates.len(),
-            7,
-            "Expected 7 univariates for ExtendedRelationParameters, got {}",
-            univariates.len()
-        );
-        ExtendedRelationParameters {
-            eta: univariates[0].clone(),
-            eta_two: univariates[1].clone(),
-            eta_three: univariates[2].clone(),
-            beta: univariates[3].clone(),
-            gamma: univariates[4].clone(),
-            public_input_delta: univariates[5].clone(),
-            lookup_grand_product_delta: univariates[6].clone(),
-        }
-    }
-
-    pub fn get_params(&self) -> Vec<&Univariate<F, EXTENDED_LENGTH>> {
-        vec![
-            &self.eta,
-            &self.eta_two,
-            &self.eta_three,
-            &self.beta,
-            &self.gamma,
-            &self.public_input_delta,
-            &self.lookup_grand_product_delta,
-        ]
-    }
-}
-
-pub struct DeciderProvingKey<C, L>
-where
-    C: HonkCurve<TranscriptFieldType>,
-    L: PlainProverFlavour,
-{
-    pub is_accumulator: bool,
-    pub target_sum: C::ScalarField,
-    pub proving_key: ProvingKey<C, L>,
-}
+pub type ExtendedRelationParameters<F> = RelationParameters<Univariate<F, BATCHED_EXTENDED_LENGTH>>;
 
 pub struct ProtogalaxyProver<C, H, L>
 where
@@ -117,28 +55,29 @@ where
     H: TranscriptHasher<TranscriptFieldType>,
     L: PlainProverFlavour<Alpha<C::ScalarField> = C::ScalarField>,
 {
-    fn run_oink_prover_on_one_incomplete_key(
-        &mut self,
-        proving_key: &mut DeciderProvingKey<C, L>,
-    ) -> HonkProofResult<OinkProverMemory<C, L>> {
-        // TODO CESAR: ZeroKnowledge?
-        let oink_prover = Oink::<C, H, L>::new(ZeroKnowledge::No);
-        oink_prover.prove(&mut proving_key.proving_key, &mut self.transcript)
+    pub(crate) fn with_empty_transcript() -> Self {
+        Self {
+            transcript: Transcript::new(),
+            phantom_data: PhantomData,
+        }
     }
 
-    fn run_oink_prover_on_each_incomplete_key(
+    fn run_oink_prover_on_one_incomplete_key(
         &mut self,
-        proving_keys: &mut Vec<DeciderProvingKey<C, L>>,
-    ) -> HonkProofResult<Vec<OinkProverMemory<C, L>>> {
-        let mut memory = Vec::with_capacity(proving_keys.len());
-        let first_key = proving_keys.first_mut().unwrap();
-        if !first_key.is_accumulator {
-            memory.push(self.run_oink_prover_on_one_incomplete_key(first_key));
-            first_key.target_sum = C::ScalarField::ZERO;
-            // TODO CESAR: gate_challenges?
-        }
+        proving_key: &mut ProvingKey<C, L>,
+    ) -> HonkProofResult<OinkProverMemory<C, L>> {
+        let oink_prover = Oink::<C, H, L>::new(ZeroKnowledge::No);
+        oink_prover.prove(proving_key, &mut self.transcript)
+    }
 
-        for key in proving_keys.iter_mut().skip(1) {
+    pub(crate) fn run_oink_prover_on_each_incomplete_key(
+        &mut self,
+        proving_keys: &mut Vec<ProvingKey<C, L>>,
+    ) -> HonkProofResult<Vec<OinkProverMemory<C, L>>> {
+        // Asummes accumulator has not been folded
+        let mut memory = Vec::with_capacity(proving_keys.len());
+        
+        for key in proving_keys.iter_mut() {
             memory.push(self.run_oink_prover_on_one_incomplete_key(key));
         }
 
@@ -146,28 +85,20 @@ where
         memory.into_iter().collect::<HonkProofResult<Vec<_>>>()
     }
 
-    // TODO CESAR: This is wrong, handle the case where subrelations are linearly independent
-    fn process_subrelation_evaluations(
-        all_rel_evals: L::AllRelationEvaluations<C::ScalarField>,
-        challenges: &Vec<C::ScalarField>,
-        linearly_dependent_contribution: &C::ScalarField,
-    ) -> C::ScalarField {
-        todo!()
-    }
-
     fn perturbator_round(
         &mut self,
-        accumulator: &mut DeciderProvingKey<C, L>,
+        accumulator: &mut ProvingKey<C, L>,
         accumulator_prover_memory: &DeciderProverMemory<C, L>,
     ) -> (Vec<C::ScalarField>, Polynomial<C::ScalarField>) {
         let delta = self.transcript.get_challenge::<C>("delta".to_owned());
 
-        let deltas = std::iter::successors(Some(delta), |&x| Some(x * delta))
+        let deltas = std::iter::successors(Some(delta), |&x| Some(x.square()))
             .take(CONST_PG_LOG_N)
             .collect();
 
         // An honest prover with valid initial key computes that the perturbator is 0 in the first round
-        let perturbator = if accumulator.is_accumulator {
+        // TODO CESAR: Fix
+        let perturbator = if true {
             compute_perturbator(accumulator, &deltas, accumulator_prover_memory)
         } else {
             Polynomial::new(vec![C::ScalarField::ZERO; CONST_PG_LOG_N + 1])
@@ -187,9 +118,8 @@ where
 
     fn combiner_quotient_round(
         &mut self,
-        prover_memory: &Vec<DeciderProverMemory<C, L>>,
+        prover_memory: &mut Vec<DeciderProverMemory<C, L>>,
         perturbator: Polynomial<C::ScalarField>,
-        gate_challenges: &Vec<C::ScalarField>,
         deltas: Vec<C::ScalarField>,
     ) -> (
         Vec<C::ScalarField>,
@@ -202,13 +132,22 @@ where
             .transcript
             .get_challenge::<C>("perturbator_challenge".to_owned());
 
-        let updated_gate_challenges = gate_challenges
+        let updated_gate_challenges = prover_memory[0]
+            .gate_challenges
             .iter()
             .zip(deltas.iter())
             .map(|(&g, &d)| g + perturbator_challenge * d)
             .collect_vec();
 
+        for (i, challenge) in updated_gate_challenges.iter().enumerate() {
+            println!(
+                "updated_gate_challenge_{i}: {}",
+                challenge
+            );
+        }
+
         let alphas = compute_and_extend_alphas(prover_memory);
+
 
         // TODO CESAR: Avoid the clone here
         let gate_separators =
@@ -221,7 +160,19 @@ where
             &relation_parameters,
             &alphas,
         );
+        for (i, eval) in combiner.evaluations.iter().enumerate() {
+            println!(
+                "combiner_evaluation_{i}: {}",
+                eval
+            );
+        }
+
         let perturbator_evaluation = perturbator.eval_poly(perturbator_challenge);
+        println!(
+            "perturbator_evaluation: {}",
+            perturbator_evaluation
+        );
+
         let combiner_quotient = compute_combiner_quotient::<C>(&combiner, perturbator_evaluation);
 
         for (i, eval) in combiner_quotient.evaluations.iter().enumerate() {
@@ -246,8 +197,9 @@ where
         univariate_relation_parameters: ExtendedRelationParameters<C::ScalarField>,
         perturbator_evaluation: C::ScalarField,
     ) -> (HonkProof<TranscriptFieldType>, C::ScalarField) {
-        let (accumulator_prover_memory, other_prover_memories) = prover_memory.split_at_mut(1);
+        let (accumulator_prover_memory, next_prover_memory) = prover_memory.split_at_mut(1);
         let accumulator_prover_memory = &mut accumulator_prover_memory[0];
+        let next_prover_memory = &next_prover_memory[0];
 
         let combiner_challenge = self
             .transcript
@@ -255,10 +207,6 @@ where
 
         let proof = self.transcript.get_proof();
 
-        // TODO CESAR: Reintroduce the accumulator flag
-        // accumulator.is_accumulator = true;
-
-        // TODO CESAR: This works for NUM = 2, but should be generalized
         let (vanishing_polynomial_at_challenge, lagranges) = (
             combiner_challenge * (combiner_challenge - C::ScalarField::ONE),
             vec![C::ScalarField::ONE - combiner_challenge, combiner_challenge],
@@ -277,23 +225,20 @@ where
                     .for_each(|coeff| *coeff = coeff.clone() * lagranges[0]);
             });
 
-        for (memory, lagrange) in other_prover_memories.iter_mut().zip(lagranges.iter()) {
-            for (key_poly, acc_poly) in memory
-                .polys
-                .iter_unshifted_mut()
-                .zip(accumulator_prover_memory.polys.iter_unshifted_mut())
-            {
-                acc_poly
-                    .iter_mut()
-                    .zip(key_poly.iter_mut())
-                    .for_each(|(acc_coeff, key_coeff)| *acc_coeff += key_coeff.clone() * lagrange);
-            }
+        for (key_poly, acc_poly) in next_prover_memory
+            .polys
+            .iter_unshifted()
+            .zip(accumulator_prover_memory.polys.iter_unshifted_mut())
+        {
+            acc_poly
+                .iter_mut()
+                .zip(key_poly.iter())
+                .for_each(|(acc_coeff, key_coeff)| *acc_coeff += key_coeff.clone() * lagranges[1]);
         }
 
         // Evaluate the combined batching  α_i univariate at challenge to obtain next α_i and send it to the
         // verifier, where i ∈ {0,...,NUM_SUBRELATIONS - 1}
         for (folded_alpha, key_alpha) in accumulator_prover_memory
-            .relation_parameters
             .alphas
             .iter_mut()
             .zip(alphas.iter())
@@ -316,12 +261,13 @@ where
 
     pub fn prove(
         mut self,
-        accumulator: &mut DeciderProvingKey<C, L>,
-        mut proving_keys: Vec<DeciderProvingKey<C, L>>,
+        accumulator: &mut ProvingKey<C, L>,
+        accumulator_prover_memory: DeciderProverMemory<C, L>,
+        mut next_proving_key: ProvingKey<C, L>,
     ) -> HonkProof<TranscriptFieldType> {
-        let max_circuit_size = proving_keys
+        let max_circuit_size = [accumulator, &next_proving_key]
             .iter()
-            .map(|pk| pk.proving_key.circuit_size)
+            .map(|pk| pk.circuit_size)
             .max()
             .unwrap_or(0);
         // TODO CESAR: Increase Virtual size shenanigans
@@ -329,23 +275,15 @@ where
         // Run Oink prover
         // TODO CESAR: No unwrap here, handle the error properly
         let oink_memory = self
-            .run_oink_prover_on_each_incomplete_key(&mut proving_keys)
+            .run_oink_prover_on_one_incomplete_key(&mut next_proving_key)
             .unwrap();
 
-        let mut prover_memory = oink_memory
-            .into_iter()
-            .zip(proving_keys.into_iter())
-            .map(|(oink_memory, proving_key)| {
-                DeciderProverMemory::from_memory_and_polynomials(
-                    oink_memory,
-                    proving_key.proving_key.polynomials,
-                )
-            })
-            .collect::<Vec<DeciderProverMemory<C, L>>>();
+        let next_prover_memory = DeciderProverMemory::from_memory_and_polynomials(oink_memory, next_proving_key.polynomials);
 
         // Perturbator round
-        let accumulator_prover_memory = &prover_memory[0];
-        let (deltas, perturbator) = self.perturbator_round(accumulator, accumulator_prover_memory);
+        let (deltas, perturbator) = self.perturbator_round(accumulator, &accumulator_prover_memory);
+
+        let mut prover_memory = vec![accumulator_prover_memory, next_prover_memory];
 
         // Combiner quotient round
         let (
@@ -355,16 +293,12 @@ where
             perturbator_evaluation,
             combiner_quotient,
         ) = self.combiner_quotient_round(
-            &prover_memory,
+            &mut prover_memory,
             perturbator,
-            // TODO CESAR: This line assumes that the first key is the accumulator, check this
-            &accumulator_prover_memory
-                .relation_parameters
-                .gate_challenges,
             deltas,
         );
 
-        prover_memory[0].relation_parameters.gate_challenges = updated_gate_challenges;
+        prover_memory[0].gate_challenges = updated_gate_challenges;
 
         // update target sum and fold
         // TODO CESAR: handle target sum

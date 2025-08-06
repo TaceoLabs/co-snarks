@@ -5,10 +5,12 @@ use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::prelude::Polynomial;
 use co_builder::{TranscriptFieldType, prelude::HonkCurve};
 use ultrahonk::plain_prover_flavour::{PlainProverFlavour, UnivariateTrait};
-use ultrahonk::prelude::{GateSeparatorPolynomial, Univariate};
+use ultrahonk::prelude::{AllEntities, GateSeparatorPolynomial, ProvingKey, Univariate};
+use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
+use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
 
 use crate::protogalaxy_prover::{
-    CONST_PG_LOG_N, DeciderProverMemory, DeciderProvingKey, ExtendedRelationParameters,
+    CONST_PG_LOG_N, DeciderProverMemory, ExtendedRelationParameters,
 };
 
 pub(crate) fn compute_extended_relation_parameters<
@@ -56,11 +58,10 @@ pub(crate) fn compute_and_extend_alphas<
                 .iter()
                 .enumerate()
                 .for_each(|(key_idx, memory)| {
-                    tmp.evaluations[key_idx] = memory.relation_parameters.alphas[alpha_idx].clone();
+                    tmp.evaluations[key_idx] = memory.alphas[alpha_idx].clone();
                 });
 
             let mut alpha = Univariate::<C::ScalarField, BATCHED_EXTENDED_LENGTH>::default();
-            // TODO CESAR: Verify that extend_from is equivalent to extend_to
             alpha.extend_from(&tmp.evaluations);
             alpha
         })
@@ -87,25 +88,26 @@ pub(crate) fn compute_combiner_quotient<C: HonkCurve<TranscriptFieldType>>(
         evaluations: combiner_quotient_evals.try_into().unwrap(),
     }
 }
-// TODO CESAR: test
+
 pub(crate) fn compute_row_evaluations<C: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour>(
-    accumulator: &mut DeciderProvingKey<C, L>,
     accumulator_prover_memory: &DeciderProverMemory<C, L>,
 ) -> Polynomial<C::ScalarField> {
     let DeciderProverMemory {
         polys,
         relation_parameters,
+        alphas,
+        ..
     } = accumulator_prover_memory;
 
-    let polynomial_size = polys.iter().count();
+    let polynomial_size = polys.witness.w_l().len();
     let mut aggregated_relation_evaluations = vec![C::ScalarField::ZERO; polynomial_size];
+    let mut last_coeff = C::ScalarField::ZERO;
 
-    // TODO CESAR: What about all the trace_usage_tracker shenanigans?
     // TODO CESAR: Parallelize this, use the parallel_for stuff
     for i in 0..polynomial_size {
+
         let row = polys.get_row(i);
 
-        // TODO CESAR: Verify this line makes sense
         let mut evals = L::AllRelationEvaluations::default();
         L::accumulate_relation_evaluations::<C>(
             &mut evals,
@@ -114,13 +116,12 @@ pub(crate) fn compute_row_evaluations<C: HonkCurve<TranscriptFieldType>, L: Plai
             &C::ScalarField::ONE,
         );
 
-        // TODO CESAR: This is not correct, need to handle the case where subrelations are linearly dependent
-        aggregated_relation_evaluations[i] =
-            L::scale_and_batch_elements(&evals, C::ScalarField::ONE, &relation_parameters.alphas);
+        let (linearly_independent_contributions, linearly_dependent_contributions) = L::scale_by_challenge_and_accumulate(&evals, C::ScalarField::ONE, &alphas);
+        aggregated_relation_evaluations[i] = linearly_independent_contributions;
+        last_coeff += linearly_dependent_contributions;
     }
 
-    // TODO CESAR: This is not correct, need to handle the case where subrelations are linearly dependent
-    aggregated_relation_evaluations[0] += C::ScalarField::ZERO;
+    aggregated_relation_evaluations[0] += last_coeff;
 
     Polynomial {
         coefficients: aggregated_relation_evaluations,
@@ -175,21 +176,19 @@ pub(crate) fn construct_perturbator_coefficients<C: HonkCurve<TranscriptFieldTyp
     construct_coefficients_tree::<C>(betas, deltas, first_level_coeffs, 1)
 }
 
-// TODO CESAR: test
 pub(crate) fn compute_perturbator<C: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour>(
-    accumulator: &mut DeciderProvingKey<C, L>,
+    accumulator: &mut ProvingKey<C, L>,
     deltas: &Vec<C::ScalarField>,
     accumulator_prover_memory: &DeciderProverMemory<C, L>,
 ) -> Polynomial<C::ScalarField> {
-    let full_honk_evaluations = compute_row_evaluations(accumulator, accumulator_prover_memory);
+    let full_honk_evaluations = compute_row_evaluations(accumulator_prover_memory);
 
     // TODO CESAR: This line assumes that the first key is the accumulator, check this
     let betas = &accumulator_prover_memory
-        .relation_parameters
         .gate_challenges;
 
     // TODO CESAR: Check if this log is fine
-    let log_circuit_size = accumulator.proving_key.circuit_size.ilog2() as usize;
+    let log_circuit_size = accumulator.circuit_size.ilog2() as usize;
 
     // Compute the perturbator using only the first log_circuit_size-many betas/deltas
     let mut perturbator = construct_perturbator_coefficients::<C>(
@@ -200,8 +199,8 @@ pub(crate) fn compute_perturbator<C: HonkCurve<TranscriptFieldType>, L: PlainPro
 
     // Populate the remaining coefficients with zeros to reach the required constant size
     // TODO CESAR: replace with extend
-    for _ in log_circuit_size..CONST_PG_LOG_N {
-        perturbator.push(C::ScalarField::ZERO);
+    if log_circuit_size < CONST_PG_LOG_N {
+        perturbator.resize(CONST_PG_LOG_N + 1, C::ScalarField::ZERO);
     }
 
     Polynomial::new(perturbator)
@@ -211,9 +210,9 @@ pub(crate) fn compute_perturbator<C: HonkCurve<TranscriptFieldType>, L: PlainPro
 pub(crate) fn extend_univariates<C: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour>(
     prover_memory: &Vec<DeciderProverMemory<C, L>>,
     row_idx: usize,
-) -> Vec<Univariate<C::ScalarField, BATCHED_EXTENDED_LENGTH>> {
-    let mut results: Vec<Univariate<C::ScalarField, BATCHED_EXTENDED_LENGTH>> =
-        Vec::with_capacity(prover_memory[0].polys.iter().count());
+) -> AllEntities<Univariate<C::ScalarField, BATCHED_EXTENDED_LENGTH>, L> {
+    let mut coefficients: Vec<[C::ScalarField; NUM]> =
+        vec![[C::ScalarField::ZERO; NUM]; prover_memory[0].polys.iter().count()];
 
     prover_memory
         .iter()
@@ -221,22 +220,33 @@ pub(crate) fn extend_univariates<C: HonkCurve<TranscriptFieldType>, L: PlainProv
         .enumerate()
         .for_each(|(pk_idx, row)| {
             row.into_iter().enumerate().for_each(|(col_idx, value)| {
-                results[col_idx].evaluations[pk_idx] = value.clone();
+                coefficients[col_idx][pk_idx] = value.clone();
             });
         });
 
-    results
+    let results = coefficients
+        .into_iter()
+        .map(|coeffs| {
+            let mut univariate = Univariate::<C::ScalarField, BATCHED_EXTENDED_LENGTH>::default();
+            univariate.extend_from(&coeffs);
+            univariate
+        }).collect::<Vec<_>>();
+
+    AllEntities {
+        precomputed: L::PrecomputedEntities::from_elements(
+            &results[..L::PRECOMPUTED_ENTITIES_SIZE].to_vec(),
+        ),
+        witness: L::WitnessEntities::from_elements(
+            &results[L::PRECOMPUTED_ENTITIES_SIZE..L::PRECOMPUTED_ENTITIES_SIZE + L::WITNESS_ENTITIES_SIZE]
+                .to_vec(),
+        ),
+        shifted_witness: L::ShiftedWitnessEntities::from_elements(
+            &results[L::PRECOMPUTED_ENTITIES_SIZE + L::WITNESS_ENTITIES_SIZE..L::SHIFTED_WITNESS_ENTITIES_SIZE + L::PRECOMPUTED_ENTITIES_SIZE + L::WITNESS_ENTITIES_SIZE]
+                .to_vec(),
+        ),
+    }
 }
 
-// TODO CESAR: test
-pub(crate) fn batch_over_relations<C: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour>(
-    univariate_accumulators: &L::AllRelationAcc<C::ScalarField>,
-    alphas: &Vec<Univariate<C::ScalarField, BATCHED_EXTENDED_LENGTH>>,
-) -> Univariate<C::ScalarField, BATCHED_EXTENDED_LENGTH> {
-    todo!()
-}
-
-// TODO CESAR: finish/test
 pub(crate) fn compute_combiner<C: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour>(
     prover_memory: &Vec<DeciderProverMemory<C, L>>,
     gate_separators: &GateSeparatorPolynomial<C::ScalarField>,
@@ -252,13 +262,19 @@ pub(crate) fn compute_combiner<C: HonkCurve<TranscriptFieldType>, L: PlainProver
 
         let pow_challenge = gate_separators.beta_products[i];
 
-        // L::accumulate_relation_univariates(
-        //     &mut univariate_accumulators,
-        //     &extended_univariates,
-        //     &relation_parameters,
-        //     C::ScalarField::ONE,
-        // );
+        L::accumulate_relation_univariates_extended_parameters::<C, BATCHED_EXTENDED_LENGTH>(
+            &mut univariate_accumulators,
+            &extended_univariates,
+            relation_parameters,
+            &pow_challenge,
+        );
     }
 
-    batch_over_relations::<C, L>(&univariate_accumulators, alphas)
+    let mut result = Univariate::<C::ScalarField, BATCHED_EXTENDED_LENGTH>::default();
+    L::extend_and_batch_univariates_2::<C::ScalarField, _>(&univariate_accumulators, &mut result, 
+        Univariate::<C::ScalarField, BATCHED_EXTENDED_LENGTH> {
+            evaluations: [C::ScalarField::ONE; BATCHED_EXTENDED_LENGTH],
+        },
+        alphas.as_slice());
+    result
 }
