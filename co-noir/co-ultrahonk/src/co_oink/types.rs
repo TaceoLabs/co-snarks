@@ -1,10 +1,10 @@
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_builder::prelude::Polynomial;
 
-use crate::{mpc::NoirUltraHonkProver, mpc_prover_flavour::MPCProverFlavour};
-
-pub(crate) struct ProverMemory<T: NoirUltraHonkProver<P>, P: Pairing, L: MPCProverFlavour> {
+use crate::mpc_prover_flavour::MPCProverFlavour;
+use common::mpc::NoirUltraHonkProver;
+pub(crate) struct ProverMemory<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCProverFlavour> {
     pub(crate) w_4: Polynomial<T::ArithmeticShare>, // column 3
     pub(crate) z_perm: Polynomial<T::ArithmeticShare>, // column 4
     pub(crate) lookup_inverses: Polynomial<T::ArithmeticShare>, // column 5
@@ -37,7 +37,9 @@ impl<F: PrimeField, L: MPCProverFlavour> Default for Challenges<F, L> {
     }
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing, L: MPCProverFlavour> Default for ProverMemory<T, P, L> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCProverFlavour> Default
+    for ProverMemory<T, P, L>
+{
     fn default() -> Self {
         Self {
             w_4: Default::default(),

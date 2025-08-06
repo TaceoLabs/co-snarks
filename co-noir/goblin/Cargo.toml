@@ -1,0 +1,24 @@
+[package]
+name = "goblin"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+publish.workspace = true
+readme.workspace = true
+
+[dependencies]
+common = {version = "0.1.0", path = "../common"}
+co-builder = { version = "0.4.0", path = "../co-builder" }
+ultrahonk = { version = "0.5.0", path = "../ultrahonk" }
+ark-ec.workspace = true
+ark-ff.workspace = true
+ark-bn254.workspace = true
+eyre.workspace = true
+num-bigint.workspace = true
+
+[dev-dependencies]
+mpc-core = { version = "0.9.0", path = "../../mpc-core" }

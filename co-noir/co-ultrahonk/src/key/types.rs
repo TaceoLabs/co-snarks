@@ -1,5 +1,5 @@
-use crate::{key::proving_key::ProvingKey, mpc::NoirUltraHonkProver};
-use ark_ec::pairing::Pairing;
+use crate::key::proving_key::ProvingKey;
+use ark_ec::CurveGroup;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
@@ -10,9 +10,10 @@ use co_builder::{
         NUM_WIRES, Polynomial,
     },
 };
+use common::mpc::NoirUltraHonkProver;
 use mpc_core::MpcState;
 
-pub(crate) struct TraceData<'a, T: NoirUltraHonkProver<P>, P: Pairing> {
+pub(crate) struct TraceData<'a, T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) wires: [&'a mut Polynomial<T::ArithmeticShare>; NUM_WIRES],
     pub(crate) selectors: [&'a mut Polynomial<P::ScalarField>; NUM_SELECTORS],
     pub(crate) copy_cycles: Vec<CyclicPermutation>,
@@ -20,7 +21,7 @@ pub(crate) struct TraceData<'a, T: NoirUltraHonkProver<P>, P: Pairing> {
     pub(crate) pub_inputs_offset: u32,
 }
 
-impl<'a, T: NoirUltraHonkProver<P>, P: Pairing> TraceData<'a, T, P> {
+impl<'a, T: NoirUltraHonkProver<P>, P: CurveGroup> TraceData<'a, T, P> {
     pub(crate) fn new<
         U: NoirWitnessExtensionProtocol<P::ScalarField, ArithmeticShare = T::ArithmeticShare>,
     >(

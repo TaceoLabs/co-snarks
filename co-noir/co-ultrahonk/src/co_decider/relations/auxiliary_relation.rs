@@ -3,10 +3,9 @@ use crate::{
     co_decider::{
         relations::fold_accumulator, types::RelationParameters, univariates::SharedUnivariate,
     },
-    mpc::NoirUltraHonkProver,
     mpc_prover_flavour::MPCProverFlavour,
 };
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_ff::One;
 use ark_ff::Zero;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
@@ -17,6 +16,7 @@ use co_builder::{
 use co_builder::{
     TranscriptFieldType, polynomials::polynomial_flavours::PrecomputedEntitiesFlavour,
 };
+use common::mpc::NoirUltraHonkProver;
 use itertools::Itertools as _;
 use mpc_core::MpcState as _;
 use mpc_net::Network;
@@ -36,7 +36,7 @@ use ultrahonk::prelude::Univariate;
  * };
  */
 #[derive(Clone, Debug)]
-pub(crate) struct AuxiliaryRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing> {
+pub(crate) struct AuxiliaryRelationAcc<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) r0: SharedUnivariate<T, P, 6>,
     pub(crate) r1: SharedUnivariate<T, P, 6>,
     pub(crate) r2: SharedUnivariate<T, P, 6>,
@@ -45,7 +45,7 @@ pub(crate) struct AuxiliaryRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing> {
     pub(crate) r5: SharedUnivariate<T, P, 6>,
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for AuxiliaryRelationAcc<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for AuxiliaryRelationAcc<T, P> {
     fn default() -> Self {
         Self {
             r0: Default::default(),
@@ -58,7 +58,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for AuxiliaryRelationAcc<T, 
     }
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing> AuxiliaryRelationAcc<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> AuxiliaryRelationAcc<T, P> {
     pub(crate) fn scale(&mut self, elements: &[P::ScalarField]) {
         assert!(elements.len() == AuxiliaryRelation::NUM_RELATIONS);
         self.r0.scale_inplace(elements[0]);

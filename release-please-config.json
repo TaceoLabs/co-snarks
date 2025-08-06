@@ -56,6 +56,14 @@
       "draft": false,
       "prerelease": false
     },
+    "co-noir/common": {
+      "changelog-path": "CHANGELOG.md",
+      "release-type": "rust",
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": false,
+      "draft": false,
+      "prerelease": false
+    },
     "co-noir/co-acvm": {
       "changelog-path": "CHANGELOG.md",
       "release-type": "rust",
@@ -65,6 +73,14 @@
       "prerelease": false
     },
     "co-noir/co-brillig": {
+      "changelog-path": "CHANGELOG.md",
+      "release-type": "rust",
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": false,
+      "draft": false,
+      "prerelease": false
+    },
+    "co-noir/co-goblin": {
       "changelog-path": "CHANGELOG.md",
       "release-type": "rust",
       "bump-minor-pre-major": true,
@@ -97,6 +113,14 @@
       "prerelease": false
     },
     "co-noir/ultrahonk": {
+      "changelog-path": "CHANGELOG.md",
+      "release-type": "rust",
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": false,
+      "draft": false,
+      "prerelease": false
+    },
+    "co-noir/goblin": {
       "changelog-path": "CHANGELOG.md",
       "release-type": "rust",
       "bump-minor-pre-major": true,

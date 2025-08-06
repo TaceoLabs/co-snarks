@@ -1,4 +1,4 @@
-pub(crate) mod prover;
+pub(crate) mod co_oink_prover;
 pub(crate) mod types;
 
 // execute_log_derivative_inverse_round: n for inv and n for mult

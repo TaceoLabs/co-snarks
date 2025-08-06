@@ -10,12 +10,10 @@ pub(crate) mod poseidon2_internal_relation;
 pub(crate) mod ultra_arithmetic_relation;
 
 use super::types::{ProverUnivariates, ProverUnivariatesBatch, RelationParameters};
-use crate::{
-    mpc::NoirUltraHonkProver, mpc_prover_flavour::MPCProverFlavour,
-    types_batch::SumCheckDataForRelation,
-};
+use crate::{mpc_prover_flavour::MPCProverFlavour, types_batch::SumCheckDataForRelation};
 use co_builder::prelude::HonkCurve;
 use co_builder::{HonkProofResult, TranscriptFieldType};
+use common::mpc::NoirUltraHonkProver;
 use mpc_net::Network;
 
 macro_rules! fold_accumulator {

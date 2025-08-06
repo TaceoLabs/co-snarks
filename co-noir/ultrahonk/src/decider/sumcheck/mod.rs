@@ -1,7 +1,7 @@
-pub(crate) mod prover;
-pub(crate) mod round_prover;
-pub(crate) mod round_verifier;
-pub(crate) mod verifier;
+pub(crate) mod sumcheck_prover;
+pub(crate) mod sumcheck_round_prover;
+pub(crate) mod sumcheck_round_verifier;
+pub(crate) mod sumcheck_verifier;
 pub(crate) mod zk_data;
 
 use crate::plain_prover_flavour::PlainProverFlavour;

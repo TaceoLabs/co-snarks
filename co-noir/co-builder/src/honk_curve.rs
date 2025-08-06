@@ -1,19 +1,20 @@
-use ark_ec::{CurveGroup, pairing::Pairing};
+use ark_ec::{CurveGroup, short_weierstrass};
 use ark_ff::{BigInt, Field, One, PrimeField};
+use ark_grumpkin::GrumpkinConfig;
 use num_bigint::BigUint;
 use std::str::FromStr;
 
 // Des describes the PrimeField used for the Transcript
-pub trait HonkCurve<Des: PrimeField>: Pairing {
-    type CycleGroup: CurveGroup<BaseField = Self::ScalarField>;
+pub trait HonkCurve<Des: PrimeField>: CurveGroup<BaseField: PrimeField> {
+    type CycleGroup: CurveGroup<BaseField = Self::ScalarField> + HonkCurve<Des>;
 
     const NUM_BASEFIELD_ELEMENTS: usize;
     const NUM_SCALARFIELD_ELEMENTS: usize;
     const SUBGROUP_SIZE: usize;
     const LIBRA_UNIVARIATES_LENGTH: usize;
 
-    fn g1_affine_from_xy(x: Self::BaseField, y: Self::BaseField) -> Self::G1Affine;
-    fn g1_affine_to_xy(p: &Self::G1Affine) -> (Self::BaseField, Self::BaseField);
+    fn g1_affine_from_xy(x: Self::BaseField, y: Self::BaseField) -> Self::Affine;
+    fn g1_affine_to_xy(p: &Self::Affine) -> (Self::BaseField, Self::BaseField);
 
     fn convert_scalarfield_into(src: &Self::ScalarField) -> Vec<Des>;
     fn convert_scalarfield_back(src: &[Des]) -> Self::ScalarField;
@@ -34,7 +35,7 @@ pub trait HonkCurve<Des: PrimeField>: Pairing {
     }
 }
 
-impl HonkCurve<ark_bn254::Fr> for ark_bn254::Bn254 {
+impl HonkCurve<ark_bn254::Fr> for ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config> {
     type CycleGroup = ark_grumpkin::Projective;
 
     const NUM_BASEFIELD_ELEMENTS: usize = 2;
@@ -46,7 +47,7 @@ impl HonkCurve<ark_bn254::Fr> for ark_bn254::Bn254 {
         ark_bn254::G1Affine::new(x, y)
     }
 
-    fn g1_affine_to_xy(p: &Self::G1Affine) -> (Self::BaseField, Self::BaseField) {
+    fn g1_affine_to_xy(p: &Self::Affine) -> (Self::BaseField, Self::BaseField) {
         (p.x, p.y)
     }
 
@@ -105,6 +106,51 @@ impl HonkCurve<ark_bn254::Fr> for ark_bn254::Bn254 {
         ]));
         debug_assert_eq!(val, Self::get_subgroup_generator().inverse().unwrap());
         val
+    }
+}
+
+impl HonkCurve<ark_bn254::Fr> for short_weierstrass::Projective<GrumpkinConfig> {
+    type CycleGroup = ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>;
+
+    const NUM_BASEFIELD_ELEMENTS: usize = 2;
+    const NUM_SCALARFIELD_ELEMENTS: usize = 1;
+    const SUBGROUP_SIZE: usize = 87;
+    const LIBRA_UNIVARIATES_LENGTH: usize = 3;
+
+    fn g1_affine_from_xy(x: Self::BaseField, y: Self::BaseField) -> Self::Affine {
+        ark_grumpkin::Affine::new(x, y)
+    }
+
+    fn g1_affine_to_xy(p: &Self::Affine) -> (Self::BaseField, Self::BaseField) {
+        (p.x, p.y)
+    }
+
+    fn convert_scalarfield_into(_src: &Self::ScalarField) -> Vec<ark_bn254::Fr> {
+        todo!("Implement HonkCurve for ark_grumpkin::Projective")
+    }
+
+    fn convert_scalarfield_back(_src: &[ark_bn254::Fr]) -> Self::ScalarField {
+        todo!("Implement HonkCurve for ark_grumpkin::Projective")
+    }
+
+    fn convert_basefield_into(_src: &Self::BaseField) -> Vec<ark_bn254::Fr> {
+        todo!("Implement HonkCurve for ark_grumpkin::Projective")
+    }
+
+    fn convert_basefield_back(_src: &[ark_bn254::Fr]) -> Self::BaseField {
+        todo!("Implement HonkCurve for ark_grumpkin::Projective")
+    }
+
+    fn convert_destinationfield_to_scalarfield(_des: &ark_bn254::Fr) -> Self::ScalarField {
+        todo!("Implement HonkCurve for ark_grumpkin::Projective")
+    }
+
+    fn get_curve_b() -> Self::ScalarField {
+        ark_grumpkin::Fr::from(3)
+    }
+
+    fn get_subgroup_generator() -> Self::ScalarField {
+        todo!("Implement HonkCurve for ark_grumpkin::Projective")
     }
 }
 
