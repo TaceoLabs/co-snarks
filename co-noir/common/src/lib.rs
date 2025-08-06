@@ -2,7 +2,7 @@ use crate::{
     mpc::NoirUltraHonkProver,
     transcript::{Transcript, TranscriptFieldType, TranscriptHasher},
 };
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_builder::{
     HonkProofResult,
@@ -69,22 +69,22 @@ pub fn compute_co_opening_proof<
 pub struct CoUtils {}
 
 impl CoUtils {
-    pub fn commit<T: NoirUltraHonkProver<P>, P: Pairing>(
+    pub fn commit<T: NoirUltraHonkProver<P>, P: CurveGroup>(
         poly: &[T::ArithmeticShare],
         crs: &ProverCrs<P>,
     ) -> T::PointShare {
         Self::msm::<T, P>(poly, &crs.monomials)
     }
 
-    pub fn msm<T: NoirUltraHonkProver<P>, P: Pairing>(
+    pub fn msm<T: NoirUltraHonkProver<P>, P: CurveGroup>(
         poly: &[T::ArithmeticShare],
-        crs: &[P::G1Affine],
+        crs: &[P::Affine],
     ) -> T::PointShare {
         let len = poly.len();
         T::msm_public_points(&crs[..len], poly)
     }
 
-    pub fn batch_invert<T: NoirUltraHonkProver<P>, P: Pairing, N: Network>(
+    pub fn batch_invert<T: NoirUltraHonkProver<P>, P: CurveGroup, N: Network>(
         poly: &mut [T::ArithmeticShare],
         net: &N,
         state: &mut T::State,
@@ -92,7 +92,7 @@ impl CoUtils {
         T::inv_many_in_place(poly, net, state)
     }
 
-    pub fn batch_invert_leaking_zeros<T: NoirUltraHonkProver<P>, P: Pairing, N: Network>(
+    pub fn batch_invert_leaking_zeros<T: NoirUltraHonkProver<P>, P: CurveGroup, N: Network>(
         poly: &mut [T::ArithmeticShare],
         net: &N,
         state: &mut T::State,

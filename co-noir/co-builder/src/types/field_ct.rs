@@ -1,12 +1,11 @@
 use super::types::{AddQuad, EccDblGate, MulQuad};
 use crate::TranscriptFieldType;
-use crate::builder::GenericUltraCircuitBuilder;
 use crate::prelude::HonkCurve;
 use crate::types::generators;
 use crate::types::plookup::{ColumnIdx, Plookup};
 use crate::types::types::{AddTriple, EccAddGate, PolyTriple};
+use crate::ultra_builder::GenericUltraCircuitBuilder;
 use crate::utils::Utils;
-use ark_ec::pairing::Pairing;
 use ark_ec::{AffineRepr, CurveConfig, CurveGroup, PrimeGroup};
 use ark_ff::PrimeField;
 use ark_ff::{One, Zero};
@@ -33,7 +32,7 @@ impl<F: PrimeField> FieldCT<F> {
     }
 
     pub(crate) fn from_witness<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         input: T::AcvmType,
@@ -44,7 +43,7 @@ impl<F: PrimeField> FieldCT<F> {
     }
 
     pub(crate) fn get_value<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &self,
@@ -74,7 +73,7 @@ impl<F: PrimeField> FieldCT<F> {
      * calling this method.
      */
     pub(crate) fn assert_equal<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &self,
@@ -110,7 +109,7 @@ impl<F: PrimeField> FieldCT<F> {
     }
 
     pub(crate) fn to_bool_ct<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &self,
@@ -157,7 +156,7 @@ impl<F: PrimeField> FieldCT<F> {
     }
 
     pub(crate) fn normalize<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &self,
@@ -200,7 +199,7 @@ impl<F: PrimeField> FieldCT<F> {
     }
 
     pub(crate) fn get_normalized_witness_index<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &self,
@@ -211,7 +210,7 @@ impl<F: PrimeField> FieldCT<F> {
     }
 
     pub(crate) fn multiply<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &self,
@@ -312,7 +311,7 @@ impl<F: PrimeField> FieldCT<F> {
     }
 
     pub(crate) fn mul_assign<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &mut self,
@@ -326,7 +325,7 @@ impl<F: PrimeField> FieldCT<F> {
 
     #[expect(dead_code)]
     pub(crate) fn divide<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &self,
@@ -339,7 +338,7 @@ impl<F: PrimeField> FieldCT<F> {
     }
 
     fn divide_no_zero_check<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &self,
@@ -448,7 +447,7 @@ impl<F: PrimeField> FieldCT<F> {
     }
 
     pub(crate) fn add<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &self,
@@ -499,7 +498,7 @@ impl<F: PrimeField> FieldCT<F> {
     }
 
     pub(crate) fn add_assign<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &mut self,
@@ -524,7 +523,7 @@ impl<F: PrimeField> FieldCT<F> {
     }
 
     pub(crate) fn sub<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &self,
@@ -544,7 +543,7 @@ impl<F: PrimeField> FieldCT<F> {
 
     // this * to_mul + to_add
     pub(crate) fn madd<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &self,
@@ -645,7 +644,7 @@ impl<F: PrimeField> FieldCT<F> {
     // Slices a `field_ct` at given indices (msb, lsb) both included in the slice,
     // returns three parts: [low, slice, high].
     pub(crate) fn slice<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &self,
@@ -721,7 +720,7 @@ impl<F: PrimeField> FieldCT<F> {
     }
 
     pub(crate) fn create_range_constraint<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &self,
@@ -751,7 +750,7 @@ impl<F: PrimeField> FieldCT<F> {
     }
 
     fn assert_is_zero<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &self,
@@ -789,7 +788,7 @@ impl<F: PrimeField> FieldCT<F> {
 
     // if val == 0 ? 0 : val^-1
     fn zero_or_inverse<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         val: T::AcvmType,
@@ -802,7 +801,7 @@ impl<F: PrimeField> FieldCT<F> {
     }
 
     fn assert_is_not_zero<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &self,
@@ -848,7 +847,7 @@ impl<F: PrimeField> FieldCT<F> {
 
     // if predicate == true then return lhs, else return rhs
     fn conditional_assign<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         predicate: &BoolCT<P, T>,
@@ -878,7 +877,7 @@ impl<F: PrimeField> FieldCT<F> {
     }
 
     pub(crate) fn evaluate_linear_identity<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         a: &FieldCT<F>,
@@ -938,7 +937,7 @@ impl<F: PrimeField> FieldCT<F> {
     }
 
     fn evaluate_polynomial_identity<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         a: &Self,
@@ -997,7 +996,7 @@ impl<F: PrimeField> FieldCT<F> {
         });
     }
 
-    fn equals<P: Pairing<ScalarField = F>, T: NoirWitnessExtensionProtocol<P::ScalarField>>(
+    fn equals<P: CurveGroup<ScalarField = F>, T: NoirWitnessExtensionProtocol<P::ScalarField>>(
         &self,
         other: &Self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
@@ -1043,7 +1042,7 @@ impl<F: PrimeField> FieldCT<F> {
     }
 
     pub(crate) fn add_two<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &self,
@@ -1129,7 +1128,7 @@ impl<F: PrimeField> From<F> for FieldCT<F> {
     }
 }
 
-impl<F: PrimeField, P: Pairing<ScalarField = F>, T: NoirWitnessExtensionProtocol<P::ScalarField>>
+impl<F: PrimeField, P: CurveGroup<ScalarField = F>, T: NoirWitnessExtensionProtocol<P::ScalarField>>
     From<WitnessCT<P, T>> for FieldCT<F>
 {
     fn from(value: WitnessCT<P, T>) -> Self {
@@ -1152,12 +1151,12 @@ impl<F: PrimeField> Default for FieldCT<F> {
 }
 
 #[expect(dead_code)]
-pub(crate) struct WitnessCT<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
+pub(crate) struct WitnessCT<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
     pub(crate) witness: T::AcvmType,
     pub(crate) witness_index: u32,
 }
 
-impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> WitnessCT<P, T> {
+impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> WitnessCT<P, T> {
     #[expect(dead_code)]
     const IS_CONSTANT: u32 = FieldCT::<P::ScalarField>::IS_CONSTANT;
 
@@ -1174,13 +1173,13 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> WitnessCT<P, T
 }
 
 #[derive(Debug)]
-pub(crate) struct BoolCT<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
+pub(crate) struct BoolCT<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
     pub(crate) witness_bool: T::AcvmType,
     pub(crate) witness_inverted: bool,
     pub(crate) witness_index: u32,
 }
 
-impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> Default for BoolCT<P, T> {
+impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> Default for BoolCT<P, T> {
     fn default() -> Self {
         Self {
             witness_bool: T::public_zero(),
@@ -1190,7 +1189,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> Default for Bo
     }
 }
 
-impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> Clone for BoolCT<P, T> {
+impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> Clone for BoolCT<P, T> {
     fn clone(&self) -> Self {
         Self {
             witness_bool: self.witness_bool.to_owned(),
@@ -1200,7 +1199,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> Clone for Bool
     }
 }
 
-impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> From<bool> for BoolCT<P, T> {
+impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> From<bool> for BoolCT<P, T> {
     fn from(val: bool) -> Self {
         Self {
             witness_bool: P::ScalarField::from(val as u64).into(),
@@ -1210,7 +1209,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> From<bool> for
     }
 }
 
-impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T> {
+impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T> {
     pub(crate) fn is_constant(&self) -> bool {
         self.witness_index == FieldCT::<P::ScalarField>::IS_CONSTANT
     }
@@ -1651,7 +1650,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T> {
 }
 
 #[derive(Debug)]
-pub(crate) struct CycleGroupCT<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
+pub(crate) struct CycleGroupCT<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
     pub(crate) x: FieldCT<P::ScalarField>,
     pub(crate) y: FieldCT<P::ScalarField>,
     pub(crate) is_infinity: BoolCT<P, T>,
@@ -1659,7 +1658,7 @@ pub(crate) struct CycleGroupCT<P: Pairing, T: NoirWitnessExtensionProtocol<P::Sc
     pub(crate) is_constant: bool,
 }
 
-impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> Clone for CycleGroupCT<P, T> {
+impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> Clone for CycleGroupCT<P, T> {
     fn clone(&self) -> Self {
         Self {
             x: self.x.clone(),
@@ -1671,7 +1670,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> Clone for Cycl
     }
 }
 
-impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupCT<P, T> {
+impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupCT<P, T> {
     const ULTRA_NUM_TABLE_BITS: usize = 4;
     const TABLE_BITS: usize = Self::ULTRA_NUM_TABLE_BITS;
 
@@ -1852,7 +1851,9 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupCT<P
     }
 }
 
-impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> Default for CycleGroupCT<P, T> {
+impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> Default
+    for CycleGroupCT<P, T>
+{
     fn default() -> Self {
         Self {
             x: FieldCT::default(),
@@ -2965,7 +2966,7 @@ impl<F: PrimeField> CycleScalarCT<F> {
     }
 
     fn validate_scalar_is_in_field<
-        P: Pairing<ScalarField = F>,
+        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &self,
@@ -3036,13 +3037,13 @@ impl<F: PrimeField> CycleScalarCT<F> {
 }
 
 #[derive(Debug)]
-struct StrausScalarSlice<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
+struct StrausScalarSlice<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
     table_bits: usize,
     slices: Vec<FieldCT<P::ScalarField>>,
     slices_native: Vec<T::AcvmType>,
 }
 
-impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> Clone
+impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> Clone
     for StrausScalarSlice<P, T>
 {
     fn clone(&self) -> Self {
@@ -3054,7 +3055,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> Clone
     }
 }
 
-impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> StrausScalarSlice<P, T> {
+impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> StrausScalarSlice<P, T> {
     fn new(
         scalar: &CycleScalarCT<P::ScalarField>,
         table_bits: usize,
@@ -3149,7 +3150,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> StrausScalarSl
     }
 }
 
-struct StrausLookupTable<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
+struct StrausLookupTable<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
     #[expect(dead_code)]
     table_bits: usize,
     #[expect(dead_code)] // Is in ROM, so technically not needed anymore
@@ -3378,7 +3379,7 @@ impl<F: PrimeField> ByteArray<F> {
     }
 
     pub(crate) fn from_field_ct<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         input: &FieldCT<F>,
@@ -3515,7 +3516,7 @@ impl<F: PrimeField> ByteArray<F> {
      *modulus
      **/
     pub(crate) fn to_field_ct<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &self,

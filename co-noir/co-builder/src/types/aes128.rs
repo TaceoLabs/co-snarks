@@ -3,10 +3,10 @@ use super::{
     types::WitnessOrConstant,
 };
 use crate::{
-    TranscriptFieldType, builder::GenericUltraCircuitBuilder, prelude::HonkCurve,
-    types::field_ct::FieldCT, utils::Utils,
+    TranscriptFieldType, prelude::HonkCurve, types::field_ct::FieldCT,
+    ultra_builder::GenericUltraCircuitBuilder, utils::Utils,
 };
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use ark_ff::Zero;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
@@ -264,7 +264,7 @@ impl<F: PrimeField> AES128<F> {
         Ok(())
     }
 
-    fn add_round_key<P: Pairing<ScalarField = F>, T: NoirWitnessExtensionProtocol<F>>(
+    fn add_round_key<P: CurveGroup<ScalarField = F>, T: NoirWitnessExtensionProtocol<F>>(
         sparse_state: &mut [(FieldCT<F>, FieldCT<F>); 16],
         sparse_round_key: &[FieldCT<F>],
         round: usize,
@@ -278,7 +278,7 @@ impl<F: PrimeField> AES128<F> {
         }
     }
 
-    fn xor_with_iv<P: Pairing<ScalarField = F>, T: NoirWitnessExtensionProtocol<F>>(
+    fn xor_with_iv<P: CurveGroup<ScalarField = F>, T: NoirWitnessExtensionProtocol<F>>(
         state: &mut [(FieldCT<F>, FieldCT<F>); 16],
         iv: &[FieldCT<F>; 16],
         builder: &mut GenericUltraCircuitBuilder<P, T>,
@@ -405,7 +405,7 @@ pub(crate) fn pack_input_bytes_into_field<
 
 // Packs 16 bytes from the outputs (witness indexes) into a field element for comparison
 pub(crate) fn pack_output_bytes_into_field<
-    P: Pairing,
+    P: CurveGroup,
     T: NoirWitnessExtensionProtocol<P::ScalarField>,
 >(
     outputs: &[u32; 16],

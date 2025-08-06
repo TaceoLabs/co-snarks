@@ -1,5 +1,5 @@
 use crate::{HonkProofError, HonkProofResult, TranscriptFieldType, prelude::HonkCurve};
-use ark_ec::{AffineRepr, CurveConfig, CurveGroup, pairing::Pairing};
+use ark_ec::{AffineRepr, CurveConfig, CurveGroup};
 use ark_ff::{Field, PrimeField};
 use num_bigint::BigUint;
 
@@ -11,7 +11,7 @@ pub struct SerializeC<C: CurveGroup> {
     phantom: std::marker::PhantomData<C>,
 }
 
-pub struct SerializeP<P: Pairing> {
+pub struct SerializeP<P: CurveGroup> {
     phantom: std::marker::PhantomData<P>,
 }
 
@@ -167,14 +167,14 @@ impl<P: HonkCurve<TranscriptFieldType>> SerializeP<P> {
     const NUM_64_LIMBS: u32 = P::BaseField::MODULUS_BIT_SIZE.div_ceil(64);
     pub const FIELDSIZE_BYTES: u32 = Self::NUM_64_LIMBS * 8;
 
-    pub fn write_g1_element(buf: &mut Vec<u8>, el: &P::G1Affine, write_x_first: bool) {
-        SerializeC::<P::G1>::write_group_element(buf, el, write_x_first);
+    pub fn write_g1_element(buf: &mut Vec<u8>, el: &P::Affine, write_x_first: bool) {
+        SerializeC::<P>::write_group_element(buf, el, write_x_first);
     }
 
-    pub fn read_g1_element(buf: &[u8], offset: &mut usize, read_x_first: bool) -> P::G1Affine {
+    pub fn read_g1_element(buf: &[u8], offset: &mut usize, read_x_first: bool) -> P::Affine {
         if buf.iter().all(|&x| x == 255) {
             *offset += Self::FIELDSIZE_BYTES as usize * 2;
-            return P::G1Affine::zero();
+            return P::Affine::zero();
         }
 
         let first = Serialize::<P::BaseField>::read_field_element(buf, offset);

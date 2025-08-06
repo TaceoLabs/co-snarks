@@ -1,6 +1,6 @@
 use crate::decider::relations::databus_lookup_relation::DataBusLookupRelationEvals;
 use crate::decider::relations::ecc_op_queue_relation::EccOpQueueRelationEvals;
-use crate::decider::sumcheck::round_prover::SumcheckProverRound;
+use crate::decider::sumcheck::sumcheck_round_prover::SumcheckProverRound;
 use crate::decider::types::{ProverUnivariates, RelationParameters};
 use crate::decider::{
     relations::{
@@ -28,7 +28,7 @@ use crate::decider::{
             UltraArithmeticRelation, UltraArithmeticRelationAcc, UltraArithmeticRelationEvals,
         },
     },
-    sumcheck::round_verifier::SumcheckVerifierRound,
+    sumcheck::sumcheck_round_verifier::SumcheckVerifierRound,
     types::ClaimedEvaluations,
 };
 use crate::plain_prover_flavour::PlainProverFlavour;

@@ -106,7 +106,7 @@ where
         self.num_frs_written += len;
     }
 
-    fn convert_point<P: HonkCurve<F>>(element: P::G1Affine) -> Vec<F> {
+    fn convert_point<P: HonkCurve<F>>(element: P::Affine) -> Vec<F> {
         let (x, y) = if element.is_zero() {
             // we are at infinity
             (P::BaseField::zero(), P::BaseField::zero())
@@ -146,7 +146,7 @@ where
         self.add_to_hash_buffer(label, &[el]);
     }
 
-    pub fn send_point_to_verifier<P: HonkCurve<F>>(&mut self, label: String, element: P::G1Affine) {
+    pub fn send_point_to_verifier<P: HonkCurve<F>>(&mut self, label: String, element: P::Affine) {
         let elements = Self::convert_point::<P>(element);
         self.send_to_verifier(label, &elements);
     }
@@ -190,7 +190,7 @@ where
     pub fn receive_point_from_prover<P: HonkCurve<F>>(
         &mut self,
         label: String,
-    ) -> HonkProofResult<P::G1Affine> {
+    ) -> HonkProofResult<P::Affine> {
         let elements = self.receive_n_from_prover(label, P::NUM_BASEFIELD_ELEMENTS * 2)?;
 
         let coords = elements
@@ -202,7 +202,7 @@ where
         let y = coords[1];
 
         let res = if x.is_zero() && y.is_zero() {
-            P::G1Affine::zero()
+            P::Affine::zero()
         } else {
             P::g1_affine_from_xy(x, y)
         };

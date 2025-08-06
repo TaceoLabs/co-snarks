@@ -1,7 +1,9 @@
 use super::types::VerifierMemory;
 use crate::{
-    oink::prover::Oink, plain_prover_flavour::PlainProverFlavour, verifier::HonkVerifyResult,
+    oink::oink_prover::Oink, plain_prover_flavour::PlainProverFlavour,
+    ultra_verifier::HonkVerifyResult,
 };
+use ark_ec::pairing::Pairing;
 use co_builder::prelude::{HonkCurve, VerifyingKey};
 use co_builder::{
     polynomials::polynomial_flavours::WitnessEntitiesFlavour, prover_flavour::Flavour,
@@ -30,10 +32,10 @@ impl<
 }
 
 impl<
-    P: HonkCurve<TranscriptFieldType>,
+    C: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
     L: PlainProverFlavour,
-> OinkVerifier<P, H, L>
+> OinkVerifier<C, H, L>
 {
     pub(crate) fn new() -> Self {
         Self {
@@ -43,7 +45,7 @@ impl<
         }
     }
 
-    fn execute_preamble_round(
+    fn execute_preamble_round<P: Pairing<G1 = C>>(
         &mut self,
         verifying_key: &VerifyingKey<P, L>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
@@ -62,7 +64,7 @@ impl<
 
         for i in 0..public_input_size {
             let public_input =
-                transcript.receive_fr_from_prover::<P>(format!("public_input_{i}"))?;
+                transcript.receive_fr_from_prover::<C>(format!("public_input_{i}"))?;
             self.public_inputs.push(public_input);
         }
 
@@ -76,48 +78,48 @@ impl<
         tracing::trace!("executing (verifying) wire commitments round");
 
         *self.memory.witness_commitments.w_l_mut() =
-            transcript.receive_point_from_prover::<P>("W_L".to_string())?;
+            transcript.receive_point_from_prover::<C>("W_L".to_string())?;
         *self.memory.witness_commitments.w_r_mut() =
-            transcript.receive_point_from_prover::<P>("W_R".to_string())?;
+            transcript.receive_point_from_prover::<C>("W_R".to_string())?;
         *self.memory.witness_commitments.w_o_mut() =
-            transcript.receive_point_from_prover::<P>("W_O".to_string())?;
+            transcript.receive_point_from_prover::<C>("W_O".to_string())?;
 
         if L::FLAVOUR == Flavour::Mega {
             *self.memory.witness_commitments.ecc_op_wire_1_mut() =
-                transcript.receive_point_from_prover::<P>("ecc_op_wire_1".to_string())?;
+                transcript.receive_point_from_prover::<C>("ecc_op_wire_1".to_string())?;
             *self.memory.witness_commitments.ecc_op_wire_2_mut() =
-                transcript.receive_point_from_prover::<P>("ecc_op_wire_2".to_string())?;
+                transcript.receive_point_from_prover::<C>("ecc_op_wire_2".to_string())?;
             *self.memory.witness_commitments.ecc_op_wire_3_mut() =
-                transcript.receive_point_from_prover::<P>("ecc_op_wire_3".to_string())?;
+                transcript.receive_point_from_prover::<C>("ecc_op_wire_3".to_string())?;
             *self.memory.witness_commitments.ecc_op_wire_4_mut() =
-                transcript.receive_point_from_prover::<P>("ecc_op_wire_4".to_string())?;
+                transcript.receive_point_from_prover::<C>("ecc_op_wire_4".to_string())?;
             *self.memory.witness_commitments.calldata_mut() =
-                transcript.receive_point_from_prover::<P>("calldata".to_string())?;
+                transcript.receive_point_from_prover::<C>("calldata".to_string())?;
             *self.memory.witness_commitments.calldata_read_counts_mut() =
-                transcript.receive_point_from_prover::<P>("calldata_read_counts".to_string())?;
+                transcript.receive_point_from_prover::<C>("calldata_read_counts".to_string())?;
             *self.memory.witness_commitments.calldata_read_tags_mut() =
-                transcript.receive_point_from_prover::<P>("calldata_read_tags".to_string())?;
+                transcript.receive_point_from_prover::<C>("calldata_read_tags".to_string())?;
             *self.memory.witness_commitments.secondary_calldata_mut() =
-                transcript.receive_point_from_prover::<P>("secondary_calldata".to_string())?;
+                transcript.receive_point_from_prover::<C>("secondary_calldata".to_string())?;
             *self
                 .memory
                 .witness_commitments
                 .secondary_calldata_read_counts_mut() = transcript
-                .receive_point_from_prover::<P>("secondary_calldata_read_counts".to_string())?;
+                .receive_point_from_prover::<C>("secondary_calldata_read_counts".to_string())?;
             *self
                 .memory
                 .witness_commitments
                 .secondary_calldata_read_tags_mut() = transcript
-                .receive_point_from_prover::<P>("secondary_calldata_read_tags".to_string())?;
+                .receive_point_from_prover::<C>("secondary_calldata_read_tags".to_string())?;
             *self.memory.witness_commitments.return_data_mut() =
-                transcript.receive_point_from_prover::<P>("return_data".to_string())?;
+                transcript.receive_point_from_prover::<C>("return_data".to_string())?;
             *self
                 .memory
                 .witness_commitments
                 .return_data_read_counts_mut() =
-                transcript.receive_point_from_prover::<P>("return_data_read_counts".to_string())?;
+                transcript.receive_point_from_prover::<C>("return_data_read_counts".to_string())?;
             *self.memory.witness_commitments.return_data_read_tags_mut() =
-                transcript.receive_point_from_prover::<P>("return_data_read_tags".to_string())?;
+                transcript.receive_point_from_prover::<C>("return_data_read_tags".to_string())?;
         }
         Ok(())
     }
@@ -128,7 +130,7 @@ impl<
     ) -> HonkVerifyResult<()> {
         tracing::trace!("executing (verifying) sorted list accumulator round");
 
-        let challs = transcript.get_challenges::<P>(&[
+        let challs = transcript.get_challenges::<C>(&[
             "eta".to_string(),
             "eta_two".to_string(),
             "eta_three".to_string(),
@@ -138,13 +140,13 @@ impl<
         self.memory.challenges.eta_3 = challs[2];
 
         *self.memory.witness_commitments.lookup_read_counts_mut() =
-            transcript.receive_point_from_prover::<P>("lookup_read_counts".to_string())?;
+            transcript.receive_point_from_prover::<C>("lookup_read_counts".to_string())?;
 
         *self.memory.witness_commitments.lookup_read_tags_mut() =
-            transcript.receive_point_from_prover::<P>("lookup_read_tags".to_string())?;
+            transcript.receive_point_from_prover::<C>("lookup_read_tags".to_string())?;
 
         *self.memory.witness_commitments.w_4_mut() =
-            transcript.receive_point_from_prover::<P>("w_4".to_string())?;
+            transcript.receive_point_from_prover::<C>("w_4".to_string())?;
 
         Ok(())
     }
@@ -155,35 +157,35 @@ impl<
     ) -> HonkVerifyResult<()> {
         tracing::trace!("executing (verifying) log derivative inverse round");
 
-        let challs = transcript.get_challenges::<P>(&["beta".to_string(), "gamma".to_string()]);
+        let challs = transcript.get_challenges::<C>(&["beta".to_string(), "gamma".to_string()]);
         self.memory.challenges.beta = challs[0];
         self.memory.challenges.gamma = challs[1];
 
         *self.memory.witness_commitments.lookup_inverses_mut() =
-            transcript.receive_point_from_prover::<P>("lookup_inverses".to_string())?;
+            transcript.receive_point_from_prover::<C>("lookup_inverses".to_string())?;
 
         // If Goblin (i.e. using DataBus) receive commitments to log-deriv inverses polynomials
         if L::FLAVOUR == Flavour::Mega {
             *self.memory.witness_commitments.calldata_inverses_mut() =
-                transcript.receive_point_from_prover::<P>("calldata_inverses".to_string())?;
+                transcript.receive_point_from_prover::<C>("calldata_inverses".to_string())?;
             *self
                 .memory
                 .witness_commitments
                 .secondary_calldata_inverses_mut() = transcript
-                .receive_point_from_prover::<P>("secondary_calldata_inverses".to_string())?;
+                .receive_point_from_prover::<C>("secondary_calldata_inverses".to_string())?;
             *self.memory.witness_commitments.return_data_inverses_mut() =
-                transcript.receive_point_from_prover::<P>("return_data_inverses".to_string())?;
+                transcript.receive_point_from_prover::<C>("return_data_inverses".to_string())?;
         }
         Ok(())
     }
 
-    fn execute_grand_product_computation_round(
+    fn execute_grand_product_computation_round<P: Pairing<G1 = C>>(
         &mut self,
         verifying_key: &VerifyingKey<P, L>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
     ) -> HonkVerifyResult<()> {
         tracing::trace!("executing (verifying) grand product computation round");
-        self.memory.public_input_delta = Oink::<P, H, L>::compute_public_input_delta(
+        self.memory.public_input_delta = Oink::<C, H, L>::compute_public_input_delta(
             &self.memory.challenges.beta,
             &self.memory.challenges.gamma,
             &self.public_inputs,
@@ -191,22 +193,22 @@ impl<
             verifying_key.pub_inputs_offset,
         );
         *self.memory.witness_commitments.z_perm_mut() =
-            transcript.receive_point_from_prover::<P>("z_perm".to_string())?;
+            transcript.receive_point_from_prover::<C>("z_perm".to_string())?;
         Ok(())
     }
 
-    pub(crate) fn verify(
+    pub(crate) fn verify<P: Pairing<G1 = C>>(
         mut self,
         verifying_key: &VerifyingKey<P, L>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
-    ) -> HonkVerifyResult<VerifierMemory<P, L>> {
+    ) -> HonkVerifyResult<VerifierMemory<C, L>> {
         tracing::trace!("Oink verify");
         self.execute_preamble_round(verifying_key, transcript)?;
         self.execute_wire_commitments_round(transcript)?;
         self.execute_sorted_list_accumulator_round(transcript)?;
         self.execute_log_derivative_inverse_round(transcript)?;
         self.execute_grand_product_computation_round(verifying_key, transcript)?;
-        Oink::<P, H, L>::generate_alphas_round(&mut self.memory.challenges.alphas, transcript);
+        Oink::<C, H, L>::generate_alphas_round(&mut self.memory.challenges.alphas, transcript);
         Ok(self.memory)
     }
 }

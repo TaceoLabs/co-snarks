@@ -101,7 +101,7 @@ impl<T: NoirUltraHonkProver<C>, C: HonkCurve<TranscriptFieldType>> CoUltraEccOps
 #[derive(Default)]
 pub struct CoECCVMOperation<T: NoirUltraHonkProver<C>, C: HonkCurve<TranscriptFieldType>> {
     pub op_code: CoEccOpCode<T, C>,
-    pub base_point: C::G1Affine,
+    pub base_point: C::Affine,
     pub z1: BigUint,
     pub z2: BigUint,
     pub mul_scalar_full: C::ScalarField,
@@ -150,7 +150,7 @@ where
 pub struct CoECCOpQueue<T: NoirUltraHonkProver<C>, C: HonkCurve<TranscriptFieldType>> {
     pub(crate) ultra_ops_table: CoUltraEccOpsTable<T, C>,
     pub(crate) eccvm_ops_table: CoEccvmOpsTable<T, C>,
-    pub(crate) accumulator: C::G1Affine,
+    pub(crate) accumulator: C::Affine,
     pub(crate) eccvm_ops_reconstructed: Vec<CoECCVMOperation<T, C>>,
     pub(crate) eccvm_row_tracker: EccvmRowTracker,
 }
@@ -219,7 +219,7 @@ impl<T: NoirUltraHonkProver<C>, C: HonkCurve<TranscriptFieldType>> CoECCOpQueue<
         self.eccvm_ops_reconstructed = eccvm_ops_in;
     }
 
-    pub fn get_accumulator(&self) -> C::G1Affine {
+    pub fn get_accumulator(&self) -> C::Affine {
         self.accumulator
     }
 }

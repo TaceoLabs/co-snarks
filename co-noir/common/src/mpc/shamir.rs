@@ -1,5 +1,5 @@
 use super::NoirUltraHonkProver;
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_ff::Field;
 use itertools::izip;
 use mpc_core::MpcState;
@@ -15,9 +15,9 @@ use rayon::prelude::*;
 /// A UltraHonk driver using shamir secret sharing
 pub struct ShamirUltraHonkDriver;
 
-impl<P: Pairing> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
+impl<P: CurveGroup> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
     type ArithmeticShare = ShamirPrimeFieldShare<P::ScalarField>;
-    type PointShare = ShamirPointShare<P::G1>;
+    type PointShare = ShamirPointShare<P>;
     type State = ShamirState<P::ScalarField>;
 
     fn rand<N: Network>(net: &N, state: &mut Self::State) -> eyre::Result<Self::ArithmeticShare> {
@@ -42,7 +42,7 @@ impl<P: Pairing> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
 
     fn add_assign_public(
         a: &mut Self::ArithmeticShare,
-        b: <P as Pairing>::ScalarField,
+        b: P::ScalarField,
         _id: <Self::State as MpcState>::PartyID,
     ) {
         arithmetic::add_assign_public(a, b);
@@ -133,7 +133,7 @@ impl<P: Pairing> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
         a: Self::PointShare,
         net: &N,
         state: &mut Self::State,
-    ) -> eyre::Result<P::G1> {
+    ) -> eyre::Result<P> {
         pointshare::open_point(&a, net, state)
     }
 
@@ -141,7 +141,7 @@ impl<P: Pairing> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
         a: &[Self::PointShare],
         net: &N,
         state: &mut Self::State,
-    ) -> eyre::Result<Vec<P::G1>> {
+    ) -> eyre::Result<Vec<P>> {
         pointshare::open_point_many(a, net, state)
     }
 
@@ -158,7 +158,7 @@ impl<P: Pairing> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
         b: Self::ArithmeticShare,
         net: &N,
         state: &mut Self::State,
-    ) -> eyre::Result<(<P as Pairing>::G1, <P as Pairing>::ScalarField)> {
+    ) -> eyre::Result<(P, P::ScalarField)> {
         pointshare::open_point_and_field(&a, &b, net, state)
     }
 
@@ -223,27 +223,24 @@ impl<P: Pairing> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
     }
 
     fn msm_public_points(
-        points: &[P::G1Affine],
+        points: &[P::Affine],
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShare {
         pointshare::msm_public_points(points, scalars)
     }
 
-    fn eval_poly(
-        coeffs: &[Self::ArithmeticShare],
-        point: <P as Pairing>::ScalarField,
-    ) -> Self::ArithmeticShare {
+    fn eval_poly(coeffs: &[Self::ArithmeticShare], point: P::ScalarField) -> Self::ArithmeticShare {
         poly::eval_poly(coeffs, point)
     }
 
-    fn fft<D: ark_poly::EvaluationDomain<<P as Pairing>::ScalarField>>(
+    fn fft<D: ark_poly::EvaluationDomain<P::ScalarField>>(
         data: &[Self::ArithmeticShare],
         domain: &D,
     ) -> Vec<Self::ArithmeticShare> {
         domain.fft(data)
     }
 
-    fn ifft<D: ark_poly::EvaluationDomain<<P as Pairing>::ScalarField>>(
+    fn ifft<D: ark_poly::EvaluationDomain<P::ScalarField>>(
         data: &[Self::ArithmeticShare],
         domain: &D,
     ) -> Vec<Self::ArithmeticShare> {

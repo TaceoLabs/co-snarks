@@ -1,11 +1,11 @@
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_builder::prelude::Polynomial;
 
-pub struct ShpleminiVerifierOpeningClaim<P: Pairing> {
+pub struct ShpleminiVerifierOpeningClaim<P: CurveGroup> {
     pub challenge: P::ScalarField,
     pub scalars: Vec<P::ScalarField>,
-    pub commitments: Vec<P::G1Affine>,
+    pub commitments: Vec<P::Affine>,
 }
 #[derive(Clone)]
 pub struct ShpleminiOpeningClaim<F: PrimeField> {

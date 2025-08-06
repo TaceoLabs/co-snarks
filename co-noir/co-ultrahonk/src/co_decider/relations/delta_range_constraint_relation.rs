@@ -5,7 +5,7 @@ use crate::{
 };
 use common::mpc::NoirUltraHonkProver;
 
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_ff::One;
 use ark_ff::Zero;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
@@ -22,14 +22,14 @@ use mpc_net::Network;
 use ultrahonk::prelude::Univariate;
 
 #[derive(Clone, Debug)]
-pub(crate) struct DeltaRangeConstraintRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing> {
+pub(crate) struct DeltaRangeConstraintRelationAcc<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) r0: SharedUnivariate<T, P, 6>,
     pub(crate) r1: SharedUnivariate<T, P, 6>,
     pub(crate) r2: SharedUnivariate<T, P, 6>,
     pub(crate) r3: SharedUnivariate<T, P, 6>,
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for DeltaRangeConstraintRelationAcc<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for DeltaRangeConstraintRelationAcc<T, P> {
     fn default() -> Self {
         Self {
             r0: Default::default(),
@@ -40,7 +40,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for DeltaRangeConstraintRela
     }
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing> DeltaRangeConstraintRelationAcc<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> DeltaRangeConstraintRelationAcc<T, P> {
     pub(crate) fn scale(&mut self, elements: &[P::ScalarField]) {
         assert!(elements.len() == DeltaRangeConstraintRelation::NUM_RELATIONS);
         self.r0.scale_inplace(elements[0]);

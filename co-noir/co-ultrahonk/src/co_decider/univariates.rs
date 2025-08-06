@@ -1,4 +1,4 @@
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_ff::Field;
 use mpc_net::Network;
 use std::array;
@@ -7,11 +7,11 @@ use ultrahonk::prelude::{Barycentric, Univariate};
 use crate::mpc_prover_flavour::SharedUnivariateTrait;
 use common::mpc::NoirUltraHonkProver;
 
-pub struct SharedUnivariate<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> {
+pub struct SharedUnivariate<T: NoirUltraHonkProver<P>, P: CurveGroup, const SIZE: usize> {
     pub(crate) evaluations: [T::ArithmeticShare; SIZE],
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> SharedUnivariate<T, P, SIZE> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup, const SIZE: usize> SharedUnivariate<T, P, SIZE> {
     pub(crate) fn from_vec(evaluations: Vec<T::ArithmeticShare>) -> Self {
         Self {
             evaluations: evaluations
@@ -52,7 +52,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> SharedUnivariate<
     }
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> SharedUnivariateTrait<T, P>
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup, const SIZE: usize> SharedUnivariateTrait<T, P>
     for SharedUnivariate<T, P, SIZE>
 {
     /**
@@ -246,7 +246,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> SharedUnivariateT
 
     fn mul_public<K>(&self, other: &K) -> Self
     where
-        K: ultrahonk::plain_prover_flavour::UnivariateTrait<<P as Pairing>::ScalarField>,
+        K: ultrahonk::plain_prover_flavour::UnivariateTrait<P::ScalarField>,
     {
         let mut result = Self::default();
         for i in 0..SIZE {
@@ -273,7 +273,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> SharedUnivariateT
     }
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> Default
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup, const SIZE: usize> Default
     for SharedUnivariate<T, P, SIZE>
 {
     fn default() -> Self {
@@ -283,7 +283,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> Default
     }
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> Clone
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup, const SIZE: usize> Clone
     for SharedUnivariate<T, P, SIZE>
 {
     fn clone(&self) -> Self {
@@ -293,7 +293,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> Clone
     }
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> std::fmt::Debug
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup, const SIZE: usize> std::fmt::Debug
     for SharedUnivariate<T, P, SIZE>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -301,7 +301,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> std::fmt::Debug
     }
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing, const SIZE: usize> AsRef<[T::ArithmeticShare]>
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup, const SIZE: usize> AsRef<[T::ArithmeticShare]>
     for SharedUnivariate<T, P, SIZE>
 {
     fn as_ref(&self) -> &[T::ArithmeticShare] {

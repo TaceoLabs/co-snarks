@@ -1,5 +1,5 @@
-use crate::decider::sumcheck::round_prover::SumcheckProverRound;
-use crate::decider::sumcheck::round_verifier::SumcheckVerifierRound;
+use crate::decider::sumcheck::sumcheck_round_prover::SumcheckProverRound;
+use crate::decider::sumcheck::sumcheck_round_verifier::SumcheckVerifierRound;
 use crate::decider::types::{ClaimedEvaluations, ProverUnivariates, RelationParameters};
 use crate::plain_prover_flavour::PlainProverFlavour;
 use crate::prelude::Univariate;

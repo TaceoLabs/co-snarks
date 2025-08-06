@@ -1,6 +1,7 @@
 use super::univariate::Univariate;
 use crate::plain_prover_flavour::PlainProverFlavour;
 use crate::types::AllEntities;
+use ark_ec::CurveGroup;
 use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
@@ -14,19 +15,18 @@ use co_builder::prover_flavour::Flavour;
 use itertools::izip;
 use std::{iter, vec};
 
-pub(crate) struct ProverMemory<P: Pairing, L: PlainProverFlavour> {
-    pub(crate) polys: AllEntities<Vec<P::ScalarField>, L>,
-    pub(crate) relation_parameters: RelationParameters<P::ScalarField, L>,
+pub struct ProverMemory<P: CurveGroup, L: PlainProverFlavour> {
+    pub polys: AllEntities<Vec<P::ScalarField>, L>,
+    pub relation_parameters: RelationParameters<P::ScalarField, L>,
 }
 
-pub(crate) struct VerifierMemory<P: Pairing, L: PlainProverFlavour> {
-    pub(crate) verifier_commitments: VerifierCommitments<P::G1Affine, L>,
+pub(crate) struct VerifierMemory<P: CurveGroup, L: PlainProverFlavour> {
+    pub(crate) verifier_commitments: VerifierCommitments<P::Affine, L>,
     pub(crate) relation_parameters: RelationParameters<P::ScalarField, L>,
     pub(crate) claimed_evaluations: ClaimedEvaluations<P::ScalarField, L>,
 }
 
-pub(crate) type ProverUnivariates<F, L> =
-    AllEntities<<L as PlainProverFlavour>::ProverUnivariate<F>, L>;
+pub type ProverUnivariates<F, L> = AllEntities<<L as PlainProverFlavour>::ProverUnivariate<F>, L>;
 pub(crate) type ProverUnivariatesSized<F, L, const SIZE: usize> =
     AllEntities<Univariate<F, SIZE>, L>;
 pub(crate) type PartiallyEvaluatePolys<F, L> = AllEntities<Vec<F>, L>;
@@ -115,7 +115,7 @@ impl<F: PrimeField> GateSeparatorPolynomial<F> {
     }
 }
 
-impl<P: Pairing, L: PlainProverFlavour> ProverMemory<P, L> {
+impl<P: CurveGroup, L: PlainProverFlavour> ProverMemory<P, L> {
     pub(crate) fn from_memory_and_polynomials(
         prover_memory: crate::oink::types::ProverMemory<P, L>,
         polynomials: Polynomials<P::ScalarField, L>,
@@ -224,10 +224,10 @@ impl<P: Pairing, L: PlainProverFlavour> ProverMemory<P, L> {
     }
 }
 
-impl<P: Pairing, L: PlainProverFlavour> VerifierMemory<P, L> {
+impl<C: CurveGroup, L: PlainProverFlavour> VerifierMemory<C, L> {
     #[expect(clippy::field_reassign_with_default)]
-    pub(crate) fn from_memory_and_key(
-        verifier_memory: crate::oink::types::VerifierMemory<P, L>,
+    pub(crate) fn from_memory_and_key<P: Pairing<G1 = C, G1Affine = C::Affine>>(
+        verifier_memory: crate::oink::types::VerifierMemory<C, L>,
         vk: &VerifyingKey<P, L>,
     ) -> Self {
         let relation_parameters = RelationParameters {
@@ -241,7 +241,7 @@ impl<P: Pairing, L: PlainProverFlavour> VerifierMemory<P, L> {
             gate_challenges: Default::default(),
         };
 
-        let mut memory = AllEntities::<P::G1Affine, _>::default();
+        let mut memory = AllEntities::<C::Affine, _>::default();
         memory.witness = verifier_memory.witness_commitments;
         memory.precomputed = vk.commitments.clone();
 

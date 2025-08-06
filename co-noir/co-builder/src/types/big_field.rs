@@ -1,5 +1,5 @@
-use crate::{builder::GenericUltraCircuitBuilder, types::field_ct::FieldCT};
-use ark_ec::pairing::Pairing;
+use crate::{types::field_ct::FieldCT, ultra_builder::GenericUltraCircuitBuilder};
+use ark_ec::CurveGroup;
 use ark_ff::{One, PrimeField};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use num_bigint::BigUint;
@@ -46,7 +46,7 @@ impl<F: PrimeField> BigField<F> {
     ///
     /// Returns the public input index at which the representation of the BigField starts.
     pub(crate) fn set_public<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &self,
@@ -62,7 +62,7 @@ impl<F: PrimeField> BigField<F> {
     }
 
     pub(crate) fn from_witness<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         input: &T::AcvmType,
@@ -100,7 +100,7 @@ impl<F: PrimeField> BigField<F> {
     }
 
     pub(crate) fn from_slices<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         low_bits_in: FieldCT<F>,
@@ -233,12 +233,12 @@ impl<F: PrimeField> BigField<F> {
     }
 }
 #[expect(dead_code)]
-pub(crate) struct BigGroup<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
+pub(crate) struct BigGroup<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
     pub(crate) x: BigField<P::ScalarField>,
     pub(crate) y: BigField<P::ScalarField>,
     pub(crate) is_infinity: BoolCT<P, T>,
 }
-impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> BigGroup<P, T> {
+impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BigGroup<P, T> {
     pub(crate) fn new(x: BigField<P::ScalarField>, y: BigField<P::ScalarField>) -> Self {
         BigGroup {
             x,
