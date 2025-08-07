@@ -226,7 +226,7 @@ impl ECCVMFlavour {
     const TRANSCRIPT_ACCUMULATOR_X: usize = 83; // column 83
     const TRANSCRIPT_ACCUMULATOR_Y: usize = 84; // column 84
     const Z_PERM: usize = 85; // column 85
-    const LOOKUP_INVERSES: usize = 86; // column 1
+    const LOOKUP_INVERSES: usize = 86; // column 86
 }
 
 impl ProverFlavour for ECCVMFlavour {
