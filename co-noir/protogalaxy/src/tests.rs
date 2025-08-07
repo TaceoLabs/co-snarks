@@ -557,17 +557,24 @@ fn test_protogalaxy_prover() {
         env!("CARGO_MANIFEST_DIR")
     );
 
-    let content_1 = std::fs::read_to_string(&test_file_acc).unwrap();
-    let content_2 = std::fs::read_to_string(&test_file_folded).unwrap();
+    let test_file_folding_result = format!(
+        "{}/../../test_vectors/noir/protogalaxy_prover/run_oink_prover/folding_result",
+        env!("CARGO_MANIFEST_DIR")
+    );
 
-
-    let ((circuit_size_1, num_public_inputs_1, pub_inputs_offset_1, start_idx_1, final_active_wire_idx_1, public_inputs_1, polynomials_1_str, memory_read_records_1, memory_write_records_1, (ranges_1, idxs_1, current_end_1)), honk_proof_1): 
+    let content = std::fs::read_to_string(&test_file_acc).unwrap();
+    let ((circuit_size_1, num_public_inputs_1, pub_inputs_offset_1, start_idx_1, final_active_wire_idx_1, public_inputs_1, polynomials_1_str, memory_read_records_1, memory_write_records_1, (ranges_1, idxs_1, current_end_1)), oink_proof_1): 
         ((u32, u32, u32, u32, usize, Vec<&str>, Vec<Vec<&str>>, Vec<u32>, Vec<u32>, (Vec<(usize, usize)>, Vec<usize>, usize)), Vec<&str>)
-    = serde_json::from_str(&content_1).unwrap();
+    = serde_json::from_str(&content).unwrap();
 
-    let ((circuit_size_2, num_public_inputs_2, pub_inputs_offset_2, start_idx_2, final_active_wire_idx_2, public_inputs_2, polynomials_2_str, memory_read_records_2, memory_write_records_2, (ranges_2, idxs_2, current_end_2)), honk_proof_2): 
+    let content = std::fs::read_to_string(&test_file_folded).unwrap();
+    let ((circuit_size_2, num_public_inputs_2, pub_inputs_offset_2, start_idx_2, final_active_wire_idx_2, public_inputs_2, polynomials_2_str, memory_read_records_2, memory_write_records_2, (ranges_2, idxs_2, current_end_2)), oink_proof_2):
         ((u32, u32, u32, u32, usize, Vec<&str>, Vec<Vec<&str>>, Vec<u32>, Vec<u32>, (Vec<(usize, usize)>, Vec<usize>, usize)), Vec<&str>)
-     = serde_json::from_str(&content_2).unwrap();
+     = serde_json::from_str(&content).unwrap();
+
+    let content = std::fs::read_to_string(&test_file_folding_result).unwrap();
+    let ((target_sum_result, gate_challenges_result, alphas_result, relation_parameters_result, polynomials_folding_result_str), honk_proof): ((&str, Vec<&str>, Vec<&str>, Vec<&str>, Vec<Vec<&str>>), Vec<&str>) = serde_json::from_str(&content).unwrap();
+
 
     println!("circuit_size_1: {}, circuit_size_2: {}", circuit_size_1, circuit_size_2);
     let crs = CrsParser::<C>::get_crs(
@@ -578,6 +585,26 @@ fn test_protogalaxy_prover() {
     ).unwrap();
 
     let (prover_crs, _) = crs.split();
+
+    let honk_proof = honk_proof
+        .into_iter()
+        .map(field_from_hex_string)
+        .map(Result::unwrap)
+        .collect::<Vec<F>>();
+
+    let alphas_result = alphas_result
+        .into_iter()
+        .map(field_from_hex_string)
+        .map(Result::unwrap)
+        .collect::<Vec<F>>();
+
+    let relation_parameters_result = relation_parameters_result
+        .into_iter()
+        .map(field_from_hex_string)         
+        .map(Result::unwrap)
+        .collect::<Vec<F>>();
+
+    let target_sum_result: F = field_from_hex_string(target_sum_result).unwrap();
 
     let polys_1 = polynomials_1_str
         .into_iter()
@@ -632,8 +659,7 @@ fn test_protogalaxy_prover() {
         polynomials: structure_prover_polys(polys_1.clone()),
     };
 
-
-    let mut folded_key = ProvingKey::<C, MegaFlavour> {
+    let folded_key = ProvingKey::<C, MegaFlavour> {
         crs: Arc::new(prover_crs),
         circuit_size: circuit_size_2,
         num_public_inputs: num_public_inputs_2,
@@ -671,6 +697,13 @@ fn test_protogalaxy_prover() {
 
     accumulator_prover_memory.gate_challenges = vec![F::ZERO; CONST_PG_LOG_N];
 
-    prover.prove(&mut accumulator, accumulator_prover_memory, folded_key);
+    assert_eq!(
+        prover.prove(&mut accumulator, accumulator_prover_memory, folded_key).inner(),
+        honk_proof
+    );
 
+    // assert_eq!(
+    //     accumulator_prover_memory.alphas,
+    //     alphas_result
+    // );
 }
