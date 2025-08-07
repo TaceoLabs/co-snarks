@@ -107,7 +107,7 @@ pub struct HonkProof<F: PrimeField> {
 }
 
 impl<F: PrimeField> HonkProof<F> {
-    pub(crate) fn new(proof: Vec<F>) -> Self {
+    pub fn new(proof: Vec<F>) -> Self {
         Self { proof }
     }
 

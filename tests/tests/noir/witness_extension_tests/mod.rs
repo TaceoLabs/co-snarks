@@ -56,15 +56,14 @@ macro_rules! add_rep3_acvm_test {
                     $name
                 ));
                 // read the input file
-                let inputs = Rep3CoSolver::<_, ()>::partially_read_abi_bn254_fieldelement(
-                    &input,
+                let inputs = noir_types::partially_read_abi_bn254(
+                    std::fs::File::open(input).unwrap(),
                     &program_artifact.abi,
-                    &program_artifact.bytecode,
+                    &program_artifact.bytecode.functions[0].public_inputs().indices(),
                 ).expect("can share field elements for noir witness extension");
 
                 // create input shares
-                let mut rng = rand::thread_rng();
-                let shares = co_noir::split_input_rep3::<Bn254, _>(inputs, &mut rng);
+                let shares = co_noir::split_input_rep3::<Bn254>(inputs);
                 let nets0 = LocalNetwork::new_3_parties();
                 let nets1 = LocalNetwork::new_3_parties();
                 let mut threads = vec![];
@@ -79,7 +78,7 @@ macro_rules! add_rep3_acvm_test {
                     shares
                 ) {
                     threads.push(std::thread::spawn(move || {
-                        let input_share = co_noir::witness_to_witness_map(share, &program_artifact.abi).expect("can translate witness for noir witness extension");
+                        let input_share = co_noir::witness_map_from_string_map(share, &program_artifact.abi).expect("can translate witness for noir witness extension");
                         let solver =
                             Rep3CoSolver::new_with_witness(&net0, &net1, program_artifact, input_share).unwrap();
                         let proof = solver.solve().unwrap();
