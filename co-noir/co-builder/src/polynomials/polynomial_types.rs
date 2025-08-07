@@ -33,6 +33,16 @@ impl<F: PrimeField, L: ProverFlavour> Polynomials<F, L> {
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Polynomial<F>> {
         self.witness.iter_mut().chain(self.precomputed.iter_mut())
     }
+
+    // TODO CESAR: USE
+    pub fn increase_polynomial_size(&mut self, circuit_size: usize) {
+        self.witness
+            .iter_mut()
+            .for_each(|el| el.resize(circuit_size, Default::default()));
+        self.precomputed
+            .iter_mut()
+            .for_each(|el| el.resize(circuit_size, Default::default()));
+    }
 }
 #[derive(Debug)]
 pub struct ProverWitnessEntities<T: Default, const SIZE: usize> {

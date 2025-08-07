@@ -6,12 +6,8 @@ use co_builder::prelude::Polynomial;
 use co_builder::{TranscriptFieldType, prelude::HonkCurve};
 use ultrahonk::plain_prover_flavour::{PlainProverFlavour, UnivariateTrait};
 use ultrahonk::prelude::{AllEntities, GateSeparatorPolynomial, ProvingKey, Univariate};
-use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
-use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
 
-use crate::protogalaxy_prover::{
-    CONST_PG_LOG_N, DeciderProverMemory, ExtendedRelationParameters,
-};
+use crate::protogalaxy_prover::{CONST_PG_LOG_N, DeciderProverMemory, ExtendedRelationParameters};
 
 pub(crate) fn compute_extended_relation_parameters<
     C: HonkCurve<TranscriptFieldType>,
@@ -36,8 +32,6 @@ pub(crate) fn compute_extended_relation_parameters<
                         memory.relation_parameters.get_params()[param_idx].clone();
                 });
 
-            // TODO CESAR: Verify that extend_from is equivalent to extend_to
-            // TODO CESAR: This is probably not correct, check skip_count stuff
             param.extend_from(&tmp.evaluations);
         });
     result
@@ -72,7 +66,6 @@ pub(crate) fn compute_combiner_quotient<C: HonkCurve<TranscriptFieldType>>(
     combiner: &Univariate<C::ScalarField, BATCHED_EXTENDED_LENGTH>,
     perturbator_evaluation: C::ScalarField,
 ) -> Univariate<C::ScalarField, { BATCHED_EXTENDED_LENGTH - NUM }> {
-    // TODO CESAR: Polish and avoid the try_into at the end, besides, should this work for NUM > 2?
     let mut combiner_quotient_evals = vec![C::ScalarField::ZERO; BATCHED_EXTENDED_LENGTH - NUM];
     for point in NUM..combiner.evaluations.len() {
         let idx = point - NUM;
@@ -103,9 +96,8 @@ pub(crate) fn compute_row_evaluations<C: HonkCurve<TranscriptFieldType>, L: Plai
     let mut aggregated_relation_evaluations = vec![C::ScalarField::ZERO; polynomial_size];
     let mut last_coeff = C::ScalarField::ZERO;
 
-    // TODO CESAR: Parallelize this, use the parallel_for stuff
+    // Barretenberg uses parallelization here
     for i in 0..polynomial_size {
-
         let row = polys.get_row(i);
 
         let mut evals = L::AllRelationEvaluations::default();
@@ -116,7 +108,8 @@ pub(crate) fn compute_row_evaluations<C: HonkCurve<TranscriptFieldType>, L: Plai
             &C::ScalarField::ONE,
         );
 
-        let (linearly_independent_contributions, linearly_dependent_contributions) = L::scale_by_challenge_and_accumulate(&evals, C::ScalarField::ONE, &alphas);
+        let (linearly_independent_contributions, linearly_dependent_contributions) =
+            L::scale_by_challenge_and_accumulate(&evals, C::ScalarField::ONE, &alphas);
         aggregated_relation_evaluations[i] = linearly_independent_contributions;
         last_coeff += linearly_dependent_contributions;
     }
@@ -142,7 +135,7 @@ pub(crate) fn construct_coefficients_tree<C: HonkCurve<TranscriptFieldType>>(
     let prev_level_width = prev_level_coeffs.len();
     let mut level_coeffs = vec![vec![C::ScalarField::ZERO; degree + 1]; prev_level_width / 2];
 
-    // TODO CESAR: Add parallelism here, all the parallel_for stuff
+    // Barretenberg uses parallelization here
     for parent in 0..prev_level_width / 2 {
         let node = parent * 2;
         level_coeffs[parent][..prev_level_coeffs[node].len()]
@@ -165,7 +158,7 @@ pub(crate) fn construct_perturbator_coefficients<C: HonkCurve<TranscriptFieldTyp
     let mut first_level_coeffs =
         vec![vec![C::ScalarField::from(2u64), C::ScalarField::ZERO]; width / 2];
 
-    // TODO CESAR: Add parallelism here, all the parallel_for stuff
+    // Barretenberg uses parallelization here
     for parent in 0..first_level_coeffs.len() {
         let node = parent * 2;
         first_level_coeffs[parent][0] = full_honk_evaluations.coefficients[node]
@@ -183,11 +176,8 @@ pub(crate) fn compute_perturbator<C: HonkCurve<TranscriptFieldType>, L: PlainPro
 ) -> Polynomial<C::ScalarField> {
     let full_honk_evaluations = compute_row_evaluations(accumulator_prover_memory);
 
-    // TODO CESAR: This line assumes that the first key is the accumulator, check this
-    let betas = &accumulator_prover_memory
-        .gate_challenges;
+    let betas = &accumulator_prover_memory.gate_challenges;
 
-    // TODO CESAR: Check if this log is fine
     let log_circuit_size = accumulator.circuit_size.ilog2() as usize;
 
     // Compute the perturbator using only the first log_circuit_size-many betas/deltas
@@ -198,7 +188,6 @@ pub(crate) fn compute_perturbator<C: HonkCurve<TranscriptFieldType>, L: PlainPro
     );
 
     // Populate the remaining coefficients with zeros to reach the required constant size
-    // TODO CESAR: replace with extend
     if log_circuit_size < CONST_PG_LOG_N {
         perturbator.resize(CONST_PG_LOG_N + 1, C::ScalarField::ZERO);
     }
@@ -206,7 +195,6 @@ pub(crate) fn compute_perturbator<C: HonkCurve<TranscriptFieldType>, L: PlainPro
     Polynomial::new(perturbator)
 }
 
-// TODO CESAR: test
 pub(crate) fn extend_univariates<C: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour>(
     prover_memory: &Vec<&mut DeciderProverMemory<C, L>>,
     row_idx: usize,
@@ -230,21 +218,10 @@ pub(crate) fn extend_univariates<C: HonkCurve<TranscriptFieldType>, L: PlainProv
             let mut univariate = Univariate::<C::ScalarField, BATCHED_EXTENDED_LENGTH>::default();
             univariate.extend_from(&coeffs);
             univariate
-        }).collect::<Vec<_>>();
+        })
+        .collect::<Vec<_>>();
 
-    AllEntities {
-        precomputed: L::PrecomputedEntities::from_elements(
-            &results[..L::PRECOMPUTED_ENTITIES_SIZE].to_vec(),
-        ),
-        witness: L::WitnessEntities::from_elements(
-            &results[L::PRECOMPUTED_ENTITIES_SIZE..L::PRECOMPUTED_ENTITIES_SIZE + L::WITNESS_ENTITIES_SIZE]
-                .to_vec(),
-        ),
-        shifted_witness: L::ShiftedWitnessEntities::from_elements(
-            &results[L::PRECOMPUTED_ENTITIES_SIZE + L::WITNESS_ENTITIES_SIZE..L::SHIFTED_WITNESS_ENTITIES_SIZE + L::PRECOMPUTED_ENTITIES_SIZE + L::WITNESS_ENTITIES_SIZE]
-                .to_vec(),
-        ),
-    }
+    AllEntities::from_elements(results)
 }
 
 pub(crate) fn compute_combiner<C: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour>(
@@ -257,6 +234,7 @@ pub(crate) fn compute_combiner<C: HonkCurve<TranscriptFieldType>, L: PlainProver
     let common_polynomial_size = prover_memory[0].polys.witness.w_l().len();
     let mut univariate_accumulators = L::AllRelationAcc::<C::ScalarField>::default();
 
+    // Barretenberg uses parallelization here
     for i in 0..common_polynomial_size {
         let extended_univariates = extend_univariates(&prover_memory, i);
 
@@ -271,10 +249,13 @@ pub(crate) fn compute_combiner<C: HonkCurve<TranscriptFieldType>, L: PlainProver
     }
 
     let mut result = Univariate::<C::ScalarField, BATCHED_EXTENDED_LENGTH>::default();
-    L::extend_and_batch_univariates_2::<C::ScalarField, _>(&univariate_accumulators, &mut result, 
+    L::extend_and_batch_univariates_2::<C::ScalarField, _>(
+        &univariate_accumulators,
+        &mut result,
         Univariate::<C::ScalarField, BATCHED_EXTENDED_LENGTH> {
             evaluations: [C::ScalarField::ONE; BATCHED_EXTENDED_LENGTH],
         },
-        alphas.as_slice());
+        alphas.as_slice(),
+    );
     result
 }

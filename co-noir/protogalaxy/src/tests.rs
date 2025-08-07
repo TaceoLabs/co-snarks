@@ -1,32 +1,38 @@
-use core::panic;
-use std::{array, io::Read, ops::RangeBounds, sync::Arc, vec};
+use std::{array, io::Read, sync::Arc, vec};
 
 use ark_bn254::Bn254;
-use ark_ff::{AdditiveGroup, Field};
-use ark_poly::polynomial;
-use co_builder::{flavours::mega_flavour::{MegaFlavour, MegaPrecomputedEntities, MegaProverWitnessEntities}, polynomials, prelude::{ActiveRegionData, CrsParser, Polynomial, Polynomials, ProverCrs, PublicComponentKey}, prover_flavour::ProverFlavour, TranscriptFieldType};
-use flate2::read::GzDecoder;
-use itertools::concat;
-use mpc_core::{gadgets::{field_from_hex_string, poseidon2::Poseidon2}, protocols::rep3::poly};
-use serde::{de::DeserializeOwned, Deserialize};
-use tracing::instrument::WithSubscriber;
-use ultrahonk::{
-    decider::types::{ProverMemory, RelationParameters}, oink::prover::Oink, prelude::{GateSeparatorPolynomial, Poseidon2Sponge, ProvingKey, Transcript, TranscriptHasher, Univariate, ZeroKnowledge}
-};
-use ultrahonk::prelude::AllEntities;
-use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
-use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
-use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
-
-use crate::{protogalaxy_prover::{DeciderProverMemory, ProtogalaxyProver, CONST_PG_LOG_N}, protogalaxy_prover_internal::{
-    compute_combiner, compute_combiner_quotient, compute_perturbator, compute_row_evaluations, construct_perturbator_coefficients
-}};
-use crate::{
-    protogalaxy_prover::{
-        BATCHED_EXTENDED_LENGTH, EXTENDED_LENGTH, ExtendedRelationParameters, NUM,
+use ark_ff::AdditiveGroup;
+use co_builder::{
+    TranscriptFieldType,
+    flavours::mega_flavour::{MegaFlavour, MegaPrecomputedEntities, MegaProverWitnessEntities},
+    prelude::{
+        ActiveRegionData, CrsParser, Polynomial, Polynomials, ProverCrs, PublicComponentKey,
     },
+    prover_flavour::ProverFlavour,
+};
+use flate2::read::GzDecoder;
+use mpc_core::gadgets::field_from_hex_string;
+use serde::de::DeserializeOwned;
+use ultrahonk::prelude::AllEntities;
+use ultrahonk::{
+    decider::types::{ProverMemory, RelationParameters},
+    oink::prover::Oink,
+    prelude::{
+        GateSeparatorPolynomial, Poseidon2Sponge, ProvingKey, Transcript, Univariate, ZeroKnowledge,
+    },
+};
+
+use crate::{
+    protogalaxy_prover::{BATCHED_EXTENDED_LENGTH, EXTENDED_LENGTH, NUM},
     protogalaxy_prover_internal::{
         compute_and_extend_alphas, compute_extended_relation_parameters,
+    },
+};
+use crate::{
+    protogalaxy_prover::{CONST_PG_LOG_N, DeciderProverMemory, ProtogalaxyProver},
+    protogalaxy_prover_internal::{
+        compute_combiner, compute_combiner_quotient, compute_perturbator, compute_row_evaluations,
+        construct_perturbator_coefficients,
     },
 };
 const CRS_PATH_G1: &str = concat!(
@@ -39,7 +45,6 @@ const CRS_PATH_G2: &str = concat!(
 );
 type F = TranscriptFieldType;
 type C = Bn254;
-
 
 fn decompress_and_read_test_data<T: DeserializeOwned>(filename: &str) -> T {
     let gzip_file = format!(
@@ -60,17 +65,12 @@ macro_rules! to_field {
         field_from_hex_string($x.as_str()).unwrap()
     };
     ($x:expr, 1) => {
-        $x.into_iter()
-            .map(|s| to_field!(s))
-            .collect::<Vec<_>>()
+        $x.into_iter().map(|s| to_field!(s)).collect::<Vec<_>>()
     };
     ($x:expr, 2) => {
-        $x.into_iter()
-            .map(|s| to_field!(s, 1))
-            .collect::<Vec<_>>()
+        $x.into_iter().map(|s| to_field!(s, 1)).collect::<Vec<_>>()
     };
 }
-
 
 fn structure_parameters<T: PartialEq>(
     [
@@ -109,7 +109,7 @@ fn test_compute_and_extend_alphas() {
     let mut memory_0 = ProverMemory::<C, MegaFlavour> {
         alphas: alphas_0.clone(),
         // Fields not used in this test
-        gate_challenges: vec![], 
+        gate_challenges: vec![],
         relation_parameters: RelationParameters::default(),
         polys: Default::default(),
     };
@@ -117,19 +117,17 @@ fn test_compute_and_extend_alphas() {
     let mut memory_1 = ProverMemory::<C, MegaFlavour> {
         alphas: alphas_1.clone(),
         // Fields not used in this test
-        gate_challenges: vec![], 
+        gate_challenges: vec![],
         relation_parameters: RelationParameters::default(),
         polys: Default::default(),
     };
 
-    let prover_memory = vec![
-        &mut memory_0,
-        &mut memory_1,
-    ];
+    let prover_memory = vec![&mut memory_0, &mut memory_1];
 
     assert_eq!(
         compute_and_extend_alphas(&prover_memory),
-        to_field!(expected_alphas, 2).into_iter()
+        to_field!(expected_alphas, 2)
+            .into_iter()
             .map(|alphas| Univariate {
                 evaluations: alphas.try_into().unwrap()
             })
@@ -147,18 +145,18 @@ fn test_compute_extended_relation_parameters() {
         Vec<[String; EXTENDED_LENGTH]>,
     ) = decompress_and_read_test_data(&test_file);
 
-    let parameters_1 = structure_parameters(
-        to_field!(parameters_1_values, 1).try_into().unwrap()
-    );
-    let parameters_2 = structure_parameters(
-        to_field!(parameters_2_values, 1).try_into().unwrap()
-    );
+    let parameters_1 = structure_parameters(to_field!(parameters_1_values, 1).try_into().unwrap());
+    let parameters_2 = structure_parameters(to_field!(parameters_2_values, 1).try_into().unwrap());
 
     let expected_relation_parameters = structure_parameters(
         to_field!(univariates, 2)
             .into_iter()
-            .map(|v| Univariate { evaluations: v.try_into().unwrap() })
-            .collect::<Vec<Univariate<F, EXTENDED_LENGTH>>>().try_into().unwrap()
+            .map(|v| Univariate {
+                evaluations: v.try_into().unwrap(),
+            })
+            .collect::<Vec<Univariate<F, EXTENDED_LENGTH>>>()
+            .try_into()
+            .unwrap(),
     );
 
     let mut memory_1 = ProverMemory::<C, MegaFlavour> {
@@ -176,10 +174,7 @@ fn test_compute_extended_relation_parameters() {
         gate_challenges: vec![],
     };
 
-    let prover_memory = vec![
-        &mut memory_1,
-        &mut memory_2,
-    ];
+    let prover_memory = vec![&mut memory_1, &mut memory_2];
 
     let extended_parameters = compute_extended_relation_parameters(&prover_memory);
     for (p1, p2) in extended_parameters
@@ -203,7 +198,7 @@ fn test_compute_combiner_quotient() {
     ) = decompress_and_read_test_data(test_file);
 
     let combiner = Univariate::<F, BATCHED_EXTENDED_LENGTH> {
-        evaluations: to_field!(combiner_values, 1).try_into().unwrap() 
+        evaluations: to_field!(combiner_values, 1).try_into().unwrap(),
     };
 
     let perturbator_evaluation: F = to_field!(perturbator_evaluation);
@@ -228,7 +223,8 @@ fn test_construct_perturbator_coefficients() {
         deltas_values,
         perturbator_coefficients_values,
         full_honk_evaluations_values,
-    ): (Vec<String>, Vec<String>, Vec<String>, Vec<String>) = decompress_and_read_test_data(test_file);
+    ): (Vec<String>, Vec<String>, Vec<String>, Vec<String>) =
+        decompress_and_read_test_data(test_file);
 
     let betas = to_field!(betas_values, 1);
     let deltas = to_field!(deltas_values, 1);
@@ -242,7 +238,7 @@ fn test_construct_perturbator_coefficients() {
             coefficients: full_honk_evaluations,
         },
     );
-    
+
     assert_eq!(coefficients, perturbator_coefficients);
 }
 
@@ -251,23 +247,27 @@ fn test_construct_perturbator_coefficients() {
 fn test_compute_row_evaluations() {
     let test_file = "unit/compute_row_evaluations";
 
-    let (
-        alphas_values,
-        relation_parameters_values,
-        polys_values,
-        full_honk_evaluations_values,
-    ): (Vec<String>, Vec<String>, Vec<Vec<String>>, Vec<String>) = decompress_and_read_test_data(test_file);
+    let (alphas, relation_parameters, polys, expected_full_honk_evaluations): (
+        Vec<String>,
+        Vec<String>,
+        Vec<Vec<String>>,
+        Vec<String>,
+    ) = decompress_and_read_test_data(test_file);
 
-    let alphas = to_field!(alphas_values, 1);
-    let relation_parameters_iter = to_field!(relation_parameters_values, 1);
-    let polys_iter = to_field!(polys_values, 2);
-    let expected_full_honk_evaluations = to_field!(full_honk_evaluations_values, 1);
+    let alphas = to_field!(alphas, 1);
+    let relation_parameters = to_field!(relation_parameters, 1);
+    let polys = to_field!(polys, 2);
+    let expected_full_honk_evaluations = to_field!(expected_full_honk_evaluations, 1);
 
-    let (precomputed_entities, other) = polys_iter.split_at(MegaFlavour::PRECOMPUTED_ENTITIES_SIZE);
-    let (witness_entities, shifted_witness_entities) = other.split_at(MegaFlavour::WITNESS_ENTITIES_SIZE);
-
-    let [eta_1, eta_2, eta_3, beta, gamma, public_input_delta, lookup_grand_product_delta] =
-        relation_parameters_iter.as_slice().try_into().unwrap();
+    let [
+        eta_1,
+        eta_2,
+        eta_3,
+        beta,
+        gamma,
+        public_input_delta,
+        lookup_grand_product_delta,
+    ] = relation_parameters.as_slice().try_into().unwrap();
     let relation_parameters = RelationParameters {
         eta_1,
         eta_2,
@@ -278,16 +278,7 @@ fn test_compute_row_evaluations() {
         lookup_grand_product_delta,
     };
 
-    let mut polys = AllEntities::<Vec<F>, MegaFlavour>::default();
-    polys.witness = <MegaFlavour as ProverFlavour>::WitnessEntities::from_elements(
-        &witness_entities.to_vec()
-    );
-    polys.precomputed = <MegaFlavour as ProverFlavour>::PrecomputedEntities::from_elements(
-        &precomputed_entities.to_vec()
-    );
-    polys.shifted_witness = <MegaFlavour as ProverFlavour>::ShiftedWitnessEntities::from_elements(
-        &shifted_witness_entities.to_vec()
-    );
+    let polys = AllEntities::<Vec<F>, MegaFlavour>::from_elements(polys);
 
     let prover_memory = ProverMemory::<C, MegaFlavour> {
         relation_parameters,
@@ -306,34 +297,38 @@ fn test_compute_row_evaluations() {
 fn test_compute_perturbator() {
     let test_file = "unit/compute_row_evaluations";
 
-    let (
-        alphas_values,
-        relation_parameters_values,
-        polys_values,
-        _
-    ): (Vec<String>, Vec<String>, Vec<Vec<String>>, Vec<String>) = decompress_and_read_test_data(test_file);
+    let (alphas, relation_parameters, polys, _): (
+        Vec<String>,
+        Vec<String>,
+        Vec<Vec<String>>,
+        Vec<String>,
+    ) = decompress_and_read_test_data(test_file);
 
     let test_file = "unit/compute_perturbator";
-    
-    let (
-        deltas,
-        gate_challenges_values,
-        circuit_log_size,
-        perturbator_coefficients_values
-    ): (Vec<String>, Vec<String>, usize, Vec<String>) = decompress_and_read_test_data(test_file);
 
-    let alphas = to_field!(alphas_values, 1);
-    let relation_parameters_iter = to_field!(relation_parameters_values, 1);
-    let polys_iter = to_field!(polys_values, 2);
+    let (deltas, gate_challenges, circuit_log_size, perturbator_coefficients): (
+        Vec<String>,
+        Vec<String>,
+        usize,
+        Vec<String>,
+    ) = decompress_and_read_test_data(test_file);
+
+    let alphas = to_field!(alphas, 1);
+    let relation_parameters = to_field!(relation_parameters, 1);
+    let polys = to_field!(polys, 2);
     let deltas = to_field!(deltas, 1);
-    let gate_challenges = to_field!(gate_challenges_values, 1);
-    let perturbator_coefficients = to_field!(perturbator_coefficients_values, 1);
+    let gate_challenges = to_field!(gate_challenges, 1);
+    let perturbator_coefficients = to_field!(perturbator_coefficients, 1);
 
-    let (precomputed_entities, other) = polys_iter.split_at(MegaFlavour::PRECOMPUTED_ENTITIES_SIZE);
-    let (witness_entities, shifted_witness_entities) = other.split_at(MegaFlavour::WITNESS_ENTITIES_SIZE);
-
-    let [eta_1, eta_2, eta_3, beta, gamma, public_input_delta, lookup_grand_product_delta] =
-        relation_parameters_iter.as_slice().try_into().unwrap();
+    let [
+        eta_1,
+        eta_2,
+        eta_3,
+        beta,
+        gamma,
+        public_input_delta,
+        lookup_grand_product_delta,
+    ] = relation_parameters.as_slice().try_into().unwrap();
     let relation_parameters = RelationParameters {
         eta_1,
         eta_2,
@@ -344,16 +339,7 @@ fn test_compute_perturbator() {
         lookup_grand_product_delta,
     };
 
-    let mut polys = AllEntities::<Vec<F>, MegaFlavour>::default();
-    polys.witness = <MegaFlavour as ProverFlavour>::WitnessEntities::from_elements(
-        &witness_entities.to_vec()
-    );
-    polys.precomputed = <MegaFlavour as ProverFlavour>::PrecomputedEntities::from_elements(
-        &precomputed_entities.to_vec()
-    );
-    polys.shifted_witness = <MegaFlavour as ProverFlavour>::ShiftedWitnessEntities::from_elements(
-        &shifted_witness_entities.to_vec()
-    );
+    let polys = AllEntities::<Vec<F>, MegaFlavour>::from_elements(polys);
 
     let prover_memory = ProverMemory::<C, MegaFlavour> {
         relation_parameters,
@@ -363,17 +349,16 @@ fn test_compute_perturbator() {
     };
 
     let mut proving_key = ProvingKey::<C, MegaFlavour>::new(
-        2usize.pow(circuit_log_size as u32), 
+        2usize.pow(circuit_log_size as u32),
         // Irrelevant values, as we are only using the circuit size in this test
         0, // Irrelevant,
-        Arc::new(ProverCrs::<C>{
-            monomials: vec![]
-        }),
+        Arc::new(ProverCrs::<C> { monomials: vec![] }),
         0,
     );
 
     assert_eq!(
-        compute_perturbator::<C, MegaFlavour>(&mut proving_key, &deltas, &prover_memory).coefficients,
+        compute_perturbator::<C, MegaFlavour>(&mut proving_key, &deltas, &prover_memory)
+            .coefficients,
         perturbator_coefficients
     );
 }
@@ -382,57 +367,46 @@ fn test_compute_perturbator() {
 fn test_compute_combiner() {
     let test_file = "unit/compute_combiner";
 
-    let (
-        beta_products_values,
-        alphas_values,
-        relation_parameters_values,
-        (polys_values_1, polys_values_2),
-        combiner_values
-    ): (Vec<String>, Vec<Vec<String>>, Vec<Vec<String>>, (Vec<Vec<String>>, Vec<Vec<String>>), Vec<String>) = decompress_and_read_test_data(test_file);
+    let (beta_products, alphas, relation_parameters, (polys_1, polys_2), combiner): (
+        Vec<String>,
+        Vec<Vec<String>>,
+        Vec<Vec<String>>,
+        (Vec<Vec<String>>, Vec<Vec<String>>),
+        Vec<String>,
+    ) = decompress_and_read_test_data(test_file);
 
-    let alphas = to_field!(alphas_values, 2)
+    let alphas = to_field!(alphas, 2)
         .into_iter()
         .map(|a| Univariate {
-            evaluations: a.try_into().unwrap()
+            evaluations: a.try_into().unwrap(),
         })
         .collect::<Vec<Univariate<F, BATCHED_EXTENDED_LENGTH>>>();
-    let beta_products = to_field!(beta_products_values, 1);
+    let beta_products = to_field!(beta_products, 1);
     // TODO CESAR: What?
-    let relation_parameters_iter = to_field!(relation_parameters_values, 2)
+    let relation_parameters = to_field!(relation_parameters, 2)
         .into_iter()
         .map(|mut p| {
             p.push(F::ZERO);
             p
         })
         .collect::<Vec<Vec<F>>>();
-    let polys_iter_1 = to_field!(polys_values_1, 2);
-    let polys_iter_2 = to_field!(polys_values_2, 2);
-    let combiner = to_field!(combiner_values, 1);
+    let polys_1 = to_field!(polys_1, 2);
+    let polys_2 = to_field!(polys_2, 2);
+    let combiner = to_field!(combiner, 1);
 
-    let structure_polys = |polys: Vec<Vec<F>>| {
-        let (precomputed_entities, other) = polys.split_at(MegaFlavour::PRECOMPUTED_ENTITIES_SIZE);
-        let (witness_entities, shifted_witness_entities) = other.split_at(MegaFlavour::WITNESS_ENTITIES_SIZE);
+    let polys_1 = AllEntities::from_elements(polys_1);
+    let polys_2 = AllEntities::from_elements(polys_2);
 
-        let mut polys = AllEntities::<Vec<F>, MegaFlavour>::default();
-        polys.witness = <MegaFlavour as ProverFlavour>::WitnessEntities::from_elements(
-            &witness_entities.to_vec()
-        );
-        polys.precomputed = <MegaFlavour as ProverFlavour>::PrecomputedEntities::from_elements(
-            &precomputed_entities.to_vec()
-        );
-        polys.shifted_witness = <MegaFlavour as ProverFlavour>::ShiftedWitnessEntities::from_elements(
-            &shifted_witness_entities.to_vec()
-        );
-        polys
-    };
-
-    let polys_1 = structure_polys(polys_iter_1);
-    let polys_2 = structure_polys(polys_iter_2);
-
-
-    let relation_parameters = structure_parameters(relation_parameters_iter.into_iter().map(|evaluations| Univariate {
-        evaluations: evaluations.try_into().unwrap()
-    }).collect::<Vec<Univariate<F, BATCHED_EXTENDED_LENGTH>>>().try_into().unwrap());
+    let relation_parameters = structure_parameters(
+        relation_parameters
+            .into_iter()
+            .map(|evaluations| Univariate {
+                evaluations: evaluations.try_into().unwrap(),
+            })
+            .collect::<Vec<Univariate<F, BATCHED_EXTENDED_LENGTH>>>()
+            .try_into()
+            .unwrap(),
+    );
 
     let mut prover_memory_1 = ProverMemory::<C, MegaFlavour> {
         polys: polys_1,
@@ -453,14 +427,21 @@ fn test_compute_combiner() {
     let gate_separator_polynomial = GateSeparatorPolynomial::<F> {
         beta_products,
         // Fields not used in this test
-        betas: Default::default(), 
-        partial_evaluation_result: Default::default(), 
-        current_element_idx: 0,  
+        betas: Default::default(),
+        partial_evaluation_result: Default::default(),
+        current_element_idx: 0,
         periodicity: 0,
     };
 
     assert_eq!(
-        compute_combiner(&vec![&mut prover_memory_1, &mut prover_memory_2], &gate_separator_polynomial, &relation_parameters, &alphas).evaluations.to_vec(),
+        compute_combiner(
+            &vec![&mut prover_memory_1, &mut prover_memory_2],
+            &gate_separator_polynomial,
+            &relation_parameters,
+            &alphas
+        )
+        .evaluations
+        .to_vec(),
         combiner
     );
 }
@@ -471,23 +452,93 @@ fn test_protogalaxy_prover() {
     let test_file_folded = "e2e/folded_key";
     let test_file_folding_result = "e2e/folding_result";
 
-    let ((circuit_size_1, num_public_inputs_1, pub_inputs_offset_1, start_idx_1, final_active_wire_idx_1, public_inputs_1, polynomials_1_str, memory_read_records_1, memory_write_records_1, (ranges_1, idxs_1, current_end_1)), oink_proof_1): 
-        ((u32, u32, u32, u32, usize, Vec<String>, Vec<Vec<String>>, Vec<u32>, Vec<u32>, (Vec<(usize, usize)>, Vec<usize>, usize)), Vec<String>)
-    = decompress_and_read_test_data(test_file_acc);
+    let (
+        (
+            circuit_size_1,
+            num_public_inputs_1,
+            pub_inputs_offset_1,
+            start_idx_1,
+            final_active_wire_idx_1,
+            public_inputs_1,
+            polys_1,
+            memory_read_records_1,
+            memory_write_records_1,
+            (ranges_1, idxs_1, current_end_1),
+        ),
+        _,
+    ): (
+        (
+            u32,
+            u32,
+            u32,
+            u32,
+            usize,
+            Vec<String>,
+            Vec<Vec<String>>,
+            Vec<u32>,
+            Vec<u32>,
+            (Vec<(usize, usize)>, Vec<usize>, usize),
+        ),
+        Vec<String>,
+    ) = decompress_and_read_test_data(test_file_acc);
 
-    let ((circuit_size_2, num_public_inputs_2, pub_inputs_offset_2, start_idx_2, final_active_wire_idx_2, public_inputs_2, polynomials_2_str, memory_read_records_2, memory_write_records_2, (ranges_2, idxs_2, current_end_2)), oink_proof_2):
-        ((u32, u32, u32, u32, usize, Vec<String>, Vec<Vec<String>>, Vec<u32>, Vec<u32>, (Vec<(usize, usize)>, Vec<usize>, usize)), Vec<String>)
-     = decompress_and_read_test_data(test_file_folded);
+    let (
+        (
+            circuit_size_2,
+            num_public_inputs_2,
+            pub_inputs_offset_2,
+            start_idx_2,
+            final_active_wire_idx_2,
+            public_inputs_2,
+            polys_2,
+            memory_read_records_2,
+            memory_write_records_2,
+            (ranges_2, idxs_2, current_end_2),
+        ),
+        _,
+    ): (
+        (
+            u32,
+            u32,
+            u32,
+            u32,
+            usize,
+            Vec<String>,
+            Vec<Vec<String>>,
+            Vec<u32>,
+            Vec<u32>,
+            (Vec<(usize, usize)>, Vec<usize>, usize),
+        ),
+        Vec<String>,
+    ) = decompress_and_read_test_data(test_file_folded);
 
-    let ((target_sum_result, gate_challenges_result, alphas_result, relation_parameters_result, polynomials_folding_result_str), honk_proof): 
-    ((String, Vec<String>, Vec<String>, Vec<String>, Vec<Vec<String>>), Vec<String>) = decompress_and_read_test_data(test_file_folding_result);
+    let (
+        (
+            target_sum_result,
+            gate_challenges_result,
+            alphas_result,
+            relation_parameters_result,
+            polynomials_folding_result,
+        ),
+        honk_proof,
+    ): (
+        (
+            String,
+            Vec<String>,
+            Vec<String>,
+            Vec<String>,
+            Vec<Vec<String>>,
+        ),
+        Vec<String>,
+    ) = decompress_and_read_test_data(test_file_folding_result);
 
     let crs = CrsParser::<C>::get_crs(
         CRS_PATH_G1,
         CRS_PATH_G2,
         circuit_size_1 as usize,
         ZeroKnowledge::Yes,
-    ).unwrap();
+    )
+    .unwrap();
 
     let (prover_crs, _) = crs.split();
 
@@ -496,7 +547,7 @@ fn test_protogalaxy_prover() {
     let alphas_result = to_field!(alphas_result, 1);
     let relation_parameters_result = to_field!(relation_parameters_result, 1);
     let gate_challenges_result = to_field!(gate_challenges_result, 1);
-    let polynomials_folding_result = to_field!(polynomials_folding_result_str, 2);
+    let polynomials_folding_result = to_field!(polynomials_folding_result, 2);
 
     // TODO CESAR: Handle target sum
     let target_sum_result: F = to_field!(target_sum_result);
@@ -504,11 +555,13 @@ fn test_protogalaxy_prover() {
     let public_inputs_1 = to_field!(public_inputs_1, 1);
     let public_inputs_2 = to_field!(public_inputs_2, 1);
 
-    let polys_1 = to_field!(polynomials_1_str, 2).into_iter()
+    let polys_1 = to_field!(polys_1, 2)
+        .into_iter()
         .map(|coefficients| Polynomial { coefficients })
         .collect::<Vec<_>>();
 
-    let polys_2 = to_field!(polynomials_2_str, 2).into_iter()
+    let polys_2 = to_field!(polys_2, 2)
+        .into_iter()
         .map(|coefficients| Polynomial { coefficients })
         .collect::<Vec<_>>();
 
@@ -521,10 +574,10 @@ fn test_protogalaxy_prover() {
 
         Polynomials::<F, MegaFlavour> {
             witness: MegaProverWitnessEntities {
-                elements: array::from_fn(|i| prover_witness[i].clone())
+                elements: array::from_fn(|i| prover_witness[i].clone()),
             },
             precomputed: MegaPrecomputedEntities {
-                elements: array::from_fn(|i| precomputed[i].clone())
+                elements: array::from_fn(|i| precomputed[i].clone()),
             },
         }
     };
@@ -569,32 +622,41 @@ fn test_protogalaxy_prover() {
         polynomials: structure_prover_polys(polys_2),
     };
 
-    let prover = ProtogalaxyProver::<C, Poseidon2Sponge, MegaFlavour>::with_empty_transcript();
+    let prover = ProtogalaxyProver::<C, Poseidon2Sponge, MegaFlavour>::new();
 
     // Compute the first Oink proof
     let mut transcript = Transcript::<F, Poseidon2Sponge>::new();
     let oink = Oink::<C, Poseidon2Sponge, MegaFlavour>::new(ZeroKnowledge::No);
-    let oink_memory_1 = oink
-        .prove(&mut accumulator, &mut transcript).unwrap();
+    let oink_memory_1 = oink.prove(&mut accumulator, &mut transcript).unwrap();
 
-    let mut accumulator_prover_memory = DeciderProverMemory::<C, MegaFlavour>::from_memory_and_polynomials(oink_memory_1, 
-        structure_prover_polys(polys_1)
-    );
+    let mut accumulator_prover_memory =
+        DeciderProverMemory::<C, MegaFlavour>::from_memory_and_polynomials(
+            oink_memory_1,
+            structure_prover_polys(polys_1),
+        );
 
     accumulator_prover_memory.gate_challenges = vec![F::ZERO; CONST_PG_LOG_N];
 
     assert_eq!(
-        prover.prove(&mut accumulator, &mut accumulator_prover_memory, folded_key).inner(),
+        prover
+            .prove(
+                &mut accumulator,
+                &mut accumulator_prover_memory,
+                vec![folded_key]
+            )
+            .inner(),
         honk_proof
     );
 
-    assert_eq!(
-        accumulator_prover_memory.alphas,
-        alphas_result
-    );
+    assert_eq!(accumulator_prover_memory.alphas, alphas_result);
 
     assert_eq!(
-        accumulator_prover_memory.relation_parameters.get_params().into_iter().cloned().collect::<Vec<_>>(),
+        accumulator_prover_memory
+            .relation_parameters
+            .get_params()
+            .into_iter()
+            .cloned()
+            .collect::<Vec<_>>(),
         relation_parameters_result
     );
 
@@ -607,5 +669,4 @@ fn test_protogalaxy_prover() {
         accumulator_prover_memory.polys.into_iter(),
         polynomials_folding_result.into_iter(),
     );
-    
 }

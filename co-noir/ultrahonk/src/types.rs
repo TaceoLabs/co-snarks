@@ -1,4 +1,5 @@
 use ark_ff::PrimeField;
+use std::{fmt::Debug};
 use co_builder::{
     HonkProofResult,
     polynomials::polynomial_flavours::{
@@ -15,7 +16,7 @@ pub struct HonkProof<F: PrimeField> {
 }
 
 impl<F: PrimeField> HonkProof<F> {
-    pub(crate) fn new(proof: Vec<F>) -> Self {
+    pub fn new(proof: Vec<F>) -> Self {
         Self { proof }
     }
 
@@ -44,13 +45,55 @@ impl<F: PrimeField> HonkProof<F> {
     }
 }
 
-pub struct AllEntities<T: Default + Clone + std::marker::Sync, L: PlainProverFlavour> {
-    pub(crate) witness: L::WitnessEntities<T>,
-    pub(crate) precomputed: L::PrecomputedEntities<T>,
-    pub(crate) shifted_witness: L::ShiftedWitnessEntities<T>,
+pub struct AllEntities<T, L> 
+where 
+    T:  Default + Debug + Clone + std::marker::Sync,
+    L: PlainProverFlavour,
+{
+    pub witness: L::WitnessEntities<T>,
+    pub precomputed: L::PrecomputedEntities<T>,
+    pub shifted_witness: L::ShiftedWitnessEntities<T>,
 }
 
-impl<T: Default + Clone + std::marker::Sync, L: PlainProverFlavour> Default for AllEntities<T, L> {
+impl<T, L> AllEntities<T, L> 
+where 
+    T:  Default + Clone + Debug + std::marker::Sync,
+    L: PlainProverFlavour,{
+    pub fn from_elements(elements: Vec<T>) -> Self {
+        let mut precomputed = elements;
+        let mut witness = precomputed.split_off(L::PRECOMPUTED_ENTITIES_SIZE);
+        let shifted_witness = witness.split_off(L::WITNESS_ENTITIES_SIZE).try_into().unwrap();
+
+        
+        AllEntities {
+            precomputed: L::PrecomputedEntities::from_elements(
+                precomputed
+            ),
+            witness: L::WitnessEntities::from_elements(
+                witness,
+            ),
+            shifted_witness: L::ShiftedWitnessEntities::from_elements(
+                shifted_witness,
+            ),
+        }
+    }
+}
+
+impl<F, L> AllEntities<Vec<F>, L>
+where
+    F: Default + Clone + Debug + std::marker::Sync,
+    L: PlainProverFlavour,
+{
+    pub fn get_row(&self, index: usize) -> AllEntities<F, L> {
+        AllEntities {
+            witness: L::WitnessEntities::from_elements(self.witness.iter().map(|v| v[index].clone()).collect()),
+            precomputed: L::PrecomputedEntities::from_elements(self.precomputed.iter().map(|v| v[index].clone()).collect()),
+            shifted_witness: L::ShiftedWitnessEntities::from_elements(self.shifted_witness.iter().map(|v| v[index].clone()).collect()),
+        }
+    }
+}
+
+impl<T: Default + Clone + Debug + std::marker::Sync, L: PlainProverFlavour> Default for AllEntities<T, L> {
     fn default() -> Self {
         Self {
             witness: L::WitnessEntities::default(),
@@ -60,22 +103,22 @@ impl<T: Default + Clone + std::marker::Sync, L: PlainProverFlavour> Default for 
     }
 }
 
-impl<T: Default + Clone + std::marker::Sync, L: PlainProverFlavour> AllEntities<T, L> {
-    pub(crate) fn into_iter(self) -> impl Iterator<Item = T> {
+impl<T: Default + Clone + Debug + std::marker::Sync, L: PlainProverFlavour> AllEntities<T, L> {
+    pub fn into_iter(self) -> impl Iterator<Item = T> {
         self.precomputed
             .into_iter()
             .chain(self.witness.into_iter())
             .chain(self.shifted_witness.into_iter())
     }
 
-    pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
+    pub fn iter(&self) -> impl Iterator<Item = &T> {
         self.precomputed
             .iter()
             .chain(self.witness.iter())
             .chain(self.shifted_witness.iter())
     }
 
-    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
         self.precomputed
             .iter_mut()
             .chain(self.witness.iter_mut())
@@ -83,7 +126,7 @@ impl<T: Default + Clone + std::marker::Sync, L: PlainProverFlavour> AllEntities<
     }
 }
 
-impl<T: Default + Clone + std::marker::Sync, L: PlainProverFlavour> AllEntities<Vec<T>, L> {
+impl<T: Default + Clone + Debug + std::marker::Sync, L: PlainProverFlavour> AllEntities<Vec<T>, L> {
     pub(crate) fn new(circuit_size: usize) -> Self {
         let mut polynomials = Self::default();
         // Shifting is done at a later point

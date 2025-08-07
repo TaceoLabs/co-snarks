@@ -10,6 +10,7 @@ use crate::{
     },
     prover_flavour::{Flavour, ProverFlavour},
 };
+use std::fmt::Debug;
 
 type UltraPrecomputedEntities<T> =
     PrecomputedEntities<T, { UltraFlavour::PRECOMPUTED_ENTITIES_SIZE }>;
@@ -24,9 +25,11 @@ pub struct UltraFlavour {}
 
 impl ProverFlavour for UltraFlavour {
     type ProverWitnessEntities<T: Default + std::marker::Sync> = UltraProverWitnessEntities<T>;
-    type ShiftedWitnessEntities<T: Default + std::marker::Sync> = UltraShiftedWitnessEntities<T>; // This is the same for Ultra and Mega
-    type WitnessEntities<T: Default + std::marker::Sync> = UltraWitnessEntities<T>;
-    type PrecomputedEntities<T: Default + Clone + std::marker::Sync> = UltraPrecomputedEntities<T>;
+    type ShiftedWitnessEntities<T: Default + Debug + Clone + std::marker::Sync> =
+        UltraShiftedWitnessEntities<T>; // This is the same for Ultra and Mega
+    type WitnessEntities<T: Default + Debug + Clone + std::marker::Sync> = UltraWitnessEntities<T>;
+    type PrecomputedEntities<T: Default + Debug + Clone + std::marker::Sync> =
+        UltraPrecomputedEntities<T>;
 
     const FLAVOUR: Flavour = Flavour::Ultra;
     const WITNESS_ENTITIES_SIZE: usize = 8;
@@ -176,7 +179,7 @@ impl ProverFlavour for UltraFlavour {
         }
     }
 
-    fn precomputed_entity_from_vec<T: Default + Clone + Sync>(
+    fn precomputed_entity_from_vec<T: Default + Debug + Clone + Sync>(
         vec: Vec<crate::prelude::Polynomial<T>>,
     ) -> Self::PrecomputedEntities<crate::prelude::Polynomial<T>> {
         UltraPrecomputedEntities {
@@ -185,10 +188,15 @@ impl ProverFlavour for UltraFlavour {
     }
 }
 
-impl<T: Default> PrecomputedEntitiesFlavour<T> for UltraPrecomputedEntities<T> {
+impl<T: Default + Debug + Clone> PrecomputedEntitiesFlavour<T> for UltraPrecomputedEntities<T> {
     fn new() -> Self {
         Self {
             elements: std::array::from_fn(|_| T::default()),
+        }
+    }
+    fn from_elements(elements: Vec<T>) -> Self {
+        Self {
+            elements: elements.try_into().unwrap(),
         }
     }
     fn iter<'a>(&'a self) -> impl Iterator<Item = &'a T>
@@ -460,10 +468,15 @@ impl<T: Default> ProverWitnessEntitiesFlavour<T> for UltraProverWitnessEntities<
     }
 }
 
-impl<T: Default> WitnessEntitiesFlavour<T> for UltraWitnessEntities<T> {
+impl<T: Default + Debug + Clone> WitnessEntitiesFlavour<T> for UltraWitnessEntities<T> {
     fn new() -> Self {
         Self {
             elements: std::array::from_fn(|_| T::default()),
+        }
+    }
+    fn from_elements(elements: Vec<T>) -> Self {
+        Self {
+            elements: elements.try_into().unwrap(),
         }
     }
     fn iter<'a>(&'a self) -> impl Iterator<Item = &'a T>
@@ -537,10 +550,17 @@ impl<T: Default> WitnessEntitiesFlavour<T> for UltraWitnessEntities<T> {
     }
 }
 
-impl<T: Default> ShiftedWitnessEntitiesFlavour<T> for UltraShiftedWitnessEntities<T> {
+impl<T: Default + Debug + Clone> ShiftedWitnessEntitiesFlavour<T>
+    for UltraShiftedWitnessEntities<T>
+{
     fn new() -> Self {
         Self {
             elements: std::array::from_fn(|_| T::default()),
+        }
+    }
+    fn from_elements(elements: Vec<T>) -> Self {
+        Self {
+            elements: elements.try_into().unwrap(),
         }
     }
     fn iter<'a>(&'a self) -> impl Iterator<Item = &'a T>

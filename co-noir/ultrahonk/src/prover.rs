@@ -59,8 +59,7 @@ impl<
 
         let mut memory =
             ProverMemory::from_memory_and_polynomials(oink_result, proving_key.polynomials);
-        memory.relation_parameters.gate_challenges =
-            Self::generate_gate_challenges(&mut transcript);
+        memory.gate_challenges = Self::generate_gate_challenges(&mut transcript);
 
         let num_public_inputs = if L::FLAVOUR == Flavour::Ultra {
             proving_key.num_public_inputs - PAIRING_POINT_ACCUMULATOR_SIZE

@@ -2,23 +2,23 @@ use std::{marker::PhantomData, vec};
 
 use ark_ec::AdditiveGroup;
 
-use ark_ff::{PrimeField, fields::Field};
+use ark_ff::fields::Field;
 
 use co_builder::{
     HonkProofResult, TranscriptFieldType,
     prelude::{HonkCurve, Polynomial, ProvingKey},
 };
 
-use itertools::Itertools;
+use itertools::{Itertools, izip};
 
+use ultrahonk::decider::types::RelationParameters;
 use ultrahonk::{
-    oink::{self, prover::Oink},
+    oink::prover::Oink,
     plain_prover_flavour::{PlainProverFlavour, UnivariateTrait},
     prelude::{
         GateSeparatorPolynomial, HonkProof, Transcript, TranscriptHasher, Univariate, ZeroKnowledge,
     },
 };
-use ultrahonk::decider::types::RelationParameters;
 
 use crate::protogalaxy_prover_internal::{
     compute_and_extend_alphas, compute_combiner_quotient, compute_perturbator,
@@ -55,13 +55,12 @@ where
     H: TranscriptHasher<TranscriptFieldType>,
     L: PlainProverFlavour<Alpha<C::ScalarField> = C::ScalarField>,
 {
-    pub(crate) fn with_empty_transcript() -> Self {
+    pub fn new() -> Self {
         Self {
-            transcript: Transcript::new(),
+            transcript: Transcript::default(),
             phantom_data: PhantomData,
         }
     }
-
     fn run_oink_prover_on_one_incomplete_key(
         &mut self,
         proving_key: &mut ProvingKey<C, L>,
@@ -76,7 +75,7 @@ where
     ) -> HonkProofResult<Vec<OinkProverMemory<C, L>>> {
         // Asummes accumulator has not been folded
         let mut memory = Vec::with_capacity(proving_keys.len());
-        
+
         for key in proving_keys.iter_mut() {
             memory.push(self.run_oink_prover_on_one_incomplete_key(key));
         }
@@ -141,8 +140,6 @@ where
 
         let alphas = compute_and_extend_alphas(prover_memory);
 
-
-        // TODO CESAR: Avoid the clone here
         let gate_separators =
             GateSeparatorPolynomial::new(updated_gate_challenges.clone(), CONST_PG_LOG_N);
         let relation_parameters = compute_extended_relation_parameters(prover_memory);
@@ -153,7 +150,6 @@ where
             &relation_parameters,
             &alphas,
         );
-
 
         let perturbator_evaluation = perturbator.eval_poly(perturbator_challenge);
         let combiner_quotient = compute_combiner_quotient::<C>(&combiner, perturbator_evaluation);
@@ -200,13 +196,10 @@ where
 
         // TODO CESAR: Overflow stuff
         // TODO CESAR: Is the unshifted stuff correct?
-        accumulator_prover_memory
-            .polys
-            .iter_mut()
-            .for_each(|poly| {
-                poly.iter_mut()
-                    .for_each(|coeff| *coeff = coeff.clone() * lagranges[0]);
-            });
+        accumulator_prover_memory.polys.iter_mut().for_each(|poly| {
+            poly.iter_mut()
+                .for_each(|coeff| *coeff = coeff.clone() * lagranges[0]);
+        });
 
         for (key_poly, acc_poly) in next_prover_memory
             .polys
@@ -246,27 +239,38 @@ where
         mut self,
         accumulator: &mut ProvingKey<C, L>,
         accumulator_prover_memory: &mut DeciderProverMemory<C, L>,
-        mut next_proving_key: ProvingKey<C, L>,
+        mut next_proving_keys: Vec<ProvingKey<C, L>>,
     ) -> HonkProof<TranscriptFieldType> {
-        let max_circuit_size = [accumulator, &next_proving_key]
+        let max_circuit_size = next_proving_keys
             .iter()
             .map(|pk| pk.circuit_size)
+            .chain(std::iter::once(accumulator.circuit_size))
             .max()
             .unwrap_or(0);
         // TODO CESAR: Increase Virtual size shenanigans
 
         // Run Oink prover
         // TODO CESAR: No unwrap here, handle the error properly
-        let oink_memory = self
-            .run_oink_prover_on_one_incomplete_key(&mut next_proving_key)
+        let oink_memories = self
+            .run_oink_prover_on_each_incomplete_key(&mut next_proving_keys)
             .unwrap();
 
-        let mut next_prover_memory = DeciderProverMemory::from_memory_and_polynomials(oink_memory, next_proving_key.polynomials);
+        let mut next_prover_memories =
+            izip!(oink_memories.into_iter(), next_proving_keys.into_iter())
+                .map(|(oink_memory, next_proving_key)| {
+                    DeciderProverMemory::from_memory_and_polynomials(
+                        oink_memory,
+                        next_proving_key.polynomials,
+                    )
+                })
+                .collect::<Vec<_>>();
 
         // Perturbator round
         let (deltas, perturbator) = self.perturbator_round(accumulator, &accumulator_prover_memory);
 
-        let mut prover_memory = vec![accumulator_prover_memory, &mut next_prover_memory];
+        let mut prover_memory = std::iter::once(accumulator_prover_memory)
+            .chain(next_prover_memories.iter_mut())
+            .collect::<Vec<_>>();
 
         // Combiner quotient round
         let (
@@ -275,11 +279,7 @@ where
             relation_parameters,
             perturbator_evaluation,
             combiner_quotient,
-        ) = self.combiner_quotient_round(
-            &prover_memory,
-            perturbator,
-            deltas,
-        );
+        ) = self.combiner_quotient_round(&prover_memory, perturbator, deltas);
 
         prover_memory[0].gate_challenges = updated_gate_challenges;
 

@@ -14,14 +14,19 @@ use co_builder::prover_flavour::Flavour;
 use itertools::izip;
 use std::{iter, vec};
 
-pub(crate) struct ProverMemory<P: Pairing, L: PlainProverFlavour> {
-    pub(crate) polys: AllEntities<Vec<P::ScalarField>, L>,
-    pub(crate) relation_parameters: RelationParameters<P::ScalarField, L>,
+#[derive(Default)]
+pub struct ProverMemory<P: Pairing, L: PlainProverFlavour> {
+    pub polys: AllEntities<Vec<P::ScalarField>, L>,
+    pub relation_parameters: RelationParameters<P::ScalarField>,
+    pub alphas: Vec<L::Alpha<P::ScalarField>>,
+    pub gate_challenges: Vec<P::ScalarField>,
 }
 
 pub(crate) struct VerifierMemory<P: Pairing, L: PlainProverFlavour> {
     pub(crate) verifier_commitments: VerifierCommitments<P::G1Affine, L>,
-    pub(crate) relation_parameters: RelationParameters<P::ScalarField, L>,
+    pub(crate) relation_parameters: RelationParameters<P::ScalarField>,
+    pub(crate) alphas: Vec<L::Alpha<P::ScalarField>>,
+    pub(crate) gate_challenges: Vec<P::ScalarField>,
     pub(crate) claimed_evaluations: ClaimedEvaluations<P::ScalarField, L>,
 }
 
@@ -33,22 +38,48 @@ pub(crate) type PartiallyEvaluatePolys<F, L> = AllEntities<Vec<F>, L>;
 pub(crate) type ClaimedEvaluations<F, L> = AllEntities<F, L>;
 pub(crate) type VerifierCommitments<P, L> = AllEntities<P, L>;
 
-pub struct RelationParameters<F: PrimeField, L: PlainProverFlavour> {
-    pub(crate) eta_1: F,
-    pub(crate) eta_2: F,
-    pub(crate) eta_3: F,
-    pub(crate) beta: F,
-    pub(crate) gamma: F,
-    pub(crate) public_input_delta: F,
-    pub(crate) alphas: L::Alphas<F>, // TODO: Can we just make this a Vec<F>?
-    pub(crate) gate_challenges: Vec<F>,
+ #[derive(Default, PartialEq, Debug)]
+pub struct RelationParameters<T> {
+    pub eta_1: T,
+    pub eta_2: T,
+    pub eta_3: T,
+    pub beta: T,
+    pub gamma: T,
+    pub public_input_delta: T,
+    pub lookup_grand_product_delta: T,
+}
+
+impl<T: PartialEq> RelationParameters<T> {
+    pub fn get_params_as_mut(&mut self) -> Vec<&mut T> {
+        vec![
+            &mut self.eta_1,
+            &mut self.eta_2,
+            &mut self.eta_3,
+            &mut self.beta,
+            &mut self.gamma,
+            &mut self.public_input_delta,
+            &mut self.lookup_grand_product_delta,
+        ]
+    }
+    
+    pub fn get_params(&self) -> Vec<&T> {
+        vec![
+            &self.eta_1,
+            &self.eta_2,
+            &self.eta_3,
+            &self.beta,
+            &self.gamma,
+            &self.public_input_delta,
+            &self.lookup_grand_product_delta,
+        ]
+    }
 }
 
 pub struct GateSeparatorPolynomial<F: PrimeField> {
-    betas: Vec<F>,
+    pub betas: Vec<F>,
     pub beta_products: Vec<F>,
     pub partial_evaluation_result: F,
-    current_element_idx: usize,
+    pub current_element_idx: usize,
     pub periodicity: usize,
 }
 
@@ -116,7 +147,7 @@ impl<F: PrimeField> GateSeparatorPolynomial<F> {
 }
 
 impl<P: Pairing, L: PlainProverFlavour> ProverMemory<P, L> {
-    pub(crate) fn from_memory_and_polynomials(
+    pub fn from_memory_and_polynomials(
         prover_memory: crate::oink::types::ProverMemory<P, L>,
         polynomials: Polynomials<P::ScalarField, L>,
     ) -> Self {
@@ -127,9 +158,12 @@ impl<P: Pairing, L: PlainProverFlavour> ProverMemory<P, L> {
             beta: prover_memory.challenges.beta,
             gamma: prover_memory.challenges.gamma,
             public_input_delta: prover_memory.public_input_delta,
-            alphas: prover_memory.challenges.alphas,
-            gate_challenges: Default::default(),
+            // TODO TACEO: How to initialize this?
+            lookup_grand_product_delta: Default::default(),
         };
+
+        let alphas = prover_memory.challenges.alphas;
+        let gate_challenges = Default::default();
 
         let mut memory = AllEntities::<Vec<P::ScalarField>, L>::default();
 
@@ -220,6 +254,8 @@ impl<P: Pairing, L: PlainProverFlavour> ProverMemory<P, L> {
         Self {
             polys: memory,
             relation_parameters,
+            alphas,
+            gate_challenges,
         }
     }
 }
@@ -237,9 +273,11 @@ impl<P: Pairing, L: PlainProverFlavour> VerifierMemory<P, L> {
             beta: verifier_memory.challenges.beta,
             gamma: verifier_memory.challenges.gamma,
             public_input_delta: verifier_memory.public_input_delta,
-            alphas: verifier_memory.challenges.alphas,
-            gate_challenges: Default::default(),
+            // TODO TACEO: How to initialize this?
+            lookup_grand_product_delta: Default::default(),
         };
+        let alphas = verifier_memory.challenges.alphas;
+        let gate_challenges = Default::default();
 
         let mut memory = AllEntities::<P::G1Affine, _>::default();
         memory.witness = verifier_memory.witness_commitments;
@@ -262,6 +300,8 @@ impl<P: Pairing, L: PlainProverFlavour> VerifierMemory<P, L> {
         Self {
             relation_parameters,
             verifier_commitments: memory,
+            alphas,
+            gate_challenges,
             claimed_evaluations: Default::default(),
         }
     }

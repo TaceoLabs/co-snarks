@@ -878,9 +878,9 @@ impl<F: PrimeField> WitnessOrConstant<F> {
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
 pub struct ActiveRegionData {
-    ranges: Vec<(usize, usize)>, // active ranges [start_i, end_i) of the execution trace
-    idxs: Vec<usize>,            // full set of poly indices corresposponding to active ranges
-    current_end: usize,          // end of last range; for ensuring monotonicity of ranges
+    pub ranges: Vec<(usize, usize)>, // active ranges [start_i, end_i) of the execution trace
+    pub idxs: Vec<usize>,            // full set of poly indices corresposponding to active ranges
+    pub current_end: usize,          // end of last range; for ensuring monotonicity of ranges
 }
 impl ActiveRegionData {
     pub fn new() -> Self {

@@ -3,7 +3,7 @@ use ark_ec::pairing::Pairing;
 use ark_ff::PrimeField;
 use co_builder::prelude::Polynomial;
 
-pub(crate) struct ProverMemory<P: Pairing, L: PlainProverFlavour> {
+pub struct ProverMemory<P: Pairing, L: PlainProverFlavour> {
     /// column 3
     pub(crate) w_4: Polynomial<P::ScalarField>,
     /// column 4
@@ -29,7 +29,7 @@ pub(crate) struct Challenges<F: PrimeField, L: PlainProverFlavour> {
     pub(crate) eta_3: F,
     pub(crate) beta: F,
     pub(crate) gamma: F,
-    pub(crate) alphas: L::Alphas<F>,
+    pub(crate) alphas: Vec<L::Alpha<F>>,
 }
 
 impl<F: PrimeField, L: PlainProverFlavour> Default for Challenges<F, L> {
@@ -40,7 +40,7 @@ impl<F: PrimeField, L: PlainProverFlavour> Default for Challenges<F, L> {
             eta_3: Default::default(),
             beta: Default::default(),
             gamma: Default::default(),
-            alphas: L::Alphas::default(),
+            alphas: Default::default(),
         }
     }
 }
