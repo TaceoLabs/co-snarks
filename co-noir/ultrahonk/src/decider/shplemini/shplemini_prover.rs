@@ -26,15 +26,6 @@ impl<
     L: PlainProverFlavour,
 > Decider<P, H, L>
 {
-    // fn get_f_polynomials(
-    //     polys: &'_ AllEntities<Vec<P::ScalarField>, L>,
-    // ) -> PolyF<'_, Vec<P::ScalarField>, L> {
-    //     PolyF {
-    //         precomputed: &polys.precomputed,
-    //         witness: &polys.witness,
-    //     }
-    // }
-
     fn get_g_polynomials<'a>(
         polys: &'a AllEntities<Vec<P::ScalarField>, L>,
     ) -> L::PolyG<'a, Vec<P::ScalarField>> {

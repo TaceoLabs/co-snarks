@@ -126,7 +126,8 @@ type ShamirProverWitnessEntities<T> =
     <UltraFlavour as ProverFlavour>::ProverWitnessEntities<Polynomial<ShamirPrimeFieldShare<T>>>;
 
 /// Translate a REP3 shared proving key to a shamir shared proving key
-pub fn translate_proving_key<P: CurveGroup, N: Network>(
+#[allow(clippy::complexity)]
+pub fn translate_proving_key<P: CurveGroup<BaseField: PrimeField>, N: Network>(
     proving_key: Rep3ProvingKey<P, UltraFlavour>,
     net: &N,
 ) -> Result<ShamirProvingKey<P, UltraFlavour>> {
@@ -322,7 +323,7 @@ pub fn generate_vk_barretenberg<P: HonkCurve<TranscriptFieldType>>(
 }
 
 /// Split a proving key into RPE3 shares
-pub fn split_proving_key_rep3<P: CurveGroup>(
+pub fn split_proving_key_rep3<P: CurveGroup<BaseField: PrimeField>, R: Rng + CryptoRng>(
     proving_key: PlainProvingKey<P, UltraFlavour>,
 ) -> Result<[Rep3ProvingKey<P, UltraFlavour>; 3]> {
     let mut rng = rand::thread_rng();
@@ -349,7 +350,7 @@ pub fn split_proving_key_rep3<P: CurveGroup>(
 }
 
 /// Split a proving key into shamir shares
-pub fn split_proving_key_shamir<P: CurveGroup>(
+pub fn split_proving_key_shamir<P: CurveGroup<BaseField: PrimeField>, R: Rng + CryptoRng>(
     proving_key: PlainProvingKey<P, UltraFlavour>,
     degree: usize,
     num_parties: usize,

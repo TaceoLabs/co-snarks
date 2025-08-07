@@ -53,7 +53,7 @@ where
     Polynomial<Shared>: Serialize + for<'a> Deserialize<'a>,
     Polynomial<Public>: Serialize + for<'a> Deserialize<'a>,
 {
-    pub(crate) fn new(circuit_size: usize) -> Self {
+    pub fn new(circuit_size: usize) -> Self {
         let mut polynomials = Self::default();
 
         // Shifting is done at a later point

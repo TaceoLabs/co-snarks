@@ -230,19 +230,19 @@ impl SumcheckRound {
         let mut univariate_accumulators = L::AllRelationAccHalfShared::<T, P>::default();
         while start < self.round_size {
             let end = (start + batch_size).min(self.round_size);
-            let mut all_entites = L::AllEntitiesBatchRelations::new();
+            let mut all_entities = L::AllEntitiesBatchRelations::new();
             for edge_idx in (start..end).step_by(2) {
                 let mut extended_edges = ProverUnivariates::<T, P, L>::default();
                 Self::extend_edges(&mut extended_edges, polynomials, edge_idx);
                 let scaling_factor =
                     gate_separators.beta_products[(edge_idx >> 1) * gate_separators.periodicity];
-                all_entites.fold_and_filter(extended_edges, scaling_factor);
+                all_entities.fold_and_filter(extended_edges, scaling_factor);
             }
             L::accumulate_relation_univariates_batch(
                 net,
                 state,
                 &mut univariate_accumulators,
-                &all_entites,
+                &all_entities,
                 relation_parameters,
             )?;
             start = end;
@@ -413,8 +413,9 @@ impl SumcheckRound {
         } else {
             // Note: Currently not happening
             let mut libra_round_univariate_extended = L::SumcheckRoundOutputZK::<T, P>::default();
-            libra_round_univariate_extended
-                .extend_from(libra_round_univariate.evaluations_as_ref());
+            libra_round_univariate_extended.extend_from(
+                &libra_round_univariate.evaluations_as_ref()[..P::LIBRA_UNIVARIATES_LENGTH],
+            ); //It's important that the poly gets extended from the right length
             libra_round_univariate_extended
         }
     }

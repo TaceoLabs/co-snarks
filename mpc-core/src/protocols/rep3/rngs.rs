@@ -297,7 +297,7 @@ impl Rep3RandBitComp {
         (a, b, c)
     }
 
-    /// Generate three random field elements
+    /// Generate three random curve elements
     pub fn random_curves_3keys<C: CurveGroup>(&mut self) -> (C, C, C) {
         let a = C::rand(&mut self.rng1);
         let b = C::rand(&mut self.rng2);

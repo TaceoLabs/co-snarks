@@ -1,6 +1,7 @@
 use super::NoirUltraHonkProver;
 use ark_ec::CurveGroup;
 use ark_ff::Field;
+use ark_ff::PrimeField;
 use itertools::izip;
 use mpc_core::MpcState;
 use mpc_core::protocols::shamir::ShamirState;
@@ -13,9 +14,10 @@ use num_traits::Zero;
 use rayon::prelude::*;
 
 /// A UltraHonk driver using shamir secret sharing
+#[derive(Debug)]
 pub struct ShamirUltraHonkDriver;
 
-impl<P: CurveGroup> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
+impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
     type ArithmeticShare = ShamirPrimeFieldShare<P::ScalarField>;
     type PointShare = ShamirPointShare<P>;
     type State = ShamirState<P::ScalarField>;
@@ -175,6 +177,15 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
         pointshare::open_point_and_field(&a, &b, net, state)
     }
 
+    fn open_point_and_field_many<N: Network>(
+        a: &[Self::PointShare],
+        b: &[Self::ArithmeticShare],
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<(Vec<P>, Vec<<P>::ScalarField>)> {
+        pointshare::open_point_and_field_many(a, b, net, state)
+    }
+
     fn mul_open_many<N: Network>(
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
@@ -242,6 +253,10 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
         pointshare::msm_public_points(points, scalars)
     }
 
+    fn point_add(a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare {
+        pointshare::add(a, b)
+    }
+
     fn eval_poly(coeffs: &[Self::ArithmeticShare], point: P::ScalarField) -> Self::ArithmeticShare {
         poly::eval_poly(coeffs, point)
     }
@@ -265,5 +280,30 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
         _state: &mut Self::State,
     ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
         panic!("ShamirUltraHonkDriver does not support is_zero_many");
+    }
+
+    fn promote_to_trivial_point_share(
+        _id: <Self::State as MpcState>::PartyID,
+        public_value: P,
+    ) -> Self::PointShare {
+        pointshare::promote_to_trivial_share(&public_value)
+    }
+
+    fn point_sub(a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare {
+        pointshare::sub(a, b)
+    }
+
+    fn inverse_or_zero_many_in_place<N: Network>(
+        _net: &N,
+        _state: &mut Self::State,
+        _a: &mut [Self::ArithmeticShare],
+    ) -> eyre::Result<()> {
+        unimplemented!(
+            "inverse_or_zero_many_in_place is not implemented for ShamirUltraHonkDriver"
+        );
+    }
+
+    fn scalar_mul_public_point(a: &P, b: Self::ArithmeticShare) -> Self::PointShare {
+        pointshare::scalar_mul_public_point(b, a)
     }
 }

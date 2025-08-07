@@ -9,7 +9,7 @@ use rand::{CryptoRng, Rng};
 use std::fmt::Debug;
 
 pub trait PlainProverFlavour: Default + ProverFlavour {
-    type AllRelationAcc<F: PrimeField>: Default;
+    type AllRelationAcc<F: PrimeField>: Default + Debug;
     type AllRelationEvaluations<F: PrimeField>: Default;
     type SumcheckRoundOutput<F: PrimeField>: Default
         + std::ops::MulAssign

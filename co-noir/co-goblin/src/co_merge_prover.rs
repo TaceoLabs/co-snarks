@@ -11,6 +11,7 @@ use common::transcript::Transcript;
 use common::transcript::TranscriptHasher;
 
 use itertools::{Itertools, izip};
+use mpc_core::MpcState;
 use mpc_net::Network;
 use ultrahonk::prelude::HonkProof;
 
@@ -52,14 +53,14 @@ where
         commitment_key: &ProverCrs<C>,
     ) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
         self.transcript = Transcript::new();
-
+        let id = self.state.id();
         let curr_subtable = self
             .ecc_op_queue
-            .construct_current_ultra_ops_subtable_columns();
-        let curr_table = self.ecc_op_queue.construct_ultra_ops_table_columns();
+            .construct_current_ultra_ops_subtable_columns(id);
+        let curr_table = self.ecc_op_queue.construct_ultra_ops_table_columns(id);
         let prev_table = self
             .ecc_op_queue
-            .construct_previous_ultra_ops_table_columns();
+            .construct_previous_ultra_ops_table_columns(id);
 
         let (current_table_size, current_subtable_size) = (
             curr_table[0].coefficients.len(),
@@ -195,21 +196,20 @@ where
 mod tests {
     use std::thread;
 
-    use crate::eccvm::co_ecc_op_queue::{
-        CoEccOpCode, CoEccvmOpsTable, CoUltraEccOpsTable, CoUltraOp,
-    };
+    use crate::eccvm::co_ecc_op_queue::{CoEccvmOpsTable, CoUltraEccOpsTable, CoUltraOp};
 
     use super::*;
+    use crate::eccvm::co_ecc_op_queue::CoEccvmRowTracker;
     use ark_bn254::Bn254;
     use ark_ec::bn::Bn;
     use ark_ec::pairing::Pairing;
     use co_builder::prelude::CrsParser;
     use common::mpc::rep3::Rep3UltraHonkDriver;
     use common::transcript::Poseidon2Sponge;
-    use goblin::prelude::{EccOpCode, EccOpsTable, EccvmRowTracker, UltraOp};
+    use goblin::prelude::{EccOpCode, EccOpsTable, UltraOp};
     use mpc_core::{
         gadgets::field_from_hex_string,
-        protocols::rep3::{Rep3State, conversion::A2BType, share_field_element},
+        protocols::rep3::{Rep3State, conversion::A2BType, share_curve_point, share_field_element},
     };
     use mpc_net::local::LocalNetwork;
     use rand::thread_rng;
@@ -236,32 +236,24 @@ mod tests {
     fn co_ultra_ops_from_ultra_op(ultra_op: UltraOp<Bn254G1>) -> Vec<CoUltraOp<Driver, Bn254G1>> {
         let mut rng = thread_rng();
         izip!(
-            share_field_element(F::from(ultra_op.op_code.add as u8), &mut rng),
-            share_field_element(F::from(ultra_op.op_code.mul as u8), &mut rng),
-            share_field_element(F::from(ultra_op.op_code.eq as u8), &mut rng),
-            share_field_element(F::from(ultra_op.op_code.reset as u8), &mut rng),
             share_field_element(ultra_op.x_lo, &mut rng),
             share_field_element(ultra_op.x_hi, &mut rng),
             share_field_element(ultra_op.y_lo, &mut rng),
             share_field_element(ultra_op.y_hi, &mut rng),
             share_field_element(ultra_op.z_1, &mut rng),
             share_field_element(ultra_op.z_2, &mut rng),
+            share_field_element(F::from(ultra_op.return_is_infinity), &mut rng,)
         )
         .map(
-            |(add, mul, eq, reset, x_lo, x_hi, y_lo, y_hi, z_1, z_2)| CoUltraOp {
-                op_code: CoEccOpCode {
-                    add,
-                    mul,
-                    eq,
-                    reset,
-                },
+            |(x_lo, x_hi, y_lo, y_hi, z_1, z_2, is_infinity)| CoUltraOp {
+                op_code: ultra_op.op_code.clone(),
                 x_lo,
                 x_hi,
                 y_lo,
                 y_hi,
                 z_1,
                 z_2,
-                return_is_infinity: ultra_op.return_is_infinity,
+                return_is_infinity: is_infinity,
             },
         )
         .collect_vec()
@@ -351,9 +343,11 @@ mod tests {
         };
 
         let mut co_ultra_ops_2: VecDeque<_> = co_ultra_ops_from_ultra_op(ultra_op_2).into();
+        let mut acc: VecDeque<_> =
+            share_curve_point(Bn254G1Affine::identity().into(), &mut thread_rng()).into();
 
         let mut get_queues = || CoECCOpQueue::<Driver, Bn254G1> {
-            accumulator: Bn254G1Affine::identity(),
+            accumulator: acc.pop_front().unwrap(),
             eccvm_ops_table: CoEccvmOpsTable::new(),
             ultra_ops_table: CoUltraEccOpsTable {
                 table: EccOpsTable {
@@ -364,7 +358,8 @@ mod tests {
                 },
             },
             eccvm_ops_reconstructed: Vec::new(),
-            eccvm_row_tracker: EccvmRowTracker::new(),
+            ultra_ops_reconstructed: Vec::new(),
+            eccvm_row_tracker: CoEccvmRowTracker::default(),
         };
 
         let queue: [CoECCOpQueue<Driver, Bn254G1>; 3] = core::array::from_fn(|_| get_queues());

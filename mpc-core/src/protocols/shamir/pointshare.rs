@@ -3,6 +3,7 @@
 //! This module contains operations with point shares
 
 use ark_ec::CurveGroup;
+use ark_ff::Zero;
 use mpc_net::Network;
 
 use super::{
@@ -107,6 +108,11 @@ pub fn open_half_point<C: CurveGroup, N: Network>(
     Ok(res)
 }
 
+/// Transforms a public value into a shared value: \[a\] = a.
+pub fn promote_to_trivial_share<C: CurveGroup>(a: &C) -> PointShare<C> {
+    PointShare::new(*a)
+}
+
 /// Performs opening of a point share.
 pub fn open_point<C: CurveGroup, N: Network>(
     a: &PointShare<C>,
@@ -155,6 +161,45 @@ pub fn open_point_and_field<C: CurveGroup, N: Network>(
     let res_point = reconstruct_point(&points, &state.open_lagrange_t);
     let res_field = reconstruct(&fields, &state.open_lagrange_t);
     Ok((res_point, res_field))
+}
+
+/// Opens a vector shared points and a vector of shared field elements together
+pub fn open_point_and_field_many<C: CurveGroup, N: Network>(
+    a: &[PointShare<C>],
+    b: &[FieldShare<C::ScalarField>],
+    net: &N,
+    state: &mut ShamirState<C::ScalarField>,
+) -> eyre::Result<(Vec<C>, Vec<C::ScalarField>)> {
+    todo!("TODO FLORIN: Sizes can be different here");
+    // let a_a = ShamirPointShare::convert_slice(a);
+    // let b_a = FieldShare::convert_slice(b);
+
+    // let rcv = net.broadcast_next(
+    //     state.num_parties,
+    //     state.threshold + 1,
+    //     (a_a.to_owned(), b_a.to_owned()),
+    // )?;
+
+    // let mut transposed_points = vec![vec![C::zero(); state.threshold + 1]; a.len()];
+    // let mut transposed_fields = vec![vec![C::ScalarField::zero(); state.threshold + 1]; b.len()];
+
+    // for (j, (r_point, r_field)) in rcv.into_iter().enumerate() {
+    //     for (i, val) in r_point.into_iter().enumerate() {
+    //         transposed_points[i][j] = val;
+    //     }
+    //     for (i, val) in r_field.into_iter().enumerate() {
+    //         transposed_fields[i][j] = val;
+    //     }
+    // }
+    // let res_points = transposed_points
+    //     .into_iter()
+    //     .map(|r| reconstruct_point(&r, &state.open_lagrange_t))
+    //     .collect();
+    // let res_fields = transposed_fields
+    //     .into_iter()
+    //     .map(|r| reconstruct(&r, &state.open_lagrange_t))
+    //     .collect();
+    // Ok((res_points, res_fields))
 }
 
 /// Perfoms MSM between curve points and field shares.

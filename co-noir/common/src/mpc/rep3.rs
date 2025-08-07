@@ -1,6 +1,7 @@
 use super::NoirUltraHonkProver;
 use ark_ec::CurveGroup;
-use ark_ff::Field;
+use ark_ff::PrimeField;
+use ark_ff::{Field, One, Zero};
 use itertools::izip;
 use mpc_core::{
     MpcState,
@@ -9,12 +10,11 @@ use mpc_core::{
     },
 };
 use mpc_net::Network;
-use num_traits::Zero;
 use rayon::prelude::*;
-
+#[derive(Debug)]
 pub struct Rep3UltraHonkDriver;
 
-impl<P: CurveGroup> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
+impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
     type ArithmeticShare = Rep3PrimeFieldShare<P::ScalarField>;
     type PointShare = Rep3PointShare<P>;
     type State = Rep3State;
@@ -176,6 +176,15 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
         pointshare::open_point_and_field(&a, &b, net)
     }
 
+    fn open_point_and_field_many<N: Network>(
+        a: &[Self::PointShare],
+        b: &[Self::ArithmeticShare],
+        net: &N,
+        _state: &mut Self::State,
+    ) -> eyre::Result<(Vec<P>, Vec<<P>::ScalarField>)> {
+        pointshare::open_point_and_field_many(a, b, net)
+    }
+
     fn mul_open_many<N: Network>(
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
@@ -243,6 +252,10 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
         pointshare::msm_public_points(points, scalars)
     }
 
+    fn point_add(a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare {
+        pointshare::add(a, b)
+    }
+
     fn eval_poly(coeffs: &[Self::ArithmeticShare], point: P::ScalarField) -> Self::ArithmeticShare {
         poly::eval_poly(coeffs, point)
     }
@@ -267,5 +280,54 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
     ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
         let zeroes = vec![P::ScalarField::zero(); a.len()];
         arithmetic::eq_public_many(a, &zeroes, net, state)
+    }
+
+    fn promote_to_trivial_point_share(
+        id: <Self::State as MpcState>::PartyID,
+        public_value: P,
+    ) -> Self::PointShare {
+        pointshare::promote_to_trivial_share(id, &public_value)
+    }
+
+    fn point_sub(a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare {
+        pointshare::sub(a, b)
+    }
+
+    fn inverse_or_zero_many_in_place<N: Network>(
+        net: &N,
+        state: &mut Self::State,
+        secrets: &mut [Self::ArithmeticShare],
+    ) -> eyre::Result<()> {
+        let zeroes = vec![P::ScalarField::zero(); secrets.len()];
+        let is_zero = arithmetic::eq_public_many(secrets, &zeroes, net, state)?;
+        let inv_is_zero = is_zero
+            .iter()
+            .map(|x| arithmetic::add_public(arithmetic::neg(*x), P::ScalarField::one(), state.id()))
+            .collect::<Vec<_>>();
+
+        let mut to_invert = arithmetic::mul_vec(secrets, &inv_is_zero, net, state)?;
+        to_invert.iter_mut().zip(is_zero.iter()).for_each(|(x, y)| {
+            arithmetic::add_assign(x, *y);
+        });
+        let r = (0..secrets.len())
+            .map(|_| <Self as NoirUltraHonkProver<P>>::rand(net, state))
+            .collect::<Result<Vec<_>, _>>()?;
+        let y: Vec<P::ScalarField> =
+            <Self as NoirUltraHonkProver<P>>::mul_open_many(&to_invert, &r, net, state)?;
+
+        for (a, r, y) in izip!(to_invert.iter_mut(), r, y) {
+            if y.is_zero() {
+                eyre::bail!("Element should not be zero",);
+            } else {
+                *a = r * y.inverse().unwrap();
+            }
+        }
+        secrets.copy_from_slice(&to_invert);
+
+        Ok(())
+    }
+
+    fn scalar_mul_public_point(a: &P, b: Self::ArithmeticShare) -> Self::PointShare {
+        pointshare::scalar_mul_public_point(a, b)
     }
 }
