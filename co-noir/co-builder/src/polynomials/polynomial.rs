@@ -139,7 +139,7 @@ impl<F: Default + Clone> Polynomial<F> {
     }
 
     // Can only shift by 1
-    pub fn shifted(&self) -> ShiftedPoly<F> {
+    pub fn shifted(&'_ self) -> ShiftedPoly<'_, F> {
         assert!(!self.coefficients.is_empty());
         ShiftedPoly {
             coefficients: &self.coefficients[1..],

@@ -495,7 +495,7 @@ impl<T: Default> ECCVMProverWitnessEntities<T> {
     }
     pub fn non_shifted_mut(&mut self) -> &mut [T] {
         &mut self.elements[ECCVMFlavour::TRANSCRIPT_ADD
-            ..ECCVMFlavour::TRANSCRIPT_MSM_COUNT_AT_TRANSITION_INVERSE + 1]
+            ..=ECCVMFlavour::TRANSCRIPT_MSM_COUNT_AT_TRANSITION_INVERSE]
     }
     pub fn into_shifted_without_z_perm(self) -> impl Iterator<Item = T> {
         self.elements

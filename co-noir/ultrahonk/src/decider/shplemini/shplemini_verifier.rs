@@ -26,8 +26,8 @@ impl<
 > DeciderVerifier<P, H, L>
 {
     pub fn get_g_shift_evaluations(
-        evaluations: &ClaimedEvaluations<P::ScalarField, L>,
-    ) -> PolyGShift<P::ScalarField, L> {
+        evaluations: &'_ ClaimedEvaluations<P::ScalarField, L>,
+    ) -> PolyGShift<'_, P::ScalarField, L> {
         PolyGShift {
             wires: &evaluations.shifted_witness,
         }
@@ -40,14 +40,16 @@ impl<
     }
 
     pub fn get_f_evaluations(
-        evaluations: &ClaimedEvaluations<P::ScalarField, L>,
-    ) -> PolyF<P::ScalarField, L> {
+        evaluations: &'_ ClaimedEvaluations<P::ScalarField, L>,
+    ) -> PolyF<'_, P::ScalarField, L> {
         PolyF {
             precomputed: &evaluations.precomputed,
             witness: &evaluations.witness,
         }
     }
-    pub fn get_f_comms(evaluations: &ClaimedEvaluations<P::Affine, L>) -> PolyF<P::Affine, L> {
+    pub fn get_f_comms(
+        evaluations: &'_ ClaimedEvaluations<P::Affine, L>,
+    ) -> PolyF<'_, P::Affine, L> {
         PolyF {
             precomputed: &evaluations.precomputed,
             witness: &evaluations.witness,
