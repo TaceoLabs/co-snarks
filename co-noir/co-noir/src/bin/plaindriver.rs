@@ -8,7 +8,7 @@ use co_builder::prelude::Serialize as FieldSerialize;
 use co_noir::{Bn254G1, HonkRecursion};
 use co_ultrahonk::{
     PlainCoBuilder,
-    prelude::{CoUltraHonk, CrsParser, ProvingKey, UltraHonk, Utils, VerifyingKey, ZeroKnowledge},
+    prelude::{CoUltraHonk, CrsParser, ProvingKey, UltraHonk, VerifyingKey, ZeroKnowledge},
 };
 use color_eyre::eyre::Context;
 use common::{mpc::plain::PlainUltraHonkDriver, transcript::Poseidon2Sponge};
@@ -19,6 +19,7 @@ use figment::{
 use serde::{Deserialize, Serialize};
 use sha3::Keccak256;
 use std::{
+    fs::File,
     io::{BufWriter, Write},
     path::PathBuf,
     process::ExitCode,
@@ -180,13 +181,13 @@ fn main() -> color_eyre::Result<ExitCode> {
     let has_zk = ZeroKnowledge::from(config.zk);
 
     // Read circuit
-    let program_artifact = Utils::get_program_artifact_from_file(&circuit_path)
+    let program_artifact = co_noir::program_artifact_from_reader(File::open(&circuit_path)?)
         .context("while parsing program artifact")?;
-    let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
+    let constraint_system = co_noir::get_constraint_system_from_artifact(&program_artifact, true);
 
     // Create witness
     let witness = if let Some(witness_path) = witness_file {
-        Utils::get_witness_from_file(&witness_path).expect("failed to parse witness")
+        co_noir::witness_from_reader(File::open(&witness_path)?).expect("failed to parse witness")
     } else {
         let solver = PlainCoSolver::init_plain_driver(program_artifact, input_path)
             .context("while initializing plain driver")?;

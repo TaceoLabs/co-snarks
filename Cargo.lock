@@ -897,7 +897,6 @@ dependencies = [
  "mpc-net",
  "num-bigint 0.4.6",
  "num-traits",
- "rayon",
  "serde",
  "tracing",
 ]
@@ -1001,7 +1000,6 @@ name = "co-acvm"
 version = "0.6.0"
 dependencies = [
  "acir",
- "acvm",
  "ark-bn254",
  "ark-ec",
  "ark-ff",
@@ -1009,12 +1007,14 @@ dependencies = [
  "blake2",
  "blake3",
  "co-brillig",
+ "co-noir-types",
  "eyre",
  "intmap",
  "itertools 0.14.0",
  "libaes",
  "mpc-core",
  "mpc-net",
+ "noir-types",
  "noirc_abi",
  "noirc_artifacts",
  "num-bigint 0.4.6",
@@ -1023,7 +1023,6 @@ dependencies = [
  "serde",
  "sha2",
  "thiserror 2.0.14",
- "toml 0.8.23",
  "tracing",
 ]
 
@@ -1062,6 +1061,7 @@ dependencies = [
  "eyre",
  "itertools 0.14.0",
  "mpc-core",
+ "noir-types",
  "num-bigint 0.4.6",
  "num-traits",
  "rand 0.8.5",
@@ -1091,13 +1091,11 @@ dependencies = [
  "figment",
  "mpc-core",
  "mpc-net",
- "num-bigint 0.4.6",
  "num-traits",
  "rand 0.8.5",
  "rustls",
  "serde",
  "serde_json",
- "thiserror 2.0.14",
  "toml 0.8.23",
  "tracing",
  "tracing-subscriber 0.3.19",
@@ -1128,7 +1126,6 @@ dependencies = [
  "ark-ec",
  "ark-ff",
  "co-builder",
- "co-ultrahonk",
  "common",
  "eyre",
  "goblin",
@@ -1177,12 +1174,14 @@ dependencies = [
  "clap",
  "co-acvm",
  "co-builder",
+ "co-noir-types",
  "co-ultrahonk",
  "color-eyre",
  "common",
  "figment",
  "mpc-core",
  "mpc-net",
+ "noir-types",
  "noirc_abi",
  "noirc_artifacts",
  "rand 0.8.5",
@@ -1194,6 +1193,16 @@ dependencies = [
  "toml 0.8.23",
  "tracing",
  "tracing-subscriber 0.3.19",
+]
+
+[[package]]
+name = "co-noir-types"
+version = "0.1.0"
+dependencies = [
+ "ark-ff",
+ "mpc-core",
+ "rand 0.8.5",
+ "serde",
 ]
 
 [[package]]
@@ -1229,7 +1238,6 @@ dependencies = [
  "ark-ec",
  "ark-ff",
  "ark-poly",
- "ark-serialize",
  "co-acvm",
  "co-builder",
  "common",
@@ -1238,6 +1246,7 @@ dependencies = [
  "itertools 0.14.0",
  "mpc-core",
  "mpc-net",
+ "noir-types",
  "num-bigint 0.4.6",
  "num-traits",
  "rand 0.8.5",
@@ -2943,6 +2952,21 @@ name = "new_debug_unreachable"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
+
+[[package]]
+name = "noir-types"
+version = "0.1.0"
+dependencies = [
+ "acir",
+ "ark-bn254",
+ "ark-ff",
+ "co-noir-types",
+ "eyre",
+ "noirc_abi",
+ "noirc_artifacts",
+ "serde_json",
+ "toml 0.8.23",
+]
 
 [[package]]
 name = "noir_protobuf"
@@ -4822,12 +4846,10 @@ dependencies = [
  "ark-ec",
  "ark-ff",
  "ark-grumpkin",
- "ark-serialize",
  "ark-std",
  "bincode",
  "blake2",
  "blake3",
- "bytes",
  "circom-mpc-compiler",
  "circom-mpc-vm",
  "circom-types",
@@ -4836,6 +4858,7 @@ dependencies = [
  "co-circom-types",
  "co-groth16",
  "co-noir",
+ "co-noir-types",
  "co-plonk",
  "co-ultrahonk",
  "common",
@@ -4844,7 +4867,7 @@ dependencies = [
  "libaes",
  "mpc-core",
  "mpc-net",
- "noirc_abi",
+ "noir-types",
  "noirc_artifacts",
  "num-bigint 0.4.6",
  "num-traits",
@@ -5205,7 +5228,6 @@ checksum = "2896d95c02a80c6d6a5d6e953d479f5ddf2dfdb6a244441010e373ac0fb88971"
 name = "ultrahonk"
 version = "0.5.0"
 dependencies = [
- "acir",
  "ark-bn254",
  "ark-ec",
  "ark-ff",
@@ -5215,12 +5237,11 @@ dependencies = [
  "eyre",
  "itertools 0.14.0",
  "mpc-core",
- "noirc_artifacts",
+ "noir-types",
  "num-bigint 0.4.6",
  "num-traits",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "serde_json",
  "sha3",
  "tracing",
 ]

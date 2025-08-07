@@ -2,6 +2,7 @@ use super::{NoirWitnessExtensionProtocol, plain::PlainAcvmSolver};
 use ark_ec::CurveGroup;
 use ark_ff::{One, PrimeField};
 use co_brillig::mpc::{ShamirBrilligDriver, ShamirBrilligType};
+use co_noir_types::ShamirType;
 use core::panic;
 use mpc_core::{
     MpcState,
@@ -125,6 +126,15 @@ impl<F: PrimeField> From<F> for ShamirAcvmType<F> {
 impl<F: PrimeField> From<ShamirPrimeFieldShare<F>> for ShamirAcvmType<F> {
     fn from(value: ShamirPrimeFieldShare<F>) -> Self {
         Self::Shared(value)
+    }
+}
+
+impl<F: PrimeField> From<ShamirType<F>> for ShamirAcvmType<F> {
+    fn from(value: ShamirType<F>) -> Self {
+        match value {
+            ShamirType::Public(public) => ShamirAcvmType::Public(public),
+            ShamirType::Shared(shared) => ShamirAcvmType::Shared(shared),
+        }
     }
 }
 

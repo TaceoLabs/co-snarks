@@ -8,15 +8,9 @@ pub(crate) mod types;
 pub(crate) mod ultra_prover;
 pub(crate) mod ultra_verifier;
 
-use acir::{FieldElement, native_types::WitnessStack};
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
-use co_builder::{
-    HonkProofResult,
-    prelude::{AcirFormat, ProverCrs},
-};
-use noirc_artifacts::program::ProgramArtifact;
-use std::{io, path::Path};
+use co_builder::{HonkProofResult, prelude::ProverCrs};
 
 /// The log of the max circuit size assumed in order to achieve constant sized Honk proofs
 /// AZTEC TODO(<https://github.com/AztecProtocol/barretenberg/issues/1046>): Remove the need for const sized proofs
@@ -36,48 +30,6 @@ pub const NUM_INTERLEAVING_CLAIMS: u32 = 2;
 pub struct Utils {}
 
 impl Utils {
-    pub fn get_program_artifact_from_file(path: impl AsRef<Path>) -> io::Result<ProgramArtifact> {
-        let program = std::fs::read_to_string(path)?;
-        Ok(serde_json::from_str::<ProgramArtifact>(&program)?)
-    }
-
-    fn read_witness_stack_from_file(
-        path: impl AsRef<Path>,
-    ) -> io::Result<WitnessStack<FieldElement>> {
-        let witness_stack = std::fs::read(path)?;
-        WitnessStack::try_from(witness_stack.as_slice())
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
-    }
-
-    pub fn get_constraint_system_from_artifact(
-        program_artifact: &ProgramArtifact,
-        honk_recusion: bool,
-    ) -> AcirFormat<ark_bn254::Fr> {
-        let circuit = program_artifact.bytecode.functions[0].to_owned();
-        AcirFormat::circuit_serde_to_acir_format(circuit, honk_recusion)
-    }
-
-    pub fn get_constraint_system_from_file(
-        path: impl AsRef<Path>,
-        honk_recusion: bool,
-    ) -> io::Result<AcirFormat<ark_bn254::Fr>> {
-        let program_artifact = Self::get_program_artifact_from_file(path)?;
-        Ok(Self::get_constraint_system_from_artifact(
-            &program_artifact,
-            honk_recusion,
-        ))
-    }
-
-    pub fn get_witness_from_file(path: impl AsRef<Path>) -> io::Result<Vec<ark_bn254::Fr>> {
-        let mut witness_stack = Self::read_witness_stack_from_file(path)?;
-        let witness_map = witness_stack
-            .pop()
-            .expect("Witness should be present")
-            .witness;
-        let witness = AcirFormat::witness_map_to_witness_vector(witness_map);
-        Ok(witness)
-    }
-
     pub fn get_msb32(inp: u32) -> u32 {
         co_builder::prelude::Utils::get_msb32(inp)
     }

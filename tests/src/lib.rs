@@ -1,54 +1,12 @@
 pub mod test_utils {
-    use std::{array, collections::BTreeMap};
-
-    use acir::{
-        acir_field::GenericFieldElement,
-        native_types::{WitnessMap, WitnessStack},
-    };
+    use acir::native_types::{WitnessMap, WitnessStack};
     use ark_ff::PrimeField;
-    use co_acvm::{
-        solver::{partial_abi::PublicMarker, Rep3CoSolver},
-        Rep3AcvmType,
-    };
+    use co_acvm::Rep3AcvmType;
     use co_circom_types::SharedWitness;
-    use co_noir::Pairing;
     use itertools::izip;
     use mpc_core::protocols::rep3;
-    use noirc_abi::Abi;
     use num_bigint::BigUint;
     use num_traits::Num as _;
-    use rand::{CryptoRng, Rng};
-
-    pub fn share_input_rep3<P: Pairing, R: Rng + CryptoRng>(
-        initial_witness: BTreeMap<String, PublicMarker<GenericFieldElement<P::ScalarField>>>,
-        rng: &mut R,
-    ) -> [BTreeMap<String, Rep3AcvmType<P::ScalarField>>; 3] {
-        let mut witnesses = array::from_fn(|_| BTreeMap::default());
-        for (witness, v) in initial_witness.into_iter() {
-            match v {
-                PublicMarker::Public(v) => {
-                    for w in witnesses.iter_mut() {
-                        w.insert(witness.to_owned(), Rep3AcvmType::Public(v.into_repr()));
-                    }
-                }
-                PublicMarker::Private(v) => {
-                    let shares = rep3::share_field_element(v.into_repr(), rng);
-                    for (w, share) in witnesses.iter_mut().zip(shares) {
-                        w.insert(witness.clone(), Rep3AcvmType::Shared(share));
-                    }
-                }
-            }
-        }
-
-        witnesses
-    }
-
-    pub fn translate_witness_share_rep3(
-        witness: BTreeMap<String, Rep3AcvmType<ark_bn254::Fr>>,
-        abi: &Abi,
-    ) -> WitnessMap<Rep3AcvmType<ark_bn254::Fr>> {
-        Rep3CoSolver::<ark_bn254::Fr, ()>::witness_map_from_string_map(witness, abi).unwrap()
-    }
 
     pub fn combine_field_elements_for_vm(
         a: SharedWitness<ark_bn254::Fr, rep3::arithmetic::FieldShare<ark_bn254::Fr>>,

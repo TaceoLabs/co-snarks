@@ -14,7 +14,6 @@ readme.workspace = true
 co-builder = { version = "0.4.0", path = "../co-builder" }
 mpc-core = { version = "0.9.0", path = "../../mpc-core" }
 ultrahonk = { version = "0.5.0", path = "../ultrahonk" }
-co-ultrahonk = { version = "0.5.0", path = "../co-ultrahonk" }
 goblin = { version = "0.1.0", path = "../goblin" }
 mpc-net = { version = "0.4.0", path = "../../mpc-net" }
 common = { version = "0.1.0", path = "../common" }
