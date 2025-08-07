@@ -4,7 +4,7 @@ use std::{array, ops::RangeBounds, sync::Arc, vec};
 use ark_bn254::Bn254;
 use ark_ff::{AdditiveGroup, Field};
 use ark_poly::polynomial;
-use co_builder::{flavours::mega_flavour::{MegaFlavour, MegaPrecomputedEntities, MegaProverWitnessEntities}, prelude::{ActiveRegionData, CrsParser, Polynomial, Polynomials, ProverCrs, PublicComponentKey}, prover_flavour::ProverFlavour, TranscriptFieldType};
+use co_builder::{flavours::mega_flavour::{MegaFlavour, MegaPrecomputedEntities, MegaProverWitnessEntities}, polynomials, prelude::{ActiveRegionData, CrsParser, Polynomial, Polynomials, ProverCrs, PublicComponentKey}, prover_flavour::ProverFlavour, TranscriptFieldType};
 use itertools::concat;
 use mpc_core::{gadgets::{field_from_hex_string, poseidon2::Poseidon2}, protocols::rep3::poly};
 use tracing::instrument::WithSubscriber;
@@ -37,6 +37,7 @@ const CRS_PATH_G2: &str = concat!(
 );
 type F = TranscriptFieldType;
 type C = Bn254;
+
 
 
 fn structure_parameters<T: PartialEq>(
@@ -74,31 +75,37 @@ fn test_compute_and_extend_alphas() {
         Vec<[&str; BATCHED_EXTENDED_LENGTH]>,
     ) = serde_json::from_str(&content).unwrap();
 
+    let alphas_0 = alphas_0
+        .into_iter()
+        .map(field_from_hex_string)
+        .map(Result::unwrap)
+        .collect::<Vec<F>>();
+
+    let alphas_1 = alphas_1
+        .into_iter()
+        .map(field_from_hex_string)
+        .map(Result::unwrap)
+        .collect::<Vec<F>>();
+
+    let mut memory_0 = ProverMemory::<C, MegaFlavour> {
+        alphas: alphas_0.clone(),
+        // Fields not used in this test
+        gate_challenges: vec![], 
+        relation_parameters: RelationParameters::default(),
+        polys: Default::default(),
+    };
+
+    let mut memory_1 = ProverMemory::<C, MegaFlavour> {
+        alphas: alphas_1.clone(),
+        // Fields not used in this test
+        gate_challenges: vec![], 
+        relation_parameters: RelationParameters::default(),
+        polys: Default::default(),
+    };
+
     let prover_memory = vec![
-        ProverMemory::<C, MegaFlavour> {
-            alphas: alphas_0
-                    .clone()
-                    .into_iter()
-                    .map(field_from_hex_string)
-                    .map(Result::unwrap)
-                    .collect(),
-            // Fields not used in this test
-            gate_challenges: vec![], 
-            relation_parameters: RelationParameters::default(),
-            polys: Default::default(),
-        },
-        ProverMemory::<C, MegaFlavour> {
-                alphas: alphas_1
-                    .clone()
-                    .into_iter()
-                    .map(field_from_hex_string)
-                    .map(Result::unwrap)
-                    .collect(),
-            // Fields not used in this test
-            gate_challenges: vec![], 
-            relation_parameters: RelationParameters::default(),
-            polys: Default::default(),
-        },
+        &mut memory_0,
+        &mut memory_1,
     ];
 
     assert_eq!(
@@ -148,21 +155,24 @@ fn test_compute_extended_relation_parameters() {
             .unwrap(),
     );
 
+    let mut memory_1 = ProverMemory::<C, MegaFlavour> {
+        relation_parameters: parameters_1,
+        // Fields not used in this test
+        polys: Default::default(),
+        alphas: vec![],
+        gate_challenges: vec![],
+    };
+    let mut memory_2 = ProverMemory::<C, MegaFlavour> {
+        relation_parameters: parameters_2,
+        // Fields not used in this test
+        polys: Default::default(),
+        alphas: vec![],
+        gate_challenges: vec![],
+    };
+
     let prover_memory = vec![
-        ProverMemory::<C, MegaFlavour> {
-            relation_parameters: parameters_1,
-            // Fields not used in this test
-            polys: Default::default(),
-            alphas: vec![], 
-            gate_challenges: vec![],
-        },
-        ProverMemory::<C, MegaFlavour> {
-            relation_parameters: parameters_2,
-            // Fields not used in this test
-            polys: Default::default(),
-            alphas: vec![],
-            gate_challenges: vec![],
-        },
+        &mut memory_1,
+        &mut memory_2,
     ];
 
     let extended_parameters = compute_extended_relation_parameters(&prover_memory);
@@ -514,7 +524,7 @@ fn test_compute_combiner() {
         evaluations: evaluations.try_into().unwrap()
     }).collect::<Vec<Univariate<F, BATCHED_EXTENDED_LENGTH>>>().try_into().unwrap());
 
-    let prover_memory_1 = ProverMemory::<C, MegaFlavour> {
+    let mut prover_memory_1 = ProverMemory::<C, MegaFlavour> {
         polys: polys_1,
         // Fields not used in this test
         alphas: Default::default(),
@@ -522,7 +532,7 @@ fn test_compute_combiner() {
         relation_parameters: Default::default(),
     };
 
-    let prover_memory_2 = ProverMemory::<C, MegaFlavour> {
+    let mut prover_memory_2 = ProverMemory::<C, MegaFlavour> {
         polys: polys_2,
         // Fields not used in this test
         alphas: Default::default(),
@@ -540,7 +550,7 @@ fn test_compute_combiner() {
     };
 
     assert_eq!(
-        compute_combiner(&vec![prover_memory_1, prover_memory_2], &gate_separator_polynomial, &relation_parameters, &alphas).evaluations.to_vec(),
+        compute_combiner(&vec![&mut prover_memory_1, &mut prover_memory_2], &gate_separator_polynomial, &relation_parameters, &alphas).evaluations.to_vec(),
         combiner
     );
 }
@@ -575,8 +585,6 @@ fn test_protogalaxy_prover() {
     let content = std::fs::read_to_string(&test_file_folding_result).unwrap();
     let ((target_sum_result, gate_challenges_result, alphas_result, relation_parameters_result, polynomials_folding_result_str), honk_proof): ((&str, Vec<&str>, Vec<&str>, Vec<&str>, Vec<Vec<&str>>), Vec<&str>) = serde_json::from_str(&content).unwrap();
 
-
-    println!("circuit_size_1: {}, circuit_size_2: {}", circuit_size_1, circuit_size_2);
     let crs = CrsParser::<C>::get_crs(
         CRS_PATH_G1,
         CRS_PATH_G2,
@@ -604,6 +612,18 @@ fn test_protogalaxy_prover() {
         .map(Result::unwrap)
         .collect::<Vec<F>>();
 
+    let gate_challenges_result = gate_challenges_result
+        .into_iter()
+        .map(field_from_hex_string)
+        .map(Result::unwrap)
+        .collect::<Vec<F>>();
+
+    let polynomials_folding_result = polynomials_folding_result_str 
+        .into_iter()
+        .map(|p| p.into_iter().map(field_from_hex_string).map(Result::unwrap).collect::<Vec<F>>())
+        .collect::<Vec<_>>();
+
+    // TODO CESAR: Handle target_sum_result
     let target_sum_result: F = field_from_hex_string(target_sum_result).unwrap();
 
     let polys_1 = polynomials_1_str
@@ -698,12 +718,28 @@ fn test_protogalaxy_prover() {
     accumulator_prover_memory.gate_challenges = vec![F::ZERO; CONST_PG_LOG_N];
 
     assert_eq!(
-        prover.prove(&mut accumulator, accumulator_prover_memory, folded_key).inner(),
+        prover.prove(&mut accumulator, &mut accumulator_prover_memory, folded_key).inner(),
         honk_proof
     );
 
-    // assert_eq!(
-    //     accumulator_prover_memory.alphas,
-    //     alphas_result
-    // );
+    assert_eq!(
+        accumulator_prover_memory.alphas,
+        alphas_result
+    );
+
+    assert_eq!(
+        accumulator_prover_memory.relation_parameters.get_params().into_iter().cloned().collect::<Vec<_>>(),
+        relation_parameters_result
+    );
+
+    assert_eq!(
+        accumulator_prover_memory.gate_challenges,
+        gate_challenges_result
+    );
+
+    itertools::assert_equal(
+        accumulator_prover_memory.polys.into_iter(),
+        polynomials_folding_result.into_iter(),
+    );
+    
 }

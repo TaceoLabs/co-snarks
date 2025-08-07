@@ -17,7 +17,7 @@ pub(crate) fn compute_extended_relation_parameters<
     C: HonkCurve<TranscriptFieldType>,
     L: PlainProverFlavour,
 >(
-    prover_memory: &Vec<DeciderProverMemory<C, L>>,
+    prover_memory: &Vec<&mut DeciderProverMemory<C, L>>,
 ) -> ExtendedRelationParameters<C::ScalarField> {
     let mut result = ExtendedRelationParameters::<C::ScalarField>::default();
     result
@@ -47,7 +47,7 @@ pub(crate) fn compute_and_extend_alphas<
     C: HonkCurve<TranscriptFieldType>,
     L: PlainProverFlavour<Alpha<C::ScalarField> = C::ScalarField>,
 >(
-    prover_memory: &Vec<DeciderProverMemory<C, L>>,
+    prover_memory: &Vec<&mut DeciderProverMemory<C, L>>,
 ) -> Vec<Univariate<C::ScalarField, BATCHED_EXTENDED_LENGTH>> {
     (0..L::NUM_SUBRELATIONS - 1)
         .map(|alpha_idx| {
@@ -208,7 +208,7 @@ pub(crate) fn compute_perturbator<C: HonkCurve<TranscriptFieldType>, L: PlainPro
 
 // TODO CESAR: test
 pub(crate) fn extend_univariates<C: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour>(
-    prover_memory: &Vec<DeciderProverMemory<C, L>>,
+    prover_memory: &Vec<&mut DeciderProverMemory<C, L>>,
     row_idx: usize,
 ) -> AllEntities<Univariate<C::ScalarField, BATCHED_EXTENDED_LENGTH>, L> {
     let mut coefficients: Vec<[C::ScalarField; NUM]> =
@@ -248,7 +248,7 @@ pub(crate) fn extend_univariates<C: HonkCurve<TranscriptFieldType>, L: PlainProv
 }
 
 pub(crate) fn compute_combiner<C: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour>(
-    prover_memory: &Vec<DeciderProverMemory<C, L>>,
+    prover_memory: &Vec<&mut DeciderProverMemory<C, L>>,
     gate_separators: &GateSeparatorPolynomial<C::ScalarField>,
     relation_parameters: &ExtendedRelationParameters<C::ScalarField>,
     alphas: &Vec<Univariate<C::ScalarField, BATCHED_EXTENDED_LENGTH>>,

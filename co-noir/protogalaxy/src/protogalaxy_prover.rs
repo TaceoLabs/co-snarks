@@ -118,7 +118,7 @@ where
 
     fn combiner_quotient_round(
         &mut self,
-        prover_memory: &mut Vec<DeciderProverMemory<C, L>>,
+        prover_memory: &Vec<&mut DeciderProverMemory<C, L>>,
         perturbator: Polynomial<C::ScalarField>,
         deltas: Vec<C::ScalarField>,
     ) -> (
@@ -139,13 +139,6 @@ where
             .map(|(&g, &d)| g + perturbator_challenge * d)
             .collect_vec();
 
-        for (i, challenge) in updated_gate_challenges.iter().enumerate() {
-            println!(
-                "updated_gate_challenge_{i}: {}",
-                challenge
-            );
-        }
-
         let alphas = compute_and_extend_alphas(prover_memory);
 
 
@@ -160,19 +153,9 @@ where
             &relation_parameters,
             &alphas,
         );
-        for (i, eval) in combiner.evaluations.iter().enumerate() {
-            println!(
-                "combiner_evaluation_{i}: {}",
-                eval
-            );
-        }
+
 
         let perturbator_evaluation = perturbator.eval_poly(perturbator_challenge);
-        println!(
-            "perturbator_evaluation: {}",
-            perturbator_evaluation
-        );
-
         let combiner_quotient = compute_combiner_quotient::<C>(&combiner, perturbator_evaluation);
 
         for (i, eval) in combiner_quotient.evaluations.iter().enumerate() {
@@ -191,7 +174,7 @@ where
 
     fn update_target_sum_and_fold(
         mut self,
-        prover_memory: &mut Vec<DeciderProverMemory<C, L>>,
+        prover_memory: &mut Vec<&mut DeciderProverMemory<C, L>>,
         combiner_quotient: Univariate<C::ScalarField, { BATCHED_EXTENDED_LENGTH - NUM }>,
         alphas: Vec<Univariate<C::ScalarField, BATCHED_EXTENDED_LENGTH>>,
         univariate_relation_parameters: ExtendedRelationParameters<C::ScalarField>,
@@ -219,7 +202,7 @@ where
         // TODO CESAR: Is the unshifted stuff correct?
         accumulator_prover_memory
             .polys
-            .iter_unshifted_mut()
+            .iter_mut()
             .for_each(|poly| {
                 poly.iter_mut()
                     .for_each(|coeff| *coeff = coeff.clone() * lagranges[0]);
@@ -227,8 +210,8 @@ where
 
         for (key_poly, acc_poly) in next_prover_memory
             .polys
-            .iter_unshifted()
-            .zip(accumulator_prover_memory.polys.iter_unshifted_mut())
+            .iter()
+            .zip(accumulator_prover_memory.polys.iter_mut())
         {
             acc_poly
                 .iter_mut()
@@ -262,7 +245,7 @@ where
     pub fn prove(
         mut self,
         accumulator: &mut ProvingKey<C, L>,
-        accumulator_prover_memory: DeciderProverMemory<C, L>,
+        accumulator_prover_memory: &mut DeciderProverMemory<C, L>,
         mut next_proving_key: ProvingKey<C, L>,
     ) -> HonkProof<TranscriptFieldType> {
         let max_circuit_size = [accumulator, &next_proving_key]
@@ -278,12 +261,12 @@ where
             .run_oink_prover_on_one_incomplete_key(&mut next_proving_key)
             .unwrap();
 
-        let next_prover_memory = DeciderProverMemory::from_memory_and_polynomials(oink_memory, next_proving_key.polynomials);
+        let mut next_prover_memory = DeciderProverMemory::from_memory_and_polynomials(oink_memory, next_proving_key.polynomials);
 
         // Perturbator round
         let (deltas, perturbator) = self.perturbator_round(accumulator, &accumulator_prover_memory);
 
-        let mut prover_memory = vec![accumulator_prover_memory, next_prover_memory];
+        let mut prover_memory = vec![accumulator_prover_memory, &mut next_prover_memory];
 
         // Combiner quotient round
         let (
@@ -293,7 +276,7 @@ where
             perturbator_evaluation,
             combiner_quotient,
         ) = self.combiner_quotient_round(
-            &mut prover_memory,
+            &prover_memory,
             perturbator,
             deltas,
         );
