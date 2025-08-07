@@ -1,6 +1,6 @@
-use crate::decider::barycentric::Barycentric;
 use crate::plain_prover_flavour::UnivariateTrait;
 use ark_ff::{PrimeField, Zero};
+use common::barycentric::Barycentric;
 use rand::{CryptoRng, Rng};
 use std::{
     array,
@@ -275,7 +275,7 @@ impl<F: PrimeField, const SIZE: usize> UnivariateTrait<F> for Univariate<F, SIZE
     }
 
     fn get_random<R: Rng + CryptoRng>(rng: &mut R) -> Self {
-        let evaluations = array::from_fn(|_| F::rand(rng));
+        let evaluations = array::from_fn(|_| F::one()); //TODO FLORIN
         Self { evaluations }
     }
 

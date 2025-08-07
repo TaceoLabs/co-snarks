@@ -228,7 +228,7 @@ impl GarbledCircuits {
     /// Binary subtraction. Returns the result and whether it underflowed.
     /// I.e., calculates 2^k + x1 - x2
     #[expect(clippy::type_complexity)]
-    fn bin_subtraction<G: FancyBinary>(
+    pub fn bin_subtraction<G: FancyBinary>(
         g: &mut G,
         xs: &[G::Item],
         ys: &[G::Item],
@@ -3869,6 +3869,218 @@ impl GarbledCircuits {
             Err(e) => return Err(G::Error::from(FancyError::from(e))),
         };
         Ok(result)
+    }
+
+    pub(crate) fn compute_wnaf_digits_many<G: FancyBinary + FancyBinaryConstant, F: PrimeField>(
+        g: &mut G,
+        wires_x1: &BinaryBundle<G::Item>,
+        wires_x2: &BinaryBundle<G::Item>,
+        wires_c: &BinaryBundle<G::Item>,
+        total_output_bitlen_per_field: usize,
+    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+        let input_bitlen = F::MODULUS_BIT_SIZE as usize;
+        debug_assert_eq!(wires_x1.size(), wires_x2.size());
+        let length = wires_x1.size();
+        debug_assert_eq!(length % 2, 0);
+        // let num_decomps_per_field = total_output_bitlen_per_field.div_ceil(base_bit);
+
+        // debug_assert_eq!(wires_c.size(), total_output_elements * input_bitlen);
+        // debug_assert_eq!((length / 2) % input_bitlen, 0);
+
+        let mut results = Vec::with_capacity(wires_c.size());
+
+        for (chunk_x1, chunk_x2, chunk_c) in izip!(
+            wires_x1.wires().chunks(input_bitlen),
+            wires_x2.wires().chunks(input_bitlen),
+            wires_c.wires().chunks(
+                32 * input_bitlen
+                    + 32 * input_bitlen
+                    + input_bitlen
+                    + 8 * 8 * input_bitlen
+                    + 8 * input_bitlen
+                    + 8 * input_bitlen
+            ),
+        ) {
+            let value = Self::compute_wnaf_digits::<G, F>(
+                g,
+                chunk_x1,
+                chunk_x2,
+                chunk_c,
+                total_output_bitlen_per_field,
+            )?;
+
+            results.extend(value);
+        }
+        Ok(BinaryBundle::new(results))
+    }
+
+    /// TODO FLORIN DOC
+    fn compute_wnaf_digits<G: FancyBinary + FancyBinaryConstant, F: PrimeField>(
+        g: &mut G,
+        wires_a: &[G::Item],
+        wires_b: &[G::Item],
+        wires_c: &[G::Item],
+        total_output_bitlen: usize,
+    ) -> Result<Vec<G::Item>, G::Error> {
+        const NUM_SCALAR_BITS: usize = 128; // The length of scalars handled by the ECCVVM
+        const NUM_WNAF_DIGIT_BITS: usize = 4; // Scalars are decompose into base 16 in wNAF form
+        const NUM_WNAF_DIGITS_PER_SCALAR: usize = NUM_SCALAR_BITS / NUM_WNAF_DIGIT_BITS; // 32
+        const WNAF_DIGITS_PER_ROW: usize = 4;
+        let num_rows_per_scalar = NUM_WNAF_DIGITS_PER_SCALAR / WNAF_DIGITS_PER_ROW;
+
+        let input_bitlen = F::MODULUS_BIT_SIZE as usize;
+        let mut rands = wires_c.chunks(input_bitlen);
+
+        // TODO FLORIN: add checks
+        // let num_decomps_per_field = total_output_bitlen.div_ceil(decompose_bitlen);
+        // debug_assert_eq!(wires_a.len(), wires_b.len());
+        // let input_bitlen = wires_a.len();
+        // debug_assert_eq!(input_bitlen, F::MODULUS_BIT_SIZE as usize);
+        // debug_assert!(input_bitlen >= total_output_bitlen);
+        // debug_assert!(decompose_bitlen <= total_output_bitlen);
+        // debug_assert_eq!(wires_c.len(), input_bitlen * num_decomps_per_field);
+
+        let mut input_bits =
+            Self::adder_mod_p_with_output_size::<_, F>(g, wires_a, wires_b, total_output_bitlen)?;
+        let input_bitlen = input_bits.len();
+        let mut previous_slice = vec![g.const_zero()?];
+        previous_slice.resize(5, g.const_zero()?);
+        let borrow_constant = [false, false, false, false, true]; // 16 in binary
+        let constant_fifteen = Self::constant_bundle_from_usize(g, 15, 5)?;
+
+        let mut results = Vec::with_capacity(wires_c.len());
+
+        let is_even = g.negate(&input_bits[0])?; //Gives us whether the input is odd or even
+
+        results.extend(Self::compose_field_element::<_, F>(
+            g,
+            &[is_even],
+            rands.next().unwrap(),
+        )?);
+        let mut outputs = Vec::with_capacity(NUM_WNAF_DIGITS_PER_SCALAR - 1);
+        let mut underflow_bits = Vec::with_capacity(NUM_WNAF_DIGITS_PER_SCALAR - 1);
+
+        for i in 0..NUM_WNAF_DIGITS_PER_SCALAR {
+            let raw_slice = &input_bits[..4];
+            let is_even = g.negate(&raw_slice[0])?; //(&raw_slice & const_one) == BigUint::zero();
+            let mut is_even = vec![is_even];
+            is_even.resize(raw_slice.len(), g.const_zero()?);
+
+            let mut wnaf_slice = raw_slice.to_owned();
+            let mut underflow_bit = g.const_zero()?;
+
+            if i == 0 {
+                wnaf_slice = Self::bin_addition_no_carry(g, &wnaf_slice, &is_even)?;
+            } else {
+                wnaf_slice = Self::bin_addition_no_carry(g, &wnaf_slice, &is_even)?;
+                let mut subtrahend = Self::bin_mul_with_public(g, &is_even, &borrow_constant)?;
+                subtrahend.resize(5, g.const_zero()?);
+                (previous_slice, underflow_bit) =
+                    Self::bin_subtraction(g, &previous_slice, &subtrahend)?;
+            }
+
+            if i > 0 {
+                outputs.push(previous_slice);
+                underflow_bits.push(underflow_bit);
+            }
+            previous_slice = wnaf_slice;
+            previous_slice.resize(5, g.const_zero()?);
+
+            input_bits = input_bits[4..].to_vec();
+            input_bits.resize(input_bitlen, g.const_zero()?);
+        }
+        outputs.push(previous_slice);
+        outputs.reverse();
+        underflow_bits.push(g.const_one()?);
+        underflow_bits.reverse();
+
+        for i in 0..num_rows_per_scalar {
+            let slice0 = &outputs[i * WNAF_DIGITS_PER_ROW];
+            let slice1 = &outputs[i * WNAF_DIGITS_PER_ROW + 1];
+            let slice2 = &outputs[i * WNAF_DIGITS_PER_ROW + 2];
+            let slice3 = &outputs[i * WNAF_DIGITS_PER_ROW + 3];
+            let underflow0 = &underflow_bits[i * WNAF_DIGITS_PER_ROW];
+            let underflow1 = &underflow_bits[i * WNAF_DIGITS_PER_ROW + 1];
+            let underflow2 = &underflow_bits[i * WNAF_DIGITS_PER_ROW + 2];
+            let underflow3 = &underflow_bits[i * WNAF_DIGITS_PER_ROW + 3];
+
+            let mut slice0base2 = Self::bin_addition_no_carry(g, slice0, &constant_fifteen)?; // The results of this later get (x + 15) / 2. Since these are always even, we can just add 15 and shift 
+            let mut slice1base2 = Self::bin_addition_no_carry(g, slice1, &constant_fifteen)?; // The results of this later get (x + 15) / 2. Since these are always even, we can just add 15 and shift 
+            let mut slice2base2 = Self::bin_addition_no_carry(g, slice2, &constant_fifteen)?; // The results of this later get (x + 15) / 2. Since these are always even, we can just add 15 and shift 
+            let mut slice3base2 = Self::bin_addition_no_carry(g, slice3, &constant_fifteen)?; // The results of this later get (x + 15) / 2. Since these are always even, we can just add 15 and shift 
+            for (slice, overflow) in [
+                (&mut slice0base2, underflow0),
+                (&mut slice1base2, underflow1),
+                (&mut slice2base2, underflow2),
+                (&mut slice3base2, underflow3),
+            ] {
+                slice.remove(0);
+                slice.push(g.const_zero()?);
+                results.extend(Self::compose_field_element::<_, F>(
+                    g,
+                    slice,
+                    rands.next().unwrap(),
+                )?);
+                results.extend(Self::compose_field_element::<_, F>(
+                    g,
+                    std::slice::from_ref(overflow),
+                    rands.next().unwrap(),
+                )?);
+            }
+            let mut row_s1 = slice0base2[2..].to_vec();
+            row_s1.extend([g.const_zero()?, g.const_zero()?]);
+            let row_s2 = slice0base2[0..2].to_vec();
+            let mut row_s3 = slice1base2[2..].to_vec();
+            row_s3.extend([g.const_zero()?, g.const_zero()?]);
+            let row_s4 = slice1base2[0..2].to_vec();
+            let mut row_s5 = slice2base2[2..].to_vec();
+            row_s5.extend([g.const_zero()?, g.const_zero()?]);
+            let row_s6 = slice2base2[0..2].to_vec();
+            let mut row_s7 = slice3base2[2..].to_vec();
+            row_s7.extend([g.const_zero()?, g.const_zero()?]);
+            let row_s8 = slice3base2[0..2].to_vec();
+            for row in [
+                row_s1, row_s2, row_s3, row_s4, row_s5, row_s6, row_s7, row_s8,
+            ] {
+                results.extend(Self::compose_field_element::<_, F>(
+                    g,
+                    &row,
+                    rands.next().unwrap(),
+                )?);
+            }
+
+            let mut slice2_shift4 = [vec![g.const_zero()?; 4], slice2.to_vec()].concat();
+            slice2_shift4.resize(32, slice2.last().cloned().unwrap_or(g.const_one()?));
+            let mut slice1_shift8 = [vec![g.const_zero()?; 8], slice1.to_vec()].concat();
+            slice1_shift8.resize(32, slice1.last().cloned().unwrap_or(g.const_one()?));
+            let mut slice0_shift12 = [vec![g.const_zero()?; 12], slice0.to_vec()].concat();
+            slice0_shift12.resize(32, slice0.last().cloned().unwrap_or(g.const_one()?));
+            let mut slice3_no_shift = slice3.to_vec();
+            slice3_no_shift.resize(32, slice3.last().cloned().unwrap_or(g.const_one()?));
+
+            // TODO FLORIN: optimize this
+            let row_chunk = Self::bin_addition_no_carry(g, &slice3_no_shift, &slice2_shift4)?;
+            let row_chunk = Self::bin_addition_no_carry(g, &row_chunk, &slice1_shift8)?;
+            let row_chunk = Self::bin_addition_no_carry(g, &row_chunk, &slice0_shift12)?;
+            let is_negative_value = row_chunk[31].clone();
+            let mut const_is_negative = vec![is_negative_value.clone()];
+            let is_negative: [_; 32] = core::array::from_fn(|_| is_negative_value.clone());
+            const_is_negative.resize(32, g.const_zero()?);
+            let row_chunk = Self::xor_many_as_wires(g, &row_chunk, &is_negative)?;
+            let row_chunk = Self::bin_addition_no_carry(g, &row_chunk, &const_is_negative)?;
+            results.extend(Self::compose_field_element::<_, F>(
+                g,
+                &row_chunk,
+                rands.next().unwrap(),
+            )?);
+            results.extend(Self::compose_field_element::<_, F>(
+                g,
+                &[is_negative_value],
+                rands.next().unwrap(),
+            )?);
+        }
+
+        Ok(results)
     }
 }
 

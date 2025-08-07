@@ -5,7 +5,6 @@ use ark_ff::Field;
 use ark_ff::One;
 use ark_ff::Zero;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
-use co_builder::HonkProofError;
 use co_builder::HonkProofResult;
 use co_builder::TranscriptFieldType;
 use co_builder::prelude::HonkCurve;
@@ -16,7 +15,7 @@ use common::transcript::{Transcript, TranscriptHasher};
 use mpc_core::MpcState as _;
 use mpc_net::Network;
 
-pub(crate) struct SharedZKSumcheckData<T: NoirUltraHonkProver<P>, P: CurveGroup> {
+pub struct SharedZKSumcheckData<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) constant_term: T::ArithmeticShare,
     pub(crate) interpolation_domain: Vec<P::ScalarField>,
     pub(crate) libra_concatenated_lagrange_form: SharedPolynomial<T, P>,
@@ -31,14 +30,14 @@ pub(crate) struct SharedZKSumcheckData<T: NoirUltraHonkProver<P>, P: CurveGroup>
 }
 
 impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> SharedZKSumcheckData<T, P> {
-    pub(crate) fn new<H: TranscriptHasher<TranscriptFieldType>, N: Network>(
+    pub fn new<H: TranscriptHasher<TranscriptFieldType>, N: Network>(
         multivariate_d: usize,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         commitment_key: &[P::Affine],
         net: &N,
         state: &mut T::State,
     ) -> HonkProofResult<Self> {
-        let constant_term = T::rand(net, state)?;
+        let constant_term = T::promote_to_trivial_share(state.id(), P::ScalarField::one()); // T::rand(net, state)?; TODO FLORIN
         let libra_univariates = Self::generate_libra_univariates(
             multivariate_d,
             P::LIBRA_UNIVARIATES_LENGTH,
@@ -209,14 +208,20 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> SharedZKSumch
 
         let masking_scalars = SharedUnivariate::<T, P, 2>::get_random(net, state)?;
 
-        let domain = GeneralEvaluationDomain::<P::ScalarField>::new(P::SUBGROUP_SIZE)
-            .ok_or(HonkProofError::LargeSubgroup)?;
-
-        let coeffs_lagrange_subgroup_ifft =
-            T::ifft(&self.libra_concatenated_lagrange_form.coefficients, &domain);
-        let libra_concatenated_monomial_form_unmasked = SharedPolynomial::<T, P> {
-            coefficients: coeffs_lagrange_subgroup_ifft,
-        };
+        let libra_concatenated_monomial_form_unmasked: SharedPolynomial<T, P> =
+            match GeneralEvaluationDomain::<P::ScalarField>::new(P::SUBGROUP_SIZE) {
+                Some(domain) => SharedPolynomial {
+                    coefficients: T::ifft(
+                        &self.libra_concatenated_lagrange_form.coefficients,
+                        &domain,
+                    ),
+                },
+                None => SharedPolynomial::interpolate_from_evals(
+                    &self.interpolation_domain,
+                    &self.libra_concatenated_lagrange_form.coefficients,
+                    P::SUBGROUP_SIZE,
+                ),
+            };
 
         for idx in 0..P::SUBGROUP_SIZE {
             self.libra_concatenated_monomial_form.coefficients[idx] =

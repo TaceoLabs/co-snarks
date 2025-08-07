@@ -28,7 +28,7 @@ use ark_ff::PrimeField;
 use co_builder::flavours::eccvm_flavour::ECCVMFlavour;
 use co_builder::prover_flavour::ProverFlavour;
 use common::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct AllRelationAccECCVM<F: PrimeField> {
     pub(crate) r_ecc_transcript: EccTranscriptRelationAcc<F>,
     pub(crate) r_ecc_point_table: EccPointTableRelationAcc<F>,

@@ -1471,3 +1471,22 @@ pub fn accumulate_from_sparse_bytes<F: PrimeField, N: Network>(
         (input_bitsize, output_bitsize, base)
     )
 }
+
+/// TODO FLORIN DOC
+pub fn compute_wnaf_digits_and_compute_rows_many<F: PrimeField, N: Network>(
+    input: &[Rep3PrimeFieldShare<F>],
+    net: &N,
+    state: &mut Rep3State,
+    input_bitsize: usize,
+) -> eyre::Result<Vec<Rep3PrimeFieldShare<F>>> {
+    let total_output_elements = input.len() * (32 + 32 + 1 + 8 * 8 + 8 + 8);
+
+    decompose_circuit_compose_blueprint!(
+        &input,
+        net,
+        state,
+        total_output_elements,
+        GarbledCircuits::compute_wnaf_digits_many::<_, F>,
+        (input_bitsize)
+    )
+}

@@ -321,7 +321,7 @@ pub fn is_zero<F: PrimeField, N: Network>(
 }
 
 /// Computes a binary circuit to check whether each of the replicated binary-shared inputs in the vector x is zero or not. The output is a vector of binary sharings of one bit.
-pub(crate) fn is_zero_many<F: PrimeField, N: Network>(
+pub fn is_zero_many<F: PrimeField, N: Network>(
     mut x: Vec<Rep3BigUintShare<F>>,
     net: &N,
     state: &mut Rep3State,

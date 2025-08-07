@@ -57,7 +57,7 @@ use common::mpc::NoirUltraHonkProver;
 use mpc_net::Network;
 use std::array;
 use ultrahonk::prelude::Univariate;
-
+#[derive(Debug)]
 pub struct AllRelationAccMega<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) r_arith: UltraArithmeticRelationAcc<T, P>,
     pub(crate) r_perm: UltraPermutationRelationAccType<T, P>,

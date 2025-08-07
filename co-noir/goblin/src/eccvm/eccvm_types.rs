@@ -273,6 +273,7 @@ impl<C: HonkCurve<TranscriptFieldType>> VMState<C> {
             updated_state.accumulator =
                 (r + updated_state.msm_accumulator - offset_generator_scaled::<C>()).into();
         }
+
         updated_state.is_accumulator_empty = updated_state.accumulator.is_zero();
 
         let msm_output = updated_state.msm_accumulator - offset_generator_scaled::<C>();
@@ -450,7 +451,6 @@ fn compute_lambda_numerator_and_denominator<C: HonkCurve<TranscriptFieldType>>(
 
     let vm_infinity = vm_point.is_zero();
     let accumulator_infinity = accumulator.is_zero();
-
     let vm_x = if vm_infinity {
         C::BaseField::zero()
     } else {
@@ -598,7 +598,6 @@ fn compute_rows<C: HonkCurve<TranscriptFieldType>>(
         } else {
             0
         };
-
         if is_mul {
             VMState::<C>::process_mul(entry, &mut updated_state, &state);
         }
@@ -613,8 +612,7 @@ fn compute_rows<C: HonkCurve<TranscriptFieldType>>(
         if is_add {
             VMState::<C>::process_add(entry, &mut updated_state, &state);
         }
-
-        //     // populate the first group of TranscriptRow entries
+        // populate the first group of TranscriptRow entries
         VMState::<C>::populate_transcript_row(
             &mut row,
             entry,

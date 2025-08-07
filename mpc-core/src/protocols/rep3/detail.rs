@@ -440,6 +440,53 @@ pub(crate) fn point_addition<F: PrimeField, N: Network>(
     Ok((x, y, is_zero))
 }
 
+/// Batched version of point_addition.
+/// For curves of the form y^2 = x^3 + ax + b, computes the addition of two vecs of points.
+/// Note: This implementation assumes that at least one point is randomly chosen (as is e.g., the case for point_share_to_fieldshares). Thus, the special case that the x-coordinate of the two points are equal is only considered to be able to happen if the sum is infinity (as is the case when translating a share of the infinity point to fieldshares). Thus, we count the fact of the x coordinates being equal as infinity.
+///
+/// The output will be (x, y, is_infinity). Thereby no statement is made on x, y if is_infinity is true.
+#[expect(clippy::type_complexity)]
+pub(crate) fn point_addition_many<F: PrimeField, N: Network>(
+    a_x: &[Rep3PrimeFieldShare<F>],
+    a_y: &[Rep3PrimeFieldShare<F>],
+    b_x: &[Rep3PrimeFieldShare<F>],
+    b_y: &[Rep3PrimeFieldShare<F>],
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<(
+    Vec<Rep3PrimeFieldShare<F>>,
+    Vec<Rep3PrimeFieldShare<F>>,
+    Vec<Rep3PrimeFieldShare<F>>,
+)> {
+    let mut diff_xs = izip!(b_x, a_x).map(|(b_x, a_x)| b_x - a_x).collect_vec(); //b_x - a_x;
+    let diff_ys = izip!(b_y, a_y).map(|(b_y, a_y)| b_y - a_y).collect_vec(); // b_y - a_y;
+
+    let zero_share = vec![Rep3PrimeFieldShare::default(); diff_xs.len()];
+    let is_zero = arithmetic::eq_many(&zero_share, &diff_xs, net, state)?;
+    let tmp = diff_xs
+        .iter()
+        .map(|diff_x| arithmetic::sub_public_by_shared(F::one(), *diff_x, state.id))
+        .collect_vec();
+    let mul = arithmetic::mul_vec(&tmp, &is_zero, net, state)?;
+    for (diff_x, m) in izip!(diff_xs.iter_mut(), mul.into_iter()) {
+        *diff_x += m;
+    }
+
+    let inv = arithmetic::inv_vec(&diff_xs, net, state)?;
+
+    let lambda = arithmetic::mul_vec(&diff_ys, &inv, net, state)?;
+    let lambda_square = arithmetic::mul_vec(&lambda, &lambda, net, state)?;
+
+    let x = izip!(lambda_square.iter(), a_x, b_x)
+        .map(|(lambda_square, a_x, b_x)| *lambda_square - *a_x - *b_x)
+        .collect_vec();
+    let ax_minus_x = izip!(a_x, x.iter()).map(|(a_x, x)| *a_x - *x).collect_vec();
+    let y = arithmetic::mul_vec(&lambda, &ax_minus_x, net, state)?;
+    let y = izip!(y.iter(), a_y).map(|(y, a_y)| *y - *a_y).collect_vec();
+
+    Ok((x, y, is_zero))
+}
+
 // This function is necessary, since CurveGroup does not expose any way to create a point from x, y directly.
 pub(crate) fn point_from_xy<C: CurveGroup>(
     x: C::BaseField,

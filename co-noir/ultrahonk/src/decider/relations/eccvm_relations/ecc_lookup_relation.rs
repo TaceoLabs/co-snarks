@@ -264,12 +264,12 @@ impl<F: PrimeField> Relation<F, ECCVMFlavour> for EccLookupRelation {
         // Each predicate is degree-1
         // Degree of relation at this point = NUM_TOTAL_TERMS + 1
         let mut tmp = Univariate::default();
-        for (i, denuminator) in denominator_accumulator
+        for (i, denominator) in denominator_accumulator
             .iter()
             .enumerate()
             .take(Self::READ_TERMS)
         {
-            tmp += Self::compute_read_term_predicate::<F, SIZE>(input, i).to_owned() * denuminator;
+            tmp += Self::compute_read_term_predicate::<F, SIZE>(input, i).to_owned() * denominator;
         }
         for i in 0..univariate_accumulator.r1.evaluations.len() {
             univariate_accumulator.r1.evaluations[i] += tmp.evaluations[i];

@@ -12,7 +12,7 @@ pub mod rep3;
 pub mod shamir;
 
 /// This trait represents the operations used during UltraHonk proof generation
-pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
+pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized + std::fmt::Debug {
     /// The arithmetic share type
     type ArithmeticShare: CanonicalSerialize
         + CanonicalDeserialize
@@ -24,8 +24,9 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
         + PartialEq
         + std::fmt::Debug
         + 'static;
+
     /// The G1 point share type
-    type PointShare: std::fmt::Debug + Send + 'static;
+    type PointShare: std::fmt::Debug + Send + 'static + Clone + Default + Copy;
     /// Internal state of used MPC protocol
     type State: MpcState + Send;
 
@@ -196,6 +197,18 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
         }
     }
 
+    /// Scales all elements in-place in \[a\] by the provided scale, by multiplying every share with the
+    /// public scalar.
+    fn scale_many(
+        shared: &[Self::ArithmeticShare],
+        scale: P::ScalarField,
+    ) -> Vec<Self::ArithmeticShare> {
+        shared
+            .iter()
+            .map(|share| Self::mul_with_public(scale, *share))
+            .collect()
+    }
+
     /// Adds a public scalar to all elements in \[a\].
     fn add_scalar(
         shared: &[Self::ArithmeticShare],
@@ -267,6 +280,11 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
         public_values: &[P::ScalarField],
     ) -> Vec<Self::ArithmeticShare>;
 
+    fn promote_to_trivial_point_share(
+        id: <Self::State as MpcState>::PartyID,
+        public_value: P,
+    ) -> Self::PointShare;
+
     /// Reconstructs a shared point: A = Open(\[A\]).
     fn open_point<N: Network>(
         a: Self::PointShare,
@@ -295,6 +313,14 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
         net: &N,
         state: &mut Self::State,
     ) -> eyre::Result<(P, P::ScalarField)>;
+
+    /// Reconstructs slices of shared points and field elements: (A,B) = Open(\[(A,B)\])
+    fn open_point_and_field_many<N: Network>(
+        a: &[Self::PointShare],
+        b: &[Self::ArithmeticShare],
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<(Vec<P>, Vec<P::ScalarField>)>;
 
     /// This function performs a multiplication directly followed by an opening. This safes one round of communication in some MPC protocols compared to calling `mul` and `open` separately.
     fn mul_open_many<N: Network>(
@@ -327,11 +353,24 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
         state: &mut Self::State,
     ) -> eyre::Result<()>;
 
+    /// Inverts an ACVM-type and returns a share of zero if the input is zero: \[c\] = \[secret\]^(-1) if secret != 0 else \[c\] = 0.
+    fn inverse_or_zero_many_in_place<N: Network>(
+        net: &N,
+        state: &mut Self::State,
+        a: &mut [Self::ArithmeticShare],
+    ) -> eyre::Result<()>;
+
     /// Perform msm between `points` and `scalars`
     fn msm_public_points(
         points: &[P::Affine],
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShare;
+
+    /// Adds two shared points: \[c\] = \[a\] + \[b\].
+    fn point_add(a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare;
+
+    /// Subs two shared points: \[c\] = \[a\] - \[b\].
+    fn point_sub(a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare;
 
     /// Evaluates shared polynomials at one point
     fn eval_poly(coeffs: &[Self::ArithmeticShare], point: P::ScalarField) -> Self::ArithmeticShare;
@@ -348,9 +387,13 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
         domain: &D,
     ) -> Vec<Self::ArithmeticShare>;
 
+    /// Checks which of the shared values are zero. Returns a share of 1 if the value is zero, and a share of 0 otherwise.
     fn is_zero_many<N: Network>(
         a: &[Self::ArithmeticShare],
         net: &N,
         state: &mut Self::State,
     ) -> eyre::Result<Vec<Self::ArithmeticShare>>;
+
+    /// Multiplies a shared point by a public scalar: \[C\] = a * \[B\].
+    fn scalar_mul_public_point(a: &P, b: Self::ArithmeticShare) -> Self::PointShare;
 }

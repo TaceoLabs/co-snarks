@@ -321,7 +321,7 @@ where
             if T::is_shared(val) {
                 let opened_val = opened.pop().expect("opened value should be present");
                 let opened_val = T::AcvmType::from(opened_val);
-                witness_map.insert(*index, opened_val.clone());
+                witness_map.insert(*index, opened_val);
                 result.push(opened_val);
             } else {
                 result.push(val.to_owned());

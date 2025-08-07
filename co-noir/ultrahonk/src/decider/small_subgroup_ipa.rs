@@ -64,7 +64,6 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
             grand_sum_lagrange_coeffs: vec![P::ScalarField::zero(); Self::SUBGROUP_SIZE],
             grand_sum_identity_polynomial: Polynomial::new_zero(Self::GRAND_SUM_IDENTITY_LENGTH),
             grand_sum_identity_quotient: Polynomial::new_zero(Self::QUOTIENT_LENGTH),
-            // TACEO TODO the ZKSumcheckData also creates the same domain
             claimed_inner_product,
             prefix_label,
         };
