@@ -16,7 +16,7 @@ use co_acvm::PlainAcvmSolver;
 use serde::{Deserialize, Serialize as SerdeSerialize};
 use std::sync::Arc;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct VerifyingKey<P: Pairing, L: ProverFlavour> {
     pub crs: P::G2Affine,
     pub circuit_size: u32,

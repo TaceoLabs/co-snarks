@@ -1,18 +1,18 @@
+use std::fs::File;
+
 use ark_bn254::Bn254;
 use ark_ff::PrimeField;
 use co_acvm::{PlainAcvmSolver, mpc::NoirWitnessExtensionProtocol};
 use co_builder::TranscriptFieldType;
 use co_builder::flavours::ultra_flavour::UltraFlavour;
+use co_builder::prelude::constraint_system_from_reader;
 use co_builder::prelude::{CrsParser, HonkRecursion};
 use co_ultrahonk::prelude::{CoUltraHonk, PlainCoBuilder, ProvingKey};
 use common::HonkProof;
 use common::mpc::plain::PlainUltraHonkDriver;
 use common::transcript::{Poseidon2Sponge, TranscriptHasher};
 use sha3::Keccak256;
-use ultrahonk::{
-    Utils,
-    prelude::{UltraHonk, ZeroKnowledge},
-};
+use ultrahonk::prelude::{UltraHonk, ZeroKnowledge};
 
 fn promote_public_witness_vector<F: PrimeField, T: NoirWitnessExtensionProtocol<F>>(
     witness: Vec<F>,
@@ -29,8 +29,9 @@ fn plaindriver_test<H: TranscriptHasher<TranscriptFieldType>>(
     const CRS_PATH_G1: &str = "../co-builder/src/crs/bn254_g1.dat";
     const CRS_PATH_G2: &str = "../co-builder/src/crs/bn254_g2.dat";
 
-    let constraint_system = Utils::get_constraint_system_from_file(circuit_file, true).unwrap();
-    let witness = Utils::get_witness_from_file(witness_file).unwrap();
+    let constraint_system =
+        constraint_system_from_reader(File::open(circuit_file).unwrap(), true).unwrap();
+    let witness = noir_types::witness_from_reader(File::open(witness_file).unwrap()).unwrap();
 
     let witness = promote_public_witness_vector::<_, PlainAcvmSolver<ark_bn254::Fr>>(witness);
     let mut driver = PlainAcvmSolver::new();

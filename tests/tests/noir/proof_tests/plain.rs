@@ -1,3 +1,5 @@
+use std::fs::File;
+
 use crate::proof_tests::{CRS_PATH_G1, CRS_PATH_G2};
 use acir::native_types::{WitnessMap, WitnessStack};
 use ark_bn254::Bn254;
@@ -6,7 +8,7 @@ use co_acvm::{solver::PlainCoSolver, PlainAcvmSolver};
 use co_builder::{flavours::ultra_flavour::UltraFlavour, TranscriptFieldType};
 use co_noir::{Bn254G1, HonkRecursion};
 use co_ultrahonk::prelude::{
-    CoUltraHonk, CrsParser, PlainCoBuilder, ProvingKey, UltraHonk, Utils, ZeroKnowledge,
+    CoUltraHonk, CrsParser, PlainCoBuilder, ProvingKey, UltraHonk, ZeroKnowledge,
 };
 use common::{
     mpc::plain::PlainUltraHonkDriver,
@@ -43,9 +45,11 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str, has_zk: Zero
     let circuit_file = format!("../test_vectors/noir/{name}/kat/{name}.json");
     let witness_file = format!("../test_vectors/noir/{name}/kat/{name}.gz");
 
-    let constraint_system = Utils::get_constraint_system_from_file(&circuit_file, true)
-        .expect("failed to parse program artifact");
-    let witness = Utils::get_witness_from_file(&witness_file).expect("failed to parse witness");
+    let constraint_system =
+        co_noir::constraint_system_from_reader(File::open(&circuit_file).unwrap(), true)
+            .expect("failed to parse constraint system");
+    let witness = co_noir::witness_from_reader(File::open(&witness_file).unwrap())
+        .expect("failed to parse witness");
 
     let mut driver = PlainAcvmSolver::new();
     let builder = PlainCoBuilder::<Bn254G1>::create_circuit(
@@ -93,9 +97,10 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     let circuit_file = format!("../test_vectors/noir/{name}/kat/{name}.json");
     let prover_toml = format!("../test_vectors/noir/{name}/Prover.toml");
 
-    let program_artifact = Utils::get_program_artifact_from_file(&circuit_file)
-        .expect("failed to parse program artifact");
-    let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
+    let program_artifact =
+        co_noir::program_artifact_from_reader(File::open(&circuit_file).unwrap())
+            .expect("failed to parse program artifact");
+    let constraint_system = co_noir::get_constraint_system_from_artifact(&program_artifact, true);
 
     let solver = PlainCoSolver::init_plain_driver(program_artifact, prover_toml).unwrap();
     let witness = solver.solve().unwrap();

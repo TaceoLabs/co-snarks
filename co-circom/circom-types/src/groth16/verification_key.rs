@@ -13,7 +13,7 @@ use serde::{
 use crate::traits::{CheckElement, CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge};
 
 /// Represents a verification key in JSON format that was created by circom. Supports de/serialization using [`serde`].
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct JsonVerificationKey<P: Pairing + CircomArkworksPairingBridge>
 where
     P::BaseField: CircomArkworksPrimeFieldBridge,

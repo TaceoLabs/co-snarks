@@ -1,64 +1,32 @@
 use crate::proof_tests::{CRS_PATH_G1, CRS_PATH_G2};
-use acir::native_types::{WitnessMap, WitnessStack};
 use ark_bn254::Bn254;
-use ark_ff::PrimeField;
-use co_acvm::{solver::Rep3CoSolver, Rep3AcvmType};
+use co_acvm::solver::Rep3CoSolver;
 use co_builder::{flavours::ultra_flavour::UltraFlavour, TranscriptFieldType};
 use co_noir::Bn254G1;
-use co_ultrahonk::prelude::{CrsParser, Rep3CoUltraHonk, UltraHonk, Utils, ZeroKnowledge};
+use co_noir_types::Rep3Type;
+use co_ultrahonk::prelude::{CrsParser, Rep3CoUltraHonk, UltraHonk, ZeroKnowledge};
 use common::transcript::{Poseidon2Sponge, TranscriptHasher};
 use mpc_net::local::LocalNetwork;
 use sha3::Keccak256;
-use std::sync::Arc;
-
-fn witness_map_to_witness_vector<F: PrimeField>(
-    witness_map: WitnessMap<Rep3AcvmType<F>>,
-) -> Vec<Rep3AcvmType<F>> {
-    let mut wv = Vec::new();
-    let mut index = 0;
-    for (w, f) in witness_map.into_iter() {
-        // ACIR uses a sparse format for WitnessMap where unused witness indices may be left unassigned.
-        // To ensure that witnesses sit at the correct indices in the `WitnessVector`, we fill any indices
-        // which do not exist within the `WitnessMap` with the dummy value of zero.
-        while index < w.0 {
-            wv.push(Rep3AcvmType::from(F::zero()));
-            index += 1;
-        }
-
-        wv.push(f);
-        index += 1;
-    }
-    wv
-}
-
-fn convert_witness_rep3<F: PrimeField>(
-    mut witness_stack: WitnessStack<Rep3AcvmType<F>>,
-) -> Vec<Rep3AcvmType<F>> {
-    let witness_map = witness_stack
-        .pop()
-        .expect("Witness should be present")
-        .witness;
-    witness_map_to_witness_vector(witness_map)
-}
+use std::{fs::File, sync::Arc};
 
 fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str, has_zk: ZeroKnowledge) {
     let circuit_file = format!("../test_vectors/noir/{name}/kat/{name}.json");
     let witness_file = format!("../test_vectors/noir/{name}/kat/{name}.gz");
 
-    let program_artifact = Utils::get_program_artifact_from_file(&circuit_file)
-        .expect("failed to parse program artifact");
-    let witness = Utils::get_witness_from_file(&witness_file).expect("failed to parse witness");
+    let program_artifact =
+        co_noir::program_artifact_from_reader(File::open(&circuit_file).unwrap())
+            .expect("failed to parse program artifact");
+    let witness = co_noir::witness_from_reader(File::open(&witness_file).unwrap())
+        .expect("failed to parse witness");
 
     // Will be trivially shared anyways
-    let witness = witness
-        .into_iter()
-        .map(Rep3AcvmType::from)
-        .collect::<Vec<_>>();
+    let witness = witness.into_iter().map(Rep3Type::from).collect::<Vec<_>>();
 
     let nets0 = LocalNetwork::new_3_parties();
     let nets1 = LocalNetwork::new_3_parties();
     let mut threads = Vec::with_capacity(3);
-    let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
+    let constraint_system = co_noir::get_constraint_system_from_artifact(&program_artifact, true);
     let crs_size = co_noir::compute_circuit_size::<Bn254G1>(&constraint_system, false).unwrap();
     let prover_crs = Arc::new(
         CrsParser::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>::get_crs_g1(
@@ -71,7 +39,8 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str, has_zk: Zero
     for (net0, net1) in nets0.into_iter().zip(nets1) {
         let witness = witness.clone();
         let prover_crs = prover_crs.clone();
-        let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
+        let constraint_system =
+            co_noir::get_constraint_system_from_artifact(&program_artifact, true);
         threads.push(std::thread::spawn(move || {
             // generate proving key and vk
             let pk = co_noir::generate_proving_key_rep3(
@@ -130,13 +99,14 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     let circuit_file = format!("../test_vectors/noir/{name}/kat/{name}.json");
     let prover_toml = format!("../test_vectors/noir/{name}/Prover.toml");
 
-    let program_artifact = Utils::get_program_artifact_from_file(&circuit_file)
-        .expect("failed to parse program artifact");
+    let program_artifact =
+        co_noir::program_artifact_from_reader(File::open(&circuit_file).unwrap())
+            .expect("failed to parse program artifact");
 
     let nets0 = LocalNetwork::new_3_parties();
     let nets1 = LocalNetwork::new_3_parties();
     let mut threads = Vec::with_capacity(3);
-    let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
+    let constraint_system = co_noir::get_constraint_system_from_artifact(&program_artifact, true);
     let crs_size = co_noir::compute_circuit_size::<Bn254G1>(&constraint_system, false).unwrap();
     let prover_crs = Arc::new(
         CrsParser::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>::get_crs_g1(
@@ -148,13 +118,14 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     );
     for (net0, net1) in nets0.into_iter().zip(nets1) {
         let prover_crs = prover_crs.clone();
-        let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
+        let constraint_system =
+            co_noir::get_constraint_system_from_artifact(&program_artifact, true);
         let artifact = program_artifact.clone();
         let prover_toml = prover_toml.clone();
         threads.push(std::thread::spawn(move || {
             let solver = Rep3CoSolver::new(&net0, &net1, artifact, prover_toml).unwrap();
             let witness = solver.solve().unwrap();
-            let witness = convert_witness_rep3(witness);
+            let witness = co_noir::witness_stack_to_vec_rep3(witness);
             // generate proving key and vk
             let pk = co_noir::generate_proving_key_rep3(
                 &constraint_system,

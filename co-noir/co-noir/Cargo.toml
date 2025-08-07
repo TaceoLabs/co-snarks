@@ -22,6 +22,8 @@ clap.workspace = true
 co-acvm = { version = "0.6.0", path = "../co-acvm" }
 co-ultrahonk = { version = "0.5.0", path = "../co-ultrahonk" }
 co-builder = { version = "0.4.0", path = "../co-builder" }
+co-noir-types = { version = "0.1.0", path = "../co-noir-types" }
+noir-types = { version = "0.1.0", path = "../noir-types" }
 common = { version = "0.1.0", path = "../common" }
 color-eyre.workspace = true
 figment.workspace = true
