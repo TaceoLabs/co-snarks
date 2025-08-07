@@ -262,8 +262,7 @@ fn bn254_fq_to_fr_rev(res0: &ark_bn254::Fr, res1: &ark_bn254::Fr) -> ark_bn254::
 
 fn convert_grumpkin_fr_to_bn254_frs(val: &ark_grumpkin::Fr) -> (ark_bn254::Fr, ark_bn254::Fr) {
     // Convert grumpkin::fr to 2 bb::fr elements
-    let (res0, res1) = bn254_fq_to_fr(&ark_bn254::Fq::from(*val));
-    (res0, res1)
+    bn254_fq_to_fr(&ark_bn254::Fq::from(*val))
 }
 
 fn convert_to_grumpkin_fr(f: &ark_bn254::Fr) -> ark_grumpkin::Fr {
