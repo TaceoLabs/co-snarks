@@ -1,12 +1,14 @@
 use core::panic;
-use std::{array, ops::RangeBounds, sync::Arc, vec};
+use std::{array, io::Read, ops::RangeBounds, sync::Arc, vec};
 
 use ark_bn254::Bn254;
 use ark_ff::{AdditiveGroup, Field};
 use ark_poly::polynomial;
 use co_builder::{flavours::mega_flavour::{MegaFlavour, MegaPrecomputedEntities, MegaProverWitnessEntities}, polynomials, prelude::{ActiveRegionData, CrsParser, Polynomial, Polynomials, ProverCrs, PublicComponentKey}, prover_flavour::ProverFlavour, TranscriptFieldType};
+use flate2::read::GzDecoder;
 use itertools::concat;
 use mpc_core::{gadgets::{field_from_hex_string, poseidon2::Poseidon2}, protocols::rep3::poly};
+use serde::{de::DeserializeOwned, Deserialize};
 use tracing::instrument::WithSubscriber;
 use ultrahonk::{
     decider::types::{ProverMemory, RelationParameters}, oink::prover::Oink, prelude::{GateSeparatorPolynomial, Poseidon2Sponge, ProvingKey, Transcript, TranscriptHasher, Univariate, ZeroKnowledge}
@@ -39,6 +41,36 @@ type F = TranscriptFieldType;
 type C = Bn254;
 
 
+fn decompress_and_read_test_data<T: DeserializeOwned>(filename: &str) -> T {
+    let gzip_file = format!(
+        "{}/../../test_vectors/noir/protogalaxy_prover/{}.gz",
+        env!("CARGO_MANIFEST_DIR"),
+        filename
+    );
+    let mut d = GzDecoder::new(std::fs::File::open(gzip_file).unwrap());
+    let mut buffer = String::new();
+    d.read_to_string(&mut buffer).unwrap();
+    serde_json::from_str::<T>(&buffer).unwrap()
+}
+
+// Macro to transfor a String or a vec of Strings or a vec of vecs of Strings or a Vec of slices of Strings into the corresponding field type
+
+macro_rules! to_field {
+    ($x:expr) => {
+        field_from_hex_string($x.as_str()).unwrap()
+    };
+    ($x:expr, 1) => {
+        $x.into_iter()
+            .map(|s| to_field!(s))
+            .collect::<Vec<_>>()
+    };
+    ($x:expr, 2) => {
+        $x.into_iter()
+            .map(|s| to_field!(s, 1))
+            .collect::<Vec<_>>()
+    };
+}
+
 
 fn structure_parameters<T: PartialEq>(
     [
@@ -63,29 +95,16 @@ fn structure_parameters<T: PartialEq>(
 }
 #[test]
 fn test_compute_and_extend_alphas() {
-    let test_file = format!(
-        "{}/../../test_vectors/noir/protogalaxy_prover/compute_and_extend_alphas",
-        env!("CARGO_MANIFEST_DIR")
-    );
+    let test_file = "unit/compute_and_extend_alphas";
 
-    let content = std::fs::read_to_string(&test_file).unwrap();
     let (alphas_0, alphas_1, expected_alphas): (
-        Vec<&str>,
-        Vec<&str>,
-        Vec<[&str; BATCHED_EXTENDED_LENGTH]>,
-    ) = serde_json::from_str(&content).unwrap();
+        Vec<String>,
+        Vec<String>,
+        Vec<[String; BATCHED_EXTENDED_LENGTH]>,
+    ) = decompress_and_read_test_data(test_file);
 
-    let alphas_0 = alphas_0
-        .into_iter()
-        .map(field_from_hex_string)
-        .map(Result::unwrap)
-        .collect::<Vec<F>>();
-
-    let alphas_1 = alphas_1
-        .into_iter()
-        .map(field_from_hex_string)
-        .map(Result::unwrap)
-        .collect::<Vec<F>>();
+    let alphas_0 = to_field!(alphas_0, 1);
+    let alphas_1 = to_field!(alphas_1, 1);
 
     let mut memory_0 = ProverMemory::<C, MegaFlavour> {
         alphas: alphas_0.clone(),
@@ -110,11 +129,9 @@ fn test_compute_and_extend_alphas() {
 
     assert_eq!(
         compute_and_extend_alphas(&prover_memory),
-        expected_alphas
-            .into_iter()
-            .map(|alphas| alphas.map(field_from_hex_string).map(Result::unwrap))
+        to_field!(expected_alphas, 2).into_iter()
             .map(|alphas| Univariate {
-                evaluations: alphas
+                evaluations: alphas.try_into().unwrap()
             })
             .collect::<Vec<_>>()
     );
@@ -122,37 +139,26 @@ fn test_compute_and_extend_alphas() {
 
 #[test]
 fn test_compute_extended_relation_parameters() {
-    let test_file = format!(
-        "{}/../../test_vectors/noir/protogalaxy_prover/compute_extended_relation_parameters",
-        env!("CARGO_MANIFEST_DIR")
-    );
+    let test_file = "unit/compute_extended_relation_parameters";
 
-    let content = std::fs::read_to_string(&test_file).unwrap();
     let (parameters_1_values, parameters_2_values, univariates): (
-        [&str; 7],
-        [&str; 7],
-        Vec<[&str; EXTENDED_LENGTH]>,
-    ) = serde_json::from_str(&content).unwrap();
+        [String; 7],
+        [String; 7],
+        Vec<[String; EXTENDED_LENGTH]>,
+    ) = decompress_and_read_test_data(&test_file);
 
     let parameters_1 = structure_parameters(
-        parameters_1_values
-            .map(field_from_hex_string)
-            .map(Result::unwrap),
+        to_field!(parameters_1_values, 1).try_into().unwrap()
     );
     let parameters_2 = structure_parameters(
-        parameters_2_values
-            .map(field_from_hex_string)
-            .map(Result::unwrap),
+        to_field!(parameters_2_values, 1).try_into().unwrap()
     );
 
     let expected_relation_parameters = structure_parameters(
-        univariates
+        to_field!(univariates, 2)
             .into_iter()
-            .map(|evaluations| evaluations.map(field_from_hex_string).map(Result::unwrap))
-            .map(|evaluations| Univariate { evaluations })
-            .collect::<Vec<Univariate<F, EXTENDED_LENGTH>>>()
-            .try_into()
-            .unwrap(),
+            .map(|v| Univariate { evaluations: v.try_into().unwrap() })
+            .collect::<Vec<Univariate<F, EXTENDED_LENGTH>>>().try_into().unwrap()
     );
 
     let mut memory_1 = ProverMemory::<C, MegaFlavour> {
@@ -188,29 +194,22 @@ fn test_compute_extended_relation_parameters() {
 
 #[test]
 fn test_compute_combiner_quotient() {
-    let test_file = format!(
-        "{}/../../test_vectors/noir/protogalaxy_prover/compute_combiner_quotient",
-        env!("CARGO_MANIFEST_DIR")
-    );
+    let test_file = "unit/compute_combiner_quotient";
 
-    let content = std::fs::read_to_string(&test_file).unwrap();
     let (combiner_values, perturbator_evaluation, expected_combiner_quotient): (
-        [&str; BATCHED_EXTENDED_LENGTH],
-        &str,
-        [&str; BATCHED_EXTENDED_LENGTH - NUM],
-    ) = serde_json::from_str(&content).unwrap();
+        [String; BATCHED_EXTENDED_LENGTH],
+        String,
+        [String; BATCHED_EXTENDED_LENGTH - NUM],
+    ) = decompress_and_read_test_data(test_file);
 
     let combiner = Univariate::<F, BATCHED_EXTENDED_LENGTH> {
-        evaluations: combiner_values
-            .map(field_from_hex_string)
-            .map(Result::unwrap),
+        evaluations: to_field!(combiner_values, 1).try_into().unwrap() 
     };
-    let perturbator_evaluation: F = field_from_hex_string(perturbator_evaluation).unwrap();
+
+    let perturbator_evaluation: F = to_field!(perturbator_evaluation);
 
     let expected_combiner_quotient = Univariate::<F, { BATCHED_EXTENDED_LENGTH - NUM }> {
-        evaluations: expected_combiner_quotient
-            .map(field_from_hex_string)
-            .map(Result::unwrap),
+        evaluations: to_field!(expected_combiner_quotient, 1).try_into().unwrap(),
     };
 
     assert_eq!(
@@ -222,39 +221,19 @@ fn test_compute_combiner_quotient() {
 // TODO CESAR: Full Honk evaluation is a huge vector, maybe it makes sense to use a lfs
 #[test]
 fn test_construct_perturbator_coefficients() {
-    let test_file = format!(
-        "{}/../../test_vectors/noir/protogalaxy_prover/construct_perturbator_coefficients",
-        env!("CARGO_MANIFEST_DIR")
-    );
+    let test_file = "unit/construct_perturbator_coefficients";
 
-    let content = std::fs::read_to_string(&test_file).unwrap();
     let (
         betas_values,
         deltas_values,
         perturbator_coefficients_values,
         full_honk_evaluations_values,
-    ): (Vec<&str>, Vec<&str>, Vec<&str>, Vec<&str>) = serde_json::from_str(&content).unwrap();
+    ): (Vec<String>, Vec<String>, Vec<String>, Vec<String>) = decompress_and_read_test_data(test_file);
 
-    let betas = betas_values
-        .into_iter()
-        .map(field_from_hex_string)
-        .map(Result::unwrap)
-        .collect::<Vec<F>>();
-    let deltas = deltas_values
-        .into_iter()
-        .map(field_from_hex_string)
-        .map(Result::unwrap)
-        .collect::<Vec<F>>();
-    let full_honk_evaluations = full_honk_evaluations_values
-        .into_iter()
-        .map(field_from_hex_string)
-        .map(Result::unwrap)
-        .collect::<Vec<F>>();
-    let perturbator_coefficients = perturbator_coefficients_values
-        .into_iter()
-        .map(field_from_hex_string)
-        .map(Result::unwrap)
-        .collect::<Vec<F>>();
+    let betas = to_field!(betas_values, 1);
+    let deltas = to_field!(deltas_values, 1);
+    let full_honk_evaluations = to_field!(full_honk_evaluations_values, 1);
+    let perturbator_coefficients = to_field!(perturbator_coefficients_values, 1);
 
     let coefficients = construct_perturbator_coefficients::<C>(
         &betas,
@@ -270,38 +249,19 @@ fn test_construct_perturbator_coefficients() {
 #[test]
 // TODO CESAR: AllEntities is a huge struct, rethink this test
 fn test_compute_row_evaluations() {
-    let test_file = format!(
-        "{}/../../test_vectors/noir/protogalaxy_prover/compute_row_evaluations",
-        env!("CARGO_MANIFEST_DIR")
-    );
+    let test_file = "unit/compute_row_evaluations";
 
-    let content = std::fs::read_to_string(&test_file).unwrap();
     let (
         alphas_values,
         relation_parameters_values,
         polys_values,
         full_honk_evaluations_values,
-    ): (Vec<&str>, Vec<&str>, Vec<Vec<&str>>, Vec<&str>) = serde_json::from_str(&content).unwrap();
+    ): (Vec<String>, Vec<String>, Vec<Vec<String>>, Vec<String>) = decompress_and_read_test_data(test_file);
 
-    let alphas = alphas_values
-        .into_iter()
-        .map(field_from_hex_string)
-        .map(Result::unwrap)
-        .collect::<Vec<F>>();
-    let relation_parameters_iter = relation_parameters_values
-        .into_iter()
-        .map(field_from_hex_string)
-        .map(Result::unwrap)
-        .collect::<Vec<F>>();
-    let polys_iter = polys_values.clone()
-        .into_iter()
-        .map(|p| p.into_iter().map(field_from_hex_string).map(Result::unwrap).collect::<Vec<F>>())
-        .collect::<Vec<Vec<F>>>();
-    let expected_full_honk_evaluations = full_honk_evaluations_values
-        .into_iter()
-        .map(field_from_hex_string)
-        .map(Result::unwrap)
-        .collect::<Vec<F>>();
+    let alphas = to_field!(alphas_values, 1);
+    let relation_parameters_iter = to_field!(relation_parameters_values, 1);
+    let polys_iter = to_field!(polys_values, 2);
+    let expected_full_honk_evaluations = to_field!(full_honk_evaluations_values, 1);
 
     let (precomputed_entities, other) = polys_iter.split_at(MegaFlavour::PRECOMPUTED_ENTITIES_SIZE);
     let (witness_entities, shifted_witness_entities) = other.split_at(MegaFlavour::WITNESS_ENTITIES_SIZE);
@@ -344,61 +304,30 @@ fn test_compute_row_evaluations() {
 
 #[test]
 fn test_compute_perturbator() {
-    let test_file = format!(
-        "{}/../../test_vectors/noir/protogalaxy_prover/compute_row_evaluations",
-        env!("CARGO_MANIFEST_DIR")
-    );
+    let test_file = "unit/compute_row_evaluations";
 
-    let content = std::fs::read_to_string(&test_file).unwrap();
     let (
         alphas_values,
         relation_parameters_values,
         polys_values,
         _
-    ): (Vec<&str>, Vec<&str>, Vec<Vec<&str>>, Vec<&str>) = serde_json::from_str(&content).unwrap();
+    ): (Vec<String>, Vec<String>, Vec<Vec<String>>, Vec<String>) = decompress_and_read_test_data(test_file);
 
-    let test_file = format!(
-        "{}/../../test_vectors/noir/protogalaxy_prover/compute_perturbator",
-        env!("CARGO_MANIFEST_DIR")
-    );
-
-    let content = std::fs::read_to_string(&test_file).unwrap();
+    let test_file = "unit/compute_perturbator";
+    
     let (
         deltas,
         gate_challenges_values,
         circuit_log_size,
         perturbator_coefficients_values
-    ): (Vec<&str>, Vec<&str>, usize, Vec<&str>) = serde_json::from_str(&content).unwrap();
+    ): (Vec<String>, Vec<String>, usize, Vec<String>) = decompress_and_read_test_data(test_file);
 
-    let alphas = alphas_values
-        .into_iter()
-        .map(field_from_hex_string)
-        .map(Result::unwrap)
-        .collect::<Vec<F>>();
-    let relation_parameters_iter = relation_parameters_values
-        .into_iter()
-        .map(field_from_hex_string)
-        .map(Result::unwrap)
-        .collect::<Vec<F>>();
-    let polys_iter = polys_values.clone()
-        .into_iter()
-        .map(|p| p.into_iter().map(field_from_hex_string).map(Result::unwrap).collect::<Vec<F>>())
-        .collect::<Vec<Vec<F>>>();
-    let deltas = deltas
-        .into_iter()
-        .map(field_from_hex_string)     
-        .map(Result::unwrap)
-        .collect::<Vec<F>>();
-    let gate_challenges = gate_challenges_values
-        .into_iter()
-        .map(field_from_hex_string) 
-        .map(Result::unwrap)
-        .collect::<Vec<F>>();
-    let perturbator_coefficients = perturbator_coefficients_values
-        .into_iter()
-        .map(field_from_hex_string)
-        .map(Result::unwrap)
-        .collect::<Vec<F>>();   
+    let alphas = to_field!(alphas_values, 1);
+    let relation_parameters_iter = to_field!(relation_parameters_values, 1);
+    let polys_iter = to_field!(polys_values, 2);
+    let deltas = to_field!(deltas, 1);
+    let gate_challenges = to_field!(gate_challenges_values, 1);
+    let perturbator_coefficients = to_field!(perturbator_coefficients_values, 1);
 
     let (precomputed_entities, other) = polys_iter.split_at(MegaFlavour::PRECOMPUTED_ENTITIES_SIZE);
     let (witness_entities, shifted_witness_entities) = other.split_at(MegaFlavour::WITNESS_ENTITIES_SIZE);
@@ -451,53 +380,34 @@ fn test_compute_perturbator() {
 
 #[test]
 fn test_compute_combiner() {
-    let test_file = format!(
-        "{}/../../test_vectors/noir/protogalaxy_prover/compute_combiner",
-        env!("CARGO_MANIFEST_DIR")
-    );
+    let test_file = "unit/compute_combiner";
 
-    let content = std::fs::read_to_string(&test_file).unwrap();
     let (
         beta_products_values,
         alphas_values,
         relation_parameters_values,
         (polys_values_1, polys_values_2),
         combiner_values
-    ): (Vec<&str>, Vec<Vec<&str>>, Vec<Vec<&str>>, (Vec<Vec<&str>>, Vec<Vec<&str>>), Vec<&str>) = serde_json::from_str(&content).unwrap();
+    ): (Vec<String>, Vec<Vec<String>>, Vec<Vec<String>>, (Vec<Vec<String>>, Vec<Vec<String>>), Vec<String>) = decompress_and_read_test_data(test_file);
 
-    let alphas = alphas_values
+    let alphas = to_field!(alphas_values, 2)
         .into_iter()
-        .map(|a| a.into_iter().map(field_from_hex_string).map(Result::unwrap).collect::<Vec<F>>())
         .map(|a| Univariate {
             evaluations: a.try_into().unwrap()
         })
         .collect::<Vec<Univariate<F, BATCHED_EXTENDED_LENGTH>>>();
-    let beta_products = beta_products_values
+    let beta_products = to_field!(beta_products_values, 1);
+    // TODO CESAR: What?
+    let relation_parameters_iter = to_field!(relation_parameters_values, 2)
         .into_iter()
-        .map(field_from_hex_string)
-        .map(Result::unwrap)
-        .collect::<Vec<F>>();
-    let relation_parameters_iter = relation_parameters_values
-        .into_iter()
-        .map(|p| {
-            let mut new_v = p.into_iter().map(field_from_hex_string).map(Result::unwrap).collect::<Vec<F>>();
-            new_v.push(F::ZERO);
-            new_v
+        .map(|mut p| {
+            p.push(F::ZERO);
+            p
         })
         .collect::<Vec<Vec<F>>>();
-    let polys_iter_1 = polys_values_1
-        .into_iter()        
-        .map(|p| p.into_iter().map(field_from_hex_string).map(Result::unwrap).collect::<Vec<F>>())
-        .collect::<Vec<Vec<F>>>();
-    let polys_iter_2 = polys_values_2
-        .into_iter()        
-        .map(|p| p.into_iter().map(field_from_hex_string).map(Result::unwrap).collect::<Vec<F>>())
-        .collect::<Vec<Vec<F>>>();
-    let combiner = combiner_values
-        .into_iter()
-        .map(field_from_hex_string)
-        .map(Result::unwrap)
-        .collect::<Vec<F>>();
+    let polys_iter_1 = to_field!(polys_values_1, 2);
+    let polys_iter_2 = to_field!(polys_values_2, 2);
+    let combiner = to_field!(combiner_values, 1);
 
     let structure_polys = |polys: Vec<Vec<F>>| {
         let (precomputed_entities, other) = polys.split_at(MegaFlavour::PRECOMPUTED_ENTITIES_SIZE);
@@ -557,33 +467,20 @@ fn test_compute_combiner() {
 
 #[test]
 fn test_protogalaxy_prover() {
-    let test_file_acc = format!(
-        "{}/../../test_vectors/noir/protogalaxy_prover/run_oink_prover/accumulator",
-        env!("CARGO_MANIFEST_DIR")
-    );
+    let test_file_acc = "e2e/accumulator";
+    let test_file_folded = "e2e/folded_key";
+    let test_file_folding_result = "e2e/folding_result";
 
-    let test_file_folded = format!(
-        "{}/../../test_vectors/noir/protogalaxy_prover/run_oink_prover/folded_key",
-        env!("CARGO_MANIFEST_DIR")
-    );
-
-    let test_file_folding_result = format!(
-        "{}/../../test_vectors/noir/protogalaxy_prover/run_oink_prover/folding_result",
-        env!("CARGO_MANIFEST_DIR")
-    );
-
-    let content = std::fs::read_to_string(&test_file_acc).unwrap();
     let ((circuit_size_1, num_public_inputs_1, pub_inputs_offset_1, start_idx_1, final_active_wire_idx_1, public_inputs_1, polynomials_1_str, memory_read_records_1, memory_write_records_1, (ranges_1, idxs_1, current_end_1)), oink_proof_1): 
-        ((u32, u32, u32, u32, usize, Vec<&str>, Vec<Vec<&str>>, Vec<u32>, Vec<u32>, (Vec<(usize, usize)>, Vec<usize>, usize)), Vec<&str>)
-    = serde_json::from_str(&content).unwrap();
+        ((u32, u32, u32, u32, usize, Vec<String>, Vec<Vec<String>>, Vec<u32>, Vec<u32>, (Vec<(usize, usize)>, Vec<usize>, usize)), Vec<String>)
+    = decompress_and_read_test_data(test_file_acc);
 
-    let content = std::fs::read_to_string(&test_file_folded).unwrap();
     let ((circuit_size_2, num_public_inputs_2, pub_inputs_offset_2, start_idx_2, final_active_wire_idx_2, public_inputs_2, polynomials_2_str, memory_read_records_2, memory_write_records_2, (ranges_2, idxs_2, current_end_2)), oink_proof_2):
-        ((u32, u32, u32, u32, usize, Vec<&str>, Vec<Vec<&str>>, Vec<u32>, Vec<u32>, (Vec<(usize, usize)>, Vec<usize>, usize)), Vec<&str>)
-     = serde_json::from_str(&content).unwrap();
+        ((u32, u32, u32, u32, usize, Vec<String>, Vec<Vec<String>>, Vec<u32>, Vec<u32>, (Vec<(usize, usize)>, Vec<usize>, usize)), Vec<String>)
+     = decompress_and_read_test_data(test_file_folded);
 
-    let content = std::fs::read_to_string(&test_file_folding_result).unwrap();
-    let ((target_sum_result, gate_challenges_result, alphas_result, relation_parameters_result, polynomials_folding_result_str), honk_proof): ((&str, Vec<&str>, Vec<&str>, Vec<&str>, Vec<Vec<&str>>), Vec<&str>) = serde_json::from_str(&content).unwrap();
+    let ((target_sum_result, gate_challenges_result, alphas_result, relation_parameters_result, polynomials_folding_result_str), honk_proof): 
+    ((String, Vec<String>, Vec<String>, Vec<String>, Vec<Vec<String>>), Vec<String>) = decompress_and_read_test_data(test_file_folding_result);
 
     let crs = CrsParser::<C>::get_crs(
         CRS_PATH_G1,
@@ -594,47 +491,24 @@ fn test_protogalaxy_prover() {
 
     let (prover_crs, _) = crs.split();
 
-    let honk_proof = honk_proof
-        .into_iter()
-        .map(field_from_hex_string)
-        .map(Result::unwrap)
-        .collect::<Vec<F>>();
+    let honk_proof = to_field!(honk_proof, 1);
 
-    let alphas_result = alphas_result
-        .into_iter()
-        .map(field_from_hex_string)
-        .map(Result::unwrap)
-        .collect::<Vec<F>>();
+    let alphas_result = to_field!(alphas_result, 1);
+    let relation_parameters_result = to_field!(relation_parameters_result, 1);
+    let gate_challenges_result = to_field!(gate_challenges_result, 1);
+    let polynomials_folding_result = to_field!(polynomials_folding_result_str, 2);
 
-    let relation_parameters_result = relation_parameters_result
-        .into_iter()
-        .map(field_from_hex_string)         
-        .map(Result::unwrap)
-        .collect::<Vec<F>>();
+    // TODO CESAR: Handle target sum
+    let target_sum_result: F = to_field!(target_sum_result);
 
-    let gate_challenges_result = gate_challenges_result
-        .into_iter()
-        .map(field_from_hex_string)
-        .map(Result::unwrap)
-        .collect::<Vec<F>>();
+    let public_inputs_1 = to_field!(public_inputs_1, 1);
+    let public_inputs_2 = to_field!(public_inputs_2, 1);
 
-    let polynomials_folding_result = polynomials_folding_result_str 
-        .into_iter()
-        .map(|p| p.into_iter().map(field_from_hex_string).map(Result::unwrap).collect::<Vec<F>>())
-        .collect::<Vec<_>>();
-
-    // TODO CESAR: Handle target_sum_result
-    let target_sum_result: F = field_from_hex_string(target_sum_result).unwrap();
-
-    let polys_1 = polynomials_1_str
-        .into_iter()
-        .map(|p| p.into_iter().map(field_from_hex_string).map(Result::unwrap).collect::<Vec<F>>())
+    let polys_1 = to_field!(polynomials_1_str, 2).into_iter()
         .map(|coefficients| Polynomial { coefficients })
         .collect::<Vec<_>>();
 
-    let polys_2 = polynomials_2_str
-        .into_iter()
-        .map(|p| p.into_iter().map(field_from_hex_string).map(Result::      unwrap).collect::<Vec<F>>())
+    let polys_2 = to_field!(polynomials_2_str, 2).into_iter()
         .map(|coefficients| Polynomial { coefficients })
         .collect::<Vec<_>>();
 
@@ -660,11 +534,7 @@ fn test_protogalaxy_prover() {
         circuit_size: circuit_size_1,
         num_public_inputs: num_public_inputs_1,
         pub_inputs_offset: pub_inputs_offset_1,
-        public_inputs: public_inputs_1
-            .into_iter()
-            .map(field_from_hex_string)
-            .map(Result::unwrap)
-            .collect::<Vec<F>>(),
+        public_inputs: public_inputs_1,
         memory_read_records: memory_read_records_1,
         memory_write_records: memory_write_records_1,
         active_region_data: ActiveRegionData {
@@ -684,11 +554,7 @@ fn test_protogalaxy_prover() {
         circuit_size: circuit_size_2,
         num_public_inputs: num_public_inputs_2,
         pub_inputs_offset: pub_inputs_offset_2,
-        public_inputs: public_inputs_2
-            .into_iter()
-            .map(field_from_hex_string)
-            .map(Result::unwrap)
-            .collect::<Vec<F>>(),
+        public_inputs: public_inputs_2,
         memory_read_records: memory_read_records_2,
         memory_write_records: memory_write_records_2,
         active_region_data: ActiveRegionData {
