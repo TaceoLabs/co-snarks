@@ -10,29 +10,16 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-acir.workspace = true
 ark-bn254.workspace = true
 ark-ec.workspace = true
 ark-ff.workspace = true
-ark-grumpkin.workspace = true
-ark-poly.workspace = true
-ark-serialize.workspace = true
-blake3.workspace = true
-co-acvm = { version = "0.6.0", path = "../co-acvm" }
 mpc-core = { version = "0.9.0", path = "../../mpc-core" }
 co-builder = { version = "0.4.0", path = "../co-builder" }
 ultrahonk = { version = "0.5.0", path = "../ultrahonk" , features = ["protogalaxy"] }
-eyre.workspace = true
+common = { version = "0.1.0", path = "../common" }
 itertools.workspace = true
-num-bigint.workspace = true
-num-traits.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-thiserror.workspace = true
-tracing.workspace = true
-rand.workspace = true
-proc-macro2 = "1.0"
-syn = "1.0"
 
 [dev-dependencies]
 flate2 = "1.0"

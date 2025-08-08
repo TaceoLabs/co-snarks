@@ -3,7 +3,7 @@ use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_builder::prelude::Polynomial;
 
-pub(crate) struct ProverMemory<P: CurveGroup, L: PlainProverFlavour> {
+pub struct ProverMemory<P: CurveGroup, L: PlainProverFlavour> {
     /// column 3
     pub(crate) w_4: Polynomial<P::ScalarField>,
     /// column 4

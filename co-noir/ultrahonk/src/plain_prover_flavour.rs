@@ -1,5 +1,6 @@
-use crate::decider::types::RelationParameters;
+use crate::decider::types::{ProverUnivariatesSized, RelationParameters};
 use crate::decider::types::{ClaimedEvaluations, ProverUnivariates};
+use crate::prelude::Univariate;
 use ark_ff::PrimeField;
 use co_builder::HonkProofResult;
 use co_builder::{prelude::HonkCurve, prover_flavour::ProverFlavour};
@@ -53,8 +54,7 @@ pub trait PlainProverFlavour: Default + ProverFlavour {
         extended_random_poly: &Self::SumcheckRoundOutputZK<F>,
         partial_evaluation_result: &F,
     );
-    // TODO CESAR: Better name
-    fn extend_and_batch_univariates_2<F: PrimeField, const SIZE: usize>(
+    fn extend_and_batch_univariates_with_distinct_challenges<F: PrimeField, const SIZE: usize>(
         univariate_accumulators: &Self::AllRelationAcc<F>,
         result: &mut Univariate<F, SIZE>,
         first_term: Univariate<F, SIZE>,

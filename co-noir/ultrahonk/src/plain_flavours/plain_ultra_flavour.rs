@@ -1,6 +1,6 @@
 use crate::decider::sumcheck::sumcheck_round_prover::SumcheckProverRound;
 use crate::decider::sumcheck::sumcheck_round_verifier::SumcheckVerifierRound;
-use crate::decider::types::{ClaimedEvaluations, ProverUnivariates, RelationParameters};
+use crate::decider::types::{ClaimedEvaluations, ProverUnivariates, ProverUnivariatesSized, RelationParameters};
 use crate::plain_prover_flavour::PlainProverFlavour;
 use crate::prelude::Univariate;
 use ark_ff::PrimeField;
@@ -173,7 +173,7 @@ impl PlainProverFlavour for UltraFlavour {
         )
     }
 
-    fn extend_and_batch_univariates_2<F: PrimeField, const SIZE: usize>(
+    fn extend_and_batch_univariates_with_distinct_challenges<F: PrimeField, const SIZE: usize>(
         acc: &Self::AllRelationAcc<F>,
         result: &mut Univariate<F, SIZE>,
         first_term: Univariate<F, SIZE>,

@@ -24,7 +24,7 @@ pub struct ProverMemory<C: CurveGroup, L: PlainProverFlavour> {
 }
 
 pub(crate) struct VerifierMemory<C: CurveGroup, L: PlainProverFlavour> {
-    pub(crate) verifier_commitments: VerifierCommitments<C::G1Affine, L>,
+    pub(crate) verifier_commitments: VerifierCommitments<C::Affine, L>,
     pub(crate) relation_parameters: RelationParameters<C::ScalarField>,
     pub(crate) alphas: Vec<L::Alpha<C::ScalarField>>,
     pub(crate) gate_challenges: Vec<C::ScalarField>,
@@ -147,7 +147,7 @@ impl<F: PrimeField> GateSeparatorPolynomial<F> {
 }
 
 impl<P: CurveGroup, L: PlainProverFlavour> ProverMemory<P, L> {
-    pub(crate) fn from_memory_and_polynomials(
+    pub fn from_memory_and_polynomials(
         prover_memory: crate::oink::types::ProverMemory<P, L>,
         polynomials: Polynomials<P::ScalarField, L>,
     ) -> Self {

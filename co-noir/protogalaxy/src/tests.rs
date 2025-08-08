@@ -16,14 +16,14 @@ use serde::de::DeserializeOwned;
 use ultrahonk::prelude::AllEntities;
 use ultrahonk::{
     decider::types::{ProverMemory, RelationParameters},
-    oink::prover::Oink,
+    oink::oink_prover::Oink,
     prelude::{
         GateSeparatorPolynomial, Poseidon2Sponge, ProvingKey, Transcript, Univariate, ZeroKnowledge,
     },
 };
 
 use crate::{
-    protogalaxy_prover::{BATCHED_EXTENDED_LENGTH, EXTENDED_LENGTH, NUM},
+    protogalaxy_prover::{BATCHED_EXTENDED_LENGTH, MAX_TOTAL_RELATION_LENGTH, NUM_KEYS},
     protogalaxy_prover_internal::{
         compute_and_extend_alphas, compute_extended_relation_parameters,
     },
@@ -35,6 +35,8 @@ use crate::{
         construct_perturbator_coefficients,
     },
 };
+
+const EXTENDED_LENGTH: usize = (MAX_TOTAL_RELATION_LENGTH - 1) * (NUM_KEYS - 1) + 1;
 const CRS_PATH_G1: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../co-builder/src/crs/bn254_g1.dat"
@@ -44,7 +46,7 @@ const CRS_PATH_G2: &str = concat!(
     "/../co-builder/src/crs/bn254_g2.dat"
 );
 type F = TranscriptFieldType;
-type C = Bn254;
+type C = ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>;
 
 fn decompress_and_read_test_data<T: DeserializeOwned>(filename: &str) -> T {
     let gzip_file = format!(
@@ -154,7 +156,7 @@ fn test_compute_extended_relation_parameters() {
             .map(|v| Univariate {
                 evaluations: v.try_into().unwrap(),
             })
-            .collect::<Vec<Univariate<F, EXTENDED_LENGTH>>>()
+            .collect::<Vec<Univariate<F, { EXTENDED_LENGTH }>>>()
             .try_into()
             .unwrap(),
     );
@@ -194,7 +196,7 @@ fn test_compute_combiner_quotient() {
     let (combiner_values, perturbator_evaluation, expected_combiner_quotient): (
         [String; BATCHED_EXTENDED_LENGTH],
         String,
-        [String; BATCHED_EXTENDED_LENGTH - NUM],
+        [String; BATCHED_EXTENDED_LENGTH - NUM_KEYS],
     ) = decompress_and_read_test_data(test_file);
 
     let combiner = Univariate::<F, BATCHED_EXTENDED_LENGTH> {
@@ -203,7 +205,7 @@ fn test_compute_combiner_quotient() {
 
     let perturbator_evaluation: F = to_field!(perturbator_evaluation);
 
-    let expected_combiner_quotient = Univariate::<F, { BATCHED_EXTENDED_LENGTH - NUM }> {
+    let expected_combiner_quotient = Univariate::<F, { BATCHED_EXTENDED_LENGTH - NUM_KEYS }> {
         evaluations: to_field!(expected_combiner_quotient, 1).try_into().unwrap(),
     };
 
@@ -213,7 +215,6 @@ fn test_compute_combiner_quotient() {
     );
 }
 
-// TODO CESAR: Full Honk evaluation is a huge vector, maybe it makes sense to use a lfs
 #[test]
 fn test_construct_perturbator_coefficients() {
     let test_file = "unit/construct_perturbator_coefficients";
@@ -243,7 +244,6 @@ fn test_construct_perturbator_coefficients() {
 }
 
 #[test]
-// TODO CESAR: AllEntities is a huge struct, rethink this test
 fn test_compute_row_evaluations() {
     let test_file = "unit/compute_row_evaluations";
 
@@ -382,10 +382,10 @@ fn test_compute_combiner() {
         })
         .collect::<Vec<Univariate<F, BATCHED_EXTENDED_LENGTH>>>();
     let beta_products = to_field!(beta_products, 1);
-    // TODO CESAR: What?
     let relation_parameters = to_field!(relation_parameters, 2)
         .into_iter()
         .map(|mut p| {
+            // Handle skipped indices
             p.push(F::ZERO);
             p
         })
@@ -532,7 +532,7 @@ fn test_protogalaxy_prover() {
         Vec<String>,
     ) = decompress_and_read_test_data(test_file_folding_result);
 
-    let crs = CrsParser::<C>::get_crs(
+    let crs = CrsParser::<Bn254>::get_crs(
         CRS_PATH_G1,
         CRS_PATH_G2,
         circuit_size_1 as usize,
@@ -644,6 +644,8 @@ fn test_protogalaxy_prover() {
                 &mut accumulator_prover_memory,
                 vec![folded_key]
             )
+            .unwrap()
+            .0
             .inner(),
         honk_proof
     );

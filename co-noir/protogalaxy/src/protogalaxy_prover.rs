@@ -11,13 +11,12 @@ use co_builder::{
 
 use itertools::{Itertools, izip};
 
+use common::HonkProof;
 use ultrahonk::decider::types::RelationParameters;
 use ultrahonk::{
-    oink::prover::Oink,
+    oink::oink_prover::Oink,
     plain_prover_flavour::{PlainProverFlavour, UnivariateTrait},
-    prelude::{
-        GateSeparatorPolynomial, HonkProof, Transcript, TranscriptHasher, Univariate, ZeroKnowledge,
-    },
+    prelude::{GateSeparatorPolynomial, Transcript, TranscriptHasher, Univariate, ZeroKnowledge},
 };
 
 use crate::protogalaxy_prover_internal::{
@@ -26,13 +25,13 @@ use crate::protogalaxy_prover_internal::{
 use crate::protogalaxy_prover_internal::{compute_combiner, compute_extended_relation_parameters};
 
 pub(crate) const CONST_PG_LOG_N: usize = 20;
-
-// TODO CESAR: Move constants to the flavor files
 pub(crate) const MAX_TOTAL_RELATION_LENGTH: usize = 11;
-pub(crate) const NUM: usize = 2;
-pub(crate) const EXTENDED_LENGTH: usize = (MAX_TOTAL_RELATION_LENGTH - 1) * (NUM - 1) + 1;
+
+// Mega Protogalaxy prover only supports 2 keys
+pub(crate) const NUM_KEYS: usize = 2;
+
 pub(crate) const BATCHED_EXTENDED_LENGTH: usize =
-    (MAX_TOTAL_RELATION_LENGTH - 1 + NUM - 1) * (NUM - 1) + 1;
+    (MAX_TOTAL_RELATION_LENGTH - 1 + NUM_KEYS - 1) * (NUM_KEYS - 1) + 1;
 
 pub(crate) type OinkProverMemory<C, L> = ultrahonk::oink::types::ProverMemory<C, L>;
 pub(crate) type DeciderProverMemory<C, L> = ultrahonk::decider::types::ProverMemory<C, L>;
@@ -125,7 +124,7 @@ where
         Vec<Univariate<C::ScalarField, BATCHED_EXTENDED_LENGTH>>,
         ExtendedRelationParameters<C::ScalarField>,
         C::ScalarField,
-        Univariate<C::ScalarField, { BATCHED_EXTENDED_LENGTH - NUM }>,
+        Univariate<C::ScalarField, { BATCHED_EXTENDED_LENGTH - NUM_KEYS }>,
     ) {
         let perturbator_challenge = self
             .transcript
@@ -168,14 +167,17 @@ where
         )
     }
 
+    /**
+     * @brief Given the challenge \gamma, compute Z(\gamma) and {L_0(\gamma),L_1(\gamma)}
+     */
     fn update_target_sum_and_fold(
         mut self,
         prover_memory: &mut Vec<&mut DeciderProverMemory<C, L>>,
-        combiner_quotient: Univariate<C::ScalarField, { BATCHED_EXTENDED_LENGTH - NUM }>,
+        combiner_quotient: Univariate<C::ScalarField, { BATCHED_EXTENDED_LENGTH - NUM_KEYS }>,
         alphas: Vec<Univariate<C::ScalarField, BATCHED_EXTENDED_LENGTH>>,
         univariate_relation_parameters: ExtendedRelationParameters<C::ScalarField>,
         perturbator_evaluation: C::ScalarField,
-    ) -> (HonkProof<TranscriptFieldType>, C::ScalarField) {
+    ) -> HonkProofResult<(HonkProof<TranscriptFieldType>, C::ScalarField)> {
         let (accumulator_prover_memory, next_prover_memory) = prover_memory.split_at_mut(1);
         let accumulator_prover_memory = &mut accumulator_prover_memory[0];
         let next_prover_memory = &next_prover_memory[0];
@@ -195,7 +197,6 @@ where
             + vanishing_polynomial_at_challenge * combiner_quotient.evaluate(combiner_challenge);
 
         // TODO CESAR: Overflow stuff
-        // TODO CESAR: Is the unshifted stuff correct?
         accumulator_prover_memory.polys.iter_mut().for_each(|poly| {
             poly.iter_mut()
                 .for_each(|coeff| *coeff = coeff.clone() * lagranges[0]);
@@ -232,7 +233,7 @@ where
             *value = univariate.evaluate(combiner_challenge);
         }
 
-        (proof, target_sum)
+        HonkProofResult::Ok((proof, target_sum))
     }
 
     pub fn prove(
@@ -240,20 +241,21 @@ where
         accumulator: &mut ProvingKey<C, L>,
         accumulator_prover_memory: &mut DeciderProverMemory<C, L>,
         mut next_proving_keys: Vec<ProvingKey<C, L>>,
-    ) -> HonkProof<TranscriptFieldType> {
+    ) -> HonkProofResult<(HonkProof<TranscriptFieldType>, C::ScalarField)> {
         let max_circuit_size = next_proving_keys
             .iter()
             .map(|pk| pk.circuit_size)
             .chain(std::iter::once(accumulator.circuit_size))
             .max()
             .unwrap_or(0);
-        // TODO CESAR: Increase Virtual size shenanigans
+
+        next_proving_keys.iter_mut().for_each(|pk| {
+            pk.polynomials
+                .increase_polynomial_size(max_circuit_size.try_into().unwrap())
+        });
 
         // Run Oink prover
-        // TODO CESAR: No unwrap here, handle the error properly
-        let oink_memories = self
-            .run_oink_prover_on_each_incomplete_key(&mut next_proving_keys)
-            .unwrap();
+        let oink_memories = self.run_oink_prover_on_each_incomplete_key(&mut next_proving_keys)?;
 
         let mut next_prover_memories =
             izip!(oink_memories.into_iter(), next_proving_keys.into_iter())
@@ -284,15 +286,12 @@ where
         prover_memory[0].gate_challenges = updated_gate_challenges;
 
         // update target sum and fold
-        // TODO CESAR: handle target sum
-        let (proof, target_sum) = self.update_target_sum_and_fold(
+        self.update_target_sum_and_fold(
             &mut prover_memory,
             combiner_quotient,
             alphas,
             relation_parameters,
             perturbator_evaluation,
-        );
-
-        proof
+        )
     }
 }

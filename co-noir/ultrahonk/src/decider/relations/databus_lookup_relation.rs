@@ -72,7 +72,6 @@ impl<F: PrimeField> DataBusLookupRelationEvals<F> {
     ) {
         assert!(running_challenge.len() == DataBusLookupRelation::NUM_RELATIONS);
 
-        // TODO CESAR: Common interface
         *linearly_independent_contribution += self.r0 * running_challenge[0]
             + self.r2 * running_challenge[2]
             + self.r4 * running_challenge[4];
@@ -136,28 +135,52 @@ impl<F: PrimeField> DataBusLookupRelationAcc<F> {
         );
     }
 
-    pub(crate) fn extend_and_batch_univariates_2<const SIZE: usize>(
+    pub(crate) fn extend_and_batch_univariates_with_distinct_challenges<const SIZE: usize>(
         &self,
         result: &mut Univariate<F, SIZE>,
         running_challenge: &[Univariate<F, SIZE>],
     ) {
-        self.r0
-            .extend_and_batch_univariates_2(result, &running_challenge[0]);
+       self.r0.extend_and_batch_univariates(
+            result,
+            &running_challenge[0],
+            &F::ONE,
+            true,
+        );
 
-        self.r1
-            .extend_and_batch_univariates_2(result, &running_challenge[1]);
+        self.r1.extend_and_batch_univariates(
+            result,
+            &running_challenge[1],
+            &F::ONE,
+            true,
+        );
 
-        self.r2
-            .extend_and_batch_univariates_2(result, &running_challenge[2]);
+        self.r2.extend_and_batch_univariates(
+            result,
+            &running_challenge[2],
+            &F::ONE,
+            true,
+        );
 
-        self.r3
-            .extend_and_batch_univariates_2(result, &running_challenge[3]);
+        self.r3.extend_and_batch_univariates(
+            result,
+            &running_challenge[3],
+            &F::ONE,
+            true,
+        );
 
-        self.r4
-            .extend_and_batch_univariates_2(result, &running_challenge[4]);
+        self.r4.extend_and_batch_univariates(
+            result,
+            &running_challenge[4],
+            &F::ONE,
+            true,
+        );
 
-        self.r5
-            .extend_and_batch_univariates_2(result, &running_challenge[5]);
+        self.r5.extend_and_batch_univariates(
+            result,
+            &running_challenge[5],
+            &F::ONE,
+            true,
+        );
     }
 }
 

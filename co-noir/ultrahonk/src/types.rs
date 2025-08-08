@@ -6,6 +6,7 @@ use co_builder::{
     },
     prelude::Serialize,
 };
+use itertools::izip;
 use std::fmt::Debug;
 
 use crate::plain_prover_flavour::PlainProverFlavour;
@@ -81,22 +82,12 @@ where
     F: Default + Clone + Debug + std::marker::Sync,
     L: PlainProverFlavour,
 {
-    // TODO CESAR: Rewrite using from_elements
     pub fn get_row(&self, index: usize) -> AllEntities<F, L> {
-        AllEntities {
-            witness: L::WitnessEntities::from_elements(
-                self.witness.iter().map(|v| v[index].clone()).collect(),
-            ),
-            precomputed: L::PrecomputedEntities::from_elements(
-                self.precomputed.iter().map(|v| v[index].clone()).collect(),
-            ),
-            shifted_witness: L::ShiftedWitnessEntities::from_elements(
-                self.shifted_witness
-                    .iter()
-                    .map(|v| v[index].clone())
-                    .collect(),
-            ),
-        }
+        AllEntities::from_elements(
+            self.iter()
+                .map(|el| el[index].clone())
+                .collect(),
+        )
     }
 }
 

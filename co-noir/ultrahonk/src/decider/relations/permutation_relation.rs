@@ -54,16 +54,24 @@ impl<F: PrimeField> UltraPermutationRelationAcc<F> {
         );
     }
 
-    pub(crate) fn extend_and_batch_univariates_2<const SIZE: usize>(
+    pub(crate) fn extend_and_batch_univariates_with_distinct_challenges<const SIZE: usize>(
         &self,
         result: &mut Univariate<F, SIZE>,
         running_challenge: &[Univariate<F, SIZE>],
     ) {
-        self.r0
-            .extend_and_batch_univariates_2(result, &running_challenge[0]);
+        self.r0.extend_and_batch_univariates(
+            result,
+            &running_challenge[0],
+            &F::ONE,
+            true,
+        );
 
-        self.r1
-            .extend_and_batch_univariates_2(result, &running_challenge[1]);
+        self.r1.extend_and_batch_univariates(
+            result,
+            &running_challenge[1],
+            &F::ONE,
+            true,
+        );
     }
 }
 
@@ -84,12 +92,11 @@ impl<F: PrimeField> UltraPermutationRelationEvals<F> {
     pub(crate) fn scale_by_challenge_and_accumulate(
         &self,
         linearly_independent_contribution: &mut F,
-        linearly_dependent_contribution: &mut F,
+        _linearly_dependent_contribution: &mut F,
         running_challenge: &[F],
     ) {
         assert!(running_challenge.len() == UltraPermutationRelation::NUM_RELATIONS);
 
-        // TODO CESAR: No dependent contributions
         *linearly_independent_contribution +=
             self.r0 * running_challenge[0] + self.r1 * running_challenge[1];
     }

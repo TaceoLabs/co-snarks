@@ -34,7 +34,6 @@ impl<F: PrimeField, L: ProverFlavour> Polynomials<F, L> {
         self.witness.iter_mut().chain(self.precomputed.iter_mut())
     }
 
-    // TODO CESAR: USE
     pub fn increase_polynomial_size(&mut self, circuit_size: usize) {
         self.witness
             .iter_mut()
