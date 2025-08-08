@@ -163,7 +163,7 @@ impl EccLookupRelation {
     ) -> &Univariate<F, SIZE> {
         match write_index {
             0 => input.witness.precompute_select(),
-            1 => input.witness.precompute_select(), // TODO: Verify if this is correct
+            1 => input.witness.precompute_select(), // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/750) Is this a bug?
             _ => unreachable!(),
         }
     }

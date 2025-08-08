@@ -98,8 +98,7 @@ impl<
         }
         let mut batched_to_be_shifted = Polynomial::new_zero(n); // batched to-be-shifted polynomials
 
-        let iter = g_polynomials.iter();
-        for g_poly in iter {
+        for g_poly in g_polynomials.iter() {
             batched_to_be_shifted.add_scaled_slice(g_poly, &running_scalar);
             running_scalar *= rho;
         }

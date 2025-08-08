@@ -48,9 +48,6 @@ pub struct RelationParameters<F: PrimeField, L: PlainProverFlavour> {
     pub beta_sqr: F,
     pub beta_cube: F,
     pub eccvm_set_permutation_delta: F,
-    pub accumulated_result: [F; 4],
-    pub evaluation_input_x: [F; 5],
-    pub batching_challenge_v: [F; 20],
 }
 
 pub struct GateSeparatorPolynomial<F: PrimeField> {
@@ -142,9 +139,6 @@ impl<P: CurveGroup, L: PlainProverFlavour> ProverMemory<P, L> {
             beta_sqr: Default::default(),
             beta_cube: Default::default(),
             eccvm_set_permutation_delta: Default::default(),
-            accumulated_result: [Default::default(); 4],
-            evaluation_input_x: [Default::default(); 5],
-            batching_challenge_v: [Default::default(); 20],
         };
 
         let mut memory = AllEntities::<Vec<P::ScalarField>, L>::default();
@@ -245,9 +239,6 @@ impl<C: CurveGroup, L: PlainProverFlavour> VerifierMemory<C, L> {
             beta_sqr: Default::default(),
             beta_cube: Default::default(),
             eccvm_set_permutation_delta: Default::default(),
-            accumulated_result: [Default::default(); 4],
-            evaluation_input_x: [Default::default(); 5],
-            batching_challenge_v: [Default::default(); 20],
         };
 
         let mut memory = AllEntities::<C::Affine, _>::default();
