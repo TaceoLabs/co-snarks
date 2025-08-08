@@ -171,7 +171,7 @@ impl<C: HonkCurve<TranscriptFieldType>> MSMRow<C> {
         // This section sets up the data structures we need to store all intermediate ECC operations in projective form
         let num_point_adds_and_doubles = (num_msm_rows - 2) * 4;
         let num_accumulators = num_msm_rows - 1;
-        // In what fallows, either p1 + p2 = p3, or p1.dbl() = p3
+        // In what follows, either p1 + p2 = p3, or p1.dbl() = p3
         // We create 1 vector to store the entire point trace. We split into multiple containers using std::span
         // (we want 1 vector object to more efficiently batch normalize points)
         const NUM_POINTS_IN_ADDITION_RELATION: usize = 3;
