@@ -34,6 +34,7 @@ use crate::decider::relations::{
         UltraArithmeticRelation, UltraArithmeticRelationAcc, UltraArithmeticRelationEvals,
     },
 };
+use ark_ff::AdditiveGroup;
 
 #[derive(Default)]
 pub struct AllRelationAccUltra<F: PrimeField> {
@@ -108,7 +109,7 @@ fn extend_and_batch_univariates_template<F: PrimeField, const SIZE: usize>(
 impl PlainProverFlavour for UltraFlavour {
     type AllRelationAcc<F: PrimeField> = AllRelationAccUltra<F>;
     type AllRelationEvaluations<F: PrimeField> = AllRelationEvaluationsUltra<F>;
-    type Alphas<F: PrimeField> = [F; Self::NUM_ALPHAS];
+    type Alpha<F: PrimeField> = F;
     type SumcheckRoundOutput<F: PrimeField> =
         Univariate<F, { UltraFlavour::BATCHED_RELATION_PARTIAL_LENGTH }>;
     type SumcheckRoundOutputZK<F: PrimeField> =
@@ -128,7 +129,7 @@ impl PlainProverFlavour for UltraFlavour {
     fn scale<F: PrimeField>(
         acc: &mut Self::AllRelationAcc<F>,
         first_scalar: F,
-        elements: &Self::Alphas<F>,
+        elements: &[Self::Alpha<F>],
     ) {
         tracing::trace!("Prove::Scale");
         assert!(elements.len() == Self::NUM_SUBRELATIONS - 1);
@@ -172,10 +173,19 @@ impl PlainProverFlavour for UltraFlavour {
         )
     }
 
+    fn extend_and_batch_univariates_2<F: PrimeField, const SIZE: usize>(
+        acc: &Self::AllRelationAcc<F>,
+        result: &mut Univariate<F, SIZE>,
+        first_term: Univariate<F, SIZE>,
+        running_challenge: &[Univariate<F, SIZE>],
+    ) {
+        todo!();
+    }
+
     fn accumulate_relation_univariates<P: HonkCurve<TranscriptFieldType>>(
         univariate_accumulators: &mut Self::AllRelationAcc<P::ScalarField>,
         extended_edges: &ProverUnivariates<P::ScalarField, Self>,
-        relation_parameters: &RelationParameters<P::ScalarField, Self>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
         scaling_factor: &P::ScalarField,
     ) {
         tracing::trace!("Prove::Accumulate relations");
@@ -253,11 +263,21 @@ impl PlainProverFlavour for UltraFlavour {
             scaling_factor,
         );
     }
-
+    fn accumulate_relation_univariates_extended_parameters<
+        P: HonkCurve<TranscriptFieldType>,
+        const SIZE: usize,
+    >(
+        univariate_accumulators: &mut Self::AllRelationAcc<P::ScalarField>,
+        extended_edges: &ProverUnivariatesSized<P::ScalarField, Self, SIZE>,
+        relation_parameters: &RelationParameters<Univariate<P::ScalarField, SIZE>>,
+        scaling_factor: &P::ScalarField,
+    ) {
+        todo!()
+    }
     fn accumulate_relation_evaluations<P: HonkCurve<TranscriptFieldType>>(
         univariate_accumulators: &mut Self::AllRelationEvaluations<P::ScalarField>,
         extended_edges: &ClaimedEvaluations<P::ScalarField, Self>,
-        relation_parameters: &RelationParameters<P::ScalarField, Self>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
         scaling_factor: &P::ScalarField,
     ) {
         tracing::trace!("Verify::Accumulate relations");
@@ -326,7 +346,7 @@ impl PlainProverFlavour for UltraFlavour {
     fn scale_and_batch_elements<F: PrimeField>(
         all_rel_evals: &Self::AllRelationEvaluations<F>,
         first_scalar: F,
-        elements: &Self::Alphas<F>,
+        elements: &[Self::Alpha<F>],
     ) -> F {
         tracing::trace!("Verify::scale_and_batch_elements");
         assert!(elements.len() == Self::NUM_SUBRELATIONS - 1);
@@ -360,6 +380,61 @@ impl PlainProverFlavour for UltraFlavour {
         output
     }
 
+    fn scale_by_challenge_and_accumulate<F: PrimeField>(
+        all_rel_evals: &Self::AllRelationEvaluations<F>,
+        first_scalar: F,
+        elements: &[Self::Alpha<F>],
+    ) -> (F, F) {
+        assert!(elements.len() == Self::NUM_SUBRELATIONS - 1);
+        let (mut linearly_dependent_contribution, mut linearly_independent_contribution) =
+            (F::ZERO, F::ZERO);
+        all_rel_evals.r_arith.scale_by_challenge_and_accumulate(
+            &mut linearly_independent_contribution,
+            &mut linearly_dependent_contribution,
+            &[first_scalar, elements[0]],
+        );
+        all_rel_evals.r_perm.scale_by_challenge_and_accumulate(
+            &mut linearly_independent_contribution,
+            &mut linearly_dependent_contribution,
+            &elements[1..3],
+        );
+        all_rel_evals.r_lookup.scale_by_challenge_and_accumulate(
+            &mut linearly_independent_contribution,
+            &mut linearly_dependent_contribution,
+            &elements[3..5],
+        );
+        all_rel_evals.r_delta.scale_by_challenge_and_accumulate(
+            &mut linearly_independent_contribution,
+            &mut linearly_dependent_contribution,
+            &elements[5..9],
+        );
+        all_rel_evals.r_elliptic.scale_by_challenge_and_accumulate(
+            &mut linearly_independent_contribution,
+            &mut linearly_dependent_contribution,
+            &elements[9..11],
+        );
+        all_rel_evals.r_aux.scale_by_challenge_and_accumulate(
+            &mut linearly_independent_contribution,
+            &mut linearly_dependent_contribution,
+            &elements[11..17],
+        );
+        all_rel_evals.r_pos_ext.scale_by_challenge_and_accumulate(
+            &mut linearly_independent_contribution,
+            &mut linearly_dependent_contribution,
+            &elements[17..21],
+        );
+        all_rel_evals.r_pos_int.scale_by_challenge_and_accumulate(
+            &mut linearly_independent_contribution,
+            &mut linearly_dependent_contribution,
+            &elements[21..],
+        );
+
+        (
+            linearly_independent_contribution,
+            linearly_dependent_contribution,
+        )
+    }
+
     fn receive_round_univariate_from_prover<
         F: PrimeField,
         H: TranscriptHasher<F>,
@@ -389,9 +464,10 @@ impl PlainProverFlavour for UltraFlavour {
     }
     fn get_alpha_challenges<F: PrimeField, H: TranscriptHasher<F>, P: HonkCurve<F>>(
         transcript: &mut Transcript<F, H>,
-        alphas: &mut Self::Alphas<P::ScalarField>,
+        alphas: &mut Vec<Self::Alpha<P::ScalarField>>,
     ) {
         let args: [String; Self::NUM_ALPHAS] = array::from_fn(|i| format!("alpha_{i}"));
+        alphas.resize(Self::NUM_ALPHAS, P::ScalarField::ZERO);
         alphas.copy_from_slice(&transcript.get_challenges::<P>(&args));
     }
 }

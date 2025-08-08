@@ -38,7 +38,7 @@ pub(crate) type PartiallyEvaluatePolys<F, L> = AllEntities<Vec<F>, L>;
 pub(crate) type ClaimedEvaluations<F, L> = AllEntities<F, L>;
 pub(crate) type VerifierCommitments<P, L> = AllEntities<P, L>;
 
- #[derive(Default, PartialEq, Debug)]
+#[derive(Default, PartialEq, Debug)]
 pub struct RelationParameters<T> {
     pub eta_1: T,
     pub eta_2: T,
@@ -61,7 +61,7 @@ impl<T: PartialEq> RelationParameters<T> {
             &mut self.lookup_grand_product_delta,
         ]
     }
-    
+
     pub fn get_params(&self) -> Vec<&T> {
         vec![
             &self.eta_1,

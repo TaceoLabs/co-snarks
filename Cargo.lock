@@ -3649,6 +3649,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "protogalaxy"
+version = "0.1.0"
+dependencies = [
+ "acir",
+ "ark-bn254",
+ "ark-ec",
+ "ark-ff",
+ "ark-grumpkin",
+ "ark-poly",
+ "ark-serialize",
+ "blake3",
+ "co-acvm",
+ "co-builder",
+ "eyre",
+ "flate2",
+ "itertools 0.14.0",
+ "mpc-core",
+ "num-bigint 0.4.6",
+ "num-traits",
+ "proc-macro2",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "syn 1.0.109",
+ "thiserror 2.0.12",
+ "tracing",
+ "ultrahonk",
+]
+
+[[package]]
 name = "quick-xml"
 version = "0.36.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

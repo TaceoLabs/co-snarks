@@ -6,7 +6,7 @@ use std::{
     array,
     ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Univariate<F, const SIZE: usize> {
     pub evaluations: [F; SIZE],
 }
@@ -26,6 +26,16 @@ impl<F: PrimeField, const SIZE: usize> Univariate<F, SIZE> {
         } else {
             *result += extended;
         }
+    }
+
+    pub(crate) fn extend_and_batch_univariates_2<const SIZE2: usize>(
+        &self,
+        result: &mut Univariate<F, SIZE2>,
+        scale: &Univariate<F, SIZE2>,
+    ) {
+        let mut extended = Univariate::<F, SIZE2>::default();
+        extended.extend_from(&self.evaluations);
+        *result += extended * scale;
     }
 }
 

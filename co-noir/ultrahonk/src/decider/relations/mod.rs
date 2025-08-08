@@ -12,6 +12,7 @@ pub(crate) mod ultra_arithmetic_relation;
 use super::types::{ClaimedEvaluations, RelationParameters};
 use crate::decider::types::ProverUnivariatesSized;
 use crate::plain_prover_flavour::PlainProverFlavour;
+use crate::prelude::Univariate;
 use ark_ff::PrimeField;
 
 pub(crate) trait Relation<F: PrimeField, L: PlainProverFlavour> {
@@ -30,14 +31,21 @@ pub(crate) trait Relation<F: PrimeField, L: PlainProverFlavour> {
     fn accumulate<const SIZE: usize>(
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesSized<F, L, SIZE>,
-        relation_parameters: &RelationParameters<F, L>,
+        relation_parameters: &RelationParameters<F>,
+        scaling_factor: &F,
+    );
+
+    fn accumulate_with_extended_parameters<const SIZE: usize>(
+        univariate_accumulator: &mut Self::Acc,
+        input: &ProverUnivariatesSized<F, L, SIZE>,
+        relation_parameters: &RelationParameters<Univariate<F, SIZE>>,
         scaling_factor: &F,
     );
 
     fn verify_accumulate(
         univariate_accumulator: &mut Self::VerifyAcc,
         input: &ClaimedEvaluations<F, L>,
-        relation_parameters: &RelationParameters<F, L>,
+        relation_parameters: &RelationParameters<F>,
         scaling_factor: &F,
     );
 }

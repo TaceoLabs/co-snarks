@@ -6,8 +6,12 @@ use co_builder::prelude::Polynomial;
 use co_builder::{TranscriptFieldType, prelude::HonkCurve};
 use ultrahonk::plain_prover_flavour::{PlainProverFlavour, UnivariateTrait};
 use ultrahonk::prelude::{AllEntities, GateSeparatorPolynomial, ProvingKey, Univariate};
+use proc_macro2::TokenStream;
+use syn::{parse_macro_input, DeriveInput, Data, Fields};
 
 use crate::protogalaxy_prover::{CONST_PG_LOG_N, DeciderProverMemory, ExtendedRelationParameters};
+
+
 
 pub(crate) fn compute_extended_relation_parameters<
     C: HonkCurve<TranscriptFieldType>,

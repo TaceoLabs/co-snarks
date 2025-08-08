@@ -2,7 +2,10 @@ use super::{
     super::types::{GateSeparatorPolynomial, RelationParameters},
     zk_data::ZKSumcheckData,
 };
-use crate::{decider::types::ProverUnivariates, plain_prover_flavour::PlainProverFlavour};
+use crate::{
+    decider::types::ProverUnivariates, plain_prover_flavour::PlainProverFlavour,
+    prelude::Univariate,
+};
 use crate::{
     decider::{
         relations::{
@@ -111,7 +114,7 @@ impl<F: PrimeField, L: PlainProverFlavour> SumcheckProverRound<F, L> {
      */
     fn batch_over_relations_univariates(
         mut univariate_accumulators: L::AllRelationAcc<F>,
-        alphas: &L::Alphas<F>,
+        alphas: &[L::Alpha<F>],
         gate_separators: &GateSeparatorPolynomial<F>,
     ) -> L::SumcheckRoundOutput<F> {
         tracing::trace!("batch over relations");
@@ -125,7 +128,7 @@ impl<F: PrimeField, L: PlainProverFlavour> SumcheckProverRound<F, L> {
 
     fn batch_over_relations_univariates_zk(
         mut univariate_accumulators: L::AllRelationAcc<F>,
-        alphas: &L::Alphas<F>,
+        alphas: &[L::Alpha<F>],
         gate_separators: &GateSeparatorPolynomial<F>,
     ) -> L::SumcheckRoundOutputZK<F> {
         tracing::trace!("batch over relations");
@@ -140,7 +143,7 @@ impl<F: PrimeField, L: PlainProverFlavour> SumcheckProverRound<F, L> {
     pub(crate) fn accumulate_one_relation_univariates<R: Relation<F, L>, const SIZE: usize>(
         univariate_accumulator: &mut R::Acc,
         extended_edges: &ProverUnivariatesSized<F, L, SIZE>,
-        relation_parameters: &RelationParameters<F, L>,
+        relation_parameters: &RelationParameters<F>,
         scaling_factor: &F,
     ) {
         if R::SKIPPABLE && R::skip(extended_edges) {
@@ -155,13 +158,34 @@ impl<F: PrimeField, L: PlainProverFlavour> SumcheckProverRound<F, L> {
         );
     }
 
+    pub(crate) fn accumulate_one_relation_univariates_extended_params<
+        R: Relation<F, L>,
+        const SIZE: usize,
+    >(
+        univariate_accumulator: &mut R::Acc,
+        extended_edges: &ProverUnivariatesSized<F, L, SIZE>,
+        relation_parameters: &RelationParameters<Univariate<F, SIZE>>,
+        scaling_factor: &F,
+    ) {
+        if R::SKIPPABLE && R::skip(extended_edges) {
+            return;
+        }
+
+        R::accumulate_with_extended_parameters(
+            univariate_accumulator,
+            extended_edges,
+            relation_parameters,
+            scaling_factor,
+        );
+    }
+
     pub(crate) fn accumulate_elliptic_curve_relation_univariates<
         P: HonkCurve<TranscriptFieldType, ScalarField = F>,
         const SIZE: usize,
     >(
         univariate_accumulator: &mut EllipticRelationAcc<F>,
         extended_edges: &ProverUnivariatesSized<F, L, SIZE>,
-        relation_parameters: &RelationParameters<F, L>,
+        relation_parameters: &RelationParameters<F>,
         scaling_factor: &F,
     ) {
         if EllipticRelation::SKIPPABLE && EllipticRelation::skip::<F, L, SIZE>(extended_edges) {
@@ -176,9 +200,30 @@ impl<F: PrimeField, L: PlainProverFlavour> SumcheckProverRound<F, L> {
         );
     }
 
+    pub(crate) fn accumulate_elliptic_curve_relation_univariates_extended_params<
+        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
+        const SIZE: usize,
+    >(
+        univariate_accumulator: &mut EllipticRelationAcc<F>,
+        extended_edges: &ProverUnivariatesSized<F, L, SIZE>,
+        relation_parameters: &RelationParameters<Univariate<F, SIZE>>,
+        scaling_factor: &F,
+    ) {
+        if EllipticRelation::SKIPPABLE && EllipticRelation::skip::<F, L, SIZE>(extended_edges) {
+            return;
+        }
+
+        EllipticRelation::accumulate_with_extended_parameters::<P, L, SIZE>(
+            univariate_accumulator,
+            extended_edges,
+            relation_parameters,
+            scaling_factor,
+        );
+    }
+
     fn compute_univariate_inner_template<P: HonkCurve<TranscriptFieldType, ScalarField = F>>(
         &self,
-        relation_parameters: &RelationParameters<P::ScalarField, L>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
         gate_separators: &GateSeparatorPolynomial<P::ScalarField>,
         polynomials: &AllEntities<Vec<P::ScalarField>, L>,
     ) -> L::AllRelationAcc<F> {
@@ -209,8 +254,9 @@ impl<F: PrimeField, L: PlainProverFlavour> SumcheckProverRound<F, L> {
 
     fn compute_univariate_inner<P: HonkCurve<TranscriptFieldType, ScalarField = F>>(
         &self,
-        relation_parameters: &RelationParameters<P::ScalarField, L>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
         gate_separators: &GateSeparatorPolynomial<P::ScalarField>,
+        alphas: &[L::Alpha<F>],
         polynomials: &AllEntities<Vec<P::ScalarField>, L>,
     ) -> L::SumcheckRoundOutput<P::ScalarField> {
         let univariate_accumulators = self.compute_univariate_inner_template::<P>(
@@ -219,17 +265,14 @@ impl<F: PrimeField, L: PlainProverFlavour> SumcheckProverRound<F, L> {
             polynomials,
         );
 
-        Self::batch_over_relations_univariates(
-            univariate_accumulators,
-            &relation_parameters.alphas,
-            gate_separators,
-        )
+        Self::batch_over_relations_univariates(univariate_accumulators, alphas, gate_separators)
     }
 
     fn compute_univariate_inner_zk<P: HonkCurve<TranscriptFieldType, ScalarField = F>>(
         &self,
-        relation_parameters: &RelationParameters<P::ScalarField, L>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
         gate_separators: &GateSeparatorPolynomial<P::ScalarField>,
+        alphas: &[L::Alpha<F>],
         polynomials: &AllEntities<Vec<P::ScalarField>, L>,
     ) -> L::SumcheckRoundOutputZK<P::ScalarField> {
         let univariate_accumulators = self.compute_univariate_inner_template::<P>(
@@ -238,30 +281,33 @@ impl<F: PrimeField, L: PlainProverFlavour> SumcheckProverRound<F, L> {
             polynomials,
         );
 
-        Self::batch_over_relations_univariates_zk(
-            univariate_accumulators,
-            &relation_parameters.alphas,
-            gate_separators,
-        )
+        Self::batch_over_relations_univariates_zk(univariate_accumulators, alphas, gate_separators)
     }
 
     pub(crate) fn compute_univariate<P: HonkCurve<TranscriptFieldType, ScalarField = F>>(
         &self,
         round_index: usize,
-        relation_parameters: &RelationParameters<P::ScalarField, L>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
         gate_separators: &GateSeparatorPolynomial<P::ScalarField>,
+        alphas: &[L::Alpha<F>],
         polynomials: &AllEntities<Vec<P::ScalarField>, L>,
     ) -> L::SumcheckRoundOutput<P::ScalarField> {
         tracing::trace!("Sumcheck round {}", round_index);
 
-        self.compute_univariate_inner::<P>(relation_parameters, gate_separators, polynomials)
+        self.compute_univariate_inner::<P>(
+            relation_parameters,
+            gate_separators,
+            alphas,
+            polynomials,
+        )
     }
 
     pub(crate) fn compute_univariate_zk<P: HonkCurve<TranscriptFieldType, ScalarField = F>>(
         &self,
         round_index: usize,
-        relation_parameters: &RelationParameters<P::ScalarField, L>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
         gate_separators: &GateSeparatorPolynomial<P::ScalarField>,
+        alphas: &[L::Alpha<F>],
         polynomials: &AllEntities<Vec<P::ScalarField>, L>,
         zk_sumcheck_data: &ZKSumcheckData<P>,
         row_disabling_polynomial: &mut RowDisablingPolynomial<P::ScalarField>,
@@ -271,6 +317,7 @@ impl<F: PrimeField, L: PlainProverFlavour> SumcheckProverRound<F, L> {
         let round_univariate = self.compute_univariate_inner_zk::<P>(
             relation_parameters,
             gate_separators,
+            alphas,
             polynomials,
         );
 
@@ -278,6 +325,7 @@ impl<F: PrimeField, L: PlainProverFlavour> SumcheckProverRound<F, L> {
             polynomials,
             relation_parameters,
             gate_separators,
+            alphas,
             self.round_size,
             round_index,
             row_disabling_polynomial,
@@ -319,8 +367,9 @@ impl<F: PrimeField, L: PlainProverFlavour> SumcheckProverRound<F, L> {
 
     fn compute_disabled_contribution<P: HonkCurve<TranscriptFieldType, ScalarField = F>>(
         polynomials: &AllEntities<Vec<P::ScalarField>, L>,
-        relation_parameters: &RelationParameters<P::ScalarField, L>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
         gate_separators: &GateSeparatorPolynomial<P::ScalarField>,
+        alphas: &[L::Alpha<F>],
         round_size: usize,
         round_idx: usize,
         row_disabling_polynomial: &RowDisablingPolynomial<P::ScalarField>,
@@ -349,7 +398,7 @@ impl<F: PrimeField, L: PlainProverFlavour> SumcheckProverRound<F, L> {
         }
         let mut result = Self::batch_over_relations_univariates_zk(
             univariate_accumulators,
-            &relation_parameters.alphas,
+            alphas,
             gate_separators,
         );
 

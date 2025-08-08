@@ -1,5 +1,4 @@
 use ark_ff::PrimeField;
-use std::{fmt::Debug};
 use co_builder::{
     HonkProofResult,
     polynomials::polynomial_flavours::{
@@ -7,6 +6,7 @@ use co_builder::{
     },
     prelude::Serialize,
 };
+use std::fmt::Debug;
 
 use crate::plain_prover_flavour::PlainProverFlavour;
 
@@ -45,9 +45,9 @@ impl<F: PrimeField> HonkProof<F> {
     }
 }
 
-pub struct AllEntities<T, L> 
-where 
-    T:  Default + Debug + Clone + std::marker::Sync,
+pub struct AllEntities<T, L>
+where
+    T: Default + Debug + Clone + std::marker::Sync,
     L: PlainProverFlavour,
 {
     pub witness: L::WitnessEntities<T>,
@@ -55,26 +55,23 @@ where
     pub shifted_witness: L::ShiftedWitnessEntities<T>,
 }
 
-impl<T, L> AllEntities<T, L> 
-where 
-    T:  Default + Clone + Debug + std::marker::Sync,
-    L: PlainProverFlavour,{
+impl<T, L> AllEntities<T, L>
+where
+    T: Default + Clone + Debug + std::marker::Sync,
+    L: PlainProverFlavour,
+{
     pub fn from_elements(elements: Vec<T>) -> Self {
         let mut precomputed = elements;
         let mut witness = precomputed.split_off(L::PRECOMPUTED_ENTITIES_SIZE);
-        let shifted_witness = witness.split_off(L::WITNESS_ENTITIES_SIZE).try_into().unwrap();
+        let shifted_witness = witness
+            .split_off(L::WITNESS_ENTITIES_SIZE)
+            .try_into()
+            .unwrap();
 
-        
         AllEntities {
-            precomputed: L::PrecomputedEntities::from_elements(
-                precomputed
-            ),
-            witness: L::WitnessEntities::from_elements(
-                witness,
-            ),
-            shifted_witness: L::ShiftedWitnessEntities::from_elements(
-                shifted_witness,
-            ),
+            precomputed: L::PrecomputedEntities::from_elements(precomputed),
+            witness: L::WitnessEntities::from_elements(witness),
+            shifted_witness: L::ShiftedWitnessEntities::from_elements(shifted_witness),
         }
     }
 }
@@ -84,16 +81,28 @@ where
     F: Default + Clone + Debug + std::marker::Sync,
     L: PlainProverFlavour,
 {
+    // TODO CESAR: Rewrite using from_elements
     pub fn get_row(&self, index: usize) -> AllEntities<F, L> {
         AllEntities {
-            witness: L::WitnessEntities::from_elements(self.witness.iter().map(|v| v[index].clone()).collect()),
-            precomputed: L::PrecomputedEntities::from_elements(self.precomputed.iter().map(|v| v[index].clone()).collect()),
-            shifted_witness: L::ShiftedWitnessEntities::from_elements(self.shifted_witness.iter().map(|v| v[index].clone()).collect()),
+            witness: L::WitnessEntities::from_elements(
+                self.witness.iter().map(|v| v[index].clone()).collect(),
+            ),
+            precomputed: L::PrecomputedEntities::from_elements(
+                self.precomputed.iter().map(|v| v[index].clone()).collect(),
+            ),
+            shifted_witness: L::ShiftedWitnessEntities::from_elements(
+                self.shifted_witness
+                    .iter()
+                    .map(|v| v[index].clone())
+                    .collect(),
+            ),
         }
     }
 }
 
-impl<T: Default + Clone + Debug + std::marker::Sync, L: PlainProverFlavour> Default for AllEntities<T, L> {
+impl<T: Default + Clone + Debug + std::marker::Sync, L: PlainProverFlavour> Default
+    for AllEntities<T, L>
+{
     fn default() -> Self {
         Self {
             witness: L::WitnessEntities::default(),

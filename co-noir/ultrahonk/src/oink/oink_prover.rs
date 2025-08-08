@@ -37,7 +37,7 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
 use std::marker::PhantomData;
 
-pub(crate) struct Oink<
+pub struct Oink<
     P: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
     L: PlainProverFlavour,
@@ -65,7 +65,7 @@ impl<
     L: PlainProverFlavour,
 > Oink<P, H, L>
 {
-    pub(crate) fn new(has_zk: ZeroKnowledge) -> Self {
+    pub fn new(has_zk: ZeroKnowledge) -> Self {
         Self {
             memory: ProverMemory::default(),
             phantom_data: PhantomData,
@@ -489,11 +489,11 @@ impl<
         // Compute grand product values corresponding only to the active regions of the trace
         for i in 0..active_domain_size - 1 {
             let idx = if has_active_ranges {
-                proving_key.active_region_data.get_idx(i)
+                proving_key.active_region_data.get_idx(i + 1)
             } else {
-                i
+                i + 1
             };
-            self.memory.z_perm[idx + 1] = numerator[i] * denominator[i];
+            self.memory.z_perm[idx] = numerator[i] * denominator[i];
         }
 
         // Final step: If active/inactive regions have been specified, the value of the grand product in the inactive
@@ -507,7 +507,8 @@ impl<
                     let next_range_start = proving_key.active_region_data.get_range(j + 1).0;
                     // Set the value of the polynomial if the index falls in an inactive region
                     if i >= previous_range_end && i < next_range_start {
-                        self.memory.z_perm[i + 1] = self.memory.z_perm[next_range_start];
+                        self.memory.z_perm[i] = self.memory.z_perm[next_range_start];
+                        break;
                     }
                 }
             }
@@ -516,7 +517,7 @@ impl<
 
     /// Generate relation separators alphas for sumcheck/combiner computation
     pub(crate) fn generate_alphas_round(
-        alphas: &mut L::Alphas<P::ScalarField>,
+        alphas: &mut Vec<L::Alpha<P::ScalarField>>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
     ) {
         tracing::trace!("generate alpha round");
@@ -822,7 +823,7 @@ impl<
         Ok(())
     }
 
-    pub(crate) fn prove(
+    pub fn prove(
         mut self,
         proving_key: &mut ProvingKey<P, L>,
         transcript: &mut Transcript<TranscriptFieldType, H>,

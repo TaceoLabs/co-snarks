@@ -10,7 +10,7 @@ use std::fmt::Debug;
 pub trait PlainProverFlavour: Default + ProverFlavour {
     type AllRelationAcc<F: PrimeField>: Default;
     type AllRelationEvaluations<F: PrimeField>: Default;
-    type Alphas<F: PrimeField>: Default + Clone + Copy + Debug;
+    type Alpha<F: PrimeField>: Default + Clone + Copy + Debug;
     type SumcheckRoundOutput<F: PrimeField>: Default
         + std::ops::MulAssign
         + std::ops::Add
@@ -25,6 +25,7 @@ pub trait PlainProverFlavour: Default + ProverFlavour {
         + UnivariateTrait<F>;
     type ProverUnivariate<F: PrimeField>: UnivariateTrait<F>
         + Clone
+        + Debug
         + Default
         + std::marker::Sync
         + std::ops::MulAssign
@@ -38,7 +39,7 @@ pub trait PlainProverFlavour: Default + ProverFlavour {
     fn scale<F: PrimeField>(
         acc: &mut Self::AllRelationAcc<F>,
         first_scalar: F,
-        elements: &Self::Alphas<F>,
+        elements: &[Self::Alpha<F>],
     );
     fn extend_and_batch_univariates<F: PrimeField>(
         acc: &Self::AllRelationAcc<F>,
@@ -52,23 +53,44 @@ pub trait PlainProverFlavour: Default + ProverFlavour {
         extended_random_poly: &Self::SumcheckRoundOutputZK<F>,
         partial_evaluation_result: &F,
     );
+    // TODO CESAR: Better name
+    fn extend_and_batch_univariates_2<F: PrimeField, const SIZE: usize>(
+        univariate_accumulators: &Self::AllRelationAcc<F>,
+        result: &mut Univariate<F, SIZE>,
+        first_term: Univariate<F, SIZE>,
+        running_challenge: &[Univariate<F, SIZE>],
+    );
     fn accumulate_relation_univariates<P: HonkCurve<TranscriptFieldType>>(
         univariate_accumulators: &mut Self::AllRelationAcc<P::ScalarField>,
         extended_edges: &ProverUnivariates<P::ScalarField, Self>,
-        relation_parameters: &RelationParameters<P::ScalarField, Self>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
+        scaling_factor: &P::ScalarField,
+    );
+    fn accumulate_relation_univariates_extended_parameters<
+        P: HonkCurve<TranscriptFieldType>,
+        const SIZE: usize,
+    >(
+        univariate_accumulators: &mut Self::AllRelationAcc<P::ScalarField>,
+        extended_edges: &ProverUnivariatesSized<P::ScalarField, Self, SIZE>,
+        relation_parameters: &RelationParameters<Univariate<P::ScalarField, SIZE>>,
         scaling_factor: &P::ScalarField,
     );
     fn accumulate_relation_evaluations<P: HonkCurve<TranscriptFieldType>>(
         univariate_accumulators: &mut Self::AllRelationEvaluations<P::ScalarField>,
         extended_edges: &ClaimedEvaluations<P::ScalarField, Self>,
-        relation_parameters: &RelationParameters<P::ScalarField, Self>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
         scaling_factor: &P::ScalarField,
     );
     fn scale_and_batch_elements<F: PrimeField>(
         all_rel_evals: &Self::AllRelationEvaluations<F>,
         first_scalar: F,
-        elements: &Self::Alphas<F>,
+        elements: &[Self::Alpha<F>],
     ) -> F;
+    fn scale_by_challenge_and_accumulate<F: PrimeField>(
+        all_rel_evals: &Self::AllRelationEvaluations<F>,
+        first_scalar: F,
+        elements: &[Self::Alpha<F>],
+    ) -> (F, F);
     fn receive_round_univariate_from_prover<
         F: PrimeField,
         H: TranscriptHasher<F>,
@@ -88,7 +110,7 @@ pub trait PlainProverFlavour: Default + ProverFlavour {
 
     fn get_alpha_challenges<F: PrimeField, H: TranscriptHasher<F>, P: HonkCurve<F>>(
         transcript: &mut Transcript<F, H>,
-        alphas: &mut Self::Alphas<P::ScalarField>,
+        alphas: &mut Vec<Self::Alpha<P::ScalarField>>,
     );
 }
 
