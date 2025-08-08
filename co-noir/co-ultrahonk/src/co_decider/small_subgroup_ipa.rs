@@ -1,18 +1,10 @@
 use std::marker::PhantomData;
 
-use crate::CONST_PROOF_SIZE_LOG_N;
-use crate::CoUtils;
-use crate::mpc::NoirUltraHonkProver;
-use crate::mpc_prover_flavour::SharedUnivariateTrait;
-use crate::prelude::TranscriptHasher;
-use mpc_core::MpcState;
-use mpc_net::Network;
-use ultrahonk::prelude::Transcript;
-
 use super::co_sumcheck::zk_data::SharedZKSumcheckData;
-use super::polynomial::SharedPolynomial;
 use super::univariates::SharedUnivariate;
-use ark_ec::pairing::Pairing;
+use crate::CONST_PROOF_SIZE_LOG_N;
+use crate::mpc_prover_flavour::SharedUnivariateTrait;
+use ark_ec::CurveGroup;
 use ark_ff::One;
 use ark_ff::Zero;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
@@ -20,8 +12,14 @@ use co_builder::HonkProofError;
 use co_builder::HonkProofResult;
 use co_builder::TranscriptFieldType;
 use co_builder::prelude::{HonkCurve, Polynomial, ProverCrs};
+use common::CoUtils;
+use common::mpc::NoirUltraHonkProver;
+use common::shared_polynomial::SharedPolynomial;
+use common::transcript::{Transcript, TranscriptHasher};
+use mpc_core::MpcState;
+use mpc_net::Network;
 
-pub(crate) struct SharedSmallSubgroupIPAProver<T: NoirUltraHonkProver<P>, P: Pairing> {
+pub(crate) struct SharedSmallSubgroupIPAProver<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     interpolation_domain: Vec<P::ScalarField>,
     concatenated_polynomial: SharedPolynomial<T, P>,
     libra_concatenated_lagrange_form: SharedPolynomial<T, P>,

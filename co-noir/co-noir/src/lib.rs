@@ -5,6 +5,7 @@ use acir::{
     acir_field::GenericFieldElement,
     native_types::{WitnessMap, WitnessStack},
 };
+use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::pss_store::PssStore;
 use co_acvm::{
@@ -34,11 +35,13 @@ pub use co_ultrahonk::{
     Rep3CoBuilder, ShamirCoBuilder,
     prelude::{
         AcirFormat, CrsParser, HonkRecursion, PlainProvingKey, Polynomial, Polynomials,
-        Poseidon2Sponge, Rep3CoUltraHonk, Rep3ProvingKey, ShamirCoUltraHonk, ShamirProvingKey,
-        UltraCircuitBuilder, UltraHonk, VerifyingKey, VerifyingKeyBarretenberg,
+        Rep3CoUltraHonk, Rep3ProvingKey, ShamirCoUltraHonk, ShamirProvingKey, UltraCircuitBuilder,
+        UltraHonk, VerifyingKey, VerifyingKeyBarretenberg,
     },
 };
 pub use sha3::Keccak256;
+
+pub type Bn254G1 = <ark_ec::bn::Bn<ark_bn254::Config> as ark_ec::pairing::Pairing>::G1;
 
 #[derive(Clone, Debug)]
 pub enum PubShared<F: Clone> {
@@ -202,7 +205,7 @@ type ShamirProverWitnessEntities<T> =
 
 /// Translate a REP3 shared proving key to a shamir shared proving key
 #[allow(clippy::complexity)]
-pub fn translate_proving_key<P: Pairing, N: Network>(
+pub fn translate_proving_key<P: CurveGroup, N: Network>(
     proving_key: Rep3ProvingKey<P, UltraFlavour>,
     net: &N,
 ) -> Result<ShamirProvingKey<P, UltraFlavour>> {
@@ -280,7 +283,7 @@ pub fn generate_proving_key_rep3<N: Network>(
     recursive: bool,
     net0: &N,
     net1: &N,
-) -> Result<Rep3ProvingKey<Bn254, UltraFlavour>> {
+) -> Result<Rep3ProvingKey<Bn254G1, UltraFlavour>> {
     let id = PartyID::try_from(net0.id())?;
     let mut driver = Rep3AcvmSolver::new(net0, net1, A2BType::default())?;
     // create the circuit
@@ -305,7 +308,7 @@ pub fn generate_proving_key_shamir<N: Network>(
     witness_share: Vec<ShamirAcvmType<ark_bn254::Fr>>,
     recursive: bool,
     net: &N,
-) -> Result<ShamirProvingKey<Bn254, UltraFlavour>> {
+) -> Result<ShamirProvingKey<Bn254G1, UltraFlavour>> {
     let id = net.id();
     // We have to handle precomputation on the fly, so amount is 0 initially
     let preprocessing = ShamirPreprocessing::new(num_parties, threshold, 0, net)?;
@@ -348,14 +351,17 @@ pub fn generate_proving_key_plain<P: HonkCurve<TranscriptFieldType>>(
 }
 
 /// Generate a verification key
-pub fn generate_vk<P: HonkCurve<TranscriptFieldType>>(
+pub fn generate_vk<P: Pairing>(
     constraint_system: &AcirFormat<P::ScalarField>,
-    prover_crs: Arc<ProverCrs<P>>,
+    prover_crs: Arc<ProverCrs<P::G1>>,
     verifier_crs: P::G2Affine,
     recursive: bool,
-) -> Result<VerifyingKey<P, UltraFlavour>> {
+) -> Result<VerifyingKey<P, UltraFlavour>>
+where
+    P::G1: HonkCurve<TranscriptFieldType>,
+{
     let mut driver = PlainAcvmSolver::new();
-    let circuit = UltraCircuitBuilder::<P>::create_circuit(
+    let circuit = UltraCircuitBuilder::<P::G1>::create_circuit(
         constraint_system,
         recursive,
         0,
@@ -391,7 +397,7 @@ pub fn generate_vk_barretenberg<P: HonkCurve<TranscriptFieldType>>(
 }
 
 /// Split a proving key into RPE3 shares
-pub fn split_proving_key_rep3<P: Pairing, R: Rng + CryptoRng>(
+pub fn split_proving_key_rep3<P: CurveGroup, R: Rng + CryptoRng>(
     proving_key: PlainProvingKey<P, UltraFlavour>,
     rng: &mut R,
 ) -> Result<[Rep3ProvingKey<P, UltraFlavour>; 3]> {
@@ -418,7 +424,7 @@ pub fn split_proving_key_rep3<P: Pairing, R: Rng + CryptoRng>(
 }
 
 /// Split a proving key into shamir shares
-pub fn split_proving_key_shamir<P: Pairing, R: Rng + CryptoRng>(
+pub fn split_proving_key_shamir<P: CurveGroup, R: Rng + CryptoRng>(
     proving_key: PlainProvingKey<P, UltraFlavour>,
     degree: usize,
     num_parties: usize,
@@ -486,7 +492,8 @@ pub fn parse_barretenberg_vk<P>(
     verifier_crs: P::G2Affine,
 ) -> eyre::Result<VerifyingKey<P, UltraFlavour>>
 where
-    P: Pairing + HonkCurve<TranscriptFieldType>,
+    P: Pairing,
+    P::G1: HonkCurve<TranscriptFieldType>,
 {
     let vk = VerifyingKeyBarretenberg::from_buffer(vk)
         .context("while deserializing verification key")?;

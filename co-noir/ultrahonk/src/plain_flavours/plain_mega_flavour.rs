@@ -1,6 +1,6 @@
 use crate::decider::relations::databus_lookup_relation::DataBusLookupRelationEvals;
 use crate::decider::relations::ecc_op_queue_relation::EccOpQueueRelationEvals;
-use crate::decider::sumcheck::round_prover::SumcheckProverRound;
+use crate::decider::sumcheck::sumcheck_round_prover::SumcheckProverRound;
 use crate::decider::types::{ProverUnivariates, RelationParameters};
 use crate::decider::{
     relations::{
@@ -28,17 +28,17 @@ use crate::decider::{
             UltraArithmeticRelation, UltraArithmeticRelationAcc, UltraArithmeticRelationEvals,
         },
     },
-    sumcheck::round_verifier::SumcheckVerifierRound,
+    sumcheck::sumcheck_round_verifier::SumcheckVerifierRound,
     types::ClaimedEvaluations,
 };
 use crate::plain_prover_flavour::PlainProverFlavour;
-use crate::prelude::{Transcript, TranscriptHasher, Univariate};
-use crate::transcript::TranscriptFieldType;
+use crate::prelude::Univariate;
 use ark_ff::PrimeField;
 use co_builder::HonkProofResult;
 use co_builder::flavours::mega_flavour::MegaFlavour;
 use co_builder::prelude::HonkCurve;
 use co_builder::prover_flavour::ProverFlavour;
+use common::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
 use std::array;
 
 #[derive(Default)]

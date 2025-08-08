@@ -1,6 +1,5 @@
 use super::big_field::BigGroup;
 use super::field_ct::{CycleGroupCT, FieldCT};
-use crate::builder::UltraCircuitBuilder;
 use crate::flavours::ultra_flavour::UltraFlavour;
 use crate::keys::proving_key::ProvingKey;
 use crate::polynomials::polynomial::Polynomial;
@@ -9,7 +8,8 @@ use crate::polynomials::polynomial_flavours::{
 };
 use crate::prelude::GenericUltraCircuitBuilder;
 use crate::prover_flavour::ProverFlavour;
-use ark_ec::pairing::Pairing;
+use crate::ultra_builder::UltraCircuitBuilder;
+use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use num_bigint::BigUint;
@@ -524,11 +524,11 @@ pub(crate) struct Blake3Constraint<F: PrimeField> {
     pub(crate) result: [u32; 32],
 }
 
-pub(crate) struct AggregationState<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
+pub(crate) struct AggregationState<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
     p0: BigGroup<P, T>,
     p1: BigGroup<P, T>,
 }
-impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> AggregationState<P, T> {
+impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> AggregationState<P, T> {
     pub(crate) fn new(p0: BigGroup<P, T>, p1: BigGroup<P, T>) -> Self {
         Self { p0, p1 }
     }
@@ -539,7 +539,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> AggregationSta
 // Four limbs are used when simulating a non-native field using the bigfield class, so 16 total field elements.
 pub const PAIRING_POINT_ACCUMULATOR_SIZE: u32 = 16;
 
-impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> AggregationState<P, T> {
+impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> AggregationState<P, T> {
     pub fn set_public(
         &mut self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
@@ -662,7 +662,7 @@ pub struct CycleNode {
 }
 pub type CyclicPermutation = Vec<CycleNode>;
 
-pub(crate) struct TraceData<'a, P: Pairing> {
+pub(crate) struct TraceData<'a, P: CurveGroup> {
     pub(crate) wires: &'a mut [Polynomial<P::ScalarField>; NUM_WIRES],
     pub(crate) selectors: &'a mut [Polynomial<P::ScalarField>; NUM_SELECTORS],
     pub(crate) copy_cycles: Vec<CyclicPermutation>,
@@ -670,7 +670,7 @@ pub(crate) struct TraceData<'a, P: Pairing> {
     pub(crate) pub_inputs_offset: u32,
 }
 
-impl<'a, P: Pairing> TraceData<'a, P> {
+impl<'a, P: CurveGroup> TraceData<'a, P> {
     pub(crate) fn new(
         builder: &UltraCircuitBuilder<P>,
         proving_key: &'a mut ProvingKey<P, UltraFlavour>,
@@ -841,7 +841,7 @@ impl<F: PrimeField> WitnessOrConstant<F> {
     }
 
     pub(crate) fn to_grumpkin_point<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         input_x: &Self,

@@ -1,9 +1,9 @@
 use crate::plain_prover_flavour::PlainProverFlavour;
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_builder::prelude::Polynomial;
 
-pub struct ProverMemory<P: Pairing, L: PlainProverFlavour> {
+pub(crate) struct ProverMemory<P: CurveGroup, L: PlainProverFlavour> {
     /// column 3
     pub(crate) w_4: Polynomial<P::ScalarField>,
     /// column 4
@@ -17,9 +17,9 @@ pub struct ProverMemory<P: Pairing, L: PlainProverFlavour> {
     pub(crate) challenges: Challenges<P::ScalarField, L>,
 }
 
-pub(crate) struct VerifierMemory<P: Pairing, L: PlainProverFlavour> {
+pub(crate) struct VerifierMemory<P: CurveGroup, L: PlainProverFlavour> {
     pub(crate) public_input_delta: P::ScalarField,
-    pub(crate) witness_commitments: L::WitnessEntities<P::G1Affine>,
+    pub(crate) witness_commitments: L::WitnessEntities<P::Affine>,
     pub(crate) challenges: Challenges<P::ScalarField, L>,
 }
 
@@ -45,7 +45,7 @@ impl<F: PrimeField, L: PlainProverFlavour> Default for Challenges<F, L> {
     }
 }
 
-impl<P: Pairing, L: PlainProverFlavour> Default for ProverMemory<P, L> {
+impl<P: CurveGroup, L: PlainProverFlavour> Default for ProverMemory<P, L> {
     fn default() -> Self {
         Self {
             w_4: Default::default(),
@@ -60,7 +60,7 @@ impl<P: Pairing, L: PlainProverFlavour> Default for ProverMemory<P, L> {
     }
 }
 
-impl<P: Pairing, L: PlainProverFlavour> Default for VerifierMemory<P, L> {
+impl<P: CurveGroup, L: PlainProverFlavour> Default for VerifierMemory<P, L> {
     fn default() -> Self {
         Self {
             public_input_delta: Default::default(),

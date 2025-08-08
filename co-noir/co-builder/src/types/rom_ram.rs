@@ -1,6 +1,6 @@
 use super::field_ct::FieldCT;
-use crate::builder::GenericUltraCircuitBuilder;
-use ark_ec::pairing::Pairing;
+use crate::ultra_builder::GenericUltraCircuitBuilder;
+use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use mpc_core::lut::LookupTableProvider;
@@ -36,7 +36,7 @@ impl<F: PrimeField> RomTable<F> {
     }
 
     pub(crate) fn index_field_ct<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &mut self,
@@ -69,7 +69,7 @@ impl<F: PrimeField> RomTable<F> {
     }
 
     fn initialize_table<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &mut self,
@@ -140,7 +140,7 @@ impl<F: PrimeField> RamTable<F> {
     }
 
     pub(crate) fn read<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &mut self,
@@ -170,7 +170,7 @@ impl<F: PrimeField> RamTable<F> {
     }
 
     pub(crate) fn write<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &mut self,
@@ -244,7 +244,7 @@ impl<F: PrimeField> RamTable<F> {
     }
 
     fn initialize_table<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &mut self,

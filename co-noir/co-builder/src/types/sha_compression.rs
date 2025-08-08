@@ -1,7 +1,8 @@
 use crate::{
-    TranscriptFieldType, builder::GenericUltraCircuitBuilder, prelude::HonkCurve, utils::Utils,
+    TranscriptFieldType, prelude::HonkCurve, ultra_builder::GenericUltraCircuitBuilder,
+    utils::Utils,
 };
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use num_bigint::BigUint;
@@ -22,7 +23,7 @@ pub(crate) struct SparseValue<F: PrimeField> {
 }
 
 impl<F: PrimeField> SparseValue<F> {
-    pub fn new<P: Pairing<ScalarField = F>, T: NoirWitnessExtensionProtocol<F>>(
+    pub fn new<P: CurveGroup<ScalarField = F>, T: NoirWitnessExtensionProtocol<F>>(
         input: FieldCT<F>,
         builder: &GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
@@ -457,7 +458,7 @@ impl<F: PrimeField> SHA256<F> {
         Ok(majority_result)
     }
 
-    fn add_normalize<P: Pairing<ScalarField = F>, T: NoirWitnessExtensionProtocol<F>>(
+    fn add_normalize<P: CurveGroup<ScalarField = F>, T: NoirWitnessExtensionProtocol<F>>(
         a: &FieldCT<F>,
         b: &FieldCT<F>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,

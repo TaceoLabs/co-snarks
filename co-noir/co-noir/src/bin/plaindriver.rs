@@ -5,15 +5,13 @@ use clap::{Parser, ValueEnum};
 use co_acvm::{PlainAcvmSolver, solver::PlainCoSolver};
 use co_builder::flavours::ultra_flavour::UltraFlavour;
 use co_builder::prelude::Serialize as FieldSerialize;
-use co_noir::HonkRecursion;
+use co_noir::{Bn254G1, HonkRecursion};
 use co_ultrahonk::{
     PlainCoBuilder,
-    prelude::{
-        CoUltraHonk, CrsParser, PlainUltraHonkDriver, Poseidon2Sponge, ProvingKey, UltraHonk,
-        Utils, VerifyingKey, ZeroKnowledge,
-    },
+    prelude::{CoUltraHonk, CrsParser, ProvingKey, UltraHonk, Utils, VerifyingKey, ZeroKnowledge},
 };
 use color_eyre::eyre::Context;
+use common::{mpc::plain::PlainUltraHonkDriver, transcript::Poseidon2Sponge};
 use figment::{
     Figment,
     providers::{Env, Format, Serialized, Toml},
@@ -198,7 +196,7 @@ fn main() -> color_eyre::Result<ExitCode> {
 
     // Build the circuit
     let mut driver = PlainAcvmSolver::new();
-    let builder = PlainCoBuilder::<Bn254>::create_circuit(
+    let builder = PlainCoBuilder::<Bn254G1>::create_circuit(
         &constraint_system,
         false, // We don't support recursive atm
         0,
@@ -208,8 +206,8 @@ fn main() -> color_eyre::Result<ExitCode> {
     )
     .context("while creating the circuit")?;
     // Read the Crs
-    let crs_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, false)?;
-    let crs = CrsParser::get_crs(&prover_crs_path, &verifier_crs_path, crs_size, has_zk)?;
+    let crs_size = co_noir::compute_circuit_size::<Bn254G1>(&constraint_system, false)?;
+    let crs = CrsParser::<Bn254>::get_crs(&prover_crs_path, &verifier_crs_path, crs_size, has_zk)?;
     let (prover_crs, verifier_crs) = crs.split();
     // Create the proving key and the barretenberg-compatible verifying key
     let (proving_key, vk_barretenberg) =
@@ -271,7 +269,10 @@ fn main() -> color_eyre::Result<ExitCode> {
     tracing::info!("Wrote public inputs to file {}", out_path.display());
 
     // Get the verifying key
-    let verifying_key = VerifyingKey::from_barrettenberg_and_crs(vk_barretenberg, verifier_crs);
+    let verifying_key = VerifyingKey::<Bn254, UltraFlavour>::from_barrettenberg_and_crs(
+        vk_barretenberg,
+        verifier_crs,
+    );
 
     // Verify the proof
     let is_valid = match hasher {

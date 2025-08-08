@@ -4,8 +4,8 @@ use super::generators;
 use crate::TranscriptFieldType;
 use crate::prelude::HonkCurve;
 use crate::types::aes128::{AES128_BASE, AES128_SBOX};
-use crate::{builder::GenericUltraCircuitBuilder, utils};
-use ark_ec::{AffineRepr, CurveGroup, pairing::Pairing};
+use crate::{ultra_builder::GenericUltraCircuitBuilder, utils};
+use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{PrimeField, Zero};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use mpc_core::protocols::rep3::yao::circuits::SHA256Table;
@@ -2018,7 +2018,8 @@ impl<C: Clone> LookupEntry<C> {
     }
 }
 
-pub(crate) struct PlookupBasicTable<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
+pub(crate) struct PlookupBasicTable<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
+{
     pub(crate) id: BasicTableId,
     pub(crate) table_index: usize,
     pub(crate) use_twin_keys: bool,
@@ -2033,7 +2034,7 @@ pub(crate) struct PlookupBasicTable<P: Pairing, T: NoirWitnessExtensionProtocol<
     pub(crate) get_values_from_key: fn([u64; 2]) -> [P::ScalarField; 2],
 }
 
-impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> Default
+impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> Default
     for PlookupBasicTable<P, T>
 {
     fn default() -> Self {
@@ -2041,7 +2042,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> Default
     }
 }
 
-impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> PlookupBasicTable<P, T> {
+impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> PlookupBasicTable<P, T> {
     fn new() -> Self {
         Self {
             id: BasicTableId::HonkDummyBasic1,
@@ -2063,7 +2064,7 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> PlookupBasicTa
     }
 }
 
-impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> PlookupBasicTable<P, T> {
+impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> PlookupBasicTable<P, T> {
     pub(crate) fn len(&self) -> usize {
         assert_eq!(self.column_1.len(), self.column_2.len());
         assert_eq!(self.column_1.len(), self.column_3.len());

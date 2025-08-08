@@ -1,13 +1,14 @@
-use crate::decider::sumcheck::round_prover::SumcheckProverRound;
-use crate::decider::sumcheck::round_verifier::SumcheckVerifierRound;
+use crate::decider::sumcheck::sumcheck_round_prover::SumcheckProverRound;
+use crate::decider::sumcheck::sumcheck_round_verifier::SumcheckVerifierRound;
 use crate::decider::types::{ClaimedEvaluations, ProverUnivariates, RelationParameters};
 use crate::plain_prover_flavour::PlainProverFlavour;
-use crate::prelude::{Transcript, TranscriptHasher, Univariate};
+use crate::prelude::Univariate;
 use ark_ff::PrimeField;
 use co_builder::HonkProofResult;
 use co_builder::flavours::ultra_flavour::UltraFlavour;
 use co_builder::prelude::HonkCurve;
 use co_builder::prover_flavour::ProverFlavour;
+use common::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
 use std::array;
 
 use crate::decider::relations::{
@@ -33,7 +34,6 @@ use crate::decider::relations::{
         UltraArithmeticRelation, UltraArithmeticRelationAcc, UltraArithmeticRelationEvals,
     },
 };
-use crate::transcript::TranscriptFieldType;
 
 #[derive(Default)]
 pub struct AllRelationAccUltra<F: PrimeField> {

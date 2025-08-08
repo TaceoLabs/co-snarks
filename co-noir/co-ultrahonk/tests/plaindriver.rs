@@ -4,11 +4,14 @@ use co_acvm::{PlainAcvmSolver, mpc::NoirWitnessExtensionProtocol};
 use co_builder::TranscriptFieldType;
 use co_builder::flavours::ultra_flavour::UltraFlavour;
 use co_builder::prelude::{CrsParser, HonkRecursion};
-use co_ultrahonk::prelude::{CoUltraHonk, PlainCoBuilder, PlainUltraHonkDriver, ProvingKey};
+use co_ultrahonk::prelude::{CoUltraHonk, PlainCoBuilder, ProvingKey};
+use common::HonkProof;
+use common::mpc::plain::PlainUltraHonkDriver;
+use common::transcript::{Poseidon2Sponge, TranscriptHasher};
 use sha3::Keccak256;
 use ultrahonk::{
     Utils,
-    prelude::{HonkProof, Poseidon2Sponge, TranscriptHasher, UltraHonk, ZeroKnowledge},
+    prelude::{UltraHonk, ZeroKnowledge},
 };
 
 fn promote_public_witness_vector<F: PrimeField, T: NoirWitnessExtensionProtocol<F>>(
@@ -31,7 +34,9 @@ fn plaindriver_test<H: TranscriptHasher<TranscriptFieldType>>(
 
     let witness = promote_public_witness_vector::<_, PlainAcvmSolver<ark_bn254::Fr>>(witness);
     let mut driver = PlainAcvmSolver::new();
-    let builder = PlainCoBuilder::<Bn254>::create_circuit(
+    let builder = PlainCoBuilder::<
+        <ark_ec::models::bn::Bn<ark_bn254::Config> as ark_ec::pairing::Pairing>::G1,
+    >::create_circuit(
         &constraint_system,
         false, // We don't support recursive atm
         0,
@@ -42,9 +47,10 @@ fn plaindriver_test<H: TranscriptHasher<TranscriptFieldType>>(
     .unwrap();
 
     let crs_size = builder.compute_dyadic_size();
-    let (prover_crs, verifier_crs) = CrsParser::get_crs(CRS_PATH_G1, CRS_PATH_G2, crs_size, has_zk)
-        .unwrap()
-        .split();
+    let (prover_crs, verifier_crs) =
+        CrsParser::<Bn254>::get_crs(CRS_PATH_G1, CRS_PATH_G2, crs_size, has_zk)
+            .unwrap()
+            .split();
     let (proving_key, verifying_key) =
         ProvingKey::create_keys(0, builder, &prover_crs, verifier_crs, &mut driver).unwrap();
 
@@ -64,9 +70,13 @@ fn plaindriver_test<H: TranscriptHasher<TranscriptFieldType>>(
         assert_eq!(proof, read_proof);
     }
 
-    let is_valid =
-        UltraHonk::<_, H, UltraFlavour>::verify(proof, &public_inputs, &verifying_key, has_zk)
-            .unwrap();
+    let is_valid = UltraHonk::<_, H, UltraFlavour>::verify::<Bn254>(
+        proof,
+        &public_inputs,
+        &verifying_key,
+        has_zk,
+    )
+    .unwrap();
     assert!(is_valid);
 }
 

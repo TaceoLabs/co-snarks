@@ -1121,6 +1121,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "co-goblin"
+version = "0.1.0"
+dependencies = [
+ "ark-bn254",
+ "ark-ec",
+ "ark-ff",
+ "co-builder",
+ "co-ultrahonk",
+ "common",
+ "eyre",
+ "goblin",
+ "itertools 0.14.0",
+ "mpc-core",
+ "mpc-net",
+ "num-bigint 0.4.6",
+ "rand 0.8.5",
+ "ultrahonk",
+]
+
+[[package]]
 name = "co-groth16"
 version = "0.9.0"
 dependencies = [
@@ -1159,6 +1179,7 @@ dependencies = [
  "co-builder",
  "co-ultrahonk",
  "color-eyre",
+ "common",
  "figment",
  "mpc-core",
  "mpc-net",
@@ -1211,6 +1232,7 @@ dependencies = [
  "ark-serialize",
  "co-acvm",
  "co-builder",
+ "common",
  "criterion",
  "eyre",
  "itertools 0.14.0",
@@ -1319,6 +1341,27 @@ checksum = "ba5a308b75df32fe02788e748662718f03fde005016435c444eea572398219fd"
 dependencies = [
  "bytes",
  "memchr",
+]
+
+[[package]]
+name = "common"
+version = "0.1.0"
+dependencies = [
+ "ark-bn254",
+ "ark-ec",
+ "ark-ff",
+ "ark-poly",
+ "ark-serialize",
+ "co-builder",
+ "eyre",
+ "itertools 0.14.0",
+ "mpc-core",
+ "mpc-net",
+ "num-bigint 0.4.6",
+ "num-traits",
+ "rand 0.8.5",
+ "rayon",
+ "sha3",
 ]
 
 [[package]]
@@ -2131,6 +2174,21 @@ name = "glob"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8d1add55171497b4705a648c6b583acafb01d58050a51727785f0b2c8e0a2b2"
+
+[[package]]
+name = "goblin"
+version = "0.1.0"
+dependencies = [
+ "ark-bn254",
+ "ark-ec",
+ "ark-ff",
+ "co-builder",
+ "common",
+ "eyre",
+ "mpc-core",
+ "num-bigint 0.4.6",
+ "ultrahonk",
+]
 
 [[package]]
 name = "group"
@@ -4747,6 +4805,7 @@ dependencies = [
  "co-noir",
  "co-plonk",
  "co-ultrahonk",
+ "common",
  "eyre",
  "itertools 0.14.0",
  "libaes",
@@ -5119,6 +5178,7 @@ dependencies = [
  "ark-ff",
  "ark-poly",
  "co-builder",
+ "common",
  "eyre",
  "itertools 0.14.0",
  "mpc-core",
