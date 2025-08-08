@@ -1,7 +1,7 @@
 use std::any::Any;
 
 use crate::{HonkProofError, HonkProofResult, crs::ProverCrs};
-use ark_ec::CurveGroup;
+use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{One, PrimeField, Zero};
 use eyre::Error;
 use mpc_core::gadgets;
@@ -19,6 +19,10 @@ impl Utils {
         ark_ff::batch_inversion(coeffs);
     }
 
+    pub fn batch_normalize<C: CurveGroup>(elements: &[C::Affine]) -> Vec<C::Affine> {
+        let projective_elements: Vec<C> = elements.iter().map(|e| e.into_group()).collect();
+        C::normalize_batch(&projective_elements)
+    }
     pub fn commit<P: CurveGroup>(
         poly: &[P::ScalarField],
         crs: &ProverCrs<P>,

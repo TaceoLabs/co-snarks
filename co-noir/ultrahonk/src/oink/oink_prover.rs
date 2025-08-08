@@ -437,7 +437,7 @@ impl<
 
         let has_active_ranges = proving_key.active_region_data.size() > 0;
 
-        // Barratenberg uses multithreading here
+        // Barretenberg uses multithreading here
 
         // Set the domain over which the grand product must be computed. This may be less than the dyadic circuit size, e.g
         // the permutation grand product does not need to be computed beyond the index of the last active wire
@@ -484,16 +484,18 @@ impl<
             .resize(proving_key.circuit_size as usize, P::ScalarField::zero());
 
         // For Ultra/Mega, the first row is an inactive zero row thus the grand prod takes value 1 at both i = 0 and i = 1
-        self.memory.z_perm[1] = P::ScalarField::one();
+        if L::FLAVOUR == Flavour::Ultra || L::FLAVOUR == Flavour::Mega {
+            self.memory.z_perm[1] = P::ScalarField::one();
+        }
 
         // Compute grand product values corresponding only to the active regions of the trace
         for i in 0..active_domain_size - 1 {
             let idx = if has_active_ranges {
-                proving_key.active_region_data.get_idx(i)
+                proving_key.active_region_data.get_idx(i + 1)
             } else {
-                i
+                i + 1
             };
-            self.memory.z_perm[idx + 1] = numerator[i] * denominator[i];
+            self.memory.z_perm[idx] = numerator[i] * denominator[i];
         }
 
         // Final step: If active/inactive regions have been specified, the value of the grand product in the inactive
@@ -507,7 +509,8 @@ impl<
                     let next_range_start = proving_key.active_region_data.get_range(j + 1).0;
                     // Set the value of the polynomial if the index falls in an inactive region
                     if i >= previous_range_end && i < next_range_start {
-                        self.memory.z_perm[i + 1] = self.memory.z_perm[next_range_start];
+                        self.memory.z_perm[i] = self.memory.z_perm[next_range_start];
+                        break;
                     }
                 }
             }

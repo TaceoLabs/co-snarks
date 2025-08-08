@@ -1,4 +1,4 @@
-use super::types::{PolyF, PolyG, PolyGShift};
+use super::types::{PolyF, PolyGShift};
 use crate::plain_prover_flavour::PlainProverFlavour;
 use crate::{
     CONST_PROOF_SIZE_LOG_N, NUM_INTERLEAVING_CLAIMS, NUM_LIBRA_COMMITMENTS,
@@ -11,6 +11,7 @@ use crate::{
 };
 use ark_ec::AffineRepr;
 use ark_ff::{Field, One, Zero};
+use co_builder::polynomials::polynomial_flavours::PolyGFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::prelude::HonkCurve;
 use co_builder::prelude::ZeroKnowledge;
@@ -25,28 +26,30 @@ impl<
 > DeciderVerifier<P, H, L>
 {
     pub fn get_g_shift_evaluations(
-        evaluations: &ClaimedEvaluations<P::ScalarField, L>,
-    ) -> PolyGShift<P::ScalarField, L> {
+        evaluations: &'_ ClaimedEvaluations<P::ScalarField, L>,
+    ) -> PolyGShift<'_, P::ScalarField, L> {
         PolyGShift {
             wires: &evaluations.shifted_witness,
         }
     }
 
-    pub fn get_g_shift_comms(evaluations: &VerifierCommitments<P::Affine, L>) -> PolyG<P::Affine> {
-        PolyG {
-            wires: evaluations.witness.to_be_shifted().try_into().unwrap(),
-        }
+    pub fn get_g_shift_comms(
+        evaluations: &VerifierCommitments<P::Affine, L>,
+    ) -> L::PolyG<'_, P::Affine> {
+        L::PolyG::from_slice(evaluations.witness.to_be_shifted())
     }
 
     pub fn get_f_evaluations(
-        evaluations: &ClaimedEvaluations<P::ScalarField, L>,
-    ) -> PolyF<P::ScalarField, L> {
+        evaluations: &'_ ClaimedEvaluations<P::ScalarField, L>,
+    ) -> PolyF<'_, P::ScalarField, L> {
         PolyF {
             precomputed: &evaluations.precomputed,
             witness: &evaluations.witness,
         }
     }
-    pub fn get_f_comms(evaluations: &ClaimedEvaluations<P::Affine, L>) -> PolyF<P::Affine, L> {
+    pub fn get_f_comms(
+        evaluations: &'_ ClaimedEvaluations<P::Affine, L>,
+    ) -> PolyF<'_, P::Affine, L> {
         PolyF {
             precomputed: &evaluations.precomputed,
             witness: &evaluations.witness,

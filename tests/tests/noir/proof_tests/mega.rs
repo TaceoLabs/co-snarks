@@ -60,7 +60,12 @@ fn proof_test_rep3<H: TranscriptHasher<TranscriptFieldType>>(
         bincode::deserialize_from(proving_key_file).unwrap();
     let dyadic_circuit_size = proving_key.circuit_size.next_power_of_two();
     let prover_crs =
-        CrsParser::<Bn254>::get_crs_g1(CRS_PATH_G1, dyadic_circuit_size as usize, has_zk).unwrap();
+        CrsParser::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>::get_crs_g1(
+            CRS_PATH_G1,
+            dyadic_circuit_size as usize,
+            has_zk,
+        )
+        .unwrap();
     let proving_key = co_ultrahonk::key::proving_key::to_plain_pk::<_, MegaFlavour>(
         proving_key,
         prover_crs.clone(),
@@ -77,7 +82,11 @@ fn proof_test_rep3<H: TranscriptHasher<TranscriptFieldType>>(
         *des = ark_bn254::G1Affine::from(comm);
     }
 
-    let verifier_crs = CrsParser::<Bn254>::get_crs_g2(CRS_PATH_G2).unwrap();
+    let verifier_crs =
+        CrsParser::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>::get_crs_g2::<
+            Bn254,
+        >(CRS_PATH_G2)
+        .unwrap();
     // Create and return the VerifyingKey instance
     let verifying_key = VerifyingKey::<Bn254, MegaFlavour> {
         crs: verifier_crs,
@@ -150,7 +159,12 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(
         bincode::deserialize_from(proving_key_file).unwrap();
     let dyadic_circuit_size = proving_key.circuit_size.next_power_of_two();
     let prover_crs =
-        CrsParser::<Bn254>::get_crs_g1(CRS_PATH_G1, dyadic_circuit_size as usize, has_zk).unwrap();
+        CrsParser::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>::get_crs_g1(
+            CRS_PATH_G1,
+            dyadic_circuit_size as usize,
+            has_zk,
+        )
+        .unwrap();
     let proving_key = co_ultrahonk::key::proving_key::to_plain_pk::<_, MegaFlavour>(
         proving_key,
         prover_crs.clone(),
@@ -165,7 +179,11 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(
         *des = ark_bn254::G1Affine::from(comm);
     }
 
-    let verifier_crs = CrsParser::<Bn254>::get_crs_g2(CRS_PATH_G2).unwrap();
+    let verifier_crs =
+        CrsParser::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>::get_crs_g2::<
+            Bn254,
+        >(CRS_PATH_G2)
+        .unwrap();
     // Create and return the VerifyingKey instance
     let verifying_key = VerifyingKey::<Bn254, MegaFlavour> {
         crs: verifier_crs,

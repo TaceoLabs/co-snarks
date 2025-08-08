@@ -17,15 +17,15 @@ pub(crate) fn default_generators<C: CurveGroup>() -> &'static [C::Affine; NUM_DE
                 &'static [C::Affine; NUM_DEFAULT_GENERATORS],
             >(gens)
         }
-    // } else if TypeId::of::<C>() == TypeId::of::<ark_bn254::G1Projective>() {
-    //     let gens = _default_generators_bn254();
-    //     // Safety: We checked that the types match
-    //     unsafe {
-    //         std::mem::transmute::<
-    //             &[ark_bn254::G1Affine; NUM_DEFAULT_GENERATORS],
-    //             &[C::Affine; NUM_DEFAULT_GENERATORS],
-    //         >(gens)
-    //     }
+    } else if TypeId::of::<C>() == TypeId::of::<ark_bn254::G1Projective>() {
+        let gens = _default_generators_bn254();
+        // Safety: We checked that the types match
+        unsafe {
+            std::mem::transmute::<
+                &[ark_bn254::G1Affine; NUM_DEFAULT_GENERATORS],
+                &[C::Affine; NUM_DEFAULT_GENERATORS],
+            >(gens)
+        }
     } else {
         panic!("Unsupported curve {}", std::any::type_name::<C>())
     }
@@ -57,7 +57,7 @@ fn _default_generators_bn254() -> &'static [ark_bn254::G1Affine; NUM_DEFAULT_GEN
     })
 }
 
-pub(crate) fn derive_generators<C: CurveGroup>(
+pub fn derive_generators<C: CurveGroup>(
     domain_separator_bytes: &[u8],
     num_generators: usize,
     starting_index: usize,
@@ -118,9 +118,9 @@ fn hash_to_curve<C: CurveGroup>(seed: &[u8], attempt_count: u8) -> C::Affine {
     if TypeId::of::<C>() == TypeId::of::<ark_grumpkin::Projective>() {
         let point = _hash_to_curve_grumpkin(seed, attempt_count);
         *Utils::downcast(&point).expect("We checked types")
-    // } else if TypeId::of::<C>() == TypeId::of::<ark_bn254::G1Projective>() {
-    //     let point = _hash_to_curve_bn254(seed, attempt_count);
-    //     *Utils::downcast(&point).expect("We checked types")
+    } else if TypeId::of::<C>() == TypeId::of::<ark_bn254::G1Projective>() {
+        let point = _hash_to_curve_bn254(seed, attempt_count);
+        *Utils::downcast(&point).expect("We checked types")
     } else {
         panic!("Unsupported curve {}", std::any::type_name::<C>())
     }
@@ -343,4 +343,22 @@ fn generate_generator_offset<C: CurveGroup, const NUM_BITS: usize>(input: &C::Af
         acc += r#gen;
     }
     acc
+}
+
+pub fn offset_generator_scaled<C: CurveGroup>() -> C::Affine {
+    let domain_separator = "ECCVM_OFFSET_GENERATOR";
+    let mut domain_bytes = Vec::with_capacity(domain_separator.len());
+    for i in domain_separator.chars() {
+        domain_bytes.push(i as u8);
+    }
+    let offset_generator = derive_generators::<C>(&domain_bytes, 1, 0)[0];
+    (offset_generator * C::ScalarField::from(BigUint::one() << 124)).into()
+}
+pub fn offset_generator<C: CurveGroup>() -> C::Affine {
+    let domain_separator = "ECCVM_OFFSET_GENERATOR";
+    let mut domain_bytes = Vec::with_capacity(domain_separator.len());
+    for i in domain_separator.chars() {
+        domain_bytes.push(i as u8);
+    }
+    derive_generators::<C>(&domain_bytes, 1, 0)[0]
 }
