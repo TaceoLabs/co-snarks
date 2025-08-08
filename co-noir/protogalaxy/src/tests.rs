@@ -364,6 +364,7 @@ fn test_compute_perturbator() {
 }
 
 #[test]
+#[ignore = "Requires a large test file"]
 fn test_compute_combiner() {
     let test_file = "unit/compute_combiner";
 
@@ -549,7 +550,6 @@ fn test_protogalaxy_prover() {
     let gate_challenges_result = to_field!(gate_challenges_result, 1);
     let polynomials_folding_result = to_field!(polynomials_folding_result, 2);
 
-    // TODO CESAR: Handle target sum
     let target_sum_result: F = to_field!(target_sum_result);
 
     let public_inputs_1 = to_field!(public_inputs_1, 1);
@@ -637,18 +637,15 @@ fn test_protogalaxy_prover() {
 
     accumulator_prover_memory.gate_challenges = vec![F::ZERO; CONST_PG_LOG_N];
 
-    assert_eq!(
-        prover
-            .prove(
-                &mut accumulator,
-                &mut accumulator_prover_memory,
-                vec![folded_key]
-            )
-            .unwrap()
-            .0
-            .inner(),
-        honk_proof
-    );
+    let (proof, target_sum) = prover
+        .prove(
+            &mut accumulator,
+            &mut accumulator_prover_memory,
+            vec![folded_key],
+        )
+        .unwrap();
+
+    assert_eq!(proof.inner(), honk_proof);
 
     assert_eq!(accumulator_prover_memory.alphas, alphas_result);
 
@@ -666,6 +663,8 @@ fn test_protogalaxy_prover() {
         accumulator_prover_memory.gate_challenges,
         gate_challenges_result
     );
+
+    assert_eq!(target_sum, target_sum_result);
 
     itertools::assert_equal(
         accumulator_prover_memory.polys.into_iter(),

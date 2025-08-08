@@ -21,6 +21,7 @@ use ultrahonk::{
 
 use crate::protogalaxy_prover_internal::{
     compute_and_extend_alphas, compute_combiner_quotient, compute_perturbator,
+    evaluate_with_domain_start,
 };
 use crate::protogalaxy_prover_internal::{compute_combiner, compute_extended_relation_parameters};
 
@@ -95,7 +96,7 @@ where
             .collect();
 
         // An honest prover with valid initial key computes that the perturbator is 0 in the first round
-        // TODO CESAR: Fix
+        // TODO TACEO: Fix once ClientIVC::accumulate is implemented
         let perturbator = if true {
             compute_perturbator(accumulator, &deltas, accumulator_prover_memory)
         } else {
@@ -194,9 +195,9 @@ where
         );
 
         let target_sum = perturbator_evaluation * lagranges[0]
-            + vanishing_polynomial_at_challenge * combiner_quotient.evaluate(combiner_challenge);
+            + vanishing_polynomial_at_challenge
+                * evaluate_with_domain_start(&combiner_quotient, combiner_challenge, NUM_KEYS);
 
-        // TODO CESAR: Overflow stuff
         accumulator_prover_memory.polys.iter_mut().for_each(|poly| {
             poly.iter_mut()
                 .for_each(|coeff| *coeff = coeff.clone() * lagranges[0]);
