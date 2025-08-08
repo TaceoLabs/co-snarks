@@ -523,34 +523,10 @@ impl<C: HonkCurve<TranscriptFieldType>> MSMRow<C> {
         final_row.q_double = false;
         final_row.q_skew = false;
         final_row.add_state = [
-            AddState {
-                add: false,
-                slice: 0,
-                point: C::Affine::default(),
-                lambda: C::BaseField::zero(),
-                collision_inverse: C::BaseField::zero(),
-            },
-            AddState {
-                add: false,
-                slice: 0,
-                point: C::Affine::default(),
-                lambda: C::BaseField::zero(),
-                collision_inverse: C::BaseField::zero(),
-            },
-            AddState {
-                add: false,
-                slice: 0,
-                point: C::Affine::default(),
-                lambda: C::BaseField::zero(),
-                collision_inverse: C::BaseField::zero(),
-            },
-            AddState {
-                add: false,
-                slice: 0,
-                point: C::Affine::default(),
-                lambda: C::BaseField::zero(),
-                collision_inverse: C::BaseField::zero(),
-            },
+            AddState::default(),
+            AddState::default(),
+            AddState::default(),
+            AddState::default(),
         ];
 
         (msm_rows, point_table_read_counts)
