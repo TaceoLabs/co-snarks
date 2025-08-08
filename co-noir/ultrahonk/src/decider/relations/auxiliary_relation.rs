@@ -59,8 +59,6 @@ impl<F: PrimeField> AuxiliaryRelationAcc<F> {
         self.r5 *= elements[5];
     }
 
-    
-
     pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(
         &self,
         result: &mut Univariate<F, SIZE>,
@@ -115,47 +113,23 @@ impl<F: PrimeField> AuxiliaryRelationAcc<F> {
         result: &mut Univariate<F, SIZE>,
         running_challenge: &[Univariate<F, SIZE>],
     ) {
-        self.r0.extend_and_batch_univariates(
-            result,
-            &running_challenge[0],
-            &F::ONE,
-            true,
-        );
+        self.r0
+            .extend_and_batch_univariates(result, &running_challenge[0], &F::ONE, true);
 
-        self.r1.extend_and_batch_univariates(
-            result,
-            &running_challenge[1],
-            &F::ONE,
-            true,
-        );
+        self.r1
+            .extend_and_batch_univariates(result, &running_challenge[1], &F::ONE, true);
 
-        self.r2.extend_and_batch_univariates(
-            result,
-            &running_challenge[2],
-            &F::ONE,
-            true,
-        );
+        self.r2
+            .extend_and_batch_univariates(result, &running_challenge[2], &F::ONE, true);
 
-        self.r3.extend_and_batch_univariates(
-            result,
-            &running_challenge[3],
-            &F::ONE,
-            true,
-        );
+        self.r3
+            .extend_and_batch_univariates(result, &running_challenge[3], &F::ONE, true);
 
-        self.r4.extend_and_batch_univariates(
-            result,
-            &running_challenge[4],
-            &F::ONE,
-            true,
-        );
+        self.r4
+            .extend_and_batch_univariates(result, &running_challenge[4], &F::ONE, true);
 
-        self.r5.extend_and_batch_univariates(
-            result,
-            &running_challenge[5],
-            &F::ONE,
-            true,
-        );
+        self.r5
+            .extend_and_batch_univariates(result, &running_challenge[5], &F::ONE, true);
     }
 }
 

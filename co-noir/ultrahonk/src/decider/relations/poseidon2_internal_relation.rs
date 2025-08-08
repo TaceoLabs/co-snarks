@@ -1,5 +1,3 @@
-use std::ops::{Add, Mul};
-
 use super::Relation;
 use crate::decider::types::ProverUnivariatesSized;
 use crate::plain_prover_flavour::UnivariateTrait;
@@ -74,33 +72,17 @@ impl<F: PrimeField> Poseidon2InternalRelationAcc<F> {
         result: &mut Univariate<F, SIZE>,
         running_challenge: &[Univariate<F, SIZE>],
     ) {
-        self.r0.extend_and_batch_univariates(
-            result,
-            &running_challenge[0],
-            &F::ONE,
-            true,
-        );
+        self.r0
+            .extend_and_batch_univariates(result, &running_challenge[0], &F::ONE, true);
 
-        self.r1.extend_and_batch_univariates(
-            result,
-            &running_challenge[1],
-            &F::ONE,
-            true,
-        );
+        self.r1
+            .extend_and_batch_univariates(result, &running_challenge[1], &F::ONE, true);
 
-        self.r2.extend_and_batch_univariates(
-            result,
-            &running_challenge[2],
-            &F::ONE,
-            true,
-        );
+        self.r2
+            .extend_and_batch_univariates(result, &running_challenge[2], &F::ONE, true);
 
-        self.r3.extend_and_batch_univariates(
-            result,
-            &running_challenge[3],
-            &F::ONE,
-            true,
-        );
+        self.r3
+            .extend_and_batch_univariates(result, &running_challenge[3], &F::ONE, true);
     }
 }
 
@@ -260,7 +242,7 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for Poseidon2InternalR
     fn accumulate_with_extended_parameters<const SIZE: usize>(
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesSized<F, L, SIZE>,
-        relation_parameters: &RelationParameters<Univariate<F, SIZE>>,
+        _relation_parameters: &RelationParameters<Univariate<F, SIZE>>,
         scaling_factor: &F,
     ) {
         tracing::trace!("Accumulate Poseidon2InternalRelation");

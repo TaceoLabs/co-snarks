@@ -31,8 +31,8 @@ use crate::decider::{
     sumcheck::sumcheck_round_verifier::SumcheckVerifierRound,
     types::ClaimedEvaluations,
 };
-use crate::plain_prover_flavour::{PlainProverFlavour};
-use crate::prelude::{ Univariate};
+use crate::plain_prover_flavour::PlainProverFlavour;
+use crate::prelude::Univariate;
 use ark_ff::AdditiveGroup;
 use ark_ff::PrimeField;
 use co_builder::HonkProofResult;
@@ -204,25 +204,55 @@ impl PlainProverFlavour for MegaFlavour {
         running_challenge: &[Univariate<F, SIZE>],
     ) {
         acc.r_arith
-            .extend_and_batch_univariates_with_distinct_challenges(result, &[first_term, running_challenge[0].clone()]);
+            .extend_and_batch_univariates_with_distinct_challenges(
+                result,
+                &[first_term, running_challenge[0].clone()],
+            );
         acc.r_perm
-            .extend_and_batch_univariates_with_distinct_challenges(result, &running_challenge[1..3]);
+            .extend_and_batch_univariates_with_distinct_challenges(
+                result,
+                &running_challenge[1..3],
+            );
         acc.r_lookup
-            .extend_and_batch_univariates_with_distinct_challenges(result, &running_challenge[3..5]);
+            .extend_and_batch_univariates_with_distinct_challenges(
+                result,
+                &running_challenge[3..5],
+            );
         acc.r_delta
-            .extend_and_batch_univariates_with_distinct_challenges(result, &running_challenge[5..9]);
+            .extend_and_batch_univariates_with_distinct_challenges(
+                result,
+                &running_challenge[5..9],
+            );
         acc.r_elliptic
-            .extend_and_batch_univariates_with_distinct_challenges(result, &running_challenge[9..11]);
+            .extend_and_batch_univariates_with_distinct_challenges(
+                result,
+                &running_challenge[9..11],
+            );
         acc.r_aux
-            .extend_and_batch_univariates_with_distinct_challenges(result, &running_challenge[11..17]);
+            .extend_and_batch_univariates_with_distinct_challenges(
+                result,
+                &running_challenge[11..17],
+            );
         acc.r_ecc_op_queue
-            .extend_and_batch_univariates_with_distinct_challenges(result, &running_challenge[17..25]);
+            .extend_and_batch_univariates_with_distinct_challenges(
+                result,
+                &running_challenge[17..25],
+            );
         acc.r_databus
-            .extend_and_batch_univariates_with_distinct_challenges(result, &running_challenge[25..31]);
+            .extend_and_batch_univariates_with_distinct_challenges(
+                result,
+                &running_challenge[25..31],
+            );
         acc.r_pos_ext
-            .extend_and_batch_univariates_with_distinct_challenges(result, &running_challenge[31..35]);
+            .extend_and_batch_univariates_with_distinct_challenges(
+                result,
+                &running_challenge[31..35],
+            );
         acc.r_pos_int
-            .extend_and_batch_univariates_with_distinct_challenges(result, &running_challenge[35..]);
+            .extend_and_batch_univariates_with_distinct_challenges(
+                result,
+                &running_challenge[35..],
+            );
     }
 
     fn accumulate_relation_univariates<P: HonkCurve<TranscriptFieldType>>(

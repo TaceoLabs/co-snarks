@@ -1,6 +1,8 @@
 use crate::decider::sumcheck::sumcheck_round_prover::SumcheckProverRound;
 use crate::decider::sumcheck::sumcheck_round_verifier::SumcheckVerifierRound;
-use crate::decider::types::{ClaimedEvaluations, ProverUnivariates, ProverUnivariatesSized, RelationParameters};
+use crate::decider::types::{
+    ClaimedEvaluations, ProverUnivariates, ProverUnivariatesSized, RelationParameters,
+};
 use crate::plain_prover_flavour::PlainProverFlavour;
 use crate::prelude::Univariate;
 use ark_ff::PrimeField;
@@ -174,10 +176,10 @@ impl PlainProverFlavour for UltraFlavour {
     }
 
     fn extend_and_batch_univariates_with_distinct_challenges<F: PrimeField, const SIZE: usize>(
-        acc: &Self::AllRelationAcc<F>,
-        result: &mut Univariate<F, SIZE>,
-        first_term: Univariate<F, SIZE>,
-        running_challenge: &[Univariate<F, SIZE>],
+        _acc: &Self::AllRelationAcc<F>,
+        _result: &mut Univariate<F, SIZE>,
+        _first_term: Univariate<F, SIZE>,
+        _running_challenge: &[Univariate<F, SIZE>],
     ) {
         todo!();
     }
@@ -267,10 +269,10 @@ impl PlainProverFlavour for UltraFlavour {
         P: HonkCurve<TranscriptFieldType>,
         const SIZE: usize,
     >(
-        univariate_accumulators: &mut Self::AllRelationAcc<P::ScalarField>,
-        extended_edges: &ProverUnivariatesSized<P::ScalarField, Self, SIZE>,
-        relation_parameters: &RelationParameters<Univariate<P::ScalarField, SIZE>>,
-        scaling_factor: &P::ScalarField,
+        _univariate_accumulators: &mut Self::AllRelationAcc<P::ScalarField>,
+        _extended_edges: &ProverUnivariatesSized<P::ScalarField, Self, SIZE>,
+        _relation_parameters: &RelationParameters<Univariate<P::ScalarField, SIZE>>,
+        _scaling_factor: &P::ScalarField,
     ) {
         todo!()
     }

@@ -59,19 +59,11 @@ impl<F: PrimeField> UltraPermutationRelationAcc<F> {
         result: &mut Univariate<F, SIZE>,
         running_challenge: &[Univariate<F, SIZE>],
     ) {
-        self.r0.extend_and_batch_univariates(
-            result,
-            &running_challenge[0],
-            &F::ONE,
-            true,
-        );
+        self.r0
+            .extend_and_batch_univariates(result, &running_challenge[0], &F::ONE, true);
 
-        self.r1.extend_and_batch_univariates(
-            result,
-            &running_challenge[1],
-            &F::ONE,
-            true,
-        );
+        self.r1
+            .extend_and_batch_univariates(result, &running_challenge[1], &F::ONE, true);
     }
 }
 

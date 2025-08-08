@@ -6,7 +6,6 @@ use co_builder::{
     },
     prelude::Serialize,
 };
-use itertools::izip;
 use std::fmt::Debug;
 
 use crate::plain_prover_flavour::PlainProverFlavour;
@@ -83,11 +82,7 @@ where
     L: PlainProverFlavour,
 {
     pub fn get_row(&self, index: usize) -> AllEntities<F, L> {
-        AllEntities::from_elements(
-            self.iter()
-                .map(|el| el[index].clone())
-                .collect(),
-        )
+        AllEntities::from_elements(self.iter().map(|el| el[index].clone()).collect())
     }
 }
 

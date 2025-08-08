@@ -1,5 +1,5 @@
-use crate::decider::types::{ProverUnivariatesSized, RelationParameters};
 use crate::decider::types::{ClaimedEvaluations, ProverUnivariates};
+use crate::decider::types::{ProverUnivariatesSized, RelationParameters};
 use crate::prelude::Univariate;
 use ark_ff::PrimeField;
 use co_builder::HonkProofResult;
