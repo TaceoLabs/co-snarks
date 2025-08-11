@@ -25,7 +25,7 @@ use crate::protogalaxy_prover_internal::{
 };
 use crate::protogalaxy_prover_internal::{compute_combiner, compute_extended_relation_parameters};
 
-pub(crate) const CONST_PG_LOG_N: usize = 20;
+pub const CONST_PG_LOG_N: usize = 20;
 pub(crate) const MAX_TOTAL_RELATION_LENGTH: usize = 11;
 
 // Mega Protogalaxy prover only supports 2 keys

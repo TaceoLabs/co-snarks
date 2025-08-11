@@ -7,6 +7,7 @@ members = [
     "co-circom/co-circom",
     "co-circom/co-groth16",
     "co-circom/co-plonk",
+    "co-noir/client-ivc",
     "co-noir/co-acvm",
     "co-noir/co-brillig",
     "co-noir/co-builder",

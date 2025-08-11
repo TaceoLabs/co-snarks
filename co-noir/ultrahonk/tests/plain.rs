@@ -1,3 +1,4 @@
+#![cfg(not(feature = "protogalaxy"))]
 use ark_bn254::Bn254;
 use co_builder::TranscriptFieldType;
 use co_builder::flavours::ultra_flavour::UltraFlavour;
