@@ -778,11 +778,11 @@ impl<
         // Compute grand product values corresponding only to the active regions of the trace
         for (i, mul) in mul.into_iter().enumerate() {
             let idx = if has_active_ranges {
-                proving_key.active_region_data.get_idx(i)
+                proving_key.active_region_data.get_idx(i + 1)
             } else {
-                i
+                i + 1
             };
-            self.memory.z_perm[idx + 1] = mul
+            self.memory.z_perm[idx] = mul
         }
 
         // Final step: If active/inactive regions have been specified, the value of the grand product in the inactive
@@ -796,7 +796,8 @@ impl<
                     let next_range_start = proving_key.active_region_data.get_range(j + 1).0;
                     // Set the value of the polynomial if the index falls in an inactive region
                     if i >= previous_range_end && i < next_range_start {
-                        self.memory.z_perm[i + 1] = self.memory.z_perm[next_range_start];
+                        self.memory.z_perm[i] = self.memory.z_perm[next_range_start];
+                        break;
                     }
                 }
             }
