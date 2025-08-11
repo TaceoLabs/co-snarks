@@ -1,7 +1,7 @@
 use co_builder::TranscriptFieldType;
 use co_builder::prelude::HonkCurve;
 use common::{mpc::NoirUltraHonkProver, shared_polynomial::SharedPolynomial};
-use goblin::eccvm::ecc_op_queue::{EccOpsTable, EccvmRowTracker};
+use goblin::prelude::{EccOpsTable, EccvmRowTracker};
 use num_bigint::BigUint;
 use std::array;
 

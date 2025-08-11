@@ -90,7 +90,7 @@ impl Utils {
         co_builder::prelude::Utils::get_msb64(inp)
     }
 
-    fn batch_invert<F: PrimeField>(coeffs: &mut [F]) {
+    pub fn batch_invert<F: PrimeField>(coeffs: &mut [F]) {
         co_builder::prelude::Utils::batch_invert(coeffs);
     }
 

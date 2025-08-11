@@ -4,7 +4,7 @@ use super::{
 };
 
 use crate::{
-    Utils, decider::small_subgroup_ipa::SmallSubgroupIPAProver,
+    CONST_PROOF_SIZE_LOG_N, Utils, decider::small_subgroup_ipa::SmallSubgroupIPAProver,
     plain_prover_flavour::PlainProverFlavour,
 };
 use co_builder::{
@@ -16,13 +16,14 @@ use common::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
 use std::marker::PhantomData;
-pub(crate) struct Decider<
+
+pub struct Decider<
     P: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
     L: PlainProverFlavour,
 > {
-    pub(super) memory: ProverMemory<P, L>,
-    pub(super) rng: ChaCha12Rng,
+    pub memory: ProverMemory<P, L>,
+    pub rng: ChaCha12Rng,
     pub(crate) has_zk: ZeroKnowledge,
     phantom_data: PhantomData<(P, H)>,
 }
@@ -33,7 +34,7 @@ impl<
     L: PlainProverFlavour,
 > Decider<P, H, L>
 {
-    pub(crate) fn new(memory: ProverMemory<P, L>, has_zk: ZeroKnowledge) -> Self {
+    pub fn new(memory: ProverMemory<P, L>, has_zk: ZeroKnowledge) -> Self {
         Self {
             memory,
             rng: ChaCha12Rng::from_entropy(),
@@ -64,7 +65,12 @@ impl<
                 &mut self.rng,
             )?;
             Ok((
-                self.sumcheck_prove_zk(transcript, circuit_size, &mut zk_sumcheck_data),
+                self.sumcheck_prove_zk::<CONST_PROOF_SIZE_LOG_N>(
+                    transcript,
+                    circuit_size,
+                    &mut zk_sumcheck_data,
+                    crs,
+                )?,
                 Some(zk_sumcheck_data),
             ))
         } else {
@@ -92,16 +98,15 @@ impl<
                 self.shplemini_prove(transcript, circuit_size, crs, sumcheck_output, None)?;
             common::compute_opening_proof(prover_opening_claim, transcript, crs)
         } else {
-            let small_subgroup_ipa_prover = SmallSubgroupIPAProver::<_>::new::<H, _>(
+            let mut small_subgroup_ipa_prover = SmallSubgroupIPAProver::<_>::new::<H>(
                 zk_sumcheck_data.expect("We have ZK"),
-                &sumcheck_output.challenges,
                 sumcheck_output
                     .claimed_libra_evaluation
                     .expect("We have ZK"),
-                transcript,
-                crs,
-                &mut self.rng,
+                "Libra:".to_string(),
+                &sumcheck_output.challenges,
             )?;
+            small_subgroup_ipa_prover.prove(transcript, crs, &mut self.rng)?;
             let witness_polynomials = small_subgroup_ipa_prover.into_witness_polynomials();
             let prover_opening_claim = self.shplemini_prove(
                 transcript,

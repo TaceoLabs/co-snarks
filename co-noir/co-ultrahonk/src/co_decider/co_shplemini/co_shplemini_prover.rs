@@ -34,8 +34,8 @@ impl<
 > CoDecider<'_, T, P, H, N, L>
 {
     fn get_f_polynomials(
-        polys: &AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>, L>,
-    ) -> PolyF<Vec<T::ArithmeticShare>, Vec<P::ScalarField>, L> {
+        polys: &'_ AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>, L>,
+    ) -> PolyF<'_, Vec<T::ArithmeticShare>, Vec<P::ScalarField>, L> {
         PolyF {
             precomputed: &polys.precomputed,
             witness: &polys.witness,
@@ -43,8 +43,8 @@ impl<
     }
 
     fn get_g_polynomials(
-        polys: &AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>, L>,
-    ) -> PolyG<Vec<T::ArithmeticShare>> {
+        polys: &'_ AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>, L>,
+    ) -> PolyG<'_, Vec<T::ArithmeticShare>> {
         PolyG {
             wires: polys.witness.to_be_shifted().try_into().unwrap(),
         }

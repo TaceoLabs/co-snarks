@@ -37,7 +37,14 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(
     )
     .unwrap();
     let crs_size = builder.compute_dyadic_size();
-    let crs = CrsParser::<Bn254>::get_crs(CRS_PATH_G1, CRS_PATH_G2, crs_size, has_zk).unwrap();
+    let crs =
+        CrsParser::<<ark_ec::bn::Bn<ark_bn254::Config> as ark_ec::pairing::Pairing>::G1>::get_crs::<Bn254>(
+            CRS_PATH_G1,
+            CRS_PATH_G2,
+            crs_size,
+            has_zk,
+        )
+        .unwrap();
     let (prover_crs, verifier_crs) = crs.split();
 
     let (proving_key, verifying_key) = builder
