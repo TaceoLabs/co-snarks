@@ -5,9 +5,9 @@ use co_builder::polynomials::polynomial_flavours::{
 use crate::plain_prover_flavour::PlainProverFlavour;
 
 pub struct AllEntities<T: Default + Clone + std::marker::Sync, L: PlainProverFlavour> {
-    pub(crate) witness: L::WitnessEntities<T>,
-    pub(crate) precomputed: L::PrecomputedEntities<T>,
-    pub(crate) shifted_witness: L::ShiftedWitnessEntities<T>,
+    pub witness: L::WitnessEntities<T>,
+    pub precomputed: L::PrecomputedEntities<T>,
+    pub shifted_witness: L::ShiftedWitnessEntities<T>,
 }
 
 impl<T: Default + Clone + std::marker::Sync, L: PlainProverFlavour> Default for AllEntities<T, L> {
@@ -28,7 +28,7 @@ impl<T: Default + Clone + std::marker::Sync, L: PlainProverFlavour> AllEntities<
             .chain(self.shifted_witness.into_iter())
     }
 
-    pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
+    pub fn iter(&self) -> impl Iterator<Item = &T> {
         self.precomputed
             .iter()
             .chain(self.witness.iter())
