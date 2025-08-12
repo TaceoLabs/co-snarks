@@ -1,13 +1,12 @@
 use crate::protogalaxy_prover::{BATCHED_EXTENDED_LENGTH, NUM_KEYS};
 use ark_ec::AdditiveGroup;
-use ark_ff::{Field, PrimeField};
+use ark_ff::Field;
+use co_builder::flavours::mega_flavour::MegaFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::prelude::Polynomial;
 use co_builder::{TranscriptFieldType, prelude::HonkCurve};
 use ultrahonk::plain_prover_flavour::{PlainProverFlavour, UnivariateTrait};
-use ultrahonk::prelude::{
-    AllEntities, Barycentric, GateSeparatorPolynomial, ProvingKey, Univariate,
-};
+use ultrahonk::prelude::{AllEntities, GateSeparatorPolynomial, ProvingKey, Univariate};
 
 use crate::protogalaxy_prover::{CONST_PG_LOG_N, DeciderProverMemory, ExtendedRelationParameters};
 
@@ -15,11 +14,8 @@ use crate::protogalaxy_prover::{CONST_PG_LOG_N, DeciderProverMemory, ExtendedRel
  * @brief For each parameter, collect the value in each decider proving key in a univariate and extend for use in the
  * combiner compute.
  */
-pub(crate) fn compute_extended_relation_parameters<
-    C: HonkCurve<TranscriptFieldType>,
-    L: PlainProverFlavour,
->(
-    prover_memory: &Vec<&mut DeciderProverMemory<C, L>>,
+pub(crate) fn compute_extended_relation_parameters<C: HonkCurve<TranscriptFieldType>>(
+    prover_memory: &Vec<&mut DeciderProverMemory<C>>,
 ) -> ExtendedRelationParameters<C::ScalarField> {
     let mut result = ExtendedRelationParameters::<C::ScalarField>::default();
     result
@@ -34,8 +30,7 @@ pub(crate) fn compute_extended_relation_parameters<
                 .iter()
                 .enumerate()
                 .for_each(|(key_idx, memory)| {
-                    tmp.evaluations[key_idx] =
-                        memory.relation_parameters.get_params()[param_idx].clone();
+                    tmp.evaluations[key_idx] = *memory.relation_parameters.get_params()[param_idx];
                 });
 
             param.extend_from(&tmp.evaluations);
@@ -47,13 +42,10 @@ pub(crate) fn compute_extended_relation_parameters<
  * @brief Combine the relation batching parameters (alphas) from each decider proving key into a univariate for
  * using in the combiner computation.
  */
-pub(crate) fn compute_and_extend_alphas<
-    C: HonkCurve<TranscriptFieldType>,
-    L: PlainProverFlavour<Alpha<C::ScalarField> = C::ScalarField>,
->(
-    prover_memory: &Vec<&mut DeciderProverMemory<C, L>>,
+pub(crate) fn compute_and_extend_alphas<C: HonkCurve<TranscriptFieldType>>(
+    prover_memory: &Vec<&mut DeciderProverMemory<C>>,
 ) -> Vec<Univariate<C::ScalarField, BATCHED_EXTENDED_LENGTH>> {
-    (0..L::NUM_SUBRELATIONS - 1)
+    (0..MegaFlavour::NUM_SUBRELATIONS - 1)
         .map(|alpha_idx| {
             let mut tmp = Univariate {
                 evaluations: [C::ScalarField::ZERO; NUM_KEYS],
@@ -62,7 +54,7 @@ pub(crate) fn compute_and_extend_alphas<
                 .iter()
                 .enumerate()
                 .for_each(|(key_idx, memory)| {
-                    tmp.evaluations[key_idx] = memory.alphas[alpha_idx].clone();
+                    tmp.evaluations[key_idx] = memory.alphas[alpha_idx];
                 });
 
             let mut alpha = Univariate::<C::ScalarField, BATCHED_EXTENDED_LENGTH>::default();
@@ -89,7 +81,9 @@ pub(crate) fn compute_combiner_quotient<C: HonkCurve<TranscriptFieldType>>(
         let vanishing_polynomial = point_as_fr * (point_as_fr - C::ScalarField::ONE);
         combiner_quotient_evals[idx] = (combiner.evaluations[point]
             - perturbator_evaluation * lagrange_0)
-            * vanishing_polynomial.inverse().unwrap();
+            * vanishing_polynomial
+                .inverse()
+                .expect("Vanishing polynomial should not be zero");
     }
 
     Univariate {
@@ -109,8 +103,8 @@ pub(crate) fn compute_combiner_quotient<C: HonkCurve<TranscriptFieldType>>(
  * representing the sum f_0(ω) + α_j*g(ω) where f_0 represents the full honk evaluation at row 0, g(ω) is the
  * linearly dependent subrelation and α_j is its corresponding batching challenge.
  */
-pub(crate) fn compute_row_evaluations<C: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour>(
-    accumulator_prover_memory: &DeciderProverMemory<C, L>,
+pub(crate) fn compute_row_evaluations<C: HonkCurve<TranscriptFieldType>>(
+    accumulator_prover_memory: &DeciderProverMemory<C>,
 ) -> Polynomial<C::ScalarField> {
     let DeciderProverMemory {
         polys,
@@ -124,22 +118,25 @@ pub(crate) fn compute_row_evaluations<C: HonkCurve<TranscriptFieldType>, L: Plai
     let mut last_coeff = C::ScalarField::ZERO;
 
     // TACEO TODO: Barretenberg uses balanced parallelization here with the trace_usage_tracker
-    for i in 0..polynomial_size {
+    for (i, aggregated_relation_evaluations_coeff) in
+        aggregated_relation_evaluations.iter_mut().enumerate()
+    {
+        // TACEO TODO: Avoid cloning the row
         let row = polys.get_row(i);
 
-        let mut evals = L::AllRelationEvaluations::default();
+        let mut evals = <MegaFlavour as PlainProverFlavour>::AllRelationEvaluations::default();
         // Evaluate all subrelations on given row. Separator is 1 since we are not summing across rows here
-        L::accumulate_relation_evaluations::<C>(
+        MegaFlavour::accumulate_relation_evaluations::<C>(
             &mut evals,
             &row,
-            &relation_parameters,
+            relation_parameters,
             &C::ScalarField::ONE,
         );
 
         // Sum against challenges alpha
         let (linearly_independent_contributions, linearly_dependent_contributions) =
-            L::scale_by_challenge_and_accumulate(&evals, C::ScalarField::ONE, &alphas);
-        aggregated_relation_evaluations[i] = linearly_independent_contributions;
+            MegaFlavour::scale_by_challenge_and_accumulate(&evals, C::ScalarField::ONE, alphas);
+        *aggregated_relation_evaluations_coeff = linearly_independent_contributions;
         last_coeff += linearly_dependent_contributions;
     }
 
@@ -170,17 +167,20 @@ pub(crate) fn construct_coefficients_tree<C: HonkCurve<TranscriptFieldType>>(
     let mut level_coeffs = vec![vec![C::ScalarField::ZERO; degree + 1]; prev_level_width / 2];
 
     // TACEO TODO: Barretenberg uses parallelization here
-    for parent in 0..prev_level_width / 2 {
-        let node = parent * 2;
-        level_coeffs[parent][..prev_level_coeffs[node].len()]
-            .copy_from_slice(&prev_level_coeffs[node]);
+    for (parent_idx, parent_node) in level_coeffs
+        .iter_mut()
+        .take(prev_level_width / 2)
+        .enumerate()
+    {
+        let node = parent_idx * 2;
+        parent_node[..prev_level_coeffs[node].len()].copy_from_slice(&prev_level_coeffs[node]);
         for d in 0..degree {
-            level_coeffs[parent][d] += prev_level_coeffs[node + 1][d] * betas[level];
-            level_coeffs[parent][d + 1] += prev_level_coeffs[node + 1][d] * deltas[level];
+            parent_node[d] += prev_level_coeffs[node + 1][d] * betas[level];
+            parent_node[d + 1] += prev_level_coeffs[node + 1][d] * deltas[level];
         }
     }
 
-    return construct_coefficients_tree::<C>(betas, deltas, level_coeffs, level + 1);
+    construct_coefficients_tree::<C>(betas, deltas, level_coeffs, level + 1)
 }
 
 /**
@@ -203,11 +203,11 @@ pub(crate) fn construct_perturbator_coefficients<C: HonkCurve<TranscriptFieldTyp
         vec![vec![C::ScalarField::from(2u64), C::ScalarField::ZERO]; width / 2];
 
     // TACEO TODO: Barretenberg uses parallelization here
-    for parent in 0..first_level_coeffs.len() {
-        let node = parent * 2;
-        first_level_coeffs[parent][0] = full_honk_evaluations.coefficients[node]
+    for (parent_idx, parent_node) in first_level_coeffs.iter_mut().enumerate() {
+        let node = parent_idx * 2;
+        parent_node[0] = full_honk_evaluations.coefficients[node]
             + full_honk_evaluations.coefficients[node + 1] * betas[0];
-        first_level_coeffs[parent][1] = full_honk_evaluations.coefficients[node + 1] * deltas[0];
+        parent_node[1] = full_honk_evaluations.coefficients[node + 1] * deltas[0];
     }
 
     construct_coefficients_tree::<C>(betas, deltas, first_level_coeffs, 1)
@@ -216,10 +216,10 @@ pub(crate) fn construct_perturbator_coefficients<C: HonkCurve<TranscriptFieldTyp
 /**
  * @brief Construct the power perturbator polynomial F(X) in coefficient form from the accumulator
  */
-pub(crate) fn compute_perturbator<C: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour>(
-    accumulator: &mut ProvingKey<C, L>,
-    deltas: &Vec<C::ScalarField>,
-    accumulator_prover_memory: &DeciderProverMemory<C, L>,
+pub(crate) fn compute_perturbator<C: HonkCurve<TranscriptFieldType>>(
+    accumulator: &mut ProvingKey<C, MegaFlavour>,
+    deltas: &[C::ScalarField],
+    accumulator_prover_memory: &DeciderProverMemory<C>,
 ) -> Polynomial<C::ScalarField> {
     let full_honk_evaluations = compute_row_evaluations(accumulator_prover_memory);
 
@@ -249,10 +249,10 @@ pub(crate) fn compute_perturbator<C: HonkCurve<TranscriptFieldType>, L: PlainPro
  * extend (i.e., compute additional evaluations at adjacent domain values) as needed.
  * @todo TODO(https://github.com/AztecProtocol/barretenberg/issues/751) Optimize memory
  */
-pub(crate) fn extend_univariates<C: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour>(
-    prover_memory: &Vec<&mut DeciderProverMemory<C, L>>,
+pub(crate) fn extend_univariates<C: HonkCurve<TranscriptFieldType>>(
+    prover_memory: &Vec<&mut DeciderProverMemory<C>>,
     row_idx: usize,
-) -> AllEntities<Univariate<C::ScalarField, BATCHED_EXTENDED_LENGTH>, L> {
+) -> AllEntities<Univariate<C::ScalarField, BATCHED_EXTENDED_LENGTH>, MegaFlavour> {
     let mut coefficients: Vec<[C::ScalarField; NUM_KEYS]> =
         vec![[C::ScalarField::ZERO; NUM_KEYS]; prover_memory[0].polys.iter().count()];
 
@@ -261,9 +261,11 @@ pub(crate) fn extend_univariates<C: HonkCurve<TranscriptFieldType>, L: PlainProv
         .map(|memory| memory.polys.get_row(row_idx))
         .enumerate()
         .for_each(|(pk_idx, row)| {
-            row.into_iter().enumerate().for_each(|(col_idx, value)| {
-                coefficients[col_idx][pk_idx] = value.clone();
-            });
+            row.into_iterator()
+                .enumerate()
+                .for_each(|(col_idx, value)| {
+                    coefficients[col_idx][pk_idx] = value;
+                });
         });
 
     let results = coefficients
@@ -290,28 +292,33 @@ pub(crate) fn extend_univariates<C: HonkCurve<TranscriptFieldType>, L: PlainProv
  * @param alphas
  * @return Univariate<C::ScalarField, BATCHED_EXTENDED_LENGTH>
  */
-pub(crate) fn compute_combiner<C: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour>(
-    prover_memory: &Vec<&mut DeciderProverMemory<C, L>>,
+pub(crate) fn compute_combiner<C: HonkCurve<TranscriptFieldType>>(
+    prover_memory: &Vec<&mut DeciderProverMemory<C>>,
     gate_separators: &GateSeparatorPolynomial<C::ScalarField>,
     relation_parameters: &ExtendedRelationParameters<C::ScalarField>,
     alphas: &Vec<Univariate<C::ScalarField, BATCHED_EXTENDED_LENGTH>>,
 ) -> Univariate<C::ScalarField, BATCHED_EXTENDED_LENGTH> {
     // TACEO TODO: In barretenberg there is virtual_size
     let common_polynomial_size = prover_memory[0].polys.witness.w_l().len();
-    let mut univariate_accumulators = L::AllRelationAcc::<C::ScalarField>::default();
+    let mut univariate_accumulators = <MegaFlavour as PlainProverFlavour>::AllRelationAcc::<
+        C::ScalarField,
+    >::default_with_total_lengths();
 
     // Accumulate the contribution from each sub-relation
     // TACEO TODO: Barretenberg uses balanced parallelization here with the trace_usage_tracker
     for i in 0..common_polynomial_size {
         // Construct extended univariates containers
-        let extended_univariates = extend_univariates(&prover_memory, i);
+        let extended_univariates = extend_univariates(prover_memory, i);
 
         let pow_challenge = gate_separators.beta_products[i];
 
         // Accumulate the i-th row's univariate contribution. Note that the relation parameters passed to
         // this function have already been folded. Moreover, linear-dependent relations that act over the
         // entire execution trace rather than on rows, will not be multiplied by the pow challenge.
-        L::accumulate_relation_univariates_extended_parameters::<C, BATCHED_EXTENDED_LENGTH>(
+        MegaFlavour::accumulate_relation_univariates_extended_parameters::<
+            C,
+            BATCHED_EXTENDED_LENGTH,
+        >(
             &mut univariate_accumulators,
             &extended_univariates,
             relation_parameters,
@@ -321,7 +328,7 @@ pub(crate) fn compute_combiner<C: HonkCurve<TranscriptFieldType>, L: PlainProver
 
     let mut result = Univariate::<C::ScalarField, BATCHED_EXTENDED_LENGTH>::default();
     //  Batch the univariate contributions from each sub-relation to obtain the round univariate
-    L::extend_and_batch_univariates_with_distinct_challenges::<C::ScalarField, _>(
+    MegaFlavour::extend_and_batch_univariates_with_distinct_challenges::<C::ScalarField, _>(
         &univariate_accumulators,
         &mut result,
         Univariate::<C::ScalarField, BATCHED_EXTENDED_LENGTH> {
@@ -329,42 +336,5 @@ pub(crate) fn compute_combiner<C: HonkCurve<TranscriptFieldType>, L: PlainProver
         },
         alphas.as_slice(),
     );
-    result
-}
-
-pub(crate) fn evaluate_with_domain_start<F: PrimeField, const SIZE: usize>(
-    poly: &Univariate<F, SIZE>,
-    u: F,
-    domain_start: usize,
-) -> F {
-    let mut full_numerator_value = F::one();
-    for i in domain_start..SIZE + domain_start {
-        full_numerator_value *= u - F::from(i as u64);
-    }
-
-    let big_domain = (domain_start..domain_start + SIZE)
-        .map(|i| F::from(i as u64))
-        .collect::<Vec<_>>();
-    let lagrange_denominators = Barycentric::construct_lagrange_denominators(SIZE, &big_domain);
-
-    let mut denominator_inverses = [F::zero(); SIZE];
-    for i in 0..SIZE {
-        let mut inv = lagrange_denominators[i];
-
-        inv *= u - big_domain[i];
-        inv = F::one() / inv;
-        denominator_inverses[i] = inv;
-    }
-
-    let mut result = F::zero();
-    // Compute each term v_j / (d_j*(x-x_j)) of the sum
-    for (i, &inverse) in denominator_inverses.iter().enumerate() {
-        let mut term = poly.evaluations[i];
-        term *= inverse;
-        result += term;
-    }
-
-    // Scale the sum by the value of B(x)
-    result *= full_numerator_value;
     result
 }

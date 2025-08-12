@@ -120,7 +120,7 @@ impl<P: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour> SumcheckVerifierR
         purported_evaluations: &ClaimedEvaluations<P::ScalarField, L>,
         relation_parameters: &RelationParameters<P::ScalarField>,
         gate_sparators: GateSeparatorPolynomial<P::ScalarField>,
-        alphas: &[L::Alpha<P::ScalarField>],
+        alphas: &[P::ScalarField],
     ) -> P::ScalarField {
         tracing::trace!("Compute full relation purported value");
 

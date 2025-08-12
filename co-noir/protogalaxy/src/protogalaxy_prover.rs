@@ -6,6 +6,7 @@ use ark_ff::fields::Field;
 
 use co_builder::{
     HonkProofResult, TranscriptFieldType,
+    flavours::mega_flavour::MegaFlavour,
     prelude::{HonkCurve, Polynomial, ProvingKey},
 };
 
@@ -15,13 +16,12 @@ use common::HonkProof;
 use ultrahonk::decider::types::RelationParameters;
 use ultrahonk::{
     oink::oink_prover::Oink,
-    plain_prover_flavour::{PlainProverFlavour, UnivariateTrait},
+    plain_prover_flavour::UnivariateTrait,
     prelude::{GateSeparatorPolynomial, Transcript, TranscriptHasher, Univariate, ZeroKnowledge},
 };
 
 use crate::protogalaxy_prover_internal::{
     compute_and_extend_alphas, compute_combiner_quotient, compute_perturbator,
-    evaluate_with_domain_start,
 };
 use crate::protogalaxy_prover_internal::{compute_combiner, compute_extended_relation_parameters};
 
@@ -34,26 +34,25 @@ pub(crate) const NUM_KEYS: usize = 2;
 pub(crate) const BATCHED_EXTENDED_LENGTH: usize =
     (MAX_TOTAL_RELATION_LENGTH - 1 + NUM_KEYS - 1) * (NUM_KEYS - 1) + 1;
 
-pub(crate) type OinkProverMemory<C, L> = ultrahonk::oink::types::ProverMemory<C, L>;
-pub(crate) type DeciderProverMemory<C, L> = ultrahonk::decider::types::ProverMemory<C, L>;
+pub(crate) type OinkProverMemory<C> = ultrahonk::oink::types::ProverMemory<C>;
+pub(crate) type DeciderProverMemory<C> = ultrahonk::decider::types::ProverMemory<C, MegaFlavour>;
 
 pub type ExtendedRelationParameters<F> = RelationParameters<Univariate<F, BATCHED_EXTENDED_LENGTH>>;
 
-pub struct ProtogalaxyProver<C, H, L>
+#[derive(Default)]
+pub struct ProtogalaxyProver<C, H>
 where
     C: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
-    L: PlainProverFlavour,
 {
     transcript: Transcript<TranscriptFieldType, H>,
-    phantom_data: PhantomData<(C, L)>,
+    phantom_data: PhantomData<C>,
 }
 
-impl<C, H, L> ProtogalaxyProver<C, H, L>
+impl<C, H> ProtogalaxyProver<C, H>
 where
     C: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
-    L: PlainProverFlavour<Alpha<C::ScalarField> = C::ScalarField>,
 {
     pub fn new() -> Self {
         Self {
@@ -63,17 +62,17 @@ where
     }
     fn run_oink_prover_on_one_incomplete_key(
         &mut self,
-        proving_key: &mut ProvingKey<C, L>,
-    ) -> HonkProofResult<OinkProverMemory<C, L>> {
-        let oink_prover = Oink::<C, H, L>::new(ZeroKnowledge::No);
+        proving_key: &mut ProvingKey<C, MegaFlavour>,
+    ) -> HonkProofResult<OinkProverMemory<C>> {
+        let oink_prover = Oink::<C, H, MegaFlavour>::new(ZeroKnowledge::No);
         oink_prover.prove(proving_key, &mut self.transcript)
     }
 
     pub(crate) fn run_oink_prover_on_each_incomplete_key(
         &mut self,
-        proving_keys: &mut Vec<ProvingKey<C, L>>,
-    ) -> HonkProofResult<Vec<OinkProverMemory<C, L>>> {
-        // Asummes accumulator has not been folded
+        proving_keys: &mut [ProvingKey<C, MegaFlavour>],
+    ) -> HonkProofResult<Vec<OinkProverMemory<C>>> {
+        // Assumes accumulator has not been folded
         let mut memory = Vec::with_capacity(proving_keys.len());
 
         for key in proving_keys.iter_mut() {
@@ -86,19 +85,19 @@ where
 
     fn perturbator_round(
         &mut self,
-        accumulator: &mut ProvingKey<C, L>,
-        accumulator_prover_memory: &DeciderProverMemory<C, L>,
+        accumulator: &mut ProvingKey<C, MegaFlavour>,
+        accumulator_prover_memory: &DeciderProverMemory<C>,
     ) -> (Vec<C::ScalarField>, Polynomial<C::ScalarField>) {
         let delta = self.transcript.get_challenge::<C>("delta".to_owned());
 
         let deltas = std::iter::successors(Some(delta), |&x| Some(x.square()))
             .take(CONST_PG_LOG_N)
-            .collect();
+            .collect::<Vec<_>>();
 
         // An honest prover with valid initial key computes that the perturbator is 0 in the first round
         // TODO TACEO: Fix once ClientIVC::accumulate is implemented
         let perturbator = if true {
-            compute_perturbator(accumulator, &deltas, accumulator_prover_memory)
+            compute_perturbator(accumulator, deltas.as_slice(), accumulator_prover_memory)
         } else {
             Polynomial::new(vec![C::ScalarField::ZERO; CONST_PG_LOG_N + 1])
         };
@@ -115,9 +114,10 @@ where
         (deltas, perturbator)
     }
 
+    #[expect(clippy::type_complexity)]
     fn combiner_quotient_round(
         &mut self,
-        prover_memory: &Vec<&mut DeciderProverMemory<C, L>>,
+        prover_memory: &Vec<&mut DeciderProverMemory<C>>,
         perturbator: Polynomial<C::ScalarField>,
         deltas: Vec<C::ScalarField>,
     ) -> (
@@ -173,7 +173,7 @@ where
      */
     fn update_target_sum_and_fold(
         mut self,
-        prover_memory: &mut Vec<&mut DeciderProverMemory<C, L>>,
+        prover_memory: &mut Vec<&mut DeciderProverMemory<C>>,
         combiner_quotient: Univariate<C::ScalarField, { BATCHED_EXTENDED_LENGTH - NUM_KEYS }>,
         alphas: Vec<Univariate<C::ScalarField, BATCHED_EXTENDED_LENGTH>>,
         univariate_relation_parameters: ExtendedRelationParameters<C::ScalarField>,
@@ -196,11 +196,10 @@ where
 
         let target_sum = perturbator_evaluation * lagranges[0]
             + vanishing_polynomial_at_challenge
-                * evaluate_with_domain_start(&combiner_quotient, combiner_challenge, NUM_KEYS);
+                * combiner_quotient.evaluate_with_domain_start(combiner_challenge, NUM_KEYS);
 
         accumulator_prover_memory.polys.iter_mut().for_each(|poly| {
-            poly.iter_mut()
-                .for_each(|coeff| *coeff = coeff.clone() * lagranges[0]);
+            poly.iter_mut().for_each(|coeff| *coeff *= lagranges[0]);
         });
 
         for (key_poly, acc_poly) in next_prover_memory
@@ -211,7 +210,7 @@ where
             acc_poly
                 .iter_mut()
                 .zip(key_poly.iter())
-                .for_each(|(acc_coeff, key_coeff)| *acc_coeff += key_coeff.clone() * lagranges[1]);
+                .for_each(|(acc_coeff, key_coeff)| *acc_coeff += *key_coeff * lagranges[1]);
         }
 
         // Evaluate the combined batching  α_i univariate at challenge to obtain next α_i and send it to the
@@ -239,9 +238,9 @@ where
 
     pub fn prove(
         mut self,
-        accumulator: &mut ProvingKey<C, L>,
-        accumulator_prover_memory: &mut DeciderProverMemory<C, L>,
-        mut next_proving_keys: Vec<ProvingKey<C, L>>,
+        accumulator: &mut ProvingKey<C, MegaFlavour>,
+        accumulator_prover_memory: &mut DeciderProverMemory<C>,
+        mut next_proving_keys: Vec<ProvingKey<C, MegaFlavour>>,
     ) -> HonkProofResult<(HonkProof<TranscriptFieldType>, C::ScalarField)> {
         let max_circuit_size = next_proving_keys
             .iter()
@@ -269,7 +268,7 @@ where
                 .collect::<Vec<_>>();
 
         // Perturbator round
-        let (deltas, perturbator) = self.perturbator_round(accumulator, &accumulator_prover_memory);
+        let (deltas, perturbator) = self.perturbator_round(accumulator, accumulator_prover_memory);
 
         let mut prover_memory = std::iter::once(accumulator_prover_memory)
             .chain(next_prover_memories.iter_mut())

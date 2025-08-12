@@ -155,7 +155,7 @@ where
 #[cfg(test)]
 mod tests {
     use crate::eccvm::ecc_op_queue::{
-        EccOpCode, EccOpsTable, EccvmOpsTable, EccvmRowTracker, UltraEccOpsTable, UltraOp,
+        EccOpCode, EccvmOpsTable, EccvmRowTracker, UltraEccOpsTable, UltraOp,
     };
 
     use super::*;
@@ -266,9 +266,7 @@ mod tests {
             accumulator: Bn254G1Affine::identity(),
             eccvm_ops_table: EccvmOpsTable::new(),
             ultra_ops_table: UltraEccOpsTable {
-                table: EccOpsTable {
-                    table: vec![vec![ultra_op_1, ultra_op_2]],
-                },
+                table: vec![vec![ultra_op_1, ultra_op_2]],
             },
             eccvm_ops_reconstructed: Vec::new(),
             ultra_ops_reconstructed: Vec::new(),
@@ -276,7 +274,8 @@ mod tests {
         };
 
         let crs =
-            CrsParser::<Bn254>::get_crs(CRS_PATH_G1, CRS_PATH_G2, 5, ZeroKnowledge::No).unwrap();
+            CrsParser::<Bn254G1>::get_crs::<Bn254>(CRS_PATH_G1, CRS_PATH_G2, 5, ZeroKnowledge::No)
+                .unwrap();
         let (prover_crs, _) = crs.split();
 
         let proof = MergeProver::<Bn254G1, Poseidon2Sponge>::new(queue)

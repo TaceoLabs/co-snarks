@@ -3680,9 +3680,11 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             }
 
             let idx_option = bits_locations.get(&range);
-            if idx_option.is_some() && decompose_indices[i].0 {
+            if let Some(idx) = idx_option
+                && decompose_indices[i].0
+            {
                 // Already decomposed
-                let idx = idx_option.unwrap().to_owned();
+                let idx = idx.to_owned();
                 self.decompose_into_default_range(
                     driver,
                     constraint.witness,

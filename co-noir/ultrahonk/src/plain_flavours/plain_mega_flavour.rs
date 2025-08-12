@@ -1,10 +1,13 @@
+use crate::decider::relations::auxiliary_relation::AuxiliaryRelationAccType;
 use crate::decider::relations::databus_lookup_relation::DataBusLookupRelationEvals;
 use crate::decider::relations::ecc_op_queue_relation::EccOpQueueRelationEvals;
+use crate::decider::relations::logderiv_lookup_relation::LogDerivLookupRelationAccType;
+use crate::decider::relations::permutation_relation::UltraPermutationRelationAccType;
 use crate::decider::sumcheck::sumcheck_round_prover::SumcheckProverRound;
 use crate::decider::types::{ProverUnivariates, ProverUnivariatesSized, RelationParameters};
 use crate::decider::{
     relations::{
-        auxiliary_relation::{AuxiliaryRelation, AuxiliaryRelationAcc, AuxiliaryRelationEvals},
+        auxiliary_relation::{AuxiliaryRelation, AuxiliaryRelationEvals},
         databus_lookup_relation::{DataBusLookupRelation, DataBusLookupRelationAcc},
         delta_range_constraint_relation::{
             DeltaRangeConstraintRelation, DeltaRangeConstraintRelationAcc,
@@ -12,12 +15,8 @@ use crate::decider::{
         },
         ecc_op_queue_relation::{EccOpQueueRelation, EccOpQueueRelationAcc},
         elliptic_relation::{EllipticRelation, EllipticRelationAcc, EllipticRelationEvals},
-        logderiv_lookup_relation::{
-            LogDerivLookupRelation, LogDerivLookupRelationAcc, LogDerivLookupRelationEvals,
-        },
-        permutation_relation::{
-            UltraPermutationRelation, UltraPermutationRelationAcc, UltraPermutationRelationEvals,
-        },
+        logderiv_lookup_relation::{LogDerivLookupRelation, LogDerivLookupRelationEvals},
+        permutation_relation::{UltraPermutationRelation, UltraPermutationRelationEvals},
         poseidon2_external_relation::{
             Poseidon2ExternalRelation, Poseidon2ExternalRelationAcc, Poseidon2ExternalRelationEvals,
         },
@@ -45,15 +44,26 @@ use std::array;
 #[derive(Default)]
 pub struct AllRelationAccMega<F: PrimeField> {
     pub(crate) r_arith: UltraArithmeticRelationAcc<F>,
-    pub(crate) r_perm: UltraPermutationRelationAcc<F>,
-    pub(crate) r_lookup: LogDerivLookupRelationAcc<F>,
+    pub(crate) r_perm: UltraPermutationRelationAccType<F>,
+    pub(crate) r_lookup: LogDerivLookupRelationAccType<F>,
     pub(crate) r_delta: DeltaRangeConstraintRelationAcc<F>,
     pub(crate) r_elliptic: EllipticRelationAcc<F>,
-    pub(crate) r_aux: AuxiliaryRelationAcc<F>,
+    pub(crate) r_aux: AuxiliaryRelationAccType<F>,
     pub(crate) r_ecc_op_queue: EccOpQueueRelationAcc<F>,
     pub(crate) r_databus: DataBusLookupRelationAcc<F>,
     pub(crate) r_pos_ext: Poseidon2ExternalRelationAcc<F>,
     pub(crate) r_pos_int: Poseidon2InternalRelationAcc<F>,
+}
+
+impl<F: PrimeField> AllRelationAccMega<F> {
+    pub fn default_with_total_lengths() -> Self {
+        Self {
+            r_aux: AuxiliaryRelationAccType::default_total(),
+            r_perm: UltraPermutationRelationAccType::default_total(),
+            r_lookup: LogDerivLookupRelationAccType::default_total(),
+            ..Default::default()
+        }
+    }
 }
 
 #[derive(Default)]
@@ -129,7 +139,6 @@ fn extend_and_batch_univariates_template<F: PrimeField, const SIZE: usize>(
 impl PlainProverFlavour for MegaFlavour {
     type AllRelationAcc<F: PrimeField> = AllRelationAccMega<F>;
     type AllRelationEvaluations<F: PrimeField> = AllRelationEvaluationsMega<F>;
-    type Alpha<F: PrimeField> = F;
     type SumcheckRoundOutput<F: PrimeField> =
         Univariate<F, { MegaFlavour::BATCHED_RELATION_PARTIAL_LENGTH }>;
     type SumcheckRoundOutputZK<F: PrimeField> =
@@ -148,11 +157,7 @@ impl PlainProverFlavour for MegaFlavour {
         + Poseidon2ExternalRelation::NUM_RELATIONS
         + Poseidon2InternalRelation::NUM_RELATIONS;
 
-    fn scale<F: PrimeField>(
-        acc: &mut Self::AllRelationAcc<F>,
-        first_scalar: F,
-        elements: &[Self::Alpha<F>],
-    ) {
+    fn scale<F: PrimeField>(acc: &mut Self::AllRelationAcc<F>, first_scalar: F, elements: &[F]) {
         tracing::trace!("Prove::Scale");
         assert!(elements.len() == Self::NUM_SUBRELATIONS - 1);
         acc.r_arith.scale(&[first_scalar, elements[0]]);
@@ -544,7 +549,7 @@ impl PlainProverFlavour for MegaFlavour {
     fn scale_and_batch_elements<F: PrimeField>(
         all_rel_evals: &Self::AllRelationEvaluations<F>,
         first_scalar: F,
-        elements: &[Self::Alpha<F>],
+        elements: &[F],
     ) -> F {
         tracing::trace!("Verify::scale_and_batch_elements");
         assert!(elements.len() == Self::NUM_SUBRELATIONS - 1);
@@ -586,7 +591,7 @@ impl PlainProverFlavour for MegaFlavour {
     fn scale_by_challenge_and_accumulate<F: PrimeField>(
         all_rel_evals: &Self::AllRelationEvaluations<F>,
         first_scalar: F,
-        elements: &[Self::Alpha<F>],
+        elements: &[F],
     ) -> (F, F) {
         assert!(elements.len() == Self::NUM_SUBRELATIONS - 1);
         let (mut linearly_dependent_contribution, mut linearly_independent_contribution) =
@@ -680,7 +685,7 @@ impl PlainProverFlavour for MegaFlavour {
 
     fn get_alpha_challenges<F: PrimeField, H: TranscriptHasher<F>, P: HonkCurve<F>>(
         transcript: &mut Transcript<F, H>,
-        alphas: &mut Vec<Self::Alpha<P::ScalarField>>,
+        alphas: &mut Vec<P::ScalarField>,
     ) {
         let args: [String; Self::NUM_ALPHAS] = array::from_fn(|i| format!("alpha_{i}"));
         //set the length of alphas to the number of alphas

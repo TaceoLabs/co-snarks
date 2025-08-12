@@ -42,7 +42,7 @@ pub struct Oink<
     H: TranscriptHasher<TranscriptFieldType>,
     L: PlainProverFlavour,
 > {
-    memory: ProverMemory<P, L>,
+    memory: ProverMemory<P>,
     phantom_data: PhantomData<(P, H, L)>,
     has_zk: ZeroKnowledge,
     rng: ChaCha12Rng,
@@ -437,7 +437,7 @@ impl<
 
         let has_active_ranges = proving_key.active_region_data.size() > 0;
 
-        // Barratenberg uses multithreading here
+        // Barretenberg uses multithreading here
 
         // Set the domain over which the grand product must be computed. This may be less than the dyadic circuit size, e.g
         // the permutation grand product does not need to be computed beyond the index of the last active wire
@@ -484,7 +484,9 @@ impl<
             .resize(proving_key.circuit_size as usize, P::ScalarField::zero());
 
         // For Ultra/Mega, the first row is an inactive zero row thus the grand prod takes value 1 at both i = 0 and i = 1
-        self.memory.z_perm[1] = P::ScalarField::one();
+        if L::FLAVOUR == Flavour::Ultra || L::FLAVOUR == Flavour::Mega {
+            self.memory.z_perm[1] = P::ScalarField::one();
+        }
 
         // Compute grand product values corresponding only to the active regions of the trace
         for i in 0..active_domain_size - 1 {
@@ -517,7 +519,7 @@ impl<
 
     /// Generate relation separators alphas for sumcheck/combiner computation
     pub(crate) fn generate_alphas_round(
-        alphas: &mut Vec<L::Alpha<P::ScalarField>>,
+        alphas: &mut Vec<P::ScalarField>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
     ) {
         tracing::trace!("generate alpha round");
@@ -827,7 +829,7 @@ impl<
         mut self,
         proving_key: &mut ProvingKey<P, L>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
-    ) -> HonkProofResult<ProverMemory<P, L>> {
+    ) -> HonkProofResult<ProverMemory<P>> {
         tracing::trace!("Oink prove");
 
         // Add circuit size public input size and public inputs to transcript

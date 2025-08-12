@@ -74,15 +74,8 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCProverFlavour> ProverMemory
             polynomials.witness.lookup_read_tags().as_ref().to_vec();
         if L::FLAVOUR == Flavour::Mega {
             for (des, src) in izip!(
-                memory
-                    .witness
-                    .iter_mut()
-                    .skip(L::WITNESS_ECC_OP_WIRE_1.expect("ECC_OP_WIRE_1 is not set")),
-                polynomials
-                    .witness
-                    .iter()
-                    .skip(L::ECC_OP_WIRE_1.expect("ECC_OP_WIRE_1 is not set"))
-                    .take(7)
+                memory.witness.iter_mut().skip(L::WITNESS_ECC_OP_WIRE_1),
+                polynomials.witness.iter().skip(L::ECC_OP_WIRE_1).take(7)
             ) {
                 *des = src.as_ref().to_vec();
             }
@@ -93,11 +86,11 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCProverFlavour> ProverMemory
                 memory
                     .witness
                     .iter_mut()
-                    .skip(L::WITNESS_SECONDARY_CALLDATA.expect("SECONDARY_CALLDATA is not set")),
+                    .skip(L::WITNESS_SECONDARY_CALLDATA),
                 polynomials
                     .witness
                     .iter()
-                    .skip(L::SECONDARY_CALLDATA.expect("SECONDARY_CALLDATA is not set"))
+                    .skip(L::SECONDARY_CALLDATA)
                     .take(3)
             ) {
                 *des = src.as_ref().to_vec();
@@ -107,15 +100,8 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCProverFlavour> ProverMemory
                 prover_memory.secondary_calldata_inverses.into_vec();
 
             for (des, src) in izip!(
-                memory
-                    .witness
-                    .iter_mut()
-                    .skip(L::WITNESS_RETURN_DATA.expect("RETURN_DATA is not set")),
-                polynomials
-                    .witness
-                    .iter()
-                    .skip(L::RETURN_DATA.expect("RETURN_DATA is not set"))
-                    .take(3)
+                memory.witness.iter_mut().skip(L::WITNESS_RETURN_DATA),
+                polynomials.witness.iter().skip(L::RETURN_DATA).take(3)
             ) {
                 *des = src.as_ref().to_vec();
             }

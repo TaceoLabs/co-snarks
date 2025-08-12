@@ -1,6 +1,7 @@
 use std::{array, io::Read, sync::Arc, vec};
 
 use ark_bn254::Bn254;
+use ark_ec::{bn::Bn, pairing::Pairing};
 use ark_ff::AdditiveGroup;
 use co_builder::{
     TranscriptFieldType,
@@ -74,7 +75,7 @@ macro_rules! to_field {
     };
 }
 
-fn structure_parameters<T: PartialEq>(
+fn structure_parameters<T: PartialEq + Default>(
     [
         eta_1,
         eta_2,
@@ -93,6 +94,9 @@ fn structure_parameters<T: PartialEq>(
         gamma,
         public_input_delta,
         lookup_grand_product_delta,
+        beta_sqr: T::default(),
+        beta_cube: T::default(),
+        eccvm_set_permutation_delta: T::default(),
     }
 }
 #[test]
@@ -145,7 +149,7 @@ fn test_compute_extended_relation_parameters() {
         [String; 7],
         [String; 7],
         Vec<[String; EXTENDED_LENGTH]>,
-    ) = decompress_and_read_test_data(&test_file);
+    ) = decompress_and_read_test_data(test_file);
 
     let parameters_1 = structure_parameters(to_field!(parameters_1_values, 1).try_into().unwrap());
     let parameters_2 = structure_parameters(to_field!(parameters_2_values, 1).try_into().unwrap());
@@ -259,24 +263,7 @@ fn test_compute_row_evaluations() {
     let polys = to_field!(polys, 2);
     let expected_full_honk_evaluations = to_field!(expected_full_honk_evaluations, 1);
 
-    let [
-        eta_1,
-        eta_2,
-        eta_3,
-        beta,
-        gamma,
-        public_input_delta,
-        lookup_grand_product_delta,
-    ] = relation_parameters.as_slice().try_into().unwrap();
-    let relation_parameters = RelationParameters {
-        eta_1,
-        eta_2,
-        eta_3,
-        beta,
-        gamma,
-        public_input_delta,
-        lookup_grand_product_delta,
-    };
+    let relation_parameters = structure_parameters(relation_parameters.try_into().unwrap());
 
     let polys = AllEntities::<Vec<F>, MegaFlavour>::from_elements(polys);
 
@@ -288,7 +275,7 @@ fn test_compute_row_evaluations() {
     };
 
     assert_eq!(
-        compute_row_evaluations::<C, MegaFlavour>(&prover_memory).coefficients,
+        compute_row_evaluations::<C>(&prover_memory).coefficients,
         expected_full_honk_evaluations
     );
 }
@@ -320,24 +307,7 @@ fn test_compute_perturbator() {
     let gate_challenges = to_field!(gate_challenges, 1);
     let perturbator_coefficients = to_field!(perturbator_coefficients, 1);
 
-    let [
-        eta_1,
-        eta_2,
-        eta_3,
-        beta,
-        gamma,
-        public_input_delta,
-        lookup_grand_product_delta,
-    ] = relation_parameters.as_slice().try_into().unwrap();
-    let relation_parameters = RelationParameters {
-        eta_1,
-        eta_2,
-        eta_3,
-        beta,
-        gamma,
-        public_input_delta,
-        lookup_grand_product_delta,
-    };
+    let relation_parameters = structure_parameters(relation_parameters.try_into().unwrap());
 
     let polys = AllEntities::<Vec<F>, MegaFlavour>::from_elements(polys);
 
@@ -357,8 +327,7 @@ fn test_compute_perturbator() {
     );
 
     assert_eq!(
-        compute_perturbator::<C, MegaFlavour>(&mut proving_key, &deltas, &prover_memory)
-            .coefficients,
+        compute_perturbator::<C>(&mut proving_key, &deltas, &prover_memory).coefficients,
         perturbator_coefficients
     );
 }
@@ -367,14 +336,16 @@ fn test_compute_perturbator() {
 #[ignore = "Requires a large test file"]
 fn test_compute_combiner() {
     let test_file = "unit/compute_combiner";
-
-    let (beta_products, alphas, relation_parameters, (polys_1, polys_2), combiner): (
+    type Out = (
         Vec<String>,
         Vec<Vec<String>>,
         Vec<Vec<String>>,
         (Vec<Vec<String>>, Vec<Vec<String>>),
         Vec<String>,
-    ) = decompress_and_read_test_data(test_file);
+    );
+
+    let (beta_products, alphas, relation_parameters, (polys_1, polys_2), combiner): Out =
+        decompress_and_read_test_data(test_file);
 
     let alphas = to_field!(alphas, 2)
         .into_iter()
@@ -452,6 +423,31 @@ fn test_protogalaxy_prover() {
     let test_file_acc = "e2e/accumulator";
     let test_file_folded = "e2e/folded_key";
     let test_file_folding_result = "e2e/folding_result";
+    type SavedPK = (
+        (
+            u32,                                      // circuit_size
+            u32,                                      // num_public_inputs
+            u32,                                      // pub_inputs_offset
+            u32,                                      // start_idx
+            usize,                                    // final_active_wire_idx
+            Vec<String>,                              // public_inputs
+            Vec<Vec<String>>,                         // polys
+            Vec<u32>,                                 // memory_read_records
+            Vec<u32>,                                 // memory_write_records
+            (Vec<(usize, usize)>, Vec<usize>, usize), // active_region_data
+        ),
+        Vec<String>, // honk_proof
+    );
+    type SavedResult = (
+        (
+            String,           // target_sum_result
+            Vec<String>,      // gate_challenges_result
+            Vec<String>,      // alphas_result
+            Vec<String>,      // relation_parameters_result
+            Vec<Vec<String>>, // polynomials_folding_result
+        ),
+        Vec<String>, // honk_proof
+    );
 
     let (
         (
@@ -467,21 +463,7 @@ fn test_protogalaxy_prover() {
             (ranges_1, idxs_1, current_end_1),
         ),
         _,
-    ): (
-        (
-            u32,
-            u32,
-            u32,
-            u32,
-            usize,
-            Vec<String>,
-            Vec<Vec<String>>,
-            Vec<u32>,
-            Vec<u32>,
-            (Vec<(usize, usize)>, Vec<usize>, usize),
-        ),
-        Vec<String>,
-    ) = decompress_and_read_test_data(test_file_acc);
+    ): SavedPK = decompress_and_read_test_data(test_file_acc);
 
     let (
         (
@@ -497,21 +479,7 @@ fn test_protogalaxy_prover() {
             (ranges_2, idxs_2, current_end_2),
         ),
         _,
-    ): (
-        (
-            u32,
-            u32,
-            u32,
-            u32,
-            usize,
-            Vec<String>,
-            Vec<Vec<String>>,
-            Vec<u32>,
-            Vec<u32>,
-            (Vec<(usize, usize)>, Vec<usize>, usize),
-        ),
-        Vec<String>,
-    ) = decompress_and_read_test_data(test_file_folded);
+    ): SavedPK = decompress_and_read_test_data(test_file_folded);
 
     let (
         (
@@ -522,18 +490,9 @@ fn test_protogalaxy_prover() {
             polynomials_folding_result,
         ),
         honk_proof,
-    ): (
-        (
-            String,
-            Vec<String>,
-            Vec<String>,
-            Vec<String>,
-            Vec<Vec<String>>,
-        ),
-        Vec<String>,
-    ) = decompress_and_read_test_data(test_file_folding_result);
+    ): SavedResult = decompress_and_read_test_data(test_file_folding_result);
 
-    let crs = CrsParser::<Bn254>::get_crs(
+    let crs = CrsParser::<<Bn<ark_bn254::Config> as Pairing>::G1>::get_crs::<Bn254>(
         CRS_PATH_G1,
         CRS_PATH_G2,
         circuit_size_1 as usize,
@@ -622,18 +581,17 @@ fn test_protogalaxy_prover() {
         polynomials: structure_prover_polys(polys_2),
     };
 
-    let prover = ProtogalaxyProver::<C, Poseidon2Sponge, MegaFlavour>::new();
+    let prover = ProtogalaxyProver::<C, Poseidon2Sponge>::new();
 
     // Compute the first Oink proof
     let mut transcript = Transcript::<F, Poseidon2Sponge>::new();
     let oink = Oink::<C, Poseidon2Sponge, MegaFlavour>::new(ZeroKnowledge::No);
     let oink_memory_1 = oink.prove(&mut accumulator, &mut transcript).unwrap();
 
-    let mut accumulator_prover_memory =
-        DeciderProverMemory::<C, MegaFlavour>::from_memory_and_polynomials(
-            oink_memory_1,
-            structure_prover_polys(polys_1),
-        );
+    let mut accumulator_prover_memory = DeciderProverMemory::<C>::from_memory_and_polynomials(
+        oink_memory_1,
+        structure_prover_polys(polys_1),
+    );
 
     accumulator_prover_memory.gate_challenges = vec![F::ZERO; CONST_PG_LOG_N];
 
@@ -667,7 +625,7 @@ fn test_protogalaxy_prover() {
     assert_eq!(target_sum, target_sum_result);
 
     itertools::assert_equal(
-        accumulator_prover_memory.polys.into_iter(),
-        polynomials_folding_result.into_iter(),
+        accumulator_prover_memory.polys.into_iterator(),
+        polynomials_folding_result,
     );
 }

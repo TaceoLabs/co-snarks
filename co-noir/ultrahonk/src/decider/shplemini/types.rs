@@ -9,10 +9,6 @@ pub(crate) struct PolyF<'a, T: Default + Clone + Debug + std::marker::Sync, L: P
     pub(crate) witness: &'a L::WitnessEntities<T>,
 }
 
-pub(crate) struct PolyG<'a, T: Default> {
-    pub(crate) wires: &'a [T; 5],
-}
-
 pub(crate) struct PolyGShift<
     'a,
     T: Default + Debug + Clone + std::marker::Sync,
@@ -24,12 +20,6 @@ pub(crate) struct PolyGShift<
 impl<T: Default + Clone + Debug + std::marker::Sync, L: PlainProverFlavour> PolyF<'_, T, L> {
     pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
         self.precomputed.iter().chain(self.witness.iter())
-    }
-}
-
-impl<T: Default + Debug> PolyG<'_, T> {
-    pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
-        self.wires.iter()
     }
 }
 

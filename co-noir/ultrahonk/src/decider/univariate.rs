@@ -27,6 +27,39 @@ impl<F: PrimeField, const SIZE: usize> Univariate<F, SIZE> {
             *result += extended;
         }
     }
+
+    pub fn evaluate_with_domain_start(&self, u: F, domain_start: usize) -> F {
+        let mut full_numerator_value = F::one();
+        for i in domain_start..SIZE + domain_start {
+            full_numerator_value *= u - F::from(i as u64);
+        }
+
+        let big_domain = (domain_start..domain_start + SIZE)
+            .map(|i| F::from(i as u64))
+            .collect::<Vec<_>>();
+        let lagrange_denominators = Barycentric::construct_lagrange_denominators(SIZE, &big_domain);
+
+        let mut denominator_inverses = [F::zero(); SIZE];
+        for i in 0..SIZE {
+            let mut inv = lagrange_denominators[i];
+
+            inv *= u - big_domain[i];
+            inv = F::one() / inv;
+            denominator_inverses[i] = inv;
+        }
+
+        let mut result = F::zero();
+        // Compute each term v_j / (d_j*(x-x_j)) of the sum
+        for (i, &inverse) in denominator_inverses.iter().enumerate() {
+            let mut term = self.evaluations[i];
+            term *= inverse;
+            result += term;
+        }
+
+        // Scale the sum by the value of B(x)
+        result *= full_numerator_value;
+        result
+    }
 }
 
 impl<F: PrimeField, const SIZE: usize> UnivariateTrait<F> for Univariate<F, SIZE> {
@@ -240,6 +273,11 @@ impl<F: PrimeField, const SIZE: usize> UnivariateTrait<F> for Univariate<F, SIZE
     }
     fn evaluations_as_ref(&self) -> &[F] {
         &self.evaluations
+    }
+
+    fn value_at(&self, i: usize) -> F {
+        assert!(i < SIZE, "Index out of bounds for univariate evaluations");
+        self.evaluations[i]
     }
 }
 

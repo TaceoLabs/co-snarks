@@ -1,5 +1,6 @@
 use super::Relation;
 use crate::decider::types::ProverUnivariatesSized;
+use crate::{assign_subrelation_evals, impl_relation_acc_type_methods};
 use crate::{
     decider::{
         types::{ClaimedEvaluations, RelationParameters},
@@ -12,21 +13,20 @@ use co_builder::polynomials::polynomial_flavours::{
     PrecomputedEntitiesFlavour, ShiftedWitnessEntitiesFlavour, WitnessEntitiesFlavour,
 };
 
-#[cfg(not(feature = "protogalaxy"))]
+pub enum UltraPermutationRelationAccType<F: PrimeField> {
+    Partial(UltraPermutationRelationAcc<F, 6>),
+    Total(UltraPermutationRelationAcc<F, 11>),
+}
+
+impl_relation_acc_type_methods!(UltraPermutationRelationAccType<F>);
+
 #[derive(Clone, Debug, Default)]
-pub(crate) struct UltraPermutationRelationAcc<F: PrimeField> {
-    pub(crate) r0: Univariate<F, 6>,
+pub(crate) struct UltraPermutationRelationAcc<F: PrimeField, const LENGTH: usize> {
+    pub(crate) r0: Univariate<F, LENGTH>,
     pub(crate) r1: Univariate<F, 3>,
 }
 
-#[cfg(feature = "protogalaxy")]
-#[derive(Clone, Debug, Default)]
-pub(crate) struct UltraPermutationRelationAcc<F: PrimeField> {
-    pub(crate) r0: Univariate<F, 11>,
-    pub(crate) r1: Univariate<F, 3>,
-}
-
-impl<F: PrimeField> UltraPermutationRelationAcc<F> {
+impl<F: PrimeField, const LENGTH: usize> UltraPermutationRelationAcc<F, LENGTH> {
     pub(crate) fn scale(&mut self, elements: &[F]) {
         assert!(elements.len() == UltraPermutationRelation::NUM_RELATIONS);
         self.r0 *= elements[0];
@@ -101,7 +101,7 @@ impl UltraPermutationRelation {
 }
 
 impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for UltraPermutationRelation {
-    type Acc = UltraPermutationRelationAcc<F>;
+    type Acc = UltraPermutationRelationAccType<F>;
     type VerifyAcc = UltraPermutationRelationEvals<F>;
 
     const SKIPPABLE: bool = true;
@@ -192,17 +192,22 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for UltraPermutationRe
         let tmp =
             ((z_perm.to_owned() + lagrange_first) * numerator) - (public_input_term * denominator);
 
-        for i in 0..univariate_accumulator.r0.evaluations.len() {
-            univariate_accumulator.r0.evaluations[i] += tmp.evaluations[i];
-        }
-
+        assign_subrelation_evals!(
+            UltraPermutationRelationAccType,
+            univariate_accumulator,
+            r0,
+            tmp.evaluations
+        );
         ///////////////////////////////////////////////////////////////////////
 
         let tmp = (lagrange_last.to_owned() * z_perm_shift) * scaling_factor;
 
-        for i in 0..univariate_accumulator.r1.evaluations.len() {
-            univariate_accumulator.r1.evaluations[i] += tmp.evaluations[i];
-        }
+        assign_subrelation_evals!(
+            UltraPermutationRelationAccType,
+            univariate_accumulator,
+            r1,
+            tmp.evaluations
+        );
     }
 
     fn accumulate_with_extended_parameters<const SIZE: usize>(
@@ -268,17 +273,23 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for UltraPermutationRe
         let tmp =
             ((z_perm.to_owned() + lagrange_first) * numerator) - (public_input_term * denominator);
 
-        for i in 0..univariate_accumulator.r0.evaluations.len() {
-            univariate_accumulator.r0.evaluations[i] += tmp.evaluations[i];
-        }
+        assign_subrelation_evals!(
+            UltraPermutationRelationAccType,
+            univariate_accumulator,
+            r0,
+            tmp.evaluations
+        );
 
         ///////////////////////////////////////////////////////////////////////
 
         let tmp = (lagrange_last.to_owned() * z_perm_shift) * scaling_factor;
 
-        for i in 0..univariate_accumulator.r1.evaluations.len() {
-            univariate_accumulator.r1.evaluations[i] += tmp.evaluations[i];
-        }
+        assign_subrelation_evals!(
+            UltraPermutationRelationAccType,
+            univariate_accumulator,
+            r1,
+            tmp.evaluations
+        );
     }
 
     fn verify_accumulate(

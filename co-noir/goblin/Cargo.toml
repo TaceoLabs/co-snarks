@@ -11,14 +11,21 @@ publish.workspace = true
 readme.workspace = true
 
 [dependencies]
-common = {version = "0.1.0", path = "../common"}
+common = { version = "0.1.0", path = "../common" }
 co-builder = { version = "0.4.0", path = "../co-builder" }
+mpc-core = { version = "0.9.0", path = "../../mpc-core" }
 ultrahonk = { version = "0.5.0", path = "../ultrahonk" }
 ark-ec.workspace = true
 ark-ff.workspace = true
 ark-bn254.workspace = true
 eyre.workspace = true
+itertools.workspace = true
 num-bigint.workspace = true
+ark-grumpkin.workspace = true
+tracing.workspace = true
+rand.workspace = true
+serde.workspace = true
+
 
 [dev-dependencies]
 mpc-core = { version = "0.9.0", path = "../../mpc-core" }

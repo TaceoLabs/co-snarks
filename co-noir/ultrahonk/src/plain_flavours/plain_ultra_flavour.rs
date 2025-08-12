@@ -1,3 +1,6 @@
+use crate::decider::relations::auxiliary_relation::AuxiliaryRelationAccType;
+use crate::decider::relations::logderiv_lookup_relation::LogDerivLookupRelationAccType;
+use crate::decider::relations::permutation_relation::UltraPermutationRelationAccType;
 use crate::decider::sumcheck::sumcheck_round_prover::SumcheckProverRound;
 use crate::decider::sumcheck::sumcheck_round_verifier::SumcheckVerifierRound;
 use crate::decider::types::{
@@ -14,18 +17,14 @@ use common::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
 use std::array;
 
 use crate::decider::relations::{
-    auxiliary_relation::{AuxiliaryRelation, AuxiliaryRelationAcc, AuxiliaryRelationEvals},
+    auxiliary_relation::{AuxiliaryRelation, AuxiliaryRelationEvals},
     delta_range_constraint_relation::{
         DeltaRangeConstraintRelation, DeltaRangeConstraintRelationAcc,
         DeltaRangeConstraintRelationEvals,
     },
     elliptic_relation::{EllipticRelation, EllipticRelationAcc, EllipticRelationEvals},
-    logderiv_lookup_relation::{
-        LogDerivLookupRelation, LogDerivLookupRelationAcc, LogDerivLookupRelationEvals,
-    },
-    permutation_relation::{
-        UltraPermutationRelation, UltraPermutationRelationAcc, UltraPermutationRelationEvals,
-    },
+    logderiv_lookup_relation::{LogDerivLookupRelation, LogDerivLookupRelationEvals},
+    permutation_relation::{UltraPermutationRelation, UltraPermutationRelationEvals},
     poseidon2_external_relation::{
         Poseidon2ExternalRelation, Poseidon2ExternalRelationAcc, Poseidon2ExternalRelationEvals,
     },
@@ -41,11 +40,11 @@ use ark_ff::AdditiveGroup;
 #[derive(Default)]
 pub struct AllRelationAccUltra<F: PrimeField> {
     pub(crate) r_arith: UltraArithmeticRelationAcc<F>,
-    pub(crate) r_perm: UltraPermutationRelationAcc<F>,
-    pub(crate) r_lookup: LogDerivLookupRelationAcc<F>,
+    pub(crate) r_perm: UltraPermutationRelationAccType<F>,
+    pub(crate) r_lookup: LogDerivLookupRelationAccType<F>,
     pub(crate) r_delta: DeltaRangeConstraintRelationAcc<F>,
     pub(crate) r_elliptic: EllipticRelationAcc<F>,
-    pub(crate) r_aux: AuxiliaryRelationAcc<F>,
+    pub(crate) r_aux: AuxiliaryRelationAccType<F>,
     pub(crate) r_pos_ext: Poseidon2ExternalRelationAcc<F>,
     pub(crate) r_pos_int: Poseidon2InternalRelationAcc<F>,
 }
@@ -111,7 +110,6 @@ fn extend_and_batch_univariates_template<F: PrimeField, const SIZE: usize>(
 impl PlainProverFlavour for UltraFlavour {
     type AllRelationAcc<F: PrimeField> = AllRelationAccUltra<F>;
     type AllRelationEvaluations<F: PrimeField> = AllRelationEvaluationsUltra<F>;
-    type Alpha<F: PrimeField> = F;
     type SumcheckRoundOutput<F: PrimeField> =
         Univariate<F, { UltraFlavour::BATCHED_RELATION_PARTIAL_LENGTH }>;
     type SumcheckRoundOutputZK<F: PrimeField> =
@@ -128,11 +126,7 @@ impl PlainProverFlavour for UltraFlavour {
         + Poseidon2ExternalRelation::NUM_RELATIONS
         + Poseidon2InternalRelation::NUM_RELATIONS;
 
-    fn scale<F: PrimeField>(
-        acc: &mut Self::AllRelationAcc<F>,
-        first_scalar: F,
-        elements: &[Self::Alpha<F>],
-    ) {
+    fn scale<F: PrimeField>(acc: &mut Self::AllRelationAcc<F>, first_scalar: F, elements: &[F]) {
         tracing::trace!("Prove::Scale");
         assert!(elements.len() == Self::NUM_SUBRELATIONS - 1);
         acc.r_arith.scale(&[first_scalar, elements[0]]);
@@ -265,17 +259,6 @@ impl PlainProverFlavour for UltraFlavour {
             scaling_factor,
         );
     }
-    fn accumulate_relation_univariates_extended_parameters<
-        P: HonkCurve<TranscriptFieldType>,
-        const SIZE: usize,
-    >(
-        _univariate_accumulators: &mut Self::AllRelationAcc<P::ScalarField>,
-        _extended_edges: &ProverUnivariatesSized<P::ScalarField, Self, SIZE>,
-        _relation_parameters: &RelationParameters<Univariate<P::ScalarField, SIZE>>,
-        _scaling_factor: &P::ScalarField,
-    ) {
-        todo!()
-    }
     fn accumulate_relation_evaluations<P: HonkCurve<TranscriptFieldType>>(
         univariate_accumulators: &mut Self::AllRelationEvaluations<P::ScalarField>,
         extended_edges: &ClaimedEvaluations<P::ScalarField, Self>,
@@ -348,7 +331,7 @@ impl PlainProverFlavour for UltraFlavour {
     fn scale_and_batch_elements<F: PrimeField>(
         all_rel_evals: &Self::AllRelationEvaluations<F>,
         first_scalar: F,
-        elements: &[Self::Alpha<F>],
+        elements: &[F],
     ) -> F {
         tracing::trace!("Verify::scale_and_batch_elements");
         assert!(elements.len() == Self::NUM_SUBRELATIONS - 1);
@@ -466,7 +449,7 @@ impl PlainProverFlavour for UltraFlavour {
     }
     fn get_alpha_challenges<F: PrimeField, H: TranscriptHasher<F>, P: HonkCurve<F>>(
         transcript: &mut Transcript<F, H>,
-        alphas: &mut Vec<Self::Alpha<P::ScalarField>>,
+        alphas: &mut Vec<P::ScalarField>,
     ) {
         let args: [String; Self::NUM_ALPHAS] = array::from_fn(|i| format!("alpha_{i}"));
         alphas.resize(Self::NUM_ALPHAS, P::ScalarField::ZERO);

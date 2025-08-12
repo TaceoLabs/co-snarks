@@ -19,14 +19,14 @@ use std::{iter, vec};
 pub struct ProverMemory<C: CurveGroup, L: PlainProverFlavour> {
     pub polys: AllEntities<Vec<C::ScalarField>, L>,
     pub relation_parameters: RelationParameters<C::ScalarField>,
-    pub alphas: Vec<L::Alpha<C::ScalarField>>,
+    pub alphas: Vec<C::ScalarField>,
     pub gate_challenges: Vec<C::ScalarField>,
 }
 
 pub(crate) struct VerifierMemory<C: CurveGroup, L: PlainProverFlavour> {
     pub(crate) verifier_commitments: VerifierCommitments<C::Affine, L>,
     pub(crate) relation_parameters: RelationParameters<C::ScalarField>,
-    pub(crate) alphas: Vec<L::Alpha<C::ScalarField>>,
+    pub(crate) alphas: Vec<C::ScalarField>,
     pub(crate) gate_challenges: Vec<C::ScalarField>,
     pub(crate) claimed_evaluations: ClaimedEvaluations<C::ScalarField, L>,
 }
@@ -35,7 +35,7 @@ pub type ProverUnivariates<F, L> = AllEntities<<L as PlainProverFlavour>::Prover
 pub(crate) type ProverUnivariatesSized<F, L, const SIZE: usize> =
     AllEntities<Univariate<F, SIZE>, L>;
 pub(crate) type PartiallyEvaluatePolys<F, L> = AllEntities<Vec<F>, L>;
-pub(crate) type ClaimedEvaluations<F, L> = AllEntities<F, L>;
+pub type ClaimedEvaluations<F, L> = AllEntities<F, L>;
 pub(crate) type VerifierCommitments<P, L> = AllEntities<P, L>;
 
 #[derive(Default, PartialEq, Debug)]
@@ -47,6 +47,9 @@ pub struct RelationParameters<T> {
     pub gamma: T,
     pub public_input_delta: T,
     pub lookup_grand_product_delta: T,
+    pub beta_sqr: T,
+    pub beta_cube: T,
+    pub eccvm_set_permutation_delta: T,
 }
 
 impl<T: PartialEq> RelationParameters<T> {
@@ -148,7 +151,7 @@ impl<F: PrimeField> GateSeparatorPolynomial<F> {
 
 impl<P: CurveGroup, L: PlainProverFlavour> ProverMemory<P, L> {
     pub fn from_memory_and_polynomials(
-        prover_memory: crate::oink::types::ProverMemory<P, L>,
+        prover_memory: crate::oink::types::ProverMemory<P>,
         polynomials: Polynomials<P::ScalarField, L>,
     ) -> Self {
         let relation_parameters = RelationParameters {
@@ -158,8 +161,10 @@ impl<P: CurveGroup, L: PlainProverFlavour> ProverMemory<P, L> {
             beta: prover_memory.challenges.beta,
             gamma: prover_memory.challenges.gamma,
             public_input_delta: prover_memory.public_input_delta,
-            // TODO TACEO: How to initialize this?
             lookup_grand_product_delta: Default::default(),
+            beta_sqr: Default::default(),
+            beta_cube: Default::default(),
+            eccvm_set_permutation_delta: Default::default(),
         };
 
         let alphas = prover_memory.challenges.alphas;
@@ -177,15 +182,8 @@ impl<P: CurveGroup, L: PlainProverFlavour> ProverMemory<P, L> {
             polynomials.witness.lookup_read_tags().as_ref().to_vec();
         if L::FLAVOUR == Flavour::Mega {
             for (des, src) in izip!(
-                memory
-                    .witness
-                    .iter_mut()
-                    .skip(L::WITNESS_ECC_OP_WIRE_1.expect("ECC_OP_WIRE_1 is not set")),
-                polynomials
-                    .witness
-                    .iter()
-                    .skip(L::ECC_OP_WIRE_1.expect("ECC_OP_WIRE_1 is not set"))
-                    .take(7)
+                memory.witness.iter_mut().skip(L::WITNESS_ECC_OP_WIRE_1),
+                polynomials.witness.iter().skip(L::ECC_OP_WIRE_1).take(7)
             ) {
                 *des = src.as_ref().to_vec();
             }
@@ -196,11 +194,11 @@ impl<P: CurveGroup, L: PlainProverFlavour> ProverMemory<P, L> {
                 memory
                     .witness
                     .iter_mut()
-                    .skip(L::WITNESS_SECONDARY_CALLDATA.expect("SECONDARY_CALLDATA is not set")),
+                    .skip(L::WITNESS_SECONDARY_CALLDATA),
                 polynomials
                     .witness
                     .iter()
-                    .skip(L::SECONDARY_CALLDATA.expect("SECONDARY_CALLDATA is not set"))
+                    .skip(L::SECONDARY_CALLDATA)
                     .take(3)
             ) {
                 *des = src.as_ref().to_vec();
@@ -210,15 +208,8 @@ impl<P: CurveGroup, L: PlainProverFlavour> ProverMemory<P, L> {
                 prover_memory.secondary_calldata_inverses.into_vec();
 
             for (des, src) in izip!(
-                memory
-                    .witness
-                    .iter_mut()
-                    .skip(L::WITNESS_RETURN_DATA.expect("RETURN_DATA is not set")),
-                polynomials
-                    .witness
-                    .iter()
-                    .skip(L::RETURN_DATA.expect("RETURN_DATA is not set"))
-                    .take(3)
+                memory.witness.iter_mut().skip(L::WITNESS_RETURN_DATA),
+                polynomials.witness.iter().skip(L::RETURN_DATA).take(3)
             ) {
                 *des = src.as_ref().to_vec();
             }
@@ -273,8 +264,10 @@ impl<C: CurveGroup, L: PlainProverFlavour> VerifierMemory<C, L> {
             beta: verifier_memory.challenges.beta,
             gamma: verifier_memory.challenges.gamma,
             public_input_delta: verifier_memory.public_input_delta,
-            // TODO TACEO: How to initialize this?
             lookup_grand_product_delta: Default::default(),
+            beta_sqr: Default::default(),
+            beta_cube: Default::default(),
+            eccvm_set_permutation_delta: Default::default(),
         };
         let alphas = verifier_memory.challenges.alphas;
         let gate_challenges = Default::default();

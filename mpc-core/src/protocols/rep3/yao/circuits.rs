@@ -2393,7 +2393,7 @@ impl GarbledCircuits {
             for bit in resized.iter() {
                 results.extend(Self::compose_field_element::<_, F>(
                     g,
-                    &[bit.clone()],
+                    std::slice::from_ref(bit),
                     rands.next().unwrap(),
                 )?);
             }
@@ -2401,7 +2401,7 @@ impl GarbledCircuits {
                 for bit in resized.iter() {
                     results.extend(Self::compose_field_element::<_, F>(
                         g,
-                        &[bit.clone()],
+                        std::slice::from_ref(bit),
                         rands.next().unwrap(),
                     )?);
                 }
@@ -2411,7 +2411,7 @@ impl GarbledCircuits {
                 for bit in rotated.iter() {
                     results.extend(Self::compose_field_element::<_, F>(
                         g,
-                        &[bit.clone()],
+                        std::slice::from_ref(bit),
                         rands.next().unwrap(),
                     )?);
                 }
@@ -2768,7 +2768,7 @@ impl GarbledCircuits {
                         for _ in 0..8 - counter {
                             results.extend(Self::compose_field_element::<_, F>(
                                 g,
-                                &[zero.clone()],
+                                std::slice::from_ref(&zero),
                                 rands.next().unwrap(),
                             )?);
                         }

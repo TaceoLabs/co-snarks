@@ -1,6 +1,7 @@
 use super::Relation;
 use crate::decider::types::ProverUnivariatesSized;
 use crate::plain_prover_flavour::UnivariateTrait;
+use crate::{assign_subrelation_evals, impl_relation_acc_type_methods};
 use crate::{
     decider::{
         types::{ClaimedEvaluations, RelationParameters},
@@ -26,29 +27,24 @@ use num_bigint::BigUint;
  *     5 // RAM consistency sub-relation 3
  * };
  */
-#[cfg(not(feature = "protogalaxy"))]
-#[derive(Clone, Debug, Default)]
-pub(crate) struct AuxiliaryRelationAcc<F: PrimeField> {
-    pub(crate) r0: Univariate<F, 6>,
-    pub(crate) r1: Univariate<F, 6>,
-    pub(crate) r2: Univariate<F, 6>,
-    pub(crate) r3: Univariate<F, 6>,
-    pub(crate) r4: Univariate<F, 6>,
-    pub(crate) r5: Univariate<F, 6>,
+pub enum AuxiliaryRelationAccType<F: PrimeField> {
+    Partial(AuxiliaryRelationAcc<F, 6>),
+    Total(AuxiliaryRelationAcc<F, 7>),
 }
 
-#[cfg(feature = "protogalaxy")]
+impl_relation_acc_type_methods!(AuxiliaryRelationAccType<F>);
+
 #[derive(Clone, Debug, Default)]
-pub(crate) struct AuxiliaryRelationAcc<F: PrimeField> {
-    pub(crate) r0: Univariate<F, 7>,
-    pub(crate) r1: Univariate<F, 7>,
-    pub(crate) r2: Univariate<F, 7>,
-    pub(crate) r3: Univariate<F, 7>,
-    pub(crate) r4: Univariate<F, 7>,
-    pub(crate) r5: Univariate<F, 7>,
+pub(crate) struct AuxiliaryRelationAcc<F: PrimeField, const LENGTH: usize = 6> {
+    pub(crate) r0: Univariate<F, LENGTH>,
+    pub(crate) r1: Univariate<F, LENGTH>,
+    pub(crate) r2: Univariate<F, LENGTH>,
+    pub(crate) r3: Univariate<F, LENGTH>,
+    pub(crate) r4: Univariate<F, LENGTH>,
+    pub(crate) r5: Univariate<F, LENGTH>,
 }
 
-impl<F: PrimeField> AuxiliaryRelationAcc<F> {
+impl<F: PrimeField, const LENGTH: usize> AuxiliaryRelationAcc<F, LENGTH> {
     pub(crate) fn scale(&mut self, elements: &[F]) {
         assert!(elements.len() == AuxiliaryRelation::NUM_RELATIONS);
         self.r0 *= elements[0];
@@ -179,7 +175,7 @@ impl AuxiliaryRelation {
 }
 
 impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for AuxiliaryRelation {
-    type Acc = AuxiliaryRelationAcc<F>;
+    type Acc = AuxiliaryRelationAccType<F>;
     type VerifyAcc = AuxiliaryRelationEvals<F>;
 
     const SKIPPABLE: bool = true;
@@ -393,14 +389,20 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for AuxiliaryRelation 
         let q_one_by_two_by_aux_by_scaling = q_one_by_two.to_owned() * &q_aux_by_scaling;
 
         let tmp = adjacent_values_match_if_adjacent_indices_match * &q_one_by_two_by_aux_by_scaling; // deg 5
-        for i in 0..univariate_accumulator.r1.evaluations.len() {
-            univariate_accumulator.r1.evaluations[i] += tmp.evaluations[i];
-        }
+        assign_subrelation_evals!(
+            AuxiliaryRelationAccType,
+            univariate_accumulator,
+            r1,
+            tmp.evaluations
+        );
 
         let tmp = q_one_by_two_by_aux_by_scaling * &index_is_monotonically_increasing; // deg 5
-        for i in 0..univariate_accumulator.r2.evaluations.len() {
-            univariate_accumulator.r2.evaluations[i] += tmp.evaluations[i];
-        }
+        assign_subrelation_evals!(
+            AuxiliaryRelationAccType,
+            univariate_accumulator,
+            r2,
+            tmp.evaluations
+        );
 
         let rom_consistency_check_identity = q_one_by_two * &memory_record_check; // deg 3 or 4
 
@@ -451,19 +453,28 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for AuxiliaryRelation 
         let tmp =
             adjacent_values_match_if_adjacent_indices_match_and_next_access_is_a_read_operation
                 * &q_arith_by_aux_and_scaling; // deg 5 or 6
-        for i in 0..univariate_accumulator.r3.evaluations.len() {
-            univariate_accumulator.r3.evaluations[i] += tmp.evaluations[i];
-        }
+        assign_subrelation_evals!(
+            AuxiliaryRelationAccType,
+            univariate_accumulator,
+            r3,
+            tmp.evaluations
+        );
 
         let tmp = index_is_monotonically_increasing * &q_arith_by_aux_and_scaling; // deg 4
-        for i in 0..univariate_accumulator.r4.evaluations.len() {
-            univariate_accumulator.r4.evaluations[i] += tmp.evaluations[i];
-        }
+        assign_subrelation_evals!(
+            AuxiliaryRelationAccType,
+            univariate_accumulator,
+            r4,
+            tmp.evaluations
+        );
 
         let tmp = next_gate_access_type_is_boolean * q_arith_by_aux_and_scaling; // deg 4 or 6
-        for i in 0..univariate_accumulator.r5.evaluations.len() {
-            univariate_accumulator.r5.evaluations[i] += tmp.evaluations[i];
-        }
+        assign_subrelation_evals!(
+            AuxiliaryRelationAccType,
+            univariate_accumulator,
+            r5,
+            tmp.evaluations
+        );
 
         let ram_consistency_check_identity = access_check * (q_arith); // deg 3 or 5
 
@@ -495,9 +506,12 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for AuxiliaryRelation 
             memory_identity + non_native_field_identity + limb_accumulator_identity;
         auxiliary_identity *= q_aux_by_scaling; // deg 5 or 6
 
-        for i in 0..univariate_accumulator.r0.evaluations.len() {
-            univariate_accumulator.r0.evaluations[i] += auxiliary_identity.evaluations[i];
-        }
+        assign_subrelation_evals!(
+            AuxiliaryRelationAccType,
+            univariate_accumulator,
+            r0,
+            auxiliary_identity.evaluations
+        );
     }
 
     fn accumulate_with_extended_parameters<const SIZE: usize>(
@@ -670,14 +684,20 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for AuxiliaryRelation 
         let q_one_by_two_by_aux_by_scaling = q_one_by_two.to_owned() * &q_aux_by_scaling;
 
         let tmp = adjacent_values_match_if_adjacent_indices_match * &q_one_by_two_by_aux_by_scaling; // deg 5
-        for i in 0..univariate_accumulator.r1.evaluations.len() {
-            univariate_accumulator.r1.evaluations[i] += tmp.evaluations[i];
-        }
+        assign_subrelation_evals!(
+            AuxiliaryRelationAccType,
+            univariate_accumulator,
+            r1,
+            tmp.evaluations
+        );
 
         let tmp = q_one_by_two_by_aux_by_scaling * &index_is_monotonically_increasing; // deg 5
-        for i in 0..univariate_accumulator.r2.evaluations.len() {
-            univariate_accumulator.r2.evaluations[i] += tmp.evaluations[i];
-        }
+        assign_subrelation_evals!(
+            AuxiliaryRelationAccType,
+            univariate_accumulator,
+            r2,
+            tmp.evaluations
+        );
 
         let rom_consistency_check_identity = q_one_by_two * &memory_record_check; // deg 3 or 4
 
@@ -728,19 +748,28 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for AuxiliaryRelation 
         let tmp =
             adjacent_values_match_if_adjacent_indices_match_and_next_access_is_a_read_operation
                 * &q_arith_by_aux_and_scaling; // deg 5 or 6
-        for i in 0..univariate_accumulator.r3.evaluations.len() {
-            univariate_accumulator.r3.evaluations[i] += tmp.evaluations[i];
-        }
+        assign_subrelation_evals!(
+            AuxiliaryRelationAccType,
+            univariate_accumulator,
+            r3,
+            tmp.evaluations
+        );
 
         let tmp = index_is_monotonically_increasing * &q_arith_by_aux_and_scaling; // deg 4
-        for i in 0..univariate_accumulator.r4.evaluations.len() {
-            univariate_accumulator.r4.evaluations[i] += tmp.evaluations[i];
-        }
+        assign_subrelation_evals!(
+            AuxiliaryRelationAccType,
+            univariate_accumulator,
+            r4,
+            tmp.evaluations
+        );
 
         let tmp = next_gate_access_type_is_boolean * q_arith_by_aux_and_scaling; // deg 4 or 6
-        for i in 0..univariate_accumulator.r5.evaluations.len() {
-            univariate_accumulator.r5.evaluations[i] += tmp.evaluations[i];
-        }
+        assign_subrelation_evals!(
+            AuxiliaryRelationAccType,
+            univariate_accumulator,
+            r5,
+            tmp.evaluations
+        );
 
         let ram_consistency_check_identity = access_check * (q_arith); // deg 3 or 5
 
@@ -772,9 +801,12 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for AuxiliaryRelation 
             memory_identity + non_native_field_identity + limb_accumulator_identity;
         auxiliary_identity *= q_aux_by_scaling; // deg 5 or 6
 
-        for i in 0..univariate_accumulator.r0.evaluations.len() {
-            univariate_accumulator.r0.evaluations[i] += auxiliary_identity.evaluations[i];
-        }
+        assign_subrelation_evals!(
+            AuxiliaryRelationAccType,
+            univariate_accumulator,
+            r0,
+            auxiliary_identity.evaluations
+        );
     }
 
     fn verify_accumulate(

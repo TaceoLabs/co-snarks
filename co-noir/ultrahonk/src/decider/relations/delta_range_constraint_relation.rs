@@ -281,64 +281,11 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for DeltaRangeConstrai
         _relation_parameters: &RelationParameters<Univariate<F, SIZE>>,
         scaling_factor: &F,
     ) {
-        tracing::trace!("Accumulate DeltaRangeConstraintRelation");
-
-        let w_1 = input.witness.w_l();
-        let w_2 = input.witness.w_r();
-        let w_3 = input.witness.w_o();
-        let w_4 = input.witness.w_4();
-        let w_1_shift = input.shifted_witness.w_l();
-        let q_delta_range = input.precomputed.q_delta_range();
-        let minus_one = -F::one();
-        let minus_two = -F::from(2u64);
-
-        // Compute wire differences
-        let delta_1 = w_2.to_owned() - w_1;
-        let delta_2 = w_3.to_owned() - w_2;
-        let delta_3 = w_4.to_owned() - w_3;
-        let delta_4 = w_1_shift.to_owned() - w_4;
-
-        // Contribution (1)
-        let mut tmp = (delta_1.to_owned() + &minus_one).sqr() + &minus_one;
-        tmp *= (delta_1.to_owned() + &minus_two).sqr() + &minus_one;
-        tmp *= q_delta_range;
-        tmp *= scaling_factor;
-
-        for i in 0..univariate_accumulator.r0.evaluations.len() {
-            univariate_accumulator.r0.evaluations[i] += tmp.evaluations[i];
-        }
-
-        ///////////////////////////////////////////////////////////////////////
-        // Contribution (2)
-        let mut tmp = (delta_2.to_owned() + &minus_one).sqr() + &minus_one;
-        tmp *= (delta_2.to_owned() + &minus_two).sqr() + &minus_one;
-        tmp *= q_delta_range;
-        tmp *= scaling_factor;
-
-        for i in 0..univariate_accumulator.r1.evaluations.len() {
-            univariate_accumulator.r1.evaluations[i] += tmp.evaluations[i];
-        }
-
-        ///////////////////////////////////////////////////////////////////////
-        // Contribution (3)
-        let mut tmp = (delta_3.to_owned() + &minus_one).sqr() + &minus_one;
-        tmp *= (delta_3.to_owned() + &minus_two).sqr() + &minus_one;
-        tmp *= q_delta_range;
-        tmp *= scaling_factor;
-
-        for i in 0..univariate_accumulator.r2.evaluations.len() {
-            univariate_accumulator.r2.evaluations[i] += tmp.evaluations[i];
-        }
-
-        ///////////////////////////////////////////////////////////////////////
-        // Contribution (4)
-        let mut tmp = (delta_4.to_owned() + &minus_one).sqr() + &minus_one;
-        tmp *= (delta_4.to_owned() + &minus_two).sqr() + &minus_one;
-        tmp *= q_delta_range;
-        tmp *= scaling_factor;
-
-        for i in 0..univariate_accumulator.r3.evaluations.len() {
-            univariate_accumulator.r3.evaluations[i] += tmp.evaluations[i];
-        }
+        Self::accumulate(
+            univariate_accumulator,
+            input,
+            &RelationParameters::default(),
+            scaling_factor,
+        );
     }
 }

@@ -1,5 +1,6 @@
 use super::Relation;
 use crate::decider::types::ProverUnivariatesSized;
+use crate::{assign_subrelation_evals, impl_relation_acc_type_methods};
 use crate::{
     decider::{
         types::{ClaimedEvaluations, RelationParameters},
@@ -12,21 +13,20 @@ use co_builder::polynomials::polynomial_flavours::{
     PrecomputedEntitiesFlavour, ShiftedWitnessEntitiesFlavour, WitnessEntitiesFlavour,
 };
 
-#[cfg(not(feature = "protogalaxy"))]
-#[derive(Clone, Debug, Default)]
-pub(crate) struct LogDerivLookupRelationAcc<F: PrimeField> {
-    pub(crate) r0: Univariate<F, 5>,
-    pub(crate) r1: Univariate<F, 5>,
+pub enum LogDerivLookupRelationAccType<F: PrimeField> {
+    Partial(LogDerivLookupRelationAcc<F, 5>),
+    Total(LogDerivLookupRelationAcc<F, 7>),
 }
 
-#[cfg(feature = "protogalaxy")]
 #[derive(Clone, Debug, Default)]
-pub(crate) struct LogDerivLookupRelationAcc<F: PrimeField> {
-    pub(crate) r0: Univariate<F, 7>,
-    pub(crate) r1: Univariate<F, 7>,
+pub(crate) struct LogDerivLookupRelationAcc<F: PrimeField, const LENGTH: usize> {
+    pub(crate) r0: Univariate<F, LENGTH>,
+    pub(crate) r1: Univariate<F, LENGTH>,
 }
 
-impl<F: PrimeField> LogDerivLookupRelationAcc<F> {
+impl_relation_acc_type_methods!(LogDerivLookupRelationAccType<F>);
+
+impl<F: PrimeField, const LENGTH: usize> LogDerivLookupRelationAcc<F, LENGTH> {
     pub(crate) fn scale(&mut self, elements: &[F]) {
         assert!(elements.len() == LogDerivLookupRelation::NUM_RELATIONS);
         self.r0 *= elements[0];
@@ -300,7 +300,7 @@ impl LogDerivLookupRelation {
 }
 
 impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for LogDerivLookupRelation {
-    type Acc = LogDerivLookupRelationAcc<F>;
+    type Acc = LogDerivLookupRelationAccType<F>;
     type VerifyAcc = LogDerivLookupRelationEvals<F>;
 
     const SKIPPABLE: bool = true;
@@ -369,9 +369,12 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for LogDerivLookupRela
         // if !inverse_exists.
         // Degrees:                     2 (3)       1 (2)        1              1
         let tmp = (read_term * write_term * inverses - inverse_exists) * scaling_factor; // Deg 4 (6)
-        for i in 0..univariate_accumulator.r0.evaluations.len() {
-            univariate_accumulator.r0.evaluations[i] += tmp.evaluations[i];
-        }
+        assign_subrelation_evals!(
+            LogDerivLookupRelationAccType,
+            univariate_accumulator,
+            r0,
+            tmp.evaluations
+        );
 
         ///////////////////////////////////////////////////////////////////////
 
@@ -379,9 +382,12 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for LogDerivLookupRela
         // i.e. enforced across the entire trace, not on a per-row basis.
         // Degrees:                       1            2 (3)            1            3 (4)
         let tmp = read_inverse * read_selector - write_inverse * read_counts; // Deg 4 (5)
-        for i in 0..univariate_accumulator.r1.evaluations.len() {
-            univariate_accumulator.r1.evaluations[i] += tmp.evaluations[i];
-        }
+        assign_subrelation_evals!(
+            LogDerivLookupRelationAccType,
+            univariate_accumulator,
+            r1,
+            tmp.evaluations
+        );
     }
 
     fn accumulate_with_extended_parameters<const SIZE: usize>(
@@ -408,9 +414,12 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for LogDerivLookupRela
         // if !inverse_exists.
         // Degrees:                     2 (3)       1 (2)        1              1
         let tmp = (read_term * write_term * inverses - inverse_exists) * scaling_factor; // Deg 4 (6)
-        for i in 0..univariate_accumulator.r0.evaluations.len() {
-            univariate_accumulator.r0.evaluations[i] += tmp.evaluations[i];
-        }
+        assign_subrelation_evals!(
+            LogDerivLookupRelationAccType,
+            univariate_accumulator,
+            r0,
+            tmp.evaluations
+        );
 
         ///////////////////////////////////////////////////////////////////////
 
@@ -418,9 +427,102 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for LogDerivLookupRela
         // i.e. enforced across the entire trace, not on a per-row basis.
         // Degrees:                       1            2 (3)            1            3 (4)
         let tmp = read_inverse * read_selector - write_inverse * read_counts; // Deg 4 (5)
-        for i in 0..univariate_accumulator.r1.evaluations.len() {
-            univariate_accumulator.r1.evaluations[i] += tmp.evaluations[i];
-        }
+        assign_subrelation_evals!(
+            LogDerivLookupRelationAccType,
+            univariate_accumulator,
+            r1,
+            tmp.evaluations
+        );
+    }
+
+    fn accumulate_with_extended_parameters<const SIZE: usize>(
+        univariate_accumulator: &mut Self::Acc,
+        input: &ProverUnivariatesSized<F, L, SIZE>,
+        relation_parameters: &RelationParameters<Univariate<F, SIZE>>,
+        scaling_factor: &F,
+    ) {
+        tracing::trace!("Accumulate LogDerivLookupRelation");
+
+        let inverses = input.witness.lookup_inverses(); // Degree 1
+        let read_counts = input.witness.lookup_read_counts(); // Degree 1
+        let read_selector = input.precomputed.q_lookup(); // Degree 1
+
+        let inverse_exists = Self::compute_inverse_exists(input); // Degree 2
+        let read_term =
+            Self::compute_read_term_with_extended_parameters(input, relation_parameters); // Degree 2 (3)
+        let write_term =
+            Self::compute_write_term_with_extended_parameters(input, relation_parameters); // Degree 1 (2)
+        let write_inverse = read_term.to_owned() * inverses; // Degree 3 (4)
+        let read_inverse = write_term.to_owned() * inverses; // Degree 2 (3)
+
+        // Establish the correctness of the polynomial of inverses I. Note: inverses is computed so that the value is 0
+        // if !inverse_exists.
+        // Degrees:                     2 (3)       1 (2)        1              1
+        let tmp = (read_term * write_term * inverses - inverse_exists) * scaling_factor; // Deg 4 (6)
+        assign_subrelation_evals!(
+            LogDerivLookupRelationAccType,
+            univariate_accumulator,
+            r0,
+            tmp.evaluations
+        );
+
+        ///////////////////////////////////////////////////////////////////////
+
+        // Establish validity of the read. Note: no scaling factor here since this constraint is 'linearly dependent,
+        // i.e. enforced across the entire trace, not on a per-row basis.
+        // Degrees:                       1            2 (3)            1            3 (4)
+        let tmp = read_inverse * read_selector - write_inverse * read_counts; // Deg 4 (5)
+        assign_subrelation_evals!(
+            LogDerivLookupRelationAccType,
+            univariate_accumulator,
+            r1,
+            tmp.evaluations
+        );
+    }
+
+    fn accumulate_with_extended_parameters<const SIZE: usize>(
+        univariate_accumulator: &mut Self::Acc,
+        input: &ProverUnivariatesSized<F, L, SIZE>,
+        relation_parameters: &RelationParameters<Univariate<F, SIZE>>,
+        scaling_factor: &F,
+    ) {
+        tracing::trace!("Accumulate LogDerivLookupRelation");
+
+        let inverses = input.witness.lookup_inverses(); // Degree 1
+        let read_counts = input.witness.lookup_read_counts(); // Degree 1
+        let read_selector = input.precomputed.q_lookup(); // Degree 1
+
+        let inverse_exists = Self::compute_inverse_exists(input); // Degree 2
+        let read_term =
+            Self::compute_read_term_with_extended_parameters(input, relation_parameters); // Degree 2 (3)
+        let write_term =
+            Self::compute_write_term_with_extended_parameters(input, relation_parameters); // Degree 1 (2)
+        let write_inverse = read_term.to_owned() * inverses; // Degree 3 (4)
+        let read_inverse = write_term.to_owned() * inverses; // Degree 2 (3)
+
+        // Establish the correctness of the polynomial of inverses I. Note: inverses is computed so that the value is 0
+        // if !inverse_exists.
+        // Degrees:                     2 (3)       1 (2)        1              1
+        let tmp = (read_term * write_term * inverses - inverse_exists) * scaling_factor; // Deg 4 (6)
+        assign_subrelation_evals!(
+            LogDerivLookupRelationAccType,
+            univariate_accumulator,
+            r0,
+            tmp.evaluations
+        );
+
+        ///////////////////////////////////////////////////////////////////////
+
+        // Establish validity of the read. Note: no scaling factor here since this constraint is 'linearly dependent,
+        // i.e. enforced across the entire trace, not on a per-row basis.
+        // Degrees:                       1            2 (3)            1            3 (4)
+        let tmp = read_inverse * read_selector - write_inverse * read_counts; // Deg 4 (5)
+        assign_subrelation_evals!(
+            LogDerivLookupRelationAccType,
+            univariate_accumulator,
+            r1,
+            tmp.evaluations
+        );
     }
 
     fn verify_accumulate(

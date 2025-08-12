@@ -60,8 +60,14 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str, has_zk: Zero
     let mut threads = Vec::with_capacity(3);
     let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
     let crs_size = co_noir::compute_circuit_size::<Bn254G1>(&constraint_system, false).unwrap();
-    let prover_crs =
-        Arc::new(CrsParser::<Bn254>::get_crs_g1(CRS_PATH_G1, crs_size, has_zk).unwrap());
+    let prover_crs = Arc::new(
+        CrsParser::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>::get_crs_g1(
+            CRS_PATH_G1,
+            crs_size,
+            has_zk,
+        )
+        .unwrap(),
+    );
     for (net0, net1) in nets0.into_iter().zip(nets1) {
         let witness = witness.clone();
         let prover_crs = prover_crs.clone();
@@ -104,7 +110,11 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str, has_zk: Zero
     }
 
     // Get vk
-    let verifier_crs = CrsParser::<Bn254>::get_crs_g2(CRS_PATH_G2).unwrap();
+    let verifier_crs =
+        CrsParser::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>::get_crs_g2::<
+            Bn254,
+        >(CRS_PATH_G2)
+        .unwrap();
     let vk =
         co_noir::generate_vk::<Bn254>(&constraint_system, prover_crs, verifier_crs, false).unwrap();
 
@@ -128,8 +138,14 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     let mut threads = Vec::with_capacity(3);
     let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
     let crs_size = co_noir::compute_circuit_size::<Bn254G1>(&constraint_system, false).unwrap();
-    let prover_crs =
-        Arc::new(CrsParser::<Bn254>::get_crs_g1(CRS_PATH_G1, crs_size, has_zk).unwrap());
+    let prover_crs = Arc::new(
+        CrsParser::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>::get_crs_g1(
+            CRS_PATH_G1,
+            crs_size,
+            has_zk,
+        )
+        .unwrap(),
+    );
     for (net0, net1) in nets0.into_iter().zip(nets1) {
         let prover_crs = prover_crs.clone();
         let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
@@ -176,7 +192,11 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     }
 
     // Get vk
-    let verifier_crs = CrsParser::<Bn254>::get_crs_g2(CRS_PATH_G2).unwrap();
+    let verifier_crs =
+        CrsParser::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>::get_crs_g2::<
+            Bn254,
+        >(CRS_PATH_G2)
+        .unwrap();
     let vk =
         co_noir::generate_vk::<Bn254>(&constraint_system, prover_crs, verifier_crs, false).unwrap();
 

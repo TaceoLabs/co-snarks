@@ -63,10 +63,7 @@ where
     pub fn from_elements(elements: Vec<T>) -> Self {
         let mut precomputed = elements;
         let mut witness = precomputed.split_off(L::PRECOMPUTED_ENTITIES_SIZE);
-        let shifted_witness = witness
-            .split_off(L::WITNESS_ENTITIES_SIZE)
-            .try_into()
-            .unwrap();
+        let shifted_witness = witness.split_off(L::WITNESS_ENTITIES_SIZE);
 
         AllEntities {
             precomputed: L::PrecomputedEntities::from_elements(precomputed),
@@ -99,7 +96,7 @@ impl<T: Default + Clone + Debug + std::marker::Sync, L: PlainProverFlavour> Defa
 }
 
 impl<T: Default + Clone + Debug + std::marker::Sync, L: PlainProverFlavour> AllEntities<T, L> {
-    pub fn into_iter(self) -> impl Iterator<Item = T> {
+    pub fn into_iterator(self) -> impl Iterator<Item = T> {
         self.precomputed
             .into_iter()
             .chain(self.witness.into_iter())
