@@ -469,7 +469,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         lhs.extend(num_muls_in_row_factor_1);
         rhs.extend(num_muls_in_row_factor_2); //This result is num_muls_in_row
 
-        //TODO After above 2nd mul
+        //TODO After above 2nd mul X DONE
         // let tmp = (q_mul.to_owned() * minus_one * num_muls_in_row.clone() + pc_delta)
         //     * scaling_factor
         //     * is_not_first_row.clone(); // degree 4
@@ -624,11 +624,11 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         //     * q_eq; // degree 4 TODO after 2nd mul
         // let eq_y_diff_relation =
         // (eq_y_diff.to_owned() * both_not_infinity + infinity_exclusion_check) * q_eq; // degree 4 // TODO after 2nd mul
-        // let tmp = eq_x_diff_relation * scaling_factor; // degree 4 //TODO
+        // let tmp = eq_x_diff_relation * scaling_factor; // degree 4 //TODO X DONE
         // for i in 0..univariate_accumulator.r9.evaluations.len() {
         //     univariate_accumulator.r9.evaluations[i] += tmp.evaluations[i];
         // }
-        // let tmp = eq_y_diff_relation * scaling_factor; // degree 4 //TODO
+        // let tmp = eq_y_diff_relation * scaling_factor; // degree 4 //TODO X DONE
         // for i in 0..univariate_accumulator.r10.evaluations.len() {
         //     univariate_accumulator.r10.evaluations[i] += tmp.evaluations[i];
         // }
@@ -695,7 +695,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
          *
          */
 
-        // let is_double = transcript_add_x_equal.to_owned() * transcript_add_y_equal; TODO
+        // let is_double = transcript_add_x_equal.to_owned() * transcript_add_y_equal; TODO X DONE
         lhs.extend(transcript_add_x_equal.to_owned());
         rhs.extend(transcript_add_y_equal.to_owned());
         let mut is_add = transcript_add_x_equal.to_owned(); // * minus_one + &P::ScalarField::one();
@@ -703,7 +703,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         T::add_scalar_in_place(&mut is_add, P::ScalarField::one(), id);
         // let add_result_is_infinity = (transcript_add_y_equal.to_owned() * minus_one
         //     + &P::ScalarField::one())
-        //     * transcript_add_x_equal; // degree 2 TODO
+        //     * transcript_add_x_equal; // degree 2 TODO X DONE
         let mut add_result_is_infinity_factor_1 = transcript_add_y_equal.to_owned();
         T::scale_many_in_place(&mut add_result_is_infinity_factor_1, minus_one);
         T::add_scalar_in_place(
@@ -711,7 +711,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
             P::ScalarField::one(),
             id,
         );
-        let mut add_result_is_infinity_factor_2 = transcript_add_x_equal;
+        let add_result_is_infinity_factor_2 = transcript_add_x_equal;
         lhs.extend(add_result_is_infinity_factor_1);
         rhs.extend(add_result_is_infinity_factor_2.to_owned());
         let rhs_x = transcript_accumulator_x;
@@ -724,26 +724,26 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         rhs.extend(q_add.to_owned());
         lhs.extend(transcript_msm_x.to_owned());
         rhs.extend(msm_transition.to_owned());
-        // let lhs_y = transcript_py.to_owned() * q_add + transcript_msm_y.to_owned() * msm_transition; TODO
+        // let lhs_y = transcript_py.to_owned() * q_add + transcript_msm_y.to_owned() * msm_transition; TODO X DONE
         lhs.extend(transcript_py.to_owned());
         rhs.extend(q_add.to_owned());
         lhs.extend(transcript_msm_y.to_owned());
         rhs.extend(msm_transition.to_owned());
         // let lhs_infinity = transcript_pinfinity.to_owned() * q_add
-        //     + transcript_msm_infinity.to_owned() * msm_transition; TODO
+        //     + transcript_msm_infinity.to_owned() * msm_transition; TODO X DONE
         lhs.extend(transcript_pinfinity.to_owned());
         rhs.extend(q_add.to_owned());
         lhs.extend(transcript_msm_infinity.to_owned());
         rhs.extend(msm_transition.to_owned());
         let rhs_infinity = is_accumulator_empty;
         // let result_is_lhs =
-        //     (lhs_infinity.to_owned() * minus_one + &P::ScalarField::one()) * rhs_infinity; // degree 2 TODO
+        //     (lhs_infinity.to_owned() * minus_one + &P::ScalarField::one()) * rhs_infinity; // degree 2 TODO X DONE
         // let result_is_rhs =
-        //     (rhs_infinity.to_owned() * minus_one + &P::ScalarField::one()) * lhs_infinity.clone(); // degree 2 TODO
+        //     (rhs_infinity.to_owned() * minus_one + &P::ScalarField::one()) * lhs_infinity.clone(); // degree 2 TODO X DONE
         // let result_infinity_from_inputs = lhs_infinity * rhs_infinity; // degree 2 TODO
         // let result_infinity_from_operation = (transcript_add_y_equal.to_owned() * minus_one
         //     + &P::ScalarField::one())
-        //     * transcript_add_x_equal; // degree 2 TODO
+        //     * transcript_add_x_equal; // degree 2 TODO X DONE
         let mut result_infinity_from_operation_factor_1 = transcript_add_y_equal.to_owned();
         T::scale_many_in_place(&mut result_infinity_from_operation_factor_1, minus_one);
         T::add_scalar_in_place(
@@ -756,7 +756,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         rhs.extend(result_infinity_from_operation_factor_2.to_owned());
         // infinity_from_inputs and infinity_from_operation mutually exclusive so we can perform an OR by adding
         // (mutually exclusive because if result_infinity_from_inputs then transcript_add_y_equal = 1 (both y are 0)
-        // let result_is_infinity = result_infinity_from_inputs + result_infinity_from_operation; // degree 2 TODO after 2nd mul
+        // let result_is_infinity = result_infinity_from_inputs + result_infinity_from_operation; // degree 2 TODO after 2nd mul X DONE
         let mut any_add_is_active = q_add.to_owned(); //+ msm_transition;
         T::add_assign_many(&mut any_add_is_active, msm_transition);
 
@@ -776,7 +776,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         // let lambda_relation_1 = lambda_denominator * lambda + lambda_numerator.to_owned() * minus_one; // degree 2 TODO X DONE
         lhs.extend(lambda_denominator);
         rhs.extend(lambda.clone());
-        // transcript_msm_lambda_relation += lambda_relation * is_add.clone(); // degree 3 TODO after 2nd mul
+        // transcript_msm_lambda_relation += lambda_relation * is_add.clone(); // degree 3 TODO after 2nd mul X DONE
 
         // Group operation is point doubling
 
@@ -817,7 +817,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         );
         lhs.extend(transcript_add_or_dbl_from_msm_output_is_valid_factor_1);
         rhs.extend(transcript_add_or_dbl_from_msm_output_is_valid_factor_2);
-        // transcript_msm_lambda_relation *= transcript_add_or_dbl_from_msm_output_is_valid; // degree 6 TODO
+        // transcript_msm_lambda_relation *= transcript_add_or_dbl_from_msm_output_is_valid; // degree 6 TODO done after 3rd mul
         // No group operation because of points at infinity
 
         let mut lambda_relation_invalid_3 = transcript_msm_infinity.to_owned();
@@ -825,14 +825,14 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         // + add_result_is_infinity.clone(); // degree 2
         T::add_assign_many(&mut lambda_relation_invalid_3, is_accumulator_empty);
         // T::add_assign_many(&mut lambda_relation_invalid_3, add_result_is_infinity); TODO X DONE
-        // let lambda_relation_3 = lambda_relation_invalid_3 * lambda; // degree 4 TODO DONE after 2nd mul
-        // transcript_msm_lambda_relation += lambda_relation; // (still degree 6) TODO after 2nd mul
+        // let lambda_relation_3 = lambda_relation_invalid_3 * lambda; // degree 4 TODO after 2nd mul X DONE
+        // transcript_msm_lambda_relation += lambda_relation_3; // (still degree 6) TODO after 3rd mul
 
-        // let mut transcript_lambda_relation = transcript_msm_lambda_relation * msm_transition; // degree 7 TODO after 2nd mul
+        // let mut transcript_lambda_relation = transcript_msm_lambda_relation * msm_transition; // degree 7 TODO after 3rd mul
 
         // Valdiate `transcript_add_lambda` is well formed if we are adding base point into accumulator
 
-        // let mut transcript_add_lambda_relation = Univariate::<P::ScalarField, SIZE>::default(); TODO
+        let mut transcript_add_lambda_relation = Univariate::<P::ScalarField, SIZE>::default(); //TODO
         let add_x = transcript_px;
         let add_y = transcript_py;
         // Group operation is point addition
@@ -848,7 +848,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         lhs.extend(lambda_denominator);
         rhs.extend(lambda.clone());
         // let lambda_relation_4 = lambda_denominator * lambda + lambda_numerator.to_owned() * minus_one; // degree 2  TODO X DONE
-        // transcript_add_lambda_relation += lambda_relation * is_add; // degree 3 TODO LATER
+        // transcript_add_lambda_relation += lambda_relation_4 * is_add; // degree 3 TODO X DONE
 
         // Group operation is point doubling
 
@@ -860,11 +860,11 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         lhs.extend(lambda_denominator);
         rhs.extend(lambda.clone());
         // let lambda_relation_5 = lambda_denominator * lambda + lambda_numerator.to_owned() * minus_one; // degree 2 TODO X DONE
-        // transcript_add_lambda_relation += lambda_relation * is_double; // degree 4 TODO after 2nd mul
+        // transcript_add_lambda_relation += lambda_relation_5 * is_double; // degree 4 TODO after 2nd mul  X DONE
 
         // let transcript_add_or_dbl_from_add_output_is_valid =
         //     (transcript_pinfinity.to_owned() * minus_one + &P::ScalarField::one())
-        //         * (is_accumulator_empty.to_owned() * minus_one + &P::ScalarField::one()); // degree 2 TODO
+        //         * (is_accumulator_empty.to_owned() * minus_one + &P::ScalarField::one()); // degree 2 TODO X DONE
         let mut transcript_add_or_dbl_from_add_output_is_valid_factor_1 =
             transcript_pinfinity.to_owned();
         T::scale_many_in_place(
@@ -889,19 +889,19 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         );
         lhs.extend(transcript_add_or_dbl_from_add_output_is_valid_factor_1);
         rhs.extend(transcript_add_or_dbl_from_add_output_is_valid_factor_2);
-        // transcript_add_lambda_relation *= transcript_add_or_dbl_from_add_output_is_valid; // degree 6 TODO after 2nd mul
+        // transcript_add_lambda_relation *= transcript_add_or_dbl_from_add_output_is_valid; // degree 6 TODO after 2nd mul Done after 3rd mul
         // No group operation because of points at infinity
 
         let mut lambda_relation_invalid_6 = transcript_pinfinity.to_owned(); // + is_accumulator_empty + add_result_is_infinity; // degree 2
         T::add_assign_many(&mut lambda_relation_invalid_6, is_accumulator_empty);
         // T::add_assign_many(&mut lambda_relation_invalid_6, add_result_is_infinity); TODO X DONE
-        // let lambda_relation_6 = lambda.to_owned() * lambda_relation_invalid_6; // degree 4 TODO after 2nd mul
-        // transcript_add_lambda_relation += lambda_relation; // (still degree 6) TODO after 2nd mul
+        // let lambda_relation_6 = lambda.to_owned() * lambda_relation_invalid_6; // degree 4 TODO after 2nd mul X DONE
+        // transcript_add_lambda_relation += lambda_relation_6; // (still degree 6) TODO after 3rd mul
 
-        // transcript_lambda_relation += transcript_add_lambda_relation * q_add; TODO after 2nd mul
-        // let tmp = transcript_lambda_relation * scaling_factor; // degree 7 TODO after 2nd mul
+        // transcript_lambda_relation += transcript_add_lambda_relation * q_add; TODO after 3rd mul
+        // let tmp = transcript_lambda_relation * scaling_factor; // degree 7 TODO after 3rd mul
         // for i in 0..univariate_accumulator.r14.evaluations.len() {
-        //     univariate_accumulator.r14.evaluations[i] += tmp.evaluations[i]; TODO after 2nd mul
+        //     univariate_accumulator.r14.evaluations[i] += tmp.evaluations[i]; TODO after 3rd mul
         // }
 
         /*
@@ -925,13 +925,13 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         // This should be validated by the lambda_relation
 
         // let mut x3_acc = (lambda_sqr - &lhs_x) - rhs_x; // degree 2
-        // x3_acc += result_is_lhs.clone() * (rhs_x.to_owned() + &lhs_x + &lhs_x); // degree 4 TODO After 2nd mul
-        // x3_acc += result_is_rhs.clone() * (lhs_x.to_owned() + rhs_x + rhs_x); // degree 4 TODO After 2nd mul
-        // x3_acc += (lhs_x.to_owned() + rhs_x) * &result_is_infinity; // degree 4 TODO After 2nd mul
+        // x3_acc += result_is_lhs.clone() * (rhs_x.to_owned() + &lhs_x + &lhs_x); // degree 4 TODO After 3rd mul
+        // x3_acc += result_is_rhs.clone() * (lhs_x.to_owned() + rhs_x + rhs_x); // degree 4 TODO After 3rd mul
+        // x3_acc += (lhs_x.to_owned() + rhs_x) * &result_is_infinity; // degree 4 TODO After 3rd mul
         // let mut y3_acc = lambda.to_owned() * (lhs_x.clone() - out_x) - &lhs_y; // degree 3
-        // y3_acc += result_is_lhs * (lhs_y.clone() + &lhs_y); // degree 4 TODO After 2nd mul
-        // y3_acc += result_is_rhs * (lhs_y.clone() + rhs_y); // degree 4 TODO After 2nd mul
-        // y3_acc += lhs_y.clone() * &result_is_infinity; // degree 4 TODO After 2nd mul
+        // y3_acc += result_is_lhs * (lhs_y.clone() + &lhs_y); // degree 4 TODO After 3rd mul
+        // y3_acc += result_is_rhs * (lhs_y.clone() + rhs_y); // degree 4 TODO After 3rd mul
+        // y3_acc += lhs_y.clone() * &result_is_infinity; // degree 4 TODO After 3rd mul
 
         let mut propagate_transcript_accumulator = q_add.to_owned(); // * minus_one - msm_transition - q_reset_accumulator
         // + &P::ScalarField::one();
@@ -943,7 +943,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
             P::ScalarField::one(),
             id,
         );
-        // let mut add_point_x_relation = (x3_acc - out_x) * &any_add_is_active; // degree 5 TODO after 2nd mul
+        // let mut add_point_x_relation = (x3_acc - out_x) * &any_add_is_active; // degree 5 TODO after 3rd mul
 
         // add_point_x_relation += (out_x.to_owned() - transcript_accumulator_x) TODO
         //     * &propagate_transcript_accumulator
@@ -957,7 +957,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         // add_point_x_relation += out_x.to_owned() * q_reset_accumulator; TODO
         lhs.extend(out_x.to_owned());
         rhs.extend(q_reset_accumulator.to_owned());
-        // let mut add_point_y_relation = (y3_acc - out_y) * &any_add_is_active; // degree 5 TODO after 2nd mul
+        // let mut add_point_y_relation = (y3_acc - out_y) * &any_add_is_active; // degree 5 TODO after 3rd mul
         // add_point_y_relation += propagate_transcript_accumulator
         //     * is_not_last_row
         //     * (out_y.to_owned() - transcript_accumulator_y); TODO (is_not_last_row is public) after above is done
@@ -1023,18 +1023,18 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
 
         // //TODO:[
         // let transcript_offset_generator_subtract_x = x_term
-        //     * (transcript_msm_infinity.to_owned() * minus_one + &P::ScalarField::one()) TODO After 2nd mul
+        //     * (transcript_msm_infinity.to_owned() * minus_one + &P::ScalarField::one()) TODO DONE After 3rd mul
         //     + transcript_msm_infinity.to_owned() * x3; // degree 4
         // let transcript_offset_generator_subtract_y = y_term
         //     * (transcript_msm_infinity.to_owned() * minus_one + &P::ScalarField::one()) TODO DONE After 2nd mul
         //     + transcript_msm_infinity.to_owned() * y3; // degree 3
 
-        // let tmp = transcript_offset_generator_subtract_x * msm_transition * scaling_factor; // degree 5
+        // let tmp = transcript_offset_generator_subtract_x * msm_transition * scaling_factor; // degree 5 TODO After 3rd mul
         // for i in 0..univariate_accumulator.r17.evaluations.len() {
         //     univariate_accumulator.r17.evaluations[i] += tmp.evaluations[i];
         // }
 
-        // let tmp = transcript_offset_generator_subtract_y * msm_transition * scaling_factor; // degree 5
+        // let tmp = transcript_offset_generator_subtract_y * msm_transition * scaling_factor; // degree 5 TODO DONE After 3rd mul
         // for i in 0..univariate_accumulator.r18.evaluations.len() {
         //     univariate_accumulator.r18.evaluations[i] += tmp.evaluations[i];
         // }]
@@ -1059,13 +1059,13 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         // }
         // if transcript_msm_infinity = 1, then x_diff must have an inverse
         let transcript_msm_x_inverse = input.witness.transcript_msm_x_inverse();
-        //   TODO: [ // let inverse_term = (transcript_msm_infinity.to_owned() * minus_one
+        //   TODO DONE AFTER 2nd MUL: [ // let inverse_term = (transcript_msm_infinity.to_owned() * minus_one
         //     + &P::ScalarField::one())
         //     * (x_diff * transcript_msm_x_inverse - 1);]
         lhs.extend(x_diff.to_owned());
         rhs.extend(transcript_msm_x_inverse.to_owned());
 
-        //    TODO [ // let tmp = inverse_term * msm_transition * scaling_factor; // degree 3 TODO AFTER 2nd mul
+        //    TODO [ // let tmp = inverse_term * msm_transition * scaling_factor; // degree 3 TODO AFTER 2nd mul DONE AFTER 3RD MUL
         // for i in 0..univariate_accumulator.r21.evaluations.len() {
         //     univariate_accumulator.r21.evaluations[i] += tmp.evaluations[i];
         // }]
@@ -1115,9 +1115,9 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         lhs.extend(accumulator_infinity_q_reset_factor_1);
         rhs.extend(q_reset_accumulator.to_owned());
         //    TODO [ // let accumulator_infinity_from_add =
-        //     (result_is_infinity - is_accumulator_empty_shift) * &any_add_is_active; // degree 3 TODO after 2nd mul
+        //     (result_is_infinity - is_accumulator_empty_shift) * &any_add_is_active; // degree 3 TODO after 2nd mul DONE after 3rd mul
         // let accumulator_infinity_relation = accumulator_infinity_preserve
-        //     + (accumulator_infinity_q_reset + accumulator_infinity_from_add) * is_not_first_row; // degree 4 TODO after 2nd mul
+        //     + (accumulator_infinity_q_reset + accumulator_infinity_from_add) * is_not_first_row; // degree 4 TODO after 3rd mul
         // let tmp = accumulator_infinity_relation * scaling_factor; // degree 4
         // for i in 0..univariate_accumulator.r22.evaluations.len() {
         //     univariate_accumulator.r22.evaluations[i] += tmp.evaluations[i];
@@ -1140,10 +1140,10 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let mut x_constant = transcript_add_x_equal.to_owned(); // - 1; // degree 1
         T::add_scalar_in_place(&mut x_constant, -P::ScalarField::one(), id);
         // let transcript_add_x_equal_check_relation =
-        //     (x_diff * x_product + x_constant) * &any_add_is_active; // degree 5 TODO AFTER 2ND MUL
-        // let tmp = transcript_add_x_equal_check_relation * scaling_factor; // degree 5  TODO AFTER 2ND MUL
+        //     (x_diff * x_product + x_constant) * &any_add_is_active; // degree 5 TODO AFTER 3rd MUL
+        // let tmp = transcript_add_x_equal_check_relation * scaling_factor; // degree 5  TODO AFTER 3rd MUL
         // for i in 0..univariate_accumulator.r23.evaluations.len() {
-        //     univariate_accumulator.r23.evaluations[i] += tmp.evaluations[i];
+        //     univariate_accumulator.r23.evaluations[i] += tmp.evaluations[i]; TODO AFTER 3rd MUL
         // }
 
         /*
@@ -1154,7 +1154,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         // let y_diff = lhs_y - rhs_y;
         // let y_product = (transcript_add_y_equal.to_owned() * minus_one + &P::ScalarField::one())
         //     * transcript_py_inverse
-        //     + transcript_add_y_equal; TODO FINISH THIS
+        //     + transcript_add_y_equal; TODO X DONE
         let mut y_product_factor_1 = transcript_add_y_equal.to_owned();
         T::scale_many_in_place(&mut y_product_factor_1, minus_one);
         T::add_scalar_in_place(&mut y_product_factor_1, P::ScalarField::one(), id);
@@ -1163,10 +1163,10 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let mut y_constant = transcript_add_y_equal.to_owned(); //- 1;
         T::add_scalar_in_place(&mut y_constant, -P::ScalarField::one(), id);
         // let transcript_add_y_equal_check_relation =
-        //     (y_diff * y_product + y_constant) * &any_add_is_active; TODO AFTER 2ND MUL
-        // let tmp = transcript_add_y_equal_check_relation * scaling_factor; // degree 5 TODO AFTER 2ND MUL
+        //     (y_diff * y_product + y_constant) * &any_add_is_active; TODO AFTER 3rd MUL
+        // let tmp = transcript_add_y_equal_check_relation * scaling_factor; // degree 5 TODO AFTER 3rd MUL
         // for i in 0..univariate_accumulator.r24.evaluations.len() {
-        //     univariate_accumulator.r24.evaluations[i] += tmp.evaluations[i]; TODO AFTER 2ND MUL
+        //     univariate_accumulator.r24.evaluations[i] += tmp.evaluations[i]; TODO AFTER 3rd MUL
         // }
 
         let mul = T::mul_many(&lhs, &rhs, net, state)?;
@@ -1197,13 +1197,13 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         rhs2.extend(msm_count_total.to_owned());
         // msm_count_zero_at_transition_check += (msm_count_total * msm_count_at_transition_inverse
         //     - 1)
-        //     * (msm_count_zero_at_transition.to_owned() * minus_one + &P::ScalarField::one()); TODO AFTER 2ND MUL
+        //     * (msm_count_zero_at_transition.to_owned() * minus_one + &P::ScalarField::one()); TODO AFTER 3RD MUL
         lhs2.extend(msm_count_at_transition_inverse.to_owned());
         rhs2.extend(msm_count_total.to_owned());
-        // TODO AFTER 2ND MUL  // let tmp =
+        // TODO AFTER 3RD MUL  // let tmp =
         //     msm_transition_check.to_owned() * msm_count_zero_at_transition_check * scaling_factor; // degree 3
         // for i in 0..univariate_accumulator.r4.evaluations.len() {
-        //     univariate_accumulator.r4.evaluations[i] += tmp.evaluations[i];
+        //     univariate_accumulator.r4.evaluations[i] += tmp.evaluations[i]; TODO AFTER 4TH MUL
         // }
         let msm_transition_check = mul[3].to_owned();
 
@@ -1243,7 +1243,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         lhs2.extend(transcript_px_sqr.to_owned());
         rhs2.extend(transcript_px.to_owned());
 
-        let validate_on_curve_mul_on_curve_check = mul[11].to_owned();
+        let validate_on_curve_mul_is_not_infinity = mul[11].to_owned();
 
         let is_double = mul[12].to_owned();
         let add_result_is_infinity = mul[13].to_owned();
@@ -1294,11 +1294,15 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
 
         let mut lambda_relation_4 = mul[25].to_owned();
         T::sub_assign_many(&mut lambda_relation_4, &lambda_numerator_4);
+        lhs2.extend(lambda_relation_4);
+        rhs2.extend(is_add.to_owned());
 
         let mut lambda_numerator_5 = mul[26].to_owned();
         T::scale_many_in_place(&mut lambda_numerator_5, P::ScalarField::from(3));
         let mut lambda_relation_5 = mul[27].to_owned();
         T::sub_assign_many(&mut lambda_relation_5, &lambda_numerator_5);
+        lhs2.extend(lambda_relation_5);
+        rhs2.extend(is_double.to_owned());
 
         let transcript_add_or_dbl_from_add_output_is_valid = mul[28].to_owned();
 
@@ -1309,6 +1313,11 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let mut x3_acc = mul[29].to_owned();
         T::sub_assign_many(&mut x3_acc, &lhs_x);
         T::sub_assign_many(&mut x3_acc, &rhs_x);
+
+        let mut y3_acc_summand_1_factor = lhs_x.to_owned();
+        T::sub_assign_many(&mut y3_acc_summand_1_factor, &out_x);
+        lhs2.extend(y3_acc_summand_1_factor);
+        rhs2.extend(lambda.clone());
 
         let mut add_point_x_relation_summand_1 = mul[30].to_owned();
         T::mul_assign_with_public_many(&mut add_point_x_relation_summand_1, &is_not_last_row);
@@ -1322,7 +1331,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         rhs2.extend(x_term_12.to_owned());
         lhs2.extend(transcript_msm_infinity.to_owned());
         rhs2.extend(x3.to_owned());
-        let x_term_factor_2 = mul[35].to_owned();
+        let x_term_factor_2 = mul[35];
 
         let y_term = T::sub_many(&mul[36], &mul[37]);
         lhs2.extend(y_term.to_owned());
@@ -1363,6 +1372,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         );
 
         let accumulator_infinity_q_reset = mul[42].to_owned();
+
         let mut x_product = mul[43].to_owned();
         T::add_assign_many(&mut x_product, &transcript_add_x_equal);
         lhs2.extend(x_product.to_owned());
@@ -1378,8 +1388,288 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         rhs2.extend(y_diff);
 
         let mul2 = T::mul_many(&lhs2, &rhs2, net, state)?;
-        let mul2 = mul2.chunks_exact(mul2.len() / 23).collect_vec();
-        debug_assert_eq!(mul2.len(), 23);
+        let mul2 = mul2.chunks_exact(mul2.len() / 26).collect_vec();
+        debug_assert_eq!(mul2.len(), 26);
+
+        let mut tmp = pc_delta.to_owned();
+        T::sub_assign_many(&mut tmp, &mul2[0]);
+        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
+        T::mul_assign_with_public_many(&mut tmp, &is_not_first_row);
+        fold_accumulator!(univariate_accumulator.r3, tmp, SIZE);
+
+        let mut msm_count_zero_at_transition_check = mul2[1].to_owned(); // TODO STILL NEEDS THE SUMMAND BELOW
+        let mut msm_count_zero_at_transition_check_factor_1 = mul2[2].to_owned();
+        T::add_scalar_in_place(
+            &mut msm_count_zero_at_transition_check_factor_1,
+            minus_one,
+            id,
+        );
+        let mut msm_count_zero_at_transition_check_factor_2 =
+            msm_count_zero_at_transition.to_owned();
+        T::scale_many_in_place(&mut msm_count_zero_at_transition_check_factor_2, minus_one);
+        T::add_scalar_in_place(
+            &mut msm_count_zero_at_transition_check_factor_2,
+            P::ScalarField::one(),
+            id,
+        );
+
+        let mut lhs3 = Vec::with_capacity(1);
+        let mut rhs3 = Vec::with_capacity(lhs3.len());
+        lhs3.extend(msm_count_zero_at_transition_check_factor_1);
+        rhs3.extend(msm_count_zero_at_transition_check_factor_2);
+
+        let mut tmp = msm_transition.to_owned();
+        T::sub_assign_many(&mut tmp, &mul2[3]);
+        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
+        fold_accumulator!(univariate_accumulator.r5, tmp, SIZE);
+
+        let mut eq_x_diff_relation_factor_1 = mul2[4].to_owned();
+        T::add_assign_many(&mut eq_x_diff_relation_factor_1, &infinity_exclusion_check);
+        lhs3.extend(eq_x_diff_relation_factor_1);
+        rhs3.extend(q_eq.to_owned());
+
+        let mut eq_y_diff_relation_factor_1 = mul2[5].to_owned();
+        T::add_assign_many(&mut eq_y_diff_relation_factor_1, &infinity_exclusion_check);
+        lhs3.extend(eq_y_diff_relation_factor_1);
+        rhs3.extend(q_eq.to_owned());
+
+        let mut on_curve_check = transcript_py_sqr;
+        T::sub_assign_many(&mut on_curve_check, &mul2[6]);
+        T::add_scalar_in_place(&mut on_curve_check, -P::get_curve_b(), id);
+        lhs3.extend(on_curve_check.to_owned());
+        rhs3.extend(&validate_on_curve_mul_is_not_infinity); // THIS THEN YIELDS TO r13
+
+        let result_is_lhs = mul2[7].to_owned();
+        let result_is_rhs = mul2[8].to_owned();
+        let result_infinity_from_inputs = mul2[9].to_owned();
+
+        let mut result_is_infinity = result_infinity_from_inputs;
+        T::add_assign_many(&mut result_is_infinity, &result_infinity_from_operation);
+
+        let mut transcript_msm_lambda_relation = mul2[10].to_owned(); // TODO STILL NEED to add lambda_relation_3
+        T::add_assign_many(&mut transcript_msm_lambda_relation, &mul2[11]);
+
+        lhs3.extend(transcript_msm_lambda_relation);
+        rhs3.extend(transcript_add_or_dbl_from_msm_output_is_valid);
+
+        let lambda_relation_3 = mul2[12].to_owned();
+        let mut transcript_add_lambda_relation = mul2[13].to_owned();
+        let transcript_add_lambda_relation_summand_1 = mul2[14].to_owned();
+        T::add_assign_many(
+            &mut transcript_add_lambda_relation,
+            &transcript_add_lambda_relation_summand_1,
+        );
+        lhs3.extend(transcript_add_lambda_relation);
+        rhs3.extend(transcript_add_or_dbl_from_add_output_is_valid);
+
+        let lambda_relation_6 = mul2[15];
+
+        let mut x3_acc_summand_1_factor = rhs_x.to_owned();
+        T::add_assign_many(&mut x3_acc_summand_1_factor, &lhs_x);
+        T::add_assign_many(&mut x3_acc_summand_1_factor, &lhs_x);
+        lhs3.extend(x3_acc_summand_1_factor);
+        rhs3.extend(result_is_lhs.to_owned());
+        let mut x3_acc_summand_2_factor = lhs_x.to_owned();
+        T::add_assign_many(&mut x3_acc_summand_2_factor, &rhs_x);
+        T::add_assign_many(&mut x3_acc_summand_2_factor, &rhs_x);
+        lhs3.extend(x3_acc_summand_2_factor);
+        rhs3.extend(result_is_rhs.to_owned());
+        let mut x3_acc_summand_3_factor = lhs_x.to_owned();
+        T::add_assign_many(&mut x3_acc_summand_3_factor, &rhs_x);
+        lhs3.extend(x3_acc_summand_3_factor);
+        rhs3.extend(result_is_infinity.clone());
+
+        let mut y3_acc = mul2[16].to_owned();
+        T::sub_assign_many(&mut y3_acc, &lhs_y);
+        let mut y3_acc_summand_2_factor = lhs_y.to_owned();
+        T::scale_many_in_place(&mut y3_acc_summand_2_factor, P::ScalarField::from(2));
+        lhs3.extend(y3_acc_summand_2_factor);
+        rhs3.extend(result_is_lhs.to_owned());
+        let mut y3_acc_summand_3_factor = lhs_y.to_owned();
+        T::add_assign_many(&mut y3_acc_summand_3_factor, &rhs_y);
+        lhs3.extend(y3_acc_summand_3_factor);
+        rhs3.extend(result_is_rhs.to_owned());
+        lhs3.extend(lhs_y.to_owned());
+        rhs3.extend(result_is_infinity.to_owned());
+
+        let x_term = T::sub_many(&mul2[17], x_term_factor_2);
+        let mut transcript_offset_generator_subtract_x_factor_1 =
+            transcript_msm_infinity.to_owned();
+        T::scale_many_in_place(
+            &mut transcript_offset_generator_subtract_x_factor_1,
+            minus_one,
+        );
+        T::add_scalar_in_place(
+            &mut transcript_offset_generator_subtract_x_factor_1,
+            P::ScalarField::one(),
+            id,
+        );
+        lhs3.extend(x_term);
+        rhs3.extend(transcript_offset_generator_subtract_x_factor_1);
+
+        let transcript_offset_generator_subtract_x_factor_2 = mul2[18];
+        let transcript_offset_generator_subtract_y = T::add_many(&mul2[19], &mul2[20]);
+
+        lhs3.extend(transcript_offset_generator_subtract_y);
+        rhs3.extend(msm_transition.to_owned());
+
+        let mut tmp = mul2[21].to_owned();
+        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
+        fold_accumulator!(univariate_accumulator.r19, tmp, SIZE);
+
+        let mut tmp = mul2[22].to_owned();
+        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
+        fold_accumulator!(univariate_accumulator.r20, tmp, SIZE);
+
+        let inverse_term = mul2[23];
+        lhs3.extend(inverse_term.to_owned());
+        rhs3.extend(msm_transition.to_owned());
+
+        let mut accumulator_infinity_from_add_factor_1 = result_is_infinity.to_owned();
+        T::sub_assign_many(
+            &mut accumulator_infinity_from_add_factor_1,
+            &is_accumulator_empty_shift,
+        );
+        lhs3.extend(accumulator_infinity_from_add_factor_1);
+        rhs3.extend(any_add_is_active.to_owned());
+
+        let mut transcript_add_x_equal_check_relation_factor = mul2[24].to_owned();
+        T::add_assign_many(
+            &mut transcript_add_x_equal_check_relation_factor,
+            &x_constant,
+        );
+        lhs3.extend(transcript_add_x_equal_check_relation_factor);
+        rhs3.extend(any_add_is_active.to_owned());
+
+        let mut transcript_add_y_equal_check_relation_factor = mul2[25].to_owned();
+        T::add_assign_many(
+            &mut transcript_add_y_equal_check_relation_factor,
+            &y_constant,
+        );
+        lhs3.extend(transcript_add_y_equal_check_relation_factor);
+        rhs3.extend(any_add_is_active.to_owned());
+
+        let mul3 = T::mul_many(&lhs3, &rhs3, net, state)?;
+        let mul3 = mul3.chunks_exact(mul3.len() / 18).collect_vec();
+        debug_assert_eq!(mul3.len(), 18);
+
+        let mut lhs4 = Vec::with_capacity(1);
+        let mut rhs4 = Vec::with_capacity(lhs4.len());
+
+        T::add_assign_many(&mut msm_count_zero_at_transition_check, mul3[0]);
+        lhs4.extend(msm_count_zero_at_transition_check);
+        rhs4.extend(msm_transition_check.to_owned());
+
+        let mut tmp = mul3[1].to_owned(); //this is eq_x_diff_relation
+        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
+        fold_accumulator!(univariate_accumulator.r9, tmp, SIZE);
+
+        let mut tmp = mul3[2].to_owned(); // this is eq_y_diff_relation
+        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
+        fold_accumulator!(univariate_accumulator.r10, tmp, SIZE);
+
+        let mut tmp = mul3[3].to_owned(); // this is validate_on_curve * on_curve_check * is_not_infinity
+        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
+        fold_accumulator!(univariate_accumulator.r13, tmp, SIZE);
+
+        let mut transcript_msm_lambda_relation = mul3[4].to_owned();
+        T::add_assign_many(&mut transcript_msm_lambda_relation, &lambda_relation_3);
+
+        lhs4.extend(transcript_msm_lambda_relation);
+        rhs4.extend(msm_transition.to_owned()); // This is then transcript_lambda_relation
+
+        let mut transcript_add_lambda_relation = mul3[5].to_owned();
+        T::add_assign_many(&mut transcript_add_lambda_relation, lambda_relation_6);
+        lhs4.extend(transcript_add_lambda_relation);
+        rhs4.extend(q_add.to_owned()); // TODO add this to transcript_lambda_relation after the above mul
+
+        T::add_assign_many(&mut x3_acc, &mul3[6]);
+        T::add_assign_many(&mut x3_acc, &mul3[7]);
+        T::add_assign_many(&mut x3_acc, &mul3[8]);
+
+        T::add_assign_many(&mut y3_acc, &mul3[9]);
+        T::add_assign_many(&mut y3_acc, &mul3[10]);
+        T::add_assign_many(&mut y3_acc, &mul3[11]);
+
+        let mut add_point_x_relation_factor = x3_acc;
+        T::sub_assign_many(&mut add_point_x_relation_factor, out_x);
+        lhs4.extend(add_point_x_relation_factor);
+        rhs4.extend(any_add_is_active.clone()); // This is then the initial add_point_x_relation
+
+        let mut add_point_y_relation_factor = y3_acc;
+        T::sub_assign_many(&mut add_point_y_relation_factor, out_y);
+        lhs4.extend(add_point_y_relation_factor);
+        rhs4.extend(any_add_is_active); // This is then the initial add_point_y_relation
+
+        let transcript_offset_generator_subtract_x =
+            T::add_many(&mul3[12], transcript_offset_generator_subtract_x_factor_2);
+
+        lhs4.extend(transcript_offset_generator_subtract_x);
+        rhs4.extend(msm_transition.to_owned()); //TODO SCALE THIS AND THEN ACC TO R17
+
+        let mut tmp = mul3[13].to_owned();
+        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
+        fold_accumulator!(univariate_accumulator.r18, tmp, SIZE);
+
+        let mut tmp = mul3[14].to_owned();
+        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
+        fold_accumulator!(univariate_accumulator.r21, tmp, SIZE);
+
+        let accumulator_infinity_from_add = mul3[15];
+
+        let mut accumulator_infinity_relation = accumulator_infinity_from_add.to_owned();
+        T::add_assign_many(
+            &mut accumulator_infinity_relation,
+            &accumulator_infinity_q_reset,
+        );
+        T::mul_assign_with_public_many(&mut accumulator_infinity_relation, &is_not_first_row);
+        T::add_assign_many(
+            &mut accumulator_infinity_relation,
+            &accumulator_infinity_preserve,
+        );
+        T::mul_assign_with_public_many(&mut accumulator_infinity_relation, &scaling_factors);
+        fold_accumulator!(
+            univariate_accumulator.r22,
+            accumulator_infinity_relation,
+            SIZE
+        );
+
+        let mut tmp = mul3[16].to_owned();
+        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
+        fold_accumulator!(univariate_accumulator.r23, tmp, SIZE);
+
+        let mut tmp = mul3[17].to_owned();
+        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
+        fold_accumulator!(univariate_accumulator.r24, tmp, SIZE);
+
+        let mul4 = T::mul_many(&lhs4, &rhs4, net, state)?;
+        let mul4 = mul4.chunks_exact(mul4.len() / 6).collect_vec();
+        debug_assert_eq!(mul4.len(), 6);
+
+        let mut tmp = mul4[0].to_owned();
+        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
+        fold_accumulator!(univariate_accumulator.r4, tmp, SIZE);
+
+        let mut transcript_lambda_relation = mul4[1].to_owned();
+        T::add_assign_many(&mut transcript_lambda_relation, &mul4[2]);
+        T::mul_assign_with_public_many(&mut transcript_lambda_relation, scaling_factors);
+        fold_accumulator!(univariate_accumulator.r14, transcript_lambda_relation, SIZE);
+
+        let mut add_point_x_relation = mul4[3].to_owned();
+        T::add_assign_many(&mut add_point_x_relation, &add_point_x_relation_summand_1);
+        T::add_assign_many(&mut add_point_x_relation, &add_point_x_relation_summand_2);
+        T::mul_assign_with_public_many(&mut add_point_x_relation, &*scaling_factors);
+        fold_accumulator!(univariate_accumulator.r15, add_point_x_relation, SIZE);
+
+        let mut add_point_y_relation = mul4[4].to_owned();
+        T::add_assign_many(&mut add_point_y_relation, &add_point_y_relation_summand_1);
+        T::add_assign_many(&mut add_point_y_relation, &add_point_y_relation_summand_2);
+        T::mul_assign_with_public_many(&mut add_point_y_relation, &scaling_factors);
+        fold_accumulator!(univariate_accumulator.r16, add_point_y_relation, SIZE);
+
+        let mut tmp = mul4[5].to_owned();
+        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
+        fold_accumulator!(univariate_accumulator.r17, tmp, SIZE);
 
         Ok(())
     }
