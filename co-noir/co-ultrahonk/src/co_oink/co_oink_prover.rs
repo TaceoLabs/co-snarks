@@ -40,7 +40,7 @@ use mpc_core::MpcState as _;
 use mpc_net::Network;
 use std::marker::PhantomData;
 use ultrahonk::prelude::ZeroKnowledge;
-pub(crate) struct CoOink<
+pub struct CoOink<
     'a,
     T: NoirUltraHonkProver<P>,
     P: HonkCurve<TranscriptFieldType>,
@@ -64,7 +64,7 @@ impl<
     L: MPCProverFlavour,
 > CoOink<'a, T, P, H, N, L>
 {
-    pub(crate) fn new(net: &'a N, state: &'a mut T::State, has_zk: ZeroKnowledge) -> Self {
+    pub fn new(net: &'a N, state: &'a mut T::State, has_zk: ZeroKnowledge) -> Self {
         Self {
             net,
             state,
@@ -1201,7 +1201,7 @@ impl<
         Ok(())
     }
 
-    pub(crate) fn prove(
+    pub fn prove(
         mut self,
         proving_key: &mut ProvingKey<T, P, L>,
         transcript: &mut Transcript<TranscriptFieldType, H>,

@@ -16,9 +16,11 @@ use common::mpc::NoirUltraHonkProver;
 use itertools::izip;
 use std::iter;
 
-pub(crate) struct ProverMemory<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCProverFlavour> {
-    pub(crate) polys: AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>, L>,
-    pub(crate) relation_parameters: RelationParameters<P::ScalarField, L>,
+pub struct ProverMemory<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCProverFlavour> {
+    pub polys: AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>, L>,
+    pub relation_parameters: RelationParameters<P::ScalarField>,
+    pub alphas: L::Alphas<P::ScalarField>,
+    pub gate_challenges: Vec<P::ScalarField>,
 }
 
 pub(crate) type ProverUnivariates<T, P, L> = AllEntities<
@@ -35,19 +37,17 @@ pub(crate) type PartiallyEvaluatePolys<T, P, L> = AllEntities<
 >;
 pub(crate) type ClaimedEvaluations<F, L> = AllEntities<F, F, L>;
 
-pub struct RelationParameters<F: PrimeField, L: MPCProverFlavour> {
+pub struct RelationParameters<F: PrimeField> {
     pub(crate) eta_1: F,
     pub(crate) eta_2: F,
     pub(crate) eta_3: F,
     pub(crate) beta: F,
     pub(crate) gamma: F,
     pub(crate) public_input_delta: F,
-    pub(crate) alphas: L::Alphas<F>,
-    pub(crate) gate_challenges: Vec<F>,
 }
 
 impl<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCProverFlavour> ProverMemory<T, P, L> {
-    pub(crate) fn from_memory_and_polynomials(
+    pub fn from_memory_and_polynomials(
         prover_memory: crate::co_oink::types::ProverMemory<T, P, L>,
         polynomials: Polynomials<T::ArithmeticShare, P::ScalarField, L>,
     ) -> Self {
@@ -58,9 +58,9 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCProverFlavour> ProverMemory
             beta: prover_memory.challenges.beta,
             gamma: prover_memory.challenges.gamma,
             public_input_delta: prover_memory.public_input_delta,
-            alphas: prover_memory.challenges.alphas,
-            gate_challenges: Default::default(),
         };
+        let alphas = prover_memory.challenges.alphas;
+        let gate_challenges = Default::default();
 
         let mut memory = AllEntities::<Vec<T::ArithmeticShare>, Vec<P::ScalarField>, L>::default();
 
@@ -151,6 +151,8 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCProverFlavour> ProverMemory
         Self {
             polys: memory,
             relation_parameters,
+            alphas,
+            gate_challenges,
         }
     }
 }
