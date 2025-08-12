@@ -675,7 +675,6 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
 
         // acc 8
         fold_accumulator!(univariate_accumulator.r8, mul2[9], SIZE);
-
         // acc 9
         fold_accumulator!(univariate_accumulator.r9, mul2[10], SIZE);
         // acc 10
