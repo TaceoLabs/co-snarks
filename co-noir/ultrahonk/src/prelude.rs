@@ -7,8 +7,11 @@ pub use crate::decider::types::{
     ClaimedEvaluations, GateSeparatorPolynomial, ProverUnivariates, RelationParameters,
 };
 pub use crate::decider::univariate::Univariate;
-pub use crate::types::AllEntities;
+pub use crate::types::{AllEntities, HonkProof};
 pub use crate::ultra_prover::UltraHonk;
+pub use co_builder::flavours::ultra_flavour::UltraFlavour;
 pub use co_builder::prelude::PlainAcvmSolver;
 pub use co_builder::prelude::VerifyingKeyBarretenberg;
 pub use co_builder::prelude::{ProvingKey, UltraCircuitBuilder, ZeroKnowledge};
+pub use common::transcript::Poseidon2Sponge;
+pub use common::transcript::{Transcript, TranscriptHasher};

@@ -45,6 +45,18 @@ impl<F: PrimeField> UltraArithmeticRelationAcc<F> {
             true,
         );
     }
+
+    pub(crate) fn extend_and_batch_univariates_with_distinct_challenges<const SIZE: usize>(
+        &self,
+        result: &mut Univariate<F, SIZE>,
+        running_challenge: &[Univariate<F, SIZE>],
+    ) {
+        self.r0
+            .extend_and_batch_univariates(result, &running_challenge[0], &F::ONE, true);
+
+        self.r1
+            .extend_and_batch_univariates(result, &running_challenge[1], &F::ONE, true);
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -59,6 +71,18 @@ impl<F: PrimeField> UltraArithmeticRelationEvals<F> {
 
         *result += self.r0 * running_challenge[0];
         *result += self.r1 * running_challenge[1];
+    }
+
+    pub(crate) fn scale_by_challenge_and_accumulate(
+        &self,
+        linearly_independent_contribution: &mut F,
+        _linearly_dependent_contribution: &mut F,
+        running_challenge: &[F],
+    ) {
+        assert!(running_challenge.len() == UltraArithmeticRelation::NUM_RELATIONS);
+
+        *linearly_independent_contribution +=
+            self.r0 * running_challenge[0] + self.r1 * running_challenge[1];
     }
 }
 
@@ -133,7 +157,7 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for UltraArithmeticRel
     fn accumulate<const SIZE: usize>(
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesSized<F, L, SIZE>,
-        _relation_parameters: &RelationParameters<F, L>,
+        _relation_parameters: &RelationParameters<F>,
         scaling_factor: &F,
     ) {
         tracing::trace!("Accumulate UltraArithmeticRelation");
@@ -184,7 +208,7 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for UltraArithmeticRel
     fn verify_accumulate(
         univariate_accumulator: &mut Self::VerifyAcc,
         input: &ClaimedEvaluations<F, L>,
-        _relation_parameters: &RelationParameters<F, L>,
+        _relation_parameters: &RelationParameters<F>,
         scaling_factor: &F,
     ) {
         tracing::trace!("Accumulate UltraArithmeticRelation_Verify");
@@ -227,5 +251,19 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for UltraArithmeticRel
         tmp *= scaling_factor;
 
         univariate_accumulator.r1 += tmp;
+    }
+
+    fn accumulate_with_extended_parameters<const SIZE: usize>(
+        univariate_accumulator: &mut Self::Acc,
+        input: &ProverUnivariatesSized<F, L, SIZE>,
+        _relation_parameters: &RelationParameters<Univariate<F, SIZE>>,
+        scaling_factor: &F,
+    ) {
+        Self::accumulate(
+            univariate_accumulator,
+            input,
+            &RelationParameters::default(),
+            scaling_factor,
+        );
     }
 }

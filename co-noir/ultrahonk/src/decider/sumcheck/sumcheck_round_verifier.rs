@@ -91,7 +91,7 @@ impl<P: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour> SumcheckVerifierR
     pub(crate) fn accumulate_one_relation_evaluations<R: Relation<P::ScalarField, L>>(
         univariate_accumulator: &mut R::VerifyAcc,
         extended_edges: &ClaimedEvaluations<P::ScalarField, L>,
-        relation_parameters: &RelationParameters<P::ScalarField, L>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
         scaling_factor: &P::ScalarField,
     ) {
         R::verify_accumulate(
@@ -105,7 +105,7 @@ impl<P: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour> SumcheckVerifierR
     pub(crate) fn accumulate_elliptic_curve_relation_evaluations(
         univariate_accumulator: &mut EllipticRelationEvals<P::ScalarField>,
         extended_edges: &ClaimedEvaluations<P::ScalarField, L>,
-        relation_parameters: &RelationParameters<P::ScalarField, L>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
         scaling_factor: &P::ScalarField,
     ) {
         EllipticRelation::verify_accumulate::<P, L>(
@@ -118,8 +118,9 @@ impl<P: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour> SumcheckVerifierR
 
     pub(crate) fn compute_full_relation_purported_value(
         purported_evaluations: &ClaimedEvaluations<P::ScalarField, L>,
-        relation_parameters: &RelationParameters<P::ScalarField, L>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
         gate_sparators: GateSeparatorPolynomial<P::ScalarField>,
+        alphas: &[P::ScalarField],
     ) -> P::ScalarField {
         tracing::trace!("Compute full relation purported value");
 
@@ -134,10 +135,6 @@ impl<P: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour> SumcheckVerifierR
 
         let running_challenge = P::ScalarField::one();
 
-        L::scale_and_batch_elements(
-            &relation_evaluations,
-            running_challenge,
-            &relation_parameters.alphas,
-        )
+        L::scale_and_batch_elements(&relation_evaluations, running_challenge, alphas)
     }
 }

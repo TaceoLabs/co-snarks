@@ -74,7 +74,7 @@ pub struct VerifyingKeyBarretenberg<P: CurveGroup, L: ProverFlavour> {
 
 #[derive(Clone, Copy, Debug, SerdeSerialize, Deserialize, PartialEq)]
 pub struct PublicComponentKey {
-    start_idx: u32,
+    pub start_idx: u32,
 }
 
 impl Default for PublicComponentKey {

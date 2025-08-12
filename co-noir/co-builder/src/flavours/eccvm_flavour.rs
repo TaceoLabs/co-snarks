@@ -7,6 +7,8 @@ use crate::{
     },
     prelude::{PrecomputedEntities, ProverWitnessEntities, ShiftedWitnessEntities},
 };
+use std::fmt::Debug;
+
 #[derive(Default)]
 pub struct ECCVMFlavour {}
 
@@ -233,9 +235,11 @@ impl ProverFlavour for ECCVMFlavour {
     const FLAVOUR: Flavour = Flavour::ECCVM;
     const IS_GRUMPKIN_FLAVOUR: bool = true;
 
-    type PrecomputedEntities<T: Default + Clone + std::marker::Sync> = ECCVMPrecomputedEntities<T>;
-    type WitnessEntities<T: Default + std::marker::Sync> = ECCVMWitnessEntities<T>;
-    type ShiftedWitnessEntities<T: Default + std::marker::Sync> = ECCVMShiftedWitnessEntities<T>;
+    type PrecomputedEntities<T: Default + Clone + Debug + std::marker::Sync> =
+        ECCVMPrecomputedEntities<T>;
+    type WitnessEntities<T: Default + Clone + Debug + std::marker::Sync> = ECCVMWitnessEntities<T>;
+    type ShiftedWitnessEntities<T: Default + Clone + Debug + std::marker::Sync> =
+        ECCVMShiftedWitnessEntities<T>;
     type ProverWitnessEntities<T: Default + std::marker::Sync> = ECCVMProverWitnessEntities<T>;
 
     const WITNESS_ENTITIES_SIZE: usize = 87;
@@ -327,7 +331,7 @@ impl ProverFlavour for ECCVMFlavour {
             elements: std::array::from_fn(|i| vec[i].clone()),
         }
     }
-    fn precomputed_entity_from_vec<T: Default + Clone + Sync>(
+    fn precomputed_entity_from_vec<T: Default + Debug + Clone + Sync>(
         vec: Vec<crate::prelude::Polynomial<T>>,
     ) -> Self::PrecomputedEntities<crate::prelude::Polynomial<T>> {
         ECCVMPrecomputedEntities {
@@ -385,7 +389,12 @@ impl<T: Default> ProverWitnessEntitiesFlavour<T> for ECCVMProverWitnessEntities<
         std::iter::empty()
     }
 }
-impl<T: Default> PrecomputedEntitiesFlavour<T> for ECCVMPrecomputedEntities<T> {
+impl<T: Default + Debug> PrecomputedEntitiesFlavour<T> for ECCVMPrecomputedEntities<T> {
+    fn from_elements(_elements: Vec<T>) -> Self {
+        unimplemented!(
+            "PrecomputedEntitiesFlavour::from_elements is not implemented for ECCVMFlavour"
+        );
+    }
     fn iter<'a>(&'a self) -> impl Iterator<Item = &'a T>
     where
         T: 'a,
@@ -419,11 +428,14 @@ impl<T: Default> PrecomputedEntitiesFlavour<T> for ECCVMPrecomputedEntities<T> {
         &self.elements[ECCVMFlavour::LAGRANGE_LAST]
     }
 }
-impl<T: Default> WitnessEntitiesFlavour<T> for ECCVMWitnessEntities<T> {
+impl<T: Default + Debug> WitnessEntitiesFlavour<T> for ECCVMWitnessEntities<T> {
     fn new() -> Self {
         Self {
             elements: std::array::from_fn(|_| T::default()),
         }
+    }
+    fn from_elements(_elements: Vec<T>) -> Self {
+        unimplemented!("WitnessEntitiesFlavour::from_elements is not implemented for ECCVMFlavour");
     }
     fn iter<'a>(&'a self) -> impl Iterator<Item = &'a T>
     where
@@ -456,11 +468,16 @@ impl<T: Default> WitnessEntitiesFlavour<T> for ECCVMWitnessEntities<T> {
         &self.elements[ECCVMFlavour::Z_PERM]
     }
 }
-impl<T: Default> ShiftedWitnessEntitiesFlavour<T> for ECCVMShiftedWitnessEntities<T> {
+impl<T: Default + Debug> ShiftedWitnessEntitiesFlavour<T> for ECCVMShiftedWitnessEntities<T> {
     fn new() -> Self {
         Self {
             elements: std::array::from_fn(|_| T::default()),
         }
+    }
+    fn from_elements(_elements: Vec<T>) -> Self {
+        unimplemented!(
+            "ShiftedWitnessEntitiesFlavour::from_elements is not implemented for ECCVMFlavour"
+        );
     }
     fn iter<'a>(&'a self) -> impl Iterator<Item = &'a T>
     where

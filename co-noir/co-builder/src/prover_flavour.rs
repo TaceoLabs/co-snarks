@@ -5,6 +5,7 @@ use crate::{
     },
     prelude::Polynomial,
 };
+use std::fmt::Debug;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Flavour {
@@ -16,14 +17,14 @@ pub enum Flavour {
 
 pub trait ProverFlavour: Default {
     const FLAVOUR: Flavour;
-    type PrecomputedEntities<T: Default + Clone + std::marker::Sync>: PrecomputedEntitiesFlavour<T>
+    type PrecomputedEntities<T: Default + Debug + Clone + std::marker::Sync>: PrecomputedEntitiesFlavour<T>
         + Default
         + Clone
         + std::marker::Sync;
-    type WitnessEntities<T: Default + std::marker::Sync>: WitnessEntitiesFlavour<T>
+    type WitnessEntities<T: Default + Debug + Clone + std::marker::Sync>: WitnessEntitiesFlavour<T>
         + Default
         + std::marker::Sync;
-    type ShiftedWitnessEntities<T: Default + std::marker::Sync>: ShiftedWitnessEntitiesFlavour<T>
+    type ShiftedWitnessEntities<T: Default + Debug + Clone + std::marker::Sync>: ShiftedWitnessEntitiesFlavour<T>
         + Default
         + std::marker::Sync;
     type ProverWitnessEntities<T: Default + std::marker::Sync>: ProverWitnessEntitiesFlavour<T>
@@ -138,7 +139,7 @@ pub trait ProverFlavour: Default {
     fn prover_witness_entity_from_vec<T: Default + Sync + Clone>(
         vec: Vec<Polynomial<T>>,
     ) -> Self::ProverWitnessEntities<Polynomial<T>>;
-    fn precomputed_entity_from_vec<T: Default + Clone + Sync>(
+    fn precomputed_entity_from_vec<T: Default + Clone + Sync + Debug>(
         vec: Vec<Polynomial<T>>,
     ) -> Self::PrecomputedEntities<Polynomial<T>>;
 }

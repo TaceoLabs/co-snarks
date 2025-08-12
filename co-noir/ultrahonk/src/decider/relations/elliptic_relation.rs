@@ -42,6 +42,18 @@ impl<F: PrimeField> EllipticRelationAcc<F> {
             true,
         );
     }
+
+    pub(crate) fn extend_and_batch_univariates_with_distinct_challenges<const SIZE: usize>(
+        &self,
+        result: &mut Univariate<F, SIZE>,
+        running_challenge: &[Univariate<F, SIZE>],
+    ) {
+        self.r0
+            .extend_and_batch_univariates(result, &running_challenge[0], &F::ONE, true);
+
+        self.r1
+            .extend_and_batch_univariates(result, &running_challenge[1], &F::ONE, true);
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -56,6 +68,18 @@ impl<F: PrimeField> EllipticRelationEvals<F> {
 
         *result += self.r0 * running_challenge[0];
         *result += self.r1 * running_challenge[1];
+    }
+
+    pub(crate) fn scale_by_challenge_and_accumulate(
+        &self,
+        linearly_independent_contribution: &mut F,
+        _linearly_dependent_contribution: &mut F,
+        running_challenge: &[F],
+    ) {
+        assert!(running_challenge.len() == EllipticRelation::NUM_RELATIONS);
+
+        *linearly_independent_contribution +=
+            self.r0 * running_challenge[0] + self.r1 * running_challenge[1];
     }
 }
 
@@ -92,7 +116,7 @@ impl EllipticRelation {
     >(
         univariate_accumulator: &mut EllipticRelationAcc<P::ScalarField>,
         input: &ProverUnivariatesSized<P::ScalarField, L, UNIVARIATE_SIZE>,
-        _relation_parameters: &RelationParameters<P::ScalarField, L>,
+        _relation_parameters: &RelationParameters<P::ScalarField>,
         scaling_factor: &P::ScalarField,
     ) {
         tracing::trace!("Accumulate EllipticRelation");
@@ -171,10 +195,27 @@ impl EllipticRelation {
         }
     }
 
+    pub(crate) fn accumulate_with_extended_parameters<
+        P: HonkCurve<TranscriptFieldType>,
+        L: PlainProverFlavour,
+        const SIZE: usize,
+    >(
+        univariate_accumulator: &mut EllipticRelationAcc<P::ScalarField>,
+        input: &ProverUnivariatesSized<P::ScalarField, L, SIZE>,
+        _relation_parameters: &RelationParameters<Univariate<P::ScalarField, SIZE>>,
+        scaling_factor: &P::ScalarField,
+    ) {
+        Self::accumulate::<P, L, SIZE>(
+            univariate_accumulator,
+            input,
+            &RelationParameters::default(),
+            scaling_factor,
+        );
+    }
     pub(crate) fn verify_accumulate<P: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour>(
         univariate_accumulator: &mut EllipticRelationEvals<P::ScalarField>,
         input: &ClaimedEvaluations<P::ScalarField, L>,
-        _relation_parameters: &RelationParameters<P::ScalarField, L>,
+        _relation_parameters: &RelationParameters<P::ScalarField>,
         scaling_factor: &P::ScalarField,
     ) where
         P::ScalarField: PrimeField,

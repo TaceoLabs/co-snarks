@@ -61,6 +61,22 @@ impl<F: PrimeField> DataBusLookupRelationEvals<F> {
         *result += self.r4 * running_challenge[4];
         *result += self.r5 * running_challenge[5];
     }
+
+    pub(crate) fn scale_by_challenge_and_accumulate(
+        &self,
+        linearly_independent_contribution: &mut F,
+        linearly_dependent_contribution: &mut F,
+        running_challenge: &[F],
+    ) {
+        assert!(running_challenge.len() == DataBusLookupRelation::NUM_RELATIONS);
+
+        *linearly_independent_contribution += self.r0 * running_challenge[0]
+            + self.r2 * running_challenge[2]
+            + self.r4 * running_challenge[4];
+        *linearly_dependent_contribution += self.r1 * running_challenge[1]
+            + self.r3 * running_challenge[3]
+            + self.r5 * running_challenge[5];
+    }
 }
 
 impl<F: PrimeField> DataBusLookupRelationAcc<F> {
@@ -115,6 +131,30 @@ impl<F: PrimeField> DataBusLookupRelationAcc<F> {
             partial_evaluation_result,
             false,
         );
+    }
+
+    pub(crate) fn extend_and_batch_univariates_with_distinct_challenges<const SIZE: usize>(
+        &self,
+        result: &mut Univariate<F, SIZE>,
+        running_challenge: &[Univariate<F, SIZE>],
+    ) {
+        self.r0
+            .extend_and_batch_univariates(result, &running_challenge[0], &F::ONE, true);
+
+        self.r1
+            .extend_and_batch_univariates(result, &running_challenge[1], &F::ONE, true);
+
+        self.r2
+            .extend_and_batch_univariates(result, &running_challenge[2], &F::ONE, true);
+
+        self.r3
+            .extend_and_batch_univariates(result, &running_challenge[3], &F::ONE, true);
+
+        self.r4
+            .extend_and_batch_univariates(result, &running_challenge[4], &F::ONE, true);
+
+        self.r5
+            .extend_and_batch_univariates(result, &running_challenge[5], &F::ONE, true);
     }
 }
 
@@ -195,7 +235,7 @@ impl DataBusLookupRelation {
     fn compute_write_term<F: PrimeField, L: PlainProverFlavour, const SIZE: usize>(
         bus_idx: BusData,
         input: &ProverUnivariatesSized<F, L, SIZE>,
-        params: &RelationParameters<F, L>,
+        params: &RelationParameters<F>,
     ) -> Univariate<F, SIZE> {
         let id = input.precomputed.databus_id();
         let value = DataBusLookupRelation::values(bus_idx, input);
@@ -206,9 +246,27 @@ impl DataBusLookupRelation {
         id.to_owned() * beta + value + &gamma
     }
 
+    fn compute_write_term_with_extended_parameters<
+        F: PrimeField,
+        L: PlainProverFlavour,
+        const SIZE: usize,
+    >(
+        bus_idx: BusData,
+        input: &ProverUnivariatesSized<F, L, SIZE>,
+        params: &RelationParameters<Univariate<F, SIZE>>,
+    ) -> Univariate<F, SIZE> {
+        let id = input.precomputed.databus_id();
+        let value = DataBusLookupRelation::values(bus_idx, input);
+        let gamma = &params.gamma;
+        let beta = &params.beta;
+
+        // value_i + idx_i * beta + gamma
+        id.to_owned() * beta + value + gamma
+    }
+
     fn compute_read_term<F: PrimeField, L: PlainProverFlavour, const SIZE: usize>(
         input: &ProverUnivariatesSized<F, L, SIZE>,
-        params: &RelationParameters<F, L>,
+        params: &RelationParameters<F>,
     ) -> Univariate<F, SIZE> {
         // Bus value stored in w_l, index into bus column stored in w_r
         let w_1 = input.witness.w_l();
@@ -218,6 +276,24 @@ impl DataBusLookupRelation {
 
         // value + index * beta + gamma
         w_2.to_owned() * beta + w_1 + &gamma
+    }
+
+    fn compute_read_term_with_extended_parameters<
+        F: PrimeField,
+        L: PlainProverFlavour,
+        const SIZE: usize,
+    >(
+        input: &ProverUnivariatesSized<F, L, SIZE>,
+        params: &RelationParameters<Univariate<F, SIZE>>,
+    ) -> Univariate<F, SIZE> {
+        // Bus value stored in w_l, index into bus column stored in w_r
+        let w_1 = input.witness.w_l();
+        let w_2 = input.witness.w_r();
+        let gamma = &params.gamma;
+        let beta = &params.beta;
+
+        // value + index * beta + gamma
+        w_2.to_owned() * beta + w_1 + gamma
     }
 
     fn values_verifier<F: PrimeField, L: PlainProverFlavour>(
@@ -292,7 +368,7 @@ impl DataBusLookupRelation {
     fn compute_write_term_verifier<F: PrimeField, L: PlainProverFlavour>(
         bus_idx: BusData,
         input: &ClaimedEvaluations<F, L>,
-        params: &RelationParameters<F, L>,
+        params: &RelationParameters<F>,
     ) -> F {
         let id = input.precomputed.databus_id();
         let value = DataBusLookupRelation::values_verifier(bus_idx, input);
@@ -305,7 +381,7 @@ impl DataBusLookupRelation {
 
     fn compute_read_term_verifier<F: PrimeField, L: PlainProverFlavour>(
         input: &ClaimedEvaluations<F, L>,
-        params: &RelationParameters<F, L>,
+        params: &RelationParameters<F>,
     ) -> F {
         // Bus value stored in w_l, index into bus column stored in w_r
         let w_1 = *input.witness.w_l();
@@ -324,7 +400,7 @@ impl DataBusLookupRelation {
     >(
         univariate_accumulator: &mut DataBusLookupRelationAcc<F>,
         input: &ProverUnivariatesSized<F, L, SIZE>,
-        params: &RelationParameters<F, L>,
+        params: &RelationParameters<F>,
         scaling_factor: &F,
         bus_idx: BusData,
     ) {
@@ -386,10 +462,79 @@ impl DataBusLookupRelation {
         } // Deg 4 (5)
     }
 
+    fn accumulate_subrelation_contributions_with_extended_params<
+        F: PrimeField,
+        L: PlainProverFlavour,
+        const SIZE: usize,
+    >(
+        univariate_accumulator: &mut DataBusLookupRelationAcc<F>,
+        input: &ProverUnivariatesSized<F, L, SIZE>,
+        params: &RelationParameters<Univariate<F, SIZE>>,
+        scaling_factor: &F,
+        bus_idx: BusData,
+    ) {
+        let inverses = Self::inverses(bus_idx, input); // Degree 1
+        let read_counts_m = Self::read_counts(bus_idx, input); // Degree 1
+        let read_term = Self::compute_read_term_with_extended_parameters(input, params); // Degree 1 (2)
+        let write_term = Self::compute_write_term_with_extended_parameters(bus_idx, input, params); // Degree 1 (2)
+        let inverse_exists = Self::compute_inverse_exists(bus_idx, input); // Degree 2
+        let read_selector = Self::get_read_selector(bus_idx, input); // Degree 2
+
+        // Determine which pair of subrelations to update based on which bus column is being read
+        let subrel_idx_1: u32 = 2u32 * (bus_idx as u32);
+        let subrel_idx_2: u32 = 2u32 * (bus_idx as u32) + 1u32;
+
+        // Establish the correctness of the polynomial of inverses I. Note: inverses is computed so that the value
+        // is 0 if !inverse_exists. Degree 3 (5)
+        let tmp = (read_term.clone() * &write_term * inverses - inverse_exists) * scaling_factor;
+        match subrel_idx_1 {
+            0 => {
+                for i in 0..univariate_accumulator.r0.evaluations.len() {
+                    univariate_accumulator.r0.evaluations[i] += tmp.evaluations[i];
+                }
+            }
+            2 => {
+                for i in 0..univariate_accumulator.r2.evaluations.len() {
+                    univariate_accumulator.r2.evaluations[i] += tmp.evaluations[i];
+                }
+            }
+            4 => {
+                for i in 0..univariate_accumulator.r4.evaluations.len() {
+                    univariate_accumulator.r4.evaluations[i] += tmp.evaluations[i];
+                }
+            }
+            _ => panic!("unexpected subrel_idx_1"),
+        }
+
+        // Establish validity of the read. Note: no scaling factor here since this constraint is enforced across the
+        // entire trace, not on a per-row basis.
+        let mut tmp = read_selector * write_term;
+        tmp -= read_counts_m.to_owned() * read_term;
+        tmp *= inverses;
+        match subrel_idx_2 {
+            1 => {
+                for i in 0..univariate_accumulator.r1.evaluations.len() {
+                    univariate_accumulator.r1.evaluations[i] += tmp.evaluations[i];
+                }
+            }
+            3 => {
+                for i in 0..univariate_accumulator.r3.evaluations.len() {
+                    univariate_accumulator.r3.evaluations[i] += tmp.evaluations[i];
+                }
+            }
+            5 => {
+                for i in 0..univariate_accumulator.r5.evaluations.len() {
+                    univariate_accumulator.r5.evaluations[i] += tmp.evaluations[i];
+                }
+            }
+            _ => panic!("unexpected subrel_idx_2"),
+        } // Deg 4 (5)
+    }
+
     fn verify_accumulate_subrelation_contributions<F: PrimeField, L: PlainProverFlavour>(
         univariate_accumulator: &mut DataBusLookupRelationEvals<F>,
         input: &ClaimedEvaluations<F, L>,
-        params: &RelationParameters<F, L>,
+        params: &RelationParameters<F>,
         scaling_factor: &F,
         bus_idx: BusData,
     ) {
@@ -473,7 +618,7 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for DataBusLookupRelat
     fn accumulate<const SIZE: usize>(
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesSized<F, L, SIZE>,
-        _relation_parameters: &RelationParameters<F, L>,
+        relation_parameters: &RelationParameters<F>,
         scaling_factor: &F,
     ) {
         tracing::trace!("Accumulate DataBusLookupRelation");
@@ -482,7 +627,30 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for DataBusLookupRelat
             DataBusLookupRelation::accumulate_subrelation_contributions::<F, L, SIZE>(
                 univariate_accumulator,
                 input,
-                _relation_parameters,
+                relation_parameters,
+                scaling_factor,
+                BusData::from(bus_idx),
+            );
+        }
+    }
+
+    fn accumulate_with_extended_parameters<const SIZE: usize>(
+        univariate_accumulator: &mut Self::Acc,
+        input: &ProverUnivariatesSized<F, L, SIZE>,
+        relation_parameters: &RelationParameters<Univariate<F, SIZE>>,
+        scaling_factor: &F,
+    ) {
+        tracing::trace!("Accumulate DataBusLookupRelation");
+        // Accumulate the subrelation contributions for each column of the databus
+        for bus_idx in 0..Self::NUM_BUS_COLUMNS {
+            DataBusLookupRelation::accumulate_subrelation_contributions_with_extended_params::<
+                F,
+                L,
+                SIZE,
+            >(
+                univariate_accumulator,
+                input,
+                relation_parameters,
                 scaling_factor,
                 BusData::from(bus_idx),
             );
@@ -492,7 +660,7 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for DataBusLookupRelat
     fn verify_accumulate(
         univariate_accumulator: &mut Self::VerifyAcc,
         input: &ClaimedEvaluations<F, L>,
-        relation_parameters: &RelationParameters<F, L>,
+        relation_parameters: &RelationParameters<F>,
         scaling_factor: &F,
     ) {
         tracing::trace!("Accumulate DataBusLookupRelation");
