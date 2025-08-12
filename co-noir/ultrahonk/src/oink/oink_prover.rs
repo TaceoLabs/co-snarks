@@ -37,12 +37,12 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
 use std::marker::PhantomData;
 
-pub(crate) struct Oink<
+pub struct Oink<
     P: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
     L: PlainProverFlavour,
 > {
-    memory: ProverMemory<P, L>,
+    memory: ProverMemory<P>,
     phantom_data: PhantomData<(P, H, L)>,
     has_zk: ZeroKnowledge,
     rng: ChaCha12Rng,
@@ -65,7 +65,7 @@ impl<
     L: PlainProverFlavour,
 > Oink<P, H, L>
 {
-    pub(crate) fn new(has_zk: ZeroKnowledge) -> Self {
+    pub fn new(has_zk: ZeroKnowledge) -> Self {
         Self {
             memory: ProverMemory::default(),
             phantom_data: PhantomData,
@@ -519,7 +519,7 @@ impl<
 
     /// Generate relation separators alphas for sumcheck/combiner computation
     pub(crate) fn generate_alphas_round(
-        alphas: &mut L::Alphas<P::ScalarField>,
+        alphas: &mut Vec<P::ScalarField>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
     ) {
         tracing::trace!("generate alpha round");
@@ -825,11 +825,11 @@ impl<
         Ok(())
     }
 
-    pub(crate) fn prove(
+    pub fn prove(
         mut self,
         proving_key: &mut ProvingKey<P, L>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
-    ) -> HonkProofResult<ProverMemory<P, L>> {
+    ) -> HonkProofResult<ProverMemory<P>> {
         tracing::trace!("Oink prove");
 
         // Add circuit size public input size and public inputs to transcript

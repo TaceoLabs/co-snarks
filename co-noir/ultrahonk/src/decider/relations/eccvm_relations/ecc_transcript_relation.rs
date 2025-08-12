@@ -297,7 +297,7 @@ impl EccTranscriptRelation {
     pub(crate) fn accumulate<P: HonkCurve<TranscriptFieldType>, const SIZE: usize>(
         univariate_accumulator: &mut EccTranscriptRelationAcc<P::ScalarField>,
         input: &crate::decider::types::ProverUnivariatesSized<P::ScalarField, ECCVMFlavour, SIZE>,
-        _relation_parameters: &crate::prelude::RelationParameters<P::ScalarField, ECCVMFlavour>,
+        _relation_parameters: &crate::prelude::RelationParameters<P::ScalarField>,
         scaling_factor: &P::ScalarField,
     ) {
         let result = offset_generator_scaled::<P::CycleGroup>();
@@ -824,7 +824,7 @@ impl EccTranscriptRelation {
     fn _verify_accumulate<F: PrimeField>(
         _univariate_accumulator: &mut EccTranscriptRelationEvals<F>,
         _input: &crate::prelude::ClaimedEvaluations<F, ECCVMFlavour>,
-        _relation_parameters: &crate::prelude::RelationParameters<F, ECCVMFlavour>,
+        _relation_parameters: &crate::prelude::RelationParameters<F>,
         _scaling_factor: &F,
     ) {
         todo!()

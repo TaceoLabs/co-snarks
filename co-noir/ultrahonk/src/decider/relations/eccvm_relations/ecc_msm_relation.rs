@@ -407,7 +407,7 @@ impl EccMsmRelation {
     pub(crate) fn accumulate<P: HonkCurve<TranscriptFieldType>, const SIZE: usize>(
         univariate_accumulator: &mut EccMsmRelationAcc<P::ScalarField>,
         input: &crate::decider::types::ProverUnivariatesSized<P::ScalarField, ECCVMFlavour, SIZE>,
-        _relation_parameters: &crate::prelude::RelationParameters<P::ScalarField, ECCVMFlavour>,
+        _relation_parameters: &crate::prelude::RelationParameters<P::ScalarField>,
         scaling_factor: &P::ScalarField,
     ) {
         let x1 = input.witness.msm_x1();
@@ -986,7 +986,7 @@ impl EccMsmRelation {
     fn verify_accumulate<P: HonkCurve<TranscriptFieldType>>(
         _univariate_accumulator: &mut EccMsmRelationEvals<P::ScalarField>,
         _input: &crate::prelude::ClaimedEvaluations<P::ScalarField, ECCVMFlavour>,
-        _relation_parameters: &crate::prelude::RelationParameters<P::ScalarField, ECCVMFlavour>,
+        _relation_parameters: &crate::prelude::RelationParameters<P::ScalarField>,
         _scaling_factor: &P::ScalarField,
     ) {
         todo!()

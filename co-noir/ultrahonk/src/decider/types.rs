@@ -16,15 +16,19 @@ use itertools::izip;
 use std::{iter, vec};
 
 #[derive(Default)]
-pub struct ProverMemory<P: CurveGroup, L: PlainProverFlavour> {
-    pub polys: AllEntities<Vec<P::ScalarField>, L>,
-    pub relation_parameters: RelationParameters<P::ScalarField, L>,
+pub struct ProverMemory<C: CurveGroup, L: PlainProverFlavour> {
+    pub polys: AllEntities<Vec<C::ScalarField>, L>,
+    pub relation_parameters: RelationParameters<C::ScalarField>,
+    pub alphas: Vec<C::ScalarField>,
+    pub gate_challenges: Vec<C::ScalarField>,
 }
 
-pub(crate) struct VerifierMemory<P: CurveGroup, L: PlainProverFlavour> {
-    pub(crate) verifier_commitments: VerifierCommitments<P::Affine, L>,
-    pub(crate) relation_parameters: RelationParameters<P::ScalarField, L>,
-    pub(crate) claimed_evaluations: ClaimedEvaluations<P::ScalarField, L>,
+pub(crate) struct VerifierMemory<C: CurveGroup, L: PlainProverFlavour> {
+    pub(crate) verifier_commitments: VerifierCommitments<C::Affine, L>,
+    pub(crate) relation_parameters: RelationParameters<C::ScalarField>,
+    pub(crate) alphas: Vec<C::ScalarField>,
+    pub(crate) gate_challenges: Vec<C::ScalarField>,
+    pub(crate) claimed_evaluations: ClaimedEvaluations<C::ScalarField, L>,
 }
 
 pub type ProverUnivariates<F, L> = AllEntities<<L as PlainProverFlavour>::ProverUnivariate<F>, L>;
@@ -34,27 +38,51 @@ pub(crate) type PartiallyEvaluatePolys<F, L> = AllEntities<Vec<F>, L>;
 pub type ClaimedEvaluations<F, L> = AllEntities<F, L>;
 pub(crate) type VerifierCommitments<P, L> = AllEntities<P, L>;
 
-#[derive(Default)]
-pub struct RelationParameters<F: PrimeField, L: PlainProverFlavour> {
-    pub eta_1: F,
-    pub eta_2: F,
-    pub eta_3: F,
-    pub beta: F,
-    pub gamma: F,
-    pub public_input_delta: F,
-    pub alphas: L::Alphas<F>, // TODO: Can we just make this a Vec<F>?
-    pub gate_challenges: Vec<F>,
-    pub lookup_grand_product_delta: F,
-    pub beta_sqr: F,
-    pub beta_cube: F,
-    pub eccvm_set_permutation_delta: F,
+#[derive(Default, PartialEq, Debug)]
+pub struct RelationParameters<T> {
+    pub eta_1: T,
+    pub eta_2: T,
+    pub eta_3: T,
+    pub beta: T,
+    pub gamma: T,
+    pub public_input_delta: T,
+    pub lookup_grand_product_delta: T,
+    pub beta_sqr: T,
+    pub beta_cube: T,
+    pub eccvm_set_permutation_delta: T,
+}
+
+impl<T: PartialEq> RelationParameters<T> {
+    pub fn get_params_as_mut(&mut self) -> Vec<&mut T> {
+        vec![
+            &mut self.eta_1,
+            &mut self.eta_2,
+            &mut self.eta_3,
+            &mut self.beta,
+            &mut self.gamma,
+            &mut self.public_input_delta,
+            &mut self.lookup_grand_product_delta,
+        ]
+    }
+
+    pub fn get_params(&self) -> Vec<&T> {
+        vec![
+            &self.eta_1,
+            &self.eta_2,
+            &self.eta_3,
+            &self.beta,
+            &self.gamma,
+            &self.public_input_delta,
+            &self.lookup_grand_product_delta,
+        ]
+    }
 }
 
 pub struct GateSeparatorPolynomial<F: PrimeField> {
-    betas: Vec<F>,
+    pub betas: Vec<F>,
     pub beta_products: Vec<F>,
     pub partial_evaluation_result: F,
-    current_element_idx: usize,
+    pub current_element_idx: usize,
     pub periodicity: usize,
 }
 
@@ -122,8 +150,8 @@ impl<F: PrimeField> GateSeparatorPolynomial<F> {
 }
 
 impl<P: CurveGroup, L: PlainProverFlavour> ProverMemory<P, L> {
-    pub(crate) fn from_memory_and_polynomials(
-        prover_memory: crate::oink::types::ProverMemory<P, L>,
+    pub fn from_memory_and_polynomials(
+        prover_memory: crate::oink::types::ProverMemory<P>,
         polynomials: Polynomials<P::ScalarField, L>,
     ) -> Self {
         let relation_parameters = RelationParameters {
@@ -133,13 +161,14 @@ impl<P: CurveGroup, L: PlainProverFlavour> ProverMemory<P, L> {
             beta: prover_memory.challenges.beta,
             gamma: prover_memory.challenges.gamma,
             public_input_delta: prover_memory.public_input_delta,
-            alphas: prover_memory.challenges.alphas,
-            gate_challenges: Default::default(),
             lookup_grand_product_delta: Default::default(),
             beta_sqr: Default::default(),
             beta_cube: Default::default(),
             eccvm_set_permutation_delta: Default::default(),
         };
+
+        let alphas = prover_memory.challenges.alphas;
+        let gate_challenges = Default::default();
 
         let mut memory = AllEntities::<Vec<P::ScalarField>, L>::default();
 
@@ -216,6 +245,8 @@ impl<P: CurveGroup, L: PlainProverFlavour> ProverMemory<P, L> {
         Self {
             polys: memory,
             relation_parameters,
+            alphas,
+            gate_challenges,
         }
     }
 }
@@ -233,13 +264,13 @@ impl<C: CurveGroup, L: PlainProverFlavour> VerifierMemory<C, L> {
             beta: verifier_memory.challenges.beta,
             gamma: verifier_memory.challenges.gamma,
             public_input_delta: verifier_memory.public_input_delta,
-            alphas: verifier_memory.challenges.alphas,
-            gate_challenges: Default::default(),
             lookup_grand_product_delta: Default::default(),
             beta_sqr: Default::default(),
             beta_cube: Default::default(),
             eccvm_set_permutation_delta: Default::default(),
         };
+        let alphas = verifier_memory.challenges.alphas;
+        let gate_challenges = Default::default();
 
         let mut memory = AllEntities::<C::Affine, _>::default();
         memory.witness = verifier_memory.witness_commitments;
@@ -262,6 +293,8 @@ impl<C: CurveGroup, L: PlainProverFlavour> VerifierMemory<C, L> {
         Self {
             relation_parameters,
             verifier_commitments: memory,
+            alphas,
+            gate_challenges,
             claimed_evaluations: Default::default(),
         }
     }

@@ -10,10 +10,11 @@ use crate::{
     },
     prover_flavour::{Flavour, ProverFlavour},
 };
+use std::fmt::Debug;
 
-type MegaPrecomputedEntities<T> =
+pub type MegaPrecomputedEntities<T> =
     PrecomputedEntities<T, { MegaFlavour::PRECOMPUTED_ENTITIES_SIZE }>;
-type MegaProverWitnessEntities<T> =
+pub type MegaProverWitnessEntities<T> =
     ProverWitnessEntities<T, { MegaFlavour::PROVER_WITNESS_ENTITIES_SIZE }>;
 type MegaShiftedWitnessEntities<T> =
     ShiftedWitnessEntities<T, { MegaFlavour::SHIFTED_WITNESS_ENTITIES_SIZE }>;
@@ -24,9 +25,11 @@ pub struct MegaFlavour {}
 
 impl ProverFlavour for MegaFlavour {
     type ProverWitnessEntities<T: Default + std::marker::Sync> = MegaProverWitnessEntities<T>;
-    type ShiftedWitnessEntities<T: Default + std::marker::Sync> = MegaShiftedWitnessEntities<T>; // This is the same for Ultra and Mega
-    type WitnessEntities<T: Default + std::marker::Sync> = MegaWitnessEntities<T>;
-    type PrecomputedEntities<T: Default + Clone + std::marker::Sync> = MegaPrecomputedEntities<T>;
+    type ShiftedWitnessEntities<T: Default + Clone + Debug + std::marker::Sync> =
+        MegaShiftedWitnessEntities<T>; // This is the same for Ultra and Mega
+    type WitnessEntities<T: Default + Clone + Debug + std::marker::Sync> = MegaWitnessEntities<T>;
+    type PrecomputedEntities<T: Default + Clone + Debug + std::marker::Sync> =
+        MegaPrecomputedEntities<T>;
 
     const FLAVOUR: Flavour = Flavour::Mega;
     const WITNESS_ENTITIES_SIZE: usize = 24;
@@ -178,7 +181,7 @@ impl ProverFlavour for MegaFlavour {
         }
     }
 
-    fn precomputed_entity_from_vec<T: Default + Clone + Sync>(
+    fn precomputed_entity_from_vec<T: Default + Clone + Debug + Sync>(
         vec: Vec<crate::prelude::Polynomial<T>>,
     ) -> Self::PrecomputedEntities<crate::prelude::Polynomial<T>> {
         MegaPrecomputedEntities {
@@ -210,7 +213,12 @@ impl<'a, T: Default> PolyGFlavour<'a, T> for MegaPolyG<'a, T> {
     }
 }
 
-impl<T: Default> PrecomputedEntitiesFlavour<T> for MegaPrecomputedEntities<T> {
+impl<T: Default + Clone + Debug> PrecomputedEntitiesFlavour<T> for MegaPrecomputedEntities<T> {
+    fn from_elements(elements: Vec<T>) -> Self {
+        Self {
+            elements: elements.try_into().unwrap(),
+        }
+    }
     fn iter<'a>(&'a self) -> impl Iterator<Item = &'a T>
     where
         T: 'a,
@@ -594,10 +602,15 @@ impl<T: Default> ProverWitnessEntitiesFlavour<T> for MegaProverWitnessEntities<T
     }
 }
 
-impl<T: Default> WitnessEntitiesFlavour<T> for MegaWitnessEntities<T> {
+impl<T: Default + Clone + Debug> WitnessEntitiesFlavour<T> for MegaWitnessEntities<T> {
     fn new() -> Self {
         Self {
             elements: std::array::from_fn(|_| T::default()),
+        }
+    }
+    fn from_elements(elements: Vec<T>) -> Self {
+        Self {
+            elements: elements.try_into().unwrap(),
         }
     }
     fn iter<'a>(&'a self) -> impl Iterator<Item = &'a T>

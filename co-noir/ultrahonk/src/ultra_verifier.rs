@@ -35,8 +35,7 @@ impl<
         let crs = verifying_key.crs;
 
         let mut memory = VerifierMemory::from_memory_and_key(oink_result, verifying_key);
-        memory.relation_parameters.gate_challenges =
-            Self::generate_gate_challenges(&mut transcript);
+        memory.gate_challenges = Self::generate_gate_challenges(&mut transcript);
         let decider_verifier = DeciderVerifier::new(memory);
         decider_verifier.verify::<P>(circuit_size, &crs, transcript, has_zk)
     }

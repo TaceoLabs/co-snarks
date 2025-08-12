@@ -882,15 +882,15 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         SumcheckOutput<P::ScalarField, ECCVMFlavour>,
         ZKSumcheckData<P>,
     )> {
-        self.decider.memory.relation_parameters.alphas =
-            transcript.get_challenge::<P>("Sumcheck:alpha".to_string());
+        self.decider.memory.alphas =
+            vec![transcript.get_challenge::<P>("Sumcheck:alpha".to_string())];
         let mut gate_challenges: Vec<P::ScalarField> = Vec::with_capacity(CONST_ECCVM_LOG_N);
 
         for idx in 0..CONST_ECCVM_LOG_N {
             let chall = transcript.get_challenge::<P>(format!("Sumcheck:gate_challenge_{idx}"));
             gate_challenges.push(chall);
         }
-        self.decider.memory.relation_parameters.gate_challenges = gate_challenges;
+        self.decider.memory.gate_challenges = gate_challenges;
         let log_subgroup_size = UltraHonkUtils::get_msb64(P::SUBGROUP_SIZE as u64);
         let commitment_key = &crs.monomials[..1 << (log_subgroup_size + 1)];
         let mut zk_sumcheck_data: ZKSumcheckData<P> = ZKSumcheckData::<P>::new::<H, _>(

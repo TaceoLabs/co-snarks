@@ -16,6 +16,7 @@ members = [
     "co-noir/co-goblin",
     "co-noir/common",
     "co-noir/goblin",
+    "co-noir/protogalaxy",
     "mpc-core",
     "mpc-net",
     "tests",
