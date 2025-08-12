@@ -32,10 +32,12 @@ pub trait MPCProverFlavour: Default + ProverFlavour {
         + UnivariateTrait<F>;
     type ProverUnivariateShared<T: NoirUltraHonkProver<P>, P: CurveGroup>: SharedUnivariateTrait<T, P>
         + Clone
+        + Debug
         + Default
         + std::marker::Sync;
     type ProverUnivariatePublic<P: CurveGroup>: UnivariateTrait<P::ScalarField>
         + Clone
+        + Debug
         + Default
         + std::ops::MulAssign
         + std::ops::Add

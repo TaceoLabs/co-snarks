@@ -100,8 +100,6 @@ impl PlainProverFlavour for ECCVMFlavour {
 
     type AllRelationEvaluations<F: ark_ff::PrimeField> = AllRelationEvaluationsECCVM<F>;
 
-    type Alphas<F: ark_ff::PrimeField> = F;
-
     type SumcheckRoundOutput<F: ark_ff::PrimeField> =
         Univariate<F, { ECCVMFlavour::BATCHED_RELATION_PARTIAL_LENGTH }>;
 
@@ -122,17 +120,18 @@ impl PlainProverFlavour for ECCVMFlavour {
     fn scale<F: ark_ff::PrimeField>(
         acc: &mut Self::AllRelationAcc<F>,
         first_scalar: F,
-        elements: &Self::Alphas<F>,
+        elements: &[F],
     ) {
         tracing::trace!("Prove::Scale");
         let mut current_scalar = first_scalar;
-        acc.r_ecc_transcript.scale(&mut current_scalar, elements);
-        acc.r_ecc_point_table.scale(&mut current_scalar, elements);
-        acc.r_ecc_wnaf.scale(&mut current_scalar, elements);
-        acc.r_ecc_msm.scale(&mut current_scalar, elements);
-        acc.r_ecc_set.scale(&mut current_scalar, elements);
-        acc.r_ecc_lookup.scale(&mut current_scalar, elements);
-        acc.r_ecc_bools.scale(&mut current_scalar, elements);
+        let alpha = elements[0];
+        acc.r_ecc_transcript.scale(&mut current_scalar, &alpha);
+        acc.r_ecc_point_table.scale(&mut current_scalar, &alpha);
+        acc.r_ecc_wnaf.scale(&mut current_scalar, &alpha);
+        acc.r_ecc_msm.scale(&mut current_scalar, &alpha);
+        acc.r_ecc_set.scale(&mut current_scalar, &alpha);
+        acc.r_ecc_lookup.scale(&mut current_scalar, &alpha);
+        acc.r_ecc_bools.scale(&mut current_scalar, &alpha);
     }
 
     fn extend_and_batch_univariates<F: ark_ff::PrimeField>(
@@ -168,7 +167,7 @@ impl PlainProverFlavour for ECCVMFlavour {
     fn accumulate_relation_univariates<P: co_builder::prelude::HonkCurve<TranscriptFieldType>>(
         univariate_accumulators: &mut Self::AllRelationAcc<P::ScalarField>,
         extended_edges: &ProverUnivariates<P::ScalarField, Self>,
-        relation_parameters: &RelationParameters<P::ScalarField, Self>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
         scaling_factor: &P::ScalarField,
     ) {
         SumcheckProverRound::<<P as ark_ec::PrimeGroup>::ScalarField, ECCVMFlavour>::accumulate_ecc_transcript_relation::<P, { Self::MAX_PARTIAL_RELATION_LENGTH }>(
@@ -230,7 +229,7 @@ impl PlainProverFlavour for ECCVMFlavour {
     fn accumulate_relation_evaluations<P: co_builder::prelude::HonkCurve<TranscriptFieldType>>(
         _univariate_accumulators: &mut Self::AllRelationEvaluations<P::ScalarField>,
         _extended_edges: &ClaimedEvaluations<P::ScalarField, Self>,
-        _relation_parameters: &RelationParameters<P::ScalarField, Self>,
+        _relation_parameters: &RelationParameters<P::ScalarField>,
         _scaling_factor: &P::ScalarField,
     ) {
         todo!("Implement Sumcheck Verifier for ECCVMFlavour");
@@ -239,7 +238,7 @@ impl PlainProverFlavour for ECCVMFlavour {
     fn scale_and_batch_elements<F: ark_ff::PrimeField>(
         _all_rel_evals: &Self::AllRelationEvaluations<F>,
         _first_scalar: F,
-        _elements: &Self::Alphas<F>,
+        _elements: &[F],
     ) -> F {
         todo!("Implement Sumcheck Verifier for ECCVMFlavour");
     }
@@ -272,7 +271,7 @@ impl PlainProverFlavour for ECCVMFlavour {
         P: co_builder::prelude::HonkCurve<F>,
     >(
         _transcript: &mut Transcript<F, H>,
-        _alphas: &mut Self::Alphas<P::ScalarField>,
+        _alphas: &mut Vec<P::ScalarField>,
     ) {
         todo!("Implement Sumcheck Verifier for ECCVMFlavour");
     }

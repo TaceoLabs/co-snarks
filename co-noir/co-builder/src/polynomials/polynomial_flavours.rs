@@ -1,7 +1,10 @@
 // proverwitnessentities and precomputed entities, also witnessentities
 
-pub trait PrecomputedEntitiesFlavour<T: Default> {
+use std::fmt::Debug;
+
+pub trait PrecomputedEntitiesFlavour<T: Default + Debug> {
     fn new() -> Self;
+    fn from_elements(elements: Vec<T>) -> Self;
     fn iter<'a>(&'a self) -> impl Iterator<Item = &'a T>
     where
         T: 'a;
@@ -206,9 +209,9 @@ pub trait PrecomputedEntitiesFlavour<T: Default> {
     }
 }
 
-pub trait WitnessEntitiesFlavour<T: Default> {
+pub trait WitnessEntitiesFlavour<T: Default + Debug> {
     fn new() -> Self;
-
+    fn from_elements(elements: Vec<T>) -> Self;
     fn iter<'a>(&'a self) -> impl Iterator<Item = &'a T>
     where
         T: 'a;
@@ -370,6 +373,7 @@ pub trait WitnessEntitiesFlavour<T: Default> {
 
 pub trait ShiftedWitnessEntitiesFlavour<T: Default> {
     fn new() -> Self;
+    fn from_elements(elements: Vec<T>) -> Self;
     fn iter<'a>(&'a self) -> impl Iterator<Item = &'a T>
     where
         T: 'a;

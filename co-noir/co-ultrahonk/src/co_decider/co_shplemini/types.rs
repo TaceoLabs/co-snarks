@@ -1,9 +1,10 @@
 use crate::mpc_prover_flavour::MPCProverFlavour;
+use std::fmt::Debug;
 
 pub(crate) struct PolyF<
     'a,
-    Shared: Default + std::marker::Sync,
-    Public: Default + Clone + std::marker::Sync,
+    Shared: Default + Clone + Debug + std::marker::Sync,
+    Public: Default + Clone + Debug + std::marker::Sync,
     L: MPCProverFlavour,
 > {
     pub(crate) precomputed: &'a L::PrecomputedEntities<Public>,

@@ -5,5 +5,5 @@ pub(crate) mod relations;
 pub mod shplemini;
 pub(crate) mod small_subgroup_ipa;
 pub(crate) mod sumcheck;
-pub(crate) mod types;
+pub mod types;
 pub(crate) mod univariate;

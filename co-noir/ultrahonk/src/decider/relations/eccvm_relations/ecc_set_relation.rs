@@ -30,7 +30,7 @@ impl EccSetRelation {
 
     fn compute_grand_product_numerator<F: PrimeField, const SIZE: usize>(
         input: &ProverUnivariatesSized<F, ECCVMFlavour, SIZE>,
-        relation_parameters: &crate::prelude::RelationParameters<F, ECCVMFlavour>,
+        relation_parameters: &crate::prelude::RelationParameters<F>,
     ) -> Univariate<F, SIZE> {
         tracing::trace!("compute grand product numerator");
 
@@ -240,7 +240,7 @@ impl EccSetRelation {
 
     fn compute_grand_product_denominator<P: HonkCurve<TranscriptFieldType>, const SIZE: usize>(
         input: &ProverUnivariatesSized<P::ScalarField, ECCVMFlavour, SIZE>,
-        relation_parameters: &crate::prelude::RelationParameters<P::ScalarField, ECCVMFlavour>,
+        relation_parameters: &crate::prelude::RelationParameters<P::ScalarField>,
     ) -> Univariate<P::ScalarField, SIZE> {
         tracing::trace!("compute grand product denominator");
 
@@ -394,7 +394,7 @@ impl EccSetRelation {
     pub(crate) fn accumulate<P: HonkCurve<TranscriptFieldType>, const SIZE: usize>(
         univariate_accumulator: &mut EccSetRelationAcc<P::ScalarField>,
         input: &crate::decider::types::ProverUnivariatesSized<P::ScalarField, ECCVMFlavour, SIZE>,
-        relation_parameters: &crate::prelude::RelationParameters<P::ScalarField, ECCVMFlavour>,
+        relation_parameters: &crate::prelude::RelationParameters<P::ScalarField>,
         scaling_factor: &P::ScalarField,
     ) {
         // degree-11
@@ -431,7 +431,7 @@ impl EccSetRelation {
     fn _verify_accumulate<F: PrimeField>(
         _univariate_accumulator: &mut EccSetRelationEvals<F>,
         _input: &crate::prelude::ClaimedEvaluations<F, ECCVMFlavour>,
-        _relation_parameters: &crate::prelude::RelationParameters<F, ECCVMFlavour>,
+        _relation_parameters: &crate::prelude::RelationParameters<F>,
         _scaling_factor: &F,
     ) {
         todo!()

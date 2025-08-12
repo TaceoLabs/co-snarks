@@ -33,9 +33,8 @@ impl<
         // Pad gate challenges for Protogalaxy DeciderVerifier and AVM
         self.pad_gate_challenges();
 
-        let mut gate_separators = GateSeparatorPolynomial::new_without_products(
-            self.memory.relation_parameters.gate_challenges.to_owned(),
-        );
+        let mut gate_separators =
+            GateSeparatorPolynomial::new_without_products(self.memory.gate_challenges.to_owned());
 
         let mut sum_check_round = SumcheckVerifierRound::<P, L>::default();
         let mut libra_challenge = P::ScalarField::one();
@@ -124,6 +123,7 @@ impl<
                 &self.memory.claimed_evaluations,
                 &self.memory.relation_parameters,
                 gate_separators,
+                &self.memory.alphas,
             );
 
         // For ZK Flavors: the evaluation of the Row Disabling Polynomial at the sumcheck challenge
@@ -154,10 +154,10 @@ impl<
     }
 
     fn pad_gate_challenges(&mut self) {
-        if self.memory.relation_parameters.gate_challenges.len() < CONST_PROOF_SIZE_LOG_N {
+        if self.memory.gate_challenges.len() < CONST_PROOF_SIZE_LOG_N {
             let zero = P::ScalarField::zero();
-            for _ in self.memory.relation_parameters.gate_challenges.len()..CONST_PROOF_SIZE_LOG_N {
-                self.memory.relation_parameters.gate_challenges.push(zero);
+            for _ in self.memory.gate_challenges.len()..CONST_PROOF_SIZE_LOG_N {
+                self.memory.gate_challenges.push(zero);
             }
         }
     }

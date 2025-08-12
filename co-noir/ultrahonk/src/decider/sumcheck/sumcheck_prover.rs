@@ -71,7 +71,7 @@ impl<
 
         #[expect(unused_mut)] // TACEO TODO: This is for the linter, remove once its fixed...
         for (src, mut des) in partially_evaluated_polynomials
-            .into_iter()
+            .into_iterator()
             .zip(multivariate_evaluations.iter_mut())
         {
             *des = src[0];
@@ -94,7 +94,7 @@ impl<
             SumcheckProverRound::<P::ScalarField, L>::new(multivariate_n as usize);
 
         let mut gate_separators = GateSeparatorPolynomial::new(
-            self.memory.relation_parameters.gate_challenges.to_owned(),
+            self.memory.gate_challenges.to_owned(),
             multivariate_d as usize,
         );
 
@@ -108,6 +108,7 @@ impl<
             round_idx,
             &self.memory.relation_parameters,
             &gate_separators,
+            &self.memory.alphas,
             &self.memory.polys,
         );
 
@@ -141,6 +142,7 @@ impl<
                 round_idx,
                 &self.memory.relation_parameters,
                 &gate_separators,
+                &self.memory.alphas,
                 &partially_evaluated_polys,
             );
 
@@ -214,7 +216,7 @@ impl<
         let mut row_disabling_polynomial = RowDisablingPolynomial::<P::ScalarField>::default();
 
         let mut gate_separators = GateSeparatorPolynomial::new(
-            self.memory.relation_parameters.gate_challenges.to_owned(),
+            self.memory.gate_challenges.to_owned(),
             multivariate_d as usize,
         );
 
@@ -230,6 +232,7 @@ impl<
             round_idx,
             &self.memory.relation_parameters,
             &gate_separators,
+            &self.memory.alphas,
             &self.memory.polys,
             zk_sumcheck_data,
             &mut row_disabling_polynomial,
@@ -279,6 +282,7 @@ impl<
                 round_idx,
                 &self.memory.relation_parameters,
                 &gate_separators,
+                &self.memory.alphas,
                 &partially_evaluated_polys,
                 zk_sumcheck_data,
                 &mut row_disabling_polynomial,

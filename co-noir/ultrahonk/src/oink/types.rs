@@ -3,7 +3,7 @@ use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_builder::prelude::Polynomial;
 
-pub(crate) struct ProverMemory<P: CurveGroup, L: PlainProverFlavour> {
+pub struct ProverMemory<P: CurveGroup> {
     /// column 3
     pub(crate) w_4: Polynomial<P::ScalarField>,
     /// column 4
@@ -14,25 +14,25 @@ pub(crate) struct ProverMemory<P: CurveGroup, L: PlainProverFlavour> {
     pub(crate) secondary_calldata_inverses: Polynomial<P::ScalarField>,
     pub(crate) return_data_inverses: Polynomial<P::ScalarField>,
     pub(crate) public_input_delta: P::ScalarField,
-    pub(crate) challenges: Challenges<P::ScalarField, L>,
+    pub(crate) challenges: Challenges<P::ScalarField>,
 }
 
 pub(crate) struct VerifierMemory<P: CurveGroup, L: PlainProverFlavour> {
     pub(crate) public_input_delta: P::ScalarField,
     pub(crate) witness_commitments: L::WitnessEntities<P::Affine>,
-    pub(crate) challenges: Challenges<P::ScalarField, L>,
+    pub(crate) challenges: Challenges<P::ScalarField>,
 }
 
-pub(crate) struct Challenges<F: PrimeField, L: PlainProverFlavour> {
+pub(crate) struct Challenges<F: PrimeField> {
     pub(crate) eta_1: F,
     pub(crate) eta_2: F,
     pub(crate) eta_3: F,
     pub(crate) beta: F,
     pub(crate) gamma: F,
-    pub(crate) alphas: L::Alphas<F>,
+    pub(crate) alphas: Vec<F>,
 }
 
-impl<F: PrimeField, L: PlainProverFlavour> Default for Challenges<F, L> {
+impl<F: PrimeField> Default for Challenges<F> {
     fn default() -> Self {
         Self {
             eta_1: Default::default(),
@@ -40,12 +40,12 @@ impl<F: PrimeField, L: PlainProverFlavour> Default for Challenges<F, L> {
             eta_3: Default::default(),
             beta: Default::default(),
             gamma: Default::default(),
-            alphas: L::Alphas::default(),
+            alphas: Default::default(),
         }
     }
 }
 
-impl<P: CurveGroup, L: PlainProverFlavour> Default for ProverMemory<P, L> {
+impl<P: CurveGroup> Default for ProverMemory<P> {
     fn default() -> Self {
         Self {
             w_4: Default::default(),

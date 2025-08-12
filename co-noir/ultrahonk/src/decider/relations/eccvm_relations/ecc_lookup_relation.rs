@@ -24,7 +24,7 @@ impl EccLookupRelation {
 
     pub(crate) fn compute_read_term<F: PrimeField, const SIZE: usize>(
         input: &crate::decider::types::ProverUnivariatesSized<F, ECCVMFlavour, SIZE>,
-        relation_parameters: &crate::prelude::RelationParameters<F, ECCVMFlavour>,
+        relation_parameters: &crate::prelude::RelationParameters<F>,
         read_index: usize,
     ) -> Univariate<F, SIZE> {
         assert!(
@@ -88,7 +88,7 @@ impl EccLookupRelation {
     }
     pub(crate) fn compute_write_term<F: PrimeField, const SIZE: usize>(
         input: &crate::decider::types::ProverUnivariatesSized<F, ECCVMFlavour, SIZE>,
-        relation_parameters: &crate::prelude::RelationParameters<F, ECCVMFlavour>,
+        relation_parameters: &crate::prelude::RelationParameters<F>,
         write_index: usize,
     ) -> Univariate<F, SIZE> {
         assert!(
@@ -214,7 +214,7 @@ impl<F: PrimeField> Relation<F, ECCVMFlavour> for EccLookupRelation {
     fn accumulate<const SIZE: usize>(
         univariate_accumulator: &mut Self::Acc,
         input: &crate::decider::types::ProverUnivariatesSized<F, ECCVMFlavour, SIZE>,
-        relation_parameters: &crate::prelude::RelationParameters<F, ECCVMFlavour>,
+        relation_parameters: &crate::prelude::RelationParameters<F>,
         scaling_factor: &F,
     ) {
         const NUM_TOTAL_TERMS: usize =
@@ -292,7 +292,7 @@ impl<F: PrimeField> Relation<F, ECCVMFlavour> for EccLookupRelation {
     fn verify_accumulate(
         _univariate_accumulator: &mut Self::VerifyAcc,
         _input: &crate::prelude::ClaimedEvaluations<F, ECCVMFlavour>,
-        _relation_parameters: &crate::prelude::RelationParameters<F, ECCVMFlavour>,
+        _relation_parameters: &crate::prelude::RelationParameters<F>,
         _scaling_factor: &F,
     ) {
         todo!()

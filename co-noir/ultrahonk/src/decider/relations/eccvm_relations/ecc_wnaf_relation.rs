@@ -255,7 +255,7 @@ impl<F: PrimeField> Relation<F, ECCVMFlavour> for EccWnafRelation {
     fn accumulate<const SIZE: usize>(
         univariate_accumulator: &mut Self::Acc,
         input: &crate::decider::types::ProverUnivariatesSized<F, ECCVMFlavour, SIZE>,
-        _relation_parameters: &crate::prelude::RelationParameters<F, ECCVMFlavour>,
+        _relation_parameters: &crate::prelude::RelationParameters<F>,
         scaling_factor: &F,
     ) {
         let scalar_sum = input.witness.precompute_scalar_sum();
@@ -424,7 +424,7 @@ impl<F: PrimeField> Relation<F, ECCVMFlavour> for EccWnafRelation {
     fn verify_accumulate(
         _univariate_accumulator: &mut Self::VerifyAcc,
         _input: &crate::prelude::ClaimedEvaluations<F, ECCVMFlavour>,
-        _relation_parameters: &crate::prelude::RelationParameters<F, ECCVMFlavour>,
+        _relation_parameters: &crate::prelude::RelationParameters<F>,
         _scaling_factor: &F,
     ) {
         todo!()
