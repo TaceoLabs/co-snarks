@@ -6,7 +6,6 @@ use crate::co_decider::{
 use ark_ec::AffineRepr;
 use ark_ec::CurveGroup;
 use ark_ff::One;
-use ark_ff::PrimeField;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::prelude::offset_generator_scaled;
 use co_builder::{HonkProofResult, flavours::eccvm_flavour::ECCVMFlavour, prelude::HonkCurve};
@@ -764,7 +763,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
 
         let msm_x = transcript_msm_x;
         let msm_y = transcript_msm_y;
-        let mut transcript_msm_lambda_relation = Univariate::<P::ScalarField, SIZE>::default();
+
         // Group operation is point addition
 
         let mut lambda_denominator = msm_x.to_owned(); // * minus_one + rhs_x;
@@ -832,7 +831,6 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
 
         // Valdiate `transcript_add_lambda` is well formed if we are adding base point into accumulator
 
-        let mut transcript_add_lambda_relation = Univariate::<P::ScalarField, SIZE>::default(); //TODO
         let add_x = transcript_px;
         let add_y = transcript_py;
         // Group operation is point addition
@@ -1413,7 +1411,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
             id,
         );
 
-        let mut lhs3 = Vec::with_capacity(1);
+        let mut lhs3 = Vec::with_capacity(1); // TODO FLORIN
         let mut rhs3 = Vec::with_capacity(lhs3.len());
         lhs3.extend(msm_count_zero_at_transition_check_factor_1);
         rhs3.extend(msm_count_zero_at_transition_check_factor_2);
@@ -1553,7 +1551,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let mul3 = mul3.chunks_exact(mul3.len() / 18).collect_vec();
         debug_assert_eq!(mul3.len(), 18);
 
-        let mut lhs4 = Vec::with_capacity(1);
+        let mut lhs4 = Vec::with_capacity(1); // TODO FLORIN
         let mut rhs4 = Vec::with_capacity(lhs4.len());
 
         T::add_assign_many(&mut msm_count_zero_at_transition_check, mul3[0]);

@@ -304,7 +304,7 @@ impl<F: PrimeField> Relation<F, ECCVMFlavour> for EccWnafRelation {
                 t += t.clone();
                 t += s1;
                 t *= &two;
-                t.to_owned() + &minus_15
+                t + &minus_15
             };
 
         let scaled_transition = q_transition.to_owned() * scaling_factor;
