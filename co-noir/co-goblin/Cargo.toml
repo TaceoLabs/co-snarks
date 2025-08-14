@@ -1,6 +1,6 @@
 [package]
 name = "co-goblin"
-version = "0.1.0"
+version = "0.2.0"
 edition.workspace = true
 rust-version.workspace = true
 authors.workspace = true
@@ -11,13 +11,13 @@ publish.workspace = true
 readme.workspace = true
 
 [dependencies]
-co-builder = { version = "0.4.0", path = "../co-builder" }
-mpc-core = { version = "0.9.0", path = "../../mpc-core" }
-ultrahonk = { version = "0.5.0", path = "../ultrahonk" }
-co-ultrahonk = { version = "0.5.0", path = "../co-ultrahonk" }
-goblin = { version = "0.1.0", path = "../goblin" }
-mpc-net = { version = "0.4.0", path = "../../mpc-net" }
-common = { version = "0.1.0", path = "../common" }
+co-builder = { version = "0.5.0", path = "../co-builder" }
+mpc-core = { version = "0.10.0", path = "../../mpc-core" }
+ultrahonk = { version = "0.6.0", path = "../ultrahonk" }
+co-ultrahonk = { version = "0.6.0", path = "../co-ultrahonk" }
+goblin = { version = "0.2.0", path = "../goblin" }
+mpc-net = { version = "0.5.0", path = "../../mpc-net" }
+common = { version = "0.2.0", path = "../common" }
 ark-ec.workspace = true
 ark-ff.workspace = true
 ark-bn254.workspace = true
@@ -27,4 +27,4 @@ num-bigint.workspace = true
 rand.workspace = true
 
 [dev-dependencies]
-mpc-net = { version = "0.4.0", path = "../../mpc-net" , features = ["local"] }
+mpc-net = { version = "0.5.0", path = "../../mpc-net" , features = ["local"] }

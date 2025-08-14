@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.10.0](https://github.com/TaceoLabs/co-snarks/compare/circom-types-v0.9.0...circom-types-v0.10.0) (2025-08-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* unify MPC networks, split protocol state and networking to allow fork of state without network, replace io::Error with eyre, merge mpc-core and mpc-types with feature gated mpc-net
+
+### Features
+
+* update rust edition to 2024 ([6ea0ba9](https://github.com/TaceoLabs/co-snarks/commit/6ea0ba9f9f34063e8ab859c1d4ae41d05629a1c0))
+
+
+### Code Refactoring
+
+* unify MPC networks, split protocol state and networking to allow fork of state without network, replace io::Error with eyre, merge mpc-core and mpc-types with feature gated mpc-net ([16dbf54](https://github.com/TaceoLabs/co-snarks/commit/16dbf546d8f2d80ad4fa9f5053da19edc7270d3c))
+
 ## [0.9.0](https://github.com/TaceoLabs/co-snarks/compare/circom-types-v0.8.0...circom-types-v0.9.0) (2025-04-03)
 
 
