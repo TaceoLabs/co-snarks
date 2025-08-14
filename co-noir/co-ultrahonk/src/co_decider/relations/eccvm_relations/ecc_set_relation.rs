@@ -24,9 +24,7 @@ pub(crate) struct EccSetRelationAcc<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) r1: SharedUnivariate<T, P, 3>,
 }
 
-impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Default
-    for EccSetRelationAcc<T, P>
-{
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for EccSetRelationAcc<T, P> {
     fn default() -> Self {
         Self {
             r0: SharedUnivariate::default(),
@@ -767,7 +765,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
     }
 }
 
-impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> EccSetRelationAcc<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> EccSetRelationAcc<T, P> {
     pub(crate) fn scale(
         &mut self,
         current_scalar: &mut P::ScalarField,

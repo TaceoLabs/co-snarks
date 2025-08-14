@@ -16,7 +16,7 @@ use common::mpc::NoirUltraHonkProver;
 use itertools::izip;
 use std::iter;
 
-pub(crate) struct ProverMemory<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCProverFlavour> {
+pub struct ProverMemory<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCProverFlavour> {
     pub(crate) polys: AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>, L>,
     pub(crate) relation_parameters: RelationParameters<P::ScalarField, L>,
 }
@@ -44,6 +44,10 @@ pub struct RelationParameters<F: PrimeField, L: MPCProverFlavour> {
     pub(crate) public_input_delta: F,
     pub(crate) alphas: L::Alphas<F>,
     pub(crate) gate_challenges: Vec<F>,
+    pub lookup_grand_product_delta: F,
+    pub beta_sqr: F,
+    pub beta_cube: F,
+    pub eccvm_set_permutation_delta: F,
 }
 
 impl<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCProverFlavour> ProverMemory<T, P, L> {
@@ -60,6 +64,10 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCProverFlavour> ProverMemory
             public_input_delta: prover_memory.public_input_delta,
             alphas: prover_memory.challenges.alphas,
             gate_challenges: Default::default(),
+            lookup_grand_product_delta: Default::default(),
+            beta_sqr: Default::default(),
+            beta_cube: Default::default(),
+            eccvm_set_permutation_delta: Default::default(),
         };
 
         let mut memory = AllEntities::<Vec<T::ArithmeticShare>, Vec<P::ScalarField>, L>::default();

@@ -17,9 +17,7 @@ pub(crate) struct EccLookupRelationAcc<T: NoirUltraHonkProver<P>, P: CurveGroup>
     pub(crate) r0: SharedUnivariate<T, P, 9>,
     pub(crate) r1: SharedUnivariate<T, P, 9>,
 }
-impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Default
-    for EccLookupRelationAcc<T, P>
-{
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for EccLookupRelationAcc<T, P> {
     fn default() -> Self {
         Self {
             r0: SharedUnivariate::default(),
@@ -303,7 +301,7 @@ impl EccLookupRelation {
     }
 }
 
-impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> EccLookupRelationAcc<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> EccLookupRelationAcc<T, P> {
     pub(crate) fn scale(
         &mut self,
         current_scalar: &mut P::ScalarField,

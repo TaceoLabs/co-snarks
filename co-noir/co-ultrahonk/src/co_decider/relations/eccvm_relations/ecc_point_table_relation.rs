@@ -42,7 +42,7 @@ impl EccPointTableRelation {
     pub(crate) const NUM_RELATIONS: usize = 6;
 }
 
-impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> EccPointTableRelationAcc<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> EccPointTableRelationAcc<T, P> {
     pub(crate) fn scale(
         &mut self,
         current_scalar: &mut P::ScalarField,

@@ -37,7 +37,7 @@ pub(crate) struct EccWnafRelationAcc<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) r20: SharedUnivariate<T, P, 5>,
 }
 
-impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Default
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default
     for EccWnafRelationAcc<T, P>
 {
     fn default() -> Self {
@@ -71,7 +71,7 @@ impl EccWnafRelation {
     pub(crate) const NUM_RELATIONS: usize = 21;
 }
 
-impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> EccWnafRelationAcc<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> EccWnafRelationAcc<T, P> {
     pub(crate) fn scale(
         &mut self,
         current_scalar: &mut P::ScalarField,

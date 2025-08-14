@@ -58,9 +58,7 @@ pub(crate) struct EccMsmRelationAcc<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) r35: SharedUnivariate<T, P, 8>,
 }
 
-impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Default
-    for EccMsmRelationAcc<T, P>
-{
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for EccMsmRelationAcc<T, P> {
     fn default() -> Self {
         EccMsmRelationAcc {
             r0: SharedUnivariate::default(),
@@ -108,7 +106,7 @@ impl EccMsmRelation {
     pub(crate) const NUM_RELATIONS: usize = 36;
 }
 
-impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> EccMsmRelationAcc<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> EccMsmRelationAcc<T, P> {
     pub(crate) fn scale(
         &mut self,
         current_scalar: &mut P::ScalarField,
