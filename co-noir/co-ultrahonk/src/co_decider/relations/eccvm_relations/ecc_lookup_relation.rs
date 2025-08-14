@@ -366,7 +366,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let mut lookup_inverses = input.witness.lookup_inverses().to_owned(); // Degree 1
 
         let mut lookup_terms = vec![[T::ArithmeticShare::default(); SIZE]; NUM_TOTAL_TERMS];
-        // TODO FLORIN: The vec is wrong, need to fix
+        // TODO FLORIN: The vec is wrong, need to fix (Why though?)
 
         for (i, term) in lookup_terms.iter_mut().take(Self::READ_TERMS).enumerate() {
             *term = Self::compute_read_term::<T, P, SIZE>(input, relation_parameters, i, id)
@@ -385,19 +385,76 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
                 .unwrap_or_else(|_| panic!("vec must contain exactly {SIZE} elements"));
         }
 
-        let mut denominator_accumulator = lookup_terms.clone();
+        let mut lhs = Vec::with_capacity(1); // TODO FLORIN
+        let mut rhs = Vec::with_capacity(lhs.len());
+        lhs.extend(lookup_terms[0].to_owned());
+        rhs.extend(lookup_terms[1].to_owned());
+        lhs.extend(lookup_terms[2].to_owned());
+        rhs.extend(lookup_terms[3].to_owned());
+        lhs.extend(lookup_terms[4].to_owned());
+        rhs.extend(lookup_terms[5].to_owned());
+        let mul = T::mul_many(&lhs, &rhs, net, state)?;
+        let mul = mul.chunks_exact(mul.len() / 3).collect_vec();
+        debug_assert_eq!(mul.len(), 3);
+        let x0x1 = mul[0];
+        let x2x3 = mul[1];
+        let x4x5 = mul[2];
+        let mut lhs = Vec::with_capacity(1); // TODO FLORIN
+        let mut rhs = Vec::with_capacity(lhs.len());
+        lhs.extend(x0x1.to_owned());
+        rhs.extend(lookup_terms[2].to_owned());
+        lhs.extend(x0x1.to_owned());
+        rhs.extend(x2x3.to_owned());
+        let mul = T::mul_many(&lhs, &rhs, net, state)?;
+        let mul = mul.chunks_exact(mul.len() / 2).collect_vec();
+        debug_assert_eq!(mul.len(), 2);
+        let x0x1x2 = mul[0];
+        let x0x1x2x3 = mul[1];
+        let mut lhs = Vec::with_capacity(1); // TODO FLORIN
+        let mut rhs = Vec::with_capacity(lhs.len());
+        lhs.extend(x0x1x2x3.to_owned());
+        rhs.extend(lookup_terms[4].to_owned());
+        lhs.extend(x0x1x2x3.to_owned());
+        rhs.extend(x4x5.to_owned());
+        let mul = T::mul_many(&lhs, &rhs, net, state)?;
+        let mul = mul.chunks_exact(mul.len() / 2).collect_vec();
+        debug_assert_eq!(mul.len(), 2);
+        let x0x1x2x3x4 = mul[0];
+        let x0x1x2x3x4x5 = mul[1];
 
-        for i in 0..NUM_TOTAL_TERMS - 1 {
-            // TODO FLORIN: Is there a better way than doing this 5 multiplications?
-            denominator_accumulator[i + 1] = T::mul_many(
-                &denominator_accumulator[i + 1],
-                &denominator_accumulator[i],
-                net,
-                state,
-            )?
+        let mut denominator_accumulator = lookup_terms.clone();
+        denominator_accumulator[1] = x0x1
+            .to_owned()
             .try_into()
             .unwrap_or_else(|_| panic!("vec must contain exactly {SIZE} elements"));
-        }
+        denominator_accumulator[2] = x0x1x2
+            .to_owned()
+            .try_into()
+            .unwrap_or_else(|_| panic!("vec must contain exactly {SIZE} elements"));
+        denominator_accumulator[3] = x0x1x2x3
+            .to_owned()
+            .try_into()
+            .unwrap_or_else(|_| panic!("vec must contain exactly {SIZE} elements"));
+        denominator_accumulator[4] = x0x1x2x3x4
+            .to_owned()
+            .try_into()
+            .unwrap_or_else(|_| panic!("vec must contain exactly {SIZE} elements"));
+        denominator_accumulator[5] = x0x1x2x3x4x5
+            .to_owned()
+            .try_into()
+            .unwrap_or_else(|_| panic!("vec must contain exactly {SIZE} elements"));
+
+        // for i in 0..NUM_TOTAL_TERMS - 1 {
+        //     // TODO FLORIN: Is there a better way than doing this 5 multiplications? Modify array_prod_mul
+        //     denominator_accumulator[i + 1] = T::mul_many(
+        //         &denominator_accumulator[i + 1],
+        //         &denominator_accumulator[i],
+        //         net,
+        //         state,
+        //     )?
+        //     .try_into()
+        //     .unwrap_or_else(|_| panic!("vec must contain exactly {SIZE} elements"));
+        // }
 
         let mut lhs = Vec::with_capacity(
             denominator_accumulator[NUM_TOTAL_TERMS - 1].len()
