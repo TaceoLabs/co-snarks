@@ -1,5 +1,45 @@
 # Changelog
 
+## [0.6.0](https://github.com/TaceoLabs/co-snarks/compare/ultrahonk-v0.5.0...ultrahonk-v0.6.0) (2025-08-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* plain protogalaxy prover ([#410](https://github.com/TaceoLabs/co-snarks/issues/410))
+* grand product computation with inactive regions ([#411](https://github.com/TaceoLabs/co-snarks/issues/411))
+* moves several components from the `ultrahonk` and `co-ultrahonk` crates into the `common` crate
+* Add MegaFlavour to the Prover and Verifier
+* unify MPC networks, split protocol state and networking to allow fork of state without network, replace io::Error with eyre, merge mpc-core and mpc-types with feature gated mpc-net
+* bump to Barretenberg 0.86.0 ([#373](https://github.com/TaceoLabs/co-snarks/issues/373))
+
+### Features
+
+* add (co-)merge-prover and common crates ([f7eea60](https://github.com/TaceoLabs/co-snarks/commit/f7eea60e71e23ff31aa9e48c801eb3d193a3a4ad))
+* Add MegaFlavour to the Prover and Verifier ([06ab1a9](https://github.com/TaceoLabs/co-snarks/commit/06ab1a95f0a8204e377f8e07ee2e0c898fbf6379))
+* add plain ECCVM Prover ([#409](https://github.com/TaceoLabs/co-snarks/issues/409)) ([dc5f175](https://github.com/TaceoLabs/co-snarks/commit/dc5f175c1f1c61a95731129d10995b0f6122a1c1))
+* bump to Barretenberg 0.86.0 ([#373](https://github.com/TaceoLabs/co-snarks/issues/373)) ([55f4ca3](https://github.com/TaceoLabs/co-snarks/commit/55f4ca3211a944cb755e541cfabc4519697ce665))
+* plain protogalaxy prover ([#410](https://github.com/TaceoLabs/co-snarks/issues/410)) ([42d49f5](https://github.com/TaceoLabs/co-snarks/commit/42d49f55a93b48e01c133f7ca5d7fefc559fd470))
+* update rust edition to 2024 ([6ea0ba9](https://github.com/TaceoLabs/co-snarks/commit/6ea0ba9f9f34063e8ab859c1d4ae41d05629a1c0))
+
+
+### Bug Fixes
+
+* grand product computation with inactive regions ([#411](https://github.com/TaceoLabs/co-snarks/issues/411)) ([a2501da](https://github.com/TaceoLabs/co-snarks/commit/a2501da24ad594f334645d23f7ab5311f98721e1))
+
+
+### Code Refactoring
+
+* unify MPC networks, split protocol state and networking to allow fork of state without network, replace io::Error with eyre, merge mpc-core and mpc-types with feature gated mpc-net ([16dbf54](https://github.com/TaceoLabs/co-snarks/commit/16dbf546d8f2d80ad4fa9f5053da19edc7270d3c))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * common bumped from 0.1.0 to 0.2.0
+    * co-builder bumped from 0.4.0 to 0.5.0
+    * mpc-core bumped from 0.9.0 to 0.10.0
+
 ## [0.5.0](https://github.com/TaceoLabs/co-snarks/compare/ultrahonk-v0.4.0...ultrahonk-v0.5.0) (2025-04-03)
 
 
