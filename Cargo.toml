@@ -13,6 +13,8 @@ members = [
     "co-noir/ultrahonk",
     "co-noir/co-ultrahonk",
     "co-noir/co-noir",
+    "co-noir/co-noir-types",
+    "co-noir/noir-types",
     "co-noir/co-goblin",
     "co-noir/common",
     "co-noir/goblin",

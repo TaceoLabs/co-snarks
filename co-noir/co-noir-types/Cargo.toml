@@ -1,0 +1,20 @@
+[package]
+name = "co-noir-types"
+version = "0.1.0"
+publish.workspace = true
+authors.workspace = true
+edition.workspace = true
+repository.workspace = true
+homepage.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ark-ff = { workspace = true }
+mpc-core = { version = "0.9.0", path = "../../mpc-core" }
+rand = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
