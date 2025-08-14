@@ -310,7 +310,7 @@ mod ring_share {
         apply_to_all!(rep3_mul2_then_add_t, [Bit, u8, u16, u32, u64, u128]);
     }
 
-    fn rep3_mul_vec_t<T: IntRing2k>()
+    fn rep3_mul_many_t<T: IntRing2k>()
     where
         Standard: Distribution<T>,
     {
@@ -341,8 +341,8 @@ mod ring_share {
         ) {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
-                let mul = arithmetic::mul_vec(&x, &y, &net, &mut state).unwrap();
-                let mul = arithmetic::mul_vec(&mul, &y, &net, &mut state).unwrap();
+                let mul = arithmetic::mul_many(&x, &y, &net, &mut state).unwrap();
+                let mul = arithmetic::mul_many(&mul, &y, &net, &mut state).unwrap();
                 tx.send(mul)
             });
         }
@@ -354,8 +354,8 @@ mod ring_share {
     }
 
     #[test]
-    fn rep3_mul_vec() {
-        apply_to_all!(rep3_mul_vec_t, [Bit, u8, u16, u32, u64, u128]);
+    fn rep3_mul_many() {
+        apply_to_all!(rep3_mul_many_t, [Bit, u8, u16, u32, u64, u128]);
     }
 
     fn rep3_neg_t<T: IntRing2k>()

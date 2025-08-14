@@ -132,7 +132,7 @@ mod field_share {
         shamir_mul2_then_add_inner(10, 4);
     }
 
-    fn shamir_mul_vec_bn_inner(num_parties: usize, threshold: usize) {
+    fn shamir_mul_many_bn_inner(num_parties: usize, threshold: usize) {
         let nets = LocalNetwork::new(num_parties);
         let mut rng = thread_rng();
         let x = [
@@ -206,7 +206,7 @@ mod field_share {
                 let mut state = ShamirPreprocessing::new(num_parties, threshold, x.len(), &net)
                     .unwrap()
                     .into();
-                let mul = arithmetic::mul_vec(&x, &y, &net, &mut state).unwrap();
+                let mul = arithmetic::mul_many(&x, &y, &net, &mut state).unwrap();
                 tx.send(mul)
             });
         }
@@ -224,12 +224,12 @@ mod field_share {
     }
 
     #[test]
-    fn shamir_mul_vec_bn() {
-        shamir_mul_vec_bn_inner(3, 1);
-        shamir_mul_vec_bn_inner(10, 4);
+    fn shamir_mul_many_bn() {
+        shamir_mul_many_bn_inner(3, 1);
+        shamir_mul_many_bn_inner(10, 4);
     }
 
-    fn shamir_mul_vec_inner(num_parties: usize, threshold: usize) {
+    fn shamir_mul_many_inner(num_parties: usize, threshold: usize) {
         let nets = LocalNetwork::new(num_parties);
         let mut rng = thread_rng();
         let x = (0..1)
@@ -260,8 +260,8 @@ mod field_share {
                 let mut state = ShamirPreprocessing::new(num_parties, threshold, x.len() * 2, &net)
                     .unwrap()
                     .into();
-                let mul = arithmetic::mul_vec(&x, &y, &net, &mut state).unwrap();
-                let mul = arithmetic::mul_vec(&mul, &y, &net, &mut state).unwrap();
+                let mul = arithmetic::mul_many(&x, &y, &net, &mut state).unwrap();
+                let mul = arithmetic::mul_many(&mul, &y, &net, &mut state).unwrap();
                 tx.send(mul)
             });
         }
@@ -279,9 +279,9 @@ mod field_share {
     }
 
     #[test]
-    fn shamir_mul_vec() {
-        shamir_mul_vec_inner(3, 1);
-        shamir_mul_vec_inner(10, 4);
+    fn shamir_mul_many() {
+        shamir_mul_many_inner(3, 1);
+        shamir_mul_many_inner(10, 4);
     }
 
     fn shamir_neg_inner(num_parties: usize, threshold: usize) {

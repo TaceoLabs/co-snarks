@@ -53,15 +53,15 @@ pub trait CircomPlonkProver<P: Pairing> {
     ///
     /// # Security
     /// If you want to perform additional non-linear operations on the result of this function,
-    /// you *MUST* call [`CircomPlonkProver::io_round_mul_vec`] first. Only then the relevant network round is performed.
-    fn local_mul_vec(
+    /// you *MUST* call [`CircomPlonkProver::io_round_mul_many`] first. Only then the relevant network round is performed.
+    fn local_mul_many(
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
         state: &mut Self::State,
     ) -> Vec<P::ScalarField>;
 
-    /// Performs networking round of `local_mul_vec`
-    fn io_round_mul_vec<N: Network>(
+    /// Performs networking round of `local_mul_many`
+    fn io_round_mul_many<N: Network>(
         a: Vec<P::ScalarField>,
         net: &N,
         state: &mut Self::State,
@@ -69,8 +69,8 @@ pub trait CircomPlonkProver<P: Pairing> {
 
     /// Performs element-wise multiplication of two vectors of shared values.
     ///
-    /// Use this function for small vecs. For large vecs see [`CircomPlonkProver::local_mul_vec`]
-    fn mul_vec<N: Network>(
+    /// Use this function for small vecs. For large vecs see [`CircomPlonkProver::local_mul_many`]
+    fn mul_many<N: Network>(
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
         net: &N,
@@ -79,8 +79,8 @@ pub trait CircomPlonkProver<P: Pairing> {
 
     /// Performs element-wise multiplication of three vectors of shared values.
     ///
-    /// Use this function for small vecs. For large vecs see [`CircomPlonkProver::local_mul_vec`]
-    fn mul_vecs<N: Network>(
+    /// Use this function for small vecs. For large vecs see [`CircomPlonkProver::local_mul_many`]
+    fn mul_many_pairs<N: Network>(
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
         c: &[Self::ArithmeticShare],
@@ -89,7 +89,7 @@ pub trait CircomPlonkProver<P: Pairing> {
     ) -> eyre::Result<Vec<Self::ArithmeticShare>>;
 
     /// Convenience method for \[a\] + \[b\] * \[c\]
-    fn add_mul_vec<N: Network>(
+    fn add_mul_many<N: Network>(
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
         c: &[Self::ArithmeticShare],

@@ -1451,7 +1451,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 // Set x,y to 0 of infinity is one.
                 // TODO is this even necesary?
                 let mul = arithmetic::sub_public_by_shared(ark_bn254::Fr::one(), i, self.id);
-                let res = arithmetic::mul_vec(&[x, y], &[mul, mul], self.net0, &mut self.state0)?;
+                let res = arithmetic::mul_many(&[x, y], &[mul, mul], self.net0, &mut self.state0)?;
 
                 let out_x = downcast::<_, Self::ArithmeticShare>(&res[0])
                     .expect("We checked types")
@@ -1512,7 +1512,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 // Set x,y to 0 of infinity is one.
                 // TODO is this even necesary?
                 let mul = arithmetic::sub_public_by_shared(F::one(), i, self.id);
-                let res = arithmetic::mul_vec(&[x, y], &[mul, mul], self.net0, &mut self.state0)?;
+                let res = arithmetic::mul_many(&[x, y], &[mul, mul], self.net0, &mut self.state0)?;
 
                 (res[0].into(), res[1].into(), i.into())
             }
@@ -1918,7 +1918,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         // Set x,y to 0 of infinity is one.
         // TODO is this even necesary?
         let mul = arithmetic::sub_public_by_shared(F::one(), i, self.id);
-        let res = arithmetic::mul_vec(&[x, y], &[mul, mul], self.net0, &mut self.state0)?;
+        let res = arithmetic::mul_many(&[x, y], &[mul, mul], self.net0, &mut self.state0)?;
 
         Ok((res[0].into(), res[1].into(), i.into()))
     }
