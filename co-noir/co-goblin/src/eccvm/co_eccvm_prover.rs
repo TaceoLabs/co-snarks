@@ -2,15 +2,21 @@ use ark_ec::CurveGroup;
 use ark_ff::Field;
 use ark_ff::PrimeField;
 use ark_ff::{One, Zero};
+use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
+use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
+use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::{
     HonkProofResult, TranscriptFieldType,
     flavours::eccvm_flavour::ECCVMFlavour,
     prelude::{HonkCurve, NUM_DISABLED_ROWS_IN_SUMCHECK, Polynomial, ProverCrs},
 };
+use co_ultrahonk::prelude::AllEntities;
+use co_ultrahonk::prelude::Polynomials;
 use co_ultrahonk::prelude::{
     CoDecider, ProvingKey, SharedSmallSubgroupIPAProver, SharedZKSumcheckData, SumcheckOutput,
 };
 use common::CoUtils;
+use common::co_shplemini::OpeningPair;
 use common::{
     HonkProof,
     co_shplemini::ShpleminiOpeningClaim,
@@ -22,6 +28,7 @@ use itertools::Itertools;
 use itertools::izip;
 use mpc_core::MpcState;
 use mpc_net::Network;
+use std::iter;
 use ultrahonk::{NUM_SMALL_IPA_EVALUATIONS, Utils as UltraHonkUtils};
 
 #[derive(Default)]
@@ -67,13 +74,14 @@ where
         &mut self,
         mut transcript: Transcript<TranscriptFieldType, H>,
         mut proving_key: &mut ProvingKey<T, P, ECCVMFlavour>,
+        crs: &ProverCrs<P>,
     ) -> HonkProofResult<(
         HonkProof<TranscriptFieldType>,
         HonkProof<TranscriptFieldType>,
     )> {
         let circuit_size = proving_key.circuit_size;
         let unmasked_witness_size = (circuit_size - NUM_DISABLED_ROWS_IN_SUMCHECK) as usize;
-        self.execute_wire_commitments_round(&mut transcript, &mut proving_key)?;
+        self.execute_wire_commitments_round(&mut transcript, &mut proving_key, crs)?;
         self.execute_log_derivative_commitments_round(
             &mut transcript,
             &proving_key,
@@ -83,17 +91,18 @@ where
             &mut transcript,
             &proving_key,
             unmasked_witness_size,
+            crs,
         )?;
         self.add_polynomials_to_memory(proving_key.polynomials);
 
         let (sumcheck_output, zk_sumcheck_data) =
-            self.execute_relation_check_rounds(&mut transcript, &proving_key.crs, circuit_size)?;
+            self.execute_relation_check_rounds(&mut transcript, &crs, circuit_size)?;
 
         let ipa_transcript = self.execute_pcs_rounds(
             sumcheck_output,
             zk_sumcheck_data,
             &mut transcript,
-            &proving_key.crs,
+            &crs,
             circuit_size,
         )?;
 
@@ -103,34 +112,44 @@ where
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         proving_key: &mut ProvingKey<T, P, ECCVMFlavour>,
+        crs: &ProverCrs<P>,
     ) -> HonkProofResult<()> {
         let non_shifted = proving_key.polynomials.witness.non_shifted_mut();
         let first_labels = ECCVMFlavour::non_shifted_labels();
         let second_labels = ECCVMFlavour::to_be_shifted_without_accumulators_labels();
         let third_labels = ECCVMFlavour::to_be_shifted_accumulators_labels();
 
-        for (wire, label) in non_shifted.iter_mut().zip(first_labels.iter()) {
-            self.commit_to_witness_polynomial(wire, label, &proving_key.crs, transcript)?;
+        //TODO FLORIN: TAKE CARE OF COMMITTING
+        let mut commitments =
+            Vec::with_capacity(first_labels.len() + second_labels.len() + third_labels.len());
+        for wire in non_shifted.iter_mut() {
+            CoUtils::mask_polynomial::<T, P, N>(self.net, self.state, wire)?;
+            commitments.push(CoUtils::commit::<T, P>(wire.as_ref(), crs));
         }
         let to_be_shifted_without_accumulators = proving_key
             .polynomials
             .witness
             .to_be_shifted_without_accumulators_mut();
-        for (wire, label) in to_be_shifted_without_accumulators
-            .iter_mut()
-            .zip(second_labels.iter())
-        {
-            self.commit_to_witness_polynomial(wire, label, &proving_key.crs, transcript)?;
+        for wire in to_be_shifted_without_accumulators.iter_mut() {
+            CoUtils::mask_polynomial::<T, P, N>(self.net, self.state, wire)?;
+            commitments.push(CoUtils::commit::<T, P>(wire.as_ref(), crs));
         }
         let to_be_shifted_accumulators = proving_key
             .polynomials
             .witness
             .to_be_shifted_accumulators_mut();
-        for (wire, label) in to_be_shifted_accumulators
-            .iter_mut()
-            .zip(third_labels.iter())
+        for wire in to_be_shifted_accumulators.iter_mut() {
+            CoUtils::mask_polynomial::<T, P, N>(self.net, self.state, wire)?;
+            commitments.push(CoUtils::commit::<T, P>(wire.as_ref(), crs));
+        }
+        let open = T::open_point_many(&commitments, self.net, self.state)?;
+        for (label, commitment) in first_labels
+            .iter()
+            .chain(second_labels.iter())
+            .chain(third_labels.iter())
+            .zip(open.into_iter())
         {
-            self.commit_to_witness_polynomial(wire, label, &proving_key.crs, transcript)?;
+            transcript.send_point_to_verifier::<P>(label.to_string(), commitment.into());
         }
         Ok(())
     }
@@ -452,472 +471,474 @@ where
         self.commit_to_witness_polynomial(
             &mut lookup_inverses_tmp,
             "LOOKUP_INVERSES",
-            &proving_key.crs,
+            &crs,
             transcript,
         )?;
         std::mem::swap(&mut self.memory.lookup_inverses, &mut lookup_inverses_tmp);
         Ok(())
     }
 
-    fn compute_grand_product_numerator(
-        &self,
-        proving_key: &ProvingKey<T, P, ECCVMFlavour>,
-        i: usize,
-    ) -> P::ScalarField {
-        tracing::trace!("compute grand product numerator");
-        let id = self.state.id();
-
-        let precompute_round = &proving_key.polynomials.witness.precompute_round()[i];
-        let precompute_round2 = *precompute_round + *precompute_round;
-        let precompute_round4 = precompute_round2 + precompute_round2;
-
-        let gamma = &self.decider.memory.relation_parameters.gamma;
-        let beta = &self.decider.memory.relation_parameters.beta;
-        let beta_sqr = &self.decider.memory.relation_parameters.beta_sqr;
-        let beta_cube = &self.decider.memory.relation_parameters.beta_cube;
-        let precompute_pc = &proving_key.polynomials.witness.precompute_pc()[i];
-        let precompute_select = &proving_key.polynomials.witness.precompute_select()[i];
-
-        // First term: tuple of (pc, round, wnaf_slice), computed when slicing scalar multipliers into slices,
-        // as part of ECCVMWnafRelation.
-        // If precompute_select = 1, tuple entry = (wnaf-slice + point-counter * beta + msm-round * beta_sqr).
-        // There are 4 tuple entries per row.
-        let mut numerator = P::ScalarField::one(); // degree-0
-
-        let s0 = &proving_key.polynomials.witness.precompute_s1hi()[i];
-        let s1 = &proving_key.polynomials.witness.precompute_s1lo()[i];
-
-        let mut wnaf_slice = *s0 + *s0;
-        wnaf_slice += wnaf_slice;
-        wnaf_slice += *s1;
-
-        let wnaf_slice_input0 =
-            wnaf_slice + *gamma + *precompute_pc * *beta + precompute_round4 * *beta_sqr;
-        numerator *= wnaf_slice_input0; // degree-1
-
-        let s0 = &proving_key.polynomials.witness.precompute_s2hi()[i];
-        let s1 = &proving_key.polynomials.witness.precompute_s2lo()[i];
-
-        let mut wnaf_slice = *s0 + *s0;
-        wnaf_slice += wnaf_slice;
-        wnaf_slice += *s1;
-
-        let wnaf_slice_input1 = wnaf_slice
-            + *gamma
-            + *precompute_pc * *beta
-            + (precompute_round4 + P::ScalarField::from(1)) * *beta_sqr;
-        numerator *= wnaf_slice_input1; // degree-2
-
-        let s0 = &proving_key.polynomials.witness.precompute_s3hi()[i];
-        let s1 = &proving_key.polynomials.witness.precompute_s3lo()[i];
-
-        let mut wnaf_slice = *s0 + *s0;
-        wnaf_slice += wnaf_slice;
-        wnaf_slice += *s1;
-
-        let wnaf_slice_input2 = wnaf_slice
-            + *gamma
-            + *precompute_pc * *beta
-            + (precompute_round4 + P::ScalarField::from(2)) * *beta_sqr;
-        numerator *= wnaf_slice_input2; // degree-3
-
-        let s0 = &proving_key.polynomials.witness.precompute_s4hi()[i];
-        let s1 = &proving_key.polynomials.witness.precompute_s4lo()[i];
-
-        let mut wnaf_slice = *s0 + *s0;
-        wnaf_slice += wnaf_slice;
-        wnaf_slice += *s1;
-
-        let wnaf_slice_input3 = wnaf_slice
-            + *gamma
-            + *precompute_pc * *beta
-            + (precompute_round4 + P::ScalarField::from(3)) * *beta_sqr;
-        numerator *= wnaf_slice_input3; // degree-4
-
-        // skew product if relevant
-        let skew = &proving_key.polynomials.witness.precompute_skew()[i];
-        let precompute_point_transition = &proving_key
-            .polynomials
-            .witness
-            .precompute_point_transition()[i];
-        let skew_input = *precompute_point_transition
-            * (*skew
-                + *gamma
-                + *precompute_pc * *beta
-                + (precompute_round4 + P::ScalarField::from(4)) * *beta_sqr)
-            + (-*precompute_point_transition + P::ScalarField::one());
-        numerator *= skew_input; // degree-5
-
-        let eccvm_set_permutation_delta = &self
-            .decider
-            .memory
-            .relation_parameters
-            .eccvm_set_permutation_delta;
-        numerator *= *precompute_select * (-*eccvm_set_permutation_delta + P::ScalarField::one())
-            + *eccvm_set_permutation_delta; // degree-7
-
-        // Second term: tuple of (point-counter, P.x, P.y, scalar-multiplier), used in ECCVMWnafRelation and
-        // ECCVMPointTableRelation. ECCVMWnafRelation validates the sum of the wnaf slices associated with point-counter
-        // equals scalar-multiplier. ECCVMPointTableRelation computes a table of multiples of [P]: { -15[P], -13[P], ...,
-        // 15[P] }. We need to validate that scalar-multiplier and [P] = (P.x, P.y) come from MUL opcodes in the transcript
-        // columns.
-
-        fn convert_to_wnaf<T: NoirUltraHonkProver<P>, P: CurveGroup>(
-            s0: &T::ArithmeticShare,
-            s1: &T::ArithmeticShare,
-            id: <T::State as MpcState>::PartyID,
-        ) -> T::ArithmeticShare {
-            let mut t = T::add(*s0, *s0);
-            T::mul_assign_with_public(&mut t, P::ScalarField::from(2)); // t += t;
-            T::add_assign(&mut t, *s1);
-
-            T::add_with_public(-P::ScalarField::from(15u32), T::add(t, t), id)
-        }
-
-        let table_x = &proving_key.polynomials.witness.precompute_tx()[i];
-        let table_y = &proving_key.polynomials.witness.precompute_ty()[i];
-
-        let precompute_skew = &proving_key.polynomials.witness.precompute_skew()[i];
-        let negative_inverse_seven = P::ScalarField::from(-7)
-            .inverse()
-            .expect("-7 is hopefully non-zero");
-        let adjusted_skew = *precompute_skew * negative_inverse_seven;
-
-        let wnaf_scalar_sum = &proving_key.polynomials.witness.precompute_scalar_sum()[i];
-        let w0 = convert_to_wnaf::<T, P>(
-            &proving_key.polynomials.witness.precompute_s1hi()[i],
-            &proving_key.polynomials.witness.precompute_s1lo()[i],
-            id,
-        );
-        let w1 = convert_to_wnaf::<T, P>(
-            &proving_key.polynomials.witness.precompute_s2hi()[i],
-            &proving_key.polynomials.witness.precompute_s2lo()[i],
-            id,
-        );
-        let w2 = convert_to_wnaf::<T, P>(
-            &proving_key.polynomials.witness.precompute_s3hi()[i],
-            &proving_key.polynomials.witness.precompute_s3lo()[i],
-            id,
-        );
-        let w3 = convert_to_wnaf::<T, P>(
-            &proving_key.polynomials.witness.precompute_s4hi()[i],
-            &proving_key.polynomials.witness.precompute_s4lo()[i],
-            id,
-        );
-
-        let mut row_slice = w0;
-        row_slice += row_slice;
-        row_slice += row_slice;
-        row_slice += row_slice;
-        row_slice += row_slice;
-        row_slice += w1;
-        row_slice += row_slice;
-        row_slice += row_slice;
-        row_slice += row_slice;
-        row_slice += row_slice;
-        row_slice += w2;
-        row_slice += row_slice;
-        row_slice += row_slice;
-        row_slice += row_slice;
-        row_slice += row_slice;
-        row_slice += w3;
-
-        let mut scalar_sum_full = *wnaf_scalar_sum * P::ScalarField::from(2);
-        scalar_sum_full += scalar_sum_full;
-        scalar_sum_full += scalar_sum_full;
-        scalar_sum_full += scalar_sum_full;
-        scalar_sum_full += scalar_sum_full;
-        scalar_sum_full += scalar_sum_full;
-        scalar_sum_full += scalar_sum_full;
-        scalar_sum_full += scalar_sum_full;
-        scalar_sum_full += scalar_sum_full;
-        scalar_sum_full += scalar_sum_full;
-        scalar_sum_full += scalar_sum_full;
-        scalar_sum_full += scalar_sum_full;
-        scalar_sum_full += scalar_sum_full;
-        scalar_sum_full += scalar_sum_full;
-        scalar_sum_full += scalar_sum_full;
-        scalar_sum_full += scalar_sum_full;
-        scalar_sum_full += row_slice + adjusted_skew;
-
-        let precompute_point_transition = &proving_key
-            .polynomials
-            .witness
-            .precompute_point_transition()[i];
-
-        let mut point_table_init_read =
-            *precompute_pc + *table_x * *beta + *table_y * *beta_sqr + scalar_sum_full * *beta_cube;
-        point_table_init_read = *precompute_point_transition * (point_table_init_read + *gamma)
-            + (-*precompute_point_transition + P::ScalarField::one());
-
-        numerator *= point_table_init_read; // degree-9
-
-        // Third term: tuple of (point-counter, P.x, P.y, msm-size) from ECCVMMSMRelation.
-        // (P.x, P.y) is the output of a multi-scalar-multiplication evaluated in ECCVMMSMRelation.
-        // We need to validate that the same values (P.x, P.y) are present in the Transcript columns and describe a
-        // multi-scalar multiplication of size `msm-size`, starting at `point-counter`.
-
-        let lagrange_first = &proving_key.polynomials.precomputed.lagrange_first()[i];
-        let partial_msm_transition_shift =
-            &proving_key.polynomials.witness.msm_transition().shifted()[i];
-        let msm_transition_shift =
-            (-*lagrange_first + P::ScalarField::one()) * *partial_msm_transition_shift;
-        let msm_pc_shift = &proving_key.polynomials.witness.msm_pc().shifted()[i];
-        let msm_x_shift = &proving_key
-            .polynomials
-            .witness
-            .msm_accumulator_x()
-            .shifted()[i];
-        let msm_y_shift = &proving_key
-            .polynomials
-            .witness
-            .msm_accumulator_y()
-            .shifted()[i];
-        let msm_size = &proving_key.polynomials.witness.msm_size_of_msm()[i];
-
-        let mut msm_result_write = *msm_pc_shift
-            + *msm_x_shift * *beta
-            + *msm_y_shift * *beta_sqr
-            + *msm_size * *beta_cube;
-
-        msm_result_write = msm_transition_shift * (msm_result_write + *gamma)
-            + (-msm_transition_shift + P::ScalarField::one());
-        numerator *= msm_result_write; // degree-11
-
-        numerator
-    }
-
-    fn compute_grand_product_denominator(
-        &self,
-        proving_key: &ProvingKey<T, P, ECCVMFlavour>,
-        i: usize,
-    ) -> P::ScalarField {
-        tracing::trace!("compute grand product denominator");
-
-        // AZTEC TODO(@zac-williamson). The degree of this contribution is 17! makes overall relation degree 19.
-        // Can optimise by refining the algebra, once we have a stable base to iterate off of.
-        let gamma = &self.decider.memory.relation_parameters.gamma;
-        let beta = &self.decider.memory.relation_parameters.beta;
-        let beta_sqr = &self.decider.memory.relation_parameters.beta_sqr;
-        let beta_cube = &self.decider.memory.relation_parameters.beta_cube;
-        let msm_pc = &proving_key.polynomials.witness.msm_pc()[i];
-        let msm_count = &proving_key.polynomials.witness.msm_count()[i];
-        let msm_round = &proving_key.polynomials.witness.msm_round()[i];
-
-        /*
-         * @brief First term: tuple of (pc, round, wnaf_slice), used to determine which points we extract from lookup tables
-         * when evaluaing MSMs in ECCVMMsmRelation.
-         * These values must be equivalent to the values computed in the 1st term of `compute_grand_product_numerator`
-         */
-        let mut denominator = P::ScalarField::one(); // degree-0
-
-        let add1 = &proving_key.polynomials.witness.msm_add1()[i];
-        let msm_slice1 = &proving_key.polynomials.witness.msm_slice1()[i];
-
-        let wnaf_slice_output1 = *add1
-            * (*msm_slice1 + *gamma + (*msm_pc - *msm_count) * *beta + *msm_round * *beta_sqr)
-            + (-*add1 + P::ScalarField::one());
-        denominator *= wnaf_slice_output1; // degree-2
-
-        let add2 = &proving_key.polynomials.witness.msm_add2()[i];
-        let msm_slice2 = &proving_key.polynomials.witness.msm_slice2()[i];
-
-        let wnaf_slice_output2 = *add2
-            * (*msm_slice2
-                + *gamma
-                + (*msm_pc - *msm_count - P::ScalarField::one()) * *beta
-                + *msm_round * *beta_sqr)
-            + (-*add2 + P::ScalarField::one());
-        denominator *= wnaf_slice_output2; // degree-4
-
-        let add3 = &proving_key.polynomials.witness.msm_add3()[i];
-        let msm_slice3 = &proving_key.polynomials.witness.msm_slice3()[i];
-
-        let wnaf_slice_output3 = *add3
-            * (*msm_slice3
-                + *gamma
-                + (*msm_pc - *msm_count - P::ScalarField::from(2)) * *beta
-                + *msm_round * *beta_sqr)
-            + (-*add3 + P::ScalarField::one());
-        denominator *= wnaf_slice_output3; // degree-6
-
-        let add4 = &proving_key.polynomials.witness.msm_add4()[i];
-        let msm_slice4 = &proving_key.polynomials.witness.msm_slice4()[i];
-
-        let wnaf_slice_output4 = *add4
-            * (*msm_slice4
-                + *gamma
-                + (*msm_pc - *msm_count - P::ScalarField::from(3)) * *beta
-                + *msm_round * *beta_sqr)
-            + (-*add4 + P::ScalarField::one());
-        denominator *= wnaf_slice_output4; // degree-8
-
-        /*
-         * @brief Second term: tuple of (transcript_pc, transcript_Px, transcript_Py, z1) OR (transcript_pc, \lambda *
-         * transcript_Px, -transcript_Py, z2) for each scalar multiplication in ECCVMTranscriptRelation columns. (the latter
-         * term uses the curve endomorphism: \lambda = cube root of unity). These values must be equivalent to the second
-         * term values in `compute_grand_product_numerator`
-         */
-        let transcript_pc = &proving_key.polynomials.witness.transcript_pc()[i];
-        let transcript_px = &proving_key.polynomials.witness.transcript_px()[i];
-        let transcript_py = &proving_key.polynomials.witness.transcript_py()[i];
-        let z1 = &proving_key.polynomials.witness.transcript_z1()[i];
-        let z2 = &proving_key.polynomials.witness.transcript_z2()[i];
-        let z1_zero = &proving_key.polynomials.witness.transcript_z1zero()[i];
-        let z2_zero = &proving_key.polynomials.witness.transcript_z2zero()[i];
-        let base_infinity = &proving_key.polynomials.witness.transcript_base_infinity()[i];
-        let transcript_mul = &proving_key.polynomials.witness.transcript_mul()[i];
-
-        let lookup_first = -(*z1_zero) + P::ScalarField::one();
-        let lookup_second = -(*z2_zero) + P::ScalarField::one();
-        let endomorphism_base_field_shift = P::CycleGroup::get_cube_root_of_unity();
-
-        let mut transcript_input1 =
-            *transcript_pc + *transcript_px * *beta + *transcript_py * *beta_sqr + *z1 * *beta_cube; // degree = 1
-        let mut transcript_input2 = (*transcript_pc - P::ScalarField::one())
-            + *transcript_px * endomorphism_base_field_shift * *beta
-            - *transcript_py * *beta_sqr
-            + *z2 * *beta_cube; // degree = 2
-
-        transcript_input1 =
-            (transcript_input1 + *gamma) * lookup_first + (-lookup_first + P::ScalarField::one()); // degree 2
-        transcript_input2 =
-            (transcript_input2 + *gamma) * lookup_second + (-lookup_second + P::ScalarField::one()); // degree 3
-
-        let transcript_product = (transcript_input1 * transcript_input2)
-            * (-*base_infinity + P::ScalarField::one())
-            + *base_infinity; // degree 6
-
-        let point_table_init_write =
-            *transcript_mul * transcript_product + (-*transcript_mul + P::ScalarField::one());
-        denominator *= point_table_init_write; // degree 17
-
-        /*
-         * @brief Third term: tuple of (point-counter, P.x, P.y, msm-size) from ECCVMTranscriptRelation.
-         *        (P.x, P.y) is the *claimed* output of a multi-scalar-multiplication evaluated in ECCVMMSMRelation.
-         *        We need to validate that the msm output produced in ECCVMMSMRelation is equivalent to the output present
-         * in `transcript_msm_output_x, transcript_msm_output_y`, for a given multi-scalar multiplication starting at
-         * `transcript_pc` and has size `transcript_msm_count`
-         */
-        let transcript_pc_shift = &proving_key.polynomials.witness.transcript_pc().shifted()[i];
-        let transcript_msm_x = &proving_key.polynomials.witness.transcript_msm_x()[i];
-        let transcript_msm_y = &proving_key.polynomials.witness.transcript_msm_y()[i];
-        let transcript_msm_transition =
-            &proving_key.polynomials.witness.transcript_msm_transition()[i];
-        let transcript_msm_count = &proving_key.polynomials.witness.transcript_msm_count()[i];
-        let z1_zero = &proving_key.polynomials.witness.transcript_z1zero()[i];
-        let z2_zero = &proving_key.polynomials.witness.transcript_z2zero()[i];
-        let transcript_mul = &proving_key.polynomials.witness.transcript_mul()[i];
-        let base_infinity = &proving_key.polynomials.witness.transcript_base_infinity()[i];
-
-        let full_msm_count = *transcript_msm_count
-            + *transcript_mul
-                * ((-*z1_zero + P::ScalarField::one()) + (-*z2_zero + P::ScalarField::one()))
-                * (-*base_infinity + P::ScalarField::one());
-
-        let mut msm_result_read = *transcript_pc_shift
-            + *transcript_msm_x * *beta
-            + *transcript_msm_y * *beta_sqr
-            + full_msm_count * *beta_cube;
-        msm_result_read = *transcript_msm_transition * (msm_result_read + *gamma)
-            + (-*transcript_msm_transition + P::ScalarField::one());
-        denominator *= msm_result_read; // degree-20
-
-        denominator
-    }
-
-    fn compute_grand_product(
-        &mut self,
-        proving_key: &ProvingKey<T, P, ECCVMFlavour>,
-        domain_size: usize,
-    ) {
-        tracing::trace!("compute grand product");
-
-        let has_active_ranges = proving_key.active_region_data.size() > 0;
-
-        // Barretenberg uses multithreading here
-
-        // Set the domain over which the grand product must be computed. This may be less than the dyadic circuit size, e.g
-        // the permutation grand product does not need to be computed beyond the index of the last active wire
-
-        let active_domain_size = if has_active_ranges {
-            proving_key.active_region_data.size()
-        } else {
-            domain_size
-        };
-
-        // In Barretenberg circuit size is taken from the q_c polynomial
-        let mut numerator = Vec::with_capacity(active_domain_size - 1);
-        let mut denominator = Vec::with_capacity(active_domain_size - 1);
-
-        // Step (1)
-        // Populate `numerator` and `denominator` with the algebra described by Relation
-
-        for i in 0..active_domain_size {
-            let idx = if has_active_ranges {
-                proving_key.active_region_data.get_idx(i)
-            } else {
-                i
-            };
-            numerator.push(self.compute_grand_product_numerator(proving_key, idx));
-            denominator.push(self.compute_grand_product_denominator(proving_key, idx));
-        }
-
-        // Step (2)
-        // Compute the accumulating product of the numerator and denominator terms.
-        // In Barretenberg, this is done in parallel across multiple threads, however we just do the computation signlethreaded for simplicity
-
-        for i in 1..active_domain_size - 1 {
-            numerator[i] = numerator[i] * numerator[i - 1];
-            denominator[i] = denominator[i] * denominator[i - 1];
-        }
-        // invert denominator
-        UltraHonkUtils::batch_invert(&mut denominator);
-
-        // Step (3) Compute z_perm[i] = numerator[i] / denominator[i]
-        self.memory
-            .z_perm
-            .resize(proving_key.circuit_size as usize, P::ScalarField::zero());
-
-        // Compute grand product values corresponding only to the active regions of the trace
-        for i in 0..active_domain_size - 1 {
-            let idx = if has_active_ranges {
-                proving_key.active_region_data.get_idx(i)
-            } else {
-                i
-            };
-            self.memory.z_perm[idx + 1] = numerator[i] * denominator[i];
-        }
-
-        // Final step: If active/inactive regions have been specified, the value of the grand product in the inactive
-        // regions have not yet been set. The polynomial takes an already computed constant value across each inactive
-        // region (since no copy constraints are present there) equal to the value of the grand product at the first index
-        // of the subsequent active region.
-        if has_active_ranges {
-            for i in 0..domain_size {
-                for j in 0..proving_key.active_region_data.num_ranges() - 1 {
-                    let previous_range_end = proving_key.active_region_data.get_range(j).1;
-                    let next_range_start = proving_key.active_region_data.get_range(j + 1).0;
-                    // Set the value of the polynomial if the index falls in an inactive region
-                    if i >= previous_range_end && i < next_range_start {
-                        self.memory.z_perm[i + 1] = self.memory.z_perm[next_range_start];
-                    }
-                }
-            }
-        }
-    }
+    //TODO FLORIN TODO FLORIN TODO FLORIN
+    // fn compute_grand_product_numerator(
+    //     &self,
+    //     proving_key: &ProvingKey<T, P, ECCVMFlavour>,
+    //     i: usize,
+    // ) -> P::ScalarField {
+    //     tracing::trace!("compute grand product numerator");
+    //     let id = self.state.id();
+
+    //     let precompute_round = &proving_key.polynomials.witness.precompute_round()[i];
+    //     let precompute_round2 = *precompute_round + *precompute_round;
+    //     let precompute_round4 = precompute_round2 + precompute_round2;
+
+    //     let gamma = &self.decider.memory.relation_parameters.gamma;
+    //     let beta = &self.decider.memory.relation_parameters.beta;
+    //     let beta_sqr = &self.decider.memory.relation_parameters.beta_sqr;
+    //     let beta_cube = &self.decider.memory.relation_parameters.beta_cube;
+    //     let precompute_pc = &proving_key.polynomials.witness.precompute_pc()[i];
+    //     let precompute_select = &proving_key.polynomials.witness.precompute_select()[i];
+
+    //     // First term: tuple of (pc, round, wnaf_slice), computed when slicing scalar multipliers into slices,
+    //     // as part of ECCVMWnafRelation.
+    //     // If precompute_select = 1, tuple entry = (wnaf-slice + point-counter * beta + msm-round * beta_sqr).
+    //     // There are 4 tuple entries per row.
+    //     let mut numerator = P::ScalarField::one(); // degree-0
+
+    //     let s0 = &proving_key.polynomials.witness.precompute_s1hi()[i];
+    //     let s1 = &proving_key.polynomials.witness.precompute_s1lo()[i];
+
+    //     let mut wnaf_slice = *s0 + *s0;
+    //     wnaf_slice += wnaf_slice;
+    //     wnaf_slice += *s1;
+
+    //     let wnaf_slice_input0 =
+    //         wnaf_slice + *gamma + *precompute_pc * *beta + precompute_round4 * *beta_sqr;
+    //     numerator *= wnaf_slice_input0; // degree-1
+
+    //     let s0 = &proving_key.polynomials.witness.precompute_s2hi()[i];
+    //     let s1 = &proving_key.polynomials.witness.precompute_s2lo()[i];
+
+    //     let mut wnaf_slice = *s0 + *s0;
+    //     wnaf_slice += wnaf_slice;
+    //     wnaf_slice += *s1;
+
+    //     let wnaf_slice_input1 = wnaf_slice
+    //         + *gamma
+    //         + *precompute_pc * *beta
+    //         + (precompute_round4 + P::ScalarField::from(1)) * *beta_sqr;
+    //     numerator *= wnaf_slice_input1; // degree-2
+
+    //     let s0 = &proving_key.polynomials.witness.precompute_s3hi()[i];
+    //     let s1 = &proving_key.polynomials.witness.precompute_s3lo()[i];
+
+    //     let mut wnaf_slice = *s0 + *s0;
+    //     wnaf_slice += wnaf_slice;
+    //     wnaf_slice += *s1;
+
+    //     let wnaf_slice_input2 = wnaf_slice
+    //         + *gamma
+    //         + *precompute_pc * *beta
+    //         + (precompute_round4 + P::ScalarField::from(2)) * *beta_sqr;
+    //     numerator *= wnaf_slice_input2; // degree-3
+
+    //     let s0 = &proving_key.polynomials.witness.precompute_s4hi()[i];
+    //     let s1 = &proving_key.polynomials.witness.precompute_s4lo()[i];
+
+    //     let mut wnaf_slice = *s0 + *s0;
+    //     wnaf_slice += wnaf_slice;
+    //     wnaf_slice += *s1;
+
+    //     let wnaf_slice_input3 = wnaf_slice
+    //         + *gamma
+    //         + *precompute_pc * *beta
+    //         + (precompute_round4 + P::ScalarField::from(3)) * *beta_sqr;
+    //     numerator *= wnaf_slice_input3; // degree-4
+
+    //     // skew product if relevant
+    //     let skew = &proving_key.polynomials.witness.precompute_skew()[i];
+    //     let precompute_point_transition = &proving_key
+    //         .polynomials
+    //         .witness
+    //         .precompute_point_transition()[i];
+    //     let skew_input = *precompute_point_transition
+    //         * (*skew
+    //             + *gamma
+    //             + *precompute_pc * *beta
+    //             + (precompute_round4 + P::ScalarField::from(4)) * *beta_sqr)
+    //         + (-*precompute_point_transition + P::ScalarField::one());
+    //     numerator *= skew_input; // degree-5
+
+    //     let eccvm_set_permutation_delta = &self
+    //         .decider
+    //         .memory
+    //         .relation_parameters
+    //         .eccvm_set_permutation_delta;
+    //     numerator *= *precompute_select * (-*eccvm_set_permutation_delta + P::ScalarField::one())
+    //         + *eccvm_set_permutation_delta; // degree-7
+
+    //     // Second term: tuple of (point-counter, P.x, P.y, scalar-multiplier), used in ECCVMWnafRelation and
+    //     // ECCVMPointTableRelation. ECCVMWnafRelation validates the sum of the wnaf slices associated with point-counter
+    //     // equals scalar-multiplier. ECCVMPointTableRelation computes a table of multiples of [P]: { -15[P], -13[P], ...,
+    //     // 15[P] }. We need to validate that scalar-multiplier and [P] = (P.x, P.y) come from MUL opcodes in the transcript
+    //     // columns.
+
+    //     fn convert_to_wnaf<T: NoirUltraHonkProver<P>, P: CurveGroup>(
+    //         s0: &T::ArithmeticShare,
+    //         s1: &T::ArithmeticShare,
+    //         id: <T::State as MpcState>::PartyID,
+    //     ) -> T::ArithmeticShare {
+    //         let mut t = T::add(*s0, *s0);
+    //         T::mul_assign_with_public(&mut t, P::ScalarField::from(2)); // t += t;
+    //         T::add_assign(&mut t, *s1);
+
+    //         T::add_with_public(-P::ScalarField::from(15u32), T::add(t, t), id)
+    //     }
+
+    //     let table_x = &proving_key.polynomials.witness.precompute_tx()[i];
+    //     let table_y = &proving_key.polynomials.witness.precompute_ty()[i];
+
+    //     let precompute_skew = &proving_key.polynomials.witness.precompute_skew()[i];
+    //     let negative_inverse_seven = P::ScalarField::from(-7)
+    //         .inverse()
+    //         .expect("-7 is hopefully non-zero");
+    //     let adjusted_skew = *precompute_skew * negative_inverse_seven;
+
+    //     let wnaf_scalar_sum = &proving_key.polynomials.witness.precompute_scalar_sum()[i];
+    //     let w0 = convert_to_wnaf::<T, P>(
+    //         &proving_key.polynomials.witness.precompute_s1hi()[i],
+    //         &proving_key.polynomials.witness.precompute_s1lo()[i],
+    //         id,
+    //     );
+    //     let w1 = convert_to_wnaf::<T, P>(
+    //         &proving_key.polynomials.witness.precompute_s2hi()[i],
+    //         &proving_key.polynomials.witness.precompute_s2lo()[i],
+    //         id,
+    //     );
+    //     let w2 = convert_to_wnaf::<T, P>(
+    //         &proving_key.polynomials.witness.precompute_s3hi()[i],
+    //         &proving_key.polynomials.witness.precompute_s3lo()[i],
+    //         id,
+    //     );
+    //     let w3 = convert_to_wnaf::<T, P>(
+    //         &proving_key.polynomials.witness.precompute_s4hi()[i],
+    //         &proving_key.polynomials.witness.precompute_s4lo()[i],
+    //         id,
+    //     );
+
+    //     let mut row_slice = w0;
+    //     row_slice += row_slice;
+    //     row_slice += row_slice;
+    //     row_slice += row_slice;
+    //     row_slice += row_slice;
+    //     row_slice += w1;
+    //     row_slice += row_slice;
+    //     row_slice += row_slice;
+    //     row_slice += row_slice;
+    //     row_slice += row_slice;
+    //     row_slice += w2;
+    //     row_slice += row_slice;
+    //     row_slice += row_slice;
+    //     row_slice += row_slice;
+    //     row_slice += row_slice;
+    //     row_slice += w3;
+
+    //     let mut scalar_sum_full = *wnaf_scalar_sum * P::ScalarField::from(2);
+    //     scalar_sum_full += scalar_sum_full;
+    //     scalar_sum_full += scalar_sum_full;
+    //     scalar_sum_full += scalar_sum_full;
+    //     scalar_sum_full += scalar_sum_full;
+    //     scalar_sum_full += scalar_sum_full;
+    //     scalar_sum_full += scalar_sum_full;
+    //     scalar_sum_full += scalar_sum_full;
+    //     scalar_sum_full += scalar_sum_full;
+    //     scalar_sum_full += scalar_sum_full;
+    //     scalar_sum_full += scalar_sum_full;
+    //     scalar_sum_full += scalar_sum_full;
+    //     scalar_sum_full += scalar_sum_full;
+    //     scalar_sum_full += scalar_sum_full;
+    //     scalar_sum_full += scalar_sum_full;
+    //     scalar_sum_full += scalar_sum_full;
+    //     scalar_sum_full += row_slice + adjusted_skew;
+
+    //     let precompute_point_transition = &proving_key
+    //         .polynomials
+    //         .witness
+    //         .precompute_point_transition()[i];
+
+    //     let mut point_table_init_read =
+    //         *precompute_pc + *table_x * *beta + *table_y * *beta_sqr + scalar_sum_full * *beta_cube;
+    //     point_table_init_read = *precompute_point_transition * (point_table_init_read + *gamma)
+    //         + (-*precompute_point_transition + P::ScalarField::one());
+
+    //     numerator *= point_table_init_read; // degree-9
+
+    //     // Third term: tuple of (point-counter, P.x, P.y, msm-size) from ECCVMMSMRelation.
+    //     // (P.x, P.y) is the output of a multi-scalar-multiplication evaluated in ECCVMMSMRelation.
+    //     // We need to validate that the same values (P.x, P.y) are present in the Transcript columns and describe a
+    //     // multi-scalar multiplication of size `msm-size`, starting at `point-counter`.
+
+    //     let lagrange_first = &proving_key.polynomials.precomputed.lagrange_first()[i];
+    //     let partial_msm_transition_shift =
+    //         &proving_key.polynomials.witness.msm_transition().shifted()[i];
+    //     let msm_transition_shift =
+    //         (-*lagrange_first + P::ScalarField::one()) * *partial_msm_transition_shift;
+    //     let msm_pc_shift = &proving_key.polynomials.witness.msm_pc().shifted()[i];
+    //     let msm_x_shift = &proving_key
+    //         .polynomials
+    //         .witness
+    //         .msm_accumulator_x()
+    //         .shifted()[i];
+    //     let msm_y_shift = &proving_key
+    //         .polynomials
+    //         .witness
+    //         .msm_accumulator_y()
+    //         .shifted()[i];
+    //     let msm_size = &proving_key.polynomials.witness.msm_size_of_msm()[i];
+
+    //     let mut msm_result_write = *msm_pc_shift
+    //         + *msm_x_shift * *beta
+    //         + *msm_y_shift * *beta_sqr
+    //         + *msm_size * *beta_cube;
+
+    //     msm_result_write = msm_transition_shift * (msm_result_write + *gamma)
+    //         + (-msm_transition_shift + P::ScalarField::one());
+    //     numerator *= msm_result_write; // degree-11
+
+    //     numerator
+    // }
+
+    // fn compute_grand_product_denominator(
+    //     &self,
+    //     proving_key: &ProvingKey<T, P, ECCVMFlavour>,
+    //     i: usize,
+    // ) -> P::ScalarField {
+    //     tracing::trace!("compute grand product denominator");
+
+    //     // AZTEC TODO(@zac-williamson). The degree of this contribution is 17! makes overall relation degree 19.
+    //     // Can optimise by refining the algebra, once we have a stable base to iterate off of.
+    //     let gamma = &self.decider.memory.relation_parameters.gamma;
+    //     let beta = &self.decider.memory.relation_parameters.beta;
+    //     let beta_sqr = &self.decider.memory.relation_parameters.beta_sqr;
+    //     let beta_cube = &self.decider.memory.relation_parameters.beta_cube;
+    //     let msm_pc = &proving_key.polynomials.witness.msm_pc()[i];
+    //     let msm_count = &proving_key.polynomials.witness.msm_count()[i];
+    //     let msm_round = &proving_key.polynomials.witness.msm_round()[i];
+
+    //     /*
+    //      * @brief First term: tuple of (pc, round, wnaf_slice), used to determine which points we extract from lookup tables
+    //      * when evaluaing MSMs in ECCVMMsmRelation.
+    //      * These values must be equivalent to the values computed in the 1st term of `compute_grand_product_numerator`
+    //      */
+    //     let mut denominator = P::ScalarField::one(); // degree-0
+
+    //     let add1 = &proving_key.polynomials.witness.msm_add1()[i];
+    //     let msm_slice1 = &proving_key.polynomials.witness.msm_slice1()[i];
+
+    //     let wnaf_slice_output1 = *add1
+    //         * (*msm_slice1 + *gamma + (*msm_pc - *msm_count) * *beta + *msm_round * *beta_sqr)
+    //         + (-*add1 + P::ScalarField::one());
+    //     denominator *= wnaf_slice_output1; // degree-2
+
+    //     let add2 = &proving_key.polynomials.witness.msm_add2()[i];
+    //     let msm_slice2 = &proving_key.polynomials.witness.msm_slice2()[i];
+
+    //     let wnaf_slice_output2 = *add2
+    //         * (*msm_slice2
+    //             + *gamma
+    //             + (*msm_pc - *msm_count - P::ScalarField::one()) * *beta
+    //             + *msm_round * *beta_sqr)
+    //         + (-*add2 + P::ScalarField::one());
+    //     denominator *= wnaf_slice_output2; // degree-4
+
+    //     let add3 = &proving_key.polynomials.witness.msm_add3()[i];
+    //     let msm_slice3 = &proving_key.polynomials.witness.msm_slice3()[i];
+
+    //     let wnaf_slice_output3 = *add3
+    //         * (*msm_slice3
+    //             + *gamma
+    //             + (*msm_pc - *msm_count - P::ScalarField::from(2)) * *beta
+    //             + *msm_round * *beta_sqr)
+    //         + (-*add3 + P::ScalarField::one());
+    //     denominator *= wnaf_slice_output3; // degree-6
+
+    //     let add4 = &proving_key.polynomials.witness.msm_add4()[i];
+    //     let msm_slice4 = &proving_key.polynomials.witness.msm_slice4()[i];
+
+    //     let wnaf_slice_output4 = *add4
+    //         * (*msm_slice4
+    //             + *gamma
+    //             + (*msm_pc - *msm_count - P::ScalarField::from(3)) * *beta
+    //             + *msm_round * *beta_sqr)
+    //         + (-*add4 + P::ScalarField::one());
+    //     denominator *= wnaf_slice_output4; // degree-8
+
+    //     /*
+    //      * @brief Second term: tuple of (transcript_pc, transcript_Px, transcript_Py, z1) OR (transcript_pc, \lambda *
+    //      * transcript_Px, -transcript_Py, z2) for each scalar multiplication in ECCVMTranscriptRelation columns. (the latter
+    //      * term uses the curve endomorphism: \lambda = cube root of unity). These values must be equivalent to the second
+    //      * term values in `compute_grand_product_numerator`
+    //      */
+    //     let transcript_pc = &proving_key.polynomials.witness.transcript_pc()[i];
+    //     let transcript_px = &proving_key.polynomials.witness.transcript_px()[i];
+    //     let transcript_py = &proving_key.polynomials.witness.transcript_py()[i];
+    //     let z1 = &proving_key.polynomials.witness.transcript_z1()[i];
+    //     let z2 = &proving_key.polynomials.witness.transcript_z2()[i];
+    //     let z1_zero = &proving_key.polynomials.witness.transcript_z1zero()[i];
+    //     let z2_zero = &proving_key.polynomials.witness.transcript_z2zero()[i];
+    //     let base_infinity = &proving_key.polynomials.witness.transcript_base_infinity()[i];
+    //     let transcript_mul = &proving_key.polynomials.witness.transcript_mul()[i];
+
+    //     let lookup_first = -(*z1_zero) + P::ScalarField::one();
+    //     let lookup_second = -(*z2_zero) + P::ScalarField::one();
+    //     let endomorphism_base_field_shift = P::CycleGroup::get_cube_root_of_unity();
+
+    //     let mut transcript_input1 =
+    //         *transcript_pc + *transcript_px * *beta + *transcript_py * *beta_sqr + *z1 * *beta_cube; // degree = 1
+    //     let mut transcript_input2 = (*transcript_pc - P::ScalarField::one())
+    //         + *transcript_px * endomorphism_base_field_shift * *beta
+    //         - *transcript_py * *beta_sqr
+    //         + *z2 * *beta_cube; // degree = 2
+
+    //     transcript_input1 =
+    //         (transcript_input1 + *gamma) * lookup_first + (-lookup_first + P::ScalarField::one()); // degree 2
+    //     transcript_input2 =
+    //         (transcript_input2 + *gamma) * lookup_second + (-lookup_second + P::ScalarField::one()); // degree 3
+
+    //     let transcript_product = (transcript_input1 * transcript_input2)
+    //         * (-*base_infinity + P::ScalarField::one())
+    //         + *base_infinity; // degree 6
+
+    //     let point_table_init_write =
+    //         *transcript_mul * transcript_product + (-*transcript_mul + P::ScalarField::one());
+    //     denominator *= point_table_init_write; // degree 17
+
+    //     /*
+    //      * @brief Third term: tuple of (point-counter, P.x, P.y, msm-size) from ECCVMTranscriptRelation.
+    //      *        (P.x, P.y) is the *claimed* output of a multi-scalar-multiplication evaluated in ECCVMMSMRelation.
+    //      *        We need to validate that the msm output produced in ECCVMMSMRelation is equivalent to the output present
+    //      * in `transcript_msm_output_x, transcript_msm_output_y`, for a given multi-scalar multiplication starting at
+    //      * `transcript_pc` and has size `transcript_msm_count`
+    //      */
+    //     let transcript_pc_shift = &proving_key.polynomials.witness.transcript_pc().shifted()[i];
+    //     let transcript_msm_x = &proving_key.polynomials.witness.transcript_msm_x()[i];
+    //     let transcript_msm_y = &proving_key.polynomials.witness.transcript_msm_y()[i];
+    //     let transcript_msm_transition =
+    //         &proving_key.polynomials.witness.transcript_msm_transition()[i];
+    //     let transcript_msm_count = &proving_key.polynomials.witness.transcript_msm_count()[i];
+    //     let z1_zero = &proving_key.polynomials.witness.transcript_z1zero()[i];
+    //     let z2_zero = &proving_key.polynomials.witness.transcript_z2zero()[i];
+    //     let transcript_mul = &proving_key.polynomials.witness.transcript_mul()[i];
+    //     let base_infinity = &proving_key.polynomials.witness.transcript_base_infinity()[i];
+
+    //     let full_msm_count = *transcript_msm_count
+    //         + *transcript_mul
+    //             * ((-*z1_zero + P::ScalarField::one()) + (-*z2_zero + P::ScalarField::one()))
+    //             * (-*base_infinity + P::ScalarField::one());
+
+    //     let mut msm_result_read = *transcript_pc_shift
+    //         + *transcript_msm_x * *beta
+    //         + *transcript_msm_y * *beta_sqr
+    //         + full_msm_count * *beta_cube;
+    //     msm_result_read = *transcript_msm_transition * (msm_result_read + *gamma)
+    //         + (-*transcript_msm_transition + P::ScalarField::one());
+    //     denominator *= msm_result_read; // degree-20
+
+    //     denominator
+    // }
+
+    // fn compute_grand_product(
+    //     &mut self,
+    //     proving_key: &ProvingKey<T, P, ECCVMFlavour>,
+    //     domain_size: usize,
+    // ) {
+    //     tracing::trace!("compute grand product");
+
+    //     let has_active_ranges = proving_key.active_region_data.size() > 0;
+
+    //     // Barretenberg uses multithreading here
+
+    //     // Set the domain over which the grand product must be computed. This may be less than the dyadic circuit size, e.g
+    //     // the permutation grand product does not need to be computed beyond the index of the last active wire
+
+    //     let active_domain_size = if has_active_ranges {
+    //         proving_key.active_region_data.size()
+    //     } else {
+    //         domain_size
+    //     };
+
+    //     // In Barretenberg circuit size is taken from the q_c polynomial
+    //     let mut numerator = Vec::with_capacity(active_domain_size - 1);
+    //     let mut denominator = Vec::with_capacity(active_domain_size - 1);
+
+    //     // Step (1)
+    //     // Populate `numerator` and `denominator` with the algebra described by Relation
+
+    //     for i in 0..active_domain_size {
+    //         let idx = if has_active_ranges {
+    //             proving_key.active_region_data.get_idx(i)
+    //         } else {
+    //             i
+    //         };
+    //         numerator.push(self.compute_grand_product_numerator(proving_key, idx));
+    //         denominator.push(self.compute_grand_product_denominator(proving_key, idx));
+    //     }
+
+    //     // Step (2)
+    //     // Compute the accumulating product of the numerator and denominator terms.
+    //     // In Barretenberg, this is done in parallel across multiple threads, however we just do the computation signlethreaded for simplicity
+
+    //     for i in 1..active_domain_size - 1 {
+    //         numerator[i] = numerator[i] * numerator[i - 1];
+    //         denominator[i] = denominator[i] * denominator[i - 1];
+    //     }
+    //     // invert denominator
+    //     UltraHonkUtils::batch_invert(&mut denominator);
+
+    //     // Step (3) Compute z_perm[i] = numerator[i] / denominator[i]
+    //     self.memory
+    //         .z_perm
+    //         .resize(proving_key.circuit_size as usize, P::ScalarField::zero());
+
+    //     // Compute grand product values corresponding only to the active regions of the trace
+    //     for i in 0..active_domain_size - 1 {
+    //         let idx = if has_active_ranges {
+    //             proving_key.active_region_data.get_idx(i)
+    //         } else {
+    //             i
+    //         };
+    //         self.memory.z_perm[idx + 1] = numerator[i] * denominator[i];
+    //     }
+
+    //     // Final step: If active/inactive regions have been specified, the value of the grand product in the inactive
+    //     // regions have not yet been set. The polynomial takes an already computed constant value across each inactive
+    //     // region (since no copy constraints are present there) equal to the value of the grand product at the first index
+    //     // of the subsequent active region.
+    //     if has_active_ranges {
+    //         for i in 0..domain_size {
+    //             for j in 0..proving_key.active_region_data.num_ranges() - 1 {
+    //                 let previous_range_end = proving_key.active_region_data.get_range(j).1;
+    //                 let next_range_start = proving_key.active_region_data.get_range(j + 1).0;
+    //                 // Set the value of the polynomial if the index falls in an inactive region
+    //                 if i >= previous_range_end && i < next_range_start {
+    //                     self.memory.z_perm[i + 1] = self.memory.z_perm[next_range_start];
+    //                 }
+    //             }
+    //         }
+    //     }
+    // }
 
     fn execute_grand_product_computation_round(
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         proving_key: &ProvingKey<T, P, ECCVMFlavour>,
         unmasked_witness_size: usize,
+        crs: &ProverCrs<P>,
     ) -> HonkProofResult<()> {
         // Compute permutation grand product and their commitments
-        self.compute_grand_product(proving_key, unmasked_witness_size);
+        // self.compute_grand_product(proving_key, unmasked_witness_size); TODO FLORIN
         // we do std::mem::take here to avoid borrowing issues with self
         let mut z_perm_tmp = std::mem::take(&mut self.memory.z_perm);
-        self.commit_to_witness_polynomial(&mut z_perm_tmp, "Z_PERM", &proving_key.crs, transcript)?;
+        self.commit_to_witness_polynomial(&mut z_perm_tmp, "Z_PERM", &crs, transcript)?;
         std::mem::swap(&mut self.memory.z_perm, &mut z_perm_tmp);
         Ok(())
     }
@@ -1151,9 +1172,10 @@ where
 
     fn add_polynomials_to_memory(
         &mut self,
-        polynomials: Polynomials<P::ScalarField, ECCVMFlavour>,
+        polynomials: Polynomials<T::ArithmeticShare, P::ScalarField, ECCVMFlavour>,
     ) {
-        let mut memory = AllEntities::<Vec<P::ScalarField>, ECCVMFlavour>::default();
+        let mut memory =
+            AllEntities::<Vec<T::ArithmeticShare>, Vec<P::ScalarField>, ECCVMFlavour>::default();
         *memory.witness.lookup_inverses_mut() = self.memory.lookup_inverses.to_owned().into_vec();
 
         // Copy the (non-shifted) witness polynomials

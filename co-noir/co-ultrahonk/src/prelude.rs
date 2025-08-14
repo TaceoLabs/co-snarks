@@ -4,7 +4,7 @@ pub use crate::co_decider::co_decider_prover::CoDecider;
 pub use crate::co_decider::co_sumcheck::{SumcheckOutput, zk_data::SharedZKSumcheckData};
 pub use crate::co_decider::small_subgroup_ipa::SharedSmallSubgroupIPAProver;
 pub use crate::co_ultra_prover::{CoUltraHonk, Rep3CoUltraHonk, ShamirCoUltraHonk};
-pub use crate::types::Polynomials;
+pub use crate::types::{AllEntities, Polynomials};
 pub use crate::{
     PlainCoBuilder, Rep3CoBuilder, ShamirCoBuilder, mpc_prover_flavour::MPCProverFlavour,
 };
