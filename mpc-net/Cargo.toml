@@ -37,6 +37,7 @@ bytes = { workspace = true }
 eyre.workspace = true
 futures = { version = "0.3.30", optional = true }
 intmap.workspace = true
+itertools.workspace = true
 parking_lot = "0.12.4"
 quinn = { version = "0.11", optional = true }
 rustls = { workspace = true, optional = true }

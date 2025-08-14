@@ -17,6 +17,7 @@ use byteorder::{BigEndian, ReadBytesExt as _, WriteBytesExt as _};
 use crossbeam_channel::Receiver;
 use eyre::ContextCompat;
 use intmap::IntMap;
+use itertools::Itertools;
 use parking_lot::Mutex;
 use rustls::{
     ClientConfig, ClientConnection, RootCertStore, ServerConfig, ServerConnection, StreamOwned,
@@ -234,11 +235,13 @@ impl TlsNetwork {
         let addrs = config
             .parties
             .iter()
+            .sorted_by_key(|p| p.id)
             .map(|party| party.dns_name.clone())
             .collect::<Vec<_>>();
         let certs = config
             .parties
             .into_iter()
+            .sorted_by_key(|p| p.id)
             .map(|party| party.cert)
             .collect::<Vec<_>>();
         let timeout = config.timeout.unwrap_or(DEFAULT_CONNECTION_TIMEOUT);
