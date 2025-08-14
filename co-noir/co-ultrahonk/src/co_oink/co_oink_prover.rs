@@ -74,24 +74,6 @@ impl<
         }
     }
 
-    fn mask_polynomial(
-        &mut self,
-        polynomial: &mut Polynomial<T::ArithmeticShare>,
-    ) -> HonkProofResult<()> {
-        tracing::trace!("mask polynomial");
-
-        let virtual_size = polynomial.coefficients.len();
-        assert!(
-            virtual_size >= NUM_MASKED_ROWS as usize,
-            "Insufficient space for masking"
-        );
-        for i in (virtual_size - NUM_MASKED_ROWS as usize..virtual_size).rev() {
-            polynomial.coefficients[i] = T::rand(self.net, self.state)?;
-        }
-
-        Ok(())
-    }
-
     fn compute_w4_inner(&mut self, proving_key: &ProvingKey<T, P, L>, gate_idx: usize) {
         let target = &mut self.memory.w_4[gate_idx];
 
@@ -857,34 +839,76 @@ impl<
 
         // Mask the polynomial when proving in zero-knowledge
         if self.has_zk == ZeroKnowledge::Yes {
-            self.mask_polynomial(proving_key.polynomials.witness.w_l_mut())?;
-            self.mask_polynomial(proving_key.polynomials.witness.w_r_mut())?;
-            self.mask_polynomial(proving_key.polynomials.witness.w_o_mut())?;
+            CoUtils::mask_polynomial::<T, P, N>(
+                self.net,
+                self.state,
+                proving_key.polynomials.witness.w_l_mut(),
+            )?;
+            CoUtils::mask_polynomial::<T, P, N>(
+                self.net,
+                self.state,
+                proving_key.polynomials.witness.w_r_mut(),
+            )?;
+            CoUtils::mask_polynomial::<T, P, N>(
+                self.net,
+                self.state,
+                proving_key.polynomials.witness.w_o_mut(),
+            )?;
             if L::FLAVOUR == Flavour::Mega {
-                self.mask_polynomial(proving_key.polynomials.witness.calldata_mut())?;
-                self.mask_polynomial(proving_key.polynomials.witness.calldata_read_counts_mut())?;
-                self.mask_polynomial(proving_key.polynomials.witness.calldata_read_tags_mut())?;
-                self.mask_polynomial(proving_key.polynomials.witness.secondary_calldata_mut())?;
-                self.mask_polynomial(
+                CoUtils::mask_polynomial::<T, P, N>(
+                    self.net,
+                    self.state,
+                    proving_key.polynomials.witness.calldata_mut(),
+                )?;
+                CoUtils::mask_polynomial::<T, P, N>(
+                    self.net,
+                    self.state,
+                    proving_key.polynomials.witness.calldata_read_counts_mut(),
+                )?;
+                CoUtils::mask_polynomial::<T, P, N>(
+                    self.net,
+                    self.state,
+                    proving_key.polynomials.witness.calldata_read_tags_mut(),
+                )?;
+                CoUtils::mask_polynomial::<T, P, N>(
+                    self.net,
+                    self.state,
+                    proving_key.polynomials.witness.secondary_calldata_mut(),
+                )?;
+                CoUtils::mask_polynomial::<T, P, N>(
+                    self.net,
+                    self.state,
                     proving_key
                         .polynomials
                         .witness
                         .secondary_calldata_read_counts_mut(),
                 )?;
-                self.mask_polynomial(
+                CoUtils::mask_polynomial::<T, P, N>(
+                    self.net,
+                    self.state,
                     proving_key
                         .polynomials
                         .witness
                         .secondary_calldata_read_tags_mut(),
                 )?;
-                self.mask_polynomial(proving_key.polynomials.witness.return_data_mut())?;
-                self.mask_polynomial(
+                CoUtils::mask_polynomial::<T, P, N>(
+                    self.net,
+                    self.state,
+                    proving_key.polynomials.witness.return_data_mut(),
+                )?;
+                CoUtils::mask_polynomial::<T, P, N>(
+                    self.net,
+                    self.state,
                     proving_key
                         .polynomials
                         .witness
                         .return_data_read_counts_mut(),
                 )?;
-                self.mask_polynomial(proving_key.polynomials.witness.return_data_read_tags_mut())?;
+                CoUtils::mask_polynomial::<T, P, N>(
+                    self.net,
+                    self.state,
+                    proving_key.polynomials.witness.return_data_read_tags_mut(),
+                )?;
             }
         };
 
@@ -1059,11 +1083,19 @@ impl<
 
         // Mask the polynomial when proving in zero-knowledge
         if self.has_zk == ZeroKnowledge::Yes {
-            self.mask_polynomial(proving_key.polynomials.witness.lookup_read_counts_mut())?;
-            self.mask_polynomial(proving_key.polynomials.witness.lookup_read_tags_mut())?;
+            CoUtils::mask_polynomial::<T, P, N>(
+                self.net,
+                self.state,
+                proving_key.polynomials.witness.lookup_read_counts_mut(),
+            )?;
+            CoUtils::mask_polynomial::<T, P, N>(
+                self.net,
+                self.state,
+                proving_key.polynomials.witness.lookup_read_tags_mut(),
+            )?;
             // we do std::mem::take here to avoid borrowing issues with self
             let mut w_4_tmp = std::mem::take(&mut self.memory.w_4);
-            self.mask_polynomial(&mut w_4_tmp)?;
+            CoUtils::mask_polynomial::<T, P, N>(self.net, self.state, &mut w_4_tmp)?;
             std::mem::swap(&mut self.memory.w_4, &mut w_4_tmp);
         };
 
@@ -1130,10 +1162,10 @@ impl<
         if self.has_zk == ZeroKnowledge::Yes {
             // we do std::mem::take here to avoid borrowing issues with self
             let mut lookup_inverses_mut = std::mem::take(&mut self.memory.lookup_inverses);
-            self.mask_polynomial(&mut lookup_inverses_mut)?;
+            CoUtils::mask_polynomial::<T, P, N>(self.net, self.state, &mut lookup_inverses_mut)?;
             std::mem::swap(&mut self.memory.lookup_inverses, &mut lookup_inverses_mut);
             let mut z_perm_mut = std::mem::take(&mut self.memory.z_perm);
-            self.mask_polynomial(&mut z_perm_mut)?;
+            CoUtils::mask_polynomial::<T, P, N>(self.net, self.state, &mut z_perm_mut)?;
             std::mem::swap(&mut self.memory.z_perm, &mut z_perm_mut);
         };
 
@@ -1150,21 +1182,33 @@ impl<
         } else if L::FLAVOUR == Flavour::Mega {
             if self.has_zk == ZeroKnowledge::Yes {
                 let mut calldata_inverses_mut = std::mem::take(&mut self.memory.calldata_inverses);
-                self.mask_polynomial(&mut calldata_inverses_mut)?;
+                CoUtils::mask_polynomial::<T, P, N>(
+                    self.net,
+                    self.state,
+                    &mut calldata_inverses_mut,
+                )?;
                 std::mem::swap(
                     &mut self.memory.calldata_inverses,
                     &mut calldata_inverses_mut,
                 );
                 let mut secondary_calldata_inverses_mut =
                     std::mem::take(&mut self.memory.secondary_calldata_inverses);
-                self.mask_polynomial(&mut secondary_calldata_inverses_mut)?;
+                CoUtils::mask_polynomial::<T, P, N>(
+                    self.net,
+                    self.state,
+                    &mut secondary_calldata_inverses_mut,
+                )?;
                 std::mem::swap(
                     &mut self.memory.secondary_calldata_inverses,
                     &mut secondary_calldata_inverses_mut,
                 );
                 let mut return_data_inverses_mut =
                     std::mem::take(&mut self.memory.return_data_inverses);
-                self.mask_polynomial(&mut return_data_inverses_mut)?;
+                CoUtils::mask_polynomial::<T, P, N>(
+                    self.net,
+                    self.state,
+                    &mut return_data_inverses_mut,
+                )?;
                 std::mem::swap(
                     &mut self.memory.return_data_inverses,
                     &mut return_data_inverses_mut,

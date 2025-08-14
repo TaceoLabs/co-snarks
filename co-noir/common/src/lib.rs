@@ -6,7 +6,7 @@ use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_builder::{
     HonkProofResult,
-    prelude::{HonkCurve, ProverCrs, Serialize, Utils},
+    prelude::{HonkCurve, NUM_MASKED_ROWS, Polynomial, ProverCrs, Serialize, Utils},
 };
 use mpc_net::Network;
 
@@ -98,6 +98,25 @@ impl CoUtils {
         state: &mut T::State,
     ) -> eyre::Result<()> {
         T::inv_many_in_place_leaking_zeros(poly, net, state)
+    }
+
+    pub fn mask_polynomial<T: NoirUltraHonkProver<P>, P: CurveGroup, N: Network>(
+        net: &N,
+        state: &mut T::State,
+        polynomial: &mut Polynomial<T::ArithmeticShare>,
+    ) -> HonkProofResult<()> {
+        tracing::trace!("mask polynomial");
+
+        let virtual_size = polynomial.coefficients.len();
+        assert!(
+            virtual_size >= NUM_MASKED_ROWS as usize,
+            "Insufficient space for masking"
+        );
+        for i in (virtual_size - NUM_MASKED_ROWS as usize..virtual_size).rev() {
+            polynomial.coefficients[i] = T::rand(net, state)?;
+        }
+
+        Ok(())
     }
 }
 
