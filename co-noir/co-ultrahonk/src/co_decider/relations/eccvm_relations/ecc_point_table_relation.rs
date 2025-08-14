@@ -148,7 +148,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
             .iter_mut()
             .zip_eq(scaling_factors)
             .for_each(|(x, y)| {
-                *x * minus_one + &P::ScalarField::one();
+                *x = *x * minus_one + P::ScalarField::one();
                 *x *= *y;
             });
 
@@ -235,7 +235,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
          */
         let mut two_x = tx.to_owned();
         T::scale_many_in_place(&mut two_x, P::ScalarField::from(2u64));
-        let three_x = T::add_many(&two_x, &tx);
+        let three_x = T::add_many(&two_x, tx);
         let mut two_y = ty.to_owned();
         T::scale_many_in_place(&mut two_y, P::ScalarField::from(2u64));
         let mut lhs = Vec::with_capacity(three_x.len() + two_y.len());
@@ -253,10 +253,10 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
             three_xx.len() + ty.len() + three_xx.len() + three_xx.len() + dx.len(),
         );
         let mut rhs = Vec::with_capacity(lhs.len());
-        lhs.extend(three_xx.clone());
+        lhs.extend(three_xx);
         lhs.extend(T::add_many(ty, dy));
-        lhs.extend(three_xx.clone());
-        lhs.extend(three_xx.clone());
+        lhs.extend(three_xx);
+        lhs.extend(three_xx);
         lhs.extend(T::add_many(dx, &two_x));
 
         rhs.extend(three_xx);
@@ -312,10 +312,10 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let y3 = ty;
         let mut lambda_numerator = y1.to_owned();
         T::scale_many_in_place(&mut lambda_numerator, minus_one);
-        T::add_assign_many(&mut lambda_numerator, &y2);
+        T::add_assign_many(&mut lambda_numerator, y2);
         let mut lambda_denominator = x1.to_owned();
         T::scale_many_in_place(&mut lambda_denominator, minus_one);
-        T::add_assign_many(&mut lambda_denominator, &x2);
+        T::add_assign_many(&mut lambda_denominator, x2);
 
         let mut precompute_point_transition_modified = precompute_point_transition.to_owned();
         T::scale_many_in_place(&mut precompute_point_transition_modified, minus_one);
@@ -355,8 +355,8 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
 
         rhs.extend(precompute_point_transition.clone());
         rhs.extend(precompute_point_transition);
-        rhs.extend(T::add_many(&dx_shift_neg, &dx));
-        rhs.extend(T::add_many(&dy_shift_neg, &dy));
+        rhs.extend(T::add_many(&dx_shift_neg, dx));
+        rhs.extend(T::add_many(&dy_shift_neg, dy));
         rhs.extend(lambda_denominator);
         rhs.extend(lambda_numerator);
         rhs.extend(y3);
@@ -376,7 +376,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let tmp3 = mul[3].to_owned();
         fold_accumulator!(univariate_accumulator.r3, tmp3, SIZE);
 
-        let mul_2 = T::mul_many(&T::add_many(&x3, &T::add_many(x2, x1)), mul[4], net, state)?;
+        let mul_2 = T::mul_many(&T::add_many(x3, &T::add_many(x2, x1)), mul[4], net, state)?;
 
         let x_add_check = T::sub_many(&mul_2, mul[5]);
 

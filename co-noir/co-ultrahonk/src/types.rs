@@ -64,14 +64,14 @@ where
 }
 
 #[derive(Default, Clone)]
-pub(crate) struct AllEntities<
+pub struct AllEntities<
     Shared: Default + std::marker::Sync,
     Public: Default + Clone + std::marker::Sync,
     L: MPCProverFlavour,
 > {
-    pub(crate) witness: L::WitnessEntities<Shared>,
-    pub(crate) precomputed: L::PrecomputedEntities<Public>,
-    pub(crate) shifted_witness: L::ShiftedWitnessEntities<Shared>,
+    pub witness: L::WitnessEntities<Shared>,
+    pub precomputed: L::PrecomputedEntities<Public>,
+    pub shifted_witness: L::ShiftedWitnessEntities<Shared>,
 }
 
 impl<

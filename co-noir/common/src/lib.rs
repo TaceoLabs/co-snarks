@@ -8,6 +8,7 @@ use co_builder::{
     HonkProofResult,
     prelude::{HonkCurve, NUM_MASKED_ROWS, Polynomial, ProverCrs, Serialize, Utils},
 };
+use itertools::izip;
 use mpc_net::Network;
 
 pub mod co_shplemini;
@@ -117,6 +118,83 @@ impl CoUtils {
         }
 
         Ok(())
+    }
+    // To reduce the number of communication rounds, we implement the array_prod_mul macro according to https://www.usenix.org/system/files/sec22-ozdemir.pdf, p11 first paragraph.
+    pub fn array_prod_mul<T: NoirUltraHonkProver<P>, P: CurveGroup, N: Network>(
+        net: &N,
+        state: &mut T::State,
+        inp: &[T::ArithmeticShare],
+    ) -> eyre::Result<Vec<T::ArithmeticShare>> {
+        // Do the multiplications of inp[i] * inp[i-1] in constant rounds
+        let len = inp.len();
+
+        let r = (0..=len)
+            .map(|_| T::rand(net, state))
+            .collect::<Result<Vec<_>, _>>()?;
+        let r_inv = T::inv_many(&r, net, state)?;
+        let r_inv0 = vec![r_inv[0]; len];
+
+        let mut unblind = T::mul_many(&r_inv0, &r[1..], net, state)?;
+
+        let mul = T::mul_many(&r[..len], inp, net, state)?;
+        let mut open = T::mul_open_many(&mul, &r_inv[1..], net, state)?;
+
+        for i in 1..open.len() {
+            open[i] = open[i] * open[i - 1];
+        }
+
+        for (unblind, open) in unblind.iter_mut().zip(open.iter()) {
+            *unblind = T::mul_with_public(*open, *unblind);
+        }
+        Ok(unblind)
+    }
+    // To reduce the number of communication rounds, we implement the array_prod_mul macro according to https://www.usenix.org/system/files/sec22-ozdemir.pdf, p11 first paragraph.
+    //TODO FLORIN TEST AND CLEAN THIS UP
+    pub fn array_prod_mul_many<T: NoirUltraHonkProver<P>, P: CurveGroup, N: Network>(
+        net: &N,
+        state: &mut T::State,
+        inp: Vec<Vec<T::ArithmeticShare>>,
+    ) -> eyre::Result<Vec<Vec<T::ArithmeticShare>>> {
+        // Do the multiplications of inp[i] * inp[i-1] in constant rounds
+        let vector_size = inp.len();
+        let len = inp[0].len();
+        debug_assert!(
+            inp.iter().all(|v| v.len() == len),
+            "All input slices must have the same length"
+        );
+
+        let r = (0..=vector_size * (len + 1))
+            .map(|_| T::rand(net, state))
+            .collect::<Result<Vec<_>, _>>()?;
+        let r_inv = T::inv_many(&r, net, state)?;
+        let mut r_invs = Vec::with_capacity(vector_size * len);
+        let mut r_chunks = Vec::with_capacity(vector_size * len);
+        let mut mul_r = Vec::with_capacity(vector_size * len);
+        let mut r_invs_mul = Vec::with_capacity(vector_size * len);
+        for (r_, r_inv_) in izip!(r.chunks(len), r_inv.chunks(len)) {
+            r_invs.extend(vec![r_inv_[0]; len]);
+            r_chunks.extend(r_[1..].to_vec());
+            mul_r.extend(r_[..len].to_vec());
+            r_invs_mul.extend(r_inv_[1..].to_vec());
+        }
+
+        let mut unblind = T::mul_many(&r_invs, &r_chunks, net, state)?;
+
+        // Flatten inp (Vec<&[T::ArithmeticShare]>) into one contiguous vector
+        let flat_inp = inp.concat();
+        let mul = T::mul_many(&mul_r, &flat_inp, net, state)?;
+        let mut open = T::mul_open_many(&mul, &r_invs_mul, net, state)?;
+
+        for open_ in open.chunks_mut(len) {
+            for i in 1..open_.len() {
+                open_[i] *= open_[i - 1];
+            }
+        }
+
+        for (unblind, open) in unblind.iter_mut().zip(open.iter()) {
+            *unblind = T::mul_with_public(*open, *unblind);
+        }
+        Ok(unblind.chunks(len).map(|c| c.to_vec()).collect())
     }
 }
 

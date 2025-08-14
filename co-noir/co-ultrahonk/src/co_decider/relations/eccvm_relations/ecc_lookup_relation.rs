@@ -99,7 +99,7 @@ impl EccLookupRelation {
                 )
             }
             1 => {
-                T::add_scalar_in_place(&mut current_pc, P::ScalarField::from(-1) + &gamma, id);
+                T::add_scalar_in_place(&mut current_pc, P::ScalarField::from(-1) + gamma, id);
                 T::add_many(
                     &T::add_many(
                         &T::add_many(
@@ -121,7 +121,7 @@ impl EccLookupRelation {
                 )
             }
             2 => {
-                T::add_scalar_in_place(&mut current_pc, P::ScalarField::from(-2) + &gamma, id);
+                T::add_scalar_in_place(&mut current_pc, P::ScalarField::from(-2) + gamma, id);
                 T::add_many(
                     &T::add_many(
                         &T::add_many(
@@ -143,7 +143,7 @@ impl EccLookupRelation {
                 )
             }
             3 => {
-                T::add_scalar_in_place(&mut current_pc, P::ScalarField::from(-3) + &gamma, id);
+                T::add_scalar_in_place(&mut current_pc, P::ScalarField::from(-3) + gamma, id);
                 T::add_many(
                     &T::add_many(
                         &T::add_many(
@@ -226,7 +226,7 @@ impl EccLookupRelation {
                     .collect_vec();
                 T::add_scalar_in_place(&mut mul, gamma, id);
 
-                T::add_assign_many(&mut mul, &precompute_pc);
+                T::add_assign_many(&mut mul, precompute_pc);
 
                 T::add_assign_many(
                     &mut mul,
@@ -462,7 +462,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
 
         // let inverse_exists = {
         lhs.extend(input.witness.precompute_select().to_owned());
-        lhs.extend(denominator_accumulator[NUM_TOTAL_TERMS - 1].clone());
+        lhs.extend(denominator_accumulator[NUM_TOTAL_TERMS - 1]);
 
         let row_has_write = input.witness.precompute_select();
         let row_has_read = T::add_many(input.witness.msm_add(), input.witness.msm_skew());
@@ -477,8 +477,8 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let inverse_exists = T::add_many(&tmp, &T::add_many(row_has_write, &row_has_read));
 
         // Note: the lookup_inverses are computed so that the value is 0 if !inverse_exists
-        let mut tmp = T::sub_many(&mul[1], &inverse_exists);
-        T::mul_assign_with_public_many(&mut tmp, &scaling_factors);
+        let mut tmp = T::sub_many(mul[1], &inverse_exists);
+        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
 
         fold_accumulator!(univariate_accumulator.r0, tmp, SIZE);
 
@@ -498,9 +498,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
                 &lookup_inverses,
                 net,
                 state,
-            )?
-            .try_into()
-            .unwrap_or_else(|_| panic!("vec must contain exactly {SIZE} elements"));
+            )?;
         }
         denominator_accumulator[0] = lookup_inverses
             .try_into()
@@ -529,7 +527,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
             .chunks_exact(mul.len() / Self::READ_TERMS + Self::WRITE_TERMS)
             .collect_vec();
         debug_assert_eq!(mul.len(), Self::READ_TERMS + Self::WRITE_TERMS);
-        let mut tmp = T::add_many(&mul[0], &mul[1]);
+        let mut tmp = T::add_many(mul[0], mul[1]);
         for el in mul.iter().take(Self::READ_TERMS).skip(2) {
             T::add_assign_many(&mut tmp, el);
         }
@@ -544,7 +542,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
             .chunks_exact(mul.len() / Self::WRITE_TERMS)
             .collect_vec();
         debug_assert_eq!(mul.len(), Self::WRITE_TERMS);
-        let mut tmp = T::add_many(&mul[0], &mul[1]);
+        let mut tmp = T::add_many(mul[0], mul[1]);
         T::scale_many_in_place(&mut tmp, P::ScalarField::from(-1));
         for el in mul.iter().skip(2) {
             T::add_assign_many(&mut tmp, el);

@@ -1137,6 +1137,7 @@ dependencies = [
  "mpc-net",
  "num-bigint 0.4.6",
  "rand 0.8.5",
+ "tracing",
  "ultrahonk",
 ]
 
@@ -1362,6 +1363,7 @@ dependencies = [
  "rand 0.8.5",
  "rayon",
  "sha3",
+ "tracing",
 ]
 
 [[package]]

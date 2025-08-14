@@ -17,8 +17,8 @@ use itertools::izip;
 use std::iter;
 
 pub struct ProverMemory<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCProverFlavour> {
-    pub(crate) polys: AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>, L>,
-    pub(crate) relation_parameters: RelationParameters<P::ScalarField, L>,
+    pub polys: AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>, L>,
+    pub relation_parameters: RelationParameters<P::ScalarField, L>,
 }
 
 pub(crate) type ProverUnivariates<T, P, L> = AllEntities<
@@ -36,14 +36,14 @@ pub(crate) type PartiallyEvaluatePolys<T, P, L> = AllEntities<
 pub(crate) type ClaimedEvaluations<F, L> = AllEntities<F, F, L>;
 
 pub struct RelationParameters<F: PrimeField, L: MPCProverFlavour> {
-    pub(crate) eta_1: F,
-    pub(crate) eta_2: F,
-    pub(crate) eta_3: F,
-    pub(crate) beta: F,
-    pub(crate) gamma: F,
-    pub(crate) public_input_delta: F,
-    pub(crate) alphas: L::Alphas<F>,
-    pub(crate) gate_challenges: Vec<F>,
+    pub eta_1: F,
+    pub eta_2: F,
+    pub eta_3: F,
+    pub beta: F,
+    pub gamma: F,
+    pub public_input_delta: F,
+    pub alphas: L::Alphas<F>,
+    pub gate_challenges: Vec<F>,
     pub lookup_grand_product_delta: F,
     pub beta_sqr: F,
     pub beta_cube: F,

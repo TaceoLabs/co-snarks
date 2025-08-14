@@ -239,14 +239,14 @@ impl<
         Self::add_evals_to_transcript(transcript, &multivariate_evaluations);
 
         let res = SumcheckOutput {
-            _claimed_evaluations: multivariate_evaluations,
+            claimed_evaluations: multivariate_evaluations,
             challenges: multivariate_challenge,
             claimed_libra_evaluation: None,
         };
         Ok(res)
     }
 
-    pub(crate) fn sumcheck_prove_zk(
+    pub fn sumcheck_prove_zk(
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         circuit_size: u32,
@@ -381,7 +381,7 @@ impl<
             .send_fr_to_verifier::<P>("Libra:claimed_evaluation".to_string(), libra_evaluation);
 
         Ok(SumcheckOutput {
-            _claimed_evaluations: multivariate_evaluations,
+            claimed_evaluations: multivariate_evaluations,
             challenges: multivariate_challenge,
             claimed_libra_evaluation: Some(libra_evaluation),
         })

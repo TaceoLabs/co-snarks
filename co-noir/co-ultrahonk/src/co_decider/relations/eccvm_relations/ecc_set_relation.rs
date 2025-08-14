@@ -112,7 +112,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let wnaf_slice_input0 = T::add_many(
             &T::add_scalar(&wnaf_slice, gamma, id),
             &T::add_many(
-                &T::scale_many(&precompute_pc, beta),
+                &T::scale_many(precompute_pc, beta),
                 &T::scale_many(&precompute_round4, beta_sqr),
             ),
         );
@@ -128,7 +128,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let wnaf_slice_input1 = T::add_many(
             &T::add_scalar(&wnaf_slice, gamma, id),
             &T::add_many(
-                &T::scale_many(&precompute_pc, beta),
+                &T::scale_many(precompute_pc, beta),
                 &T::scale_many(&T::add_scalar(&precompute_round4, one, id), beta_sqr),
             ),
         );
@@ -148,7 +148,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let wnaf_slice_input2 = T::add_many(
             &T::add_scalar(&wnaf_slice, gamma, id),
             &T::add_many(
-                &T::scale_many(&precompute_pc, beta),
+                &T::scale_many(precompute_pc, beta),
                 &T::scale_many(&T::add_scalar(&precompute_round4, two, id), beta_sqr),
             ),
         );
@@ -165,7 +165,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let wnaf_slice_input3 = T::add_many(
             &T::add_scalar(&wnaf_slice, gamma, id),
             &T::add_many(
-                &T::scale_many(&precompute_pc, beta),
+                &T::scale_many(precompute_pc, beta),
                 &T::scale_many(&T::add_scalar(&precompute_round4, three, id), beta_sqr),
             ),
         );
@@ -306,11 +306,11 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         //     + table_y.to_owned() * beta_sqr
         //     + scalar_sum_full * beta_cube;
         T::scale_many_in_place(&mut point_table_init_read, beta);
-        T::add_assign_many(&mut point_table_init_read, &precompute_pc);
+        T::add_assign_many(&mut point_table_init_read, precompute_pc);
         T::add_assign_many(
             &mut point_table_init_read,
             &T::add_many(
-                &T::scale_many(&table_y, beta_sqr),
+                &T::scale_many(table_y, beta_sqr),
                 &T::scale_many(&scalar_sum_full, beta_cube),
             ),
         );
@@ -393,13 +393,13 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         T::add_assign_many(
             &mut wnaf_slice_output1_factor,
             &T::sub_many(
-                &T::scale_many(&msm_pc, beta),
-                &T::scale_many(&msm_count, beta),
+                &T::scale_many(msm_pc, beta),
+                &T::scale_many(msm_count, beta),
             ),
         );
         T::add_assign_many(
             &mut wnaf_slice_output1_factor,
-            &T::scale_many(&msm_round, beta_sqr),
+            &T::scale_many(msm_round, beta_sqr),
         );
         let mut wnaf_slice_output1_summand = add1.to_owned();
         T::scale_many_in_place(&mut wnaf_slice_output1_summand, minus_one);
@@ -422,13 +422,13 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         T::add_assign_many(
             &mut wnaf_slice_output2_factor,
             &T::sub_many(
-                &T::scale_many(&msm_pc, beta),
+                &T::scale_many(msm_pc, beta),
                 &T::scale_many(&T::add_scalar(msm_count, minus_one, id), beta),
             ),
         );
         T::add_assign_many(
             &mut wnaf_slice_output2_factor,
-            &T::scale_many(&msm_round, beta_sqr),
+            &T::scale_many(msm_round, beta_sqr),
         );
         let mut wnaf_slice_output2_summand = add2.to_owned();
         T::scale_many_in_place(&mut wnaf_slice_output2_summand, minus_one);
@@ -451,13 +451,13 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         T::add_assign_many(
             &mut wnaf_slice_output3_factor,
             &T::sub_many(
-                &T::scale_many(&msm_pc, beta),
+                &T::scale_many(msm_pc, beta),
                 &T::scale_many(&T::add_scalar(msm_count, minus_two, id), beta),
             ),
         );
         T::add_assign_many(
             &mut wnaf_slice_output3_factor,
-            &T::scale_many(&msm_round, beta_sqr),
+            &T::scale_many(msm_round, beta_sqr),
         );
         let mut wnaf_slice_output3_summand = add3.to_owned();
         T::scale_many_in_place(&mut wnaf_slice_output3_summand, minus_one);
@@ -480,13 +480,13 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         T::add_assign_many(
             &mut wnaf_slice_output4_factor,
             &T::sub_many(
-                &T::scale_many(&msm_pc, beta),
+                &T::scale_many(msm_pc, beta),
                 &T::scale_many(&T::add_scalar(msm_count, minus_three, id), beta),
             ),
         );
         T::add_assign_many(
             &mut wnaf_slice_output4_factor,
-            &T::scale_many(&msm_round, beta_sqr),
+            &T::scale_many(msm_round, beta_sqr),
         );
         let mut wnaf_slice_output4_summand = add4.to_owned();
         T::scale_many_in_place(&mut wnaf_slice_output4_summand, minus_one);
@@ -522,12 +522,12 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         // + transcript_py.to_owned() * beta_sqr
         // + z1.to_owned() * beta_cube; // degree = 1
         T::scale_many_in_place(&mut transcript_input1, beta);
-        T::add_assign_many(&mut transcript_input1, &transcript_pc);
+        T::add_assign_many(&mut transcript_input1, transcript_pc);
         T::add_assign_many(
             &mut transcript_input1,
-            &T::scale_many(&transcript_py, beta_sqr),
+            &T::scale_many(transcript_py, beta_sqr),
         );
-        T::add_assign_many(&mut transcript_input1, &T::scale_many(&z1, beta_cube));
+        T::add_assign_many(&mut transcript_input1, &T::scale_many(z1, beta_cube));
         let mut transcript_input2 = transcript_px.to_owned(); // * endomorphism_base_field_shift * beta
         // + transcript_pc.to_owned()
         // + &minus_one
@@ -535,13 +535,13 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         // + z2.to_owned() * beta_cube; // degree = 2
         T::scale_many_in_place(&mut transcript_input2, endomorphism_base_field_shift);
         T::scale_many_in_place(&mut transcript_input2, beta);
-        T::add_assign_many(&mut transcript_input2, &transcript_pc);
+        T::add_assign_many(&mut transcript_input2, transcript_pc);
         T::add_scalar_in_place(&mut transcript_input2, minus_one, id);
         T::add_assign_many(
             &mut transcript_input2,
-            &T::scale_many(&transcript_py, beta_sqr * minus_one),
+            &T::scale_many(transcript_py, beta_sqr * minus_one),
         );
-        T::add_assign_many(&mut transcript_input2, &T::scale_many(&z2, beta_cube));
+        T::add_assign_many(&mut transcript_input2, &T::scale_many(z2, beta_cube));
 
         // transcript_input1 = (transcript_input1 + &gamma) * lookup_first.clone()
         //     + (lookup_first.to_owned() * minus_one + &P::ScalarField::one()); // degree 2 TODO ADD THIS
@@ -600,16 +600,16 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         // + transcript_msm_y.to_owned() * beta_sqr
         // + full_msm_count.to_owned() * beta_cube
         // + transcript_pc_shift;
-        T::scale_many(&mut msm_result_read, beta);
+        T::scale_many_in_place(&mut msm_result_read, beta);
         T::add_assign_many(
             &mut msm_result_read,
-            &T::scale_many(&transcript_msm_y, beta_sqr),
+            &T::scale_many(transcript_msm_y, beta_sqr),
         );
         T::add_assign_many(
             &mut msm_result_read,
-            &T::scale_many(&transcript_msm_count, beta_cube),
+            &T::scale_many(transcript_msm_count, beta_cube),
         );
-        T::add_assign_many(&mut msm_result_read, &transcript_pc_shift);
+        T::add_assign_many(&mut msm_result_read, transcript_pc_shift);
         T::add_scalar_in_place(&mut msm_result_read, gamma, id);
         // lhs.extend(transcript_msm_transition); // TODO THIS HERE IS WRONG; WE NEED TO FIRST ADD FULL_MSM_COUNT
         // rhs.extend(msm_result_read); // TODO THIS HERE IS WRONG; WE NEED TO FIRST ADD FULL_MSM_COUNT
@@ -701,7 +701,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         rhs4.extend(transcript_mul.to_owned());
 
         let mut msm_result_read = mul[3].to_owned(); //  (transcript_msm_transition.to_owned() * (msm_result_read + &gamma) 
-        T::sub_assign_many(&mut msm_result_read, &transcript_msm_transition);
+        T::sub_assign_many(&mut msm_result_read, transcript_msm_transition);
         T::add_scalar_in_place(&mut msm_result_read, one, id);
 
         lhs4.extend(mul[1].to_owned()); // (wnaf_slice_output1 * wnaf_slice_output2) * (wnaf_slice_output3 * wnaf_slice_output4)
@@ -724,7 +724,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         rhs5.extend(z_perm.to_owned()); // z_perm + lagrange_first
 
         let mut point_table_init_write = mul[1].to_owned(); // transcript_mul.to_owned() * transcript_product
-        T::sub_assign_many(&mut point_table_init_write, &transcript_mul);
+        T::sub_assign_many(&mut point_table_init_write, transcript_mul);
         T::add_scalar_in_place(&mut point_table_init_write, one, id);
 
         lhs5.extend(point_table_init_write);
@@ -757,7 +757,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
 
         // // Contribution (2)
         let mut tmp = z_perm_shift.to_owned(); // lagrange_last.to_owned() * * scaling_factors;
-        T::mul_assign_with_public_many(&mut tmp, &lagrange_last);
+        T::mul_assign_with_public_many(&mut tmp, lagrange_last);
         T::mul_assign_with_public_many(&mut tmp, scaling_factors);
         fold_accumulator!(univariate_accumulator.r1, tmp, SIZE);
 

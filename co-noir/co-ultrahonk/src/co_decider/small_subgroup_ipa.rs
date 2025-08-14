@@ -19,7 +19,7 @@ use common::transcript::{Transcript, TranscriptHasher};
 use mpc_core::MpcState;
 use mpc_net::Network;
 
-pub(crate) struct SharedSmallSubgroupIPAProver<T: NoirUltraHonkProver<P>, P: CurveGroup> {
+pub struct SharedSmallSubgroupIPAProver<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     interpolation_domain: Vec<P::ScalarField>,
     concatenated_polynomial: SharedPolynomial<T, P>,
     libra_concatenated_lagrange_form: SharedPolynomial<T, P>,
@@ -50,7 +50,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
     // Length of the big sum identity polynomial C. It is equal to the length of the highest degree term X * F(X) * G(X)
     const GRAND_SUM_IDENTITY_LENGTH: usize =
         Self::MASKED_CONCATENATED_WITNESS_LENGTH + Self::SUBGROUP_SIZE;
-    pub(crate) fn new<H: TranscriptHasher<TranscriptFieldType>, N: Network>(
+    pub fn new<H: TranscriptHasher<TranscriptFieldType>, N: Network>(
         net: &N,
         state: &mut T::State,
         zk_sumcheck_data: SharedZKSumcheckData<T, P>,

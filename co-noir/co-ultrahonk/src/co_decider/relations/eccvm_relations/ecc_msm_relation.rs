@@ -515,10 +515,10 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let count = input.witness.msm_count();
         let count_shift = input.shifted_witness.msm_count_shift();
         let mut round_delta = round_shift.to_owned(); // - round;
-        T::sub_assign_many(&mut round_delta, &round);
+        T::sub_assign_many(&mut round_delta, round);
         let mut round_delta_scaled = round_delta.clone();
         T::scale_many_in_place(&mut round_delta_scaled, minus_one);
-        T::add_scalar(&mut round_delta_scaled, one, id);
+        T::add_scalar_in_place(&mut round_delta_scaled, one, id);
         let inverse_seven = P::ScalarField::from(7)
             .inverse()
             .expect("Let's hope we are never in F_7");
@@ -696,10 +696,10 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         rhs.extend(T::scale_many(acc_x, P::ScalarField::from(3u64))); // This is for the double relation
 
         lhs.extend(lambda1.to_owned());
-        rhs.extend(T::sub_many(&x1, &T::add_scalar(acc_x, one, id))); //skew_relation_1_term
+        rhs.extend(T::sub_many(x1, &T::add_scalar(acc_x, one, id))); //skew_relation_1_term
 
         lhs.extend(skew1_select.clone());
-        rhs.extend(T::sub_many(&x1, &acc_x));
+        rhs.extend(T::sub_many(x1, acc_x));
 
         lhs.extend(skew1_select.clone());
         rhs.extend(T::sub_many(
@@ -773,15 +773,15 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let mut lhs2 = Vec::with_capacity(1); // TODO FLORIN
         let mut rhs2 = Vec::with_capacity(lhs2.len());
         lhs2.extend(lambda1.to_owned());
-        rhs2.extend(T::add_many(&x, &T::sub_many(&y1, &T::add_many(&x1, &y)))); // this gives us add_relation
+        rhs2.extend(T::add_many(&x, &T::sub_many(y1, &T::add_many(x1, &y)))); // this gives us add_relation
         let mut x_t1 = mul[2].to_owned();
-        T::sub_assign_many(&mut x_t1, &x1);
+        T::sub_assign_many(&mut x_t1, x1);
         T::sub_assign_many(&mut x_t1, &x);
         lhs2.extend(lambda2.to_owned());
-        rhs2.extend(&T::sub_many(&x2, &T::add_scalar(&x_t1, one, id))); //This gives us the first multiplication in the first addition to add_relation
+        rhs2.extend(&T::sub_many(x2, &T::add_scalar(&x_t1, one, id))); //This gives us the first multiplication in the first addition to add_relation
         lhs2.extend(lambda1.to_owned());
-        rhs2.extend(T::sub_many(&x1, &x_t1));
-        let x1_collision_relation = T::sub_many(&x1, &x);
+        rhs2.extend(T::sub_many(x1, &x_t1));
+        let x1_collision_relation = T::sub_many(x1, &x);
         let lambda1_sqr = mul[2];
         let lambda2_sqr = mul[3];
         let lambda3_sqr = mul[4];
@@ -878,9 +878,9 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         rhs2.extend(T::scale_many(acc_y, P::ScalarField::from(-2))); // this gives us the second summand of y_out_21 
 
         lhs2.extend(lambda2.to_owned());
-        rhs2.extend(T::sub_many(&x2, &T::add_scalar(&x_out_21, one, id))); // this gives us one term of skew_relation_2
+        rhs2.extend(T::sub_many(x2, &T::add_scalar(&x_out_21, one, id))); // this gives us one term of skew_relation_2
         lhs2.extend(skew2_select.clone());
-        rhs2.extend(T::sub_many(&x2, &x_out_21)); // this gives us x2_skew_collision_relation
+        rhs2.extend(T::sub_many(x2, &x_out_21)); // this gives us x2_skew_collision_relation
         lhs2.extend(skew2_select.clone());
         rhs2.extend(T::sub_many(
             &T::scale_many(x2, minus_one),
@@ -924,7 +924,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
 
         let mut add_relation = mul2[0].to_owned();
         let add_relation_1_mul = mul2[1];
-        let y_t1 = T::sub_many(mul2[2], &y1);
+        let y_t1 = T::sub_many(mul2[2], y1);
         let x2_collision_relation = mul2[3];
 
         let mut x_out_1 = lambda2_sqr.to_owned();
@@ -932,19 +932,19 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         T::add_assign_many(&mut x_out_1, &x_t1);
 
         let mut y_out_dbl_1 = mul2[5].to_owned();
-        T::sub_assign_many(&mut y_out_dbl_1, &acc_y);
+        T::sub_assign_many(&mut y_out_dbl_1, acc_y);
 
-        T::sub_assign_many(&mut double_relation, &mul2[6]); // this is the "-" term in the first double relation accumulation
+        T::sub_assign_many(&mut double_relation, mul2[6]); // this is the "-" term in the first double relation accumulation
 
         let mut y_out_dbl_2 = mul2[7].to_owned();
         T::sub_assign_many(&mut y_out_dbl_2, &y_out_dbl_1);
 
-        T::sub_assign_many(&mut double_relation, &mul2[8]); // this is the "-" term in the second double relation accumulation
+        T::sub_assign_many(&mut double_relation, mul2[8]); // this is the "-" term in the second double relation accumulation
 
         let mut y_out_dbl_3 = mul2[9].to_owned();
         T::sub_assign_many(&mut y_out_dbl_3, &y_out_dbl_2);
 
-        T::sub_assign_many(&mut double_relation, &mul2[10]); // this is the "-" term in the third double relation accumulation
+        T::sub_assign_many(&mut double_relation, mul2[10]); // this is the "-" term in the third double relation accumulation
 
         let mut y_out_dbl_4 = mul2[11].to_owned();
         T::sub_assign_many(&mut y_out_dbl_4, &y_out_dbl_3);
@@ -952,10 +952,10 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let tmp_r10 = mul2[12];
 
         let mut skew_relation = mul2[13].to_owned();
-        T::add_assign_many(&mut skew_relation, &lambda1); // This is the first summand of skew_relation
+        T::add_assign_many(&mut skew_relation, lambda1); // This is the first summand of skew_relation
 
         let mut y_out_21 = T::add_many(mul2[14], mul2[15]);
-        T::add_assign_many(&mut y_out_21, &acc_y);
+        T::add_assign_many(&mut y_out_21, acc_y);
 
         let skew_relation_2_term = mul2[16].to_owned();
 
@@ -987,9 +987,9 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         rhs3.extend(T::scale_many(&y_t1, P::ScalarField::from(-2))); // This gives us the second summand of y_out_1
 
         lhs3.extend(lambda3.to_owned());
-        rhs3.extend(&T::sub_many(&x3, &T::add_scalar(&x_out_1, one, id))); //This gives us the first multiplication in the second addition to add_relation
+        rhs3.extend(&T::sub_many(x3, &T::add_scalar(&x_out_1, one, id))); //This gives us the first multiplication in the second addition to add_relation
         lhs3.extend(add3.to_owned());
-        rhs3.extend(T::sub_many(&x3, &x_out_1)); // This gives us x3_collision_relation
+        rhs3.extend(T::sub_many(x3, &x_out_1)); // This gives us x3_collision_relation
         lhs3.extend(add3.to_owned());
         rhs3.extend(&T::sub_many(
             &T::scale_many(x3, minus_one),
@@ -1005,7 +1005,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         rhs3.extend(T::scale_many(&y_out_dbl_3, P::ScalarField::from(2u64))); // missing part of third contribution
 
         lhs3.extend(q_double.to_owned());
-        rhs3.extend(T::sub_many(&acc_y_shift, &y_out_dbl_4)); // This gives us the unscaled r11 accumulator term
+        rhs3.extend(T::sub_many(acc_y_shift, &y_out_dbl_4)); // This gives us the unscaled r11 accumulator term
 
         lhs3.extend(skew2_select.to_owned());
         rhs3.extend(T::add_many(
@@ -1018,9 +1018,9 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         lhs3.extend(skew2_select);
         rhs3.extend(T::scale_many(&y_out_21, P::ScalarField::from(-2))); // this gives us the second summand of y_out_22 
         lhs3.extend(lambda3.to_owned());
-        rhs3.extend(T::sub_many(&x3, &T::add_scalar(&x_out_22, one, id))); // this gives us one term of skew_relation_3
+        rhs3.extend(T::sub_many(x3, &T::add_scalar(&x_out_22, one, id))); // this gives us one term of skew_relation_3
         lhs3.extend(skew3_select.clone());
-        rhs3.extend(T::sub_many(&x3, &x_out_22)); // this gives us x3_skew_collision_relation
+        rhs3.extend(T::sub_many(x3, &x_out_22)); // this gives us x3_skew_collision_relation
         lhs3.extend(skew3_select.clone());
         rhs3.extend(T::sub_many(
             &T::scale_many(x3, minus_one),
@@ -1031,8 +1031,8 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let mul3 = mul3.chunks_exact(mul3.len() / 16).collect_vec();
         debug_assert_eq!(mul3.len(), 16);
 
-        T::add_assign_many(&mut add_relation, &mul3[0]);
-        T::add_assign_many(&mut add_relation, &lambda2); // This is the first summand of add_relation done
+        T::add_assign_many(&mut add_relation, mul3[0]);
+        T::add_assign_many(&mut add_relation, lambda2); // This is the first summand of add_relation done
 
         let mut y_out_1 = T::add_many(mul3[1], mul3[2]);
         T::add_assign_many(&mut y_out_1, &y_t1);
@@ -1043,13 +1043,13 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let mut x_out_2 = T::add_many(mul3[5], lambda3_sqr);
         T::add_assign_many(&mut x_out_2, &x_out_1);
 
-        T::add_assign_many(&mut double_relation, &mul3[6]); // This is the "+" term in the first double relation accumulation
-        T::add_assign_many(&mut double_relation, &mul3[7]); // This is the "+" term in the second double relation accumulation
-        T::add_assign_many(&mut double_relation, &mul3[8]); // This is the "+" term in the third double relation accumulation
+        T::add_assign_many(&mut double_relation, mul3[6]); // This is the "+" term in the first double relation accumulation
+        T::add_assign_many(&mut double_relation, mul3[7]); // This is the "+" term in the second double relation accumulation
+        T::add_assign_many(&mut double_relation, mul3[8]); // This is the "+" term in the third double relation accumulation
         let tmp_r11 = mul3[9].to_owned();
 
-        T::add_assign_many(&mut skew_relation, &mul3[10]);
-        T::add_assign_many(&mut skew_relation, &lambda2); // This is the second summand of skew_relation done
+        T::add_assign_many(&mut skew_relation, mul3[10]);
+        T::add_assign_many(&mut skew_relation, lambda2); // This is the second summand of skew_relation done
 
         let mut y_out_22 = T::add_many(mul3[11], mul3[12]);
         T::add_assign_many(&mut y_out_22, &y_out_21);
@@ -1070,9 +1070,9 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         rhs4.extend(T::scale_many(&y_out_1, P::ScalarField::from(-2))); // This gives us the second summand of y_out_2
 
         lhs4.extend(lambda4.to_owned());
-        rhs4.extend(&T::sub_many(&x4, &T::add_scalar(&x_out_2, one, id))); //This gives us the first multiplication in the third addition to add_relation
+        rhs4.extend(&T::sub_many(x4, &T::add_scalar(&x_out_2, one, id))); //This gives us the first multiplication in the third addition to add_relation
         lhs4.extend(add4.to_owned());
-        rhs4.extend(T::sub_many(&x4, &x_out_2)); // This gives us x4_collision_relation
+        rhs4.extend(T::sub_many(x4, &x_out_2)); // This gives us x4_collision_relation
         lhs4.extend(add3.to_owned());
         rhs4.extend(&T::sub_many(
             &T::scale_many(x3, minus_one),
@@ -1093,9 +1093,9 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         lhs4.extend(skew3_select);
         rhs4.extend(T::scale_many(&y_out_22, P::ScalarField::from(-2))); // this gives us the second summand of y_out_23
         lhs4.extend(lambda4.to_owned());
-        rhs4.extend(T::sub_many(&x4, &T::add_scalar(&x_out_23, one, id))); // this gives us one term of skew_relation_4
+        rhs4.extend(T::sub_many(x4, &T::add_scalar(&x_out_23, one, id))); // this gives us one term of skew_relation_4
         lhs4.extend(skew4_select.clone());
-        rhs4.extend(T::sub_many(&x4, &x_out_23)); // this gives us x3_skew_collision_relation
+        rhs4.extend(T::sub_many(x4, &x_out_23)); // this gives us x3_skew_collision_relation
         lhs4.extend(skew4_select.clone());
         rhs4.extend(T::sub_many(
             &T::scale_many(x4, minus_one),
@@ -1106,8 +1106,8 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let mul4 = mul4.chunks_exact(mul4.len() / 13).collect_vec();
         debug_assert_eq!(mul4.len(), 13);
 
-        T::add_assign_many(&mut add_relation, &mul4[0]);
-        T::add_assign_many(&mut add_relation, &lambda3); //second contribution to add_relation done
+        T::add_assign_many(&mut add_relation, mul4[0]);
+        T::add_assign_many(&mut add_relation, lambda3); //second contribution to add_relation done
 
         let mut y_out_2 = T::add_many(mul4[1], mul4[2]);
         T::add_assign_many(&mut y_out_2, &y_out_1);
@@ -1120,8 +1120,8 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
 
         let tmp_r12 = mul4[6];
 
-        T::add_assign_many(&mut skew_relation, &mul4[7]);
-        T::add_assign_many(&mut skew_relation, &lambda3); // This is the third summand of skew_relation done
+        T::add_assign_many(&mut skew_relation, mul4[7]);
+        T::add_assign_many(&mut skew_relation, lambda3); // This is the third summand of skew_relation done
         let mut y_out_23 = T::add_many(mul4[8], mul4[9]);
         T::add_assign_many(&mut y_out_23, &y_out_22);
 
@@ -1171,19 +1171,19 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
 
         //Final mul for r19:
         lhs5.extend(round_transition_mul_q_skew_shift);
-        rhs5.extend(T::add_scalar(&round, P::ScalarField::from(-31), id)); // leading to r19
+        rhs5.extend(T::add_scalar(round, P::ScalarField::from(-31), id)); // leading to r19
 
         let mul5 = T::mul_many(&lhs5, &rhs5, net, state)?;
         let mul5 = mul5.chunks_exact(mul5.len() / 16).collect_vec();
         debug_assert_eq!(mul5.len(), 16);
 
-        T::add_assign_many(&mut add_relation, &mul5[0]);
-        T::add_assign_many(&mut add_relation, &lambda4); // third contribution to add_relation done
+        T::add_assign_many(&mut add_relation, mul5[0]);
+        T::add_assign_many(&mut add_relation, lambda4); // third contribution to add_relation done
         let mut y_out_3 = T::add_many(mul5[1], mul5[2]);
         T::add_assign_many(&mut y_out_3, &y_out_2);
 
-        T::add_assign_many(&mut skew_relation, &mul5[3]);
-        T::add_assign_many(&mut skew_relation, &lambda4); // This is the fourth summand of skew_relation done
+        T::add_assign_many(&mut skew_relation, mul5[3]);
+        T::add_assign_many(&mut skew_relation, lambda4); // This is the fourth summand of skew_relation done
         let mut y_out_24 = T::add_many(mul5[4], mul5[5]);
         T::add_assign_many(&mut y_out_24, &y_out_23);
         let x1_delta = T::add_many(mul5[6], mul5[7]);
@@ -1196,19 +1196,19 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let mut rhs6 = Vec::with_capacity(lhs6.len());
 
         lhs6.extend(q_add.to_owned());
-        rhs6.extend(T::sub_many(&acc_x_shift, &x_out_3)); // this is for r0
+        rhs6.extend(T::sub_many(acc_x_shift, &x_out_3)); // this is for r0
 
         lhs6.extend(q_add.to_owned());
-        rhs6.extend(T::sub_many(&acc_y_shift, &y_out_3)); // this is for r1
+        rhs6.extend(T::sub_many(acc_y_shift, &y_out_3)); // this is for r1
 
         lhs6.extend(q_add.to_owned());
         rhs6.extend(add_relation); // this is for r2
 
         lhs6.extend(q_skew.to_owned());
-        rhs6.extend(T::sub_many(&acc_x_shift, &x_out_24)); // this is for r3
+        rhs6.extend(T::sub_many(acc_x_shift, &x_out_24)); // this is for r3
 
         lhs6.extend(q_skew.to_owned());
-        rhs6.extend(T::sub_many(&acc_y_shift, &y_out_24)); // this is for r4
+        rhs6.extend(T::sub_many(acc_y_shift, &y_out_24)); // this is for r4
 
         lhs6.extend(q_skew.to_owned());
         rhs6.extend(skew_relation); // this is for r5
@@ -1300,15 +1300,15 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         // Validate accumulator output matches ADD output if q_add = 1
         // (this is a degree-6 relation)
         let mut tmp = tmp_r0.to_owned(); //q_add.to_owned() * (acc_x_shift.to_owned() - x_out_3) * scaling_factors;
-        T::mul_assign_with_public_many(&mut tmp, &scaling_factors);
+        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
         fold_accumulator!(univariate_accumulator.r0, tmp, SIZE);
 
         let mut tmp = tmp_r1.to_owned(); //q_add.to_owned() * (acc_y_shift.to_owned() - y_out_3) * scaling_factors;
-        T::mul_assign_with_public_many(&mut tmp, &scaling_factors);
+        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
         fold_accumulator!(univariate_accumulator.r1, tmp, SIZE);
 
         let mut tmp = tmp_r2.to_owned(); // q_add.to_owned() * add_relation * scaling_factors;
-        T::mul_assign_with_public_many(&mut tmp, &scaling_factors);
+        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
         fold_accumulator!(univariate_accumulator.r2, tmp, SIZE);
 
         /*
@@ -1389,15 +1389,15 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         // };
 
         let mut tmp = tmp_r10.to_owned(); //q_double.to_owned() * (acc_x_shift.to_owned() - x_out_dbl_4) * scaling_factors;
-        T::mul_assign_with_public_many(&mut tmp, &scaling_factors);
+        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
         fold_accumulator!(univariate_accumulator.r10, tmp, SIZE);
 
         let mut tmp = tmp_r11.to_owned(); // q_double.to_owned() * (acc_y_shift.to_owned() - y_out_dbl_4) * scaling_factors;
-        T::mul_assign_with_public_many(&mut tmp, &scaling_factors);
+        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
         fold_accumulator!(univariate_accumulator.r11, tmp, SIZE);
 
         let mut tmp = tmp_r12.to_owned(); // q_double.to_owned() * double_relation * scaling_factors;
-        T::mul_assign_with_public_many(&mut tmp, &scaling_factors);
+        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
         fold_accumulator!(univariate_accumulator.r12, tmp, SIZE);
         /*
          * @brief SKEW operations
@@ -1489,24 +1489,24 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         // Validate accumulator output matches SKEW output if q_skew = 1
         // (this is a degree-6 relation)
         let mut tmp = tmp_r3.to_owned(); // q_skew.to_owned() * (acc_x_shift.to_owned() - x_out_24) * scaling_factors;
-        T::mul_assign_with_public_many(&mut tmp, &scaling_factors);
+        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
         fold_accumulator!(univariate_accumulator.r3, tmp, SIZE);
 
         let mut tmp = tmp_r4.to_owned(); // q_skew.to_owned() * (acc_y_shift.to_owned() - y_out_24) * scaling_factors;
-        T::mul_assign_with_public_many(&mut tmp, &scaling_factors);
+        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
         fold_accumulator!(univariate_accumulator.r4, tmp, SIZE);
 
         let mut tmp = tmp_r5.to_owned(); // q_skew.to_owned() * skew_relation * scaling_factors;
-        T::mul_assign_with_public_many(&mut tmp, &scaling_factors);
+        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
         fold_accumulator!(univariate_accumulator.r5, tmp, SIZE);
 
         // Check x-coordinates do not collide if row is an ADD row or a SKEW row
         // if either q_add or q_skew = 1, an inverse should exist for each computed relation
         // Step 1: construct boolean selectors that describe whether we added a point at the current row
-        let add_first_point = T::add_many(&add1_mul_q_add, &q_skew_mul_skew1_select);
-        let add_second_point = T::add_many(&add2_mul_q_add, &q_skew_mul_skew2_select);
-        let add_third_point = T::add_many(&add3_mul_q_add, &q_skew_mul_skew3_select);
-        let add_fourth_point = T::add_many(&add4_mul_q_add, &q_skew_mul_skew4_select);
+        let add_first_point = T::add_many(add1_mul_q_add, q_skew_mul_skew1_select);
+        let add_second_point = T::add_many(add2_mul_q_add, q_skew_mul_skew2_select);
+        let add_third_point = T::add_many(add3_mul_q_add, q_skew_mul_skew3_select);
+        let add_fourth_point = T::add_many(add4_mul_q_add, q_skew_mul_skew4_select);
         // Step 2: construct the delta between x-coordinates for each point add (depending on if row is ADD or SKEW)
         // let x1_delta = x1_skew_collision_relation * q_skew + x1_collision_relation * q_add;
         // let x2_delta = x2_skew_collision_relation * q_skew + x2_collision_relation * q_add;
@@ -1515,30 +1515,30 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         // Step 3: x_delta * inverse - 1 = 0 if we performed a point addition (else x_delta * inverse = 0)
         let mut tmp = tmp_r6.to_owned(); // (x1_delta * collision_inverse1 - add_first_point) * scaling_factors;
         T::sub_assign_many(&mut tmp, &add_first_point);
-        T::mul_assign_with_public_many(&mut tmp, &scaling_factors);
+        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
         fold_accumulator!(univariate_accumulator.r6, tmp, SIZE);
 
         let mut tmp = tmp_r7.to_owned(); // (x2_delta * collision_inverse2 - add_second_point) * scaling_factors;
         T::sub_assign_many(&mut tmp, &add_second_point);
-        T::mul_assign_with_public_many(&mut tmp, &scaling_factors);
+        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
         fold_accumulator!(univariate_accumulator.r7, tmp, SIZE);
 
         let mut tmp = tmp_r8.to_owned(); // (x3_delta * collision_inverse3 - add_third_point) * scaling_factors;
         T::sub_assign_many(&mut tmp, &add_third_point);
-        T::mul_assign_with_public_many(&mut tmp, &scaling_factors);
+        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
         fold_accumulator!(univariate_accumulator.r8, tmp, SIZE);
 
         let mut tmp = tmp_r9.to_owned(); // (x4_delta * collision_inverse4 - add_fourth_point) * scaling_factors;
         T::sub_assign_many(&mut tmp, &add_fourth_point);
-        T::mul_assign_with_public_many(&mut tmp, &scaling_factors);
+        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
         fold_accumulator!(univariate_accumulator.r9, tmp, SIZE);
 
         // Validate that if q_add = 1 or q_skew = 1, add1 also is 1
         // TODO(@zac-williamson) Once we have a stable base to work off of, remove q_add1 and replace with q_msm_add +
         // q_msm_skew (issue ?)
         let mut tmp = add1.to_owned(); // - q_add - q_skew) * scaling_factors;
-        T::sub_assign_many(&mut tmp, &q_add);
-        T::sub_assign_many(&mut tmp, &q_skew);
+        T::sub_assign_many(&mut tmp, q_add);
+        T::sub_assign_many(&mut tmp, q_skew);
         T::mul_assign_with_public_many(&mut tmp, scaling_factors);
         fold_accumulator!(univariate_accumulator.r32, tmp, SIZE);
 

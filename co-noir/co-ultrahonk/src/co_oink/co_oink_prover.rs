@@ -29,7 +29,7 @@ use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
 
 use co_builder::{
     HonkProofError, HonkProofResult,
-    prelude::{ActiveRegionData, HonkCurve, NUM_MASKED_ROWS, Polynomial, ProverCrs},
+    prelude::{ActiveRegionData, HonkCurve, Polynomial, ProverCrs},
     prover_flavour::Flavour,
 };
 use common::CoUtils;
@@ -633,35 +633,6 @@ impl<
         Ok(T::mul_many(&mul1, &mul2, net, state)?)
     }
 
-    // To reduce the number of communication rounds, we implement the array_prod_mul macro according to https://www.usenix.org/system/files/sec22-ozdemir.pdf, p11 first paragraph.
-    fn array_prod_mul(
-        &mut self,
-        inp: &[T::ArithmeticShare],
-    ) -> HonkProofResult<Vec<T::ArithmeticShare>> {
-        // Do the multiplications of inp[i] * inp[i-1] in constant rounds
-        let len = inp.len();
-
-        let r = (0..=len)
-            .map(|_| T::rand(self.net, self.state))
-            .collect::<Result<Vec<_>, _>>()?;
-        let r_inv = T::inv_many(&r, self.net, self.state)?;
-        let r_inv0 = vec![r_inv[0]; len];
-
-        let mut unblind = T::mul_many(&r_inv0, &r[1..], self.net, self.state)?;
-
-        let mul = T::mul_many(&r[..len], inp, self.net, self.state)?;
-        let mut open = T::mul_open_many(&mul, &r_inv[1..], self.net, self.state)?;
-
-        for i in 1..open.len() {
-            open[i] = open[i] * open[i - 1];
-        }
-
-        for (unblind, open) in unblind.iter_mut().zip(open.iter()) {
-            *unblind = T::mul_with_public(*open, *unblind);
-        }
-        Ok(unblind)
-    }
-
     fn compute_grand_product(&mut self, proving_key: &ProvingKey<T, P, L>) -> HonkProofResult<()> {
         tracing::trace!("compute grand product");
 
@@ -742,8 +713,9 @@ impl<
 
         // TACEO TODO could batch here as well
         // Do the multiplications of num[i] * num[i-1] and den[i] * den[i-1] in constant rounds
-        let numerator = self.array_prod_mul(&numerator)?;
-        let mut denominator = self.array_prod_mul(&denominator)?;
+        let numerator = CoUtils::array_prod_mul::<T, P, N>(self.net, self.state, &numerator)?;
+        let mut denominator =
+            CoUtils::array_prod_mul::<T, P, N>(self.net, self.state, &denominator)?;
 
         // invert denominator
         CoUtils::batch_invert::<T, P, N>(&mut denominator, self.net, self.state)?;

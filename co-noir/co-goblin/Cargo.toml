@@ -21,10 +21,11 @@ common = { version = "0.1.0", path = "../common" }
 ark-ec.workspace = true
 ark-ff.workspace = true
 ark-bn254.workspace = true
+tracing.workspace = true
 eyre.workspace = true
 itertools.workspace = true
 num-bigint.workspace = true
 rand.workspace = true
 
 [dev-dependencies]
-mpc-net = { version = "0.4.0", path = "../../mpc-net" , features = ["local"] }
+mpc-net = { version = "0.4.0", path = "../../mpc-net", features = ["local"] }

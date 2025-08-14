@@ -37,9 +37,7 @@ pub(crate) struct EccWnafRelationAcc<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) r20: SharedUnivariate<T, P, 5>,
 }
 
-impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default
-    for EccWnafRelationAcc<T, P>
-{
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for EccWnafRelationAcc<T, P> {
     fn default() -> Self {
         Self {
             r0: SharedUnivariate::default(),
@@ -424,7 +422,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let mut sum_delta = scalar_sum.to_owned(); // * P::ScalarField::from(1u64 << 16) + row_slice;
         T::scale_many_in_place(&mut sum_delta, P::ScalarField::from(1u64 << 16));
         T::add_assign_many(&mut sum_delta, &row_slice);
-        let check_sum = T::sub_many(&scalar_sum_new, &sum_delta);
+        let check_sum = T::sub_many(scalar_sum_new, &sum_delta);
 
         lhs1.extend(precompute_select.clone()); //8 
         rhs1.extend(check_sum.clone()); // 8
@@ -432,7 +430,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
 
         let mut round_check = round.to_owned();
         T::scale_many_in_place(&mut round_check, minus_one);
-        T::add_assign_many(&mut round_check, &round_shift);
+        T::add_assign_many(&mut round_check, round_shift);
         T::add_scalar_in_place(&mut round_check, minus_one, id);
         let mut round_check_neg = round_check.to_owned();
         T::scale_many_in_place(&mut round_check_neg, minus_one);
@@ -547,15 +545,15 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         // precompute_select * scaled_transition
         //     * ((round_check * minus_one + round + minus_seven) + round_check)
         // in acc 9
-        lhs2.extend(mul1[18].clone());
+        lhs2.extend(mul1[18]);
         rhs2.extend(tmp9_3);
 
         // precompute_select * scaled_transition.clone() * round_shift in acc 10
-        lhs2.extend(mul1[18].clone());
+        lhs2.extend(mul1[18]);
         rhs2.extend(round_shift);
 
         // precompute_select.to_owned() * scalar_sum_new * scaled_transition in acc 11
-        lhs2.extend(mul1[18].clone());
+        lhs2.extend(mul1[18]);
         rhs2.extend(scalar_sum_new);
 
         // precompute_select * (scaled_transition * (pc_delta * minus_two + minus_one)
@@ -566,7 +564,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         // precompute_select.to_owned() * (precompute_skew.to_owned()
         // * (precompute_skew.to_owned() + &minus_seven)
         // * scaling_factor) in acc 13
-        lhs2.extend(mul1[20].clone());
+        lhs2.extend(mul1[20]);
         rhs2.extend(precompute_select.clone());
 
         // acc 14
