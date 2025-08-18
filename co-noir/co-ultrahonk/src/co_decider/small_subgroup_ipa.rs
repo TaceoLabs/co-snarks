@@ -10,6 +10,8 @@ use ark_ff::Zero;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use co_builder::HonkProofResult;
 use co_builder::TranscriptFieldType;
+use co_builder::prelude::NUM_DISABLED_ROWS_IN_SUMCHECK;
+use co_builder::prelude::NUM_TRANSLATION_EVALUATIONS;
 use co_builder::prelude::{HonkCurve, Polynomial, ProverCrs};
 use common::CoUtils;
 use common::mpc::NoirUltraHonkProver;
@@ -19,36 +21,36 @@ use mpc_core::MpcState;
 use mpc_net::Network;
 
 pub struct SharedSmallSubgroupIPAProver<T: NoirUltraHonkProver<P>, P: CurveGroup> {
-    interpolation_domain: Vec<P::ScalarField>,
-    concatenated_polynomial: SharedPolynomial<T, P>,
-    libra_concatenated_lagrange_form: SharedPolynomial<T, P>,
-    challenge_polynomial: Polynomial<P::ScalarField>,
-    challenge_polynomial_lagrange: Polynomial<P::ScalarField>,
-    grand_sum_polynomial_unmasked: SharedPolynomial<T, P>,
-    grand_sum_polynomial: SharedPolynomial<T, P>,
-    grand_sum_lagrange_coeffs: Vec<T::ArithmeticShare>,
-    grand_sum_identity_polynomial: SharedPolynomial<T, P>,
-    grand_sum_identity_quotient: SharedPolynomial<T, P>,
+    pub interpolation_domain: Vec<P::ScalarField>,
+    pub concatenated_polynomial: SharedPolynomial<T, P>,
+    pub libra_concatenated_lagrange_form: SharedPolynomial<T, P>,
+    pub challenge_polynomial: Polynomial<P::ScalarField>,
+    pub challenge_polynomial_lagrange: Polynomial<P::ScalarField>,
+    pub grand_sum_polynomial_unmasked: SharedPolynomial<T, P>,
+    pub grand_sum_polynomial: SharedPolynomial<T, P>,
+    pub grand_sum_lagrange_coeffs: Vec<T::ArithmeticShare>,
+    pub grand_sum_identity_polynomial: SharedPolynomial<T, P>,
+    pub grand_sum_identity_quotient: SharedPolynomial<T, P>,
     pub claimed_inner_product: P::ScalarField,
     pub prefix_label: String,
-    phantom_data: PhantomData<T>,
+    pub phantom_data: PhantomData<T>,
 }
 
 impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
     SharedSmallSubgroupIPAProver<T, P>
 {
-    const SUBGROUP_SIZE: usize = P::SUBGROUP_SIZE;
+    pub const SUBGROUP_SIZE: usize = P::SUBGROUP_SIZE;
     // A masking term of length 2 (degree 1) is required to mask [G] and G(r).
     const WITNESS_MASKING_TERM_LENGTH: usize = 2;
     const MASKED_CONCATENATED_WITNESS_LENGTH: usize =
         Self::SUBGROUP_SIZE + Self::WITNESS_MASKING_TERM_LENGTH;
-    const QUOTIENT_LENGTH: usize = Self::SUBGROUP_SIZE + 2;
+    pub const QUOTIENT_LENGTH: usize = Self::SUBGROUP_SIZE + 2;
     // A masking term of length 3 (degree 2) is required to mask [A], A(r), and A(g*r)
     const GRAND_SUM_MASKING_TERM_LENGTH: usize = 3;
-    const MASKED_GRAND_SUM_LENGTH: usize =
+    pub const MASKED_GRAND_SUM_LENGTH: usize =
         Self::SUBGROUP_SIZE + Self::GRAND_SUM_MASKING_TERM_LENGTH;
     // Length of the big sum identity polynomial C. It is equal to the length of the highest degree term X * F(X) * G(X)
-    const GRAND_SUM_IDENTITY_LENGTH: usize =
+    pub const GRAND_SUM_IDENTITY_LENGTH: usize =
         Self::MASKED_CONCATENATED_WITNESS_LENGTH + Self::SUBGROUP_SIZE;
     pub fn new(
         zk_sumcheck_data: SharedZKSumcheckData<T, P>,
@@ -366,6 +368,48 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
             self.grand_sum_polynomial,
             self.grand_sum_identity_quotient,
         ]
+    }
+
+    pub fn compute_eccvm_challenge_polynomial(
+        &mut self,
+        evaluation_challenge_x: P::ScalarField,
+        batching_challenge_v: P::ScalarField,
+    ) {
+        let coeffs_lagrange_basis =
+            Self::compute_eccvm_challenge_coeffs(evaluation_challenge_x, batching_challenge_v);
+
+        self.challenge_polynomial_lagrange = Polynomial {
+            coefficients: coeffs_lagrange_basis,
+        };
+
+        // Compute monomial coefficients
+        self.challenge_polynomial = Polynomial::interpolate_from_evals(
+            &self.interpolation_domain,
+            &self.challenge_polynomial_lagrange.coefficients,
+            Self::SUBGROUP_SIZE,
+        );
+    }
+
+    pub fn compute_eccvm_challenge_coeffs(
+        evaluation_challenge_x: P::ScalarField,
+        batching_challenge_v: P::ScalarField,
+    ) -> Vec<P::ScalarField> {
+        let mut coeffs_lagrange_basis = vec![P::ScalarField::zero(); Self::SUBGROUP_SIZE];
+
+        let mut v_power = P::ScalarField::one();
+        for poly_idx in 0..NUM_TRANSLATION_EVALUATIONS {
+            let start = NUM_DISABLED_ROWS_IN_SUMCHECK * poly_idx;
+            coeffs_lagrange_basis[start as usize] = v_power;
+
+            for idx in (start + 1)..(start + NUM_DISABLED_ROWS_IN_SUMCHECK) {
+                coeffs_lagrange_basis[idx as usize] =
+                    coeffs_lagrange_basis[idx as usize - 1] * evaluation_challenge_x;
+            }
+
+            v_power *= batching_challenge_v;
+        }
+
+        coeffs_lagrange_basis
     }
 
     fn compute_momomial_coefficients(

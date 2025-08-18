@@ -17,6 +17,7 @@ use co_ultrahonk::prelude::{
 };
 use common::CoUtils;
 use common::co_shplemini::OpeningPair;
+use common::shared_polynomial::SharedPolynomial;
 use common::{
     HonkProof,
     co_shplemini::ShpleminiOpeningClaim,
@@ -31,6 +32,7 @@ use mpc_net::Network;
 use std::iter;
 use ultrahonk::{NUM_SMALL_IPA_EVALUATIONS, Utils as UltraHonkUtils};
 
+use crate::eccvm::co_eccvm_types::SharedTranslationData;
 use crate::ipa::compute_ipa_opening_proof;
 
 #[derive(Default)]
@@ -948,7 +950,7 @@ where
         crs: &ProverCrs<P>,
         circuit_size: u32,
     ) -> HonkProofResult<(
-        SumcheckOutput<P::ScalarField, ECCVMFlavour>,
+        SumcheckOutput<T, P, ECCVMFlavour>,
         SharedZKSumcheckData<T, P>,
     )> {
         self.decider.memory.relation_parameters.alphas =
@@ -972,12 +974,11 @@ where
             )?;
 
         Ok((
-            self.decider.sumcheck_prove_zk(
-                //::<CONST_ECCVM_LOG_N>( add later to commit to round_univariates
+            self.decider.sumcheck_prove_zk::<CONST_ECCVM_LOG_N>(
                 transcript,
                 circuit_size,
                 &mut zk_sumcheck_data,
-                // crs, add later to commit to round_univariates
+                crs,
             )?,
             zk_sumcheck_data,
         ))
@@ -985,7 +986,7 @@ where
 
     fn execute_pcs_rounds(
         &mut self,
-        sumcheck_output: SumcheckOutput<P::ScalarField, ECCVMFlavour>,
+        sumcheck_output: SumcheckOutput<T, P, ECCVMFlavour>,
         zk_sumcheck_data: SharedZKSumcheckData<T, P>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         crs: &ProverCrs<P>,
@@ -1049,21 +1050,11 @@ where
 
         // Collect the polynomials to be batched
         let translation_polynomials = [
-            Polynomial {
-                coefficients: self.decider.memory.polys.witness.transcript_op().to_vec(),
-            },
-            Polynomial {
-                coefficients: self.decider.memory.polys.witness.transcript_px().to_vec(),
-            },
-            Polynomial {
-                coefficients: self.decider.memory.polys.witness.transcript_py().to_vec(),
-            },
-            Polynomial {
-                coefficients: self.decider.memory.polys.witness.transcript_z1().to_vec(),
-            },
-            Polynomial {
-                coefficients: self.decider.memory.polys.witness.transcript_z2().to_vec(),
-            },
+            self.decider.memory.polys.witness.transcript_op(),
+            self.decider.memory.polys.witness.transcript_px(),
+            self.decider.memory.polys.witness.transcript_py(),
+            self.decider.memory.polys.witness.transcript_z1(),
+            self.decider.memory.polys.witness.transcript_z2(),
         ];
         let translation_labels = [
             "Translation:transcript_op".to_string(),
@@ -1075,11 +1066,12 @@ where
 
         // Extract the masking terms of `translation_polynomials`, concatenate them in the Lagrange basis over SmallSubgroup
         // H, mask the resulting polynomial, and commit to it
-        let mut translation_data = TranslationData::construct_translation_data(
+        let mut translation_data = SharedTranslationData::construct_translation_data(
             &translation_polynomials,
             transcript,
             crs,
-            &mut self.decider.rng,
+            self.net,
+            self.state,
         )?;
 
         // Get a challenge to evaluate the `translation_polynomials` as univariates
@@ -1088,8 +1080,13 @@ where
 
         // Evaluate `translation_polynomial` as univariates and add their evaluations at x to the transcript
         let mut translation_evaluations = Vec::with_capacity(translation_polynomials.len());
-        for (poly, label) in translation_polynomials.iter().zip(translation_labels) {
-            let eval = poly.eval_poly(evaluation_challenge_x);
+        let mut evaluations = Vec::with_capacity(translation_polynomials.len());
+        for poly in translation_polynomials.iter() {
+            let eval = T::eval_poly(poly, evaluation_challenge_x);
+            evaluations.push(eval);
+        }
+        let opened = T::open_many(&evaluations, self.net, self.state)?;
+        for (eval, label) in opened.into_iter().zip(translation_labels) {
             transcript.send_fr_to_verifier::<P>(label, eval);
             translation_evaluations.push(eval);
         }
@@ -1098,13 +1095,16 @@ where
         let batching_challenge_v =
             transcript.get_challenge::<P>("Translation:batching_challenge_v".to_string());
 
-        let mut translation_masking_term_prover = translation_data.compute_small_ipa_prover::<_>(
-            evaluation_challenge_x,
-            batching_challenge_v,
-            transcript,
-        )?;
+        let mut translation_masking_term_prover = translation_data
+            .compute_small_ipa_prover::<_, _>(
+                evaluation_challenge_x,
+                batching_challenge_v,
+                transcript,
+                self.net,
+                self.state,
+            )?;
 
-        translation_masking_term_prover.prove(transcript, crs, &mut self.decider.rng)?;
+        translation_masking_term_prover.prove(self.net, self.state, transcript, crs)?;
 
         // Get the challenge to check evaluations of the SmallSubgroupIPA witness polynomials
         let small_ipa_evaluation_challenge =
@@ -1131,15 +1131,21 @@ where
         // the opening claims
         // let mut opening_claims = Vec::with_capacity(NUM_SMALL_IPA_EVALUATIONS + 1);
         let witness_polys = translation_masking_term_prover.into_witness_polynomials();
+        let mut evaluations = Vec::with_capacity(NUM_SMALL_IPA_EVALUATIONS);
         for idx in 0..NUM_SMALL_IPA_EVALUATIONS {
             let witness_poly = &witness_polys[idx];
-            let evaluation = witness_poly.eval_poly(evaluation_points[idx]);
-            transcript.send_fr_to_verifier::<P>(evaluation_labels[idx].clone(), evaluation);
-            self.memory.opening_claims[idx] = ShpleminiOpeningClaim {
-                polynomial: witness_poly.clone(),
+            let eval = T::eval_poly(&witness_poly.coefficients, evaluation_points[idx]);
+            evaluations.push(eval);
+        }
+        let opened = T::open_many(&evaluations, self.net, self.state)?; //TACEO TODO Here we open the opening pair evaluations, is this a problem?
+        // Also we promote to trivial shares down below, maybe this can be optimized?
+        for (i, eval) in opened.iter().enumerate() {
+            transcript.send_fr_to_verifier::<P>(evaluation_labels[i].clone(), *eval);
+            self.memory.opening_claims[i] = ShpleminiOpeningClaim {
+                polynomial: witness_polys[i].clone(),
                 opening_pair: OpeningPair {
-                    challenge: evaluation_points[idx],
-                    evaluation,
+                    challenge: evaluation_points[i],
+                    evaluation: T::promote_to_trivial_share(self.state.id(), *eval),
                 },
                 gemini_fold: false,
             };
@@ -1147,15 +1153,14 @@ where
 
         // Compute the opening claim for the masked evaluations of `op`, `Px`, `Py`, `z1`, and `z2` at
         // `evaluation_challenge_x` batched by the powers of `batching_challenge_v`.
-        let mut batched_translation_univariate =
-            Polynomial::new(vec![P::ScalarField::zero(); circuit_size as usize]);
+        let mut batched_translation_univariate = SharedPolynomial::new_zero(circuit_size as usize);
         let mut batched_translation_evaluation = P::ScalarField::zero();
         let mut batching_scalar = P::ScalarField::one();
         for (polynomial, eval) in translation_polynomials
             .iter()
             .zip(translation_evaluations.iter())
         {
-            batched_translation_univariate.add_scaled(polynomial, &batching_scalar);
+            batched_translation_univariate.add_scaled_slice(polynomial, &batching_scalar);
             batched_translation_evaluation += *eval * batching_scalar;
             batching_scalar *= batching_challenge_v;
         }
@@ -1165,7 +1170,10 @@ where
             polynomial: batched_translation_univariate,
             opening_pair: OpeningPair {
                 challenge: evaluation_challenge_x,
-                evaluation: batched_translation_evaluation,
+                evaluation: T::promote_to_trivial_share(
+                    self.state.id(),
+                    batched_translation_evaluation,
+                ),
             },
             gemini_fold: false,
         };
