@@ -114,17 +114,15 @@ impl<
                 crs,
             )
         } else {
-            let small_subgroup_ipa_prover = SharedSmallSubgroupIPAProver::<T, P>::new(
-                self.net,
-                self.state,
+            let mut small_subgroup_ipa_prover = SharedSmallSubgroupIPAProver::<T, P>::new(
                 zk_sumcheck_data.expect("We have ZK"),
-                &sumcheck_output.challenges,
                 sumcheck_output
                     .claimed_libra_evaluation
                     .expect("We have ZK"),
-                transcript,
-                crs,
+                "Libra:".to_string(),
+                &sumcheck_output.challenges,
             )?;
+            small_subgroup_ipa_prover.prove::<H, N>(self.net, self.state, transcript, crs)?;
             let witness_polynomials = small_subgroup_ipa_prover.into_witness_polynomials();
             let prover_opening_claim = self.shplemini_prove(
                 transcript,

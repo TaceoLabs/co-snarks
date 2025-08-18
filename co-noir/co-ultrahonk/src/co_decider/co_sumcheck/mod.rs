@@ -8,7 +8,7 @@ use super::types::ClaimedEvaluations;
 use ark_ff::PrimeField;
 
 pub struct SumcheckOutput<F: PrimeField, L: MPCProverFlavour> {
-    pub(crate) claimed_evaluations: ClaimedEvaluations<F, L>,
-    pub(crate) challenges: Vec<F>,
+    pub claimed_evaluations: ClaimedEvaluations<F, L>,
+    pub challenges: Vec<F>,
     pub claimed_libra_evaluation: Option<F>,
 }

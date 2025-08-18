@@ -31,6 +31,8 @@ use mpc_net::Network;
 use std::iter;
 use ultrahonk::{NUM_SMALL_IPA_EVALUATIONS, Utils as UltraHonkUtils};
 
+use crate::ipa::compute_ipa_opening_proof;
+
 #[derive(Default)]
 pub(crate) struct ProverMemory<T: NoirUltraHonkProver<C>, C: CurveGroup> {
     pub(crate) z_perm: Polynomial<T::ArithmeticShare>,
@@ -73,7 +75,7 @@ where
     pub(crate) fn construct_proof(
         &mut self,
         mut transcript: Transcript<TranscriptFieldType, H>,
-        mut proving_key: &mut ProvingKey<T, P, ECCVMFlavour>,
+        mut proving_key: ProvingKey<T, P, ECCVMFlavour>,
         crs: &ProverCrs<P>,
     ) -> HonkProofResult<(
         HonkProof<TranscriptFieldType>,
@@ -468,12 +470,7 @@ where
         self.compute_logderivative_inverses(proving_key, unmasked_witness_size);
 
         let mut lookup_inverses_tmp = std::mem::take(&mut self.memory.lookup_inverses);
-        self.commit_to_witness_polynomial(
-            &mut lookup_inverses_tmp,
-            "LOOKUP_INVERSES",
-            &crs,
-            transcript,
-        )?;
+        todo!("Commit to lookup inverses polynomial");
         std::mem::swap(&mut self.memory.lookup_inverses, &mut lookup_inverses_tmp);
         Ok(())
     }
@@ -938,7 +935,8 @@ where
         // self.compute_grand_product(proving_key, unmasked_witness_size); TODO FLORIN
         // we do std::mem::take here to avoid borrowing issues with self
         let mut z_perm_tmp = std::mem::take(&mut self.memory.z_perm);
-        self.commit_to_witness_polynomial(&mut z_perm_tmp, "Z_PERM", &crs, transcript)?;
+        // self.commit_to_witness_polynomial(&mut z_perm_tmp, "Z_PERM", &crs, transcript)?;
+        todo!("Commit to z_perm polynomial");
         std::mem::swap(&mut self.memory.z_perm, &mut z_perm_tmp);
         Ok(())
     }
@@ -993,9 +991,7 @@ where
         crs: &ProverCrs<P>,
         circuit_size: u32,
     ) -> HonkProofResult<Transcript<TranscriptFieldType, H>> {
-        let mut small_subgroup_ipa_prover = SharedSmallSubgroupIPAProver::<_, _>::new::<H>(
-            self.net,
-            self.state,
+        let mut small_subgroup_ipa_prover = SharedSmallSubgroupIPAProver::<_, _>::new(
             zk_sumcheck_data,
             sumcheck_output
                 .claimed_libra_evaluation
@@ -1003,7 +999,7 @@ where
             "Libra:".to_string(),
             &sumcheck_output.challenges,
         )?;
-        small_subgroup_ipa_prover.prove(transcript, crs, &mut self.decider.rng)?;
+        small_subgroup_ipa_prover.prove::<H, N>(self.net, self.state, transcript, crs)?;
 
         let witness_polynomials = small_subgroup_ipa_prover.into_witness_polynomials();
         let multivariate_to_univariate_opening_claim = self.decider.shplemini_prove(
@@ -1033,7 +1029,13 @@ where
         // Compute the opening proof for the batched opening claim with the univariate PCS
 
         let mut ipa_transcript = Transcript::<TranscriptFieldType, H>::new();
-        compute_ipa_opening_proof(&mut ipa_transcript, batch_opening_claim, crs)?;
+        compute_ipa_opening_proof(
+            self.net,
+            self.state,
+            &mut ipa_transcript,
+            batch_opening_claim,
+            crs,
+        )?;
         Ok(ipa_transcript)
     }
 
