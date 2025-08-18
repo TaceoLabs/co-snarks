@@ -1200,6 +1200,7 @@ name = "co-noir-types"
 version = "0.1.0"
 dependencies = [
  "ark-ff",
+ "eyre",
  "mpc-core",
  "rand 0.8.5",
  "serde",

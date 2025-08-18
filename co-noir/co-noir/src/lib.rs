@@ -41,6 +41,7 @@ pub use noir_types::witness_from_reader;
 pub use noirc_artifacts::program::ProgramArtifact;
 pub use sha3::Keccak256;
 
+pub use co_noir_types::merge_input_shares;
 pub use co_noir_types::split_input_rep3;
 pub use co_noir_types::split_witness_rep3;
 pub use co_noir_types::split_witness_shamir;
@@ -367,22 +368,6 @@ pub fn split_proving_key_shamir<P: CurveGroup>(
         .into_iter()
         .map(|share| ShamirProvingKey::from_plain_key_and_shares(&proving_key, share))
         .collect::<Result<Vec<_>>>()
-}
-
-/// Merge multiple REP3 input shares
-pub fn merge_input_shares<F: PrimeField>(
-    input_shares: Vec<Rep3SharedInput<F>>,
-) -> Result<Rep3SharedInput<F>> {
-    let mut result = BTreeMap::new();
-    for input_share in input_shares.into_iter() {
-        for (wit, share) in input_share.into_iter() {
-            if result.contains_key(&wit) {
-                eyre::bail!("Duplicate witness found in input shares");
-            }
-            result.insert(wit, share);
-        }
-    }
-    Ok(result)
 }
 
 /// Parse a barretenberg verification key into a [VerifyingKey]
