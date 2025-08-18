@@ -170,6 +170,15 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         Ok((a, b))
     }
 
+    fn open_point_and_field_many<N: Network>(
+        a: &[Self::PointShare],
+        b: &[Self::ArithmeticShare],
+        _net: &N,
+        _state: &mut Self::State,
+    ) -> eyre::Result<(Vec<P>, Vec<P::ScalarField>)> {
+        Ok((a.to_vec(), b.to_vec()))
+    }
+
     fn mul_open_many<N: Network>(
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],

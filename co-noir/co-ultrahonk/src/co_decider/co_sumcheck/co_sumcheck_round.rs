@@ -405,8 +405,9 @@ impl SumcheckRound {
         } else {
             // Note: Currently not happening
             let mut libra_round_univariate_extended = L::SumcheckRoundOutputZK::<T, P>::default();
-            libra_round_univariate_extended
-                .extend_from(libra_round_univariate.evaluations_as_ref());
+            libra_round_univariate_extended.extend_from(
+                &libra_round_univariate.evaluations_as_ref()[..P::LIBRA_UNIVARIATES_LENGTH],
+            ); //It's important that the poly gets extended from the right length
             libra_round_univariate_extended
         }
     }

@@ -3,7 +3,7 @@ use super::{
     small_subgroup_ipa::SharedSmallSubgroupIPAProver,
     types::ProverMemory,
 };
-use crate::mpc_prover_flavour::MPCProverFlavour;
+use crate::{CONST_PROOF_SIZE_LOG_N, mpc_prover_flavour::MPCProverFlavour};
 use co_builder::{
     HonkProofResult, TranscriptFieldType,
     prelude::{HonkCurve, ProverCrs, Utils},
@@ -63,10 +63,7 @@ impl<
         transcript: &mut Transcript<TranscriptFieldType, H>,
         crs: &ProverCrs<P>,
         circuit_size: u32,
-    ) -> HonkProofResult<(
-        SumcheckOutput<P::ScalarField, L>,
-        Option<SharedZKSumcheckData<T, P>>,
-    )> {
+    ) -> HonkProofResult<(SumcheckOutput<T, P, L>, Option<SharedZKSumcheckData<T, P>>)> {
         if self.has_zk == ZeroKnowledge::Yes {
             let log_subgroup_size = Utils::get_msb64(P::SUBGROUP_SIZE as u64);
             let commitment_key = &crs.monomials[..1 << (log_subgroup_size + 1)];
@@ -80,7 +77,12 @@ impl<
                 )?;
 
             Ok((
-                self.sumcheck_prove_zk(transcript, circuit_size, &mut zk_sumcheck_data)?,
+                self.sumcheck_prove_zk::<CONST_PROOF_SIZE_LOG_N>(
+                    transcript,
+                    circuit_size,
+                    &mut zk_sumcheck_data,
+                    crs,
+                )?,
                 Some(zk_sumcheck_data),
             ))
         } else {
@@ -100,7 +102,7 @@ impl<
         transcript: &mut Transcript<TranscriptFieldType, H>,
         circuit_size: u32,
         crs: &ProverCrs<P>,
-        sumcheck_output: SumcheckOutput<P::ScalarField, L>,
+        sumcheck_output: SumcheckOutput<T, P, L>,
         zk_sumcheck_data: Option<SharedZKSumcheckData<T, P>>,
     ) -> HonkProofResult<()> {
         if self.has_zk == ZeroKnowledge::No {

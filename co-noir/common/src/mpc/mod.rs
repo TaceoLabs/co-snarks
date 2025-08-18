@@ -292,6 +292,14 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
         state: &mut Self::State,
     ) -> eyre::Result<(P, P::ScalarField)>;
 
+    /// Reconstructs slices of shared points and field elements: (A,B) = Open(\[(A,B)\])
+    fn open_point_and_field_many<N: Network>(
+        a: &[Self::PointShare],
+        b: &[Self::ArithmeticShare],
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<(Vec<P>, Vec<P::ScalarField>)>;
+
     /// This function performs a multiplication directly followed by an opening. This safes one round of communication in some MPC protocols compared to calling `mul` and `open` separately.
     fn mul_open_many<N: Network>(
         a: &[Self::ArithmeticShare],

@@ -29,8 +29,8 @@ impl<
 > Decider<P, H, L>
 {
     fn get_f_polynomials(
-        polys: &AllEntities<Vec<P::ScalarField>, L>,
-    ) -> PolyF<Vec<P::ScalarField>, L> {
+        polys: &'_ AllEntities<Vec<P::ScalarField>, L>,
+    ) -> PolyF<'_, Vec<P::ScalarField>, L> {
         PolyF {
             precomputed: &polys.precomputed,
             witness: &polys.witness,
