@@ -329,6 +329,9 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShare;
 
+    /// Adds two shared points: \[c\] = \[a\] + \[b\].
+    fn point_add(a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare;
+
     /// Evaluates shared polynomials at one point
     fn eval_poly(coeffs: &[Self::ArithmeticShare], point: P::ScalarField) -> Self::ArithmeticShare;
 

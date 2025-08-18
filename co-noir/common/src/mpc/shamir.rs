@@ -229,6 +229,10 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
         pointshare::msm_public_points(points, scalars)
     }
 
+    fn point_add(a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare {
+        pointshare::add(a, b)
+    }
+
     fn eval_poly(coeffs: &[Self::ArithmeticShare], point: P::ScalarField) -> Self::ArithmeticShare {
         poly::eval_poly(coeffs, point)
     }

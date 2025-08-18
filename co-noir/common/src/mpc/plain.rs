@@ -266,4 +266,8 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         }
         Ok(res)
     }
+
+    fn point_add(a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare {
+        *a + b
+    }
 }
