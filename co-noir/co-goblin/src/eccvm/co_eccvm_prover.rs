@@ -1,6 +1,5 @@
 use ark_ec::CurveGroup;
 use ark_ff::Field;
-use ark_ff::PrimeField;
 use ark_ff::{One, Zero};
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
@@ -382,7 +381,7 @@ where
         let mut denominator_to_mul = Vec::with_capacity(6 * circuit_size);
 
         for i in 0..circuit_size {
-            // The following check cannot easily be done since the values are shared. We prepare TODO FLORIN instead and multiply it later to self.memory.lookup_inverses.
+            // The following check cannot easily be done since the values are shared. We prepare the read_and_write_tag instead and multiply it later to self.memory.lookup_inverses.
             // (row.msm_add == 1) || (row.msm_skew == 1) || (row.precompute_select == 1)
             // if !(msm_add.is_one() || msm_skew.is_one() || precompute_select.is_one()) {
             //     continue;
@@ -413,7 +412,7 @@ where
             .iter_mut()
             .zip(result.iter())
             .for_each(|(lookup_inverse, row_result)| {
-                // We only need the last element since this is alle previous read and write terms multiplied together.
+                // We only need the last element since this is all previous read and write terms multiplied together.
                 *lookup_inverse = *row_result.last().unwrap();
             });
 
@@ -475,6 +474,710 @@ where
         todo!("Commit to lookup inverses polynomial");
         std::mem::swap(&mut self.memory.lookup_inverses, &mut lookup_inverses_tmp);
         Ok(())
+    }
+
+    fn compute_grand_product_numerator_and_denominator(
+        &mut self,
+        proving_key: &ProvingKey<T, P, ECCVMFlavour>,
+    ) -> HonkProofResult<(Vec<T::ArithmeticShare>, Vec<T::ArithmeticShare>)> {
+        tracing::trace!("compute grand product numerator and denominator");
+        let id = self.state.id();
+
+        // degree-11
+        tracing::trace!("compute grand product numerator");
+
+        let precompute_round = proving_key.polynomials.witness.precompute_round().as_ref();
+        let precompute_round2 = T::add_many(precompute_round, precompute_round);
+        let precompute_round4 = T::add_many(&precompute_round2, &precompute_round2);
+
+        let gamma = self.decider.memory.relation_parameters.gamma;
+        let beta = self.decider.memory.relation_parameters.beta;
+        let beta_sqr = self.decider.memory.relation_parameters.beta_sqr;
+        let beta_cube = self.decider.memory.relation_parameters.beta_cube;
+        let precompute_pc = proving_key.polynomials.witness.precompute_pc().as_ref();
+        let precompute_select = proving_key.polynomials.witness.precompute_select().as_ref();
+
+        let msm_pc = proving_key.polynomials.witness.msm_pc().as_ref();
+        let msm_count = proving_key.polynomials.witness.msm_count().as_ref();
+        let msm_round = proving_key.polynomials.witness.msm_round().as_ref();
+        let one = P::ScalarField::one();
+        let minus_one = P::ScalarField::from(-1);
+        let minus_three = P::ScalarField::from(-3);
+        let minus_two = P::ScalarField::from(-2);
+        let minus_15 = P::ScalarField::from(-15);
+        let two = P::ScalarField::from(2);
+        let three = P::ScalarField::from(3);
+        let four = P::ScalarField::from(4);
+
+        // First term: tuple of (pc, round, wnaf_slice), computed when slicing scalar multipliers into slices,
+        // as part of ECCVMWnafRelation.
+        // If precompute_select = 1, tuple entry = (wnaf-slice + point-counter * beta + msm-round * beta_sqr).
+        // There are 4 tuple entries per row.
+        // let mut numerator = Univariate {
+        //     evaluations: [P::ScalarField::one(); SIZE],
+        // }; // degree-0
+
+        let s0 = proving_key.polynomials.witness.precompute_s1hi().as_ref();
+        let s1 = proving_key.polynomials.witness.precompute_s1lo().as_ref();
+
+        let mut wnaf_slice = s0.to_owned();
+        T::scale_many_in_place(&mut wnaf_slice, four);
+        T::add_assign_many(&mut wnaf_slice, s1);
+
+        let wnaf_slice_input0 = T::add_many(
+            &T::add_scalar(&wnaf_slice, gamma, id),
+            &T::add_many(
+                &T::scale_many(precompute_pc, beta),
+                &T::scale_many(&precompute_round4, beta_sqr),
+            ),
+        );
+        let numerator = wnaf_slice_input0; // degree-1 
+
+        let s0 = proving_key.polynomials.witness.precompute_s2hi().as_ref();
+        let s1 = proving_key.polynomials.witness.precompute_s2lo().as_ref();
+
+        let mut wnaf_slice = s0.to_owned();
+        T::scale_many_in_place(&mut wnaf_slice, four);
+        T::add_assign_many(&mut wnaf_slice, s1);
+
+        let wnaf_slice_input1 = T::add_many(
+            &T::add_scalar(&wnaf_slice, gamma, id),
+            &T::add_many(
+                &T::scale_many(precompute_pc, beta),
+                &T::scale_many(&T::add_scalar(&precompute_round4, one, id), beta_sqr),
+            ),
+        );
+        let mut lhs = Vec::with_capacity(2); //TODO FLORIN: adjust LENGTHs in this file
+        let mut rhs = Vec::with_capacity(lhs.len());
+        lhs.extend(numerator);
+        rhs.extend(wnaf_slice_input1);
+        // numerator *= wnaf_slice_input1; // degree-2 DONE HERE
+
+        let s0 = proving_key.polynomials.witness.precompute_s3hi().as_ref();
+        let s1 = proving_key.polynomials.witness.precompute_s3lo().as_ref();
+
+        let mut wnaf_slice = s0.to_owned();
+        T::scale_many_in_place(&mut wnaf_slice, four);
+        T::add_assign_many(&mut wnaf_slice, s1);
+
+        let wnaf_slice_input2 = T::add_many(
+            &T::add_scalar(&wnaf_slice, gamma, id),
+            &T::add_many(
+                &T::scale_many(precompute_pc, beta),
+                &T::scale_many(&T::add_scalar(&precompute_round4, two, id), beta_sqr),
+            ),
+        );
+        // numerator *= wnaf_slice_input2; // degree-3 TODO
+        lhs.extend(wnaf_slice_input2);
+
+        let s0 = proving_key.polynomials.witness.precompute_s4hi().as_ref();
+        let s1 = proving_key.polynomials.witness.precompute_s4lo().as_ref();
+
+        let mut wnaf_slice = s0.to_owned();
+        T::scale_many_in_place(&mut wnaf_slice, four);
+        T::add_assign_many(&mut wnaf_slice, s1);
+
+        let wnaf_slice_input3 = T::add_many(
+            &T::add_scalar(&wnaf_slice, gamma, id),
+            &T::add_many(
+                &T::scale_many(precompute_pc, beta),
+                &T::scale_many(&T::add_scalar(&precompute_round4, three, id), beta_sqr),
+            ),
+        );
+        // numerator *= wnaf_slice_input3; // degree-4 TODO
+        rhs.extend(wnaf_slice_input3);
+
+        // skew product if relevant
+        let skew = proving_key.polynomials.witness.precompute_skew().as_ref();
+        let precompute_point_transition = proving_key
+            .polynomials
+            .witness
+            .precompute_point_transition()
+            .as_ref();
+        let mut skew_input_factor = precompute_pc.to_owned();
+        T::scale_many_in_place(&mut skew_input_factor, beta);
+        T::add_assign_many(&mut skew_input_factor, skew);
+        T::add_assign_many(
+            &mut skew_input_factor,
+            &T::scale_many(
+                &T::add_scalar(&precompute_round4, P::ScalarField::from(4), id),
+                beta_sqr,
+            ),
+        );
+        T::add_scalar_in_place(&mut skew_input_factor, gamma, id);
+        let mut skew_input_summand = precompute_point_transition.to_owned();
+        T::scale_many_in_place(&mut skew_input_summand, minus_one);
+        T::add_scalar_in_place(&mut skew_input_summand, one, id);
+
+        // skew
+        //     + &gamma
+        //     + precompute_pc.to_owned() * beta
+        //     + (precompute_round4 + &P::ScalarField::from(4)) * beta_sqr;
+        lhs.extend(precompute_point_transition.clone());
+        rhs.extend(&skew_input_factor);
+        // let skew_input = precompute_point_transition.to_owned() * skew_input_factor
+        //     + (T::add_scalar(
+        //         &T::scale_many(precompute_point_transition, minus_one),
+        //         one,
+        //         id,
+        //     )); TODO
+        // numerator *= skew_input; // degree-5 TODO
+
+        // let eccvm_set_permutation_delta = relation_parameters.eccvm_set_permutation_delta;
+        let mut numerator_factor_7 = precompute_select.to_owned();
+        T::scale_many_in_place(
+            &mut numerator_factor_7,
+            one - self
+                .decider
+                .memory
+                .relation_parameters
+                .eccvm_set_permutation_delta,
+        );
+        T::add_scalar_in_place(&mut numerator_factor_7, one, id);
+        // numerator *= numerator_factor_7 TODO
+        // ); // degree-7
+
+        // Second term: tuple of (point-counter, P.x, P.y, scala r-multiplier), used in ECCVMWnafRelation and
+        // ECCVMPointTableRelation. ECCVMWnafRelation validates the sum of the wnaf slices associated with point-counter
+        // equals scalar-multiplier. ECCVMPointTableRelation computes a table of multiples of [P]: { -15[P], -13[P], ...,
+        // 15[P] }. We need to validate that scalar-multiplier and [P] = (P.x, P.y) come from MUL opcodes in the transcript
+        // columns.
+
+        let convert_to_wnaf = |s0: &[<T as NoirUltraHonkProver<P>>::ArithmeticShare],
+                               s1: &[<T as NoirUltraHonkProver<P>>::ArithmeticShare]|
+         -> Vec<<T as NoirUltraHonkProver<P>>::ArithmeticShare> {
+            let mut t = s0.to_owned();
+            T::scale_many_in_place(&mut t, two * two);
+            T::add_assign_many(&mut t, s1);
+            T::scale_many_in_place(&mut t, two);
+            T::add_scalar_in_place(&mut t, minus_15, id);
+            t
+            //TODO FLORIN CHECK AGAIN
+        };
+
+        let table_x = proving_key.polynomials.witness.precompute_tx().as_ref();
+        let table_y = proving_key.polynomials.witness.precompute_ty().as_ref();
+
+        let precompute_skew = proving_key.polynomials.witness.precompute_skew().as_ref();
+        let negative_inverse_seven = P::ScalarField::from(-7)
+            .inverse()
+            .expect("-7 is hopefully non-zero");
+        let mut adjusted_skew = precompute_skew.to_owned();
+        T::scale_many_in_place(&mut adjusted_skew, negative_inverse_seven);
+
+        let wnaf_scalar_sum = proving_key
+            .polynomials
+            .witness
+            .precompute_scalar_sum()
+            .as_ref();
+        let w0 = convert_to_wnaf(
+            proving_key.polynomials.witness.precompute_s1hi().as_ref(),
+            proving_key.polynomials.witness.precompute_s1lo().as_ref(),
+        );
+        let w1 = convert_to_wnaf(
+            proving_key.polynomials.witness.precompute_s2hi().as_ref(),
+            proving_key.polynomials.witness.precompute_s2lo().as_ref(),
+        );
+        let w2 = convert_to_wnaf(
+            proving_key.polynomials.witness.precompute_s3hi().as_ref(),
+            proving_key.polynomials.witness.precompute_s3lo().as_ref(),
+        );
+        let w3 = convert_to_wnaf(
+            proving_key.polynomials.witness.precompute_s4hi().as_ref(),
+            proving_key.polynomials.witness.precompute_s4lo().as_ref(),
+        );
+
+        let mut row_slice = w0.clone();
+        T::scale_many_in_place(&mut row_slice, P::ScalarField::from(2));
+        T::scale_many_in_place(&mut row_slice, P::ScalarField::from(2));
+        T::scale_many_in_place(&mut row_slice, P::ScalarField::from(2));
+        T::scale_many_in_place(&mut row_slice, P::ScalarField::from(2));
+        T::add_assign_many(&mut row_slice, &w1);
+        T::scale_many_in_place(&mut row_slice, P::ScalarField::from(2));
+        T::scale_many_in_place(&mut row_slice, P::ScalarField::from(2));
+        T::scale_many_in_place(&mut row_slice, P::ScalarField::from(2));
+        T::scale_many_in_place(&mut row_slice, P::ScalarField::from(2));
+        T::add_assign_many(&mut row_slice, &w2);
+        T::scale_many_in_place(&mut row_slice, P::ScalarField::from(2));
+        T::scale_many_in_place(&mut row_slice, P::ScalarField::from(2));
+        T::scale_many_in_place(&mut row_slice, P::ScalarField::from(2));
+        T::scale_many_in_place(&mut row_slice, P::ScalarField::from(2));
+        T::add_assign_many(&mut row_slice, &w3);
+
+        let mut scalar_sum_full = wnaf_scalar_sum.to_owned();
+        T::scale_many_in_place(&mut scalar_sum_full, P::ScalarField::from(2));
+        T::scale_many_in_place(&mut scalar_sum_full, P::ScalarField::from(2));
+        T::scale_many_in_place(&mut scalar_sum_full, P::ScalarField::from(2));
+        T::scale_many_in_place(&mut scalar_sum_full, P::ScalarField::from(2));
+        T::scale_many_in_place(&mut scalar_sum_full, P::ScalarField::from(2));
+        T::scale_many_in_place(&mut scalar_sum_full, P::ScalarField::from(2));
+        T::scale_many_in_place(&mut scalar_sum_full, P::ScalarField::from(2));
+        T::scale_many_in_place(&mut scalar_sum_full, P::ScalarField::from(2));
+        T::scale_many_in_place(&mut scalar_sum_full, P::ScalarField::from(2));
+        T::scale_many_in_place(&mut scalar_sum_full, P::ScalarField::from(2));
+        T::scale_many_in_place(&mut scalar_sum_full, P::ScalarField::from(2));
+        T::scale_many_in_place(&mut scalar_sum_full, P::ScalarField::from(2));
+        T::scale_many_in_place(&mut scalar_sum_full, P::ScalarField::from(2));
+        T::scale_many_in_place(&mut scalar_sum_full, P::ScalarField::from(2));
+        T::scale_many_in_place(&mut scalar_sum_full, P::ScalarField::from(2));
+        T::scale_many_in_place(&mut scalar_sum_full, P::ScalarField::from(2));
+        T::add_assign_many(
+            &mut scalar_sum_full,
+            &T::add_many(&row_slice, &adjusted_skew),
+        );
+
+        let precompute_point_transition = proving_key
+            .polynomials
+            .witness
+            .precompute_point_transition()
+            .as_ref();
+
+        let mut point_table_init_read = table_x.to_owned(); // * beta
+        //     + precompute_pc
+        //     + table_y.to_owned() * beta_sqr
+        //     + scalar_sum_full * beta_cube;
+        T::scale_many_in_place(&mut point_table_init_read, beta);
+        T::add_assign_many(&mut point_table_init_read, precompute_pc);
+        T::add_assign_many(
+            &mut point_table_init_read,
+            &T::add_many(
+                &T::scale_many(table_y, beta_sqr),
+                &T::scale_many(&scalar_sum_full, beta_cube),
+            ),
+        );
+        T::add_scalar_in_place(&mut point_table_init_read, gamma, id);
+        // let mut point_table_init_read = precompute_point_transition.to_owned()
+        //     * (point_table_init_read + &gamma)
+        //     + (precompute_point_transition.to_owned() * minus_one + &P::ScalarField::one());
+        let mut point_table_init_read_summand = precompute_point_transition.to_owned();
+        T::scale_many_in_place(&mut point_table_init_read_summand, minus_one);
+        T::add_scalar_in_place(&mut point_table_init_read_summand, one, id);
+        lhs.extend(precompute_point_transition);
+        rhs.extend(point_table_init_read);
+
+        // numerator *= point_table_init_read; // degree-9 TODO
+
+        // Third term: tuple of (point-counter, P.x, P.y, msm-size) from ECCVMMSMRelation.
+        // (P.x, P.y) is the output of a multi-scalar-multiplication evaluated in ECCVMMSMRelation.
+        // We need to validate that the same values (P.x, P.y) are present in the Transcript columns and describe a
+        // multi-scalar multiplication of size `msm-size`, starting at `point-counter`.
+
+        let lagrange_first_modified = proving_key
+            .polynomials
+            .precomputed
+            .lagrange_first()
+            .iter()
+            .map(|a| *a * minus_one + one)
+            .collect_vec();
+
+        let binding = proving_key.polynomials.witness.msm_transition().shifted();
+        let partial_msm_transition_shift = binding.as_ref();
+        let msm_transition_shift =
+            T::mul_with_public_many(&lagrange_first_modified, partial_msm_transition_shift);
+        let binding = proving_key.polynomials.witness.msm_pc().shifted();
+        let msm_pc_shift = binding.as_ref();
+
+        let binding = proving_key
+            .polynomials
+            .witness
+            .msm_accumulator_x()
+            .shifted();
+        let msm_x_shift = binding.as_ref();
+        let binding = proving_key
+            .polynomials
+            .witness
+            .msm_accumulator_y()
+            .shifted();
+        let msm_y_shift = binding.as_ref();
+        let msm_size = proving_key.polynomials.witness.msm_size_of_msm().as_ref();
+
+        let msm_result_write = T::add_many(
+            &T::scale_many(msm_x_shift, beta),
+            &T::add_many(
+                &T::scale_many(msm_y_shift, beta_sqr),
+                &T::add_many(&T::scale_many(msm_size, beta_cube), msm_pc_shift),
+            ),
+        );
+
+        lhs.extend(&msm_transition_shift);
+        rhs.extend(T::add_scalar(&msm_result_write, gamma, id));
+        // msm_result_write = msm_transition_shift.to_owned() * (msm_result_write + &gamma)
+        //     + (msm_transition_shift * minus_one + &P::ScalarField::one()); //TODO subtract this from the product
+        // numerator *= msm_result_write; // degree-11 TODO
+
+        // numerator
+        tracing::trace!("compute grand product numinator finished");
+
+        // degree-20
+        tracing::trace!("compute grand product denominator");
+
+        // AZTEC TODO(@zac-williamson). The degree of this contribution is 17! makes overall relation degree 19.
+        // Can optimise by refining the algebra, once we have a stable base to iterate off of.
+
+        /*
+         * @brief First term: tuple of (pc, round, wnaf_slice), used to determine which points we extract from lookup tables
+         * when evaluaing MSMs in ECCVMMsmRelation.
+         * These values must be equivalent to the values computed in the 1st term of `compute_grand_product_numerator`
+         */
+        // let mut denominator = Univariate {
+        //     evaluations: [P::ScalarField::one(); SIZE],
+        // }; // degree-0
+
+        let add1 = proving_key.polynomials.witness.msm_add1().as_ref();
+        let msm_slice1 = proving_key.polynomials.witness.msm_slice1().as_ref();
+
+        // let wnaf_slice_output1 = add1.to_owned()
+        //     * (msm_slice1.to_owned()
+        //         + &gamma
+        //         + (msm_pc.to_owned() - msm_count) * beta
+        //         + msm_round.to_owned() * beta_sqr)
+        //     + (add1.to_owned() * minus_one + &P::ScalarField::one());
+        let mut wnaf_slice_output1_factor = msm_slice1.to_owned();
+        T::add_scalar_in_place(&mut wnaf_slice_output1_factor, gamma, id);
+        T::add_assign_many(
+            &mut wnaf_slice_output1_factor,
+            &T::sub_many(
+                &T::scale_many(msm_pc, beta),
+                &T::scale_many(msm_count, beta),
+            ),
+        );
+        T::add_assign_many(
+            &mut wnaf_slice_output1_factor,
+            &T::scale_many(msm_round, beta_sqr),
+        );
+        let mut wnaf_slice_output1_summand = add1.to_owned();
+        T::scale_many_in_place(&mut wnaf_slice_output1_summand, minus_one);
+        T::add_scalar_in_place(&mut wnaf_slice_output1_summand, one, id);
+        lhs.extend(add1);
+        rhs.extend(wnaf_slice_output1_factor);
+        // denominator *= wnaf_slice_output1; // degree-2 TODO
+
+        let add2 = proving_key.polynomials.witness.msm_add2().as_ref();
+        let msm_slice2 = proving_key.polynomials.witness.msm_slice2().as_ref();
+
+        // let wnaf_slice_output2 = add2.to_owned()
+        //     * (msm_slice2.to_owned()
+        //         + &gamma
+        //         + (msm_pc.to_owned() - msm_count + &minus_one) * beta
+        //         + msm_round.to_owned() * beta_sqr)
+        //     + (add2.to_owned() * minus_one + &P::ScalarField::one());
+        let mut wnaf_slice_output2_factor = msm_slice2.to_owned();
+        T::add_scalar_in_place(&mut wnaf_slice_output2_factor, gamma, id);
+        T::add_assign_many(
+            &mut wnaf_slice_output2_factor,
+            &T::sub_many(
+                &T::scale_many(msm_pc, beta),
+                &T::scale_many(&T::add_scalar(msm_count, minus_one, id), beta),
+            ),
+        );
+        T::add_assign_many(
+            &mut wnaf_slice_output2_factor,
+            &T::scale_many(msm_round, beta_sqr),
+        );
+        let mut wnaf_slice_output2_summand = add2.to_owned();
+        T::scale_many_in_place(&mut wnaf_slice_output2_summand, minus_one);
+        T::add_scalar_in_place(&mut wnaf_slice_output2_summand, one, id);
+        lhs.extend(add2);
+        rhs.extend(wnaf_slice_output2_factor);
+        // denominator *= wnaf_slice_output2; // degree-4 TODO
+
+        let add3 = proving_key.polynomials.witness.msm_add3().as_ref();
+        let msm_slice3 = proving_key.polynomials.witness.msm_slice3().as_ref();
+
+        // let wnaf_slice_output3 = add3.to_owned()
+        //     * (msm_slice3.to_owned()
+        //         + &gamma
+        //         + (msm_pc.to_owned() - msm_count + &P::ScalarField::from(-2)) * beta
+        //         + msm_round.to_owned() * beta_sqr)
+        //     + (add3.to_owned() * minus_one + &P::ScalarField::one());
+        let mut wnaf_slice_output3_factor = msm_slice3.to_owned();
+        T::add_scalar_in_place(&mut wnaf_slice_output3_factor, gamma, id);
+        T::add_assign_many(
+            &mut wnaf_slice_output3_factor,
+            &T::sub_many(
+                &T::scale_many(msm_pc, beta),
+                &T::scale_many(&T::add_scalar(msm_count, minus_two, id), beta),
+            ),
+        );
+        T::add_assign_many(
+            &mut wnaf_slice_output3_factor,
+            &T::scale_many(msm_round, beta_sqr),
+        );
+        let mut wnaf_slice_output3_summand = add3.to_owned();
+        T::scale_many_in_place(&mut wnaf_slice_output3_summand, minus_one);
+        T::add_scalar_in_place(&mut wnaf_slice_output3_summand, one, id);
+        lhs.extend(add3);
+        rhs.extend(wnaf_slice_output3_factor);
+        // denominator *= wnaf_slice_output3; // degree-6 TODO
+
+        let add4 = proving_key.polynomials.witness.msm_add4().as_ref();
+        let msm_slice4 = proving_key.polynomials.witness.msm_slice4().as_ref();
+
+        // let wnaf_slice_output4 = add4.to_owned()
+        //     * (msm_slice4.to_owned()
+        //         + &gamma
+        //         + (msm_pc.to_owned() - msm_count + &P::ScalarField::from(-3)) * beta
+        //         + msm_round.to_owned() * beta_sqr)
+        //     + (add4.to_owned() * minus_one + &P::ScalarField::one());
+        let mut wnaf_slice_output4_factor = msm_slice4.to_owned();
+        T::add_scalar_in_place(&mut wnaf_slice_output4_factor, gamma, id);
+        T::add_assign_many(
+            &mut wnaf_slice_output4_factor,
+            &T::sub_many(
+                &T::scale_many(msm_pc, beta),
+                &T::scale_many(&T::add_scalar(msm_count, minus_three, id), beta),
+            ),
+        );
+        T::add_assign_many(
+            &mut wnaf_slice_output4_factor,
+            &T::scale_many(msm_round, beta_sqr),
+        );
+        let mut wnaf_slice_output4_summand = add4.to_owned();
+        T::scale_many_in_place(&mut wnaf_slice_output4_summand, minus_one);
+        T::add_scalar_in_place(&mut wnaf_slice_output4_summand, one, id);
+        lhs.extend(add4);
+        rhs.extend(wnaf_slice_output4_factor);
+        // denominator *= wnaf_slice_output4; // degree-8 TODO
+
+        /*
+         * @brief Second term: tuple of (transcript_pc, transcript_Px, transcript_Py, z1) OR (transcript_pc, \lambda *
+         * transcript_Px, -transcript_Py, z2) for each scalar multiplication in ECCVMTranscriptRelation columns. (the latter
+         * term uses the curve endomorphism: \lambda = cube root of unity). These values must be equivalent to the second
+         * term values in `compute_grand_product_numerator`
+         */
+        let transcript_pc = proving_key.polynomials.witness.transcript_pc().as_ref();
+        let transcript_px = proving_key.polynomials.witness.transcript_px().as_ref();
+        let transcript_py = proving_key.polynomials.witness.transcript_py().as_ref();
+        let z1 = proving_key.polynomials.witness.transcript_z1().as_ref();
+        let z2 = proving_key.polynomials.witness.transcript_z2().as_ref();
+        let z1_zero = proving_key.polynomials.witness.transcript_z1zero().as_ref();
+        let z2_zero = proving_key.polynomials.witness.transcript_z2zero().as_ref();
+
+        let mut lookup_first = z1_zero.to_owned(); //* minus_one + &P::ScalarField::one();
+        T::scale_many_in_place(&mut lookup_first, minus_one);
+        T::add_scalar_in_place(&mut lookup_first, one, id);
+        let mut lookup_second = z2_zero.to_owned(); // * minus_one + &P::ScalarField::one();
+        T::scale_many_in_place(&mut lookup_second, minus_one);
+        T::add_scalar_in_place(&mut lookup_second, one, id);
+        let endomorphism_base_field_shift = P::CycleGroup::get_cube_root_of_unity();
+
+        let mut transcript_input1 = transcript_px.to_owned(); // * beta
+        // + transcript_pc
+        // + transcript_py.to_owned() * beta_sqr
+        // + z1.to_owned() * beta_cube; // degree = 1
+        T::scale_many_in_place(&mut transcript_input1, beta);
+        T::add_assign_many(&mut transcript_input1, transcript_pc);
+        T::add_assign_many(
+            &mut transcript_input1,
+            &T::scale_many(transcript_py, beta_sqr),
+        );
+        T::add_assign_many(&mut transcript_input1, &T::scale_many(z1, beta_cube));
+        let mut transcript_input2 = transcript_px.to_owned(); // * endomorphism_base_field_shift * beta
+        // + transcript_pc.to_owned()
+        // + &minus_one
+        // + transcript_py.to_owned() * beta_sqr * minus_one
+        // + z2.to_owned() * beta_cube; // degree = 2
+        T::scale_many_in_place(&mut transcript_input2, endomorphism_base_field_shift);
+        T::scale_many_in_place(&mut transcript_input2, beta);
+        T::add_assign_many(&mut transcript_input2, transcript_pc);
+        T::add_scalar_in_place(&mut transcript_input2, minus_one, id);
+        T::add_assign_many(
+            &mut transcript_input2,
+            &T::scale_many(transcript_py, beta_sqr * minus_one),
+        );
+        T::add_assign_many(&mut transcript_input2, &T::scale_many(z2, beta_cube));
+
+        // transcript_input1 = (transcript_input1 + &gamma) * lookup_first.clone()
+        //     + (lookup_first.to_owned() * minus_one + &P::ScalarField::one()); // degree 2 TODO ADD THIS
+        T::add_scalar_in_place(&mut transcript_input1, gamma, id);
+        lhs.extend(transcript_input1);
+        rhs.extend(lookup_first.clone());
+        // transcript_input2 = (transcript_input2 + &gamma) * lookup_second.clone()
+        //     + (lookup_second.to_owned() * minus_one + &P::ScalarField::one()); // degree 3 TODO ADD THIS
+        T::add_scalar_in_place(&mut transcript_input2, gamma, id);
+        lhs.extend(transcript_input2);
+        rhs.extend(lookup_second.clone());
+
+        // let transcript_product = (transcript_input1 * transcript_input2)
+        //     * (base_infinity.to_owned() * minus_one + &P::ScalarField::one())
+        //     + base_infinity; // degree 6 TODO
+
+        // let point_table_init_write = transcript_mul.to_owned() * transcript_product
+        //     + (transcript_mul.to_owned() * minus_one + &P::ScalarField::one()); TODO
+        // denominator *= point_table_init_write; // degree 17 TODO
+
+        /*
+         * @brief Third term: tuple of (point-counter, P.x, P.y, msm-size) from ECCVMTranscriptRelation.
+         *        (P.x, P.y) is the *claimed* output of a multi-scalar-multiplication evaluated in ECCVMMSMRelation.
+         *        We need to validate that the msm output produced in ECCVMMSMRelation is equivalent to the output present
+         * in `transcript_msm_output_x, transcript_msm_output_y`, for a given multi-scalar multiplication starting at
+         * `transcript_pc` and has size `transcript_msm_count`
+         */
+
+        let transcript_msm_x = proving_key.polynomials.witness.transcript_msm_x().as_ref();
+        let transcript_msm_y = proving_key.polynomials.witness.transcript_msm_y().as_ref();
+        let transcript_msm_transition = proving_key
+            .polynomials
+            .witness
+            .transcript_msm_transition()
+            .as_ref();
+        let transcript_msm_count = proving_key
+            .polynomials
+            .witness
+            .transcript_msm_count()
+            .as_ref();
+        let z1_zero = proving_key.polynomials.witness.transcript_z1zero().as_ref();
+        let z2_zero = proving_key.polynomials.witness.transcript_z2zero().as_ref();
+        let transcript_mul = proving_key.polynomials.witness.transcript_mul().as_ref();
+        let base_infinity = proving_key
+            .polynomials
+            .witness
+            .transcript_base_infinity()
+            .as_ref();
+
+        //  let full_msm_count = transcript_mul.to_owned()
+        // * ((z1_zero.to_owned() * minus_one + &P::ScalarField::one())
+        //     + (z2_zero.to_owned() * minus_one + &P::ScalarField::one()))
+        // * (base_infinity.to_owned() * minus_one + &P::ScalarField::one())
+        // + transcript_msm_count;
+        let full_msm_count_factor_1 = transcript_mul;
+        let mut full_msm_count_factor_2 = z1_zero.to_owned();
+        T::scale_many_in_place(&mut full_msm_count_factor_2, minus_one);
+        T::add_scalar_in_place(&mut full_msm_count_factor_2, two, id);
+        T::sub_assign_many(&mut full_msm_count_factor_2, z2_zero);
+        let mut full_msm_count_factor_3 = base_infinity.to_owned();
+        T::scale_many_in_place(&mut full_msm_count_factor_3, minus_one);
+        T::add_scalar_in_place(&mut full_msm_count_factor_3, one, id);
+        let full_msm_count_summand = transcript_msm_count;
+        lhs.extend(full_msm_count_factor_1);
+        rhs.extend(full_msm_count_factor_2);
+
+        let mut msm_result_read = transcript_msm_x.to_owned(); // * beta
+        // + transcript_msm_y.to_owned() * beta_sqr
+        // + full_msm_count.to_owned() * beta_cube
+        // + transcript_pc_shift;
+        T::scale_many_in_place(&mut msm_result_read, beta);
+        T::add_assign_many(
+            &mut msm_result_read,
+            &T::scale_many(transcript_msm_y, beta_sqr),
+        );
+        T::add_assign_many(
+            &mut msm_result_read,
+            &T::scale_many(transcript_msm_count, beta_cube),
+        );
+        let transcript_pc_shift = proving_key.polynomials.witness.transcript_pc().shifted();
+        let transcript_pc_shift = transcript_pc_shift.as_ref();
+        T::add_assign_many(&mut msm_result_read, transcript_pc_shift);
+        T::add_scalar_in_place(&mut msm_result_read, gamma, id);
+        // lhs.extend(transcript_msm_transition); // TODO THIS HERE IS WRONG; WE NEED TO FIRST ADD FULL_MSM_COUNT
+        // rhs.extend(msm_result_read); // TODO THIS HERE IS WRONG; WE NEED TO FIRST ADD FULL_MSM_COUNT
+        // msm_result_read = transcript_msm_transition.to_owned() * (msm_result_read + &gamma)<- DONE
+        //     + (transcript_msm_transition.to_owned() * minus_one + &P::ScalarField::one()); TODO
+        // denominator *= msm_result_read; // degree-20 TODO
+
+        let mul = T::mul_many(&lhs, &rhs, self.net, self.state)?;
+        let mul = mul.chunks_exact(mul.len() / 12).collect_vec();
+        debug_assert_eq!(mul.len(), 12);
+
+        // Numerator stuff:
+        let numerator_2 = mul[0].to_owned();
+        let wnaf2wnaf3 = mul[1].to_owned(); //TODO multiply to numerator
+        let mut skew_input = mul[2].to_owned(); //TODO multiply to numerator
+        T::sub_assign_many(&mut skew_input, precompute_point_transition);
+        T::add_scalar_in_place(&mut skew_input, one, id);
+        let mut point_table_init_read = mul[3].to_owned(); //TODO multiply to numerator
+        T::add_assign_many(&mut point_table_init_read, &point_table_init_read_summand);
+        let mut msm_result_write = mul[4].to_owned(); //TODO multiply to numerator
+        T::sub_assign_many(&mut msm_result_write, &msm_transition_shift);
+        T::add_scalar_in_place(&mut msm_result_write, one, id);
+
+        // Denominator stuff:
+        let wnaf_slice_output1 = mul[5].to_owned();
+        let wnaf_slice_output2 = mul[6].to_owned();
+        let wnaf_slice_output3 = mul[7].to_owned();
+        let wnaf_slice_output4 = mul[8].to_owned();
+        let mut transcript_input1 = mul[9].to_owned();
+        T::sub_assign_many(&mut transcript_input1, &lookup_first);
+        T::add_scalar_in_place(&mut transcript_input1, one, id);
+        let mut transcript_input2 = mul[10].to_owned();
+        T::sub_assign_many(&mut transcript_input2, &lookup_second);
+        T::add_scalar_in_place(&mut transcript_input2, one, id);
+        let full_msm_count = mul[11].to_owned();
+        // let mut msm_result_read = mul[12].to_owned(); // TODO multiply to denominator
+        // T::sub_assign_many(&mut msm_result_read, &transcript_msm_transition);
+        // T::add_scalar_in_place(&mut msm_result_read, one, id);
+
+        let mut lhs2 = Vec::with_capacity(12);
+        let mut rhs2 = Vec::with_capacity(lhs2.len());
+        lhs2.extend(wnaf2wnaf3);
+        rhs2.extend(skew_input);
+        lhs2.extend(point_table_init_read);
+        rhs2.extend(msm_result_write);
+
+        lhs2.extend(wnaf_slice_output1);
+        rhs2.extend(wnaf_slice_output2);
+        lhs2.extend(wnaf_slice_output3);
+        rhs2.extend(wnaf_slice_output4);
+        lhs2.extend(transcript_input1);
+        rhs2.extend(transcript_input2);
+        lhs2.extend(full_msm_count);
+        rhs2.extend(full_msm_count_factor_3);
+
+        let mul2 = T::mul_many(&lhs2, &rhs2, self.net, self.state)?;
+        let mul2 = mul2.chunks_exact(mul2.len() / 6).collect_vec();
+        debug_assert_eq!(mul2.len(), 6);
+
+        let mut lhs3 = Vec::with_capacity(6);
+        let mut rhs3 = Vec::with_capacity(lhs3.len());
+        lhs3.extend(mul2[0].to_owned()); // wnaf2wnaf3 * skew_input
+        rhs3.extend(mul2[1].to_owned()); // point_table_init_read * msm_result_write
+
+        lhs3.extend(mul2[2].to_owned()); // wnaf_slice_output1 * wnaf_slice_output2
+        rhs3.extend(mul2[3].to_owned()); // wnaf_slice_output3 * wnaf_slice_output4
+        lhs3.extend(mul2[4].to_owned()); // transcript_input1 * transcript_input2
+        rhs3.extend(T::add_scalar(
+            &T::scale_many(base_infinity, minus_one),
+            one,
+            id,
+        )); // TODO: add base_infinity to this result
+        let mut full_msm_count = T::add_many(mul2[5], full_msm_count_summand);
+        T::scale_many_in_place(&mut full_msm_count, beta_cube);
+        T::add_assign_many(&mut msm_result_read, &full_msm_count);
+        lhs3.extend(transcript_msm_transition.to_owned());
+        rhs3.extend(msm_result_read);
+
+        let mul = T::mul_many(&lhs3, &rhs3, self.net, self.state)?;
+        let mul = mul.chunks_exact(mul.len() / 4).collect_vec();
+        debug_assert_eq!(mul.len(), 4);
+
+        let mut lhs4 = Vec::with_capacity(4);
+        let mut rhs4 = Vec::with_capacity(lhs4.len());
+        lhs4.extend(mul[0].to_owned()); // (wnaf2wnaf3 * skew_input) *  (point_table_init_read * msm_result_write)
+        rhs4.extend(numerator_2); // 
+
+        lhs4.extend(T::add_many(mul[2], base_infinity)); // (transcript_input1 * transcript_input2)   * (base_infinity.to_owned() * minus_one + &P::ScalarField::one())
+        rhs4.extend(transcript_mul.to_owned());
+
+        let mut msm_result_read = mul[3].to_owned(); //  (transcript_msm_transition.to_owned() * (msm_result_read + &gamma) 
+        T::sub_assign_many(&mut msm_result_read, transcript_msm_transition);
+        T::add_scalar_in_place(&mut msm_result_read, one, id);
+
+        lhs4.extend(mul[1].to_owned()); // (wnaf_slice_output1 * wnaf_slice_output2) * (wnaf_slice_output3 * wnaf_slice_output4)
+        rhs4.extend(msm_result_read);
+
+        let mul = T::mul_many(&lhs4, &rhs4, self.net, self.state)?;
+        let mul = mul.chunks_exact(mul.len() / 3).collect_vec();
+        debug_assert_eq!(mul.len(), 3);
+
+        let final_numerator = mul[0].to_owned();
+
+        let mut point_table_init_write = mul[1].to_owned(); // transcript_mul.to_owned() * transcript_product
+        T::sub_assign_many(&mut point_table_init_write, transcript_mul);
+        T::add_scalar_in_place(&mut point_table_init_write, one, id);
+
+        let final_denominator =
+            T::mul_many(&point_table_init_write, &mul[2], self.net, self.state)?;
+        Ok((final_numerator, final_denominator))
     }
 
     //TODO FLORIN TODO FLORIN TODO FLORIN
@@ -845,86 +1548,92 @@ where
     //     denominator
     // }
 
-    // fn compute_grand_product(
-    //     &mut self,
-    //     proving_key: &ProvingKey<T, P, ECCVMFlavour>,
-    //     domain_size: usize,
-    // ) {
-    //     tracing::trace!("compute grand product");
+    fn compute_grand_product(
+        &mut self,
+        proving_key: &ProvingKey<T, P, ECCVMFlavour>,
+        domain_size: usize,
+    ) -> HonkProofResult<()> {
+        tracing::trace!("compute grand product");
 
-    //     let has_active_ranges = proving_key.active_region_data.size() > 0;
+        let has_active_ranges = proving_key.active_region_data.size() > 0;
 
-    //     // Barretenberg uses multithreading here
+        // Barretenberg uses multithreading here
 
-    //     // Set the domain over which the grand product must be computed. This may be less than the dyadic circuit size, e.g
-    //     // the permutation grand product does not need to be computed beyond the index of the last active wire
+        // Set the domain over which the grand product must be computed. This may be less than the dyadic circuit size, e.g
+        // the permutation grand product does not need to be computed beyond the index of the last active wire
 
-    //     let active_domain_size = if has_active_ranges {
-    //         proving_key.active_region_data.size()
-    //     } else {
-    //         domain_size
-    //     };
+        let active_domain_size = if has_active_ranges {
+            proving_key.active_region_data.size()
+        } else {
+            domain_size
+        };
 
-    //     // In Barretenberg circuit size is taken from the q_c polynomial
-    //     let mut numerator = Vec::with_capacity(active_domain_size - 1);
-    //     let mut denominator = Vec::with_capacity(active_domain_size - 1);
+        // In Barretenberg circuit size is taken from the q_c polynomial
+        let mut numerator = Vec::with_capacity(active_domain_size - 1);
+        let mut denominator = Vec::with_capacity(active_domain_size - 1);
 
-    //     // Step (1)
-    //     // Populate `numerator` and `denominator` with the algebra described by Relation
+        // Step (1)
+        // Populate `numerator` and `denominator` with the algebra described by Relation
+        let (numerator_, denominator_) =
+            self.compute_grand_product_numerator_and_denominator(proving_key)?;
 
-    //     for i in 0..active_domain_size {
-    //         let idx = if has_active_ranges {
-    //             proving_key.active_region_data.get_idx(i)
-    //         } else {
-    //             i
-    //         };
-    //         numerator.push(self.compute_grand_product_numerator(proving_key, idx));
-    //         denominator.push(self.compute_grand_product_denominator(proving_key, idx));
-    //     }
+        //TACEO TODO: Could minimize the number of elements being multiplied in the above
+        for i in 0..active_domain_size {
+            let idx = if has_active_ranges {
+                proving_key.active_region_data.get_idx(i)
+            } else {
+                i
+            };
+            numerator.push(numerator_[idx]);
+            denominator.push(denominator_[idx]);
+        }
 
-    //     // Step (2)
-    //     // Compute the accumulating product of the numerator and denominator terms.
-    //     // In Barretenberg, this is done in parallel across multiple threads, however we just do the computation signlethreaded for simplicity
+        // Step (2)
+        // Compute the accumulating product of the numerator and denominator terms.
 
-    //     for i in 1..active_domain_size - 1 {
-    //         numerator[i] = numerator[i] * numerator[i - 1];
-    //         denominator[i] = denominator[i] * denominator[i - 1];
-    //     }
-    //     // invert denominator
-    //     UltraHonkUtils::batch_invert(&mut denominator);
+        // TACEO TODO could batch here as well
+        // Do the multiplications of num[i] * num[i-1] and den[i] * den[i-1] in constant rounds
+        let numerator = CoUtils::array_prod_mul::<T, P, N>(self.net, self.state, &numerator)?;
+        let mut denominator =
+            CoUtils::array_prod_mul::<T, P, N>(self.net, self.state, &denominator)?;
+        // invert denominator
+        CoUtils::batch_invert::<T, P, N>(&mut denominator, self.net, self.state)?;
 
-    //     // Step (3) Compute z_perm[i] = numerator[i] / denominator[i]
-    //     self.memory
-    //         .z_perm
-    //         .resize(proving_key.circuit_size as usize, P::ScalarField::zero());
+        // Step (3) Compute z_perm[i] = numerator[i] / denominator[i]
+        let mul = T::mul_many(&numerator, &denominator, self.net, self.state)?;
+        self.memory.z_perm.resize(
+            proving_key.circuit_size as usize,
+            T::ArithmeticShare::default(),
+        );
 
-    //     // Compute grand product values corresponding only to the active regions of the trace
-    //     for i in 0..active_domain_size - 1 {
-    //         let idx = if has_active_ranges {
-    //             proving_key.active_region_data.get_idx(i)
-    //         } else {
-    //             i
-    //         };
-    //         self.memory.z_perm[idx + 1] = numerator[i] * denominator[i];
-    //     }
+        // Compute grand product values corresponding only to the active regions of the trace
+        for (i, mul) in mul.into_iter().enumerate() {
+            let idx = if has_active_ranges {
+                proving_key.active_region_data.get_idx(i)
+            } else {
+                i
+            };
+            self.memory.z_perm[idx + 1] = mul
+        }
 
-    //     // Final step: If active/inactive regions have been specified, the value of the grand product in the inactive
-    //     // regions have not yet been set. The polynomial takes an already computed constant value across each inactive
-    //     // region (since no copy constraints are present there) equal to the value of the grand product at the first index
-    //     // of the subsequent active region.
-    //     if has_active_ranges {
-    //         for i in 0..domain_size {
-    //             for j in 0..proving_key.active_region_data.num_ranges() - 1 {
-    //                 let previous_range_end = proving_key.active_region_data.get_range(j).1;
-    //                 let next_range_start = proving_key.active_region_data.get_range(j + 1).0;
-    //                 // Set the value of the polynomial if the index falls in an inactive region
-    //                 if i >= previous_range_end && i < next_range_start {
-    //                     self.memory.z_perm[i + 1] = self.memory.z_perm[next_range_start];
-    //                 }
-    //             }
-    //         }
-    //     }
-    // }
+        // Final step: If active/inactive regions have been specified, the value of the grand product in the inactive
+        // regions have not yet been set. The polynomial takes an already computed constant value across each inactive
+        // region (since no copy constraints are present there) equal to the value of the grand product at the first index
+        // of the subsequent active region.
+        if has_active_ranges {
+            for i in 0..domain_size {
+                for j in 0..proving_key.active_region_data.num_ranges() - 1 {
+                    let previous_range_end = proving_key.active_region_data.get_range(j).1;
+                    let next_range_start = proving_key.active_region_data.get_range(j + 1).0;
+                    // Set the value of the polynomial if the index falls in an inactive region
+                    if i >= previous_range_end && i < next_range_start {
+                        self.memory.z_perm[i + 1] = self.memory.z_perm[next_range_start];
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
 
     fn execute_grand_product_computation_round(
         &mut self,

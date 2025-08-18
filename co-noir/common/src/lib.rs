@@ -4,6 +4,7 @@ use crate::{
 };
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
+use co_builder::prelude::ActiveRegionData;
 use co_builder::{
     HonkProofResult,
     prelude::{HonkCurve, NUM_MASKED_ROWS, Polynomial, ProverCrs, Serialize, Utils},
@@ -180,7 +181,6 @@ impl CoUtils {
 
         let mut unblind = T::mul_many(&r_invs, &r_chunks, net, state)?;
 
-        // Flatten inp (Vec<&[T::ArithmeticShare]>) into one contiguous vector
         let flat_inp = inp.concat();
         let mul = T::mul_many(&mul_r, &flat_inp, net, state)?;
         let mut open = T::mul_open_many(&mul, &r_invs_mul, net, state)?;
