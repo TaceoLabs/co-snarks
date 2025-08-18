@@ -36,6 +36,7 @@ pub(crate) trait Relation<F: PrimeField, L: PlainProverFlavour> {
         scaling_factor: &F,
     );
 
+    // TODO CESAR: Default impl should call accumulate
     fn accumulate_with_extended_parameters<const SIZE: usize>(
         _univariate_accumulator: &mut Self::Acc,
         _input: &ProverUnivariatesSized<F, L, SIZE>,

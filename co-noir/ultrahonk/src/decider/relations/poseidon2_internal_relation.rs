@@ -245,82 +245,12 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for Poseidon2InternalR
         _relation_parameters: &RelationParameters<Univariate<F, SIZE>>,
         scaling_factor: &F,
     ) {
-        tracing::trace!("Accumulate Poseidon2InternalRelation");
-
-        let w_l = input.witness.w_l();
-        let w_r = input.witness.w_r();
-        let w_o = input.witness.w_o();
-        let w_4 = input.witness.w_4();
-        let w_l_shift = input.shifted_witness.w_l();
-        let w_r_shift = input.shifted_witness.w_r();
-        let w_o_shift = input.shifted_witness.w_o();
-        let w_4_shift = input.shifted_witness.w_4();
-        let q_l = input.precomputed.q_l();
-        let q_poseidon2_internal = input.precomputed.q_poseidon2_internal();
-
-        // add round constants
-        let s1 = w_l.to_owned() + q_l;
-
-        // apply s-box round
-        let mut u1 = s1.to_owned().sqr();
-        u1 = u1.sqr();
-        u1 *= s1;
-        let u2 = w_r.to_owned();
-        let u3 = w_o.to_owned();
-        let u4 = w_4.to_owned();
-
-        // matrix mul with v = M_I * u 4 muls and 7 additions
-        let sum = u1.to_owned() + &u2 + &u3 + &u4;
-
-        let q_pos_by_scaling = q_poseidon2_internal.to_owned() * scaling_factor;
-
-        // TACEO TODO this poseidon instance is very hardcoded to the bn254 curve
-        let internal_matrix_diag_0 = F::from(BigUint::from(
-            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[0],
-        ));
-        let internal_matrix_diag_1 = F::from(BigUint::from(
-            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[1],
-        ));
-        let internal_matrix_diag_2 = F::from(BigUint::from(
-            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[2],
-        ));
-        let internal_matrix_diag_3 = F::from(BigUint::from(
-            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[3],
-        ));
-
-        let mut v1 = u1 * internal_matrix_diag_0;
-        v1 += &sum;
-        let tmp = (v1 - w_l_shift) * &q_pos_by_scaling;
-        for i in 0..univariate_accumulator.r0.evaluations.len() {
-            univariate_accumulator.r0.evaluations[i] += tmp.evaluations[i];
-        }
-
-        ///////////////////////////////////////////////////////////////////////
-
-        let mut v2 = u2 * internal_matrix_diag_1;
-        v2 += &sum;
-        let tmp = (v2 - w_r_shift) * &q_pos_by_scaling;
-        for i in 0..univariate_accumulator.r1.evaluations.len() {
-            univariate_accumulator.r1.evaluations[i] += tmp.evaluations[i];
-        }
-
-        ///////////////////////////////////////////////////////////////////////
-
-        let mut v3 = u3 * internal_matrix_diag_2;
-        v3 += &sum;
-        let tmp = (v3 - w_o_shift) * &q_pos_by_scaling;
-        for i in 0..univariate_accumulator.r2.evaluations.len() {
-            univariate_accumulator.r2.evaluations[i] += tmp.evaluations[i];
-        }
-
-        ///////////////////////////////////////////////////////////////////////
-
-        let mut v4 = u4 * internal_matrix_diag_3;
-        v4 += sum;
-        let tmp = (v4 - w_4_shift) * q_pos_by_scaling;
-        for i in 0..univariate_accumulator.r3.evaluations.len() {
-            univariate_accumulator.r3.evaluations[i] += tmp.evaluations[i];
-        }
+        Self::accumulate::<SIZE>(
+            univariate_accumulator,
+            input,
+            &RelationParameters::default(),
+            scaling_factor,
+        );
     }
 
     fn verify_accumulate(

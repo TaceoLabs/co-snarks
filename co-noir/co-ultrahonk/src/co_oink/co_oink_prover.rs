@@ -50,7 +50,7 @@ pub struct CoOink<
 > {
     net: &'a N,
     state: &'a mut T::State,
-    memory: ProverMemory<T, P, L>,
+    memory: ProverMemory<T, P>,
     phantom_data: PhantomData<(P, H, L)>,
     has_zk: ZeroKnowledge,
 }
@@ -1207,7 +1207,7 @@ impl<
         proving_key: &mut ProvingKey<T, P, L>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         crs: &ProverCrs<P>,
-    ) -> HonkProofResult<ProverMemory<T, P, L>> {
+    ) -> HonkProofResult<ProverMemory<T, P>> {
         tracing::trace!("Oink prove");
 
         // Add circuit size public input size and public inputs to transcript

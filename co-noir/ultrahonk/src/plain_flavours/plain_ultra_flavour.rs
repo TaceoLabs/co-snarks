@@ -3,9 +3,7 @@ use crate::decider::relations::logderiv_lookup_relation::LogDerivLookupRelationA
 use crate::decider::relations::permutation_relation::UltraPermutationRelationAccType;
 use crate::decider::sumcheck::sumcheck_round_prover::SumcheckProverRound;
 use crate::decider::sumcheck::sumcheck_round_verifier::SumcheckVerifierRound;
-use crate::decider::types::{
-    ClaimedEvaluations, ProverUnivariates, ProverUnivariatesSized, RelationParameters,
-};
+use crate::decider::types::{ClaimedEvaluations, ProverUnivariates, RelationParameters};
 use crate::plain_prover_flavour::PlainProverFlavour;
 use crate::prelude::Univariate;
 use ark_ff::PrimeField;
@@ -368,7 +366,7 @@ impl PlainProverFlavour for UltraFlavour {
     fn scale_by_challenge_and_accumulate<F: PrimeField>(
         all_rel_evals: &Self::AllRelationEvaluations<F>,
         first_scalar: F,
-        elements: &[Self::Alpha<F>],
+        elements: &[F],
     ) -> (F, F) {
         assert!(elements.len() == Self::NUM_SUBRELATIONS - 1);
         let (mut linearly_dependent_contribution, mut linearly_independent_contribution) =
