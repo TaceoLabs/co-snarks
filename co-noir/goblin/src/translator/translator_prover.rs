@@ -1,3 +1,4 @@
+use crate::CONST_TRANSLATOR_LOG_N;
 use ark_ec::CurveGroup;
 use ark_ff::Zero;
 use co_builder::HonkProofResult;
@@ -11,8 +12,6 @@ use ultrahonk::Utils as UltraHonkUtils;
 use ultrahonk::prelude::{
     Decider, ProvingKey, SmallSubgroupIPAProver, SumcheckOutput, TranscriptHasher, ZKSumcheckData,
 };
-
-use crate::CONST_TRANSLATOR_LOG_N;
 
 pub(crate) struct ProverMemory<P: CurveGroup> {
     pub(crate) z_perm: Polynomial<P::ScalarField>,
@@ -254,7 +253,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         let mut gate_challenges: Vec<P::ScalarField> =
             Vec::with_capacity(TranslatorFlavour::CONST_TRANSLATOR_LOG_N);
 
-        // todo florin todo!("Add polynomials to the decider memory");
+        todo!("Add polynomials to the decider memory");
 
         for idx in 0..TranslatorFlavour::CONST_TRANSLATOR_LOG_N {
             let chall = transcript.get_challenge::<P>(format!("Sumcheck:gate_challenge_{idx}"));
@@ -299,6 +298,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
         let witness_polynomials = small_subgroup_ipa_prover.into_witness_polynomials();
 
+        todo!("do interleaving stuff");
         // TODO FLORIN: BB does this, but do we also have to do it? YES
         //    PolynomialBatcher polynomial_batcher(key->proving_key->circuit_size);
         //     polynomial_batcher.set_unshifted(key->proving_key->polynomials.get_unshifted_without_interleaved());
