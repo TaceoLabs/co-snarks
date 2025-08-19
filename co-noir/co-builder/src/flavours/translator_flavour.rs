@@ -338,3 +338,272 @@ impl<T: Default> TranslatorProverWitnessEntities<T> {
         todo!()
     }
 }
+
+impl<T: Default> TranslatorWitnessEntities<T> {
+    pub fn accumulators_binary_limbs_0(&self) -> &T {
+        todo!()
+    }
+    pub fn accumulators_binary_limbs_1(&self) -> &T {
+        todo!()
+    }
+    pub fn accumulators_binary_limbs_2(&self) -> &T {
+        todo!()
+    }
+    pub fn accumulators_binary_limbs_3(&self) -> &T {
+        todo!()
+    }
+    pub fn ordered_range_constraints_0(&self) -> &T {
+        todo!()
+    }
+    pub fn ordered_range_constraints_1(&self) -> &T {
+        todo!()
+    }
+    pub fn ordered_range_constraints_2(&self) -> &T {
+        todo!()
+    }
+    pub fn ordered_range_constraints_3(&self) -> &T {
+        todo!()
+    }
+    pub fn ordered_range_constraints_4(&self) -> &T {
+        todo!()
+    }
+    pub fn interleaved_range_constraints_0(&self) -> &T {
+        todo!()
+    }
+    pub fn interleaved_range_constraints_1(&self) -> &T {
+        todo!()
+    }
+    pub fn interleaved_range_constraints_2(&self) -> &T {
+        todo!()
+    }
+    pub fn interleaved_range_constraints_3(&self) -> &T {
+        todo!()
+    }
+    pub fn op(&self) -> &T {
+        todo!()
+    }
+    pub fn p_x_low_limbs_range_constraint_0(&self) -> &T {
+        todo!()
+    }
+    pub fn p_x_low_limbs_range_constraint_1(&self) -> &T {
+        todo!()
+    }
+    pub fn p_x_low_limbs_range_constraint_2(&self) -> &T {
+        todo!()
+    }
+    pub fn p_x_low_limbs_range_constraint_3(&self) -> &T {
+        todo!()
+    }
+    pub fn p_x_low_limbs_range_constraint_4(&self) -> &T {
+        todo!()
+    }
+    pub fn p_x_high_limbs_range_constraint_0(&self) -> &T {
+        todo!()
+    }
+    pub fn p_x_high_limbs_range_constraint_1(&self) -> &T {
+        todo!()
+    }
+    pub fn p_x_high_limbs_range_constraint_2(&self) -> &T {
+        todo!()
+    }
+    pub fn p_x_high_limbs_range_constraint_3(&self) -> &T {
+        todo!()
+    }
+    pub fn p_x_high_limbs_range_constraint_4(&self) -> &T {
+        todo!()
+    }
+    pub fn p_y_low_limbs_range_constraint_0(&self) -> &T {
+        todo!()
+    }
+    pub fn p_y_low_limbs_range_constraint_1(&self) -> &T {
+        todo!()
+    }
+    pub fn p_y_low_limbs_range_constraint_2(&self) -> &T {
+        todo!()
+    }
+    pub fn p_y_low_limbs_range_constraint_3(&self) -> &T {
+        todo!()
+    }
+    pub fn p_y_low_limbs_range_constraint_4(&self) -> &T {
+        todo!()
+    }
+    pub fn p_y_high_limbs_range_constraint_0(&self) -> &T {
+        todo!()
+    }
+    pub fn p_y_high_limbs_range_constraint_1(&self) -> &T {
+        todo!()
+    }
+    pub fn p_y_high_limbs_range_constraint_2(&self) -> &T {
+        todo!()
+    }
+    pub fn p_y_high_limbs_range_constraint_3(&self) -> &T {
+        todo!()
+    }
+    pub fn p_y_high_limbs_range_constraint_4(&self) -> &T {
+        todo!()
+    }
+    pub fn z_low_limbs_range_constraint_0(&self) -> &T {
+        todo!()
+    }
+    pub fn z_low_limbs_range_constraint_1(&self) -> &T {
+        todo!()
+    }
+    pub fn z_low_limbs_range_constraint_2(&self) -> &T {
+        todo!()
+    }
+    pub fn z_low_limbs_range_constraint_3(&self) -> &T {
+        todo!()
+    }
+    pub fn z_low_limbs_range_constraint_4(&self) -> &T {
+        todo!()
+    }
+    pub fn z_high_limbs_range_constraint_0(&self) -> &T {
+        todo!()
+    }
+    pub fn z_high_limbs_range_constraint_1(&self) -> &T {
+        todo!()
+    }
+    pub fn z_high_limbs_range_constraint_2(&self) -> &T {
+        todo!()
+    }
+    pub fn z_high_limbs_range_constraint_3(&self) -> &T {
+        todo!()
+    }
+    pub fn z_high_limbs_range_constraint_4(&self) -> &T {
+        todo!()
+    }
+    pub fn accumulator_low_limbs_range_constraint_0(&self) -> &T {
+        todo!()
+    }
+    pub fn accumulator_low_limbs_range_constraint_1(&self) -> &T {
+        todo!()
+    }
+    pub fn accumulator_low_limbs_range_constraint_2(&self) -> &T {
+        todo!()
+    }
+    pub fn accumulator_low_limbs_range_constraint_3(&self) -> &T {
+        todo!()
+    }
+    pub fn accumulator_low_limbs_range_constraint_4(&self) -> &T {
+        todo!()
+    }
+    pub fn accumulator_high_limbs_range_constraint_0(&self) -> &T {
+        todo!()
+    }
+    pub fn accumulator_high_limbs_range_constraint_1(&self) -> &T {
+        todo!()
+    }
+    pub fn accumulator_high_limbs_range_constraint_2(&self) -> &T {
+        todo!()
+    }
+    pub fn accumulator_high_limbs_range_constraint_3(&self) -> &T {
+        todo!()
+    }
+    pub fn accumulator_high_limbs_range_constraint_4(&self) -> &T {
+        todo!()
+    }
+    pub fn quotient_low_limbs_range_constraint_0(&self) -> &T {
+        todo!()
+    }
+    pub fn quotient_low_limbs_range_constraint_1(&self) -> &T {
+        todo!()
+    }
+    pub fn quotient_low_limbs_range_constraint_2(&self) -> &T {
+        todo!()
+    }
+    pub fn quotient_low_limbs_range_constraint_3(&self) -> &T {
+        todo!()
+    }
+    pub fn quotient_low_limbs_range_constraint_4(&self) -> &T {
+        todo!()
+    }
+    pub fn quotient_high_limbs_range_constraint_0(&self) -> &T {
+        todo!()
+    }
+    pub fn quotient_high_limbs_range_constraint_1(&self) -> &T {
+        todo!()
+    }
+    pub fn quotient_high_limbs_range_constraint_2(&self) -> &T {
+        todo!()
+    }
+    pub fn quotient_high_limbs_range_constraint_3(&self) -> &T {
+        todo!()
+    }
+    pub fn quotient_high_limbs_range_constraint_4(&self) -> &T {
+        todo!()
+    }
+    pub fn relation_wide_limbs_range_constraint_0(&self) -> &T {
+        todo!()
+    }
+    pub fn relation_wide_limbs_range_constraint_1(&self) -> &T {
+        todo!()
+    }
+    pub fn relation_wide_limbs_range_constraint_2(&self) -> &T {
+        todo!()
+    }
+    pub fn relation_wide_limbs_range_constraint_3(&self) -> &T {
+        todo!()
+    }
+    pub fn p_x_low_limbs_range_constraint_tail(&self) -> &T {
+        todo!()
+    }
+    pub fn p_x_high_limbs_range_constraint_tail(&self) -> &T {
+        todo!()
+    }
+    pub fn p_y_low_limbs_range_constraint_tail(&self) -> &T {
+        todo!()
+    }
+    pub fn p_y_high_limbs_range_constraint_tail(&self) -> &T {
+        todo!()
+    }
+    pub fn z_low_limbs_range_constraint_tail(&self) -> &T {
+        todo!()
+    }
+    pub fn z_high_limbs_range_constraint_tail(&self) -> &T {
+        todo!()
+    }
+    pub fn accumulator_low_limbs_range_constraint_tail(&self) -> &T {
+        todo!()
+    }
+    pub fn accumulator_high_limbs_range_constraint_tail(&self) -> &T {
+        todo!()
+    }
+    pub fn quotient_low_limbs_range_constraint_tail(&self) -> &T {
+        todo!()
+    }
+    pub fn quotient_high_limbs_range_constraint_tail(&self) -> &T {
+        todo!()
+    }
+}
+impl<T: Default> TranslatorShiftedWitnessEntities<T> {
+    pub fn ordered_range_constraints_0_shift(&self) -> &T {
+        todo!()
+    }
+    pub fn ordered_range_constraints_1_shift(&self) -> &T {
+        todo!()
+    }
+    pub fn ordered_range_constraints_2_shift(&self) -> &T {
+        todo!()
+    }
+    pub fn ordered_range_constraints_3_shift(&self) -> &T {
+        todo!()
+    }
+    pub fn ordered_range_constraints_4_shift(&self) -> &T {
+        todo!()
+    }
+    pub fn z_perm_shift(&self) -> &T {
+        todo!()
+    }
+    pub fn accumulators_binary_limbs_0_shift(&self) -> &T {
+        todo!()
+    }
+    pub fn accumulators_binary_limbs_1_shift(&self) -> &T {
+        todo!()
+    }
+    pub fn accumulators_binary_limbs_2_shift(&self) -> &T {
+        todo!()
+    }
+    pub fn accumulators_binary_limbs_3_shift(&self) -> &T {
+        todo!()
+    }
+}
