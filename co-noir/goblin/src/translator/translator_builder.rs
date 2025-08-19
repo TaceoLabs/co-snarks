@@ -1,4 +1,7 @@
-use crate::{eccvm::ecc_op_queue::ECCOpQueue, prelude::UltraOp};
+use crate::{
+    NUM_BINARY_LIMBS, NUM_MICRO_LIMBS, NUM_RELATION_WIDE_LIMBS, NUM_Z_LIMBS,
+    eccvm::ecc_op_queue::ECCOpQueue, prelude::UltraOp,
+};
 use ark_ec::CurveGroup;
 use ark_ff::Zero;
 use co_builder::{TranscriptFieldType, prelude::HonkCurve};
@@ -228,5 +231,55 @@ pub enum WireIds {
 impl WireIds {
     pub const fn as_usize(self) -> usize {
         self as usize
+    }
+}
+
+#[derive(Clone, Debug)]
+struct AccumulationInput<P: HonkCurve<TranscriptFieldType>> {
+    // Members necessary for the gate creation
+    ultra_op: UltraOp<P>,
+
+    p_x_limbs: [P::ScalarField; NUM_BINARY_LIMBS],
+    p_x_microlimbs: [[P::ScalarField; NUM_MICRO_LIMBS]; NUM_BINARY_LIMBS],
+
+    p_y_limbs: [P::ScalarField; NUM_BINARY_LIMBS],
+    p_y_microlimbs: [[P::ScalarField; NUM_MICRO_LIMBS]; NUM_BINARY_LIMBS],
+
+    z_1_limbs: [P::ScalarField; NUM_Z_LIMBS],
+    z_1_microlimbs: [[P::ScalarField; NUM_MICRO_LIMBS]; NUM_Z_LIMBS],
+    z_2_limbs: [P::ScalarField; NUM_Z_LIMBS],
+    z_2_microlimbs: [[P::ScalarField; NUM_MICRO_LIMBS]; NUM_Z_LIMBS],
+
+    previous_accumulator: [P::ScalarField; NUM_BINARY_LIMBS],
+    current_accumulator: [P::ScalarField; NUM_BINARY_LIMBS],
+    current_accumulator_microlimbs: [[P::ScalarField; NUM_MICRO_LIMBS]; NUM_BINARY_LIMBS],
+
+    quotient_binary_limbs: [P::ScalarField; NUM_BINARY_LIMBS],
+    quotient_microlimbs: [[P::ScalarField; NUM_MICRO_LIMBS]; NUM_BINARY_LIMBS],
+
+    relation_wide_limbs: [P::ScalarField; NUM_RELATION_WIDE_LIMBS],
+    relation_wide_microlimbs: [[P::ScalarField; NUM_MICRO_LIMBS]; 2],
+}
+
+impl<P: HonkCurve<TranscriptFieldType>> AccumulationInput<P> {
+    fn new(ultra_op: UltraOp<P>, zero: P::ScalarField) -> Self {
+        Self {
+            ultra_op,
+            p_x_limbs: [zero; NUM_BINARY_LIMBS],
+            p_x_microlimbs: [[zero; NUM_MICRO_LIMBS]; NUM_BINARY_LIMBS],
+            p_y_limbs: [zero; NUM_BINARY_LIMBS],
+            p_y_microlimbs: [[zero; NUM_MICRO_LIMBS]; NUM_BINARY_LIMBS],
+            z_1_limbs: [zero; NUM_Z_LIMBS],
+            z_1_microlimbs: [[zero; NUM_MICRO_LIMBS]; NUM_Z_LIMBS],
+            z_2_limbs: [zero; NUM_Z_LIMBS],
+            z_2_microlimbs: [[zero; NUM_MICRO_LIMBS]; NUM_Z_LIMBS],
+            previous_accumulator: [zero; NUM_BINARY_LIMBS],
+            current_accumulator: [zero; NUM_BINARY_LIMBS],
+            current_accumulator_microlimbs: [[zero; NUM_MICRO_LIMBS]; NUM_BINARY_LIMBS],
+            quotient_binary_limbs: [zero; NUM_BINARY_LIMBS],
+            quotient_microlimbs: [[zero; NUM_MICRO_LIMBS]; NUM_BINARY_LIMBS],
+            relation_wide_limbs: [zero; NUM_RELATION_WIDE_LIMBS],
+            relation_wide_microlimbs: [[zero; NUM_MICRO_LIMBS]; 2],
+        }
     }
 }
