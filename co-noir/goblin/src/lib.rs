@@ -23,3 +23,7 @@ pub(crate) const NUM_ROWS_PER_OP: usize = 2; // A single ECC op is split across 
 
 // Translator constans:
 pub(crate) const CONST_TRANSLATOR_LOG_N: usize = 18;
+pub(crate) const NUM_BINARY_LIMBS: usize = 4;
+pub(crate) const NUM_Z_LIMBS: usize = 2;
+pub(crate) const NUM_MICRO_LIMBS: usize = 6;
+pub(crate) const NUM_RELATION_WIDE_LIMBS: usize = 2;
