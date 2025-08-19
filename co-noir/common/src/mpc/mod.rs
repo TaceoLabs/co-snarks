@@ -232,7 +232,6 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
         state: &mut Self::State,
     ) -> eyre::Result<Vec<Self::ArithmeticShare>>;
 
-    // TODO CESAR: There's a reason why this wasn't here in the first place
     /// Multiply two shares: \[c\] = \[a\] * \[b\]. Requires network communication.
     fn mul<N: Network>(
         a: Self::ArithmeticShare,

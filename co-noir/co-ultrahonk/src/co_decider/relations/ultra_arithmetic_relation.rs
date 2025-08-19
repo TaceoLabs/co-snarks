@@ -5,7 +5,6 @@ use crate::{
     types::AllEntities,
 };
 use ark_ec::CurveGroup;
-use ark_ff::AdditiveGroup;
 use ark_ff::Field;
 use ark_ff::Zero;
 use co_builder::HonkProofResult;
@@ -261,7 +260,8 @@ impl UltraArithmeticRelation {
         r0: &mut T::ArithmeticShare,
         input: &AllEntities<T::ArithmeticShare, P::ScalarField, L>,
         scaling_factor: P::ScalarField,
-    ) where
+    ) -> HonkProofResult<()>
+    where
         T: NoirUltraHonkProver<P>,
         P: HonkCurve<TranscriptFieldType>,
         L: MPCProverFlavour,
@@ -284,8 +284,7 @@ impl UltraArithmeticRelation {
         let neg_half = -P::ScalarField::from(2u64).inverse().unwrap();
         let three = P::ScalarField::from(3_u64);
 
-        // TODO CESAR: Error message
-        let mul = T::mul(w_l, w_r, net, state).unwrap();
+        let mul = T::mul(w_l, w_r, net, state)?;
         let id = state.id();
 
         let tmp_l = T::mul_with_public(q_l, w_l);
@@ -307,6 +306,7 @@ impl UltraArithmeticRelation {
         T::mul_assign_with_public(&mut tmp, q_arith);
         T::mul_assign_with_public(&mut tmp, scaling_factor);
         T::add_assign(r0, tmp);
+        Ok(())
     }
 
     fn compute_r1<T, P, L, const SIZE: usize>(
@@ -534,14 +534,13 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         _relation_parameters: &RelationParameters<P::ScalarField>,
         scaling_factor: &P::ScalarField,
     ) -> HonkProofResult<()> {
-        // TODO CESAR: Redo paralelilization
         Self::compute_r0_verifier::<T, P, L, N>(
             net,
             state,
             &mut accumulator.r0,
             input,
             *scaling_factor,
-        );
+        )?;
         Self::compute_r1_verifier::<T, P, L>(state, &mut accumulator.r1, input, *scaling_factor);
         Ok(())
     }

@@ -11,9 +11,9 @@ pub struct Univariate<F, const SIZE: usize> {
     pub evaluations: [F; SIZE],
 }
 
-// TODO CESAR: Maybe remove
 impl<F: PrimeField, const SIZE: usize> From<Vec<F>> for Univariate<F, SIZE> {
     fn from(vec: Vec<F>) -> Self {
+        assert_eq!(vec.len(), SIZE);
         let mut evaluations = [F::zero(); SIZE];
         for (i, v) in vec.into_iter().enumerate() {
             evaluations[i] = v;

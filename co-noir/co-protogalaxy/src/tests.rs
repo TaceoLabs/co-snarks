@@ -734,8 +734,6 @@ fn test_protogalaxy_prover() {
             [a, b, c]
         });
 
-    // TODO CESAR: Remove
-    println!("Starting test");
     let structure_prover_polys =
         |shared: Vec<Vec<<Rep3UltraHonkDriver as NoirUltraHonkProver<C>>::ArithmeticShare>>,
          public: Vec<Vec<F>>| {

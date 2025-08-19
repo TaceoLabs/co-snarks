@@ -243,7 +243,6 @@ impl UltraPermutationRelation {
         let w_3 = input.witness.w_o();
         let w_4 = input.witness.w_4();
 
-        // TODO CESAR: Revisit
         let id_1 = Univariate::from(input.precomputed.id_1().to_owned());
         let id_2 = Univariate::from(input.precomputed.id_2().to_owned());
         let id_3 = Univariate::from(input.precomputed.id_3().to_owned());
@@ -538,14 +537,8 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         let t7 = T::add_with_public(sigma_3 * beta, w_3_plus_gamma, state.id());
         let t8 = T::add_with_public(sigma_4 * beta, w_4_plus_gamma, state.id());
 
-        // TODO CESAR: Use 3 mul instead of 4
-        // TODO CESAR: What about the scaling factor? ALSO MISSING IN ACCUMULATE!
-        let num = T::mul_many(&[t1, t2], &[t3, t4], net, state)?;
-        let numerator = T::mul(num[0], num[1], net, state)?;
-
-        // TODO CESAR: What about the scaling factor? ALSO MISSING IN ACCUMULATE!
-        let den = T::mul_many(&[t5, t6], &[t7, t8], net, state)?;
-        let denominator = T::mul(den[0], den[1], net, state)?;
+        let num_den = T::mul_many(&[t1, t2, t5, t6], &[t3, t4, t7, t8], net, state)?;
+        let [numerator, denominator] = T::mul_many(&[num_den[0], num_den[2]], &[num_den[1], num_den[3]], net, state)?.try_into().unwrap();
 
         let public_input_term =
             T::add_with_public(public_input_delta * lagrange_last, z_perm_shift, state.id());
