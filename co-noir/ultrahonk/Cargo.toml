@@ -31,6 +31,3 @@ num-traits.workspace = true
 
 [dev-dependencies]
 rand.workspace = true
-
-[features]
-protogalaxy = []
