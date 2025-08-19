@@ -5,7 +5,8 @@ use itertools::izip;
 use mpc_core::{
     MpcState,
     protocols::rep3::{
-        Rep3PointShare, Rep3PrimeFieldShare, Rep3State, arithmetic, id::PartyID, pointshare, poly,
+        Rep3BigUintShare, Rep3PointShare, Rep3PrimeFieldShare, Rep3State, arithmetic, id::PartyID,
+        pointshare, poly,
     },
 };
 use mpc_net::Network;
@@ -17,6 +18,7 @@ pub struct Rep3UltraHonkDriver;
 impl<P: CurveGroup> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
     type ArithmeticShare = Rep3PrimeFieldShare<P::ScalarField>;
     type PointShare = Rep3PointShare<P>;
+    type BinaryShare = Rep3BigUintShare<P::ScalarField>;
     type State = Rep3State;
 
     fn rand<N: Network>(_: &N, state: &mut Self::State) -> eyre::Result<Self::ArithmeticShare> {

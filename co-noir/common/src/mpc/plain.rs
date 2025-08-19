@@ -7,6 +7,7 @@ use ark_poly::DenseUVPolynomial;
 use ark_poly::{Polynomial, univariate::DensePolynomial};
 use mpc_core::MpcState;
 use mpc_net::Network;
+use num_bigint::BigUint;
 use num_traits::Zero;
 use rand::thread_rng;
 use rayon::prelude::*;
@@ -16,6 +17,7 @@ pub struct PlainUltraHonkDriver;
 impl<P: CurveGroup> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
     type ArithmeticShare = P::ScalarField;
     type PointShare = P;
+    type BinaryShare = BigUint;
     type State = ();
 
     fn debug(ele: Self::ArithmeticShare) -> String {

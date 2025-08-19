@@ -8,7 +8,7 @@ use std::array;
 pub(crate) const TABLE_WIDTH: usize = 4; // dictated by the number of wires in the Ultra arithmetization
 pub(crate) const NUM_ROWS_PER_OP: usize = 2; // A single ECC op is split across two width-4 rows
 
-pub(crate) type CoEccvmOpsTable<T, C> = EccOpsTable<CoECCVMOperation<T, C>>;
+pub(crate) type CoEccvmOpsTable<T, C> = EccOpsTable<CoVMOperation<T, C>>;
 
 pub(crate) struct CoUltraEccOpsTable<T: NoirUltraHonkProver<C>, C: HonkCurve<TranscriptFieldType>> {
     pub(crate) table: EccOpsTable<CoUltraOp<T, C>>,
@@ -99,12 +99,12 @@ impl<T: NoirUltraHonkProver<C>, C: HonkCurve<TranscriptFieldType>> CoUltraEccOps
 }
 
 #[derive(Default)]
-pub struct CoECCVMOperation<T: NoirUltraHonkProver<C>, C: HonkCurve<TranscriptFieldType>> {
+pub struct CoVMOperation<T: NoirUltraHonkProver<C>, C: HonkCurve<TranscriptFieldType>> {
     pub op_code: CoEccOpCode<T, C>,
-    pub base_point: C::Affine,
-    pub z1: BigUint,
-    pub z2: BigUint,
-    pub mul_scalar_full: C::ScalarField,
+    pub base_point: T::PointShare,
+    pub z1: T::BinaryShare,
+    pub z2: T::BinaryShare,
+    pub mul_scalar_full: T::ArithmeticShare,
 }
 
 #[derive(Clone)]
@@ -151,7 +151,7 @@ pub struct CoECCOpQueue<T: NoirUltraHonkProver<C>, C: HonkCurve<TranscriptFieldT
     pub(crate) ultra_ops_table: CoUltraEccOpsTable<T, C>,
     pub(crate) eccvm_ops_table: CoEccvmOpsTable<T, C>,
     pub(crate) accumulator: C::Affine,
-    pub(crate) eccvm_ops_reconstructed: Vec<CoECCVMOperation<T, C>>,
+    pub(crate) eccvm_ops_reconstructed: Vec<CoVMOperation<T, C>>,
     pub(crate) eccvm_row_tracker: EccvmRowTracker,
 }
 
@@ -215,7 +215,7 @@ impl<T: NoirUltraHonkProver<C>, C: HonkCurve<TranscriptFieldType>> CoECCOpQueue<
      * @brief A fuzzing only method for setting eccvm ops directly
      *
      */
-    pub fn set_eccvm_ops_for_fuzzing(&mut self, eccvm_ops_in: Vec<CoECCVMOperation<T, C>>) {
+    pub fn set_eccvm_ops_for_fuzzing(&mut self, eccvm_ops_in: Vec<CoVMOperation<T, C>>) {
         self.eccvm_ops_reconstructed = eccvm_ops_in;
     }
 

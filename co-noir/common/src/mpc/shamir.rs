@@ -18,6 +18,7 @@ pub struct ShamirUltraHonkDriver;
 impl<P: CurveGroup> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
     type ArithmeticShare = ShamirPrimeFieldShare<P::ScalarField>;
     type PointShare = ShamirPointShare<P>;
+    type BinaryShare = ();
     type State = ShamirState<P::ScalarField>;
 
     fn rand<N: Network>(net: &N, state: &mut Self::State) -> eyre::Result<Self::ArithmeticShare> {

@@ -45,8 +45,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
     type Acc = EccSetRelationAcc<T, P>;
 
     fn can_skip(entity: &crate::co_decider::types::ProverUnivariates<T, P, ECCVMFlavour>) -> bool {
-        // TACEO TODO: investigate difference not skipping <-> is_zero & skipping
-        // We do not do this check (don't wan't to do the is_zero check)
+        // We do not do this check
         // (input.witness.z_perm().to_owned() - input.shifted_witness.z_perm_shift().to_owned())
         //     .is_zero()
         false
