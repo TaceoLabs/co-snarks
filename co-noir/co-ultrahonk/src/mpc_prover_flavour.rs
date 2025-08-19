@@ -85,10 +85,10 @@ pub trait MPCProverFlavour: Default + ProverFlavour {
         P: CurveGroup,
         const SIZE: usize,
     >(
-        acc: &Self::AllRelationAcc<T, P>,
-        result: &mut SharedUnivariate<T, P, SIZE>,
-        first_term: Univariate<P::ScalarField, SIZE>,
-        running_challenge: &[Univariate<P::ScalarField, SIZE>],
+        _acc: &Self::AllRelationAcc<T, P>,
+        _result: &mut SharedUnivariate<T, P, SIZE>,
+        _first_term: Univariate<P::ScalarField, SIZE>,
+        _running_challenge: &[Univariate<P::ScalarField, SIZE>],
     ) {
         panic!(
             "extend_and_batch_univariates_with_distinct_challenges is not implemented for this flavor"
@@ -126,11 +126,11 @@ pub trait MPCProverFlavour: Default + ProverFlavour {
         N: Network,
         const SIZE: usize,
     >(
-        net: &N,
-        state: &mut T::State,
-        univariate_accumulators: &mut Self::AllRelationAccHalfShared<T, P>,
-        input: &AllEntitiesBatch<T, P, Self>,
-        relation_parameters: &RelationParameters<Univariate<P::ScalarField, SIZE>>,
+        _net: &N,
+        _state: &mut T::State,
+        _univariate_accumulators: &mut Self::AllRelationAccHalfShared<T, P>,
+        _input: &AllEntitiesBatch<T, P, Self>,
+        _relation_parameters: &RelationParameters<Univariate<P::ScalarField, SIZE>>,
         _scaling_factor: &P::ScalarField,
     ) -> HonkProofResult<()> {
         panic!(

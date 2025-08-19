@@ -83,36 +83,6 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup> UltraArithmeticRelationEvals<T, P
     }
 }
 
-impl<T: NoirUltraHonkProver<P>, P: CurveGroup> UltraArithmeticRelationAccHalfShared<T, P> {
-    pub(crate) fn extend_and_batch_univariates_with_distinct_challenges<const SIZE: usize>(
-        &self,
-        state: &mut T::State,
-        result: &mut SharedUnivariate<T, P, SIZE>,
-        running_challenge: &[Univariate<P::ScalarField, SIZE>],
-    ) {
-        let mut univariate_result = Univariate::<P::ScalarField, SIZE>::default();
-        self.r0.extend_and_batch_univariates(
-            &mut univariate_result,
-            &running_challenge[0],
-            &P::ScalarField::ONE,
-            true,
-        );
-
-        self.r1.extend_and_batch_univariates(
-            result,
-            &running_challenge[1],
-            &P::ScalarField::ONE,
-            true,
-        );
-
-        T::add_assign_public_many(
-            &mut result.evaluations,
-            &univariate_result.evaluations,
-            state.id(),
-        );
-    }
-}
-
 impl<T: NoirUltraHonkProver<P>, P: CurveGroup> UltraArithmeticRelationAcc<T, P> {
     pub(crate) fn scale(&mut self, elements: &[P::ScalarField]) {
         assert!(elements.len() == UltraArithmeticRelation::NUM_RELATIONS);
@@ -512,7 +482,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         _relation_parameters: &RelationParameters<Univariate<P::ScalarField, SIZE>>,
         scaling_factor: &P::ScalarField,
     ) -> HonkProofResult<()> {
-        // TODO CESAR: Reconcile skips
+        // TODO TACEO: Reconcile skip check and `can_skip`
         if input.precomputed.q_arith().iter().all(|x| x.is_zero()) {
             return Ok(());
         }

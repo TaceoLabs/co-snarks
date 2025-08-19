@@ -538,7 +538,14 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         let t8 = T::add_with_public(sigma_4 * beta, w_4_plus_gamma, state.id());
 
         let num_den = T::mul_many(&[t1, t2, t5, t6], &[t3, t4, t7, t8], net, state)?;
-        let [numerator, denominator] = T::mul_many(&[num_den[0], num_den[2]], &[num_den[1], num_den[3]], net, state)?.try_into().unwrap();
+        let [numerator, denominator] = T::mul_many(
+            &[num_den[0], num_den[2]],
+            &[num_den[1], num_den[3]],
+            net,
+            state,
+        )?
+        .try_into()
+        .unwrap();
 
         let public_input_term =
             T::add_with_public(public_input_delta * lagrange_last, z_perm_shift, state.id());

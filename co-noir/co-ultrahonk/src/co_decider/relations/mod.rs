@@ -90,25 +90,26 @@ pub(crate) trait Relation<
         scaling_factor: &P::ScalarField,
     ) -> HonkProofResult<()>;
 
-    // TODO CESAR: Default impl should use accumulate
     fn accumulate_with_extended_parameters<N: Network, const SIZE: usize>(
-        net: &N,
-        state: &mut T::State,
-        univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariatesBatch<T, P, L>,
+        _net: &N,
+        _state: &mut T::State,
+        _univariate_accumulator: &mut Self::Acc,
+        _input: &ProverUnivariatesBatch<T, P, L>,
         _relation_parameters: &RelationParameters<Univariate<P::ScalarField, SIZE>>,
-        scaling_factor: &P::ScalarField,
-    ) -> HonkProofResult<()>;
+        _scaling_factor: &P::ScalarField,
+    ) -> HonkProofResult<()> {
+        panic!("accumulate_with_extended_parameters is not implemented for this relation");
+    }
 
     fn verify_accumulate<N: Network>(
-        net: &N,
-        state: &mut T::State,
-        univariate_accumulator: &mut Self::VerifyAcc,
-        input: &AllEntities<T::ArithmeticShare, P::ScalarField, L>,
-        relation_parameters: &RelationParameters<P::ScalarField>,
-        scaling_factor: &P::ScalarField,
+        _net: &N,
+        _state: &mut T::State,
+        _univariate_accumulator: &mut Self::VerifyAcc,
+        _input: &AllEntities<T::ArithmeticShare, P::ScalarField, L>,
+        _relation_parameters: &RelationParameters<P::ScalarField>,
+        _scaling_factor: &P::ScalarField,
     ) -> HonkProofResult<()> {
-        todo!("verify_accumulate is not implemented for this relation");
+        panic!("verify_accumulate is not implemented for this relation");
     }
 }
 

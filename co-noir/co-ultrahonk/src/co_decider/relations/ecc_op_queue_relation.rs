@@ -331,7 +331,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         _relation_parameters: &RelationParameters<Univariate<P::ScalarField, SIZE>>,
         scaling_factor: &P::ScalarField,
     ) -> HonkProofResult<()> {
-        // TODO CESAR: Reconcile skips
+        // TODO TACEO: Reconcile skip check and `can_skip`
         if input
             .precomputed
             .lagrange_ecc_op()

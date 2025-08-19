@@ -6,7 +6,7 @@ use crate::{
     },
     mpc_prover_flavour::MPCProverFlavour,
 };
-use common::{mpc::NoirUltraHonkProver, shplemini::ShpleminiVerifierOpeningClaim};
+use common::mpc::NoirUltraHonkProver;
 
 use ark_ec::CurveGroup;
 use ark_ff::Field;
@@ -298,7 +298,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         _relation_parameters: &RelationParameters<Univariate<P::ScalarField, SIZE>>,
         scaling_factor: &P::ScalarField,
     ) -> HonkProofResult<()> {
-        // TODO CESAR: Reconcile skips
+        // TODO TACEO: Reconcile skip check and `can_skip`
         if input
             .precomputed
             .q_delta_range()
@@ -352,7 +352,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         let tmp_3_2 = T::add_with_public(minus_two, delta_3, id);
         let tmp_4_2 = T::add_with_public(minus_two, delta_4, id);
 
-        let mut lhs = vec![
+        let lhs = vec![
             tmp_1, tmp_2, tmp_3, tmp_4, tmp_1_2, tmp_2_2, tmp_3_2, tmp_4_2,
         ];
 

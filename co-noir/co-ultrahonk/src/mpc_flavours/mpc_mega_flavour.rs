@@ -22,15 +22,15 @@ use crate::{
     co_decider::{
         co_sumcheck::co_sumcheck_round::SumcheckRound,
         relations::{
-            auxiliary_relation::{AuxiliaryRelation, AuxiliaryRelationAcc},
+            auxiliary_relation::AuxiliaryRelation,
             databus_lookup_relation::{DataBusLookupRelation, DataBusLookupRelationAcc},
             delta_range_constraint_relation::{
                 DeltaRangeConstraintRelation, DeltaRangeConstraintRelationAcc,
             },
             ecc_op_queue_relation::{EccOpQueueRelation, EccOpQueueRelationAcc},
             elliptic_relation::{EllipticRelation, EllipticRelationAcc},
-            logderiv_lookup_relation::{LogDerivLookupRelation, LogDerivLookupRelationAcc},
-            permutation_relation::{UltraPermutationRelation, UltraPermutationRelationAcc},
+            logderiv_lookup_relation::LogDerivLookupRelation,
+            permutation_relation::UltraPermutationRelation,
             poseidon2_external_relation::{
                 Poseidon2ExternalRelation, Poseidon2ExternalRelationAcc,
             },

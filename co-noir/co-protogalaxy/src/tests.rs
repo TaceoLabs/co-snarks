@@ -1,4 +1,4 @@
-use std::{array, clone, io::Read, sync::Arc, thread, vec};
+use std::{io::Read, sync::Arc, thread, vec};
 
 use ark_bn254::Bn254;
 use ark_ec::{bn::Bn, pairing::Pairing};
@@ -6,7 +6,7 @@ use ark_ff::AdditiveGroup;
 use co_builder::{
     TranscriptFieldType,
     flavours::mega_flavour::{MegaFlavour, MegaPrecomputedEntities, MegaProverWitnessEntities},
-    prelude::{ActiveRegionData, CrsParser, Polynomial, ProverCrs, PublicComponentKey},
+    prelude::{ActiveRegionData, CrsParser, Polynomial, PublicComponentKey},
     prover_flavour::ProverFlavour,
 };
 use co_ultrahonk::{
@@ -18,21 +18,18 @@ use co_ultrahonk::{
 use co_ultrahonk::{co_decider::univariates::SharedUnivariate, types::AllEntities};
 use common::{
     HonkProof,
-    mpc::{NoirUltraHonkProver, plain::PlainUltraHonkDriver, rep3::Rep3UltraHonkDriver},
+    mpc::{NoirUltraHonkProver, rep3::Rep3UltraHonkDriver},
     shared_polynomial::SharedPolynomial,
 };
 use flate2::read::GzDecoder;
-use itertools::{Itertools, izip};
+use itertools::izip;
 use mpc_core::{
     gadgets::field_from_hex_string,
-    protocols::{
-        rep3::{Rep3State, conversion::A2BType, poly, share_field_element, share_field_elements},
-        shamir::share,
-    },
+    protocols::rep3::{Rep3State, conversion::A2BType, share_field_elements},
 };
 use mpc_net::local::LocalNetwork;
 use rand::thread_rng;
-use serde::de::{self, DeserializeOwned};
+use serde::de::DeserializeOwned;
 
 use ultrahonk::prelude::{
     GateSeparatorPolynomial, Poseidon2Sponge, Transcript, Univariate, ZeroKnowledge,
@@ -63,10 +60,7 @@ const CRS_PATH_G2: &str = concat!(
 );
 type F = TranscriptFieldType;
 type C = ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>;
-type PlainDriver = PlainUltraHonkDriver;
 type Driver = Rep3UltraHonkDriver;
-type PlainSharedEntities =
-    AllEntities<Vec<<PlainDriver as NoirUltraHonkProver<C>>::ArithmeticShare>, Vec<F>, MegaFlavour>;
 type SharedEntities =
     AllEntities<Vec<<Driver as NoirUltraHonkProver<C>>::ArithmeticShare>, Vec<F>, MegaFlavour>;
 
@@ -697,10 +691,10 @@ fn test_protogalaxy_prover() {
 
     let honk_proof = to_field!(honk_proof, 1);
 
-    // let alphas_result = to_field!(alphas_result, 1);
-    // let relation_parameters_result = to_field!(relation_parameters_result, 1);
-    // let gate_challenges_result = to_field!(gate_challenges_result, 1);
-    // let polynomials_folding_result = to_field!(polynomials_folding_result, 2);
+    let alphas_result = to_field!(alphas_result, 1);
+    let relation_parameters_result = to_field!(relation_parameters_result, 1);
+    let gate_challenges_result = to_field!(gate_challenges_result, 1);
+    let polynomials_folding_result: Vec<Vec<F>> = to_field!(polynomials_folding_result, 2);
 
     let target_sum_result: F = to_field!(target_sum_result);
 
@@ -838,7 +832,7 @@ fn test_protogalaxy_prover() {
                 let oink_memory_1 = oink
                     .prove(&mut accumulator, &mut transcript, &prover_crs)
                     .unwrap();
-                
+
                 let mut accumulator_prover_memory =
                     DeciderProverMemory::<Driver, C>::from_memory_and_polynomials(
                         oink_memory_1,
@@ -852,53 +846,63 @@ fn test_protogalaxy_prover() {
                     &mut state,
                     &prover_crs,
                 );
-                prover
+                let (proof, target_sum) = prover
                     .prove(
                         &mut accumulator,
                         &mut accumulator_prover_memory,
                         vec![folded_key],
                     )
-                    .unwrap()
+                    .unwrap();
 
-                // <Driver as NoirUltraHonkProver<C>>::open_many(
-                //     &shared_univariate,
-                //     &net,
-                //     &mut state,
-                // )
-                // .unwrap()
+                let alphas = accumulator_prover_memory.alphas.clone();
+                let relation_parameters = accumulator_prover_memory
+                    .relation_parameters
+                    .get_params()
+                    .into_iter()
+                    .cloned()
+                    .collect::<Vec<_>>();
+                let gate_challenges = accumulator_prover_memory.gate_challenges.clone();
+                let polynomials = accumulator_prover_memory.polys;
+                let public_polynomials =
+                    polynomials.public_iter().cloned().collect::<Vec<Vec<_>>>();
+                let shared_polynomials = polynomials
+                    .shared_iter()
+                    .cloned()
+                    .map(|shared| {
+                        <Driver as NoirUltraHonkProver<C>>::open_many(&shared, &net, &mut state)
+                            .unwrap()
+                    })
+                    .collect::<Vec<_>>();
+                let polynomials = public_polynomials
+                    .into_iter()
+                    .chain(shared_polynomials.into_iter())
+                    .collect::<Vec<_>>();
+                (
+                    proof,
+                    target_sum,
+                    alphas,
+                    relation_parameters,
+                    gate_challenges,
+                    polynomials,
+                )
             }
         }));
     }
 
-    let results: Vec<(HonkProof<F>, F)> = threads.into_iter().map(|t| t.join().unwrap()).collect();
-    for (proof, target_sum) in results.into_iter() {
+    let results: Vec<(HonkProof<F>, F, Vec<F>, Vec<F>, Vec<F>, Vec<Vec<F>>)> =
+        threads.into_iter().map(|t| t.join().unwrap()).collect();
+    for (proof, target_sum, alphas, relation_parameters, gate_challenges, polynomials) in
+        results.into_iter()
+    {
         assert_eq!(proof.inner(), honk_proof);
         assert_eq!(target_sum, target_sum_result);
+        assert_eq!(alphas, alphas_result);
+        assert_eq!(relation_parameters, relation_parameters_result);
+        assert_eq!(gate_challenges, gate_challenges_result);
+        for (i, row) in polynomials.into_iter().enumerate() {
+            if row != polynomials_folding_result[i] {
+                println!("failed test at row {}", i)
+            }
+        }
     }
-
-    // assert_eq!(proof.inner(), honk_proof);
-
-    // assert_eq!(accumulator_prover_memory.alphas, alphas_result);
-
-    // assert_eq!(
-    //     accumulator_prover_memory
-    //         .relation_parameters
-    //         .get_params()
-    //         .into_iter()
-    //         .cloned()
-    //         .collect::<Vec<_>>(),
-    //     relation_parameters_result
-    // );
-
-    // assert_eq!(
-    //     accumulator_prover_memory.gate_challenges,
-    //     gate_challenges_result
-    // );
-
-    // assert_eq!(target_sum, target_sum_result);
-
-    // itertools::assert_equal(
-    //     accumulator_prover_memory.polys.into_iter(),
-    //     polynomials_folding_result.into_iter(),
-    // );
 }

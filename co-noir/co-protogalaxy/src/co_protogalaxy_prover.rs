@@ -1,4 +1,4 @@
-use std::{vec};
+use std::vec;
 
 use ark_ff::fields::Field;
 
@@ -138,7 +138,7 @@ where
 
         // Open the values of the perturbator
         let perturbator = Polynomial {
-            coefficients: T::open_many(&perturbator.coefficients, self.net, self.state)?
+            coefficients: T::open_many(&perturbator.coefficients, self.net, self.state)?,
         };
 
         (1..=CONST_PG_LOG_N).for_each(|i| {
@@ -268,8 +268,7 @@ where
             .polys
             .shared_iter_mut()
             .for_each(|poly| {
-                let poly_len = poly.len();
-                T::mul_assign_with_public_many(poly, &vec![lagranges[0]; poly_len]);
+                T::scale_many_in_place(poly, lagranges[0]);
             });
 
         for (key_poly, acc_poly) in next_prover_memory
@@ -286,15 +285,6 @@ where
                 )
                 .for_each(|(acc_coeff, tmp)| T::add_assign(acc_coeff, tmp));
         }
-
-        // Fold the shared polynomials
-        accumulator_prover_memory
-            .polys
-            .shared_iter_mut()
-            .for_each(|poly| {
-                let poly_len = poly.len();
-                T::mul_assign_with_public_many(poly, &vec![lagranges[0]; poly_len]);
-            });
 
         // Evaluate the combined batching  α_i univariate at challenge to obtain next α_i and send it to the
         // verifier, where i ∈ {0,...,NUM_SUBRELATIONS - 1}

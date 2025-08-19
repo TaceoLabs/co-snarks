@@ -372,7 +372,6 @@ impl LogDerivLookupRelation {
         let eta_2 = &relation_parameters.eta_2;
         let eta_3 = &relation_parameters.eta_3;
 
-        // TODO CESAR: I think Prover Univariates Batch should be univariates instead of vectors
         let table_1 = Univariate::from(input.precomputed.table_1().to_owned());
         let table_2 = Univariate::from(input.precomputed.table_2().to_owned());
         let table_3 = Univariate::from(input.precomputed.table_3().to_owned());

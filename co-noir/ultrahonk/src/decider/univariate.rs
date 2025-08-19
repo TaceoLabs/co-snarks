@@ -526,5 +526,3 @@ impl<F: PrimeField, const SIZE: usize> Neg for Univariate<F, SIZE> {
         result
     }
 }
-
-// TODO CESAR: Use macro to impl ops

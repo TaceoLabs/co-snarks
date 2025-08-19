@@ -1,5 +1,3 @@
-// TODO CESAR: Remove prints
-
 use crate::co_protogalaxy_prover::{BATCHED_EXTENDED_LENGTH, NUM_KEYS};
 use ark_ec::AdditiveGroup;
 use ark_ff::Field;
@@ -11,7 +9,7 @@ use co_builder::{TranscriptFieldType, prelude::HonkCurve};
 use co_ultrahonk::co_decider::univariates::SharedUnivariate;
 use co_ultrahonk::mpc_prover_flavour::SharedUnivariateTrait;
 use co_ultrahonk::prelude::{MPCProverFlavour, ProvingKey};
-use co_ultrahonk::types_batch::{AllEntitiesBatch};
+use co_ultrahonk::types_batch::AllEntitiesBatch;
 use common::mpc::NoirUltraHonkProver;
 use common::shared_polynomial::SharedPolynomial;
 use mpc_core::MpcState;
@@ -229,17 +227,17 @@ pub(crate) fn construct_coefficients_tree<
             let node = parent_idx * 2;
             parent_node[..prev_level_coeffs[node].len()].copy_from_slice(&prev_level_coeffs[node]);
             for d in 0..degree {
-            T::add_assign(
-                &mut parent_node[d],
-                T::mul_with_public(betas[level], prev_level_coeffs[node + 1][d]),
-            );
+                T::add_assign(
+                    &mut parent_node[d],
+                    T::mul_with_public(betas[level], prev_level_coeffs[node + 1][d]),
+                );
 
-            T::add_assign(
-                &mut parent_node[d + 1],
-                T::mul_with_public(deltas[level], prev_level_coeffs[node + 1][d]),
-            );
-        }
-    });
+                T::add_assign(
+                    &mut parent_node[d + 1],
+                    T::mul_with_public(deltas[level], prev_level_coeffs[node + 1][d]),
+                );
+            }
+        });
 
     construct_coefficients_tree::<T, C>(betas, deltas, level_coeffs, level + 1)
 }
@@ -265,17 +263,20 @@ pub(crate) fn construct_perturbator_coefficients<
     let width = full_honk_evaluations.coefficients.len();
     let mut first_level_coeffs = vec![vec![T::ArithmeticShare::default(); 2]; width / 2];
 
-    first_level_coeffs.par_iter_mut().enumerate().for_each(|(parent_idx, parent_node)| {
-        let node = parent_idx * 2;
+    first_level_coeffs
+        .par_iter_mut()
+        .enumerate()
+        .for_each(|(parent_idx, parent_node)| {
+            let node = parent_idx * 2;
 
-        parent_node[0] = T::add(
-            full_honk_evaluations.coefficients[node],
-            T::mul_with_public(betas[0], full_honk_evaluations.coefficients[node + 1]),
-        );
+            parent_node[0] = T::add(
+                full_honk_evaluations.coefficients[node],
+                T::mul_with_public(betas[0], full_honk_evaluations.coefficients[node + 1]),
+            );
 
-        parent_node[1] =
-            T::mul_with_public(deltas[0], full_honk_evaluations.coefficients[node + 1]);
-    });
+            parent_node[1] =
+                T::mul_with_public(deltas[0], full_honk_evaluations.coefficients[node + 1]);
+        });
 
     construct_coefficients_tree::<T, C>(betas, deltas, first_level_coeffs, 1)
 }
