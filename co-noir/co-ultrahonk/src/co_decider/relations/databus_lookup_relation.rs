@@ -755,8 +755,8 @@ impl DataBusLookupRelation {
         // Determine which pair of subrelations to update based on which bus column is being read
         let subrel_idx_1: u32 = 2u32 * (bus_idx as u32);
         let subrel_idx_2: u32 = 2u32 * (bus_idx as u32) + 1u32;
-        let lhs = vec![read_term.clone(), read_counts_m];
-        let rhs = vec![write_term.clone(), read_term];
+        let lhs = [read_term, read_counts_m];
+        let rhs = [write_term, read_term];
         let mul = T::mul_many(&lhs, &rhs, net, state)?;
 
         // Establish the correctness of the polynomial of inverses I. Note: inverses is computed so that the value

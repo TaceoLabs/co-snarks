@@ -1287,7 +1287,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         T::add_assign(&mut memory_record_check, tmp1);
         T::add_assign(&mut memory_record_check, tmp2);
         T::add_assign_public(&mut memory_record_check, *q_c, id);
-        let partial_record_check = memory_record_check.clone();
+        let partial_record_check = memory_record_check;
         let mut memory_record_check = T::sub(partial_record_check, *w_4);
 
         /*
@@ -1306,7 +1306,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         let index_delta = T::sub(*w_1_shift, *w_1);
         let record_delta = T::sub(*w_4_shift, *w_4);
 
-        let mut index_delta_one = index_delta.clone();
+        let mut index_delta_one = index_delta;
         T::neg_assign(&mut index_delta_one);
         T::add_assign_public(&mut index_delta_one, P::ScalarField::one(), id);
 
@@ -1331,16 +1331,16 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         let access_type = T::sub(*w_4, partial_record_check); // deg 1 or 2
         let value_delta = T::sub(*w_3_shift, *w_3);
         let lhs = vec![
-            index_delta.clone(),
+            index_delta,
             record_delta,
-            access_type.clone(),
+            access_type,
             value_delta,
         ];
         let rhs = vec![
-            index_delta.clone(),
-            index_delta_one.clone(),
-            access_type.clone(),
-            index_delta_one.clone(),
+            index_delta,
+            index_delta_one,
+            access_type,
+            index_delta_one,
         ];
 
         let mul = T::mul_many(&lhs, &rhs, net, state)?;
@@ -1382,7 +1382,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         T::add_assign(&mut next_gate_access_type, tmp1);
         T::add_assign(&mut next_gate_access_type, tmp2);
         let next_gate_access_type = T::sub(*w_4_shift, next_gate_access_type);
-        let mut tmp = next_gate_access_type.clone();
+        let mut tmp = next_gate_access_type;
         T::neg_assign(&mut tmp);
         T::add_assign_public(&mut tmp, P::ScalarField::one(), id);
 
@@ -1393,7 +1393,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
             index_delta_one,
         ];
 
-        let rhs = vec![tmp, next_gate_access_type.clone(), timestamp_delta];
+        let rhs = vec![tmp, next_gate_access_type, timestamp_delta];
 
         let mul = T::mul_many(&lhs, &rhs, net, state)?;
 

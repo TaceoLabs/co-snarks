@@ -274,7 +274,7 @@ impl SumcheckRound {
 
         let res = Self::batch_over_relations_univariates::<T, P, L>(
             univariate_accumulators,
-            &alphas,
+            alphas,
             gate_separators,
         );
         Ok(res)
@@ -304,7 +304,7 @@ impl SumcheckRound {
 
         let res = Self::batch_over_relations_univariates_zk::<T, P, L>(
             univariate_accumulators,
-            &alphas,
+            alphas,
             gate_separators,
         );
         Ok(res)
@@ -463,7 +463,7 @@ impl SumcheckRound {
         let univariate_accumulators = L::reshare(univariate_accumulators, net, state)?;
         let mut result = Self::batch_over_relations_univariates_zk::<T, P, L>(
             univariate_accumulators,
-            &alphas,
+            alphas,
             gate_separators,
         );
 

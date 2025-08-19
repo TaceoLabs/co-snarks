@@ -379,13 +379,13 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
             y_1,
             y_2,
             y_1,
-            x_diff.clone(),
-            y1_plus_y3.clone(),
-            y_diff.clone(),
-            x1_mul_3.clone(),
+            x_diff,
+            y1_plus_y3,
+            y_diff,
+            x1_mul_3,
         ];
 
-        let rhs = vec![y_1, y_2, y_2, x_diff.clone(), x_diff, T::sub(x_3, x_1), x_1];
+        let rhs = vec![y_1, y_2, y_2, x_diff, x_diff, T::sub(x_3, x_1), x_1];
 
         let mul1 = T::mul_many(&lhs, &rhs, net, state)?;
 

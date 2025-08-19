@@ -105,7 +105,7 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
         net: &N,
         state: &mut Self::State,
     ) -> eyre::Result<Self::ArithmeticShare> {
-        arithmetic::mul_vec(&vec![a], &vec![b], net, state).map(|v| v[0])
+        arithmetic::mul_vec(&[a], &[b], net, state).map(|v| v[0])
     }
 
     fn mul_many<N: Network>(

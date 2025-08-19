@@ -676,7 +676,7 @@ impl MPCProverFlavour for MegaFlavour {
             net,
             state,
             &mut univariate_accumulators.r_aux,
-            &input,
+            input,
             relation_parameters,
             scaling_factor,
         )?;
@@ -685,7 +685,7 @@ impl MPCProverFlavour for MegaFlavour {
             net,
             state,
             &mut univariate_accumulators.r_lookup,
-            &input,
+            input,
             relation_parameters,
             scaling_factor,
         )?;
@@ -694,7 +694,7 @@ impl MPCProverFlavour for MegaFlavour {
             net,
             state,
             &mut univariate_accumulators.r_ecc_op_queue,
-            &input,
+            input,
             relation_parameters,
             scaling_factor,
         )?;
@@ -703,7 +703,7 @@ impl MPCProverFlavour for MegaFlavour {
             net,
             state,
             &mut univariate_accumulators.r_databus,
-            &input,
+            input,
             relation_parameters,
             scaling_factor,
         )?;
@@ -712,7 +712,7 @@ impl MPCProverFlavour for MegaFlavour {
             net,
             state,
             &mut univariate_accumulators.r_pos_ext,
-            &input,
+            input,
             relation_parameters,
             scaling_factor,
         )?;
@@ -721,7 +721,7 @@ impl MPCProverFlavour for MegaFlavour {
             net,
             state,
             &mut univariate_accumulators.r_pos_int,
-            &input,
+            input,
             relation_parameters,
             scaling_factor,
         )?;
