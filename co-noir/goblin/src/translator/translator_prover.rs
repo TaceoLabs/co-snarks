@@ -1,23 +1,24 @@
 use ark_ec::CurveGroup;
 use ark_ff::Zero;
 use co_builder::HonkProofResult;
-use co_builder::prelude::{Polynomial, ProverCrs};
-use co_builder::{
-    TranscriptFieldType, flavours::translator_flavour::TranslatorFlavour, prelude::HonkCurve,
-};
+use co_builder::flavours::translator_flavour::TranslatorFlavour;
+use co_builder::prelude::{HonkCurve, Polynomial, ProverCrs};
+use common::HonkProof;
+use common::shplemini::ShpleminiOpeningClaim;
+use common::transcript::{Transcript, TranscriptFieldType};
 use num_bigint::BigUint;
 use ultrahonk::Utils as UltraHonkUtils;
 use ultrahonk::prelude::{
-    Decider, HonkProof, ProvingKey, ShpleminiOpeningClaim, SmallSubgroupIPAProver, SumcheckOutput,
-    Transcript, TranscriptHasher, ZKSumcheckData,
+    Decider, ProvingKey, SmallSubgroupIPAProver, SumcheckOutput, TranscriptHasher, ZKSumcheckData,
 };
+
+use crate::CONST_TRANSLATOR_LOG_N;
 
 pub(crate) struct ProverMemory<P: CurveGroup> {
     pub(crate) z_perm: Polynomial<P::ScalarField>,
 }
 
 struct Translator<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> {
-    //TODO FLORIN: I dont think this is the nicest way to do this, think about it later
     decider: Decider<P, H, TranslatorFlavour>,
     batching_challenge_v: P::BaseField,
     evaluation_input_x: P::BaseField,
@@ -59,7 +60,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
         // Fiat-Shamir: gamma
         // Compute grand product(s) and commitments.
-        self.execute_grand_product_computation_round(&mut transcript)?;
+        self.execute_grand_product_computation_round(&mut transcript, proving_key)?;
 
         // Fiat-Shamir: alpha
         // Run sumcheck subprotocol.
@@ -169,6 +170,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     fn execute_grand_product_computation_round(
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
+        proving_key: &ProvingKey<P, TranslatorFlavour>,
     ) -> HonkProofResult<()> {
         let challs = transcript.get_challenges::<P>(&["BETA".to_string(), "GAMMA".to_string()]);
         let beta = challs[0];
@@ -228,11 +230,12 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
                 .try_into()
                 .expect("We should have 20 batching challenge powers");
 
-        // TODO FLORIN:
-        //             // Compute constraint permutation grand product
-        // compute_grand_products<Flavor>(key->proving_key->polynomials, relation_parameters);
-
-        // commit_to_witness_polynomial(key->proving_key->polynomials.z_perm, commitment_labels.z_perm);
+        // Compute permutation grand product and their commitments
+        self.compute_grand_product(proving_key);
+        // we do std::mem::take here to avoid borrowing issues with self
+        let mut z_perm_tmp = std::mem::take(&mut self.memory.z_perm);
+        self.commit_to_witness_polynomial(&mut z_perm_tmp, "Z_PERM", &proving_key.crs, transcript)?;
+        std::mem::swap(&mut self.memory.z_perm, &mut z_perm_tmp);
 
         Ok(())
     }
@@ -246,8 +249,8 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         SumcheckOutput<P::ScalarField, TranslatorFlavour>,
         ZKSumcheckData<P>,
     )> {
-        self.decider.memory.relation_parameters.alphas =
-            transcript.get_challenge::<P>("Sumcheck:alpha".to_string());
+        self.decider.memory.alphas =
+            vec![transcript.get_challenge::<P>("Sumcheck:alpha".to_string())];
         let mut gate_challenges: Vec<P::ScalarField> =
             Vec::with_capacity(TranslatorFlavour::CONST_TRANSLATOR_LOG_N);
 
@@ -267,8 +270,12 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         )?;
 
         Ok((
-            self.decider
-                .sumcheck_prove_zk(transcript, circuit_size, &mut zk_sumcheck_data),
+            self.decider.sumcheck_prove_zk::<CONST_TRANSLATOR_LOG_N>(
+                transcript,
+                circuit_size,
+                &mut zk_sumcheck_data,
+                crs,
+            )?,
             zk_sumcheck_data,
         ))
     }
@@ -292,10 +299,12 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
         let witness_polynomials = small_subgroup_ipa_prover.into_witness_polynomials();
 
-        // TODO FLORIN: BB does this, but do we also have to do it?
+        // TODO FLORIN: BB does this, but do we also have to do it? YES
         //    PolynomialBatcher polynomial_batcher(key->proving_key->circuit_size);
         //     polynomial_batcher.set_unshifted(key->proving_key->polynomials.get_unshifted_without_interleaved());
         //     polynomial_batcher.set_to_be_shifted_by_one(key->proving_key->polynomials.get_to_be_shifted());
+
+        //THIS WE NEED TO DO:
         //     polynomial_batcher.set_interleaved(key->proving_key->polynomials.get_interleaved(),
         //                                        key->proving_key->polynomials.get_groups_to_be_interleaved());
 

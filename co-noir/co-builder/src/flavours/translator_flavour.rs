@@ -1,13 +1,14 @@
 use crate::{
     polynomials::polynomial_flavours::{
-        PrecomputedEntitiesFlavour, ProverWitnessEntitiesFlavour, ShiftedWitnessEntitiesFlavour,
-        WitnessEntitiesFlavour,
+        PolyGFlavour, PrecomputedEntitiesFlavour, ProverWitnessEntitiesFlavour,
+        ShiftedWitnessEntitiesFlavour, WitnessEntitiesFlavour,
     },
     prelude::{
         PrecomputedEntities, ProverWitnessEntities, ShiftedWitnessEntities, WitnessEntities,
     },
     prover_flavour::{Flavour, ProverFlavour},
 };
+use std::fmt::Debug;
 
 #[derive(Default)]
 pub struct TranslatorFlavour {}
@@ -26,13 +27,15 @@ impl TranslatorFlavour {
 
 impl ProverFlavour for TranslatorFlavour {
     const FLAVOUR: Flavour = Flavour::Translator;
+    type PolyG<'a, T: Default + 'a> = TranslatorPolyG<'a, T>;
 
-    type PrecomputedEntities<T: Default + Clone + std::marker::Sync> =
+    type PrecomputedEntities<T: Default + Clone + Debug + std::marker::Sync> =
         TranslatorPrecomputedEntities<T>;
 
-    type WitnessEntities<T: Default + std::marker::Sync> = TranslatorWitnessEntities<T>;
+    type WitnessEntities<T: Default + Debug + Clone + std::marker::Sync> =
+        TranslatorWitnessEntities<T>;
 
-    type ShiftedWitnessEntities<T: Default + std::marker::Sync> =
+    type ShiftedWitnessEntities<T: Default + Clone + Debug + std::marker::Sync> =
         TranslatorShiftedWitnessEntities<T>;
 
     type ProverWitnessEntities<T: Default + std::marker::Sync> = TranslatorProverWitnessEntities<T>;
@@ -126,7 +129,7 @@ impl ProverFlavour for TranslatorFlavour {
         todo!()
     }
 
-    fn precomputed_entity_from_vec<T: Default + Clone + Sync>(
+    fn precomputed_entity_from_vec<T: Default + Clone + Sync + Debug>(
         _vec: Vec<crate::prelude::Polynomial<T>>,
     ) -> Self::PrecomputedEntities<crate::prelude::Polynomial<T>> {
         todo!()
@@ -140,6 +143,27 @@ pub type TranslatorShiftedWitnessEntities<T> =
     ShiftedWitnessEntities<T, { TranslatorFlavour::SHIFTED_WITNESS_ENTITIES_SIZE }>;
 pub type TranslatorWitnessEntities<T> =
     WitnessEntities<T, { TranslatorFlavour::WITNESS_ENTITIES_SIZE }>;
+
+pub struct TranslatorPolyG<'a, T: Default> {
+    pub(crate) wires: &'a [T; TranslatorFlavour::SHIFTED_WITNESS_ENTITIES_SIZE],
+}
+impl<'a, T: Default> PolyGFlavour<'a, T> for TranslatorPolyG<'a, T> {
+    fn iter(&self) -> impl Iterator<Item = &'a T> {
+        self.wires.iter()
+    }
+    fn from_slice(input: &'a [T]) -> Self {
+        assert_eq!(
+            input.len(),
+            TranslatorFlavour::SHIFTED_WITNESS_ENTITIES_SIZE,
+            "Input slice length does not match the expected size for Translator flavour."
+        );
+        Self {
+            wires: input
+                .try_into()
+                .unwrap_or_else(|_| panic!("Slice length mismatch")),
+        }
+    }
+}
 
 impl<T: Default> ProverWitnessEntitiesFlavour<T> for TranslatorProverWitnessEntities<T> {
     fn iter<'a>(&'a self) -> impl Iterator<Item = &'a T>
@@ -161,7 +185,7 @@ impl<T: Default> ProverWitnessEntitiesFlavour<T> for TranslatorProverWitnessEnti
         std::iter::empty()
     }
 }
-impl<T: Default> PrecomputedEntitiesFlavour<T> for TranslatorPrecomputedEntities<T> {
+impl<T: Default + Debug> PrecomputedEntitiesFlavour<T> for TranslatorPrecomputedEntities<T> {
     fn iter<'a>(&'a self) -> impl Iterator<Item = &'a T>
     where
         T: 'a,
@@ -183,8 +207,12 @@ impl<T: Default> PrecomputedEntitiesFlavour<T> for TranslatorPrecomputedEntities
             elements: std::array::from_fn(|_| T::default()),
         }
     }
+
+    fn from_elements(elements: Vec<T>) -> Self {
+        todo!()
+    }
 }
-impl<T: Default> WitnessEntitiesFlavour<T> for TranslatorWitnessEntities<T> {
+impl<T: Default + Debug> WitnessEntitiesFlavour<T> for TranslatorWitnessEntities<T> {
     fn new() -> Self {
         Self {
             elements: std::array::from_fn(|_| T::default()),
@@ -205,8 +233,12 @@ impl<T: Default> WitnessEntitiesFlavour<T> for TranslatorWitnessEntities<T> {
     fn into_iter(self) -> impl Iterator<Item = T> {
         self.elements.into_iter()
     }
+
+    fn from_elements(elements: Vec<T>) -> Self {
+        todo!()
+    }
 }
-impl<T: Default> ShiftedWitnessEntitiesFlavour<T> for TranslatorShiftedWitnessEntities<T> {
+impl<T: Default + Debug> ShiftedWitnessEntitiesFlavour<T> for TranslatorShiftedWitnessEntities<T> {
     fn new() -> Self {
         Self {
             elements: std::array::from_fn(|_| T::default()),
@@ -226,6 +258,10 @@ impl<T: Default> ShiftedWitnessEntitiesFlavour<T> for TranslatorShiftedWitnessEn
     }
     fn into_iter(self) -> impl Iterator<Item = T> {
         self.elements.into_iter()
+    }
+
+    fn from_elements(elements: Vec<T>) -> Self {
+        todo!()
     }
 }
 impl<T: Default> TranslatorPrecomputedEntities<T> {

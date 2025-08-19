@@ -3,16 +3,14 @@ use crate::decider::types::ClaimedEvaluations;
 use crate::decider::types::{ProverUnivariates, RelationParameters};
 use crate::plain_prover_flavour::PlainProverFlavour;
 use crate::prelude::{Transcript, TranscriptHasher, Univariate};
-use crate::transcript::TranscriptFieldType;
 use co_builder::flavours::translator_flavour::TranslatorFlavour;
 use co_builder::prover_flavour::ProverFlavour;
+use common::transcript::TranscriptFieldType;
 
 impl PlainProverFlavour for TranslatorFlavour {
     type AllRelationAcc<F: ark_ff::PrimeField> = ();
 
     type AllRelationEvaluations<F: ark_ff::PrimeField> = ();
-
-    type Alphas<F: ark_ff::PrimeField> = F;
 
     type SumcheckRoundOutput<F: ark_ff::PrimeField> =
         Univariate<F, { TranslatorFlavour::BATCHED_RELATION_PARTIAL_LENGTH }>;
@@ -28,7 +26,7 @@ impl PlainProverFlavour for TranslatorFlavour {
     fn scale<F: ark_ff::PrimeField>(
         acc: &mut Self::AllRelationAcc<F>,
         first_scalar: F,
-        elements: &Self::Alphas<F>,
+        elements: &[F],
     ) {
         todo!()
     }
@@ -54,7 +52,7 @@ impl PlainProverFlavour for TranslatorFlavour {
     fn accumulate_relation_univariates<P: co_builder::prelude::HonkCurve<TranscriptFieldType>>(
         univariate_accumulators: &mut Self::AllRelationAcc<P::ScalarField>,
         extended_edges: &ProverUnivariates<P::ScalarField, Self>,
-        relation_parameters: &RelationParameters<P::ScalarField, Self>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
         scaling_factor: &P::ScalarField,
     ) {
         todo!()
@@ -63,16 +61,16 @@ impl PlainProverFlavour for TranslatorFlavour {
     fn accumulate_relation_evaluations<P: co_builder::prelude::HonkCurve<TranscriptFieldType>>(
         univariate_accumulators: &mut Self::AllRelationEvaluations<P::ScalarField>,
         extended_edges: &ClaimedEvaluations<P::ScalarField, Self>,
-        relation_parameters: &RelationParameters<P::ScalarField, Self>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
         scaling_factor: &P::ScalarField,
     ) {
         todo!()
     }
 
     fn scale_and_batch_elements<F: ark_ff::PrimeField>(
-        all_rel_evals: &Self::AllRelationEvaluations<F>,
-        first_scalar: F,
-        elements: &Self::Alphas<F>,
+        _all_rel_evals: &Self::AllRelationEvaluations<F>,
+        _first_scalar: F,
+        _elements: &[F],
     ) -> F {
         todo!()
     }
@@ -104,8 +102,8 @@ impl PlainProverFlavour for TranslatorFlavour {
         H: TranscriptHasher<F>,
         P: co_builder::prelude::HonkCurve<F>,
     >(
-        transcript: &mut Transcript<F, H>,
-        alphas: &mut Self::Alphas<P::ScalarField>,
+        _transcript: &mut Transcript<F, H>,
+        _alphas: &mut Vec<P::ScalarField>,
     ) {
         todo!()
     }

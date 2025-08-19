@@ -20,3 +20,6 @@ pub(crate) const WNAF_DIGITS_PER_ROW: usize = 4;
 pub(crate) const ADDITIONS_PER_ROW: usize = 4;
 pub(crate) const TABLE_WIDTH: usize = 4; // dictated by the number of wires in the Ultra arithmetization
 pub(crate) const NUM_ROWS_PER_OP: usize = 2; // A single ECC op is split across two width-4 rows
+
+// Translator constans:
+pub(crate) const CONST_TRANSLATOR_LOG_N: usize = 18;
