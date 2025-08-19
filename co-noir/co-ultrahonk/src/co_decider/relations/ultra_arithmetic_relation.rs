@@ -70,7 +70,6 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for UltraArithmeticRelati
 impl<T: NoirUltraHonkProver<P>, P: CurveGroup> UltraArithmeticRelationEvals<T, P> {
     pub(crate) fn scale_by_challenge_and_accumulate(
         &self,
-        state: &mut T::State,
         linearly_independent_contribution: &mut T::ArithmeticShare,
         running_challenge: &[P::ScalarField],
     ) {
@@ -80,8 +79,6 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup> UltraArithmeticRelationEvals<T, P
             .into_iter()
             .reduce(T::add)
             .unwrap();
-
-        T::add_assign(linearly_independent_contribution, tmp);
 
         T::add_assign(linearly_independent_contribution, tmp);
     }

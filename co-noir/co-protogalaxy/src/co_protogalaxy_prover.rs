@@ -1,5 +1,4 @@
-// TODO CESAR: Remove prints
-use std::{marker::PhantomData, vec};
+use std::{vec};
 
 use ark_ff::fields::Field;
 
@@ -138,9 +137,8 @@ where
         // different
 
         // Open the values of the perturbator
-        // TODO Cesar: Handle unwrap
         let perturbator = Polynomial {
-            coefficients: T::open_many(&perturbator.coefficients, self.net, self.state).unwrap(),
+            coefficients: T::open_many(&perturbator.coefficients, self.net, self.state)?
         };
 
         (1..=CONST_PG_LOG_N).for_each(|i| {
@@ -339,11 +337,9 @@ where
                 .increase_polynomial_size(max_circuit_size.try_into().unwrap())
         });
 
-        println!("Running Oink prover...");
         // Run Oink prover
         let oink_memories = self.run_oink_prover_on_each_incomplete_key(&mut next_proving_keys)?;
 
-        println!("Computing prover memories....");
         let mut next_prover_memories =
             izip!(oink_memories.into_iter(), next_proving_keys.into_iter())
                 .map(|(oink_memory, next_proving_key)| {
@@ -355,7 +351,6 @@ where
                 .collect::<Vec<_>>();
 
         // Perturbator round
-        println!("Perturbator round...");
         let (deltas, perturbator) =
             self.perturbator_round(accumulator, accumulator_prover_memory)?;
 
@@ -363,7 +358,6 @@ where
             .chain(next_prover_memories.iter_mut())
             .collect::<Vec<_>>();
 
-        println!("Combiner quotient round...");
         // Combiner quotient round
         let (
             updated_gate_challenges,
@@ -376,7 +370,6 @@ where
         prover_memory[0].gate_challenges = updated_gate_challenges;
 
         // update target sum and fold
-        println!("Updating target sum and folding...");
         self.update_target_sum_and_fold(
             &mut prover_memory,
             combiner_quotient,

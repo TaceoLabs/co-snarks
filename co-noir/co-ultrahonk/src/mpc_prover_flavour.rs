@@ -62,12 +62,11 @@ pub trait MPCProverFlavour: Default + ProverFlavour {
         elements: &[P::ScalarField],
     );
     fn scale_by_challenge_and_accumulate<T: NoirUltraHonkProver<P>, P: CurveGroup>(
-        _state: &mut T::State,
         _acc: &mut Self::AllRelationEvaluations<T, P>,
         _first_scalar: P::ScalarField,
         _elements: &[P::ScalarField],
     ) -> (T::ArithmeticShare, T::ArithmeticShare) {
-        todo!("scale_by_challenge_and_accumulate is not implemented for this relation");
+        panic!("scale_by_challenge_and_accumulate is not implemented for this relation");
     }
     fn extend_and_batch_univariates<T: NoirUltraHonkProver<P>, P: CurveGroup>(
         acc: &Self::AllRelationAcc<T, P>,

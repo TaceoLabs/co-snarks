@@ -1,4 +1,4 @@
-use std::time::Instant;
+// TODO CESAR: Remove prints
 
 use crate::co_protogalaxy_prover::{BATCHED_EXTENDED_LENGTH, NUM_KEYS};
 use ark_ec::AdditiveGroup;
@@ -6,20 +6,17 @@ use ark_ff::Field;
 use co_builder::HonkProofResult;
 use co_builder::flavours::mega_flavour::MegaFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
-use co_builder::prelude::Polynomial;
 use co_builder::prover_flavour::ProverFlavour;
 use co_builder::{TranscriptFieldType, prelude::HonkCurve};
 use co_ultrahonk::co_decider::univariates::SharedUnivariate;
-use co_ultrahonk::mpc_flavours::mpc_mega_flavour::AllEntitiesBatchRelationsMega;
 use co_ultrahonk::mpc_prover_flavour::SharedUnivariateTrait;
 use co_ultrahonk::prelude::{MPCProverFlavour, ProvingKey};
-use co_ultrahonk::types::AllEntities;
-use co_ultrahonk::types_batch::{AllEntitiesBatch, AllEntitiesBatchRelationsTrait};
+use co_ultrahonk::types_batch::{AllEntitiesBatch};
 use common::mpc::NoirUltraHonkProver;
 use common::shared_polynomial::SharedPolynomial;
 use mpc_core::MpcState;
-use mpc_core::protocols::rep3::poly;
 use mpc_net::Network;
+use rayon::prelude::*;
 use ultrahonk::plain_prover_flavour::UnivariateTrait;
 use ultrahonk::prelude::{GateSeparatorPolynomial, Univariate};
 
@@ -114,7 +111,6 @@ pub(crate) fn compute_combiner_quotient<
         let tmp = T::add_with_public(
             -perturbator_evaluation * lagrange_0,
             combiner.evaluations[point],
-            // TODO CESAR: revisit
             state.id(),
         );
 
@@ -186,7 +182,6 @@ pub(crate) fn compute_row_evaluations<
         // Sum against challenges alpha
         let (linearly_independent_contributions, linearly_dependent_contributions) =
             <MegaFlavour as MPCProverFlavour>::scale_by_challenge_and_accumulate(
-                state,
                 &mut evals,
                 C::ScalarField::ONE,
                 alphas,
@@ -226,16 +221,14 @@ pub(crate) fn construct_coefficients_tree<
     let mut level_coeffs =
         vec![vec![T::ArithmeticShare::default(); degree + 1]; prev_level_width / 2];
 
-    // TACEO TODO: Barretenberg uses parallelization here
-    for (parent_idx, parent_node) in level_coeffs
-        .iter_mut()
+    level_coeffs
+        .par_iter_mut()
         .take(prev_level_width / 2)
         .enumerate()
-    {
-        let node = parent_idx * 2;
-        parent_node[..prev_level_coeffs[node].len()].copy_from_slice(&prev_level_coeffs[node]);
-        for d in 0..degree {
-            // TODO CESAR: revisit using mul and add with many
+        .for_each(|(parent_idx, parent_node)| {
+            let node = parent_idx * 2;
+            parent_node[..prev_level_coeffs[node].len()].copy_from_slice(&prev_level_coeffs[node]);
+            for d in 0..degree {
             T::add_assign(
                 &mut parent_node[d],
                 T::mul_with_public(betas[level], prev_level_coeffs[node + 1][d]),
@@ -246,7 +239,7 @@ pub(crate) fn construct_coefficients_tree<
                 T::mul_with_public(deltas[level], prev_level_coeffs[node + 1][d]),
             );
         }
-    }
+    });
 
     construct_coefficients_tree::<T, C>(betas, deltas, level_coeffs, level + 1)
 }
@@ -272,11 +265,9 @@ pub(crate) fn construct_perturbator_coefficients<
     let width = full_honk_evaluations.coefficients.len();
     let mut first_level_coeffs = vec![vec![T::ArithmeticShare::default(); 2]; width / 2];
 
-    // TACEO TODO: Barretenberg uses parallelization here
-    for (parent_idx, parent_node) in first_level_coeffs.iter_mut().enumerate() {
+    first_level_coeffs.par_iter_mut().enumerate().for_each(|(parent_idx, parent_node)| {
         let node = parent_idx * 2;
 
-        // TODO CESAR: revisit using mul and add with many
         parent_node[0] = T::add(
             full_honk_evaluations.coefficients[node],
             T::mul_with_public(betas[0], full_honk_evaluations.coefficients[node + 1]),
@@ -284,7 +275,7 @@ pub(crate) fn construct_perturbator_coefficients<
 
         parent_node[1] =
             T::mul_with_public(deltas[0], full_honk_evaluations.coefficients[node + 1]);
-    }
+    });
 
     construct_coefficients_tree::<T, C>(betas, deltas, first_level_coeffs, 1)
 }
@@ -341,21 +332,6 @@ pub(crate) fn extend_univariates<T: NoirUltraHonkProver<C>, C: HonkCurve<Transcr
         vec![[C::ScalarField::ZERO; NUM_KEYS]; LENGTH_PUBLIC];
     let mut coefficients_shared: Vec<[T::ArithmeticShare; NUM_KEYS]> =
         vec![[T::ArithmeticShare::default(); NUM_KEYS]; LENGTH_SHARED];
-
-    // prover_memory
-    //     .iter()
-    //     .map(|memory| memory.polys.get_row(row_idx))
-    //     .enumerate()
-    //     .for_each(|(pk_idx, row)| {
-    //         row.public_iter().enumerate().for_each(|(col_idx, value)| {
-    //             coefficients_public[col_idx][pk_idx] = *value;
-    //         });
-    //         row.into_shared_iter()
-    //             .enumerate()
-    //             .for_each(|(col_idx, value)| {
-    //                 coefficients_shared[col_idx][pk_idx] = value;
-    //             });
-    //     });
 
     prover_memory
         .iter()
@@ -429,31 +405,15 @@ pub(crate) fn compute_combiner<
 
     // Accumulate the contribution from each sub-relation
     // TACEO TODO: Barretenberg uses balanced parallelization here with the trace_usage_tracker
-    let mut avg_acc_timer = 0;
-    let mut avg_ext_timer = 0;
     for i in 0..common_polynomial_size {
-        if i % 20000 == 0 {
-            println!(
-                "Average accumulation time for {} iters: {} microseconds",
-                i, avg_acc_timer
-            );
-            println!(
-                "Average extension time for {} iters: {} microseconds",
-                i, avg_ext_timer
-            );
-        }
         // Construct extended univariates containers
-        let start_ext = Instant::now();
         let extended_univariates = extend_univariates(prover_memory, i);
-        avg_ext_timer += start_ext.elapsed().as_micros() as usize;
 
         let pow_challenge = gate_separators.beta_products[i];
 
         // Accumulate the i-th row's univariate contribution. Note that the relation parameters passed to
         // this function have already been folded. Moreover, linear-dependent relations that act over the
         // entire execution trace rather than on rows, will not be multiplied by the pow challenge.
-
-        let start = Instant::now();
         <MegaFlavour as MPCProverFlavour>::accumulate_relation_univariates_with_extended_parameters::<
             C, T, N, BATCHED_EXTENDED_LENGTH
         >(
@@ -464,7 +424,6 @@ pub(crate) fn compute_combiner<
             relation_parameters,
             &pow_challenge,
         )?;
-        avg_acc_timer += start.elapsed().as_micros() as usize;
     }
 
     let univariate_accumulators = MegaFlavour::reshare(univariate_accumulators, net, state)?;

@@ -96,7 +96,7 @@ pub(crate) trait Relation<
         state: &mut T::State,
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesBatch<T, P, L>,
-        relation_parameters: &RelationParameters<Univariate<P::ScalarField, SIZE>>,
+        _relation_parameters: &RelationParameters<Univariate<P::ScalarField, SIZE>>,
         scaling_factor: &P::ScalarField,
     ) -> HonkProofResult<()>;
 

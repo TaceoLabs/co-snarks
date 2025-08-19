@@ -831,7 +831,6 @@ fn test_protogalaxy_prover() {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
 
                 // Compute the first Oink proof
-                println!("Computing Oink proof");
                 let mut transcript = Transcript::<F, Poseidon2Sponge>::new();
                 let oink = CoOink::<Driver, C, Poseidon2Sponge, LocalNetwork, MegaFlavour>::new(
                     &net,
@@ -841,15 +840,12 @@ fn test_protogalaxy_prover() {
                 let oink_memory_1 = oink
                     .prove(&mut accumulator, &mut transcript, &prover_crs)
                     .unwrap();
-                println!("Oink proof computed");
-
-                println!("Computing CoProtogalaxy proof");
+                
                 let mut accumulator_prover_memory =
                     DeciderProverMemory::<Driver, C>::from_memory_and_polynomials(
                         oink_memory_1,
                         structure_prover_polys(shared_polys_1, public_polys_1),
                     );
-                println!("CoProtogalaxy proof computed");
 
                 accumulator_prover_memory.gate_challenges = vec![F::ZERO; CONST_PG_LOG_N];
 

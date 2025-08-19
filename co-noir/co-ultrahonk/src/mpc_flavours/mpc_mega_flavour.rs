@@ -317,7 +317,6 @@ impl MPCProverFlavour for MegaFlavour {
     }
 
     fn scale_by_challenge_and_accumulate<T: NoirUltraHonkProver<P>, P: CurveGroup>(
-        state: &mut T::State,
         acc: &mut Self::AllRelationEvaluations<T, P>,
         first_scalar: P::ScalarField,
         elements: &[P::ScalarField],
@@ -326,7 +325,6 @@ impl MPCProverFlavour for MegaFlavour {
         let (mut linearly_dependent_contribution, mut linearly_independent_contribution) =
             (T::ArithmeticShare::default(), T::ArithmeticShare::default());
         acc.r_arith.scale_by_challenge_and_accumulate(
-            state,
             &mut linearly_independent_contribution,
             &[first_scalar, elements[0]],
         );
