@@ -454,7 +454,7 @@ impl<
      */
     pub fn shplonk_prove(
         &mut self,
-        opening_claims: Vec<ShpleminiOpeningClaim<T, P>>,
+        opening_claims: &[ShpleminiOpeningClaim<T, P>],
         commitment_key: &ProverCrs<P>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         libra_opening_claims: Option<Vec<ShpleminiOpeningClaim<T, P>>>,
@@ -464,11 +464,10 @@ impl<
         tracing::trace!("Shplonk prove");
         let nu = transcript.get_challenge::<P>("Shplonk:nu".to_string());
         // Compute the evaluations Fold_i(r^{2^i}) for i>0.
-        let gemini_fold_pos_evaluations =
-            Self::compute_gemini_fold_pos_evaluations(&opening_claims);
+        let gemini_fold_pos_evaluations = Self::compute_gemini_fold_pos_evaluations(opening_claims);
         let batched_quotient = Self::compute_batched_quotient(
             virtual_log_n,
-            &opening_claims,
+            opening_claims,
             nu,
             &gemini_fold_pos_evaluations,
             &libra_opening_claims,
@@ -549,7 +548,7 @@ impl<
         };
 
         let batched_claim = self.shplonk_prove(
-            opening_claims,
+            &opening_claims,
             crs,
             transcript,
             libra_opening_claims,
@@ -572,7 +571,7 @@ impl<
     pub(crate) fn compute_partially_evaluated_batched_quotient(
         &mut self,
         virtual_log_n: usize,
-        opening_claims: Vec<ShpleminiOpeningClaim<T, P>>,
+        opening_claims: &[ShpleminiOpeningClaim<T, P>],
         batched_quotient_q: SharedPolynomial<T, P>,
         nu_challenge: P::ScalarField,
         z_challenge: P::ScalarField,
@@ -590,7 +589,7 @@ impl<
                 .map_or(0, |claims| claims.len());
         let mut inverse_vanishing_evals: Vec<P::ScalarField> =
             Vec::with_capacity(num_opening_claims);
-        for claim in &opening_claims {
+        for claim in opening_claims {
             if claim.gemini_fold {
                 inverse_vanishing_evals.push(z_challenge + claim.opening_pair.challenge);
             }
@@ -617,7 +616,7 @@ impl<
         let mut current_nu = P::ScalarField::one();
         let mut idx = 0;
         let mut fold_idx = 0;
-        for claim in opening_claims.into_iter() {
+        for claim in opening_claims.iter() {
             if claim.gemini_fold {
                 let mut tmp = claim.polynomial.clone();
                 let sub = T::sub(tmp[0], gemini_fold_pos_evaluations[fold_idx]);
@@ -630,7 +629,7 @@ impl<
                 idx += 1;
                 fold_idx += 1;
             }
-            let mut tmp = claim.polynomial;
+            let mut tmp = claim.polynomial.to_owned();
             let claim_neg = T::neg(claim.opening_pair.evaluation);
             tmp[0] = T::add(tmp[0], claim_neg);
             let scaling_factor = current_nu * inverse_vanishing_evals[idx];
@@ -694,7 +693,7 @@ impl<
      */
     pub(crate) fn compute_batched_quotient(
         virtual_log_n: usize,
-        opening_claims: &Vec<ShpleminiOpeningClaim<T, P>>,
+        opening_claims: &[ShpleminiOpeningClaim<T, P>],
         nu_challenge: P::ScalarField,
         gemini_fold_pos_evaluations: &[T::ArithmeticShare],
         libra_opening_claims: &Option<Vec<ShpleminiOpeningClaim<T, P>>>,
