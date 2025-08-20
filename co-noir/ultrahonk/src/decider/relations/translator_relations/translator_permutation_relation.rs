@@ -83,7 +83,7 @@ impl<F: PrimeField> TranslatorPermutationRelationEvals<F> {
 pub(crate) struct TranslatorPermutationRelation {}
 
 impl TranslatorPermutationRelation {
-    pub(crate) const NUM_RELATIONS: usize = 10;
+    pub(crate) const NUM_RELATIONS: usize = 2;
     fn compute_grand_product_numerator<F: PrimeField, const SIZE: usize>(
         input: &ProverUnivariatesSized<F, TranslatorFlavour, SIZE>,
         relation_parameters: &crate::prelude::RelationParameters<F>,

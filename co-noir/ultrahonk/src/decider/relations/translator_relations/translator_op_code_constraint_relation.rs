@@ -71,7 +71,7 @@ impl<F: PrimeField> TranslatorOpCodeConstraintRelationEvals<F> {
 pub(crate) struct TranslatorOpCodeConstraintRelation {}
 
 impl TranslatorOpCodeConstraintRelation {
-    pub(crate) const NUM_RELATIONS: usize = 10;
+    pub(crate) const NUM_RELATIONS: usize = 1;
 }
 
 impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorOpCodeConstraintRelation {

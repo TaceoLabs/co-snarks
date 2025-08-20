@@ -47,6 +47,72 @@ impl<F: PrimeField> TranslatorAccumulatorTransferRelationAcc<F> {
             partial_evaluation_result,
             true,
         );
+        self.r1.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            true,
+        );
+        self.r2.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            true,
+        );
+        self.r3.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            true,
+        );
+        self.r4.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            true,
+        );
+        self.r5.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            true,
+        );
+        self.r6.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            true,
+        );
+        self.r7.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            true,
+        );
+        self.r8.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            true,
+        );
+        self.r9.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            true,
+        );
+        self.r10.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            true,
+        );
+        self.r11.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            true,
+        );
     }
 
     pub(crate) fn extend_and_batch_univariates_with_distinct_challenges<const SIZE: usize>(
@@ -54,14 +120,26 @@ impl<F: PrimeField> TranslatorAccumulatorTransferRelationAcc<F> {
         result: &mut Univariate<F, SIZE>,
         running_challenge: &[Univariate<F, SIZE>],
     ) {
-        self.r0
-            .extend_and_batch_univariates(result, &running_challenge[0], &F::ONE, true);
+        panic!(
+            "TranslatorAccumulatorTransferRelationAcc should not call extend_and_batch_univariates_with_distinct_challenges"
+        );
     }
 }
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct TranslatorAccumulatorTransferRelationEvals<F: PrimeField> {
     pub(crate) r0: F,
+    pub(crate) r1: F,
+    pub(crate) r2: F,
+    pub(crate) r3: F,
+    pub(crate) r4: F,
+    pub(crate) r5: F,
+    pub(crate) r6: F,
+    pub(crate) r7: F,
+    pub(crate) r8: F,
+    pub(crate) r9: F,
+    pub(crate) r10: F,
+    pub(crate) r11: F,
 }
 
 impl<F: PrimeField> TranslatorAccumulatorTransferRelationEvals<F> {

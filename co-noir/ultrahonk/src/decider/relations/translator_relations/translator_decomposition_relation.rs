@@ -4,10 +4,7 @@ use crate::decider::univariate::Univariate;
 use ark_ff::One;
 use ark_ff::{PrimeField, Zero};
 use co_builder::flavours::translator_flavour::TranslatorFlavour;
-use co_builder::prelude::HonkCurve;
-use common::transcript::TranscriptFieldType;
 use num_bigint::BigUint;
-use std::str::FromStr;
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct TranslatorDecompositionRelationAcc<F: PrimeField> {
@@ -178,14 +175,14 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
      * @brief Expression for decomposition of various values into smaller limbs or microlimbs.
      * @details This relation enforces three types of subrelations:
      * 1) A subrelation decomposing a value from the transcript (for example, z1) into 68-bit limbs. These relations
-     * will have the structure `lagrange_even_in_minicircuit⋅(a - a_low - a_high⋅2⁶⁸)`
+     *    will have the structure `lagrange_even_in_minicircuit⋅(a - a_low - a_high⋅2⁶⁸)`
      * 2) A subrelation decomposing a value  of one of the limbs used in bigfield computation (for example, the lower
-     * wide relation limb) into 14-bit limbs. These relations will have the structure `lagrange_even_in_minicircuit⋅(a -
+     *    wide relation limb) into 14-bit limbs. These relations will have the structure `lagrange_even_in_minicircuit⋅(a -
      * a_0 - a_1⋅2¹⁴ -
      * ....)` 3) A subrelation making a microlimb range constraint more constraining. For example, we want to constrain
-     * some values to 12 bits instead of 14. So we add a constraint `lagrange_even_in_minicircuit⋅(a_highest⋅4 -
+     *    some values to 12 bits instead of 14. So we add a constraint `lagrange_even_in_minicircuit⋅(a_highest⋅4 -
      * a_tail)`. In a separate relation both a_highest and a_tail are constrained to be 14 bits, but this relation
-     * changes the constraint on a_highest to be 12 bits.
+     *    changes the constraint on a_highest to be 12 bits.
      *
      * @param evals transformed to `evals + C(in(X)...)*scaling_factor`
      * @param in an std::array containing the fully extended Univariate edges.
@@ -537,12 +534,12 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
 
         // Contributions that decompose 50, 52, 68 or 84 bit limbs used for computation into range-constrained chunks
         // Contribution 1 , P_x lowest limb decomposition
-        let mut tmp_1 = ((p_x_low_limbs_range_constraint_1.to_owned() * micro_limb_shift
+        let mut tmp_1 = (p_x_low_limbs_range_constraint_1.to_owned() * micro_limb_shift
             + p_x_low_limbs_range_constraint_2.to_owned() * micro_limb_shiftx2
             + p_x_low_limbs_range_constraint_3.to_owned() * micro_limb_shiftx3
             + p_x_low_limbs_range_constraint_4.to_owned() * micro_limb_shiftx4
             + p_x_low_limbs_range_constraint_0)
-            - p_x_low_limbs);
+            - p_x_low_limbs;
         tmp_1 *= lagrange_even_in_minicircuit;
         tmp_1 *= scaling_factor;
         for i in 0..univariate_accumulator.r0.evaluations.len() {
@@ -550,12 +547,12 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
         }
 
         // Contribution 2 , P_x second lowest limb decomposition
-        let mut tmp_2 = ((p_x_low_limbs_range_constraint_1_shift.to_owned() * micro_limb_shift
+        let mut tmp_2 = (p_x_low_limbs_range_constraint_1_shift.to_owned() * micro_limb_shift
             + p_x_low_limbs_range_constraint_0_shift
             + p_x_low_limbs_range_constraint_2_shift.to_owned() * micro_limb_shiftx2
             + p_x_low_limbs_range_constraint_3_shift.to_owned() * micro_limb_shiftx3
             + p_x_low_limbs_range_constraint_4_shift.to_owned() * micro_limb_shiftx4)
-            - p_x_low_limbs_shift);
+            - p_x_low_limbs_shift;
         tmp_2 *= lagrange_even_in_minicircuit;
         tmp_2 *= scaling_factor;
         for i in 0..univariate_accumulator.r1.evaluations.len() {
@@ -563,12 +560,12 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
         }
 
         // Contribution 3 , P_x third limb decomposition
-        let mut tmp_3 = ((p_x_high_limbs_range_constraint_1.to_owned() * micro_limb_shift
+        let mut tmp_3 = (p_x_high_limbs_range_constraint_1.to_owned() * micro_limb_shift
             + p_x_high_limbs_range_constraint_0
             + p_x_high_limbs_range_constraint_2.to_owned() * micro_limb_shiftx2
             + p_x_high_limbs_range_constraint_3.to_owned() * micro_limb_shiftx3
             + p_x_high_limbs_range_constraint_4.to_owned() * micro_limb_shiftx4)
-            - p_x_high_limbs);
+            - p_x_high_limbs;
         tmp_3 *= lagrange_even_in_minicircuit;
         tmp_3 *= scaling_factor;
         for i in 0..univariate_accumulator.r2.evaluations.len() {
@@ -576,11 +573,11 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
         }
 
         // Contribution 4 , P_x highest limb decomposition
-        let mut tmp_4 = ((p_x_high_limbs_range_constraint_1_shift.to_owned() * micro_limb_shift
+        let mut tmp_4 = (p_x_high_limbs_range_constraint_1_shift.to_owned() * micro_limb_shift
             + p_x_high_limbs_range_constraint_0_shift
             + p_x_high_limbs_range_constraint_2_shift.to_owned() * micro_limb_shiftx2
             + p_x_high_limbs_range_constraint_3_shift.to_owned() * micro_limb_shiftx3)
-            - p_x_high_limbs_shift);
+            - p_x_high_limbs_shift;
         tmp_4 *= lagrange_even_in_minicircuit;
         tmp_4 *= scaling_factor;
         for i in 0..univariate_accumulator.r3.evaluations.len() {
@@ -588,12 +585,12 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
         }
 
         // Contribution 5 , P_y lowest limb decomposition
-        let mut tmp_5 = ((p_y_low_limbs_range_constraint_1.to_owned() * micro_limb_shift
+        let mut tmp_5 = (p_y_low_limbs_range_constraint_1.to_owned() * micro_limb_shift
             + p_y_low_limbs_range_constraint_0
             + p_y_low_limbs_range_constraint_2.to_owned() * micro_limb_shiftx2
             + p_y_low_limbs_range_constraint_3.to_owned() * micro_limb_shiftx3
             + p_y_low_limbs_range_constraint_4.to_owned() * micro_limb_shiftx4)
-            - p_y_low_limbs);
+            - p_y_low_limbs;
         tmp_5 *= lagrange_even_in_minicircuit;
         tmp_5 *= scaling_factor;
         for i in 0..univariate_accumulator.r4.evaluations.len() {
@@ -601,12 +598,12 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
         }
 
         // Contribution 6 , P_y second lowest limb decomposition
-        let mut tmp_6 = ((p_y_low_limbs_range_constraint_1_shift.to_owned() * micro_limb_shift
+        let mut tmp_6 = (p_y_low_limbs_range_constraint_1_shift.to_owned() * micro_limb_shift
             + p_y_low_limbs_range_constraint_0_shift
             + p_y_low_limbs_range_constraint_2_shift.to_owned() * micro_limb_shiftx2
             + p_y_low_limbs_range_constraint_3_shift.to_owned() * micro_limb_shiftx3
             + p_y_low_limbs_range_constraint_4_shift.to_owned() * micro_limb_shiftx4)
-            - p_y_low_limbs_shift);
+            - p_y_low_limbs_shift;
         tmp_6 *= lagrange_even_in_minicircuit;
         tmp_6 *= scaling_factor;
         for i in 0..univariate_accumulator.r5.evaluations.len() {
@@ -614,12 +611,12 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
         }
 
         // Contribution 7 , P_y third limb decomposition
-        let mut tmp_7 = ((p_y_high_limbs_range_constraint_1.to_owned() * micro_limb_shift
+        let mut tmp_7 = (p_y_high_limbs_range_constraint_1.to_owned() * micro_limb_shift
             + p_y_high_limbs_range_constraint_0
             + p_y_high_limbs_range_constraint_2.to_owned() * micro_limb_shiftx2
             + p_y_high_limbs_range_constraint_3.to_owned() * micro_limb_shiftx3
             + p_y_high_limbs_range_constraint_4.to_owned() * micro_limb_shiftx4)
-            - p_y_high_limbs);
+            - p_y_high_limbs;
         tmp_7 *= lagrange_even_in_minicircuit;
         tmp_7 *= scaling_factor;
         for i in 0..univariate_accumulator.r6.evaluations.len() {
@@ -627,11 +624,11 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
         }
 
         // Contribution 8 , P_y highest limb decomposition
-        let mut tmp_8 = ((p_y_high_limbs_range_constraint_1_shift.to_owned() * micro_limb_shift
+        let mut tmp_8 = (p_y_high_limbs_range_constraint_1_shift.to_owned() * micro_limb_shift
             + p_y_high_limbs_range_constraint_0_shift
             + p_y_high_limbs_range_constraint_2_shift.to_owned() * micro_limb_shiftx2
             + p_y_high_limbs_range_constraint_3_shift.to_owned() * micro_limb_shiftx3)
-            - p_y_high_limbs_shift);
+            - p_y_high_limbs_shift;
         tmp_8 *= lagrange_even_in_minicircuit;
         tmp_8 *= scaling_factor;
         for i in 0..univariate_accumulator.r7.evaluations.len() {
@@ -639,12 +636,12 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
         }
 
         // Contribution 9 , z_1 low limb decomposition
-        let mut tmp_9 = ((z_low_limbs_range_constraint_1.to_owned() * micro_limb_shift
+        let mut tmp_9 = (z_low_limbs_range_constraint_1.to_owned() * micro_limb_shift
             + z_low_limbs_range_constraint_0
             + z_low_limbs_range_constraint_2.to_owned() * micro_limb_shiftx2
             + z_low_limbs_range_constraint_3.to_owned() * micro_limb_shiftx3
             + z_low_limbs_range_constraint_4.to_owned() * micro_limb_shiftx4)
-            - z_low_limbs);
+            - z_low_limbs;
         tmp_9 *= lagrange_even_in_minicircuit;
         tmp_9 *= scaling_factor;
         for i in 0..univariate_accumulator.r8.evaluations.len() {
@@ -652,12 +649,12 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
         }
 
         // Contribution 10 , z_2 low limb decomposition
-        let mut tmp_10 = ((z_low_limbs_range_constraint_1_shift.to_owned() * micro_limb_shift
+        let mut tmp_10 = (z_low_limbs_range_constraint_1_shift.to_owned() * micro_limb_shift
             + z_low_limbs_range_constraint_0_shift
             + z_low_limbs_range_constraint_2_shift.to_owned() * micro_limb_shiftx2
             + z_low_limbs_range_constraint_3_shift.to_owned() * micro_limb_shiftx3
             + z_low_limbs_range_constraint_4_shift.to_owned() * micro_limb_shiftx4)
-            - z_low_limbs_shift);
+            - z_low_limbs_shift;
         tmp_10 *= lagrange_even_in_minicircuit;
         tmp_10 *= scaling_factor;
         for i in 0..univariate_accumulator.r9.evaluations.len() {
@@ -665,12 +662,12 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
         }
 
         // Contribution 11 , z_1 high limb decomposition
-        let mut tmp_11 = ((z_high_limbs_range_constraint_1.to_owned() * micro_limb_shift
+        let mut tmp_11 = (z_high_limbs_range_constraint_1.to_owned() * micro_limb_shift
             + z_high_limbs_range_constraint_0
             + z_high_limbs_range_constraint_2.to_owned() * micro_limb_shiftx2
             + z_high_limbs_range_constraint_3.to_owned() * micro_limb_shiftx3
             + z_high_limbs_range_constraint_4.to_owned() * micro_limb_shiftx4)
-            - z_high_limbs);
+            - z_high_limbs;
         tmp_11 *= lagrange_even_in_minicircuit;
         tmp_11 *= scaling_factor;
         for i in 0..univariate_accumulator.r10.evaluations.len() {
@@ -678,12 +675,12 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
         }
 
         // Contribution 12 , z_2 high limb decomposition
-        let mut tmp_12 = ((z_high_limbs_range_constraint_1_shift.to_owned() * micro_limb_shift
+        let mut tmp_12 = (z_high_limbs_range_constraint_1_shift.to_owned() * micro_limb_shift
             + z_high_limbs_range_constraint_0_shift
             + z_high_limbs_range_constraint_2_shift.to_owned() * micro_limb_shiftx2
             + z_high_limbs_range_constraint_3_shift.to_owned() * micro_limb_shiftx3
             + z_high_limbs_range_constraint_4_shift.to_owned() * micro_limb_shiftx4)
-            - z_high_limbs_shift);
+            - z_high_limbs_shift;
         tmp_12 *= lagrange_even_in_minicircuit;
         tmp_12 *= scaling_factor;
         for i in 0..univariate_accumulator.r11.evaluations.len() {
@@ -691,25 +688,25 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
         }
 
         // Contribution 13 , accumulator lowest limb decomposition
-        let mut tmp_13 = ((accumulator_low_limbs_range_constraint_1.to_owned() * micro_limb_shift
+        let mut tmp_13 = (accumulator_low_limbs_range_constraint_1.to_owned() * micro_limb_shift
             + accumulator_low_limbs_range_constraint_0
             + accumulator_low_limbs_range_constraint_2.to_owned() * micro_limb_shiftx2
             + accumulator_low_limbs_range_constraint_3.to_owned() * micro_limb_shiftx3
             + accumulator_low_limbs_range_constraint_4.to_owned() * micro_limb_shiftx4)
-            - accumulators_binary_limbs_0);
+            - accumulators_binary_limbs_0;
         tmp_13 *= lagrange_even_in_minicircuit;
         tmp_13 *= scaling_factor;
         for i in 0..univariate_accumulator.r12.evaluations.len() {
             univariate_accumulator.r12.evaluations[i] += tmp_13.evaluations[i];
         }
         // Contribution 14 , accumulator second limb decomposition
-        let mut tmp_14 = ((accumulator_low_limbs_range_constraint_1_shift.to_owned()
+        let mut tmp_14 = (accumulator_low_limbs_range_constraint_1_shift.to_owned()
             * micro_limb_shift
             + accumulator_low_limbs_range_constraint_0_shift
             + accumulator_low_limbs_range_constraint_2_shift.to_owned() * micro_limb_shiftx2
             + accumulator_low_limbs_range_constraint_3_shift.to_owned() * micro_limb_shiftx3
             + accumulator_low_limbs_range_constraint_4_shift.to_owned() * micro_limb_shiftx4)
-            - accumulators_binary_limbs_1);
+            - accumulators_binary_limbs_1;
         tmp_14 *= lagrange_even_in_minicircuit;
         tmp_14 *= scaling_factor;
         for i in 0..univariate_accumulator.r13.evaluations.len() {
@@ -717,25 +714,24 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
         }
 
         // Contribution 15 , accumulator second highest limb decomposition
-        let mut tmp_15 = ((accumulator_high_limbs_range_constraint_1.to_owned()
-            * micro_limb_shift
+        let mut tmp_15 = (accumulator_high_limbs_range_constraint_1.to_owned() * micro_limb_shift
             + accumulator_high_limbs_range_constraint_0
             + accumulator_high_limbs_range_constraint_2.to_owned() * micro_limb_shiftx2
             + accumulator_high_limbs_range_constraint_3.to_owned() * micro_limb_shiftx3
             + accumulator_high_limbs_range_constraint_4.to_owned() * micro_limb_shiftx4)
-            - accumulators_binary_limbs_2);
+            - accumulators_binary_limbs_2;
         tmp_15 *= lagrange_even_in_minicircuit;
         tmp_15 *= scaling_factor;
         for i in 0..univariate_accumulator.r14.evaluations.len() {
             univariate_accumulator.r14.evaluations[i] += tmp_15.evaluations[i];
         }
         // Contribution 16 , accumulator highest limb decomposition
-        let mut tmp_16 = ((accumulator_high_limbs_range_constraint_1_shift.to_owned()
+        let mut tmp_16 = (accumulator_high_limbs_range_constraint_1_shift.to_owned()
             * micro_limb_shift
             + accumulator_high_limbs_range_constraint_0_shift
             + accumulator_high_limbs_range_constraint_2_shift.to_owned() * micro_limb_shiftx2
             + accumulator_high_limbs_range_constraint_3_shift.to_owned() * micro_limb_shiftx3)
-            - accumulators_binary_limbs_3);
+            - accumulators_binary_limbs_3;
         tmp_16 *= lagrange_even_in_minicircuit;
         tmp_16 *= scaling_factor;
         for i in 0..univariate_accumulator.r15.evaluations.len() {
@@ -743,25 +739,25 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
         }
 
         // Contribution 15 , quotient lowest limb decomposition
-        let mut tmp_17 = ((quotient_low_limbs_range_constraint_1.to_owned() * micro_limb_shift
+        let mut tmp_17 = (quotient_low_limbs_range_constraint_1.to_owned() * micro_limb_shift
             + quotient_low_limbs_range_constraint_0
             + quotient_low_limbs_range_constraint_2.to_owned() * micro_limb_shiftx2
             + quotient_low_limbs_range_constraint_3.to_owned() * micro_limb_shiftx3
             + quotient_low_limbs_range_constraint_4.to_owned() * micro_limb_shiftx4)
-            - quotient_low_binary_limbs);
+            - quotient_low_binary_limbs;
         tmp_17 *= lagrange_even_in_minicircuit;
         tmp_17 *= scaling_factor;
         for i in 0..univariate_accumulator.r16.evaluations.len() {
             univariate_accumulator.r16.evaluations[i] += tmp_17.evaluations[i];
         }
         // Contribution 16 , quotient second lowest limb decomposition
-        let mut tmp_18 = ((quotient_low_limbs_range_constraint_1_shift.to_owned()
+        let mut tmp_18 = (quotient_low_limbs_range_constraint_1_shift.to_owned()
             * micro_limb_shift
             + quotient_low_limbs_range_constraint_0_shift
             + quotient_low_limbs_range_constraint_2_shift.to_owned() * micro_limb_shiftx2
             + quotient_low_limbs_range_constraint_3_shift.to_owned() * micro_limb_shiftx3
             + quotient_low_limbs_range_constraint_4_shift.to_owned() * micro_limb_shiftx4)
-            - quotient_low_binary_limbs_shift);
+            - quotient_low_binary_limbs_shift;
         tmp_18 *= lagrange_even_in_minicircuit;
         tmp_18 *= scaling_factor;
         for i in 0..univariate_accumulator.r17.evaluations.len() {
@@ -769,24 +765,24 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
         }
 
         // Contribution 19 , quotient second highest limb decomposition
-        let mut tmp_19 = ((quotient_high_limbs_range_constraint_1.to_owned() * micro_limb_shift
+        let mut tmp_19 = (quotient_high_limbs_range_constraint_1.to_owned() * micro_limb_shift
             + quotient_high_limbs_range_constraint_0
             + quotient_high_limbs_range_constraint_2.to_owned() * micro_limb_shiftx2
             + quotient_high_limbs_range_constraint_3.to_owned() * micro_limb_shiftx3
             + quotient_high_limbs_range_constraint_4.to_owned() * micro_limb_shiftx4)
-            - quotient_high_binary_limbs);
+            - quotient_high_binary_limbs;
         tmp_19 *= lagrange_even_in_minicircuit;
         tmp_19 *= scaling_factor;
         for i in 0..univariate_accumulator.r18.evaluations.len() {
             univariate_accumulator.r18.evaluations[i] += tmp_19.evaluations[i];
         }
         // Contribution 20 , quotient highest limb decomposition
-        let mut tmp_20 = ((quotient_high_limbs_range_constraint_1_shift.to_owned()
+        let mut tmp_20 = (quotient_high_limbs_range_constraint_1_shift.to_owned()
             * micro_limb_shift
             + quotient_high_limbs_range_constraint_0_shift
             + quotient_high_limbs_range_constraint_2_shift.to_owned() * micro_limb_shiftx2
             + quotient_high_limbs_range_constraint_3_shift.to_owned() * micro_limb_shiftx3)
-            - quotient_high_binary_limbs_shift);
+            - quotient_high_binary_limbs_shift;
         tmp_20 *= lagrange_even_in_minicircuit;
         tmp_20 *= scaling_factor;
         for i in 0..univariate_accumulator.r19.evaluations.len() {
@@ -797,13 +793,13 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
         // N.B. top microlimbs of relation wide limbs are stored in microlimbs for range constraints of P_x, P_y,
         // accumulator and quotient. This is to save space and because these microlimbs are not used by their namesakes,
         // since top limbs in 254/6-bit values use one less microlimb for the top 50/52-bit limb
-        let mut tmp_21 = ((relation_wide_limbs_range_constraint_1.to_owned() * micro_limb_shift
+        let mut tmp_21 = (relation_wide_limbs_range_constraint_1.to_owned() * micro_limb_shift
             + relation_wide_limbs_range_constraint_0
             + relation_wide_limbs_range_constraint_2.to_owned() * micro_limb_shiftx2
             + relation_wide_limbs_range_constraint_3.to_owned() * micro_limb_shiftx3
             + p_x_high_limbs_range_constraint_tail_shift.to_owned() * micro_limb_shiftx4
             + accumulator_high_limbs_range_constraint_tail_shift.to_owned() * micro_limb_shiftx5)
-            - relation_wide_limbs);
+            - relation_wide_limbs;
         tmp_21 *= lagrange_even_in_minicircuit;
         tmp_21 *= scaling_factor;
         for i in 0..univariate_accumulator.r20.evaluations.len() {
@@ -811,14 +807,14 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
         }
 
         // Contribution 22 , decomposition of high relation limb
-        let mut tmp_22 = ((relation_wide_limbs_range_constraint_1_shift.to_owned()
+        let mut tmp_22 = (relation_wide_limbs_range_constraint_1_shift.to_owned()
             * micro_limb_shift
             + relation_wide_limbs_range_constraint_0_shift
             + relation_wide_limbs_range_constraint_2_shift.to_owned() * micro_limb_shiftx2
             + relation_wide_limbs_range_constraint_3_shift.to_owned() * micro_limb_shiftx3
             + p_y_high_limbs_range_constraint_tail_shift.to_owned() * micro_limb_shiftx4
             + quotient_high_limbs_range_constraint_tail_shift.to_owned() * micro_limb_shiftx5)
-            - relation_wide_limbs_shift);
+            - relation_wide_limbs_shift;
         tmp_22 *= lagrange_even_in_minicircuit;
         tmp_22 *= scaling_factor;
         for i in 0..univariate_accumulator.r21.evaluations.len() {
@@ -856,8 +852,8 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
         }
 
         // Contribution 26, range constrain the highest microilmb of highest P.x limb to be 8 bits (50 % 14 = 8)
-        let mut tmp_26 = (p_x_high_limbs_range_constraint_3_shift.to_owned() * shift_8_to_14
-            - p_x_high_limbs_range_constraint_4_shift);
+        let mut tmp_26 = p_x_high_limbs_range_constraint_3_shift.to_owned() * shift_8_to_14
+            - p_x_high_limbs_range_constraint_4_shift;
 
         tmp_26 *= lagrange_even_in_minicircuit;
         tmp_26 *= scaling_factor;
@@ -894,9 +890,8 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
         }
 
         // Contribution 30, range constrain the highest microlimb of highest P.y limb to be 8 bits (50 % 14 = 8)
-        let mut tmp_30 = (p_y_high_limbs_range_constraint_3_shift.to_owned() * shift_8_to_14
-            - p_y_high_limbs_range_constraint_4_shift);
-
+        let mut tmp_30 = p_y_high_limbs_range_constraint_3_shift.to_owned() * shift_8_to_14
+            - p_y_high_limbs_range_constraint_4_shift;
         tmp_30 *= lagrange_even_in_minicircuit;
         tmp_30 *= scaling_factor;
         for i in 0..univariate_accumulator.r29.evaluations.len() {
@@ -904,8 +899,8 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
         }
 
         // Contribution 31, range constrain the highest microlimb of low z1 limb to be 12 bits (68 % 14 = 12)
-        let mut tmp_31 = (z_low_limbs_range_constraint_4.to_owned() * shift_12_to_14
-            - z_low_limbs_range_constraint_tail);
+        let mut tmp_31 = z_low_limbs_range_constraint_4.to_owned() * shift_12_to_14
+            - z_low_limbs_range_constraint_tail;
         tmp_31 *= lagrange_even_in_minicircuit;
         tmp_31 *= scaling_factor;
         for i in 0..univariate_accumulator.r30.evaluations.len() {
@@ -913,8 +908,8 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
         }
 
         // Contribution 32, range constrain the highest microlimb of low z2 limb to be 12 bits (68 % 14 = 12)
-        let mut tmp_32 = (z_low_limbs_range_constraint_4_shift.to_owned() * shift_12_to_14
-            - z_low_limbs_range_constraint_tail_shift);
+        let mut tmp_32 = z_low_limbs_range_constraint_4_shift.to_owned() * shift_12_to_14
+            - z_low_limbs_range_constraint_tail_shift;
         tmp_32 *= lagrange_even_in_minicircuit;
         tmp_32 *= scaling_factor;
         for i in 0..univariate_accumulator.r31.evaluations.len() {
@@ -922,8 +917,8 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
         }
 
         // Contribution 33, range constrain the highest microlimb of high z1 limb to be 4 bits (60 % 14 = 12)
-        let mut tmp_33 = (z_high_limbs_range_constraint_4.to_owned() * shift_4_to_14
-            - z_high_limbs_range_constraint_tail);
+        let mut tmp_33 = z_high_limbs_range_constraint_4.to_owned() * shift_4_to_14
+            - z_high_limbs_range_constraint_tail;
         tmp_33 *= lagrange_even_in_minicircuit;
         tmp_33 *= scaling_factor;
         for i in 0..univariate_accumulator.r32.evaluations.len() {
@@ -931,8 +926,8 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
         }
 
         // Contribution 34, range constrain the highest microlimb of high z2 limb to be 4 bits (60 % 14 = 12)
-        let mut tmp_34 = (z_high_limbs_range_constraint_4_shift.to_owned() * shift_4_to_14
-            - z_high_limbs_range_constraint_tail_shift);
+        let mut tmp_34 = z_high_limbs_range_constraint_4_shift.to_owned() * shift_4_to_14
+            - z_high_limbs_range_constraint_tail_shift;
         tmp_34 *= lagrange_even_in_minicircuit;
         tmp_34 *= scaling_factor;
         for i in 0..univariate_accumulator.r33.evaluations.len() {
@@ -941,8 +936,8 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
 
         // Contribution 35, range constrain the highest microlimb of lowest current accumulator limb to be 12 bits (68 %
         // 14 = 12)
-        let mut tmp_35 = (accumulator_low_limbs_range_constraint_4.to_owned() * shift_12_to_14
-            - accumulator_low_limbs_range_constraint_tail);
+        let mut tmp_35 = accumulator_low_limbs_range_constraint_4.to_owned() * shift_12_to_14
+            - accumulator_low_limbs_range_constraint_tail;
         tmp_35 *= lagrange_even_in_minicircuit;
         tmp_35 *= scaling_factor;
         for i in 0..univariate_accumulator.r34.evaluations.len() {
@@ -951,9 +946,8 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
 
         // Contribution 36, range constrain the highest microlimb of second lowest current accumulator limb to be 12
         // bits (68 % 14 = 12)
-        let mut tmp_36 = (accumulator_low_limbs_range_constraint_4_shift.to_owned()
-            * shift_12_to_14
-            - accumulator_low_limbs_range_constraint_tail_shift);
+        let mut tmp_36 = accumulator_low_limbs_range_constraint_4_shift.to_owned() * shift_12_to_14
+            - accumulator_low_limbs_range_constraint_tail_shift;
         tmp_36 *= lagrange_even_in_minicircuit;
         tmp_36 *= scaling_factor;
         for i in 0..univariate_accumulator.r35.evaluations.len() {
@@ -962,8 +956,8 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
 
         // Contribution 37, range constrain the highest microlimb of second highest current accumulator limb to be 12
         // bits (68 % 14 = 12)
-        let mut tmp_37 = (accumulator_high_limbs_range_constraint_4.to_owned() * shift_12_to_14
-            - accumulator_high_limbs_range_constraint_tail);
+        let mut tmp_37 = accumulator_high_limbs_range_constraint_4.to_owned() * shift_12_to_14
+            - accumulator_high_limbs_range_constraint_tail;
         tmp_37 *= lagrange_even_in_minicircuit;
         tmp_37 *= scaling_factor;
         for i in 0..univariate_accumulator.r36.evaluations.len() {
@@ -972,9 +966,8 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
 
         // Contribution 38, range constrain the highest microlimb of highest current accumulator limb to be 8 bits (50 %
         // 14 = 12)
-        let mut tmp_38 = (accumulator_high_limbs_range_constraint_3_shift.to_owned()
-            * shift_8_to_14
-            - accumulator_high_limbs_range_constraint_4_shift);
+        let mut tmp_38 = accumulator_high_limbs_range_constraint_3_shift.to_owned() * shift_8_to_14
+            - accumulator_high_limbs_range_constraint_4_shift;
         tmp_38 *= lagrange_even_in_minicircuit;
         tmp_38 *= scaling_factor;
         for i in 0..univariate_accumulator.r37.evaluations.len() {
@@ -982,8 +975,8 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
         }
 
         // Contribution 39, range constrain the highest microlimb of lowest quotient limb to be 12 bits (68 % 14 = 12)
-        let mut tmp_39 = (quotient_low_limbs_range_constraint_4.to_owned() * shift_12_to_14
-            - quotient_low_limbs_range_constraint_tail);
+        let mut tmp_39 = quotient_low_limbs_range_constraint_4.to_owned() * shift_12_to_14
+            - quotient_low_limbs_range_constraint_tail;
         tmp_39 *= lagrange_even_in_minicircuit;
         tmp_39 *= scaling_factor;
         for i in 0..univariate_accumulator.r38.evaluations.len() {
@@ -992,8 +985,8 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
 
         // Contribution 40, range constrain the highest microlimb of second lowest quotient limb to be 12 bits (68 % 14
         // = 12)
-        let mut tmp_40 = (quotient_low_limbs_range_constraint_4_shift.to_owned() * shift_12_to_14
-            - quotient_low_limbs_range_constraint_tail_shift);
+        let mut tmp_40 = quotient_low_limbs_range_constraint_4_shift.to_owned() * shift_12_to_14
+            - quotient_low_limbs_range_constraint_tail_shift;
         tmp_40 *= lagrange_even_in_minicircuit;
         tmp_40 *= scaling_factor;
         for i in 0..univariate_accumulator.r39.evaluations.len() {
@@ -1002,8 +995,8 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
 
         // Contribution 41, range constrain the highest microlimb of second highest quotient limb to be 12 bits (68 % 14
         // = 12)
-        let mut tmp_41 = (quotient_high_limbs_range_constraint_4.to_owned() * shift_12_to_14
-            - quotient_high_limbs_range_constraint_tail);
+        let mut tmp_41 = quotient_high_limbs_range_constraint_4.to_owned() * shift_12_to_14
+            - quotient_high_limbs_range_constraint_tail;
         tmp_41 *= lagrange_even_in_minicircuit;
         tmp_41 *= scaling_factor;
         for i in 0..univariate_accumulator.r40.evaluations.len() {
@@ -1011,8 +1004,8 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
         }
 
         // Contribution 42, range constrain the highest microlimb of highest quotient limb to be 10 bits (52 % 14 = 12)
-        let mut tmp_42 = (quotient_high_limbs_range_constraint_3_shift.to_owned() * shift_10_to_14
-            - quotient_high_limbs_range_constraint_4_shift);
+        let mut tmp_42 = quotient_high_limbs_range_constraint_3_shift.to_owned() * shift_10_to_14
+            - quotient_high_limbs_range_constraint_4_shift;
         tmp_42 *= lagrange_even_in_minicircuit;
         tmp_42 *= scaling_factor;
         for i in 0..univariate_accumulator.r41.evaluations.len() {
