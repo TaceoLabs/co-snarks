@@ -648,7 +648,7 @@ where
             }
             // create witness shares
             let start = Instant::now();
-            let shares = co_circom::split_witness_rep3::<P>(
+            let shares = co_circom::split_witness_rep3(
                 r1cs.num_inputs,
                 witness,
                 Compression::SeededHalfShares,
@@ -674,7 +674,7 @@ where
         MPCProtocol::SHAMIR => {
             // create witness shares
             let start = Instant::now();
-            let shares = co_circom::split_witness_shamir::<P>(r1cs.num_inputs, witness, t, n);
+            let shares = co_circom::split_witness_shamir(r1cs.num_inputs, witness, t, n);
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!("Split witness took {duration_ms} ms");
 
@@ -726,7 +726,7 @@ where
 
     tracing::info!("Starting split input...");
     let start = Instant::now();
-    let shares = co_circom::split_input::<P>(input, &public_inputs)?;
+    let shares = co_circom::split_input::<P::ScalarField>(input, &public_inputs)?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Split input took {duration_ms} ms");
 
@@ -780,7 +780,7 @@ where
 
     tracing::info!("Starting input shares merging...");
     let start = Instant::now();
-    let merged = co_circom::merge_input_shares::<P>(input_shares)?;
+    let merged = co_circom::merge_input_shares(input_shares)?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Merge input shares took {duration_ms} ms");
 
@@ -826,7 +826,7 @@ where
     tracing::info!("Starting witness generation...");
     let start = Instant::now();
     let result_witness_share =
-        co_circom::generate_witness_rep3::<P, _>(&circuit, input_share, config.vm, &net0, &net1)?;
+        co_circom::generate_witness_rep3(&circuit, input_share, config.vm, &net0, &net1)?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Generate witness took {duration_ms} ms");
 
@@ -869,7 +869,7 @@ where
     // Translate witness to shamir shares
     tracing::info!("Starting witness translation...");
     let start = Instant::now();
-    let shamir_witness_share = co_circom::translate_witness::<P, _>(witness_share, &net)?;
+    let shamir_witness_share = co_circom::translate_witness(witness_share, &net)?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Translate witness took {duration_ms} ms");
 

@@ -941,7 +941,7 @@ fn run_split_witness(config: SplitWitnessConfig) -> color_eyre::Result<ExitCode>
             }
             // create witness shares
             let start = Instant::now();
-            let shares = co_noir::split_witness_rep3::<Bn254>(witness);
+            let shares = co_noir::split_witness_rep3::<ark_bn254::Fr>(witness);
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!("Split witness took {duration_ms} ms");
 
@@ -963,7 +963,7 @@ fn run_split_witness(config: SplitWitnessConfig) -> color_eyre::Result<ExitCode>
         MPCProtocol::SHAMIR => {
             // create witness shares
             let start = Instant::now();
-            let shares = co_noir::split_witness_shamir::<Bn254>(witness, t, n);
+            let shares = co_noir::split_witness_shamir::<ark_bn254::Fr>(witness, t, n);
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!("Split witness took {duration_ms} ms");
 
@@ -1091,7 +1091,7 @@ fn run_split_input(config: SplitInputConfig) -> color_eyre::Result<ExitCode> {
     // create input shares
     tracing::info!("Starting split input...");
     let start = Instant::now();
-    let shares = co_noir::split_input_rep3::<Bn254>(inputs);
+    let shares = co_noir::split_input_rep3::<ark_bn254::Fr>(inputs);
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Split input took {duration_ms} ms");
 
@@ -1141,7 +1141,7 @@ fn run_merge_input_shares(config: MergeInputSharesConfig) -> color_eyre::Result<
 
     tracing::info!("Starting input shares merging...");
     let start = Instant::now();
-    let result = co_noir::merge_input_shares::<Bn254>(input_shares)?;
+    let result = co_noir::merge_input_shares(input_shares)?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Merge input shares took {duration_ms} ms");
 
@@ -1216,7 +1216,7 @@ fn run_translate_witness(config: TranslateWitnessConfig) -> color_eyre::Result<E
     // Translate witness to shamir shares
     tracing::info!("Starting witness translation...");
     let start = Instant::now();
-    let shamir_witness_shares = co_noir::translate_witness::<Bn254, _>(witness_share, &net)?;
+    let shamir_witness_shares = co_noir::translate_witness(witness_share, &net)?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Translate witness took {duration_ms} ms");
 

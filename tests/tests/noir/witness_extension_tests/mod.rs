@@ -63,7 +63,7 @@ macro_rules! add_rep3_acvm_test {
                 ).expect("can share field elements for noir witness extension");
 
                 // create input shares
-                let shares = co_noir::split_input_rep3::<Bn254>(inputs);
+                let shares = co_noir::split_input_rep3(inputs);
                 let nets0 = LocalNetwork::new_3_parties();
                 let nets1 = LocalNetwork::new_3_parties();
                 let mut threads = vec![];

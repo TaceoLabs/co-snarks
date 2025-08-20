@@ -1,5 +1,4 @@
 use acir::{native_types::WitnessStack, FieldElement};
-use ark_bn254::Bn254;
 use co_acvm::solver::PlainCoSolver;
 use co_acvm::solver::Rep3CoSolver;
 use itertools::izip;
