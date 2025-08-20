@@ -18,11 +18,205 @@ impl TranslatorFlavour {
     pub const CONST_TRANSLATOR_LOG_N: usize = 18;
 
     pub fn wire_to_be_shifted_labels() -> &'static [&'static str] {
-        todo!()
+        &[
+            "X_LO_Y_HI",
+            "X_HI_Z_1",
+            "Y_LO_Z_2",
+            "P_X_LOW_LIMBS",
+            "P_X_HIGH_LIMBS",
+            "P_Y_LOW_LIMBS",
+            "P_Y_HIGH_LIMBS",
+            "Z_LOW_LIMBS",
+            "Z_HIGH_LIMBS",
+            "ACCUMULATORS_BINARY_LIMBS_0",
+            "ACCUMULATORS_BINARY_LIMBS_1",
+            "ACCUMULATORS_BINARY_LIMBS_2",
+            "ACCUMULATORS_BINARY_LIMBS_3",
+            "QUOTIENT_LOW_BINARY_LIMBS",
+            "QUOTIENT_HIGH_BINARY_LIMBS",
+            "RELATION_WIDE_LIMBS",
+            "P_X_LOW_LIMBS_RANGE_CONSTRAINT_0",
+            "P_X_LOW_LIMBS_RANGE_CONSTRAINT_1",
+            "P_X_LOW_LIMBS_RANGE_CONSTRAINT_2",
+            "P_X_LOW_LIMBS_RANGE_CONSTRAINT_3",
+            "P_X_LOW_LIMBS_RANGE_CONSTRAINT_4",
+            "P_X_LOW_LIMBS_RANGE_CONSTRAINT_TAIL",
+            "P_X_HIGH_LIMBS_RANGE_CONSTRAINT_0",
+            "P_X_HIGH_LIMBS_RANGE_CONSTRAINT_1",
+            "P_X_HIGH_LIMBS_RANGE_CONSTRAINT_2",
+            "P_X_HIGH_LIMBS_RANGE_CONSTRAINT_3",
+            "P_X_HIGH_LIMBS_RANGE_CONSTRAINT_4",
+            "P_X_HIGH_LIMBS_RANGE_CONSTRAINT_TAIL",
+            "P_Y_LOW_LIMBS_RANGE_CONSTRAINT_0",
+            "P_Y_LOW_LIMBS_RANGE_CONSTRAINT_1",
+            "P_Y_LOW_LIMBS_RANGE_CONSTRAINT_2",
+            "P_Y_LOW_LIMBS_RANGE_CONSTRAINT_3",
+            "P_Y_LOW_LIMBS_RANGE_CONSTRAINT_4",
+            "P_Y_LOW_LIMBS_RANGE_CONSTRAINT_TAIL",
+            "P_Y_HIGH_LIMBS_RANGE_CONSTRAINT_0",
+            "P_Y_HIGH_LIMBS_RANGE_CONSTRAINT_1",
+            "P_Y_HIGH_LIMBS_RANGE_CONSTRAINT_2",
+            "P_Y_HIGH_LIMBS_RANGE_CONSTRAINT_3",
+            "P_Y_HIGH_LIMBS_RANGE_CONSTRAINT_4",
+            "P_Y_HIGH_LIMBS_RANGE_CONSTRAINT_TAIL",
+            "Z_LOW_LIMBS_RANGE_CONSTRAINT_0",
+            "Z_LOW_LIMBS_RANGE_CONSTRAINT_1",
+            "Z_LOW_LIMBS_RANGE_CONSTRAINT_2",
+            "Z_LOW_LIMBS_RANGE_CONSTRAINT_3",
+            "Z_LOW_LIMBS_RANGE_CONSTRAINT_4",
+            "Z_LOW_LIMBS_RANGE_CONSTRAINT_TAIL",
+            "Z_HIGH_LIMBS_RANGE_CONSTRAINT_0",
+            "Z_HIGH_LIMBS_RANGE_CONSTRAINT_1",
+            "Z_HIGH_LIMBS_RANGE_CONSTRAINT_2",
+            "Z_HIGH_LIMBS_RANGE_CONSTRAINT_3",
+            "Z_HIGH_LIMBS_RANGE_CONSTRAINT_4",
+            "Z_HIGH_LIMBS_RANGE_CONSTRAINT_TAIL",
+            "ACCUMULATOR_LOW_LIMBS_RANGE_CONSTRAINT_0",
+            "ACCUMULATOR_LOW_LIMBS_RANGE_CONSTRAINT_1",
+            "ACCUMULATOR_LOW_LIMBS_RANGE_CONSTRAINT_2",
+            "ACCUMULATOR_LOW_LIMBS_RANGE_CONSTRAINT_3",
+            "ACCUMULATOR_LOW_LIMBS_RANGE_CONSTRAINT_4",
+            "ACCUMULATOR_LOW_LIMBS_RANGE_CONSTRAINT_TAIL",
+            "ACCUMULATOR_HIGH_LIMBS_RANGE_CONSTRAINT_0",
+            "ACCUMULATOR_HIGH_LIMBS_RANGE_CONSTRAINT_1",
+            "ACCUMULATOR_HIGH_LIMBS_RANGE_CONSTRAINT_2",
+            "ACCUMULATOR_HIGH_LIMBS_RANGE_CONSTRAINT_3",
+            "ACCUMULATOR_HIGH_LIMBS_RANGE_CONSTRAINT_4",
+            "ACCUMULATOR_HIGH_LIMBS_RANGE_CONSTRAINT_TAIL",
+            "QUOTIENT_LOW_LIMBS_RANGE_CONSTRAINT_0",
+            "QUOTIENT_LOW_LIMBS_RANGE_CONSTRAINT_1",
+            "QUOTIENT_LOW_LIMBS_RANGE_CONSTRAINT_2",
+            "QUOTIENT_LOW_LIMBS_RANGE_CONSTRAINT_3",
+            "QUOTIENT_LOW_LIMBS_RANGE_CONSTRAINT_4",
+            "QUOTIENT_LOW_LIMBS_RANGE_CONSTRAINT_TAIL",
+            "QUOTIENT_HIGH_LIMBS_RANGE_CONSTRAINT_0",
+            "QUOTIENT_HIGH_LIMBS_RANGE_CONSTRAINT_1",
+            "QUOTIENT_HIGH_LIMBS_RANGE_CONSTRAINT_2",
+            "QUOTIENT_HIGH_LIMBS_RANGE_CONSTRAINT_3",
+            "QUOTIENT_HIGH_LIMBS_RANGE_CONSTRAINT_4",
+            "QUOTIENT_HIGH_LIMBS_RANGE_CONSTRAINT_TAIL",
+            "RELATION_WIDE_LIMBS_RANGE_CONSTRAINT_0",
+            "RELATION_WIDE_LIMBS_RANGE_CONSTRAINT_1",
+            "RELATION_WIDE_LIMBS_RANGE_CONSTRAINT_2",
+            "RELATION_WIDE_LIMBS_RANGE_CONSTRAINT_3",
+        ]
+    }
+    pub fn wire_non_shifted_labels() -> &'static [&'static str] {
+        &["OP"]
     }
     pub fn get_ordered_range_constraints_labels() -> &'static [&'static str] {
-        todo!()
+        &[
+            "ORDERED_RANGE_CONSTRAINTS_0",
+            "ORDERED_RANGE_CONSTRAINTS_1",
+            "ORDERED_RANGE_CONSTRAINTS_2",
+            "ORDERED_RANGE_CONSTRAINTS_3",
+            "ORDERED_RANGE_CONSTRAINTS_4",
+        ]
     }
+    // PRECOMPUTED ENTITIES:
+    const ORDERED_EXTRA_RANGE_CONSTRAINTS_NUMERATOR: usize = 0; // column 0
+    const LAGRANGE_FIRST: usize = 1; // column 1
+    const LAGRANGE_LAST: usize = 2; // column 2
+    // TODO(https://github.com/AztecProtocol/barretenberg/issues/758): Check if one of these
+    // can be replaced by shifts
+    const LAGRANGE_ODD_IN_MINICIRCUIT: usize = 3; // column 3
+    const LAGRANGE_EVEN_IN_MINICIRCUIT: usize = 4; // column 4
+    const LAGRANGE_RESULT_ROW: usize = 5; // column 5
+    const LAGRANGE_LAST_IN_MINICIRCUIT: usize = 6; // column 6
+    const LAGRANGE_MASKING: usize = 7; // column 7
+    const LAGRANGE_REAL_LAST: usize = 8; // column 8
+    // WITNESS ENTITIES:
+    const OP: usize = 0;
+    const X_LO_Y_HI: usize = 1;
+    const X_HI_Z_1: usize = 2;
+    const Y_LO_Z_2: usize = 3;
+    const P_X_LOW_LIMBS: usize = 4;
+    const P_X_HIGH_LIMBS: usize = 5;
+    const P_Y_LOW_LIMBS: usize = 6;
+    const P_Y_HIGH_LIMBS: usize = 7;
+    const Z_LOW_LIMBS: usize = 8;
+    const Z_HIGH_LIMBS: usize = 9;
+    const ACCUMULATORS_BINARY_LIMBS_0: usize = 10;
+    const ACCUMULATORS_BINARY_LIMBS_1: usize = 11;
+    const ACCUMULATORS_BINARY_LIMBS_2: usize = 12;
+    const ACCUMULATORS_BINARY_LIMBS_3: usize = 13;
+    const QUOTIENT_LOW_BINARY_LIMBS: usize = 14;
+    const QUOTIENT_HIGH_BINARY_LIMBS: usize = 15;
+    const RELATION_WIDE_LIMBS: usize = 16;
+    const P_X_LOW_LIMBS_RANGE_CONSTRAINT_0: usize = 17;
+    const P_X_LOW_LIMBS_RANGE_CONSTRAINT_1: usize = 18;
+    const P_X_LOW_LIMBS_RANGE_CONSTRAINT_2: usize = 19;
+    const P_X_LOW_LIMBS_RANGE_CONSTRAINT_3: usize = 20;
+    const P_X_LOW_LIMBS_RANGE_CONSTRAINT_4: usize = 21;
+    const P_X_LOW_LIMBS_RANGE_CONSTRAINT_TAIL: usize = 22;
+    const P_X_HIGH_LIMBS_RANGE_CONSTRAINT_0: usize = 23;
+    const P_X_HIGH_LIMBS_RANGE_CONSTRAINT_1: usize = 24;
+    const P_X_HIGH_LIMBS_RANGE_CONSTRAINT_2: usize = 25;
+    const P_X_HIGH_LIMBS_RANGE_CONSTRAINT_3: usize = 26;
+    const P_X_HIGH_LIMBS_RANGE_CONSTRAINT_4: usize = 27;
+    const P_X_HIGH_LIMBS_RANGE_CONSTRAINT_TAIL: usize = 28;
+    const P_Y_LOW_LIMBS_RANGE_CONSTRAINT_0: usize = 29;
+    const P_Y_LOW_LIMBS_RANGE_CONSTRAINT_1: usize = 30;
+    const P_Y_LOW_LIMBS_RANGE_CONSTRAINT_2: usize = 31;
+    const P_Y_LOW_LIMBS_RANGE_CONSTRAINT_3: usize = 32;
+    const P_Y_LOW_LIMBS_RANGE_CONSTRAINT_4: usize = 33;
+    const P_Y_LOW_LIMBS_RANGE_CONSTRAINT_TAIL: usize = 34;
+    const P_Y_HIGH_LIMBS_RANGE_CONSTRAINT_0: usize = 35;
+    const P_Y_HIGH_LIMBS_RANGE_CONSTRAINT_1: usize = 36;
+    const P_Y_HIGH_LIMBS_RANGE_CONSTRAINT_2: usize = 37;
+    const P_Y_HIGH_LIMBS_RANGE_CONSTRAINT_3: usize = 38;
+    const P_Y_HIGH_LIMBS_RANGE_CONSTRAINT_4: usize = 39;
+    const P_Y_HIGH_LIMBS_RANGE_CONSTRAINT_TAIL: usize = 40;
+    const Z_LOW_LIMBS_RANGE_CONSTRAINT_0: usize = 41;
+    const Z_LOW_LIMBS_RANGE_CONSTRAINT_1: usize = 42;
+    const Z_LOW_LIMBS_RANGE_CONSTRAINT_2: usize = 43;
+    const Z_LOW_LIMBS_RANGE_CONSTRAINT_3: usize = 44;
+    const Z_LOW_LIMBS_RANGE_CONSTRAINT_4: usize = 45;
+    const Z_LOW_LIMBS_RANGE_CONSTRAINT_TAIL: usize = 46;
+    const Z_HIGH_LIMBS_RANGE_CONSTRAINT_0: usize = 47;
+    const Z_HIGH_LIMBS_RANGE_CONSTRAINT_1: usize = 48;
+    const Z_HIGH_LIMBS_RANGE_CONSTRAINT_2: usize = 49;
+    const Z_HIGH_LIMBS_RANGE_CONSTRAINT_3: usize = 50;
+    const Z_HIGH_LIMBS_RANGE_CONSTRAINT_4: usize = 51;
+    const Z_HIGH_LIMBS_RANGE_CONSTRAINT_TAIL: usize = 52;
+    const ACCUMULATOR_LOW_LIMBS_RANGE_CONSTRAINT_0: usize = 53;
+    const ACCUMULATOR_LOW_LIMBS_RANGE_CONSTRAINT_1: usize = 54;
+    const ACCUMULATOR_LOW_LIMBS_RANGE_CONSTRAINT_2: usize = 55;
+    const ACCUMULATOR_LOW_LIMBS_RANGE_CONSTRAINT_3: usize = 56;
+    const ACCUMULATOR_LOW_LIMBS_RANGE_CONSTRAINT_4: usize = 57;
+    const ACCUMULATOR_LOW_LIMBS_RANGE_CONSTRAINT_TAIL: usize = 58;
+    const ACCUMULATOR_HIGH_LIMBS_RANGE_CONSTRAINT_0: usize = 59;
+    const ACCUMULATOR_HIGH_LIMBS_RANGE_CONSTRAINT_1: usize = 60;
+    const ACCUMULATOR_HIGH_LIMBS_RANGE_CONSTRAINT_2: usize = 61;
+    const ACCUMULATOR_HIGH_LIMBS_RANGE_CONSTRAINT_3: usize = 62;
+    const ACCUMULATOR_HIGH_LIMBS_RANGE_CONSTRAINT_4: usize = 63;
+    const ACCUMULATOR_HIGH_LIMBS_RANGE_CONSTRAINT_TAIL: usize = 64;
+    const QUOTIENT_LOW_LIMBS_RANGE_CONSTRAINT_0: usize = 65;
+    const QUOTIENT_LOW_LIMBS_RANGE_CONSTRAINT_1: usize = 66;
+    const QUOTIENT_LOW_LIMBS_RANGE_CONSTRAINT_2: usize = 67;
+    const QUOTIENT_LOW_LIMBS_RANGE_CONSTRAINT_3: usize = 68;
+    const QUOTIENT_LOW_LIMBS_RANGE_CONSTRAINT_4: usize = 69;
+    const QUOTIENT_LOW_LIMBS_RANGE_CONSTRAINT_TAIL: usize = 70;
+    const QUOTIENT_HIGH_LIMBS_RANGE_CONSTRAINT_0: usize = 71;
+    const QUOTIENT_HIGH_LIMBS_RANGE_CONSTRAINT_1: usize = 72;
+    const QUOTIENT_HIGH_LIMBS_RANGE_CONSTRAINT_2: usize = 73;
+    const QUOTIENT_HIGH_LIMBS_RANGE_CONSTRAINT_3: usize = 74;
+    const QUOTIENT_HIGH_LIMBS_RANGE_CONSTRAINT_4: usize = 75;
+    const QUOTIENT_HIGH_LIMBS_RANGE_CONSTRAINT_TAIL: usize = 76;
+    const RELATION_WIDE_LIMBS_RANGE_CONSTRAINT_0: usize = 77;
+    const RELATION_WIDE_LIMBS_RANGE_CONSTRAINT_1: usize = 78;
+    const RELATION_WIDE_LIMBS_RANGE_CONSTRAINT_2: usize = 79;
+    const RELATION_WIDE_LIMBS_RANGE_CONSTRAINT_3: usize = 80;
+    const ORDERED_RANGE_CONSTRAINTS_0: usize = 81;
+    const ORDERED_RANGE_CONSTRAINTS_1: usize = 82;
+    const ORDERED_RANGE_CONSTRAINTS_2: usize = 83;
+    const ORDERED_RANGE_CONSTRAINTS_3: usize = 84;
+    const ORDERED_RANGE_CONSTRAINTS_4: usize = 85;
+    const Z_PERM: usize = 86;
+    const INTERLEAVED_RANGE_CONSTRAINTS_0: usize = 87;
+    const INTERLEAVED_RANGE_CONSTRAINTS_1: usize = 88;
+    const INTERLEAVED_RANGE_CONSTRAINTS_2: usize = 89;
+    const INTERLEAVED_RANGE_CONSTRAINTS_3: usize = 90;
 }
 
 impl ProverFlavour for TranslatorFlavour {
@@ -72,8 +266,8 @@ impl ProverFlavour for TranslatorFlavour {
     const TABLE_2: usize = usize::MAX;
     const TABLE_3: usize = usize::MAX;
     const TABLE_4: usize = usize::MAX;
-    const LAGRANGE_FIRST: usize = usize::MAX;
-    const LAGRANGE_LAST: usize = usize::MAX;
+    const LAGRANGE_FIRST: usize = 1;
+    const LAGRANGE_LAST: usize = 2;
     const LAGRANGE_ECC_OP: usize = usize::MAX;
     const DATABUS_ID: usize = usize::MAX;
     const W_L: usize = usize::MAX;
@@ -302,7 +496,9 @@ impl<T: Default> TranslatorProverWitnessEntities<T> {
     pub fn accumulators_binary_limbs_3(&self) -> &T {
         todo!()
     }
-
+    pub fn wire_non_shifted_mut(&mut self) -> &mut [T] {
+        todo!()
+    }
     pub fn wire_to_be_shifted_mut(&mut self) -> &mut [T] {
         todo!()
     }

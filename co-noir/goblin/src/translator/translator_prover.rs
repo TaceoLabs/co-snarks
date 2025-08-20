@@ -143,6 +143,11 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         transcript: &mut Transcript<TranscriptFieldType, H>,
         proving_key: &mut ProvingKey<P, TranslatorFlavour>,
     ) -> HonkProofResult<()> {
+        let non_shifted_labels = TranslatorFlavour::wire_non_shifted_labels();
+        let wire_non_shifted = proving_key.polynomials.witness.wire_non_shifted_mut();
+        for (wire, label) in wire_non_shifted.iter_mut().zip(non_shifted_labels.iter()) {
+            self.commit_to_witness_polynomial(wire, label, &proving_key.crs, transcript)?;
+        }
         let to_be_shifted_labels = TranslatorFlavour::wire_to_be_shifted_labels();
         let wire_to_be_shifted = proving_key.polynomials.witness.wire_to_be_shifted_mut();
         for (wire, label) in wire_to_be_shifted
