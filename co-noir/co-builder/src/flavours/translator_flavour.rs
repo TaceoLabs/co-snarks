@@ -101,8 +101,8 @@ impl TranslatorFlavour {
             "RELATION_WIDE_LIMBS_RANGE_CONSTRAINT_3",
         ]
     }
-    pub fn wire_non_shifted_labels() -> &'static [&'static str] {
-        &["OP"]
+    pub fn wire_non_shifted_labels() -> &'static str {
+        "OP"
     }
     pub fn get_ordered_range_constraints_labels() -> &'static [&'static str] {
         &[
@@ -128,6 +128,7 @@ impl TranslatorFlavour {
     const LAGRANGE_REAL_LAST: usize = 8; // column 8
     // WITNESS ENTITIES:
     const OP: usize = 0;
+    // Here the shifted start:
     const X_LO_Y_HI: usize = 1;
     const X_HI_Z_1: usize = 2;
     const Y_LO_Z_2: usize = 3;
@@ -214,6 +215,7 @@ impl TranslatorFlavour {
     const ORDERED_RANGE_CONSTRAINTS_3: usize = 84;
     const ORDERED_RANGE_CONSTRAINTS_4: usize = 85;
     const Z_PERM: usize = 86;
+    //here the shifted end
     const INTERLEAVED_RANGE_CONSTRAINTS_0: usize = 87;
     const INTERLEAVED_RANGE_CONSTRAINTS_1: usize = 88;
     const INTERLEAVED_RANGE_CONSTRAINTS_2: usize = 89;
@@ -437,6 +439,12 @@ impl<T: Default + Debug> WitnessEntitiesFlavour<T> for TranslatorWitnessEntities
             elements: elements.try_into().unwrap(),
         }
     }
+    fn to_be_shifted(&self) -> &[T] {
+        &self.elements[TranslatorFlavour::X_LO_Y_HI..=TranslatorFlavour::Z_PERM]
+    }
+    fn to_be_shifted_mut(&mut self) -> &mut [T] {
+        &mut self.elements[TranslatorFlavour::X_LO_Y_HI..=TranslatorFlavour::Z_PERM]
+    }
 }
 impl<T: Default + Debug> ShiftedWitnessEntitiesFlavour<T> for TranslatorShiftedWitnessEntities<T> {
     fn new() -> Self {
@@ -492,6 +500,12 @@ impl<T: Default> TranslatorPrecomputedEntities<T> {
 }
 
 impl<T: Default> TranslatorProverWitnessEntities<T> {
+    pub fn into_shifted_without_z_perm(self) -> impl Iterator<Item = T> {
+        self.elements
+            .into_iter()
+            .skip(1)
+            .take(TranslatorFlavour::SHIFTED_WITNESS_ENTITIES_SIZE - 1) // Minus 1 because we don't include z_perm
+    }
     pub fn accumulators_binary_limbs_0(&self) -> &T {
         &self.elements[TranslatorFlavour::ACCUMULATORS_BINARY_LIMBS_0]
     }
@@ -506,6 +520,9 @@ impl<T: Default> TranslatorProverWitnessEntities<T> {
     }
     pub fn wire_non_shifted_mut(&mut self) -> &mut T {
         &mut self.elements[TranslatorFlavour::OP]
+    }
+    pub fn op(&self) -> &T {
+        &self.elements[TranslatorFlavour::OP]
     }
     pub fn wire_to_be_shifted_mut(&mut self) -> &mut [T] {
         &mut self.elements[TranslatorFlavour::X_LO_Y_HI
@@ -526,6 +543,10 @@ impl<T: Default> TranslatorProverWitnessEntities<T> {
     }
     pub fn interleaved_range_constraints_3(&self) -> &T {
         &self.elements[TranslatorFlavour::INTERLEAVED_RANGE_CONSTRAINTS_3 - 1] // We do -1 here because we don't have z_perm here
+    }
+    pub fn get_interleaved_range_constraints(&self) -> &[T] {
+        &self.elements[TranslatorFlavour::INTERLEAVED_RANGE_CONSTRAINTS_0
+            ..=TranslatorFlavour::INTERLEAVED_RANGE_CONSTRAINTS_3 - 1]
     }
     pub fn ordered_range_constraints_0(&self) -> &T {
         &self.elements[TranslatorFlavour::ORDERED_RANGE_CONSTRAINTS_0]
@@ -584,8 +605,15 @@ impl<T: Default> TranslatorWitnessEntities<T> {
     pub fn interleaved_range_constraints_3(&self) -> &T {
         &self.elements[TranslatorFlavour::INTERLEAVED_RANGE_CONSTRAINTS_3]
     }
+    pub fn get_interleaved_range_constraints_mut(&mut self) -> &mut [T] {
+        &mut self.elements[TranslatorFlavour::INTERLEAVED_RANGE_CONSTRAINTS_0
+            ..=TranslatorFlavour::INTERLEAVED_RANGE_CONSTRAINTS_3]
+    }
     pub fn op(&self) -> &T {
         &self.elements[TranslatorFlavour::OP]
+    }
+    pub fn op_mut(&mut self) -> &mut T {
+        &mut self.elements[TranslatorFlavour::OP]
     }
     pub fn p_x_low_limbs_range_constraint_0(&self) -> &T {
         &self.elements[TranslatorFlavour::P_X_LOW_LIMBS_RANGE_CONSTRAINT_0]
