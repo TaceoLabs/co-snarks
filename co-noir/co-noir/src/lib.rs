@@ -8,7 +8,7 @@ use co_acvm::{PlainAcvmSolver, Rep3AcvmSolver, ShamirAcvmSolver, solver::Rep3CoS
 use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
 use co_builder::prover_flavour::ProverFlavour;
 use co_builder::{TranscriptFieldType, flavours::ultra_flavour::UltraFlavour};
-use co_noir_types::{PubPrivate, Rep3SharedInput, Rep3SharedWitness, ShamirType};
+use co_noir_types::{Rep3SharedInput, Rep3SharedWitness, ShamirType};
 use co_noir_types::{Rep3Type, ShamirSharedWitness};
 use co_ultrahonk::prelude::{HonkCurve, ProverCrs};
 use color_eyre::eyre::{self, Context, Result};
@@ -41,23 +41,11 @@ pub use noir_types::witness_from_reader;
 pub use noirc_artifacts::program::ProgramArtifact;
 pub use sha3::Keccak256;
 
+pub use co_noir_types::split_input_rep3;
+pub use co_noir_types::split_witness_rep3;
+pub use co_noir_types::split_witness_shamir;
+
 pub type Bn254G1 = <ark_ec::bn::Bn<ark_bn254::Config> as ark_ec::pairing::Pairing>::G1;
-
-/// Split a witness into REP3 shares
-pub fn split_witness_rep3<P: Pairing>(
-    witness: Vec<PubPrivate<P::ScalarField>>,
-) -> [Rep3SharedWitness<P::ScalarField>; 3] {
-    co_noir_types::split_witness_rep3(witness)
-}
-
-/// Split a witness into shamir shares
-pub fn split_witness_shamir<P: Pairing>(
-    witness: Vec<PubPrivate<P::ScalarField>>,
-    degree: usize,
-    num_parties: usize,
-) -> Vec<ShamirSharedWitness<P::ScalarField>> {
-    co_noir_types::split_witness_shamir(witness, degree, num_parties)
-}
 
 #[expect(clippy::type_complexity)]
 /// Executes the noir circuit with REP3 protocol
@@ -96,10 +84,10 @@ pub fn generate_witness_rep3<N: Network>(
 }
 
 /// Translate a REP3 shared witness to a shamir shared witness
-pub fn translate_witness<P: Pairing, N: Network>(
-    witness_share: Rep3SharedWitness<P::ScalarField>,
+pub fn translate_witness<F: PrimeField, N: Network>(
+    witness_share: Rep3SharedWitness<F>,
     net: &N,
-) -> Result<ShamirSharedWitness<P::ScalarField>> {
+) -> Result<ShamirSharedWitness<F>> {
     // extract shares only
     let mut shares = vec![];
     for share in witness_share.iter() {
@@ -381,17 +369,10 @@ pub fn split_proving_key_shamir<P: CurveGroup>(
         .collect::<Result<Vec<_>>>()
 }
 
-/// Split input into REP3 shares
-pub fn split_input_rep3<P: Pairing>(
-    initial_witness: BTreeMap<String, PubPrivate<P::ScalarField>>,
-) -> [Rep3SharedInput<P::ScalarField>; 3] {
-    co_noir_types::split_input_rep3(initial_witness)
-}
-
 /// Merge multiple REP3 input shares
-pub fn merge_input_shares<P: Pairing>(
-    input_shares: Vec<Rep3SharedInput<P::ScalarField>>,
-) -> Result<Rep3SharedInput<P::ScalarField>> {
+pub fn merge_input_shares<F: PrimeField>(
+    input_shares: Vec<Rep3SharedInput<F>>,
+) -> Result<Rep3SharedInput<F>> {
     let mut result = BTreeMap::new();
     for input_share in input_shares.into_iter() {
         for (wit, share) in input_share.into_iter() {
