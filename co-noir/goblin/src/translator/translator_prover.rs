@@ -298,16 +298,6 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
         let witness_polynomials = small_subgroup_ipa_prover.into_witness_polynomials();
 
-        todo!("do interleaving stuff");
-        // TODO FLORIN: BB does this, but do we also have to do it? YES
-        //    PolynomialBatcher polynomial_batcher(key->proving_key->circuit_size);
-        //     polynomial_batcher.set_unshifted(key->proving_key->polynomials.get_unshifted_without_interleaved());
-        //     polynomial_batcher.set_to_be_shifted_by_one(key->proving_key->polynomials.get_to_be_shifted());
-
-        //THIS WE NEED TO DO:
-        //     polynomial_batcher.set_interleaved(key->proving_key->polynomials.get_interleaved(),
-        //                                        key->proving_key->polynomials.get_groups_to_be_interleaved());
-
         let prover_opening_claim = self.decider.shplemini_prove(
             transcript,
             circuit_size,
