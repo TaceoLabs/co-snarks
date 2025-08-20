@@ -115,8 +115,9 @@ impl TranslatorFlavour {
     }
     // PRECOMPUTED ENTITIES:
     const ORDERED_EXTRA_RANGE_CONSTRAINTS_NUMERATOR: usize = 0; // column 0
-    const LAGRANGE_FIRST: usize = 1; // column 1
-    const LAGRANGE_LAST: usize = 2; // column 2
+    // The lagrange constants are already defined in the polynomial flavours
+    // const LAGRANGE_FIRST: usize = 1; // column 1
+    // const LAGRANGE_LAST: usize = 2; // column 2
     // TODO(https://github.com/AztecProtocol/barretenberg/issues/758): Check if one of these
     // can be replaced by shifts
     const LAGRANGE_ODD_IN_MINICIRCUIT: usize = 3; // column 3
@@ -236,6 +237,7 @@ impl ProverFlavour for TranslatorFlavour {
 
     const WITNESS_ENTITIES_SIZE: usize = 91;
     const SHIFTED_WITNESS_ENTITIES_SIZE: usize = 86;
+    const PROVER_WITNESS_ENTITIES_SIZE: usize = 90; // Only z_perm is a derived witness entity
     const PRECOMPUTED_ENTITIES_SIZE: usize = 9;
     const MAX_PARTIAL_RELATION_LENGTH: usize = 7;
     const BATCHED_RELATION_PARTIAL_LENGTH: usize = 9;
@@ -320,13 +322,13 @@ impl ProverFlavour for TranslatorFlavour {
     fn prover_witness_entity_from_vec<T: Default + Sync + Clone>(
         _vec: Vec<crate::prelude::Polynomial<T>>,
     ) -> Self::ProverWitnessEntities<crate::prelude::Polynomial<T>> {
-        todo!()
+        todo!("Implementation for prover_witness_entity_from_vec in TranslatorFlavour")
     }
 
     fn precomputed_entity_from_vec<T: Default + Clone + Sync + Debug>(
         _vec: Vec<crate::prelude::Polynomial<T>>,
     ) -> Self::PrecomputedEntities<crate::prelude::Polynomial<T>> {
-        todo!()
+        todo!("Implementation for precomputed_entity_from_vec in TranslatorFlavour")
     }
 }
 pub type TranslatorPrecomputedEntities<T> =
@@ -402,8 +404,10 @@ impl<T: Default + Debug> PrecomputedEntitiesFlavour<T> for TranslatorPrecomputed
         }
     }
 
-    fn from_elements(elements: Vec<T>) -> Self {
-        todo!()
+    fn from_elements(_elements: Vec<T>) -> Self {
+        unimplemented!(
+            "PrecomputedEntitiesFlavour::from_elements is not implemented for TranslatorFlavour."
+        );
     }
 }
 impl<T: Default + Debug> WitnessEntitiesFlavour<T> for TranslatorWitnessEntities<T> {
@@ -429,7 +433,9 @@ impl<T: Default + Debug> WitnessEntitiesFlavour<T> for TranslatorWitnessEntities
     }
 
     fn from_elements(elements: Vec<T>) -> Self {
-        todo!()
+        Self {
+            elements: elements.try_into().unwrap(),
+        }
     }
 }
 impl<T: Default + Debug> ShiftedWitnessEntitiesFlavour<T> for TranslatorShiftedWitnessEntities<T> {
@@ -455,615 +461,618 @@ impl<T: Default + Debug> ShiftedWitnessEntitiesFlavour<T> for TranslatorShiftedW
     }
 
     fn from_elements(elements: Vec<T>) -> Self {
-        todo!()
+        Self {
+            elements: elements.try_into().unwrap(),
+        }
     }
 }
 impl<T: Default> TranslatorPrecomputedEntities<T> {
     pub fn ordered_extra_range_constraints_numerator(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ORDERED_EXTRA_RANGE_CONSTRAINTS_NUMERATOR]
     }
 
     pub fn lagrange_odd_in_minicircuit(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::LAGRANGE_ODD_IN_MINICIRCUIT]
     }
     pub fn lagrange_even_in_minicircuit(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::LAGRANGE_EVEN_IN_MINICIRCUIT]
     }
     pub fn lagrange_result_row(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::LAGRANGE_RESULT_ROW]
     }
     pub fn lagrange_last_in_minicircuit(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::LAGRANGE_LAST_IN_MINICIRCUIT]
     }
     pub fn lagrange_masking(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::LAGRANGE_MASKING]
     }
     pub fn lagrange_real_last(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::LAGRANGE_REAL_LAST]
     }
 }
 
 impl<T: Default> TranslatorProverWitnessEntities<T> {
     pub fn accumulators_binary_limbs_0(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ACCUMULATORS_BINARY_LIMBS_0]
     }
     pub fn accumulators_binary_limbs_1(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ACCUMULATORS_BINARY_LIMBS_1]
     }
     pub fn accumulators_binary_limbs_2(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ACCUMULATORS_BINARY_LIMBS_2]
     }
     pub fn accumulators_binary_limbs_3(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ACCUMULATORS_BINARY_LIMBS_3]
     }
-    pub fn wire_non_shifted_mut(&mut self) -> &mut [T] {
-        todo!()
+    pub fn wire_non_shifted_mut(&mut self) -> &mut T {
+        &mut self.elements[TranslatorFlavour::OP]
     }
     pub fn wire_to_be_shifted_mut(&mut self) -> &mut [T] {
-        todo!()
+        &mut self.elements[TranslatorFlavour::X_LO_Y_HI
+            ..=TranslatorFlavour::RELATION_WIDE_LIMBS_RANGE_CONSTRAINT_3]
     }
     pub fn get_ordered_range_constraints_mut(&mut self) -> &mut [T] {
-        todo!()
+        &mut self.elements[TranslatorFlavour::ORDERED_RANGE_CONSTRAINTS_0
+            ..=TranslatorFlavour::ORDERED_RANGE_CONSTRAINTS_4]
     }
     pub fn interleaved_range_constraints_0(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::INTERLEAVED_RANGE_CONSTRAINTS_0]
     }
     pub fn interleaved_range_constraints_1(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::INTERLEAVED_RANGE_CONSTRAINTS_1]
     }
     pub fn interleaved_range_constraints_2(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::INTERLEAVED_RANGE_CONSTRAINTS_2 - 1] // We do -1 here because we don't have z_perm here
     }
     pub fn interleaved_range_constraints_3(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::INTERLEAVED_RANGE_CONSTRAINTS_3 - 1] // We do -1 here because we don't have z_perm here
     }
-
     pub fn ordered_range_constraints_0(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ORDERED_RANGE_CONSTRAINTS_0]
     }
     pub fn ordered_range_constraints_1(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ORDERED_RANGE_CONSTRAINTS_1]
     }
     pub fn ordered_range_constraints_2(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ORDERED_RANGE_CONSTRAINTS_2]
     }
     pub fn ordered_range_constraints_3(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ORDERED_RANGE_CONSTRAINTS_3]
     }
     pub fn ordered_range_constraints_4(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ORDERED_RANGE_CONSTRAINTS_4]
     }
 }
 
 impl<T: Default> TranslatorWitnessEntities<T> {
     pub fn accumulators_binary_limbs_0(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ACCUMULATORS_BINARY_LIMBS_0]
     }
     pub fn accumulators_binary_limbs_1(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ACCUMULATORS_BINARY_LIMBS_1]
     }
     pub fn accumulators_binary_limbs_2(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ACCUMULATORS_BINARY_LIMBS_2]
     }
     pub fn accumulators_binary_limbs_3(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ACCUMULATORS_BINARY_LIMBS_3]
     }
     pub fn ordered_range_constraints_0(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ORDERED_RANGE_CONSTRAINTS_0]
     }
     pub fn ordered_range_constraints_1(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ORDERED_RANGE_CONSTRAINTS_1]
     }
     pub fn ordered_range_constraints_2(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ORDERED_RANGE_CONSTRAINTS_2]
     }
     pub fn ordered_range_constraints_3(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ORDERED_RANGE_CONSTRAINTS_3]
     }
     pub fn ordered_range_constraints_4(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ORDERED_RANGE_CONSTRAINTS_4]
     }
     pub fn interleaved_range_constraints_0(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::INTERLEAVED_RANGE_CONSTRAINTS_0]
     }
     pub fn interleaved_range_constraints_1(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::INTERLEAVED_RANGE_CONSTRAINTS_1]
     }
     pub fn interleaved_range_constraints_2(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::INTERLEAVED_RANGE_CONSTRAINTS_2]
     }
     pub fn interleaved_range_constraints_3(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::INTERLEAVED_RANGE_CONSTRAINTS_3]
     }
     pub fn op(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::OP]
     }
     pub fn p_x_low_limbs_range_constraint_0(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_X_LOW_LIMBS_RANGE_CONSTRAINT_0]
     }
     pub fn p_x_low_limbs_range_constraint_1(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_X_LOW_LIMBS_RANGE_CONSTRAINT_1]
     }
     pub fn p_x_low_limbs_range_constraint_2(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_X_LOW_LIMBS_RANGE_CONSTRAINT_2]
     }
     pub fn p_x_low_limbs_range_constraint_3(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_X_LOW_LIMBS_RANGE_CONSTRAINT_3]
     }
     pub fn p_x_low_limbs_range_constraint_4(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_X_LOW_LIMBS_RANGE_CONSTRAINT_4]
     }
     pub fn p_x_high_limbs_range_constraint_0(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_X_HIGH_LIMBS_RANGE_CONSTRAINT_0]
     }
     pub fn p_x_high_limbs_range_constraint_1(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_X_HIGH_LIMBS_RANGE_CONSTRAINT_1]
     }
     pub fn p_x_high_limbs_range_constraint_2(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_X_HIGH_LIMBS_RANGE_CONSTRAINT_2]
     }
     pub fn p_x_high_limbs_range_constraint_3(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_X_HIGH_LIMBS_RANGE_CONSTRAINT_3]
     }
     pub fn p_x_high_limbs_range_constraint_4(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_X_HIGH_LIMBS_RANGE_CONSTRAINT_4]
     }
     pub fn p_y_low_limbs_range_constraint_0(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_Y_LOW_LIMBS_RANGE_CONSTRAINT_0]
     }
     pub fn p_y_low_limbs_range_constraint_1(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_Y_LOW_LIMBS_RANGE_CONSTRAINT_1]
     }
     pub fn p_y_low_limbs_range_constraint_2(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_Y_LOW_LIMBS_RANGE_CONSTRAINT_2]
     }
     pub fn p_y_low_limbs_range_constraint_3(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_Y_LOW_LIMBS_RANGE_CONSTRAINT_3]
     }
     pub fn p_y_low_limbs_range_constraint_4(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_Y_LOW_LIMBS_RANGE_CONSTRAINT_4]
     }
     pub fn p_y_high_limbs_range_constraint_0(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_Y_HIGH_LIMBS_RANGE_CONSTRAINT_0]
     }
     pub fn p_y_high_limbs_range_constraint_1(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_Y_HIGH_LIMBS_RANGE_CONSTRAINT_1]
     }
     pub fn p_y_high_limbs_range_constraint_2(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_Y_HIGH_LIMBS_RANGE_CONSTRAINT_2]
     }
     pub fn p_y_high_limbs_range_constraint_3(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_Y_HIGH_LIMBS_RANGE_CONSTRAINT_3]
     }
     pub fn p_y_high_limbs_range_constraint_4(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_Y_HIGH_LIMBS_RANGE_CONSTRAINT_4]
     }
     pub fn z_low_limbs_range_constraint_0(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::Z_LOW_LIMBS_RANGE_CONSTRAINT_0]
     }
     pub fn z_low_limbs_range_constraint_1(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::Z_LOW_LIMBS_RANGE_CONSTRAINT_1]
     }
     pub fn z_low_limbs_range_constraint_2(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::Z_LOW_LIMBS_RANGE_CONSTRAINT_2]
     }
     pub fn z_low_limbs_range_constraint_3(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::Z_LOW_LIMBS_RANGE_CONSTRAINT_3]
     }
     pub fn z_low_limbs_range_constraint_4(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::Z_LOW_LIMBS_RANGE_CONSTRAINT_4]
     }
     pub fn z_high_limbs_range_constraint_0(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::Z_HIGH_LIMBS_RANGE_CONSTRAINT_0]
     }
     pub fn z_high_limbs_range_constraint_1(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::Z_HIGH_LIMBS_RANGE_CONSTRAINT_1]
     }
     pub fn z_high_limbs_range_constraint_2(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::Z_HIGH_LIMBS_RANGE_CONSTRAINT_2]
     }
     pub fn z_high_limbs_range_constraint_3(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::Z_HIGH_LIMBS_RANGE_CONSTRAINT_3]
     }
     pub fn z_high_limbs_range_constraint_4(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::Z_HIGH_LIMBS_RANGE_CONSTRAINT_4]
     }
     pub fn accumulator_low_limbs_range_constraint_0(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ACCUMULATOR_LOW_LIMBS_RANGE_CONSTRAINT_0]
     }
     pub fn accumulator_low_limbs_range_constraint_1(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ACCUMULATOR_LOW_LIMBS_RANGE_CONSTRAINT_1]
     }
     pub fn accumulator_low_limbs_range_constraint_2(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ACCUMULATOR_LOW_LIMBS_RANGE_CONSTRAINT_2]
     }
     pub fn accumulator_low_limbs_range_constraint_3(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ACCUMULATOR_LOW_LIMBS_RANGE_CONSTRAINT_3]
     }
     pub fn accumulator_low_limbs_range_constraint_4(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ACCUMULATOR_LOW_LIMBS_RANGE_CONSTRAINT_4]
     }
     pub fn accumulator_high_limbs_range_constraint_0(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ACCUMULATOR_HIGH_LIMBS_RANGE_CONSTRAINT_0]
     }
     pub fn accumulator_high_limbs_range_constraint_1(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ACCUMULATOR_HIGH_LIMBS_RANGE_CONSTRAINT_1]
     }
     pub fn accumulator_high_limbs_range_constraint_2(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ACCUMULATOR_HIGH_LIMBS_RANGE_CONSTRAINT_2]
     }
     pub fn accumulator_high_limbs_range_constraint_3(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ACCUMULATOR_HIGH_LIMBS_RANGE_CONSTRAINT_3]
     }
     pub fn accumulator_high_limbs_range_constraint_4(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ACCUMULATOR_HIGH_LIMBS_RANGE_CONSTRAINT_4]
     }
     pub fn quotient_low_limbs_range_constraint_0(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::QUOTIENT_LOW_LIMBS_RANGE_CONSTRAINT_0]
     }
     pub fn quotient_low_limbs_range_constraint_1(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::QUOTIENT_LOW_LIMBS_RANGE_CONSTRAINT_1]
     }
     pub fn quotient_low_limbs_range_constraint_2(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::QUOTIENT_LOW_LIMBS_RANGE_CONSTRAINT_2]
     }
     pub fn quotient_low_limbs_range_constraint_3(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::QUOTIENT_LOW_LIMBS_RANGE_CONSTRAINT_3]
     }
     pub fn quotient_low_limbs_range_constraint_4(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::QUOTIENT_LOW_LIMBS_RANGE_CONSTRAINT_4]
     }
     pub fn quotient_high_limbs_range_constraint_0(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::QUOTIENT_HIGH_LIMBS_RANGE_CONSTRAINT_0]
     }
     pub fn quotient_high_limbs_range_constraint_1(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::QUOTIENT_HIGH_LIMBS_RANGE_CONSTRAINT_1]
     }
     pub fn quotient_high_limbs_range_constraint_2(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::QUOTIENT_HIGH_LIMBS_RANGE_CONSTRAINT_2]
     }
     pub fn quotient_high_limbs_range_constraint_3(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::QUOTIENT_HIGH_LIMBS_RANGE_CONSTRAINT_3]
     }
     pub fn quotient_high_limbs_range_constraint_4(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::QUOTIENT_HIGH_LIMBS_RANGE_CONSTRAINT_4]
     }
     pub fn relation_wide_limbs_range_constraint_0(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::RELATION_WIDE_LIMBS_RANGE_CONSTRAINT_0]
     }
     pub fn relation_wide_limbs_range_constraint_1(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::RELATION_WIDE_LIMBS_RANGE_CONSTRAINT_1]
     }
     pub fn relation_wide_limbs_range_constraint_2(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::RELATION_WIDE_LIMBS_RANGE_CONSTRAINT_2]
     }
     pub fn relation_wide_limbs_range_constraint_3(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::RELATION_WIDE_LIMBS_RANGE_CONSTRAINT_3]
     }
     pub fn p_x_low_limbs_range_constraint_tail(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_X_LOW_LIMBS_RANGE_CONSTRAINT_TAIL]
     }
     pub fn p_x_high_limbs_range_constraint_tail(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_X_HIGH_LIMBS_RANGE_CONSTRAINT_TAIL]
     }
     pub fn p_y_low_limbs_range_constraint_tail(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_Y_LOW_LIMBS_RANGE_CONSTRAINT_TAIL]
     }
     pub fn p_y_high_limbs_range_constraint_tail(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_Y_HIGH_LIMBS_RANGE_CONSTRAINT_TAIL]
     }
     pub fn z_low_limbs_range_constraint_tail(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::Z_LOW_LIMBS_RANGE_CONSTRAINT_TAIL]
     }
     pub fn z_high_limbs_range_constraint_tail(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::Z_HIGH_LIMBS_RANGE_CONSTRAINT_TAIL]
     }
     pub fn accumulator_low_limbs_range_constraint_tail(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ACCUMULATOR_LOW_LIMBS_RANGE_CONSTRAINT_TAIL]
     }
     pub fn accumulator_high_limbs_range_constraint_tail(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ACCUMULATOR_HIGH_LIMBS_RANGE_CONSTRAINT_TAIL]
     }
     pub fn quotient_low_limbs_range_constraint_tail(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::QUOTIENT_LOW_LIMBS_RANGE_CONSTRAINT_TAIL]
     }
     pub fn quotient_high_limbs_range_constraint_tail(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::QUOTIENT_HIGH_LIMBS_RANGE_CONSTRAINT_TAIL]
     }
     pub fn p_x_low_limbs(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_X_LOW_LIMBS]
     }
     pub fn p_y_low_limbs(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_Y_LOW_LIMBS]
     }
     pub fn p_x_high_limbs(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_X_HIGH_LIMBS]
     }
     pub fn p_y_high_limbs(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_Y_HIGH_LIMBS]
     }
     pub fn z_low_limbs(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::Z_LOW_LIMBS]
     }
     pub fn z_high_limbs(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::Z_HIGH_LIMBS]
     }
     pub fn quotient_low_binary_limbs(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::QUOTIENT_LOW_BINARY_LIMBS]
     }
     pub fn quotient_high_binary_limbs(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::QUOTIENT_HIGH_BINARY_LIMBS]
     }
     pub fn relation_wide_limbs(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::RELATION_WIDE_LIMBS]
     }
     pub fn x_lo_y_hi(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::X_LO_Y_HI]
     }
     pub fn x_hi_z_1(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::X_HI_Z_1]
     }
     pub fn y_lo_z_2(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::Y_LO_Z_2]
     }
 }
 impl<T: Default> TranslatorShiftedWitnessEntities<T> {
     pub fn ordered_range_constraints_0_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ORDERED_RANGE_CONSTRAINTS_0 - 1]
     }
     pub fn ordered_range_constraints_1_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ORDERED_RANGE_CONSTRAINTS_1 - 1]
     }
     pub fn ordered_range_constraints_2_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ORDERED_RANGE_CONSTRAINTS_2 - 1]
     }
     pub fn ordered_range_constraints_3_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ORDERED_RANGE_CONSTRAINTS_3 - 1]
     }
     pub fn ordered_range_constraints_4_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ORDERED_RANGE_CONSTRAINTS_4 - 1]
     }
     pub fn z_perm_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::Z_PERM - 1]
     }
     pub fn accumulators_binary_limbs_0_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ACCUMULATORS_BINARY_LIMBS_0 - 1]
     }
     pub fn accumulators_binary_limbs_1_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ACCUMULATORS_BINARY_LIMBS_1 - 1]
     }
     pub fn accumulators_binary_limbs_2_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ACCUMULATORS_BINARY_LIMBS_2 - 1]
     }
     pub fn accumulators_binary_limbs_3_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ACCUMULATORS_BINARY_LIMBS_3 - 1]
     }
     pub fn p_x_low_limbs_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_X_LOW_LIMBS - 1]
     }
     pub fn p_y_low_limbs_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_Y_LOW_LIMBS - 1]
     }
     pub fn p_x_high_limbs_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_X_HIGH_LIMBS - 1]
     }
     pub fn p_y_high_limbs_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_Y_HIGH_LIMBS - 1]
     }
     pub fn z_low_limbs_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::Z_LOW_LIMBS - 1]
     }
     pub fn z_high_limbs_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::Z_HIGH_LIMBS - 1]
     }
     pub fn quotient_low_binary_limbs_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::QUOTIENT_LOW_BINARY_LIMBS - 1]
     }
     pub fn quotient_high_binary_limbs_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::QUOTIENT_HIGH_BINARY_LIMBS - 1]
     }
     pub fn relation_wide_limbs_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::RELATION_WIDE_LIMBS - 1]
     }
     pub fn p_x_low_limbs_range_constraint_0_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_X_LOW_LIMBS_RANGE_CONSTRAINT_0 - 1]
     }
     pub fn p_x_low_limbs_range_constraint_1_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_X_LOW_LIMBS_RANGE_CONSTRAINT_1 - 1]
     }
     pub fn p_x_low_limbs_range_constraint_2_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_X_LOW_LIMBS_RANGE_CONSTRAINT_2 - 1]
     }
     pub fn p_x_low_limbs_range_constraint_3_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_X_LOW_LIMBS_RANGE_CONSTRAINT_3 - 1]
     }
     pub fn p_x_low_limbs_range_constraint_4_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_X_LOW_LIMBS_RANGE_CONSTRAINT_4 - 1]
     }
     pub fn p_x_high_limbs_range_constraint_0_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_X_HIGH_LIMBS_RANGE_CONSTRAINT_0 - 1]
     }
     pub fn p_x_high_limbs_range_constraint_1_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_X_HIGH_LIMBS_RANGE_CONSTRAINT_1 - 1]
     }
     pub fn p_x_high_limbs_range_constraint_2_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_X_HIGH_LIMBS_RANGE_CONSTRAINT_2 - 1]
     }
     pub fn p_x_high_limbs_range_constraint_3_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_X_HIGH_LIMBS_RANGE_CONSTRAINT_3 - 1]
     }
     pub fn p_y_low_limbs_range_constraint_0_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_Y_LOW_LIMBS_RANGE_CONSTRAINT_0 - 1]
     }
     pub fn p_y_low_limbs_range_constraint_1_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_Y_LOW_LIMBS_RANGE_CONSTRAINT_1 - 1]
     }
     pub fn p_y_low_limbs_range_constraint_2_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_Y_LOW_LIMBS_RANGE_CONSTRAINT_2 - 1]
     }
     pub fn p_y_low_limbs_range_constraint_3_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_Y_LOW_LIMBS_RANGE_CONSTRAINT_3 - 1]
     }
     pub fn p_y_low_limbs_range_constraint_4_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_Y_LOW_LIMBS_RANGE_CONSTRAINT_4 - 1]
     }
     pub fn p_y_high_limbs_range_constraint_0_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_Y_HIGH_LIMBS_RANGE_CONSTRAINT_0 - 1]
     }
     pub fn p_y_high_limbs_range_constraint_1_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_Y_HIGH_LIMBS_RANGE_CONSTRAINT_1 - 1]
     }
     pub fn p_y_high_limbs_range_constraint_2_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_Y_HIGH_LIMBS_RANGE_CONSTRAINT_2 - 1]
     }
     pub fn p_y_high_limbs_range_constraint_3_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_Y_HIGH_LIMBS_RANGE_CONSTRAINT_3 - 1]
     }
     pub fn z_low_limbs_range_constraint_0_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::Z_LOW_LIMBS_RANGE_CONSTRAINT_0 - 1]
     }
     pub fn z_low_limbs_range_constraint_1_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::Z_LOW_LIMBS_RANGE_CONSTRAINT_1 - 1]
     }
     pub fn z_low_limbs_range_constraint_2_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::Z_LOW_LIMBS_RANGE_CONSTRAINT_2 - 1]
     }
     pub fn z_low_limbs_range_constraint_3_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::Z_LOW_LIMBS_RANGE_CONSTRAINT_3 - 1]
     }
     pub fn z_low_limbs_range_constraint_4_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::Z_LOW_LIMBS_RANGE_CONSTRAINT_4 - 1]
     }
     pub fn z_high_limbs_range_constraint_0_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::Z_HIGH_LIMBS_RANGE_CONSTRAINT_0 - 1]
     }
     pub fn z_high_limbs_range_constraint_1_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::Z_HIGH_LIMBS_RANGE_CONSTRAINT_1 - 1]
     }
     pub fn z_high_limbs_range_constraint_2_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::Z_HIGH_LIMBS_RANGE_CONSTRAINT_2 - 1]
     }
     pub fn z_high_limbs_range_constraint_3_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::Z_HIGH_LIMBS_RANGE_CONSTRAINT_3 - 1]
     }
     pub fn z_high_limbs_range_constraint_4_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::Z_HIGH_LIMBS_RANGE_CONSTRAINT_4 - 1]
     }
     pub fn accumulator_low_limbs_range_constraint_0_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ACCUMULATOR_LOW_LIMBS_RANGE_CONSTRAINT_0 - 1]
     }
     pub fn accumulator_low_limbs_range_constraint_1_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ACCUMULATOR_LOW_LIMBS_RANGE_CONSTRAINT_1 - 1]
     }
     pub fn accumulator_low_limbs_range_constraint_2_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ACCUMULATOR_LOW_LIMBS_RANGE_CONSTRAINT_2 - 1]
     }
     pub fn accumulator_low_limbs_range_constraint_3_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ACCUMULATOR_LOW_LIMBS_RANGE_CONSTRAINT_3 - 1]
     }
     pub fn accumulator_low_limbs_range_constraint_4_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ACCUMULATOR_LOW_LIMBS_RANGE_CONSTRAINT_4 - 1]
     }
     pub fn accumulator_high_limbs_range_constraint_0_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ACCUMULATOR_HIGH_LIMBS_RANGE_CONSTRAINT_0 - 1]
     }
     pub fn accumulator_high_limbs_range_constraint_1_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ACCUMULATOR_HIGH_LIMBS_RANGE_CONSTRAINT_1 - 1]
     }
     pub fn accumulator_high_limbs_range_constraint_2_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ACCUMULATOR_HIGH_LIMBS_RANGE_CONSTRAINT_2 - 1]
     }
     pub fn accumulator_high_limbs_range_constraint_3_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ACCUMULATOR_HIGH_LIMBS_RANGE_CONSTRAINT_3 - 1]
     }
     pub fn quotient_low_limbs_range_constraint_0_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::QUOTIENT_LOW_LIMBS_RANGE_CONSTRAINT_0 - 1]
     }
     pub fn quotient_low_limbs_range_constraint_1_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::QUOTIENT_LOW_LIMBS_RANGE_CONSTRAINT_1 - 1]
     }
     pub fn quotient_low_limbs_range_constraint_2_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::QUOTIENT_LOW_LIMBS_RANGE_CONSTRAINT_2 - 1]
     }
     pub fn quotient_low_limbs_range_constraint_3_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::QUOTIENT_LOW_LIMBS_RANGE_CONSTRAINT_3 - 1]
     }
     pub fn quotient_low_limbs_range_constraint_4_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::QUOTIENT_LOW_LIMBS_RANGE_CONSTRAINT_4 - 1]
     }
     pub fn quotient_high_limbs_range_constraint_0_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::QUOTIENT_HIGH_LIMBS_RANGE_CONSTRAINT_0 - 1]
     }
     pub fn quotient_high_limbs_range_constraint_1_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::QUOTIENT_HIGH_LIMBS_RANGE_CONSTRAINT_1 - 1]
     }
     pub fn quotient_high_limbs_range_constraint_2_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::QUOTIENT_HIGH_LIMBS_RANGE_CONSTRAINT_2 - 1]
     }
     pub fn quotient_high_limbs_range_constraint_3_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::QUOTIENT_HIGH_LIMBS_RANGE_CONSTRAINT_3 - 1]
     }
     pub fn p_x_high_limbs_range_constraint_tail_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_X_HIGH_LIMBS_RANGE_CONSTRAINT_TAIL - 1]
     }
     pub fn relation_wide_limbs_range_constraint_0_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::RELATION_WIDE_LIMBS_RANGE_CONSTRAINT_0 - 1]
     }
     pub fn relation_wide_limbs_range_constraint_1_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::RELATION_WIDE_LIMBS_RANGE_CONSTRAINT_1 - 1]
     }
     pub fn relation_wide_limbs_range_constraint_2_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::RELATION_WIDE_LIMBS_RANGE_CONSTRAINT_2 - 1]
     }
     pub fn relation_wide_limbs_range_constraint_3_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::RELATION_WIDE_LIMBS_RANGE_CONSTRAINT_3 - 1]
     }
     pub fn p_y_high_limbs_range_constraint_tail_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_Y_HIGH_LIMBS_RANGE_CONSTRAINT_TAIL - 1]
     }
     pub fn quotient_high_limbs_range_constraint_tail_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::QUOTIENT_HIGH_LIMBS_RANGE_CONSTRAINT_TAIL - 1]
     }
     pub fn p_x_low_limbs_range_constraint_tail_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_X_LOW_LIMBS_RANGE_CONSTRAINT_TAIL - 1]
     }
     pub fn p_x_high_limbs_range_constraint_4_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_X_HIGH_LIMBS_RANGE_CONSTRAINT_4 - 1]
     }
     pub fn p_y_low_limbs_range_constraint_tail_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_Y_LOW_LIMBS_RANGE_CONSTRAINT_TAIL - 1]
     }
     pub fn p_y_high_limbs_range_constraint_4_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::P_Y_HIGH_LIMBS_RANGE_CONSTRAINT_4 - 1]
     }
     pub fn z_low_limbs_range_constraint_tail_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::Z_LOW_LIMBS_RANGE_CONSTRAINT_TAIL - 1]
     }
     pub fn z_high_limbs_range_constraint_tail_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::Z_HIGH_LIMBS_RANGE_CONSTRAINT_TAIL - 1]
     }
     pub fn accumulator_low_limbs_range_constraint_tail_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ACCUMULATOR_LOW_LIMBS_RANGE_CONSTRAINT_TAIL - 1]
     }
     pub fn accumulator_high_limbs_range_constraint_4_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ACCUMULATOR_HIGH_LIMBS_RANGE_CONSTRAINT_4 - 1]
     }
     pub fn quotient_low_limbs_range_constraint_tail_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::QUOTIENT_LOW_LIMBS_RANGE_CONSTRAINT_TAIL - 1]
     }
     pub fn quotient_high_limbs_range_constraint_4_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::QUOTIENT_HIGH_LIMBS_RANGE_CONSTRAINT_4 - 1]
     }
     pub fn x_lo_y_hi_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::X_LO_Y_HI - 1]
     }
     pub fn x_hi_z_1_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::X_HI_Z_1 - 1]
     }
     pub fn y_lo_z_2_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::Y_LO_Z_2 - 1]
     }
     pub fn accumulator_high_limbs_range_constraint_tail_shift(&self) -> &T {
-        todo!()
+        &self.elements[TranslatorFlavour::ACCUMULATOR_HIGH_LIMBS_RANGE_CONSTRAINT_TAIL - 1]
     }
 }
