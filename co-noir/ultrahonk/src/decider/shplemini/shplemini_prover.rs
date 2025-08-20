@@ -359,9 +359,9 @@ impl<
 
         let mut current_r_shift_pos = r_challenge;
         let mut current_r_shift_neg = -r_challenge;
-        for i in 1..batched_group.len() {
-            p_pos.add_scaled(&batched_group[i], &current_r_shift_pos);
-            p_neg.add_scaled(&batched_group[i], &current_r_shift_neg);
+        for poly in batched_group.iter().skip(1) {
+            p_pos.add_scaled(poly, &current_r_shift_pos);
+            p_neg.add_scaled(poly, &current_r_shift_neg);
             current_r_shift_pos *= r_challenge;
             current_r_shift_neg *= -r_challenge;
         }
