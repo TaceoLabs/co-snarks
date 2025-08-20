@@ -69,7 +69,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
         // Fiat-Shamir: gamma
         // Compute grand product(s) and commitments.
-        self.execute_grand_product_computation_round(&mut transcript, &mut proving_key)?;
+        self.execute_grand_product_computation_round(&mut transcript, &proving_key)?;
 
         self.add_polynomials_to_memory(proving_key.polynomials);
 
@@ -273,8 +273,6 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             vec![transcript.get_challenge::<P>("Sumcheck:alpha".to_string())];
         let mut gate_challenges: Vec<P::ScalarField> =
             Vec::with_capacity(TranslatorFlavour::CONST_TRANSLATOR_LOG_N);
-
-        todo!("Add polynomials to the decider memory");
 
         for idx in 0..TranslatorFlavour::CONST_TRANSLATOR_LOG_N {
             let chall = transcript.get_challenge::<P>(format!("Sumcheck:gate_challenge_{idx}"));
