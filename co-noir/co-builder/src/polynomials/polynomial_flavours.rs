@@ -369,6 +369,12 @@ pub trait WitnessEntitiesFlavour<T: Default + Debug> {
     fn return_data_inverses_mut(&mut self) -> &mut T {
         panic!("This should not be called with this Flavour");
     }
+    fn get_interleaved(&self) -> Option<&[T]> {
+        None
+    }
+    fn get_groups_to_be_interleaved(&self) -> Option<&[&[T]]> {
+        None
+    }
 }
 
 pub trait ShiftedWitnessEntitiesFlavour<T: Default> {
