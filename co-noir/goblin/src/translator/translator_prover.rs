@@ -1,16 +1,23 @@
+use std::iter;
+
 use crate::CONST_TRANSLATOR_LOG_N;
 use ark_ec::CurveGroup;
 use ark_ff::Zero;
 use co_builder::HonkProofResult;
 use co_builder::flavours::translator_flavour::TranslatorFlavour;
-use co_builder::prelude::{HonkCurve, Polynomial, ProverCrs};
+use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
+use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
+use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
+use co_builder::prelude::{HonkCurve, Polynomial, Polynomials, ProverCrs};
 use common::HonkProof;
 use common::shplemini::ShpleminiOpeningClaim;
 use common::transcript::{Transcript, TranscriptFieldType};
+use itertools::izip;
 use num_bigint::BigUint;
 use ultrahonk::Utils as UltraHonkUtils;
 use ultrahonk::prelude::{
-    Decider, ProvingKey, SmallSubgroupIPAProver, SumcheckOutput, TranscriptHasher, ZKSumcheckData,
+    AllEntities, Decider, ProvingKey, SmallSubgroupIPAProver, SumcheckOutput, TranscriptHasher,
+    ZKSumcheckData,
 };
 
 pub(crate) struct ProverMemory<P: CurveGroup> {
@@ -46,20 +53,25 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     fn construct_proof(
         &mut self,
         mut transcript: Transcript<TranscriptFieldType, H>,
-        proving_key: &mut ProvingKey<P, TranslatorFlavour>,
+        mut proving_key: ProvingKey<P, TranslatorFlavour>,
     ) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
         tracing::trace!("TranslatorProver::construct_proof");
         let circuit_size = proving_key.circuit_size;
 
         // Add circuit size public input size and public inputs to transcript.
-        self.execute_preamble_round(&mut transcript, proving_key)?;
+        self.execute_preamble_round(&mut transcript, &mut proving_key)?;
 
         // Compute first three wire commitments
-        self.execute_wire_and_sorted_constraints_commitments_round(&mut transcript, proving_key)?;
+        self.execute_wire_and_sorted_constraints_commitments_round(
+            &mut transcript,
+            &mut proving_key,
+        )?;
 
         // Fiat-Shamir: gamma
         // Compute grand product(s) and commitments.
-        self.execute_grand_product_computation_round(&mut transcript, proving_key)?;
+        self.execute_grand_product_computation_round(&mut transcript, &mut proving_key)?;
+
+        self.add_polynomials_to_memory(proving_key.polynomials);
 
         // Fiat-Shamir: alpha
         // Run sumcheck subprotocol.
@@ -72,7 +84,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             sumcheck_output,
             zk_sumcheck_data,
             &mut transcript,
-            proving_key,
+            &proving_key.crs,
             circuit_size,
         )?;
         Ok(transcript.get_proof())
@@ -143,11 +155,15 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         transcript: &mut Transcript<TranscriptFieldType, H>,
         proving_key: &mut ProvingKey<P, TranslatorFlavour>,
     ) -> HonkProofResult<()> {
-        let non_shifted_labels = TranslatorFlavour::wire_non_shifted_labels();
+        let non_shifted_label = TranslatorFlavour::wire_non_shifted_labels();
         let wire_non_shifted = proving_key.polynomials.witness.wire_non_shifted_mut();
-        for (wire, label) in wire_non_shifted.iter_mut().zip(non_shifted_labels.iter()) {
-            self.commit_to_witness_polynomial(wire, label, &proving_key.crs, transcript)?;
-        }
+        self.commit_to_witness_polynomial(
+            wire_non_shifted,
+            non_shifted_label,
+            &proving_key.crs,
+            transcript,
+        )?;
+
         let to_be_shifted_labels = TranslatorFlavour::wire_to_be_shifted_labels();
         let wire_to_be_shifted = proving_key.polynomials.witness.wire_to_be_shifted_mut();
         for (wire, label) in wire_to_be_shifted
@@ -288,7 +304,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         sumcheck_output: SumcheckOutput<P::ScalarField, TranslatorFlavour>,
         zk_sumcheck_data: ZKSumcheckData<P>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
-        proving_key: &mut ProvingKey<P, TranslatorFlavour>,
+        crs: &ProverCrs<P>,
         circuit_size: u32,
     ) -> HonkProofResult<()> {
         let mut small_subgroup_ipa_prover = SmallSubgroupIPAProver::<_>::new::<H>(
@@ -299,19 +315,19 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             "Libra:".to_string(),
             &sumcheck_output.challenges,
         )?;
-        small_subgroup_ipa_prover.prove(transcript, &proving_key.crs, &mut self.decider.rng)?;
+        small_subgroup_ipa_prover.prove(transcript, crs, &mut self.decider.rng)?;
 
         let witness_polynomials = small_subgroup_ipa_prover.into_witness_polynomials();
 
         let prover_opening_claim = self.decider.shplemini_prove(
             transcript,
             circuit_size,
-            &proving_key.crs,
+            crs,
             sumcheck_output,
             Some(witness_polynomials),
         )?;
 
-        Self::compute_opening_proof(prover_opening_claim, transcript, &proving_key.crs)
+        Self::compute_opening_proof(prover_opening_claim, transcript, crs)
     }
 
     fn compute_grand_product_numerator(
@@ -488,5 +504,43 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         // pthreads) or even the work queue itself
         transcript.send_point_to_verifier::<P>("KZG:W".to_string(), quotient_commitment.into());
         Ok(())
+    }
+
+    fn add_polynomials_to_memory(
+        &mut self,
+        polynomials: Polynomials<P::ScalarField, TranslatorFlavour>,
+    ) {
+        let mut memory = AllEntities::<Vec<P::ScalarField>, TranslatorFlavour>::default();
+
+        // Copy the (non-shifted) witness polynomials
+        *memory.witness.op_mut() = polynomials.witness.op().as_ref().to_vec();
+        for (des, src) in izip!(
+            memory.witness.get_interleaved_range_constraints_mut(),
+            polynomials.witness.get_interleaved_range_constraints()
+        ) {
+            *des = src.as_ref().to_vec();
+        }
+
+        // Shift the witnesses
+        for (des_shifted, des, src) in izip!(
+            memory.shifted_witness.iter_mut(),
+            memory.witness.to_be_shifted_mut(),
+            polynomials
+                .witness
+                .into_shifted_without_z_perm()
+                .chain(iter::once(self.memory.z_perm.clone())),
+        ) {
+            *des_shifted = src.shifted().to_vec();
+            *des = src.into_vec();
+        }
+
+        // Copy precomputed polynomials
+        for (des, src) in izip!(
+            memory.precomputed.iter_mut(),
+            polynomials.precomputed.into_iter()
+        ) {
+            *des = src.into_vec();
+        }
+        self.decider.memory.polys = memory;
     }
 }
