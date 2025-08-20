@@ -109,11 +109,11 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorNonNativeFieldR
      * `      previous_accumulator[0]⋅x[0] + op + P.x[0]⋅v[0] + P.y[0]⋅v²[0] + z1[0] ⋅ v³[0] + z2[0] ⋅ v⁴[0]
      *          + quotient[0]⋅(-p)[0] - current_accumulator[0]
      * + 2⁶⁸⋅(previous_accumulator[1]⋅x[0] +      P.x[1]⋅v[0] + P.y[1]⋅v²[0] + z1[1] ⋅ v³[0] + z2[1] ⋅ v⁴[0]
-     *          + quotient[1]⋅(-p)[0] +
-     *        previous_accumulator[0]⋅x[1] +      P.x[0]⋅v[1] + P.y[0]⋅v²[1] + z1[0] ⋅ v³[1] + z2[0] ⋅ v⁴[1]
-     *          + quotient[0]⋅(-p)[1] - current_accumulator[1])
+     *   + quotient[1]⋅(-p)[0] +
+     *     previous_accumulator[0]⋅x[1] +      P.x[0]⋅v[1] + P.y[0]⋅v²[1] + z1[0] ⋅ v³[1] + z2[0] ⋅ v⁴[1]
+     *   + quotient[0]⋅(-p)[1] - current_accumulator[1])
      *  - 2¹³⁶⋅relation_wide_lower_limb
-     *  == 0`
+     *    == 0`
      *
      * We use 2 relation wide limbs which are called wide, because they contain the results of products (like you needed
      * EDX:EAX in x86 to hold the product results of two standard 32-bit registers) and because they are constrained to
