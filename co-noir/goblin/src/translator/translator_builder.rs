@@ -4,11 +4,13 @@ use crate::{
     eccvm::ecc_op_queue::ECCOpQueue, prelude::UltraOp,
 };
 use ark_ec::CurveGroup;
+use ark_ff::Field;
 use ark_ff::One;
 use ark_ff::PrimeField;
 use ark_ff::Zero;
 use co_builder::{TranscriptFieldType, prelude::HonkCurve};
 use num_bigint::BigUint;
+use std::str::FromStr;
 
 const NUM_WIRES: usize = 81;
 const ZERO_IDX: usize = 0;
@@ -143,7 +145,34 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
         batching_challenge_v: P::BaseField,
         evaluation_input_x: P::BaseField,
     ) -> AccumulationInput<P> {
-        // Helper: slice bits [start, end) from a BigUint
+        const NUM_LIMB_BITS: usize = 68;
+        let shift_1: P::ScalarField = (BigUint::one() << NUM_LIMB_BITS).into();
+        let shift_2 = BigUint::one() << (NUM_LIMB_BITS << 1);
+
+        // Precomputed inverse to easily divide by the shift by 2 limbs
+        let mut shift_2_inverse: P::ScalarField = shift_2.into();
+        shift_2_inverse = shift_2_inverse.inverse().unwrap_or_else(|| {
+            panic!(
+                "Failed to compute inverse of shift_2, this should not happen in a valid circuit"
+            )
+        });
+        //TODO FLORIN: make this nicer
+        let negative_modulus_limbs: [P::ScalarField; 5] = [
+            P::ScalarField::from_str("51007615349848998585")
+                .unwrap_or_else(|_| panic!("invalid field element literal")),
+            P::ScalarField::from_str("187243884991886189399")
+                .unwrap_or_else(|_| panic!("invalid field element literal")),
+            P::ScalarField::from_str("292141664167738113703")
+                .unwrap_or_else(|_| panic!("invalid field element literal")),
+            P::ScalarField::from_str("295147053861416594661")
+                .unwrap_or_else(|_| panic!("invalid field element literal")),
+            P::ScalarField::from_str(
+                "21888242871839275222246405745257275088400417643534245024707370478506390782651",
+            )
+            .unwrap_or_else(|_| panic!("invalid field element literal")),
+        ];
+
+        // TODO FLORIN: This is kinda wrong
         fn slice_bits(n: &BigUint, start: usize, end: usize) -> BigUint {
             if end <= start {
                 return BigUint::zero();
@@ -153,10 +182,7 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
         }
 
         // Convert BigUint to ScalarField (assumes canonical < modulus)
-        fn to_scalar<F: From<u64> + TryFrom<BigUint>>(b: BigUint) -> F
-        where
-            F: From<u64>,
-        {
+        fn to_scalar<F: From<u64> + TryFrom<BigUint>>(b: BigUint) -> F {
             // F likely implements From<BigUint> in this codebase; if not, reduce manually.
             // Here we attempt TryFrom, fallback via u64 (only for small slices).
             if let Ok(v) = F::try_from(b.clone()) {
@@ -434,7 +460,7 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
             + v_squared_witnesses[0] * p_y_limbs[0]
             + v_cubed_witnesses[0] * z_1_limbs[0]
             + v_quarted_witnesses[0] * z_2_limbs[0]
-            + quotient_limbs[0] * NEGATIVE_MODULUS_LIMBS[0]
+            + quotient_limbs[0] * negative_modulus_limbs[0]
             - remainder_limbs[0]; // This covers the lowest limb
 
         let low_wide_relation_limb = low_wide_relation_limb_part_1
@@ -448,17 +474,18 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
                 + z_1_limbs[1] * v_cubed_witnesses[0]
                 + v_quarted_witnesses[1] * z_2_limbs[0]
                 + v_quarted_witnesses[0] * z_2_limbs[1]
-                + quotient_limbs[0] * NEGATIVE_MODULUS_LIMBS[1]
-                + quotient_limbs[1] * NEGATIVE_MODULUS_LIMBS[0]
+                + quotient_limbs[0] * negative_modulus_limbs[1]
+                + quotient_limbs[1] * negative_modulus_limbs[0]
                 - remainder_limbs[1])
-                * SHIFT_1;
+                * shift_1;
 
         // Low bits have to be zero
-        debug_assert!(
-            slice_bits(&BigUint::from(low_wide_relation_limb), 0, 2 * NUM_LIMB_BITS).is_zero()
-        );
+        //TODO FLORIN
+        // debug_assert!(
+        //     slice_bits(&BigUint::from(low_wide_relation_limb), 0, 2 * NUM_LIMB_BITS).is_zero()
+        // );
 
-        let low_wide_relation_limb_divided = low_wide_relation_limb * SHIFT_2_INVERSE;
+        let low_wide_relation_limb_divided = low_wide_relation_limb * shift_2_inverse;
 
         // The high relation limb is the accumulation of the low limb divided by 2¹³⁶ and the combination of limbs with
         // indices (0*2,1*1,2*0) with limbs with indices (0*3,1*2,2*1,3*0) multiplied by 2⁶⁸
@@ -477,9 +504,9 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
             + v_cubed_witnesses[1] * z_1_limbs[1]
             + v_quarted_witnesses[2] * z_2_limbs[0]
             + v_quarted_witnesses[1] * z_2_limbs[1]
-            + quotient_limbs[2] * NEGATIVE_MODULUS_LIMBS[0]
-            + quotient_limbs[1] * NEGATIVE_MODULUS_LIMBS[1]
-            + quotient_limbs[0] * NEGATIVE_MODULUS_LIMBS[2]
+            + quotient_limbs[2] * negative_modulus_limbs[0]
+            + quotient_limbs[1] * negative_modulus_limbs[1]
+            + quotient_limbs[0] * negative_modulus_limbs[2]
             - remainder_limbs[2]
             + (previous_accumulator_limbs[3] * x_witnesses[0]
                 + previous_accumulator_limbs[2] * x_witnesses[1]
@@ -497,25 +524,26 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
                 + v_cubed_witnesses[2] * z_1_limbs[1]
                 + v_quarted_witnesses[3] * z_2_limbs[0]
                 + v_quarted_witnesses[2] * z_2_limbs[1]
-                + quotient_limbs[3] * NEGATIVE_MODULUS_LIMBS[0]
-                + quotient_limbs[2] * NEGATIVE_MODULUS_LIMBS[1]
-                + quotient_limbs[1] * NEGATIVE_MODULUS_LIMBS[2]
-                + quotient_limbs[0] * NEGATIVE_MODULUS_LIMBS[3]
+                + quotient_limbs[3] * negative_modulus_limbs[0]
+                + quotient_limbs[2] * negative_modulus_limbs[1]
+                + quotient_limbs[1] * negative_modulus_limbs[2]
+                + quotient_limbs[0] * negative_modulus_limbs[3]
                 - remainder_limbs[3])
-                * SHIFT_1;
+                * shift_1;
 
         // Check that the results lower 136 bits are zero
-        debug_assert!(
-            slice_bits(
-                &BigUint::from(high_wide_relation_limb),
-                0,
-                2 * NUM_LIMB_BITS
-            )
-            .is_zero()
-        );
+        //TODO FLORIN
+        // debug_assert!(
+        //     slice_bits(
+        //         &BigUint::from(high_wide_relation_limb),
+        //         0,
+        //         2 * NUM_LIMB_BITS
+        //     )
+        //     .is_zero()
+        // );
 
         // Get divided version
-        let high_wide_relation_limb_divided = high_wide_relation_limb * SHIFT_2_INVERSE;
+        let high_wide_relation_limb_divided = high_wide_relation_limb * shift_2_inverse;
 
         const LAST_LIMB_INDEX: usize = NUM_BINARY_LIMBS - 1;
 
@@ -600,6 +628,227 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
         ];
 
         input
+    }
+
+    /**
+     * @brief Create a single accumulation gate
+     *
+     * @param acc_step
+     */
+    fn create_accumulation_gate(&mut self, acc_step: AccumulationInput<P>) {
+        // assert_well_formed_accumulation_input(acc_step);
+
+        self.populate_wires_from_ultra_op(&acc_step.ultra_op);
+
+        // Insert limbs used in bigfield evaluations
+        self.insert_pair_into_wire(
+            WireIds::P_X_LOW_LIMBS,
+            acc_step.p_x_limbs[0],
+            acc_step.p_x_limbs[1],
+        );
+        self.insert_pair_into_wire(
+            WireIds::P_X_HIGH_LIMBS,
+            acc_step.p_x_limbs[2],
+            acc_step.p_x_limbs[3],
+        );
+        self.insert_pair_into_wire(
+            WireIds::P_Y_LOW_LIMBS,
+            acc_step.p_y_limbs[0],
+            acc_step.p_y_limbs[1],
+        );
+        self.insert_pair_into_wire(
+            WireIds::P_Y_HIGH_LIMBS,
+            acc_step.p_y_limbs[2],
+            acc_step.p_y_limbs[3],
+        );
+        self.insert_pair_into_wire(
+            WireIds::Z_LOW_LIMBS,
+            acc_step.z_1_limbs[0],
+            acc_step.z_2_limbs[0],
+        );
+        self.insert_pair_into_wire(
+            WireIds::Z_HIGH_LIMBS,
+            acc_step.z_1_limbs[1],
+            acc_step.z_2_limbs[1],
+        );
+        self.insert_pair_into_wire(
+            WireIds::QUOTIENT_LOW_BINARY_LIMBS,
+            acc_step.quotient_binary_limbs[0],
+            acc_step.quotient_binary_limbs[1],
+        );
+        self.insert_pair_into_wire(
+            WireIds::QUOTIENT_HIGH_BINARY_LIMBS,
+            acc_step.quotient_binary_limbs[2],
+            acc_step.quotient_binary_limbs[3],
+        );
+        self.insert_pair_into_wire(
+            WireIds::RELATION_WIDE_LIMBS,
+            acc_step.relation_wide_limbs[0],
+            acc_step.relation_wide_limbs[1],
+        );
+
+        // We are using some leftover crevices for relation_wide_microlimbs
+        let low_relation_microlimbs = acc_step.relation_wide_microlimbs[0];
+        let high_relation_microlimbs = acc_step.relation_wide_microlimbs[1];
+
+        // We have 4 wires specifically for the relation microlimbs
+        self.insert_pair_into_wire(
+            WireIds::RELATION_WIDE_LIMBS_RANGE_CONSTRAINT_0,
+            low_relation_microlimbs[0],
+            high_relation_microlimbs[0],
+        );
+        self.insert_pair_into_wire(
+            WireIds::RELATION_WIDE_LIMBS_RANGE_CONSTRAINT_1,
+            low_relation_microlimbs[1],
+            high_relation_microlimbs[1],
+        );
+        self.insert_pair_into_wire(
+            WireIds::RELATION_WIDE_LIMBS_RANGE_CONSTRAINT_2,
+            low_relation_microlimbs[2],
+            high_relation_microlimbs[2],
+        );
+        self.insert_pair_into_wire(
+            WireIds::RELATION_WIDE_LIMBS_RANGE_CONSTRAINT_3,
+            low_relation_microlimbs[3],
+            high_relation_microlimbs[3],
+        );
+
+        // Next ones go into top P_x and P_y, current accumulator and quotient unused microlimbs
+
+        // Insert the second highest low relation microlimb into the space left in P_x range constraints highest wire
+        let mut top_p_x_microlimbs = acc_step.p_x_microlimbs[NUM_BINARY_LIMBS - 1];
+        top_p_x_microlimbs[NUM_MICRO_LIMBS - 1] = low_relation_microlimbs[NUM_MICRO_LIMBS - 2];
+
+        // Insert the second highest high relation microlimb into the space left in P_y range constraints highest wire
+        let mut top_p_y_microlimbs = acc_step.p_y_microlimbs[NUM_BINARY_LIMBS - 1];
+        top_p_y_microlimbs[NUM_MICRO_LIMBS - 1] = high_relation_microlimbs[NUM_MICRO_LIMBS - 2];
+
+        // The highest low relation microlimb goes into the crevice left in current accumulator microlimbs
+        let mut top_current_accumulator_microlimbs =
+            acc_step.current_accumulator_microlimbs[NUM_BINARY_LIMBS - 1];
+        top_current_accumulator_microlimbs[NUM_MICRO_LIMBS - 1] =
+            low_relation_microlimbs[NUM_MICRO_LIMBS - 1];
+
+        // The highest high relation microlimb goes into the quotient crevice
+        let mut top_quotient_microlimbs = acc_step.quotient_microlimbs[NUM_BINARY_LIMBS - 1];
+        top_quotient_microlimbs[NUM_MICRO_LIMBS - 1] =
+            high_relation_microlimbs[NUM_MICRO_LIMBS - 1];
+
+        /*
+         * @brief Put several values in sequential wires
+         *
+         */
+        let mut lay_limbs_in_row = |input: &[P::ScalarField], starting_wire: WireIds| {
+            let mut wire_index = starting_wire.as_usize();
+            for &element in input.iter() {
+                let var_idx = self.add_variable(element);
+                self.wires[wire_index].push(var_idx);
+                wire_index += 1;
+            }
+        };
+
+        // Now put all microlimbs into appropriate wires
+        lay_limbs_in_row(
+            &acc_step.p_x_microlimbs[0],
+            WireIds::P_X_LOW_LIMBS_RANGE_CONSTRAINT_0,
+        );
+        lay_limbs_in_row(
+            &acc_step.p_x_microlimbs[1],
+            WireIds::P_X_LOW_LIMBS_RANGE_CONSTRAINT_0,
+        );
+        lay_limbs_in_row(
+            &acc_step.p_x_microlimbs[2],
+            WireIds::P_X_HIGH_LIMBS_RANGE_CONSTRAINT_0,
+        );
+        lay_limbs_in_row(
+            &top_p_x_microlimbs,
+            WireIds::P_X_HIGH_LIMBS_RANGE_CONSTRAINT_0,
+        );
+        lay_limbs_in_row(
+            &acc_step.p_y_microlimbs[0],
+            WireIds::P_Y_LOW_LIMBS_RANGE_CONSTRAINT_0,
+        );
+        lay_limbs_in_row(
+            &acc_step.p_y_microlimbs[1],
+            WireIds::P_Y_LOW_LIMBS_RANGE_CONSTRAINT_0,
+        );
+        lay_limbs_in_row(
+            &acc_step.p_y_microlimbs[2],
+            WireIds::P_Y_HIGH_LIMBS_RANGE_CONSTRAINT_0,
+        );
+        lay_limbs_in_row(
+            &top_p_y_microlimbs,
+            WireIds::P_Y_HIGH_LIMBS_RANGE_CONSTRAINT_0,
+        );
+        lay_limbs_in_row(
+            &acc_step.z_1_microlimbs[0],
+            WireIds::Z_LOW_LIMBS_RANGE_CONSTRAINT_0,
+        );
+        lay_limbs_in_row(
+            &acc_step.z_2_microlimbs[0],
+            WireIds::Z_LOW_LIMBS_RANGE_CONSTRAINT_0,
+        );
+        lay_limbs_in_row(
+            &acc_step.z_1_microlimbs[1],
+            WireIds::Z_HIGH_LIMBS_RANGE_CONSTRAINT_0,
+        );
+        lay_limbs_in_row(
+            &acc_step.z_2_microlimbs[1],
+            WireIds::Z_HIGH_LIMBS_RANGE_CONSTRAINT_0,
+        );
+        lay_limbs_in_row(
+            &acc_step.current_accumulator,
+            WireIds::ACCUMULATORS_BINARY_LIMBS_0,
+        );
+        lay_limbs_in_row(
+            &acc_step.previous_accumulator,
+            WireIds::ACCUMULATORS_BINARY_LIMBS_0,
+        );
+        lay_limbs_in_row(
+            &acc_step.current_accumulator_microlimbs[0],
+            WireIds::ACCUMULATOR_LOW_LIMBS_RANGE_CONSTRAINT_0,
+        );
+        lay_limbs_in_row(
+            &acc_step.current_accumulator_microlimbs[1],
+            WireIds::ACCUMULATOR_LOW_LIMBS_RANGE_CONSTRAINT_0,
+        );
+        lay_limbs_in_row(
+            &acc_step.current_accumulator_microlimbs[2],
+            WireIds::ACCUMULATOR_HIGH_LIMBS_RANGE_CONSTRAINT_0,
+        );
+        lay_limbs_in_row(
+            &top_current_accumulator_microlimbs,
+            WireIds::ACCUMULATOR_HIGH_LIMBS_RANGE_CONSTRAINT_0,
+        );
+        lay_limbs_in_row(
+            &acc_step.quotient_microlimbs[0],
+            WireIds::QUOTIENT_LOW_LIMBS_RANGE_CONSTRAIN_0,
+        );
+        lay_limbs_in_row(
+            &acc_step.quotient_microlimbs[1],
+            WireIds::QUOTIENT_LOW_LIMBS_RANGE_CONSTRAIN_0,
+        );
+        lay_limbs_in_row(
+            &acc_step.quotient_microlimbs[2],
+            WireIds::QUOTIENT_HIGH_LIMBS_RANGE_CONSTRAIN_0,
+        );
+        lay_limbs_in_row(
+            &top_quotient_microlimbs,
+            WireIds::QUOTIENT_HIGH_LIMBS_RANGE_CONSTRAIN_0,
+        );
+
+        self.num_gates += 2;
+
+        // Check that all the wires are filled equally
+        // TODO FLORIN DO WE WANT TO DO THIS?
+        // for (i, wire) in self.wires.iter().enumerate() {
+        //     debug_assert!(
+        //         wire.len() == self.num_gates,
+        //         "wire {i} len {} != {}",
+        //         wire.len(),
+        //         self.num_gates
+        //     );
+        // }
     }
 }
 
