@@ -15,16 +15,18 @@ use common::transcript::{Transcript, TranscriptFieldType};
 use itertools::izip;
 use num_bigint::BigUint;
 use ultrahonk::Utils as UltraHonkUtils;
+use ultrahonk::prelude::ZeroKnowledge;
 use ultrahonk::prelude::{
     AllEntities, Decider, ProvingKey, SmallSubgroupIPAProver, SumcheckOutput, TranscriptHasher,
     ZKSumcheckData,
 };
 
+#[derive(Default)]
 pub(crate) struct ProverMemory<P: CurveGroup> {
     pub(crate) z_perm: Polynomial<P::ScalarField>,
 }
 
-struct Translator<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> {
+pub struct Translator<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> {
     decider: Decider<P, H, TranslatorFlavour>,
     batching_challenge_v: P::BaseField,
     evaluation_input_x: P::BaseField,
@@ -32,6 +34,14 @@ struct Translator<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<Transcr
 }
 
 impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> Translator<P, H> {
+    pub fn new(batching_challenge_v: P::BaseField, evaluation_input_x: P::BaseField) -> Self {
+        Self {
+            decider: Decider::new(Default::default(), ZeroKnowledge::Yes),
+            batching_challenge_v,
+            evaluation_input_x,
+            memory: ProverMemory::default(),
+        }
+    }
     /// A uniform method to mask, commit, and send the corresponding commitment to the verifier.
     fn commit_to_witness_polynomial(
         &mut self,
@@ -50,7 +60,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         Ok(())
     }
 
-    fn construct_proof(
+    pub fn construct_proof(
         &mut self,
         mut transcript: Transcript<TranscriptFieldType, H>,
         mut proving_key: ProvingKey<P, TranslatorFlavour>,
