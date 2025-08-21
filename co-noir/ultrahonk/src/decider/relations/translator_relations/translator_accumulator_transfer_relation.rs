@@ -31,8 +31,31 @@ pub(crate) struct TranslatorAccumulatorTransferRelationAcc<F: PrimeField> {
 }
 
 impl<F: PrimeField> TranslatorAccumulatorTransferRelationAcc<F> {
-    pub(crate) fn scale(&mut self, elements: &[F]) {
-        todo!()
+    pub(crate) fn scale(&mut self, current_scalar: &mut F, challenge: &F) {
+        self.r0 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r1 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r2 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r3 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r4 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r5 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r6 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r7 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r8 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r9 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r10 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r11 *= *current_scalar;
+        *current_scalar *= challenge;
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(
@@ -117,11 +140,11 @@ impl<F: PrimeField> TranslatorAccumulatorTransferRelationAcc<F> {
 
     pub(crate) fn extend_and_batch_univariates_with_distinct_challenges<const SIZE: usize>(
         &self,
-        result: &mut Univariate<F, SIZE>,
-        running_challenge: &[Univariate<F, SIZE>],
+        _result: &mut Univariate<F, SIZE>,
+        _running_challenge: &[Univariate<F, SIZE>],
     ) {
         panic!(
-            "TranslatorAccumulatorTransferRelationAcc should not call extend_and_batch_univariates_with_distinct_challenges"
+            "TranslatorFlavour should not need extend_and_batch_univariates_with_distinct_challenges"
         );
     }
 }
@@ -144,7 +167,7 @@ pub(crate) struct TranslatorAccumulatorTransferRelationEvals<F: PrimeField> {
 
 impl<F: PrimeField> TranslatorAccumulatorTransferRelationEvals<F> {
     pub(crate) fn scale_and_batch_elements(&self, running_challenge: &[F], result: &mut F) {
-        todo!()
+        todo!("Implement Sumcheck Verifier for TranslatorFlavour");
     }
 
     pub(crate) fn scale_by_challenge_and_accumulate(
@@ -153,7 +176,7 @@ impl<F: PrimeField> TranslatorAccumulatorTransferRelationEvals<F> {
         _linearly_dependent_contribution: &mut F,
         running_challenge: &[F],
     ) {
-        todo!()
+        todo!("Implement Sumcheck Verifier for TranslatorFlavour");
     }
 }
 

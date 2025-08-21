@@ -20,8 +20,9 @@ pub(crate) struct TranslatorOpCodeConstraintRelationAcc<F: PrimeField> {
 }
 
 impl<F: PrimeField> TranslatorOpCodeConstraintRelationAcc<F> {
-    pub(crate) fn scale(&mut self, elements: &[F]) {
-        todo!()
+    pub(crate) fn scale(&mut self, current_scalar: &mut F, challenge: &F) {
+        self.r0 *= *current_scalar;
+        *current_scalar *= challenge;
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(
@@ -43,8 +44,9 @@ impl<F: PrimeField> TranslatorOpCodeConstraintRelationAcc<F> {
         result: &mut Univariate<F, SIZE>,
         running_challenge: &[Univariate<F, SIZE>],
     ) {
-        self.r0
-            .extend_and_batch_univariates(result, &running_challenge[0], &F::ONE, true);
+        panic!(
+            "TranslatorFlavour should not need extend_and_batch_univariates_with_distinct_challenges"
+        );
     }
 }
 
@@ -55,7 +57,7 @@ pub(crate) struct TranslatorOpCodeConstraintRelationEvals<F: PrimeField> {
 
 impl<F: PrimeField> TranslatorOpCodeConstraintRelationEvals<F> {
     pub(crate) fn scale_and_batch_elements(&self, running_challenge: &[F], result: &mut F) {
-        todo!()
+        todo!("Implement Sumcheck Verifier for TranslatorFlavour");
     }
 
     pub(crate) fn scale_by_challenge_and_accumulate(
@@ -64,7 +66,7 @@ impl<F: PrimeField> TranslatorOpCodeConstraintRelationEvals<F> {
         _linearly_dependent_contribution: &mut F,
         running_challenge: &[F],
     ) {
-        todo!()
+        todo!("Implement Sumcheck Verifier for TranslatorFlavour");
     }
 }
 
