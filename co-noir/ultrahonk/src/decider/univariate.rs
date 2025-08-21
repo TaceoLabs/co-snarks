@@ -264,7 +264,7 @@ impl<F: PrimeField, const SIZE: usize> UnivariateTrait<F> for Univariate<F, SIZE
     }
 
     fn get_random<R: Rng + CryptoRng>(rng: &mut R) -> Self {
-        let evaluations = array::from_fn(|_| F::rand(rng));
+        let evaluations = array::from_fn(|_| F::one());
         Self { evaluations }
     }
 
