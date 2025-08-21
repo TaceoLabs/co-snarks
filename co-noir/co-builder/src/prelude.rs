@@ -1,7 +1,9 @@
 pub use crate::acir_format::{AcirFormat, HonkRecursion};
+pub use crate::constraint_system_from_reader;
 pub use crate::crs::Crs;
 pub use crate::crs::ProverCrs;
 pub use crate::crs::parse::CrsParser;
+pub use crate::get_constraint_system_from_artifact;
 pub use crate::honk_curve::HonkCurve;
 pub use crate::keys::proving_key::ProvingKey;
 pub use crate::keys::verification_key::{

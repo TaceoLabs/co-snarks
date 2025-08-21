@@ -1,0 +1,2 @@
+[compiler]
+link_library = ["../lib"]

@@ -20,7 +20,7 @@ type UltraShiftedWitnessEntities<T> =
     ShiftedWitnessEntities<T, { UltraFlavour::SHIFTED_WITNESS_ENTITIES_SIZE }>;
 type UltraWitnessEntities<T> = WitnessEntities<T, { UltraFlavour::WITNESS_ENTITIES_SIZE }>;
 
-#[derive(Default, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct UltraFlavour {}
 
 impl ProverFlavour for UltraFlavour {

@@ -16,6 +16,7 @@ use byteorder::{BigEndian, ReadBytesExt as _, WriteBytesExt as _};
 use crossbeam_channel::Receiver;
 use eyre::ContextCompat;
 use intmap::IntMap;
+use itertools::Itertools;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use socket2::{Domain, Socket, TcpKeepalive, Type};
@@ -101,6 +102,7 @@ impl TcpNetwork {
         let addrs = config
             .parties
             .into_iter()
+            .sorted_by_key(|p| p.id)
             .map(|party| party.dns_name)
             .collect::<Vec<_>>();
         let timeout = config.timeout.unwrap_or(DEFAULT_CONNECTION_TIMEOUT);

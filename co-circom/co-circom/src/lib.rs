@@ -34,27 +34,15 @@ pub use co_plonk::{Plonk, Rep3CoPlonk, ShamirCoPlonk};
 pub use serde_json::Number;
 pub use serde_json::Value;
 
-/// Split the input into REP3 shares
-pub fn split_input<P: Pairing>(
-    input: Input,
-    public_inputs: &[String],
-) -> eyre::Result<[Rep3SharedInput<P::ScalarField>; 3]> {
-    co_circom_types::split_input(input, public_inputs)
-}
-
-/// Merge multiple REP3 shared inputs into one
-pub fn merge_input_shares<P: Pairing>(
-    inputs: Vec<Rep3SharedInput<P::ScalarField>>,
-) -> eyre::Result<Rep3SharedInput<P::ScalarField>> {
-    co_circom_types::merge_input_shares(inputs)
-}
+pub use co_circom_types::merge_input_shares;
+pub use co_circom_types::split_input;
 
 /// Split the witness into REP3 shares
-pub fn split_witness_rep3<P: Pairing>(
+pub fn split_witness_rep3<F: PrimeField>(
     num_inputs: usize,
-    witness: Witness<P::ScalarField>,
+    witness: Witness<F>,
     compression: Compression,
-) -> [CompressedRep3SharedWitness<P::ScalarField>; 3] {
+) -> [CompressedRep3SharedWitness<F>; 3] {
     let mut rng = rand::thread_rng();
     // create witness shares
     CompressedRep3SharedWitness::share_rep3(witness, num_inputs, &mut rng, compression)
@@ -85,33 +73,22 @@ pub fn uncompress_shared_witness<F: PrimeField, N: Network>(
 }
 
 /// Split the witness into shamir shares
-pub fn split_witness_shamir<P: Pairing>(
+pub fn split_witness_shamir<F: PrimeField>(
     num_inputs: usize,
-    witness: Witness<P::ScalarField>,
+    witness: Witness<F>,
     threshold: usize,
     num_parties: usize,
-) -> Vec<ShamirSharedWitness<P::ScalarField>> {
+) -> Vec<ShamirSharedWitness<F>> {
     let mut rng = rand::thread_rng();
     // create witness shares
-    ShamirSharedWitness::<P::ScalarField>::share_shamir(
-        witness,
-        num_inputs,
-        threshold,
-        num_parties,
-        &mut rng,
-    )
+    ShamirSharedWitness::<F>::share_shamir(witness, num_inputs, threshold, num_parties, &mut rng)
 }
 
 /// Translate the REP3 shared witness into a shamir shared witness
-pub fn translate_witness<P, N: Network>(
-    witness: CompressedRep3SharedWitness<P::ScalarField>,
+pub fn translate_witness<F: PrimeField, N: Network>(
+    witness: CompressedRep3SharedWitness<F>,
     net: &N,
-) -> eyre::Result<ShamirSharedWitness<P::ScalarField>>
-where
-    P: Pairing + CircomArkworksPairingBridge,
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-{
+) -> eyre::Result<ShamirSharedWitness<F>> {
     let witness = SharedWitness::from(witness);
     // init MPC protocol
     let num_parties = 3;
@@ -124,7 +101,7 @@ where
     let translated_witness = protocol
         .translate_primefield_addshare_vec(witness.witness, net)
         .context("while translating witness")?;
-    let shamir_witness_share: ShamirSharedWitness<P::ScalarField> = SharedWitness {
+    let shamir_witness_share: ShamirSharedWitness<F> = SharedWitness {
         public_inputs: witness.public_inputs,
         witness: translated_witness,
     };
@@ -133,18 +110,13 @@ where
 }
 
 /// Generate a REP3 shared witness
-pub fn generate_witness_rep3<P, N: Network>(
-    circuit: &CoCircomCompilerParsed<P::ScalarField>,
-    input: Rep3SharedInput<P::ScalarField>,
+pub fn generate_witness_rep3<F: PrimeField, N: Network>(
+    circuit: &CoCircomCompilerParsed<F>,
+    input: Rep3SharedInput<F>,
     config: VMConfig,
     net0: &N,
     net1: &N,
-) -> eyre::Result<Rep3SharedWitness<P::ScalarField>>
-where
-    P: Pairing + CircomArkworksPairingBridge,
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-{
+) -> eyre::Result<Rep3SharedWitness<F>> {
     if !input.maybe_shared_inputs.is_empty() {
         eyre::bail!("still unmerged elements left");
     }

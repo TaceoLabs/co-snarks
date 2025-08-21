@@ -4,6 +4,7 @@ use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{BigInteger, MontConfig, One, PrimeField, Zero};
 use blake2::{Blake2s256, Digest};
 use co_brillig::mpc::{Rep3BrilligDriver, Rep3BrilligType};
+use co_noir_types::Rep3Type;
 use itertools::{Itertools, izip};
 use libaes::Cipher;
 use mpc_core::MpcState as _;
@@ -305,6 +306,15 @@ impl<F: PrimeField> From<F> for Rep3AcvmType<F> {
 impl<F: PrimeField> From<ArithmeticShare<F>> for Rep3AcvmType<F> {
     fn from(value: ArithmeticShare<F>) -> Self {
         Self::Shared(value)
+    }
+}
+
+impl<F: PrimeField> From<Rep3Type<F>> for Rep3AcvmType<F> {
+    fn from(value: Rep3Type<F>) -> Self {
+        match value {
+            Rep3Type::Public(public) => Rep3AcvmType::Public(public),
+            Rep3Type::Shared(shared) => Rep3AcvmType::Shared(shared),
+        }
     }
 }
 
