@@ -15,13 +15,12 @@ use co_builder::prelude::{Polynomial, Polynomials};
 use co_builder::{TranscriptFieldType, prelude::HonkCurve};
 use num_bigint::BigUint;
 use std::str::FromStr;
-use ultrahonk::prelude::ProvingKey;
 
 const NUM_WIRES: usize = 81;
 const ZERO_IDX: usize = 0;
 const ONE_IDX: usize = 1;
 
-struct TranslatorBuilder<P: CurveGroup> {
+pub struct TranslatorBuilder<P: CurveGroup> {
     pub variables: Vec<P::ScalarField>,
     next_var_index: Vec<u32>,
     prev_var_index: Vec<u32>,
@@ -36,6 +35,19 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
     pub(crate) const DUMMY_TAG: u32 = 0;
     pub(crate) const REAL_VARIABLE: u32 = u32::MAX - 1;
     pub(crate) const FIRST_VARIABLE_IN_CLASS: u32 = u32::MAX - 2;
+    pub fn new() -> Self {
+        Self {
+            variables: Vec::new(),
+            next_var_index: Vec::new(),
+            prev_var_index: Vec::new(),
+            real_variable_index: Vec::new(),
+            real_variable_tags: Vec::new(),
+            batching_challenge_v: P::BaseField::zero(),
+            evaluation_input_x: P::BaseField::zero(),
+            wires: std::array::from_fn(|_| Vec::new()),
+            num_gates: 0,
+        }
+    }
     pub(crate) fn add_variable(&mut self, value: P::ScalarField) -> u32 {
         let idx = self.variables.len() as u32;
         self.variables.push(value);
@@ -45,7 +57,7 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
         self.real_variable_tags.push(Self::DUMMY_TAG);
         idx
     }
-    fn feed_ecc_op_queue_into_circuit(
+    pub fn feed_ecc_op_queue_into_circuit(
         &mut self,
         batching_challenge_v: P::BaseField,
         evaluation_input_x: P::BaseField,
@@ -1007,7 +1019,14 @@ pub fn construct_pk_from_builder<C: HonkCurve<TranscriptFieldType>>(
     }
 
     let circuit_size = 1 << TranslatorFlavour::CONST_TRANSLATOR_LOG_N;
-    let mut polys = Polynomials::<C::ScalarField, TranslatorFlavour>::new(circuit_size); //TODO FLORIN: maybe we need something else here
+    let mut polys = Polynomials::<C::ScalarField, TranslatorFlavour>::new(circuit_size);
+    for poly in polys.witness.to_be_shifted_mut() {
+        poly.resize(mini_circuit_dyadic_size, C::ScalarField::zero());
+    }
+    //TODO FLORIN: make this nicer
+    for poly in polys.witness.get_ordered_range_constraints_mut() {
+        poly.resize(circuit_size, C::ScalarField::zero());
+    }
 
     // Populate the wire polynomials from the wire vectors in the circuit
     for (wire_poly, wire_indices) in polys
@@ -1034,9 +1053,7 @@ pub fn construct_pk_from_builder<C: HonkCurve<TranscriptFieldType>>(
     {
         for i in (2..mini_circuit_dyadic_size).step_by(2) {
             polys.precomputed.lagrange_even_in_minicircuit_mut()[i] = C::ScalarField::one();
-            if i + 1 < mini_circuit_dyadic_size {
-                polys.precomputed.lagrange_odd_in_minicircuit_mut()[i + 1] = C::ScalarField::one();
-            }
+            polys.precomputed.lagrange_odd_in_minicircuit_mut()[i + 1] = C::ScalarField::one();
         }
         polys.precomputed.lagrange_result_row_mut()[2] = C::ScalarField::one();
         polys.precomputed.lagrange_last_in_minicircuit_mut()[mini_circuit_dyadic_size - 1] =
@@ -1086,12 +1103,11 @@ pub fn construct_pk_from_builder<C: HonkCurve<TranscriptFieldType>>(
             // The vector of groups of polynomials to be interleaved
             let interleaved = polys.witness.get_groups_to_be_interleaved().to_owned();
             // Resulting interleaved polynomials
-            //TODO FLORIN SIZES
             let mut targets = [
-                Polynomial::<C::ScalarField>::new_zero(1),
-                Polynomial::<C::ScalarField>::new_zero(1),
-                Polynomial::<C::ScalarField>::new_zero(1),
-                Polynomial::<C::ScalarField>::new_zero(1),
+                Polynomial::<C::ScalarField>::new_zero(circuit_size),
+                Polynomial::<C::ScalarField>::new_zero(circuit_size),
+                Polynomial::<C::ScalarField>::new_zero(circuit_size),
+                Polynomial::<C::ScalarField>::new_zero(circuit_size),
             ];
 
             let num_polys_in_group = interleaved[0].len();
@@ -1111,10 +1127,8 @@ pub fn construct_pk_from_builder<C: HonkCurve<TranscriptFieldType>>(
 
                 // Copy into appropriate position in the interleaved polynomial
                 // We offset by start_index() as the first 0 is not physically represented for shiftable values
-                // TODO FLORIN: CHECK START AND END HERE
-                let start = 0; //group[j].start_index();
-                let end = group[j].len();
-                for k in start..end {
+                for k in 1..group[j].len() {
+                    // We have an offset here
                     targets[i][k * num_polys_in_group + j] = group[j][k];
                 }
             }

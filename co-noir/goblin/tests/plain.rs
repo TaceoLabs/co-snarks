@@ -3,6 +3,7 @@ use ark_ec::short_weierstrass;
 use ark_grumpkin::GrumpkinConfig;
 use co_builder::TranscriptFieldType;
 use co_builder::flavours::eccvm_flavour::ECCVMFlavour;
+use co_builder::flavours::translator_flavour::TranslatorFlavour;
 use co_builder::prelude::HonkCurve;
 use co_builder::prelude::{CrsParser, Serialize, SerializeP};
 use common::transcript::Poseidon2Sponge;
@@ -12,10 +13,14 @@ use goblin::prelude::EccOpCode;
 use goblin::prelude::Eccvm;
 use goblin::prelude::EccvmOpsTable;
 use goblin::prelude::EccvmRowTracker;
+use goblin::prelude::Translator;
+use goblin::prelude::TranslatorBuilder;
 use goblin::prelude::UltraEccOpsTable;
 use goblin::prelude::UltraOp;
 use goblin::prelude::VMOperation;
 use goblin::prelude::construct_from_builder;
+use goblin::prelude::construct_pk_from_builder;
+use std::str::FromStr;
 use std::{path::PathBuf, sync::Arc};
 use ultrahonk::prelude::ProvingKey;
 use ultrahonk::prelude::ZeroKnowledge;
@@ -159,4 +164,56 @@ fn test_ecc_vm_prover() {
     let mut prover =
         Eccvm::<short_weierstrass::Projective<GrumpkinConfig>, Poseidon2Sponge>::default();
     let (_transcript, _ipa_transcript) = prover.construct_proof(transcript, proving_key).unwrap();
+}
+
+// TACEO TODO:
+#[test]
+#[ignore]
+fn test_translator_prover() {
+    let ecc_op_queue_file = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../test_vectors/noir/eccvm/ecc_op_queue"
+    );
+    const CRS_PATH_G1: &str = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../co-builder/src/crs/bn254_g1.dat"
+    );
+    let path = PathBuf::from(ecc_op_queue_file);
+    let mut queue: ECCOpQueue<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>> =
+        deserialize_ecc_op_queue(path);
+    let circuit_size = 1 << TranslatorFlavour::CONST_TRANSLATOR_LOG_N;
+    let _ = construct_from_builder::<short_weierstrass::Projective<GrumpkinConfig>>(&mut queue); // We need to do this as the ecc_op_queue is necessary for the translator builder and gets modified in there
+    let translation_batching_challenge_v =
+        ark_bn254::Fq::from_str("333310174131141305725676434666258450925").unwrap();
+    let evaluation_challenge_x =
+        ark_bn254::Fq::from_str("17211194955796430769589779325535368928").unwrap();
+    let mut translator_builder =
+        TranslatorBuilder::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>::new();
+    translator_builder.feed_ecc_op_queue_into_circuit(
+        translation_batching_challenge_v,
+        evaluation_challenge_x,
+        &mut queue,
+    );
+    let polys = construct_pk_from_builder::<
+        ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>,
+    >(translator_builder);
+    let prover_crs = Arc::new(
+        CrsParser::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>::get_crs_g1(
+            CRS_PATH_G1,
+            circuit_size,
+            ZeroKnowledge::Yes,
+        )
+        .unwrap(),
+    );
+    let mut proving_key = ProvingKey::<
+        ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>,
+        TranslatorFlavour,
+    >::new(circuit_size, 0, prover_crs, 0);
+    proving_key.polynomials = polys;
+    let mut prover = Translator::<
+        short_weierstrass::Projective<ark_bn254::g1::Config>,
+        Poseidon2Sponge,
+    >::new(translation_batching_challenge_v, evaluation_challenge_x);
+    let transcript = Transcript::<TranscriptFieldType, Poseidon2Sponge>::new();
+    let proof = prover.construct_proof(transcript, proving_key).unwrap();
 }

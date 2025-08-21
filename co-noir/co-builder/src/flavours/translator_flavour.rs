@@ -388,6 +388,10 @@ impl<T: Default> ProverWitnessEntitiesFlavour<T> for TranslatorProverWitnessEnti
     fn into_wires(self) -> impl Iterator<Item = T> {
         std::iter::empty()
     }
+    fn get_wires_mut(&mut self) -> &mut [T] {
+        &mut self.elements
+            [TranslatorFlavour::OP..=TranslatorFlavour::RELATION_WIDE_LIMBS_RANGE_CONSTRAINT_3]
+    }
 }
 impl<T: Default + Debug> PrecomputedEntitiesFlavour<T> for TranslatorPrecomputedEntities<T> {
     fn iter<'a>(&'a self) -> impl Iterator<Item = &'a T>
@@ -416,6 +420,12 @@ impl<T: Default + Debug> PrecomputedEntitiesFlavour<T> for TranslatorPrecomputed
         unimplemented!(
             "PrecomputedEntitiesFlavour::from_elements is not implemented for TranslatorFlavour."
         );
+    }
+    fn lagrange_first_mut(&mut self) -> &mut T {
+        &mut self.elements[TranslatorFlavour::LAGRANGE_FIRST]
+    }
+    fn lagrange_last_mut(&mut self) -> &mut T {
+        &mut self.elements[TranslatorFlavour::LAGRANGE_LAST]
     }
 }
 impl<T: Default + Debug> WitnessEntitiesFlavour<T> for TranslatorWitnessEntities<T> {
@@ -531,6 +541,9 @@ impl<T: Default> TranslatorProverWitnessEntities<T> {
             .into_iter()
             .skip(1)
             .take(TranslatorFlavour::SHIFTED_WITNESS_ENTITIES_SIZE - 1) // Minus 1 because we don't include z_perm
+    }
+    pub fn to_be_shifted_mut(&mut self) -> &mut [T] {
+        &mut self.elements[TranslatorFlavour::X_LO_Y_HI..TranslatorFlavour::Z_PERM]
     }
     pub fn accumulators_binary_limbs_0(&self) -> &T {
         &self.elements[TranslatorFlavour::ACCUMULATORS_BINARY_LIMBS_0]
