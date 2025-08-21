@@ -574,6 +574,10 @@ impl<T: Default> TranslatorProverWitnessEntities<T> {
         &self.elements[TranslatorFlavour::INTERLEAVED_RANGE_CONSTRAINTS_0
             ..=TranslatorFlavour::INTERLEAVED_RANGE_CONSTRAINTS_3 - 1]
     }
+    pub fn get_interleaved_range_constraints_mut(&mut self) -> &mut [T] {
+        &mut self.elements[TranslatorFlavour::INTERLEAVED_RANGE_CONSTRAINTS_0
+            ..=TranslatorFlavour::INTERLEAVED_RANGE_CONSTRAINTS_3 - 1]
+    }
     pub fn ordered_range_constraints_0(&self) -> &T {
         &self.elements[TranslatorFlavour::ORDERED_RANGE_CONSTRAINTS_0]
     }
@@ -604,17 +608,19 @@ impl<T: Default> TranslatorProverWitnessEntities<T> {
     pub fn ordered_range_constraints_4_mut(&mut self) -> &mut T {
         &mut self.elements[TranslatorFlavour::ORDERED_RANGE_CONSTRAINTS_4]
     }
-    pub fn get_interleaved(&self) -> &[T] {
-        todo!("Implement get_interleaved for TranslatorProverWitnessEntities")
-    }
-    pub fn get_interleaved_mut(&mut self) -> &mut [T] {
-        todo!("Implement get_interleaved for TranslatorProverWitnessEntities")
-    }
-    pub fn get_groups_to_be_interleaved(&self) -> &[&[T]] {
-        todo!("Implement get_interleaved for TranslatorProverWitnessEntities")
+    pub fn get_groups_to_be_interleaved(&self) -> [&[T]; 4] {
+        [
+            &self.elements[TranslatorFlavour::P_X_LOW_LIMBS_RANGE_CONSTRAINT_0
+                ..=TranslatorFlavour::P_Y_LOW_LIMBS_RANGE_CONSTRAINT_3],
+            &self.elements[TranslatorFlavour::P_Y_LOW_LIMBS_RANGE_CONSTRAINT_4
+                ..=TranslatorFlavour::Z_HIGH_LIMBS_RANGE_CONSTRAINT_1],
+            &self.elements[TranslatorFlavour::Z_HIGH_LIMBS_RANGE_CONSTRAINT_2
+                ..=TranslatorFlavour::ACCUMULATOR_HIGH_LIMBS_RANGE_CONSTRAINT_TAIL],
+            &self.elements[TranslatorFlavour::QUOTIENT_LOW_LIMBS_RANGE_CONSTRAINT_0
+                ..=TranslatorFlavour::RELATION_WIDE_LIMBS_RANGE_CONSTRAINT_3],
+        ]
     }
 }
-
 impl<T: Default> TranslatorWitnessEntities<T> {
     pub fn accumulators_binary_limbs_0(&self) -> &T {
         &self.elements[TranslatorFlavour::ACCUMULATORS_BINARY_LIMBS_0]
