@@ -4,10 +4,7 @@ use crate::decider::univariate::Univariate;
 use ark_ff::One;
 use ark_ff::{PrimeField, Zero};
 use co_builder::flavours::translator_flavour::TranslatorFlavour;
-use co_builder::prelude::HonkCurve;
-use common::transcript::TranscriptFieldType;
 use num_bigint::BigUint;
-use std::str::FromStr;
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct TranslatorNonNativeFieldRelationAcc<F: PrimeField> {
@@ -51,38 +48,14 @@ impl<F: PrimeField> TranslatorNonNativeFieldRelationAcc<F> {
             true,
         );
     }
-
-    pub(crate) fn extend_and_batch_univariates_with_distinct_challenges<const SIZE: usize>(
-        &self,
-        result: &mut Univariate<F, SIZE>,
-        running_challenge: &[Univariate<F, SIZE>],
-    ) {
-        panic!(
-            "TranslatorFlavour should not need extend_and_batch_univariates_with_distinct_challenges"
-        );
-    }
 }
 
 #[derive(Clone, Debug, Default)]
+#[expect(dead_code)]
 pub(crate) struct TranslatorNonNativeFieldRelationEvals<F: PrimeField> {
     pub(crate) r0: F,
     pub(crate) r1: F,
     pub(crate) r2: F,
-}
-
-impl<F: PrimeField> TranslatorNonNativeFieldRelationEvals<F> {
-    pub(crate) fn scale_and_batch_elements(&self, running_challenge: &[F], result: &mut F) {
-        todo!("Implement Sumcheck Verifier for TranslatorFlavour");
-    }
-
-    pub(crate) fn scale_by_challenge_and_accumulate(
-        &self,
-        linearly_independent_contribution: &mut F,
-        _linearly_dependent_contribution: &mut F,
-        running_challenge: &[F],
-    ) {
-        todo!("Implement Sumcheck Verifier for TranslatorFlavour");
-    }
 }
 
 pub(crate) struct TranslatorNonNativeFieldRelation {}
@@ -408,12 +381,5 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorNonNativeFieldR
         }
     }
 
-    fn verify_accumulate(
-        univariate_accumulator: &mut Self::VerifyAcc,
-        input: &crate::prelude::ClaimedEvaluations<F, TranslatorFlavour>,
-        relation_parameters: &crate::prelude::RelationParameters<F>,
-        scaling_factor: &F,
-    ) {
-        todo!()
-    }
+ 
 }
