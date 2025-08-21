@@ -1,4 +1,4 @@
-use crate::{MICRO_LIMB_BITS, NUM_LAST_LIMB_BITS, NUM_LIMB_BITS, NUM_QUOTIENT_BITS, NUM_Z_BITS};
+use crate::{MICRO_LIMB_BITS, NUM_LAST_LIMB_BITS, NUM_QUOTIENT_BITS, NUM_Z_BITS};
 use crate::{
     NUM_BINARY_LIMBS, NUM_MICRO_LIMBS, NUM_RELATION_WIDE_LIMBS, NUM_Z_LIMBS,
     eccvm::ecc_op_queue::ECCOpQueue, prelude::UltraOp,
@@ -8,9 +8,14 @@ use ark_ff::Field;
 use ark_ff::One;
 use ark_ff::PrimeField;
 use ark_ff::Zero;
+use co_builder::flavours::translator_flavour::TranslatorFlavour;
+use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
+use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
+use co_builder::prelude::{Polynomial, Polynomials};
 use co_builder::{TranscriptFieldType, prelude::HonkCurve};
 use num_bigint::BigUint;
 use std::str::FromStr;
+use ultrahonk::prelude::ProvingKey;
 
 const NUM_WIRES: usize = 81;
 const ZERO_IDX: usize = 0;
@@ -172,25 +177,13 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
             .unwrap_or_else(|_| panic!("invalid field element literal")),
         ];
 
-        // TODO FLORIN: This is kinda wrong
-        fn slice_bits(n: &BigUint, start: usize, end: usize) -> BigUint {
+        // TODO FLORIN: I think this is correct but lets see
+        fn slice(n: &BigUint, start: usize, end: usize) -> BigUint {
             if end <= start {
                 return BigUint::zero();
             }
             let width = end - start;
             (n >> start) & ((BigUint::one() << width) - 1u32)
-        }
-
-        // Convert BigUint to ScalarField (assumes canonical < modulus)
-        fn to_scalar<F: From<u64> + TryFrom<BigUint>>(b: BigUint) -> F {
-            // F likely implements From<BigUint> in this codebase; if not, reduce manually.
-            // Here we attempt TryFrom, fallback via u64 (only for small slices).
-            if let Ok(v) = F::try_from(b.clone()) {
-                v
-            } else {
-                // Fallback (should not trigger for wide limbs in real implementation)
-                F::from(b.to_u64_digits().first().copied().unwrap_or(0))
-            }
         }
 
         // All parameters are well-described in the header, this is just for convenience
@@ -209,8 +202,11 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
         let uint512_t_to_limbs = |original: &BigUint| -> [P::ScalarField; NUM_BINARY_LIMBS] {
             let mut out = [P::ScalarField::from(0u64); NUM_BINARY_LIMBS];
             for i in 0..NUM_BINARY_LIMBS {
-                let lo = slice_bits(original, i * NUM_LIMB_BITS, (i + 1) * NUM_LIMB_BITS);
-                out[i] = to_scalar(lo);
+                out[i] = P::ScalarField::from(slice(
+                    original,
+                    i * NUM_LIMB_BITS,
+                    (i + 1) * NUM_LIMB_BITS,
+                ));
             }
             out
         };
@@ -223,8 +219,8 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
             |wide_limb: P::ScalarField| -> [P::ScalarField; NUM_Z_LIMBS] {
                 let wide: BigUint = wide_limb.into();
                 [
-                    to_scalar(slice_bits(&wide, 0, NUM_LIMB_BITS)),
-                    to_scalar(slice_bits(&wide, NUM_LIMB_BITS, 2 * NUM_LIMB_BITS)),
+                    P::ScalarField::from(slice(&wide, 0, NUM_LIMB_BITS)),
+                    P::ScalarField::from(slice(&wide, NUM_LIMB_BITS, 2 * NUM_LIMB_BITS)),
                 ]
             };
         /*
@@ -235,11 +231,11 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
             |limb: P::ScalarField| -> [P::ScalarField; NUM_MICRO_LIMBS] {
                 // static_assert(MICRO_LIMB_BITS == 14);
                 let val: BigUint = limb.into();
-                let a0 = slice_bits(&val, 0, MICRO_LIMB_BITS);
-                let a1 = slice_bits(&val, MICRO_LIMB_BITS, 2 * MICRO_LIMB_BITS);
-                let a2 = slice_bits(&val, 2 * MICRO_LIMB_BITS, 3 * MICRO_LIMB_BITS);
-                let a3 = slice_bits(&val, 3 * MICRO_LIMB_BITS, 4 * MICRO_LIMB_BITS);
-                let a4 = slice_bits(&val, 4 * MICRO_LIMB_BITS, 5 * MICRO_LIMB_BITS);
+                let a0 = slice(&val, 0, MICRO_LIMB_BITS);
+                let a1 = slice(&val, MICRO_LIMB_BITS, 2 * MICRO_LIMB_BITS);
+                let a2 = slice(&val, 2 * MICRO_LIMB_BITS, 3 * MICRO_LIMB_BITS);
+                let a3 = slice(&val, 3 * MICRO_LIMB_BITS, 4 * MICRO_LIMB_BITS);
+                let a4 = slice(&val, 4 * MICRO_LIMB_BITS, 5 * MICRO_LIMB_BITS);
                 let top = {
                     let raw = a4.clone();
                     let shift_amt = MICRO_LIMB_BITS - (NUM_LIMB_BITS % MICRO_LIMB_BITS);
@@ -250,12 +246,12 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
                     }
                 };
                 [
-                    to_scalar(a0),
-                    to_scalar(a1),
-                    to_scalar(a2),
-                    to_scalar(a3),
-                    to_scalar(a4),
-                    to_scalar(top),
+                    P::ScalarField::from(a0),
+                    P::ScalarField::from(a1),
+                    P::ScalarField::from(a2),
+                    P::ScalarField::from(a3),
+                    P::ScalarField::from(a4),
+                    P::ScalarField::from(top),
                 ]
             };
 
@@ -268,12 +264,12 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
             |limb: P::ScalarField, last_limb_bits: usize| -> [P::ScalarField; NUM_MICRO_LIMBS] {
                 // static_assert(MICRO_LIMB_BITS == 14);
                 let val: BigUint = limb.into();
-                let a0 = slice_bits(&val, 0, MICRO_LIMB_BITS);
-                let a1 = slice_bits(&val, MICRO_LIMB_BITS, 2 * MICRO_LIMB_BITS);
-                let a2 = slice_bits(&val, 2 * MICRO_LIMB_BITS, 3 * MICRO_LIMB_BITS);
-                let a3 = slice_bits(&val, 3 * MICRO_LIMB_BITS, 4 * MICRO_LIMB_BITS);
+                let a0 = slice(&val, 0, MICRO_LIMB_BITS);
+                let a1 = slice(&val, MICRO_LIMB_BITS, 2 * MICRO_LIMB_BITS);
+                let a2 = slice(&val, 2 * MICRO_LIMB_BITS, 3 * MICRO_LIMB_BITS);
+                let a3 = slice(&val, 3 * MICRO_LIMB_BITS, 4 * MICRO_LIMB_BITS);
                 let a4 = {
-                    let raw = slice_bits(&val, 3 * MICRO_LIMB_BITS, 4 * MICRO_LIMB_BITS);
+                    let raw = slice(&val, 3 * MICRO_LIMB_BITS, 4 * MICRO_LIMB_BITS);
                     let shift_amt = MICRO_LIMB_BITS - (last_limb_bits % MICRO_LIMB_BITS);
                     if shift_amt == 0 {
                         raw
@@ -282,11 +278,11 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
                     }
                 };
                 [
-                    to_scalar(a0),
-                    to_scalar(a1),
-                    to_scalar(a2),
-                    to_scalar(a3),
-                    to_scalar(a4),
+                    P::ScalarField::from(a0),
+                    P::ScalarField::from(a1),
+                    P::ScalarField::from(a2),
+                    P::ScalarField::from(a3),
+                    P::ScalarField::from(a4),
                     P::ScalarField::from(0u64),
                 ]
             };
@@ -300,13 +296,13 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
             |limb: P::ScalarField, last_limb_bits: usize| -> [P::ScalarField; NUM_MICRO_LIMBS] {
                 // static_assert(MICRO_LIMB_BITS == 14);
                 let val: BigUint = limb.into();
-                let a0 = slice_bits(&val, 0, MICRO_LIMB_BITS);
-                let a1 = slice_bits(&val, MICRO_LIMB_BITS, 2 * MICRO_LIMB_BITS);
-                let a2 = slice_bits(&val, 2 * MICRO_LIMB_BITS, 3 * MICRO_LIMB_BITS);
-                let a3 = slice_bits(&val, 3 * MICRO_LIMB_BITS, 4 * MICRO_LIMB_BITS);
-                let a4 = slice_bits(&val, 4 * MICRO_LIMB_BITS, 5 * MICRO_LIMB_BITS);
+                let a0 = slice(&val, 0, MICRO_LIMB_BITS);
+                let a1 = slice(&val, MICRO_LIMB_BITS, 2 * MICRO_LIMB_BITS);
+                let a2 = slice(&val, 2 * MICRO_LIMB_BITS, 3 * MICRO_LIMB_BITS);
+                let a3 = slice(&val, 3 * MICRO_LIMB_BITS, 4 * MICRO_LIMB_BITS);
+                let a4 = slice(&val, 4 * MICRO_LIMB_BITS, 5 * MICRO_LIMB_BITS);
                 let a5 = {
-                    let raw = slice_bits(&val, 4 * MICRO_LIMB_BITS, 5 * MICRO_LIMB_BITS);
+                    let raw = slice(&val, 4 * MICRO_LIMB_BITS, 5 * MICRO_LIMB_BITS);
                     let shift_amt = MICRO_LIMB_BITS - (last_limb_bits % MICRO_LIMB_BITS);
                     if shift_amt == 0 {
                         raw
@@ -315,12 +311,12 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
                     }
                 };
                 [
-                    to_scalar(a0),
-                    to_scalar(a1),
-                    to_scalar(a2),
-                    to_scalar(a3),
-                    to_scalar(a4),
-                    to_scalar(a5),
+                    P::ScalarField::from(a0),
+                    P::ScalarField::from(a1),
+                    P::ScalarField::from(a2),
+                    P::ScalarField::from(a3),
+                    P::ScalarField::from(a4),
+                    P::ScalarField::from(a5),
                 ]
             };
 
@@ -334,8 +330,8 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
             let val: BigUint = limb.into();
             let mut out = [P::ScalarField::from(0u64); 6];
             for i in 0..6 {
-                let part = slice_bits(&val, i * MICRO_LIMB_BITS, (i + 1) * MICRO_LIMB_BITS);
-                out[i] = to_scalar(part);
+                let part = slice(&val, i * MICRO_LIMB_BITS, (i + 1) * MICRO_LIMB_BITS);
+                out[i] = P::ScalarField::from(part);
             }
             out
         };
@@ -345,8 +341,8 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
             let xb: BigUint = x.into();
             let mut out = [P::ScalarField::from(0u64); NUM_BINARY_LIMBS];
             for i in 0..NUM_BINARY_LIMBS {
-                let limb = slice_bits(&xb, i * NUM_LIMB_BITS, (i + 1) * NUM_LIMB_BITS);
-                out[i] = to_scalar(limb);
+                let limb = slice(&xb, i * NUM_LIMB_BITS, (i + 1) * NUM_LIMB_BITS);
+                out[i] = P::ScalarField::from(limb);
             }
             out
         };
@@ -383,7 +379,6 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
         let uint_v_cubed: BigUint = v_cubed.into();
         let uint_v_quarted: BigUint = v_quarted.into();
 
-        let limb_shift_big = BigUint::one() << num_limb_shift;
         let uint_p_x = &x_lo + (&x_hi << num_limb_shift);
         let uint_p_y = &y_lo + (&y_hi << num_limb_shift);
         let uint_z1 = z1_b.clone();
@@ -396,11 +391,11 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
             // x_lo + (x_hi << (2*NUM_LIMB_BITS))
             // Convert back assuming into fits
             // (Simplified assumption: direct BigUint -> BaseField via try_from implemented elsewhere)
-            P::BaseField::try_from(uint_p_x.clone()).unwrap()
+            P::BaseField::from(uint_p_x.clone())
         };
-        let base_p_y = P::BaseField::try_from(uint_p_y.clone()).unwrap();
-        let base_z_1 = P::BaseField::try_from(uint_z1.clone()).unwrap();
-        let base_z_2 = P::BaseField::try_from(uint_z2.clone()).unwrap();
+        let base_p_y = P::BaseField::from(uint_p_y.clone());
+        let base_z_1 = P::BaseField::from(uint_z1.clone());
+        let base_z_2 = P::BaseField::from(uint_z2.clone());
 
         // Construct bigfield representations of P.x and P.y
         let [p_x_0, p_x_1] = split_wide_limb_into_2_limbs(ultra_op.x_lo);
@@ -480,10 +475,8 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
                 * shift_1;
 
         // Low bits have to be zero
-        //TODO FLORIN
-        // debug_assert!(
-        //     slice_bits(&BigUint::from(low_wide_relation_limb), 0, 2 * NUM_LIMB_BITS).is_zero()
-        // );
+        //TODO FLORIN necessary?
+        debug_assert!(slice(&low_wide_relation_limb.into(), 0, 2 * NUM_LIMB_BITS).is_zero());
 
         let low_wide_relation_limb_divided = low_wide_relation_limb * shift_2_inverse;
 
@@ -532,15 +525,8 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
                 * shift_1;
 
         // Check that the results lower 136 bits are zero
-        //TODO FLORIN
-        // debug_assert!(
-        //     slice_bits(
-        //         &BigUint::from(high_wide_relation_limb),
-        //         0,
-        //         2 * NUM_LIMB_BITS
-        //     )
-        //     .is_zero()
-        // );
+        //TODO FLORIN necessary?
+        debug_assert!(slice(&high_wide_relation_limb.into(), 0, 2 * NUM_LIMB_BITS).is_zero());
 
         // Get divided version
         let high_wide_relation_limb_divided = high_wide_relation_limb * shift_2_inverse;
@@ -841,14 +827,14 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
 
         // Check that all the wires are filled equally
         // TODO FLORIN DO WE WANT TO DO THIS?
-        // for (i, wire) in self.wires.iter().enumerate() {
-        //     debug_assert!(
-        //         wire.len() == self.num_gates,
-        //         "wire {i} len {} != {}",
-        //         wire.len(),
-        //         self.num_gates
-        //     );
-        // }
+        for (i, wire) in self.wires.iter().enumerate() {
+            debug_assert!(
+                wire.len() == self.num_gates,
+                "wire {i} len {} != {}",
+                wire.len(),
+                self.num_gates
+            );
+        }
     }
 }
 
@@ -1000,4 +986,273 @@ impl<P: HonkCurve<TranscriptFieldType>> AccumulationInput<P> {
             relation_wide_microlimbs: [[zero; NUM_MICRO_LIMBS]; 2],
         }
     }
+}
+
+pub fn construct_pk_from_builder<C: HonkCurve<TranscriptFieldType>>(
+    circuit: TranslatorBuilder<C>,
+) -> Polynomials<C::ScalarField, TranslatorFlavour> {
+    let mini_circuit_dyadic_size = TranslatorFlavour::MINI_CIRCUIT_SIZE;
+    // The actual circuit size is several times bigger than the trace in the circuit, because we use interleaving
+    // to bring the degree of relations down, while extending the length.
+
+    let dyadic_circuit_size = mini_circuit_dyadic_size * TranslatorFlavour::INTERLEAVING_GROUP_SIZE;
+    // Check that the Translator Circuit does not exceed the fixed upper bound, the current value amounts to
+    // a number of EccOps sufficient for 10 rounds of folding (so 20 circuits)
+    if circuit.num_gates > TranslatorFlavour::MINI_CIRCUIT_SIZE {
+        panic!(
+            "The Translator circuit size has exceeded the fixed upper bound ({} > {})",
+            circuit.num_gates,
+            TranslatorFlavour::MINI_CIRCUIT_SIZE
+        );
+    }
+
+    let circuit_size = 1 << TranslatorFlavour::CONST_TRANSLATOR_LOG_N;
+    let mut polys = Polynomials::<C::ScalarField, TranslatorFlavour>::new(circuit_size); //TODO FLORIN: maybe we need something else here
+
+    // Populate the wire polynomials from the wire vectors in the circuit
+    for (wire_poly, wire_indices) in polys
+        .witness
+        .get_wires_mut()
+        .iter_mut()
+        .zip(circuit.wires.iter())
+    {
+        // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1383)
+        for i in 0..circuit.num_gates {
+            let var_idx = wire_indices[i] as usize;
+            let value = circuit.variables[var_idx];
+            wire_poly[i] = value;
+        }
+    }
+
+    // First and last lagrange polynomials (in the full circuit size)
+    polys.precomputed.lagrange_first_mut()[0] = C::ScalarField::one();
+    polys.precomputed.lagrange_real_last_mut()[dyadic_circuit_size - 1] = C::ScalarField::one();
+    polys.precomputed.lagrange_last_mut()[dyadic_circuit_size - 1] = C::ScalarField::one();
+
+    // Construct polynomials with odd and even indices set to 1 up to the minicircuit margin + lagrange
+    // polynomials at second and second to last indices in the minicircuit
+    {
+        for i in (2..mini_circuit_dyadic_size).step_by(2) {
+            polys.precomputed.lagrange_even_in_minicircuit_mut()[i] = C::ScalarField::one();
+            if i + 1 < mini_circuit_dyadic_size {
+                polys.precomputed.lagrange_odd_in_minicircuit_mut()[i + 1] = C::ScalarField::one();
+            }
+        }
+        polys.precomputed.lagrange_result_row_mut()[2] = C::ScalarField::one();
+        polys.precomputed.lagrange_last_in_minicircuit_mut()[mini_circuit_dyadic_size - 1] =
+            C::ScalarField::one();
+    }
+    // Construct the extra range constraint numerator which contains all the additional values in the ordered range
+    // constraints not present in the interleaved polynomials
+    // NB this will always have a fixed size unless we change the allowed range
+    {
+        let extra_range_constraint_numerator = polys
+            .precomputed
+            .ordered_extra_range_constraints_numerator_mut();
+
+        const MAX_VALUE: u32 = (1u32 << MICRO_LIMB_BITS) - 1;
+
+        // Calculate how many elements there are in the sequence MAX_VALUE, MAX_VALUE - 3,...,0
+        let sort_step = TranslatorFlavour::SORT_STEP as u32;
+        let sorted_elements_count =
+            (MAX_VALUE / sort_step) as usize + 1 + if MAX_VALUE % sort_step == 0 { 0 } else { 1 };
+
+        // Check that we can fit every element in the polynomial
+        assert!(
+            (TranslatorFlavour::NUM_INTERLEAVED_WIRES + 1) * sorted_elements_count
+                < extra_range_constraint_numerator.len()
+        ); //TODO FLORIN ASSERT
+
+        let mut sorted_elements = vec![0usize; sorted_elements_count];
+
+        // Calculate the sequence in integers
+        sorted_elements[0] = MAX_VALUE as usize;
+        for (i, elem) in sorted_elements.iter_mut().enumerate().skip(1) {
+            *elem = (sorted_elements_count - 1 - i) * TranslatorFlavour::SORT_STEP;
+        }
+
+        // AZTEC TODO(#756): can be parallelized further. This will use at most 5 threads
+        // Fill polynomials with a sequence, where each element is repeated NUM_INTERLEAVED_WIRES+1 times
+        let interleaved_span = TranslatorFlavour::NUM_INTERLEAVED_WIRES + 1;
+        for shift in 0..interleaved_span {
+            for i in 0..sorted_elements_count {
+                extra_range_constraint_numerator[shift + i * interleaved_span] =
+                    C::ScalarField::from(sorted_elements[i] as u64);
+            }
+        }
+
+        // Construct the polynomials resulted from interleaving the small polynomials in each group
+        {
+            // The vector of groups of polynomials to be interleaved
+            let interleaved = polys.witness.get_groups_to_be_interleaved().to_owned();
+            // Resulting interleaved polynomials
+            //TODO FLORIN SIZES
+            let mut targets = [
+                Polynomial::<C::ScalarField>::new_zero(1),
+                Polynomial::<C::ScalarField>::new_zero(1),
+                Polynomial::<C::ScalarField>::new_zero(1),
+                Polynomial::<C::ScalarField>::new_zero(1),
+            ];
+
+            let num_polys_in_group = interleaved[0].len();
+            assert!(num_polys_in_group == TranslatorFlavour::INTERLEAVING_GROUP_SIZE);
+
+            // Targets have to be full-sized proving_key->polynomials. We can compute the mini circuit size from them by
+            // dividing by the number of polynomials in the group
+            let mini_circuit_size = targets[0].len() / num_polys_in_group;
+            assert!(mini_circuit_size * num_polys_in_group == targets[0].len()); // TODO FLORIN ASSERT
+
+            for index in 0..(interleaved.len() * num_polys_in_group) {
+                // Get the index of the interleaved polynomial
+                let i = index / interleaved[0].len();
+                // Get the index of the original polynomial
+                let j = index % interleaved[0].len();
+                let group = &interleaved[i];
+
+                // Copy into appropriate position in the interleaved polynomial
+                // We offset by start_index() as the first 0 is not physically represented for shiftable values
+                // TODO FLORIN: CHECK START AND END HERE
+                let start = 0; //group[j].start_index();
+                let end = group[j].len();
+                for k in start..end {
+                    targets[i][k * num_polys_in_group + j] = group[j][k];
+                }
+            }
+
+            for (src, des) in targets
+                .iter()
+                .zip(polys.witness.get_interleaved_mut().iter_mut())
+            {
+                *des = src.to_owned();
+            }
+        }
+        // Construct the ordered polynomials, containing the values of the interleaved polynomials + enough values to
+        // bridge the range from 0 to 3 (3 is the maximum allowed range defined by the range constraint).
+        {
+            // Get constants
+            let sort_step = TranslatorFlavour::SORT_STEP;
+            let num_interleaved_wires = TranslatorFlavour::NUM_INTERLEAVED_WIRES;
+
+            let mini_num_disabled_rows_in_sumcheck = 0usize;
+            let full_num_disabled_rows_in_sumcheck = 0usize;
+            let real_circuit_size = dyadic_circuit_size - full_num_disabled_rows_in_sumcheck;
+
+            // The value we have to end polynomials with, 2¹⁴ - 1
+            let max_value: u32 = (1u32 << MICRO_LIMB_BITS) - 1;
+
+            // Number of elements needed to go from 0 to MAX_VALUE with our step
+            let sorted_elements_count = (max_value as usize / sort_step)
+                + 1
+                + if (max_value as usize) % sort_step == 0 {
+                    0
+                } else {
+                    1
+                };
+
+            // Check if we can construct these polynomials
+            assert!((num_interleaved_wires + 1) * sorted_elements_count < real_circuit_size); //TODO FLORIN ASSERT
+
+            // First use integers (easier to sort)
+            let mut sorted_elements = vec![0usize; sorted_elements_count];
+
+            // Fill with necessary steps
+            sorted_elements[0] = max_value as usize;
+            for i in 1..sorted_elements_count {
+                sorted_elements[i] = (sorted_elements_count - 1 - i) * sort_step;
+            }
+            // let to_be_interleaved_groups = polys.witness.get_groups_to_be_interleaved().clone();
+
+            let mut extra_denominator_uint = vec![0usize; real_circuit_size];
+
+            // Given the polynomials in group_i, transfer their elements, sorted in non-descending order, into the corresponding
+            // ordered_range_constraint_i up to the given capacity and the remaining elements to the last range constraint.
+            // Sorting is done by converting the elements to uint for efficiency.
+            for i in 0..num_interleaved_wires {
+                let group = polys.witness.get_groups_to_be_interleaved()[i];
+                let mut ordered_vectors_uint = vec![0u32; real_circuit_size];
+
+                // Calculate how much space there is for values from the group polynomials given we also need to append the
+                // additional steps
+                let free_space_before_runway = real_circuit_size - sorted_elements_count;
+
+                // Calculate the starting index of this group's overflowing elements in the extra denominator polynomial
+                let mut extra_denominator_offset = i * sorted_elements_count;
+
+                // Go through each polynomial in the interleaved group
+                for j in 0..TranslatorFlavour::INTERLEAVING_GROUP_SIZE {
+                    // Calculate the offset in the target vector
+                    let current_offset =
+                        j * (mini_circuit_dyadic_size - mini_num_disabled_rows_in_sumcheck);
+
+                    let start = 0usize;
+                    let end = group[j].len() - mini_num_disabled_rows_in_sumcheck;
+
+                    // For each element in the polynomial
+                    for k in start..end {
+                        let val_big = group[j][k].into_bigint();
+                        let limb0 = val_big.as_ref()[0] as u32;
+
+                        // Put it it the target polynomial
+                        if (current_offset + k) < free_space_before_runway {
+                            ordered_vectors_uint[current_offset + k] = limb0;
+
+                        // Or in the extra one if there is no space left
+                        } else {
+                            extra_denominator_uint[extra_denominator_offset] = limb0 as usize;
+                            extra_denominator_offset += 1;
+                        }
+                    }
+                }
+                // Advance the iterator past the last written element in the range constraint polynomial and complete it with
+                // sorted steps
+                for (dst, src) in ordered_vectors_uint
+                    [free_space_before_runway..free_space_before_runway + sorted_elements_count]
+                    .iter_mut()
+                    .zip(sorted_elements.iter())
+                {
+                    *dst = *src as u32;
+                }
+
+                // Sort the polynomial in nondescending order. We sort using the size_t vector for 2 reasons:
+                // 1. It is faster to sort size_t
+                // 2. Comparison operators for finite fields are operating on internal form, so we'd have to convert them
+                // from Montgomery
+                ordered_vectors_uint.sort_unstable();
+                assert!(ordered_vectors_uint.len() == real_circuit_size);
+                // Copy the values into the actual polynomial
+                for (idx, v) in ordered_vectors_uint.iter().enumerate() {
+                    polys.witness.get_ordered_range_constraints_mut()[i][idx] =
+                        C::ScalarField::from(*v as u64);
+                }
+            }
+
+            // Construct the first 4 polynomials
+            // parallel_for(num_interleaved_wires, ordering_function);
+
+            // Advance the iterator into the extra range constraint past the last written element
+            let extra_offset = num_interleaved_wires * sorted_elements_count;
+
+            // Add steps to the extra denominator polynomial to fill it
+            for (dst, src) in extra_denominator_uint
+                [extra_offset..extra_offset + sorted_elements_count]
+                .iter_mut()
+                .zip(sorted_elements.iter())
+            {
+                *dst = *src;
+            }
+
+            assert!(extra_denominator_uint.len() == real_circuit_size);
+            // Sort it
+            extra_denominator_uint.sort_unstable();
+            assert!(extra_denominator_uint.len() == real_circuit_size);
+
+            // Copy the values into the actual polynomial
+            let poly4 = polys.witness.ordered_range_constraints_4_mut();
+            for (i, v) in extra_denominator_uint.iter().enumerate() {
+                poly4[i] = C::ScalarField::from(*v as u64);
+            }
+        }
+    }
+
+    polys
 }

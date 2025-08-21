@@ -13,9 +13,15 @@ use std::fmt::Debug;
 #[derive(Default)]
 pub struct TranslatorFlavour {}
 impl TranslatorFlavour {
+    //TODO FLORIN ADD DESCRIPTION
     pub const NUM_LIMB_BITS: usize = 68;
     pub const RESULT_ROW: usize = 2;
     pub const CONST_TRANSLATOR_LOG_N: usize = 18;
+    pub const LOG_MINI_CIRCUIT_SIZE: usize = 14;
+    pub const MINI_CIRCUIT_SIZE: usize = 1 << Self::LOG_MINI_CIRCUIT_SIZE;
+    pub const INTERLEAVING_GROUP_SIZE: usize = 16;
+    pub const SORT_STEP: usize = 3;
+    pub const NUM_INTERLEAVED_WIRES: usize = 4;
 
     pub fn wire_to_be_shifted_labels() -> &'static [&'static str] {
         &[
@@ -478,24 +484,44 @@ impl<T: Default> TranslatorPrecomputedEntities<T> {
     pub fn ordered_extra_range_constraints_numerator(&self) -> &T {
         &self.elements[TranslatorFlavour::ORDERED_EXTRA_RANGE_CONSTRAINTS_NUMERATOR]
     }
-
+    pub fn ordered_extra_range_constraints_numerator_mut(&mut self) -> &mut T {
+        &mut self.elements[TranslatorFlavour::ORDERED_EXTRA_RANGE_CONSTRAINTS_NUMERATOR]
+    }
     pub fn lagrange_odd_in_minicircuit(&self) -> &T {
         &self.elements[TranslatorFlavour::LAGRANGE_ODD_IN_MINICIRCUIT]
+    }
+    pub fn lagrange_odd_in_minicircuit_mut(&mut self) -> &mut T {
+        &mut self.elements[TranslatorFlavour::LAGRANGE_ODD_IN_MINICIRCUIT]
     }
     pub fn lagrange_even_in_minicircuit(&self) -> &T {
         &self.elements[TranslatorFlavour::LAGRANGE_EVEN_IN_MINICIRCUIT]
     }
+    pub fn lagrange_even_in_minicircuit_mut(&mut self) -> &mut T {
+        &mut self.elements[TranslatorFlavour::LAGRANGE_EVEN_IN_MINICIRCUIT]
+    }
     pub fn lagrange_result_row(&self) -> &T {
         &self.elements[TranslatorFlavour::LAGRANGE_RESULT_ROW]
+    }
+    pub fn lagrange_result_row_mut(&mut self) -> &mut T {
+        &mut self.elements[TranslatorFlavour::LAGRANGE_RESULT_ROW]
     }
     pub fn lagrange_last_in_minicircuit(&self) -> &T {
         &self.elements[TranslatorFlavour::LAGRANGE_LAST_IN_MINICIRCUIT]
     }
+    pub fn lagrange_last_in_minicircuit_mut(&mut self) -> &mut T {
+        &mut self.elements[TranslatorFlavour::LAGRANGE_LAST_IN_MINICIRCUIT]
+    }
     pub fn lagrange_masking(&self) -> &T {
         &self.elements[TranslatorFlavour::LAGRANGE_MASKING]
     }
+    pub fn lagrange_masking_mut(&mut self) -> &mut T {
+        &mut self.elements[TranslatorFlavour::LAGRANGE_MASKING]
+    }
     pub fn lagrange_real_last(&self) -> &T {
         &self.elements[TranslatorFlavour::LAGRANGE_REAL_LAST]
+    }
+    pub fn lagrange_real_last_mut(&mut self) -> &mut T {
+        &mut self.elements[TranslatorFlavour::LAGRANGE_REAL_LAST]
     }
 }
 
@@ -562,6 +588,30 @@ impl<T: Default> TranslatorProverWitnessEntities<T> {
     }
     pub fn ordered_range_constraints_4(&self) -> &T {
         &self.elements[TranslatorFlavour::ORDERED_RANGE_CONSTRAINTS_4]
+    }
+    pub fn ordered_range_constraints_0_mut(&mut self) -> &mut T {
+        &mut self.elements[TranslatorFlavour::ORDERED_RANGE_CONSTRAINTS_0]
+    }
+    pub fn ordered_range_constraints_1_mut(&mut self) -> &mut T {
+        &mut self.elements[TranslatorFlavour::ORDERED_RANGE_CONSTRAINTS_1]
+    }
+    pub fn ordered_range_constraints_2_mut(&mut self) -> &mut T {
+        &mut self.elements[TranslatorFlavour::ORDERED_RANGE_CONSTRAINTS_2]
+    }
+    pub fn ordered_range_constraints_3_mut(&mut self) -> &mut T {
+        &mut self.elements[TranslatorFlavour::ORDERED_RANGE_CONSTRAINTS_3]
+    }
+    pub fn ordered_range_constraints_4_mut(&mut self) -> &mut T {
+        &mut self.elements[TranslatorFlavour::ORDERED_RANGE_CONSTRAINTS_4]
+    }
+    pub fn get_interleaved(&self) -> &[T] {
+        todo!("Implement get_interleaved for TranslatorProverWitnessEntities")
+    }
+    pub fn get_interleaved_mut(&mut self) -> &mut [T] {
+        todo!("Implement get_interleaved for TranslatorProverWitnessEntities")
+    }
+    pub fn get_groups_to_be_interleaved(&self) -> &[&[T]] {
+        todo!("Implement get_interleaved for TranslatorProverWitnessEntities")
     }
 }
 
