@@ -59,8 +59,103 @@ pub(crate) struct TranslatorDecompositionRelationAcc<F: PrimeField> {
 }
 
 impl<F: PrimeField> TranslatorDecompositionRelationAcc<F> {
-    pub(crate) fn scale(&mut self, elements: &[F]) {
-        todo!()
+    pub(crate) fn scale(&mut self, current_scalar: &mut F, challenge: &F) {
+        self.r0 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r1 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r2 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r3 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r4 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r5 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r6 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r7 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r8 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r9 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r10 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r11 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r12 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r13 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r14 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r15 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r16 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r17 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r18 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r19 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r20 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r21 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r22 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r23 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r24 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r25 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r26 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r27 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r28 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r29 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r30 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r31 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r32 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r33 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r34 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r35 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r36 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r37 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r38 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r39 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r40 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r41 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r42 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r43 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r44 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r45 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r46 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r47 *= *current_scalar;
+        *current_scalar *= challenge;
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(
@@ -75,15 +170,298 @@ impl<F: PrimeField> TranslatorDecompositionRelationAcc<F> {
             partial_evaluation_result,
             true,
         );
+        self.r1.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r2.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r3.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r4.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r5.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r6.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r7.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r8.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r9.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r10.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r11.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r12.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r13.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r14.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r15.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r16.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r17.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r18.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r19.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r20.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r21.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r22.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r23.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r24.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r25.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r26.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r27.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r28.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r29.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r30.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r31.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r32.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r33.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r34.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r35.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r36.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r37.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r38.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r39.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r40.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r41.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r42.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r43.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r44.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r45.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r46.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
+        self.r47.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
     }
 
     pub(crate) fn extend_and_batch_univariates_with_distinct_challenges<const SIZE: usize>(
         &self,
-        result: &mut Univariate<F, SIZE>,
-        running_challenge: &[Univariate<F, SIZE>],
+        _result: &mut Univariate<F, SIZE>,
+        _running_challenge: &[Univariate<F, SIZE>],
     ) {
-        self.r0
-            .extend_and_batch_univariates(result, &running_challenge[0], &F::ONE, true);
+        panic!(
+            "TranslatorFlavour should not need extend_and_batch_univariates_with_distinct_challenges"
+        );
     }
 }
 
@@ -141,7 +519,7 @@ pub(crate) struct TranslatorDecompositionRelationEvals<F: PrimeField> {
 
 impl<F: PrimeField> TranslatorDecompositionRelationEvals<F> {
     pub(crate) fn scale_and_batch_elements(&self, running_challenge: &[F], result: &mut F) {
-        todo!()
+        todo!("Implement Sumcheck Verifier for TranslatorFlavour");
     }
 
     pub(crate) fn scale_by_challenge_and_accumulate(
@@ -150,7 +528,7 @@ impl<F: PrimeField> TranslatorDecompositionRelationEvals<F> {
         _linearly_dependent_contribution: &mut F,
         running_challenge: &[F],
     ) {
-        todo!()
+        todo!("Implement Sumcheck Verifier for TranslatorFlavour");
     }
 }
 

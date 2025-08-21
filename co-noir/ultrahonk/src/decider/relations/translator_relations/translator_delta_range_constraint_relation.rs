@@ -29,8 +29,27 @@ pub(crate) struct TranslatorDeltaRangeConstraintRelationAcc<F: PrimeField> {
 }
 
 impl<F: PrimeField> TranslatorDeltaRangeConstraintRelationAcc<F> {
-    pub(crate) fn scale(&mut self, elements: &[F]) {
-        todo!()
+    pub(crate) fn scale(&mut self, current_scalar: &mut F, challenge: &F) {
+        self.r0 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r1 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r2 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r3 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r4 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r5 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r6 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r7 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r8 *= *current_scalar;
+        *current_scalar *= challenge;
+        self.r9 *= *current_scalar;
+        *current_scalar *= challenge;
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(
@@ -90,6 +109,18 @@ impl<F: PrimeField> TranslatorDeltaRangeConstraintRelationAcc<F> {
             partial_evaluation_result,
             true,
         );
+        self.r8.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            true,
+        );
+        self.r9.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            true,
+        );
     }
 
     pub(crate) fn extend_and_batch_univariates_with_distinct_challenges<const SIZE: usize>(
@@ -97,17 +128,9 @@ impl<F: PrimeField> TranslatorDeltaRangeConstraintRelationAcc<F> {
         result: &mut Univariate<F, SIZE>,
         running_challenge: &[Univariate<F, SIZE>],
     ) {
-        self.r0
-            .extend_and_batch_univariates(result, &running_challenge[0], &F::ONE, true);
-
-        self.r1
-            .extend_and_batch_univariates(result, &running_challenge[1], &F::ONE, true);
-
-        self.r2
-            .extend_and_batch_univariates(result, &running_challenge[2], &F::ONE, true);
-
-        self.r3
-            .extend_and_batch_univariates(result, &running_challenge[3], &F::ONE, true);
+        panic!(
+            "TranslatorFlavour should not need extend_and_batch_univariates_with_distinct_challenges"
+        );
     }
 }
 
@@ -127,7 +150,7 @@ pub(crate) struct TranslatorDeltaRangeConstraintRelationEvals<F: PrimeField> {
 
 impl<F: PrimeField> TranslatorDeltaRangeConstraintRelationEvals<F> {
     pub(crate) fn scale_and_batch_elements(&self, running_challenge: &[F], result: &mut F) {
-        todo!()
+        todo!("Implement Sumcheck Verifier for TranslatorFlavour");
     }
 
     pub(crate) fn scale_by_challenge_and_accumulate(
@@ -136,7 +159,7 @@ impl<F: PrimeField> TranslatorDeltaRangeConstraintRelationEvals<F> {
         _linearly_dependent_contribution: &mut F,
         running_challenge: &[F],
     ) {
-        todo!()
+        todo!("Implement Sumcheck Verifier for TranslatorFlavour");
     }
 }
 
