@@ -79,7 +79,7 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
         public_values.to_vec()
     }
 
-    fn local_mul_vec(
+    fn local_mul_many(
         a: Vec<Self::ArithmeticShare>,
         b: Vec<Self::ArithmeticShare>,
         _: &mut Self::State,

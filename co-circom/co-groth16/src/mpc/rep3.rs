@@ -83,12 +83,12 @@ impl<P: Pairing> CircomGroth16Prover<P> for Rep3Groth16Driver {
             .collect()
     }
 
-    fn local_mul_vec(
+    fn local_mul_many(
         a: Vec<Self::ArithmeticShare>,
         b: Vec<Self::ArithmeticShare>,
         state: &mut Self::State,
     ) -> Vec<P::ScalarField> {
-        arithmetic::local_mul_vec(&a, &b, state)
+        arithmetic::local_mul_many(&a, &b, state)
     }
 
     fn distribute_powers_and_mul_by_const(
