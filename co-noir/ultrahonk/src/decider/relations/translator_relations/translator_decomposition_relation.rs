@@ -453,19 +453,10 @@ impl<F: PrimeField> TranslatorDecompositionRelationAcc<F> {
             false,
         );
     }
-
-    pub(crate) fn extend_and_batch_univariates_with_distinct_challenges<const SIZE: usize>(
-        &self,
-        _result: &mut Univariate<F, SIZE>,
-        _running_challenge: &[Univariate<F, SIZE>],
-    ) {
-        panic!(
-            "TranslatorFlavour should not need extend_and_batch_univariates_with_distinct_challenges"
-        );
-    }
 }
 
 #[derive(Clone, Debug, Default)]
+#[expect(dead_code)]
 pub(crate) struct TranslatorDecompositionRelationEvals<F: PrimeField> {
     pub(crate) r0: F,
     pub(crate) r1: F,
@@ -517,21 +508,6 @@ pub(crate) struct TranslatorDecompositionRelationEvals<F: PrimeField> {
     pub(crate) r47: F,
 }
 
-impl<F: PrimeField> TranslatorDecompositionRelationEvals<F> {
-    pub(crate) fn scale_and_batch_elements(&self, running_challenge: &[F], result: &mut F) {
-        todo!("Implement Sumcheck Verifier for TranslatorFlavour");
-    }
-
-    pub(crate) fn scale_by_challenge_and_accumulate(
-        &self,
-        linearly_independent_contribution: &mut F,
-        _linearly_dependent_contribution: &mut F,
-        running_challenge: &[F],
-    ) {
-        todo!("Implement Sumcheck Verifier for TranslatorFlavour");
-    }
-}
-
 pub(crate) struct TranslatorDecompositionRelation {}
 
 impl TranslatorDecompositionRelation {
@@ -570,7 +546,7 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
     fn accumulate<const SIZE: usize>(
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesSized<F, TranslatorFlavour, SIZE>,
-        relation_parameters: &crate::prelude::RelationParameters<F>,
+        _relation_parameters: &crate::prelude::RelationParameters<F>,
         scaling_factor: &F,
     ) {
         tracing::trace!("Accumulate TranslatorDecompositionRelation");
@@ -579,7 +555,7 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
         const NUM_MICRO_LIMB_BITS: usize = 14; // Number of bits in a standard limb used for bigfield operations
 
         // Value to multiply an element by to perform an appropriate shift
-        let LIMB_SHIFT: F = (BigUint::one() << NUM_LIMB_BITS).into();
+        let limb_shift: F = (BigUint::one() << NUM_LIMB_BITS).into();
 
         // Values to multiply an element by to perform an appropriate shift
         let micro_limb_shift: F = (BigUint::one() << NUM_MICRO_LIMB_BITS).into();
@@ -1393,7 +1369,7 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
         // Contributions where we decompose initial EccOpQueue values into 68-bit limbs
 
         // Contribution 43, decompose x_lo
-        let mut tmp_43 = (p_x_low_limbs_shift.to_owned() * LIMB_SHIFT + p_x_low_limbs) - x_lo_y_hi;
+        let mut tmp_43 = (p_x_low_limbs_shift.to_owned() * limb_shift + p_x_low_limbs) - x_lo_y_hi;
         tmp_43 *= lagrange_even_in_minicircuit;
         tmp_43 *= scaling_factor;
         for i in 0..univariate_accumulator.r42.evaluations.len() {
@@ -1401,14 +1377,14 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
         }
 
         // Contribution 44, decompose x_hi
-        let mut tmp_44 = (p_x_high_limbs_shift.to_owned() * LIMB_SHIFT + p_x_high_limbs) - x_hi_z_1;
+        let mut tmp_44 = (p_x_high_limbs_shift.to_owned() * limb_shift + p_x_high_limbs) - x_hi_z_1;
         tmp_44 *= lagrange_even_in_minicircuit;
         tmp_44 *= scaling_factor;
         for i in 0..univariate_accumulator.r43.evaluations.len() {
             univariate_accumulator.r43.evaluations[i] += tmp_44.evaluations[i];
         }
         // Contribution 45, decompose y_lo
-        let mut tmp_45 = (p_y_low_limbs_shift.to_owned() * LIMB_SHIFT + p_y_low_limbs) - y_lo_z_2;
+        let mut tmp_45 = (p_y_low_limbs_shift.to_owned() * limb_shift + p_y_low_limbs) - y_lo_z_2;
         tmp_45 *= lagrange_even_in_minicircuit;
         tmp_45 *= scaling_factor;
         for i in 0..univariate_accumulator.r44.evaluations.len() {
@@ -1417,7 +1393,7 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
 
         // Contribution 46, decompose y_hi
         let mut tmp_46 =
-            (p_y_high_limbs_shift.to_owned() * LIMB_SHIFT + p_y_high_limbs) - x_lo_y_hi_shift;
+            (p_y_high_limbs_shift.to_owned() * limb_shift + p_y_high_limbs) - x_lo_y_hi_shift;
         tmp_46 *= lagrange_even_in_minicircuit;
         tmp_46 *= scaling_factor;
         for i in 0..univariate_accumulator.r45.evaluations.len() {
@@ -1425,7 +1401,7 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
         }
 
         // Contribution 47, decompose z1
-        let mut tmp_47 = (z_high_limbs.to_owned() * LIMB_SHIFT + z_low_limbs) - x_hi_z_1_shift;
+        let mut tmp_47 = (z_high_limbs.to_owned() * limb_shift + z_low_limbs) - x_hi_z_1_shift;
         tmp_47 *= lagrange_even_in_minicircuit;
         tmp_47 *= scaling_factor;
         for i in 0..univariate_accumulator.r46.evaluations.len() {
@@ -1434,20 +1410,11 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
 
         // Contribution 48, decompose z2
         let mut tmp_48 =
-            (z_high_limbs_shift.to_owned() * LIMB_SHIFT + z_low_limbs_shift) - y_lo_z_2_shift;
+            (z_high_limbs_shift.to_owned() * limb_shift + z_low_limbs_shift) - y_lo_z_2_shift;
         tmp_48 *= lagrange_even_in_minicircuit;
         tmp_48 *= scaling_factor;
         for i in 0..univariate_accumulator.r47.evaluations.len() {
             univariate_accumulator.r47.evaluations[i] += tmp_48.evaluations[i];
         }
-    }
-
-    fn verify_accumulate(
-        univariate_accumulator: &mut Self::VerifyAcc,
-        input: &crate::prelude::ClaimedEvaluations<F, TranslatorFlavour>,
-        relation_parameters: &crate::prelude::RelationParameters<F>,
-        scaling_factor: &F,
-    ) {
-        todo!()
     }
 }

@@ -1,18 +1,8 @@
 use crate::decider::relations::Relation;
 use crate::decider::types::ProverUnivariatesSized;
-use crate::plain_prover_flavour::UnivariateTrait;
-use crate::{
-    decider::{
-        types::{ClaimedEvaluations, RelationParameters},
-        univariate::Univariate,
-    },
-    plain_prover_flavour::PlainProverFlavour,
-};
+use crate::decider::{types::RelationParameters, univariate::Univariate};
 use ark_ff::{PrimeField, Zero};
 use co_builder::flavours::translator_flavour::TranslatorFlavour;
-use co_builder::polynomials::polynomial_flavours::{
-    PrecomputedEntitiesFlavour, ShiftedWitnessEntitiesFlavour, WitnessEntitiesFlavour,
-};
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct TranslatorZeroConstraintsRelationAcc<F: PrimeField> {
@@ -605,36 +595,12 @@ impl<F: PrimeField> TranslatorZeroConstraintsRelationAcc<F> {
             false,
         );
     }
-
-    pub(crate) fn extend_and_batch_univariates_with_distinct_challenges<const SIZE: usize>(
-        &self,
-        _result: &mut Univariate<F, SIZE>,
-        _running_challenge: &[Univariate<F, SIZE>],
-    ) {
-        panic!(
-            "TranslatorFlavour should not need extend_and_batch_univariates_with_distinct_challenges"
-        );
-    }
 }
 
 #[derive(Clone, Debug, Default)]
+#[expect(dead_code)]
 pub(crate) struct TranslatorZeroConstraintsRelationEvals<F: PrimeField> {
     pub(crate) r0: F,
-}
-
-impl<F: PrimeField> TranslatorZeroConstraintsRelationEvals<F> {
-    pub(crate) fn scale_and_batch_elements(&self, _running_challenge: &[F], result: &mut F) {
-        todo!("Implement Sumcheck Verifier for TranslatorFlavour");
-    }
-
-    pub(crate) fn scale_by_challenge_and_accumulate(
-        &self,
-        _linearly_independent_contribution: &mut F,
-        _linearly_dependent_contribution: &mut F,
-        _running_challenge: &[F],
-    ) {
-        todo!("Implement Sumcheck Verifier for TranslatorFlavour");
-    }
 }
 
 pub(crate) struct TranslatorZeroConstraintsRelation {}
@@ -668,7 +634,7 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorZeroConstraints
     fn accumulate<const SIZE: usize>(
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesSized<F, TranslatorFlavour, SIZE>,
-        relation_parameters: &RelationParameters<F>,
+        _relation_parameters: &RelationParameters<F>,
         scaling_factor: &F,
     ) {
         let minus_one = -F::one();
@@ -1184,23 +1150,5 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorZeroConstraints
         for i in 0..univariate_accumulator.r63.evaluations.len() {
             univariate_accumulator.r63.evaluations[i] += tmp.evaluations[i];
         }
-    }
-
-    fn verify_accumulate(
-        univariate_accumulator: &mut Self::VerifyAcc,
-        input: &ClaimedEvaluations<F, TranslatorFlavour>,
-        _relation_parameters: &RelationParameters<F>,
-        scaling_factor: &F,
-    ) {
-        todo!()
-    }
-
-    fn accumulate_with_extended_parameters<const SIZE: usize>(
-        univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariatesSized<F, TranslatorFlavour, SIZE>,
-        _relation_parameters: &RelationParameters<Univariate<F, SIZE>>,
-        scaling_factor: &F,
-    ) {
-        todo!()
     }
 }

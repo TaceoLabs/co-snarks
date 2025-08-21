@@ -427,15 +427,6 @@ impl EccSetRelation {
             univariate_accumulator.r1.evaluations[i] += tmp.evaluations[i];
         }
     }
-
-    fn _verify_accumulate<F: PrimeField>(
-        _univariate_accumulator: &mut EccSetRelationEvals<F>,
-        _input: &crate::prelude::ClaimedEvaluations<F, ECCVMFlavour>,
-        _relation_parameters: &crate::prelude::RelationParameters<F>,
-        _scaling_factor: &F,
-    ) {
-        todo!()
-    }
 }
 
 impl<F: PrimeField> EccSetRelationAcc<F> {

@@ -1,18 +1,8 @@
 use crate::decider::relations::Relation;
 use crate::decider::types::ProverUnivariatesSized;
-use crate::plain_prover_flavour::UnivariateTrait;
-use crate::{
-    decider::{
-        types::{ClaimedEvaluations, RelationParameters},
-        univariate::Univariate,
-    },
-    plain_prover_flavour::PlainProverFlavour,
-};
-use ark_ff::{PrimeField, Zero};
+use crate::decider::{types::RelationParameters, univariate::Univariate};
+use ark_ff::PrimeField;
 use co_builder::flavours::translator_flavour::TranslatorFlavour;
-use co_builder::polynomials::polynomial_flavours::{
-    PrecomputedEntitiesFlavour, ShiftedWitnessEntitiesFlavour, WitnessEntitiesFlavour,
-};
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct TranslatorOpCodeConstraintRelationAcc<F: PrimeField> {
@@ -38,36 +28,12 @@ impl<F: PrimeField> TranslatorOpCodeConstraintRelationAcc<F> {
             true,
         );
     }
-
-    pub(crate) fn extend_and_batch_univariates_with_distinct_challenges<const SIZE: usize>(
-        &self,
-        result: &mut Univariate<F, SIZE>,
-        running_challenge: &[Univariate<F, SIZE>],
-    ) {
-        panic!(
-            "TranslatorFlavour should not need extend_and_batch_univariates_with_distinct_challenges"
-        );
-    }
 }
 
 #[derive(Clone, Debug, Default)]
+#[expect(dead_code)]
 pub(crate) struct TranslatorOpCodeConstraintRelationEvals<F: PrimeField> {
     pub(crate) r0: F,
-}
-
-impl<F: PrimeField> TranslatorOpCodeConstraintRelationEvals<F> {
-    pub(crate) fn scale_and_batch_elements(&self, running_challenge: &[F], result: &mut F) {
-        todo!("Implement Sumcheck Verifier for TranslatorFlavour");
-    }
-
-    pub(crate) fn scale_by_challenge_and_accumulate(
-        &self,
-        linearly_independent_contribution: &mut F,
-        _linearly_dependent_contribution: &mut F,
-        running_challenge: &[F],
-    ) {
-        todo!("Implement Sumcheck Verifier for TranslatorFlavour");
-    }
 }
 
 pub(crate) struct TranslatorOpCodeConstraintRelation {}
@@ -120,23 +86,5 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorOpCodeConstrain
         for i in 0..univariate_accumulator.r0.evaluations.len() {
             univariate_accumulator.r0.evaluations[i] += tmp_1.evaluations[i];
         }
-    }
-
-    fn verify_accumulate(
-        univariate_accumulator: &mut Self::VerifyAcc,
-        input: &ClaimedEvaluations<F, TranslatorFlavour>,
-        _relation_parameters: &RelationParameters<F>,
-        scaling_factor: &F,
-    ) {
-        todo!()
-    }
-
-    fn accumulate_with_extended_parameters<const SIZE: usize>(
-        univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariatesSized<F, TranslatorFlavour, SIZE>,
-        _relation_parameters: &RelationParameters<Univariate<F, SIZE>>,
-        scaling_factor: &F,
-    ) {
-        todo!()
     }
 }
