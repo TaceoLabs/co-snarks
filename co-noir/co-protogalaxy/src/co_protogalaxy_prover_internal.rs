@@ -343,14 +343,14 @@ pub(crate) fn extend_univariates<T: NoirUltraHonkProver<C>, C: HonkCurve<Transcr
                 .public_iter()
                 .enumerate()
                 .for_each(|(col_idx, value)| {
-                    coefficients_public[col_idx][pk_idx] = value[row_idx].clone();
+                    coefficients_public[col_idx][pk_idx] = value[row_idx];
                 });
             memory
                 .polys
                 .shared_iter()
                 .enumerate()
                 .for_each(|(col_idx, value)| {
-                    coefficients_shared[col_idx][pk_idx] = value[row_idx].clone();
+                    coefficients_shared[col_idx][pk_idx] = value[row_idx];
                 });
         });
 

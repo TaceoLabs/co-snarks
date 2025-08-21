@@ -161,7 +161,7 @@ fn test_compute_extended_relation_parameters() {
         [String; 7],
         [String; 7],
         Vec<[String; EXTENDED_LENGTH]>,
-    ) = decompress_and_read_test_data(&test_file);
+    ) = decompress_and_read_test_data(test_file);
 
     let parameters_1 = structure_parameters(to_field!(parameters_1_values, 1).try_into().unwrap());
     let parameters_2 = structure_parameters(to_field!(parameters_2_values, 1).try_into().unwrap());
@@ -458,15 +458,17 @@ fn test_compute_perturbator() {
 #[ignore = "Requires a large test file"]
 #[test]
 fn test_compute_combiner() {
-    let test_file = "unit/compute_combiner";
-
-    let (beta_products, alphas, relation_parameters, (polys_1, polys_2), combiner): (
+    type CombinerTestData = (
         Vec<String>,
         Vec<Vec<String>>,
         Vec<Vec<String>>,
         (Vec<Vec<String>>, Vec<Vec<String>>),
         Vec<String>,
-    ) = decompress_and_read_test_data(test_file);
+    );
+
+    let test_file = "unit/compute_combiner";
+
+    let (beta_products, alphas, relation_parameters, (polys_1, polys_2), combiner): CombinerTestData = decompress_and_read_test_data(test_file);
 
     let alphas = to_field!(alphas, 2)
         .into_iter()
@@ -593,6 +595,33 @@ fn test_compute_combiner() {
 
 #[test]
 fn test_protogalaxy_prover() {
+    type SavedPK = (
+        (
+            u32,
+            u32,
+            u32,
+            u32,
+            usize,
+            Vec<String>,
+            Vec<Vec<String>>,
+            Vec<u32>,
+            Vec<u32>,
+            (Vec<(usize, usize)>, Vec<usize>, usize),
+        ),
+        Vec<String>,
+    );
+
+    type FoldingResult = (
+        (
+            String,
+            Vec<String>,
+            Vec<String>,
+            Vec<String>,
+            Vec<Vec<String>>,
+        ),
+        Vec<String>,
+    );
+
     let test_file_acc = "e2e/accumulator";
     let test_file_folded = "e2e/folded_key";
     let test_file_folding_result = "e2e/folding_result";
@@ -611,21 +640,7 @@ fn test_protogalaxy_prover() {
             (ranges_1, idxs_1, current_end_1),
         ),
         _,
-    ): (
-        (
-            u32,
-            u32,
-            u32,
-            u32,
-            usize,
-            Vec<String>,
-            Vec<Vec<String>>,
-            Vec<u32>,
-            Vec<u32>,
-            (Vec<(usize, usize)>, Vec<usize>, usize),
-        ),
-        Vec<String>,
-    ) = decompress_and_read_test_data(test_file_acc);
+    ): SavedPK = decompress_and_read_test_data(test_file_acc);
 
     let (
         (
@@ -641,21 +656,7 @@ fn test_protogalaxy_prover() {
             (ranges_2, idxs_2, current_end_2),
         ),
         _,
-    ): (
-        (
-            u32,
-            u32,
-            u32,
-            u32,
-            usize,
-            Vec<String>,
-            Vec<Vec<String>>,
-            Vec<u32>,
-            Vec<u32>,
-            (Vec<(usize, usize)>, Vec<usize>, usize),
-        ),
-        Vec<String>,
-    ) = decompress_and_read_test_data(test_file_folded);
+    ): SavedPK = decompress_and_read_test_data(test_file_folded);
 
     let (
         (
@@ -666,16 +667,7 @@ fn test_protogalaxy_prover() {
             polynomials_folding_result,
         ),
         honk_proof,
-    ): (
-        (
-            String,
-            Vec<String>,
-            Vec<String>,
-            Vec<String>,
-            Vec<Vec<String>>,
-        ),
-        Vec<String>,
-    ) = decompress_and_read_test_data(test_file_folding_result);
+    ): FoldingResult = decompress_and_read_test_data(test_file_folding_result);
 
     let crs = CrsParser::<<Bn<ark_bn254::Config> as Pairing>::G1>::get_crs::<Bn254>(
         CRS_PATH_G1,
@@ -884,9 +876,9 @@ fn test_protogalaxy_prover() {
             }
         }));
     }
+    type OutData = (HonkProof<F>, F, Vec<F>, Vec<F>, Vec<F>, Vec<Vec<F>>);
 
-    let results: Vec<(HonkProof<F>, F, Vec<F>, Vec<F>, Vec<F>, Vec<Vec<F>>)> =
-        threads.into_iter().map(|t| t.join().unwrap()).collect();
+    let results: Vec<OutData> = threads.into_iter().map(|t| t.join().unwrap()).collect();
     for (proof, target_sum, alphas, relation_parameters, gate_challenges, polynomials) in
         results.into_iter()
     {

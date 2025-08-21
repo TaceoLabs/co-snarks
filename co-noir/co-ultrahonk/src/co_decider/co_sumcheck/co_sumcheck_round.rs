@@ -310,6 +310,7 @@ impl SumcheckRound {
         Ok(res)
     }
 
+    #[expect(clippy::too_many_arguments)]
     pub(crate) fn compute_univariate<
         T: NoirUltraHonkProver<P>,
         P: HonkCurve<TranscriptFieldType>,

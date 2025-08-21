@@ -40,6 +40,14 @@ pub(crate) const BATCHED_EXTENDED_LENGTH: usize =
 pub(crate) type OinkProverMemory<T, C> = co_ultrahonk::co_oink::types::ProverMemory<T, C>;
 pub(crate) type DeciderProverMemory<T, C> =
     co_ultrahonk::co_decider::types::ProverMemory<T, C, MegaFlavour>;
+pub(crate) type PerturbatorRoundResult<F> = HonkProofResult<(Vec<F>, Polynomial<F>)>;
+pub(crate) type CombinerQuotientRoundResult<F> = HonkProofResult<(
+    Vec<F>,
+    Vec<Univariate<F, BATCHED_EXTENDED_LENGTH>>,
+    ExtendedRelationParameters<F>,
+    F,
+    Univariate<F, { BATCHED_EXTENDED_LENGTH - NUM_KEYS }>,
+)>;
 
 pub type ExtendedRelationParameters<F> = RelationParameters<Univariate<F, BATCHED_EXTENDED_LENGTH>>;
 
@@ -86,7 +94,7 @@ where
     ) -> HonkProofResult<OinkProverMemory<T, C>> {
         let oink_prover =
             CoOink::<T, C, H, N, MegaFlavour>::new(self.net, self.state, ZeroKnowledge::No);
-        oink_prover.prove(proving_key, &mut self.transcript, &self.crs)
+        oink_prover.prove(proving_key, &mut self.transcript, self.crs)
     }
 
     pub(crate) fn run_oink_prover_on_each_incomplete_key(
@@ -108,7 +116,7 @@ where
         &mut self,
         accumulator: &mut ProvingKey<T, C, MegaFlavour>,
         accumulator_prover_memory: &DeciderProverMemory<T, C>,
-    ) -> HonkProofResult<(Vec<C::ScalarField>, Polynomial<C::ScalarField>)> {
+    ) -> PerturbatorRoundResult<C::ScalarField> {
         let delta = self.transcript.get_challenge::<C>("delta".to_owned());
 
         let deltas = std::iter::successors(Some(delta), |&x| Some(x.square()))
@@ -149,19 +157,12 @@ where
         Ok((deltas, perturbator))
     }
 
-    #[expect(clippy::type_complexity)]
     fn combiner_quotient_round(
         &mut self,
         prover_memory: &Vec<&mut DeciderProverMemory<T, C>>,
         perturbator: Polynomial<C::ScalarField>,
         deltas: Vec<C::ScalarField>,
-    ) -> HonkProofResult<(
-        Vec<C::ScalarField>,
-        Vec<Univariate<C::ScalarField, BATCHED_EXTENDED_LENGTH>>,
-        ExtendedRelationParameters<C::ScalarField>,
-        C::ScalarField,
-        Univariate<C::ScalarField, { BATCHED_EXTENDED_LENGTH - NUM_KEYS }>,
-    )> {
+    ) -> CombinerQuotientRoundResult<C::ScalarField> {
         let perturbator_challenge = self
             .transcript
             .get_challenge::<C>("perturbator_challenge".to_owned());
