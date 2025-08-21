@@ -492,7 +492,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesBatch<T, P, L>,
         relation_parameters: &RelationParameters<P::ScalarField>,
-        scaling_factor: &P::ScalarField,
+        scaling_factors: &[P::ScalarField],
     ) -> HonkProofResult<()> {
         let inverses = input.witness.lookup_inverses(); // Degree 1
         let read_counts = input.witness.lookup_read_counts(); // Degree 1
@@ -509,7 +509,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         // Degrees:                     2 (3)       1 (2)        1              1
         let mut tmp = T::mul_with_public_many(&write_term, &write_inverse);
         T::sub_assign_many(&mut tmp, &inverse_exists);
-        T::scale_many_in_place(&mut tmp, *scaling_factor);
+        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
 
         fold_type_accumulator!(
             LogDerivLookupRelationAccType,

@@ -254,7 +254,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesBatch<T, P, L>,
         _relation_parameters: &RelationParameters<P::ScalarField>,
-        scaling_factor: &P::ScalarField,
+        scaling_factors: &[<P>::ScalarField],
     ) -> HonkProofResult<()> {
         tracing::trace!("Accumulate EccOpQueueRelation");
         // using Accumulator = std::tuple_element_t<0, ContainerOverSubrelations>;
@@ -279,11 +279,13 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
 
         let lagrange_by_scaling = lagrange_ecc_op
             .iter()
-            .map(|a| *a * *scaling_factor)
+            .zip_eq(scaling_factors.iter())
+            .map(|(a, b)| *a * *b)
             .collect_vec();
         let complement_ecc_op_by_scaling = lagrange_by_scaling
             .iter()
-            .map(|a| *scaling_factor - *a)
+            .zip_eq(scaling_factors.iter())
+            .map(|(a, b)| *b - *a)
             .collect_vec();
 
         // Contribution (1)
@@ -346,7 +348,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
             univariate_accumulator,
             input,
             &RelationParameters::default(),
-            scaling_factor,
+            &vec![*scaling_factor; input.precomputed.q_elliptic().len()],
         )
     }
 

@@ -580,7 +580,7 @@ impl DataBusLookupRelation {
         univariate_accumulator: &mut DataBusLookupRelationAcc<T, P>,
         input: &ProverUnivariatesBatch<T, P, L>,
         params: &RelationParameters<P::ScalarField>,
-        scaling_factor: &P::ScalarField,
+        scaling_factors: &[P::ScalarField],
         bus_idx: BusData,
     ) -> HonkProofResult<()> {
         let inverses = Self::inverses(bus_idx, input); // Degree 1
@@ -608,7 +608,8 @@ impl DataBusLookupRelation {
         let mul_2 = T::mul_many(mul[0], inverses, net, state)?; //TACEO TODO: combine this mul into the mul above by writing a custom multiplication function
         let tmp = T::sub_many(&mul_2, &inverse_exists)
             .into_iter()
-            .map(|a| T::mul_with_public(*scaling_factor, a))
+            .zip_eq(scaling_factors)
+            .map(|(a, b)| T::mul_with_public(*b, a))
             .collect_vec();
 
         match subrel_idx_1 {
@@ -830,7 +831,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         univariate_accumulator: &mut Self::Acc,
         input: &super::ProverUnivariatesBatch<T, P, L>,
         _relation_parameters: &RelationParameters<P::ScalarField>,
-        scaling_factor: &P::ScalarField,
+        scaling_factors: &[<P>::ScalarField],
     ) -> HonkProofResult<()> {
         tracing::trace!("Accumulate DataBusLookupRelation");
         // Accumulate the subrelation contributions for each column of the databus
@@ -842,7 +843,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
                 univariate_accumulator,
                 input,
                 _relation_parameters,
-                scaling_factor,
+                scaling_factors,
                 BusData::from(bus_idx),
             )?;
         }

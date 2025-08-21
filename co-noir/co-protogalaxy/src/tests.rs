@@ -455,6 +455,7 @@ fn test_compute_perturbator() {
     }
 }
 
+#[ignore = "Requires a large test file"]
 #[test]
 fn test_compute_combiner() {
     let test_file = "unit/compute_combiner";
@@ -490,7 +491,6 @@ fn test_compute_combiner() {
     let shared_polys_1 = others
         .into_iter()
         .map(|p| share_field_elements::<F, _>(&p, &mut thread_rng()))
-        //.map(|p| [p.clone(), p.clone(), p.clone()])
         .fold([vec![], vec![], vec![]], |[mut a, mut b, mut c], f| {
             a.push(f[0].clone());
             b.push(f[1].clone());
@@ -502,7 +502,6 @@ fn test_compute_combiner() {
     let shared_polys_2 = others
         .into_iter()
         .map(|p| share_field_elements::<F, _>(&p, &mut thread_rng()))
-        //.map(|p| [p.clone(), p.clone(), p.clone()])
         .fold([vec![], vec![], vec![]], |[mut a, mut b, mut c], f| {
             a.push(f[0].clone());
             b.push(f[1].clone());
@@ -568,7 +567,6 @@ fn test_compute_combiner() {
 
             move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
-                //let mut state = ();
                 let shared_univariate = compute_combiner(
                     &net,
                     &mut state,
@@ -708,7 +706,6 @@ fn test_protogalaxy_prover() {
     let shared_polys_1 = others
         .into_iter()
         .map(|p| share_field_elements::<F, _>(&p, &mut thread_rng()))
-        //.map(|p| [p.clone(), p.clone(), p.clone()])
         .fold([vec![], vec![], vec![]], |[mut a, mut b, mut c], f| {
             a.push(f[0].clone());
             b.push(f[1].clone());
@@ -720,7 +717,6 @@ fn test_protogalaxy_prover() {
     let shared_polys_2 = others
         .into_iter()
         .map(|p| share_field_elements::<F, _>(&p, &mut thread_rng()))
-        //.map(|p| [p.clone(), p.clone(), p.clone()])
         .fold([vec![], vec![], vec![]], |[mut a, mut b, mut c], f| {
             a.push(f[0].clone());
             b.push(f[1].clone());
@@ -899,10 +895,6 @@ fn test_protogalaxy_prover() {
         assert_eq!(alphas, alphas_result);
         assert_eq!(relation_parameters, relation_parameters_result);
         assert_eq!(gate_challenges, gate_challenges_result);
-        for (i, row) in polynomials.into_iter().enumerate() {
-            if row != polynomials_folding_result[i] {
-                println!("failed test at row {}", i)
-            }
-        }
+        assert_eq!(polynomials, polynomials_folding_result);
     }
 }

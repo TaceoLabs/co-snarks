@@ -70,7 +70,9 @@ pub(crate) trait Relation<
         if !Self::can_skip(entity) {
             data.can_skip = false;
             Self::add_entities(entity, &mut data.all_entities);
-            data.scaling_factor = scaling_factor;
+            for _ in 0..L::MAX_PARTIAL_RELATION_LENGTH {
+                data.scaling_factors.push(scaling_factor);
+            }
         }
     }
 
@@ -87,7 +89,7 @@ pub(crate) trait Relation<
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesBatch<T, P, L>,
         relation_parameters: &RelationParameters<P::ScalarField>,
-        scaling_factor: &P::ScalarField,
+        scaling_factors: &[P::ScalarField],
     ) -> HonkProofResult<()>;
 
     fn accumulate_with_extended_parameters<N: Network, const SIZE: usize>(

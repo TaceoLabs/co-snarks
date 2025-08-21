@@ -210,7 +210,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesBatch<T, P, L>,
         _relation_parameters: &RelationParameters<P::ScalarField>,
-        scaling_factor: &P::ScalarField,
+        scaling_factors: &[P::ScalarField],
     ) -> HonkProofResult<()> {
         let id = state.id();
 
@@ -272,8 +272,15 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
             .take(mul.len())
             .collect_vec();
 
+        let scaling_factors = scaling_factors
+            .iter()
+            .cloned()
+            .cycle()
+            .take(mul.len())
+            .collect_vec();
+
         T::mul_assign_with_public_many(&mut mul, &q_delta_range);
-        T::scale_many_in_place(&mut mul, *scaling_factor);
+        T::mul_assign_with_public_many(&mut mul, &scaling_factors);
 
         // Contribution (1)
         //let mut tmp = T::mul_with_public(*q_delta_range, mul[0]);
@@ -314,7 +321,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
             univariate_accumulator,
             input,
             &RelationParameters::default(),
-            scaling_factor,
+            &vec![*scaling_factor; input.precomputed.q_elliptic().len()],
         )
     }
 

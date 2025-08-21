@@ -167,15 +167,6 @@ impl PlainProverFlavour for UltraFlavour {
         )
     }
 
-    fn extend_and_batch_univariates_with_distinct_challenges<F: PrimeField, const SIZE: usize>(
-        _acc: &Self::AllRelationAcc<F>,
-        _result: &mut Univariate<F, SIZE>,
-        _first_term: Univariate<F, SIZE>,
-        _running_challenge: &[Univariate<F, SIZE>],
-    ) {
-        todo!();
-    }
-
     fn accumulate_relation_univariates<P: HonkCurve<TranscriptFieldType>>(
         univariate_accumulators: &mut Self::AllRelationAcc<P::ScalarField>,
         extended_edges: &ProverUnivariates<P::ScalarField, Self>,
@@ -361,61 +352,6 @@ impl PlainProverFlavour for UltraFlavour {
             .scale_and_batch_elements(&elements[21..], &mut output);
 
         output
-    }
-
-    fn scale_by_challenge_and_accumulate<F: PrimeField>(
-        all_rel_evals: &Self::AllRelationEvaluations<F>,
-        first_scalar: F,
-        elements: &[F],
-    ) -> (F, F) {
-        assert!(elements.len() == Self::NUM_SUBRELATIONS - 1);
-        let (mut linearly_dependent_contribution, mut linearly_independent_contribution) =
-            (F::ZERO, F::ZERO);
-        all_rel_evals.r_arith.scale_by_challenge_and_accumulate(
-            &mut linearly_independent_contribution,
-            &mut linearly_dependent_contribution,
-            &[first_scalar, elements[0]],
-        );
-        all_rel_evals.r_perm.scale_by_challenge_and_accumulate(
-            &mut linearly_independent_contribution,
-            &mut linearly_dependent_contribution,
-            &elements[1..3],
-        );
-        all_rel_evals.r_lookup.scale_by_challenge_and_accumulate(
-            &mut linearly_independent_contribution,
-            &mut linearly_dependent_contribution,
-            &elements[3..5],
-        );
-        all_rel_evals.r_delta.scale_by_challenge_and_accumulate(
-            &mut linearly_independent_contribution,
-            &mut linearly_dependent_contribution,
-            &elements[5..9],
-        );
-        all_rel_evals.r_elliptic.scale_by_challenge_and_accumulate(
-            &mut linearly_independent_contribution,
-            &mut linearly_dependent_contribution,
-            &elements[9..11],
-        );
-        all_rel_evals.r_aux.scale_by_challenge_and_accumulate(
-            &mut linearly_independent_contribution,
-            &mut linearly_dependent_contribution,
-            &elements[11..17],
-        );
-        all_rel_evals.r_pos_ext.scale_by_challenge_and_accumulate(
-            &mut linearly_independent_contribution,
-            &mut linearly_dependent_contribution,
-            &elements[17..21],
-        );
-        all_rel_evals.r_pos_int.scale_by_challenge_and_accumulate(
-            &mut linearly_independent_contribution,
-            &mut linearly_dependent_contribution,
-            &elements[21..],
-        );
-
-        (
-            linearly_independent_contribution,
-            linearly_dependent_contribution,
-        )
     }
 
     fn receive_round_univariate_from_prover<

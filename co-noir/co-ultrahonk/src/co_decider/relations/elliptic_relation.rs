@@ -170,7 +170,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesBatch<T, P, L>,
         _relation_parameters: &RelationParameters<P::ScalarField>,
-        scaling_factor: &P::ScalarField,
+        scaling_factors: &[P::ScalarField],
     ) -> HonkProofResult<()> {
         tracing::trace!("Accumulate EllipticRelation");
 
@@ -272,7 +272,8 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
 
         let q_elliptic_by_scaling = q_elliptic
             .iter()
-            .map(|a| *a * *scaling_factor)
+            .zip_eq(scaling_factors)
+            .map(|(a, b)| *a * *b)
             .collect_vec();
         let q_elliptic_q_double_scaling = q_elliptic_by_scaling
             .iter()
@@ -335,7 +336,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
             univariate_accumulator,
             input,
             &RelationParameters::default(),
-            scaling_factor,
+            &vec![*scaling_factor; input.precomputed.q_elliptic().len()],
         )
     }
 
@@ -375,15 +376,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         let mut x1_mul_3 = T::add(x_1, x_1);
         T::add_assign(&mut x1_mul_3, x_1);
 
-        let lhs = vec![
-            y_1,
-            y_2,
-            y_1,
-            x_diff,
-            y1_plus_y3,
-            y_diff,
-            x1_mul_3,
-        ];
+        let lhs = vec![y_1, y_2, y_1, x_diff, y1_plus_y3, y_diff, x1_mul_3];
 
         let rhs = vec![y_1, y_2, y_2, x_diff, x_diff, T::sub(x_3, x_1), x_1];
 

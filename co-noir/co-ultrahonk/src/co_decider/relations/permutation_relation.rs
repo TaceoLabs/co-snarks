@@ -372,7 +372,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesBatch<T, P, L>,
         relation_parameters: &RelationParameters<P::ScalarField>,
-        scaling_factor: &P::ScalarField,
+        scaling_factors: &[P::ScalarField],
     ) -> HonkProofResult<()> {
         let public_input_delta = &relation_parameters.public_input_delta;
         let z_perm = input.witness.z_perm();
@@ -403,7 +403,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         let (lhs, rhs) = mul1.split_at(mul1.len() >> 1);
         let mut tmp = lhs.to_vec();
         T::sub_assign_many(&mut tmp, rhs);
-        T::scale_many_in_place(&mut tmp, *scaling_factor);
+        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
 
         fold_type_accumulator!(
             UltraPermutationRelationAccType,
@@ -414,7 +414,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         );
 
         let mut tmp = T::mul_with_public_many(lagrange_last, z_perm_shift);
-        T::scale_many_in_place(&mut tmp, *scaling_factor);
+        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
 
         fold_type_accumulator!(
             UltraPermutationRelationAccType,

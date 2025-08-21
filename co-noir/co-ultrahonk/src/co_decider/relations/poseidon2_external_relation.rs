@@ -224,7 +224,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesBatch<T, P, L>,
         _relation_parameters: &RelationParameters<P::ScalarField>,
-        scaling_factor: &P::ScalarField,
+        scaling_factors: &[P::ScalarField],
     ) -> HonkProofResult<()> {
         let w_l = input.witness.w_l();
         let w_r = input.witness.w_r();
@@ -278,7 +278,8 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
 
         let q_pos_by_scaling = q_poseidon2_external
             .iter()
-            .map(|a| *a * *scaling_factor)
+            .zip_eq(scaling_factors)
+            .map(|(a, b)| *a * *b)
             .collect_vec();
         let mut tmp = T::sub_many(&v1, w_l_shift);
         T::mul_assign_with_public_many(&mut tmp, &q_pos_by_scaling);
@@ -330,7 +331,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
             univariate_accumulator,
             input,
             &RelationParameters::default(),
-            scaling_factor,
+            &vec![*scaling_factor; input.precomputed.q_poseidon2_external().len()],
         )
     }
 

@@ -309,7 +309,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesBatch<T, P, L>,
         relation_parameters: &RelationParameters<<P>::ScalarField>,
-        scaling_factor: &P::ScalarField,
+        scaling_factors: &[P::ScalarField],
     ) -> HonkProofResult<()> {
         let id = state.id();
 
@@ -537,7 +537,11 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         debug_assert_eq!(mul.len(), 4);
         let index_is_monotonically_increasing = T::sub_many(mul[0], &index_delta); // deg 2
         let adjacent_values_match_if_adjacent_indices_match = &mul[1]; // deg 2
-        let q_aux_by_scaling = q_aux.iter().map(|a| *a * *scaling_factor).collect_vec();
+        let q_aux_by_scaling = q_aux
+            .iter()
+            .zip_eq(scaling_factors)
+            .map(|(a, b)| *a * *b)
+            .collect_vec();
 
         let q_one_by_two = q_1.iter().zip_eq(q_2).map(|(a, b)| *a * *b).collect_vec();
         let q_one_by_two_by_aux_by_scaling = q_one_by_two
@@ -1330,18 +1334,8 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
          */
         let access_type = T::sub(*w_4, partial_record_check); // deg 1 or 2
         let value_delta = T::sub(*w_3_shift, *w_3);
-        let lhs = vec![
-            index_delta,
-            record_delta,
-            access_type,
-            value_delta,
-        ];
-        let rhs = vec![
-            index_delta,
-            index_delta_one,
-            access_type,
-            index_delta_one,
-        ];
+        let lhs = vec![index_delta, record_delta, access_type, value_delta];
+        let rhs = vec![index_delta, index_delta_one, access_type, index_delta_one];
 
         let mul = T::mul_many(&lhs, &rhs, net, state)?;
         let index_is_monotonically_increasing = T::sub(mul[0], index_delta); // deg 2

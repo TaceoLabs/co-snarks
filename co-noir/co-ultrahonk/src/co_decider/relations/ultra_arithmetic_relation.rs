@@ -144,7 +144,7 @@ impl UltraArithmeticRelation {
         state: &mut T::State,
         r0: &mut Univariate<P::ScalarField, 6>,
         input: &ProverUnivariatesBatch<T, P, L>,
-        scaling_factor: &P::ScalarField,
+        scaling_factors: &[P::ScalarField],
     ) where
         T: NoirUltraHonkProver<P>,
         P: HonkCurve<TranscriptFieldType>,
@@ -184,11 +184,31 @@ impl UltraArithmeticRelation {
             .map(|(w_l, q_l)| T::mul_with_public_to_half_share(*q_l, *w_l));
 
         let acc = (
-            &mul, tmp_l, tmp_r, tmp_o, tmp_4, q_c, q_m, q_arith, w_4_shift,
+            &mul,
+            tmp_l,
+            tmp_r,
+            tmp_o,
+            tmp_4,
+            q_c,
+            q_m,
+            q_arith,
+            w_4_shift,
+            scaling_factors,
         )
             .into_par_iter()
             .map(
-                |(mul, tmp_l, tmp_r, tmp_o, tmp_4, q_c, q_m, q_arith, w_4_shift)| {
+                |(
+                    mul,
+                    tmp_l,
+                    tmp_r,
+                    tmp_o,
+                    tmp_4,
+                    q_c,
+                    q_m,
+                    q_arith,
+                    w_4_shift,
+                    scaling_factor,
+                )| {
                     let mut tmp = *mul * q_m;
                     tmp *= *q_arith - three;
                     tmp *= neg_half;
@@ -283,7 +303,7 @@ impl UltraArithmeticRelation {
         id: <T::State as MpcState>::PartyID,
         r1: &mut SharedUnivariate<T, P, 5>,
         input: &ProverUnivariatesBatch<T, P, L>,
-        scaling_factor: &P::ScalarField,
+        scaling_factors: &[P::ScalarField],
     ) where
         T: NoirUltraHonkProver<P>,
         P: HonkCurve<TranscriptFieldType>,
@@ -297,10 +317,10 @@ impl UltraArithmeticRelation {
 
         let one = P::ScalarField::from(1_u64);
         let two = P::ScalarField::from(2_u64);
-        let acc = (w_l, w_4, w_l_shift, q_m, q_arith)
+        let acc = (w_l, w_4, w_l_shift, q_m, q_arith, scaling_factors)
             .into_par_iter()
             .with_min_len(MIN_RAYON_ITER)
-            .map(|(w_l, w_4, w_l_shift, q_m, q_arith)| {
+            .map(|(w_l, w_4, w_l_shift, q_m, q_arith, scaling_factor)| {
                 let tmp = T::add(*w_l, *w_4);
                 let tmp = T::sub(tmp, *w_l_shift);
                 let tmp = T::add_with_public(*q_m, tmp, id);
@@ -449,7 +469,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesBatch<T, P, L>,
         _relation_parameters: &RelationParameters<P::ScalarField>,
-        scaling_factor: &P::ScalarField,
+        scaling_factors: &[P::ScalarField],
     ) -> HonkProofResult<()> {
         tracing::trace!("Accumulate UltraArithmeticRelation");
         let id = state.id();
@@ -459,7 +479,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
                     state,
                     &mut univariate_accumulator.r0,
                     input,
-                    scaling_factor,
+                    scaling_factors,
                 )
             },
             || {
@@ -467,7 +487,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
                     id,
                     &mut univariate_accumulator.r1,
                     input,
-                    scaling_factor,
+                    scaling_factors,
                 )
             },
         );
@@ -492,7 +512,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
             univariate_accumulator,
             input,
             &RelationParameters::default(),
-            scaling_factor,
+            &vec![*scaling_factor; input.precomputed.q_arith().len()],
         )
     }
 

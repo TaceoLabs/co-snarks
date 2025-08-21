@@ -39,7 +39,7 @@ where
 {
     pub(crate) can_skip: bool,
     pub(crate) all_entities: AllEntitiesBatch<T, P, L>,
-    pub(crate) scaling_factor: P::ScalarField,
+    pub(crate) scaling_factors: Vec<P::ScalarField>,
 }
 
 pub trait AllEntitiesBatchRelationsTrait<T, P, L>
@@ -66,7 +66,7 @@ where
         Self {
             can_skip: true,
             all_entities: AllEntitiesBatch::new(),
-            scaling_factor: Default::default(),
+            scaling_factors: vec![],
         }
     }
 }

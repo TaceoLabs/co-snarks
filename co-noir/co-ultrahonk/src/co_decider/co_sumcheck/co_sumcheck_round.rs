@@ -198,7 +198,7 @@ impl SumcheckRound {
             univariate_accumulator,
             &sum_check_data.all_entities,
             relation_parameters,
-            &sum_check_data.scaling_factor,
+            &sum_check_data.scaling_factors,
         )
     }
 
