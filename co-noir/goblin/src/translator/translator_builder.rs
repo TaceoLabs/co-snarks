@@ -1119,10 +1119,12 @@ pub fn construct_pk_from_builder<C: HonkCurve<TranscriptFieldType>>(
                 }
             }
 
-            for (src, des) in targets
-                .iter()
-                .zip(polys.witness.get_interleaved_mut().iter_mut())
-            {
+            for (src, des) in targets.iter().zip(
+                polys
+                    .witness
+                    .get_interleaved_range_constraints_mut()
+                    .iter_mut(),
+            ) {
                 *des = src.to_owned();
             }
         }
