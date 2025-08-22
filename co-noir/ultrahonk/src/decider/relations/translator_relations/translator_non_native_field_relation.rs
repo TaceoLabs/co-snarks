@@ -259,7 +259,9 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorNonNativeFieldR
         tmp -= relation_wide_limbs.to_owned() * shiftx2;
         tmp *= lagrange_even_in_minicircuit;
         tmp *= scaling_factor;
-        // std::get<0>(accumulators) += tmp;
+        for i in 0..univariate_accumulator.r0.evaluations.len() {
+            univariate_accumulator.r0.evaluations[i] += tmp.evaluations[i];
+        }
 
         // Contribution (2) Computing the 2²⁷² relation over higher 136 bits
         // why declare another temporary?
@@ -312,8 +314,8 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorNonNativeFieldR
         tmp -= relation_wide_limbs_shift.to_owned() * shiftx2;
         tmp *= lagrange_even_in_minicircuit;
         tmp *= scaling_factor;
-        for i in 0..univariate_accumulator.r0.evaluations.len() {
-            univariate_accumulator.r0.evaluations[i] += tmp.evaluations[i];
+        for i in 0..univariate_accumulator.r1.evaluations.len() {
+            univariate_accumulator.r1.evaluations[i] += tmp.evaluations[i];
         }
 
         let reconstruct_from_two = |l0: &Univariate<F, SIZE>,
@@ -376,10 +378,8 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorNonNativeFieldR
         // clang-format on
         tmp *= lagrange_even_in_minicircuit;
         tmp *= scaling_factor;
-        for i in 0..univariate_accumulator.r1.evaluations.len() {
-            univariate_accumulator.r1.evaluations[i] += tmp.evaluations[i];
+        for i in 0..univariate_accumulator.r2.evaluations.len() {
+            univariate_accumulator.r2.evaluations[i] += tmp.evaluations[i];
         }
     }
-
- 
 }
