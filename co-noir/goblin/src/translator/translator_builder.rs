@@ -189,7 +189,7 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
             .unwrap_or_else(|_| panic!("invalid field element literal")),
         ];
 
-        // TODO FLORIN: I think this is correct but lets see
+        // TODO FLORIN: I think this is correct but lets see (ALSO MOVE SOMEWHERE FOR TRANSLATOR PROVER TO USE)
         fn slice(n: &BigUint, start: usize, end: usize) -> BigUint {
             if end <= start {
                 return BigUint::zero();
@@ -1027,6 +1027,22 @@ pub fn construct_pk_from_builder<C: HonkCurve<TranscriptFieldType>>(
     for poly in polys.witness.get_ordered_range_constraints_mut() {
         poly.resize(circuit_size, C::ScalarField::zero());
     }
+    polys
+        .precomputed
+        .lagrange_first_mut()
+        .resize(1, C::ScalarField::zero());
+    polys
+        .precomputed
+        .lagrange_result_row_mut()
+        .resize(3, C::ScalarField::zero());
+    polys
+        .precomputed
+        .lagrange_even_in_minicircuit_mut()
+        .resize(mini_circuit_dyadic_size, C::ScalarField::zero());
+    polys
+        .precomputed
+        .lagrange_odd_in_minicircuit_mut()
+        .resize(mini_circuit_dyadic_size, C::ScalarField::zero());
 
     // Populate the wire polynomials from the wire vectors in the circuit
     for (wire_poly, wire_indices) in polys
