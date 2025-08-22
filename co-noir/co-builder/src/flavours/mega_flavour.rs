@@ -634,6 +634,9 @@ impl<T: Default + Clone + Debug> WitnessEntitiesFlavour<T> for MegaWitnessEntiti
     fn to_be_shifted_mut(&mut self) -> &mut [T] {
         &mut self.elements[MegaFlavour::WITNESS_W_L..=MegaFlavour::WITNESS_Z_PERM]
     }
+    fn get_unshifted(&self) -> &[T] {
+        &self.elements
+    }
     fn w_l(&self) -> &T {
         &self.elements[MegaFlavour::WITNESS_W_L]
     }

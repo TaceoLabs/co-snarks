@@ -1,7 +1,4 @@
-use super::{
-    super::{decider_prover::Decider, sumcheck::SumcheckOutput},
-    types::PolyF,
-};
+use super::super::{decider_prover::Decider, sumcheck::SumcheckOutput};
 use crate::plain_prover_flavour::PlainProverFlavour;
 use crate::{
     NUM_INTERLEAVING_CLAIMS, NUM_SMALL_IPA_EVALUATIONS, Utils,
@@ -10,6 +7,7 @@ use crate::{
 use ark_ec::AffineRepr;
 use ark_ff::{Field, One, Zero};
 use co_builder::polynomials::polynomial_flavours::PolyGFlavour;
+use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::prelude::ZeroKnowledge;
 use co_builder::{
@@ -28,14 +26,14 @@ impl<
     L: PlainProverFlavour,
 > Decider<P, H, L>
 {
-    fn get_f_polynomials(
-        polys: &'_ AllEntities<Vec<P::ScalarField>, L>,
-    ) -> PolyF<'_, Vec<P::ScalarField>, L> {
-        PolyF {
-            precomputed: &polys.precomputed,
-            witness: &polys.witness,
-        }
-    }
+    // fn get_f_polynomials(
+    //     polys: &'_ AllEntities<Vec<P::ScalarField>, L>,
+    // ) -> PolyF<'_, Vec<P::ScalarField>, L> {
+    //     PolyF {
+    //         precomputed: &polys.precomputed,
+    //         witness: &polys.witness,
+    //     }
+    // }
 
     fn get_g_polynomials<'a>(
         polys: &'a AllEntities<Vec<P::ScalarField>, L>,
@@ -56,7 +54,13 @@ impl<
         Option<Polynomial<P::ScalarField>>,
         Option<Vec<Polynomial<P::ScalarField>>>,
     )> {
-        let f_polynomials = Self::get_f_polynomials(&self.memory.polys);
+        //TODO FLORIN: MAYBE MAKE THIS NICER
+        let f_polynomials = self
+            .memory
+            .polys
+            .precomputed
+            .iter()
+            .chain(self.memory.polys.witness.get_unshifted());
         let g_polynomials = Self::get_g_polynomials(&self.memory.polys);
         let interleaved_polynomials = self.memory.polys.witness.get_interleaved();
         let groups_to_be_interleaved = self.memory.polys.witness.get_groups_to_be_interleaved();
@@ -84,6 +88,7 @@ impl<
 
         // Generate batching challenge \rho and powers 1,...,\rho^{m-1}
         let rho = transcript.get_challenge::<P>("rho".to_string());
+        println!("rho: {rho}");
 
         // Compute batching of unshifted polynomials f_i and to-be-shifted polynomials g_i:
         // f_batched = sum_{i=0}^{m-1}\rho^i*f_i and g_batched = sum_{i=0}^{l-1}\rho^{m+i}*g_i,
@@ -98,21 +103,26 @@ impl<
             // ρ⁰ is used to batch the hiding polynomial
             running_scalar *= rho;
         }
+        println!("initial running_scalar: {running_scalar}");
 
-        for f_poly in f_polynomials.iter() {
+        for f_poly in f_polynomials {
             batched_unshifted.add_scaled_slice(f_poly, &running_scalar);
             running_scalar *= rho;
         }
+        println!("running_scalar after f_polys: {running_scalar}");
+
         let mut batched_to_be_shifted = Polynomial::new_zero(n); // batched to-be-shifted polynomials
 
         for g_poly in g_polynomials.iter() {
             batched_to_be_shifted.add_scaled_slice(g_poly, &running_scalar);
             running_scalar *= rho;
         }
+        println!("running_scalar after g_polys: {running_scalar}");
         if let Some(interleaved) = interleaved_polynomials
             && let Some(groups) = groups_to_be_interleaved
         {
             let mut batched_interleaved = Polynomial::new_zero(n); // batched interleaved polynomials
+            println!("full_batched_size: {n}");
 
             let mut batched_group: Vec<Polynomial<P::ScalarField>> =
                 Vec::with_capacity(groups[0].len());
@@ -121,12 +131,19 @@ impl<
             }
 
             for (inter_poly, group_polys) in interleaved.iter().zip(groups.iter()) {
+                println!("running_scalar: {running_scalar}");
                 batched_interleaved.add_scaled_slice(inter_poly, &running_scalar);
+                println!(
+                    "batched_interleaved after adding: {:?}",
+                    batched_interleaved
+                );
                 for (j, grp_poly) in group_polys.iter().enumerate() {
                     batched_group[j].add_scaled_slice(grp_poly, &running_scalar);
                 }
                 running_scalar *= rho;
             }
+            // println!("batched interleaved: {:?}", batched_interleaved);
+
             Ok((
                 batched_unshifted,
                 batched_to_be_shifted,
@@ -254,7 +271,7 @@ impl<
             let groups_size = groups.len();
             let r_pow = r_challenge.pow([groups_size as u64]);
             let p_pos_eval = p_pos.eval_poly(r_pow);
-            let p_neg_eval = p_neg.eval_poly(-r_pow);
+            let p_neg_eval = p_neg.eval_poly(r_pow);
             claims.push(ShpleminiOpeningClaim {
                 polynomial: p_pos,
                 opening_pair: OpeningPair {
