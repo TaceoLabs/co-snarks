@@ -174,283 +174,283 @@ impl<F: PrimeField> TranslatorDecompositionRelationAcc<F> {
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r2.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r3.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r4.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r5.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r6.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r7.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r8.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r9.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r10.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r11.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r12.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r13.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r14.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r15.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r16.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r17.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r18.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r19.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r20.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r21.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r22.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r23.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r24.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r25.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r26.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r27.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r28.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r29.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r30.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r31.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r32.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r33.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r34.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r35.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r36.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r37.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r38.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r39.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r40.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r41.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r42.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r43.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r44.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r45.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r46.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
         self.r47.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,
-            false,
+            true,
         );
     }
 }
