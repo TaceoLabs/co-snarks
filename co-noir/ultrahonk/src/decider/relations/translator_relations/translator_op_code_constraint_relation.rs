@@ -1,7 +1,7 @@
 use crate::decider::relations::Relation;
 use crate::decider::types::ProverUnivariatesSized;
 use crate::decider::{types::RelationParameters, univariate::Univariate};
-use ark_ff::PrimeField;
+use ark_ff::{PrimeField, Zero};
 use co_builder::flavours::translator_flavour::TranslatorFlavour;
 
 #[derive(Clone, Debug, Default)]
@@ -48,10 +48,8 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorOpCodeConstrain
 
     const SKIPPABLE: bool = true;
 
-    fn skip<const SIZE: usize>(
-        _input: &ProverUnivariatesSized<F, TranslatorFlavour, SIZE>,
-    ) -> bool {
-        false
+    fn skip<const SIZE: usize>(input: &ProverUnivariatesSized<F, TranslatorFlavour, SIZE>) -> bool {
+        input.witness.op().is_zero()
     }
 
     /**
