@@ -152,7 +152,7 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorPermutationRela
         for i in 0..univariate_accumulator.r0.evaluations.len() {
             univariate_accumulator.r0.evaluations[i] += tmp.evaluations[i];
         }
-        let mut tmp = lagrange_last.to_owned() + z_perm_shift;
+        let mut tmp = lagrange_last.to_owned() * z_perm_shift;
         tmp *= scaling_factor;
         for i in 0..univariate_accumulator.r1.evaluations.len() {
             univariate_accumulator.r1.evaluations[i] += tmp.evaluations[i];
