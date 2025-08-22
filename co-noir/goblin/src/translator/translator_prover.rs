@@ -2,6 +2,7 @@ use std::iter;
 
 use crate::CONST_TRANSLATOR_LOG_N;
 use ark_ec::CurveGroup;
+use ark_ff::One;
 use ark_ff::Zero;
 use co_builder::HonkProofResult;
 use co_builder::flavours::translator_flavour::TranslatorFlavour;
@@ -50,7 +51,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         crs: &ProverCrs<P>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
     ) -> HonkProofResult<()> {
-        // polynomial.mask(&mut self.decider.rng);
+        // polynomial.mask(&mut self.decider.rng); // THERE IS NO MASKING IN TRANSLATOR (YET?)
 
         // Commit to the polynomial
         let commitment = UltraHonkUtils::commit(polynomial.as_ref(), crs)?;
@@ -202,9 +203,9 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         transcript: &mut Transcript<TranscriptFieldType, H>,
         proving_key: &ProvingKey<P, TranslatorFlavour>,
     ) -> HonkProofResult<()> {
-        let challs = transcript.get_challenges::<P>(&["BETA".to_string(), "GAMMA".to_string()]);
-        let beta = challs[0];
-        let gamma = challs[1];
+        let beta = transcript.get_challenge::<P>("BETA".to_string());
+        let gamma = transcript.get_challenge::<P>("GAMMA".to_string());
+
         self.decider.memory.relation_parameters.gamma = gamma;
         self.decider.memory.relation_parameters.beta = beta;
         const NUM_LIMB_BITS: usize = TranslatorFlavour::NUM_LIMB_BITS;
@@ -228,31 +229,33 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         .try_into()
         .expect("We should have 5 limbs in the evaluation input x");
 
-        let mut uint_batching_challenge_powers = Vec::new();
-        let batching_challenge_v: BigUint = self.batching_challenge_v.into();
-        uint_batching_challenge_powers.push(batching_challenge_v.clone());
-        let mut running_power = &batching_challenge_v * &batching_challenge_v;
-        uint_batching_challenge_powers.push(running_power.clone());
-        running_power *= &batching_challenge_v;
-        uint_batching_challenge_powers.push(running_power.clone());
-        running_power *= &batching_challenge_v;
-        uint_batching_challenge_powers.push(running_power.clone());
+        fn slice(n: &BigUint, start: usize, end: usize) -> BigUint {
+            if end <= start {
+                return BigUint::zero();
+            }
+            let width = end - start;
+            (n >> start) & ((BigUint::one() << width) - 1u32)
+        }
+
+        let mut uint_batching_challenge_powers: Vec<BigUint> = Vec::new();
+        let batching_challenge_v: P::BaseField = self.batching_challenge_v;
+        uint_batching_challenge_powers.push(batching_challenge_v.into());
+        let mut running_power: P::BaseField = batching_challenge_v * batching_challenge_v;
+        uint_batching_challenge_powers.push(running_power.into());
+        running_power *= batching_challenge_v;
+        uint_batching_challenge_powers.push(running_power.into());
+        running_power *= batching_challenge_v;
+        uint_batching_challenge_powers.push(running_power.into());
 
         self.decider.memory.relation_parameters.batching_challenge_v =
             uint_batching_challenge_powers
                 .iter()
                 .flat_map(|power| {
                     vec![
-                        (power & ((BigUint::from(1u32) << NUM_LIMB_BITS) - 1u32)).into(),
-                        ((power >> NUM_LIMB_BITS)
-                            & ((BigUint::from(1u32) << NUM_LIMB_BITS) - 1u32))
-                            .into(),
-                        ((power >> (NUM_LIMB_BITS * 2))
-                            & ((BigUint::from(1u32) << NUM_LIMB_BITS) - 1u32))
-                            .into(),
-                        ((power >> (NUM_LIMB_BITS * 3))
-                            & ((BigUint::from(1u32) << NUM_LIMB_BITS) - 1u32))
-                            .into(),
+                        slice(power, 0, NUM_LIMB_BITS).into(),
+                        slice(power, NUM_LIMB_BITS, NUM_LIMB_BITS * 2).into(),
+                        slice(power, NUM_LIMB_BITS * 2, NUM_LIMB_BITS * 3).into(),
+                        slice(power, NUM_LIMB_BITS * 3, NUM_LIMB_BITS * 4).into(),
                         power.clone().into(),
                     ]
                 })
@@ -288,6 +291,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             let chall = transcript.get_challenge::<P>(format!("Sumcheck:gate_challenge_{idx}"));
             gate_challenges.push(chall);
         }
+        self.decider.memory.gate_challenges = gate_challenges;
         let log_subgroup_size = UltraHonkUtils::get_msb64(P::SUBGROUP_SIZE as u64);
         let commitment_key = &crs.monomials[..1 << (log_subgroup_size + 1)];
         let mut zk_sumcheck_data: ZKSumcheckData<P> = ZKSumcheckData::<P>::new::<H, _>(
@@ -425,7 +429,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
         // Set the domain over which the grand product must be computed. This may be less than the dyadic circuit size, e.g
         // the permutation grand product does not need to be computed beyond the index of the last active wire
-        let domain_size = proving_key.final_active_wire_idx + 1;
+        let domain_size = proving_key.polynomials.witness.op().len();
 
         let active_domain_size = if has_active_ranges {
             proving_key.active_region_data.size()
@@ -452,13 +456,12 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
         // Step (2)
         // Compute the accumulating product of the numerator and denominator terms.
-        // In Barretenberg, this is done in parallel across multiple threads, however we just do the computation signlethreaded for simplicity
+        // In Barretenberg, this is done in parallel across multiple threads, however we just do the computation singlethreaded for simplicity
 
         for i in 1..active_domain_size - 1 {
             numerator[i] = numerator[i] * numerator[i - 1];
             denominator[i] = denominator[i] * denominator[i - 1];
         }
-
         // invert denominator
         UltraHonkUtils::batch_invert(&mut denominator);
 
@@ -470,11 +473,11 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         // Compute grand product values corresponding only to the active regions of the trace
         for i in 0..active_domain_size - 1 {
             let idx = if has_active_ranges {
-                proving_key.active_region_data.get_idx(i)
+                proving_key.active_region_data.get_idx(i + 1)
             } else {
-                i
+                i + 1
             };
-            self.memory.z_perm[idx + 1] = numerator[i] * denominator[i];
+            self.memory.z_perm[idx] = numerator[i] * denominator[i];
         }
 
         // Final step: If active/inactive regions have been specified, the value of the grand product in the inactive
@@ -488,7 +491,8 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
                     let next_range_start = proving_key.active_region_data.get_range(j + 1).0;
                     // Set the value of the polynomial if the index falls in an inactive region
                     if i >= previous_range_end && i < next_range_start {
-                        self.memory.z_perm[i + 1] = self.memory.z_perm[next_range_start];
+                        self.memory.z_perm[i] = self.memory.z_perm[next_range_start];
+                        break;
                     }
                 }
             }

@@ -225,6 +225,9 @@ pub trait WitnessEntitiesFlavour<T: Default + Debug> {
     fn to_be_shifted_mut(&mut self) -> &mut [T] {
         panic!("This should not be called with this Flavour");
     }
+    fn get_unshifted(&self) -> &[T] {
+        panic!("This should not be called with this Flavour");
+    }
     fn w_l(&self) -> &T {
         panic!("This should not be called with this Flavour");
     }
@@ -372,7 +375,7 @@ pub trait WitnessEntitiesFlavour<T: Default + Debug> {
     fn get_interleaved(&self) -> Option<&[T]> {
         None
     }
-    fn get_groups_to_be_interleaved(&self) -> Option<&[&[T]]> {
+    fn get_groups_to_be_interleaved(&self) -> Option<[&[T]; 4]> {
         None
     }
 }

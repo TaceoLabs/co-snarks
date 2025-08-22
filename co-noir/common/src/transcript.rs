@@ -25,6 +25,7 @@ impl<F: PrimeField, const T: usize, const R: usize, H: FieldHash<F, T> + Default
     }
 }
 
+#[derive(Clone)]
 pub struct Transcript<F, H>
 where
     F: PrimeField,
@@ -127,6 +128,7 @@ where
     }
 
     fn send_to_verifier(&mut self, label: String, elements: &[F]) {
+        println!("Sending {label} to verifier: {:?}", elements);
         self.proof_data.extend(elements);
         self.add_element_frs_to_hash_buffer(label, elements);
     }

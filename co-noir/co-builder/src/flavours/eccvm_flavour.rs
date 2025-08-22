@@ -469,6 +469,9 @@ impl<T: Default + Debug> WitnessEntitiesFlavour<T> for ECCVMWitnessEntities<T> {
     fn z_perm(&self) -> &T {
         &self.elements[ECCVMFlavour::Z_PERM]
     }
+    fn get_unshifted(&self) -> &[T] {
+        &self.elements
+    }
 }
 impl<T: Default + Debug> ShiftedWitnessEntitiesFlavour<T> for ECCVMShiftedWitnessEntities<T> {
     fn new() -> Self {

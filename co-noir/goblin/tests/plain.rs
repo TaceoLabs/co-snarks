@@ -178,11 +178,43 @@ fn test_translator_prover() {
         env!("CARGO_MANIFEST_DIR"),
         "/../co-builder/src/crs/bn254_g1.dat"
     );
+    const CRS_PATH_GRUMPKIN: &str = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../co-builder/src/crs/grumpkin_g1.dat"
+    );
     let path = PathBuf::from(ecc_op_queue_file);
     let mut queue: ECCOpQueue<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>> =
         deserialize_ecc_op_queue(path);
-    let circuit_size = 1 << TranslatorFlavour::CONST_TRANSLATOR_LOG_N;
+
     let _ = construct_from_builder::<short_weierstrass::Projective<GrumpkinConfig>>(&mut queue); // We need to do this as the ecc_op_queue is necessary for the translator builder and gets modified in there
+
+    // TODO FLORIN: we need the eccvm transcript, but there is a nicer way to do this than running the whole eccvm prover
+    let circuit_size = 65536;
+    let prover_crs = Arc::new(
+        CrsParser::<ark_grumpkin::Projective>::get_crs_g1(
+            CRS_PATH_GRUMPKIN,
+            circuit_size,
+            ZeroKnowledge::Yes,
+        )
+        .unwrap(),
+    );
+    let polys = construct_from_builder::<short_weierstrass::Projective<GrumpkinConfig>>(&mut queue);
+    let mut proving_key =
+        ProvingKey::<short_weierstrass::Projective<GrumpkinConfig>, ECCVMFlavour>::new(
+            circuit_size,
+            0,
+            prover_crs,
+            0,
+        );
+    proving_key.polynomials = polys;
+
+    let transcript = Transcript::<TranscriptFieldType, Poseidon2Sponge>::new();
+
+    let mut prover =
+        Eccvm::<short_weierstrass::Projective<GrumpkinConfig>, Poseidon2Sponge>::default();
+
+    let (transcript, _ipa_transcript) = prover.construct_proof(transcript, proving_key).unwrap();
+
     let translation_batching_challenge_v =
         ark_bn254::Fq::from_str("333310174131141305725676434666258450925").unwrap();
     let evaluation_challenge_x =
@@ -197,6 +229,7 @@ fn test_translator_prover() {
     let polys = construct_pk_from_builder::<
         ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>,
     >(translator_builder);
+    let circuit_size = 1 << TranslatorFlavour::CONST_TRANSLATOR_LOG_N;
     let prover_crs = Arc::new(
         CrsParser::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>::get_crs_g1(
             CRS_PATH_G1,
@@ -214,6 +247,6 @@ fn test_translator_prover() {
         short_weierstrass::Projective<ark_bn254::g1::Config>,
         Poseidon2Sponge,
     >::new(translation_batching_challenge_v, evaluation_challenge_x);
-    let transcript = Transcript::<TranscriptFieldType, Poseidon2Sponge>::new();
+    println!("START START START");
     let proof = prover.construct_proof(transcript, proving_key).unwrap();
 }
