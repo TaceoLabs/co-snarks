@@ -54,7 +54,6 @@ impl<
         Option<Polynomial<P::ScalarField>>,
         Option<Vec<Polynomial<P::ScalarField>>>,
     )> {
-        //TODO FLORIN: MAYBE MAKE THIS NICER
         let f_polynomials = self
             .memory
             .polys
@@ -88,7 +87,6 @@ impl<
 
         // Generate batching challenge \rho and powers 1,...,\rho^{m-1}
         let rho = transcript.get_challenge::<P>("rho".to_string());
-        println!("rho: {rho}");
 
         // Compute batching of unshifted polynomials f_i and to-be-shifted polynomials g_i:
         // f_batched = sum_{i=0}^{m-1}\rho^i*f_i and g_batched = sum_{i=0}^{l-1}\rho^{m+i}*g_i,
@@ -103,13 +101,11 @@ impl<
             // ρ⁰ is used to batch the hiding polynomial
             running_scalar *= rho;
         }
-        println!("initial running_scalar: {running_scalar}");
 
         for f_poly in f_polynomials {
             batched_unshifted.add_scaled_slice(f_poly, &running_scalar);
             running_scalar *= rho;
         }
-        println!("running_scalar after f_polys: {running_scalar}");
 
         let mut batched_to_be_shifted = Polynomial::new_zero(n); // batched to-be-shifted polynomials
 
@@ -117,12 +113,10 @@ impl<
             batched_to_be_shifted.add_scaled_slice(g_poly, &running_scalar);
             running_scalar *= rho;
         }
-        println!("running_scalar after g_polys: {running_scalar}");
         if let Some(interleaved) = interleaved_polynomials
             && let Some(groups) = groups_to_be_interleaved
         {
             let mut batched_interleaved = Polynomial::new_zero(n); // batched interleaved polynomials
-            println!("full_batched_size: {n}");
 
             let mut batched_group: Vec<Polynomial<P::ScalarField>> =
                 Vec::with_capacity(groups[0].len());
@@ -131,18 +125,12 @@ impl<
             }
 
             for (inter_poly, group_polys) in interleaved.iter().zip(groups.iter()) {
-                println!("running_scalar: {running_scalar}");
                 batched_interleaved.add_scaled_slice(inter_poly, &running_scalar);
-                println!(
-                    "batched_interleaved after adding: {:?}",
-                    batched_interleaved
-                );
                 for (j, grp_poly) in group_polys.iter().enumerate() {
                     batched_group[j].add_scaled_slice(grp_poly, &running_scalar);
                 }
                 running_scalar *= rho;
             }
-            // println!("batched interleaved: {:?}", batched_interleaved);
 
             Ok((
                 batched_unshifted,

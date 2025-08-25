@@ -124,7 +124,7 @@ fn deserialize_ecc_op_queue<P: HonkCurve<TranscriptFieldType>>(path: PathBuf) ->
     }
 }
 
-// TACEO TODO: This was tested with all the randomness set to 1 (also in bb) and then compared the proofs. By default, the ECCVM Prover has ZK enabled, so without a dedicated ECCVM Verifier it is difficult to test it. For now, you can compare it against the proof.txt in the same folder by deactivating the randomness (->F::one()) everywhere (mask() in the prover, random element in zk_data, random polys in univariate.rs and polynomial.rs)
+// TACEO TODO: This was tested with all the randomness set to 1 (also in bb) and then compared the proofs. By default, the ECCVM Prover has ZK enabled, so without a dedicated ECCVM Verifier it is difficult to test it. For now, you can compare it against the proof.txt in the same folder by deactivating the randomness (->F::one()) everywhere (deactivating mask() in the prover, random element in zk_data, random polys in univariate.rs and polynomial.rs)
 #[test]
 #[ignore]
 fn test_ecc_vm_prover() {
@@ -164,9 +164,21 @@ fn test_ecc_vm_prover() {
     let mut prover =
         Eccvm::<short_weierstrass::Projective<GrumpkinConfig>, Poseidon2Sponge>::default();
     let (_transcript, _ipa_transcript) = prover.construct_proof(transcript, proving_key).unwrap();
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../test_vectors/noir/eccvm/transcript"
+    );
+    let out_file = std::io::BufWriter::new(
+        eyre::Context::context(std::fs::File::create(path), "while creating output file").unwrap(),
+    );
+    eyre::Context::context(
+        bincode::serialize_into(out_file, &_transcript),
+        "while serializing proving_key share",
+    )
+    .unwrap();
 }
 
-// TACEO TODO:
+// TACEO TODO: The setting (regarding randomness) is the same as for the ECCVM prover test, except that the polynomials in the oink style part don't get masked here.
 #[test]
 #[ignore]
 fn test_translator_prover() {
@@ -174,46 +186,26 @@ fn test_translator_prover() {
         env!("CARGO_MANIFEST_DIR"),
         "/../../test_vectors/noir/eccvm/ecc_op_queue"
     );
+    let transcript_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../test_vectors/noir/translator/transcript"
+    );
     const CRS_PATH_G1: &str = concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../co-builder/src/crs/bn254_g1.dat"
     );
-    const CRS_PATH_GRUMPKIN: &str = concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../co-builder/src/crs/grumpkin_g1.dat"
-    );
     let path = PathBuf::from(ecc_op_queue_file);
     let mut queue: ECCOpQueue<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>> =
         deserialize_ecc_op_queue(path);
+    let start = std::time::Instant::now();
+    // We need to do this as the ecc_op_queue is necessary for the translator builder and gets modified in there
+    // TACEO TODO: find a nicer way to do this
+    let _ = construct_from_builder::<short_weierstrass::Projective<GrumpkinConfig>>(&mut queue);
+    println!("Time to reconstruct eccvm ops: {:?}", start.elapsed());
 
-    let _ = construct_from_builder::<short_weierstrass::Projective<GrumpkinConfig>>(&mut queue); // We need to do this as the ecc_op_queue is necessary for the translator builder and gets modified in there
-
-    // TODO FLORIN: we need the eccvm transcript, but there is a nicer way to do this than running the whole eccvm prover
-    let circuit_size = 65536;
-    let prover_crs = Arc::new(
-        CrsParser::<ark_grumpkin::Projective>::get_crs_g1(
-            CRS_PATH_GRUMPKIN,
-            circuit_size,
-            ZeroKnowledge::Yes,
-        )
-        .unwrap(),
-    );
-    let polys = construct_from_builder::<short_weierstrass::Projective<GrumpkinConfig>>(&mut queue);
-    let mut proving_key =
-        ProvingKey::<short_weierstrass::Projective<GrumpkinConfig>, ECCVMFlavour>::new(
-            circuit_size,
-            0,
-            prover_crs,
-            0,
-        );
-    proving_key.polynomials = polys;
-
-    let transcript = Transcript::<TranscriptFieldType, Poseidon2Sponge>::new();
-
-    let mut prover =
-        Eccvm::<short_weierstrass::Projective<GrumpkinConfig>, Poseidon2Sponge>::default();
-
-    let (transcript, _ipa_transcript) = prover.construct_proof(transcript, proving_key).unwrap();
+    let transcript = std::io::BufReader::new(std::fs::File::open(transcript_path).unwrap());
+    let transcript: Transcript<TranscriptFieldType, Poseidon2Sponge> =
+        bincode::deserialize_from(transcript).unwrap();
 
     let translation_batching_challenge_v =
         ark_bn254::Fq::from_str("333310174131141305725676434666258450925").unwrap();
@@ -247,6 +239,5 @@ fn test_translator_prover() {
         short_weierstrass::Projective<ark_bn254::g1::Config>,
         Poseidon2Sponge,
     >::new(translation_batching_challenge_v, evaluation_challenge_x);
-    println!("START START START");
-    let proof = prover.construct_proof(transcript, proving_key).unwrap();
+    let _proof = prover.construct_proof(transcript, proving_key).unwrap();
 }

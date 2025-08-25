@@ -7,6 +7,8 @@ use ark_ff::{One, PrimeField, Zero};
 use co_builder::{HonkProofError, HonkProofResult, prelude::HonkCurve};
 use mpc_core::gadgets::poseidon2::Poseidon2;
 use num_bigint::BigUint;
+use serde::Deserialize;
+use serde::Serialize;
 use std::{collections::BTreeMap, ops::Index};
 
 pub type TranscriptFieldType = ark_bn254::Fr;
@@ -25,19 +27,32 @@ impl<F: PrimeField, const T: usize, const R: usize, H: FieldHash<F, T> + Default
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(bound = "")]
 pub struct Transcript<F, H>
 where
     F: PrimeField,
     H: TranscriptHasher<F>,
 {
+    #[serde(
+        serialize_with = "mpc_core::serde_compat::ark_se",
+        deserialize_with = "mpc_core::serde_compat::ark_de"
+    )]
     proof_data: Vec<F>,
     manifest: TranscriptManifest,
     num_frs_written: usize, // the number of bb::frs written to proof_data by the prover or the verifier
     num_frs_read: usize,    // the number of bb::frs read from proof_data by the verifier
     round_number: usize,
     is_first_challenge: bool,
+    #[serde(
+        serialize_with = "mpc_core::serde_compat::ark_se",
+        deserialize_with = "mpc_core::serde_compat::ark_de"
+    )]
     current_round_data: Vec<F>,
+    #[serde(
+        serialize_with = "mpc_core::serde_compat::ark_se",
+        deserialize_with = "mpc_core::serde_compat::ark_de"
+    )]
     previous_challenge: F,
     phantom_data: std::marker::PhantomData<H>,
 }
@@ -128,7 +143,6 @@ where
     }
 
     fn send_to_verifier(&mut self, label: String, elements: &[F]) {
-        println!("Sending {label} to verifier: {:?}", elements);
         self.proof_data.extend(elements);
         self.add_element_frs_to_hash_buffer(label, elements);
     }
@@ -333,7 +347,7 @@ where
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Default)]
+#[derive(Clone, Debug, Eq, PartialEq, Default, Serialize, Deserialize)]
 pub(crate) struct RoundData {
     challenge_label: Vec<String>,
     entries: Vec<(String, usize)>,
@@ -350,7 +364,7 @@ impl RoundData {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct TranscriptManifest {
     manifest: BTreeMap<usize, RoundData>,
 }

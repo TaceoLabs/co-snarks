@@ -149,7 +149,7 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorNonNativeFieldR
         let shift: F = (BigUint::one() << NUM_LIMB_BITS).into();
         let shiftx2: F = (BigUint::one() << (NUM_LIMB_BITS * 2)).into();
         let shiftx3: F = (BigUint::one() << (NUM_LIMB_BITS * 3)).into();
-        //TODO FLORIN: make this nicer
+        // TACEO TODO: Probably not the nicest way to do this
         let negative_modulus_limbs: [F; 5] = [
             F::from_str("51007615349848998585")
                 .unwrap_or_else(|_| panic!("invalid field element literal")),

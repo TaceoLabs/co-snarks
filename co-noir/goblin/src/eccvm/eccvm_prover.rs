@@ -83,7 +83,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         mut transcript: Transcript<TranscriptFieldType, H>,
         mut proving_key: ProvingKey<P, ECCVMFlavour>,
     ) -> HonkProofResult<(
-        Transcript<TranscriptFieldType, H>,
+        Transcript<TranscriptFieldType, H>, // We need to return the transcript here as Translator reuses it
         HonkProof<TranscriptFieldType>,
     )> {
         let circuit_size = proving_key.circuit_size;
@@ -112,11 +112,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             circuit_size,
         )?;
 
-        Ok((
-            // transcript.get_proof(),
-            transcript,
-            ipa_transcript.get_proof(),
-        ))
+        Ok((transcript, ipa_transcript.get_proof()))
     }
 
     fn execute_wire_commitments_round(

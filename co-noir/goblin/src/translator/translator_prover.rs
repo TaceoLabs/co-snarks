@@ -1,20 +1,19 @@
-use std::iter;
-
 use crate::CONST_TRANSLATOR_LOG_N;
 use ark_ec::CurveGroup;
-use ark_ff::One;
 use ark_ff::Zero;
 use co_builder::HonkProofResult;
 use co_builder::flavours::translator_flavour::TranslatorFlavour;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
+use co_builder::prelude::Utils;
 use co_builder::prelude::{HonkCurve, Polynomial, Polynomials, ProverCrs};
 use common::HonkProof;
-use common::shplemini::ShpleminiOpeningClaim;
+use common::compute_opening_proof;
 use common::transcript::{Transcript, TranscriptFieldType};
 use itertools::izip;
 use num_bigint::BigUint;
+use std::iter;
 use ultrahonk::Utils as UltraHonkUtils;
 use ultrahonk::prelude::ZeroKnowledge;
 use ultrahonk::prelude::{
@@ -229,14 +228,6 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         .try_into()
         .expect("We should have 5 limbs in the evaluation input x");
 
-        fn slice(n: &BigUint, start: usize, end: usize) -> BigUint {
-            if end <= start {
-                return BigUint::zero();
-            }
-            let width = end - start;
-            (n >> start) & ((BigUint::one() << width) - 1u32)
-        }
-
         let mut uint_batching_challenge_powers: Vec<BigUint> = Vec::new();
         let batching_challenge_v: P::BaseField = self.batching_challenge_v;
         uint_batching_challenge_powers.push(batching_challenge_v.into());
@@ -252,10 +243,21 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
                 .iter()
                 .flat_map(|power| {
                     vec![
-                        slice(power, 0, NUM_LIMB_BITS).into(),
-                        slice(power, NUM_LIMB_BITS, NUM_LIMB_BITS * 2).into(),
-                        slice(power, NUM_LIMB_BITS * 2, NUM_LIMB_BITS * 3).into(),
-                        slice(power, NUM_LIMB_BITS * 3, NUM_LIMB_BITS * 4).into(),
+                        Utils::slice_u256(power, 0, NUM_LIMB_BITS as u64).into(),
+                        Utils::slice_u256(power, NUM_LIMB_BITS as u64, 2 * NUM_LIMB_BITS as u64)
+                            .into(),
+                        Utils::slice_u256(
+                            power,
+                            2 * NUM_LIMB_BITS as u64,
+                            3 * NUM_LIMB_BITS as u64,
+                        )
+                        .into(),
+                        Utils::slice_u256(
+                            power,
+                            3 * NUM_LIMB_BITS as u64,
+                            4 * NUM_LIMB_BITS as u64,
+                        )
+                        .into(),
                         power.clone().into(),
                     ]
                 })
@@ -339,7 +341,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             Some(witness_polynomials),
         )?;
 
-        Self::compute_opening_proof(prover_opening_claim, transcript, crs)
+        compute_opening_proof(prover_opening_claim, transcript, crs)
     }
 
     fn compute_grand_product_numerator(
@@ -497,25 +499,6 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
                 }
             }
         }
-    }
-
-    //TODO FLORIN REMOVE DUPLICATE CODE
-    fn compute_opening_proof(
-        opening_claim: ShpleminiOpeningClaim<P::ScalarField>,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
-        crs: &ProverCrs<P>,
-    ) -> HonkProofResult<()> {
-        let mut quotient = opening_claim.polynomial;
-        let pair = opening_claim.opening_pair;
-        quotient[0] -= pair.evaluation;
-        // Computes the coefficients for the quotient polynomial q(X) = (p(X) - v) / (X - r) through an FFT
-        quotient.factor_roots(&pair.challenge);
-        let quotient_commitment = UltraHonkUtils::commit(&quotient.coefficients, crs)?;
-        // AZTEC TODO(#479): compute_opening_proof
-        // future we might need to adjust this to use the incoming alternative to work queue (i.e. variation of
-        // pthreads) or even the work queue itself
-        transcript.send_point_to_verifier::<P>("KZG:W".to_string(), quotient_commitment.into());
-        Ok(())
     }
 
     fn add_polynomials_to_memory(

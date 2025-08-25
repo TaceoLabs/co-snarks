@@ -28,7 +28,6 @@ pub(crate) const NUM_Z_LIMBS: usize = 2;
 pub(crate) const NUM_MICRO_LIMBS: usize = 6;
 pub(crate) const NUM_RELATION_WIDE_LIMBS: usize = 2;
 pub(crate) const NUM_LAST_LIMB_BITS: usize = 50;
-pub(crate) const NUM_LIMB_BITS: usize = 68;
 pub(crate) const NUM_QUOTIENT_BITS: usize = 256;
 pub(crate) const NUM_Z_BITS: usize = 128;
 pub(crate) const MICRO_LIMB_BITS: usize = 14;
