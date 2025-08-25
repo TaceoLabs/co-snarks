@@ -13,14 +13,21 @@ use std::fmt::Debug;
 #[derive(Default)]
 pub struct TranslatorFlavour {}
 impl TranslatorFlavour {
-    //TODO FLORIN ADD DESCRIPTION
+    // Number of bits in a binary limb
+    // This is not a configurable value. Relations are sepcifically designed for it to be 68
     pub const NUM_LIMB_BITS: usize = 68;
     pub const RESULT_ROW: usize = 2;
+    // Log of size of interleaved_* and ordered_* polynomials
     pub const CONST_TRANSLATOR_LOG_N: usize = 18;
+    // The fixed  log size of Translator circuit determining the size most polynomials (except the ones
+    // involved in the interleaving subprotocol). It should be determined by the size of the EccOpQueue.
     pub const LOG_MINI_CIRCUIT_SIZE: usize = 14;
     pub const MINI_CIRCUIT_SIZE: usize = 1 << Self::LOG_MINI_CIRCUIT_SIZE;
+    // How many mini_circuit_size polynomials are interleaved in one interleaved_*
     pub const INTERLEAVING_GROUP_SIZE: usize = 16;
+    // The step in the DeltaRangeConstraint relation i.e. the maximum difference between two consecutive values
     pub const SORT_STEP: usize = 3;
+    // The number of interleaved_* wires
     pub const NUM_INTERLEAVED_WIRES: usize = 4;
 
     pub fn wire_to_be_shifted_labels() -> &'static [&'static str] {
@@ -117,15 +124,6 @@ impl TranslatorFlavour {
             "ORDERED_RANGE_CONSTRAINTS_2",
             "ORDERED_RANGE_CONSTRAINTS_3",
             "ORDERED_RANGE_CONSTRAINTS_4",
-        ]
-    }
-    //TODO FLORIN REMOVE THIS
-    pub fn get_interleaved_range_constraints_labels() -> &'static [&'static str] {
-        &[
-            "INTERLEAVED_RANGE_CONSTRAINTS_0",
-            "INTERLEAVED_RANGE_CONSTRAINTS_1",
-            "INTERLEAVED_RANGE_CONSTRAINTS_2",
-            "INTERLEAVED_RANGE_CONSTRAINTS_3",
         ]
     }
     // PRECOMPUTED ENTITIES:
@@ -528,7 +526,6 @@ impl<T: Default + Debug> ShiftedWitnessEntitiesFlavour<T> for TranslatorShiftedW
             elements: elements.try_into().unwrap(),
         }
     }
-    //TODO FLORIN CHECK IF THIS IS CORRECT
     fn z_perm(&self) -> &T {
         &self.elements[TranslatorFlavour::Z_PERM - 1] // We do -1 because OP is not included in the shifted entities
     }
@@ -612,11 +609,6 @@ impl<T: Default> TranslatorProverWitnessEntities<T> {
     }
     pub fn get_ordered_range_constraints_mut(&mut self) -> &mut [T] {
         &mut self.elements[TranslatorFlavour::ORDERED_RANGE_CONSTRAINTS_0
-            ..=TranslatorFlavour::ORDERED_RANGE_CONSTRAINTS_4]
-    }
-    //TODO FLORIN REMOVE
-    pub fn get_ordered_range_constraints(&self) -> &[T] {
-        &self.elements[TranslatorFlavour::ORDERED_RANGE_CONSTRAINTS_0
             ..=TranslatorFlavour::ORDERED_RANGE_CONSTRAINTS_4]
     }
     pub fn interleaved_range_constraints_0(&self) -> &T {
