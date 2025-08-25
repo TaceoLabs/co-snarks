@@ -11,14 +11,13 @@ use ark_ff::Zero;
 use co_builder::flavours::translator_flavour::TranslatorFlavour;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
-use co_builder::prelude::{Polynomial, Polynomials};
+use co_builder::prelude::{Polynomial, Polynomials, Utils};
 use co_builder::{TranscriptFieldType, prelude::HonkCurve};
 use num_bigint::BigUint;
 use std::str::FromStr;
 
 const NUM_WIRES: usize = 81;
 const ZERO_IDX: usize = 0;
-const ONE_IDX: usize = 1;
 
 pub struct TranslatorBuilder<P: CurveGroup> {
     pub variables: Vec<P::ScalarField>,
@@ -97,8 +96,7 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
         // We need to precompute the accumulators at each step, because in the actual circuit we compute the values starting
         // from the later indices. We need to know the previous accumulator to create the gate
         let mut current_accumulator = current_accumulator;
-        for i in 1..ultra_ops.len() {
-            let ultra_op = &ultra_ops[ultra_ops.len() - i];
+        for ultra_op in ultra_ops.iter().skip(1).rev() {
             current_accumulator *= evaluation_input_x;
             let (x_256, y_256) = ultra_op.get_base_point_standard_form();
             let z1: BigUint = ultra_op.z_1.into();
@@ -116,9 +114,22 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
         // We don't care about the last value since we'll recompute it during witness generation anyway
         accumulator_trace.pop();
 
+        let negative_modulus_limbs: [P::ScalarField; 5] = [
+            P::ScalarField::from_str("51007615349848998585")
+                .unwrap_or_else(|_| panic!("invalid field element literal")),
+            P::ScalarField::from_str("187243884991886189399")
+                .unwrap_or_else(|_| panic!("invalid field element literal")),
+            P::ScalarField::from_str("292141664167738113703")
+                .unwrap_or_else(|_| panic!("invalid field element literal")),
+            P::ScalarField::from_str("295147053861416594661")
+                .unwrap_or_else(|_| panic!("invalid field element literal")),
+            P::ScalarField::from_str(
+                "21888242871839275222246405745257275088400417643534245024707370478506390782651",
+            )
+            .unwrap_or_else(|_| panic!("invalid field element literal")),
+        ];
         // Generate witness values from all the UltraOps
-        for i in 1..ultra_ops.len() {
-            let ultra_op = &ultra_ops[i];
+        for ultra_op in ultra_ops.iter().skip(1) {
             let mut previous_accumulator = P::BaseField::zero();
             // Pop the last value from accumulator trace and use it as previous accumulator
             if let Some(last) = accumulator_trace.pop() {
@@ -130,6 +141,7 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
                 previous_accumulator,
                 batching_challenge_v,
                 evaluation_input_x,
+                &negative_modulus_limbs,
             );
 
             // And put them into the wires
@@ -166,6 +178,7 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
         previous_accumulator: P::BaseField,
         batching_challenge_v: P::BaseField,
         evaluation_input_x: P::BaseField,
+        negative_modulus_limbs: &[P::ScalarField; 5],
     ) -> AccumulationInput<P> {
         const NUM_LIMB_BITS: usize = 68;
         let shift_1: P::ScalarField = (BigUint::one() << NUM_LIMB_BITS).into();
@@ -178,30 +191,6 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
                 "Failed to compute inverse of shift_2, this should not happen in a valid circuit"
             )
         });
-        //TODO FLORIN: make this nicer
-        let negative_modulus_limbs: [P::ScalarField; 5] = [
-            P::ScalarField::from_str("51007615349848998585")
-                .unwrap_or_else(|_| panic!("invalid field element literal")),
-            P::ScalarField::from_str("187243884991886189399")
-                .unwrap_or_else(|_| panic!("invalid field element literal")),
-            P::ScalarField::from_str("292141664167738113703")
-                .unwrap_or_else(|_| panic!("invalid field element literal")),
-            P::ScalarField::from_str("295147053861416594661")
-                .unwrap_or_else(|_| panic!("invalid field element literal")),
-            P::ScalarField::from_str(
-                "21888242871839275222246405745257275088400417643534245024707370478506390782651",
-            )
-            .unwrap_or_else(|_| panic!("invalid field element literal")),
-        ];
-
-        // TODO FLORIN: I think this is correct but lets see (ALSO MOVE SOMEWHERE FOR TRANSLATOR PROVER TO USE)
-        fn slice(n: &BigUint, start: usize, end: usize) -> BigUint {
-            if end <= start {
-                return BigUint::zero();
-            }
-            let width = end - start;
-            (n >> start) & ((BigUint::one() << width) - 1u32)
-        }
 
         // All parameters are well-described in the header, this is just for convenience
         const TOP_STANDARD_MICROLIMB_BITS: usize = NUM_LAST_LIMB_BITS % MICRO_LIMB_BITS;
@@ -219,10 +208,10 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
         let uint512_t_to_limbs = |original: &BigUint| -> [P::ScalarField; NUM_BINARY_LIMBS] {
             let mut out = [P::ScalarField::from(0u64); NUM_BINARY_LIMBS];
             for (i, limb) in out.iter_mut().enumerate() {
-                *limb = P::ScalarField::from(slice(
+                *limb = P::ScalarField::from(Utils::slice_u256(
                     original,
-                    i * NUM_LIMB_BITS,
-                    (i + 1) * NUM_LIMB_BITS,
+                    (i * NUM_LIMB_BITS) as u64,
+                    ((i + 1) * NUM_LIMB_BITS) as u64,
                 ));
             }
             out
@@ -236,8 +225,12 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
             |wide_limb: P::ScalarField| -> [P::ScalarField; NUM_Z_LIMBS] {
                 let wide: BigUint = wide_limb.into();
                 [
-                    P::ScalarField::from(slice(&wide, 0, NUM_LIMB_BITS)),
-                    P::ScalarField::from(slice(&wide, NUM_LIMB_BITS, 2 * NUM_LIMB_BITS)),
+                    P::ScalarField::from(Utils::slice_u256(&wide, 0, NUM_LIMB_BITS as u64)),
+                    P::ScalarField::from(Utils::slice_u256(
+                        &wide,
+                        NUM_LIMB_BITS as u64,
+                        2 * NUM_LIMB_BITS as u64,
+                    )),
                 ]
             };
         /*
@@ -248,11 +241,15 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
             |limb: P::ScalarField| -> [P::ScalarField; NUM_MICRO_LIMBS] {
                 // static_assert(MICRO_LIMB_BITS == 14);
                 let val: BigUint = limb.into();
-                let a0 = slice(&val, 0, MICRO_LIMB_BITS);
-                let a1 = slice(&val, MICRO_LIMB_BITS, 2 * MICRO_LIMB_BITS);
-                let a2 = slice(&val, 2 * MICRO_LIMB_BITS, 3 * MICRO_LIMB_BITS);
-                let a3 = slice(&val, 3 * MICRO_LIMB_BITS, 4 * MICRO_LIMB_BITS);
-                let a4 = slice(&val, 4 * MICRO_LIMB_BITS, 5 * MICRO_LIMB_BITS);
+                let a0 = Utils::slice_u256(&val, 0, MICRO_LIMB_BITS as u64);
+                let a1 =
+                    Utils::slice_u256(&val, MICRO_LIMB_BITS as u64, 2 * MICRO_LIMB_BITS as u64);
+                let a2 =
+                    Utils::slice_u256(&val, 2 * MICRO_LIMB_BITS as u64, 3 * MICRO_LIMB_BITS as u64);
+                let a3 =
+                    Utils::slice_u256(&val, 3 * MICRO_LIMB_BITS as u64, 4 * MICRO_LIMB_BITS as u64);
+                let a4 =
+                    Utils::slice_u256(&val, 4 * MICRO_LIMB_BITS as u64, 5 * MICRO_LIMB_BITS as u64);
                 let top = {
                     let raw = a4.clone();
                     let shift_amt = MICRO_LIMB_BITS - (NUM_LIMB_BITS % MICRO_LIMB_BITS);
@@ -277,65 +274,74 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
          * (plus there is 1 extra space for other constraints)
          *
          */
-        let split_top_limb_into_micro_limbs =
-            |limb: P::ScalarField, last_limb_bits: usize| -> [P::ScalarField; NUM_MICRO_LIMBS] {
-                // static_assert(MICRO_LIMB_BITS == 14);
-                let val: BigUint = limb.into();
-                let a0 = slice(&val, 0, MICRO_LIMB_BITS);
-                let a1 = slice(&val, MICRO_LIMB_BITS, 2 * MICRO_LIMB_BITS);
-                let a2 = slice(&val, 2 * MICRO_LIMB_BITS, 3 * MICRO_LIMB_BITS);
-                let a3 = slice(&val, 3 * MICRO_LIMB_BITS, 4 * MICRO_LIMB_BITS);
-                let a4 = {
-                    let raw = slice(&val, 3 * MICRO_LIMB_BITS, 4 * MICRO_LIMB_BITS);
-                    let shift_amt = MICRO_LIMB_BITS - (last_limb_bits % MICRO_LIMB_BITS);
-                    if shift_amt == 0 {
-                        raw
-                    } else {
-                        &raw << shift_amt
-                    }
-                };
-                [
-                    P::ScalarField::from(a0),
-                    P::ScalarField::from(a1),
-                    P::ScalarField::from(a2),
-                    P::ScalarField::from(a3),
-                    P::ScalarField::from(a4),
-                    P::ScalarField::from(0u64),
-                ]
+        let split_top_limb_into_micro_limbs = |limb: P::ScalarField,
+                                               last_limb_bits: usize|
+         -> [P::ScalarField; NUM_MICRO_LIMBS] {
+            // static_assert(MICRO_LIMB_BITS == 14);
+            let val: BigUint = limb.into();
+            let a0 = Utils::slice_u256(&val, 0, MICRO_LIMB_BITS as u64);
+            let a1 = Utils::slice_u256(&val, MICRO_LIMB_BITS as u64, 2 * MICRO_LIMB_BITS as u64);
+            let a2 =
+                Utils::slice_u256(&val, 2 * MICRO_LIMB_BITS as u64, 3 * MICRO_LIMB_BITS as u64);
+            let a3 =
+                Utils::slice_u256(&val, 3 * MICRO_LIMB_BITS as u64, 4 * MICRO_LIMB_BITS as u64);
+            let a4 = {
+                let raw =
+                    Utils::slice_u256(&val, 3 * MICRO_LIMB_BITS as u64, 4 * MICRO_LIMB_BITS as u64);
+                let shift_amt = MICRO_LIMB_BITS - (last_limb_bits % MICRO_LIMB_BITS);
+                if shift_amt == 0 {
+                    raw
+                } else {
+                    &raw << shift_amt
+                }
             };
+            [
+                P::ScalarField::from(a0),
+                P::ScalarField::from(a1),
+                P::ScalarField::from(a2),
+                P::ScalarField::from(a3),
+                P::ScalarField::from(a4),
+                P::ScalarField::from(0u64),
+            ]
+        };
 
         /*
          * @brief A method for splitting the top 60-bit z limb into microlimbs (differs from the 68-bit limb by the shift in
          * the last limb)
          *
          */
-        let split_top_z_limb_into_micro_limbs =
-            |limb: P::ScalarField, last_limb_bits: usize| -> [P::ScalarField; NUM_MICRO_LIMBS] {
-                // static_assert(MICRO_LIMB_BITS == 14);
-                let val: BigUint = limb.into();
-                let a0 = slice(&val, 0, MICRO_LIMB_BITS);
-                let a1 = slice(&val, MICRO_LIMB_BITS, 2 * MICRO_LIMB_BITS);
-                let a2 = slice(&val, 2 * MICRO_LIMB_BITS, 3 * MICRO_LIMB_BITS);
-                let a3 = slice(&val, 3 * MICRO_LIMB_BITS, 4 * MICRO_LIMB_BITS);
-                let a4 = slice(&val, 4 * MICRO_LIMB_BITS, 5 * MICRO_LIMB_BITS);
-                let a5 = {
-                    let raw = slice(&val, 4 * MICRO_LIMB_BITS, 5 * MICRO_LIMB_BITS);
-                    let shift_amt = MICRO_LIMB_BITS - (last_limb_bits % MICRO_LIMB_BITS);
-                    if shift_amt == 0 {
-                        raw
-                    } else {
-                        &raw << shift_amt
-                    }
-                };
-                [
-                    P::ScalarField::from(a0),
-                    P::ScalarField::from(a1),
-                    P::ScalarField::from(a2),
-                    P::ScalarField::from(a3),
-                    P::ScalarField::from(a4),
-                    P::ScalarField::from(a5),
-                ]
+        let split_top_z_limb_into_micro_limbs = |limb: P::ScalarField,
+                                                 last_limb_bits: usize|
+         -> [P::ScalarField; NUM_MICRO_LIMBS] {
+            // static_assert(MICRO_LIMB_BITS == 14);
+            let val: BigUint = limb.into();
+            let a0 = Utils::slice_u256(&val, 0, MICRO_LIMB_BITS as u64);
+            let a1 = Utils::slice_u256(&val, MICRO_LIMB_BITS as u64, 2 * MICRO_LIMB_BITS as u64);
+            let a2 =
+                Utils::slice_u256(&val, 2 * MICRO_LIMB_BITS as u64, 3 * MICRO_LIMB_BITS as u64);
+            let a3 =
+                Utils::slice_u256(&val, 3 * MICRO_LIMB_BITS as u64, 4 * MICRO_LIMB_BITS as u64);
+            let a4 =
+                Utils::slice_u256(&val, 4 * MICRO_LIMB_BITS as u64, 5 * MICRO_LIMB_BITS as u64);
+            let a5 = {
+                let raw =
+                    Utils::slice_u256(&val, 4 * MICRO_LIMB_BITS as u64, 5 * MICRO_LIMB_BITS as u64);
+                let shift_amt = MICRO_LIMB_BITS - (last_limb_bits % MICRO_LIMB_BITS);
+                if shift_amt == 0 {
+                    raw
+                } else {
+                    &raw << shift_amt
+                }
             };
+            [
+                P::ScalarField::from(a0),
+                P::ScalarField::from(a1),
+                P::ScalarField::from(a2),
+                P::ScalarField::from(a3),
+                P::ScalarField::from(a4),
+                P::ScalarField::from(a5),
+            ]
+        };
 
         /*
          * @brief Split a 72-bit relation limb into 6 14-bit limbs (we can allow the slack here, since we only need to
@@ -347,7 +353,11 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
             let val: BigUint = limb.into();
             let mut out = [P::ScalarField::from(0u64); 6];
             for (i, slot) in out.iter_mut().enumerate() {
-                let part = slice(&val, i * MICRO_LIMB_BITS, (i + 1) * MICRO_LIMB_BITS);
+                let part = Utils::slice_u256(
+                    &val,
+                    (i * MICRO_LIMB_BITS) as u64,
+                    ((i + 1) * MICRO_LIMB_BITS) as u64,
+                );
                 *slot = P::ScalarField::from(part);
             }
             out
@@ -357,9 +367,14 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
         let split_fq_into_limbs = |x: P::BaseField| -> [P::ScalarField; NUM_BINARY_LIMBS] {
             let xb: BigUint = x.into();
             let mut out = [P::ScalarField::from(0u64); NUM_BINARY_LIMBS];
-            for i in 0..NUM_BINARY_LIMBS {
-                let limb = slice(&xb, i * NUM_LIMB_BITS, (i + 1) * NUM_LIMB_BITS);
-                out[i] = P::ScalarField::from(limb);
+
+            for (i, limb) in out.iter_mut().enumerate() {
+                let slice = Utils::slice_u256(
+                    &xb,
+                    (i * NUM_LIMB_BITS) as u64,
+                    ((i + 1) * NUM_LIMB_BITS) as u64,
+                );
+                *limb = P::ScalarField::from(slice);
             }
             out
         };
@@ -492,7 +507,10 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
                 * shift_1;
 
         // Low bits have to be zero
-        debug_assert!(slice(&low_wide_relation_limb.into(), 0, 2 * NUM_LIMB_BITS).is_zero());
+        debug_assert!(
+            Utils::slice_u256(&low_wide_relation_limb.into(), 0, 2 * NUM_LIMB_BITS as u64)
+                .is_zero()
+        );
 
         let low_wide_relation_limb_divided = low_wide_relation_limb * shift_2_inverse;
 
@@ -541,8 +559,10 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
                 * shift_1;
 
         // Check that the results lower 136 bits are zero
-        //TODO FLORIN necessary?
-        debug_assert!(slice(&high_wide_relation_limb.into(), 0, 2 * NUM_LIMB_BITS).is_zero());
+        debug_assert!(
+            Utils::slice_u256(&high_wide_relation_limb.into(), 0, 2 * NUM_LIMB_BITS as u64)
+                .is_zero()
+        );
 
         // Get divided version
         let high_wide_relation_limb_divided = high_wide_relation_limb * shift_2_inverse;
@@ -1027,7 +1047,6 @@ pub fn construct_pk_from_builder<C: HonkCurve<TranscriptFieldType>>(
     for poly in polys.witness.to_be_shifted_mut() {
         poly.resize(mini_circuit_dyadic_size, C::ScalarField::zero());
     }
-    //TODO FLORIN: make this nicer
     for poly in polys.witness.get_ordered_range_constraints_mut() {
         poly.resize(circuit_size, C::ScalarField::zero());
     }
@@ -1215,17 +1234,21 @@ pub fn construct_pk_from_builder<C: HonkCurve<TranscriptFieldType>>(
                 let mut extra_denominator_offset = i * sorted_elements_count;
 
                 // Go through each polynomial in the interleaved group
-                for j in 0..TranslatorFlavour::INTERLEAVING_GROUP_SIZE {
+                for (j, group_el) in group
+                    .iter()
+                    .enumerate()
+                    .take(TranslatorFlavour::INTERLEAVING_GROUP_SIZE)
+                {
                     // Calculate the offset in the target vector
                     let current_offset =
                         j * (mini_circuit_dyadic_size - mini_num_disabled_rows_in_sumcheck);
 
                     let start = 0usize;
-                    let end = group[j].len() - mini_num_disabled_rows_in_sumcheck;
+                    let end = group_el.len() - mini_num_disabled_rows_in_sumcheck;
 
                     // For each element in the polynomial
                     for k in start..end {
-                        let val_big = group[j][k].into_bigint();
+                        let val_big = group_el[k].into_bigint();
                         let limb0 = val_big.as_ref()[0] as u32;
 
                         // Put it it the target polynomial
