@@ -36,7 +36,7 @@ impl<P: HonkCurve<TranscriptFieldType>> ZKSumcheckData<P> {
         commitment_key: &[P::Affine],
         rng: &mut R,
     ) -> HonkProofResult<Self> {
-        let constant_term = P::ScalarField::one();
+        let constant_term = P::ScalarField::rand(rng);
         let libra_challenge = P::ScalarField::default();
         let libra_univariates =
             Self::generate_libra_univariates(multivariate_d, P::LIBRA_UNIVARIATES_LENGTH, rng);

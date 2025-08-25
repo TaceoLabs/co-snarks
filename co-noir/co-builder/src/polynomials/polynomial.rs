@@ -205,14 +205,14 @@ impl<F: PrimeField> Polynomial<F> {
      * commitment and evaluation of a polynomial don't leak information about the coefficients in the context of zero
      * knowledge.
      */
-    pub fn mask<R: Rng + CryptoRng>(&mut self, _rng: &mut R) {
+    pub fn mask<R: Rng + CryptoRng>(&mut self, rng: &mut R) {
         let virtual_size = self.coefficients.len();
         assert!(
             virtual_size >= NUM_MASKED_ROWS as usize,
             "Insufficient space for masking"
         );
         for i in (virtual_size - NUM_MASKED_ROWS as usize..virtual_size).rev() {
-            self.coefficients[i] = F::one();
+            self.coefficients[i] = F::rand(rng);
         }
     }
 
@@ -233,8 +233,8 @@ impl<F: PrimeField> Polynomial<F> {
         poly.evaluate(&point)
     }
 
-    pub fn random<R: Rng + CryptoRng>(size: usize, _rng: &mut R) -> Self {
-        let coefficients = (0..size).map(|_| F::one()).collect();
+    pub fn random<R: Rng + CryptoRng>(size: usize, rng: &mut R) -> Self {
+        let coefficients = (0..size).map(|_| F::rand(rng)).collect();
         Self { coefficients }
     }
 
