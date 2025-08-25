@@ -31,6 +31,11 @@ pub struct TranslatorBuilder<P: CurveGroup> {
     wires: [Vec<u32>; NUM_WIRES],
     num_gates: usize,
 }
+impl<P: HonkCurve<TranscriptFieldType>> Default for TranslatorBuilder<P> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
     pub(crate) const DUMMY_TAG: u32 = 0;
     pub(crate) const REAL_VARIABLE: u32 = u32::MAX - 1;
@@ -213,8 +218,8 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
          */
         let uint512_t_to_limbs = |original: &BigUint| -> [P::ScalarField; NUM_BINARY_LIMBS] {
             let mut out = [P::ScalarField::from(0u64); NUM_BINARY_LIMBS];
-            for i in 0..NUM_BINARY_LIMBS {
-                out[i] = P::ScalarField::from(slice(
+            for (i, limb) in out.iter_mut().enumerate() {
+                *limb = P::ScalarField::from(slice(
                     original,
                     i * NUM_LIMB_BITS,
                     (i + 1) * NUM_LIMB_BITS,
@@ -341,9 +346,9 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
             // static_assert(MICRO_LIMB_BITS == 14);
             let val: BigUint = limb.into();
             let mut out = [P::ScalarField::from(0u64); 6];
-            for i in 0..6 {
+            for (i, slot) in out.iter_mut().enumerate() {
                 let part = slice(&val, i * MICRO_LIMB_BITS, (i + 1) * MICRO_LIMB_BITS);
-                out[i] = P::ScalarField::from(part);
+                *slot = P::ScalarField::from(part);
             }
             out
         };
@@ -487,7 +492,6 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
                 * shift_1;
 
         // Low bits have to be zero
-        //TODO FLORIN necessary?
         debug_assert!(slice(&low_wide_relation_limb.into(), 0, 2 * NUM_LIMB_BITS).is_zero());
 
         let low_wide_relation_limb_divided = low_wide_relation_limb * shift_2_inverse;
@@ -838,7 +842,6 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
         self.num_gates += 2;
 
         // Check that all the wires are filled equally
-        // TODO FLORIN DO WE WANT TO DO THIS?
         for (i, wire) in self.wires.iter().enumerate() {
             debug_assert!(
                 wire.len() == self.num_gates,
@@ -852,7 +855,8 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
 
 #[allow(non_camel_case_types)]
 #[repr(usize)]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[expect(dead_code)]
+#[derive(Clone, Copy, Debug)]
 pub enum WireIds {
     OP, // The first 4 wires contain the standard values from the EccQueue wire
     X_LOW_Y_HI,
@@ -945,8 +949,8 @@ pub enum WireIds {
 }
 
 impl WireIds {
-    pub const fn as_usize(self) -> usize {
-        self as usize
+    pub const fn as_usize(&self) -> usize {
+        *self as usize
     }
 }
 
@@ -1091,10 +1095,10 @@ pub fn construct_pk_from_builder<C: HonkCurve<TranscriptFieldType>>(
             (MAX_VALUE / sort_step) as usize + 1 + if MAX_VALUE % sort_step == 0 { 0 } else { 1 };
 
         // Check that we can fit every element in the polynomial
-        assert!(
+        debug_assert!(
             (TranslatorFlavour::NUM_INTERLEAVED_WIRES + 1) * sorted_elements_count
                 < extra_range_constraint_numerator.len()
-        ); //TODO FLORIN ASSERT
+        );
 
         let mut sorted_elements = vec![0usize; sorted_elements_count];
 
@@ -1127,12 +1131,12 @@ pub fn construct_pk_from_builder<C: HonkCurve<TranscriptFieldType>>(
             ];
 
             let num_polys_in_group = interleaved[0].len();
-            assert!(num_polys_in_group == TranslatorFlavour::INTERLEAVING_GROUP_SIZE);
+            debug_assert!(num_polys_in_group == TranslatorFlavour::INTERLEAVING_GROUP_SIZE);
 
             // Targets have to be full-sized proving_key->polynomials. We can compute the mini circuit size from them by
             // dividing by the number of polynomials in the group
             let mini_circuit_size = targets[0].len() / num_polys_in_group;
-            assert!(mini_circuit_size * num_polys_in_group == targets[0].len()); // TODO FLORIN ASSERT
+            debug_assert!(mini_circuit_size * num_polys_in_group == targets[0].len());
 
             for index in 0..(interleaved.len() * num_polys_in_group) {
                 // Get the index of the interleaved polynomial
@@ -1182,15 +1186,15 @@ pub fn construct_pk_from_builder<C: HonkCurve<TranscriptFieldType>>(
                 };
 
             // Check if we can construct these polynomials
-            assert!((num_interleaved_wires + 1) * sorted_elements_count < real_circuit_size); //TODO FLORIN ASSERT
+            debug_assert!((num_interleaved_wires + 1) * sorted_elements_count < real_circuit_size);
 
             // First use integers (easier to sort)
             let mut sorted_elements = vec![0usize; sorted_elements_count];
 
             // Fill with necessary steps
             sorted_elements[0] = max_value as usize;
-            for i in 1..sorted_elements_count {
-                sorted_elements[i] = (sorted_elements_count - 1 - i) * sort_step;
+            for (i, elem) in sorted_elements.iter_mut().enumerate().skip(1) {
+                *elem = (sorted_elements_count - 1 - i) * sort_step;
             }
             // let to_be_interleaved_groups = polys.witness.get_groups_to_be_interleaved().clone();
 
@@ -1250,7 +1254,7 @@ pub fn construct_pk_from_builder<C: HonkCurve<TranscriptFieldType>>(
                 // 2. Comparison operators for finite fields are operating on internal form, so we'd have to convert them
                 // from Montgomery
                 ordered_vectors_uint.sort_unstable();
-                assert!(ordered_vectors_uint.len() == real_circuit_size);
+                debug_assert!(ordered_vectors_uint.len() == real_circuit_size);
                 // Copy the values into the actual polynomial
                 for (idx, v) in ordered_vectors_uint.iter().enumerate() {
                     polys.witness.get_ordered_range_constraints_mut()[i][idx] =
@@ -1273,10 +1277,10 @@ pub fn construct_pk_from_builder<C: HonkCurve<TranscriptFieldType>>(
                 *dst = *src;
             }
 
-            assert!(extra_denominator_uint.len() == real_circuit_size);
+            debug_assert!(extra_denominator_uint.len() == real_circuit_size);
             // Sort it
             extra_denominator_uint.sort_unstable();
-            assert!(extra_denominator_uint.len() == real_circuit_size);
+            debug_assert!(extra_denominator_uint.len() == real_circuit_size);
 
             // Copy the values into the actual polynomial
             let poly4 = polys.witness.ordered_range_constraints_4_mut();

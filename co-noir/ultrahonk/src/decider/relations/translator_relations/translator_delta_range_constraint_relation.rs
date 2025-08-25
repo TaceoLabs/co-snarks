@@ -257,11 +257,6 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDeltaRangeConst
             univariate_accumulator.r4.evaluations[i] += tmp_5.evaluations[i];
         }
 
-        // TODO FLORIN: is this important?
-        // [&]() {
-        //     using Accumulator = std::tuple_element_t<5, ContainerOverSubrelations>;
-        //     using View = typename Accumulator::View;
-
         let ordered_range_constraints_0 = input.witness.ordered_range_constraints_0();
         let ordered_range_constraints_1 = input.witness.ordered_range_constraints_1();
         let ordered_range_constraints_2 = input.witness.ordered_range_constraints_2();
