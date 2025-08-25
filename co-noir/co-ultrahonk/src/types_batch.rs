@@ -19,7 +19,7 @@ pub(crate) type Shared<T, P, L> = <L as MPCProverFlavour>::ProverUnivariateShare
 pub(crate) type Public<P, L> = <L as MPCProverFlavour>::ProverUnivariatePublic<P>;
 
 #[derive(Default)]
-pub(crate) struct AllEntitiesBatch<T, P, L>
+pub struct AllEntitiesBatch<T, P, L>
 where
     T: NoirUltraHonkProver<P>,
     P: CurveGroup,
@@ -38,7 +38,7 @@ where
     L: MPCProverFlavour,
 {
     pub(crate) can_skip: bool,
-    pub(crate) all_entites: AllEntitiesBatch<T, P, L>,
+    pub(crate) all_entities: AllEntitiesBatch<T, P, L>,
     pub(crate) scaling_factors: Vec<P::ScalarField>,
 }
 
@@ -65,7 +65,7 @@ where
     pub(crate) fn new() -> Self {
         Self {
             can_skip: true,
-            all_entites: AllEntitiesBatch::new(),
+            all_entities: AllEntitiesBatch::new(),
             scaling_factors: vec![],
         }
     }
@@ -85,6 +85,21 @@ where
             witness,
             precomputed,
             shifted_witness,
+        }
+    }
+
+    pub fn from_elements(
+        shared_elements: Vec<Vec<T::ArithmeticShare>>,
+        public_elements: Vec<Vec<P::ScalarField>>,
+    ) -> Self {
+        let precomputed = public_elements;
+        let mut witness = shared_elements;
+        let shifted_witness = witness.split_off(L::WITNESS_ENTITIES_SIZE);
+
+        AllEntitiesBatch {
+            precomputed: L::PrecomputedEntities::from_elements(precomputed),
+            witness: L::WitnessEntities::from_elements(witness),
+            shifted_witness: L::ShiftedWitnessEntities::from_elements(shifted_witness),
         }
     }
 
