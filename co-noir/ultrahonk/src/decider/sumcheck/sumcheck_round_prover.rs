@@ -53,7 +53,21 @@ impl<F: PrimeField, L: PlainProverFlavour> SumcheckProverRound<F, L> {
     ) {
         tracing::trace!("Extend edges");
         for (src, des) in multivariates.iter().zip(extended_edges.iter_mut()) {
-            des.extend_from(&src[edge_index..edge_index + 2]);
+            if src.len() < edge_index {
+                *des = L::ProverUnivariate::default();
+            } else {
+                let first_value = if edge_index >= src.len() {
+                    F::zero()
+                } else {
+                    src[edge_index]
+                };
+                let second_value = if edge_index + 1 >= src.len() {
+                    F::zero()
+                } else {
+                    src[edge_index + 1]
+                };
+                des.extend_from(&[first_value, second_value]);
+            }
         }
     }
 

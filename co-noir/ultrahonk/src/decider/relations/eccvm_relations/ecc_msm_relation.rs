@@ -981,14 +981,4 @@ impl EccMsmRelation {
         // perform set membership lookups on add_i * (pc / round / slice_i)
         // perform lookups on (pc / slice_i / x / y)
     }
-
-    #[expect(dead_code)]
-    fn verify_accumulate<P: HonkCurve<TranscriptFieldType>>(
-        _univariate_accumulator: &mut EccMsmRelationEvals<P::ScalarField>,
-        _input: &crate::prelude::ClaimedEvaluations<P::ScalarField, ECCVMFlavour>,
-        _relation_parameters: &crate::prelude::RelationParameters<P::ScalarField>,
-        _scaling_factor: &P::ScalarField,
-    ) {
-        todo!()
-    }
 }

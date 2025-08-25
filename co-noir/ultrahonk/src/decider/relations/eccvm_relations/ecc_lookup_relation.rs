@@ -288,13 +288,4 @@ impl<F: PrimeField> Relation<F, ECCVMFlavour> for EccLookupRelation {
             univariate_accumulator.r1.evaluations[i] += tmp.evaluations[i];
         }
     }
-
-    fn verify_accumulate(
-        _univariate_accumulator: &mut Self::VerifyAcc,
-        _input: &crate::prelude::ClaimedEvaluations<F, ECCVMFlavour>,
-        _relation_parameters: &crate::prelude::RelationParameters<F>,
-        _scaling_factor: &F,
-    ) {
-        todo!()
-    }
 }

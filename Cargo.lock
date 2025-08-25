@@ -1370,6 +1370,7 @@ dependencies = [
  "num-traits",
  "rand 0.8.5",
  "rayon",
+ "serde",
  "sha3",
 ]
 
@@ -2192,6 +2193,7 @@ dependencies = [
  "ark-ec",
  "ark-ff",
  "ark-grumpkin",
+ "bincode",
  "co-builder",
  "common",
  "eyre",

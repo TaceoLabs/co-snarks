@@ -820,13 +820,4 @@ impl EccTranscriptRelation {
             univariate_accumulator.r24.evaluations[i] += tmp.evaluations[i];
         }
     }
-
-    fn _verify_accumulate<F: PrimeField>(
-        _univariate_accumulator: &mut EccTranscriptRelationEvals<F>,
-        _input: &crate::prelude::ClaimedEvaluations<F, ECCVMFlavour>,
-        _relation_parameters: &crate::prelude::RelationParameters<F>,
-        _scaling_factor: &F,
-    ) {
-        todo!()
-    }
 }
