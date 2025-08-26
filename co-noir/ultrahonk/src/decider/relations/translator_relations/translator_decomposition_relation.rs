@@ -1104,7 +1104,7 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDecompositionRe
         for i in 0..univariate_accumulator.r16.evaluations.len() {
             univariate_accumulator.r16.evaluations[i] += tmp_17.evaluations[i];
         }
-        // Contribution 16 , quotient second lowest limb decomposition
+        // Contribution 18 , quotient second lowest limb decomposition
         let mut tmp_18 = (quotient_low_limbs_range_constraint_1_shift.to_owned()
             * micro_limb_shift
             + quotient_low_limbs_range_constraint_0_shift
