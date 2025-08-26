@@ -2920,7 +2920,7 @@ dependencies = [
  "rcgen",
  "rustls",
  "serde",
- "socket2 0.5.10",
+ "socket2 0.6.0",
  "tokio",
  "tokio-util",
  "toml 0.8.23",
