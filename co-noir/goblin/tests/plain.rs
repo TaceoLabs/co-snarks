@@ -159,23 +159,14 @@ fn test_ecc_vm_prover() {
         );
     proving_key.polynomials = polys;
 
-    let transcript = Transcript::<TranscriptFieldType, Poseidon2Sponge>::new();
+    let mut transcript = Transcript::<TranscriptFieldType, Poseidon2Sponge>::new();
 
     let mut prover =
         Eccvm::<short_weierstrass::Projective<GrumpkinConfig>, Poseidon2Sponge>::default();
-    let (_transcript, _ipa_transcript) = prover.construct_proof(transcript, proving_key).unwrap();
-    let path = concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../test_vectors/noir/eccvm/transcript"
-    );
-    let out_file = std::io::BufWriter::new(
-        eyre::Context::context(std::fs::File::create(path), "while creating output file").unwrap(),
-    );
-    eyre::Context::context(
-        bincode::serialize_into(out_file, &_transcript),
-        "while serializing proving_key share",
-    )
-    .unwrap();
+    let _ipa_transcript = prover
+        .construct_proof(&mut transcript, proving_key)
+        .unwrap();
+    let _proof = transcript.get_proof();
 }
 
 // TACEO TODO: The setting (regarding randomness) is the same as for the ECCVM prover test, except that the polynomials in the oink style part don't get masked here.

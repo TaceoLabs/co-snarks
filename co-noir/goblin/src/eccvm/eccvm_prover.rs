@@ -68,7 +68,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         crs: &ProverCrs<P>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
     ) -> HonkProofResult<()> {
-        // polynomial.mask(&mut self.decider.rng);
+        polynomial.mask(&mut self.decider.rng);
 
         // Commit to the polynomial
         let commitment = UltraHonkUtils::commit(polynomial.as_ref(), crs)?;
@@ -80,39 +80,36 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
     pub fn construct_proof(
         &mut self,
-        mut transcript: Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
         mut proving_key: ProvingKey<P, ECCVMFlavour>,
-    ) -> HonkProofResult<(
-        Transcript<TranscriptFieldType, H>, // We need to return the transcript here as Translator reuses it
-        HonkProof<TranscriptFieldType>,
-    )> {
+    ) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
         let circuit_size = proving_key.circuit_size;
         let unmasked_witness_size = (circuit_size - NUM_DISABLED_ROWS_IN_SUMCHECK) as usize;
-        self.execute_wire_commitments_round(&mut transcript, &mut proving_key)?;
+        self.execute_wire_commitments_round(transcript, &mut proving_key)?;
         self.execute_log_derivative_commitments_round(
-            &mut transcript,
+            transcript,
             &proving_key,
             unmasked_witness_size,
         )?;
         self.execute_grand_product_computation_round(
-            &mut transcript,
+            transcript,
             &proving_key,
             unmasked_witness_size,
         )?;
         self.add_polynomials_to_memory(proving_key.polynomials);
 
         let (sumcheck_output, zk_sumcheck_data) =
-            self.execute_relation_check_rounds(&mut transcript, &proving_key.crs, circuit_size)?;
+            self.execute_relation_check_rounds(transcript, &proving_key.crs, circuit_size)?;
 
         let ipa_transcript = self.execute_pcs_rounds(
             sumcheck_output,
             zk_sumcheck_data,
-            &mut transcript,
+            transcript,
             &proving_key.crs,
             circuit_size,
         )?;
 
-        Ok((transcript, ipa_transcript.get_proof()))
+        Ok(ipa_transcript.get_proof())
     }
 
     fn execute_wire_commitments_round(

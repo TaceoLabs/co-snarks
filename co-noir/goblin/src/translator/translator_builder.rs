@@ -250,15 +250,7 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
                     Utils::slice_u256(&val, 3 * MICRO_LIMB_BITS as u64, 4 * MICRO_LIMB_BITS as u64);
                 let a4 =
                     Utils::slice_u256(&val, 4 * MICRO_LIMB_BITS as u64, 5 * MICRO_LIMB_BITS as u64);
-                let top = {
-                    let raw = a4.clone();
-                    let shift_amt = MICRO_LIMB_BITS - (NUM_LIMB_BITS % MICRO_LIMB_BITS);
-                    if shift_amt == 0 {
-                        raw
-                    } else {
-                        &raw << shift_amt
-                    }
-                };
+                let top = a4.clone() << (MICRO_LIMB_BITS - (NUM_LIMB_BITS % MICRO_LIMB_BITS));
                 [
                     P::ScalarField::from(a0),
                     P::ScalarField::from(a1),
@@ -285,16 +277,10 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
                 Utils::slice_u256(&val, 2 * MICRO_LIMB_BITS as u64, 3 * MICRO_LIMB_BITS as u64);
             let a3 =
                 Utils::slice_u256(&val, 3 * MICRO_LIMB_BITS as u64, 4 * MICRO_LIMB_BITS as u64);
-            let a4 = {
-                let raw =
-                    Utils::slice_u256(&val, 3 * MICRO_LIMB_BITS as u64, 4 * MICRO_LIMB_BITS as u64);
-                let shift_amt = MICRO_LIMB_BITS - (last_limb_bits % MICRO_LIMB_BITS);
-                if shift_amt == 0 {
-                    raw
-                } else {
-                    &raw << shift_amt
-                }
-            };
+            let a4 =
+                Utils::slice_u256(&val, 3 * MICRO_LIMB_BITS as u64, 4 * MICRO_LIMB_BITS as u64)
+                    << (MICRO_LIMB_BITS - (last_limb_bits % MICRO_LIMB_BITS));
+
             [
                 P::ScalarField::from(a0),
                 P::ScalarField::from(a1),
@@ -323,16 +309,10 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
                 Utils::slice_u256(&val, 3 * MICRO_LIMB_BITS as u64, 4 * MICRO_LIMB_BITS as u64);
             let a4 =
                 Utils::slice_u256(&val, 4 * MICRO_LIMB_BITS as u64, 5 * MICRO_LIMB_BITS as u64);
-            let a5 = {
-                let raw =
-                    Utils::slice_u256(&val, 4 * MICRO_LIMB_BITS as u64, 5 * MICRO_LIMB_BITS as u64);
-                let shift_amt = MICRO_LIMB_BITS - (last_limb_bits % MICRO_LIMB_BITS);
-                if shift_amt == 0 {
-                    raw
-                } else {
-                    &raw << shift_amt
-                }
-            };
+            let a5 =
+                Utils::slice_u256(&val, 4 * MICRO_LIMB_BITS as u64, 5 * MICRO_LIMB_BITS as u64)
+                    << (MICRO_LIMB_BITS - (last_limb_bits % MICRO_LIMB_BITS));
+
             [
                 P::ScalarField::from(a0),
                 P::ScalarField::from(a1),
