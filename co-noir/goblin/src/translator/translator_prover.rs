@@ -348,6 +348,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         &self,
         proving_key: &ProvingKey<P, TranslatorFlavour>,
         i: usize,
+        lagrange_masking_term: P::ScalarField,
     ) -> P::ScalarField {
         tracing::trace!("compute grand product numerator");
 
@@ -373,20 +374,18 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             .precomputed
             .ordered_extra_range_constraints_numerator()[i];
 
-        let lagrange_masking = &proving_key.polynomials.precomputed.lagrange_masking()[i];
-        let gamma = &self.decider.memory.relation_parameters.gamma;
-        let beta = &self.decider.memory.relation_parameters.beta;
-        (*interleaved_range_constraints_0 + *lagrange_masking * beta + gamma)
-            * (*interleaved_range_constraints_1 + *lagrange_masking * beta + gamma)
-            * (*interleaved_range_constraints_2 + *lagrange_masking * beta + gamma)
-            * (*interleaved_range_constraints_3 + *lagrange_masking * beta + gamma)
-            * (*ordered_extra_range_constraints_numerator + *lagrange_masking * beta + gamma)
+        (*interleaved_range_constraints_0 + lagrange_masking_term)
+            * (*interleaved_range_constraints_1 + lagrange_masking_term)
+            * (*interleaved_range_constraints_2 + lagrange_masking_term)
+            * (*interleaved_range_constraints_3 + lagrange_masking_term)
+            * (*ordered_extra_range_constraints_numerator + lagrange_masking_term)
     }
 
     fn compute_grand_product_denominator(
         &self,
         proving_key: &ProvingKey<P, TranslatorFlavour>,
         i: usize,
+        lagrange_masking_term: P::ScalarField,
     ) -> P::ScalarField {
         tracing::trace!("compute grand product denominator");
 
@@ -411,15 +410,11 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             .witness
             .ordered_range_constraints_4()[i];
 
-        let lagrange_masking = &proving_key.polynomials.precomputed.lagrange_masking()[i];
-
-        let gamma = &self.decider.memory.relation_parameters.gamma;
-        let beta = &self.decider.memory.relation_parameters.beta;
-        (*ordered_range_constraints_0 + *lagrange_masking * beta + gamma)
-            * (*ordered_range_constraints_1 + *lagrange_masking * beta + gamma)
-            * (*ordered_range_constraints_2 + *lagrange_masking * beta + gamma)
-            * (*ordered_range_constraints_3 + *lagrange_masking * beta + gamma)
-            * (*ordered_range_constraints_4 + *lagrange_masking * beta + gamma)
+        (*ordered_range_constraints_0 + lagrange_masking_term)
+            * (*ordered_range_constraints_1 + lagrange_masking_term)
+            * (*ordered_range_constraints_2 + lagrange_masking_term)
+            * (*ordered_range_constraints_3 + lagrange_masking_term)
+            * (*ordered_range_constraints_4 + lagrange_masking_term)
     }
 
     fn compute_grand_product(&mut self, proving_key: &ProvingKey<P, TranslatorFlavour>) {
@@ -452,8 +447,20 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             } else {
                 i
             };
-            numerator.push(self.compute_grand_product_numerator(proving_key, idx));
-            denominator.push(self.compute_grand_product_denominator(proving_key, idx));
+            let lagrange_masking = &proving_key.polynomials.precomputed.lagrange_masking()[idx];
+            let gamma = &self.decider.memory.relation_parameters.gamma;
+            let beta = &self.decider.memory.relation_parameters.beta;
+            let lagrange_masking_term = *lagrange_masking * beta + gamma;
+            numerator.push(self.compute_grand_product_numerator(
+                proving_key,
+                idx,
+                lagrange_masking_term,
+            ));
+            denominator.push(self.compute_grand_product_denominator(
+                proving_key,
+                idx,
+                lagrange_masking_term,
+            ));
         }
 
         // Step (2)
