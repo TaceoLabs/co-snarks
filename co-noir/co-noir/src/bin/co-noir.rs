@@ -1545,7 +1545,10 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
         );
         serde_json::to_writer(public_input_json_file, &public_inputs_as_strings)
             .context("while writing out public inputs to JSON file")?;
-        tracing::info!("Wrote public input to file {}", public_inputs_path.display());
+        tracing::info!(
+            "Wrote public input to file {}",
+            public_inputs_path.display()
+        );
     }
 
     tracing::info!("Proof generation finished successfully");
@@ -1773,7 +1776,10 @@ fn run_build_and_generate_proof(
         );
         serde_json::to_writer(public_input_json_file, &public_inputs_as_strings)
             .context("while writing out public inputs to JSON file")?;
-        tracing::info!("Wrote public input to file {}", public_inputs_path.display());
+        tracing::info!(
+            "Wrote public input to file {}",
+            public_inputs_path.display()
+        );
     }
 
     tracing::info!("Proof generation finished successfully");
