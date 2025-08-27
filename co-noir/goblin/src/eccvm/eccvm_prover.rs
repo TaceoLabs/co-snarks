@@ -80,39 +80,36 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
     pub fn construct_proof(
         &mut self,
-        mut transcript: Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
         mut proving_key: ProvingKey<P, ECCVMFlavour>,
-    ) -> HonkProofResult<(
-        HonkProof<TranscriptFieldType>,
-        HonkProof<TranscriptFieldType>,
-    )> {
+    ) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
         let circuit_size = proving_key.circuit_size;
         let unmasked_witness_size = (circuit_size - NUM_DISABLED_ROWS_IN_SUMCHECK) as usize;
-        self.execute_wire_commitments_round(&mut transcript, &mut proving_key)?;
+        self.execute_wire_commitments_round(transcript, &mut proving_key)?;
         self.execute_log_derivative_commitments_round(
-            &mut transcript,
+            transcript,
             &proving_key,
             unmasked_witness_size,
         )?;
         self.execute_grand_product_computation_round(
-            &mut transcript,
+            transcript,
             &proving_key,
             unmasked_witness_size,
         )?;
         self.add_polynomials_to_memory(proving_key.polynomials);
 
         let (sumcheck_output, zk_sumcheck_data) =
-            self.execute_relation_check_rounds(&mut transcript, &proving_key.crs, circuit_size)?;
+            self.execute_relation_check_rounds(transcript, &proving_key.crs, circuit_size)?;
 
         let ipa_transcript = self.execute_pcs_rounds(
             sumcheck_output,
             zk_sumcheck_data,
-            &mut transcript,
+            transcript,
             &proving_key.crs,
             circuit_size,
         )?;
 
-        Ok((transcript.get_proof(), ipa_transcript.get_proof()))
+        Ok(ipa_transcript.get_proof())
     }
 
     fn execute_wire_commitments_round(
@@ -832,11 +829,11 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         // Compute grand product values corresponding only to the active regions of the trace
         for i in 0..active_domain_size - 1 {
             let idx = if has_active_ranges {
-                proving_key.active_region_data.get_idx(i)
+                proving_key.active_region_data.get_idx(i + 1)
             } else {
-                i
+                i + 1
             };
-            self.memory.z_perm[idx + 1] = numerator[i] * denominator[i];
+            self.memory.z_perm[idx] = numerator[i] * denominator[i];
         }
 
         // Final step: If active/inactive regions have been specified, the value of the grand product in the inactive
@@ -850,7 +847,8 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
                     let next_range_start = proving_key.active_region_data.get_range(j + 1).0;
                     // Set the value of the polynomial if the index falls in an inactive region
                     if i >= previous_range_end && i < next_range_start {
-                        self.memory.z_perm[i + 1] = self.memory.z_perm[next_range_start];
+                        self.memory.z_perm[i] = self.memory.z_perm[next_range_start];
+                        break;
                     }
                 }
             }
