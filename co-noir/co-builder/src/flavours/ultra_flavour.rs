@@ -520,6 +520,9 @@ impl<T: Default + Debug + Clone> WitnessEntitiesFlavour<T> for UltraWitnessEntit
     fn to_be_shifted_mut(&mut self) -> &mut [T] {
         &mut self.elements[UltraFlavour::WITNESS_W_L..=UltraFlavour::WITNESS_Z_PERM]
     }
+    fn get_unshifted(&self) -> &[T] {
+        &self.elements
+    }
     fn w_l(&self) -> &T {
         &self.elements[UltraFlavour::WITNESS_W_L]
     }

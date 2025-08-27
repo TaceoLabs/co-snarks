@@ -390,10 +390,10 @@ impl<T: Default> ProverWitnessEntitiesFlavour<T> for ECCVMProverWitnessEntities<
     }
 }
 impl<T: Default + Debug> PrecomputedEntitiesFlavour<T> for ECCVMPrecomputedEntities<T> {
-    fn from_elements(_elements: Vec<T>) -> Self {
-        unimplemented!(
-            "PrecomputedEntitiesFlavour::from_elements is not implemented for ECCVMFlavour"
-        );
+    fn from_elements(elements: Vec<T>) -> Self {
+        Self {
+            elements: elements.try_into().unwrap(),
+        }
     }
     fn iter<'a>(&'a self) -> impl Iterator<Item = &'a T>
     where
@@ -434,8 +434,10 @@ impl<T: Default + Debug> WitnessEntitiesFlavour<T> for ECCVMWitnessEntities<T> {
             elements: std::array::from_fn(|_| T::default()),
         }
     }
-    fn from_elements(_elements: Vec<T>) -> Self {
-        unimplemented!("WitnessEntitiesFlavour::from_elements is not implemented for ECCVMFlavour");
+    fn from_elements(elements: Vec<T>) -> Self {
+        Self {
+            elements: elements.try_into().unwrap(),
+        }
     }
     fn iter<'a>(&'a self) -> impl Iterator<Item = &'a T>
     where
@@ -466,6 +468,9 @@ impl<T: Default + Debug> WitnessEntitiesFlavour<T> for ECCVMWitnessEntities<T> {
     }
     fn z_perm(&self) -> &T {
         &self.elements[ECCVMFlavour::Z_PERM]
+    }
+    fn get_unshifted(&self) -> &[T] {
+        &self.elements
     }
 }
 impl<T: Default + Debug> ShiftedWitnessEntitiesFlavour<T> for ECCVMShiftedWitnessEntities<T> {

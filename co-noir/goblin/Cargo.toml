@@ -25,6 +25,7 @@ ark-grumpkin.workspace = true
 tracing.workspace = true
 rand.workspace = true
 serde.workspace = true
+bincode.workspace = true
 
 
 [dev-dependencies]
