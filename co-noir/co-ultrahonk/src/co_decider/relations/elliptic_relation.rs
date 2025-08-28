@@ -1,13 +1,17 @@
 use super::Relation;
 use crate::{
     co_decider::{
-        relations::fold_accumulator, types::RelationParameters, univariates::SharedUnivariate,
+        relations::fold_accumulator,
+        types::{ProverUnivariatesBatch, RelationParameters},
+        univariates::SharedUnivariate,
     },
     mpc_prover_flavour::MPCProverFlavour,
+    types::AllEntities,
 };
 use common::mpc::NoirUltraHonkProver;
 
 use ark_ec::CurveGroup;
+use ark_ff::Field;
 use ark_ff::Zero;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::prelude::HonkCurve;
@@ -26,12 +30,44 @@ pub(crate) struct EllipticRelationAcc<T: NoirUltraHonkProver<P>, P: CurveGroup> 
     pub(crate) r1: SharedUnivariate<T, P, 6>,
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct EllipticRelationEvals<T: NoirUltraHonkProver<P>, P: CurveGroup> {
+    pub(crate) r0: T::ArithmeticShare,
+    pub(crate) r1: T::ArithmeticShare,
+}
+
 impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for EllipticRelationAcc<T, P> {
     fn default() -> Self {
         Self {
             r0: Default::default(),
             r1: Default::default(),
         }
+    }
+}
+
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for EllipticRelationEvals<T, P> {
+    fn default() -> Self {
+        Self {
+            r0: Default::default(),
+            r1: Default::default(),
+        }
+    }
+}
+
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> EllipticRelationEvals<T, P> {
+    pub(crate) fn scale_by_challenge_and_accumulate(
+        &self,
+        linearly_independent_contribution: &mut T::ArithmeticShare,
+        running_challenge: &[P::ScalarField],
+    ) {
+        assert!(running_challenge.len() == EllipticRelation::NUM_RELATIONS);
+
+        let tmp = T::mul_with_public_many(running_challenge, &[self.r0, self.r1])
+            .into_iter()
+            .reduce(T::add)
+            .expect("Failed to accumulate elliptic relation evaluations");
+
+        T::add_assign(linearly_independent_contribution, tmp);
     }
 }
 
@@ -62,6 +98,26 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup> EllipticRelationAcc<T, P> {
             true,
         );
     }
+
+    pub(crate) fn extend_and_batch_univariates_with_distinct_challenges<const SIZE: usize>(
+        &self,
+        result: &mut SharedUnivariate<T, P, SIZE>,
+        running_challenge: &[Univariate<P::ScalarField, SIZE>],
+    ) {
+        self.r0.extend_and_batch_univariates(
+            result,
+            &running_challenge[0],
+            &P::ScalarField::ONE,
+            true,
+        );
+
+        self.r1.extend_and_batch_univariates(
+            result,
+            &running_challenge[1],
+            &P::ScalarField::ONE,
+            true,
+        );
+    }
 }
 
 pub(crate) struct EllipticRelation {}
@@ -75,6 +131,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
     Relation<T, P, L> for EllipticRelation
 {
     type Acc = EllipticRelationAcc<T, P>;
+    type VerifyAcc = EllipticRelationEvals<T, P>;
 
     fn can_skip(entity: &super::ProverUnivariates<T, P, L>) -> bool {
         entity.precomputed.q_elliptic().is_zero()
@@ -111,9 +168,9 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         net: &N,
         state: &mut T::State,
         univariate_accumulator: &mut Self::Acc,
-        input: &super::ProverUnivariatesBatch<T, P, L>,
-        _relation_parameters: &RelationParameters<<P>::ScalarField, L>,
-        scaling_factors: &[<P>::ScalarField],
+        input: &ProverUnivariatesBatch<T, P, L>,
+        _relation_parameters: &RelationParameters<P::ScalarField>,
+        scaling_factors: &[P::ScalarField],
     ) -> HonkProofResult<()> {
         tracing::trace!("Accumulate EllipticRelation");
 
@@ -258,6 +315,140 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
 
         fold_accumulator!(univariate_accumulator.r0, tmp_1, SIZE);
         fold_accumulator!(univariate_accumulator.r1, tmp_2, SIZE);
+        Ok(())
+    }
+
+    fn accumulate_with_extended_parameters<N: Network, const SIZE: usize>(
+        net: &N,
+        state: &mut T::State,
+        univariate_accumulator: &mut Self::Acc,
+        input: &ProverUnivariatesBatch<T, P, L>,
+        _relation_parameters: &RelationParameters<Univariate<P::ScalarField, SIZE>>,
+        scaling_factor: &P::ScalarField,
+    ) -> HonkProofResult<()> {
+        // TODO TACEO: Reconcile skip check and `can_skip`
+        if input.precomputed.q_elliptic().iter().all(|x| x.is_zero()) {
+            return Ok(());
+        }
+        Self::accumulate::<N, SIZE>(
+            net,
+            state,
+            univariate_accumulator,
+            input,
+            &RelationParameters::default(),
+            &vec![*scaling_factor; input.precomputed.q_elliptic().len()],
+        )
+    }
+
+    fn accumulate_evaluations<N: Network>(
+        net: &N,
+        state: &mut T::State,
+        accumulator: &mut Self::VerifyAcc,
+        input: &AllEntities<T::ArithmeticShare, P::ScalarField, L>,
+        _relation_parameters: &RelationParameters<P::ScalarField>,
+        scaling_factor: &P::ScalarField,
+    ) -> HonkProofResult<()> {
+        tracing::trace!("Accumulate EllipticRelation");
+
+        // AZTEC TODO(@zac - williamson #2608 when Pedersen refactor is completed,
+        // replace old addition relations with these ones and
+        // remove endomorphism coefficient in ecc add gate(not used))
+
+        let id = state.id().to_owned();
+        let x_1 = input.witness.w_r().to_owned();
+        let y_1 = input.witness.w_o().to_owned();
+
+        let x_2 = input.shifted_witness.w_l().to_owned();
+        let y_2 = input.shifted_witness.w_4().to_owned();
+        let y_3 = input.shifted_witness.w_o().to_owned();
+        let x_3 = input.shifted_witness.w_r().to_owned();
+
+        let q_sign = input.precomputed.q_l().to_owned();
+        let q_elliptic = input.precomputed.q_elliptic().to_owned();
+        let q_is_double = input.precomputed.q_m().to_owned();
+
+        // First round of multiplications
+        let x_diff = T::sub(x_2, x_1);
+        let y1_plus_y3 = T::add(y_1, y_3);
+        let mut y_diff = T::mul_with_public(q_sign, y_2);
+        T::sub_assign(&mut y_diff, y_1);
+
+        let mut x1_mul_3 = T::add(x_1, x_1);
+        T::add_assign(&mut x1_mul_3, x_1);
+
+        let lhs = vec![y_1, y_2, y_1, x_diff, y1_plus_y3, y_diff, x1_mul_3];
+
+        let rhs = vec![y_1, y_2, y_2, x_diff, x_diff, T::sub(x_3, x_1), x_1];
+
+        let mul1 = T::mul_many(&lhs, &rhs, net, state)?;
+
+        // Second round of multiplications
+        let curve_b = P::get_curve_b(); // here we need the extra constraint on the Curve
+        let y1_sqr = mul1[0];
+        let y1_sqr_mul_4 = T::add(y1_sqr, y1_sqr);
+        let y1_sqr_mul_4 = T::add(y1_sqr_mul_4, y1_sqr_mul_4);
+        let x1_sqr_mul_3 = mul1[6];
+
+        let lhs = vec![
+            T::add(T::add(x_3, x_2), x_1),
+            T::add_with_public(-curve_b, y1_sqr, id),
+            T::add(T::add(x_3, x_1), x_1),
+            x1_sqr_mul_3,
+            T::add(y_1, y_1),
+        ];
+
+        let rhs = vec![
+            mul1[3],
+            x1_mul_3,
+            y1_sqr_mul_4,
+            T::sub(x_1, x_3),
+            y1_plus_y3,
+        ];
+
+        let mul2 = T::mul_many(&lhs, &rhs, net, state)?;
+
+        // Contribution (1) point addition, x-coordinate check
+        // q_elliptic * (x3 + x2 + x1)(x2 - x1)(x2 - x1) - y2^2 - y1^2 + 2(y2y1)*q_sign = 0
+        let y2_sqr = mul1[1];
+        let y1y2 = T::mul_with_public(q_sign, mul1[2]);
+        let mut x_add_identity = T::sub(mul2[0], y2_sqr);
+        T::sub_assign(&mut x_add_identity, y1_sqr);
+        T::add_assign(&mut x_add_identity, y1y2);
+        T::add_assign(&mut x_add_identity, y1y2);
+
+        let q_elliptic_by_scaling = q_elliptic * scaling_factor;
+        let q_elliptic_q_double_scaling = q_elliptic_by_scaling * q_is_double;
+        let q_elliptic_not_double_scaling = q_elliptic_by_scaling - q_elliptic_q_double_scaling;
+
+        let mut tmp_1 = T::mul_with_public(q_elliptic_not_double_scaling, x_add_identity);
+
+        ///////////////////////////////////////////////////////////////////////
+        // Contribution (2) point addition, x-coordinate check
+        // q_elliptic * (q_sign * y1 + y3)(x2 - x1) + (x3 - x1)(y2 - q_sign * y1) = 0
+        let y_add_identity = T::add(mul1[4], mul1[5]);
+        let mut tmp_2 = T::mul_with_public(q_elliptic_not_double_scaling, y_add_identity);
+
+        ///////////////////////////////////////////////////////////////////////
+        // Contribution (3) point doubling, x-coordinate check
+        // (x3 + x1 + x1) (4y1*y1) - 9 * x1 * x1 * x1 * x1 = 0
+        // N.B. we're using the equivalence x1*x1*x1 === y1*y1 - curve_b to reduce degree by 1
+        let x_pow_4_mul_3 = mul2[1];
+        let mut x1_pow_4_mul_9 = T::add(x_pow_4_mul_3, x_pow_4_mul_3);
+        T::add_assign(&mut x1_pow_4_mul_9, x_pow_4_mul_3);
+        let x_double_identity = T::sub(mul2[2], x1_pow_4_mul_9);
+
+        let tmp = T::mul_with_public(q_elliptic_q_double_scaling, x_double_identity);
+        T::add_assign(&mut tmp_1, tmp);
+
+        ///////////////////////////////////////////////////////////////////////
+        // Contribution (4) point doubling, y-coordinate check
+        // (y1 + y1) (2y1) - (3 * x1 * x1)(x1 - x3) = 0
+        let y_double_identity = T::sub(mul2[3], mul2[4]);
+        let tmp = T::mul_with_public(q_elliptic_q_double_scaling, y_double_identity);
+        T::add_assign(&mut tmp_2, tmp);
+
+        T::add_assign(&mut accumulator.r0, tmp_1);
+        T::add_assign(&mut accumulator.r1, tmp_2);
         Ok(())
     }
 }

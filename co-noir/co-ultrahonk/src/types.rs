@@ -55,28 +55,32 @@ where
 {
     pub(crate) fn new(circuit_size: usize) -> Self {
         let mut polynomials = Self::default();
+
         // Shifting is done at a later point
-        polynomials
-            .witness
-            .iter_mut()
-            .for_each(|el| el.resize(circuit_size, Default::default()));
-        polynomials.precomputed.iter_mut().for_each(|el| {
-            el.resize(circuit_size, Default::default());
-        });
+        polynomials.increase_polynomial_size(circuit_size);
 
         polynomials
+    }
+
+    pub fn increase_polynomial_size(&mut self, circuit_size: usize) {
+        self.witness
+            .iter_mut()
+            .for_each(|el| el.resize(circuit_size, Default::default()));
+        self.precomputed
+            .iter_mut()
+            .for_each(|el| el.resize(circuit_size, Default::default()));
     }
 }
 
 #[derive(Default, Clone, Debug)]
-pub(crate) struct AllEntities<
+pub struct AllEntities<
     Shared: Default + Clone + Debug + std::marker::Sync,
     Public: Default + Clone + Debug + std::marker::Sync,
     L: MPCProverFlavour,
 > {
-    pub(crate) witness: L::WitnessEntities<Shared>,
-    pub(crate) precomputed: L::PrecomputedEntities<Public>,
-    pub(crate) shifted_witness: L::ShiftedWitnessEntities<Shared>,
+    pub witness: L::WitnessEntities<Shared>,
+    pub precomputed: L::PrecomputedEntities<Public>,
+    pub shifted_witness: L::ShiftedWitnessEntities<Shared>,
 }
 
 impl<
@@ -85,25 +89,41 @@ impl<
     L: MPCProverFlavour,
 > AllEntities<Shared, Public, L>
 {
-    pub(crate) fn public_iter(&self) -> impl Iterator<Item = &Public> {
+    pub fn from_elements(shared_elements: Vec<Shared>, public_elements: Vec<Public>) -> Self {
+        let precomputed = public_elements;
+        let mut witness = shared_elements;
+        let shifted_witness = witness.split_off(L::WITNESS_ENTITIES_SIZE);
+
+        AllEntities {
+            precomputed: L::PrecomputedEntities::from_elements(precomputed),
+            witness: L::WitnessEntities::from_elements(witness),
+            shifted_witness: L::ShiftedWitnessEntities::from_elements(shifted_witness),
+        }
+    }
+
+    pub fn public_iter(&self) -> impl Iterator<Item = &Public> {
         self.precomputed.iter()
     }
 
-    pub(crate) fn shared_iter(&self) -> impl Iterator<Item = &Shared> {
+    pub fn shared_iter(&self) -> impl Iterator<Item = &Shared> {
         self.witness.iter().chain(self.shifted_witness.iter())
     }
 
-    pub(crate) fn into_shared_iter(self) -> impl Iterator<Item = Shared> {
+    pub fn into_shared_iter(self) -> impl Iterator<Item = Shared> {
         self.witness
             .into_iter()
             .chain(self.shifted_witness.into_iter())
     }
 
-    pub(crate) fn public_iter_mut(&mut self) -> impl Iterator<Item = &mut Public> {
+    pub fn into_public_iter(self) -> impl Iterator<Item = Public> {
+        self.precomputed.into_iter()
+    }
+
+    pub fn public_iter_mut(&mut self) -> impl Iterator<Item = &mut Public> {
         self.precomputed.iter_mut()
     }
 
-    pub(crate) fn shared_iter_mut(&mut self) -> impl Iterator<Item = &mut Shared> {
+    pub fn shared_iter_mut(&mut self) -> impl Iterator<Item = &mut Shared> {
         self.witness
             .iter_mut()
             .chain(self.shifted_witness.iter_mut())
@@ -128,10 +148,17 @@ impl<
 
         polynomials
     }
+
+    pub fn get_row(&self, index: usize) -> AllEntities<Shared, Public, L> {
+        AllEntities::from_elements(
+            self.shared_iter().map(|el| el[index].clone()).collect(),
+            self.public_iter().map(|el| el[index].clone()).collect(),
+        )
+    }
 }
 
 impl<T: Default + Clone + Debug + std::marker::Sync, L: MPCProverFlavour> AllEntities<T, T, L> {
-    pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
+    pub fn iter(&self) -> impl Iterator<Item = &T> {
         self.precomputed
             .iter()
             .chain(self.witness.iter())

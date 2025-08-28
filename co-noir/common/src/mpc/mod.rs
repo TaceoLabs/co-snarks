@@ -39,6 +39,9 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
     /// Subtract the share b from the share a: \[c\] = \[a\] - \[b\]
     fn sub(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare;
 
+    // Subtract two shares: \[c\] = \[a\] - \[b\] and stores the result in \[a\].
+    fn sub_assign(a: &mut Self::ArithmeticShare, b: Self::ArithmeticShare);
+
     /// Elementwise subtraction of share b from the share a: \[c\] = \[a\] - \[b\]
     fn sub_many(
         a: &[Self::ArithmeticShare],
@@ -124,6 +127,11 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
 
     /// Negates a shared value: \[b\] = -\[a\].
     fn neg(a: Self::ArithmeticShare) -> Self::ArithmeticShare;
+
+    /// Negates a shared value in-place: \[b\] = -\[a\] and stores the result in \[a\].
+    fn neg_assign(a: &mut Self::ArithmeticShare) {
+        *a = Self::neg(*a);
+    }
 
     /// Negates shared values in-place: \[b\] = -\[a\].
     fn neg_many(a: &mut [Self::ArithmeticShare]) {
@@ -223,6 +231,14 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
         net: &N,
         state: &mut Self::State,
     ) -> eyre::Result<Vec<Self::ArithmeticShare>>;
+
+    /// Multiply two shares: \[c\] = \[a\] * \[b\]. Requires network communication.
+    fn mul<N: Network>(
+        a: Self::ArithmeticShare,
+        b: Self::ArithmeticShare,
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<Self::ArithmeticShare>;
 
     /// Multiply two shares: \[c\] = \[a\] * \[b\]. Requires network communication.
     fn mul_many<N: Network>(
