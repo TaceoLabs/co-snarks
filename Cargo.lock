@@ -1200,6 +1200,7 @@ name = "co-noir-types"
 version = "0.1.0"
 dependencies = [
  "ark-ff",
+ "eyre",
  "mpc-core",
  "rand 0.8.5",
  "serde",
@@ -1228,6 +1229,27 @@ dependencies = [
  "sha3",
  "thiserror 2.0.14",
  "tracing",
+]
+
+[[package]]
+name = "co-protogalaxy"
+version = "0.1.0"
+dependencies = [
+ "ark-bn254",
+ "ark-ec",
+ "ark-ff",
+ "co-builder",
+ "co-ultrahonk",
+ "common",
+ "flate2",
+ "itertools 0.14.0",
+ "mpc-core",
+ "mpc-net",
+ "rand 0.8.5",
+ "rayon",
+ "serde",
+ "serde_json",
+ "ultrahonk",
 ]
 
 [[package]]
@@ -1370,6 +1392,7 @@ dependencies = [
  "num-traits",
  "rand 0.8.5",
  "rayon",
+ "serde",
  "sha3",
 ]
 
@@ -2192,6 +2215,7 @@ dependencies = [
  "ark-ec",
  "ark-ff",
  "ark-grumpkin",
+ "bincode",
  "co-builder",
  "common",
  "eyre",
@@ -2920,7 +2944,7 @@ dependencies = [
  "rcgen",
  "rustls",
  "serde",
- "socket2 0.5.10",
+ "socket2 0.6.0",
  "tokio",
  "tokio-util",
  "toml 0.8.23",

@@ -1,4 +1,5 @@
 use ark_ff::One;
+use co_circom_types::Rep3InputType;
 use mpc_net::Network;
 
 use ark_ff::PrimeField;
@@ -80,6 +81,33 @@ impl<F: PrimeField> From<Vec<F>> for BatchedRep3VmType<F> {
 impl<F: PrimeField> From<Vec<ArithmeticShare<F>>> for BatchedRep3VmType<F> {
     fn from(value: Vec<ArithmeticShare<F>>) -> Self {
         Self::Arithmetic(value)
+    }
+}
+
+impl<F: PrimeField> TryFrom<Vec<Rep3InputType<F>>> for BatchedRep3VmType<F> {
+    type Error = eyre::Report;
+
+    fn try_from(value: Vec<Rep3InputType<F>>) -> Result<Self, Self::Error> {
+        if value.is_empty() {
+            eyre::bail!("Cannot convert empty vector to BatchedRep3VmType");
+        }
+        if value.iter().all(|v| matches!(v, Rep3InputType::Public(_))) {
+            Ok(Self::Public(
+                value
+                    .into_iter()
+                    .map(|v| v.as_public().expect("public"))
+                    .collect(),
+            ))
+        } else if value.iter().all(|v| matches!(v, Rep3InputType::Shared(_))) {
+            Ok(Self::Arithmetic(
+                value
+                    .into_iter()
+                    .map(|v| v.as_shared().expect("shared"))
+                    .collect(),
+            ))
+        } else {
+            eyre::bail!("Cannot convert mixed vector to BatchedRep3VmType");
+        }
     }
 }
 

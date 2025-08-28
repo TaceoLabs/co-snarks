@@ -104,7 +104,10 @@ impl Utils {
      * @returns the u256 equal to the substring of bits from (and including) the `start`-th bit, to (but excluding) the
      * `end`-th bit of `this`.
      */
-    pub fn slice_u256(value: BigUint, start: u64, end: u64) -> BigUint {
+    pub fn slice_u256(value: &BigUint, start: u64, end: u64) -> BigUint {
+        if end <= start {
+            return BigUint::zero();
+        }
         let range = end - start;
         let mask = if range == 256 {
             (BigUint::from(1u64) << 256) - BigUint::one()

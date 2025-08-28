@@ -1,16 +1,19 @@
 use crate::co_decider::relations::Relation;
+use crate::co_decider::relations::auxiliary_relation::AuxiliaryRelationAccType;
+use crate::co_decider::relations::logderiv_lookup_relation::LogDerivLookupRelationAccType;
+use crate::co_decider::relations::permutation_relation::UltraPermutationRelationAccType;
 use crate::types_batch::{AllEntitiesBatchRelationsTrait, Public, Shared, SumCheckDataForRelation};
 use crate::{
     co_decider::{
         co_sumcheck::co_sumcheck_round::SumcheckRound,
         relations::{
-            auxiliary_relation::{AuxiliaryRelation, AuxiliaryRelationAcc},
+            auxiliary_relation::AuxiliaryRelation,
             delta_range_constraint_relation::{
                 DeltaRangeConstraintRelation, DeltaRangeConstraintRelationAcc,
             },
             elliptic_relation::{EllipticRelation, EllipticRelationAcc},
-            logderiv_lookup_relation::{LogDerivLookupRelation, LogDerivLookupRelationAcc},
-            permutation_relation::{UltraPermutationRelation, UltraPermutationRelationAcc},
+            logderiv_lookup_relation::LogDerivLookupRelation,
+            permutation_relation::UltraPermutationRelation,
             poseidon2_external_relation::{
                 Poseidon2ExternalRelation, Poseidon2ExternalRelationAcc,
             },
@@ -27,6 +30,7 @@ use crate::{
     mpc_prover_flavour::MPCProverFlavour,
 };
 use ark_ec::CurveGroup;
+use ark_ff::AdditiveGroup;
 use ark_ff::PrimeField;
 use co_builder::TranscriptFieldType;
 use co_builder::flavours::ultra_flavour::UltraFlavour;
@@ -39,22 +43,22 @@ use ultrahonk::prelude::Univariate;
 
 pub struct AllRelationAccUltra<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) r_arith: UltraArithmeticRelationAcc<T, P>,
-    pub(crate) r_perm: UltraPermutationRelationAcc<T, P>,
-    pub(crate) r_lookup: LogDerivLookupRelationAcc<T, P>,
+    pub(crate) r_perm: UltraPermutationRelationAccType<T, P>,
+    pub(crate) r_lookup: LogDerivLookupRelationAccType<T, P>,
     pub(crate) r_delta: DeltaRangeConstraintRelationAcc<T, P>,
     pub(crate) r_elliptic: EllipticRelationAcc<T, P>,
-    pub(crate) r_aux: AuxiliaryRelationAcc<T, P>,
+    pub(crate) r_aux: AuxiliaryRelationAccType<T, P>,
     pub(crate) r_pos_ext: Poseidon2ExternalRelationAcc<T, P>,
     pub(crate) r_pos_int: Poseidon2InternalRelationAcc<T, P>,
 }
 
 pub struct AllRelationAccHalfSharedUltra<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) r_arith: UltraArithmeticRelationAccHalfShared<T, P>,
-    pub(crate) r_perm: UltraPermutationRelationAcc<T, P>,
-    pub(crate) r_lookup: LogDerivLookupRelationAcc<T, P>,
+    pub(crate) r_perm: UltraPermutationRelationAccType<T, P>,
+    pub(crate) r_lookup: LogDerivLookupRelationAccType<T, P>,
     pub(crate) r_delta: DeltaRangeConstraintRelationAcc<T, P>,
     pub(crate) r_elliptic: EllipticRelationAcc<T, P>,
-    pub(crate) r_aux: AuxiliaryRelationAcc<T, P>,
+    pub(crate) r_aux: AuxiliaryRelationAccType<T, P>,
     pub(crate) r_pos_ext: Poseidon2ExternalRelationAcc<T, P>,
     pub(crate) r_pos_int: Poseidon2InternalRelationAcc<T, P>,
 }
@@ -63,11 +67,11 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for AllRelationAccHalfSha
     fn default() -> Self {
         AllRelationAccHalfSharedUltra {
             r_arith: UltraArithmeticRelationAccHalfShared::default(),
-            r_perm: UltraPermutationRelationAcc::default(),
-            r_lookup: LogDerivLookupRelationAcc::default(),
+            r_perm: UltraPermutationRelationAccType::default(),
+            r_lookup: LogDerivLookupRelationAccType::default(),
             r_delta: DeltaRangeConstraintRelationAcc::default(),
             r_elliptic: EllipticRelationAcc::default(),
-            r_aux: AuxiliaryRelationAcc::default(),
+            r_aux: AuxiliaryRelationAccType::default(),
             r_pos_ext: Poseidon2ExternalRelationAcc::default(),
             r_pos_int: Poseidon2InternalRelationAcc::default(),
         }
@@ -141,6 +145,7 @@ fn extend_and_batch_univariates_template<
 
 impl MPCProverFlavour for UltraFlavour {
     type AllRelationAcc<T: NoirUltraHonkProver<P>, P: CurveGroup> = AllRelationAccUltra<T, P>;
+    type AllRelationEvaluations<T: NoirUltraHonkProver<P>, P: CurveGroup> = ();
 
     type AllRelationAccHalfShared<T: NoirUltraHonkProver<P>, P: CurveGroup> =
         AllRelationAccHalfSharedUltra<T, P>;
@@ -162,8 +167,6 @@ impl MPCProverFlavour for UltraFlavour {
 
     type ProverUnivariatePublic<P: CurveGroup> =
         Univariate<P::ScalarField, { Self::MAX_PARTIAL_RELATION_LENGTH }>;
-
-    type Alphas<F: PrimeField> = [F; Self::NUM_ALPHAS];
 
     type AllEntitiesBatchRelations<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> =
         AllEntitiesBatchRelationsUltra<T, P>;
@@ -189,7 +192,7 @@ impl MPCProverFlavour for UltraFlavour {
     fn scale<T: NoirUltraHonkProver<P>, P: CurveGroup>(
         acc: &mut Self::AllRelationAcc<T, P>,
         first_scalar: P::ScalarField,
-        elements: &Self::Alphas<P::ScalarField>,
+        elements: &[P::ScalarField],
     ) {
         tracing::trace!("Prove::Scale");
         assert!(elements.len() == Self::NUM_SUBRELATIONS - 1);
@@ -240,7 +243,7 @@ impl MPCProverFlavour for UltraFlavour {
         state: &mut T::State,
         univariate_accumulators: &mut Self::AllRelationAccHalfShared<T, P>,
         sum_check_data: &Self::AllEntitiesBatchRelations<T, P>,
-        relation_parameters: &crate::co_decider::types::RelationParameters<P::ScalarField, Self>,
+        relation_parameters: &crate::co_decider::types::RelationParameters<P::ScalarField>,
     ) -> co_builder::HonkProofResult<()> {
         tracing::trace!("Accumulate relations");
         SumcheckRound::accumulate_one_relation_univariates_batch::<
@@ -368,9 +371,10 @@ impl MPCProverFlavour for UltraFlavour {
         P: co_builder::prelude::HonkCurve<F>,
     >(
         transcript: &mut common::transcript::Transcript<F, H>,
-        alphas: &mut Self::Alphas<P::ScalarField>,
+        alphas: &mut Vec<P::ScalarField>,
     ) {
         let args: [String; Self::NUM_ALPHAS] = array::from_fn(|i| format!("alpha_{i}"));
+        alphas.resize(Self::NUM_ALPHAS, P::ScalarField::ZERO);
         alphas.copy_from_slice(&transcript.get_challenges::<P>(&args));
     }
 
