@@ -6,8 +6,11 @@ use ark_ff::One;
 use ark_ff::PrimeField;
 use co_builder::flavours::eccvm_flavour::ECCVMFlavour;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
-use co_builder::prelude::{HonkCurve, derive_generators};
-use common::transcript::TranscriptFieldType;
+use co_builder::prelude::{derive_generators};
+use common::{
+    honk_proof::TranscriptFieldType,
+    honk_curve::HonkCurve,
+};
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct EccMsmRelationAcc<F: PrimeField> {

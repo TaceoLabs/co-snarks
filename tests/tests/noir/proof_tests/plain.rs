@@ -5,14 +5,13 @@ use acir::native_types::{WitnessMap, WitnessStack};
 use ark_bn254::Bn254;
 use ark_ff::PrimeField;
 use co_acvm::{solver::PlainCoSolver, PlainAcvmSolver};
-use co_builder::{flavours::ultra_flavour::UltraFlavour, TranscriptFieldType};
+use co_builder::{flavours::ultra_flavour::UltraFlavour};
 use co_noir::{Bn254G1, HonkRecursion};
 use co_ultrahonk::prelude::{
-    CoUltraHonk, CrsParser, PlainCoBuilder, ProvingKey, UltraHonk, ZeroKnowledge,
+    CoUltraHonk, PlainCoBuilder, ProvingKey, UltraHonk,
 };
 use common::{
-    mpc::plain::PlainUltraHonkDriver,
-    transcript::{Poseidon2Sponge, TranscriptHasher},
+    crs::parse::CrsParser, honk_proof::TranscriptFieldType, mpc::plain::PlainUltraHonkDriver, transcript::{Poseidon2Sponge, TranscriptHasher}, types::ZeroKnowledge
 };
 use sha3::Keccak256;
 

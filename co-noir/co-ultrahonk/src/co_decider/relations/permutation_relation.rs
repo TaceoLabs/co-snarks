@@ -7,10 +7,10 @@ use crate::{
 };
 use ark_ec::CurveGroup;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
-use co_builder::prelude::HonkCurve;
-use co_builder::{HonkProofResult, polynomials::polynomial_flavours::PrecomputedEntitiesFlavour};
-use co_builder::{
-    TranscriptFieldType, polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour,
+use common::honk_proof::{TranscriptFieldType, HonkProofResult};
+use common::honk_curve::HonkCurve;
+use co_builder::{polynomials::polynomial_flavours::PrecomputedEntitiesFlavour};
+use co_builder::{polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour,
 };
 use common::mpc::NoirUltraHonkProver;
 use mpc_core::MpcState as _;

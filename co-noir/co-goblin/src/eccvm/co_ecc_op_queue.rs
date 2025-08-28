@@ -1,7 +1,5 @@
-use co_builder::TranscriptFieldType;
-use co_builder::prelude::HonkCurve;
-use common::{mpc::NoirUltraHonkProver, shared_polynomial::SharedPolynomial};
-use goblin::prelude::{EccOpsTable, EccvmRowTracker};
+use co_builder::eccvm::ecc_op_queue::{EccOpsTable, EccvmRowTracker};
+use common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType, mpc::NoirUltraHonkProver, polynomials::shared_polynomial::SharedPolynomial};
 use num_bigint::BigUint;
 use std::array;
 

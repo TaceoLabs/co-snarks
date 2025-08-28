@@ -9,13 +9,12 @@ use ark_ec::CurveGroup;
 use ark_ff::One;
 use ark_ff::Zero;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
-use co_builder::prelude::HonkCurve;
-use co_builder::{
-    HonkProofResult, polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour,
+use co_builder::{ polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour,
 };
-use co_builder::{
-    TranscriptFieldType, polynomials::polynomial_flavours::PrecomputedEntitiesFlavour,
+use co_builder::{ polynomials::polynomial_flavours::PrecomputedEntitiesFlavour,
 };
+use common::honk_proof::{TranscriptFieldType, HonkProofResult};
+use common::honk_curve::HonkCurve;
 use itertools::Itertools as _;
 use mpc_core::MpcState as _;
 use mpc_net::Network;

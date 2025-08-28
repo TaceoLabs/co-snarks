@@ -4,11 +4,11 @@ use ark_ff::PrimeField;
 use clap::{Parser, ValueEnum};
 use co_acvm::{PlainAcvmSolver, solver::PlainCoSolver};
 use co_builder::flavours::ultra_flavour::UltraFlavour;
-use co_builder::prelude::Serialize as FieldSerialize;
+use common::{crs::parse::CrsParser, serialize::Serialize as FieldSerialize, types::ZeroKnowledge};
 use co_noir::{Bn254G1, HonkRecursion};
 use co_ultrahonk::{
     PlainCoBuilder,
-    prelude::{CoUltraHonk, CrsParser, ProvingKey, UltraHonk, VerifyingKey, ZeroKnowledge},
+    prelude::{CoUltraHonk, ProvingKey, UltraHonk, VerifyingKey},
 };
 use color_eyre::eyre::Context;
 use common::{mpc::plain::PlainUltraHonkDriver, transcript::Poseidon2Sponge};

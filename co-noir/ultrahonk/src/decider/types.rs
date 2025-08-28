@@ -9,7 +9,7 @@ use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::{
     ProverWitnessEntitiesFlavour, WitnessEntitiesFlavour,
 };
-use co_builder::prelude::Polynomial;
+use common::polynomials::polynomial::Polynomial;
 use co_builder::prelude::{Polynomials, VerifyingKey};
 use co_builder::prover_flavour::Flavour;
 use itertools::izip;

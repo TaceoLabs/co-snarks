@@ -3,8 +3,8 @@ use crate::{
         PolyGFlavour, PrecomputedEntitiesFlavour, ProverWitnessEntitiesFlavour,
         ShiftedWitnessEntitiesFlavour, WitnessEntitiesFlavour,
     },
-    prelude::Polynomial,
 };
+use common::polynomials::polynomial::Polynomial;
 use std::fmt::Debug;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

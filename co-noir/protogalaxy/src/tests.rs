@@ -4,13 +4,13 @@ use ark_bn254::Bn254;
 use ark_ec::{bn::Bn, pairing::Pairing};
 use ark_ff::AdditiveGroup;
 use co_builder::{
-    TranscriptFieldType,
     flavours::mega_flavour::{MegaFlavour, MegaPrecomputedEntities, MegaProverWitnessEntities},
     prelude::{
-        ActiveRegionData, CrsParser, Polynomial, Polynomials, ProverCrs, PublicComponentKey,
+        ActiveRegionData, Polynomials, PublicComponentKey,
     },
     prover_flavour::ProverFlavour,
 };
+use common::{crs::{parse::CrsParser, ProverCrs}, honk_proof::TranscriptFieldType, polynomials::polynomial::Polynomial, types::ZeroKnowledge};
 use flate2::read::GzDecoder;
 use mpc_core::gadgets::field_from_hex_string;
 use serde::de::DeserializeOwned;
@@ -19,7 +19,7 @@ use ultrahonk::{
     decider::types::{ProverMemory, RelationParameters},
     oink::oink_prover::Oink,
     prelude::{
-        GateSeparatorPolynomial, Poseidon2Sponge, ProvingKey, Transcript, Univariate, ZeroKnowledge,
+        GateSeparatorPolynomial, Poseidon2Sponge, ProvingKey, Transcript, Univariate,
     },
 };
 

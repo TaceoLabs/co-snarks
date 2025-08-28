@@ -1,4 +1,4 @@
-use crate::{
+use crate::eccvm::{
     ADDITIONS_PER_ROW, NUM_ROWS_PER_OP, NUM_WNAF_DIGIT_BITS, NUM_WNAF_DIGITS_PER_SCALAR,
     POINT_TABLE_SIZE, TABLE_WIDTH, WNAF_DIGITS_PER_ROW, WNAF_MASK,
 };
@@ -6,32 +6,35 @@ use ark_ec::AffineRepr;
 use ark_ec::CurveGroup;
 use ark_ff::One;
 use ark_ff::Zero;
-use co_builder::TranscriptFieldType;
-use co_builder::prelude::HonkCurve;
-use co_builder::prelude::Polynomial;
-use co_builder::prelude::Utils;
-use co_builder::prelude::offset_generator;
+use common::{
+    utils::Utils, 
+    crs::ProverCrs,
+    honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
+    honk_curve::HonkCurve,
+    polynomials::polynomial::Polynomial,
+};
+use crate::prelude::offset_generator;
 use num_bigint::BigUint;
 use serde::Deserialize;
-use serde::Serialize;
 use std::array;
+use serde::Serialize;
 
 #[derive(Clone, Default)]
 #[expect(dead_code)]
-pub(crate) struct ScalarMul<C: CurveGroup> {
-    pub(crate) pc: u32,
-    pub(crate) scalar: BigUint,
-    pub(crate) base_point: C::Affine,
-    pub(crate) wnaf_digits: [i32; NUM_WNAF_DIGITS_PER_SCALAR],
-    pub(crate) wnaf_skew: bool,
+pub struct ScalarMul<C: CurveGroup> {
+    pub pc: u32,
+    pub scalar: BigUint,
+    pub base_point: C::Affine,
+    pub wnaf_digits: [i32; NUM_WNAF_DIGITS_PER_SCALAR],
+    pub wnaf_skew: bool,
     // size bumped by 1 to record base_point.dbl()
-    pub(crate) precomputed_table: [C::Affine; POINT_TABLE_SIZE + 1],
+    pub precomputed_table: [C::Affine; POINT_TABLE_SIZE + 1],
 }
 
 pub(crate) type Msm<C> = Vec<ScalarMul<C>>;
 #[derive(Default, Clone)]
 
-pub(crate) struct AddState<C: CurveGroup> {
+pub struct AddState<C: CurveGroup> {
     pub add: bool,
     pub slice: i32,
     pub point: C::Affine,
@@ -39,24 +42,24 @@ pub(crate) struct AddState<C: CurveGroup> {
     pub collision_inverse: C::BaseField,
 }
 #[derive(Default, Clone)]
-pub(crate) struct MSMRow<C: CurveGroup> {
+pub struct MSMRow<C: CurveGroup> {
     // Counter over all half-length scalar muls used to compute the required MSMs
-    pub(crate) pc: u32,
+    pub pc: u32,
     // The number of points that will be scaled and summed
-    pub(crate) msm_size: u32,
-    pub(crate) msm_count: u32,
-    pub(crate) msm_round: u32,
-    pub(crate) msm_transition: bool,
-    pub(crate) q_add: bool,
-    pub(crate) q_double: bool,
-    pub(crate) q_skew: bool,
-    pub(crate) add_state: [AddState<C>; 4],
-    pub(crate) accumulator_x: C::BaseField,
-    pub(crate) accumulator_y: C::BaseField,
+    pub msm_size: u32,
+    pub msm_count: u32,
+    pub msm_round: u32,
+    pub msm_transition: bool,
+    pub q_add: bool,
+    pub q_double: bool,
+    pub q_skew: bool,
+    pub add_state: [AddState<C>; 4],
+    pub accumulator_x: C::BaseField,
+    pub accumulator_y: C::BaseField,
 }
 
 impl<C: HonkCurve<TranscriptFieldType>> MSMRow<C> {
-    pub(crate) fn compute_rows_msms(
+    pub fn compute_rows_msms(
         msms: &[Msm<C>],
         total_number_of_muls: u32,
         num_msm_rows: usize,
@@ -947,7 +950,7 @@ impl<P: CurveGroup> ECCOpQueue<P> {
 }
 
 impl<P: HonkCurve<TranscriptFieldType>> ECCOpQueue<P> {
-    pub(crate) fn get_msms(&mut self) -> Vec<Msm<P>> {
+    pub fn get_msms(&mut self) -> Vec<Msm<P>> {
         let num_muls = self.get_number_of_muls();
 
         let compute_precomputed_table =

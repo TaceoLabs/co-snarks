@@ -4,18 +4,21 @@ use ark_ec::CurveGroup;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
 use co_builder::prover_flavour::ProverFlavour;
-use co_builder::{flavours::mega_flavour::MegaFlavour, TranscriptFieldType};
+use co_builder::{flavours::mega_flavour::MegaFlavour};
 use co_noir::Bn254G1;
 use co_noir::VerifyingKey;
 pub use co_ultrahonk::prelude::PlainProvingKey;
 use co_ultrahonk::prelude::{
-    CrsParser, MPCProverFlavour, ProvingKey, Rep3CoUltraHonk, UltraHonk, Utils, ZeroKnowledge,
+ MPCProverFlavour, ProvingKey, Rep3CoUltraHonk, UltraHonk, Utils,
 };
+use common::crs::parse::CrsParser;
+use common::honk_proof::HonkProof;
+use common::honk_proof::TranscriptFieldType;
 use common::mpc::plain::PlainUltraHonkDriver;
 use common::mpc::rep3::Rep3UltraHonkDriver;
 use common::transcript::Poseidon2Sponge;
 use common::transcript::TranscriptHasher;
-use common::HonkProof;
+use common::types::ZeroKnowledge;
 use itertools::izip;
 use mpc_core::protocols::rep3;
 use mpc_net::local::LocalNetwork;

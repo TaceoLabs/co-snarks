@@ -3,12 +3,11 @@ use crate::co_decider::relations::fold_accumulator;
 use crate::co_decider::types::RelationParameters;
 use ark_ec::CurveGroup;
 use ark_ff::Zero;
-use co_builder::HonkProofResult;
-use co_builder::TranscriptFieldType;
+use common::honk_proof::{TranscriptFieldType, HonkProofResult};
+use common::honk_curve::HonkCurve;
 use co_builder::polynomials::polynomial_flavours::{
     PrecomputedEntitiesFlavour, ShiftedWitnessEntitiesFlavour, WitnessEntitiesFlavour,
 };
-use co_builder::prelude::HonkCurve;
 use itertools::Itertools;
 use mpc_net::Network;
 use ultrahonk::prelude::Univariate;

@@ -11,8 +11,8 @@ pub(crate) mod ultra_arithmetic_relation;
 
 use super::types::{ProverUnivariates, ProverUnivariatesBatch, RelationParameters};
 use crate::{mpc_prover_flavour::MPCProverFlavour, types_batch::SumCheckDataForRelation};
-use co_builder::prelude::HonkCurve;
-use co_builder::{HonkProofResult, TranscriptFieldType};
+use common::honk_proof::{TranscriptFieldType, HonkProofResult};
+use common::honk_curve::HonkCurve;
 use common::mpc::NoirUltraHonkProver;
 use mpc_net::Network;
 

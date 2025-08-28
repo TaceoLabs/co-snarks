@@ -1,14 +1,14 @@
 use std::fs::File;
 
 use ark_bn254::Bn254;
-use co_builder::TranscriptFieldType;
 use co_builder::flavours::ultra_flavour::UltraFlavour;
-use co_builder::prelude::CrsParser;
 use co_builder::prelude::HonkRecursion;
-use co_builder::prelude::ZeroKnowledge;
 use co_builder::prelude::constraint_system_from_reader;
-use common::HonkProof;
+use common::crs::parse::CrsParser;
+use common::honk_proof::HonkProof;
+use common::honk_proof::TranscriptFieldType;
 use common::transcript::{Poseidon2Sponge, TranscriptHasher};
+use common::types::ZeroKnowledge;
 use sha3::Keccak256;
 use ultrahonk::prelude::{PlainAcvmSolver, UltraCircuitBuilder, UltraHonk};
 

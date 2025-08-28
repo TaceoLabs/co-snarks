@@ -5,12 +5,14 @@ use crate::{
     plain_prover_flavour::PlainProverFlavour,
 };
 use co_builder::{
-    HonkProofResult,
-    prelude::{HonkCurve, PAIRING_POINT_ACCUMULATOR_SIZE, ProvingKey, ZeroKnowledge},
+    prelude::{PAIRING_POINT_ACCUMULATOR_SIZE, ProvingKey},
     prover_flavour::Flavour,
 };
-use common::HonkProof;
-use common::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
+use common::transcript::{Transcript, TranscriptHasher};
+use common::honk_proof::TranscriptFieldType;
+use common::honk_curve::HonkCurve;
+use common::honk_proof::{ HonkProof, HonkProofResult};  
+use common::types::ZeroKnowledge;
 use std::marker::PhantomData;
 
 pub struct UltraHonk<

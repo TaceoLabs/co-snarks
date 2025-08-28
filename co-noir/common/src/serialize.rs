@@ -1,4 +1,5 @@
-use crate::{HonkProofError, HonkProofResult, TranscriptFieldType, prelude::HonkCurve};
+use crate::honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType};
+use crate::honk_curve::HonkCurve;
 use ark_ec::{AffineRepr, CurveConfig, CurveGroup};
 use ark_ff::{Field, PrimeField};
 use num_bigint::BigUint;
@@ -82,7 +83,7 @@ impl<F: Field> Serialize<F> {
         res
     }
 
-    pub(crate) fn read_u64(buf: &[u8], offset: &mut usize) -> u64 {
+    pub fn read_u64(buf: &[u8], offset: &mut usize) -> u64 {
         const BYTES: usize = 8;
         let res = u64::from_be_bytes(buf[*offset..*offset + BYTES].try_into().unwrap());
         *offset += BYTES;
@@ -103,7 +104,7 @@ impl<F: Field> Serialize<F> {
         buf.extend(val.to_be_bytes());
     }
 
-    pub(crate) fn write_u64(buf: &mut Vec<u8>, val: u64) {
+    pub fn write_u64(buf: &mut Vec<u8>, val: u64) {
         buf.extend(val.to_be_bytes());
     }
 

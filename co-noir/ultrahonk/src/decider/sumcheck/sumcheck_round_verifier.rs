@@ -11,8 +11,12 @@ use crate::{
     prelude::GateSeparatorPolynomial,
 };
 use ark_ff::{One, Zero};
-use co_builder::TranscriptFieldType;
-use co_builder::prelude::HonkCurve;
+use common::{
+    honk_proof::{TranscriptFieldType},
+    honk_curve::HonkCurve,
+
+};
+
 
 pub(crate) struct SumcheckVerifierRound<P: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour> {
     pub(crate) target_total_sum: P::ScalarField,

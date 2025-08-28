@@ -27,7 +27,10 @@ use crate::prelude::Univariate;
 use ark_ff::PrimeField;
 use co_builder::flavours::eccvm_flavour::ECCVMFlavour;
 use co_builder::prover_flavour::ProverFlavour;
-use common::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
+use common::transcript::{Transcript, TranscriptHasher};
+use common::honk_proof::TranscriptFieldType;
+use common::honk_curve::HonkCurve;
+use common::honk_proof::{HonkProofError, HonkProofResult};  
 #[derive(Default)]
 pub struct AllRelationAccECCVM<F: PrimeField> {
     pub(crate) r_ecc_transcript: EccTranscriptRelationAcc<F>,
@@ -164,7 +167,7 @@ impl PlainProverFlavour for ECCVMFlavour {
         )
     }
 
-    fn accumulate_relation_univariates<P: co_builder::prelude::HonkCurve<TranscriptFieldType>>(
+    fn accumulate_relation_univariates<P: HonkCurve<TranscriptFieldType>>(
         univariate_accumulators: &mut Self::AllRelationAcc<P::ScalarField>,
         extended_edges: &ProverUnivariates<P::ScalarField, Self>,
         relation_parameters: &RelationParameters<P::ScalarField>,
@@ -226,7 +229,7 @@ impl PlainProverFlavour for ECCVMFlavour {
         );
     }
 
-    fn accumulate_relation_evaluations<P: co_builder::prelude::HonkCurve<TranscriptFieldType>>(
+    fn accumulate_relation_evaluations<P: HonkCurve<TranscriptFieldType>>(
         _univariate_accumulators: &mut Self::AllRelationEvaluations<P::ScalarField>,
         _extended_edges: &ClaimedEvaluations<P::ScalarField, Self>,
         _relation_parameters: &RelationParameters<P::ScalarField>,
@@ -246,29 +249,29 @@ impl PlainProverFlavour for ECCVMFlavour {
     fn receive_round_univariate_from_prover<
         F: ark_ff::PrimeField,
         H: TranscriptHasher<F>,
-        P: co_builder::prelude::HonkCurve<F>,
+        P:HonkCurve<F>,
     >(
         _transcript: &mut Transcript<F, H>,
         _label: String,
-    ) -> co_builder::HonkProofResult<Self::SumcheckRoundOutput<P::ScalarField>> {
+    ) -> HonkProofResult<Self::SumcheckRoundOutput<P::ScalarField>> {
         todo!("Implement Sumcheck Verifier for ECCVMFlavour");
     }
 
     fn receive_round_univariate_from_prover_zk<
         F: ark_ff::PrimeField,
         H: TranscriptHasher<F>,
-        P: co_builder::prelude::HonkCurve<F>,
+        P: HonkCurve<F>,
     >(
         _transcript: &mut Transcript<F, H>,
         _label: String,
-    ) -> co_builder::HonkProofResult<Self::SumcheckRoundOutputZK<P::ScalarField>> {
+    ) -> HonkProofResult<Self::SumcheckRoundOutputZK<P::ScalarField>> {
         todo!("Implement Sumcheck Verifier for ECCVMFlavour");
     }
 
     fn get_alpha_challenges<
         F: ark_ff::PrimeField,
         H: TranscriptHasher<F>,
-        P: co_builder::prelude::HonkCurve<F>,
+        P: HonkCurve<F>,
     >(
         _transcript: &mut Transcript<F, H>,
         _alphas: &mut Vec<P::ScalarField>,

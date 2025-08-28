@@ -6,16 +6,13 @@ use crate::{
     mpc_prover_flavour::MPCProverFlavour,
 };
 use co_builder::{
-    HonkProofResult,
-    prelude::{HonkCurve, PAIRING_POINT_ACCUMULATOR_SIZE, ProverCrs},
+    prelude::{ PAIRING_POINT_ACCUMULATOR_SIZE},
     prover_flavour::Flavour,
 };
-use co_builder::{TranscriptFieldType, flavours::ultra_flavour::UltraFlavour};
-use common::HonkProof;
-use common::mpc::{
-    NoirUltraHonkProver, plain::PlainUltraHonkDriver, rep3::Rep3UltraHonkDriver,
-    shamir::ShamirUltraHonkDriver,
-};
+use co_builder::{flavours::ultra_flavour::UltraFlavour};
+use common::{crs::ProverCrs, honk_curve::HonkCurve, honk_proof::{HonkProof, HonkProofResult, TranscriptFieldType}, mpc::{
+    plain::PlainUltraHonkDriver, rep3::Rep3UltraHonkDriver, shamir::ShamirUltraHonkDriver, NoirUltraHonkProver
+}, types::ZeroKnowledge};
 use common::transcript::{Transcript, TranscriptHasher};
 use mpc_core::protocols::{
     rep3::{Rep3State, conversion::A2BType},
@@ -23,7 +20,6 @@ use mpc_core::protocols::{
 };
 use mpc_net::Network;
 use std::marker::PhantomData;
-use ultrahonk::prelude::ZeroKnowledge;
 
 pub type Rep3CoUltraHonk<P, H, L> = CoUltraHonk<Rep3UltraHonkDriver, P, H, L>;
 pub type ShamirCoUltraHonk<P, H, L> = CoUltraHonk<ShamirUltraHonkDriver, P, H, L>;

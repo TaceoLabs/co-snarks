@@ -6,10 +6,16 @@ use crate::plain_prover_flavour::{PlainProverFlavour, UnivariateTrait};
 use crate::types::AllEntities;
 use crate::{CONST_PROOF_SIZE_LOG_N, Utils};
 use ark_ff::Zero;
-use co_builder::HonkProofResult;
-use co_builder::prelude::{HonkCurve, RowDisablingPolynomial};
-use co_builder::prelude::{Polynomial, ProverCrs};
-use common::transcript::TranscriptFieldType;
+use common::polynomials::polynomial::RowDisablingPolynomial;
+use common::{
+    honk_proof::{TranscriptFieldType, HonkProofError, HonkProofResult},
+    crs::ProverCrs,
+    polynomials::polynomial::Polynomial,
+    types::ZeroKnowledge,
+    honk_curve::HonkCurve,
+
+};
+
 use common::transcript::{Transcript, TranscriptHasher};
 
 use super::zk_data::ZKSumcheckData;

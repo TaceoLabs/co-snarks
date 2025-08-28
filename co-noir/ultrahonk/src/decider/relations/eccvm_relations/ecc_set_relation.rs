@@ -3,8 +3,12 @@ use ark_ff::One;
 use ark_ff::PrimeField;
 use ark_ff::Zero;
 use co_builder::{
-    TranscriptFieldType, polynomials::polynomial_flavours::WitnessEntitiesFlavour,
-    prelude::HonkCurve,
+    polynomials::polynomial_flavours::WitnessEntitiesFlavour,
+
+};
+use common::{
+    honk_proof::TranscriptFieldType,
+    honk_curve::HonkCurve,
 };
 use co_builder::{
     flavours::eccvm_flavour::ECCVMFlavour,

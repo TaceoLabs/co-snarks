@@ -1,7 +1,15 @@
 use crate::plain_prover_flavour::PlainProverFlavour;
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
-use co_builder::prelude::Polynomial;
+use common::{
+    honk_proof::{TranscriptFieldType, HonkProofError, HonkProofResult},
+    crs::ProverCrs,
+    polynomials::polynomial::Polynomial,
+    types::ZeroKnowledge,
+    honk_curve::HonkCurve,
+
+};
+
 
 pub struct ProverMemory<P: CurveGroup> {
     /// column 3

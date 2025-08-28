@@ -11,16 +11,18 @@ use ark_ec::AffineRepr;
 use ark_ff::{Field, One, Zero};
 use co_builder::polynomials::polynomial_flavours::PolyGFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
-use co_builder::prelude::ZeroKnowledge;
-use co_builder::{
-    HonkProofError, HonkProofResult,
-    prelude::{HonkCurve, Polynomial, ProverCrs},
-};
 use common::shplemini::OpeningPair;
 use common::shplemini::ShpleminiOpeningClaim;
-use common::transcript::TranscriptFieldType;
 use common::transcript::{Transcript, TranscriptHasher};
 use itertools::izip;
+use common::{
+    honk_proof::{TranscriptFieldType, HonkProofError, HonkProofResult},
+    crs::ProverCrs,
+    polynomials::polynomial::Polynomial,
+    types::ZeroKnowledge,
+    honk_curve::HonkCurve,
+
+};
 
 impl<
     P: HonkCurve<TranscriptFieldType>,

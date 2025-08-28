@@ -1,16 +1,16 @@
 use std::collections::VecDeque;
 
 use ark_ff::Field;
-use co_builder::prelude::{HonkCurve, ProverCrs};
-use co_builder::{HonkProofResult, TranscriptFieldType};
+use common::crs::ProverCrs;
+use common::honk_curve::HonkCurve;
+use common::honk_proof::{HonkProof, HonkProofResult, TranscriptFieldType};
 use common::CoUtils;
 use common::co_shplemini::{OpeningPair, ShpleminiOpeningClaim};
 use common::mpc::NoirUltraHonkProver;
-use common::shared_polynomial::SharedPolynomial;
+use common::polynomials::shared_polynomial::SharedPolynomial;
 use common::transcript::Transcript;
 use common::transcript::TranscriptHasher;
 
-use common::HonkProof;
 use itertools::{Itertools, izip};
 use mpc_net::Network;
 
@@ -203,17 +203,16 @@ mod tests {
     use ark_bn254::Bn254;
     use ark_ec::bn::Bn;
     use ark_ec::pairing::Pairing;
-    use co_builder::prelude::CrsParser;
-    use common::mpc::rep3::Rep3UltraHonkDriver;
+    use co_builder::eccvm::ecc_op_queue::{EccOpCode, EccOpsTable, EccvmRowTracker, UltraOp};
+    use common::crs::parse::CrsParser;
+    use common::{mpc::rep3::Rep3UltraHonkDriver, types::ZeroKnowledge};
     use common::transcript::Poseidon2Sponge;
-    use goblin::prelude::{EccOpCode, EccOpsTable, EccvmRowTracker, UltraOp};
     use mpc_core::{
         gadgets::field_from_hex_string,
         protocols::rep3::{Rep3State, conversion::A2BType, share_field_element},
     };
     use mpc_net::local::LocalNetwork;
     use rand::thread_rng;
-    use ultrahonk::prelude::ZeroKnowledge;
 
     type Bn254G1 = ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>;
     type Bn254G1Affine = ark_bn254::G1Affine;

@@ -7,11 +7,14 @@ use co_acvm::pss_store::PssStore;
 use co_acvm::{PlainAcvmSolver, Rep3AcvmSolver, ShamirAcvmSolver, solver::Rep3CoSolver};
 use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
 use co_builder::prover_flavour::ProverFlavour;
-use co_builder::{TranscriptFieldType, flavours::ultra_flavour::UltraFlavour};
+use co_builder::{flavours::ultra_flavour::UltraFlavour};
 use co_noir_types::{Rep3SharedInput, Rep3SharedWitness, ShamirType};
 use co_noir_types::{Rep3Type, ShamirSharedWitness};
-use co_ultrahonk::prelude::{HonkCurve, ProverCrs};
 use color_eyre::eyre::{self, Context, Result};
+use common::crs::ProverCrs;
+use common::honk_curve::HonkCurve;
+use common::honk_proof::TranscriptFieldType;
+use common::polynomials::polynomial::Polynomial;
 use mpc_core::protocols::{
     rep3::{self, conversion::A2BType, id::PartyID},
     shamir::{self, ShamirPreprocessing, ShamirPrimeFieldShare, ShamirState},
@@ -29,12 +32,11 @@ pub use co_builder::prelude::get_constraint_system_from_artifact;
 pub use co_ultrahonk::{
     Rep3CoBuilder, ShamirCoBuilder,
     prelude::{
-        AcirFormat, CrsParser, HonkRecursion, PlainProvingKey, Polynomial, Polynomials,
+        AcirFormat, HonkRecursion, PlainProvingKey, Polynomials,
         Rep3CoUltraHonk, Rep3ProvingKey, ShamirCoUltraHonk, ShamirProvingKey, UltraCircuitBuilder,
         UltraHonk, VerifyingKey, VerifyingKeyBarretenberg,
     },
 };
-pub use common::HonkProof;
 pub use common::transcript::{Poseidon2Sponge, TranscriptHasher};
 pub use noir_types::program_artifact_from_reader;
 pub use noir_types::witness_from_reader;

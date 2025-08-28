@@ -1,5 +1,11 @@
 use crate::{
-    TranscriptFieldType, prelude::HonkCurve, ultra_builder::GenericUltraCircuitBuilder,
+ ultra_builder::GenericUltraCircuitBuilder,
+};
+use common::{
+    honk_curve::HonkCurve,
+    honk_proof::{
+         TranscriptFieldType,
+    },
     utils::Utils,
 };
 use ark_ec::CurveGroup;

@@ -4,15 +4,18 @@ use super::{
 };
 
 use crate::{
-    CONST_PROOF_SIZE_LOG_N, Utils, decider::small_subgroup_ipa::SmallSubgroupIPAProver,
-    plain_prover_flavour::PlainProverFlavour,
+    decider::small_subgroup_ipa::SmallSubgroupIPAProver, plain_prover_flavour::PlainProverFlavour, Utils, CONST_PROOF_SIZE_LOG_N
 };
-use co_builder::{
-    HonkProofResult,
-    prelude::{HonkCurve, ProverCrs, ZeroKnowledge},
+use common::{
+    honk_proof::{TranscriptFieldType, HonkProofError, HonkProof, HonkProofResult},
+    crs::ProverCrs,
+    polynomials::polynomial::Polynomial,
+    types::ZeroKnowledge,
+    honk_curve::HonkCurve,
+
 };
-use common::HonkProof;
-use common::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
+
+use common::transcript::{Transcript, TranscriptHasher};
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
 use std::marker::PhantomData;

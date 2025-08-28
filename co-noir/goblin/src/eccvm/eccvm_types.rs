@@ -1,8 +1,8 @@
-use crate::eccvm::ecc_op_queue::ECCOpQueue;
-use crate::eccvm::ecc_op_queue::MSMRow;
-use crate::eccvm::ecc_op_queue::ScalarMul;
-use crate::eccvm::ecc_op_queue::VMOperation;
-use crate::{
+use co_builder::eccvm::ecc_op_queue::ECCOpQueue;
+use co_builder::eccvm::ecc_op_queue::MSMRow;
+use co_builder::eccvm::ecc_op_queue::ScalarMul;
+use co_builder::eccvm::ecc_op_queue::VMOperation;
+use co_builder::eccvm::{
     ECCVM_FIXED_SIZE, NUM_WNAF_DIGIT_BITS, NUM_WNAF_DIGITS_PER_SCALAR, POINT_TABLE_SIZE,
     WNAF_DIGITS_PER_ROW,
 };
@@ -11,21 +11,24 @@ use ark_ec::CurveGroup;
 use ark_ff::One;
 use ark_ff::PrimeField;
 use ark_ff::Zero;
-use co_builder::HonkProofResult;
-use co_builder::TranscriptFieldType;
+use common::polynomials::polynomial::NUM_TRANSLATION_EVALUATIONS;
+use common::{
+    utils::Utils, 
+    crs::ProverCrs,
+    honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
+    honk_curve::HonkCurve,
+    serialize::{Serialize, SerializeP},
+    polynomials::polynomial::{Polynomial, NUM_DISABLED_ROWS_IN_SUMCHECK},
+    types::ZeroKnowledge,
+};
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
-use co_builder::prelude::HonkCurve;
-use co_builder::prelude::NUM_DISABLED_ROWS_IN_SUMCHECK;
-use co_builder::prelude::NUM_TRANSLATION_EVALUATIONS;
-use co_builder::prelude::Polynomial;
-use co_builder::prelude::ProverCrs;
-use co_builder::prelude::Utils;
+
 use co_builder::prelude::offset_generator_scaled;
 use co_builder::{flavours::eccvm_flavour::ECCVMFlavour, prelude::Polynomials};
 use common::transcript::Transcript;
 use common::transcript::TranscriptHasher;
 use num_bigint::BigUint;
-use ultrahonk::Utils as UltraHonkUtils;
+use common::utils::Utils as UltraHonkUtils;
 use ultrahonk::plain_prover_flavour::UnivariateTrait;
 use ultrahonk::prelude::SmallSubgroupIPAProver;
 use ultrahonk::prelude::Univariate;

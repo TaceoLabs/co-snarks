@@ -1,7 +1,9 @@
-use crate::CONST_ECCVM_LOG_N;
-use crate::NUM_OPENING_CLAIMS;
+use co_builder::eccvm::CONST_ECCVM_LOG_N;
+use co_builder::eccvm::NUM_OPENING_CLAIMS;
+use co_builder::prelude::Polynomials;
+use common::honk_proof::HonkProof;
 use crate::eccvm::eccvm_types::TranslationData;
-use crate::ipa::compute_ipa_opening_proof;
+use co_builder::ipa::compute_ipa_opening_proof;
 use ark_ec::CurveGroup;
 use ark_ff::Field;
 use ark_ff::One;
@@ -11,13 +13,16 @@ use co_builder::flavours::eccvm_flavour::ECCVMFlavour;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
-use co_builder::prelude::NUM_DISABLED_ROWS_IN_SUMCHECK;
-use co_builder::prelude::Polynomials;
-use co_builder::{
-    HonkProofResult, TranscriptFieldType,
-    prelude::{HonkCurve, Polynomial, ProverCrs},
+
+use common::{
+    utils::Utils, 
+    crs::ProverCrs,
+    honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
+    honk_curve::HonkCurve,
+    serialize::{Serialize, SerializeP},
+    polynomials::polynomial::{Polynomial, NUM_DISABLED_ROWS_IN_SUMCHECK},
+    types::ZeroKnowledge,
 };
-use common::HonkProof;
 use common::shplemini::OpeningPair;
 use common::shplemini::ShpleminiOpeningClaim;
 use common::transcript::Transcript;
@@ -26,7 +31,6 @@ use itertools::izip;
 use std::iter;
 use ultrahonk::NUM_SMALL_IPA_EVALUATIONS;
 use ultrahonk::prelude::AllEntities;
-use ultrahonk::prelude::ZeroKnowledge;
 use ultrahonk::{
     Utils as UltraHonkUtils,
     prelude::{Decider, ProvingKey, SmallSubgroupIPAProver, SumcheckOutput, ZKSumcheckData},

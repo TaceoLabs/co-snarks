@@ -7,12 +7,11 @@ use common::mpc::NoirUltraHonkProver;
 
 use crate::mpc_prover_flavour::MPCProverFlavour;
 use ark_ec::CurveGroup;
-use co_builder::HonkProofResult;
-use co_builder::TranscriptFieldType;
+use common::honk_proof::{TranscriptFieldType, HonkProofResult};
+use common::honk_curve::HonkCurve;
 use co_builder::polynomials::polynomial_flavours::{
     PrecomputedEntitiesFlavour, WitnessEntitiesFlavour,
 };
-use co_builder::prelude::HonkCurve;
 use itertools::Itertools;
 use mpc_core::MpcState;
 use mpc_net::Network;

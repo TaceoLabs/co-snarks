@@ -10,10 +10,11 @@ use crate::{
     },
     types::AllEntities,
 };
-use co_builder::HonkProofResult;
-use co_builder::TranscriptFieldType;
-use co_builder::prelude::{HonkCurve, RowDisablingPolynomial};
+use common::honk_curve::HonkCurve;
+use common::honk_proof::HonkProofResult;
+use common::honk_proof::TranscriptFieldType;
 use common::mpc::NoirUltraHonkProver;
+use common::polynomials::polynomial::RowDisablingPolynomial;
 use common::transcript::{Transcript, TranscriptHasher};
 use mpc_net::Network;
 use ultrahonk::Utils;

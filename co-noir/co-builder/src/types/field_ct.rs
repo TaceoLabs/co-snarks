@@ -1,17 +1,23 @@
 use super::types::{AddQuad, EccDblGate, MulQuad};
-use crate::TranscriptFieldType;
-use crate::prelude::HonkCurve;
+
 use crate::types::generators;
 use crate::types::plookup::{ColumnIdx, Plookup};
 use crate::types::types::{AddTriple, EccAddGate, PolyTriple};
 use crate::ultra_builder::GenericUltraCircuitBuilder;
-use crate::utils::Utils;
 use ark_ec::{AffineRepr, CurveConfig, CurveGroup, PrimeGroup};
 use ark_ff::PrimeField;
 use ark_ff::{One, Zero};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use itertools::izip;
 use num_bigint::BigUint;
+use common::{
+    honk_curve::HonkCurve,
+    honk_proof::{
+         TranscriptFieldType,
+    },
+    utils::Utils,
+};
+
 
 #[derive(Clone, Debug)]
 pub(crate) struct FieldCT<F: PrimeField> {

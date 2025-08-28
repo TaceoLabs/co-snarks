@@ -1,10 +1,12 @@
-use crate::TranscriptFieldType;
+use common::{
+    utils::Utils,
+    honk_proof::{HonkProofResult, TranscriptFieldType},
+    polynomials::polynomial::{ NUM_DISABLED_ROWS_IN_SUMCHECK},
+};
 use crate::acir_format::{HonkRecursion, ProgramMetadata};
 use crate::flavours::ultra_flavour::UltraFlavour;
 use crate::keys::verification_key::PublicComponentKey;
-use crate::polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK;
 use crate::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
-use crate::prelude::HonkCurve;
 use crate::prover_flavour::ProverFlavour;
 use crate::types::aes128;
 use crate::types::big_field::{BigField, BigGroup};
@@ -16,10 +18,9 @@ use crate::types::types::AES128Constraint;
 use crate::types::types::{
     AggregationState, EcAdd, EccAddGate, MultiScalarMul, Sha256Compression, WitnessOrConstant,
 };
+use common::honk_curve::HonkCurve;
 use crate::{
-    HonkProofResult,
     acir_format::AcirFormat,
-    crs::ProverCrs,
     keys::{
         proving_key::ProvingKey,
         verification_key::{VerifyingKey, VerifyingKeyBarretenberg},
@@ -38,8 +39,8 @@ use crate::{
             Poseidon2InternalGate, RangeList, UltraTraceBlock, UltraTraceBlocks,
         },
     },
-    utils::Utils,
 };
+use common::crs::ProverCrs;
 use ark_ec::pairing::Pairing;
 use ark_ec::{CurveGroup, PrimeGroup};
 use ark_ff::{One, Zero};

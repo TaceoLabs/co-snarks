@@ -8,9 +8,9 @@ use common::mpc::NoirUltraHonkProver;
 use ark_ec::CurveGroup;
 use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
-use co_builder::prelude::HonkCurve;
+use common::honk_proof::{TranscriptFieldType, HonkProofResult};
+use common::honk_curve::HonkCurve;
 use co_builder::{
-    HonkProofResult, TranscriptFieldType,
     polynomials::polynomial_flavours::PrecomputedEntitiesFlavour,
 };
 use itertools::{Itertools as _, izip};

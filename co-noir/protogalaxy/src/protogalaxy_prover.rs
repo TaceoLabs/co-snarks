@@ -5,19 +5,18 @@ use ark_ec::AdditiveGroup;
 use ark_ff::fields::Field;
 
 use co_builder::{
-    HonkProofResult, TranscriptFieldType,
     flavours::mega_flavour::MegaFlavour,
-    prelude::{HonkCurve, Polynomial, ProvingKey},
+    prelude::{ProvingKey},
 };
 
+use common::{honk_curve::HonkCurve, honk_proof::{HonkProof, HonkProofResult, TranscriptFieldType}, polynomials::polynomial::Polynomial, types::ZeroKnowledge};
 use itertools::{Itertools, izip};
 
-use common::HonkProof;
 use ultrahonk::decider::types::RelationParameters;
 use ultrahonk::{
     oink::oink_prover::Oink,
     plain_prover_flavour::UnivariateTrait,
-    prelude::{GateSeparatorPolynomial, Transcript, TranscriptHasher, Univariate, ZeroKnowledge},
+    prelude::{GateSeparatorPolynomial, Transcript, TranscriptHasher, Univariate},
 };
 
 use crate::protogalaxy_prover_internal::{

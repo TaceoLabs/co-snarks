@@ -1,16 +1,17 @@
 use ark_bn254::Bn254;
 use ark_ff::Zero;
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use co_builder::{flavours::ultra_flavour::UltraFlavour, prelude::Serialize as FieldSerialize};
+use co_builder::{flavours::ultra_flavour::UltraFlavour};
+use common::{honk_proof::HonkProof, serialize::Serialize as FieldSerialize, types::ZeroKnowledge};
 use co_noir::Bn254G1;
 use co_noir_types::{PubPrivate, Rep3SharedInput, Rep3Type};
 use co_ultrahonk::prelude::{
-    CrsParser, ProvingKey, Rep3CoUltraHonk, ShamirCoUltraHonk, UltraHonk, VerifyingKey,
-    VerifyingKeyBarretenberg, ZeroKnowledge,
+ ProvingKey, Rep3CoUltraHonk, ShamirCoUltraHonk, UltraHonk, VerifyingKey,
+    VerifyingKeyBarretenberg
 };
 use color_eyre::eyre::{self, Context, ContextCompat};
 use common::{
-    HonkProof,
+    crs::parse::CrsParser,
     mpc::{rep3::Rep3UltraHonkDriver, shamir::ShamirUltraHonkDriver},
     transcript::Poseidon2Sponge,
 };

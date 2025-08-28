@@ -1,18 +1,20 @@
 use super::verification_key::PublicComponentKey;
 use crate::flavours::ultra_flavour::UltraFlavour;
-use crate::polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK;
 use crate::polynomials::polynomial_flavours::{
     PrecomputedEntitiesFlavour, ProverWitnessEntitiesFlavour,
 };
 use crate::prover_flavour::ProverFlavour;
 use crate::{
-    HonkProofResult,
-    crs::ProverCrs,
-    polynomials::{polynomial::Polynomial, polynomial_types::Polynomials},
+    polynomials::{polynomial_types::Polynomials},
     types::types::{
         ActiveRegionData, CyclicPermutation, Mapping, NUM_WIRES, PermutationMapping, TraceData,
     },
     ultra_builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder},
+};
+use common::{
+    crs::ProverCrs,
+    honk_proof::{HonkProofResult},
+    polynomials::polynomial::{Polynomial, NUM_DISABLED_ROWS_IN_SUMCHECK},
 };
 use ark_ec::CurveGroup;
 use ark_ff::One;

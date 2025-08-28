@@ -1058,6 +1058,7 @@ dependencies = [
  "ark-serialize",
  "blake3",
  "co-acvm",
+ "common",
  "eyre",
  "itertools 0.14.0",
  "mpc-core",
@@ -1359,9 +1360,9 @@ dependencies = [
  "ark-bn254",
  "ark-ec",
  "ark-ff",
+ "ark-grumpkin",
  "ark-poly",
  "ark-serialize",
- "co-builder",
  "eyre",
  "itertools 0.14.0",
  "mpc-core",
@@ -1370,7 +1371,10 @@ dependencies = [
  "num-traits",
  "rand 0.8.5",
  "rayon",
+ "serde",
  "sha3",
+ "thiserror 2.0.14",
+ "tracing",
 ]
 
 [[package]]

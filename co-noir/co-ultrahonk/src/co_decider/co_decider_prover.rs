@@ -4,15 +4,12 @@ use super::{
     types::ProverMemory,
 };
 use crate::mpc_prover_flavour::MPCProverFlavour;
-use co_builder::{
-    HonkProofResult, TranscriptFieldType,
-    prelude::{HonkCurve, ProverCrs, Utils},
-};
+use common::{crs::ProverCrs, honk_proof::{HonkProof, HonkProofResult, TranscriptFieldType}, types::ZeroKnowledge, utils::Utils};
+use common::honk_curve::HonkCurve;
 use common::transcript::{Transcript, TranscriptHasher};
-use common::{HonkProof, mpc::NoirUltraHonkProver};
+use common::{mpc::NoirUltraHonkProver};
 use mpc_net::Network;
 use std::marker::PhantomData;
-use ultrahonk::prelude::ZeroKnowledge;
 pub(crate) struct CoDecider<
     'a,
     T: NoirUltraHonkProver<P>,

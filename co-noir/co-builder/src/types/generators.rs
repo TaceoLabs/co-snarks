@@ -1,4 +1,8 @@
-use crate::{serialize::SerializeC, types::plookup::FixedBaseParams, utils::Utils};
+use crate::{types::plookup::FixedBaseParams};
+use common::{
+    serialize::SerializeC,
+    utils::Utils,
+};
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{BigInteger, Field, One, PrimeField};
 use num_bigint::BigUint;

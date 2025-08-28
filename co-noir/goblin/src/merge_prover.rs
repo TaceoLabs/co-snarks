@@ -1,14 +1,14 @@
 use ark_ec::AdditiveGroup;
 use ark_ff::Field;
-use co_builder::prelude::{HonkCurve, Polynomial, ProverCrs, Utils};
-use co_builder::{HonkProofResult, TranscriptFieldType};
-use common::HonkProof;
+use common::{
+    crs::ProverCrs, honk_curve::HonkCurve, honk_proof::{HonkProof, HonkProofResult, TranscriptFieldType}, polynomials::polynomial::Polynomial, utils::Utils
+};
 use common::shplemini::OpeningPair;
 use common::shplemini::ShpleminiOpeningClaim;
 use common::transcript::Transcript;
 use common::transcript::TranscriptHasher;
 
-use crate::eccvm::ecc_op_queue::ECCOpQueue;
+use co_builder::eccvm::ecc_op_queue::ECCOpQueue;
 
 const NUM_WIRES: usize = 4;
 
@@ -154,16 +154,16 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::eccvm::ecc_op_queue::{
+    use co_builder::eccvm::ecc_op_queue::{
         EccOpCode, EccvmOpsTable, EccvmRowTracker, UltraEccOpsTable, UltraOp,
     };
 
     use super::*;
     use ark_bn254::Bn254;
-    use co_builder::prelude::CrsParser;
+    use common::crs::parse::CrsParser;
     use common::transcript::Poseidon2Sponge;
     use mpc_core::gadgets::field_from_hex_string;
-    use ultrahonk::prelude::ZeroKnowledge;
+    use common::types::ZeroKnowledge;
 
     type Bn254G1 = ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>;
     type Bn254G1Affine = ark_bn254::G1Affine;

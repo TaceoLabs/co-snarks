@@ -22,14 +22,22 @@ use crate::{
     Utils, decider::relations::databus_lookup_relation::BusData,
     plain_prover_flavour::PlainProverFlavour,
 };
-use common::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
+use common::transcript::{Transcript, TranscriptHasher};
 
 use ark_ff::{One, Zero};
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
-use co_builder::{HonkProofError, HonkProofResult};
+use common::{
+    honk_proof::{TranscriptFieldType, HonkProofError, HonkProofResult},
+    crs::ProverCrs,
+    polynomials::polynomial::Polynomial,
+    types::ZeroKnowledge,
+    honk_curve::HonkCurve,
+
+};
+
 use co_builder::{
-    prelude::{HonkCurve, Polynomial, ProverCrs, ProvingKey, ZeroKnowledge},
+    prelude::{ProvingKey},
     prover_flavour::Flavour,
 };
 use itertools::izip;

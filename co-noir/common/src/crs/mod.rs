@@ -1,4 +1,4 @@
-pub(crate) mod parse;
+pub mod parse;
 
 use ark_ec::{CurveGroup, pairing::Pairing};
 use serde::{Deserialize, Serialize};

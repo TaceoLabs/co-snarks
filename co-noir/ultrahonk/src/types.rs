@@ -1,11 +1,11 @@
 use ark_ff::PrimeField;
 use co_builder::{
-    HonkProofResult,
     polynomials::polynomial_flavours::{
         PrecomputedEntitiesFlavour, ShiftedWitnessEntitiesFlavour, WitnessEntitiesFlavour,
-    },
-    prelude::Serialize,
+    }
 };
+use common::serialize::{Serialize};
+use common::honk_proof::{HonkProofError, HonkProofResult};
 use std::fmt::Debug;
 
 use crate::plain_prover_flavour::PlainProverFlavour;

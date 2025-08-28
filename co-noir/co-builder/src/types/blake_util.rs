@@ -1,4 +1,12 @@
-use crate::{TranscriptFieldType, prelude::HonkCurve, ultra_builder::GenericUltraCircuitBuilder};
+use crate::{ultra_builder::GenericUltraCircuitBuilder};
+use common::{
+    honk_curve::HonkCurve,
+    honk_proof::{
+         TranscriptFieldType,
+    },
+    utils::Utils,
+};
+
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;

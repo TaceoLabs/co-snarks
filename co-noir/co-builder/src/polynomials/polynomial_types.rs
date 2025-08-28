@@ -1,4 +1,4 @@
-use super::polynomial::Polynomial;
+use common::polynomials::polynomial::Polynomial;
 use crate::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use crate::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
 use crate::prover_flavour::ProverFlavour;
