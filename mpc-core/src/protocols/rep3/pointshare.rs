@@ -93,6 +93,16 @@ pub fn scalar_mul<C: CurveGroup, N: Network>(
     })
 }
 
+//TODO FLORIN Is this fine?
+/// Transforms a public value into a shared value: \[a\] = a.
+pub fn promote_to_trivial_share<C: CurveGroup>(a: &C, id: PartyID) -> PointShare<C> {
+    match id {
+        PartyID::ID0 => PointShare::new(*a, C::zero()),
+        PartyID::ID1 => PointShare::new(C::zero(), *a),
+        PartyID::ID2 => PointShare::new(C::zero(), C::zero()),
+    }
+}
+
 /// Perform local part of scalar multiplication
 pub fn scalar_mul_local<C: CurveGroup>(
     a: &PointShare<C>,
@@ -170,4 +180,28 @@ where
     let a = !is_equal.a.is_zero();
     let b = !is_equal.b.is_zero();
     Ok((a, b))
+}
+
+/// Checks whether the shared point is zero/infinity.
+/// The strategy is that we split the point into two random shares (as for point_share_to_fieldshares) and check for equal x-coordinates. This works, since the two random shares, with overwhelming probability, will have different x-coordinates if the underyling value is not zero.
+/// Returns a replicated boolean share in two separate parts.
+pub fn is_zero_many<C: CurveGroup, N: Network>(
+    x: &[PointShare<C>],
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Vec<(bool, bool)>>
+where
+    C::BaseField: PrimeField,
+{
+    let input_len = x.len();
+    let (a_x, _, b_x, _) = conversion::point_share_to_fieldshares_pre_many::<C, N>(x, net, state)?;
+    let is_equal = arithmetic::eq_bit_many(&a_x, &b_x, net, state)?;
+    if is_equal.len() != input_len {
+        eyre::bail!("Expected {input_len} elements, got {}", is_equal.len());
+    }
+    let mut res = Vec::with_capacity(input_len);
+    for is_equal in is_equal {
+        res.push((!is_equal.a.is_zero(), !is_equal.b.is_zero()));
+    }
+    Ok(res)
 }

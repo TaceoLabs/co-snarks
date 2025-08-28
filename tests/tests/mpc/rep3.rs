@@ -3567,11 +3567,82 @@ mod curve_share {
         }
     }
 
+    fn point_is_zero_many<C: CurveGroup>(points: &[C])
+    where
+        C::BaseField: PrimeField,
+    {
+        let mut rng = thread_rng();
+        let mut shares: [Vec<_>; 3] = [
+            Vec::with_capacity(points.len()),
+            Vec::with_capacity(points.len()),
+            Vec::with_capacity(points.len()),
+        ];
+        for p in points {
+            let s = rep3::share_curve_point(*p, &mut rng);
+            shares[0].push(s[0].clone());
+            shares[1].push(s[1].clone());
+            shares[2].push(s[2].clone());
+        }
+
+        let nets = LocalNetwork::new_3_parties();
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx, x) in izip!(nets.into_iter(), [tx1, tx2, tx3], shares.into_iter(),) {
+            std::thread::spawn(move || {
+                let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
+                let res = pointshare::is_zero_many(&x, &net, &mut state).unwrap();
+                let mut res_ = Vec::with_capacity(res.len());
+                for r in res {
+                    res_.push(Rep3BigUintShare::<C::ScalarField>::new(
+                        BigUint::from(r.0),
+                        BigUint::from(r.1),
+                    ));
+                }
+                tx.send(res_)
+            });
+        }
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let mut is_results = Vec::with_capacity(result1.len());
+        for i in 0..result1.len() {
+            is_results.push(rep3::combine_binary_element(
+                result1[i].clone(),
+                result2[i].clone(),
+                result3[i].clone(),
+            ));
+        }
+        for (point, is_result) in points.iter().zip(is_results.iter()) {
+            assert!(is_result <= &BigUint::one());
+            if point.is_zero() {
+                assert_eq!(*is_result, BigUint::one());
+            } else {
+                assert_eq!(*is_result, BigUint::zero());
+            }
+        }
+    }
+
     #[test]
     fn bn254_point_is_zero() {
         for _ in 0..10 {
             point_is_zero(ark_bn254::G1Projective::zero());
             point_is_zero(ark_bn254::G1Projective::rand(&mut thread_rng()));
+        }
+    }
+    #[test]
+    fn bn254_point_is_zero_many() {
+        for _ in 0..10 {
+            let mut rng = thread_rng();
+            let points = (0..10)
+                .map(|_| ark_bn254::G1Projective::rand(&mut rng))
+                .chain(std::iter::once(ark_bn254::G1Projective::zero()))
+                .collect_vec();
+            point_is_zero_many(&points);
+
+            let zero_points = vec![ark_bn254::G1Projective::zero(); 10];
+            point_is_zero_many(&zero_points);
         }
     }
 
@@ -3580,6 +3651,20 @@ mod curve_share {
         for _ in 0..10 {
             point_is_zero(ark_grumpkin::Projective::zero());
             point_is_zero(ark_grumpkin::Projective::rand(&mut thread_rng()));
+        }
+    }
+    #[test]
+    fn grumpkin_point_is_zero_many() {
+        for _ in 0..10 {
+            let mut rng = thread_rng();
+            let points = (0..10)
+                .map(|_| ark_grumpkin::Projective::rand(&mut rng))
+                .chain(std::iter::once(ark_grumpkin::Projective::zero()))
+                .collect_vec();
+            point_is_zero_many(&points);
+
+            let zero_points = vec![ark_grumpkin::Projective::zero(); 10];
+            point_is_zero_many(&zero_points);
         }
     }
 }

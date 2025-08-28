@@ -831,6 +831,98 @@ where
     Ok((x01_x, x01_y, x2_x, x2_y))
 }
 
+/// This function is the first local step of the point_sharing to sharing of the coordinates transformation. In essence, it is very similar to what is done in a2b. It takes a point share and produces two trivial shares of its x and y coordinates each. To create valid (x,y) coordinate shares from it, these shares need to be added according to the point_addition rules of elliptic curves. // TODO FLORIN
+#[expect(clippy::type_complexity)]
+pub(crate) fn point_share_to_fieldshares_pre_many<C: CurveGroup, N: Network>(
+    x: &[Rep3PointShare<C>],
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<(
+    Vec<Rep3PrimeFieldShare<C::BaseField>>,
+    Vec<Rep3PrimeFieldShare<C::BaseField>>,
+    Vec<Rep3PrimeFieldShare<C::BaseField>>,
+    Vec<Rep3PrimeFieldShare<C::BaseField>>,
+)>
+where
+    C::BaseField: PrimeField,
+{
+    let input_len = x.len();
+    let mut x01_x = Vec::with_capacity(input_len);
+    let mut x01_y = Vec::with_capacity(input_len);
+    let mut x2_x = Vec::with_capacity(input_len);
+    let mut x2_y = Vec::with_capacity(input_len);
+
+    let r_x = vec![state.rngs.rand.masking_field_element::<C::BaseField>(); input_len];
+    let r_y = vec![state.rngs.rand.masking_field_element::<C::BaseField>(); input_len];
+
+    for (x, r_x, r_y) in izip!(x.iter(), r_x.iter(), r_y.iter()) {
+        match state.id {
+            PartyID::ID0 => {
+                let mut x01_x_ = Rep3PrimeFieldShare::zero_share();
+                let mut x01_y_ = Rep3PrimeFieldShare::zero_share();
+                let mut x2_x_ = Rep3PrimeFieldShare::zero_share();
+                let mut x2_y_ = Rep3PrimeFieldShare::zero_share();
+                x01_x_.a = *r_x;
+                x01_y_.a = *r_y;
+                if let Some((x, y)) = x.b.into_affine().xy() {
+                    x2_x_.b = x;
+                    x2_y_.b = y;
+                }
+                x01_x.push(x01_x_);
+                x01_y.push(x01_y_);
+                x2_x.push(x2_x_);
+                x2_y.push(x2_y_);
+            }
+            PartyID::ID1 => {
+                let val = x.a + x.b;
+                let mut x01_x_ = Rep3PrimeFieldShare::zero_share();
+                let mut x01_y_ = Rep3PrimeFieldShare::zero_share();
+                if let Some((x, y)) = val.into_affine().xy() {
+                    x01_x_.a = x + r_x;
+                    x01_y_.a = y + r_y;
+                } else {
+                    x01_x_.a = *r_x;
+                    x01_y_.a = *r_y;
+                }
+                x01_x.push(x01_x_);
+                x01_y.push(x01_y_);
+                x2_x.push(Rep3PrimeFieldShare::zero_share());
+                x2_y.push(Rep3PrimeFieldShare::zero_share());
+            }
+            PartyID::ID2 => {
+                let mut x01_x_ = Rep3PrimeFieldShare::zero_share();
+                let mut x01_y_ = Rep3PrimeFieldShare::zero_share();
+                let mut x2_x_ = Rep3PrimeFieldShare::zero_share();
+                let mut x2_y_ = Rep3PrimeFieldShare::zero_share();
+                x01_x_.a = *r_x;
+                x01_y_.a = *r_y;
+                if let Some((x, y)) = x.a.into_affine().xy() {
+                    x2_x_.a = x;
+                    x2_y_.a = y;
+                }
+                x01_x.push(x01_x_);
+                x01_y.push(x01_y_);
+                x2_x.push(x2_x_);
+                x2_y.push(x2_y_);
+            }
+        }
+    }
+
+    // reshare x01
+    let mut reshared_inputs: Vec<_> = x01_x.iter().map(|el| el.a.to_owned()).collect();
+    reshared_inputs.extend(x01_y.iter().map(|el| el.a.to_owned()));
+    let local_b = net.reshare_many(&reshared_inputs)?;
+    if local_b.len() != 2 * input_len {
+        eyre::bail!("Expected 2*{input_len} elements");
+    }
+    for i in 0..input_len {
+        x01_x[i].b = local_b[i];
+        x01_y[i].b = local_b[input_len + i];
+    }
+
+    Ok((x01_x, x01_y, x2_x, x2_y))
+}
+
 /// Transforms a replicated point share to shares of its coordinates.
 /// The output will be (x, y, is_infinity). Thereby no statement is made on x, y if is_infinity is true.
 #[expect(clippy::type_complexity)]
