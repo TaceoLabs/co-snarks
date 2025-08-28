@@ -4,7 +4,6 @@ use crate::{
 };
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
-use co_builder::prelude::ActiveRegionData;
 use co_builder::{
     HonkProofResult,
     prelude::{HonkCurve, NUM_MASKED_ROWS, Polynomial, ProverCrs, Serialize, Utils},
