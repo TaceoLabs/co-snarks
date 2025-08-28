@@ -811,8 +811,7 @@ impl<F: PrimeField> FieldCT<F> {
         let is_zero = driver.equal(&val, &F::zero().into())?;
         let to_invert = driver.cmux(is_zero.to_owned(), F::one().into(), val)?;
         let inverse = driver.invert(to_invert)?;
-        let selected = driver.cmux(is_zero.to_owned(), F::one().into(), inverse)?;
-        Ok((selected, is_zero))
+        Ok((inverse, is_zero))
     }
 
     fn assert_is_not_zero<
