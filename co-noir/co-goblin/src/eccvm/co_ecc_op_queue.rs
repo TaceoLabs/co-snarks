@@ -118,8 +118,8 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoUltraEccOpsTable<T, C> {
 pub struct CoVMOperation<T: NoirUltraHonkProver<C>, C: CurveGroup> {
     pub op_code: EccOpCode,
     pub base_point: T::PointShare,
-    pub z1: T::ArithmeticShare, //TODO FLORIN: I think this does not have to be a binary share (It is a uint256 in bb)
-    pub z2: T::ArithmeticShare, //TODO FLORIN: I think this does not have to be a binary share (It is a uint256 in bb)
+    pub z1: T::BaseFieldArithmeticShare, //TODO FLORIN: I think this does not have to be a binary share (It is a uint256 in bb)
+    pub z2: T::BaseFieldArithmeticShare, //TODO FLORIN: I think this does not have to be a binary share (It is a uint256 in bb)
     pub mul_scalar_full: T::ArithmeticShare,
 }
 impl<T: NoirUltraHonkProver<C>, C: CurveGroup> Clone for CoVMOperation<T, C> {

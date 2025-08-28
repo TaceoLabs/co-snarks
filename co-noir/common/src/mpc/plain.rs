@@ -16,6 +16,7 @@ pub struct PlainUltraHonkDriver;
 
 impl<P: CurveGroup> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
     type ArithmeticShare = P::ScalarField;
+    type BaseFieldArithmeticShare = P::BaseField;
     type PointShare = P;
     type BinaryShare = BigUint;
     type State = ();
@@ -281,4 +282,97 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
     fn point_add(a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare {
         *a + b
     }
+
+    fn promote_to_trivial_point_share(
+        _id: <Self::State as MpcState>::PartyID,
+        public_value: P,
+    ) -> Self::PointShare {
+        public_value
+    }
+
+    fn point_is_zero_many<N: Network>(
+        a: &[Self::PointShare],
+        _net: &N,
+        _state: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::BaseFieldArithmeticShare>> {
+        let mut res = Vec::with_capacity(a.len());
+        for a in a {
+            if a.is_zero() {
+                res.push(Self::BaseFieldArithmeticShare::one());
+            } else {
+                res.push(Self::BaseFieldArithmeticShare::zero());
+            }
+        }
+        Ok(res)
+    }
+
+    fn is_zero_many_basefield<N: Network>(
+        a: &[Self::BaseFieldArithmeticShare],
+        _net: &N,
+        _state: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::BaseFieldArithmeticShare>> {
+        let mut res = Vec::with_capacity(a.len());
+        for a in a {
+            if a.is_zero() {
+                res.push(Self::BaseFieldArithmeticShare::one());
+            } else {
+                res.push(Self::BaseFieldArithmeticShare::zero());
+            }
+        }
+        Ok(res)
+    }
+
+    fn mul_assign_with_public_basefield(
+        shared: &mut Self::BaseFieldArithmeticShare,
+        public: <P as CurveGroup>::BaseField,
+    ) {
+        todo!()
+    }
+
+    fn add_assign_public_basefield(
+        a: &mut Self::BaseFieldArithmeticShare,
+        b: <P as CurveGroup>::BaseField,
+        id: <Self::State as MpcState>::PartyID,
+    ) {
+        todo!()
+    }
+
+    fn add_basefield(
+        a: Self::BaseFieldArithmeticShare,
+        b: Self::BaseFieldArithmeticShare,
+    ) -> Self::BaseFieldArithmeticShare {
+        todo!()
+    }
+
+    fn mul_many_basefield<N: Network>(
+        a: &[Self::BaseFieldArithmeticShare],
+        b: &[Self::BaseFieldArithmeticShare],
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::BaseFieldArithmeticShare>> {
+        todo!()
+    }
+
+    fn sub_basefield(
+        a: Self::BaseFieldArithmeticShare,
+        b: Self::BaseFieldArithmeticShare,
+    ) -> Self::BaseFieldArithmeticShare {
+        todo!()
+    }
+
+    // fn is_zero_binary_many<N: Network>(
+    //     a: &[Self::BinaryShare],
+    //     _net: &N,
+    //     _state: &mut Self::State,
+    // ) -> eyre::Result<Vec<Self::BinaryShare>> {
+    //     let mut res = Vec::with_capacity(a.len());
+    //     for a in a {
+    //         if a.is_zero() {
+    //             res.push(Self::BinaryShare::one());
+    //         } else {
+    //             res.push(Self::BinaryShare::zero());
+    //         }
+    //     }
+    //     Ok(res)
+    // }
 }

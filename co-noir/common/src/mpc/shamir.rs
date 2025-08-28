@@ -1,6 +1,7 @@
 use super::NoirUltraHonkProver;
 use ark_ec::CurveGroup;
 use ark_ff::Field;
+use ark_ff::PrimeField;
 use itertools::izip;
 use mpc_core::MpcState;
 use mpc_core::protocols::shamir::ShamirState;
@@ -15,8 +16,9 @@ use rayon::prelude::*;
 /// A UltraHonk driver using shamir secret sharing
 pub struct ShamirUltraHonkDriver;
 
-impl<P: CurveGroup> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
+impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
     type ArithmeticShare = ShamirPrimeFieldShare<P::ScalarField>;
+    type BaseFieldArithmeticShare = ShamirPrimeFieldShare<P::BaseField>;
     type PointShare = ShamirPointShare<P>;
     type BinaryShare = ();
     type State = ShamirState<P::ScalarField>;
@@ -164,10 +166,10 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
     }
 
     fn open_point_and_field_many<N: Network>(
-        a: &[Self::PointShare],
-        b: &[Self::ArithmeticShare],
-        net: &N,
-        state: &mut Self::State,
+        _a: &[Self::PointShare],
+        _b: &[Self::ArithmeticShare],
+        _net: &N,
+        _state: &mut Self::State,
     ) -> eyre::Result<(Vec<P>, Vec<<P>::ScalarField>)> {
         todo!("implement open_point_and_field_many for ShamirUltraHonkDriver")
     }
@@ -267,4 +269,73 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
     ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
         panic!("ShamirUltraHonkDriver does not support is_zero_many");
     }
+
+    fn promote_to_trivial_point_share(
+        _id: <Self::State as MpcState>::PartyID,
+        public_value: P,
+    ) -> Self::PointShare {
+        pointshare::promote_to_trivial_share(&public_value)
+    }
+
+    fn point_is_zero_many<N: Network>(
+        _a: &[Self::PointShare],
+        _net: &N,
+        _state: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::BaseFieldArithmeticShare>> {
+        panic!("ShamirUltraHonkDriver does not support point_is_zero_many");
+    }
+
+    fn is_zero_many_basefield<N: Network>(
+        _a: &[Self::BaseFieldArithmeticShare],
+        _net: &N,
+        _state: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::BaseFieldArithmeticShare>> {
+        panic!("ShamirUltraHonkDriver does not support is_zero_many");
+    }
+
+    fn mul_assign_with_public_basefield(
+        shared: &mut Self::BaseFieldArithmeticShare,
+        public: <P as CurveGroup>::BaseField,
+    ) {
+        todo!()
+    }
+
+    fn add_assign_public_basefield(
+        a: &mut Self::BaseFieldArithmeticShare,
+        b: <P as CurveGroup>::BaseField,
+        id: <Self::State as MpcState>::PartyID,
+    ) {
+        todo!()
+    }
+
+    fn add_basefield(
+        a: Self::BaseFieldArithmeticShare,
+        b: Self::BaseFieldArithmeticShare,
+    ) -> Self::BaseFieldArithmeticShare {
+        todo!()
+    }
+
+    fn mul_many_basefield<N: Network>(
+        a: &[Self::BaseFieldArithmeticShare],
+        b: &[Self::BaseFieldArithmeticShare],
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::BaseFieldArithmeticShare>> {
+        todo!()
+    }
+
+    fn sub_basefield(
+        a: Self::BaseFieldArithmeticShare,
+        b: Self::BaseFieldArithmeticShare,
+    ) -> Self::BaseFieldArithmeticShare {
+        todo!()
+    }
+
+    // fn is_zero_binary_many<N: Network>(
+    //     _a: &[Self::BinaryShare],
+    //     _net: &N,
+    //     _state: &mut Self::State,
+    // ) -> eyre::Result<Vec<Self::BinaryShare>> {
+    //     panic!("ShamirUltraHonkDriver does not support binary shares");
+    // }
 }

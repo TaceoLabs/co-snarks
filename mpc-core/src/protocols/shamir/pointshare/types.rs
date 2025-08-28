@@ -26,6 +26,12 @@ impl<C: CurveGroup> ShamirPointShare<C> {
     }
 }
 
+impl<C: CurveGroup> Default for ShamirPointShare<C> {
+    fn default() -> Self {
+        Self { a: C::zero() }
+    }
+}
+
 // Conversions
 impl<C: CurveGroup> ShamirPointShare<C> {
     /// Transforms a slice of `ShamirPointShare<C>` to a slice of `C`

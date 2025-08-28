@@ -24,10 +24,20 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
         + PartialEq
         + std::fmt::Debug
         + 'static;
+    type BaseFieldArithmeticShare: CanonicalSerialize
+        + CanonicalDeserialize
+        + Copy
+        + Clone
+        + Default
+        + Send
+        + Sync
+        + PartialEq
+        + std::fmt::Debug
+        + 'static;
     /// The binary share
-    type BinaryShare;
+    type BinaryShare: std::fmt::Debug + Send + 'static + Clone;
     /// The G1 point share type
-    type PointShare: std::fmt::Debug + Send + 'static;
+    type PointShare: std::fmt::Debug + Send + 'static + Clone + Default;
     /// Internal state of used MPC protocol
     type State: MpcState + Send;
 
@@ -40,6 +50,12 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
 
     /// Subtract the share b from the share a: \[c\] = \[a\] - \[b\]
     fn sub(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare;
+
+    /// Subtract the share b from the share a: \[c\] = \[a\] - \[b\]
+    fn sub_basefield(
+        a: Self::BaseFieldArithmeticShare,
+        b: Self::BaseFieldArithmeticShare,
+    ) -> Self::BaseFieldArithmeticShare;
 
     /// Elementwise subtraction of share b from the share a: \[c\] = \[a\] - \[b\]
     fn sub_many(
@@ -59,6 +75,12 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
     /// Add two shares: \[c\] = \[a\] + \[b\]
     fn add(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare;
 
+    /// Add two shares: \[c\] = \[a\] + \[b\]
+    fn add_basefield(
+        a: Self::BaseFieldArithmeticShare,
+        b: Self::BaseFieldArithmeticShare,
+    ) -> Self::BaseFieldArithmeticShare;
+
     /// Elementwise addition of two shares: \[c\] = \[a\] + \[b\]
     fn add_many(
         a: &[Self::ArithmeticShare],
@@ -67,6 +89,17 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
         a.iter()
             .zip(b.iter())
             .map(|(a, b)| Self::add(*a, *b))
+            .collect()
+    }
+
+    /// Elementwise addition of two shares: \[c\] = \[a\] + \[b\]
+    fn add_many_basefield(
+        a: &[Self::BaseFieldArithmeticShare],
+        b: &[Self::BaseFieldArithmeticShare],
+    ) -> Vec<Self::BaseFieldArithmeticShare> {
+        a.iter()
+            .zip(b.iter())
+            .map(|(a, b)| Self::add_basefield(*a, *b))
             .collect()
     }
 
@@ -84,6 +117,13 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
     fn add_assign_public(
         a: &mut Self::ArithmeticShare,
         b: P::ScalarField,
+        id: <Self::State as MpcState>::PartyID,
+    );
+
+    /// Adds a public value to a share: \[c\] = \[a\] + b and stores the result in \[a\].
+    fn add_assign_public_basefield(
+        a: &mut Self::BaseFieldArithmeticShare,
+        b: P::BaseField,
         id: <Self::State as MpcState>::PartyID,
     );
 
@@ -143,6 +183,12 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
     /// Multiply a share b by a public value a: c = \[a\] * b and stores the result in \[a\];
     fn mul_assign_with_public(shared: &mut Self::ArithmeticShare, public: P::ScalarField);
 
+    /// Multiply a share b by a public value a: c = \[a\] * b and stores the result in \[a\];
+    fn mul_assign_with_public_basefield(
+        shared: &mut Self::BaseFieldArithmeticShare,
+        public: P::BaseField,
+    );
+
     /// Elementwise multiplication a share b by a public value a: c = a * \[b\].
     fn mul_with_public_many(
         public: &[P::ScalarField],
@@ -192,6 +238,17 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
 
     /// Scales all elements in-place in \[a\] by the provided scale, by multiplying every share with the
     /// public scalar.
+    fn scale_many_in_place_basefield(
+        shared: &mut [Self::BaseFieldArithmeticShare],
+        scale: P::BaseField,
+    ) {
+        for shared in shared.iter_mut() {
+            Self::mul_assign_with_public_basefield(shared, scale);
+        }
+    }
+
+    /// Scales all elements in-place in \[a\] by the provided scale, by multiplying every share with the
+    /// public scalar.
     fn scale_many(
         shared: &[Self::ArithmeticShare],
         scale: P::ScalarField,
@@ -225,6 +282,17 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
         }
     }
 
+    /// Adds a public scalar to all elements in-place.
+    fn add_scalar_in_place_basefield(
+        shared: &mut [Self::BaseFieldArithmeticShare],
+        scalar: P::BaseField,
+        id: <Self::State as MpcState>::PartyID,
+    ) {
+        for x in shared.iter_mut() {
+            Self::add_assign_public_basefield(x, scalar, id);
+        }
+    }
+
     fn local_mul_vec(
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
@@ -246,6 +314,14 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
         state: &mut Self::State,
     ) -> eyre::Result<Vec<Self::ArithmeticShare>>;
 
+    /// Multiply two shares: \[c\] = \[a\] * \[b\]. Requires network communication.
+    fn mul_many_basefield<N: Network>(
+        a: &[Self::BaseFieldArithmeticShare],
+        b: &[Self::BaseFieldArithmeticShare],
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::BaseFieldArithmeticShare>>;
+
     /// Add a public value a to the share b: \[c\] = a + \[b\]
     fn add_with_public(
         public: P::ScalarField,
@@ -264,6 +340,11 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
         id: <Self::State as MpcState>::PartyID,
         public_values: &[P::ScalarField],
     ) -> Vec<Self::ArithmeticShare>;
+
+    fn promote_to_trivial_point_share(
+        id: <Self::State as MpcState>::PartyID,
+        public_value: P,
+    ) -> Self::PointShare;
 
     /// Reconstructs a shared point: A = Open(\[A\]).
     fn open_point<N: Network>(
@@ -362,4 +443,23 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
         net: &N,
         state: &mut Self::State,
     ) -> eyre::Result<Vec<Self::ArithmeticShare>>;
+
+    fn is_zero_many_basefield<N: Network>(
+        a: &[Self::BaseFieldArithmeticShare],
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::BaseFieldArithmeticShare>>;
+
+    fn point_is_zero_many<N: Network>(
+        a: &[Self::PointShare],
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::BaseFieldArithmeticShare>>;
+
+    //TODO FLORIN Remove if not needed
+    // fn is_zero_binary_many<N: Network>(
+    //     a: &[Self::BinaryShare],
+    //     net: &N,
+    //     state: &mut Self::State,
+    // ) -> eyre::Result<Vec<Self::BinaryShare>>;
 }

@@ -1,22 +1,25 @@
 use super::NoirUltraHonkProver;
 use ark_ec::CurveGroup;
 use ark_ff::Field;
+use ark_ff::PrimeField;
 use itertools::izip;
 use mpc_core::{
     MpcState,
     protocols::rep3::{
-        Rep3BigUintShare, Rep3PointShare, Rep3PrimeFieldShare, Rep3State, arithmetic, id::PartyID,
-        pointshare, poly,
+        Rep3BigUintShare, Rep3PointShare, Rep3PrimeFieldShare, Rep3State, arithmetic, binary,
+        id::PartyID, pointshare, poly,
     },
 };
 use mpc_net::Network;
+use num_bigint::BigUint;
 use num_traits::Zero;
 use rayon::prelude::*;
 
 pub struct Rep3UltraHonkDriver;
 
-impl<P: CurveGroup> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
+impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
     type ArithmeticShare = Rep3PrimeFieldShare<P::ScalarField>;
+    type BaseFieldArithmeticShare = Rep3PrimeFieldShare<P::BaseField>;
     type PointShare = Rep3PointShare<P>;
     type BinaryShare = Rep3BigUintShare<P::ScalarField>;
     type State = Rep3State;
@@ -166,10 +169,10 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
     }
 
     fn open_point_and_field_many<N: Network>(
-        a: &[Self::PointShare],
-        b: &[Self::ArithmeticShare],
-        net: &N,
-        state: &mut Self::State,
+        _a: &[Self::PointShare],
+        _b: &[Self::ArithmeticShare],
+        _net: &N,
+        _state: &mut Self::State,
     ) -> eyre::Result<(Vec<P>, Vec<<P>::ScalarField>)> {
         todo!("implement open_point_and_field_many for Rep3UltraHonkDriver")
     }
@@ -270,4 +273,76 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
         let zeroes = vec![P::ScalarField::zero(); a.len()];
         arithmetic::eq_public_many(a, &zeroes, net, state)
     }
+
+    fn promote_to_trivial_point_share(
+        id: <Self::State as MpcState>::PartyID,
+        public_value: P,
+    ) -> Self::PointShare {
+        pointshare::promote_to_trivial_share(&public_value, id)
+    }
+
+    fn point_is_zero_many<N: Network>(
+        a: &[Self::PointShare],
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::BaseFieldArithmeticShare>> {
+        let a = pointshare::is_zero_many(a, net, state)?;
+        todo!("implement point_is_zero_many for Rep3UltraHonkDriver");
+    }
+
+    fn is_zero_many_basefield<N: Network>(
+        a: &[Self::BaseFieldArithmeticShare],
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::BaseFieldArithmeticShare>> {
+        let zeroes = vec![P::BaseField::zero(); a.len()];
+        arithmetic::eq_public_many(a, &zeroes, net, state)
+    }
+
+    fn mul_assign_with_public_basefield(
+        shared: &mut Self::BaseFieldArithmeticShare,
+        public: <P as CurveGroup>::BaseField,
+    ) {
+        todo!()
+    }
+
+    fn add_assign_public_basefield(
+        a: &mut Self::BaseFieldArithmeticShare,
+        b: <P as CurveGroup>::BaseField,
+        id: <Self::State as MpcState>::PartyID,
+    ) {
+        todo!()
+    }
+
+    fn add_basefield(
+        a: Self::BaseFieldArithmeticShare,
+        b: Self::BaseFieldArithmeticShare,
+    ) -> Self::BaseFieldArithmeticShare {
+        todo!()
+    }
+
+    fn mul_many_basefield<N: Network>(
+        a: &[Self::BaseFieldArithmeticShare],
+        b: &[Self::BaseFieldArithmeticShare],
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::BaseFieldArithmeticShare>> {
+        todo!()
+    }
+
+    fn sub_basefield(
+        a: Self::BaseFieldArithmeticShare,
+        b: Self::BaseFieldArithmeticShare,
+    ) -> Self::BaseFieldArithmeticShare {
+        todo!()
+    }
+
+    // fn is_zero_binary_many<N: Network>(
+    //     a: &[Self::BinaryShare],
+    //     net: &N,
+    //     state: &mut Self::State,
+    // ) -> eyre::Result<Vec<Self::BinaryShare>> {
+    //     let eq_results = binary::is_zero_many(a.to_vec(), net, state)?;
+    //     Ok(eq_results)
+    // }
 }

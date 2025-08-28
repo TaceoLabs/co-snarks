@@ -369,14 +369,14 @@ where
         let ab = mul[0];
         let ac = mul[1];
         let bc = mul[2];
-        let abc = T::mul_many(&ab, &c, self.net, self.state)?; //TACEO TODO: If really necessary we can batch this multiplication into 'array_prod_mul_many'
+        let abc = T::mul_many(ab, c, self.net, self.state)?; //TACEO TODO: If really necessary we can batch this multiplication into 'array_prod_mul_many'
 
         let mut read_and_write_tag = T::sub_many(&abc, ab);
-        T::sub_assign_many(&mut read_and_write_tag, &ac);
-        T::add_assign_many(&mut read_and_write_tag, &a);
-        T::sub_assign_many(&mut read_and_write_tag, &bc);
-        T::add_assign_many(&mut read_and_write_tag, &b);
-        T::add_assign_many(&mut read_and_write_tag, &c);
+        T::sub_assign_many(&mut read_and_write_tag, ac);
+        T::add_assign_many(&mut read_and_write_tag, a);
+        T::sub_assign_many(&mut read_and_write_tag, bc);
+        T::add_assign_many(&mut read_and_write_tag, b);
+        T::add_assign_many(&mut read_and_write_tag, c);
 
         let mut denominator_to_mul = Vec::with_capacity(6 * circuit_size);
 
@@ -468,7 +468,7 @@ where
             .expect("Challenge should be non-zero");
 
         // Compute inverse polynomial for our logarithmic-derivative lookup method
-        self.compute_logderivative_inverses(proving_key, unmasked_witness_size);
+        self.compute_logderivative_inverses(proving_key, unmasked_witness_size)?;
 
         let mut lookup_inverses_tmp = std::mem::take(&mut self.memory.lookup_inverses);
         todo!("Commit to lookup inverses polynomial");
@@ -1175,8 +1175,7 @@ where
         T::sub_assign_many(&mut point_table_init_write, transcript_mul);
         T::add_scalar_in_place(&mut point_table_init_write, one, id);
 
-        let final_denominator =
-            T::mul_many(&point_table_init_write, &mul[2], self.net, self.state)?;
+        let final_denominator = T::mul_many(&point_table_init_write, mul[2], self.net, self.state)?;
         Ok((final_numerator, final_denominator))
     }
 

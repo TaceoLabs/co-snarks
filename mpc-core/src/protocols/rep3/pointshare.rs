@@ -93,7 +93,6 @@ pub fn scalar_mul<C: CurveGroup, N: Network>(
     })
 }
 
-//TODO FLORIN Is this fine?
 /// Transforms a public value into a shared value: \[a\] = a.
 pub fn promote_to_trivial_share<C: CurveGroup>(a: &C, id: PartyID) -> PointShare<C> {
     match id {
