@@ -1232,6 +1232,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "co-protogalaxy"
+version = "0.1.0"
+dependencies = [
+ "ark-bn254",
+ "ark-ec",
+ "ark-ff",
+ "co-builder",
+ "co-ultrahonk",
+ "common",
+ "flate2",
+ "itertools 0.14.0",
+ "mpc-core",
+ "mpc-net",
+ "rand 0.8.5",
+ "rayon",
+ "serde",
+ "serde_json",
+ "ultrahonk",
+]
+
+[[package]]
 name = "co-ultrahonk"
 version = "0.5.0"
 dependencies = [

@@ -8,11 +8,11 @@ use crate::mpc_prover_flavour::SharedUnivariateTrait;
 use common::mpc::NoirUltraHonkProver;
 
 pub struct SharedUnivariate<T: NoirUltraHonkProver<P>, P: CurveGroup, const SIZE: usize> {
-    pub(crate) evaluations: [T::ArithmeticShare; SIZE],
+    pub evaluations: [T::ArithmeticShare; SIZE],
 }
 
 impl<T: NoirUltraHonkProver<P>, P: CurveGroup, const SIZE: usize> SharedUnivariate<T, P, SIZE> {
-    pub(crate) fn from_vec(evaluations: Vec<T::ArithmeticShare>) -> Self {
+    pub fn from_vec(evaluations: Vec<T::ArithmeticShare>) -> Self {
         Self {
             evaluations: evaluations
                 .try_into()

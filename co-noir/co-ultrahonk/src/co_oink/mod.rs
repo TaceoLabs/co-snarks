@@ -1,5 +1,5 @@
-pub(crate) mod co_oink_prover;
-pub(crate) mod types;
+pub mod co_oink_prover;
+pub mod types;
 
 // execute_log_derivative_inverse_round: n for inv and n for mult
 pub const CRAND_PAIRS_FACTOR_N: usize = 2;

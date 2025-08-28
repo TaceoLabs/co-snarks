@@ -1,18 +1,36 @@
 use crate::co_decider::relations::Relation;
-use crate::types_batch::{AllEntitiesBatchRelationsTrait, Public, Shared, SumCheckDataForRelation};
+use crate::co_decider::relations::auxiliary_relation::AuxiliaryRelationAccType;
+use crate::co_decider::relations::logderiv_lookup_relation::LogDerivLookupRelationAccType;
+use crate::co_decider::relations::permutation_relation::UltraPermutationRelationAccType;
+use crate::co_decider::relations::{
+    auxiliary_relation::AuxiliaryRelationEvals,
+    databus_lookup_relation::DataBusLookupRelationEvals,
+    delta_range_constraint_relation::DeltaRangeConstraintRelationEvals,
+    ecc_op_queue_relation::EccOpQueueRelationEvals, elliptic_relation::EllipticRelationEvals,
+    logderiv_lookup_relation::LogDerivLookupRelationEvals,
+    permutation_relation::UltraPermutationRelationEvals,
+    poseidon2_external_relation::Poseidon2ExternalRelationEvals,
+    poseidon2_internal_relation::Poseidon2InternalRelationEvals,
+    ultra_arithmetic_relation::UltraArithmeticRelationEvals,
+};
+use crate::co_decider::types::RelationParameters;
+use crate::types::AllEntities;
+use crate::types_batch::{
+    AllEntitiesBatch, AllEntitiesBatchRelationsTrait, Public, Shared, SumCheckDataForRelation,
+};
 use crate::{
     co_decider::{
         co_sumcheck::co_sumcheck_round::SumcheckRound,
         relations::{
-            auxiliary_relation::{AuxiliaryRelation, AuxiliaryRelationAcc},
+            auxiliary_relation::AuxiliaryRelation,
             databus_lookup_relation::{DataBusLookupRelation, DataBusLookupRelationAcc},
             delta_range_constraint_relation::{
                 DeltaRangeConstraintRelation, DeltaRangeConstraintRelationAcc,
             },
             ecc_op_queue_relation::{EccOpQueueRelation, EccOpQueueRelationAcc},
             elliptic_relation::{EllipticRelation, EllipticRelationAcc},
-            logderiv_lookup_relation::{LogDerivLookupRelation, LogDerivLookupRelationAcc},
-            permutation_relation::{UltraPermutationRelation, UltraPermutationRelationAcc},
+            logderiv_lookup_relation::LogDerivLookupRelation,
+            permutation_relation::UltraPermutationRelation,
             poseidon2_external_relation::{
                 Poseidon2ExternalRelation, Poseidon2ExternalRelationAcc,
             },
@@ -29,6 +47,7 @@ use crate::{
     mpc_prover_flavour::MPCProverFlavour,
 };
 use ark_ec::CurveGroup;
+use ark_ff::AdditiveGroup;
 use ark_ff::PrimeField;
 use co_builder::TranscriptFieldType;
 use co_builder::flavours::mega_flavour::MegaFlavour;
@@ -41,43 +60,112 @@ use ultrahonk::prelude::Univariate;
 
 pub struct AllRelationAccMega<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) r_arith: UltraArithmeticRelationAcc<T, P>,
-    pub(crate) r_perm: UltraPermutationRelationAcc<T, P>,
-    pub(crate) r_lookup: LogDerivLookupRelationAcc<T, P>,
+    pub(crate) r_perm: UltraPermutationRelationAccType<T, P>,
+    pub(crate) r_lookup: LogDerivLookupRelationAccType<T, P>,
     pub(crate) r_delta: DeltaRangeConstraintRelationAcc<T, P>,
     pub(crate) r_elliptic: EllipticRelationAcc<T, P>,
-    pub(crate) r_aux: AuxiliaryRelationAcc<T, P>,
+    pub(crate) r_aux: AuxiliaryRelationAccType<T, P>,
     pub(crate) r_ecc_op_queue: EccOpQueueRelationAcc<T, P>,
     pub(crate) r_databus: DataBusLookupRelationAcc<T, P>,
     pub(crate) r_pos_ext: Poseidon2ExternalRelationAcc<T, P>,
     pub(crate) r_pos_int: Poseidon2InternalRelationAcc<T, P>,
 }
 
+pub struct AllRelationEvalsMega<T: NoirUltraHonkProver<P>, P: CurveGroup> {
+    pub r_arith: UltraArithmeticRelationEvals<T, P>,
+    pub(crate) r_perm: UltraPermutationRelationEvals<T, P>,
+    pub(crate) r_lookup: LogDerivLookupRelationEvals<T, P>,
+    pub(crate) r_delta: DeltaRangeConstraintRelationEvals<T, P>,
+    pub(crate) r_elliptic: EllipticRelationEvals<T, P>,
+    pub(crate) r_aux: AuxiliaryRelationEvals<T, P>,
+    pub(crate) r_ecc_op_queue: EccOpQueueRelationEvals<T, P>,
+    pub(crate) r_databus: DataBusLookupRelationEvals<T, P>,
+    pub(crate) r_pos_ext: Poseidon2ExternalRelationEvals<T, P>,
+    pub(crate) r_pos_int: Poseidon2InternalRelationEvals<T, P>,
+}
+
 pub struct AllRelationAccHalfSharedMega<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) r_arith: UltraArithmeticRelationAccHalfShared<T, P>,
-    pub(crate) r_perm: UltraPermutationRelationAcc<T, P>,
-    pub(crate) r_lookup: LogDerivLookupRelationAcc<T, P>,
+    pub(crate) r_perm: UltraPermutationRelationAccType<T, P>,
+    pub(crate) r_lookup: LogDerivLookupRelationAccType<T, P>,
     pub(crate) r_delta: DeltaRangeConstraintRelationAcc<T, P>,
     pub(crate) r_elliptic: EllipticRelationAcc<T, P>,
-    pub(crate) r_aux: AuxiliaryRelationAcc<T, P>,
+    pub(crate) r_aux: AuxiliaryRelationAccType<T, P>,
     pub(crate) r_ecc_op_queue: EccOpQueueRelationAcc<T, P>,
     pub(crate) r_databus: DataBusLookupRelationAcc<T, P>,
     pub(crate) r_pos_ext: Poseidon2ExternalRelationAcc<T, P>,
     pub(crate) r_pos_int: Poseidon2InternalRelationAcc<T, P>,
+}
+
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> AllRelationAccMega<T, P> {
+    pub fn default_with_total_lengths() -> Self {
+        Self {
+            r_aux: AuxiliaryRelationAccType::default_total(),
+            r_perm: UltraPermutationRelationAccType::default_total(),
+            r_lookup: LogDerivLookupRelationAccType::default_total(),
+            ..Default::default()
+        }
+    }
+}
+
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> AllRelationAccHalfSharedMega<T, P> {
+    pub fn default_with_total_lengths() -> Self {
+        Self {
+            r_aux: AuxiliaryRelationAccType::default_total(),
+            r_perm: UltraPermutationRelationAccType::default_total(),
+            r_lookup: LogDerivLookupRelationAccType::default_total(),
+            ..Default::default()
+        }
+    }
+}
+
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for AllRelationAccMega<T, P> {
+    fn default() -> Self {
+        AllRelationAccMega {
+            r_arith: UltraArithmeticRelationAcc::default(),
+            r_perm: UltraPermutationRelationAccType::default(),
+            r_lookup: LogDerivLookupRelationAccType::default(),
+            r_delta: DeltaRangeConstraintRelationAcc::default(),
+            r_elliptic: EllipticRelationAcc::default(),
+            r_aux: AuxiliaryRelationAccType::default(),
+            r_ecc_op_queue: EccOpQueueRelationAcc::default(),
+            r_databus: DataBusLookupRelationAcc::default(),
+            r_pos_ext: Poseidon2ExternalRelationAcc::default(),
+            r_pos_int: Poseidon2InternalRelationAcc::default(),
+        }
+    }
 }
 
 impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for AllRelationAccHalfSharedMega<T, P> {
     fn default() -> Self {
         AllRelationAccHalfSharedMega {
             r_arith: UltraArithmeticRelationAccHalfShared::default(),
-            r_perm: UltraPermutationRelationAcc::default(),
-            r_lookup: LogDerivLookupRelationAcc::default(),
+            r_perm: UltraPermutationRelationAccType::default(),
+            r_lookup: LogDerivLookupRelationAccType::default(),
             r_delta: DeltaRangeConstraintRelationAcc::default(),
             r_elliptic: EllipticRelationAcc::default(),
-            r_aux: AuxiliaryRelationAcc::default(),
+            r_aux: AuxiliaryRelationAccType::default(),
             r_ecc_op_queue: EccOpQueueRelationAcc::default(),
             r_databus: DataBusLookupRelationAcc::default(),
             r_pos_ext: Poseidon2ExternalRelationAcc::default(),
             r_pos_int: Poseidon2InternalRelationAcc::default(),
+        }
+    }
+}
+
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for AllRelationEvalsMega<T, P> {
+    fn default() -> Self {
+        AllRelationEvalsMega {
+            r_arith: UltraArithmeticRelationEvals::default(),
+            r_perm: UltraPermutationRelationEvals::default(),
+            r_lookup: LogDerivLookupRelationEvals::default(),
+            r_delta: DeltaRangeConstraintRelationEvals::default(),
+            r_elliptic: EllipticRelationEvals::default(),
+            r_aux: AuxiliaryRelationEvals::default(),
+            r_ecc_op_queue: EccOpQueueRelationEvals::default(),
+            r_databus: DataBusLookupRelationEvals::default(),
+            r_pos_ext: Poseidon2ExternalRelationEvals::default(),
+            r_pos_int: Poseidon2InternalRelationEvals::default(),
         }
     }
 }
@@ -160,6 +248,8 @@ fn extend_and_batch_univariates_template<
 
 impl MPCProverFlavour for MegaFlavour {
     type AllRelationAcc<T: NoirUltraHonkProver<P>, P: CurveGroup> = AllRelationAccMega<T, P>;
+    type AllRelationEvaluations<T: NoirUltraHonkProver<P>, P: CurveGroup> =
+        AllRelationEvalsMega<T, P>;
 
     type AllRelationAccHalfShared<T: NoirUltraHonkProver<P>, P: CurveGroup> =
         AllRelationAccHalfSharedMega<T, P>;
@@ -181,8 +271,6 @@ impl MPCProverFlavour for MegaFlavour {
 
     type ProverUnivariatePublic<P: CurveGroup> =
         Univariate<P::ScalarField, { Self::MAX_PARTIAL_RELATION_LENGTH }>;
-
-    type Alphas<F: PrimeField> = MegaAlphas<F>;
 
     type AllEntitiesBatchRelations<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> =
         AllEntitiesBatchRelationsMega<T, P>;
@@ -212,20 +300,77 @@ impl MPCProverFlavour for MegaFlavour {
     fn scale<T: NoirUltraHonkProver<P>, P: CurveGroup>(
         acc: &mut Self::AllRelationAcc<T, P>,
         first_scalar: P::ScalarField,
-        elements: &Self::Alphas<P::ScalarField>,
+        elements: &[P::ScalarField],
     ) {
         tracing::trace!("Prove::Scale");
-        assert!(elements.0.len() == Self::NUM_SUBRELATIONS - 1);
-        acc.r_arith.scale(&[first_scalar, elements.0[0]]);
-        acc.r_perm.scale(&elements.0[1..3]);
-        acc.r_lookup.scale(&elements.0[3..5]);
-        acc.r_delta.scale(&elements.0[5..9]);
-        acc.r_elliptic.scale(&elements.0[9..11]);
-        acc.r_aux.scale(&elements.0[11..17]);
-        acc.r_ecc_op_queue.scale(&elements.0[17..25]);
-        acc.r_databus.scale(&elements.0[25..31]);
-        acc.r_pos_ext.scale(&elements.0[31..35]);
-        acc.r_pos_int.scale(&elements.0[35..]);
+        assert!(elements.len() == Self::NUM_SUBRELATIONS - 1);
+        acc.r_arith.scale(&[first_scalar, elements[0]]);
+        acc.r_perm.scale(&elements[1..3]);
+        acc.r_lookup.scale(&elements[3..5]);
+        acc.r_delta.scale(&elements[5..9]);
+        acc.r_elliptic.scale(&elements[9..11]);
+        acc.r_aux.scale(&elements[11..17]);
+        acc.r_ecc_op_queue.scale(&elements[17..25]);
+        acc.r_databus.scale(&elements[25..31]);
+        acc.r_pos_ext.scale(&elements[31..35]);
+        acc.r_pos_int.scale(&elements[35..]);
+    }
+
+    fn scale_by_challenge_and_accumulate<T: NoirUltraHonkProver<P>, P: CurveGroup>(
+        acc: &mut Self::AllRelationEvaluations<T, P>,
+        first_scalar: P::ScalarField,
+        elements: &[P::ScalarField],
+    ) -> (T::ArithmeticShare, T::ArithmeticShare) {
+        assert!(elements.len() == Self::NUM_SUBRELATIONS - 1);
+        let (mut linearly_dependent_contribution, mut linearly_independent_contribution) =
+            (T::ArithmeticShare::default(), T::ArithmeticShare::default());
+        acc.r_arith.scale_by_challenge_and_accumulate(
+            &mut linearly_independent_contribution,
+            &[first_scalar, elements[0]],
+        );
+        acc.r_perm.scale_by_challenge_and_accumulate(
+            &mut linearly_independent_contribution,
+            &elements[1..3],
+        );
+        acc.r_lookup.scale_by_challenge_and_accumulate(
+            &mut linearly_independent_contribution,
+            &mut linearly_dependent_contribution,
+            &elements[3..5],
+        );
+        acc.r_delta.scale_by_challenge_and_accumulate(
+            &mut linearly_independent_contribution,
+            &elements[5..9],
+        );
+        acc.r_elliptic.scale_by_challenge_and_accumulate(
+            &mut linearly_independent_contribution,
+            &elements[9..11],
+        );
+        acc.r_aux.scale_by_challenge_and_accumulate(
+            &mut linearly_independent_contribution,
+            &elements[11..17],
+        );
+        acc.r_ecc_op_queue.scale_by_challenge_and_accumulate(
+            &mut linearly_independent_contribution,
+            &elements[17..25],
+        );
+        acc.r_databus.scale_by_challenge_and_accumulate(
+            &mut linearly_independent_contribution,
+            &mut linearly_dependent_contribution,
+            &elements[25..31],
+        );
+        acc.r_pos_ext.scale_by_challenge_and_accumulate(
+            &mut linearly_independent_contribution,
+            &elements[31..35],
+        );
+        acc.r_pos_int.scale_by_challenge_and_accumulate(
+            &mut linearly_independent_contribution,
+            &elements[35..],
+        );
+
+        (
+            linearly_independent_contribution,
+            linearly_dependent_contribution,
+        )
     }
 
     fn extend_and_batch_univariates<T: NoirUltraHonkProver<P>, P: CurveGroup>(
@@ -256,6 +401,68 @@ impl MPCProverFlavour for MegaFlavour {
         )
     }
 
+    fn extend_and_batch_univariates_with_distinct_challenges<
+        T: NoirUltraHonkProver<P>,
+        P: CurveGroup,
+        const SIZE: usize,
+    >(
+        acc: &Self::AllRelationAcc<T, P>,
+        result: &mut SharedUnivariate<T, P, SIZE>,
+        first_term: Univariate<P::ScalarField, SIZE>,
+        running_challenge: &[Univariate<P::ScalarField, SIZE>],
+    ) {
+        acc.r_arith
+            .extend_and_batch_univariates_with_distinct_challenges(
+                result,
+                &[first_term, running_challenge[0].clone()],
+            );
+        acc.r_perm
+            .extend_and_batch_univariates_with_distinct_challenges(
+                result,
+                &running_challenge[1..3],
+            );
+        acc.r_lookup
+            .extend_and_batch_univariates_with_distinct_challenges(
+                result,
+                &running_challenge[3..5],
+            );
+        acc.r_delta
+            .extend_and_batch_univariates_with_distinct_challenges(
+                result,
+                &running_challenge[5..9],
+            );
+        acc.r_elliptic
+            .extend_and_batch_univariates_with_distinct_challenges(
+                result,
+                &running_challenge[9..11],
+            );
+        acc.r_aux
+            .extend_and_batch_univariates_with_distinct_challenges(
+                result,
+                &running_challenge[11..17],
+            );
+        acc.r_ecc_op_queue
+            .extend_and_batch_univariates_with_distinct_challenges(
+                result,
+                &running_challenge[17..25],
+            );
+        acc.r_databus
+            .extend_and_batch_univariates_with_distinct_challenges(
+                result,
+                &running_challenge[25..31],
+            );
+        acc.r_pos_ext
+            .extend_and_batch_univariates_with_distinct_challenges(
+                result,
+                &running_challenge[31..35],
+            );
+        acc.r_pos_int
+            .extend_and_batch_univariates_with_distinct_challenges(
+                result,
+                &running_challenge[35..],
+            );
+    }
+
     fn accumulate_relation_univariates_batch<
         P: co_builder::prelude::HonkCurve<co_builder::TranscriptFieldType>,
         T: NoirUltraHonkProver<P>,
@@ -265,7 +472,7 @@ impl MPCProverFlavour for MegaFlavour {
         state: &mut T::State,
         univariate_accumulators: &mut Self::AllRelationAccHalfShared<T, P>,
         sum_check_data: &Self::AllEntitiesBatchRelations<T, P>,
-        relation_parameters: &crate::co_decider::types::RelationParameters<P::ScalarField, Self>,
+        relation_parameters: &crate::co_decider::types::RelationParameters<P::ScalarField>,
     ) -> co_builder::HonkProofResult<()> {
         tracing::trace!("Accumulate relations");
         SumcheckRound::accumulate_one_relation_univariates_batch::<
@@ -416,18 +623,220 @@ impl MPCProverFlavour for MegaFlavour {
         Ok(())
     }
 
+    fn accumulate_relation_univariates_with_extended_parameters<
+        P: HonkCurve<TranscriptFieldType>,
+        T: NoirUltraHonkProver<P>,
+        N: Network,
+        const SIZE: usize,
+    >(
+        net: &N,
+        state: &mut T::State,
+        univariate_accumulators: &mut Self::AllRelationAccHalfShared<T, P>,
+        input: &AllEntitiesBatch<T, P, Self>,
+        relation_parameters: &RelationParameters<Univariate<P::ScalarField, SIZE>>,
+        scaling_factor: &P::ScalarField,
+    ) -> co_builder::HonkProofResult<()> {
+        UltraArithmeticRelation::accumulate_with_extended_parameters(
+            net,
+            state,
+            &mut univariate_accumulators.r_arith,
+            input,
+            relation_parameters,
+            scaling_factor,
+        )?;
+
+        UltraPermutationRelation::accumulate_with_extended_parameters(
+            net,
+            state,
+            &mut univariate_accumulators.r_perm,
+            input,
+            relation_parameters,
+            scaling_factor,
+        )?;
+
+        DeltaRangeConstraintRelation::accumulate_with_extended_parameters(
+            net,
+            state,
+            &mut univariate_accumulators.r_delta,
+            input,
+            relation_parameters,
+            scaling_factor,
+        )?;
+
+        EllipticRelation::accumulate_with_extended_parameters(
+            net,
+            state,
+            &mut univariate_accumulators.r_elliptic,
+            input,
+            relation_parameters,
+            scaling_factor,
+        )?;
+
+        AuxiliaryRelation::accumulate_with_extended_parameters(
+            net,
+            state,
+            &mut univariate_accumulators.r_aux,
+            input,
+            relation_parameters,
+            scaling_factor,
+        )?;
+
+        LogDerivLookupRelation::accumulate_with_extended_parameters(
+            net,
+            state,
+            &mut univariate_accumulators.r_lookup,
+            input,
+            relation_parameters,
+            scaling_factor,
+        )?;
+
+        EccOpQueueRelation::accumulate_with_extended_parameters(
+            net,
+            state,
+            &mut univariate_accumulators.r_ecc_op_queue,
+            input,
+            relation_parameters,
+            scaling_factor,
+        )?;
+
+        DataBusLookupRelation::accumulate_with_extended_parameters(
+            net,
+            state,
+            &mut univariate_accumulators.r_databus,
+            input,
+            relation_parameters,
+            scaling_factor,
+        )?;
+
+        Poseidon2ExternalRelation::accumulate_with_extended_parameters(
+            net,
+            state,
+            &mut univariate_accumulators.r_pos_ext,
+            input,
+            relation_parameters,
+            scaling_factor,
+        )?;
+
+        Poseidon2InternalRelation::accumulate_with_extended_parameters(
+            net,
+            state,
+            &mut univariate_accumulators.r_pos_int,
+            input,
+            relation_parameters,
+            scaling_factor,
+        )?;
+
+        Ok(())
+    }
+
+    fn accumulate_relation_evaluations<
+        T: NoirUltraHonkProver<P>,
+        P: HonkCurve<TranscriptFieldType>,
+        N: Network,
+    >(
+        net: &N,
+        state: &mut T::State,
+        accumulators: &mut Self::AllRelationEvaluations<T, P>,
+        extended_edges: &AllEntities<T::ArithmeticShare, P::ScalarField, Self>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
+        scaling_factor: &P::ScalarField,
+    ) -> co_builder::HonkProofResult<()> {
+        tracing::trace!("Accumulate relation evaluations");
+        UltraArithmeticRelation::accumulate_evaluations(
+            net,
+            state,
+            &mut accumulators.r_arith,
+            extended_edges,
+            relation_parameters,
+            scaling_factor,
+        )?;
+        UltraPermutationRelation::accumulate_evaluations(
+            net,
+            state,
+            &mut accumulators.r_perm,
+            extended_edges,
+            relation_parameters,
+            scaling_factor,
+        )?;
+        DeltaRangeConstraintRelation::accumulate_evaluations(
+            net,
+            state,
+            &mut accumulators.r_delta,
+            extended_edges,
+            relation_parameters,
+            scaling_factor,
+        )?;
+        EllipticRelation::accumulate_evaluations(
+            net,
+            state,
+            &mut accumulators.r_elliptic,
+            extended_edges,
+            relation_parameters,
+            scaling_factor,
+        )?;
+        AuxiliaryRelation::accumulate_evaluations(
+            net,
+            state,
+            &mut accumulators.r_aux,
+            extended_edges,
+            relation_parameters,
+            scaling_factor,
+        )?;
+        LogDerivLookupRelation::accumulate_evaluations(
+            net,
+            state,
+            &mut accumulators.r_lookup,
+            extended_edges,
+            relation_parameters,
+            scaling_factor,
+        )?;
+        EccOpQueueRelation::accumulate_evaluations(
+            net,
+            state,
+            &mut accumulators.r_ecc_op_queue,
+            extended_edges,
+            relation_parameters,
+            scaling_factor,
+        )?;
+        DataBusLookupRelation::accumulate_evaluations(
+            net,
+            state,
+            &mut accumulators.r_databus,
+            extended_edges,
+            relation_parameters,
+            scaling_factor,
+        )?;
+        Poseidon2ExternalRelation::accumulate_evaluations(
+            net,
+            state,
+            &mut accumulators.r_pos_ext,
+            extended_edges,
+            relation_parameters,
+            scaling_factor,
+        )?;
+        Poseidon2InternalRelation::accumulate_evaluations(
+            net,
+            state,
+            &mut accumulators.r_pos_int,
+            extended_edges,
+            relation_parameters,
+            scaling_factor,
+        )?;
+
+        Ok(())
+    }
+
     fn get_alpha_challenges<
         F: ark_ff::PrimeField,
         H: common::transcript::TranscriptHasher<F>,
         P: co_builder::prelude::HonkCurve<F>,
     >(
         transcript: &mut common::transcript::Transcript<F, H>,
-        alphas: &mut Self::Alphas<P::ScalarField>,
+        alphas: &mut Vec<P::ScalarField>,
     ) {
         let args: [String; Self::NUM_ALPHAS] = array::from_fn(|i| format!("alpha_{i}"));
-        alphas
-            .0
-            .copy_from_slice(&transcript.get_challenges::<P>(&args));
+        alphas.resize(Self::NUM_ALPHAS, P::ScalarField::ZERO);
+        alphas.copy_from_slice(&transcript.get_challenges::<P>(&args));
     }
 
     fn reshare<T: NoirUltraHonkProver<P>, P: CurveGroup, N: Network>(
