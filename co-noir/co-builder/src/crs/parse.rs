@@ -129,7 +129,6 @@ impl<P: HonkCurve<TranscriptFieldType>> FileProcessor<P> for NewFileStructure<P>
         }
         // We must pass the size actually read to the second call, not the desired
         // g1_buffer_size as the file may have been smaller than this.
-        let monomials = &mut monomials[0..];
         Self::read_elements_from_buffer(monomials, &mut buffer);
         Ok(())
     }
