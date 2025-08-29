@@ -1,5 +1,58 @@
 # Changelog
 
+## [0.7.0](https://github.com/TaceoLabs/co-snarks/compare/co-acvm-v0.6.0...co-acvm-v0.7.0) (2025-08-29)
+
+
+### ⚠ BREAKING CHANGES
+
+* move witness and input parsing/sharing to new crates for wasm comp
+* unify MPC networks, split protocol state and networking to allow fork of state without network, replace io::Error with eyre, merge mpc-core and mpc-types with feature gated mpc-net
+* bump to Barretenberg 0.86.0 ([#373](https://github.com/TaceoLabs/co-snarks/issues/373))
+* Add support for the embedded_curve_add blackbox function to co-noir ([#367](https://github.com/TaceoLabs/co-snarks/issues/367))
+* Performance improvements and cleanup for blake2/blake3
+* add BLAKE3 blackbox function to coNoir
+* add BLAKE2s blackbox function to coNoir
+* add Bristol Fashion parsing for GC, also adds the SHA256 blackbox ([#359](https://github.com/TaceoLabs/co-snarks/issues/359))
+* Add the MSM blackbox function to co-noir, which allows to use pedersen hash/commitment
+
+### Features
+
+* Add AES blackbox functionality ([fd7cd49](https://github.com/TaceoLabs/co-snarks/commit/fd7cd496a1fd21e85aa70c0bd2c5cd7aed69fece))
+* add BLAKE2s blackbox function to coNoir ([e98fb7d](https://github.com/TaceoLabs/co-snarks/commit/e98fb7dd60f52d936f07b3e3a74797dfb091e9f3))
+* add BLAKE3 blackbox function to coNoir ([ddcb10e](https://github.com/TaceoLabs/co-snarks/commit/ddcb10e5d685072279b8f11b6935636fb74ecaf0))
+* add Bristol Fashion parsing for GC, also adds the SHA256 blackbox ([#359](https://github.com/TaceoLabs/co-snarks/issues/359)) ([f8509ef](https://github.com/TaceoLabs/co-snarks/commit/f8509ef8147bf29072ba67b4ac0f489546eea2c9))
+* add CoNoir solver which allows some precomputed witnesses ([6d7d85e](https://github.com/TaceoLabs/co-snarks/commit/6d7d85eea200a33507d4e6c22c7055d776cb6dae))
+* add extension traits for REP3 and Shamir networks ([0c15da8](https://github.com/TaceoLabs/co-snarks/commit/0c15da81550f35c7aaef77d5143824a9436d5731))
+* Add support for the embedded_curve_add blackbox function to co-noir ([#367](https://github.com/TaceoLabs/co-snarks/issues/367)) ([0533f22](https://github.com/TaceoLabs/co-snarks/commit/0533f22a8a50e14eb756ee9bf82cfad857dd9722))
+* Add the MSM blackbox function to co-noir, which allows to use pedersen hash/commitment ([ffeaa32](https://github.com/TaceoLabs/co-snarks/commit/ffeaa32f754fa16c77bf050486ce871a77908653))
+* bump to Barretenberg 0.86.0 ([#373](https://github.com/TaceoLabs/co-snarks/issues/373)) ([55f4ca3](https://github.com/TaceoLabs/co-snarks/commit/55f4ca3211a944cb755e541cfabc4519697ce665))
+* dont use rayon::join for networking - added std::thread::scope based join functions ([758b069](https://github.com/TaceoLabs/co-snarks/commit/758b0699ad0ef7bca7401afe9063848eb084873f))
+* move witness and input parsing/sharing to new crates for wasm comp ([333785e](https://github.com/TaceoLabs/co-snarks/commit/333785e275bc9256fb82fd8e2dcf18689bd92862))
+* Performance improvements and cleanup for blake2/blake3 ([435fcd3](https://github.com/TaceoLabs/co-snarks/commit/435fcd333080201c7c0274519ff6f6b26fb62d50))
+* Rewrite Noir-R1CS solver to get max witness from next constraint ([9d85ce1](https://github.com/TaceoLabs/co-snarks/commit/9d85ce1df31d92ec035ef3dcc599243ac18be46e))
+* update rust edition to 2024 ([6ea0ba9](https://github.com/TaceoLabs/co-snarks/commit/6ea0ba9f9f34063e8ab859c1d4ae41d05629a1c0))
+
+
+### Bug Fixes
+
+* add runtime curve type check in field_shares_to_pointshare in co-acvm ([#423](https://github.com/TaceoLabs/co-snarks/issues/423)) ([819a6ee](https://github.com/TaceoLabs/co-snarks/commit/819a6eeda09b4bc9d0785b46ebf6b7f7b5366b3a))
+
+
+### Code Refactoring
+
+* unify MPC networks, split protocol state and networking to allow fork of state without network, replace io::Error with eyre, merge mpc-core and mpc-types with feature gated mpc-net ([16dbf54](https://github.com/TaceoLabs/co-snarks/commit/16dbf546d8f2d80ad4fa9f5053da19edc7270d3c))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * co-brillig bumped from 0.3.0 to 0.4.0
+    * co-noir-types bumped from 0.1.0 to 0.1.1
+    * noir-types bumped from 0.1.0 to 0.1.1
+    * mpc-core bumped from 0.9.0 to 0.10.0
+    * mpc-net bumped from 0.4.0 to 0.5.0
+
 ## [0.6.0](https://github.com/TaceoLabs/co-snarks/compare/co-acvm-v0.5.0...co-acvm-v0.6.0) (2025-04-03)
 
 
