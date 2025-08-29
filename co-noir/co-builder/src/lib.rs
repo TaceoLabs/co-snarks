@@ -13,6 +13,7 @@ pub mod polynomials;
 pub mod prelude;
 pub mod prover_flavour;
 pub(crate) mod serialize;
+pub(crate) mod transcript;
 pub(crate) mod types;
 pub(crate) mod ultra_builder;
 pub(crate) mod utils;

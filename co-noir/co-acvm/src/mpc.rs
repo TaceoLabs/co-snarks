@@ -194,6 +194,8 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         b: &[Self::AcvmType],
     ) -> eyre::Result<Vec<Self::AcvmType>>;
 
+    fn is_zero(&mut self, a: &Self::AcvmType) -> eyre::Result<Self::AcvmType>;
+
     // TODO do we want this here?
     fn open_many(&mut self, a: &[Self::ArithmeticShare]) -> eyre::Result<Vec<F>>;
 
