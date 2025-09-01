@@ -12,7 +12,7 @@ pub mod prelude;
 pub mod prover_flavour;
 pub(crate) mod types;
 pub(crate) mod ultra_builder;
-pub(crate) mod mega_builder;
+pub mod mega_builder;
 pub mod eccvm;
 pub mod ipa;
 
