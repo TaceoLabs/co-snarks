@@ -1,10 +1,11 @@
+use crate::eccvm::NUM_LIMB_BITS_IN_FIELD_SIMULATION;
 use crate::eccvm::{
     ADDITIONS_PER_ROW, NUM_ROWS_PER_OP, NUM_WNAF_DIGIT_BITS, NUM_WNAF_DIGITS_PER_SCALAR,
     POINT_TABLE_SIZE, TABLE_WIDTH, WNAF_DIGITS_PER_ROW, WNAF_MASK,
 };
 use ark_ec::AffineRepr;
 use ark_ec::CurveGroup;
-use ark_ff::One;
+use ark_ff::{BigInt, One};
 use ark_ff::Zero;
 use common::{
     utils::Utils, 
@@ -756,6 +757,17 @@ pub struct UltraOp<P: CurveGroup> {
     pub return_is_infinity: bool,
 }
 
+pub struct ECCOpTuple {
+    pub op: u32,
+    pub x_lo: u32,
+    pub x_hi: u32,
+    pub y_lo: u32,
+    pub y_hi: u32,
+    pub z_1: u32,
+    pub z_2: u32,
+    pub return_is_infinity: bool,
+}
+
 #[derive(Default, PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
 pub struct EccOpCode {
     pub add: bool,
@@ -838,7 +850,7 @@ impl EccvmRowTracker {
 }
 
 #[derive(Serialize, Deserialize, Default, Debug)]
-pub struct ECCOpQueue<P: CurveGroup> {
+pub struct ECCOpQueue<P: HonkCurve<TranscriptFieldType>> {
     // point_at_infinity: P::Affine,
     #[serde(
         serialize_with = "mpc_core::serde_compat::ark_se",
@@ -852,7 +864,7 @@ pub struct ECCOpQueue<P: CurveGroup> {
     pub eccvm_row_tracker: EccvmRowTracker,
 }
 
-impl<P: CurveGroup> ECCOpQueue<P> {
+impl<P: HonkCurve<TranscriptFieldType>> ECCOpQueue<P> {
     // Initialize a new subtable of ECCVM ops and Ultra ops corresponding to an individual circuit
     pub fn initialize_new_subtable(&mut self) {
         self.eccvm_ops_table.create_new_subtable(0);
@@ -946,6 +958,91 @@ impl<P: CurveGroup> ECCOpQueue<P> {
 
     pub fn get_accumulator(&self) -> P::Affine {
         self.accumulator
+    }
+
+    /**
+     * @brief Write multiply and add op to queue and natively perform operation
+     *
+     * @param to_mul
+     */
+    pub fn mul_accumulate(&mut self, to_mul: P::Affine, scalar: P::ScalarField) -> UltraOp<P> {
+        // Update the accumulator natively
+        self.accumulator = (self.accumulator + (to_mul * scalar)).into();
+        let op_code = EccOpCode { mul: true, ..Default::default() };
+
+        // Construct and store the operation in the ultra op format
+        let ultra_op = self.construct_and_populate_ultra_ops(op_code.clone(), to_mul, scalar);
+
+        // Store the eccvm operation
+        self.eccvm_ops_table.push(VMOperation {
+            op_code,
+            base_point: to_mul,
+            z1: ultra_op.z_1.into(),
+            z2: ultra_op.z_2.into(),
+            mul_scalar_full: scalar,
+        });
+
+        ultra_op
+    }
+
+    /**
+     * @brief Writes a no op (i.e. two zero rows) to the ultra ops table but adds no eccvm operations.
+     *
+     * @details We want to be able to add zero rows (and, eventually, random rows
+     * https://github.com/AztecProtocol/barretenberg/issues/1360) to the ultra ops table without affecting the
+     * operations in the ECCVM.
+     */
+    pub fn no_op_ultra_only(&mut self) -> UltraOp<P>{
+        return self.construct_and_populate_ultra_ops(EccOpCode::default(), self.accumulator, P::ScalarField::zero());
+    }
+
+    /**
+     * @brief Write equality op using internal accumulator point
+     *
+     * @return current internal accumulator point (prior to reset to 0)
+     */
+    pub fn eq_and_reset(&mut self) -> UltraOp<P> {
+        let expected = self.accumulator;
+        // TODO CESAR: Is this correct
+        self.accumulator = P::Affine::zero();
+        let op_code = EccOpCode { eq: true, reset: true, ..Default::default() };
+
+        // Store the eccvm operation
+        self.eccvm_ops_table.push(VMOperation {
+            op_code: op_code.clone(),
+            base_point: expected,
+            ..Default::default()
+        });
+
+        // Construct and store the operation in the ultra op format
+        self.construct_and_populate_ultra_ops(op_code, expected, P::ScalarField::zero())
+    }
+
+    /**
+     * @brief Given an ecc operation and its inputs, decompose into ultra format and populate ultra_ops
+     *
+     * @param op_code
+     * @param point
+     * @param scalar
+     * @return UltraOp
+     */
+    pub fn construct_and_populate_ultra_ops(&mut self, op_code: EccOpCode, point: P::Affine, scalar: P::ScalarField) -> UltraOp<P>{
+
+        let mut ultra_op: UltraOp<P> = UltraOp::default();
+        const CHUNK_SIZE: u64 = (2 * NUM_LIMB_BITS_IN_FIELD_SIMULATION) as u64;
+
+        // If the point is not in the correct format, return an error
+        let (x_256, y_256): (BigUint, BigUint) = point.xy().map_or((BigUint::zero(), BigUint::zero()), |(x, y)| (x.into(), y.into())); 
+
+        ultra_op.x_lo = Utils::slice_u256(x_256.clone(), 0, CHUNK_SIZE).into();
+        ultra_op.x_hi = Utils::slice_u256(x_256, CHUNK_SIZE, 2 * CHUNK_SIZE).into();
+        ultra_op.y_lo = Utils::slice_u256(y_256.clone(), 0, CHUNK_SIZE).into();
+        ultra_op.y_hi = Utils::slice_u256(y_256, CHUNK_SIZE, 2 * CHUNK_SIZE).into();
+
+        
+        
+        let (mut z_1, mut z_2) = (BigUint::zero(), BigUint::zero());
+        todo!();
     }
 }
 

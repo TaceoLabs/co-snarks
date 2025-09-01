@@ -457,6 +457,7 @@ impl<F: PrimeField> MegaTraceBlock<F> {
     const Q_2: usize = MegaFlavour::Q_R;
     const Q_3: usize = MegaFlavour::Q_O;
     const Q_4: usize = MegaFlavour::Q_4;
+    const Q_BUSREAD: usize = MegaFlavour::Q_BUSREAD;
     const Q_ARITH: usize = MegaFlavour::Q_ARITH;
     const Q_DELTA_RANGE: usize = MegaFlavour::Q_DELTA_RANGE;
     const Q_ELLIPTIC: usize = MegaFlavour::Q_ELLIPTIC;
@@ -503,6 +504,10 @@ impl<F: PrimeField> MegaTraceBlock<F> {
 
     pub(crate) fn q_4(&mut self) -> &mut Vec<F> {
         &mut self.selectors[Self::Q_4]
+    }
+
+    pub(crate) fn q_busread(&mut self) -> &mut Vec<F> {
+        &mut self.selectors[Self::Q_BUSREAD]
     }
 
     pub(crate) fn q_arith(&mut self) -> &mut Vec<F> {
