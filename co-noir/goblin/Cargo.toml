@@ -1,6 +1,6 @@
 [package]
 name = "goblin"
-version = "0.1.0"
+version = "0.2.0"
 edition.workspace = true
 rust-version.workspace = true
 authors.workspace = true
@@ -11,10 +11,10 @@ publish.workspace = true
 readme.workspace = true
 
 [dependencies]
-common = { version = "0.1.0", path = "../common" }
-co-builder = { version = "0.4.0", path = "../co-builder" }
-mpc-core = { version = "0.9.0", path = "../../mpc-core" }
-ultrahonk = { version = "0.5.0", path = "../ultrahonk" }
+common = { version = "0.2.0", path = "../common" }
+co-builder = { version = "0.5.0", path = "../co-builder" }
+mpc-core = { version = "0.10.0", path = "../../mpc-core" }
+ultrahonk = { version = "0.6.0", path = "../ultrahonk" }
 ark-ec.workspace = true
 ark-ff.workspace = true
 ark-bn254.workspace = true
@@ -29,4 +29,4 @@ bincode.workspace = true
 
 
 [dev-dependencies]
-mpc-core = { version = "0.9.0", path = "../../mpc-core" }
+mpc-core = { version = "0.10.0", path = "../../mpc-core" }
