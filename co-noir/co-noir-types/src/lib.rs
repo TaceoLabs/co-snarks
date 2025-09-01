@@ -116,6 +116,29 @@ pub fn split_input_rep3<F: PrimeField>(
     witnesses
 }
 
+/// Merge multiple REP3 input shares
+pub fn merge_input_shares<F: PrimeField>(
+    input_shares: Vec<Rep3SharedInput<F>>,
+    public_inputs: &[String],
+) -> eyre::Result<Rep3SharedInput<F>> {
+    let mut result = BTreeMap::new();
+    for input_share in input_shares.into_iter() {
+        for (name, share) in input_share.into_iter() {
+            // some input name have a trailing [\d+], remove for public inputs check
+            let orig_name = name.split('[').next().unwrap_or(&name).to_owned();
+            if public_inputs.contains(&orig_name) {
+                if result.get(&name).is_some_and(|v| *v != share) {
+                    eyre::bail!("Public entry '{name}' not the same in all inputs");
+                }
+            } else if result.contains_key(&name) {
+                eyre::bail!("Duplicate entry '{name}' found in input shares");
+            }
+            result.insert(name, share);
+        }
+    }
+    Ok(result)
+}
+
 /// Split a witness into REP3 shares
 pub fn split_witness_rep3<F: PrimeField>(witness: Vec<PubPrivate<F>>) -> [Rep3SharedWitness<F>; 3] {
     let mut rng = rand::thread_rng();

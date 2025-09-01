@@ -166,7 +166,7 @@ pub struct SplitInputCli {
     /// The path to the circuit file
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
-    pub circuit: Option<String>,
+    pub circuit: Option<PathBuf>,
     /// The MPC protocol to be used
     #[arg(long, value_enum)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
@@ -187,7 +187,7 @@ pub struct SplitInputConfig {
     /// The path to the input JSON file
     pub input: PathBuf,
     /// The path to the circuit file
-    pub circuit: String,
+    pub circuit: PathBuf,
     /// The MPC protocol to be used
     pub protocol: MPCProtocol,
     /// The pairing friendly curve to be used
@@ -206,6 +206,10 @@ pub struct MergeInputSharesCli {
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
     pub config: Option<PathBuf>,
+    /// The path to the circuit file
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub circuit: Option<PathBuf>,
     /// The path to the input JSON file
     #[arg(long)]
     pub inputs: Vec<PathBuf>,
@@ -226,6 +230,8 @@ pub struct MergeInputSharesCli {
 /// Config for `merge_input_shares`
 #[derive(Debug, Deserialize)]
 pub struct MergeInputSharesConfig {
+    /// The path to the circuit file
+    pub circuit: PathBuf,
     /// The path to the input JSON file
     pub inputs: Vec<PathBuf>,
     /// The MPC protocol to be used
@@ -234,6 +240,9 @@ pub struct MergeInputSharesConfig {
     pub curve: Curve,
     /// The output file where the merged input share is written to
     pub out: PathBuf,
+    /// MPC compiler config
+    #[serde(default)]
+    pub compiler: CompilerConfig,
 }
 
 /// Cli arguments for `generate_witness`
@@ -250,7 +259,7 @@ pub struct GenerateWitnessCli {
     /// The path to the circuit file
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
-    pub circuit: Option<String>,
+    pub circuit: Option<PathBuf>,
     /// The MPC protocol to be used
     #[arg(long, value_enum)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
@@ -274,7 +283,7 @@ pub struct GenerateWitnessConfig {
     /// The path to the input share file
     pub input: PathBuf,
     /// The path to the circuit file
-    pub circuit: String,
+    pub circuit: PathBuf,
     /// The MPC protocol to be used
     pub protocol: MPCProtocol,
     /// The pairing friendly curve to be used
@@ -739,7 +748,7 @@ where
     for (i, share) in shares.iter().enumerate() {
         let path = out_dir.join(format!("{base_name}.{i}.shared"));
         let out_file = BufWriter::new(File::create(&path).context("while creating output file")?);
-        bincode::serialize_into(out_file, share).context("while serializing witness share")?;
+        serde_json::to_writer(out_file, share).context("while serializing witness share")?;
         tracing::info!("Wrote input share {} to file {}", i, path.display());
     }
     tracing::info!("Split input into shares successfully");
@@ -754,6 +763,7 @@ where
     P::ScalarField: CircomArkworksPrimeFieldBridge,
     P::BaseField: CircomArkworksPrimeFieldBridge,
 {
+    let circuit = config.circuit;
     let inputs = config.inputs;
     let protocol = config.protocol;
     let out = config.out;
@@ -766,13 +776,17 @@ where
         eyre::bail!("Need at least two input shares to merge");
     }
 
+    // parse circuit file & put through our compiler
+    let circuit = CoCircomCompiler::<P>::parse(circuit, config.compiler)
+        .context("while parsing circuit file")?;
+
     let input_shares = inputs
         .iter()
         .map(|input| {
             let input_share_file =
                 BufReader::new(File::open(input).context("while opening input share file")?);
             let input_share: Rep3SharedInput<P::ScalarField> =
-                bincode::deserialize_from(input_share_file)
+                serde_json::from_reader(input_share_file)
                     .context("trying to parse input share file")?;
             color_eyre::Result::<_>::Ok(input_share)
         })
@@ -780,12 +794,12 @@ where
 
     tracing::info!("Starting input shares merging...");
     let start = Instant::now();
-    let merged = co_circom::merge_input_shares(input_shares)?;
+    let merged = co_circom::merge_input_shares(input_shares, circuit.public_inputs())?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Merge input shares took {duration_ms} ms");
 
     let out_file = BufWriter::new(File::create(&out).context("while creating output file")?);
-    bincode::serialize_into(out_file, &merged).context("while serializing witness share")?;
+    serde_json::to_writer(out_file, &merged).context("while serializing witness share")?;
     tracing::info!("Wrote merged input share to file {}", out.display());
 
     Ok(ExitCode::SUCCESS)
@@ -816,7 +830,7 @@ where
     let input_share_file =
         BufReader::new(File::open(&input).context("while opening input share file")?);
     let input_share: Rep3SharedInput<P::ScalarField> =
-        bincode::deserialize_from(input_share_file).context("trying to parse input share file")?;
+        serde_json::from_reader(input_share_file).context("trying to parse input share file")?;
 
     // parse circuit file & put through our compiler
     let circuit = CoCircomCompiler::<P>::parse(circuit, config.compiler)

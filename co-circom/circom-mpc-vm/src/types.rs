@@ -186,6 +186,14 @@ impl<F: PrimeField> CoCircomCompilerParsed<F> {
         BatchedPlainWitnessExtension::new(&self, vm_config, batch_size)
     }
 
+    /// Get input names and sizes.
+    pub fn inputs(&self) -> Vec<(String, usize)> {
+        self.main_input_list
+            .iter()
+            .map(|input| (input.0.clone(), input.2))
+            .collect()
+    }
+
     /// Get public input names.
     pub fn public_inputs(&self) -> &[String] {
         &self.public_inputs

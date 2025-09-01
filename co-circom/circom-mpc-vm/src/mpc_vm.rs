@@ -12,14 +12,14 @@ use super::{
 };
 use crate::mpc::VmCircomWitnessExtension;
 use ark_ff::PrimeField;
-use co_circom_types::{SharedInput, SharedWitness};
+use co_circom_types::SharedWitness;
 use core::panic;
 use eyre::{Result, bail, eyre};
 use itertools::{Itertools, izip};
 use mpc_core::protocols::rep3::conversion::A2BType;
 use mpc_net::Network;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 /// The mpc-vm configuration
@@ -893,34 +893,26 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtension<F, C> {
         })
     }
 
-    fn set_input_signals(
-        &mut self,
-        mut input_signals: SharedInput<C::Public, C::ArithmeticShare>,
-    ) -> Result<usize> {
-        let mut amount_public_inputs = 0;
+    fn set_input_signals(&mut self, mut input_signals: BTreeMap<String, C::VmType>) -> Result<()> {
         for (name, offset, size) in self.main_input_list.iter() {
-            let input_signals =
-                if let Some(public_values) = input_signals.public_inputs.remove(name) {
-                    amount_public_inputs += public_values.len();
-                    public_values.into_iter().map(C::VmType::from).collect_vec()
-                } else {
-                    input_signals
-                        .shared_inputs
-                        .remove(name)
-                        .ok_or(eyre!("Cannot find signal \"{name}\" in provided input"))?
-                        .into_iter()
-                        .map(C::VmType::from)
-                        .collect_vec()
-                };
-            if input_signals.len() != *size {
-                bail!(
-                    "for input \"{name}\" expected {size} signals, got {}",
-                    input_signals.len()
-                );
+            if *size == 1 {
+                let signal = input_signals.remove(name).ok_or_else(|| {
+                    eyre::eyre!("Cannot find signal \"{name}\" in provided input")
+                })?;
+                self.ctx.signals[*offset] = signal;
+            } else {
+                for i in 0..*size {
+                    let signal =
+                        input_signals
+                            .remove(&format!("{name}[{i}]"))
+                            .ok_or_else(|| {
+                                eyre::eyre!("Cannot find signal \"{name}\" in provided input")
+                            })?;
+                    self.ctx.signals[*offset + i] = signal;
+                }
             }
-            self.ctx.signals[*offset..*offset + *size].clone_from_slice(input_signals.as_slice());
         }
-        Ok(amount_public_inputs)
+        Ok(())
     }
 
     fn set_flat_input_signals(&mut self, input_signals: Vec<C::VmType>) {
@@ -944,12 +936,12 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtension<F, C> {
         Ok(())
     }
 
-    /// Starts the execution of the MPC-VM with the provided [SharedInput] and consumes `self`.
+    /// Starts the execution of the MPC-VM with the provided shared inputs and consumes `self`.
     ///
     /// Use this method over [`run_with_flat()`](WitnessExtension::run) when ever possible.
     /// # Arguments
     ///
-    /// * `input_signals` - The [SharedInput] distributed over the parties.
+    /// * `input_signals` - The shared inputs distributed over the parties.
     ///
     /// # Returns
     ///
@@ -961,10 +953,11 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtension<F, C> {
     /// Panics if any of the [`CodeBlocks`](CodeBlock) are corrupted.
     pub fn run(
         mut self,
-        input_signals: SharedInput<C::Public, C::ArithmeticShare>,
+        input_signals: BTreeMap<String, C::VmType>,
+        amount_public_inputs: usize,
     ) -> Result<FinalizedWitnessExtension<F, C>> {
         self.driver.compare_vm_config(&self.config)?;
-        let amount_public_inputs = self.set_input_signals(input_signals)?;
+        self.set_input_signals(input_signals)?;
         self.call_main_component()?;
         self.post_processing(amount_public_inputs)
     }

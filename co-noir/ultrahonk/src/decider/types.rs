@@ -50,6 +50,9 @@ pub struct RelationParameters<T> {
     pub beta_sqr: T,
     pub beta_cube: T,
     pub eccvm_set_permutation_delta: T,
+    pub accumulated_result: [T; 4],
+    pub evaluation_input_x: [T; 5],
+    pub batching_challenge_v: [T; 20],
 }
 
 impl<T: PartialEq> RelationParameters<T> {
@@ -161,10 +164,7 @@ impl<P: CurveGroup, L: PlainProverFlavour> ProverMemory<P, L> {
             beta: prover_memory.challenges.beta,
             gamma: prover_memory.challenges.gamma,
             public_input_delta: prover_memory.public_input_delta,
-            lookup_grand_product_delta: Default::default(),
-            beta_sqr: Default::default(),
-            beta_cube: Default::default(),
-            eccvm_set_permutation_delta: Default::default(),
+            ..Default::default()
         };
 
         let alphas = prover_memory.challenges.alphas;
@@ -264,10 +264,7 @@ impl<C: CurveGroup, L: PlainProverFlavour> VerifierMemory<C, L> {
             beta: verifier_memory.challenges.beta,
             gamma: verifier_memory.challenges.gamma,
             public_input_delta: verifier_memory.public_input_delta,
-            lookup_grand_product_delta: Default::default(),
-            beta_sqr: Default::default(),
-            beta_cube: Default::default(),
-            eccvm_set_permutation_delta: Default::default(),
+            ..Default::default()
         };
         let alphas = verifier_memory.challenges.alphas;
         let gate_challenges = Default::default();

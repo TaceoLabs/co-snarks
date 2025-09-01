@@ -17,22 +17,76 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::error::Error;
 
-/// A shorthand type for batched inputs. Should be used with the batched
-/// witness extension
-pub type BatchedSharedInput<P, S> = SharedInput<Vec<P>, Vec<S>>;
-
-/// A shorthand type for batched witnesses. Produced by the batched
-/// witness extension
-pub type BatchedWitness<P, S> = SharedWitness<Vec<P>, Vec<S>>;
-
 /// A REP3 shared input type
-pub type Rep3SharedInput<F> = SharedInput<F, Rep3PrimeFieldShare<F>>;
+pub type Rep3SharedInput<F> = BTreeMap<String, Rep3InputType<F>>;
+
+/// A batched REP3 shared input type. Should be used with the batched witness extension
+pub type BatchedRep3SharedInput<F> = BTreeMap<String, Vec<Rep3InputType<F>>>;
+
+/// A shorthand type for batched witnesses. Produced by the batched witness extension
+pub type BatchedWitness<P, S> = SharedWitness<Vec<P>, Vec<S>>;
 
 /// A REP3 shared witness type
 pub type Rep3SharedWitness<F> = SharedWitness<F, Rep3PrimeFieldShare<F>>;
 
 /// A shamir shared witness type
 pub type ShamirSharedWitness<F> = SharedWitness<F, ShamirPrimeFieldShare<F>>;
+
+/// A REP3 input type
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub enum Rep3InputType<F: PrimeField> {
+    /// The public variant
+    Public(
+        #[serde(
+            serialize_with = "mpc_core::serde_compat::ark_se",
+            deserialize_with = "mpc_core::serde_compat::ark_de"
+        )]
+        F,
+    ),
+    /// The shared variant
+    Shared(
+        #[serde(
+            serialize_with = "mpc_core::serde_compat::ark_se",
+            deserialize_with = "mpc_core::serde_compat::ark_de"
+        )]
+        Rep3PrimeFieldShare<F>,
+    ),
+}
+
+impl<F: PrimeField> Rep3InputType<F> {
+    /// Returns true if the input is public
+    pub fn is_public(&self) -> bool {
+        matches!(self, Rep3InputType::Public(_))
+    }
+
+    /// Returns the public input or None
+    pub fn as_public(&self) -> Option<F> {
+        match self {
+            Rep3InputType::Public(value) => Some(*value),
+            Rep3InputType::Shared(_) => None,
+        }
+    }
+
+    /// Returns the shared input or None
+    pub fn as_shared(&self) -> Option<Rep3PrimeFieldShare<F>> {
+        match self {
+            Rep3InputType::Public(_) => None,
+            Rep3InputType::Shared(share) => Some(*share),
+        }
+    }
+}
+
+impl<F: PrimeField> From<F> for Rep3InputType<F> {
+    fn from(value: F) -> Self {
+        Self::Public(value)
+    }
+}
+
+impl<F: PrimeField> From<Rep3PrimeFieldShare<F>> for Rep3InputType<F> {
+    fn from(value: Rep3PrimeFieldShare<F>) -> Self {
+        Self::Shared(value)
+    }
+}
 
 /// Compression levels for [`CompressedRep3SharedWitness`] shares.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -86,73 +140,6 @@ impl<F: PrimeField> From<CompressedRep3SharedWitness<F>> for SharedWitness<F, F>
             public_inputs,
             witness,
         }
-    }
-}
-
-impl<P, S> TryFrom<Vec<SharedInput<P, S>>> for BatchedSharedInput<P, S>
-where
-    P: CanonicalSerialize + CanonicalDeserialize + Clone,
-    S: CanonicalSerialize + CanonicalDeserialize + Clone,
-{
-    type Error = eyre::Report;
-    fn try_from(value: Vec<SharedInput<P, S>>) -> eyre::Result<Self> {
-        if value.is_empty() {
-            eyre::bail!("Cannot build Batched Shared Input from empty vec");
-        }
-        let batch_len = value.len();
-        let mut public_inputs = BTreeMap::<String, Vec<Vec<P>>>::new();
-        let mut shared_inputs = BTreeMap::<String, Vec<Vec<S>>>::new();
-
-        for shared_input in value.into_iter() {
-            for (k, v) in shared_input.public_inputs {
-                let public_input = public_inputs
-                    .entry(k.clone())
-                    .or_insert_with(|| vec![vec![]; v.len()]);
-                if v.len() != public_input.len() {
-                    eyre::bail!("Cannot build BatchedShared Input from different inputs");
-                }
-                for (idx, ele) in v.into_iter().enumerate() {
-                    public_input[idx].push(ele);
-                }
-            }
-
-            for (k, v) in shared_input.shared_inputs {
-                let witness = shared_inputs
-                    .entry(k.clone())
-                    .or_insert_with(|| vec![vec![]; v.len()]);
-                if v.len() != witness.len() {
-                    eyre::bail!("Cannot build BatchedShared Input from different inputs");
-                }
-                for (idx, ele) in v.into_iter().enumerate() {
-                    witness[idx].push(ele);
-                }
-            }
-
-            if !shared_input.maybe_shared_inputs.is_empty() {
-                eyre::bail!("Cannot build batched input if there are still maybe shares")
-            }
-        }
-
-        // check that all values have same batch len
-        if public_inputs
-            .values()
-            .flatten()
-            .any(|b| b.len() != batch_len)
-        {
-            eyre::bail!("Cannot build BatchedShared Input from different inputs");
-        }
-        if shared_inputs
-            .values()
-            .flatten()
-            .any(|b| b.len() != batch_len)
-        {
-            eyre::bail!("Cannot build BatchedShared Input from different inputs");
-        }
-        Ok(BatchedSharedInput {
-            public_inputs,
-            shared_inputs,
-            maybe_shared_inputs: BTreeMap::new(),
-        })
     }
 }
 
@@ -225,120 +212,6 @@ where
     /// Get the public inputs needed for verification (does not include constant 1 at position 0)
     pub fn public_inputs_for_verify(&self) -> Vec<F> {
         self.public_inputs[1..].to_vec()
-    }
-}
-
-/// A shared input for a collaborative circom witness extension.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SharedInput<P, S>
-where
-    P: CanonicalSerialize + CanonicalDeserialize + Clone,
-    S: CanonicalSerialize + CanonicalDeserialize + Clone,
-{
-    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
-    /// A map from variable names to the public field elements.
-    /// This is a BTreeMap because it implements Canonical(De)Serialize.
-    pub public_inputs: BTreeMap<String, Vec<P>>,
-    #[serde(serialize_with = "ark_se", deserialize_with = "ark_de")]
-    /// A map from variable names to the share of the field element.
-    /// This is a BTreeMap because it implements Canonical(De)Serialize.
-    pub shared_inputs: BTreeMap<String, Vec<S>>,
-    /// A map from variable names to vecs with maybe unknown elements that need to be merged.
-    /// This is a BTreeMap because it implements Canonical(De)Serialize.
-    pub maybe_shared_inputs: BTreeMap<String, Vec<Option<S>>>,
-}
-
-impl<F: PrimeField, S> SharedInput<F, S>
-where
-    S: CanonicalSerialize + CanonicalDeserialize + Clone,
-{
-    /// Adds a public input with a given name to the [SharedInput].
-    pub fn add_public_input(&mut self, key: String, elements: Vec<F>) {
-        self.public_inputs.insert(key, elements);
-    }
-
-    /// Adds a shared input with a given name to the [SharedInput].
-    pub fn add_shared_input(&mut self, key: String, elements: Vec<S>) {
-        self.shared_inputs.insert(key, elements);
-    }
-
-    /// Merges two [SharedInput]s into one, performing basic sanity checks.
-    pub fn merge(self, other: Self) -> eyre::Result<Self> {
-        let mut shared_inputs = self.shared_inputs;
-        let public_inputs = self.public_inputs;
-        let maybe_shared_inputs = self.maybe_shared_inputs;
-
-        for (key, value) in other.shared_inputs {
-            if shared_inputs.contains_key(&key) {
-                eyre::bail!("Input with name {} present in multiple input shares", key);
-            }
-            if public_inputs.contains_key(&key) || other.public_inputs.contains_key(&key) {
-                eyre::bail!(
-                    "Input name is once in shared inputs and once in public inputs: \"{key}\""
-                );
-            }
-            shared_inputs.insert(key, value);
-        }
-        for (key, value) in other.public_inputs {
-            if !public_inputs.contains_key(&key) {
-                eyre::bail!("Public input \"{key}\" must be present in all files");
-            }
-            if public_inputs.get(&key).expect("is there we checked") != &value {
-                eyre::bail!("Public input \"{key}\" must be same in all files");
-            }
-        }
-
-        let mut merged_maybe_shared_inputs = BTreeMap::new();
-        if maybe_shared_inputs.len() != other.maybe_shared_inputs.len() {
-            eyre::bail!("Both inputs must have the same number of unmerged entries");
-        }
-        for ((k1, v1), (k2, v2)) in maybe_shared_inputs
-            .into_iter()
-            .zip(other.maybe_shared_inputs.into_iter())
-        {
-            if k1 != k2 {
-                eyre::bail!("Both inputs must have the same keys for unmerged elements");
-            }
-
-            let merged = v1
-                .into_iter()
-                .zip(v2.into_iter())
-                .map(|(a, b)| match (a, b) {
-                    (None, None) => Ok(None),
-                    (a @ Some(_), None) | (None, a @ Some(_)) => Ok(a),
-                    _ => Err(eyre::eyre!("Input {} present in both unmerged inputs", k1)),
-                })
-                .collect::<Result<Vec<_>, eyre::Report>>()?;
-            if let Some(merged) = merged.iter().cloned().collect::<Option<Vec<_>>>() {
-                shared_inputs.insert(k1.clone(), merged);
-            } else {
-                merged_maybe_shared_inputs.insert(k1.clone(), merged);
-            }
-        }
-
-        Ok(Self {
-            shared_inputs,
-            public_inputs,
-            maybe_shared_inputs: merged_maybe_shared_inputs,
-        })
-    }
-}
-
-impl<F: PrimeField> SharedInput<F, Rep3PrimeFieldShare<F>> {
-    /// Shares a given input.
-    pub fn share_rep3<R: Rng + CryptoRng>(
-        input: &[F],
-        rng: &mut R,
-    ) -> [Vec<Rep3PrimeFieldShare<F>>; 3] {
-        rep3::share_field_elements(input, rng)
-    }
-
-    /// Shares a given input with unknown elements
-    pub fn maybe_share_rep3<R: Rng + CryptoRng>(
-        input: &[Option<F>],
-        rng: &mut R,
-    ) -> [Vec<Option<Rep3PrimeFieldShare<F>>>; 3] {
-        rep3::share_maybe_field_elements(input, rng)
     }
 }
 
@@ -467,59 +340,56 @@ pub fn split_input<F: PrimeField>(
     let mut rng = rand::thread_rng();
     for (name, val) in input {
         let parsed_vals = if val.is_array() {
-            parse_array(&val)?
-        } else if val.is_boolean() {
-            vec![Some(parse_boolean(&val)?)]
-        } else {
-            vec![Some(parse_field(&val)?)]
-        };
-        if public_inputs.contains(&name) {
-            let parsed_vals = parsed_vals
+            parse_array::<F>(&val)?
                 .into_iter()
-                .collect::<Option<Vec<F>>>()
-                .context("Public inputs must not be unkown")?;
-            shares[0]
-                .public_inputs
-                .insert(name.clone(), parsed_vals.clone());
-            shares[1]
-                .public_inputs
-                .insert(name.clone(), parsed_vals.clone());
-            shares[2].public_inputs.insert(name.clone(), parsed_vals);
+                .enumerate()
+                .filter_map(|(idx, field)| field.map(|field| (format!("{name}[{idx}]"), field)))
+                .collect::<BTreeMap<_, _>>()
+        } else if val.is_boolean() {
+            BTreeMap::from([(name.clone(), parse_boolean::<F>(&val)?)])
         } else {
-            // if all elements are Some, then we can share normally
-            // else we can only share as Vec<Option<T>> and we have to merge unknown inputs later
-            if parsed_vals.iter().all(Option::is_some) {
-                let parsed_vals = parsed_vals
-                    .into_iter()
-                    .collect::<Option<Vec<_>>>()
-                    .expect("all are Some");
-                let [share0, share1, share2] = Rep3SharedInput::share_rep3(&parsed_vals, &mut rng);
-                shares[0].shared_inputs.insert(name.clone(), share0);
-                shares[1].shared_inputs.insert(name.clone(), share1);
-                shares[2].shared_inputs.insert(name.clone(), share2);
-            } else {
-                let [share0, share1, share2] =
-                    Rep3SharedInput::maybe_share_rep3(&parsed_vals, &mut rng);
-                shares[0].maybe_shared_inputs.insert(name.clone(), share0);
-                shares[1].maybe_shared_inputs.insert(name.clone(), share1);
-                shares[2].maybe_shared_inputs.insert(name.clone(), share2);
-            };
+            BTreeMap::from([(name.clone(), parse_field::<F>(&val)?)])
+        };
+
+        if public_inputs.contains(&name) {
+            for (k, v) in parsed_vals.into_iter() {
+                shares[0].insert(k.clone(), Rep3InputType::Public(v));
+                shares[1].insert(k.clone(), Rep3InputType::Public(v));
+                shares[2].insert(k.clone(), Rep3InputType::Public(v));
+            }
+        } else {
+            for (k, v) in parsed_vals.into_iter() {
+                let [share0, share1, share2] = rep3::share_field_element(v, &mut rng);
+                shares[0].insert(k.clone(), Rep3InputType::Shared(share0));
+                shares[1].insert(k.clone(), Rep3InputType::Shared(share1));
+                shares[2].insert(k.clone(), Rep3InputType::Shared(share2));
+            }
         }
     }
     Ok(shares)
 }
 
-/// Merge multiple REP3 shared inputs into one
+/// Merge multiple REP3 input shares
 pub fn merge_input_shares<F: PrimeField>(
-    mut inputs: Vec<Rep3SharedInput<F>>,
+    input_shares: Vec<Rep3SharedInput<F>>,
+    public_inputs: &[String],
 ) -> eyre::Result<Rep3SharedInput<F>> {
-    let start_item = inputs
-        .pop()
-        .context("expected at least two inputs in merge input shares")?;
-    let merged = inputs.into_iter().try_fold(start_item, |a, b| {
-        a.merge(b).context("while merging input shares")
-    })?;
-    Ok(merged)
+    let mut result = BTreeMap::new();
+    for input_share in input_shares.into_iter() {
+        for (name, share) in input_share.into_iter() {
+            // some input name have a trailing [\d+], remove for public inputs check
+            let orig_name = name.split('[').next().unwrap_or(&name).to_owned();
+            if public_inputs.contains(&orig_name) {
+                if result.get(&name).is_some_and(|v| *v != share) {
+                    eyre::bail!("Public entry '{name}' not the same in all inputs");
+                }
+            } else if result.contains_key(&name) {
+                eyre::bail!("Duplicate entry '{name}' found in input shares");
+            }
+            result.insert(name, share);
+        }
+    }
+    Ok(result)
 }
 
 /// The error type for the verification of a Circom proof.

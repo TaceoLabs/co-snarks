@@ -143,7 +143,7 @@ impl PlainProverFlavour for ECCVMFlavour {
         extended_random_poly: &Self::SumcheckRoundOutput<F>,
         partial_evaluation_result: &F,
     ) {
-        tracing::trace!("Prove::Extend and batch univariates");
+        tracing::trace!("ECCVMProve::Extend and batch univariates");
         extend_and_batch_univariates_template(
             acc,
             result,
@@ -158,7 +158,7 @@ impl PlainProverFlavour for ECCVMFlavour {
         extended_random_poly: &Self::SumcheckRoundOutputZK<F>,
         partial_evaluation_result: &F,
     ) {
-        tracing::trace!("Prove::Extend and batch univariates");
+        tracing::trace!("ECCVMProve::Extend and batch univariates");
         extend_and_batch_univariates_template(
             acc,
             result,

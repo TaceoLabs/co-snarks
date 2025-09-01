@@ -1,8 +1,11 @@
 pub mod test_utils {
+    use std::collections::BTreeMap;
+
     use acir::native_types::{WitnessMap, WitnessStack};
     use ark_ff::PrimeField;
     use co_acvm::Rep3AcvmType;
-    use co_circom_types::SharedWitness;
+    use co_circom_types::{Input, SharedWitness};
+    use eyre::{Context as _, ContextCompat as _};
     use itertools::izip;
     use mpc_core::protocols::rep3;
     use num_bigint::BigUint;
@@ -66,7 +69,29 @@ pub mod test_utils {
         res
     }
 
-    pub fn parse_field<F>(val: &serde_json::Value) -> eyre::Result<F>
+    pub fn split_input_plain<F: PrimeField>(input: Input) -> eyre::Result<BTreeMap<String, F>> {
+        let mut split_input = BTreeMap::new();
+        for (name, val) in input {
+            let parsed_vals = if val.is_array() {
+                parse_array::<F>(&val)?
+                    .into_iter()
+                    .enumerate()
+                    .filter_map(|(idx, field)| field.map(|field| (format!("{name}[{idx}]"), field)))
+                    .collect::<BTreeMap<_, _>>()
+            } else if val.is_boolean() {
+                BTreeMap::from([(name.clone(), parse_boolean::<F>(&val)?)])
+            } else {
+                BTreeMap::from([(name.clone(), parse_field::<F>(&val)?)])
+            };
+
+            for (k, v) in parsed_vals.into_iter() {
+                split_input.insert(k.clone(), v);
+            }
+        }
+        Ok(split_input)
+    }
+
+    fn parse_field<F>(val: &serde_json::Value) -> eyre::Result<F>
     where
         F: std::str::FromStr + PrimeField,
     {
@@ -83,20 +108,24 @@ pub mod test_utils {
         };
         let positive_value = if let Some(stripped) = stripped.strip_prefix("0x") {
             let mut big_int = BigUint::from_str_radix(stripped, 16)
-                .map_err(|_| eyre::eyre!("could not parse field element: \"{}\"", val))?;
+                .map_err(|_| eyre::eyre!("could not parse field element: \"{}\"", val))
+                .context("while parsing field element")?;
             let modulus = BigUint::try_from(F::MODULUS).expect("can convert mod to biguint");
             if big_int >= modulus {
+                tracing::warn!("val {} >= mod", big_int);
                 // snarkjs also does this
                 big_int %= modulus;
             }
             let big_int: F::BigInt = big_int
                 .try_into()
-                .map_err(|_| eyre::eyre!("could not parse field element: \"{}\"", val))?;
+                .map_err(|_| eyre::eyre!("could not parse field element: \"{}\"", val))
+                .context("while parsing field element")?;
             F::from(big_int)
         } else {
             stripped
                 .parse::<F>()
-                .map_err(|_| eyre::eyre!("could not parse field element: \"{}\"", val))?
+                .map_err(|_| eyre::eyre!("could not parse field element: \"{}\"", val))
+                .context("while parsing field element")?
         };
         if is_negative {
             Ok(-positive_value)
@@ -105,18 +134,31 @@ pub mod test_utils {
         }
     }
 
-    pub fn parse_array<F: PrimeField>(val: &serde_json::Value) -> eyre::Result<Vec<F>> {
+    fn parse_array<F: PrimeField>(val: &serde_json::Value) -> eyre::Result<Vec<Option<F>>> {
         let json_arr = val.as_array().expect("is an array");
         let mut field_elements = vec![];
         for ele in json_arr {
             if ele.is_array() {
                 field_elements.extend(parse_array::<F>(ele)?);
             } else if ele.is_boolean() {
-                panic!()
+                field_elements.push(Some(parse_boolean(ele)?));
+            } else if ele.as_str().is_some_and(|e| e == "?") {
+                field_elements.push(None);
             } else {
-                field_elements.push(parse_field(ele)?);
+                field_elements.push(Some(parse_field(ele)?));
             }
         }
         Ok(field_elements)
+    }
+
+    fn parse_boolean<F: PrimeField>(val: &serde_json::Value) -> eyre::Result<F> {
+        let bool = val
+            .as_bool()
+            .with_context(|| format!("expected input to be a bool, got {val}"))?;
+        if bool {
+            Ok(F::ONE)
+        } else {
+            Ok(F::ZERO)
+        }
     }
 }

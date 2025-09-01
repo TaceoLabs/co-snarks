@@ -6,6 +6,7 @@ use crate::eccvm::{
 use ark_ec::AffineRepr;
 use ark_ec::CurveGroup;
 use ark_ff::{BigInt, One};
+use ark_ff::PrimeField;
 use ark_ff::Zero;
 use common::{
     utils::Utils, 
@@ -768,6 +769,34 @@ pub struct ECCOpTuple {
     pub return_is_infinity: bool,
 }
 
+impl<P: CurveGroup> UltraOp<P> {
+    pub fn get_base_point_standard_form(&self) -> (P::BaseField, P::BaseField)
+    where
+        P::BaseField: PrimeField,
+    {
+        if self.return_is_infinity {
+            return (P::BaseField::zero(), P::BaseField::zero());
+        }
+
+        // Adjust this constant if defined elsewhere in the crate.
+        let shift_bits = 2 * NUM_LIMB_BITS_IN_FIELD_SIMULATION;
+
+        let mut x_hi: BigUint = self.x_hi.into();
+        let x_lo: BigUint = self.x_lo.into();
+        x_hi <<= shift_bits as u32;
+        x_hi += x_lo;
+        let x: P::BaseField = x_hi.into();
+
+        let mut y_hi: BigUint = self.y_hi.into();
+        let y_lo: BigUint = self.y_lo.into();
+        y_hi <<= shift_bits as u32;
+        y_hi += y_lo;
+        let y: P::BaseField = y_hi.into();
+
+        (x, y)
+    }
+}
+
 #[derive(Default, PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
 pub struct EccOpCode {
     pub add: bool,
@@ -1034,12 +1063,11 @@ impl<P: HonkCurve<TranscriptFieldType>> ECCOpQueue<P> {
         // If the point is not in the correct format, return an error
         let (x_256, y_256): (BigUint, BigUint) = point.xy().map_or((BigUint::zero(), BigUint::zero()), |(x, y)| (x.into(), y.into())); 
 
-        ultra_op.x_lo = Utils::slice_u256(x_256.clone(), 0, CHUNK_SIZE).into();
-        ultra_op.x_hi = Utils::slice_u256(x_256, CHUNK_SIZE, 2 * CHUNK_SIZE).into();
-        ultra_op.y_lo = Utils::slice_u256(y_256.clone(), 0, CHUNK_SIZE).into();
-        ultra_op.y_hi = Utils::slice_u256(y_256, CHUNK_SIZE, 2 * CHUNK_SIZE).into();
+        ultra_op.x_lo = Utils::slice_u256(&x_256, 0, CHUNK_SIZE).into();
+        ultra_op.x_hi = Utils::slice_u256(&x_256, CHUNK_SIZE, 2 * CHUNK_SIZE).into();
+        ultra_op.y_lo = Utils::slice_u256(&y_256, 0, CHUNK_SIZE).into();
+        ultra_op.y_hi = Utils::slice_u256(&y_256, CHUNK_SIZE, 2 * CHUNK_SIZE).into();
 
-        
         
         let (mut z_1, mut z_2) = (BigUint::zero(), BigUint::zero());
         todo!();

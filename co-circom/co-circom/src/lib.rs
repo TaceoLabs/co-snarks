@@ -3,8 +3,8 @@
 #![warn(missing_docs)]
 
 use ark_ff::PrimeField;
-use circom_mpc_vm::mpc_vm::Rep3WitnessExtension;
-use co_circom_types::{CompressedRep3SharedWitness, SharedWitness};
+use circom_mpc_vm::{Rep3VmType, mpc_vm::Rep3WitnessExtension};
+use co_circom_types::{CompressedRep3SharedWitness, Rep3InputType, SharedWitness};
 use color_eyre::eyre::{self, Context};
 use mpc_core::protocols::{
     rep3::{self, Rep3ShareVecType},
@@ -117,17 +117,22 @@ pub fn generate_witness_rep3<F: PrimeField, N: Network>(
     net0: &N,
     net1: &N,
 ) -> eyre::Result<Rep3SharedWitness<F>> {
-    if !input.maybe_shared_inputs.is_empty() {
-        eyre::bail!("still unmerged elements left");
-    }
-
     // init MPC protocol
     let rep3_vm = Rep3WitnessExtension::new(net0, net1, circuit, config)
         .context("while constructing MPC VM")?;
 
+    let num_public_inputs = input
+        .values()
+        .filter(|i| matches!(i, Rep3InputType::Public(_)))
+        .count();
+    let input = input
+        .into_iter()
+        .map(|(name, vale)| (name, Rep3VmType::from(vale)))
+        .collect();
+
     // execute witness generation in MPC
     let witness_share = rep3_vm
-        .run(input)
+        .run(input, num_public_inputs)
         .context("while running witness generation")?;
 
     Ok(witness_share.into_shared_witness())

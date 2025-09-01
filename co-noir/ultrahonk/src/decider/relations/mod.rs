@@ -8,6 +8,7 @@ pub(crate) mod logderiv_lookup_relation;
 pub(crate) mod permutation_relation;
 pub(crate) mod poseidon2_external_relation;
 pub(crate) mod poseidon2_internal_relation;
+pub(crate) mod translator_relations;
 pub(crate) mod ultra_arithmetic_relation;
 
 use super::types::{ClaimedEvaluations, RelationParameters};
@@ -46,11 +47,13 @@ pub(crate) trait Relation<F: PrimeField, L: PlainProverFlavour> {
     }
 
     fn verify_accumulate(
-        univariate_accumulator: &mut Self::VerifyAcc,
-        input: &ClaimedEvaluations<F, L>,
-        relation_parameters: &RelationParameters<F>,
-        scaling_factor: &F,
-    );
+        _univariate_accumulator: &mut Self::VerifyAcc,
+        _input: &ClaimedEvaluations<F, L>,
+        _relation_parameters: &RelationParameters<F>,
+        _scaling_factor: &F,
+    ) {
+        unimplemented!("verify_accumulate is not implemented for this relation");
+    }
 }
 
 #[macro_export]

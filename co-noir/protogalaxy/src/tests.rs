@@ -94,9 +94,7 @@ fn structure_parameters<T: PartialEq + Default>(
         gamma,
         public_input_delta,
         lookup_grand_product_delta,
-        beta_sqr: T::default(),
-        beta_cube: T::default(),
-        eccvm_set_permutation_delta: T::default(),
+        ..Default::default()
     }
 }
 #[test]
