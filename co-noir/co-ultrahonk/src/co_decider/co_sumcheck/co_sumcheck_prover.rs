@@ -141,7 +141,7 @@ impl<
         let mut sum_check_round = SumcheckRound::new(multivariate_n as usize);
 
         let mut gate_separators = GateSeparatorPolynomial::new(
-            self.memory.relation_parameters.gate_challenges.to_owned(),
+            self.memory.gate_challenges.to_owned(),
             multivariate_d as usize,
         );
 
@@ -158,6 +158,7 @@ impl<
             self.state,
             round_idx,
             &self.memory.relation_parameters,
+            &self.memory.alphas,
             &gate_separators,
             &self.memory.polys,
         )?;
@@ -197,6 +198,7 @@ impl<
                 self.state,
                 round_idx,
                 &self.memory.relation_parameters,
+                &self.memory.alphas,
                 &gate_separators,
                 &partially_evaluated_polys,
             )?;
@@ -265,7 +267,7 @@ impl<
         let mut sum_check_round = SumcheckRound::new(multivariate_n as usize);
         let mut row_disabling_polynomial = RowDisablingPolynomial::<P::ScalarField>::default();
         let mut gate_separators = GateSeparatorPolynomial::new(
-            self.memory.relation_parameters.gate_challenges.to_owned(),
+            self.memory.gate_challenges.to_owned(),
             multivariate_d as usize,
         );
 
@@ -282,6 +284,7 @@ impl<
             self.state,
             round_idx,
             &self.memory.relation_parameters,
+            &self.memory.alphas,
             &gate_separators,
             &self.memory.polys,
             zk_sumcheck_data,
@@ -324,6 +327,7 @@ impl<
                 self.state,
                 round_idx,
                 &self.memory.relation_parameters,
+                &self.memory.alphas,
                 &gate_separators,
                 &partially_evaluated_polys,
                 zk_sumcheck_data,

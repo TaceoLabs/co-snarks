@@ -623,12 +623,19 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
             );
         }
 
+        // Ensure the curve type matches grumpkin at runtime to avoid invalid downcasts
+        if TypeId::of::<C::Affine>() != TypeId::of::<ark_grumpkin::Affine>()
+            || TypeId::of::<C>() != TypeId::of::<ark_grumpkin::Projective>()
+        {
+            eyre::bail!("Only the grumpkin curve is supported for field_shares_to_pointshare");
+        }
+
         let x = *downcast(&x).expect("We checked types");
         let y = *downcast(&y).expect("We checked types");
-        let point = Self::create_grumpkin_point(x, y, is_infinity == F::one())?;
-        let y = *downcast(&point).expect("We checked types");
+        let point_affine = Self::create_grumpkin_point(x, y, is_infinity == F::one())?;
+        let point_affine_cast = *downcast(&point_affine).expect("We checked types");
 
-        Ok(C::from(y))
+        Ok(C::from(point_affine_cast))
     }
 
     fn pointshare_to_field_shares<C: CurveGroup<BaseField = F>>(

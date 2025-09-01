@@ -46,7 +46,7 @@ use common::{
     types::ZeroKnowledge,
     honk_curve::HonkCurve,
 };
-pub(crate) struct CoOink<
+pub struct CoOink<
     'a,
     T: NoirUltraHonkProver<P>,
     P: HonkCurve<TranscriptFieldType>,
@@ -56,7 +56,7 @@ pub(crate) struct CoOink<
 > {
     net: &'a N,
     state: &'a mut T::State,
-    memory: ProverMemory<T, P, L>,
+    memory: ProverMemory<T, P>,
     phantom_data: PhantomData<(P, H, L)>,
     has_zk: ZeroKnowledge,
 }
@@ -70,7 +70,7 @@ impl<
     L: MPCProverFlavour,
 > CoOink<'a, T, P, H, N, L>
 {
-    pub(crate) fn new(net: &'a N, state: &'a mut T::State, has_zk: ZeroKnowledge) -> Self {
+    pub fn new(net: &'a N, state: &'a mut T::State, has_zk: ZeroKnowledge) -> Self {
         Self {
             net,
             state,
@@ -1208,12 +1208,12 @@ impl<
         Ok(())
     }
 
-    pub(crate) fn prove(
+    pub fn prove(
         mut self,
         proving_key: &mut ProvingKey<T, P, L>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         crs: &ProverCrs<P>,
-    ) -> HonkProofResult<ProverMemory<T, P, L>> {
+    ) -> HonkProofResult<ProverMemory<T, P>> {
         tracing::trace!("Oink prove");
 
         // Add circuit size public input size and public inputs to transcript

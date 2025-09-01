@@ -5,7 +5,6 @@ use crate::{
 };
 use ark_ec::CurveGroup;
 use ark_ec::PrimeGroup;
-use ark_ff::PrimeField;
 use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
@@ -16,9 +15,11 @@ use common::mpc::NoirUltraHonkProver;
 use itertools::izip;
 use std::iter;
 
-pub(crate) struct ProverMemory<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCProverFlavour> {
-    pub(crate) polys: AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>, L>,
-    pub(crate) relation_parameters: RelationParameters<P::ScalarField, L>,
+pub struct ProverMemory<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCProverFlavour> {
+    pub polys: AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>, L>,
+    pub relation_parameters: RelationParameters<P::ScalarField>,
+    pub alphas: Vec<P::ScalarField>,
+    pub gate_challenges: Vec<P::ScalarField>,
 }
 
 pub(crate) type ProverUnivariates<T, P, L> = AllEntities<
@@ -35,20 +36,46 @@ pub(crate) type PartiallyEvaluatePolys<T, P, L> = AllEntities<
 >;
 pub(crate) type ClaimedEvaluations<F, L> = AllEntities<F, F, L>;
 
-pub struct RelationParameters<F: PrimeField, L: MPCProverFlavour> {
-    pub(crate) eta_1: F,
-    pub(crate) eta_2: F,
-    pub(crate) eta_3: F,
-    pub(crate) beta: F,
-    pub(crate) gamma: F,
-    pub(crate) public_input_delta: F,
-    pub(crate) alphas: L::Alphas<F>,
-    pub(crate) gate_challenges: Vec<F>,
+#[derive(Clone, Debug, Default)]
+pub struct RelationParameters<T> {
+    pub eta_1: T,
+    pub eta_2: T,
+    pub eta_3: T,
+    pub beta: T,
+    pub gamma: T,
+    pub public_input_delta: T,
+    pub lookup_grand_product_delta: T,
+}
+
+impl<T: PartialEq> RelationParameters<T> {
+    pub fn get_params_as_mut(&mut self) -> Vec<&mut T> {
+        vec![
+            &mut self.eta_1,
+            &mut self.eta_2,
+            &mut self.eta_3,
+            &mut self.beta,
+            &mut self.gamma,
+            &mut self.public_input_delta,
+            &mut self.lookup_grand_product_delta,
+        ]
+    }
+
+    pub fn get_params(&self) -> Vec<&T> {
+        vec![
+            &self.eta_1,
+            &self.eta_2,
+            &self.eta_3,
+            &self.beta,
+            &self.gamma,
+            &self.public_input_delta,
+            &self.lookup_grand_product_delta,
+        ]
+    }
 }
 
 impl<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCProverFlavour> ProverMemory<T, P, L> {
-    pub(crate) fn from_memory_and_polynomials(
-        prover_memory: crate::co_oink::types::ProverMemory<T, P, L>,
+    pub fn from_memory_and_polynomials(
+        prover_memory: crate::co_oink::types::ProverMemory<T, P>,
         polynomials: Polynomials<T::ArithmeticShare, P::ScalarField, L>,
     ) -> Self {
         let relation_parameters = RelationParameters {
@@ -58,9 +85,10 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCProverFlavour> ProverMemory
             beta: prover_memory.challenges.beta,
             gamma: prover_memory.challenges.gamma,
             public_input_delta: prover_memory.public_input_delta,
-            alphas: prover_memory.challenges.alphas,
-            gate_challenges: Default::default(),
+            lookup_grand_product_delta: Default::default(),
         };
+        let alphas = prover_memory.challenges.alphas;
+        let gate_challenges = Default::default();
 
         let mut memory = AllEntities::<Vec<T::ArithmeticShare>, Vec<P::ScalarField>, L>::default();
 
@@ -137,6 +165,8 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCProverFlavour> ProverMemory
         Self {
             polys: memory,
             relation_parameters,
+            alphas,
+            gate_challenges,
         }
     }
 }

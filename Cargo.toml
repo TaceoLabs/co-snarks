@@ -11,6 +11,7 @@ members = [
     "co-noir/co-brillig",
     "co-noir/co-builder",
     "co-noir/ultrahonk",
+    "co-noir/co-protogalaxy",
     "co-noir/co-ultrahonk",
     "co-noir/co-noir",
     "co-noir/co-noir-types",

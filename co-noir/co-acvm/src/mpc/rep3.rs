@@ -1490,6 +1490,13 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             panic!("Only BN254 is supported");
         }
 
+        // Ensure the curve type matches grumpkin at runtime to avoid invalid downcasts
+        if TypeId::of::<C::Affine>() != TypeId::of::<ark_grumpkin::Affine>()
+            || TypeId::of::<C>() != TypeId::of::<ark_grumpkin::Projective>()
+        {
+            eyre::bail!("Only the grumpkin curve is supported for field_shares_to_pointshare");
+        }
+
         let x = downcast(&x).expect("We checked types");
         let y = downcast(&y).expect("We checked types");
         let is_infinity = downcast(&is_infinity).expect("We checked types");

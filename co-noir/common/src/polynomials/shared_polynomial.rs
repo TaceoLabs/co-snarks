@@ -130,8 +130,9 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup> SharedPolynomial<T, P> {
                 temp = T::mul_with_public(root_inverse, temp);
                 *coeff = temp.to_owned();
             }
+            // remove the last (zero) coefficient after synthetic division
+            self.coefficients.pop();
         }
-        self.coefficients.pop();
     }
 
     pub fn random<N: Network>(size: usize, net: &N, state: &mut T::State) -> eyre::Result<Self> {

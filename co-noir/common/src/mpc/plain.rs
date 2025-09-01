@@ -35,6 +35,10 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         a - b
     }
 
+    fn sub_assign(a: &mut Self::ArithmeticShare, b: Self::ArithmeticShare) {
+        *a -= b;
+    }
+
     fn sub_assign_many(a: &mut [Self::ArithmeticShare], b: &[Self::ArithmeticShare]) {
         debug_assert_eq!(a.len(), b.len());
         a.par_iter_mut().zip(b.par_iter()).for_each(|(a, b)| {
@@ -103,6 +107,15 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         _state: &mut Self::State,
     ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
         Ok(a)
+    }
+
+    fn mul<N: Network>(
+        a: Self::ArithmeticShare,
+        b: Self::ArithmeticShare,
+        _net: &N,
+        _state: &mut Self::State,
+    ) -> eyre::Result<Self::ArithmeticShare> {
+        Ok(a * b)
     }
 
     fn mul_many<N: Network>(

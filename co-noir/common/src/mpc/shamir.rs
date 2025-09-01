@@ -28,6 +28,10 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
         arithmetic::sub(a, b)
     }
 
+    fn sub_assign(a: &mut Self::ArithmeticShare, b: Self::ArithmeticShare) {
+        arithmetic::sub_assign(a, b);
+    }
+
     fn sub_assign_many(a: &mut [Self::ArithmeticShare], b: &[Self::ArithmeticShare]) {
         arithmetic::sub_vec_assign(a, b);
     }
@@ -92,6 +96,15 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
         state: &mut Self::State,
     ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
         net.degree_reduce_many(state, a)
+    }
+
+    fn mul<N: Network>(
+        a: Self::ArithmeticShare,
+        b: Self::ArithmeticShare,
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<Self::ArithmeticShare> {
+        arithmetic::mul(a, b, net, state)
     }
 
     fn mul_many<N: Network>(

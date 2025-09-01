@@ -138,7 +138,7 @@ impl SumcheckRound {
         L: MPCProverFlavour,
     >(
         mut univariate_accumulators: L::AllRelationAcc<T, P>,
-        alphas: &L::Alphas<P::ScalarField>,
+        alphas: &[P::ScalarField],
         gate_separators: &GateSeparatorPolynomial<P::ScalarField>,
     ) -> L::SumcheckRoundOutput<T, P> {
         tracing::trace!("batch over relations");
@@ -160,7 +160,7 @@ impl SumcheckRound {
         L: MPCProverFlavour,
     >(
         mut univariate_accumulators: L::AllRelationAcc<T, P>,
-        alphas: &L::Alphas<P::ScalarField>,
+        alphas: &[P::ScalarField],
         gate_separators: &GateSeparatorPolynomial<P::ScalarField>,
     ) -> L::SumcheckRoundOutputZK<T, P> {
         tracing::trace!("batch over relations");
@@ -187,7 +187,7 @@ impl SumcheckRound {
         net: &N,
         state: &mut T::State,
         univariate_accumulator: &mut R::Acc,
-        relation_parameters: &RelationParameters<P::ScalarField, L>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
         sum_check_data: &SumCheckDataForRelation<T, P, L>,
     ) -> HonkProofResult<()> {
         if sum_check_data.can_skip {
@@ -197,7 +197,7 @@ impl SumcheckRound {
             net,
             state,
             univariate_accumulator,
-            &sum_check_data.all_entites,
+            &sum_check_data.all_entities,
             relation_parameters,
             &sum_check_data.scaling_factors,
         )
@@ -212,7 +212,7 @@ impl SumcheckRound {
         &self,
         net: &N,
         state: &mut T::State,
-        relation_parameters: &RelationParameters<P::ScalarField, L>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
         gate_separators: &GateSeparatorPolynomial<P::ScalarField>,
         polynomials: &AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>, L>,
     ) -> HonkProofResult<<L as MPCProverFlavour>::AllRelationAcc<T, P>> {
@@ -260,7 +260,8 @@ impl SumcheckRound {
         &self,
         net: &N,
         state: &mut T::State,
-        relation_parameters: &RelationParameters<P::ScalarField, L>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
+        alphas: &[P::ScalarField],
         gate_separators: &GateSeparatorPolynomial<P::ScalarField>,
         polynomials: &AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>, L>,
     ) -> HonkProofResult<L::SumcheckRoundOutput<T, P>> {
@@ -274,7 +275,7 @@ impl SumcheckRound {
 
         let res = Self::batch_over_relations_univariates::<T, P, L>(
             univariate_accumulators,
-            &relation_parameters.alphas,
+            alphas,
             gate_separators,
         );
         Ok(res)
@@ -289,7 +290,8 @@ impl SumcheckRound {
         &self,
         net: &N,
         state: &mut T::State,
-        relation_parameters: &RelationParameters<P::ScalarField, L>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
+        alphas: &[P::ScalarField],
         gate_separators: &GateSeparatorPolynomial<P::ScalarField>,
         polynomials: &AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>, L>,
     ) -> HonkProofResult<L::SumcheckRoundOutputZK<T, P>> {
@@ -303,12 +305,13 @@ impl SumcheckRound {
 
         let res = Self::batch_over_relations_univariates_zk::<T, P, L>(
             univariate_accumulators,
-            &relation_parameters.alphas,
+            alphas,
             gate_separators,
         );
         Ok(res)
     }
 
+    #[expect(clippy::too_many_arguments)]
     pub(crate) fn compute_univariate<
         T: NoirUltraHonkProver<P>,
         P: HonkCurve<TranscriptFieldType>,
@@ -319,7 +322,8 @@ impl SumcheckRound {
         net: &N,
         state: &mut T::State,
         round_index: usize,
-        relation_parameters: &RelationParameters<P::ScalarField, L>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
+        alphas: &[P::ScalarField],
         gate_separators: &GateSeparatorPolynomial<P::ScalarField>,
         polynomials: &AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>, L>,
     ) -> HonkProofResult<L::SumcheckRoundOutput<T, P>> {
@@ -329,6 +333,7 @@ impl SumcheckRound {
             net,
             state,
             relation_parameters,
+            alphas,
             gate_separators,
             polynomials,
         )
@@ -344,7 +349,8 @@ impl SumcheckRound {
         net: &N,
         state: &mut T::State,
         round_index: usize,
-        relation_parameters: &RelationParameters<P::ScalarField, L>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
+        alphas: &[P::ScalarField],
         gate_separators: &GateSeparatorPolynomial<P::ScalarField>,
         polynomials: &AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>, L>,
         zk_sumcheck_data: &SharedZKSumcheckData<T, P>,
@@ -356,6 +362,7 @@ impl SumcheckRound {
             net,
             state,
             relation_parameters,
+            alphas,
             gate_separators,
             polynomials,
         )?;
@@ -365,6 +372,7 @@ impl SumcheckRound {
             state,
             polynomials,
             relation_parameters,
+            alphas,
             gate_separators,
             self.round_size,
             round_index,
@@ -422,7 +430,8 @@ impl SumcheckRound {
         net: &N,
         state: &mut T::State,
         polynomials: &AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>, L>,
-        relation_parameters: &RelationParameters<P::ScalarField, L>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
+        alphas: &[P::ScalarField],
         gate_separators: &GateSeparatorPolynomial<P::ScalarField>,
         round_size: usize,
         round_idx: usize,
@@ -456,7 +465,7 @@ impl SumcheckRound {
         let univariate_accumulators = L::reshare(univariate_accumulators, net, state)?;
         let mut result = Self::batch_over_relations_univariates_zk::<T, P, L>(
             univariate_accumulators,
-            &relation_parameters.alphas,
+            alphas,
             gate_separators,
         );
 
