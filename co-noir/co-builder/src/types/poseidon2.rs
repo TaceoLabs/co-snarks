@@ -1,3 +1,4 @@
+use crate::types::field_ct::WitnessCT;
 use crate::{
     types::{
         field_ct::FieldCT,
@@ -6,9 +7,12 @@ use crate::{
     ultra_builder::GenericUltraCircuitBuilder,
 };
 use ark_ec::CurveGroup;
+use ark_ff::One;
 use ark_ff::PrimeField;
+use ark_ff::Zero;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use mpc_core::gadgets::poseidon2::{Poseidon2, Poseidon2Params};
+use num_bigint::BigUint;
 use std::{any::TypeId, array};
 
 // This workaround is required due to mutability issues
@@ -412,5 +416,236 @@ impl<F: PrimeField> Default for Poseidon2CT<F, 4, 5> {
         } else {
             panic!("No Poseidon2CT implementation for this field");
         }
+    }
+}
+
+pub trait FieldHashCT<P: CurveGroup, const T: usize> {
+    #[expect(dead_code)]
+    fn permutation<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
+        &self,
+        input: &[FieldCT<P::ScalarField>; T],
+        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        driver: &mut WT,
+    ) -> eyre::Result<[FieldCT<P::ScalarField>; T]> {
+        let mut state = input.to_owned();
+        self.permutation_in_place(&mut state, builder, driver)?;
+        Ok(state)
+    }
+    fn permutation_in_place<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
+        &self,
+        input: &mut [FieldCT<P::ScalarField>; T],
+        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        driver: &mut WT,
+    ) -> eyre::Result<()>;
+}
+
+impl<P: CurveGroup, const T: usize> FieldHashCT<P, T> for Poseidon2CT<P::ScalarField, T, 5> {
+    fn permutation_in_place<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
+        &self,
+        input: &mut [FieldCT<P::ScalarField>; T],
+        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        driver: &mut WT,
+    ) -> eyre::Result<()> {
+        self.permutation_in_place(input, builder, driver)?;
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum SpongeMode {
+    Absorb,
+    Squeeze,
+}
+
+pub struct FieldSpongeCT<P: CurveGroup, const T: usize, const R: usize, H: FieldHashCT<P, T>> {
+    state: [FieldCT<P::ScalarField>; T],
+    cache: [FieldCT<P::ScalarField>; R],
+    cache_size: usize,
+    mode: SpongeMode,
+    hasher: H,
+}
+
+impl<P: CurveGroup, const T: usize, const R: usize, H: FieldHashCT<P, T>> FieldSpongeCT<P, T, R, H>
+where
+    H: Default,
+{
+    pub(crate) fn new<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
+        iv: FieldCT<P::ScalarField>,
+        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        driver: &mut WT,
+    ) -> Self {
+        let mut state: [FieldCT<P::ScalarField>; T] =
+            array::from_fn(|_| FieldCT::<P::ScalarField>::default());
+
+        for state in state.iter_mut().take(R) {
+            *state = FieldCT::from(WitnessCT::create_constant_witness(
+                P::ScalarField::zero(),
+                builder,
+            ));
+        }
+        state[R] = FieldCT::from(WitnessCT::create_constant_witness(
+            WT::get_public(&iv.get_value(builder, driver)).expect("IV should be public"),
+            builder,
+        ));
+
+        let cache: [FieldCT<P::ScalarField>; R] =
+            array::from_fn(|_| FieldCT::<P::ScalarField>::default());
+
+        Self {
+            state,
+            cache,
+            cache_size: 0,
+            mode: SpongeMode::Absorb,
+            hasher: H::default(),
+        }
+    }
+
+    fn perform_duplex<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
+        &mut self,
+        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        driver: &mut WT,
+    ) -> eyre::Result<[FieldCT<P::ScalarField>; R]> {
+        // zero-pad the cache
+        for i in self.cache_size..R {
+            self.cache[i] = FieldCT::from(WitnessCT::create_constant_witness(
+                P::ScalarField::zero(),
+                builder,
+            ));
+        }
+        // add the cache into sponge state
+        for i in 0..R {
+            self.state[i].add_assign(&self.cache[i], builder, driver);
+        }
+        self.hasher
+            .permutation_in_place(&mut self.state, builder, driver)?;
+
+        // TACEO TODO: We will only call this with Mega I guess?
+        // // variables with indices from rate to size of state - 1 won't be used anymore
+        // // after permutation. But they aren't dangerous and needed to put in used witnesses
+        // if constexpr (IsUltraBuilder<Builder>) {
+        //     for (size_t i = rate; i < t; i++) {
+        //         builder->update_used_witnesses(state[i].witness_index);
+        //     }
+        // }
+
+        // return `rate` number of field elements from the sponge state.
+        Ok(self.state[..R]
+            .to_owned()
+            .try_into()
+            .expect("State slice should be of length R"))
+    }
+
+    fn absorb<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
+        &mut self,
+        input: FieldCT<P::ScalarField>,
+        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        driver: &mut WT,
+    ) -> eyre::Result<()> {
+        if self.mode == SpongeMode::Absorb && self.cache_size == R {
+            // If we're absorbing, and the cache is full, apply the sponge permutation to compress the cache
+            self.perform_duplex(builder, driver)?;
+            self.cache[0] = input;
+            self.cache_size = 1;
+        } else if self.mode == SpongeMode::Absorb && self.cache_size < R {
+            // If we're absorbing, and the cache is not full, add the input into the cache
+            self.cache[self.cache_size] = input;
+            self.cache_size += 1;
+        } else if self.mode == SpongeMode::Squeeze {
+            // If we're in squeeze mode, switch to absorb mode and add the input into the cache.
+            // N.B. I don't think this code path can be reached?!
+            self.cache[0] = input;
+            self.cache_size = 1;
+            self.mode = SpongeMode::Absorb;
+        }
+        Ok(())
+    }
+
+    fn squeeze<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
+        &mut self,
+        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        driver: &mut WT,
+    ) -> eyre::Result<FieldCT<P::ScalarField>> {
+        if self.mode == SpongeMode::Squeeze && self.cache_size == 0 {
+            // If we're in squeze mode and the cache is empty, there is nothing left to squeeze out of the sponge!
+            // Switch to absorb mode.
+            self.mode = SpongeMode::Absorb;
+            self.cache_size = 0;
+        }
+        if self.mode == SpongeMode::Absorb {
+            // If we're in absorb mode, apply sponge permutation to compress the cache, populate cache with compressed
+            // state and switch to squeeze mode. Note: this code block will execute if the previous `if` condition was
+            // matched
+            self.cache = self.perform_duplex(builder, driver)?;
+            self.cache_size = R;
+        }
+        // By this point, we should have a non-empty cache. Pop one item off the top of the cache and return it.
+        let result = self.cache[0].clone();
+        for i in 1..self.cache_size {
+            self.cache[i - 1] = self.cache[i].clone();
+        }
+        self.cache_size -= 1;
+        self.cache[self.cache_size] = FieldCT::from(WitnessCT::create_constant_witness(
+            P::ScalarField::zero(),
+            builder,
+        ));
+        Ok(result)
+    }
+
+    /**
+     * @brief Use the sponge to hash an input string
+     *
+     * @tparam out_len
+     * @tparam is_variable_length. Distinguishes between hashes where the preimage length is constant/not constant
+     * @param input
+     * @return std::array<FF, out_len>
+     */
+    pub(crate) fn hash_internal<
+        const OUT_LEN: usize,
+        WT: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        input: &[FieldCT<P::ScalarField>],
+        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        driver: &mut WT,
+    ) -> eyre::Result<[FieldCT<P::ScalarField>; OUT_LEN]> {
+        let in_len = input.len();
+        let iv: BigUint = (BigUint::from(in_len) << 64) + OUT_LEN - BigUint::one();
+
+        let mut sponge = Self::new(
+            FieldCT::<P::ScalarField>::from(P::ScalarField::from(iv)),
+            builder,
+            driver,
+        );
+        for input in input.iter() {
+            sponge.absorb(input.clone(), builder, driver)?;
+        }
+
+        let mut output: [FieldCT<P::ScalarField>; OUT_LEN] =
+            array::from_fn(|_| FieldCT::<P::ScalarField>::default());
+        for r in output.iter_mut() {
+            *r = sponge.squeeze(builder, driver)?;
+        }
+
+        // TACEO TODO: We will only call this with Mega I guess?
+        // // variables with indices won't be used in the circuit.
+        // // but they aren't dangerous and needed to put in used witnesses
+        // if constexpr (IsUltraBuilder<Builder>) {
+        //     for (const auto& elem : sponge.cache) {
+        //         if (elem.witness_index != IS_CONSTANT) {
+        //             builder.update_used_witnesses(elem.witness_index);
+        //         }
+        //     }
+        // }
+        Ok(output)
+    }
+
+    pub(crate) fn hash_fixed_length<
+        const OUT_LEN: usize,
+        WT: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        input: &[FieldCT<P::ScalarField>],
+        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        driver: &mut WT,
+    ) -> eyre::Result<[FieldCT<P::ScalarField>; OUT_LEN]> {
+        Self::hash_internal::<OUT_LEN, WT>(input, builder, driver)
     }
 }
