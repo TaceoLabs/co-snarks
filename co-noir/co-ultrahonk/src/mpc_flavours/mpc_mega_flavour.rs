@@ -636,7 +636,7 @@ impl MPCProverFlavour for MegaFlavour {
         input: &AllEntitiesBatch<T, P, Self>,
         relation_parameters: &RelationParameters<Univariate<P::ScalarField, SIZE>>,
         scaling_factor: &P::ScalarField,
-    ) -> co_builder::HonkProofResult<()> {
+    ) -> HonkProofResult<()> {
         UltraArithmeticRelation::accumulate_with_extended_parameters(
             net,
             state,
@@ -741,7 +741,7 @@ impl MPCProverFlavour for MegaFlavour {
         extended_edges: &AllEntities<T::ArithmeticShare, P::ScalarField, Self>,
         relation_parameters: &RelationParameters<P::ScalarField>,
         scaling_factor: &P::ScalarField,
-    ) -> co_builder::HonkProofResult<()> {
+    ) -> HonkProofResult<()> {
         tracing::trace!("Accumulate relation evaluations");
         UltraArithmeticRelation::accumulate_evaluations(
             net,

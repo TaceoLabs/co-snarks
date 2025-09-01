@@ -30,5 +30,3 @@ serde.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 rand.workspace = true
-
-[dev-dependencies]

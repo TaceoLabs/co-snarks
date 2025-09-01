@@ -19,6 +19,7 @@ use std::array;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
+use crate::generic_builder::GenericBuilder;
 
 #[derive(Default, PartialEq, Eq)]
 pub(crate) struct PolyTriple<F: PrimeField> {

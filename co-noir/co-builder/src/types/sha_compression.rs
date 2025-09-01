@@ -18,6 +18,7 @@ use super::{
     field_ct::{FieldCT, WitnessCT},
     plookup::{ColumnIdx, MultiTableId, Plookup},
 };
+use crate::generic_builder::GenericBuilder;
 pub struct SHA256<F: PrimeField> {
     phantom: PhantomData<F>,
 }

@@ -4,9 +4,8 @@ use ark_bn254::Bn254;
 use ark_ec::{bn::Bn, pairing::Pairing};
 use ark_ff::AdditiveGroup;
 use co_builder::{
-    TranscriptFieldType,
     flavours::mega_flavour::{MegaFlavour, MegaPrecomputedEntities, MegaProverWitnessEntities},
-    prelude::{ActiveRegionData, CrsParser, Polynomial, PublicComponentKey},
+    prelude::{ActiveRegionData, PublicComponentKey},
     prover_flavour::ProverFlavour,
 };
 use co_ultrahonk::{
@@ -17,9 +16,7 @@ use co_ultrahonk::{
 };
 use co_ultrahonk::{co_decider::univariates::SharedUnivariate, types::AllEntities};
 use common::{
-    HonkProof,
-    mpc::{NoirUltraHonkProver, rep3::Rep3UltraHonkDriver},
-    shared_polynomial::SharedPolynomial,
+    crs::parse::CrsParser, honk_proof::{HonkProof, TranscriptFieldType}, mpc::{rep3::Rep3UltraHonkDriver, NoirUltraHonkProver}, polynomials::{polynomial::Polynomial, shared_polynomial::SharedPolynomial}, types::ZeroKnowledge
 };
 use flate2::read::GzDecoder;
 use itertools::izip;
@@ -32,7 +29,7 @@ use rand::thread_rng;
 use serde::de::DeserializeOwned;
 
 use ultrahonk::prelude::{
-    GateSeparatorPolynomial, Poseidon2Sponge, Transcript, Univariate, ZeroKnowledge,
+    GateSeparatorPolynomial, Poseidon2Sponge, Transcript, Univariate,
 };
 
 use crate::{

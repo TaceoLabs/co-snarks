@@ -950,4 +950,8 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
     ) -> eyre::Result<Self::AcvmType> {
         panic!("functionality accumulate_from_sparse_bytes not feasible for Shamir")
     }
+
+    fn is_zero(&mut self, _a: &Self::AcvmType) -> eyre::Result<Self::AcvmType> {
+        panic!("functionality is_zero not feasible for Shamir")
+    }
 }

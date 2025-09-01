@@ -7,6 +7,7 @@ use mpc_core::lut::LookupTableProvider;
 use num_bigint::BigUint;
 use std::cmp::Ordering;
 use std::ops::Index;
+use crate::generic_builder::GenericBuilder;
 
 pub(crate) struct RomTable<F: PrimeField> {
     raw_entries: Vec<FieldCT<F>>,

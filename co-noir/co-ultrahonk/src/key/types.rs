@@ -14,6 +14,7 @@ use co_builder::{
 use common::polynomials::polynomial::Polynomial;
 use common::mpc::NoirUltraHonkProver;
 use mpc_core::MpcState;
+use co_builder::generic_builder::GenericBuilder;
 
 pub(crate) struct TraceData<'a, T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) wires: [&'a mut Polynomial<T::ArithmeticShare>; NUM_WIRES],

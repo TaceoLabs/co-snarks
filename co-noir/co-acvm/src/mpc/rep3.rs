@@ -2210,4 +2210,14 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         debug_assert_eq!(num_outputs, 1);
         Ok(Rep3AcvmType::Shared(result[0]))
     }
+
+    fn is_zero(&mut self, a: &Self::AcvmType) -> eyre::Result<Self::AcvmType> {
+        match a {
+            Rep3AcvmType::Public(a) => Ok(Rep3AcvmType::Public(F::from((a.is_zero()) as u64))),
+            Rep3AcvmType::Shared(a) => {
+                let is_zero = arithmetic::eq_public(*a, F::zero(), self.net0, &mut self.state0)?;
+                Ok(Rep3AcvmType::Shared(is_zero))
+            }
+        }
+    }
 }

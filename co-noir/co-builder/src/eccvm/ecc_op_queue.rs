@@ -879,7 +879,7 @@ impl EccvmRowTracker {
 }
 
 #[derive(Serialize, Deserialize, Default, Debug)]
-pub struct ECCOpQueue<P: HonkCurve<TranscriptFieldType>> {
+pub struct ECCOpQueue<P: CurveGroup> {
     // point_at_infinity: P::Affine,
     #[serde(
         serialize_with = "mpc_core::serde_compat::ark_se",
@@ -893,7 +893,7 @@ pub struct ECCOpQueue<P: HonkCurve<TranscriptFieldType>> {
     pub eccvm_row_tracker: EccvmRowTracker,
 }
 
-impl<P: HonkCurve<TranscriptFieldType>> ECCOpQueue<P> {
+impl<P: CurveGroup> ECCOpQueue<P> {
     // Initialize a new subtable of ECCVM ops and Ultra ops corresponding to an individual circuit
     pub fn initialize_new_subtable(&mut self) {
         self.eccvm_ops_table.create_new_subtable(0);
@@ -1060,16 +1060,18 @@ impl<P: HonkCurve<TranscriptFieldType>> ECCOpQueue<P> {
         let mut ultra_op: UltraOp<P> = UltraOp::default();
         const CHUNK_SIZE: u64 = (2 * NUM_LIMB_BITS_IN_FIELD_SIMULATION) as u64;
 
+        // TODO CESAR: Uncomment
         // If the point is not in the correct format, return an error
-        let (x_256, y_256): (BigUint, BigUint) = point.xy().map_or((BigUint::zero(), BigUint::zero()), |(x, y)| (x.into(), y.into())); 
+        
+        // let (x_256, y_256): (BigUint, BigUint) = point.xy().map_or((BigUint::zero(), BigUint::zero()), |(x, y)| (x.into(), y.into())); 
 
-        ultra_op.x_lo = Utils::slice_u256(&x_256, 0, CHUNK_SIZE).into();
-        ultra_op.x_hi = Utils::slice_u256(&x_256, CHUNK_SIZE, 2 * CHUNK_SIZE).into();
-        ultra_op.y_lo = Utils::slice_u256(&y_256, 0, CHUNK_SIZE).into();
-        ultra_op.y_hi = Utils::slice_u256(&y_256, CHUNK_SIZE, 2 * CHUNK_SIZE).into();
+        // ultra_op.x_lo = Utils::slice_u256(&x_256, 0, CHUNK_SIZE).into();
+        // ultra_op.x_hi = Utils::slice_u256(&x_256, CHUNK_SIZE, 2 * CHUNK_SIZE).into();
+        // ultra_op.y_lo = Utils::slice_u256(&y_256, 0, CHUNK_SIZE).into();
+        // ultra_op.y_hi = Utils::slice_u256(&y_256, CHUNK_SIZE, 2 * CHUNK_SIZE).into();
 
         
-        let (mut z_1, mut z_2) = (BigUint::zero(), BigUint::zero());
+        // let (mut z_1, mut z_2) = (BigUint::zero(), BigUint::zero());
         todo!();
     }
 }

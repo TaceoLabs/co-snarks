@@ -892,4 +892,8 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
             "accumulate_from_sparse_bytes not implemented for plaindriver and normally should not be called"
         );
     }
+
+    fn is_zero(&mut self, a: &Self::AcvmType) -> eyre::Result<Self::AcvmType> {
+        Ok(F::from(a.is_zero()))
+    }
 }

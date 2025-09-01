@@ -1,21 +1,25 @@
 use crate::CONST_TRANSLATOR_LOG_N;
 use ark_ec::CurveGroup;
 use ark_ff::Zero;
-use co_builder::HonkProofResult;
 use co_builder::flavours::translator_flavour::TranslatorFlavour;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
-use co_builder::prelude::Utils;
-use co_builder::prelude::{HonkCurve, Polynomial, Polynomials, ProverCrs};
-use common::HonkProof;
+use co_builder::prelude::{Polynomials};
 use common::compute_opening_proof;
-use common::transcript::{Transcript, TranscriptFieldType};
+use common::crs::ProverCrs;
+use common::honk_curve::HonkCurve;
+use common::honk_proof::HonkProof;
+use common::honk_proof::HonkProofResult;
+use common::honk_proof::TranscriptFieldType;
+use common::polynomials::polynomial::Polynomial;
+use common::transcript::{Transcript};
+use common::types::ZeroKnowledge;
+use common::utils::Utils;
 use itertools::izip;
 use num_bigint::BigUint;
 use std::iter;
 use ultrahonk::Utils as UltraHonkUtils;
-use ultrahonk::prelude::ZeroKnowledge;
 use ultrahonk::prelude::{
     AllEntities, Decider, ProvingKey, SmallSubgroupIPAProver, SumcheckOutput, TranscriptHasher,
     ZKSumcheckData,

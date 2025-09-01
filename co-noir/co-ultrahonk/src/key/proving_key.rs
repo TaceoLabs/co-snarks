@@ -38,6 +38,7 @@ use common::{
     types::ZeroKnowledge,
     honk_curve::HonkCurve,
 };
+use co_builder::generic_builder::GenericBuilder;
 
 #[derive(Serialize, Deserialize)]
 #[serde(bound = "")]

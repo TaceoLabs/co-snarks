@@ -1,5 +1,6 @@
 pub mod eccvm;
 pub mod merge_prover;
+pub mod translator;
 pub mod prelude;
 
 // Translator constans:
