@@ -3570,7 +3570,7 @@ impl<F: PrimeField> ByteArray<F> {
         if input.is_constant() {
             for i in 0..num_bytes {
                 let byte_val = Utils::slice_u256(
-                    T::get_public(&value)
+                    &T::get_public(&value)
                         .expect("Already checked it is public")
                         .into(),
                     (num_bytes - i - 1) as u64 * 8,
@@ -3623,8 +3623,8 @@ impl<F: PrimeField> ByteArray<F> {
             // constrain validator to be < r
             if num_bytes == 32 {
                 let modulus_minus_one: BigUint = (-F::one()).into(); //fr::modulus - 1;
-                let s_lo: F = Utils::slice_u256(modulus_minus_one.clone(), 0, 128).into();
-                let s_hi: F = Utils::slice_u256(modulus_minus_one, 128, 256).into();
+                let s_lo: F = Utils::slice_u256(&modulus_minus_one.clone(), 0, 128).into();
+                let s_hi: F = Utils::slice_u256(&modulus_minus_one, 128, 256).into();
                 let shift = F::from(BigUint::one() << 128);
                 validator.neg_inplace();
                 let y_lo = validator.add(&FieldCT::from(s_lo + shift), builder, driver);

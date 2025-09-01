@@ -2,9 +2,8 @@ use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_builder::prelude::Polynomial;
 
-use crate::mpc_prover_flavour::MPCProverFlavour;
 use common::mpc::NoirUltraHonkProver;
-pub(crate) struct ProverMemory<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCProverFlavour> {
+pub struct ProverMemory<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) w_4: Polynomial<T::ArithmeticShare>, // column 3
     pub(crate) z_perm: Polynomial<T::ArithmeticShare>, // column 4
     pub(crate) lookup_inverses: Polynomial<T::ArithmeticShare>, // column 5
@@ -12,19 +11,19 @@ pub(crate) struct ProverMemory<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCP
     pub(crate) secondary_calldata_inverses: Polynomial<T::ArithmeticShare>,
     pub(crate) return_data_inverses: Polynomial<T::ArithmeticShare>,
     pub(crate) public_input_delta: P::ScalarField,
-    pub(crate) challenges: Challenges<P::ScalarField, L>,
+    pub(crate) challenges: Challenges<P::ScalarField>,
 }
 
-pub(crate) struct Challenges<F: PrimeField, L: MPCProverFlavour> {
+pub(crate) struct Challenges<F: PrimeField> {
     pub(crate) eta_1: F,
     pub(crate) eta_2: F,
     pub(crate) eta_3: F,
     pub(crate) beta: F,
     pub(crate) gamma: F,
-    pub(crate) alphas: L::Alphas<F>,
+    pub(crate) alphas: Vec<F>,
 }
 
-impl<F: PrimeField, L: MPCProverFlavour> Default for Challenges<F, L> {
+impl<F: PrimeField> Default for Challenges<F> {
     fn default() -> Self {
         Self {
             eta_1: Default::default(),
@@ -32,14 +31,12 @@ impl<F: PrimeField, L: MPCProverFlavour> Default for Challenges<F, L> {
             eta_3: Default::default(),
             beta: Default::default(),
             gamma: Default::default(),
-            alphas: L::Alphas::default(),
+            alphas: Default::default(),
         }
     }
 }
 
-impl<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCProverFlavour> Default
-    for ProverMemory<T, P, L>
-{
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for ProverMemory<T, P> {
     fn default() -> Self {
         Self {
             w_4: Default::default(),

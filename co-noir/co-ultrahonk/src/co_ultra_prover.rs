@@ -76,8 +76,7 @@ impl<
 
         let mut memory =
             ProverMemory::from_memory_and_polynomials(oink_result, proving_key.polynomials);
-        memory.relation_parameters.gate_challenges =
-            Self::generate_gate_challenges(&mut transcript);
+        memory.gate_challenges = Self::generate_gate_challenges(&mut transcript);
 
         let decider = CoDecider::new(net, state, memory, has_zk);
         decider.prove(circuit_size, crs, transcript)

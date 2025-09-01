@@ -197,8 +197,9 @@ impl<F: PrimeField> Polynomial<F> {
                 temp *= root_inverse;
                 *coeff = temp;
             }
+            // remove the last (zero) coefficient after synthetic division
+            self.coefficients.pop();
         }
-        self.coefficients.pop();
     }
     /**
      * @brief Add random values to the coefficients of a polynomial. In practice, this is used for ensuring the

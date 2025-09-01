@@ -94,8 +94,13 @@ impl<
         zk_sumcheck_data: Option<ZKSumcheckData<P>>,
     ) -> HonkProofResult<()> {
         if self.has_zk == ZeroKnowledge::No {
-            let prover_opening_claim =
-                self.shplemini_prove(transcript, circuit_size, crs, sumcheck_output, None)?;
+            let prover_opening_claim = self.shplemini_prove(
+                transcript,
+                circuit_size,
+                crs,
+                sumcheck_output,
+                None, // We don't have Libra polynomials in non-ZK mode
+            )?;
             common::compute_opening_proof(prover_opening_claim, transcript, crs)
         } else {
             let mut small_subgroup_ipa_prover = SmallSubgroupIPAProver::<_>::new::<H>(
