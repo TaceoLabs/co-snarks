@@ -1,8 +1,10 @@
 use super::NoirUltraHonkProver;
+use ark_ec::AffineRepr;
 use ark_ec::CurveGroup;
-use ark_ff::Field;
 use ark_ff::PrimeField;
+use ark_ff::{Field, One};
 use itertools::izip;
+use mpc_core::protocols::rep3::conversion;
 use mpc_core::{
     MpcState,
     protocols::rep3::{
@@ -303,7 +305,7 @@ impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for Rep3UltraH
         shared: &mut Self::BaseFieldArithmeticShare,
         public: <P as CurveGroup>::BaseField,
     ) {
-        todo!()
+        arithmetic::mul_assign_public(shared, public);
     }
 
     fn add_assign_public_basefield(
@@ -311,14 +313,14 @@ impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for Rep3UltraH
         b: <P as CurveGroup>::BaseField,
         id: <Self::State as MpcState>::PartyID,
     ) {
-        todo!()
+        arithmetic::add_assign_public(a, b, id);
     }
 
     fn add_basefield(
         a: Self::BaseFieldArithmeticShare,
         b: Self::BaseFieldArithmeticShare,
     ) -> Self::BaseFieldArithmeticShare {
-        todo!()
+        arithmetic::add(a, b)
     }
 
     fn mul_many_basefield<N: Network>(
@@ -327,12 +329,102 @@ impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for Rep3UltraH
         net: &N,
         state: &mut Self::State,
     ) -> eyre::Result<Vec<Self::BaseFieldArithmeticShare>> {
-        todo!()
+        arithmetic::mul_vec(a, b, net, state)
     }
 
     fn sub_basefield(
         a: Self::BaseFieldArithmeticShare,
         b: Self::BaseFieldArithmeticShare,
+    ) -> Self::BaseFieldArithmeticShare {
+        arithmetic::sub(a, b)
+    }
+
+    fn scalar_mul<N: Network>(
+        a: &Self::PointShare,
+        b: Self::ArithmeticShare,
+        net: &N,
+        state: &mut Self::State,
+    ) -> Self::PointShare {
+        todo!()
+    }
+
+    fn promote_to_trivial_share_basefield(
+        id: <Self::State as MpcState>::PartyID,
+        public_value: <P as CurveGroup>::BaseField,
+    ) -> Self::BaseFieldArithmeticShare {
+        todo!()
+    }
+
+    fn scalar_mul_many<N: Network>(
+        a: &[Self::PointShare],
+        b: &[Self::ArithmeticShare],
+        net: &N,
+        state: &mut Self::State,
+    ) -> Vec<Self::PointShare> {
+        todo!()
+    }
+
+    fn convert_fields(
+        a: &[Self::BaseFieldArithmeticShare],
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
+        todo!()
+    }
+
+    fn point_sub(a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare {
+        todo!()
+    }
+
+    fn mul_with_public_basefield(
+        public: <P as CurveGroup>::BaseField,
+        shared: Self::BaseFieldArithmeticShare,
+    ) -> Self::BaseFieldArithmeticShare {
+        todo!()
+    }
+
+    fn pointshare_to_field_shares<N: Network>(
+        point: Self::PointShare,
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<(
+        Self::BaseFieldArithmeticShare,
+        Self::BaseFieldArithmeticShare,
+        Self::BaseFieldArithmeticShare,
+    )> {
+        let (x, y, i) = conversion::point_share_to_fieldshares(point, net, state)?;
+        // Set x,y to 0 of infinity is one.
+        // TODO is this even necesary?
+        let mul = arithmetic::sub_public_by_shared(P::BaseField::one(), i, state.id());
+        let res = arithmetic::mul_vec(&[x, y], &[mul, mul], net, state)?;
+
+        Ok((res[0], res[1], i))
+    }
+
+    fn pointshare_to_field_shares_many<N: Network>(
+        point: &[Self::PointShare],
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<(
+        Vec<Self::BaseFieldArithmeticShare>,
+        Vec<Self::BaseFieldArithmeticShare>,
+        Vec<Self::BaseFieldArithmeticShare>,
+    )> {
+        todo!()
+    }
+
+    fn cmux<N: Network>(
+        cond: Self::ArithmeticShare,
+        truthy: Self::ArithmeticShare,
+        falsy: Self::ArithmeticShare,
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<Self::ArithmeticShare> {
+        todo!()
+    }
+
+    fn add_with_public_basefield(
+        public: <P as CurveGroup>::BaseField,
+        shared: Self::BaseFieldArithmeticShare,
+        id: <Self::State as MpcState>::PartyID,
     ) -> Self::BaseFieldArithmeticShare {
         todo!()
     }

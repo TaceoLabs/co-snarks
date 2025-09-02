@@ -614,7 +614,7 @@ fn compute_rows<C: HonkCurve<TranscriptFieldType>>(
             VMState::<C>::process_add(entry, &mut updated_state, &state);
         }
 
-        //     // populate the first group of TranscriptRow entries
+        // populate the first group of TranscriptRow entries
         VMState::<C>::populate_transcript_row(
             &mut row,
             entry,
