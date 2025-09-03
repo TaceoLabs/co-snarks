@@ -3,15 +3,9 @@ use super::{
     field_ct::{ByteArray, FieldCT},
     plookup::{ColumnIdx, MultiTableId, Plookup},
 };
-use common::{
-    honk_curve::HonkCurve,
-    honk_proof::{
-         TranscriptFieldType,
-    },
-    utils::Utils,
-};
+use common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType, utils::Utils};
 
-use crate::{ultra_builder::GenericUltraCircuitBuilder};
+use crate::ultra_builder::GenericUltraCircuitBuilder;
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;

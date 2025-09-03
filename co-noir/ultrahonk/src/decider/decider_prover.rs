@@ -4,15 +4,15 @@ use super::{
 };
 
 use crate::{
-    decider::small_subgroup_ipa::SmallSubgroupIPAProver, plain_prover_flavour::PlainProverFlavour, Utils, CONST_PROOF_SIZE_LOG_N
+    CONST_PROOF_SIZE_LOG_N, Utils, decider::small_subgroup_ipa::SmallSubgroupIPAProver,
+    plain_prover_flavour::PlainProverFlavour,
 };
 use common::{
-    honk_proof::{TranscriptFieldType, HonkProofError, HonkProof, HonkProofResult},
     crs::ProverCrs,
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProof, HonkProofError, HonkProofResult, TranscriptFieldType},
     polynomials::polynomial::Polynomial,
     types::ZeroKnowledge,
-    honk_curve::HonkCurve,
-
 };
 
 use common::transcript::{Transcript, TranscriptHasher};

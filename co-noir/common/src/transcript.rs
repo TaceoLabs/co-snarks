@@ -1,5 +1,7 @@
 use crate::{
-    honk_curve::HonkCurve, honk_proof::{HonkProof, TranscriptFieldType, HonkProofError, HonkProofResult}, sponge_hasher::{FieldHash, FieldSponge}
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProof, HonkProofError, HonkProofResult, TranscriptFieldType},
+    sponge_hasher::{FieldHash, FieldSponge},
 };
 use ark_ec::AffineRepr;
 use ark_ff::{One, PrimeField, Zero};

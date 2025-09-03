@@ -29,9 +29,7 @@ impl<C: CurveGroup> ShamirPointShare<C> {
 // TODO CESAR: Check if this is correct
 impl<C: CurveGroup> Default for ShamirPointShare<C> {
     fn default() -> Self {
-        Self {
-            a: C::default(),
-        }
+        Self { a: C::default() }
     }
 }
 

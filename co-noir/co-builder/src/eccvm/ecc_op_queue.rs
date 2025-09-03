@@ -3,23 +3,23 @@ use crate::eccvm::{
     ADDITIONS_PER_ROW, NUM_ROWS_PER_OP, NUM_WNAF_DIGIT_BITS, NUM_WNAF_DIGITS_PER_SCALAR,
     POINT_TABLE_SIZE, TABLE_WIDTH, WNAF_DIGITS_PER_ROW, WNAF_MASK,
 };
+use crate::prelude::offset_generator;
 use ark_ec::AffineRepr;
 use ark_ec::CurveGroup;
-use ark_ff::{BigInt, One};
 use ark_ff::PrimeField;
 use ark_ff::Zero;
+use ark_ff::{BigInt, One};
 use common::{
-    utils::Utils, 
     crs::ProverCrs,
-    honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
     honk_curve::HonkCurve,
+    honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
     polynomials::polynomial::Polynomial,
+    utils::Utils,
 };
-use crate::prelude::offset_generator;
 use num_bigint::BigUint;
 use serde::Deserialize;
-use std::array;
 use serde::Serialize;
+use std::array;
 
 #[derive(Clone, Default)]
 #[expect(dead_code)]
@@ -997,7 +997,10 @@ impl<P: CurveGroup> ECCOpQueue<P> {
     pub fn mul_accumulate(&mut self, to_mul: P::Affine, scalar: P::ScalarField) -> UltraOp<P> {
         // Update the accumulator natively
         self.accumulator = (self.accumulator + (to_mul * scalar)).into();
-        let op_code = EccOpCode { mul: true, ..Default::default() };
+        let op_code = EccOpCode {
+            mul: true,
+            ..Default::default()
+        };
 
         // Construct and store the operation in the ultra op format
         let ultra_op = self.construct_and_populate_ultra_ops(op_code.clone(), to_mul, scalar);
@@ -1021,8 +1024,12 @@ impl<P: CurveGroup> ECCOpQueue<P> {
      * https://github.com/AztecProtocol/barretenberg/issues/1360) to the ultra ops table without affecting the
      * operations in the ECCVM.
      */
-    pub fn no_op_ultra_only(&mut self) -> UltraOp<P>{
-        return self.construct_and_populate_ultra_ops(EccOpCode::default(), self.accumulator, P::ScalarField::zero());
+    pub fn no_op_ultra_only(&mut self) -> UltraOp<P> {
+        return self.construct_and_populate_ultra_ops(
+            EccOpCode::default(),
+            self.accumulator,
+            P::ScalarField::zero(),
+        );
     }
 
     /**
@@ -1034,7 +1041,11 @@ impl<P: CurveGroup> ECCOpQueue<P> {
         let expected = self.accumulator;
         // TODO CESAR: Is this correct
         self.accumulator = P::Affine::zero();
-        let op_code = EccOpCode { eq: true, reset: true, ..Default::default() };
+        let op_code = EccOpCode {
+            eq: true,
+            reset: true,
+            ..Default::default()
+        };
 
         // Store the eccvm operation
         self.eccvm_ops_table.push(VMOperation {
@@ -1055,22 +1066,25 @@ impl<P: CurveGroup> ECCOpQueue<P> {
      * @param scalar
      * @return UltraOp
      */
-    pub fn construct_and_populate_ultra_ops(&mut self, op_code: EccOpCode, point: P::Affine, scalar: P::ScalarField) -> UltraOp<P>{
-
+    pub fn construct_and_populate_ultra_ops(
+        &mut self,
+        op_code: EccOpCode,
+        point: P::Affine,
+        scalar: P::ScalarField,
+    ) -> UltraOp<P> {
         let mut ultra_op: UltraOp<P> = UltraOp::default();
         const CHUNK_SIZE: u64 = (2 * NUM_LIMB_BITS_IN_FIELD_SIMULATION) as u64;
 
         // TODO CESAR: Uncomment
         // If the point is not in the correct format, return an error
-        
-        // let (x_256, y_256): (BigUint, BigUint) = point.xy().map_or((BigUint::zero(), BigUint::zero()), |(x, y)| (x.into(), y.into())); 
+
+        // let (x_256, y_256): (BigUint, BigUint) = point.xy().map_or((BigUint::zero(), BigUint::zero()), |(x, y)| (x.into(), y.into()));
 
         // ultra_op.x_lo = Utils::slice_u256(&x_256, 0, CHUNK_SIZE).into();
         // ultra_op.x_hi = Utils::slice_u256(&x_256, CHUNK_SIZE, 2 * CHUNK_SIZE).into();
         // ultra_op.y_lo = Utils::slice_u256(&y_256, 0, CHUNK_SIZE).into();
         // ultra_op.y_hi = Utils::slice_u256(&y_256, CHUNK_SIZE, 2 * CHUNK_SIZE).into();
 
-        
         // let (mut z_1, mut z_2) = (BigUint::zero(), BigUint::zero());
         todo!();
     }

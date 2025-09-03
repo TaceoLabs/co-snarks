@@ -2,24 +2,24 @@ use super::big_field::BigGroup;
 use super::field_ct::{CycleGroupCT, FieldCT};
 use crate::flavours::mega_flavour::MegaFlavour;
 use crate::flavours::ultra_flavour::UltraFlavour;
+use crate::generic_builder::GenericBuilder;
 use crate::keys::proving_key::ProvingKey;
 use crate::polynomials::polynomial_flavours::{
     PrecomputedEntitiesFlavour, ProverWitnessEntitiesFlavour,
 };
-use common::polynomials::polynomial::Polynomial;
 use crate::prelude::GenericUltraCircuitBuilder;
 use crate::prover_flavour::ProverFlavour;
 use crate::ultra_builder::UltraCircuitBuilder;
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use common::polynomials::polynomial::Polynomial;
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 use std::array;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
-use crate::generic_builder::GenericBuilder;
 
 #[derive(Default, PartialEq, Eq)]
 pub(crate) struct PolyTriple<F: PrimeField> {
@@ -227,7 +227,6 @@ pub struct MegaTraceBlocks<T: Default> {
     pub(crate) poseidon2_internal: T,
     pub(crate) overflow: T,
 }
-
 
 impl<T: Default> MegaTraceBlocks<T> {
     pub fn get(&self) -> [&T; 11] {
@@ -445,7 +444,6 @@ impl<F: PrimeField> UltraTraceBlock<F> {
         self.wires[Self::W_L].len()
     }
 }
-
 
 impl<F: PrimeField> MegaTraceBlock<F> {
     const W_L: usize = MegaFlavour::W_L;

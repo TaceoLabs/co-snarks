@@ -1,11 +1,9 @@
 use ark_ec::AffineRepr;
 use ark_ff::One;
 use ark_ff::{Field, Zero};
-use common::honk_proof::{
-    HonkProofResult, TranscriptFieldType,
-};
-use common::honk_curve::HonkCurve;
 use common::crs::ProverCrs;
+use common::honk_curve::HonkCurve;
+use common::honk_proof::{HonkProofResult, TranscriptFieldType};
 use common::shplemini::ShpleminiOpeningClaim;
 use common::transcript::{Transcript, TranscriptHasher};
 use common::utils::Utils as UltraHonkUtils;

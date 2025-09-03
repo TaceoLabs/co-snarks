@@ -1,15 +1,9 @@
 use super::field_ct::FieldCT;
 use super::generators;
-use common::{
-    honk_curve::HonkCurve,
-    honk_proof::{
-         TranscriptFieldType,
-    },
-    utils::Utils,
-};
+use common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType, utils::Utils};
 
 use crate::types::aes128::{AES128_BASE, AES128_SBOX};
-use crate::{ultra_builder::GenericUltraCircuitBuilder};
+use crate::ultra_builder::GenericUltraCircuitBuilder;
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{PrimeField, Zero};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;

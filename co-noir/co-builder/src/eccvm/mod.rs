@@ -1,5 +1,5 @@
-pub mod ecc_op_queue;
 pub mod co_ecc_op_queue;
+pub mod ecc_op_queue;
 
 pub const NUM_SMALL_IPA_EVALUATIONS: usize = 4;
 pub const CONST_ECCVM_LOG_N: usize = 16;

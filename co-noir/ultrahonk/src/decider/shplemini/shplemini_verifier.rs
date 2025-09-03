@@ -14,12 +14,11 @@ use ark_ff::{Field, One, Zero};
 use co_builder::polynomials::polynomial_flavours::PolyGFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use common::{
-    honk_proof::{TranscriptFieldType, HonkProofError, HonkProofResult},
     crs::ProverCrs,
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
     polynomials::polynomial::Polynomial,
     types::ZeroKnowledge,
-    honk_curve::HonkCurve,
-
 };
 
 use common::shplemini::ShpleminiVerifierOpeningClaim;
@@ -109,7 +108,7 @@ impl<
             denominators.push(*shplonk_eval_challenge + *gemini_eval_challenge_power);
         }
 
-       common::utils::Utils::batch_invert(&mut denominators);
+        common::utils::Utils::batch_invert(&mut denominators);
 
         denominators
     }

@@ -11,17 +11,25 @@ use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_builder::flavours::ultra_flavour::UltraFlavour;
+use co_builder::generic_builder::GenericBuilder;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
+use co_builder::prelude::ActiveRegionData;
 use co_builder::prelude::Polynomials as PlainPolynomials;
 use co_builder::prelude::ProvingKey as PlainProvingKey;
 use co_builder::prelude::VerifyingKey;
-use co_builder::prelude::{ActiveRegionData};
 use co_builder::prelude::{GenericUltraCircuitBuilder, PublicComponentKey};
 use co_builder::prover_flavour::ProverFlavour;
 use common::mpc::{
     NoirUltraHonkProver, plain::PlainUltraHonkDriver, rep3::Rep3UltraHonkDriver,
     shamir::ShamirUltraHonkDriver,
+};
+use common::{
+    crs::ProverCrs,
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
+    polynomials::polynomial::Polynomial,
+    types::ZeroKnowledge,
 };
 use eyre::Result;
 use mpc_core::MpcState;
@@ -30,15 +38,7 @@ use serde::Serialize;
 use std::collections::BTreeMap;
 use std::marker::PhantomData;
 use ultrahonk::Utils;
-use ultrahonk::prelude::{VerifyingKeyBarretenberg};
-use common::{
-    honk_proof::{TranscriptFieldType, HonkProofError, HonkProofResult},
-    crs::ProverCrs,
-    polynomials::polynomial::Polynomial,
-    types::ZeroKnowledge,
-    honk_curve::HonkCurve,
-};
-use co_builder::generic_builder::GenericBuilder;
+use ultrahonk::prelude::VerifyingKeyBarretenberg;
 
 #[derive(Serialize, Deserialize)]
 #[serde(bound = "")]

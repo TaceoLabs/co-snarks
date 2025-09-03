@@ -1,6 +1,6 @@
+use crate::{polynomials::polynomial::Polynomial, utils::Utils};
 use ark_ec::CurveGroup;
 use ark_ff::{Field, Zero};
-use crate::{polynomials::polynomial::Polynomial, utils::Utils};
 use mpc_core::MpcState;
 use mpc_net::Network;
 use std::{

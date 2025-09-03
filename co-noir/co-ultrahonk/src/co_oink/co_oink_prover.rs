@@ -27,25 +27,22 @@ use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
 
 use co_builder::prelude::ActiveRegionData;
-use co_builder::{
-
-    prover_flavour::Flavour,
-};
-use common::polynomials::polynomial::NUM_MASKED_ROWS;
+use co_builder::prover_flavour::Flavour;
 use common::CoUtils;
 use common::mpc::NoirUltraHonkProver;
+use common::polynomials::polynomial::NUM_MASKED_ROWS;
 use common::transcript::{Transcript, TranscriptHasher};
+use common::{
+    crs::ProverCrs,
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
+    polynomials::polynomial::Polynomial,
+    types::ZeroKnowledge,
+};
 use itertools::izip;
 use mpc_core::MpcState as _;
 use mpc_net::Network;
 use std::marker::PhantomData;
-use common::{
-    honk_proof::{TranscriptFieldType, HonkProofError, HonkProofResult},
-    crs::ProverCrs,
-    polynomials::polynomial::Polynomial,
-    types::ZeroKnowledge,
-    honk_curve::HonkCurve,
-};
 pub struct CoOink<
     'a,
     T: NoirUltraHonkProver<P>,

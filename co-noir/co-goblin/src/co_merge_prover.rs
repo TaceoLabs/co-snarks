@@ -1,11 +1,11 @@
 use std::collections::VecDeque;
 
 use ark_ff::Field;
+use common::CoUtils;
+use common::co_shplemini::{OpeningPair, ShpleminiOpeningClaim};
 use common::crs::ProverCrs;
 use common::honk_curve::HonkCurve;
 use common::honk_proof::{HonkProof, HonkProofResult, TranscriptFieldType};
-use common::CoUtils;
-use common::co_shplemini::{OpeningPair, ShpleminiOpeningClaim};
 use common::mpc::NoirUltraHonkProver;
 use common::polynomials::shared_polynomial::SharedPolynomial;
 use common::transcript::Transcript;
@@ -198,7 +198,7 @@ mod tests {
     use std::thread;
 
     use co_builder::eccvm::co_ecc_op_queue::{
-         CoEccvmOpsTable, CoEccvmRowTracker, CoUltraEccOpsTable, CoUltraOp
+        CoEccvmOpsTable, CoEccvmRowTracker, CoUltraEccOpsTable, CoUltraOp,
     };
     use mpc_core::protocols::rep3::share_curve_point;
 
@@ -208,8 +208,8 @@ mod tests {
     use ark_ec::pairing::Pairing;
     use co_builder::eccvm::ecc_op_queue::{EccOpCode, EccOpsTable, UltraOp};
     use common::crs::parse::CrsParser;
-    use common::{mpc::rep3::Rep3UltraHonkDriver, types::ZeroKnowledge};
     use common::transcript::Poseidon2Sponge;
+    use common::{mpc::rep3::Rep3UltraHonkDriver, types::ZeroKnowledge};
     use mpc_core::{
         gadgets::field_from_hex_string,
         protocols::rep3::{Rep3State, conversion::A2BType, share_field_element},

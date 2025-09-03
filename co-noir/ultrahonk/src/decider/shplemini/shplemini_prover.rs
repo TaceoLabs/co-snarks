@@ -12,15 +12,14 @@ use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use common::shplemini::OpeningPair;
 use common::shplemini::ShpleminiOpeningClaim;
 use common::transcript::{Transcript, TranscriptHasher};
-use itertools::izip;
 use common::{
-    honk_proof::{TranscriptFieldType, HonkProofError, HonkProofResult},
     crs::ProverCrs,
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
     polynomials::polynomial::Polynomial,
     types::ZeroKnowledge,
-    honk_curve::HonkCurve,
-
 };
+use itertools::izip;
 
 impl<
     P: HonkCurve<TranscriptFieldType>,

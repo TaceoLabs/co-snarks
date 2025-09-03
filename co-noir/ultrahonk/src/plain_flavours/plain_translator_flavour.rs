@@ -42,7 +42,6 @@ use co_builder::prover_flavour::ProverFlavour;
 use common::honk_curve::HonkCurve;
 use common::honk_proof::{HonkProofResult, TranscriptFieldType};
 
-
 #[derive(Default)]
 pub struct AllRelationAccTranslator<F: PrimeField> {
     pub(crate) r_translator_perm: TranslatorPermutationRelationAcc<F>,
@@ -286,11 +285,7 @@ impl PlainProverFlavour for TranslatorFlavour {
         todo!("Implement Sumcheck Verifier for TranslatorFlavour");
     }
 
-    fn get_alpha_challenges<
-        F: PrimeField,
-        H: TranscriptHasher<F>,
-        P: HonkCurve<F>,
-    >(
+    fn get_alpha_challenges<F: PrimeField, H: TranscriptHasher<F>, P: HonkCurve<F>>(
         _transcript: &mut Transcript<F, H>,
         _alphas: &mut Vec<P::ScalarField>,
     ) {

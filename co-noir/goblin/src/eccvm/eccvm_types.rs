@@ -1,3 +1,8 @@
+use ark_ec::AffineRepr;
+use ark_ec::CurveGroup;
+use ark_ff::One;
+use ark_ff::PrimeField;
+use ark_ff::Zero;
 use co_builder::eccvm::ecc_op_queue::ECCOpQueue;
 use co_builder::eccvm::ecc_op_queue::MSMRow;
 use co_builder::eccvm::ecc_op_queue::ScalarMul;
@@ -6,29 +11,24 @@ use co_builder::eccvm::{
     ECCVM_FIXED_SIZE, NUM_WNAF_DIGIT_BITS, NUM_WNAF_DIGITS_PER_SCALAR, POINT_TABLE_SIZE,
     WNAF_DIGITS_PER_ROW,
 };
-use ark_ec::AffineRepr;
-use ark_ec::CurveGroup;
-use ark_ff::One;
-use ark_ff::PrimeField;
-use ark_ff::Zero;
+use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use common::polynomials::polynomial::NUM_TRANSLATION_EVALUATIONS;
 use common::{
-    utils::Utils, 
     crs::ProverCrs,
-    honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
     honk_curve::HonkCurve,
+    honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
+    polynomials::polynomial::{NUM_DISABLED_ROWS_IN_SUMCHECK, Polynomial},
     serialize::{Serialize, SerializeP},
-    polynomials::polynomial::{Polynomial, NUM_DISABLED_ROWS_IN_SUMCHECK},
     types::ZeroKnowledge,
+    utils::Utils,
 };
-use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 
 use co_builder::prelude::offset_generator_scaled;
 use co_builder::{flavours::eccvm_flavour::ECCVMFlavour, prelude::Polynomials};
 use common::transcript::Transcript;
 use common::transcript::TranscriptHasher;
-use num_bigint::BigUint;
 use common::utils::Utils as UltraHonkUtils;
+use num_bigint::BigUint;
 use ultrahonk::plain_prover_flavour::UnivariateTrait;
 use ultrahonk::prelude::SmallSubgroupIPAProver;
 use ultrahonk::prelude::Univariate;

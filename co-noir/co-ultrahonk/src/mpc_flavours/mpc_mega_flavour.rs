@@ -50,9 +50,9 @@ use ark_ec::CurveGroup;
 use ark_ff::AdditiveGroup;
 use ark_ff::PrimeField;
 use co_builder::flavours::mega_flavour::MegaFlavour;
+use co_builder::prover_flavour::ProverFlavour;
 use common::honk_curve::HonkCurve;
 use common::honk_proof::{HonkProof, HonkProofResult, TranscriptFieldType};
-use co_builder::prover_flavour::ProverFlavour;
 use common::mpc::NoirUltraHonkProver;
 use common::transcript::{Transcript, TranscriptHasher};
 use mpc_net::Network;
@@ -827,11 +827,7 @@ impl MPCProverFlavour for MegaFlavour {
         Ok(())
     }
 
-    fn get_alpha_challenges<
-        F: PrimeField,
-        H:TranscriptHasher<F>,
-        P: HonkCurve<F>,
-    >(
+    fn get_alpha_challenges<F: PrimeField, H: TranscriptHasher<F>, P: HonkCurve<F>>(
         transcript: &mut Transcript<F, H>,
         alphas: &mut Vec<P::ScalarField>,
     ) {

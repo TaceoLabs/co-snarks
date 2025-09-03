@@ -36,10 +36,10 @@ use ark_ff::AdditiveGroup;
 use ark_ff::PrimeField;
 use co_builder::flavours::mega_flavour::MegaFlavour;
 use co_builder::prover_flavour::ProverFlavour;
-use common::transcript::{Transcript, TranscriptHasher};
-use common::honk_proof::TranscriptFieldType;
 use common::honk_curve::HonkCurve;
-use common::honk_proof::{HonkProofError, HonkProofResult};  
+use common::honk_proof::TranscriptFieldType;
+use common::honk_proof::{HonkProofError, HonkProofResult};
+use common::transcript::{Transcript, TranscriptHasher};
 use std::array;
 
 #[derive(Default)]

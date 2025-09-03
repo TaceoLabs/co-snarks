@@ -6,12 +6,11 @@ use ark_ec::AffineRepr;
 use ark_ec::pairing::Pairing;
 use ark_ff::{One, Zero};
 use common::{
-    honk_proof::{TranscriptFieldType, HonkProofError, HonkProofResult},
     crs::ProverCrs,
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
     polynomials::polynomial::Polynomial,
     types::ZeroKnowledge,
-    honk_curve::HonkCurve,
-
 };
 
 use common::shplemini::ShpleminiVerifierOpeningClaim;

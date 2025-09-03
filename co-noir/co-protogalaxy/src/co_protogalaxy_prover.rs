@@ -2,26 +2,22 @@ use std::vec;
 
 use ark_ff::fields::Field;
 
-use co_builder::{
-    flavours::mega_flavour::MegaFlavour,
-};
+use co_builder::flavours::mega_flavour::MegaFlavour;
 
 use co_ultrahonk::prelude::ProvingKey;
+use common::crs::ProverCrs;
 use common::honk_curve::HonkCurve;
+use common::honk_proof::HonkProof;
 use common::honk_proof::{HonkProofResult, TranscriptFieldType};
 use common::polynomials::polynomial::Polynomial;
 use common::polynomials::shared_polynomial::SharedPolynomial;
-use common::crs::ProverCrs;
 use common::types::ZeroKnowledge;
-use common::honk_proof::HonkProof;
 use itertools::{Itertools, izip};
 
 use co_ultrahonk::co_decider::types::RelationParameters;
 use co_ultrahonk::co_oink::co_oink_prover::CoOink;
 use common::transcript::Transcript;
-use common::{mpc::NoirUltraHonkProver, 
-    transcript::TranscriptHasher,
-};
+use common::{mpc::NoirUltraHonkProver, transcript::TranscriptHasher};
 use mpc_net::Network;
 use ultrahonk::{
     plain_prover_flavour::UnivariateTrait,

@@ -1,7 +1,5 @@
 use crate::{MICRO_LIMB_BITS, NUM_LAST_LIMB_BITS, NUM_QUOTIENT_BITS, NUM_Z_BITS};
-use crate::{
-    NUM_BINARY_LIMBS, NUM_MICRO_LIMBS, NUM_RELATION_WIDE_LIMBS, NUM_Z_LIMBS,
-};
+use crate::{NUM_BINARY_LIMBS, NUM_MICRO_LIMBS, NUM_RELATION_WIDE_LIMBS, NUM_Z_LIMBS};
 use ark_ec::CurveGroup;
 use ark_ff::Field;
 use ark_ff::One;

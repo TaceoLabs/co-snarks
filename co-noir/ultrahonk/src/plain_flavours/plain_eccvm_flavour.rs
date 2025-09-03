@@ -27,10 +27,10 @@ use crate::prelude::Univariate;
 use ark_ff::PrimeField;
 use co_builder::flavours::eccvm_flavour::ECCVMFlavour;
 use co_builder::prover_flavour::ProverFlavour;
-use common::transcript::{Transcript, TranscriptHasher};
-use common::honk_proof::TranscriptFieldType;
 use common::honk_curve::HonkCurve;
-use common::honk_proof::{HonkProofError, HonkProofResult};  
+use common::honk_proof::TranscriptFieldType;
+use common::honk_proof::{HonkProofError, HonkProofResult};
+use common::transcript::{Transcript, TranscriptHasher};
 #[derive(Default)]
 pub struct AllRelationAccECCVM<F: PrimeField> {
     pub(crate) r_ecc_transcript: EccTranscriptRelationAcc<F>,
@@ -249,7 +249,7 @@ impl PlainProverFlavour for ECCVMFlavour {
     fn receive_round_univariate_from_prover<
         F: ark_ff::PrimeField,
         H: TranscriptHasher<F>,
-        P:HonkCurve<F>,
+        P: HonkCurve<F>,
     >(
         _transcript: &mut Transcript<F, H>,
         _label: String,
@@ -268,11 +268,7 @@ impl PlainProverFlavour for ECCVMFlavour {
         todo!("Implement Sumcheck Verifier for ECCVMFlavour");
     }
 
-    fn get_alpha_challenges<
-        F: ark_ff::PrimeField,
-        H: TranscriptHasher<F>,
-        P: HonkCurve<F>,
-    >(
+    fn get_alpha_challenges<F: ark_ff::PrimeField, H: TranscriptHasher<F>, P: HonkCurve<F>>(
         _transcript: &mut Transcript<F, H>,
         _alphas: &mut Vec<P::ScalarField>,
     ) {

@@ -32,9 +32,9 @@ use crate::decider::relations::{
     },
 };
 use ark_ff::AdditiveGroup;
-use common::honk_proof::TranscriptFieldType;
 use common::honk_curve::HonkCurve;
-use common::honk_proof::{HonkProofResult};  
+use common::honk_proof::HonkProofResult;
+use common::honk_proof::TranscriptFieldType;
 
 #[derive(Default)]
 pub struct AllRelationAccUltra<F: PrimeField> {

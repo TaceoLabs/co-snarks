@@ -1,12 +1,17 @@
-use crate::eccvm::{ecc_op_queue::{EccOpCode, EccOpsTable, EccvmOpsTable, EccvmRowTracker, VMOperation}, NUM_LIMB_BITS_IN_FIELD_SIMULATION};
+use crate::eccvm::{
+    NUM_LIMB_BITS_IN_FIELD_SIMULATION,
+    ecc_op_queue::{EccOpCode, EccOpsTable, EccvmOpsTable, EccvmRowTracker, VMOperation},
+};
 use ark_ec::CurveGroup;
-use common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType, mpc::NoirUltraHonkProver, polynomials::shared_polynomial::SharedPolynomial};
-use mpc_core::MpcState;
-use num_bigint::BigUint;
 use ark_ff::AdditiveGroup;
-use std::array;
+use common::{
+    honk_curve::HonkCurve, honk_proof::TranscriptFieldType, mpc::NoirUltraHonkProver,
+    polynomials::shared_polynomial::SharedPolynomial,
+};
+use mpc_core::MpcState;
 use mpc_net::Network;
-
+use num_bigint::BigUint;
+use std::array;
 
 pub(crate) const TABLE_WIDTH: usize = 4; // dictated by the number of wires in the Ultra arithmetization
 pub(crate) const NUM_ROWS_PER_OP: usize = 2; // A single ECC op is split across two width-4 rows
@@ -120,7 +125,6 @@ pub struct CoVMOperation<T: NoirUltraHonkProver<C>, C: CurveGroup> {
     pub z2: T::BaseFieldArithmeticShare, //TODO FLORIN: I think this does not have to be a binary share (It is a uint256 in bb)
     pub mul_scalar_full: T::ArithmeticShare,
 }
-
 
 impl<T: NoirUltraHonkProver<C>, C: CurveGroup> Clone for CoVMOperation<T, C> {
     fn clone(&self) -> Self {
@@ -356,7 +360,10 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoECCOpQueue<T, C> {
     pub fn add_accumulate(&mut self, to_add: T::PointShare) -> CoUltraOp<T, C> {
         // Update the accumulator natively
         T::add_point_assign(&mut self.accumulator, to_add.clone());
-        let op_code = EccOpCode { add: true, ..Default::default() };
+        let op_code = EccOpCode {
+            add: true,
+            ..Default::default()
+        };
 
         // Store the eccvm operation
         self.eccvm_ops_table.push(CoVMOperation {
@@ -374,26 +381,37 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoECCOpQueue<T, C> {
      *
      * @param to_mul
      */
-    pub fn mul_accumulate<N: Network>(&mut self, to_mul: T::PointShare, scalar: T::ArithmeticShare, net: &N, state: &mut T::State) -> CoUltraOp<T, C> {
+    pub fn mul_accumulate<N: Network>(
+        &mut self,
+        to_mul: T::PointShare,
+        scalar: T::ArithmeticShare,
+        net: &N,
+        state: &mut T::State,
+    ) -> CoUltraOp<T, C> {
         // Update the accumulator natively
         T::add_point_assign(
-           &mut  self.accumulator,
+            &mut self.accumulator,
             // TODO CESAR: Handle this mul
-            T::mul_point_and_field(to_mul.clone(), scalar, net, state).expect("Error in mul_point_and_field")
+            T::mul_point_and_field(to_mul.clone(), scalar, net, state)
+                .expect("Error in mul_point_and_field"),
         );
-        let op_code = EccOpCode { mul: true, ..Default::default() };
+        let op_code = EccOpCode {
+            mul: true,
+            ..Default::default()
+        };
 
         // Construct and store the operation in the ultra op format
-        let ultra_op = self.construct_and_populate_ultra_ops(op_code.clone(), to_mul.clone(), scalar);
+        let ultra_op =
+            self.construct_and_populate_ultra_ops(op_code.clone(), to_mul.clone(), scalar);
 
         // Store the eccvm operation
-        self.eccvm_ops_table.push(CoVMOperation { 
+        self.eccvm_ops_table.push(CoVMOperation {
             op_code,
             base_point: to_mul,
             // TODO CESAR: Ask Floring about this, how do we convert a Arithmetic share into a BaseFieldShare
             z1: todo!("ultra_op.z_1.into()"),
             z2: todo!("ultra_op.z_2.into()"),
-            mul_scalar_full: scalar
+            mul_scalar_full: scalar,
         });
         ultra_op
     }
@@ -406,7 +424,11 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoECCOpQueue<T, C> {
      * operations in the ECCVM.
      */
     pub fn no_op_ultra_only(&mut self) -> CoUltraOp<T, C> {
-        return self.construct_and_populate_ultra_ops(EccOpCode::default(), self.accumulator.clone(), T::ArithmeticShare::default());
+        return self.construct_and_populate_ultra_ops(
+            EccOpCode::default(),
+            self.accumulator.clone(),
+            T::ArithmeticShare::default(),
+        );
     }
 
     /**
@@ -418,7 +440,11 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoECCOpQueue<T, C> {
         let expected = self.accumulator.clone();
         // TODO CESAR: Check if this is correct
         self.accumulator = T::PointShare::default();
-        let op_code = EccOpCode { eq: true, reset: true, ..Default::default() };
+        let op_code = EccOpCode {
+            eq: true,
+            reset: true,
+            ..Default::default()
+        };
 
         // Store the eccvm operation
         self.eccvm_ops_table.push(CoVMOperation {
@@ -439,7 +465,12 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoECCOpQueue<T, C> {
      * @param scalar
      * @return UltraOp
      */
-    pub fn construct_and_populate_ultra_ops(&mut self, op_code: EccOpCode, point: T::PointShare, scalar: T::ArithmeticShare) -> CoUltraOp<T, C> {
+    pub fn construct_and_populate_ultra_ops(
+        &mut self,
+        op_code: EccOpCode,
+        point: T::PointShare,
+        scalar: T::ArithmeticShare,
+    ) -> CoUltraOp<T, C> {
         // TODO CESAR
         todo!()
     }

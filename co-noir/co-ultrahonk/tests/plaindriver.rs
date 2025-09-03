@@ -4,8 +4,8 @@ use ark_bn254::Bn254;
 use ark_ff::PrimeField;
 use co_acvm::{PlainAcvmSolver, mpc::NoirWitnessExtensionProtocol};
 use co_builder::flavours::ultra_flavour::UltraFlavour;
+use co_builder::prelude::HonkRecursion;
 use co_builder::prelude::constraint_system_from_reader;
-use co_builder::prelude::{ HonkRecursion};
 use co_ultrahonk::prelude::{CoUltraHonk, PlainCoBuilder, ProvingKey};
 use common::crs::parse::CrsParser;
 use common::honk_proof::{HonkProof, TranscriptFieldType};
@@ -13,7 +13,7 @@ use common::mpc::plain::PlainUltraHonkDriver;
 use common::transcript::{Poseidon2Sponge, TranscriptHasher};
 use common::types::ZeroKnowledge;
 use sha3::Keccak256;
-use ultrahonk::prelude::{UltraHonk};
+use ultrahonk::prelude::UltraHonk;
 
 fn promote_public_witness_vector<F: PrimeField, T: NoirWitnessExtensionProtocol<F>>(
     witness: Vec<F>,

@@ -1,28 +1,28 @@
-use crate::{
-    mpc::NoirUltraHonkProver,
-    transcript::{Transcript, TranscriptHasher},
-    honk_proof::TranscriptFieldType,
-};
-use ark_ec::CurveGroup;
+use crate::crs::ProverCrs;
 use crate::honk_curve::HonkCurve;
 use crate::honk_proof::HonkProofResult;
-use crate::crs::ProverCrs;
 use crate::utils::Utils;
+use crate::{
+    honk_proof::TranscriptFieldType,
+    mpc::NoirUltraHonkProver,
+    transcript::{Transcript, TranscriptHasher},
+};
+use ark_ec::CurveGroup;
 use mpc_net::Network;
 
 pub mod co_shplemini;
+pub mod crs;
+pub mod honk_curve;
+pub mod honk_proof;
 pub mod keccak_hash;
 pub mod mpc;
+pub mod polynomials;
+pub mod serialize;
 pub mod shplemini;
 pub mod sponge_hasher;
 pub mod transcript;
-pub mod serialize;
-pub mod honk_curve;
-pub mod honk_proof;
-pub mod crs;
-pub mod utils;
-pub mod polynomials;
 pub mod types;
+pub mod utils;
 
 pub fn compute_opening_proof<
     P: HonkCurve<TranscriptFieldType>,

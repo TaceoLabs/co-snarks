@@ -1,20 +1,19 @@
 use crate::key::proving_key::ProvingKey;
 use ark_ec::CurveGroup;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use co_builder::generic_builder::GenericBuilder;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
 use co_builder::prelude::NUM_SELECTORS_ULTRA;
 use co_builder::{
     flavours::ultra_flavour::UltraFlavour,
     prelude::{
-        ActiveRegionData, CycleNode, CyclicPermutation, GenericUltraCircuitBuilder,
-        NUM_WIRES,
+        ActiveRegionData, CycleNode, CyclicPermutation, GenericUltraCircuitBuilder, NUM_WIRES,
     },
 };
-use common::polynomials::polynomial::Polynomial;
 use common::mpc::NoirUltraHonkProver;
+use common::polynomials::polynomial::Polynomial;
 use mpc_core::MpcState;
-use co_builder::generic_builder::GenericBuilder;
 
 pub(crate) struct TraceData<'a, T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) wires: [&'a mut Polynomial<T::ArithmeticShare>; NUM_WIRES],

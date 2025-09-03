@@ -1,6 +1,6 @@
+use crate::polynomials::polynomial::Polynomial;
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
-use crate::polynomials::polynomial::Polynomial;
 
 pub struct ShpleminiVerifierOpeningClaim<P: CurveGroup> {
     pub challenge: P::ScalarField,

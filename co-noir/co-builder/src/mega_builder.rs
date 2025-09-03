@@ -7,9 +7,20 @@ use mpc_core::gadgets::poseidon2::POSEIDON2_BN254_T4_PARAMS;
 use mpc_net::Network;
 use num_bigint::BigUint;
 
-use crate::{eccvm::{co_ecc_op_queue::{CoECCOpQueue, CoUltraOp}, ecc_op_queue::{ECCOpQueue, ECCOpTuple, EccOpCode, UltraOp}}, generic_builder::GenericBuilder, prelude::NUM_WIRES, types::types::{AddQuad, AddTriple, MegaTraceBlock, MegaTraceBlocks, MulQuad, PolyTriple, Poseidon2ExternalGate, Poseidon2InternalGate, RangeList}};
-use ark_ff::Zero;
+use crate::{
+    eccvm::{
+        co_ecc_op_queue::{CoECCOpQueue, CoUltraOp},
+        ecc_op_queue::{ECCOpQueue, ECCOpTuple, EccOpCode, UltraOp},
+    },
+    generic_builder::GenericBuilder,
+    prelude::NUM_WIRES,
+    types::types::{
+        AddQuad, AddTriple, MegaTraceBlock, MegaTraceBlocks, MulQuad, PolyTriple,
+        Poseidon2ExternalGate, Poseidon2InternalGate, RangeList,
+    },
+};
 use ark_ff::One;
+use ark_ff::Zero;
 
 type GateBlocks<F> = MegaTraceBlocks<MegaTraceBlock<F>>;
 
@@ -23,8 +34,8 @@ pub struct MegaCircuitBuilder<
     prev_var_index: Vec<u32>,
     pub real_variable_index: Vec<u32>,
     constant_variable_indices: BTreeMap<P::ScalarField, u32>,
-        has_dummy_witnesses: bool,
-            range_lists: BTreeMap<u64, RangeList>,
+    has_dummy_witnesses: bool,
+    range_lists: BTreeMap<u64, RangeList>,
     pub(crate) public_inputs: Vec<u32>,
     pub(crate) num_gates: usize,
     pub(crate) real_variable_tags: Vec<u32>,
@@ -35,18 +46,18 @@ pub struct MegaCircuitBuilder<
     pub(crate) add_accum_op_idx: u32,
     pub(crate) mul_accum_op_idx: u32,
     pub(crate) equality_op_idx: u32,
-        pub(crate) tau: BTreeMap<u32, u32>,
+    pub(crate) tau: BTreeMap<u32, u32>,
 }
 
-impl<P, T, D> GenericBuilder<P, T> for MegaCircuitBuilder<P, T, D> 
-where 
+impl<P, T, D> GenericBuilder<P, T> for MegaCircuitBuilder<P, T, D>
+where
     P: HonkCurve<TranscriptFieldType>,
     T: NoirWitnessExtensionProtocol<P::ScalarField>,
     D: NoirUltraHonkProver<P, ArithmeticShare = T::ArithmeticShare>,
-    {
+{
     type TraceBlock = MegaTraceBlock<P::ScalarField>;
 
-        fn get_new_tag(&mut self) -> u32 {
+    fn get_new_tag(&mut self) -> u32 {
         self.current_tag += 1;
 
         self.current_tag
@@ -57,8 +68,6 @@ where
         self.current_tag += 1;
         self.current_tag
     }
-
-
 
     fn create_dummy_constraints(&mut self, variable_index: &[u32]) {
         let mut padded_list = variable_index.to_owned();
@@ -73,12 +82,18 @@ where
         self.assert_valid_variables(&padded_list);
 
         for chunk in padded_list.chunks(GATE_WIDTH) {
-            Self::create_dummy_gate(&mut self.blocks.arithmetic, chunk[0], chunk[1], chunk[2], chunk[3]);
+            Self::create_dummy_gate(
+                &mut self.blocks.arithmetic,
+                chunk[0],
+                chunk[1],
+                chunk[2],
+                chunk[3],
+            );
             self.check_selector_length_consistency();
             self.num_gates += 1; // necessary because create dummy gate cannot increment num_gates itself
         }
     }
-     fn create_range_list(&mut self, target_range: u64) -> RangeList {
+    fn create_range_list(&mut self, target_range: u64) -> RangeList {
         let range_tag = self.get_new_tag();
         let tau_tag = self.get_new_tag();
         self.create_tag(range_tag, tau_tag);
@@ -107,7 +122,7 @@ where
         }
     }
 
-        fn assign_tag(&mut self, variable_index: u32, tag: u32) {
+    fn assign_tag(&mut self, variable_index: u32, tag: u32) {
         assert!(
             tag <= self.current_tag,
             "Tag is greater than the current tag"
@@ -147,7 +162,7 @@ where
         self.real_variable_tags.push(Self::DUMMY_TAG);
         idx
     }
-fn create_add_gate(&mut self, inp: &AddTriple<P::ScalarField>) {
+    fn create_add_gate(&mut self, inp: &AddTriple<P::ScalarField>) {
         self.assert_valid_variables(&[inp.a, inp.b, inp.c]);
 
         self.blocks
@@ -185,7 +200,7 @@ fn create_add_gate(&mut self, inp: &AddTriple<P::ScalarField>) {
         self.check_selector_length_consistency();
         self.num_gates += 1;
     }
-    
+
     fn create_big_mul_gate(&mut self, inp: &MulQuad<P::ScalarField>) {
         self.assert_valid_variables(&[inp.a, inp.b, inp.c, inp.d]);
 
@@ -264,7 +279,7 @@ fn create_add_gate(&mut self, inp: &AddTriple<P::ScalarField>) {
         self.check_selector_length_consistency();
         self.num_gates += 1;
     }
-fn create_bool_gate(&mut self, variable_index: u32) {
+    fn create_bool_gate(&mut self, variable_index: u32) {
         self.is_valid_variable(variable_index as usize);
 
         self.blocks.arithmetic.populate_wires(
@@ -308,11 +323,7 @@ fn create_bool_gate(&mut self, variable_index: u32) {
         self.num_gates += 1;
     }
 
-    fn create_big_add_gate(
-        &mut self,
-        inp: &AddQuad<P::ScalarField>,
-        include_next_gate_w_4: bool,
-    ) {
+    fn create_big_add_gate(&mut self, inp: &AddQuad<P::ScalarField>, include_next_gate_w_4: bool) {
         self.assert_valid_variables(&[inp.a, inp.b, inp.c, inp.d]);
 
         self.blocks
@@ -507,10 +518,10 @@ fn create_bool_gate(&mut self, variable_index: u32) {
     }
 
     fn assert_equal_constant(&mut self, a_idx: usize, b: P::ScalarField) {
-            self.assert_if_has_witness(self.variables[a_idx] == T::AcvmType::from(b));
-            let b_idx = self.put_constant_variable(b);
-            self.assert_equal(a_idx, b_idx as usize);
-        }
+        self.assert_if_has_witness(self.variables[a_idx] == T::AcvmType::from(b));
+        let b_idx = self.put_constant_variable(b);
+        self.assert_equal(a_idx, b_idx as usize);
+    }
 
     fn assert_equal(&mut self, a_idx: usize, b_idx: usize) {
         self.assert_valid_variables(&[a_idx as u32, b_idx as u32]);
@@ -562,7 +573,6 @@ fn create_bool_gate(&mut self, variable_index: u32) {
             self.real_variable_tags[a_real_idx] = self.real_variable_tags[b_real_idx];
         }
     }
-
 
     fn zero_idx(&self) -> u32 {
         self.zero_idx
@@ -834,13 +844,12 @@ fn create_bool_gate(&mut self, variable_index: u32) {
     }
 }
 
-impl<P, T, D> MegaCircuitBuilder<P, T, D> 
-where 
+impl<P, T, D> MegaCircuitBuilder<P, T, D>
+where
     P: HonkCurve<TranscriptFieldType>,
     T: NoirWitnessExtensionProtocol<P::ScalarField>,
     D: NoirUltraHonkProver<P, ArithmeticShare = T::ArithmeticShare>,
 {
-
     pub(crate) const DUMMY_TAG: u32 = 0;
     pub(crate) const REAL_VARIABLE: u32 = u32::MAX - 1;
     pub(crate) const FIRST_VARIABLE_IN_CLASS: u32 = u32::MAX - 2;
@@ -954,9 +963,28 @@ where
 
     fn set_goblin_ecc_op_code_constant_variables(&mut self) {
         self.zero_idx = 0; // constant 0 is is associated with the zero index
-        self.add_accum_op_idx = self.put_constant_variable(P::ScalarField::from(EccOpCode {add: true, ..Default::default()}.value()));
-        self.mul_accum_op_idx = self.put_constant_variable(P::ScalarField::from(EccOpCode {mul: true, ..Default::default()}.value()));
-        self.equality_op_idx = self.put_constant_variable(P::ScalarField::from(EccOpCode {eq: true, reset: true, ..Default::default()}.value()));
+        self.add_accum_op_idx = self.put_constant_variable(P::ScalarField::from(
+            EccOpCode {
+                add: true,
+                ..Default::default()
+            }
+            .value(),
+        ));
+        self.mul_accum_op_idx = self.put_constant_variable(P::ScalarField::from(
+            EccOpCode {
+                mul: true,
+                ..Default::default()
+            }
+            .value(),
+        ));
+        self.equality_op_idx = self.put_constant_variable(P::ScalarField::from(
+            EccOpCode {
+                eq: true,
+                reset: true,
+                ..Default::default()
+            }
+            .value(),
+        ));
     }
 
     /**
@@ -982,7 +1010,9 @@ where
         }
 
         // Second set of wires
-        self.blocks.ecc_op.populate_wires(self.zero_idx, y_hi, z_1, z_2);
+        self.blocks
+            .ecc_op
+            .populate_wires(self.zero_idx, y_hi, z_1, z_2);
         for selector in self.blocks.ecc_op.selectors.iter_mut() {
             selector.push(P::ScalarField::zero());
         }
@@ -1019,10 +1049,7 @@ where
      *
      * @param point Point to be added into the accumulator
      */
-    pub fn queue_ecc_add_accum<N: Network>(
-        &mut self,
-        point: D::PointShare,
-    ) -> ECCOpTuple {
+    pub fn queue_ecc_add_accum<N: Network>(&mut self, point: D::PointShare) -> ECCOpTuple {
         // Add the operation to the op queue
         let ultra_op = self.ecc_op_queue.add_accumulate(point);
 
@@ -1072,7 +1099,7 @@ where
      *
      * @return ecc_op_tuple with all its fields set to zero
      */
-    fn queue_ecc_no_op(&mut self) -> ECCOpTuple{
+    fn queue_ecc_no_op(&mut self) -> ECCOpTuple {
         // Add the operation to the op queue
         let ultra_op = self.ecc_op_queue.no_op_ultra_only();
 
@@ -1086,7 +1113,7 @@ where
         index
     }
 
-        pub(crate) fn assert_if_has_witness(&self, input: bool) {
+    pub(crate) fn assert_if_has_witness(&self, input: bool) {
         if self.has_dummy_witnesses {
             return;
         }
@@ -1166,4 +1193,4 @@ where
             self.real_variable_tags[a_real_idx] = self.real_variable_tags[b_real_idx];
         }
     }
-}  
+}

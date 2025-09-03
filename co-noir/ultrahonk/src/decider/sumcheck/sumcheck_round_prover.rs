@@ -27,14 +27,14 @@ use crate::{
 };
 
 use ark_ff::PrimeField;
-use co_builder::{
-    flavours::eccvm_flavour::ECCVMFlavour
-};
+use co_builder::flavours::eccvm_flavour::ECCVMFlavour;
 use common::{
-    crs::ProverCrs, honk_curve::HonkCurve, honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType}, polynomials::polynomial::{Polynomial, RowDisablingPolynomial}, types::ZeroKnowledge
-
+    crs::ProverCrs,
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
+    polynomials::polynomial::{Polynomial, RowDisablingPolynomial},
+    types::ZeroKnowledge,
 };
-
 
 pub(crate) struct SumcheckProverRound<F: PrimeField, L: PlainProverFlavour> {
     pub(crate) round_size: usize,

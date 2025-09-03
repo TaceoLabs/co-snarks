@@ -1,5 +1,5 @@
-use ark_ff::PrimeField;
 use crate::serialize::Serialize;
+use ark_ff::PrimeField;
 
 pub type TranscriptFieldType = ark_bn254::Fr;
 pub type TranscriptFieldTypeGrumpkin = ark_grumpkin::Fr;
@@ -39,7 +39,6 @@ impl<F: PrimeField> HonkProof<F> {
         Self::new(proof)
     }
 }
-
 
 /// The errors that may arise during the computation of a HONK proof.
 #[derive(Debug, thiserror::Error)]

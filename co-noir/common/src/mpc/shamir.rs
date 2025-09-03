@@ -1,6 +1,7 @@
 use super::NoirUltraHonkProver;
 use ark_ec::CurveGroup;
 use ark_ff::Field;
+use ark_ff::PrimeField;
 use itertools::izip;
 use mpc_core::MpcState;
 use mpc_core::protocols::shamir::ShamirState;
@@ -11,7 +12,6 @@ use mpc_core::protocols::shamir::{
 use mpc_net::Network;
 use num_traits::Zero;
 use rayon::prelude::*;
-use ark_ff::PrimeField;
 
 /// A UltraHonk driver using shamir secret sharing
 pub struct ShamirUltraHonkDriver;

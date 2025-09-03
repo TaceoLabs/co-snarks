@@ -18,7 +18,6 @@ use common::honk_proof::HonkProofError;
 use common::honk_proof::HonkProofResult;
 use std::{collections::BTreeMap, ops::Index};
 
-
 pub type TranscriptFieldType = ark_bn254::Fr;
 pub type Poseidon2Sponge =
     FieldSpongeCT<TranscriptFieldType, 4, 3, Poseidon2CT<TranscriptFieldType, 4, 5>>;

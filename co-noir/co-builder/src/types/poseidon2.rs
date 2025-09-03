@@ -246,7 +246,13 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
 
         // Aztec TODO(https://github.com/AztecProtocol/barretenberg/issues/879): dummy gate required since the last external gate
         // from above otherwise expects to read into the first internal gate which is sorted out of sequence
-        B::create_dummy_gate(&mut builder.get_poseidon2_external_mut(), state[0].witness_index, state[1].witness_index, state[2].witness_index, state[3].witness_index);
+        B::create_dummy_gate(
+            &mut builder.get_poseidon2_external_mut(),
+            state[0].witness_index,
+            state[1].witness_index,
+            state[2].witness_index,
+            state[3].witness_index,
+        );
 
         // Internal rounds
         for r in 0..self.poseidon2.params.rounds_p {
@@ -260,7 +266,13 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
 
         // Aztec TODO(https://github.com/AztecProtocol/barretenberg/issues/879): dummy gate required since the last internal gate
         // otherwise expects to read into the next external gate which is sorted out of sequence
-        B::create_dummy_gate(&mut builder.get_poseidon2_internal_mut(), state[0].witness_index, state[1].witness_index, state[2].witness_index, state[3].witness_index);
+        B::create_dummy_gate(
+            &mut builder.get_poseidon2_internal_mut(),
+            state[0].witness_index,
+            state[1].witness_index,
+            state[2].witness_index,
+            state[3].witness_index,
+        );
 
         // Remaining external rounds
         for r in self.poseidon2.params.rounds_f_beginning
@@ -278,7 +290,13 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
         // applying a round of Poseidon2 is stored in the next row (the shifted row). As a result, we need this end row to
         // compare with the result from the 64th round of Poseidon2. Note that it does not activate any selectors since it
         // only serves as a comparison through the shifted wires.
-        B::create_dummy_gate(&mut builder.get_poseidon2_external_mut(), state[0].witness_index, state[1].witness_index, state[2].witness_index, state[3].witness_index);
+        B::create_dummy_gate(
+            &mut builder.get_poseidon2_external_mut(),
+            state[0].witness_index,
+            state[1].witness_index,
+            state[2].witness_index,
+            state[3].witness_index,
+        );
     }
 
     fn permutation_in_place_shared<
@@ -315,7 +333,13 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
 
         // Aztec TODO(https://github.com/AztecProtocol/barretenberg/issues/879): dummy gate required since the last external gate
         // from above otherwise expects to read into the first internal gate which is sorted out of sequence
-        B::create_dummy_gate( builder.get_poseidon2_external_mut(), state[0].witness_index, state[1].witness_index, state[2].witness_index, state[3].witness_index);
+        B::create_dummy_gate(
+            builder.get_poseidon2_external_mut(),
+            state[0].witness_index,
+            state[1].witness_index,
+            state[2].witness_index,
+            state[3].witness_index,
+        );
 
         // Internal rounds
         for r in 0..self.poseidon2.params.rounds_p {
@@ -334,7 +358,13 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
 
         // Aztec TODO(https://github.com/AztecProtocol/barretenberg/issues/879): dummy gate required since the last internal gate
         // otherwise expects to read into the next external gate which is sorted out of sequence
-        B::create_dummy_gate( builder.get_poseidon2_internal_mut(), state[0].witness_index, state[1].witness_index, state[2].witness_index, state[3].witness_index);
+        B::create_dummy_gate(
+            builder.get_poseidon2_internal_mut(),
+            state[0].witness_index,
+            state[1].witness_index,
+            state[2].witness_index,
+            state[3].witness_index,
+        );
 
         // Remaining external rounds
         for r in self.poseidon2.params.rounds_f_beginning
@@ -357,7 +387,13 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
         // applying a round of Poseidon2 is stored in the next row (the shifted row). As a result, we need this end row to
         // compare with the result from the 64th round of Poseidon2. Note that it does not activate any selectors since it
         // only serves as a comparison through the shifted wires.
-        B::create_dummy_gate(builder.get_poseidon2_external_mut(), state[0].witness_index, state[1].witness_index, state[2].witness_index, state[3].witness_index);
+        B::create_dummy_gate(
+            builder.get_poseidon2_external_mut(),
+            state[0].witness_index,
+            state[1].witness_index,
+            state[2].witness_index,
+            state[3].witness_index,
+        );
         Ok(())
     }
 

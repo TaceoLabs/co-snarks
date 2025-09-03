@@ -10,16 +10,9 @@ use ark_ec::{AffineRepr, CurveConfig, CurveGroup, PrimeGroup};
 use ark_ff::PrimeField;
 use ark_ff::{One, Zero};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType, utils::Utils};
 use itertools::izip;
 use num_bigint::BigUint;
-use common::{
-    honk_curve::HonkCurve,
-    honk_proof::{
-         TranscriptFieldType,
-    },
-    utils::Utils,
-};
-
 
 #[derive(Clone, Debug)]
 pub struct FieldCT<F: PrimeField> {
@@ -472,9 +465,12 @@ impl<F: PrimeField> FieldCT<F> {
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/446): optimize by allowing smaller exponent
         let mut exponent_bits = vec![BoolCT::default(); 32];
         for i in 0..32 {
-            let value_bit = driver.integer_bitwise_and(exponent_value.clone(), P::ScalarField::ONE.into(), 32).unwrap();
+            let value_bit = driver
+                .integer_bitwise_and(exponent_value.clone(), P::ScalarField::ONE.into(), 32)
+                .unwrap();
             // TODO CESAR: This line might not make sense
-            let bit =  BoolCT::from_witness_ct(WitnessCT::from_acvm_type(value_bit, builder), builder);
+            let bit =
+                BoolCT::from_witness_ct(WitnessCT::from_acvm_type(value_bit, builder), builder);
             exponent_bits[31 - i] = bit;
             exponent_value = driver.right_shift(exponent_value, 1).unwrap();
         }
@@ -492,9 +488,13 @@ impl<F: PrimeField> FieldCT<F> {
         let mut accumulator = FieldCT::from(F::one());
         let mul_coefficient = self.sub(&FieldCT::from(F::one()), builder, driver);
         for i in (0..32) {
-            accumulator.mul_assign(&accumulator.clone(), builder, driver).unwrap();
+            accumulator
+                .mul_assign(&accumulator.clone(), builder, driver)
+                .unwrap();
             let bit = exponent_bits[i].to_field_ct(driver);
-            let rhs = mul_coefficient.madd(&bit, &FieldCT::from(F::one()), builder, driver).unwrap();
+            let rhs = mul_coefficient
+                .madd(&bit, &FieldCT::from(F::one()), builder, driver)
+                .unwrap();
             accumulator.mul_assign(&rhs, builder, driver).unwrap();
         }
 
@@ -503,10 +503,7 @@ impl<F: PrimeField> FieldCT<F> {
         accumulator
     }
 
-    pub fn add<
-        P: CurveGroup<ScalarField = F>,
-        T: NoirWitnessExtensionProtocol<P::ScalarField>,
-    >(
+    pub fn add<P: CurveGroup<ScalarField = F>, T: NoirWitnessExtensionProtocol<P::ScalarField>>(
         &self,
         other: &Self,
         builder: &mut impl GenericBuilder<P, T>,
@@ -579,10 +576,7 @@ impl<F: PrimeField> FieldCT<F> {
         }
     }
 
-    pub fn sub<
-        P: CurveGroup<ScalarField = F>,
-        T: NoirWitnessExtensionProtocol<P::ScalarField>,
-    >(
+    pub fn sub<P: CurveGroup<ScalarField = F>, T: NoirWitnessExtensionProtocol<P::ScalarField>>(
         &self,
         other: &Self,
         builder: &mut impl GenericBuilder<P, T>,
@@ -677,7 +671,7 @@ impl<F: PrimeField> FieldCT<F> {
                 self.witness_index
             },
             b: if to_mul.is_constant() {
-                builder.zero_idx()  
+                builder.zero_idx()
             } else {
                 to_mul.witness_index
             },

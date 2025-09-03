@@ -1,10 +1,6 @@
-use common::{
-    utils::Utils,
-    honk_proof::{HonkProofResult, TranscriptFieldType},
-    polynomials::polynomial::{ NUM_DISABLED_ROWS_IN_SUMCHECK},
-};
 use crate::acir_format::{HonkRecursion, ProgramMetadata};
 use crate::flavours::ultra_flavour::UltraFlavour;
+use crate::generic_builder::GenericBuilder;
 use crate::keys::verification_key::PublicComponentKey;
 use crate::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use crate::prover_flavour::ProverFlavour;
@@ -18,7 +14,6 @@ use crate::types::types::AES128Constraint;
 use crate::types::types::{
     AggregationState, EcAdd, EccAddGate, MultiScalarMul, Sha256Compression, WitnessOrConstant,
 };
-use common::honk_curve::HonkCurve;
 use crate::{
     acir_format::AcirFormat,
     keys::{
@@ -40,11 +35,17 @@ use crate::{
         },
     },
 };
-use common::crs::ProverCrs;
 use ark_ec::pairing::Pairing;
 use ark_ec::{CurveGroup, PrimeGroup};
 use ark_ff::{One, Zero};
 use co_acvm::{PlainAcvmSolver, mpc::NoirWitnessExtensionProtocol};
+use common::crs::ProverCrs;
+use common::honk_curve::HonkCurve;
+use common::{
+    honk_proof::{HonkProofResult, TranscriptFieldType},
+    polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK,
+    utils::Utils,
+};
 use itertools::izip;
 use mpc_core::gadgets::poseidon2::POSEIDON2_BN254_T4_PARAMS;
 use num_bigint::BigUint;
@@ -53,17 +54,18 @@ use std::{
     collections::{BTreeMap, HashMap},
     sync::Arc,
 };
-use crate::generic_builder::GenericBuilder;
 
 type GateBlocks<F> = UltraTraceBlocks<UltraTraceBlock<F>>;
 
 pub type UltraCircuitBuilder<P> =
     GenericUltraCircuitBuilder<P, PlainAcvmSolver<<P as PrimeGroup>::ScalarField>>;
 
-impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericBuilder<P, T> for GenericUltraCircuitBuilder<P, T> {
+impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericBuilder<P, T>
+    for GenericUltraCircuitBuilder<P, T>
+{
     type TraceBlock = UltraTraceBlock<P::ScalarField>;
 
-        fn get_new_tag(&mut self) -> u32 {
+    fn get_new_tag(&mut self) -> u32 {
         self.current_tag += 1;
 
         self.current_tag
@@ -74,8 +76,6 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericBuil
         self.current_tag += 1;
         self.current_tag
     }
-
-
 
     fn create_dummy_constraints(&mut self, variable_index: &[u32]) {
         let mut padded_list = variable_index.to_owned();
@@ -90,7 +90,13 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericBuil
         self.assert_valid_variables(&padded_list);
 
         for chunk in padded_list.chunks(GATE_WIDTH) {
-            Self::create_dummy_gate(&mut self.blocks.arithmetic, chunk[0], chunk[1], chunk[2], chunk[3]);
+            Self::create_dummy_gate(
+                &mut self.blocks.arithmetic,
+                chunk[0],
+                chunk[1],
+                chunk[2],
+                chunk[3],
+            );
             self.check_selector_length_consistency();
             self.num_gates += 1; // necessary because create dummy gate cannot increment num_gates itself
         }
@@ -164,7 +170,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericBuil
         self.real_variable_tags.push(Self::DUMMY_TAG);
         idx
     }
-fn create_add_gate(&mut self, inp: &AddTriple<P::ScalarField>) {
+    fn create_add_gate(&mut self, inp: &AddTriple<P::ScalarField>) {
         self.assert_valid_variables(&[inp.a, inp.b, inp.c]);
 
         self.blocks
@@ -202,7 +208,7 @@ fn create_add_gate(&mut self, inp: &AddTriple<P::ScalarField>) {
         self.check_selector_length_consistency();
         self.num_gates += 1;
     }
-    
+
     fn create_big_mul_gate(&mut self, inp: &MulQuad<P::ScalarField>) {
         self.assert_valid_variables(&[inp.a, inp.b, inp.c, inp.d]);
 
@@ -281,7 +287,7 @@ fn create_add_gate(&mut self, inp: &AddTriple<P::ScalarField>) {
         self.check_selector_length_consistency();
         self.num_gates += 1;
     }
-fn create_bool_gate(&mut self, variable_index: u32) {
+    fn create_bool_gate(&mut self, variable_index: u32) {
         self.is_valid_variable(variable_index as usize);
 
         self.blocks.arithmetic.populate_wires(
@@ -325,11 +331,7 @@ fn create_bool_gate(&mut self, variable_index: u32) {
         self.num_gates += 1;
     }
 
-    fn create_big_add_gate(
-        &mut self,
-        inp: &AddQuad<P::ScalarField>,
-        include_next_gate_w_4: bool,
-    ) {
+    fn create_big_add_gate(&mut self, inp: &AddQuad<P::ScalarField>, include_next_gate_w_4: bool) {
         self.assert_valid_variables(&[inp.a, inp.b, inp.c, inp.d]);
 
         self.blocks
@@ -584,10 +586,10 @@ fn create_bool_gate(&mut self, variable_index: u32) {
     }
 
     fn assert_equal_constant(&mut self, a_idx: usize, b: P::ScalarField) {
-            self.assert_if_has_witness(self.variables[a_idx] == T::AcvmType::from(b));
-            let b_idx = self.put_constant_variable(b);
-            self.assert_equal(a_idx, b_idx as usize);
-        }
+        self.assert_if_has_witness(self.variables[a_idx] == T::AcvmType::from(b));
+        let b_idx = self.put_constant_variable(b);
+        self.assert_equal(a_idx, b_idx as usize);
+    }
 
     fn assert_equal(&mut self, a_idx: usize, b_idx: usize) {
         self.assert_valid_variables(&[a_idx as u32, b_idx as u32]);
@@ -639,7 +641,6 @@ fn create_bool_gate(&mut self, variable_index: u32) {
             self.real_variable_tags[a_real_idx] = self.real_variable_tags[b_real_idx];
         }
     }
-
 
     fn zero_idx(&self) -> u32 {
         self.zero_idx

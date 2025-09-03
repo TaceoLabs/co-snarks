@@ -33,7 +33,10 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         + PartialEq
         + Into<<Self::BrilligDriver as BrilligDriver<F>>::BrilligType>;
     type AcvmPoint<C: CurveGroup<BaseField = F>>: Clone + fmt::Debug + fmt::Display + From<C>;
-    type AcvmNativePoint<C: CurveGroup<ScalarField = F>>: Clone + fmt::Debug + fmt::Display + From<C>;
+    type AcvmNativePoint<C: CurveGroup<ScalarField = F>>: Clone
+        + fmt::Debug
+        + fmt::Display
+        + From<C>;
 
     type BrilligDriver: BrilligDriver<F>;
 
@@ -182,7 +185,9 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     fn get_shared(a: &Self::AcvmType) -> Option<Self::ArithmeticShare>;
 
     // TODO CESAR
-    fn get_shared_native_point<C: CurveGroup<ScalarField = F>>(a: &Self::AcvmNativePoint<C>) -> Option<Self::NativePointShare<C>> {
+    fn get_shared_native_point<C: CurveGroup<ScalarField = F>>(
+        a: &Self::AcvmNativePoint<C>,
+    ) -> Option<Self::NativePointShare<C>> {
         unimplemented!()
     }
 

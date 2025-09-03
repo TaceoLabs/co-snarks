@@ -176,7 +176,11 @@ pub fn point_share_to_fieldshare<C: CurveGroup, N: Network>(
     x: PointShare<C>,
     net: &N,
     state: &mut Rep3State,
-) -> eyre::Result<(FieldShare<C::BaseField>, FieldShare<C::BaseField>, FieldShare<C::BaseField>)>
+) -> eyre::Result<(
+    FieldShare<C::BaseField>,
+    FieldShare<C::BaseField>,
+    FieldShare<C::BaseField>,
+)>
 where
     C::BaseField: PrimeField,
 {

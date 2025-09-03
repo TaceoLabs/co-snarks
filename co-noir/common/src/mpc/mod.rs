@@ -396,7 +396,11 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
         x: Self::PointShare,
         net: &N,
         state: &mut Self::State,
-    ) -> eyre::Result<(Self::ArithmeticShare, Self::ArithmeticShare, Self::ArithmeticShare)>
+    ) -> eyre::Result<(
+        Self::ArithmeticShare,
+        Self::ArithmeticShare,
+        Self::ArithmeticShare,
+    )>
     where
         P::BaseField: ark_ff::PrimeField,
     {

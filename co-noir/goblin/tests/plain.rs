@@ -11,6 +11,7 @@ use co_builder::eccvm::ecc_op_queue::VMOperation;
 use co_builder::flavours::eccvm_flavour::ECCVMFlavour;
 use co_builder::flavours::translator_flavour::TranslatorFlavour;
 use common::crs::parse::CrsParser;
+use common::honk_curve::HonkCurve;
 use common::honk_proof::TranscriptFieldType;
 use common::serialize::Serialize;
 use common::serialize::SerializeP;
@@ -25,7 +26,6 @@ use goblin::prelude::construct_pk_from_builder;
 use std::str::FromStr;
 use std::{path::PathBuf, sync::Arc};
 use ultrahonk::prelude::ProvingKey;
-use common::honk_curve::HonkCurve;
 
 // The input for this is extracted from barretenberg into bytes (see test_vectors/noir/eccvm for a text file on how the ecc_op_queue was serialized in bb)
 fn deserialize_ecc_op_queue<P: HonkCurve<TranscriptFieldType>>(path: PathBuf) -> ECCOpQueue<P> {

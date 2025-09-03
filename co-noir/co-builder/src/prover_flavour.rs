@@ -1,8 +1,6 @@
-use crate::{
-    polynomials::polynomial_flavours::{
-        PolyGFlavour, PrecomputedEntitiesFlavour, ProverWitnessEntitiesFlavour,
-        ShiftedWitnessEntitiesFlavour, WitnessEntitiesFlavour,
-    },
+use crate::polynomials::polynomial_flavours::{
+    PolyGFlavour, PrecomputedEntitiesFlavour, ProverWitnessEntitiesFlavour,
+    ShiftedWitnessEntitiesFlavour, WitnessEntitiesFlavour,
 };
 use common::polynomials::polynomial::Polynomial;
 use std::fmt::Debug;

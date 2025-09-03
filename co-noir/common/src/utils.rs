@@ -1,7 +1,7 @@
 use std::any::Any;
 
-use crate::honk_proof::{HonkProofError, HonkProofResult};
 use crate::crs::ProverCrs;
+use crate::honk_proof::{HonkProofError, HonkProofResult};
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{One, PrimeField, Zero};
 use eyre::Error;

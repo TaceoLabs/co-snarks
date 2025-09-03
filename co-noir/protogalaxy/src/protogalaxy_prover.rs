@@ -4,12 +4,14 @@ use ark_ec::AdditiveGroup;
 
 use ark_ff::fields::Field;
 
-use co_builder::{
-    flavours::mega_flavour::MegaFlavour,
-    prelude::{ProvingKey},
-};
+use co_builder::{flavours::mega_flavour::MegaFlavour, prelude::ProvingKey};
 
-use common::{honk_curve::HonkCurve, honk_proof::{HonkProof, HonkProofResult, TranscriptFieldType}, polynomials::polynomial::Polynomial, types::ZeroKnowledge};
+use common::{
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProof, HonkProofResult, TranscriptFieldType},
+    polynomials::polynomial::Polynomial,
+    types::ZeroKnowledge,
+};
 use itertools::{Itertools, izip};
 
 use ultrahonk::decider::types::RelationParameters;

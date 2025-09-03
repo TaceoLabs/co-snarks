@@ -1,7 +1,10 @@
 use ark_ec::CurveGroup;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 
-use crate::types::types::{AddQuad, AddTriple, MulQuad, PolyTriple, Poseidon2ExternalGate, Poseidon2InternalGate, RangeList};
+use crate::types::types::{
+    AddQuad, AddTriple, MulQuad, PolyTriple, Poseidon2ExternalGate, Poseidon2InternalGate,
+    RangeList,
+};
 
 pub trait GenericBuilder<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
     type TraceBlock;
@@ -10,11 +13,7 @@ pub trait GenericBuilder<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::Scala
     fn get_variable(&self, index: usize) -> T::AcvmType;
     fn add_variable(&mut self, value: T::AcvmType) -> u32;
     fn create_add_gate(&mut self, inp: &AddTriple<P::ScalarField>);
-    fn create_big_add_gate(
-        &mut self,
-        inp: &AddQuad<P::ScalarField>,
-        include_next_gate_w_4: bool,
-    );
+    fn create_big_add_gate(&mut self, inp: &AddQuad<P::ScalarField>, include_next_gate_w_4: bool);
 
     fn create_poseidon2_external_gate(&mut self, inp: &Poseidon2ExternalGate);
     fn create_poseidon2_internal_gate(&mut self, inp: &Poseidon2InternalGate);
@@ -42,8 +41,7 @@ pub trait GenericBuilder<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::Scala
     fn create_range_list(&mut self, target_range: u64) -> RangeList;
     fn get_new_tag(&mut self) -> u32;
 
-    fn create_tag(&mut self, tag_index: u32, tau_index: u32)-> u32;
-
+    fn create_tag(&mut self, tag_index: u32, tau_index: u32) -> u32;
 
     fn create_dummy_constraints(&mut self, variable_index: &[u32]);
 }

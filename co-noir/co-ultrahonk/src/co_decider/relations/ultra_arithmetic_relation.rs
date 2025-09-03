@@ -7,11 +7,11 @@ use crate::{
 use ark_ec::CurveGroup;
 use ark_ff::Field;
 use ark_ff::Zero;
-use common::honk_proof::{TranscriptFieldType, HonkProofResult};
-use common::honk_curve::HonkCurve;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
+use common::honk_curve::HonkCurve;
+use common::honk_proof::{HonkProofResult, TranscriptFieldType};
 use common::mpc::NoirUltraHonkProver;
 use itertools::izip;
 use mpc_core::MpcState;

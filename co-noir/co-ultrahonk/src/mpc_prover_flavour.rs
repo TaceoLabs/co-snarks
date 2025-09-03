@@ -4,7 +4,7 @@ use crate::types::AllEntities;
 use crate::types_batch::{AllEntitiesBatch, AllEntitiesBatchRelationsTrait};
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
-use co_builder::{ prover_flavour::ProverFlavour};
+use co_builder::prover_flavour::ProverFlavour;
 use common::honk_curve::HonkCurve;
 use common::honk_proof::{HonkProofResult, TranscriptFieldType};
 use common::mpc::NoirUltraHonkProver;

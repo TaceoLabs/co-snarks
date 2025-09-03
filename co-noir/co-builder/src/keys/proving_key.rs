@@ -5,20 +5,20 @@ use crate::polynomials::polynomial_flavours::{
 };
 use crate::prover_flavour::ProverFlavour;
 use crate::{
-    polynomials::{polynomial_types::Polynomials},
+    polynomials::polynomial_types::Polynomials,
     types::types::{
         ActiveRegionData, CyclicPermutation, Mapping, NUM_WIRES, PermutationMapping, TraceData,
     },
     ultra_builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder},
 };
-use common::{
-    crs::ProverCrs,
-    honk_proof::{HonkProofResult},
-    polynomials::polynomial::{Polynomial, NUM_DISABLED_ROWS_IN_SUMCHECK},
-};
 use ark_ec::CurveGroup;
 use ark_ff::One;
 use co_acvm::{PlainAcvmSolver, mpc::NoirWitnessExtensionProtocol};
+use common::{
+    crs::ProverCrs,
+    honk_proof::HonkProofResult,
+    polynomials::polynomial::{NUM_DISABLED_ROWS_IN_SUMCHECK, Polynomial},
+};
 use num_bigint::BigUint;
 use std::sync::Arc;
 

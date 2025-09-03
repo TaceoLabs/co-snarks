@@ -5,15 +5,19 @@ use crate::{
     key::proving_key::ProvingKey,
     mpc_prover_flavour::MPCProverFlavour,
 };
-use co_builder::{
-    prelude::{ PAIRING_POINT_ACCUMULATOR_SIZE},
-    prover_flavour::Flavour,
-};
-use co_builder::{flavours::ultra_flavour::UltraFlavour};
-use common::{crs::ProverCrs, honk_curve::HonkCurve, honk_proof::{HonkProof, HonkProofResult, TranscriptFieldType}, mpc::{
-    plain::PlainUltraHonkDriver, rep3::Rep3UltraHonkDriver, shamir::ShamirUltraHonkDriver, NoirUltraHonkProver
-}, types::ZeroKnowledge};
+use co_builder::flavours::ultra_flavour::UltraFlavour;
+use co_builder::{prelude::PAIRING_POINT_ACCUMULATOR_SIZE, prover_flavour::Flavour};
 use common::transcript::{Transcript, TranscriptHasher};
+use common::{
+    crs::ProverCrs,
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProof, HonkProofResult, TranscriptFieldType},
+    mpc::{
+        NoirUltraHonkProver, plain::PlainUltraHonkDriver, rep3::Rep3UltraHonkDriver,
+        shamir::ShamirUltraHonkDriver,
+    },
+    types::ZeroKnowledge,
+};
 use mpc_core::protocols::{
     rep3::{Rep3State, conversion::A2BType},
     shamir::{ShamirPreprocessing, ShamirState},

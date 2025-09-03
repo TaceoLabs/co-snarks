@@ -13,7 +13,7 @@ pub use crate::types::aes128::AES128_SBOX;
 pub use crate::types::generators::{derive_generators, offset_generator, offset_generator_scaled};
 pub use crate::types::types::{
     AGGREGATION_OBJECT_SIZE, ActiveRegionData, CycleNode, CyclicPermutation, NUM_SELECTORS_ULTRA,
-    NUM_WIRES, PAIRING_POINT_ACCUMULATOR_SIZE
+    NUM_WIRES, PAIRING_POINT_ACCUMULATOR_SIZE,
 };
 pub use crate::ultra_builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder};
 pub use co_acvm::PlainAcvmSolver;

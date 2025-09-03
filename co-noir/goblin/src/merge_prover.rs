@@ -1,12 +1,16 @@
 use ark_ec::AdditiveGroup;
 use ark_ff::Field;
-use common::{
-    crs::ProverCrs, honk_curve::HonkCurve, honk_proof::{HonkProof, HonkProofResult, TranscriptFieldType}, polynomials::polynomial::Polynomial, utils::Utils
-};
 use common::shplemini::OpeningPair;
 use common::shplemini::ShpleminiOpeningClaim;
 use common::transcript::Transcript;
 use common::transcript::TranscriptHasher;
+use common::{
+    crs::ProverCrs,
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProof, HonkProofResult, TranscriptFieldType},
+    polynomials::polynomial::Polynomial,
+    utils::Utils,
+};
 
 use co_builder::eccvm::ecc_op_queue::ECCOpQueue;
 
@@ -162,8 +166,8 @@ mod tests {
     use ark_bn254::Bn254;
     use common::crs::parse::CrsParser;
     use common::transcript::Poseidon2Sponge;
-    use mpc_core::gadgets::field_from_hex_string;
     use common::types::ZeroKnowledge;
+    use mpc_core::gadgets::field_from_hex_string;
 
     type Bn254G1 = ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>;
     type Bn254G1Affine = ark_bn254::G1Affine;

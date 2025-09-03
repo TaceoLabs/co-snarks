@@ -28,18 +28,14 @@ use ark_ff::{One, Zero};
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
 use common::{
-    honk_proof::{TranscriptFieldType, HonkProofError, HonkProofResult},
     crs::ProverCrs,
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
     polynomials::polynomial::Polynomial,
     types::ZeroKnowledge,
-    honk_curve::HonkCurve,
-
 };
 
-use co_builder::{
-    prelude::{ProvingKey},
-    prover_flavour::Flavour,
-};
+use co_builder::{prelude::ProvingKey, prover_flavour::Flavour};
 use itertools::izip;
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;

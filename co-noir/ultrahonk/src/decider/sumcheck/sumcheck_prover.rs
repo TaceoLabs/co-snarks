@@ -8,12 +8,11 @@ use crate::{CONST_PROOF_SIZE_LOG_N, Utils};
 use ark_ff::Zero;
 use common::polynomials::polynomial::RowDisablingPolynomial;
 use common::{
-    honk_proof::{TranscriptFieldType, HonkProofError, HonkProofResult},
     crs::ProverCrs,
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
     polynomials::polynomial::Polynomial,
     types::ZeroKnowledge,
-    honk_curve::HonkCurve,
-
 };
 
 use common::transcript::{Transcript, TranscriptHasher};

@@ -11,7 +11,7 @@ pub(crate) mod ultra_verifier;
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use common::crs::ProverCrs;
-use common::honk_proof::{HonkProofResult};
+use common::honk_proof::HonkProofResult;
 
 /// The log of the max circuit size assumed in order to achieve constant sized Honk proofs
 /// AZTEC TODO(<https://github.com/AztecProtocol/barretenberg/issues/1046>): Remove the need for const sized proofs

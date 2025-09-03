@@ -5,11 +5,11 @@ use crate::co_decider::types::RelationParameters;
 use crate::types::AllEntities;
 use ark_ec::CurveGroup;
 use ark_ff::Zero;
-use common::honk_proof::{TranscriptFieldType, HonkProofResult};
-use common::honk_curve::HonkCurve;
 use co_builder::polynomials::polynomial_flavours::{
     PrecomputedEntitiesFlavour, ShiftedWitnessEntitiesFlavour, WitnessEntitiesFlavour,
 };
+use common::honk_curve::HonkCurve;
+use common::honk_proof::{HonkProofResult, TranscriptFieldType};
 use itertools::Itertools;
 use mpc_net::Network;
 use ultrahonk::prelude::Univariate;

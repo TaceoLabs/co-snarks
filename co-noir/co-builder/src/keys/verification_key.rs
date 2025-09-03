@@ -1,15 +1,14 @@
 use crate::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use crate::{
-    flavours::ultra_flavour::UltraFlavour,
-    prover_flavour::ProverFlavour,
+    flavours::ultra_flavour::UltraFlavour, prover_flavour::ProverFlavour,
     ultra_builder::UltraCircuitBuilder,
 };
 use common::{
-    utils::Utils, 
     crs::ProverCrs,
-    honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
     honk_curve::HonkCurve,
+    honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
     serialize::{Serialize, SerializeP},
+    utils::Utils,
 };
 
 use ark_ec::CurveGroup;

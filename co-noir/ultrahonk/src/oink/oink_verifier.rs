@@ -4,18 +4,17 @@ use crate::{
     ultra_verifier::HonkVerifyResult,
 };
 use ark_ec::pairing::Pairing;
-use co_builder::prelude::{VerifyingKey};
+use co_builder::prelude::VerifyingKey;
 use co_builder::{
     polynomials::polynomial_flavours::WitnessEntitiesFlavour, prover_flavour::Flavour,
 };
 use common::transcript::{Transcript, TranscriptHasher};
 use common::{
-    honk_proof::{TranscriptFieldType, HonkProofError, HonkProofResult},
     crs::ProverCrs,
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
     polynomials::polynomial::Polynomial,
     types::ZeroKnowledge,
-    honk_curve::HonkCurve,
-
 };
 
 pub(crate) struct OinkVerifier<

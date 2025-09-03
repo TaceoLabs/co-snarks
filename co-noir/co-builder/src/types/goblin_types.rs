@@ -3,13 +3,13 @@ use crate::types::field_ct::BoolCT;
 use crate::types::field_ct::FieldCT;
 use crate::types::types::TraceData;
 use ark_ec::CurveGroup;
+use ark_ff::Field;
+use ark_ff::One;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use common::honk_curve::HonkCurve;
 use common::honk_proof::TranscriptFieldType;
 use common::mpc::NoirUltraHonkProver;
-use ark_ff::Field;
-use ark_ff::One;
 
 pub struct GoblinElement<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
     pub x: GoblinField<P::ScalarField>,
@@ -56,15 +56,29 @@ impl<F: PrimeField> GoblinField<F> {
 }
 
 impl GoblinField<TranscriptFieldType> {
-
-    pub fn get_value<P: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>, T: NoirWitnessExtensionProtocol<TranscriptFieldType>, D: NoirUltraHonkProver<P, ArithmeticShare = T::ArithmeticShare>>(&self, builder: &mut MegaCircuitBuilder<P, T, D>, driver: &mut T) -> T::AcvmType {
+    pub fn get_value<
+        P: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
+        T: NoirWitnessExtensionProtocol<TranscriptFieldType>,
+        D: NoirUltraHonkProver<P, ArithmeticShare = T::ArithmeticShare>,
+    >(
+        &self,
+        builder: &mut MegaCircuitBuilder<P, T, D>,
+        driver: &mut T,
+    ) -> T::AcvmType {
         let x = self.limbs[0].get_value(builder, driver);
         let y = self.limbs[1].get_value(builder, driver);
         let tmp = driver.mul_with_public(P::ScalarField::from(2u64).pow(&[136]), y);
         driver.add(x, tmp)
     }
 
-    pub fn one<P: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>, T: NoirWitnessExtensionProtocol<TranscriptFieldType>, D: NoirUltraHonkProver<P, ArithmeticShare = T::ArithmeticShare>>(builder: &mut MegaCircuitBuilder<P, T, D>, driver: &mut T) -> Self {
+    pub fn one<
+        P: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
+        T: NoirWitnessExtensionProtocol<TranscriptFieldType>,
+        D: NoirUltraHonkProver<P, ArithmeticShare = T::ArithmeticShare>,
+    >(
+        builder: &mut MegaCircuitBuilder<P, T, D>,
+        driver: &mut T,
+    ) -> Self {
         Self {
             // TODO CESAR: Verify this is correct
             limbs: [
@@ -74,15 +88,26 @@ impl GoblinField<TranscriptFieldType> {
         }
     }
 }
-impl<P: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>, T: NoirWitnessExtensionProtocol<TranscriptFieldType>> GoblinElement<P, T> {
-    pub fn get_value<D: NoirUltraHonkProver<P, ArithmeticShare = T::ArithmeticShare>>(&self, builder: &mut MegaCircuitBuilder<P, T, D>, driver: &mut T) -> (T::AcvmType, T::AcvmType, T::AcvmType) {
+impl<
+    P: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
+    T: NoirWitnessExtensionProtocol<TranscriptFieldType>,
+> GoblinElement<P, T>
+{
+    pub fn get_value<D: NoirUltraHonkProver<P, ArithmeticShare = T::ArithmeticShare>>(
+        &self,
+        builder: &mut MegaCircuitBuilder<P, T, D>,
+        driver: &mut T,
+    ) -> (T::AcvmType, T::AcvmType, T::AcvmType) {
         let x = self.x.get_value(builder, driver);
         let y = self.y.get_value(builder, driver);
         let is_infinity = self.is_infinity.get_value(driver);
         (x, y, is_infinity)
     }
 
-    pub fn one<D: NoirUltraHonkProver<P, ArithmeticShare = T::ArithmeticShare>>(builder: &mut MegaCircuitBuilder<P, T, D>, driver: &mut T) -> Self {
+    pub fn one<D: NoirUltraHonkProver<P, ArithmeticShare = T::ArithmeticShare>>(
+        builder: &mut MegaCircuitBuilder<P, T, D>,
+        driver: &mut T,
+    ) -> Self {
         Self {
             x: GoblinField::one(builder, driver),
             y: GoblinField::one(builder, driver),
@@ -90,4 +115,3 @@ impl<P: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>, T: No
         }
     }
 }
-
