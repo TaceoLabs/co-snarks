@@ -1,6 +1,6 @@
 use super::NoirUltraHonkProver;
 use ark_ec::CurveGroup;
-use ark_ff::Field;
+use ark_ff::{Field, PrimeField};
 use itertools::izip;
 use mpc_core::{
     MpcState,
@@ -14,8 +14,9 @@ use rayon::prelude::*;
 
 pub struct Rep3UltraHonkDriver;
 
-impl<P: CurveGroup> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
+impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
     type ArithmeticShare = Rep3PrimeFieldShare<P::ScalarField>;
+    type BaseFieldArithmeticShare = Rep3PrimeFieldShare<P::BaseField>;
     type PointShare = Rep3PointShare<P>;
     type State = Rep3State;
 

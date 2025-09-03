@@ -11,12 +11,14 @@ use mpc_core::protocols::shamir::{
 use mpc_net::Network;
 use num_traits::Zero;
 use rayon::prelude::*;
+use ark_ff::PrimeField;
 
 /// A UltraHonk driver using shamir secret sharing
 pub struct ShamirUltraHonkDriver;
 
-impl<P: CurveGroup> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
+impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
     type ArithmeticShare = ShamirPrimeFieldShare<P::ScalarField>;
+    type BaseFieldArithmeticShare = ShamirPrimeFieldShare<P::BaseField>;
     type PointShare = ShamirPointShare<P>;
     type State = ShamirState<P::ScalarField>;
 

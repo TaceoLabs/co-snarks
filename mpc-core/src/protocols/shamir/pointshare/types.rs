@@ -26,6 +26,15 @@ impl<C: CurveGroup> ShamirPointShare<C> {
     }
 }
 
+// TODO CESAR: Check if this is correct
+impl<C: CurveGroup> Default for ShamirPointShare<C> {
+    fn default() -> Self {
+        Self {
+            a: C::default(),
+        }
+    }
+}
+
 // Conversions
 impl<C: CurveGroup> ShamirPointShare<C> {
     /// Transforms a slice of `ShamirPointShare<C>` to a slice of `C`

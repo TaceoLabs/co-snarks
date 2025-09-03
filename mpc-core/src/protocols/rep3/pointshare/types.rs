@@ -21,3 +21,13 @@ impl<C: CurveGroup> Rep3PointShare<C> {
         (self.a, self.b)
     }
 }
+
+// TODO CESAR: Check if this is correct
+impl<C: CurveGroup> Default for Rep3PointShare<C> {
+    fn default() -> Self {
+        Self {
+            a: C::default(),
+            b: C::default(),
+        }
+    }
+}

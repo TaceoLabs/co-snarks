@@ -12,9 +12,10 @@ use common::transcript::Transcript;
 use common::transcript::TranscriptHasher;
 
 use itertools::{Itertools, izip};
+use mpc_core::MpcState;
 use mpc_net::Network;
 
-use crate::eccvm::co_ecc_op_queue::CoECCOpQueue;
+use co_builder::eccvm::co_ecc_op_queue::CoECCOpQueue;
 
 const NUM_WIRES: usize = 4;
 pub struct CoMergeProver<'a, C, H, T, N>
@@ -52,14 +53,15 @@ where
         commitment_key: &ProverCrs<C>,
     ) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
         self.transcript = Transcript::new();
+        let id = self.state.id();
 
         let curr_subtable = self
             .ecc_op_queue
-            .construct_current_ultra_ops_subtable_columns();
-        let curr_table = self.ecc_op_queue.construct_ultra_ops_table_columns();
+            .construct_current_ultra_ops_subtable_columns(id);
+        let curr_table = self.ecc_op_queue.construct_ultra_ops_table_columns(id);
         let prev_table = self
             .ecc_op_queue
-            .construct_previous_ultra_ops_table_columns();
+            .construct_previous_ultra_ops_table_columns(id);
 
         let (current_table_size, current_subtable_size) = (
             curr_table[0].coefficients.len(),
@@ -195,15 +197,16 @@ where
 mod tests {
     use std::thread;
 
-    use crate::eccvm::co_ecc_op_queue::{
-        CoEccOpCode, CoEccvmOpsTable, CoUltraEccOpsTable, CoUltraOp,
+    use co_builder::eccvm::co_ecc_op_queue::{
+         CoEccvmOpsTable, CoEccvmRowTracker, CoUltraEccOpsTable, CoUltraOp
     };
+    use mpc_core::protocols::rep3::share_curve_point;
 
     use super::*;
     use ark_bn254::Bn254;
     use ark_ec::bn::Bn;
     use ark_ec::pairing::Pairing;
-    use co_builder::eccvm::ecc_op_queue::{EccOpCode, EccOpsTable, EccvmRowTracker, UltraOp};
+    use co_builder::eccvm::ecc_op_queue::{EccOpCode, EccOpsTable, UltraOp};
     use common::crs::parse::CrsParser;
     use common::{mpc::rep3::Rep3UltraHonkDriver, types::ZeroKnowledge};
     use common::transcript::Poseidon2Sponge;
@@ -235,24 +238,21 @@ mod tests {
     fn co_ultra_ops_from_ultra_op(ultra_op: UltraOp<Bn254G1>) -> Vec<CoUltraOp<Driver, Bn254G1>> {
         let mut rng = thread_rng();
         izip!(
-            share_field_element(F::from(ultra_op.op_code.add as u8), &mut rng),
-            share_field_element(F::from(ultra_op.op_code.mul as u8), &mut rng),
-            share_field_element(F::from(ultra_op.op_code.eq as u8), &mut rng),
-            share_field_element(F::from(ultra_op.op_code.reset as u8), &mut rng),
             share_field_element(ultra_op.x_lo, &mut rng),
             share_field_element(ultra_op.x_hi, &mut rng),
             share_field_element(ultra_op.y_lo, &mut rng),
             share_field_element(ultra_op.y_hi, &mut rng),
             share_field_element(ultra_op.z_1, &mut rng),
             share_field_element(ultra_op.z_2, &mut rng),
+            share_field_element(F::from(ultra_op.return_is_infinity as u8), &mut rng)
         )
         .map(
-            |(add, mul, eq, reset, x_lo, x_hi, y_lo, y_hi, z_1, z_2)| CoUltraOp {
-                op_code: CoEccOpCode {
-                    add,
-                    mul,
-                    eq,
-                    reset,
+            |(x_lo, x_hi, y_lo, y_hi, z_1, z_2, return_is_infinity)| CoUltraOp {
+                op_code: EccOpCode {
+                    add: ultra_op.op_code.add,
+                    mul: ultra_op.op_code.mul,
+                    eq: ultra_op.op_code.eq,
+                    reset: ultra_op.op_code.reset,
                 },
                 x_lo,
                 x_hi,
@@ -260,7 +260,7 @@ mod tests {
                 y_hi,
                 z_1,
                 z_2,
-                return_is_infinity: ultra_op.return_is_infinity,
+                return_is_infinity,
             },
         )
         .collect_vec()
@@ -350,9 +350,11 @@ mod tests {
         };
 
         let mut co_ultra_ops_2: VecDeque<_> = co_ultra_ops_from_ultra_op(ultra_op_2).into();
+        let mut acc: VecDeque<_> =
+            share_curve_point(Bn254G1Affine::identity().into(), &mut thread_rng()).into();
 
         let mut get_queues = || CoECCOpQueue::<Driver, Bn254G1> {
-            accumulator: Bn254G1Affine::identity(),
+            accumulator: acc.pop_front().unwrap(),
             eccvm_ops_table: CoEccvmOpsTable::new(),
             ultra_ops_table: CoUltraEccOpsTable {
                 table: EccOpsTable {
@@ -363,7 +365,8 @@ mod tests {
                 },
             },
             eccvm_ops_reconstructed: Vec::new(),
-            eccvm_row_tracker: EccvmRowTracker::new(),
+            ultra_ops_reconstructed: Vec::new(),
+            eccvm_row_tracker: CoEccvmRowTracker::default(),
         };
 
         let queue: [CoECCOpQueue<Driver, Bn254G1>; 3] = core::array::from_fn(|_| get_queues());

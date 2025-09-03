@@ -1062,6 +1062,7 @@ dependencies = [
  "eyre",
  "itertools 0.14.0",
  "mpc-core",
+ "mpc-net",
  "noir-types",
  "num-bigint 0.4.6",
  "num-traits",

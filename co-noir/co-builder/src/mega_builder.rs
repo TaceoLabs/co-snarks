@@ -2,19 +2,21 @@ use std::collections::BTreeMap;
 
 use ark_ec::CurveGroup;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType};
+use common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType, mpc::NoirUltraHonkProver};
 use mpc_core::gadgets::poseidon2::POSEIDON2_BN254_T4_PARAMS;
+use mpc_net::Network;
 use num_bigint::BigUint;
 
-use crate::{eccvm::ecc_op_queue::{ECCOpQueue, ECCOpTuple, EccOpCode, UltraOp}, generic_builder::GenericBuilder, prelude::NUM_WIRES, types::types::{AddQuad, AddTriple, MegaTraceBlock, MegaTraceBlocks, MulQuad, PolyTriple, Poseidon2ExternalGate, Poseidon2InternalGate, RangeList}};
+use crate::{eccvm::{co_ecc_op_queue::{CoECCOpQueue, CoUltraOp}, ecc_op_queue::{ECCOpQueue, ECCOpTuple, EccOpCode, UltraOp}}, generic_builder::GenericBuilder, prelude::NUM_WIRES, types::types::{AddQuad, AddTriple, MegaTraceBlock, MegaTraceBlocks, MulQuad, PolyTriple, Poseidon2ExternalGate, Poseidon2InternalGate, RangeList}};
 use ark_ff::Zero;
 use ark_ff::One;
 
 type GateBlocks<F> = MegaTraceBlocks<MegaTraceBlock<F>>;
 
 pub struct MegaCircuitBuilder<
-    P: CurveGroup,
+    P: HonkCurve<TranscriptFieldType>,
     T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    D: NoirUltraHonkProver<P>,
 > {
     pub variables: Vec<T::AcvmType>,
     next_var_index: Vec<u32>,
@@ -28,7 +30,7 @@ pub struct MegaCircuitBuilder<
     pub(crate) real_variable_tags: Vec<u32>,
     pub(crate) current_tag: u32,
     pub(crate) blocks: GateBlocks<P::ScalarField>,
-    pub(crate) ecc_op_queue: ECCOpQueue<P>,
+    pub ecc_op_queue: CoECCOpQueue<D, P>,
     pub(crate) zero_idx: u32,
     pub(crate) add_accum_op_idx: u32,
     pub(crate) mul_accum_op_idx: u32,
@@ -36,7 +38,12 @@ pub struct MegaCircuitBuilder<
         pub(crate) tau: BTreeMap<u32, u32>,
 }
 
-impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericBuilder<P, T> for MegaCircuitBuilder<P, T> {
+impl<P, T, D> GenericBuilder<P, T> for MegaCircuitBuilder<P, T, D> 
+where 
+    P: HonkCurve<TranscriptFieldType>,
+    T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    D: NoirUltraHonkProver<P, ArithmeticShare = T::ArithmeticShare>,
+    {
     type TraceBlock = MegaTraceBlock<P::ScalarField>;
 
         fn get_new_tag(&mut self) -> u32 {
@@ -827,7 +834,12 @@ fn create_bool_gate(&mut self, variable_index: u32) {
     }
 }
 
-impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> MegaCircuitBuilder<P, T> {
+impl<P, T, D> MegaCircuitBuilder<P, T, D> 
+where 
+    P: HonkCurve<TranscriptFieldType>,
+    T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    D: NoirUltraHonkProver<P, ArithmeticShare = T::ArithmeticShare>,
+{
 
     pub(crate) const DUMMY_TAG: u32 = 0;
     pub(crate) const REAL_VARIABLE: u32 = u32::MAX - 1;
@@ -841,7 +853,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> MegaCircuit
     // number of gates created per non-native field operation in process_non_native_field_multiplications
     pub(crate) const GATES_PER_NON_NATIVE_FIELD_MULTIPLICATION_ARITHMETIC: usize = 7;
 
-    pub(crate) fn new(mut ecc_op_queue: ECCOpQueue<P>) -> Self {
+    pub(crate) fn new(mut ecc_op_queue: CoECCOpQueue<D, P>) -> Self {
         ecc_op_queue.initialize_new_subtable();
         let mut builder = Self {
             variables: vec![],
@@ -953,15 +965,15 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> MegaCircuit
      * @param ultra_op Operation data expressed in the ultra format
      * @note All selectors are set to 0 since the ecc op selector is derived later based on the block size/location.
      */
-    fn populate_ecc_op_wires(&mut self, ultra_op: &UltraOp<P>) -> ECCOpTuple {
+    fn populate_ecc_op_wires(&mut self, ultra_op: &CoUltraOp<D, P>) -> ECCOpTuple {
         // TODO CESAR: Should this be arithmetic shared
         let op = self.get_ecc_op_idx(&ultra_op.op_code);
-        let x_lo = self.add_variable(ultra_op.x_lo.into());
-        let x_hi = self.add_variable(ultra_op.x_hi.into());
-        let y_lo = self.add_variable(ultra_op.y_lo.into());
-        let y_hi = self.add_variable(ultra_op.y_hi.into());
-        let z_1 = self.add_variable(ultra_op.z_1.into());
-        let z_2 = self.add_variable(ultra_op.z_2.into());
+        let x_lo = self.add_variable(ultra_op.x_lo.clone().into());
+        let x_hi = self.add_variable(ultra_op.x_hi.clone().into());
+        let y_lo = self.add_variable(ultra_op.y_lo.clone().into());
+        let y_hi = self.add_variable(ultra_op.y_hi.clone().into());
+        let z_1 = self.add_variable(ultra_op.z_1.clone().into());
+        let z_2 = self.add_variable(ultra_op.z_2.clone().into());
 
         // First set of wires
         self.blocks.ecc_op.populate_wires(op, x_lo, x_hi, y_lo);
@@ -1003,19 +1015,37 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> MegaCircuit
     }
 
     /**
+     * @brief Add simple point addition operation to the op queue and add corresponding gates
+     *
+     * @param point Point to be added into the accumulator
+     */
+    pub fn queue_ecc_add_accum<N: Network>(
+        &mut self,
+        point: D::PointShare,
+    ) -> ECCOpTuple {
+        // Add the operation to the op queue
+        let ultra_op = self.ecc_op_queue.add_accumulate(point);
+
+        // Add corresponding gates for the operation
+        self.populate_ecc_op_wires(&ultra_op)
+    }
+
+    /**
      * Add point mul-then-accumulate operation to the op queue and add corresponding gates.
      *
      * @param point The affine point to multiply.
      * @param scalar The scalar by which point is multiplied prior to being accumulated.
      * @return ECCOpTuple encoding the point and scalar inputs to the mul accum.
      */
-    pub fn queue_ecc_mul_accum(
+    pub fn queue_ecc_mul_accum<N: Network>(
         &mut self,
-        point: P::Affine,
-        scalar: P::ScalarField,
+        point: D::PointShare,
+        scalar: D::ArithmeticShare,
+        net: &N,
+        state: &mut D::State,
     ) -> ECCOpTuple {
         // Add the operation to the op queue
-        let ultra_op = self.ecc_op_queue.mul_accumulate(point, scalar);
+        let ultra_op = self.ecc_op_queue.mul_accumulate(point, scalar, net, state);
 
         // Add corresponding gates for the operation
         self.populate_ecc_op_wires(&ultra_op)
@@ -1033,7 +1063,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> MegaCircuit
 
         // Add corresponding gates for the operation
         let mut op_tuple = self.populate_ecc_op_wires(&ultra_op);
-        op_tuple.return_is_infinity = ultra_op.return_is_infinity;
+        // TODO CESAR: op_tuple.return_is_infinity = ultra_op.return_is_infinity;
         op_tuple
     }
 

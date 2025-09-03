@@ -252,7 +252,7 @@ impl<C: CurveGroup> From<C> for Rep3AcvmPoint<C> {
 
 // TODO maybe we want to merge that with the Rep3VmType?? Atm we do not need
 // binary shares so maybe it is ok..
-#[derive(Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Copy, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Rep3AcvmType<F: PrimeField> {
     Public(
         #[serde(
@@ -357,9 +357,11 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     type Lookup = Rep3LookupTable<F>;
 
     type ArithmeticShare = Rep3PrimeFieldShare<F>;
+    type NativePointShare<C: CurveGroup<ScalarField = F>> = Rep3PointShare<C>;
 
     type AcvmType = Rep3AcvmType<F>;
     type AcvmPoint<C: CurveGroup<BaseField = F>> = Rep3AcvmPoint<C>;
+    type AcvmNativePoint<C: CurveGroup<ScalarField = F>> = Rep3AcvmPoint<C>;
 
     type BrilligDriver = Rep3BrilligDriver<'a, F, N>;
 

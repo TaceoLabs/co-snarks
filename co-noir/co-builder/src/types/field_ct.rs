@@ -6,7 +6,6 @@ use crate::types::generators;
 use crate::types::plookup::{ColumnIdx, Plookup};
 use crate::types::types::{AddTriple, EccAddGate, PolyTriple};
 use crate::ultra_builder::GenericUltraCircuitBuilder;
-use acir::circuit::Circuit;
 use ark_ec::{AffineRepr, CurveConfig, CurveGroup, PrimeGroup};
 use ark_ff::PrimeField;
 use ark_ff::{One, Zero};
@@ -20,7 +19,6 @@ use common::{
     },
     utils::Utils,
 };
-use tracing::field::Field;
 
 
 #[derive(Clone, Debug)]
@@ -33,7 +31,7 @@ pub struct FieldCT<F: PrimeField> {
 impl<F: PrimeField> FieldCT<F> {
     pub(crate) const IS_CONSTANT: u32 = u32::MAX;
 
-    pub(crate) fn from_witness_index(witness_index: u32) -> Self {
+    pub fn from_witness_index(witness_index: u32) -> Self {
         Self {
             additive_constant: F::zero(),
             multiplicative_constant: F::one(),
@@ -41,7 +39,7 @@ impl<F: PrimeField> FieldCT<F> {
         }
     }
 
-    pub(crate) fn from_witness<
+    pub fn from_witness<
         P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
@@ -52,7 +50,7 @@ impl<F: PrimeField> FieldCT<F> {
         Self::from(witness)
     }
 
-    pub(crate) fn get_value<
+    pub fn get_value<
         P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
@@ -114,7 +112,7 @@ impl<F: PrimeField> FieldCT<F> {
         }
     }
 
-    pub(crate) fn is_constant(&self) -> bool {
+    pub fn is_constant(&self) -> bool {
         self.witness_index == Self::IS_CONSTANT
     }
 
@@ -568,7 +566,7 @@ impl<F: PrimeField> FieldCT<F> {
         *self = self.add(other, builder, driver);
     }
 
-    pub(crate) fn neg(&self) -> Self {
+    pub fn neg(&self) -> Self {
         let mut result = self.to_owned();
         result.neg_inplace();
         result
@@ -581,7 +579,7 @@ impl<F: PrimeField> FieldCT<F> {
         }
     }
 
-    pub(crate) fn sub<
+    pub fn sub<
         P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
@@ -1114,7 +1112,7 @@ impl<F: PrimeField> FieldCT<F> {
         Ok(result)
     }
 
-    pub(crate) fn add_two<
+    pub fn add_two<
         P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
@@ -1190,7 +1188,7 @@ impl<F: PrimeField> FieldCT<F> {
         result
     }
 
-    pub(crate) fn is_zero<
+    pub fn is_zero<
         P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
@@ -1332,7 +1330,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> WitnessCT<P
 }
 
 #[derive(Debug)]
-pub(crate) struct BoolCT<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
+pub struct BoolCT<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
     pub(crate) witness_bool: T::AcvmType,
     pub(crate) witness_inverted: bool,
     pub(crate) witness_index: u32,

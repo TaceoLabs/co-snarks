@@ -73,7 +73,7 @@ impl<C: CurveGroup> From<C> for ShamirAcvmPoint<C> {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Copy, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ShamirAcvmType<F: PrimeField> {
     Public(
         #[serde(
@@ -160,9 +160,11 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
     type Lookup = Rep3LookupTable<F>; // This is just a dummy and unused
 
     type ArithmeticShare = ShamirPrimeFieldShare<F>;
+    type NativePointShare<C: CurveGroup<ScalarField = F>> = ShamirPointShare<C>;
 
     type AcvmType = ShamirAcvmType<F>;
     type AcvmPoint<C: CurveGroup<BaseField = F>> = ShamirAcvmPoint<C>;
+    type AcvmNativePoint<C: CurveGroup<ScalarField = F>> = ShamirAcvmPoint<C>;
 
     type BrilligDriver = ShamirBrilligDriver<'a, F, N>;
 

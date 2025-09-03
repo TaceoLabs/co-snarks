@@ -21,8 +21,10 @@ fn downcast<A: 'static, B: 'static>(a: &A) -> Option<&B> {
 pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     type Lookup: LookupTableProvider<F>;
     type ArithmeticShare: Clone;
+    type NativePointShare<C: CurveGroup<ScalarField = F>>: Clone;
     /// A type representing the values encountered during Noir compilation. It should at least contain public field elements and shared values.
-    type AcvmType: Clone
+    type AcvmType: Copy
+        + Clone
         + Default
         + fmt::Debug
         + fmt::Display
@@ -31,6 +33,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         + PartialEq
         + Into<<Self::BrilligDriver as BrilligDriver<F>>::BrilligType>;
     type AcvmPoint<C: CurveGroup<BaseField = F>>: Clone + fmt::Debug + fmt::Display + From<C>;
+    type AcvmNativePoint<C: CurveGroup<ScalarField = F>>: Clone + fmt::Debug + fmt::Display + From<C>;
 
     type BrilligDriver: BrilligDriver<F>;
 
@@ -177,6 +180,11 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
 
     /// Returns the share if the value is shared
     fn get_shared(a: &Self::AcvmType) -> Option<Self::ArithmeticShare>;
+
+    // TODO CESAR
+    fn get_shared_native_point<C: CurveGroup<ScalarField = F>>(a: &Self::AcvmNativePoint<C>) -> Option<Self::NativePointShare<C>> {
+        unimplemented!()
+    }
 
     /// Returns the value if the value is public
     fn get_public(a: &Self::AcvmType) -> Option<F>;
@@ -436,6 +444,16 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         y: Self::AcvmType,
         is_infinity: Self::AcvmType,
     ) -> eyre::Result<Self::AcvmPoint<C>>;
+
+    // TODO CESAR
+    fn field_shares_to_native_pointshare<C: CurveGroup<ScalarField = F>>(
+        &mut self,
+        x: Self::AcvmType,
+        y: Self::AcvmType,
+        is_infinity: Self::AcvmType,
+    ) -> eyre::Result<Self::AcvmNativePoint<C>> {
+        unimplemented!()
+    }
 
     /// Translates a share of the point to a share of its coordinates
     fn pointshare_to_field_shares<C: CurveGroup<BaseField = F>>(

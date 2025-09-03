@@ -24,8 +24,18 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
         + PartialEq
         + std::fmt::Debug
         + 'static;
+    type BaseFieldArithmeticShare: CanonicalSerialize
+        + CanonicalDeserialize
+        + Copy
+        + Clone
+        + Default
+        + Send
+        + Sync
+        + PartialEq
+        + std::fmt::Debug
+        + 'static;
     /// The G1 point share type
-    type PointShare: std::fmt::Debug + Send + 'static;
+    type PointShare: Clone + std::fmt::Debug + Send + Default + 'static;
     /// Internal state of used MPC protocol
     type State: MpcState + Send;
 
@@ -73,6 +83,16 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
 
     /// Add two shares: \[c\] = \[a\] + \[b\] and stores the result in \[a\].
     fn add_assign(a: &mut Self::ArithmeticShare, b: Self::ArithmeticShare);
+
+    /// Add two point shares: \[c\] = \[a\] + \[b\]
+    fn add_point(a: &mut Self::PointShare, b: Self::PointShare) {
+        unimplemented!()
+    }
+
+    /// Add two point shares: \[c\] = \[a\] + \[b\] and stores the result in \[a\].
+    fn add_point_assign(a: &mut Self::PointShare, b: Self::PointShare) {
+        unimplemented!()
+    }
 
     /// Elementwise addition of two shares: \[c\] = \[a\] + \[b\] and stores the result in \[a\].
     fn add_assign_many(a: &mut [Self::ArithmeticShare], b: &[Self::ArithmeticShare]) {
@@ -248,6 +268,16 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
         state: &mut Self::State,
     ) -> eyre::Result<Vec<Self::ArithmeticShare>>;
 
+    /// Multiply a shared point by a shared field element: \[c\] = \[a\] * b.
+    fn mul_point_and_field<N: Network>(
+        point: Self::PointShare,
+        field: Self::ArithmeticShare,
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<Self::PointShare> {
+        unimplemented!()
+    }
+
     /// Add a public value a to the share b: \[c\] = a + \[b\]
     fn add_with_public(
         public: P::ScalarField,
@@ -353,4 +383,23 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
         net: &N,
         state: &mut Self::State,
     ) -> eyre::Result<Vec<Self::ArithmeticShare>>;
+
+    fn is_zero_point<N: Network>(
+        x: Self::PointShare,
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<Self::ArithmeticShare> {
+        unimplemented!()
+    }
+
+    fn point_share_to_fieldshare<N: Network>(
+        x: Self::PointShare,
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<(Self::ArithmeticShare, Self::ArithmeticShare, Self::ArithmeticShare)>
+    where
+        P::BaseField: ark_ff::PrimeField,
+    {
+        unimplemented!()
+    }
 }
