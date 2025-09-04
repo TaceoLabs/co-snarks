@@ -19,7 +19,7 @@ use mpc_core::protocols::rep3::{
 use mpc_core::protocols::rep3_ring::gadgets::sort::{radix_sort_fields, radix_sort_fields_vec_by};
 use mpc_core::{
     lut::LookupTableProvider, protocols::rep3::Rep3PrimeFieldShare,
-    protocols::rep3_ring::lut::Rep3LookupTable,
+    protocols::rep3_ring::lut_field::Rep3LookupTable,
 };
 use mpc_net::Network;
 use num_bigint::BigUint;
@@ -665,10 +665,10 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                     .map_err(|_| eyre::eyre!("Index can not be translated to usize"))?;
 
                 match lut {
-                    mpc_core::protocols::rep3_ring::lut::PublicPrivateLut::Public(vec) => {
+                    mpc_core::protocols::rep3_ring::lut_field::PublicPrivateLut::Public(vec) => {
                         Self::AcvmType::from(vec[index].to_owned())
                     }
-                    mpc_core::protocols::rep3_ring::lut::PublicPrivateLut::Shared(vec) => {
+                    mpc_core::protocols::rep3_ring::lut_field::PublicPrivateLut::Shared(vec) => {
                         Self::AcvmType::from(vec[index].to_owned())
                     }
                 }
@@ -730,10 +730,10 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                     .map_err(|_| eyre::eyre!("Index can not be translated to usize"))?;
 
                 match lut {
-                    mpc_core::protocols::rep3_ring::lut::PublicPrivateLut::Public(vec) => {
+                    mpc_core::protocols::rep3_ring::lut_field::PublicPrivateLut::Public(vec) => {
                         vec[index] = value;
                     }
-                    mpc_core::protocols::rep3_ring::lut::PublicPrivateLut::Shared(vec) => {
+                    mpc_core::protocols::rep3_ring::lut_field::PublicPrivateLut::Shared(vec) => {
                         vec[index] = arithmetic::promote_to_trivial_share(self.id, value);
                     }
                 }
@@ -744,15 +744,17 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                     .map_err(|_| eyre::eyre!("Index can not be translated to usize"))?;
 
                 match lut {
-                    mpc_core::protocols::rep3_ring::lut::PublicPrivateLut::Public(vec) => {
+                    mpc_core::protocols::rep3_ring::lut_field::PublicPrivateLut::Public(vec) => {
                         let mut vec = vec
                             .iter()
                             .map(|value| arithmetic::promote_to_trivial_share(self.id, *value))
                             .collect::<Vec<_>>();
                         vec[index] = value;
-                        *lut = mpc_core::protocols::rep3_ring::lut::PublicPrivateLut::Shared(vec);
+                        *lut = mpc_core::protocols::rep3_ring::lut_field::PublicPrivateLut::Shared(
+                            vec,
+                        );
                     }
-                    mpc_core::protocols::rep3_ring::lut::PublicPrivateLut::Shared(vec) => {
+                    mpc_core::protocols::rep3_ring::lut_field::PublicPrivateLut::Shared(vec) => {
                         vec[index] = value;
                     }
                 }
@@ -2117,7 +2119,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
 
         let res0 = conversion::a2b_many(&results[2 * slices..], self.net0, &mut self.state0)?;
 
-        let sbox_lut = mpc_core::protocols::rep3_ring::lut::PublicPrivateLut::Public(
+        let sbox_lut = mpc_core::protocols::rep3_ring::lut_field::PublicPrivateLut::Public(
             sbox.iter().map(|&value| F::from(value)).collect::<Vec<_>>(),
         );
         let base_powers = get_base_powers::<32>(base);

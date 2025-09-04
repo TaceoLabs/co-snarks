@@ -2216,7 +2216,7 @@ mod field_share {
                     rs.extend_from_slice(&val[2 * slices..]);
                 }
 
-                let sbox_lut = rep3_ring::lut::PublicPrivateLut::Public(
+                let sbox_lut = rep3_ring::lut_field::PublicPrivateLut::Public(
                     s_box
                         .iter()
                         .map(|&value| ark_bn254::Fr::from(value))
@@ -2229,7 +2229,7 @@ mod field_share {
                 let rs = conversion::a2b_many(&rs, &net0, &mut state0).unwrap();
                 for key in rs {
                     let sbox_value =
-                        rep3_ring::lut::Rep3LookupTable::get_from_public_lut_no_b2a_conversion::<
+                        rep3_ring::lut_field::Rep3LookupTable::get_from_public_lut_no_b2a_conversion::<
                             u8,
                             _,
                         >(

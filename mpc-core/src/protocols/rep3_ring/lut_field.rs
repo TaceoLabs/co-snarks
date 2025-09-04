@@ -115,7 +115,7 @@ impl<F: PrimeField> Rep3LookupTable<F> {
         let b = T::cast_from_biguint(&index.b);
         let share = Rep3RingShare::new(a, b);
 
-        let bins_a = gadgets::lut::read_multiple_public_lut_low_depth(
+        let bins_a = gadgets::lut_field::read_multiple_public_lut_low_depth(
             luts, share, net0, net1, state0, state1,
         )?;
         let bins_b = net0.reshare_many(&bins_a)?;
@@ -148,7 +148,7 @@ impl<F: PrimeField> Rep3LookupTable<F> {
         let share = Rep3RingShare::new(a, b);
         let val = match lut {
             PublicPrivateLut::Public(vec) => {
-                let bin_a = gadgets::lut::read_public_lut_low_depth(
+                let bin_a = gadgets::lut_field::read_public_lut_low_depth(
                     vec.as_ref(),
                     share,
                     net0,
@@ -161,7 +161,7 @@ impl<F: PrimeField> Rep3LookupTable<F> {
                 rep3::conversion::b2a_selector(&bin, net0, state0)?
             }
             PublicPrivateLut::Shared(vec) => {
-                let f_a = gadgets::lut::read_shared_lut(vec.as_ref(), share, net0, state0)?;
+                let f_a = gadgets::lut_field::read_shared_lut(vec.as_ref(), share, net0, state0)?;
                 let f_b = net0.reshare(f_a)?;
                 Rep3PrimeFieldShare::new(f_a, f_b)
             }
@@ -188,7 +188,7 @@ impl<F: PrimeField> Rep3LookupTable<F> {
 
         match lut {
             PublicPrivateLut::Public(vec) => {
-                let bin_a = gadgets::lut::read_public_lut_low_depth(
+                let bin_a = gadgets::lut_field::read_public_lut_low_depth(
                     vec.as_ref(),
                     share,
                     net0,
@@ -228,11 +228,11 @@ impl<F: PrimeField> Rep3LookupTable<F> {
                     .iter()
                     .map(|v| arithmetic::promote_to_trivial_share(id, *v))
                     .collect::<Vec<_>>();
-                gadgets::lut::write_lut(value, &mut shared, share, net0, state0)?;
+                gadgets::lut_field::write_lut(value, &mut shared, share, net0, state0)?;
                 *lut = PublicPrivateLut::Shared(shared);
             }
             PublicPrivateLut::Shared(shared) => {
-                gadgets::lut::write_lut(value, shared, share, net0, state0)?;
+                gadgets::lut_field::write_lut(value, shared, share, net0, state0)?;
             }
         }
         Ok(())
@@ -292,7 +292,7 @@ impl<F: PrimeField> Rep3LookupTable<F> {
     ) -> eyre::Result<()> {
         let len = lut.len();
         tracing::debug!("doing write on LUT-map of size {}", len);
-        gadgets::lut::write_lut_from_ohv(&value, lut, ohv, net, state)?;
+        gadgets::lut_field::write_lut_from_ohv(&value, lut, ohv, net, state)?;
         tracing::debug!("we are done");
         Ok(())
     }
@@ -308,6 +308,7 @@ impl<F: PrimeField> Rep3LookupTable<F> {
 
 impl<F: PrimeField> LookupTableProvider<F> for Rep3LookupTable<F> {
     type SecretShare = Rep3PrimeFieldShare<F>;
+    type IndexSecretShare = Rep3PrimeFieldShare<F>;
     type LutType = PublicPrivateLut<F>;
     type State = Rep3State;
 
@@ -323,7 +324,7 @@ impl<F: PrimeField> LookupTableProvider<F> for Rep3LookupTable<F> {
 
     fn get_from_lut<N: Network>(
         &mut self,
-        index: Self::SecretShare,
+        index: Self::IndexSecretShare,
         lut: &Self::LutType,
         net0: &N,
         net1: &N,
@@ -352,7 +353,7 @@ impl<F: PrimeField> LookupTableProvider<F> for Rep3LookupTable<F> {
 
     fn write_to_lut<N: Network>(
         &mut self,
-        index: Self::SecretShare,
+        index: Self::IndexSecretShare,
         value: Self::SecretShare,
         lut: &mut Self::LutType,
         net0: &N,

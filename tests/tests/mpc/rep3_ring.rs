@@ -1915,7 +1915,8 @@ mod ring_share {
                 let lut = lut.clone();
                 std::thread::spawn(move || {
                     let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
-                    let res = gadgets::lut::read_public_lut(&lut, x, &net, &mut state).unwrap();
+                    let res =
+                        gadgets::lut_field::read_public_lut(&lut, x, &net, &mut state).unwrap();
                     tx.send(res)
                 });
             }
@@ -1934,6 +1935,49 @@ mod ring_share {
     #[test]
     fn rep3_lut_test() {
         apply_to_all!(rep3_lut_test_t, [u8, u16]);
+    }
+
+    fn rep3_curve_lut_test_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
+        let mut rng = thread_rng();
+        for k in 1..T::K {
+            let n = 1 << k;
+            let lut = (0..n)
+                .map(|_| ark_bn254::G1Projective::rand(&mut rng))
+                .collect::<Vec<_>>();
+            let x = rng.gen_range::<usize, _>(0..n);
+            let x_ = RingElement(T::try_from(x as u64).unwrap());
+            let x_shares = rep3_ring::share_ring_element_binary(x_, &mut rng);
+            let should_result_f = lut[x].to_owned();
+
+            let nets = LocalNetwork::new_3_parties();
+            let (tx1, rx1) = mpsc::channel();
+            let (tx2, rx2) = mpsc::channel();
+            let (tx3, rx3) = mpsc::channel();
+
+            for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter(),) {
+                let lut = lut.clone();
+                std::thread::spawn(move || {
+                    let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
+                    let res =
+                        gadgets::lut_curve::read_public_lut(&lut, x, &net, &mut state).unwrap();
+                    tx.send(res)
+                });
+            }
+
+            let result1 = rx1.recv().unwrap();
+            let result2 = rx2.recv().unwrap();
+            let result3 = rx3.recv().unwrap();
+            let is_result = rep3::combine_curve_point(result1, result2, result3);
+            assert_eq!(is_result, should_result_f);
+        }
+    }
+
+    #[test]
+    fn rep3_curve_lut_test() {
+        apply_to_all!(rep3_curve_lut_test_t, [u8, u16]);
     }
 
     fn rep3_lut_low_depth_test_t<T: IntRing2k>()
@@ -1968,7 +2012,7 @@ mod ring_share {
                     let mut state0 = Rep3State::new(&net0, A2BType::default()).unwrap();
                     let mut state1 = state0.fork(0).unwrap();
 
-                    let res = gadgets::lut::read_public_lut_low_depth(
+                    let res = gadgets::lut_field::read_public_lut_low_depth(
                         &lut,
                         x,
                         &net0,
@@ -2026,8 +2070,10 @@ mod ring_share {
             ) {
                 std::thread::spawn(move || {
                     let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
-
-                    let res = gadgets::lut::read_shared_lut(&lut, x, &net, &mut state).unwrap();
+                    let start = std::time::Instant::now();
+                    let res =
+                        gadgets::lut_field::read_shared_lut(&lut, x, &net, &mut state).unwrap();
+                    println!("Time for read_shared_lut: {:?}", start.elapsed());
                     tx.send(res)
                 });
             }
@@ -2043,6 +2089,57 @@ mod ring_share {
     #[test]
     fn rep3_shared_lut_test() {
         apply_to_all!(rep3_shared_lut_test_t, [u8, u16]);
+    }
+
+    fn rep3_shared_curve_lut_test_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
+        let mut rng = thread_rng();
+        for k in 1..T::K {
+            let n = 1 << k;
+            let lut = (0..n)
+                .map(|_| ark_bn254::G1Projective::rand(&mut rng))
+                .collect::<Vec<_>>();
+            let x = rng.gen_range::<usize, _>(0..n);
+            let x_ = RingElement(T::try_from(x as u64).unwrap());
+            let x_shares = rep3_ring::share_ring_element_binary(x_, &mut rng);
+            let lut_shares = rep3::share_curve_points(&lut, &mut rng);
+            let should_result = lut[x].to_owned();
+
+            let nets = LocalNetwork::new_3_parties();
+            let (tx1, rx1) = mpsc::channel();
+            let (tx2, rx2) = mpsc::channel();
+            let (tx3, rx3) = mpsc::channel();
+
+            for (net, tx, x, lut) in izip!(
+                nets,
+                [tx1, tx2, tx3],
+                x_shares.into_iter(),
+                lut_shares.into_iter()
+            ) {
+                std::thread::spawn(move || {
+                    let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
+                    let start = std::time::Instant::now();
+                    let res =
+                        gadgets::lut_curve::read_shared_lut(&lut, x, &net, &mut state).unwrap();
+                    println!("Time for read_shared_lut: {:?}", start.elapsed());
+                    tx.send(res)
+                });
+            }
+
+            let result1 = rx1.recv().unwrap();
+            let result2 = rx2.recv().unwrap();
+            let result3 = rx3.recv().unwrap();
+            let is_result = result1 + result2 + result3;
+            assert_eq!(is_result, should_result);
+        }
+    }
+
+    #[test]
+    #[ignore = "This test is a bit slow, so ignore by default"]
+    fn rep3_shared_curve_lut_test() {
+        apply_to_all!(rep3_shared_curve_lut_test_t, [u8, u16]);
     }
 
     fn rep3_write_lut_test_t<T: IntRing2k>()
@@ -2079,7 +2176,7 @@ mod ring_share {
                 std::thread::spawn(move || {
                     let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
 
-                    gadgets::lut::write_lut(&y, &mut lut, x, &net, &mut state).unwrap();
+                    gadgets::lut_field::write_lut(&y, &mut lut, x, &net, &mut state).unwrap();
                     tx.send(lut)
                 });
             }
