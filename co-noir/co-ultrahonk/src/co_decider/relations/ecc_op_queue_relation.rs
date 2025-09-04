@@ -348,7 +348,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
             univariate_accumulator,
             input,
             &RelationParameters::default(),
-            &vec![*scaling_factor; input.precomputed.q_elliptic().len()],
+            &vec![*scaling_factor; input.precomputed.lagrange_ecc_op().len()],
         )
     }
 
