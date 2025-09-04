@@ -103,7 +103,7 @@ pub fn scalar_mul_local<C: CurveGroup>(
 }
 
 /// Transforms a public value into a shared value: \[a\] = a.
-pub fn promote_to_trivial_share<C: CurveGroup>(a: &C, id: PartyID) -> PointShare<C> {
+pub fn promote_to_trivial_share<C: CurveGroup>(id: PartyID, a: &C) -> PointShare<C> {
     match id {
         PartyID::ID0 => PointShare::new(*a, C::zero()),
         PartyID::ID1 => PointShare::new(C::zero(), *a),

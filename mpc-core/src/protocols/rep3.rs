@@ -623,3 +623,19 @@ pub fn combine_curve_point<C: CurveGroup>(
 ) -> C {
     share1.a + share2.a + share3.a
 }
+
+/// Reconstructs a vector of curve points from its arithmetic replicated shares.
+/// # Panics
+/// Panics if the provided `Vec` sizes do not match.
+pub fn combine_curve_points<C: CurveGroup>(
+    share1: &[Rep3PointShare<C>],
+    share2: &[Rep3PointShare<C>],
+    share3: &[Rep3PointShare<C>],
+) -> Vec<C> {
+    assert_eq!(share1.len(), share2.len());
+    assert_eq!(share2.len(), share3.len());
+
+    itertools::multizip((share1, share2, share3))
+        .map(|(x1, x2, x3)| x1.a + x2.a + x3.a)
+        .collect::<Vec<_>>()
+}
