@@ -18,6 +18,7 @@ use mpc_core::{
 use num_bigint::BigUint;
 use std::any::TypeId;
 use std::marker::PhantomData;
+use std::ops::MulAssign;
 
 pub struct PlainAcvmSolver<F: PrimeField> {
     plain_lut: PlainLookupTableProvider<F>,
@@ -397,6 +398,46 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
             .iter()
             .map(|&inp| {
                 Self::decompose_arithmetic(self, inp, total_bit_size_per_field, decompose_bit_size)
+            })
+            .collect()
+    }
+
+    fn decompose_arithmetic_other_to_acvm<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        input: Self::OtherArithmeticShare<C>,
+        total_bit_size_per_field: usize,
+        decompose_bit_size: usize,
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
+        let mut result = Vec::with_capacity(total_bit_size_per_field.div_ceil(decompose_bit_size));
+        let big_mask = (BigUint::from(1u64) << total_bit_size_per_field) - BigUint::one();
+        let small_mask = (BigUint::from(1u64) << decompose_bit_size) - BigUint::one();
+        let mut x: BigUint = input.into();
+        x &= &big_mask;
+        for _ in 0..total_bit_size_per_field.div_ceil(decompose_bit_size) {
+            let chunk = &x & &small_mask;
+            x >>= decompose_bit_size;
+            result.push(F::from(chunk));
+        }
+        Ok(result)
+    }
+
+    fn decompose_arithmetic_other_to_acvm_many<
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
+        &mut self,
+        input: &[Self::OtherArithmeticShare<C>],
+        total_bit_size_per_field: usize,
+        decompose_bit_size: usize,
+    ) -> eyre::Result<Vec<Vec<Self::AcvmType>>> {
+        input
+            .iter()
+            .map(|&inp| {
+                Self::decompose_arithmetic_other_to_acvm::<C>(
+                    self,
+                    inp,
+                    total_bit_size_per_field,
+                    decompose_bit_size,
+                )
             })
             .collect()
     }
@@ -1133,6 +1174,13 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         shared.mul_assign(&public);
     }
 
+    fn mul_assign_with_public_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        shared: &mut Self::OtherAcvmType<C>,
+        public: C::BaseField,
+    ) {
+        shared.mul_assign(&public);
+    }
+
     fn mul_with_public_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         public: C::BaseField,
@@ -1215,6 +1263,25 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
             .map(|x| {
                 let x: BigUint = (*x).into();
                 let x: C::ScalarField = x.into();
+                Ok(x)
+            })
+            .collect()
+    }
+
+    fn convert_fields_back<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[Self::AcvmType],
+    ) -> eyre::Result<Vec<Self::OtherAcvmType<C>>> {
+        if a.iter().any(|v| {
+            let v_biguint: num_bigint::BigUint = (*v).into();
+            v_biguint > F::MODULUS.into()
+        }) {
+            eyre::bail!("Element too large to fit in target field");
+        }
+        a.iter()
+            .map(|x| {
+                let x: BigUint = (*x).into();
+                let x: C::BaseField = x.into();
                 Ok(x)
             })
             .collect()
@@ -1718,5 +1785,140 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         point: Self::NativeAcvmPoint<C>,
     ) -> eyre::Result<Self::NativeAcvmPoint<C>> {
         Ok(-point)
+    }
+
+    fn compute_remainder_limbs_and_quotient_limbs<
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
+        &mut self,
+        ultra_ops: &[Self::AcvmType],
+        _converted_ultra_ops: &[Self::OtherAcvmType<C>],
+        evaluation_input_x: C::BaseField,
+        batching_challenge_v: C::BaseField,
+        previous_accumulator: Self::OtherAcvmType<C>,
+        op_code: u64,
+        num_limb_shift: usize,
+        _num_binary_limbs: usize,
+    ) -> eyre::Result<(Vec<Self::AcvmType>, Vec<Self::AcvmType>)> {
+        const NUM_LIMB_BITS: usize = 68;
+        const NUM_BINARY_LIMBS: usize = 4;
+        let uint_previous_accumulator: BigUint = previous_accumulator.into();
+        let uint_x: BigUint = evaluation_input_x.into();
+        let uint_op = BigUint::from(op_code);
+        let v_squared = batching_challenge_v * batching_challenge_v;
+        let v_cubed = v_squared * batching_challenge_v;
+        let v_quarted = v_cubed * batching_challenge_v;
+        let x_lo: BigUint = ultra_ops[0].into();
+        let x_hi: BigUint = ultra_ops[1].into();
+        let y_lo: BigUint = ultra_ops[2].into();
+        let y_hi: BigUint = ultra_ops[3].into();
+        let z1_b: BigUint = ultra_ops[4].into();
+        let z2_b: BigUint = ultra_ops[5].into();
+        let uint_v: BigUint = batching_challenge_v.into();
+        let uint_v_squared: BigUint = v_squared.into();
+        let uint_v_cubed: BigUint = v_cubed.into();
+        let uint_v_quarted: BigUint = v_quarted.into();
+
+        let uint_p_x = &x_lo + (&x_hi << num_limb_shift);
+        let uint_p_y = &y_lo + (&y_hi << num_limb_shift);
+        let uint_z1 = z1_b;
+        let uint_z2 = z2_b;
+
+        // Construct Fq for op, P.x, P.y, z_1, z_2 for use in witness computation
+        let base_op = C::BaseField::from(op_code);
+        let base_p_x = C::BaseField::from(uint_p_x.clone());
+        let base_p_y = C::BaseField::from(uint_p_y.clone());
+        let base_z_1 = C::BaseField::from(uint_z1.clone());
+        let base_z_2 = C::BaseField::from(uint_z2.clone());
+
+        // The formula is `accumulator = accumulator⋅x + (op + v⋅p.x + v²⋅p.y + v³⋅z₁ + v⁴z₂)`. We need to compute the
+        // remainder (new accumulator value)
+
+        let remainder: C::BaseField = previous_accumulator * evaluation_input_x
+            + base_z_2 * v_quarted
+            + base_z_1 * v_cubed
+            + base_p_y * v_squared
+            + base_p_x * batching_challenge_v
+            + base_op;
+
+        // We also need to compute the quotient
+        let modulus_big: BigUint = C::BaseField::MODULUS.into();
+
+        let uint_remainder: BigUint = remainder.into();
+
+        let quotient_by_modulus = &uint_previous_accumulator * &uint_x
+            + &uint_z2 * &uint_v_quarted
+            + &uint_z1 * &uint_v_cubed
+            + &uint_p_y * &uint_v_squared
+            + &uint_p_x * &uint_v
+            + &uint_op
+            - &uint_remainder;
+
+        let quotient = &quotient_by_modulus / &modulus_big;
+
+        debug_assert!(
+            quotient_by_modulus == &quotient * &modulus_big,
+            "Quotient reconstruction failed"
+        );
+
+        let slice_u256 = |value: &BigUint, start: u64, end: u64| -> BigUint {
+            if end <= start {
+                return BigUint::zero();
+            }
+            let range = end - start;
+            let mask = if range == 256 {
+                (BigUint::from(1u64) << 256) - BigUint::one()
+            } else {
+                (BigUint::one() << range) - BigUint::one()
+            };
+            (value >> start) & mask
+        };
+        let split_fq_into_limbs = |x: C::BaseField| -> [C::ScalarField; NUM_BINARY_LIMBS] {
+            let xb: BigUint = x.into();
+            let mut out = [C::ScalarField::from(0u64); NUM_BINARY_LIMBS];
+
+            for (i, limb) in out.iter_mut().enumerate() {
+                let slice = slice_u256(
+                    &xb,
+                    (i * NUM_LIMB_BITS) as u64,
+                    ((i + 1) * NUM_LIMB_BITS) as u64,
+                );
+                *limb = C::ScalarField::from(slice);
+            }
+            out
+        };
+        let uint512_t_to_limbs = |original: &BigUint| -> [C::ScalarField; NUM_BINARY_LIMBS] {
+            let mut out = [C::ScalarField::from(0u64); NUM_BINARY_LIMBS];
+            for (i, limb) in out.iter_mut().enumerate() {
+                *limb = C::ScalarField::from(slice_u256(
+                    original,
+                    (i * NUM_LIMB_BITS) as u64,
+                    ((i + 1) * NUM_LIMB_BITS) as u64,
+                ));
+            }
+            out
+        };
+
+        let remainder_limbs = split_fq_into_limbs(remainder);
+        let quotient_limbs = uint512_t_to_limbs(&quotient);
+        Ok((quotient_limbs.to_vec(), remainder_limbs.to_vec()))
+    }
+
+    fn get_lowest_32_bits_many(
+        &mut self,
+        inputs: &[Self::ArithmeticShare],
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
+        Ok(inputs
+            .iter()
+            .map(|x| {
+                let x_biguint: BigUint = (*x).into();
+                let res = if let Some(&digit) = x_biguint.to_u32_digits().first() {
+                    digit
+                } else {
+                    0
+                };
+                F::from(res)
+            })
+            .collect())
     }
 }

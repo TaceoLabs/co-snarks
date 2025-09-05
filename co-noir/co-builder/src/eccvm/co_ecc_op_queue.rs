@@ -474,6 +474,13 @@ impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: CurveGroup<BaseField: P
             self.append_eccvm_op(op);
         }
     }
+
+    pub fn get_ultra_ops(&mut self) -> &Vec<CoUltraOp<T, C>> {
+        if self.ultra_ops_reconstructed.is_empty() {
+            self.construct_full_ultra_ops_table();
+        }
+        &self.ultra_ops_reconstructed
+    }
 }
 
 pub struct CoScalarMul<

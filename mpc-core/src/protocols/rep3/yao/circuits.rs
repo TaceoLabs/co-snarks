@@ -942,6 +942,90 @@ impl GarbledCircuits {
         Ok(BinaryBundle::new(results))
     }
 
+    /// Decomposes a field element (represented as two bitdecompositions wires_a, wires_b which need to be added first) into a vector of num_decomposition field elements of size decompose_bitlen. For the bitcomposition, wires_c are used.
+    fn decompose_field_element_to_other_field<G: FancyBinary, F: PrimeField, K: PrimeField>(
+        g: &mut G,
+        wires_a: &[G::Item],
+        wires_b: &[G::Item],
+        wires_c: &[G::Item],
+        decompose_bitlen: usize,
+        total_output_bitlen: usize,
+    ) -> Result<Vec<G::Item>, G::Error> {
+        let num_decomps_per_field = total_output_bitlen.div_ceil(decompose_bitlen);
+        debug_assert_eq!(wires_a.len(), wires_b.len());
+        let input_bitlen = wires_a.len();
+        let output_bitlen = K::MODULUS_BIT_SIZE as usize;
+        debug_assert_eq!(input_bitlen, F::MODULUS_BIT_SIZE as usize);
+        debug_assert!(input_bitlen >= total_output_bitlen);
+        debug_assert!(decompose_bitlen <= total_output_bitlen);
+        debug_assert_eq!(wires_c.len(), input_bitlen * num_decomps_per_field);
+
+        let input_bits =
+            Self::adder_mod_p_with_output_size::<_, F>(g, wires_a, wires_b, total_output_bitlen)?;
+
+        let mut results = Vec::with_capacity(wires_c.len());
+
+        for (xs, ys) in izip!(
+            input_bits.chunks(decompose_bitlen),
+            wires_c.chunks(output_bitlen),
+        ) {
+            let result = Self::compose_field_element::<_, K>(g, xs, ys)?;
+            results.extend(result);
+        }
+
+        Ok(results)
+    }
+
+    /// Decomposes a vector of field elements (represented as two bitdecompositions wires_a, wires_b which need to be added first) into a vector of num_decomposition field elements of size decompose_bitlen. For the bitcomposition, wires_c are used.
+    pub(crate) fn decompose_field_element_to_other_field_many<
+        G: FancyBinary,
+        F: PrimeField,
+        K: PrimeField,
+    >(
+        g: &mut G,
+        wires_a: &BinaryBundle<G::Item>,
+        wires_b: &BinaryBundle<G::Item>,
+        wires_c: &BinaryBundle<G::Item>,
+        decompose_bitlen: usize,
+        total_output_bitlen_per_field: usize,
+    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+        debug_assert_eq!(wires_a.size(), wires_b.size());
+        let input_size = wires_a.size();
+        let input_bitlen = F::MODULUS_BIT_SIZE as usize;
+        let output_bitlen = K::MODULUS_BIT_SIZE as usize;
+        let num_inputs = input_size / input_bitlen;
+
+        let num_decomps_per_field = total_output_bitlen_per_field.div_ceil(decompose_bitlen);
+        let total_output_elements = num_decomps_per_field * num_inputs;
+
+        debug_assert_eq!(input_size % input_bitlen, 0);
+        debug_assert!(input_bitlen >= total_output_bitlen_per_field);
+        debug_assert!(decompose_bitlen <= total_output_bitlen_per_field);
+        debug_assert_eq!(wires_c.size(), input_bitlen * total_output_elements);
+
+        let mut results = Vec::with_capacity(wires_c.size());
+
+        for (chunk_a, chunk_b, chunk_c) in izip!(
+            wires_a.wires().chunks(input_bitlen),
+            wires_b.wires().chunks(input_bitlen),
+            wires_c
+                .wires()
+                .chunks(output_bitlen * num_decomps_per_field)
+        ) {
+            let decomposed = Self::decompose_field_element_to_other_field::<_, F, K>(
+                g,
+                chunk_a,
+                chunk_b,
+                chunk_c,
+                decompose_bitlen,
+                total_output_bitlen_per_field,
+            )?;
+            results.extend(decomposed);
+        }
+
+        Ok(BinaryBundle::new(results))
+    }
+
     /// Slices a field element (represented as two bitdecompositions wires_a, wires_b which need to be added first) at given indices (msb, lsb), both included in the slice. For the bitcomposition, wires_c are used.
     fn slice_field_element<G: FancyBinary, F: PrimeField>(
         g: &mut G,
@@ -1497,7 +1581,7 @@ impl GarbledCircuits {
         let divisor = Self::bin_addition_no_carry(g, x1s, x2s)?;
 
         debug_assert_eq!(dividend.len(), input_bitlen);
-        debug_assert_eq!(dividend.len(), dividend.len());
+        debug_assert_eq!(divisor.len(), dividend.len());
         let quotient = Self::bin_div_by_shared(g, dividend, &divisor)?;
 
         let mut added = Vec::with_capacity(input_bitlen);
@@ -1713,6 +1797,90 @@ impl GarbledCircuits {
             )?);
         }
         Ok(BinaryBundle::new(results))
+    }
+
+    /// Divides the quotient by a public divisor and then returns the quotient and remainder as field elements in limbs_per_field many limbs. The field elements are composed using wires_c. This is needed in the Translator builder.
+    #[expect(clippy::too_many_arguments)]
+    pub fn compute_translator_limbs_many<G: FancyBinary + FancyBinaryConstant, F: PrimeField>(
+        g: &mut G,
+        wires_x1: &BinaryBundle<G::Item>,
+        wires_x2: &BinaryBundle<G::Item>,
+        wires_c: &BinaryBundle<G::Item>,
+        input_bitlen: usize,
+        output_bitlen: usize,
+        limbs_per_field: usize,
+        divisor: &[bool],
+    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+        debug_assert_eq!(wires_x1.size(), wires_x2.size());
+        let length = wires_x1.size();
+        debug_assert_eq!(length % 2, 0);
+
+        debug_assert_eq!(length / 2 % input_bitlen, 0);
+
+        let mut results = Vec::with_capacity(wires_c.size());
+        let num_outputs_per_chunk = limbs_per_field * 2;
+
+        for (chunk_x1, chunk_x2, chunk_y1, chunk_y2, chunk_c) in izip!(
+            wires_x1.wires()[0..length / 2].chunks(input_bitlen),
+            wires_x2.wires()[0..length / 2].chunks(input_bitlen),
+            wires_x1.wires()[length / 2..].chunks(input_bitlen),
+            wires_x2.wires()[length / 2..].chunks(input_bitlen),
+            wires_c
+                .wires()
+                .chunks(num_outputs_per_chunk * F::MODULUS_BIT_SIZE as usize),
+        ) {
+            results.extend(Self::compute_translator_limbs::<_, F>(
+                g,
+                chunk_x1,
+                chunk_x2,
+                chunk_y1,
+                chunk_y2,
+                chunk_c,
+                divisor,
+                input_bitlen,
+                output_bitlen,
+                limbs_per_field,
+            )?);
+        }
+        Ok(BinaryBundle::new(results))
+    }
+
+    /// Divides the quotient by a public divisor and then returns the quotient and remainder as field elements in limbs_per_field many limbs. The field elements are composed using wires_c. This is needed in the Translator builder.
+    #[expect(clippy::too_many_arguments)]
+    fn compute_translator_limbs<G: FancyBinary + FancyBinaryConstant, F: PrimeField>(
+        g: &mut G,
+        x1s: &[G::Item],
+        x2s: &[G::Item],
+        y1s: &[G::Item],
+        y2s: &[G::Item],
+        wires_c: &[G::Item],
+        divisor: &[bool],
+        input_bitlen: usize,
+        output_bitlen: usize,
+        limbs_per_field: usize,
+    ) -> Result<Vec<G::Item>, G::Error> {
+        let quotient = Self::bin_addition_no_carry(g, x1s, x2s)?;
+        let remainder = Self::bin_addition_no_carry(g, y1s, y2s)?;
+
+        debug_assert_eq!(quotient.len(), input_bitlen);
+        debug_assert_eq!(quotient.len(), divisor.len());
+        let quotient = Self::bin_div_by_public(g, &quotient, divisor)?.to_vec();
+
+        let mut results = Vec::with_capacity(F::MODULUS_BIT_SIZE as usize * 2 * limbs_per_field);
+        let mut rands = wires_c.chunks(F::MODULUS_BIT_SIZE as usize);
+
+        for inp in quotient
+            .chunks(output_bitlen)
+            .take(limbs_per_field)
+            .chain(remainder.chunks(output_bitlen).take(limbs_per_field))
+        {
+            results.extend(Self::compose_field_element::<_, F>(
+                g,
+                inp,
+                rands.next().unwrap(),
+            )?);
+        }
+        Ok(results)
     }
 
     /// Binary division for two vecs of inputs. The ring elements are represented as two bitdecompositions wires_a, wires_b which need to be split first to get the two inputs. The output is composed using wires_c, whereas wires_c is half the size as wires_a and wires_b.

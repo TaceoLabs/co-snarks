@@ -652,6 +652,26 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
         panic!("functionality decompose_arithmetic_many not feasible for Shamir")
     }
 
+    fn decompose_arithmetic_other_to_acvm<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        _input: Self::OtherArithmeticShare<C>,
+        _total_bit_size_per_field: usize,
+        _decompose_bit_size: usize,
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
+        panic!("functionality decompose_arithmetic_other_to_acvm not feasible for Shamir")
+    }
+
+    fn decompose_arithmetic_other_to_acvm_many<
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
+        &mut self,
+        _input: &[Self::OtherArithmeticShare<C>],
+        _total_bit_size_per_field: usize,
+        _decompose_bit_size: usize,
+    ) -> eyre::Result<Vec<Vec<Self::AcvmType>>> {
+        panic!("functionality decompose_arithmetic_other_to_acvm_many not feasible for Shamir")
+    }
+
     fn sort(
         &mut self,
         inputs: &[Self::AcvmType],
@@ -1203,6 +1223,19 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
         *shared = result;
     }
 
+    fn mul_assign_with_public_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        shared: &mut Self::OtherAcvmType<C>,
+        public: C::BaseField,
+    ) {
+        let result = match shared.to_owned() {
+            ShamirAcvmType::Public(secret) => ShamirAcvmType::Public(public * secret),
+            ShamirAcvmType::Shared(secret) => {
+                ShamirAcvmType::Shared(arithmetic::mul_public(secret, public))
+            }
+        };
+        *shared = result;
+    }
+
     fn mul_with_public_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         public: C::BaseField,
@@ -1288,7 +1321,14 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
         &mut self,
         _a: &[Self::OtherAcvmType<C>],
     ) -> eyre::Result<Vec<Self::AcvmType>> {
-        unimplemented!("convert_fields not implemented for Shamir")
+        panic!("convert_fields not feasible for Shamir")
+    }
+
+    fn convert_fields_back<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        _a: &[Self::AcvmType],
+    ) -> eyre::Result<Vec<Self::OtherAcvmType<C>>> {
+        panic!("convert_fields_back not feasible for Shamir")
     }
 
     fn compute_wnaf_digits_and_compute_rows_many<
@@ -1305,7 +1345,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
         Vec<[Self::OtherAcvmType<C>; 8]>, // Returns the (absolute) value of the row_chunk (also in PointTablePrecomputationRow computation)
         Vec<[Self::OtherAcvmType<C>; 8]>, // Returns the sign of the row_chunk (also in PointTablePrecomputationRow computation)
     )> {
-        unimplemented!("compute_wnaf_digits_and_compute_rows_many not implemented for Shamir")
+        panic!("compute_wnaf_digits_and_compute_rows_many not feasible for Shamir")
     }
 
     fn compute_endo_point<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
@@ -1346,7 +1386,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
         &mut self,
         _secrets: &[Self::OtherAcvmType<C>],
     ) -> eyre::Result<Vec<Self::OtherAcvmType<C>>> {
-        unimplemented!("inverse_or_zero_many not implemented for Shamir")
+        unimplemented!("inverse_or_zero_many not yet implemented for Shamir")
     }
 
     fn cmux_many_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
@@ -1690,5 +1730,28 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
         _point: Self::NativeAcvmPoint<C>,
     ) -> eyre::Result<Self::NativeAcvmPoint<C>> {
         panic!("functionality negate_native_point not feasible for Shamir")
+    }
+
+    fn compute_remainder_limbs_and_quotient_limbs<
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
+        &mut self,
+        _ultra_ops: &[Self::AcvmType],
+        _converted_ultra_ops: &[Self::OtherAcvmType<C>],
+        _evaluation_input_x: C::BaseField,
+        _batching_challenge_v: C::BaseField,
+        _previous_accumulator: Self::OtherAcvmType<C>,
+        _op_code: u64,
+        _num_limb_shift: usize,
+        _num_binary_limbs: usize,
+    ) -> eyre::Result<(Vec<Self::AcvmType>, Vec<Self::AcvmType>)> {
+        panic!("compute_remainder_limbs_and_quotient_limbs not feasible for Shamir")
+    }
+
+    fn get_lowest_32_bits_many(
+        &mut self,
+        _inputs: &[Self::ArithmeticShare],
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
+        panic!("get_lowest_32_bits not feasible for Shamir")
     }
 }

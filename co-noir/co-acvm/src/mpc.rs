@@ -197,6 +197,12 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     /// Multiply a share b by a public value a: c = \[a\] * b and stores the result in \[a\];
     fn mul_assign_with_public(shared: &mut Self::AcvmType, public: F);
 
+    /// Multiply a share b by a public value a: c = \[a\] * b and stores the result in \[a\];
+    fn mul_assign_with_public_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        shared: &mut Self::OtherAcvmType<C>,
+        public: C::BaseField,
+    );
+
     /// Multiply an ACVM-types with a public value: \[c\] = public * \[secret\].
     fn mul_with_public_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
@@ -529,6 +535,22 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         total_bit_size_per_field: usize,
         decompose_bit_size: usize,
     ) -> eyre::Result<Vec<Vec<Self::ArithmeticShare>>>;
+
+    fn decompose_arithmetic_other_to_acvm<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        input: Self::OtherArithmeticShare<C>,
+        total_bit_size_per_field: usize,
+        decompose_bit_size: usize,
+    ) -> eyre::Result<Vec<Self::AcvmType>>;
+
+    fn decompose_arithmetic_other_to_acvm_many<
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
+        &mut self,
+        input: &[Self::OtherArithmeticShare<C>],
+        total_bit_size_per_field: usize,
+        decompose_bit_size: usize,
+    ) -> eyre::Result<Vec<Vec<Self::AcvmType>>>;
 
     /// Sorts a vector of shared values in ascending order, only considering the first bitsize bits.
     /// The sort is *not* stable.
@@ -1131,4 +1153,31 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         &mut self,
         point: Self::NativeAcvmPoint<C>,
     ) -> eyre::Result<Self::NativeAcvmPoint<C>>;
+
+    fn convert_fields_back<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[Self::AcvmType],
+    ) -> eyre::Result<Vec<Self::OtherAcvmType<C>>>;
+
+    /// Computes the limbs for the remainder and quotient needed in the Translator builder
+    #[expect(clippy::too_many_arguments, clippy::type_complexity)]
+    fn compute_remainder_limbs_and_quotient_limbs<
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
+        &mut self,
+        ultra_ops: &[Self::AcvmType],
+        converted_ultra_ops: &[Self::OtherAcvmType<C>],
+        evaluation_input_x: C::BaseField,
+        batching_challenge_v: C::BaseField,
+        previous_accumulator: Self::OtherAcvmType<C>,
+        op_code: u64,
+        num_limb_shift: usize,
+        num_binary_limbs: usize,
+    ) -> eyre::Result<(Vec<Self::AcvmType>, Vec<Self::AcvmType>)>;
+
+    /// Returns the lowest 32 bits of the shared value as a new shared value.
+    fn get_lowest_32_bits_many(
+        &mut self,
+        inputs: &[Self::ArithmeticShare],
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>>;
 }

@@ -21,6 +21,9 @@ use mpc_core::protocols::rep3::{
 };
 use mpc_core::protocols::rep3_ring::gadgets::sort::{radix_sort_fields, radix_sort_fields_vec_by};
 use mpc_core::protocols::rep3_ring::lut_curve::Rep3CurveLookupTable;
+use mpc_core::protocols::rep3_ring::ring::int_ring::{IntRing2k, U512};
+use mpc_core::protocols::rep3_ring::ring::ring_impl::RingElement;
+use mpc_core::protocols::rep3_ring::{self, casts};
 use mpc_core::{
     lut::LookupTableProvider, protocols::rep3::Rep3PrimeFieldShare,
     protocols::rep3_ring::lut_field::Rep3FieldLookupTable,
@@ -1116,6 +1119,55 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             )?;
             for chunk in result.chunks(num_decomps_per_field) {
                 results.push(chunk.to_vec());
+            }
+        }
+        Ok(results)
+    }
+
+    fn decompose_arithmetic_other_to_acvm<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        input: Self::OtherArithmeticShare<C>,
+        total_bit_size_per_field: usize,
+        decompose_bit_size: usize,
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
+        Ok(
+            yao::decompose_arithmetic_to_other_field::<C::BaseField, F, _>(
+                input,
+                self.net0,
+                &mut self.state0,
+                total_bit_size_per_field,
+                decompose_bit_size,
+            )?
+            .iter()
+            .map(|x| Rep3AcvmType::Shared(*x))
+            .collect_vec(),
+        )
+    }
+
+    fn decompose_arithmetic_other_to_acvm_many<
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
+        &mut self,
+        input: &[Self::OtherArithmeticShare<C>],
+        total_bit_size_per_field: usize,
+        decompose_bit_size: usize,
+    ) -> eyre::Result<Vec<Vec<Self::AcvmType>>> {
+        // Defines an upper bound on the size of the input vector to keep the GC at a reasonable size (for RAM)
+        const BATCH_SIZE: usize = 512; // TODO adapt this if it requires too much RAM
+
+        let num_decomps_per_field = total_bit_size_per_field.div_ceil(decompose_bit_size);
+        let mut results = Vec::with_capacity(input.len());
+
+        for inp_chunk in input.chunks(BATCH_SIZE) {
+            let result = yao::decompose_arithmetic_to_other_field_many::<C::BaseField, F, _>(
+                inp_chunk,
+                self.net0,
+                &mut self.state0,
+                total_bit_size_per_field,
+                decompose_bit_size,
+            )?;
+            for chunk in result.chunks(num_decomps_per_field) {
+                results.push(chunk.iter().map(|x| Rep3AcvmType::Shared(*x)).collect_vec());
             }
         }
         Ok(results)
@@ -2880,6 +2932,19 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         *shared = result;
     }
 
+    fn mul_assign_with_public_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        shared: &mut Self::OtherAcvmType<C>,
+        public: C::BaseField,
+    ) {
+        let result = match shared.to_owned() {
+            Rep3AcvmType::Public(secret) => Rep3AcvmType::Public(public * secret),
+            Rep3AcvmType::Shared(secret) => {
+                Rep3AcvmType::Shared(arithmetic::mul_public(secret, public))
+            }
+        };
+        *shared = result;
+    }
+
     fn mul_with_public_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         public: C::BaseField,
@@ -3208,6 +3273,48 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                         (Self::get_public_other::<C>(x).expect("We checked types")).into();
                     let x: C::ScalarField = x.into();
                     Ok(Self::AcvmType::Public(x))
+                })
+                .collect()
+        }
+    }
+
+    fn convert_fields_back<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[Self::AcvmType],
+    ) -> eyre::Result<Vec<Self::OtherAcvmType<C>>> {
+        if a.iter().any(|v| Self::is_shared(v)) {
+            let a: Vec<Rep3PrimeFieldShare<F>> = (0..a.len())
+                .map(|i| match a[i] {
+                    Rep3AcvmType::Public(public) => {
+                        arithmetic::promote_to_trivial_share(self.id, public)
+                    }
+                    Rep3AcvmType::Shared(shared) => shared,
+                })
+                .collect();
+            let a2b = conversion::a2b_many(&a, self.net0, &mut self.state0)?;
+            let a2b = a2b
+                .into_iter()
+                .map(|y| Rep3BigUintShare::<C::BaseField>::new(y.a, y.b))
+                .collect::<Vec<_>>();
+            let result: Vec<Rep3PrimeFieldShare<C::BaseField>> =
+                conversion::b2a_many::<C::BaseField, N>(&a2b, self.net0, &mut self.state0)?;
+            result
+                .iter()
+                .map(|x| Ok(Self::OtherAcvmType::<C>::Shared(*x)))
+                .collect()
+        } else {
+            if a.iter().any(|v| {
+                let v_biguint: num_bigint::BigUint =
+                    (Self::get_public(v).expect("We checked types")).into();
+                v_biguint > C::ScalarField::MODULUS.into()
+            }) {
+                eyre::bail!("Element too large to fit in target field");
+            }
+            a.iter()
+                .map(|x| {
+                    let x: BigUint = (Self::get_public(x).expect("We checked types")).into();
+                    let x: C::BaseField = x.into();
+                    Ok(Self::OtherAcvmType::<C>::Public(x))
                 })
                 .collect()
         }
@@ -4224,5 +4331,160 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             Rep3AcvmPoint::Shared(point) => Ok(Rep3AcvmPoint::Shared(-point)),
             Rep3AcvmPoint::Public(point) => Ok(Rep3AcvmPoint::Public(-point)),
         }
+    }
+
+    fn compute_remainder_limbs_and_quotient_limbs<
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
+        &mut self,
+        ultra_ops: &[Self::AcvmType],
+        converted_ultra_ops: &[Self::OtherAcvmType<C>],
+        evaluation_input_x: C::BaseField,
+        batching_challenge_v: C::BaseField,
+        previous_accumulator: Self::OtherAcvmType<C>,
+        op_code: u64,
+        num_limb_shift: usize,
+        num_binary_limbs: usize,
+    ) -> eyre::Result<(Vec<Self::AcvmType>, Vec<Self::AcvmType>)> {
+        const NUM_LIMB_BITS: usize = 68;
+        let v_squared = batching_challenge_v * batching_challenge_v;
+        let v_cubed = v_squared * batching_challenge_v;
+        let v_quarted = v_cubed * batching_challenge_v;
+        let uint_x = RingElement::from(U512::cast_from_biguint(&evaluation_input_x.into()));
+        let uint_op = RingElement::from(U512::cast_from_biguint(&op_code.into()));
+        let uint_v = RingElement::from(U512::cast_from_biguint(&batching_challenge_v.into()));
+        let uint_v_squared = RingElement::from(U512::cast_from_biguint(&v_squared.into()));
+        let uint_v_cubed = RingElement::from(U512::cast_from_biguint(&v_cubed.into()));
+        let uint_v_quarted = RingElement::from(U512::cast_from_biguint(&v_quarted.into()));
+
+        let base_op = C::BaseField::from(op_code);
+        let base_x_hi = converted_ultra_ops[0];
+        let base_x_lo = converted_ultra_ops[1];
+        let base_y_hi = converted_ultra_ops[2];
+        let base_y_lo = converted_ultra_ops[3];
+        let base_z_1 = converted_ultra_ops[4];
+        let base_z_2 = converted_ultra_ops[5];
+        let shift = self.mul_with_public_other::<C>(
+            C::BaseField::from(BigUint::one() << num_limb_shift),
+            base_x_hi,
+        );
+        let base_p_x = self.add_other::<C>(base_x_lo, shift);
+        let shift = self.mul_with_public_other::<C>(
+            C::BaseField::from(BigUint::one() << num_limb_shift),
+            base_y_hi,
+        );
+        let base_p_y = self.add_other::<C>(base_y_lo, shift);
+        let mut remainder =
+            self.mul_with_public_other::<C>(evaluation_input_x, previous_accumulator);
+        let base_z_2_v_quarted = self.mul_with_public_other::<C>(v_quarted, base_z_2);
+        let base_z_1_v_cubed = self.mul_with_public_other::<C>(v_cubed, base_z_1);
+        let base_p_y_v_squared = self.mul_with_public_other::<C>(v_squared, base_p_y);
+        let base_p_x_v = self.mul_with_public_other::<C>(batching_challenge_v, base_p_x);
+        remainder = self.add_other::<C>(remainder, base_z_2_v_quarted);
+        remainder = self.add_other::<C>(remainder, base_z_1_v_cubed);
+        remainder = self.add_other::<C>(remainder, base_p_y_v_squared);
+        remainder = self.add_other::<C>(remainder, base_p_x_v);
+        remainder = self.add_other::<C>(remainder, Self::OtherAcvmType::<C>::Public(base_op));
+        let shared_remainder = Self::get_shared_other::<C>(&remainder)
+            .expect("Remainder should be shared at this point");
+        let shared_acc = self.get_as_shared_other::<C>(&previous_accumulator);
+
+        // TACEO TODO: Optimize this to handle public inputs more efficiently
+        let uints = casts::field_to_ring_a2b_many::<_, U512, _>(
+            &[shared_remainder, shared_acc],
+            self.net0,
+            &mut self.state0,
+        )?;
+
+        let uint_remainder = uints[0];
+        let uint_previous_accumulator = uints[1];
+
+        // TACEO TODO: Optimize this to handle public inputs more efficiently
+        let uints = casts::field_to_ring_a2b_many::<_, U512, _>(
+            &[
+                self.get_as_shared(&ultra_ops[0]),
+                self.get_as_shared(&ultra_ops[1]),
+                self.get_as_shared(&ultra_ops[2]),
+                self.get_as_shared(&ultra_ops[3]),
+                self.get_as_shared(&ultra_ops[4]),
+                self.get_as_shared(&ultra_ops[5]),
+            ],
+            self.net0,
+            &mut self.state0,
+        )?;
+        let uint_x_lo = uints[0];
+        let uint_x_hi = uints[1];
+        let uint_y_lo = uints[2];
+        let uint_y_hi = uints[3];
+        let uint_z1 = uints[4];
+        let uint_z2 = uints[5];
+
+        let uint_p_x = rep3_ring::arithmetic::add(
+            uint_x_lo,
+            rep3_ring::arithmetic::mul_public(
+                uint_x_hi,
+                RingElement::from(U512::cast_from_biguint(
+                    &(BigUint::from(1u64) << (num_limb_shift)),
+                )),
+            ),
+        );
+        let uint_p_y = rep3_ring::arithmetic::add(
+            uint_y_lo,
+            rep3_ring::arithmetic::mul_public(
+                uint_y_hi,
+                RingElement::from(U512::cast_from_biguint(
+                    &(BigUint::from(1u64) << (num_limb_shift)),
+                )),
+            ),
+        );
+        let quotient_by_modulus_no_remainder = rep3_ring::arithmetic::add_public(
+            uint_previous_accumulator * uint_x
+                + uint_z2 * uint_v_quarted
+                + uint_z1 * uint_v_cubed
+                + uint_p_y * uint_v_squared
+                + uint_p_x * uint_v,
+            uint_op,
+            self.state0.id(),
+        );
+
+        let quotient_by_modulus =
+            rep3_ring::arithmetic::sub(quotient_by_modulus_no_remainder, uint_remainder);
+
+        let result = rep3_ring::yao::compute_remainder_limbs_and_quotient_limbs_many::<
+            U512,
+            N,
+            C::ScalarField,
+        >(
+            &[quotient_by_modulus],
+            &[uint_remainder],
+            NUM_LIMB_BITS,
+            &C::BaseField::MODULUS.into(),
+            num_binary_limbs,
+            self.net0,
+            &mut self.state0,
+        )?;
+        let quotient_limbs = &result[..num_binary_limbs];
+        let remainder_limbs = &result[num_binary_limbs..];
+
+        Ok((
+            quotient_limbs
+                .iter()
+                .map(|x| Rep3AcvmType::<F>::Shared(*x))
+                .collect::<Vec<_>>(),
+            remainder_limbs
+                .iter()
+                .map(|x| Rep3AcvmType::<F>::Shared(*x))
+                .collect::<Vec<_>>(),
+        ))
+    }
+
+    fn get_lowest_32_bits_many(
+        &mut self,
+        inputs: &[Self::ArithmeticShare],
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
+        let res = conversion::a2b_many(inputs, self.net0, &mut self.state0)?;
+        let mask = BigUint::from((1u64 << 32) - 1);
+        let res = res.iter().map(|y| y & &mask).collect::<Vec<_>>();
+        conversion::b2a_many::<F, N>(&res, self.net0, &mut self.state0)
     }
 }

@@ -25,9 +25,12 @@ mod tests {
     use co_builder::eccvm::ecc_op_queue::UltraOp;
     use co_builder::eccvm::ecc_op_queue::VMOperation;
     use co_builder::flavours::eccvm_flavour::ECCVMFlavour;
+    use co_builder::flavours::translator_flavour::TranslatorFlavour;
     use co_builder::prelude::SerializeF;
     use co_goblin::eccvm::co_eccvm_prover::Eccvm;
-    use co_goblin::eccvm::co_eccvm_types::construct_from_builder;
+    use co_goblin::eccvm::co_eccvm_types::construct_from_builder as mpc_construct_from_builder;
+    use co_goblin::translator::co_translator_builder::CoTranslatorBuilder;
+    use co_goblin::translator::co_translator_prover::Translator;
     use co_noir_common::crs::parse::CrsParser;
     use co_noir_common::honk_curve::HonkCurve;
     use co_noir_common::honk_proof::TranscriptFieldType;
@@ -38,6 +41,7 @@ mod tests {
     use co_noir_common::transcript::Transcript;
     use co_noir_common::types::ZeroKnowledge;
     use co_ultrahonk::prelude::ProvingKey;
+    use goblin::prelude::construct_from_builder as plain_construct_from_builder;
     use itertools::Itertools;
     use itertools::izip;
     use mpc_core::protocols::rep3::Rep3State;
@@ -45,6 +49,7 @@ mod tests {
     use mpc_core::protocols::rep3::{share_curve_point, share_field_element};
     use mpc_net::local::LocalNetwork;
     use rand::thread_rng;
+    use std::str::FromStr;
     use std::thread;
     use std::{path::PathBuf, sync::Arc};
 
@@ -435,7 +440,7 @@ mod tests {
                     A2BType::default(),
                 )
                 .unwrap();
-                let polys = construct_from_builder::<
+                let polys = mpc_construct_from_builder::<
                     short_weierstrass::Projective<GrumpkinConfig>,
                     Rep3UltraHonkDriver,
                     Rep3AcvmSolver<ark_grumpkin::Fq, LocalNetwork>,
@@ -509,7 +514,7 @@ mod tests {
             .unwrap(),
         );
         let mut driver = PlainAcvmSolver::new();
-        let polys = construct_from_builder::<
+        let polys = mpc_construct_from_builder::<
             short_weierstrass::Projective<GrumpkinConfig>,
             PlainUltraHonkDriver,
             PlainAcvmSolver<ark_grumpkin::Fq>,
@@ -539,5 +544,234 @@ mod tests {
         let (_transcript, _ipa_transcript) = prover
             .construct_proof(transcript, proving_key, &prover_crs)
             .unwrap();
+    }
+
+    // TACEO TODO: This was tested with all the randomness set to 1 (also in bb) and then compared the proofs. By default, the ECCVM Prover has ZK enabled, so without a dedicated ECCVM Verifier it is difficult to test it. For now, you can compare it against the proof.txt in the same folder by deactivating the randomness (->F::one()) everywhere (mask() in the prover, random element in zk_data, random polys in univariate.rs and polynomial.rs)
+    #[test]
+    #[ignore]
+    fn test_translator_prover_mpc() {
+        let ecc_op_queue_file = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../test_vectors/noir/eccvm/ecc_op_queue"
+        );
+        let transcript_path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../test_vectors/noir/translator/transcript"
+        );
+        const CRS_PATH_G1: &str = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../co-noir-common/src/crs/bn254_g1.dat"
+        );
+
+        let path = PathBuf::from(ecc_op_queue_file);
+        let mut queue: ECCOpQueue<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>> =
+            deserialize_ecc_op_queue(path);
+        // We need to do this as the ecc_op_queue is necessary for the translator builder and gets modified in there
+        // TACEO TODO: find a nicer way to do this
+        let _ = plain_construct_from_builder::<short_weierstrass::Projective<GrumpkinConfig>>(
+            &mut queue,
+        );
+
+        let transcript = std::io::BufReader::new(std::fs::File::open(transcript_path).unwrap());
+        let transcript: Transcript<TranscriptFieldType, Poseidon2Sponge> =
+            bincode::deserialize_from(transcript).unwrap();
+
+        let translation_batching_challenge_v =
+            ark_bn254::Fq::from_str("333310174131141305725676434666258450925").unwrap();
+        let evaluation_challenge_x =
+            ark_bn254::Fq::from_str("17211194955796430769589779325535368928").unwrap();
+
+        let path = PathBuf::from(ecc_op_queue_file);
+        let queue: ECCOpQueue<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>> =
+            deserialize_ecc_op_queue(path);
+        let co_queues = ecc_op_queue_into_shared_co_ecc_op_queue::<
+            ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>,
+        >(queue);
+        let circuit_size = 1 << TranslatorFlavour::CONST_TRANSLATOR_LOG_N;
+        let prover_crs = Arc::new(
+            CrsParser::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>::get_crs_g1(
+                CRS_PATH_G1,
+                circuit_size,
+                ZeroKnowledge::Yes,
+            )
+            .unwrap(),
+        );
+
+        let nets0 = LocalNetwork::new_3_parties();
+        let nets1 = LocalNetwork::new_3_parties();
+        let mut threads = Vec::with_capacity(3);
+
+        for (net0, net1, mut queue) in
+            izip!(nets0.into_iter(), nets1.into_iter(), co_queues.into_iter())
+        {
+            let crs = prover_crs.clone();
+            let transcript_ = transcript.clone();
+            let net0b = Box::leak(Box::new(net0));
+            let net1b = Box::leak(Box::new(net1));
+
+            threads.push(thread::spawn(move || {
+                let mut driver = Rep3AcvmSolver::<ark_bn254::Fr, LocalNetwork>::new(
+                    net0b,
+                    net1b,
+                    A2BType::default(),
+                )
+                .unwrap();
+
+                let mut translator_builder = CoTranslatorBuilder::<
+                    ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>,
+                    Rep3AcvmSolver<ark_bn254::Fr, LocalNetwork>,
+                >::new();
+                translator_builder
+                    .feed_ecc_op_queue_into_circuit(
+                        translation_batching_challenge_v,
+                        evaluation_challenge_x,
+                        &mut queue,
+                        &mut driver,
+                    )
+                    .unwrap();
+                let polys =
+                    co_goblin::translator::co_translator_builder::construct_pk_from_builder::<
+                        ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>,
+                        Rep3UltraHonkDriver,
+                        Rep3AcvmSolver<ark_bn254::Fr, LocalNetwork>,
+                    >(translator_builder, &mut driver)
+                    .unwrap();
+                let mut proving_key = ProvingKey::<
+                    Rep3UltraHonkDriver,
+                    ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>,
+                    TranslatorFlavour,
+                >::new(
+                    circuit_size,
+                    0,
+                    0,
+                    co_builder::prelude::PublicComponentKey::default(),
+                );
+                proving_key.polynomials = polys;
+                let mut state = Rep3State::new(net0b, A2BType::default()).unwrap();
+                let mut prover = Translator::<
+                    short_weierstrass::Projective<ark_bn254::g1::Config>,
+                    Poseidon2Sponge,
+                    Rep3UltraHonkDriver,
+                    _,
+                >::new(
+                    net0b,
+                    &mut state,
+                    translation_batching_challenge_v,
+                    evaluation_challenge_x,
+                );
+                prover
+                    .construct_proof(transcript_, proving_key, &crs)
+                    .unwrap()
+            }));
+        }
+        let results: Vec<_> = threads.into_iter().map(|t| t.join().unwrap()).collect();
+
+        let mut proofs = results
+            .iter()
+            .map(|proof| proof.to_owned())
+            .collect::<Vec<_>>();
+        let proof = proofs.pop().unwrap();
+        for p in proofs {
+            assert_eq!(proof, p);
+        }
+    }
+
+    // TACEO TODO: This was tested with all the randomness set to 1 (also in bb) and then compared the proofs. By default, the ECCVM Prover has ZK enabled, so without a dedicated ECCVM Verifier it is difficult to test it. For now, you can compare it against the proof.txt in the same folder by deactivating the randomness (->F::one()) everywhere (mask() in the prover, random element in zk_data, random polys in univariate.rs and polynomial.rs)
+    #[test]
+    #[ignore]
+    fn test_translator_prover_plaindriver() {
+        let ecc_op_queue_file = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../test_vectors/noir/eccvm/ecc_op_queue"
+        );
+        let transcript_path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../test_vectors/noir/translator/transcript"
+        );
+        const CRS_PATH_G1: &str = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../co-noir-common/src/crs/bn254_g1.dat"
+        );
+
+        let path = PathBuf::from(ecc_op_queue_file);
+        let mut queue: ECCOpQueue<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>> =
+            deserialize_ecc_op_queue(path);
+        // We need to do this as the ecc_op_queue is necessary for the translator builder and gets modified in there
+        // TACEO TODO: find a nicer way to do this
+        let _ = plain_construct_from_builder::<short_weierstrass::Projective<GrumpkinConfig>>(
+            &mut queue,
+        );
+
+        let transcript = std::io::BufReader::new(std::fs::File::open(transcript_path).unwrap());
+        let transcript: Transcript<TranscriptFieldType, Poseidon2Sponge> =
+            bincode::deserialize_from(transcript).unwrap();
+
+        let translation_batching_challenge_v =
+            ark_bn254::Fq::from_str("333310174131141305725676434666258450925").unwrap();
+        let evaluation_challenge_x =
+            ark_bn254::Fq::from_str("17211194955796430769589779325535368928").unwrap();
+
+        let path = PathBuf::from(ecc_op_queue_file);
+        let queue: ECCOpQueue<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>> =
+            deserialize_ecc_op_queue(path);
+        let mut co_queue = ecc_op_queue_into_co_ecc_op_queue::<
+            ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>,
+            PlainAcvmSolver<ark_grumpkin::Fq>,
+        >(queue);
+        let mut driver = PlainAcvmSolver::<ark_bn254::Fr>::new();
+        let mut translator_builder = CoTranslatorBuilder::<
+            ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>,
+            PlainAcvmSolver<ark_bn254::Fr>,
+        >::new();
+        translator_builder
+            .feed_ecc_op_queue_into_circuit(
+                translation_batching_challenge_v,
+                evaluation_challenge_x,
+                &mut co_queue,
+                &mut driver,
+            )
+            .unwrap();
+        let polys = co_goblin::translator::co_translator_builder::construct_pk_from_builder::<
+            ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>,
+            PlainUltraHonkDriver,
+            PlainAcvmSolver<ark_bn254::Fr>,
+        >(translator_builder, &mut driver)
+        .unwrap();
+        let circuit_size = 1 << TranslatorFlavour::CONST_TRANSLATOR_LOG_N;
+        let prover_crs = Arc::new(
+            CrsParser::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>::get_crs_g1(
+                CRS_PATH_G1,
+                circuit_size,
+                ZeroKnowledge::Yes,
+            )
+            .unwrap(),
+        );
+        let mut proving_key = ProvingKey::<
+            PlainUltraHonkDriver,
+            ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>,
+            TranslatorFlavour,
+        >::new(
+            circuit_size,
+            0,
+            0,
+            co_builder::prelude::PublicComponentKey::default(),
+        );
+        proving_key.polynomials = polys;
+        let mut binding = ();
+        let mut prover = Translator::<
+            short_weierstrass::Projective<ark_bn254::g1::Config>,
+            Poseidon2Sponge,
+            PlainUltraHonkDriver,
+            _,
+        >::new(
+            &(),
+            &mut binding,
+            translation_batching_challenge_v,
+            evaluation_challenge_x,
+        );
+        let _proof = prover
+            .construct_proof(transcript, proving_key, &prover_crs)
+            .unwrap();
+        println!("proof: {:?}", _proof);
     }
 }

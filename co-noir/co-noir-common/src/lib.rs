@@ -30,6 +30,17 @@ pub mod transcript;
 pub mod types;
 pub mod utils;
 
+// Translator constants:
+pub const CONST_TRANSLATOR_LOG_N: usize = 18;
+pub const NUM_BINARY_LIMBS: usize = 4;
+pub const NUM_Z_LIMBS: usize = 2;
+pub const NUM_MICRO_LIMBS: usize = 6;
+pub const NUM_RELATION_WIDE_LIMBS: usize = 2;
+pub const NUM_LAST_LIMB_BITS: usize = 50;
+pub const NUM_QUOTIENT_BITS: usize = 256;
+pub const NUM_Z_BITS: usize = 128;
+pub const MICRO_LIMB_BITS: usize = 14;
+
 pub fn compute_opening_proof<
     P: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,

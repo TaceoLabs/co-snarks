@@ -217,7 +217,7 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDeltaRangeConst
         let mut tmp_2 = delta_2.clone();
         tmp_2 *= delta_2.clone() + &minus_one;
         tmp_2 *= delta_2.clone() + &minus_two;
-        tmp_2 *= delta_2.clone() + &minus_three;
+        tmp_2 *= delta_2 + &minus_three;
         tmp_2 *= &is_last_witness_or_masking;
         tmp_2 *= scaling_factor;
         for i in 0..univariate_accumulator.r1.evaluations.len() {
@@ -228,7 +228,7 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDeltaRangeConst
         let mut tmp_3 = delta_3.clone();
         tmp_3 *= delta_3.clone() + &minus_one;
         tmp_3 *= delta_3.clone() + &minus_two;
-        tmp_3 *= delta_3.clone() + &minus_three;
+        tmp_3 *= delta_3 + &minus_three;
         tmp_3 *= &is_last_witness_or_masking;
         tmp_3 *= scaling_factor;
         for i in 0..univariate_accumulator.r2.evaluations.len() {
@@ -239,7 +239,7 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDeltaRangeConst
         let mut tmp_4 = delta_4.clone();
         tmp_4 *= delta_4.clone() + &minus_one;
         tmp_4 *= delta_4.clone() + &minus_two;
-        tmp_4 *= delta_4.clone() + &minus_three;
+        tmp_4 *= delta_4 + &minus_three;
         tmp_4 *= &is_last_witness_or_masking;
         tmp_4 *= scaling_factor;
         for i in 0..univariate_accumulator.r3.evaluations.len() {
@@ -250,7 +250,7 @@ impl<F: PrimeField> Relation<F, TranslatorFlavour> for TranslatorDeltaRangeConst
         let mut tmp_5 = delta_5.clone();
         tmp_5 *= delta_5.clone() + &minus_one;
         tmp_5 *= delta_5.clone() + &minus_two;
-        tmp_5 *= delta_5.clone() + &minus_three;
+        tmp_5 *= delta_5 + &minus_three;
         tmp_5 *= is_last_witness_or_masking;
         tmp_5 *= scaling_factor;
         for i in 0..univariate_accumulator.r4.evaluations.len() {
