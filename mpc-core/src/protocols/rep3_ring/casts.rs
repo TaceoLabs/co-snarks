@@ -161,6 +161,26 @@ where
     conversion::b2a(&ring_share, net, state)
 }
 
+/// A cast of a Rep3PrimeFieldShare to a Rep3RingShare. Truncates the excess bits.
+pub fn field_to_ring_a2b_many<F: PrimeField, T: IntRing2k, N: Network>(
+    shares: &[Rep3PrimeFieldShare<F>],
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Vec<Rep3RingShare<T>>>
+where
+    Standard: Distribution<T>,
+{
+    let binary = rep3::conversion::a2b_many(shares, net, state)?;
+    let ring_shares = binary
+        .into_iter()
+        .map(|binary| Rep3RingShare {
+            a: RingElement(T::cast_from_biguint(&binary.a)),
+            b: RingElement(T::cast_from_biguint(&binary.b)),
+        })
+        .collect::<Vec<_>>();
+    conversion::b2a_many(&ring_shares, net, state)
+}
+
 /// A cast of a Rep3RingShare to a Rep3PrimeFieldShare
 pub fn ring_to_field_a2b<T: IntRing2k, F: PrimeField, N: Network>(
     share: Rep3RingShare<T>,

@@ -1376,6 +1376,58 @@ mod field_share {
         assert_eq!(is_result, should_result);
     }
 
+    #[test]
+    fn rep3_decompose_shared_field_to_other_field_many_via_yao() {
+        const VEC_SIZE: usize = 10;
+        const TOTAL_BIT_SIZE: usize = 64;
+        const CHUNK_SIZE: usize = 14;
+
+        let nets = LocalNetwork::new_3_parties();
+        let mut rng = thread_rng();
+        let x = (0..VEC_SIZE)
+            .map(|_| ark_bn254::Fr::rand(&mut rng))
+            .collect_vec();
+        let x_shares = rep3::share_field_elements(&x, &mut rng);
+
+        let mut should_result =
+            Vec::with_capacity(VEC_SIZE * (TOTAL_BIT_SIZE.div_ceil(CHUNK_SIZE)));
+        let big_mask = (BigUint::from(1u64) << TOTAL_BIT_SIZE) - BigUint::one();
+        let small_mask = (BigUint::from(1u64) << CHUNK_SIZE) - BigUint::one();
+        for x in x.into_iter() {
+            let mut x: BigUint = x.into();
+            x &= &big_mask;
+            for _ in 0..TOTAL_BIT_SIZE.div_ceil(CHUNK_SIZE) {
+                let chunk = &x & &small_mask;
+                x >>= CHUNK_SIZE;
+                should_result.push(ark_bn254::Fq::from(chunk));
+            }
+        }
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx, x) in izip!(nets.into_iter(), [tx1, tx2, tx3], x_shares.into_iter()) {
+            std::thread::spawn(move || {
+                let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
+
+                let decomposed = yao::decompose_arithmetic_to_other_field_many::<
+                    ark_bn254::Fr,
+                    ark_bn254::Fq,
+                    _,
+                >(&x, &net, &mut state, TOTAL_BIT_SIZE, CHUNK_SIZE)
+                .unwrap();
+                tx.send(decomposed)
+            });
+        }
+
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3::combine_field_elements(&result1, &result2, &result3);
+        assert_eq!(is_result, should_result);
+    }
+
     fn rep3_slice_shared_field_many_via_yao_inner(msb: usize, lsb: usize, bitsize: usize) {
         const VEC_SIZE: usize = 10;
 
