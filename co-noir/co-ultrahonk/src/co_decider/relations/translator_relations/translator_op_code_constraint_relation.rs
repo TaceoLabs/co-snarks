@@ -102,10 +102,10 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let minus_four = -P::ScalarField::from(4u64);
         let minus_eight = -P::ScalarField::from(8u64);
 
-        let op_minus_three = T::add_scalar(&op, minus_three, state.id());
-        let op_minus_four = T::add_scalar(&op, minus_four, state.id());
-        let op_minus_eight = T::add_scalar(&op, minus_eight, state.id());
-        let capacity = op.len(); //TODO FLORIN
+        let op_minus_three = T::add_scalar(op, minus_three, state.id());
+        let op_minus_four = T::add_scalar(op, minus_four, state.id());
+        let op_minus_eight = T::add_scalar(op, minus_eight, state.id());
+        let capacity = op.len() * 2;
         let mut lhs = Vec::with_capacity(capacity);
         let mut rhs = Vec::with_capacity(capacity);
         lhs.extend(op_minus_three);

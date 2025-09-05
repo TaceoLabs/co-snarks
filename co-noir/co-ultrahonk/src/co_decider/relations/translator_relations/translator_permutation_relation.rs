@@ -107,25 +107,25 @@ impl TranslatorPermutationRelation {
             T::add_with_public_many(lagrange_last, z_perm_shift, state.id());
         let mut factor1_1 = T::add_with_public_many(
             &lagrange_masking_beta,
-            &interleaved_range_constraints_0,
+            interleaved_range_constraints_0,
             state.id(),
         );
         T::add_scalar_in_place(&mut factor1_1, gamma, state.id());
         let mut factor1_2 = T::add_with_public_many(
             &lagrange_masking_beta,
-            &interleaved_range_constraints_1,
+            interleaved_range_constraints_1,
             state.id(),
         );
         T::add_scalar_in_place(&mut factor1_2, gamma, state.id());
         let mut factor1_3 = T::add_with_public_many(
             &lagrange_masking_beta,
-            &interleaved_range_constraints_2,
+            interleaved_range_constraints_2,
             state.id(),
         );
         T::add_scalar_in_place(&mut factor1_3, gamma, state.id());
         let mut factor1_4 = T::add_with_public_many(
             &lagrange_masking_beta,
-            &interleaved_range_constraints_3,
+            interleaved_range_constraints_3,
             state.id(),
         );
         T::add_scalar_in_place(&mut factor1_4, gamma, state.id());
@@ -139,31 +139,31 @@ impl TranslatorPermutationRelation {
 
         let mut factor2_1 = T::add_with_public_many(
             &lagrange_masking_beta,
-            &ordered_range_constraints_0,
+            ordered_range_constraints_0,
             state.id(),
         );
         T::add_scalar_in_place(&mut factor2_1, gamma, state.id());
         let mut factor2_2 = T::add_with_public_many(
             &lagrange_masking_beta,
-            &ordered_range_constraints_1,
+            ordered_range_constraints_1,
             state.id(),
         );
         T::add_scalar_in_place(&mut factor2_2, gamma, state.id());
         let mut factor2_3 = T::add_with_public_many(
             &lagrange_masking_beta,
-            &ordered_range_constraints_2,
+            ordered_range_constraints_2,
             state.id(),
         );
         T::add_scalar_in_place(&mut factor2_3, gamma, state.id());
         let mut factor2_4 = T::add_with_public_many(
             &lagrange_masking_beta,
-            &ordered_range_constraints_3,
+            ordered_range_constraints_3,
             state.id(),
         );
         T::add_scalar_in_place(&mut factor2_4, gamma, state.id());
         let mut factor2_5 = T::add_with_public_many(
             &lagrange_masking_beta,
-            &ordered_range_constraints_4,
+            ordered_range_constraints_4,
             state.id(),
         );
         T::add_scalar_in_place(&mut factor2_5, gamma, state.id());
@@ -210,7 +210,7 @@ impl TranslatorPermutationRelation {
         let mul = mul.chunks_exact(mul.len() / 2).collect_vec();
         debug_assert_eq!(mul.len(), 2);
         let mut result = mul[0].to_owned();
-        T::sub_assign_many(&mut result, &mul[1]);
+        T::sub_assign_many(&mut result, mul[1]);
         T::mul_assign_with_public_many(&mut result, scaling_factors);
 
         Ok(result)

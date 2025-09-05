@@ -250,31 +250,26 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         );
 
         // Contribution (1) (contributions 1-5 ensure that the sequential values have a difference of {0,1,2,3})
-        let delta_1 = delta_1;
         let delta_1_minus_one = T::add_scalar(&delta_1, minus_one, state.id());
         let delta_1_minus_two = T::add_scalar(&delta_1, minus_two, state.id());
         let delta_1_minus_three = T::add_scalar(&delta_1, minus_three, state.id());
 
         // Contribution (2)
-        let delta_2 = delta_2;
         let delta_2_minus_one = T::add_scalar(&delta_2, minus_one, state.id());
         let delta_2_minus_two = T::add_scalar(&delta_2, minus_two, state.id());
         let delta_2_minus_three = T::add_scalar(&delta_2, minus_three, state.id());
 
         // Contribution (3)
-        let delta_3 = delta_3;
         let delta_3_minus_one = T::add_scalar(&delta_3, minus_one, state.id());
         let delta_3_minus_two = T::add_scalar(&delta_3, minus_two, state.id());
         let delta_3_minus_three = T::add_scalar(&delta_3, minus_three, state.id());
 
         // Contribution (4)
-        let delta_4 = delta_4;
         let delta_4_minus_one = T::add_scalar(&delta_4, minus_one, state.id());
         let delta_4_minus_two = T::add_scalar(&delta_4, minus_two, state.id());
         let delta_4_minus_three = T::add_scalar(&delta_4, minus_three, state.id());
 
         // Contribution (5)
-        let delta_5 = delta_5;
         let delta_5_minus_one = T::add_scalar(&delta_5, minus_one, state.id());
         let delta_5_minus_two = T::add_scalar(&delta_5, minus_two, state.id());
         let delta_5_minus_three = T::add_scalar(&delta_5, minus_three, state.id());
@@ -353,31 +348,31 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         // Contribution (6) (Contributions 6-10 ensure that the last value is the designated maximum value. We don't
         // need to constrain the first value to be 0, because the shift mechanic does this for us)
         let mut tmp_6 = T::add_scalar(ordered_range_constraints_0, maximum_sort_value, state.id());
-        T::mul_assign_with_public_many(&mut tmp_6, &lagrange_real_last);
+        T::mul_assign_with_public_many(&mut tmp_6, lagrange_real_last);
         T::mul_assign_with_public_many(&mut tmp_6, scaling_factors);
         fold_accumulator!(univariate_accumulator.r5, tmp_6, SIZE);
 
         // Contribution (7)
         let mut tmp_7 = T::add_scalar(ordered_range_constraints_1, maximum_sort_value, state.id());
-        T::mul_assign_with_public_many(&mut tmp_7, &lagrange_real_last);
+        T::mul_assign_with_public_many(&mut tmp_7, lagrange_real_last);
         T::mul_assign_with_public_many(&mut tmp_7, scaling_factors);
         fold_accumulator!(univariate_accumulator.r6, tmp_7, SIZE);
 
         // Contribution (8)
         let mut tmp_8 = T::add_scalar(ordered_range_constraints_2, maximum_sort_value, state.id());
-        T::mul_assign_with_public_many(&mut tmp_8, &lagrange_real_last);
+        T::mul_assign_with_public_many(&mut tmp_8, lagrange_real_last);
         T::mul_assign_with_public_many(&mut tmp_8, scaling_factors);
         fold_accumulator!(univariate_accumulator.r7, tmp_8, SIZE);
 
         // Contribution (9)
         let mut tmp_9 = T::add_scalar(ordered_range_constraints_3, maximum_sort_value, state.id());
-        T::mul_assign_with_public_many(&mut tmp_9, &lagrange_real_last);
+        T::mul_assign_with_public_many(&mut tmp_9, lagrange_real_last);
         T::mul_assign_with_public_many(&mut tmp_9, scaling_factors);
         fold_accumulator!(univariate_accumulator.r8, tmp_9, SIZE);
 
         // Contribution (10)
         let mut tmp_10 = T::add_scalar(ordered_range_constraints_4, maximum_sort_value, state.id());
-        T::mul_assign_with_public_many(&mut tmp_10, &lagrange_real_last);
+        T::mul_assign_with_public_many(&mut tmp_10, lagrange_real_last);
         T::mul_assign_with_public_many(&mut tmp_10, scaling_factors);
         fold_accumulator!(univariate_accumulator.r9, tmp_10, SIZE);
 

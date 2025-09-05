@@ -16,7 +16,7 @@ use common::transcript::{Transcript, TranscriptHasher};
 use mpc_core::MpcState as _;
 use mpc_net::Network;
 
-pub(crate) struct SharedZKSumcheckData<T: NoirUltraHonkProver<P>, P: CurveGroup> {
+pub struct SharedZKSumcheckData<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) constant_term: T::ArithmeticShare,
     pub(crate) interpolation_domain: Vec<P::ScalarField>,
     pub(crate) libra_concatenated_lagrange_form: SharedPolynomial<T, P>,

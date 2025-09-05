@@ -13,7 +13,7 @@ use common::{HonkProof, mpc::NoirUltraHonkProver};
 use mpc_net::Network;
 use std::marker::PhantomData;
 use ultrahonk::prelude::ZeroKnowledge;
-pub(crate) struct CoDecider<
+pub struct CoDecider<
     'a,
     T: NoirUltraHonkProver<P>,
     P: HonkCurve<TranscriptFieldType>,
@@ -23,7 +23,7 @@ pub(crate) struct CoDecider<
 > {
     pub(crate) net: &'a N,
     pub(crate) state: &'a mut T::State,
-    pub(super) memory: ProverMemory<T, P, L>,
+    pub memory: ProverMemory<T, P, L>,
     pub(crate) has_zk: ZeroKnowledge,
     phantom_data: PhantomData<(P, H)>,
 }

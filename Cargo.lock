@@ -1125,7 +1125,9 @@ dependencies = [
  "ark-bn254",
  "ark-ec",
  "ark-ff",
+ "co-acvm",
  "co-builder",
+ "co-ultrahonk",
  "common",
  "eyre",
  "goblin",
@@ -1134,6 +1136,7 @@ dependencies = [
  "mpc-net",
  "num-bigint 0.4.6",
  "rand 0.8.5",
+ "tracing",
  "ultrahonk",
 ]
 

@@ -499,7 +499,7 @@ impl<
         ))
     }
 
-    pub(crate) fn shplemini_prove(
+    pub fn shplemini_prove(
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         circuit_size: u32,

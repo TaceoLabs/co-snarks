@@ -830,7 +830,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let mut not_in_minicircuit_by_scaling = lagrange_odd_in_minicircuit
             .iter()
             .zip(lagrange_even_in_minicircuit.iter())
-            .map(|(odd, even)| *even + odd + &minus_one)
+            .map(|(odd, even)| *even + odd + minus_one)
             .collect::<Vec<P::ScalarField>>();
         not_in_minicircuit_by_scaling
             .iter_mut()
