@@ -1,17 +1,23 @@
 use crate::eccvm::{
     NUM_LIMB_BITS_IN_FIELD_SIMULATION,
-    ecc_op_queue::{EccOpCode, EccOpsTable, EccvmOpsTable, EccvmRowTracker, VMOperation},
+    ecc_op_queue::{
+        EccOpCode, EccOpsTable, EndomorphismParams,
+    },
 };
 use ark_ec::CurveGroup;
-use ark_ff::AdditiveGroup;
+use ark_ff::FftField;
+use ark_ff::Field;
+use ark_ff::PrimeField;
+use ark_ff::{ BigInt};
 use common::{
-    honk_curve::HonkCurve, honk_proof::TranscriptFieldType, mpc::NoirUltraHonkProver,
+    CoUtils, honk_curve::HonkCurve, honk_proof::TranscriptFieldType, mpc::NoirUltraHonkProver,
     polynomials::shared_polynomial::SharedPolynomial,
 };
 use mpc_core::MpcState;
 use mpc_net::Network;
 use num_bigint::BigUint;
 use std::array;
+use std::ops::Shl;
 
 pub(crate) const TABLE_WIDTH: usize = 4; // dictated by the number of wires in the Ultra arithmetization
 pub(crate) const NUM_ROWS_PER_OP: usize = 2; // A single ECC op is split across two width-4 rows
@@ -357,7 +363,12 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoECCOpQueue<T, C> {
      *
      * @param to_add
      */
-    pub fn add_accumulate(&mut self, to_add: T::PointShare) -> CoUltraOp<T, C> {
+    pub fn add_accumulate<N: Network>(
+        &mut self,
+        to_add: T::PointShare,
+        net: &N,
+        state: &mut T::State,
+    ) -> CoUltraOp<T, C> {
         // Update the accumulator natively
         T::add_point_assign(&mut self.accumulator, to_add.clone());
         let op_code = EccOpCode {
@@ -373,7 +384,13 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoECCOpQueue<T, C> {
         });
 
         // Construct and store the operation in the ultra op format
-        self.construct_and_populate_ultra_ops(op_code, to_add, T::ArithmeticShare::default())
+        self.construct_and_populate_ultra_ops(
+            op_code,
+            to_add,
+            T::ArithmeticShare::default(),
+            net,
+            state,
+        )
     }
 
     /**
@@ -401,8 +418,13 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoECCOpQueue<T, C> {
         };
 
         // Construct and store the operation in the ultra op format
-        let ultra_op =
-            self.construct_and_populate_ultra_ops(op_code.clone(), to_mul.clone(), scalar);
+        let ultra_op = self.construct_and_populate_ultra_ops(
+            op_code.clone(),
+            to_mul.clone(),
+            scalar,
+            net,
+            state,
+        );
 
         // Store the eccvm operation
         self.eccvm_ops_table.push(CoVMOperation {
@@ -423,11 +445,17 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoECCOpQueue<T, C> {
      * https://github.com/AztecProtocol/barretenberg/issues/1360) to the ultra ops table without affecting the
      * operations in the ECCVM.
      */
-    pub fn no_op_ultra_only(&mut self) -> CoUltraOp<T, C> {
+    pub fn no_op_ultra_only<N: Network>(
+        &mut self,
+        net: &N,
+        state: &mut T::State,
+    ) -> CoUltraOp<T, C> {
         return self.construct_and_populate_ultra_ops(
             EccOpCode::default(),
             self.accumulator.clone(),
             T::ArithmeticShare::default(),
+            net,
+            state,
         );
     }
 
@@ -436,7 +464,7 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoECCOpQueue<T, C> {
      *
      * @return current internal accumulator point (prior to reset to 0)
      */
-    pub fn eq_and_reset(&mut self) -> CoUltraOp<T, C> {
+    pub fn eq_and_reset<N: Network>(&mut self, net: &N, state: &mut T::State) -> CoUltraOp<T, C> {
         let expected = self.accumulator.clone();
         // TODO CESAR: Check if this is correct
         self.accumulator = T::PointShare::default();
@@ -454,7 +482,13 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoECCOpQueue<T, C> {
         });
 
         // Construct and store the operation in the ultra op format
-        self.construct_and_populate_ultra_ops(op_code, expected, T::ArithmeticShare::default())
+        self.construct_and_populate_ultra_ops(
+            op_code,
+            expected,
+            T::ArithmeticShare::default(),
+            net,
+            state,
+        )
     }
 
     /**
@@ -465,13 +499,319 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoECCOpQueue<T, C> {
      * @param scalar
      * @return UltraOp
      */
-    pub fn construct_and_populate_ultra_ops(
+    pub fn construct_and_populate_ultra_ops<N: Network>(
         &mut self,
         op_code: EccOpCode,
         point: T::PointShare,
         scalar: T::ArithmeticShare,
+        net: &N,
+        state: &mut T::State,
     ) -> CoUltraOp<T, C> {
-        // TODO CESAR
-        todo!()
+        // TODO CESAR: Handle unwrap
+        let (x, y, is_point_at_infinity) = T::point_share_to_fieldshare(point, net, state).unwrap();
+
+        // // Decompose point coordinates (Fq) into hi-lo chunks (Fr)
+        // const CHUNK_SIZE: u8 = 2 * NUM_LIMB_BITS_IN_FIELD_SIMULATION as u8;
+        // let [x_lo, x_hi, _] = T::slice(
+        //     x,
+        //     2 * CHUNK_SIZE - 1, // Includes msb in the slice
+        //     CHUNK_SIZE,
+        //     2 * CHUNK_SIZE as usize,
+        //     state,
+        //     net,
+        // ).unwrap();
+        // let [y_lo, y_hi, _] = T::slice(
+        //     y,
+        //     2 * CHUNK_SIZE - 1, // Includes msb in the slice
+        //     CHUNK_SIZE,
+        //     2 * CHUNK_SIZE as usize,
+        //     state,
+        //     net,
+        // ).unwrap();
+
+        // Construct the ultra operation
+        todo!("Implement ultra operation construction")
+    }
+}
+
+impl<T: NoirUltraHonkProver<C>, C: CurveGroup<ScalarField = TranscriptFieldType>>
+    CoECCOpQueue<T, C>
+{
+    /**
+     * For short Weierstrass curves y^2 = x^3 + b mod r, if there exists a cube root of unity mod r,
+     * we can take advantage of an enodmorphism to decompose a 254 bit scalar into 2 128 bit scalars.
+     * \beta = cube root of 1, mod q (q = order of fq)
+     * \lambda = cube root of 1, mod r (r = order of fr)
+     *
+     * For a point P1 = (X, Y), where Y^2 = X^3 + b, we know that
+     * the point P2 = (X * \beta, Y) is also a point on the curve
+     * We can represent P2 as a scalar multiplication of P1, where P2 = \lambda * P1
+     *
+     * For a generic multiplication of P1 by a 254 bit scalar k, we can decompose k
+     * into 2 127 bit scalars (k1, k2), such that k = k1 - (k2 * \lambda)
+     *
+     * We can now represent (k * P1) as (k1 * P1) - (k2 * P2), where P2 = (X * \beta, Y).
+     * As k1, k2 have half the bit length of k, we have reduced the number of loop iterations of our
+     * scalar multiplication algorithm in half
+     *
+     * To find k1, k2, We use the extended euclidean algorithm to find 4 short scalars [a1, a2], [b1, b2] such that
+     * modulus = (a1 * b2) - (b1 * a2)
+     * We then compute scalars c1 = round(b2 * k / r), c2 = round(b1 * k / r), where
+     * k1 = (c1 * a1) + (c2 * a2), k2 = -((c1 * b1) + (c2 * b2))
+     * We pre-compute scalars g1 = (2^256 * b1) / n, g2 = (2^256 * b2) / n, to avoid having to perform long division
+     * on 512-bit scalars
+     **/
+    pub fn split_into_endomorphism_scalars<N: Network, Params: EndomorphismParams>(
+        scalar: T::ArithmeticShare,
+        net: &N,
+        state: &mut T::State,
+    ) -> (T::ArithmeticShare, T::ArithmeticShare) {
+        let endo_g1 = BigInt([
+            Params::ENDO_G1_LO,
+            Params::ENDO_G1_MID,
+            Params::ENDO_G1_HI,
+            0,
+        ]);
+        let endo_g2 = BigInt([Params::ENDO_G2_LO, Params::ENDO_G2_MID, 0, 0]);
+        let endo_minus_b1 = BigInt([Params::ENDO_MINUS_B1_LO, Params::ENDO_MINUS_B1_MID, 0, 0]);
+        let endo_b2 = BigInt([Params::ENDO_B2_LO, Params::ENDO_B2_MID, 0, 0]);
+
+        let scalar_montgomery = CoECCOpQueue::<T, C>::to_montgomery_form(scalar);
+        let scalar_chunks: [T::ArithmeticShare; 4] = T::decompose_arithmetic(
+            scalar_montgomery,
+            C::ScalarField::MODULUS_BIT_SIZE as usize,
+            u64::BITS as usize,
+            net,
+            state,
+        )
+        .expect("Failed to decompose scalar")
+        .try_into()
+        .expect("Failed to convert scalar chunks");
+
+        let c1 = CoECCOpQueue::<T, C>::mul_high(scalar_chunks, endo_g2, net, state);
+        let c2 = CoECCOpQueue::<T, C>::mul_high(scalar_chunks, endo_g1, net, state);
+        let q1 = CoECCOpQueue::<T, C>::mul_low(c1, endo_minus_b1, net, state);
+        let q2 = CoECCOpQueue::<T, C>::mul_low(c2, endo_b2, net, state);
+
+        let q1 = CoECCOpQueue::<T, C>::recompose_shares(q1);
+        let q2 = CoECCOpQueue::<T, C>::recompose_shares(q2);
+
+        let q1 = CoECCOpQueue::<T, C>::from_montgomery_form(q1);
+        let q2 = CoECCOpQueue::<T, C>::from_montgomery_form(q2);
+
+        let t1 = T::sub(q2, q1);
+
+        let beta = C::ScalarField::get_root_of_unity(3).unwrap();
+        let t2 = T::add(T::mul_with_public(beta, t1), scalar);
+        (t1, t2)
+    }
+
+    fn recompose_shares(x: [T::ArithmeticShare; 4]) -> T::ArithmeticShare {
+        let mut res = T::ArithmeticShare::default();
+        for (i, chunk) in x.into_iter().enumerate() {
+            let shift = C::ScalarField::from_bigint(
+                BigInt::from(1u64).shl((i * u64::BITS as usize).try_into().unwrap()),
+            )
+            .unwrap();
+            T::add_assign(&mut res, T::mul_with_public(shift, chunk));
+        }
+        res
+    }
+
+    // TODO CESAR: Verify this is correct and optimal (likely not)
+    fn mul<N: Network>(
+        x: [T::ArithmeticShare; 4],
+        y: BigInt<4>,
+        net: &N,
+        state: &mut T::State,
+    ) -> [T::ArithmeticShare; 8] {
+        let mut res = [T::ArithmeticShare::default(); 8];
+        let mut prev_column_carry = Vec::new();
+        for col in 0..7 {
+            let mut column_values = Vec::new();
+            let mut row_carries = Vec::new();
+
+            // Fill each column
+            for i in 0..4 {
+                for j in 0..4 {
+                    if i + j == col {
+                        let (product, row_carry) = CoECCOpQueue::<T, C>::mul_carry(
+                            x[i],
+                            y.0[j],
+                            prev_column_carry.pop().unwrap_or_default(),
+                            net,
+                            state,
+                        );
+                        column_values.push(product);
+                        row_carries.push(row_carry);
+                    }
+                }
+            }
+
+            // Update previous column carry
+            prev_column_carry = row_carries;
+
+            // Add all values and previous carry
+            let (column_sum, column_carry) =
+                CoECCOpQueue::<T, C>::add_many_carry(column_values, res[col], net, state);
+            res[col] = column_sum;
+
+            // Add carry to next column
+            if col < 7 {
+                res[col + 1] = column_carry;
+            }
+        }
+        res
+    }
+
+    fn mul_low<N: Network>(
+        x: [T::ArithmeticShare; 4],
+        y: BigInt<4>,
+        net: &N,
+        state: &mut T::State,
+    ) -> [T::ArithmeticShare; 4] {
+        CoECCOpQueue::<T, C>::mul(x, y, net, state)[..4]
+            .try_into()
+            .expect("Failed to convert scalar chunks")
+    }
+
+    fn mul_high<N: Network>(
+        x: [T::ArithmeticShare; 4],
+        y: BigInt<4>,
+        net: &N,
+        state: &mut T::State,
+    ) -> [T::ArithmeticShare; 4] {
+        CoECCOpQueue::<T, C>::mul(x, y, net, state)[4..]
+            .try_into()
+            .expect("Failed to convert scalar chunks")
+    }
+
+    fn mul_carry<N: Network>(
+        x: T::ArithmeticShare,
+        y: u64,
+        carry: T::ArithmeticShare,
+        net: &N,
+        state: &mut T::State,
+    ) -> (T::ArithmeticShare, T::ArithmeticShare) {
+        let total_res = T::add(T::mul_with_public(C::ScalarField::from(y), x), carry);
+
+        let [result, carry, _, _] = T::decompose_arithmetic(
+            total_res,
+            C::ScalarField::MODULUS_BIT_SIZE as usize,
+            u64::BITS as usize,
+            net,
+            state,
+        )
+        .expect("Failed to decompose scalar")
+        .try_into()
+        .expect("Failed to convert scalar chunks");
+
+        (result, carry)
+    }
+
+    fn add_many_carry<N: Network>(
+        x: Vec<T::ArithmeticShare>,
+        carry: T::ArithmeticShare,
+        net: &N,
+        state: &mut T::State,
+    ) -> (T::ArithmeticShare, T::ArithmeticShare) {
+        let total_res = T::add(x.into_iter().reduce(T::add).unwrap(), carry);
+
+        let [result, carry, _, _] = T::decompose_arithmetic(
+            total_res,
+            C::ScalarField::MODULUS_BIT_SIZE as usize,
+            u64::BITS as usize,
+            net,
+            state,
+        )
+        .expect("Failed to decompose scalar")
+        .try_into()
+        .expect("Failed to convert scalar chunks");
+
+        (result, carry)
+    }
+
+    fn from_montgomery_form(x: T::ArithmeticShare) -> T::ArithmeticShare {
+        let mont_r: C::ScalarField = C::ScalarField::MODULUS.montgomery_r().into();
+        T::mul_with_public(mont_r.inverse().unwrap(), x)
+    }
+
+    fn to_montgomery_form(x: T::ArithmeticShare) -> T::ArithmeticShare {
+        let mont_r = C::ScalarField::MODULUS.montgomery_r().into();
+        T::mul_with_public(mont_r, x)
+    }
+}
+
+mod test {
+    use std::thread;
+
+    use ark_bn254::Bn254;
+    use ark_ec::{pairing::Pairing, short_weierstrass::Affine};
+    use common::mpc::{NoirUltraHonkProver, rep3::Rep3UltraHonkDriver};
+    use mpc_core::{
+        gadgets::field_from_hex_string,
+        protocols::rep3::{Rep3State, conversion::A2BType, share_field_element},
+    };
+    use mpc_net::local::LocalNetwork;
+    use rand::thread_rng;
+
+    use crate::eccvm::ecc_op_queue::Bn254ParamsFr;
+    use crate::eccvm::{
+        co_ecc_op_queue::CoECCOpQueue,
+        ecc_op_queue::{EccOpCode, UltraOp},
+    };
+    use ark_ff::PrimeField;
+
+    type P = Bn254;
+    type Bn254G1 = ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>;
+    type Scalar = <P as Pairing>::ScalarField;
+
+    #[test]
+    fn test_split_into_endomorphism_scalars() {
+        // Scalar: 0x1a7855215e6c4b0cf02a37d1d2c8fb001f24f29e98a784096786558e824ee6b3
+        // t1: 0x1ba2c8d6ff259fa8c79d53093767cd1002d67810d1cb07c131d4fbfac46bf8c9
+        // t2: 0x0b8ab330373e7c36cab04db25e7f2a1119d7820f8941279a4ec3718c0ebe742c
+
+        let scalar = field_from_hex_string(
+            "0x1a7855215e6c4b0cf02a37d1d2c8fb001f24f29e98a784096786558e824ee6b3",
+        )
+        .unwrap();
+
+        let scalar_shares = share_field_element(scalar, &mut thread_rng());
+
+        let expected_result: Vec<Scalar> = vec![
+            field_from_hex_string(
+                "0x1ba2c8d6ff259fa8c79d53093767cd1002d67810d1cb07c131d4fbfac46bf8c9",
+            )
+            .unwrap(),
+            field_from_hex_string(
+                "0x0b8ab330373e7c36cab04db25e7f2a1119d7820f8941279a4ec3718c0ebe742c",
+            )
+            .unwrap(),
+        ];
+
+        let nets = LocalNetwork::new_3_parties();
+        let mut threads = Vec::with_capacity(3);
+
+        for (net, share) in nets.into_iter().zip(scalar_shares.into_iter()) {
+            threads.push(thread::spawn(move || {
+                let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
+                let (a, b) =
+                    CoECCOpQueue::<Rep3UltraHonkDriver, Bn254G1>::split_into_endomorphism_scalars::<
+                        LocalNetwork,
+                        Bn254ParamsFr,
+                    >(share, &net, &mut state);
+                <Rep3UltraHonkDriver as NoirUltraHonkProver<Bn254G1>>::open_many(
+                    &[a, b],
+                    &net,
+                    &mut state,
+                )
+                .unwrap()
+            }));
+        }
+
+        let results: Vec<_> = threads.into_iter().map(|t| t.join().unwrap()).collect();
+
+        assert!(results.into_iter().all(|res| res == expected_result));
     }
 }

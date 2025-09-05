@@ -214,7 +214,7 @@ impl MergeRecursiveVerifier {
             let field_share = T::get_shared(&scalar.get_value(builder, driver)).unwrap();
 
             let op_tuple = if scalar_is_constant_equal_one {
-                builder.queue_ecc_add_accum::<N>(point_share.into())
+                builder.queue_ecc_add_accum::<N>(point_share.into(), net, state)
             } else {
                 builder.queue_ecc_mul_accum(point_share.into(), field_share, net, state)
             };
@@ -256,7 +256,7 @@ impl MergeRecursiveVerifier {
         }
 
         // Populate equality gates based on the internal accumulator point
-        let op_tuple = builder.queue_ecc_eq();
+        let op_tuple = builder.queue_ecc_eq(net, state);
 
         // Reconstruct the result of the batch mul using indices into the variables array
         let x_lo = FieldCT::from_witness_index(op_tuple.x_lo);

@@ -6,6 +6,7 @@ use mpc_core::{
     MpcState,
     protocols::rep3::{
         Rep3PointShare, Rep3PrimeFieldShare, Rep3State, arithmetic, id::PartyID, pointshare, poly,
+        yao,
     },
 };
 use mpc_net::Network;
@@ -268,5 +269,22 @@ impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for Rep3UltraH
     ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
         let zeroes = vec![P::ScalarField::zero(); a.len()];
         arithmetic::eq_public_many(a, &zeroes, net, state)
+    }
+
+    // TODO CESAR
+    fn decompose_arithmetic<N: Network>(
+        input: Self::ArithmeticShare,
+        total_bit_size_per_field: usize,
+        decompose_bit_size: usize,
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
+        yao::decompose_arithmetic(
+            input,
+            net,
+            state,
+            total_bit_size_per_field,
+            decompose_bit_size,
+        )
     }
 }

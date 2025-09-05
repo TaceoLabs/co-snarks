@@ -400,10 +400,28 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
         Self::ArithmeticShare,
         Self::ArithmeticShare,
         Self::ArithmeticShare,
-    )>
-    where
-        P::BaseField: ark_ff::PrimeField,
-    {
+    )> {
+        unimplemented!()
+    }
+
+    fn slice<N: Network>(
+        input: Self::ArithmeticShare,
+        msb: u8,
+        lsb: u8,
+        bitsize: usize,
+        state: &mut Self::State,
+        net: &N,
+    ) -> eyre::Result<[Self::ArithmeticShare; 3]> {
+        unimplemented!()
+    }
+
+    fn decompose_arithmetic<N: Network>(
+        input: Self::ArithmeticShare,
+        total_bit_size_per_field: usize,
+        decompose_bit_size: usize,
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
         unimplemented!()
     }
 }

@@ -1049,9 +1049,14 @@ where
      *
      * @param point Point to be added into the accumulator
      */
-    pub fn queue_ecc_add_accum<N: Network>(&mut self, point: D::PointShare) -> ECCOpTuple {
+    pub fn queue_ecc_add_accum<N: Network>(
+        &mut self,
+        point: D::PointShare,
+        net: &N,
+        state: &mut D::State,
+    ) -> ECCOpTuple {
         // Add the operation to the op queue
-        let ultra_op = self.ecc_op_queue.add_accumulate(point);
+        let ultra_op = self.ecc_op_queue.add_accumulate(point, net, state);
 
         // Add corresponding gates for the operation
         self.populate_ecc_op_wires(&ultra_op)
@@ -1084,9 +1089,9 @@ where
      *
      * @return ecc_op_tuple encoding the point to which equality has been asserted
      */
-    pub fn queue_ecc_eq(&mut self) -> ECCOpTuple {
+    pub fn queue_ecc_eq<N: Network>(&mut self, net: &N, state: &mut D::State) -> ECCOpTuple {
         // Add the operation to the op queue
-        let ultra_op = self.ecc_op_queue.eq_and_reset();
+        let ultra_op = self.ecc_op_queue.eq_and_reset(net, state);
 
         // Add corresponding gates for the operation
         let mut op_tuple = self.populate_ecc_op_wires(&ultra_op);
@@ -1099,9 +1104,9 @@ where
      *
      * @return ecc_op_tuple with all its fields set to zero
      */
-    fn queue_ecc_no_op(&mut self) -> ECCOpTuple {
+    fn queue_ecc_no_op<N: Network>(&mut self, net: &N, state: &mut D::State) -> ECCOpTuple {
         // Add the operation to the op queue
-        let ultra_op = self.ecc_op_queue.no_op_ultra_only();
+        let ultra_op = self.ecc_op_queue.no_op_ultra_only(net, state);
 
         // Add corresponding gates for the operation
         self.populate_ecc_op_wires(&ultra_op)
