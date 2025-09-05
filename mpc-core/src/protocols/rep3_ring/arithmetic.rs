@@ -60,7 +60,7 @@ pub fn add_assign_public<T: IntRing2k>(
 }
 
 /// Performs element-wise addition of two vectors of shared values in place.
-pub fn add_vec_assign<T: IntRing2k>(lhs: &mut [RingShare<T>], rhs: &[RingShare<T>]) {
+pub fn add_many_assign<T: IntRing2k>(lhs: &mut [RingShare<T>], rhs: &[RingShare<T>]) {
     for (a, b) in izip!(lhs.iter_mut(), rhs.iter()) {
         *a += b;
     }
@@ -77,7 +77,7 @@ pub fn sub_assign<T: IntRing2k>(shared: &mut RingShare<T>, b: RingShare<T>) {
 }
 
 /// Performs element-wise subtraction of two vectors of shared values in place.
-pub fn sub_vec_assign<T: IntRing2k>(lhs: &mut [RingShare<T>], rhs: &[RingShare<T>]) {
+pub fn sub_many_assign<T: IntRing2k>(lhs: &mut [RingShare<T>], rhs: &[RingShare<T>]) {
     for (a, b) in izip!(lhs.iter_mut(), rhs.iter()) {
         *a -= *b;
     }
@@ -134,7 +134,7 @@ pub fn mul_assign_public<T: IntRing2k>(shared: &mut RingShare<T>, public: RingEl
 /// # Security
 /// If you want to perform additional non-linear operations on the result of this function,
 /// you *MUST* call [`reshare_vec`] first. Only then, a reshare is performed.
-pub fn local_mul_vec<T: IntRing2k>(
+pub fn local_mul_many<T: IntRing2k>(
     lhs: &[RingShare<T>],
     rhs: &[RingShare<T>],
     state: &mut Rep3State,
@@ -172,8 +172,8 @@ pub fn reshare_vec<T: IntRing2k, N: Network>(
 
 /// Performs element-wise multiplication of two vectors of shared values.
 ///
-/// Use this function for small vecs. For large vecs see [`local_mul_vec`] and [`reshare_vec`]
-pub fn mul_vec<T: IntRing2k, N: Network>(
+/// Use this function for small vecs. For large vecs see [`local_mul_many`] and [`reshare_vec`]
+pub fn mul_many<T: IntRing2k, N: Network>(
     lhs: &[RingShare<T>],
     rhs: &[RingShare<T>],
     net: &N,
@@ -182,10 +182,10 @@ pub fn mul_vec<T: IntRing2k, N: Network>(
 where
     Standard: Distribution<T>,
 {
-    // do not use local_mul_vec here!!! We are , this means we
-    // run on a tokio runtime. local_mul_vec uses rayon and starves the
+    // do not use local_mul_many here!!! We are , this means we
+    // run on a tokio runtime. local_mul_many uses rayon and starves the
     // runtime. This method is for small multiplications of vecs.
-    // If you want a larger one use local_mul_vec and then reshare_vec.
+    // If you want a larger one use local_mul_many and then reshare_vec.
     debug_assert_eq!(lhs.len(), rhs.len());
     let local_a = izip!(lhs.iter(), rhs.iter())
         .map(|(lhs, rhs)| lhs * rhs + state.rngs.rand.masking_element::<RingElement<T>>())

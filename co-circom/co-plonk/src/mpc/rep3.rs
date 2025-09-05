@@ -52,15 +52,15 @@ impl<P: Pairing> CircomPlonkProver<P> for Rep3PlonkDriver {
         arithmetic::mul_public(shared, public)
     }
 
-    fn local_mul_vec(
+    fn local_mul_many(
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
         state: &mut Self::State,
     ) -> Vec<P::ScalarField> {
-        arithmetic::local_mul_vec::<P::ScalarField>(a, b, state)
+        arithmetic::local_mul_many::<P::ScalarField>(a, b, state)
     }
 
-    fn io_round_mul_vec<N: Network>(
+    fn io_round_mul_many<N: Network>(
         a: Vec<P::ScalarField>,
         net: &N,
         _: &mut Self::State,
@@ -68,35 +68,35 @@ impl<P: Pairing> CircomPlonkProver<P> for Rep3PlonkDriver {
         arithmetic::reshare_vec(a, net)
     }
 
-    fn mul_vec<N: Network>(
+    fn mul_many<N: Network>(
         lhs: &[Self::ArithmeticShare],
         rhs: &[Self::ArithmeticShare],
         net: &N,
         state: &mut Self::State,
     ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
-        arithmetic::mul_vec(lhs, rhs, net, state)
+        arithmetic::mul_many(lhs, rhs, net, state)
     }
 
-    fn mul_vecs<N: Network>(
+    fn mul_many_pairs<N: Network>(
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
         c: &[Self::ArithmeticShare],
         net: &N,
         state: &mut Self::State,
     ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
-        let tmp = arithmetic::mul_vec(a, b, net, state)?;
-        arithmetic::mul_vec(&tmp, c, net, state)
+        let tmp = arithmetic::mul_many(a, b, net, state)?;
+        arithmetic::mul_many(&tmp, c, net, state)
     }
 
-    fn add_mul_vec<N: Network>(
+    fn add_mul_many<N: Network>(
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
         c: &[Self::ArithmeticShare],
         net: &N,
         state: &mut Self::State,
     ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
-        let mut result = arithmetic::mul_vec(b, c, net, state)?;
-        arithmetic::add_vec_assign(&mut result, a);
+        let mut result = arithmetic::mul_many(b, c, net, state)?;
+        arithmetic::add_many_assign(&mut result, a);
         Ok(result)
     }
 
@@ -187,8 +187,8 @@ impl<P: Pairing> CircomPlonkProver<P> for Rep3PlonkDriver {
         net: &N,
         state: &mut Self::State,
     ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
-        let arr = arithmetic::mul_vec(arr1, arr2, net, state)?;
-        let arr = arithmetic::mul_vec(&arr, arr3, net, state)?;
+        let arr = arithmetic::mul_many(arr1, arr2, net, state)?;
+        let arr = arithmetic::mul_many(&arr, arr3, net, state)?;
         // Do the multiplications of inp[i] * inp[i-1] in constant rounds
         let len = arr.len();
 
@@ -198,9 +198,9 @@ impl<P: Pairing> CircomPlonkProver<P> for Rep3PlonkDriver {
         }
         let r_inv = arithmetic::inv_vec(&r, net, state)?;
         let r_inv0 = vec![r_inv[0]; len];
-        let mut unblind = arithmetic::mul_vec(&r_inv0, &r[1..], net, state)?;
+        let mut unblind = arithmetic::mul_many(&r_inv0, &r[1..], net, state)?;
 
-        let mul = arithmetic::mul_vec(&r[..len], &arr, net, state)?;
+        let mul = arithmetic::mul_many(&r[..len], &arr, net, state)?;
         let mut open = arithmetic::mul_open_vec(&mul, &r_inv[1..], net, state)?;
 
         for i in 1..open.len() {

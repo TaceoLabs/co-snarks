@@ -353,7 +353,7 @@ mod field_share {
         ) {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
-                let mul = arithmetic::mul_vec(&x, &y, &net, &mut state).unwrap();
+                let mul = arithmetic::mul_many(&x, &y, &net, &mut state).unwrap();
                 tx.send(mul)
             });
         }
@@ -365,7 +365,7 @@ mod field_share {
     }
 
     #[test]
-    fn rep3_mul_vec() {
+    fn rep3_mul_many() {
         let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..1)
@@ -393,8 +393,8 @@ mod field_share {
         ) {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
-                let mul = arithmetic::mul_vec(&x, &y, &net, &mut state).unwrap();
-                let mul = arithmetic::mul_vec(&mul, &y, &net, &mut state).unwrap();
+                let mul = arithmetic::mul_many(&x, &y, &net, &mut state).unwrap();
+                let mul = arithmetic::mul_many(&mul, &y, &net, &mut state).unwrap();
                 tx.send(mul)
             });
         }

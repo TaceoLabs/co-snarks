@@ -35,7 +35,7 @@ pub fn sub_assign<F: PrimeField>(a: &mut ShamirShare<F>, b: ShamirShare<F>) {
 }
 
 /// Performs element-wise subtraction of two slices of shares and stores the result in `lhs`.
-pub fn sub_vec_assign<F: PrimeField>(lhs: &mut [ShamirShare<F>], rhs: &[ShamirShare<F>]) {
+pub fn sub_many_assign<F: PrimeField>(lhs: &mut [ShamirShare<F>], rhs: &[ShamirShare<F>]) {
     for (a, b) in izip!(lhs.iter_mut(), rhs.iter()) {
         *a -= *b;
     }
@@ -52,7 +52,7 @@ pub fn add_assign_public<F: PrimeField>(shared: &mut ShamirShare<F>, public: F) 
 }
 
 /// Performs element-wise addition of two slices of shares and stores the result in `lhs`.
-pub fn add_vec_assign<F: PrimeField>(lhs: &mut [ShamirShare<F>], rhs: &[ShamirShare<F>]) {
+pub fn add_many_assign<F: PrimeField>(lhs: &mut [ShamirShare<F>], rhs: &[ShamirShare<F>]) {
     for (a, b) in izip!(lhs.iter_mut(), rhs.iter()) {
         *a += b;
     }
@@ -70,7 +70,7 @@ pub fn mul<F: PrimeField, N: Network>(
 }
 
 /// Performs multiplication between two shares. *DOES NOT REDUCE DEGREE*
-pub fn local_mul_vec<F: PrimeField>(a: &[ShamirShare<F>], b: &[ShamirShare<F>]) -> Vec<F> {
+pub fn local_mul_many<F: PrimeField>(a: &[ShamirShare<F>], b: &[ShamirShare<F>]) -> Vec<F> {
     a.par_iter()
         .zip_eq(b.par_iter())
         .with_min_len(1024)
@@ -79,14 +79,14 @@ pub fn local_mul_vec<F: PrimeField>(a: &[ShamirShare<F>], b: &[ShamirShare<F>]) 
 }
 
 /// Performs element-wise multiplication of two slices of shares.
-pub fn mul_vec<F: PrimeField, N: Network>(
+pub fn mul_many<F: PrimeField, N: Network>(
     a: &[ShamirShare<F>],
     b: &[ShamirShare<F>],
     net: &N,
     state: &mut ShamirState<F>,
 ) -> eyre::Result<Vec<ShamirShare<F>>> {
-    //do not use local_mul_vec as it uses rayon and this method runs on
-    //the tokio runtime. This method is for smaller vecs, local_mul_vec and then
+    //do not use local_mul_many as it uses rayon and this method runs on
+    //the tokio runtime. This method is for smaller vecs, local_mul_many and then
     //degree_reduce for larger vecs.
     let mul = a
         .iter()

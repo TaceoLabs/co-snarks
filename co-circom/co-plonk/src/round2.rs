@@ -167,7 +167,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round2<'a, P
         let num = num?;
         let den = den?;
 
-        let mut buffer_z = T::mul_vec(&num, &den, &nets[0], state)?;
+        let mut buffer_z = T::mul_many(&num, &den, &nets[0], state)?;
         buffer_z.rotate_right(1); // Required by SNARKJs/Plonk
         batched_mul_span.exit();
 

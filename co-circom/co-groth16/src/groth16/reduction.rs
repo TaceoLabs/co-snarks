@@ -139,7 +139,7 @@ impl R1CSToQAP for CircomReduction {
             },
             || {
                 let local_mul_vec_span = tracing::debug_span!("c: local_mul_vec").entered();
-                let mut ab = T::local_mul_vec(a, b, state);
+                let mut ab = T::local_mul_many(a, b, state);
                 local_mul_vec_span.exit();
                 let ifft_span = tracing::debug_span!("c: ifft in dist pows").entered();
                 domain.ifft_in_place(&mut ab);
@@ -161,7 +161,7 @@ impl R1CSToQAP for CircomReduction {
 
         let local_ab_span = tracing::debug_span!("ab: local_mul_vec").entered();
         // same as above. No IO task is run at the moment.
-        let mut ab = T::local_mul_vec(a, b, state);
+        let mut ab = T::local_mul_many(a, b, state);
         local_ab_span.exit();
         let compute_ab_span = tracing::debug_span!("compute ab").entered();
         ab.par_iter_mut()
@@ -262,7 +262,7 @@ impl R1CSToQAP for LibSnarkReduction {
                         b
                     },
                 );
-                T::local_mul_vec(a, b, state)
+                T::local_mul_many(a, b, state)
             },
             || {
                 let mut c = evaluate_constraint_half_share::<P, T>(

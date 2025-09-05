@@ -167,7 +167,7 @@ impl UltraArithmeticRelation {
         let neg_half = -P::ScalarField::from(2u64).inverse().unwrap();
         let three = P::ScalarField::from(3_u64);
 
-        let mul = T::local_mul_vec(w_l, w_r, state);
+        let mul = T::local_mul_many(w_l, w_r, state);
         let id = state.id();
         let tmp_l = (w_l, q_l)
             .into_par_iter()
