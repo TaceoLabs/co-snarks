@@ -196,6 +196,18 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
         }
     }
 
+    /// Scales all elements in-place in \[a\] by the provided scale, by multiplying every share with the
+    /// public scalar.
+    fn scale_many(
+        shared: &[Self::ArithmeticShare],
+        scale: P::ScalarField,
+    ) -> Vec<Self::ArithmeticShare> {
+        shared
+            .iter()
+            .map(|share| Self::mul_with_public(scale, *share))
+            .collect()
+    }
+
     /// Adds a public scalar to all elements in \[a\].
     fn add_scalar(
         shared: &[Self::ArithmeticShare],

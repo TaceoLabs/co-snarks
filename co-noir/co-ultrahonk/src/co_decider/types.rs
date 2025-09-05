@@ -45,6 +45,12 @@ pub struct RelationParameters<T> {
     pub gamma: T,
     pub public_input_delta: T,
     pub lookup_grand_product_delta: T,
+    pub beta_sqr: T,
+    pub beta_cube: T,
+    pub eccvm_set_permutation_delta: T,
+    pub accumulated_result: [T; 4],
+    pub evaluation_input_x: [T; 5],
+    pub batching_challenge_v: [T; 20],
 }
 
 impl<T: PartialEq> RelationParameters<T> {
@@ -85,7 +91,7 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCProverFlavour> ProverMemory
             beta: prover_memory.challenges.beta,
             gamma: prover_memory.challenges.gamma,
             public_input_delta: prover_memory.public_input_delta,
-            lookup_grand_product_delta: Default::default(),
+            ..Default::default()
         };
         let alphas = prover_memory.challenges.alphas;
         let gate_challenges = Default::default();
