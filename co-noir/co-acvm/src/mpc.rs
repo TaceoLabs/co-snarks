@@ -21,6 +21,7 @@ fn downcast<A: 'static, B: 'static>(a: &A) -> Option<&B> {
 pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     type Lookup: LookupTableProvider<F>;
     type ArithmeticShare: Clone;
+    type OtherArithmeticShare<C: CurveGroup<BaseField = F>>: Clone;
     /// A type representing the values encountered during Noir compilation. It should at least contain public field elements and shared values.
     type AcvmType: Clone
         + Default
@@ -31,6 +32,15 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         + PartialEq
         + Into<<Self::BrilligDriver as BrilligDriver<F>>::BrilligType>;
     type AcvmPoint<C: CurveGroup<BaseField = F>>: Clone + fmt::Debug + fmt::Display + From<C>;
+
+    type OtherAcvmType<C: CurveGroup<BaseField = F>>: Clone
+        + Default
+        + Copy
+        + fmt::Debug
+        + fmt::Display
+        + From<Self::OtherArithmeticShare<C>>
+        + From<C::ScalarField>
+        + PartialEq;
 
     type BrilligDriver: BrilligDriver<F>;
 

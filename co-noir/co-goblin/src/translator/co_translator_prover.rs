@@ -384,10 +384,6 @@ where
     ) -> HonkProofResult<(Vec<T::ArithmeticShare>, Vec<T::ArithmeticShare>)> {
         tracing::trace!("compute grand product numerator");
 
-        // debug_assert!(shared1.len() >= output_len);
-        // debug_assert!(shared2.len() >= output_len);
-        // debug_assert!(pub1.len() >= output_len);
-
         let has_active_ranges = active_region_data.size() > 0;
 
         // We drop the last element since it is not needed for the grand product
@@ -518,7 +514,7 @@ where
         let mul = mul.chunks_exact(mul.len() / 2).collect_vec();
         debug_assert_eq!(mul.len(), 2);
         let numerator = mul[0];
-        let denominator = T::mul_many(&mul5_denom, &mul[1], net, state)?;
+        let denominator = T::mul_many(&mul5_denom, mul[1], net, state)?;
         Ok((numerator.to_vec(), denominator))
     }
 

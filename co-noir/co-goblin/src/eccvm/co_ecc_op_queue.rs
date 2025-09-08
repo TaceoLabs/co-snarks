@@ -1,14 +1,17 @@
+use ark_ec::CurveGroup;
+use ark_ff::PrimeField;
+use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_builder::TranscriptFieldType;
 use co_builder::prelude::HonkCurve;
 use common::{mpc::NoirUltraHonkProver, shared_polynomial::SharedPolynomial};
-use goblin::prelude::{EccOpsTable, EccvmRowTracker};
+use goblin::prelude::{EccOpCode, EccOpsTable, EccvmRowTracker};
 use num_bigint::BigUint;
 use std::array;
 
 pub(crate) const TABLE_WIDTH: usize = 4; // dictated by the number of wires in the Ultra arithmetization
 pub(crate) const NUM_ROWS_PER_OP: usize = 2; // A single ECC op is split across two width-4 rows
 
-pub(crate) type CoEccvmOpsTable<T, C> = EccOpsTable<CoECCVMOperation<T, C>>;
+pub(crate) type CoEccvmOpsTable<T, C> = EccOpsTable<CoVMOperation<T, C>>;
 
 pub(crate) struct CoUltraEccOpsTable<T: NoirUltraHonkProver<C>, C: HonkCurve<TranscriptFieldType>> {
     pub(crate) table: EccOpsTable<CoUltraOp<T, C>>,
@@ -99,12 +102,28 @@ impl<T: NoirUltraHonkProver<C>, C: HonkCurve<TranscriptFieldType>> CoUltraEccOps
 }
 
 #[derive(Default)]
-pub struct CoECCVMOperation<T: NoirUltraHonkProver<C>, C: HonkCurve<TranscriptFieldType>> {
-    pub op_code: CoEccOpCode<T, C>,
-    pub base_point: C::Affine,
-    pub z1: BigUint,
-    pub z2: BigUint,
-    pub mul_scalar_full: C::ScalarField,
+pub struct CoVMOperation<
+    T: NoirWitnessExtensionProtocol<C::BaseField>,
+    C: CurveGroup<BaseField: PrimeField>,
+> {
+    pub op_code: EccOpCode,
+    pub base_point: T::AcvmPoint<C>,
+    pub z1: T::AcvmType, //TODO FLORIN: I think this does not have to be a binary share (It is a uint256 in bb)
+    pub z2: T::AcvmType, //TODO FLORIN: I think this does not have to be a binary share (It is a uint256 in bb)
+    pub mul_scalar_full: T::OtherAcvmType<C>,
+}
+impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: CurveGroup<BaseField: PrimeField>> Clone
+    for CoVMOperation<T, C>
+{
+    fn clone(&self) -> Self {
+        Self {
+            op_code: self.op_code.clone(),
+            base_point: self.base_point,
+            z1: self.z1,
+            z2: self.z2,
+            mul_scalar_full: self.mul_scalar_full,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -147,12 +166,16 @@ where
     }
 }
 
-pub struct CoECCOpQueue<T: NoirUltraHonkProver<C>, C: HonkCurve<TranscriptFieldType>> {
-    pub(crate) ultra_ops_table: CoUltraEccOpsTable<T, C>,
+pub struct CoECCOpQueue<
+    T: NoirWitnessExtensionProtocol<C::BaseField>,
+    C: CurveGroup<BaseField: PrimeField>,
+> {
     pub(crate) eccvm_ops_table: CoEccvmOpsTable<T, C>,
-    pub(crate) accumulator: C::Affine,
-    pub(crate) eccvm_ops_reconstructed: Vec<CoECCVMOperation<T, C>>,
-    pub(crate) eccvm_row_tracker: EccvmRowTracker,
+    pub(crate) ultra_ops_table: CoUltraEccOpsTable<T, C>,
+    pub(crate) accumulator: T::AcvmPoint<C>,
+    pub(crate) eccvm_ops_reconstructed: Vec<CoVMOperation<T, C>>,
+    pub ultra_ops_reconstructed: Vec<CoUltraOp<T, C>>,
+    pub(crate) eccvm_row_tracker: CoEccvmRowTracker<T, C>,
 }
 
 impl<T: NoirUltraHonkProver<C>, C: HonkCurve<TranscriptFieldType>> CoECCOpQueue<T, C> {

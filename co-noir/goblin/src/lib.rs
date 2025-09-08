@@ -22,12 +22,12 @@ pub(crate) const TABLE_WIDTH: usize = 4; // dictated by the number of wires in t
 pub(crate) const NUM_ROWS_PER_OP: usize = 2; // A single ECC op is split across two width-4 rows
 
 // Translator constans:
-pub(crate) const CONST_TRANSLATOR_LOG_N: usize = 18;
-pub(crate) const NUM_BINARY_LIMBS: usize = 4;
-pub(crate) const NUM_Z_LIMBS: usize = 2;
-pub(crate) const NUM_MICRO_LIMBS: usize = 6;
-pub(crate) const NUM_RELATION_WIDE_LIMBS: usize = 2;
-pub(crate) const NUM_LAST_LIMB_BITS: usize = 50;
-pub(crate) const NUM_QUOTIENT_BITS: usize = 256;
-pub(crate) const NUM_Z_BITS: usize = 128;
-pub(crate) const MICRO_LIMB_BITS: usize = 14;
+pub const CONST_TRANSLATOR_LOG_N: usize = 18;
+pub const NUM_BINARY_LIMBS: usize = 4;
+pub const NUM_Z_LIMBS: usize = 2;
+pub const NUM_MICRO_LIMBS: usize = 6;
+pub const NUM_RELATION_WIDE_LIMBS: usize = 2;
+pub const NUM_LAST_LIMB_BITS: usize = 50;
+pub const NUM_QUOTIENT_BITS: usize = 256;
+pub const NUM_Z_BITS: usize = 128;
+pub const MICRO_LIMB_BITS: usize = 14;
