@@ -35,7 +35,7 @@ use ark_ff::PrimeField;
 use co_builder::flavours::ultra_flavour::UltraFlavour;
 use co_builder::prover_flavour::ProverFlavour;
 use common::honk_curve::HonkCurve;
-use common::honk_proof::{HonkProof, HonkProofResult, TranscriptFieldType};
+use common::honk_proof::{HonkProofResult, TranscriptFieldType};
 use common::mpc::NoirUltraHonkProver;
 use mpc_net::Network;
 use std::array;

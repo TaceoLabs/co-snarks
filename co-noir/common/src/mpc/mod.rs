@@ -84,16 +84,6 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
     /// Add two shares: \[c\] = \[a\] + \[b\] and stores the result in \[a\].
     fn add_assign(a: &mut Self::ArithmeticShare, b: Self::ArithmeticShare);
 
-    /// Add two point shares: \[c\] = \[a\] + \[b\]
-    fn add_point(a: &mut Self::PointShare, b: Self::PointShare) {
-        unimplemented!()
-    }
-
-    /// Add two point shares: \[c\] = \[a\] + \[b\] and stores the result in \[a\].
-    fn add_point_assign(a: &mut Self::PointShare, b: Self::PointShare) {
-        unimplemented!()
-    }
-
     /// Elementwise addition of two shares: \[c\] = \[a\] + \[b\] and stores the result in \[a\].
     fn add_assign_many(a: &mut [Self::ArithmeticShare], b: &[Self::ArithmeticShare]) {
         for (a, b) in a.iter_mut().zip(b.iter()) {
@@ -268,16 +258,6 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
         state: &mut Self::State,
     ) -> eyre::Result<Vec<Self::ArithmeticShare>>;
 
-    /// Multiply a shared point by a shared field element: \[c\] = \[a\] * b.
-    fn mul_point_and_field<N: Network>(
-        point: Self::PointShare,
-        field: Self::ArithmeticShare,
-        net: &N,
-        state: &mut Self::State,
-    ) -> eyre::Result<Self::PointShare> {
-        unimplemented!()
-    }
-
     /// Add a public value a to the share b: \[c\] = a + \[b\]
     fn add_with_public(
         public: P::ScalarField,
@@ -384,6 +364,30 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
         state: &mut Self::State,
     ) -> eyre::Result<Vec<Self::ArithmeticShare>>;
 
+    // TODO CESAR
+    /// Add two point shares: \[c\] = \[a\] + \[b\]
+    fn add_point(a: &mut Self::PointShare, b: Self::PointShare) {
+        unimplemented!()
+    }
+
+    // TODO CESAR
+    /// Add two point shares: \[c\] = \[a\] + \[b\] and stores the result in \[a\].
+    fn add_point_assign(a: &mut Self::PointShare, b: Self::PointShare) {
+        unimplemented!()
+    }
+
+    // TODO CESAR
+    /// Multiply a shared point by a shared field element: \[c\] = \[a\] * b.
+    fn mul_point_and_scalar<N: Network>(
+        point: Self::PointShare,
+        field: Self::ArithmeticShare,
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<Self::PointShare> {
+        unimplemented!()
+    }
+
+    // TODO CESAR
     fn is_zero_point<N: Network>(
         x: Self::PointShare,
         net: &N,
@@ -392,33 +396,66 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
         unimplemented!()
     }
 
-    fn point_share_to_fieldshare<N: Network>(
+    // TODO CESAR
+    fn point_share_to_fieldshares<N: Network>(
         x: Self::PointShare,
         net: &N,
         state: &mut Self::State,
     ) -> eyre::Result<(
-        Self::ArithmeticShare,
-        Self::ArithmeticShare,
-        Self::ArithmeticShare,
+        Self::BaseFieldArithmeticShare,
+        Self::BaseFieldArithmeticShare,
+        Self::BaseFieldArithmeticShare,
     )> {
         unimplemented!()
     }
 
+    // TODO CESAR
     fn slice<N: Network>(
-        input: Self::ArithmeticShare,
-        msb: u8,
-        lsb: u8,
+        input: Self::BaseFieldArithmeticShare,
+        msb: usize,
+        lsb: usize,
         bitsize: usize,
         state: &mut Self::State,
         net: &N,
-    ) -> eyre::Result<[Self::ArithmeticShare; 3]> {
+    ) -> eyre::Result<Vec<Self::BaseFieldArithmeticShare>> {
         unimplemented!()
     }
 
+    // TODO CESAR
     fn decompose_arithmetic<N: Network>(
         input: Self::ArithmeticShare,
         total_bit_size_per_field: usize,
         decompose_bit_size: usize,
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
+        unimplemented!()
+    }
+
+    // TODO CESAR
+    fn cmux<N: Network>(
+        cond: Self::ArithmeticShare,
+        a: Self::ArithmeticShare,
+        b: Self::ArithmeticShare,
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<Self::ArithmeticShare> {
+        unimplemented!()
+    }
+
+    // TODO CESAR
+    fn le_public<N: Network>(
+        lhs: Self::ArithmeticShare,
+        rhs: P::ScalarField,
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<Self::ArithmeticShare> {
+        unimplemented!()
+    }
+
+    // TODO CESAR
+    fn base_field_share_to_field_shares<N: Network>(
+        x: Self::BaseFieldArithmeticShare,
         net: &N,
         state: &mut Self::State,
     ) -> eyre::Result<Vec<Self::ArithmeticShare>> {

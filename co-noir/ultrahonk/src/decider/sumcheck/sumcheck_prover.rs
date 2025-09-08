@@ -10,9 +10,8 @@ use common::polynomials::polynomial::RowDisablingPolynomial;
 use common::{
     crs::ProverCrs,
     honk_curve::HonkCurve,
-    honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
+    honk_proof::{HonkProofResult, TranscriptFieldType},
     polynomials::polynomial::Polynomial,
-    types::ZeroKnowledge,
 };
 
 use common::transcript::{Transcript, TranscriptHasher};

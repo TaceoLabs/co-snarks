@@ -28,8 +28,8 @@ use ark_ff::PrimeField;
 use co_builder::flavours::eccvm_flavour::ECCVMFlavour;
 use co_builder::prover_flavour::ProverFlavour;
 use common::honk_curve::HonkCurve;
+use common::honk_proof::HonkProofResult;
 use common::honk_proof::TranscriptFieldType;
-use common::honk_proof::{HonkProofError, HonkProofResult};
 use common::transcript::{Transcript, TranscriptHasher};
 #[derive(Default)]
 pub struct AllRelationAccECCVM<F: PrimeField> {

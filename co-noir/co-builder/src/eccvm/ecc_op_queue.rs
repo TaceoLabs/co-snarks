@@ -14,9 +14,7 @@ use ark_ff::PrimeField;
 use ark_ff::Zero;
 use ark_ff::{BigInt, One};
 use common::{
-    honk_curve::HonkCurve,
-    honk_proof::{TranscriptFieldType},
-    polynomials::polynomial::Polynomial,
+    honk_curve::HonkCurve, honk_proof::TranscriptFieldType, polynomials::polynomial::Polynomial,
     utils::Utils,
 };
 use num_bigint::BigUint;
@@ -761,17 +759,6 @@ pub struct UltraOp<P: CurveGroup> {
     pub return_is_infinity: bool,
 }
 
-pub struct ECCOpTuple {
-    pub op: u32,
-    pub x_lo: u32,
-    pub x_hi: u32,
-    pub y_lo: u32,
-    pub y_hi: u32,
-    pub z_1: u32,
-    pub z_2: u32,
-    pub return_is_infinity: bool,
-}
-
 impl<P: CurveGroup> UltraOp<P> {
     pub fn get_base_point_standard_form(&self) -> (P::BaseField, P::BaseField)
     where
@@ -1150,6 +1137,8 @@ impl<P: HonkCurve<TranscriptFieldType>> ECCOpQueue<P> {
     }
 }
 
+// REFERENCE IMPLEMENTATIONS FOR co_ecc_op_queue.rs
+
 pub trait EndomorphismParams {
     const ENDO_G1_LO: u64;
     const ENDO_G1_MID: u64;
@@ -1223,41 +1212,33 @@ impl<P: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> ECCOp
             Params::ENDO_G1_HI,
             0,
         ]);
-        println!("Endo G1: {:?}", endo_g1.0);
 
         let endo_g2 = BigInt([Params::ENDO_G2_LO, Params::ENDO_G2_MID, 0, 0]);
-        println!("Endo G2: {:?}", endo_g2.0);
 
         let endo_minus_b1 = BigInt([Params::ENDO_MINUS_B1_LO, Params::ENDO_MINUS_B1_MID, 0, 0]);
-        println!("Endo -B1: {:?}", endo_minus_b1.0);
 
         let endo_b2 = BigInt([Params::ENDO_B2_LO, Params::ENDO_B2_MID, 0, 0]);
-        println!("Endo B2: {:?}", endo_b2.0);
 
         let scalar_bigint = to_montgomery_form(scalar).into_bigint();
-        println!("Scalar BigInt: {:?}", scalar_bigint.0);
+
         let c1 = endo_g2.mul_high(&scalar_bigint);
-        println!("C1: {:?}", c1.0);
         let c2 = endo_g1.mul_high(&scalar_bigint);
-        println!("C2: {:?}", c2.0);
+
         let q1 = c1.mul(&endo_minus_b1).0;
-        println!("Q1: {:?}", q1.0);
         let q2 = c2.mul(&endo_b2).0;
-        println!("Q2: {:?}", q2.0);
 
         let q1 = from_montgomery_form(P::ScalarField::from_bigint(q1).unwrap());
         let q2 = from_montgomery_form(P::ScalarField::from_bigint(q2).unwrap());
 
         let t1 = q2 - q1;
-        println!("T1: {:?}", t1);
         let beta = P::ScalarField::get_root_of_unity(3).unwrap();
         let t2 = t1 * beta + scalar;
-        println!("T2: {:?}", t2);
-        (t1, t2)
+
+        (t2, t1)
     }
 
     /**
-     * This method is unused and its only purpose is to serve as reference for CoECCOpQueue::construct_and_populate_ultra_ops
+     *
      * @brief Given an ecc operation and its inputs, decompose into ultra format and populate ultra_ops
      *
      * @param op_code
@@ -1302,7 +1283,7 @@ impl<P: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> ECCOp
         let (z_1, z_2) = if converted_bigint.num_bits() <= 128 {
             (scalar, P::ScalarField::ZERO)
         } else {
-            let (z_2, z_1) =
+            let (z_1, z_2) =
                 ECCOpQueue::<P>::split_into_endomorphism_scalars::<Bn254ParamsFr>(converted);
             (to_montgomery_form(z_1), to_montgomery_form(z_2))
         };
@@ -1318,75 +1299,6 @@ impl<P: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> ECCOp
             return_is_infinity,
         }
     }
-
-    // /**
-    //  * @brief Write multiply and add op to queue and natively perform operation
-    //  *
-    //  * @param to_mul
-    //  */
-    // pub fn mul_accumulate(&mut self, to_mul: P::Affine, scalar: P::ScalarField) -> UltraOp<P> {
-    //     // Update the accumulator natively
-    //     self.accumulator = (self.accumulator + (to_mul * scalar)).into();
-    //     let op_code = EccOpCode {
-    //         mul: true,
-    //         ..Default::default()
-    //     };
-
-    //     // Construct and store the operation in the ultra op format
-    //     let ultra_op = self.construct_and_populate_ultra_ops(op_code.clone(), to_mul, scalar);
-
-    //     // Store the eccvm operation
-    //     self.eccvm_ops_table.push(VMOperation {
-    //         op_code,
-    //         base_point: to_mul,
-    //         z1: ultra_op.z_1.into(),
-    //         z2: ultra_op.z_2.into(),
-    //         mul_scalar_full: scalar,
-    //     });
-
-    //     ultra_op
-    // }
-
-    // /**
-    //  * @brief Writes a no op (i.e. two zero rows) to the ultra ops table but adds no eccvm operations.
-    //  *
-    //  * @details We want to be able to add zero rows (and, eventually, random rows
-    //  * https://github.com/AztecProtocol/barretenberg/issues/1360) to the ultra ops table without affecting the
-    //  * operations in the ECCVM.
-    //  */
-    // pub fn no_op_ultra_only(&mut self) -> UltraOp<P> {
-    //     return self.construct_and_populate_ultra_ops(
-    //         EccOpCode::default(),
-    //         self.accumulator,
-    //         P::ScalarField::zero(),
-    //     );
-    // }
-
-    // /**
-    //  * @brief Write equality op using internal accumulator point
-    //  *
-    //  * @return current internal accumulator point (prior to reset to 0)
-    //  */
-    // pub fn eq_and_reset(&mut self) -> UltraOp<P> {
-    //     let expected = self.accumulator;
-    //     // TODO CESAR: Is this correct
-    //     self.accumulator = P::Affine::zero();
-    //     let op_code = EccOpCode {
-    //         eq: true,
-    //         reset: true,
-    //         ..Default::default()
-    //     };
-
-    //     // Store the eccvm operation
-    //     self.eccvm_ops_table.push(VMOperation {
-    //         op_code: op_code.clone(),
-    //         base_point: expected,
-    //         ..Default::default()
-    //     });
-
-    //     // Construct and store the operation in the ultra op format
-    //     self.construct_and_populate_ultra_ops(op_code, expected, P::ScalarField::zero())
-    // }
 }
 
 fn from_montgomery_form(x: TranscriptFieldType) -> TranscriptFieldType {
@@ -1399,22 +1311,17 @@ fn to_montgomery_form(x: TranscriptFieldType) -> TranscriptFieldType {
     x * mont_r
 }
 
+#[cfg(test)]
 mod test {
-    use ark_bn254::Bn254;
-    use ark_ec::{CurveGroup, pairing::Pairing, short_weierstrass::Affine};
-    use common::honk_curve::HonkCurve;
-    use mpc_core::gadgets::field_from_hex_string;
-    use tracing::field;
-
     use crate::eccvm::ecc_op_queue::Bn254ParamsFr;
     use crate::eccvm::ecc_op_queue::{ECCOpQueue, EccOpCode, UltraOp};
-    use ark_ff::{BigInteger, PrimeField};
+    use ark_bn254::Bn254;
+    use ark_ec::pairing::Pairing;
+    use mpc_core::gadgets::field_from_hex_string;
 
     type P = Bn254;
     type Bn254G1 = ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>;
     type Point = <P as Pairing>::G1Affine;
-    type Scalar = <P as Pairing>::ScalarField;
-    type Base = <P as Pairing>::BaseField;
 
     #[test]
     fn test_construct_and_populate_ultra_ops() {

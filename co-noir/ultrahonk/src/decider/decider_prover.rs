@@ -10,8 +10,7 @@ use crate::{
 use common::{
     crs::ProverCrs,
     honk_curve::HonkCurve,
-    honk_proof::{HonkProof, HonkProofError, HonkProofResult, TranscriptFieldType},
-    polynomials::polynomial::Polynomial,
+    honk_proof::{HonkProof, HonkProofResult, TranscriptFieldType},
     types::ZeroKnowledge,
 };
 

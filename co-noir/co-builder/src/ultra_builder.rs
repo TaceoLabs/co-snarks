@@ -646,10 +646,6 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericBuil
         self.zero_idx
     }
 
-    fn increment_num_gates(&mut self) {
-        self.num_gates += 1;
-    }
-
     fn create_dummy_gate(
         block: &mut UltraTraceBlock<P::ScalarField>,
         idx_1: u32,

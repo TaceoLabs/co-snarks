@@ -1,7 +1,6 @@
 use crate::mega_builder::MegaCircuitBuilder;
 use crate::types::field_ct::BoolCT;
 use crate::types::field_ct::FieldCT;
-use crate::types::types::TraceData;
 use ark_ec::CurveGroup;
 use ark_ff::Field;
 use ark_ff::One;

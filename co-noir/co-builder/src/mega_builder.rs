@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 
-use ark_ec::CurveGroup;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType, mpc::NoirUltraHonkProver};
 use mpc_core::gadgets::poseidon2::POSEIDON2_BN254_T4_PARAMS;
@@ -9,8 +8,8 @@ use num_bigint::BigUint;
 
 use crate::{
     eccvm::{
-        co_ecc_op_queue::{CoECCOpQueue, CoUltraOp},
-        ecc_op_queue::{ECCOpQueue, ECCOpTuple, EccOpCode, UltraOp},
+        co_ecc_op_queue::{CoECCOpQueue, CoEccOpTuple, CoUltraOp},
+        ecc_op_queue::EccOpCode,
     },
     generic_builder::GenericBuilder,
     prelude::NUM_WIRES,
@@ -25,8 +24,8 @@ use ark_ff::Zero;
 type GateBlocks<F> = MegaTraceBlocks<MegaTraceBlock<F>>;
 
 pub struct MegaCircuitBuilder<
-    P: HonkCurve<TranscriptFieldType>,
-    T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    P: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
+    T: NoirWitnessExtensionProtocol<TranscriptFieldType>,
     D: NoirUltraHonkProver<P>,
 > {
     pub variables: Vec<T::AcvmType>,
@@ -51,8 +50,8 @@ pub struct MegaCircuitBuilder<
 
 impl<P, T, D> GenericBuilder<P, T> for MegaCircuitBuilder<P, T, D>
 where
-    P: HonkCurve<TranscriptFieldType>,
-    T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    P: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
+    T: NoirWitnessExtensionProtocol<TranscriptFieldType>,
     D: NoirUltraHonkProver<P, ArithmeticShare = T::ArithmeticShare>,
 {
     type TraceBlock = MegaTraceBlock<P::ScalarField>;
@@ -578,10 +577,6 @@ where
         self.zero_idx
     }
 
-    fn increment_num_gates(&mut self) {
-        self.num_gates += 1;
-    }
-
     fn create_dummy_gate(
         block: &mut MegaTraceBlock<P::ScalarField>,
         idx_1: u32,
@@ -846,23 +841,16 @@ where
 
 impl<P, T, D> MegaCircuitBuilder<P, T, D>
 where
-    P: HonkCurve<TranscriptFieldType>,
-    T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    P: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
+    T: NoirWitnessExtensionProtocol<TranscriptFieldType>,
     D: NoirUltraHonkProver<P, ArithmeticShare = T::ArithmeticShare>,
 {
     pub(crate) const DUMMY_TAG: u32 = 0;
     pub(crate) const REAL_VARIABLE: u32 = u32::MAX - 1;
     pub(crate) const FIRST_VARIABLE_IN_CLASS: u32 = u32::MAX - 2;
-    pub(crate) const UNINITIALIZED_MEMORY_RECORD: u32 = u32::MAX;
-    pub(crate) const NUMBER_OF_GATES_PER_RAM_ACCESS: usize = 2;
-    pub(crate) const NUMBER_OF_ARITHMETIC_GATES_PER_RAM_ARRAY: usize = 1;
-    pub(crate) const NUM_RESERVED_GATES: usize = 4;
-    pub(crate) const DEFAULT_PLOOKUP_RANGE_BITNUM: usize = 14;
     pub(crate) const DEFAULT_PLOOKUP_RANGE_STEP_SIZE: usize = 3;
-    // number of gates created per non-native field operation in process_non_native_field_multiplications
-    pub(crate) const GATES_PER_NON_NATIVE_FIELD_MULTIPLICATION_ARITHMETIC: usize = 7;
 
-    pub(crate) fn new(mut ecc_op_queue: CoECCOpQueue<D, P>) -> Self {
+    pub fn new(mut ecc_op_queue: CoECCOpQueue<D, P>) -> Self {
         ecc_op_queue.initialize_new_subtable();
         let mut builder = Self {
             variables: vec![],
@@ -993,8 +981,7 @@ where
      * @param ultra_op Operation data expressed in the ultra format
      * @note All selectors are set to 0 since the ecc op selector is derived later based on the block size/location.
      */
-    fn populate_ecc_op_wires(&mut self, ultra_op: &CoUltraOp<D, P>) -> ECCOpTuple {
-        // TODO CESAR: Should this be arithmetic shared
+    fn populate_ecc_op_wires(&mut self, ultra_op: &CoUltraOp<D, P>) -> CoEccOpTuple<D, P> {
         let op = self.get_ecc_op_idx(&ultra_op.op_code);
         let x_lo = self.add_variable(ultra_op.x_lo.clone().into());
         let x_hi = self.add_variable(ultra_op.x_hi.clone().into());
@@ -1017,7 +1004,7 @@ where
             selector.push(P::ScalarField::zero());
         }
 
-        ECCOpTuple {
+        CoEccOpTuple {
             op,
             x_lo,
             x_hi,
@@ -1026,7 +1013,7 @@ where
             z_1,
             z_2,
             // TODO CESAR: Check
-            return_is_infinity: Default::default(),
+            ..Default::default()
         }
     }
 
@@ -1054,7 +1041,7 @@ where
         point: D::PointShare,
         net: &N,
         state: &mut D::State,
-    ) -> ECCOpTuple {
+    ) -> CoEccOpTuple<D, P> {
         // Add the operation to the op queue
         let ultra_op = self.ecc_op_queue.add_accumulate(point, net, state);
 
@@ -1075,7 +1062,7 @@ where
         scalar: D::ArithmeticShare,
         net: &N,
         state: &mut D::State,
-    ) -> ECCOpTuple {
+    ) -> CoEccOpTuple<D, P> {
         // Add the operation to the op queue
         let ultra_op = self.ecc_op_queue.mul_accumulate(point, scalar, net, state);
 
@@ -1089,13 +1076,17 @@ where
      *
      * @return ecc_op_tuple encoding the point to which equality has been asserted
      */
-    pub fn queue_ecc_eq<N: Network>(&mut self, net: &N, state: &mut D::State) -> ECCOpTuple {
+    pub fn queue_ecc_eq<N: Network>(
+        &mut self,
+        net: &N,
+        state: &mut D::State,
+    ) -> CoEccOpTuple<D, P> {
         // Add the operation to the op queue
         let ultra_op = self.ecc_op_queue.eq_and_reset(net, state);
 
         // Add corresponding gates for the operation
         let mut op_tuple = self.populate_ecc_op_wires(&ultra_op);
-        // TODO CESAR: op_tuple.return_is_infinity = ultra_op.return_is_infinity;
+        op_tuple.return_is_infinity = ultra_op.return_is_infinity;
         op_tuple
     }
 
@@ -1104,7 +1095,11 @@ where
      *
      * @return ecc_op_tuple with all its fields set to zero
      */
-    fn queue_ecc_no_op<N: Network>(&mut self, net: &N, state: &mut D::State) -> ECCOpTuple {
+    pub fn queue_ecc_no_op<N: Network>(
+        &mut self,
+        net: &N,
+        state: &mut D::State,
+    ) -> CoEccOpTuple<D, P> {
         // Add the operation to the op queue
         let ultra_op = self.ecc_op_queue.no_op_ultra_only(net, state);
 

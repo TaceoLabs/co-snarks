@@ -25,7 +25,6 @@ pub trait GenericBuilder<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::Scala
     fn assert_equal_constant(&mut self, a_idx: usize, b: P::ScalarField);
     fn assert_equal(&mut self, a_idx: usize, b_idx: usize);
     fn zero_idx(&self) -> u32;
-    fn increment_num_gates(&mut self);
     fn create_dummy_gate(block: &mut Self::TraceBlock, a: u32, b: u32, c: u32, d: u32);
     fn update_variable(&mut self, index: usize, value: T::AcvmType);
     fn decompose_into_default_range(

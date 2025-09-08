@@ -5,11 +5,12 @@ use itertools::izip;
 use mpc_core::{
     MpcState,
     protocols::rep3::{
-        Rep3PointShare, Rep3PrimeFieldShare, Rep3State, arithmetic, id::PartyID, pointshare, poly,
-        yao,
+        Rep3BigUintShare, Rep3PointShare, Rep3PrimeFieldShare, Rep3State, arithmetic, conversion,
+        id::PartyID, pointshare, poly, yao,
     },
 };
 use mpc_net::Network;
+use num_bigint::BigUint;
 use num_traits::Zero;
 use rayon::prelude::*;
 
@@ -271,7 +272,57 @@ impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for Rep3UltraH
         arithmetic::eq_public_many(a, &zeroes, net, state)
     }
 
-    // TODO CESAR
+    /// Add two point shares: \[c\] = \[a\] + \[b\]
+    fn add_point(a: &mut Self::PointShare, b: Self::PointShare) {
+        unimplemented!()
+    }
+
+    /// Add two point shares: \[c\] = \[a\] + \[b\] and stores the result in \[a\].
+    fn add_point_assign(a: &mut Self::PointShare, b: Self::PointShare) {
+        unimplemented!()
+    }
+
+    /// Multiply a shared point by a shared field element: \[c\] = \[a\] * b.
+    fn mul_point_and_scalar<N: Network>(
+        point: Self::PointShare,
+        field: Self::ArithmeticShare,
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<Self::PointShare> {
+        unimplemented!()
+    }
+
+    fn is_zero_point<N: Network>(
+        x: Self::PointShare,
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<Self::ArithmeticShare> {
+        unimplemented!()
+    }
+
+    fn point_share_to_fieldshares<N: Network>(
+        x: Self::PointShare,
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<(
+        Self::BaseFieldArithmeticShare,
+        Self::BaseFieldArithmeticShare,
+        Self::BaseFieldArithmeticShare,
+    )> {
+        conversion::point_share_to_fieldshares(x, net, state)
+    }
+
+    fn slice<N: Network>(
+        input: Self::BaseFieldArithmeticShare,
+        msb: usize,
+        lsb: usize,
+        bitsize: usize,
+        state: &mut Self::State,
+        net: &N,
+    ) -> eyre::Result<Vec<Self::BaseFieldArithmeticShare>> {
+        unimplemented!()
+    }
+
     fn decompose_arithmetic<N: Network>(
         input: Self::ArithmeticShare,
         total_bit_size_per_field: usize,
@@ -286,5 +337,46 @@ impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for Rep3UltraH
             total_bit_size_per_field,
             decompose_bit_size,
         )
+    }
+
+    fn cmux<N: Network>(
+        cond: Self::ArithmeticShare,
+        truthy: Self::ArithmeticShare,
+        falsy: Self::ArithmeticShare,
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<Self::ArithmeticShare> {
+        let b_min_a = <Self as NoirUltraHonkProver<P>>::sub(truthy, falsy.clone());
+        let d = <Self as NoirUltraHonkProver<P>>::mul(cond.into(), b_min_a, net, state)?;
+        Ok(<Self as NoirUltraHonkProver<P>>::add(falsy, d))
+    }
+
+    // TODO CESAR
+    fn le_public<N: Network>(
+        lhs: Self::ArithmeticShare,
+        rhs: P::ScalarField,
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<Self::ArithmeticShare> {
+        arithmetic::le_public(lhs, rhs, net, state)
+    }
+
+    fn base_field_share_to_field_shares<N: Network>(
+        x: Self::BaseFieldArithmeticShare,
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
+        let bin_share = conversion::a2b(x, net, state).unwrap();
+        let low: Rep3BigUintShare<P::BaseField> =
+            bin_share.clone() & ((BigUint::from(1u8) << 136) - BigUint::from(1u8));
+        let high: Rep3BigUintShare<P::BaseField> = bin_share >> 136;
+
+        let low = Rep3BigUintShare::new(low.a.clone(), low.b.clone());
+        let high = Rep3BigUintShare::new(high.a.clone(), high.b.clone());
+
+        Ok(vec![
+            conversion::b2a(&low, net, state).unwrap(),
+            conversion::b2a(&high, net, state).unwrap(),
+        ])
     }
 }

@@ -1,6 +1,3 @@
-use std::fs::DirBuilder;
-
-use ark_ec::CurveGroup;
 use ark_ff::FftField;
 use ark_ff::Field;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
@@ -14,11 +11,9 @@ use co_builder::{
     },
 };
 use common::{
-    co_shplemini::ShpleminiOpeningClaim,
     honk_curve::HonkCurve,
-    honk_proof::{HonkProof, HonkProofError, HonkProofResult, TranscriptFieldType},
+    honk_proof::{HonkProofResult, TranscriptFieldType},
     mpc::NoirUltraHonkProver,
-    shplemini::ShpleminiVerifierOpeningClaim,
 };
 use mpc_net::Network;
 
@@ -190,7 +185,7 @@ impl MergeRecursiveVerifier {
         net: &N,
         state: &mut D::State,
     ) -> GoblinElement<P, T> {
-        // TODO CESAR: Assert
+        // TODO TACEO: Assert?
         // Assert the accumulator is zero at the start
         // assert!(builder.ecc_op_queue.get_accumulator().is_zero_point());
 
@@ -204,22 +199,28 @@ impl MergeRecursiveVerifier {
             // If scalar is 1, there is no need to perform a mul
             let scalar_is_constant_equal_one = scalar.is_constant()
                 && scalar.get_value(builder, driver) == P::ScalarField::ONE.into();
+
             let (x, y, is_point_at_infinity) = point.get_value(builder, driver);
-            // TODO CESAR: Handle Unwrap
             let point_share = driver
                 .field_shares_to_native_pointshare(x, y, is_point_at_infinity)
-                .unwrap();
-            // TODO CESAR: Assumes that the point is shared
+                .expect("failed to convert to native point share");
+
+            // TODO TACEO: Assumes that the point is always secret shared, to be solved once CoEccOpQueue is generic only on
+            // NoirWitnessExtensionProtocol
             let point_share = T::get_shared_native_point(&point_share).unwrap();
             let field_share = T::get_shared(&scalar.get_value(builder, driver)).unwrap();
 
             let op_tuple = if scalar_is_constant_equal_one {
+                // if scalar is 1, there is no need to perform a mul
                 builder.queue_ecc_add_accum::<N>(point_share.into(), net, state)
             } else {
+                // otherwise, perform a mul-then-accumulate
                 builder.queue_ecc_mul_accum(point_share.into(), field_share, net, state)
             };
 
-            // Add constraints demonstrating that the EC point coordinates were decomposed faithfully.
+            // Add constraints demonstrating that the EC point coordinates were decomposed faithfully. In particular, show
+            // that the lo-hi components that have been encoded in the op wires can be reconstructed via the limbs of the
+            // original point coordinates.
             let x_lo = FieldCT::from_witness_index(op_tuple.x_lo);
             let x_hi = FieldCT::from_witness_index(op_tuple.x_hi);
             let y_lo = FieldCT::from_witness_index(op_tuple.y_lo);
@@ -228,8 +229,8 @@ impl MergeRecursiveVerifier {
             // Note: These constraints do not assume or enforce that the coordinates of the original point have been
             // asserted to be in the field, only that they are less than the smallest power of 2 greater than the field
             // modulus (a la the bigfield(lo, hi) constructor with can_overflow == false).
-            // TODO CESAR: assert!(point.x.get_maximum_value() <= P::BaseField::default_maximum_remainder());
-            // TODO CESAR: assert!(point.y.get_maximum_value() <= P::BaseField::default_maximum_remainder());
+            // TODO TACEO: assert!(point.x.get_maximum_value() <= P::BaseField::default_maximum_remainder());
+            // TODO TACEO: assert!(point.y.get_maximum_value() <= P::BaseField::default_maximum_remainder());
             x_lo.assert_equal(&point.x.limbs[0], builder, driver);
             x_hi.assert_equal(&point.x.limbs[1], builder, driver);
             y_lo.assert_equal(&point.y.limbs[0], builder, driver);
@@ -263,6 +264,7 @@ impl MergeRecursiveVerifier {
         let x_hi = FieldCT::from_witness_index(op_tuple.x_hi);
         let y_lo = FieldCT::from_witness_index(op_tuple.y_lo);
         let y_hi = FieldCT::from_witness_index(op_tuple.y_hi);
+
         let mut result = GoblinElement::new(
             GoblinField::new([x_lo.clone(), x_hi.clone()]),
             GoblinField::new([y_lo.clone(), y_hi.clone()]),
@@ -280,6 +282,7 @@ impl MergeRecursiveVerifier {
         result.set_point_at_infinity(op2_is_infinity);
 
         // TODO TACEO: Origin Tags?
+
         result
     }
 
@@ -329,12 +332,12 @@ impl MergeRecursiveVerifier {
             opening_claim.opening_pair.1.neg(),
         ];
 
-        let P_0 = Self::batch_mul(&commitments, &scalars, builder, driver, net, state);
+        let p_0 = Self::batch_mul(&commitments, &scalars, builder, driver, net, state);
 
         // Construct P₁ = -[W(x)]
         // TODO CESAR: How to negate a goblin element
-        let P_1 = quotient_commitment.neg();
+        let p_1 = quotient_commitment.neg();
 
-        Ok((P_0, P_1))
+        Ok((p_0, p_1))
     }
 }

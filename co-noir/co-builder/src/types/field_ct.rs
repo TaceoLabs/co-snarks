@@ -1,7 +1,6 @@
 use super::types::{AddQuad, EccDblGate, MulQuad};
 
 use crate::generic_builder::GenericBuilder;
-use crate::mega_builder::MegaCircuitBuilder;
 use crate::types::generators;
 use crate::types::plookup::{ColumnIdx, Plookup};
 use crate::types::types::{AddTriple, EccAddGate, PolyTriple};
@@ -468,7 +467,6 @@ impl<F: PrimeField> FieldCT<F> {
             let value_bit = driver
                 .integer_bitwise_and(exponent_value.clone(), P::ScalarField::ONE.into(), 32)
                 .unwrap();
-            // TODO CESAR: This line might not make sense
             let bit =
                 BoolCT::from_witness_ct(WitnessCT::from_acvm_type(value_bit, builder), builder);
             exponent_bits[31 - i] = bit;
@@ -478,7 +476,6 @@ impl<F: PrimeField> FieldCT<F> {
         if !exponent_constant {
             let mut exponent_accumulator = FieldCT::from(F::zero());
             for bit in &exponent_bits {
-                // TODO CESAR: Check if cloning works
                 exponent_accumulator.add_assign(&exponent_accumulator.clone(), builder, driver);
                 exponent_accumulator.add_assign(&bit.to_field_ct(driver), builder, driver);
             }
@@ -487,7 +484,7 @@ impl<F: PrimeField> FieldCT<F> {
 
         let mut accumulator = FieldCT::from(F::one());
         let mul_coefficient = self.sub(&FieldCT::from(F::one()), builder, driver);
-        for i in (0..32) {
+        for i in 0..32 {
             accumulator
                 .mul_assign(&accumulator.clone(), builder, driver)
                 .unwrap();
@@ -499,7 +496,7 @@ impl<F: PrimeField> FieldCT<F> {
         }
 
         accumulator = accumulator.normalize(builder, driver);
-        // TODO CESAR: What about the OriginTag
+        // TODO TACEO: Origin Tags
         accumulator
     }
 

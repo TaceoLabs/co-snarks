@@ -8,7 +8,6 @@ use ark_ec::pairing::Pairing;
 use co_builder::prelude::VerifyingKey;
 use common::honk_curve::HonkCurve;
 use common::honk_proof::TranscriptFieldType;
-use common::honk_proof::{HonkProofError, HonkProofResult};
 use common::types::ZeroKnowledge;
 use common::{
     honk_proof::HonkProof,

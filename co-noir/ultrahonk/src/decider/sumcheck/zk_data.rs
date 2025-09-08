@@ -10,11 +10,9 @@ use ark_ff::UniformRand;
 use ark_ff::Zero;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use common::{
-    crs::ProverCrs,
     honk_curve::HonkCurve,
-    honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
+    honk_proof::{HonkProofResult, TranscriptFieldType},
     polynomials::polynomial::Polynomial,
-    types::ZeroKnowledge,
 };
 
 use rand::CryptoRng;

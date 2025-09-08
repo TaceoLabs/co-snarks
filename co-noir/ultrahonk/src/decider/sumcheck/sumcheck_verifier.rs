@@ -10,13 +10,7 @@ use crate::{
 };
 use ark_ff::{One, Zero};
 use common::polynomials::polynomial::RowDisablingPolynomial;
-use common::{
-    crs::ProverCrs,
-    honk_curve::HonkCurve,
-    honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
-    polynomials::polynomial::Polynomial,
-    types::ZeroKnowledge,
-};
+use common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType, types::ZeroKnowledge};
 
 use common::transcript::{Transcript, TranscriptHasher};
 

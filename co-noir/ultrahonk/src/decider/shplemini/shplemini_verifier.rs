@@ -13,13 +13,7 @@ use ark_ec::AffineRepr;
 use ark_ff::{Field, One, Zero};
 use co_builder::polynomials::polynomial_flavours::PolyGFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
-use common::{
-    crs::ProverCrs,
-    honk_curve::HonkCurve,
-    honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
-    polynomials::polynomial::Polynomial,
-    types::ZeroKnowledge,
-};
+use common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType, types::ZeroKnowledge};
 
 use common::shplemini::ShpleminiVerifierOpeningClaim;
 use common::transcript::{Transcript, TranscriptHasher};

@@ -3,7 +3,7 @@ use super::{
     field_ct::{ByteArray, FieldCT},
     plookup::{ColumnIdx, MultiTableId, Plookup},
 };
-use common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType, utils::Utils};
+use common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType};
 
 use crate::ultra_builder::GenericUltraCircuitBuilder;
 use ark_ec::CurveGroup;
