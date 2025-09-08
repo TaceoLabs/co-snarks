@@ -681,7 +681,7 @@ where
             }
         };
         for (i, sublimb) in sublimbs.iter().enumerate() {
-            let limb_idx = self.add_variable(sublimb.clone());
+            let limb_idx = self.add_variable(sublimb.to_owned());
 
             sublimb_indices.push(limb_idx);
             if i == sublimbs.len() - 1 && has_remainder_bits {
@@ -706,17 +706,17 @@ where
 
             let round_sublimbs = [
                 if real_limbs[0] {
-                    sublimbs[3 * i as usize].clone()
+                    sublimbs[3 * i as usize]
                 } else {
                     T::public_zero()
                 },
                 if real_limbs[1] {
-                    sublimbs[(3 * i + 1) as usize].clone()
+                    sublimbs[(3 * i + 1) as usize]
                 } else {
                     T::public_zero()
                 },
                 if real_limbs[2] {
-                    sublimbs[(3 * i + 2) as usize].clone()
+                    sublimbs[(3 * i + 2) as usize]
                 } else {
                     T::public_zero()
                 },
@@ -750,13 +750,13 @@ where
             let shift1 = P::ScalarField::from((BigUint::one() << shifts[1]) & &shiftmask);
             let shift2 = P::ScalarField::from((BigUint::one() << shifts[2]) & shiftmask);
 
-            let mut subtrahend = T::mul_with_public(driver, shift0, round_sublimbs[0].clone());
-            let term0 = T::mul_with_public(driver, shift1, round_sublimbs[1].clone());
-            let term1 = T::mul_with_public(driver, shift2, round_sublimbs[2].clone());
+            let mut subtrahend = T::mul_with_public(driver, shift0, round_sublimbs[0]);
+            let term0 = T::mul_with_public(driver, shift1, round_sublimbs[1]);
+            let term1 = T::mul_with_public(driver, shift2, round_sublimbs[2]);
             T::add_assign(driver, &mut subtrahend, term0);
             T::add_assign(driver, &mut subtrahend, term1);
 
-            let new_accumulator = T::sub(driver, accumulator.clone(), subtrahend);
+            let new_accumulator = T::sub(driver, accumulator, subtrahend);
 
             self.create_big_add_gate(
                 &AddQuad {
@@ -772,7 +772,7 @@ where
                 },
                 i != num_limb_triples - 1,
             );
-            accumulator_idx = self.add_variable(new_accumulator.clone());
+            accumulator_idx = self.add_variable(new_accumulator);
             accumulator = new_accumulator;
         }
 
@@ -1013,7 +1013,6 @@ where
             y_hi,
             z_1,
             z_2,
-            // TODO CESAR: Check
             ..Default::default()
         }
     }

@@ -268,4 +268,89 @@ impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for ShamirUltr
     ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
         panic!("ShamirUltraHonkDriver does not support is_zero_many");
     }
+
+    // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
+    /// Add two point shares: \[c\] = \[a\] + \[b\] and stores the result in \[a\].
+    fn add_point_assign(a: &mut Self::PointShare, b: Self::PointShare) {
+        pointshare::add_assign(a, &b);
+    }
+
+    // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
+    /// Multiply a shared point by a shared field element: \[c\] = \[a\] * b.
+    fn mul_point_and_scalar<N: Network>(
+        point: Self::PointShare,
+        field: Self::ArithmeticShare,
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<Self::PointShare> {
+        pointshare::scalar_mul(&point, field, net, state)
+    }
+
+    // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
+    /// Given a point share \[P\] returns the shared x and y coordinates, as well as the
+    /// point at infinity as base field shares.
+    fn point_share_to_fieldshares<N: Network>(
+        _x: Self::PointShare,
+        _net: &N,
+        _state: &mut Self::State,
+    ) -> eyre::Result<(
+        Self::BaseFieldArithmeticShare,
+        Self::BaseFieldArithmeticShare,
+        Self::BaseFieldArithmeticShare,
+    )> {
+        unimplemented!("Only implemented for Rep3 and Plain backends");
+    }
+
+    // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
+    /// Decomposes a shared field element into chunks, which are also represented as shared
+    /// field elements. Per field element, the total bit size of the shared chunks is given
+    /// by total_bit_size_per_field, whereas each chunk has at most (i.e, the last chunk can
+    /// be smaller) decompose_bit_size bits.
+    fn decompose_arithmetic<N: Network>(
+        _input: Self::ArithmeticShare,
+        _total_bit_size_per_field: usize,
+        _decompose_bit_size: usize,
+        _net: &N,
+        _state: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
+        unimplemented!("Only implemented for Rep3 and Plain backends");
+    }
+
+    // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
+    /// Computes a CMUX: If cond is 1, returns truthy, otherwise returns falsy.
+    fn cmux<N: Network>(
+        cond: Self::ArithmeticShare,
+        truthy: Self::ArithmeticShare,
+        falsy: Self::ArithmeticShare,
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<Self::ArithmeticShare> {
+        let b_min_a = <Self as NoirUltraHonkProver<P>>::sub(truthy, falsy);
+        let d = <Self as NoirUltraHonkProver<P>>::mul(cond, b_min_a, net, state)?;
+        Ok(<Self as NoirUltraHonkProver<P>>::add(falsy, d))
+    }
+
+    // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
+    /// Compares two shared field elements and returns a shared bit indicating whether
+    /// lhs <= rhs.
+    fn le_public<N: Network>(
+        _lhs: Self::ArithmeticShare,
+        _rhs: P::ScalarField,
+        _net: &N,
+        _state: &mut Self::State,
+    ) -> eyre::Result<Self::ArithmeticShare> {
+        unimplemented!("Only implemented for Rep3 and Plain backends");
+    }
+
+    // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
+    // TODO TACEO: Currently only supports LIMB_BITS = 136, i.e. two Bn254::Fr elements per Bn254::Fq element
+    /// Converts a base field share into a vector of field shares, where the field shares
+    /// represent the limbs of the base field element. Each limb has at most LIMB_BITS bits.
+    fn base_field_share_to_field_shares<N: Network, const LIMB_BITS: usize>(
+        _x: Self::BaseFieldArithmeticShare,
+        _net: &N,
+        _state: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
+        unimplemented!("Only implemented for Rep3 and Plain backends");
+    }
 }

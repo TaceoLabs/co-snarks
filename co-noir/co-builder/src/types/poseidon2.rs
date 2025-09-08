@@ -238,7 +238,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
         // Aztec TODO(https://github.com/AztecProtocol/barretenberg/issues/879): dummy gate required since the last external gate
         // from above otherwise expects to read into the first internal gate which is sorted out of sequence
         B::create_dummy_gate(
-            &mut builder.get_poseidon2_external_mut(),
+            builder.get_poseidon2_external_mut(),
             state[0].witness_index,
             state[1].witness_index,
             state[2].witness_index,
@@ -258,7 +258,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
         // Aztec TODO(https://github.com/AztecProtocol/barretenberg/issues/879): dummy gate required since the last internal gate
         // otherwise expects to read into the next external gate which is sorted out of sequence
         B::create_dummy_gate(
-            &mut builder.get_poseidon2_internal_mut(),
+            builder.get_poseidon2_internal_mut(),
             state[0].witness_index,
             state[1].witness_index,
             state[2].witness_index,
@@ -282,7 +282,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
         // compare with the result from the 64th round of Poseidon2. Note that it does not activate any selectors since it
         // only serves as a comparison through the shifted wires.
         B::create_dummy_gate(
-            &mut builder.get_poseidon2_external_mut(),
+            builder.get_poseidon2_external_mut(),
             state[0].witness_index,
             state[1].witness_index,
             state[2].witness_index,

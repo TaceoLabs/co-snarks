@@ -142,8 +142,8 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> Clone for CoVMOperation<T, C> {
         Self {
             op_code: self.op_code.clone(),
             base_point: self.base_point.clone(),
-            z1: self.z1.clone(),
-            z2: self.z2.clone(),
+            z1: self.z1,
+            z2: self.z2,
             mul_scalar_full: self.mul_scalar_full,
         }
     }
@@ -412,13 +412,13 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup<ScalarField = TranscriptFieldType>
         net: &N,
         state: &mut T::State,
     ) -> CoUltraOp<T, C> {
-        return self.construct_and_populate_ultra_ops(
+        self.construct_and_populate_ultra_ops(
             EccOpCode::default(),
             self.accumulator.clone(),
             None,
             net,
             state,
-        );
+        )
     }
 
     /**
@@ -428,7 +428,7 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup<ScalarField = TranscriptFieldType>
      */
     pub fn eq_and_reset<N: Network>(&mut self, net: &N, state: &mut T::State) -> CoUltraOp<T, C> {
         let expected = self.accumulator.clone();
-        // TODO CESAR: Check if this is correct
+
         self.accumulator = T::PointShare::default();
         let op_code = EccOpCode {
             eq: true,
@@ -463,12 +463,10 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup<ScalarField = TranscriptFieldType>
         net: &N,
         state: &mut T::State,
     ) -> CoUltraOp<T, C> {
-        // TODO CESAR: Handle unwrap
-        let (x, y, is_point_at_infinity) =
-            T::point_share_to_fieldshares(point, net, state).unwrap();
+        let (x, y, is_point_at_infinity) = T::point_share_to_fieldshares(point, net, state)
+            .expect("Error converting point to field shares");
 
         // Decompose point coordinates (Fq) into hi-lo chunks (Fr)
-        // TODO CESAR: Use CHUNK_SIZE
         const CHUNK_SIZE: usize = 2 * NUM_LIMB_BITS_IN_FIELD_SIMULATION;
         let [x_lo, x_hi] = T::base_field_share_to_field_shares::<N, CHUNK_SIZE>(x, net, state)
             .unwrap()
@@ -517,8 +515,7 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup<ScalarField = TranscriptFieldType>
             converted, net, state,
         );
 
-        let cond =
-            T::le_public(converted, C::ScalarField::from(2).pow(&[128]), net, state).unwrap();
+        let cond = T::le_public(converted, C::ScalarField::from(2).pow([128]), net, state).unwrap();
 
         let z_1 = T::cmux(cond, scalar, Self::to_montgomery_form(k_1), net, state).unwrap();
         let z_2 = T::cmux(
@@ -614,7 +611,7 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup<ScalarField = TranscriptFieldType>
         res
     }
 
-    // TODO CESAR: Verify this is correct and optimal (likely not)
+    // TODO TACEO: Optimize this function to avoid decomposing so much
     fn mul<N: Network>(
         x: [T::ArithmeticShare; 4],
         y: BigInt<4>,
@@ -628,12 +625,12 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup<ScalarField = TranscriptFieldType>
             let mut row_carries = Vec::new();
 
             // Fill each column
-            for i in 0..4 {
-                for j in 0..4 {
+            for (i, x_limb) in x.iter().enumerate() {
+                for (j, y_limb) in y.0.iter().enumerate() {
                     if i + j == col {
                         let (product, row_carry) = CoECCOpQueue::<T, C>::mul_carry(
-                            x[i],
-                            y.0[j],
+                            *x_limb,
+                            *y_limb,
                             prev_column_carry.pop().unwrap_or_default(),
                             net,
                             state,

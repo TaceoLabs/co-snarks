@@ -1259,8 +1259,8 @@ impl<P: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> ECCOp
         let x_256 = x_256.to_bytes_be();
         let y_256 = y_256.to_bytes_be();
 
-        let zero_pad_x = vec![0u8; (2 * CHUNK_SIZE as usize >> 3) - x_256.len()];
-        let zero_pad_y = vec![0u8; (2 * CHUNK_SIZE as usize >> 3) - y_256.len()];
+        let zero_pad_x = vec![0u8; ((2 * CHUNK_SIZE as usize) >> 3) - x_256.len()];
+        let zero_pad_y = vec![0u8; ((2 * CHUNK_SIZE as usize) >> 3) - y_256.len()];
 
         let x_256 = [zero_pad_x, x_256].concat();
         let y_256 = [zero_pad_y, y_256].concat();

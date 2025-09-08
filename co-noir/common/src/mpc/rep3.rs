@@ -263,6 +263,7 @@ impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for Rep3UltraH
     ) -> Vec<Self::ArithmeticShare> {
         domain.ifft(data)
     }
+
     fn is_zero_many<N: Network>(
         a: &[Self::ArithmeticShare],
         net: &N,
@@ -272,16 +273,13 @@ impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for Rep3UltraH
         arithmetic::eq_public_many(a, &zeroes, net, state)
     }
 
-    /// Add two point shares: \[c\] = \[a\] + \[b\]
-    fn add_point(a: &mut Self::PointShare, b: Self::PointShare) {
-        unimplemented!()
-    }
-
+    // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
     /// Add two point shares: \[c\] = \[a\] + \[b\] and stores the result in \[a\].
     fn add_point_assign(a: &mut Self::PointShare, b: Self::PointShare) {
-        unimplemented!()
+        pointshare::add_assign(a, &b);
     }
 
+    // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
     /// Multiply a shared point by a shared field element: \[c\] = \[a\] * b.
     fn mul_point_and_scalar<N: Network>(
         point: Self::PointShare,
@@ -289,17 +287,12 @@ impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for Rep3UltraH
         net: &N,
         state: &mut Self::State,
     ) -> eyre::Result<Self::PointShare> {
-        unimplemented!()
+        pointshare::scalar_mul(&point, field, net, state)
     }
 
-    fn is_zero_point<N: Network>(
-        x: Self::PointShare,
-        net: &N,
-        state: &mut Self::State,
-    ) -> eyre::Result<Self::ArithmeticShare> {
-        unimplemented!()
-    }
-
+    // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
+    /// Given a point share \[P\] returns the shared x and y coordinates, as well as the
+    /// point at infinity as base field shares.
     fn point_share_to_fieldshares<N: Network>(
         x: Self::PointShare,
         net: &N,
@@ -312,17 +305,11 @@ impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for Rep3UltraH
         conversion::point_share_to_fieldshares(x, net, state)
     }
 
-    fn slice<N: Network>(
-        input: Self::BaseFieldArithmeticShare,
-        msb: usize,
-        lsb: usize,
-        bitsize: usize,
-        state: &mut Self::State,
-        net: &N,
-    ) -> eyre::Result<Vec<Self::BaseFieldArithmeticShare>> {
-        unimplemented!()
-    }
-
+    // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
+    /// Decomposes a shared field element into chunks, which are also represented as shared
+    /// field elements. Per field element, the total bit size of the shared chunks is given
+    /// by total_bit_size_per_field, whereas each chunk has at most (i.e, the last chunk can
+    /// be smaller) decompose_bit_size bits.
     fn decompose_arithmetic<N: Network>(
         input: Self::ArithmeticShare,
         total_bit_size_per_field: usize,
@@ -339,6 +326,8 @@ impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for Rep3UltraH
         )
     }
 
+    // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
+    /// Computes a CMUX: If cond is 1, returns truthy, otherwise returns falsy.
     fn cmux<N: Network>(
         cond: Self::ArithmeticShare,
         truthy: Self::ArithmeticShare,
@@ -346,12 +335,14 @@ impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for Rep3UltraH
         net: &N,
         state: &mut Self::State,
     ) -> eyre::Result<Self::ArithmeticShare> {
-        let b_min_a = <Self as NoirUltraHonkProver<P>>::sub(truthy, falsy.clone());
-        let d = <Self as NoirUltraHonkProver<P>>::mul(cond.into(), b_min_a, net, state)?;
+        let b_min_a = <Self as NoirUltraHonkProver<P>>::sub(truthy, falsy);
+        let d = <Self as NoirUltraHonkProver<P>>::mul(cond, b_min_a, net, state)?;
         Ok(<Self as NoirUltraHonkProver<P>>::add(falsy, d))
     }
 
-    // TODO CESAR
+    // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
+    /// Compares two shared field elements and returns a shared bit indicating whether
+    /// lhs <= rhs.
     fn le_public<N: Network>(
         lhs: Self::ArithmeticShare,
         rhs: P::ScalarField,
@@ -361,7 +352,10 @@ impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for Rep3UltraH
         arithmetic::le_public(lhs, rhs, net, state)
     }
 
-    // TODO TACEO: Currently the implementation only works for LIMB_BITS = 136
+    // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
+    // TODO TACEO: Currently only supports LIMB_BITS = 136, i.e. two Bn254::Fr elements per Bn254::Fq element
+    /// Converts a base field share into a vector of field shares, where the field shares
+    /// represent the limbs of the base field element. Each limb has at most LIMB_BITS bits.
     fn base_field_share_to_field_shares<N: Network, const LIMB_BITS: usize>(
         x: Self::BaseFieldArithmeticShare,
         net: &N,

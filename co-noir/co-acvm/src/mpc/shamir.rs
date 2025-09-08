@@ -160,11 +160,9 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
     type Lookup = Rep3LookupTable<F>; // This is just a dummy and unused
 
     type ArithmeticShare = ShamirPrimeFieldShare<F>;
-    type NativePointShare<C: CurveGroup<ScalarField = F>> = ShamirPointShare<C>;
 
     type AcvmType = ShamirAcvmType<F>;
     type AcvmPoint<C: CurveGroup<BaseField = F>> = ShamirAcvmPoint<C>;
-    type AcvmNativePoint<C: CurveGroup<ScalarField = F>> = ShamirAcvmPoint<C>;
 
     type BrilligDriver = ShamirBrilligDriver<'a, F, N>;
 
@@ -225,7 +223,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
                 if cond.is_one() { Ok(truthy) } else { Ok(falsy) }
             }
             (ShamirAcvmType::Shared(cond), truthy, falsy) => {
-                let b_min_a = self.sub(truthy, falsy.clone());
+                let b_min_a = self.sub(truthy, falsy);
                 let d = self.mul(cond.into(), b_min_a)?;
                 Ok(self.add(falsy, d))
             }
@@ -373,7 +371,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
     }
 
     fn add_assign(&mut self, target: &mut Self::AcvmType, rhs: Self::AcvmType) {
-        let result = match (target.clone(), rhs) {
+        let result = match (*target, rhs) {
             (ShamirAcvmType::Public(lhs), ShamirAcvmType::Public(rhs)) => {
                 ShamirAcvmType::Public(lhs + rhs)
             }
