@@ -248,7 +248,7 @@ impl<
         Ok(res)
     }
 
-    pub fn sumcheck_prove_zk(
+    pub fn sumcheck_prove_zk<const VIRTUAL_LOG_N: usize>(
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         circuit_size: u32,
@@ -359,7 +359,7 @@ impl<
 
         // Zero univariates are used to pad the proof to the fixed size CONST_PROOF_SIZE_LOG_N.
         let zero_univariate = L::SumcheckRoundOutputZKPublic::default();
-        for idx in multivariate_d as usize..CONST_PROOF_SIZE_LOG_N {
+        for idx in multivariate_d as usize..VIRTUAL_LOG_N {
             transcript.send_fr_iter_to_verifier::<P, _>(
                 format!("Sumcheck:univariate_{idx}"),
                 zero_univariate.evaluations_as_ref(),

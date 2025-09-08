@@ -1,4 +1,5 @@
 use ark_ec::CurveGroup;
+use ark_ff::PrimeField;
 use ark_poly::EvaluationDomain;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use mpc_core::MpcState;
@@ -365,4 +366,13 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
         net: &N,
         state: &mut Self::State,
     ) -> eyre::Result<Vec<Self::ArithmeticShare>>;
+
+    fn accumulate_limbs_for_translator<N: Network>(
+        limbs: &[Self::ArithmeticShare],
+        num_limbs: usize,
+        state: &mut Self::State,
+        net: &N,
+    ) -> P::BaseField
+    where
+        P::BaseField: PrimeField;
 }

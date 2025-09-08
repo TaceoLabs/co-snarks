@@ -3,7 +3,7 @@ use super::{
     small_subgroup_ipa::SharedSmallSubgroupIPAProver,
     types::ProverMemory,
 };
-use crate::mpc_prover_flavour::MPCProverFlavour;
+use crate::{CONST_PROOF_SIZE_LOG_N, mpc_prover_flavour::MPCProverFlavour};
 use co_builder::{
     HonkProofResult, TranscriptFieldType,
     prelude::{HonkCurve, ProverCrs, Utils},
@@ -80,7 +80,11 @@ impl<
                 )?;
 
             Ok((
-                self.sumcheck_prove_zk(transcript, circuit_size, &mut zk_sumcheck_data)?,
+                self.sumcheck_prove_zk::<CONST_PROOF_SIZE_LOG_N>(
+                    transcript,
+                    circuit_size,
+                    &mut zk_sumcheck_data,
+                )?,
                 Some(zk_sumcheck_data),
             ))
         } else {
@@ -114,17 +118,15 @@ impl<
                 crs,
             )
         } else {
-            let small_subgroup_ipa_prover = SharedSmallSubgroupIPAProver::<T, P>::new(
-                self.net,
-                self.state,
+            let mut small_subgroup_ipa_prover = SharedSmallSubgroupIPAProver::<T, P>::new(
                 zk_sumcheck_data.expect("We have ZK"),
-                &sumcheck_output.challenges,
                 sumcheck_output
                     .claimed_libra_evaluation
                     .expect("We have ZK"),
-                transcript,
-                crs,
+                "Libra:".to_string(),
+                &sumcheck_output.challenges,
             )?;
+            small_subgroup_ipa_prover.prove::<H, N>(self.net, self.state, transcript, crs)?;
             let witness_polynomials = small_subgroup_ipa_prover.into_witness_polynomials();
             let prover_opening_claim = self.shplemini_prove(
                 transcript,

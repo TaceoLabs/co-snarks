@@ -266,4 +266,13 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
     ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
         panic!("ShamirUltraHonkDriver does not support is_zero_many");
     }
+
+    fn accumulate_limbs_for_translator<N: Network>(
+        _limbs: &[Self::ArithmeticShare],
+        _num_limbs: usize,
+        _state: &mut Self::State,
+        _net: &N,
+    ) -> <P as CurveGroup>::BaseField {
+        panic!("ShamirUltraHonkDriver does not support accumulate_limbs_for_translator");
+    }
 }

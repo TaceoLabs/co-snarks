@@ -31,7 +31,7 @@ pub struct SharedZKSumcheckData<T: NoirUltraHonkProver<P>, P: CurveGroup> {
 }
 
 impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> SharedZKSumcheckData<T, P> {
-    pub(crate) fn new<H: TranscriptHasher<TranscriptFieldType>, N: Network>(
+    pub fn new<H: TranscriptHasher<TranscriptFieldType>, N: Network>(
         multivariate_d: usize,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         commitment_key: &[P::Affine],

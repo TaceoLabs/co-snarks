@@ -5,6 +5,7 @@ use co_builder::flavours::translator_flavour::TranslatorFlavour;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
+use co_builder::prelude::{ActiveRegionData, Utils};
 use co_builder::{
     HonkProofResult, TranscriptFieldType,
     flavours::eccvm_flavour::ECCVMFlavour,
@@ -15,9 +16,9 @@ use co_ultrahonk::prelude::Polynomials;
 use co_ultrahonk::prelude::{
     CoDecider, ProvingKey, SharedSmallSubgroupIPAProver, SharedZKSumcheckData, SumcheckOutput,
 };
-use common::CoUtils;
 use common::co_shplemini::OpeningPair;
 use common::shared_polynomial::SharedPolynomial;
+use common::{CoUtils, compute_co_opening_proof};
 use common::{
     HonkProof,
     co_shplemini::ShpleminiOpeningClaim,
@@ -82,23 +83,6 @@ where
             state,
         }
     }
-    // /// A uniform method to mask, commit, and send the corresponding commitment to the verifier.
-    // fn commit_to_witness_polynomial(
-    //     &mut self,
-    //     polynomial: &mut Polynomial<P::ScalarField>,
-    //     label: &str,
-    //     crs: &ProverCrs<P>,
-    //     transcript: &mut Transcript<TranscriptFieldType, H>,
-    // ) -> HonkProofResult<()> {
-    //     // polynomial.mask(&mut self.decider.rng); // THERE IS NO MASKING IN TRANSLATOR (YET?)
-
-    //     // Commit to the polynomial
-    //     let commitment = UltraHonkUtils::commit(polynomial.as_ref(), crs)?;
-    //     // Send the commitment to the verifier
-    //     transcript.send_point_to_verifier::<P>(label.to_string(), commitment.into());
-
-    //     Ok(())
-    // }
 
     pub fn construct_proof(
         &mut self,
@@ -127,7 +111,7 @@ where
         // Fiat-Shamir: alpha
         // Run sumcheck subprotocol.
         let (sumcheck_output, zk_sumcheck_data) =
-            self.execute_relation_check_rounds(&mut transcript, &crs, circuit_size)?;
+            self.execute_relation_check_rounds(&mut transcript, crs, circuit_size)?;
 
         // Fiat-Shamir: rho, y, x, z
         // Execute Shplemini PCS
@@ -135,7 +119,7 @@ where
             sumcheck_output,
             zk_sumcheck_data,
             &mut transcript,
-            &crs,
+            crs,
             circuit_size,
         )?;
         Ok(transcript.get_proof())
@@ -147,9 +131,9 @@ where
         proving_key: &mut ProvingKey<T, P, TranslatorFlavour>,
     ) -> HonkProofResult<()> {
         const NUM_LIMB_BITS: usize = TranslatorFlavour::NUM_LIMB_BITS;
-        let shift: P::ScalarField = (BigUint::from(1u32) << NUM_LIMB_BITS).into();
-        let shiftx2: P::ScalarField = (BigUint::from(1u32) << (NUM_LIMB_BITS * 2)).into();
-        let shiftx3: P::ScalarField = (BigUint::from(1u32) << (NUM_LIMB_BITS * 3)).into();
+        // let shift: P::ScalarField = (BigUint::from(1u32) << NUM_LIMB_BITS).into();
+        // let shiftx2: P::ScalarField = (BigUint::from(1u32) << (NUM_LIMB_BITS * 2)).into();
+        // let shiftx3: P::ScalarField = (BigUint::from(1u32) << (NUM_LIMB_BITS * 3)).into();
         const RESULT_ROW: usize = TranslatorFlavour::RESULT_ROW;
 
         let first = proving_key
@@ -169,28 +153,34 @@ where
             .witness
             .accumulators_binary_limbs_3()[RESULT_ROW];
 
-        let accumulated_result = (first + second * &shift + third * &shiftx2 + fourth * &shiftx3);
+        let accumulated_result = T::accumulate_limbs_for_translator(
+            &[first, second, third, fourth],
+            NUM_LIMB_BITS,
+            self.state,
+            self.net,
+        );
 
-        self.decider.memory.relation_parameters.accumulated_result = vec![
-            proving_key
-                .polynomials
-                .witness
-                .accumulators_binary_limbs_0()[RESULT_ROW],
-            proving_key
-                .polynomials
-                .witness
-                .accumulators_binary_limbs_1()[RESULT_ROW],
-            proving_key
-                .polynomials
-                .witness
-                .accumulators_binary_limbs_2()[RESULT_ROW],
-            proving_key
-                .polynomials
-                .witness
-                .accumulators_binary_limbs_3()[RESULT_ROW],
-        ]
-        .try_into()
-        .expect("We should have 4 limbs in the result");
+        //TODO FLORIN
+        // self.decider.memory.relation_parameters.accumulated_result = vec![
+        //     proving_key
+        //         .polynomials
+        //         .witness
+        //         .accumulators_binary_limbs_0()[RESULT_ROW],
+        //     proving_key
+        //         .polynomials
+        //         .witness
+        //         .accumulators_binary_limbs_1()[RESULT_ROW],
+        //     proving_key
+        //         .polynomials
+        //         .witness
+        //         .accumulators_binary_limbs_2()[RESULT_ROW],
+        //     proving_key
+        //         .polynomials
+        //         .witness
+        //         .accumulators_binary_limbs_3()[RESULT_ROW],
+        // ]
+        // .try_into()
+        // .expect("We should have 4 limbs in the result");
 
         transcript.send_fq_to_verifier::<P>("accumulated_result".to_string(), accumulated_result);
         Ok(())
@@ -302,10 +292,10 @@ where
                 .expect("We should have 20 batching challenge powers");
 
         // Compute permutation grand product and their commitments
-        self.compute_grand_product(proving_key);
+        self.compute_grand_product(proving_key)?;
         // we do std::mem::take here to avoid borrowing issues with self
         let mut z_perm_tmp = std::mem::take(&mut self.memory.z_perm);
-        self.commit_to_witness_polynomial(&mut z_perm_tmp, "Z_PERM", &proving_key.crs, transcript)?;
+        // self.commit_to_witness_polynomial(&mut z_perm_tmp, "Z_PERM", &proving_key.crs, transcript)?;
         std::mem::swap(&mut self.memory.z_perm, &mut z_perm_tmp);
 
         Ok(())
@@ -332,19 +322,22 @@ where
         self.decider.memory.gate_challenges = gate_challenges;
         let log_subgroup_size = UltraHonkUtils::get_msb64(P::SUBGROUP_SIZE as u64);
         let commitment_key = &crs.monomials[..1 << (log_subgroup_size + 1)];
-        let mut zk_sumcheck_data: ZKSumcheckData<P> = ZKSumcheckData::<P>::new::<H, _>(
-            UltraHonkUtils::get_msb64(circuit_size as u64) as usize,
-            transcript,
-            commitment_key,
-            &mut self.decider.rng,
-        )?;
+        let mut zk_sumcheck_data: SharedZKSumcheckData<T, P> =
+            SharedZKSumcheckData::<T, P>::new::<H, _>(
+                UltraHonkUtils::get_msb64(circuit_size as u64) as usize,
+                transcript,
+                commitment_key,
+                self.net,
+                self.state,
+            )?;
 
         Ok((
-            self.decider.sumcheck_prove_zk::<CONST_TRANSLATOR_LOG_N>(
-                transcript,
-                circuit_size,
-                &mut zk_sumcheck_data,
-            )?,
+            self.decider
+                .sumcheck_prove_zk::<{ TranslatorFlavour::CONST_TRANSLATOR_LOG_N }>(
+                    transcript,
+                    circuit_size,
+                    &mut zk_sumcheck_data,
+                )?,
             zk_sumcheck_data,
         ))
     }
@@ -356,7 +349,7 @@ where
         crs: &ProverCrs<P>,
         circuit_size: u32,
     ) -> HonkProofResult<()> {
-        let mut small_subgroup_ipa_prover = SharedSmallSubgroupIPAProver::<_, _>::new::<H>(
+        let mut small_subgroup_ipa_prover = SharedSmallSubgroupIPAProver::<_, _>::new(
             zk_sumcheck_data,
             sumcheck_output
                 .claimed_libra_evaluation
@@ -364,7 +357,7 @@ where
             "Libra:".to_string(),
             &sumcheck_output.challenges,
         )?;
-        small_subgroup_ipa_prover.prove(transcript, crs, &mut self.decider.rng)?;
+        small_subgroup_ipa_prover.prove::<H, N>(self.net, self.state, transcript, crs)?;
 
         let witness_polynomials = small_subgroup_ipa_prover.into_witness_polynomials();
 
@@ -376,83 +369,193 @@ where
             Some(witness_polynomials),
         )?;
 
-        compute_opening_proof(prover_opening_claim, transcript, crs)
+        compute_co_opening_proof(self.net, self.state, prover_opening_claim, transcript, crs)
     }
 
-    fn compute_grand_product_numerator(
-        &self,
+    #[expect(clippy::type_complexity)]
+    fn batched_grand_product_num_denom(
+        net: &N,
+        state: &mut T::State,
         proving_key: &ProvingKey<T, P, TranslatorFlavour>,
-        i: usize,
-        lagrange_masking_term: P::ScalarField,
-    ) -> P::ScalarField {
+        beta: &P::ScalarField,
+        gamma: &P::ScalarField,
+        output_len: usize,
+        active_region_data: &ActiveRegionData,
+    ) -> HonkProofResult<(Vec<T::ArithmeticShare>, Vec<T::ArithmeticShare>)> {
         tracing::trace!("compute grand product numerator");
 
-        let interleaved_range_constraints_0 = &proving_key
-            .polynomials
-            .witness
-            .interleaved_range_constraints_0()[i];
-        let interleaved_range_constraints_1 = &proving_key
-            .polynomials
-            .witness
-            .interleaved_range_constraints_1()[i];
-        let interleaved_range_constraints_2 = &proving_key
-            .polynomials
-            .witness
-            .interleaved_range_constraints_2()[i];
-        let interleaved_range_constraints_3 = &proving_key
-            .polynomials
-            .witness
-            .interleaved_range_constraints_3()[i];
+        // debug_assert!(shared1.len() >= output_len);
+        // debug_assert!(shared2.len() >= output_len);
+        // debug_assert!(pub1.len() >= output_len);
 
-        let ordered_extra_range_constraints_numerator = &proving_key
+        let has_active_ranges = active_region_data.size() > 0;
+
+        // We drop the last element since it is not needed for the grand product
+        let mut mul1_num = Vec::with_capacity(output_len);
+        let mut mul2_num = Vec::with_capacity(output_len);
+        let mut mul3_num = Vec::with_capacity(output_len);
+        let mut mul4_num = Vec::with_capacity(output_len);
+        let mut mul1_denom = Vec::with_capacity(output_len);
+        let mut mul2_denom = Vec::with_capacity(output_len);
+        let mut mul3_denom = Vec::with_capacity(output_len);
+        let mut mul4_denom = Vec::with_capacity(output_len);
+        let mut mul5_denom = Vec::with_capacity(output_len);
+
+        let public = proving_key.polynomials.precomputed.lagrange_masking();
+        let ordered_extra_range_constraints_numerator = proving_key
             .polynomials
             .precomputed
-            .ordered_extra_range_constraints_numerator()[i];
+            .ordered_extra_range_constraints_numerator();
 
-        (*interleaved_range_constraints_0 + lagrange_masking_term)
-            * (*interleaved_range_constraints_1 + lagrange_masking_term)
-            * (*interleaved_range_constraints_2 + lagrange_masking_term)
-            * (*interleaved_range_constraints_3 + lagrange_masking_term)
-            * (*ordered_extra_range_constraints_numerator + lagrange_masking_term)
+        for i in 0..output_len {
+            let idx = if has_active_ranges {
+                active_region_data.get_idx(i)
+            } else {
+                i
+            };
+            let id = state.id();
+            let n1 = T::add_with_public(
+                public[idx] * beta + gamma,
+                proving_key
+                    .polynomials
+                    .witness
+                    .ordered_range_constraints_0()[idx],
+                id,
+            );
+            let n2 = T::add_with_public(
+                public[idx] * beta + gamma,
+                proving_key
+                    .polynomials
+                    .witness
+                    .ordered_range_constraints_1()[idx],
+                id,
+            );
+            let n3 = T::add_with_public(
+                public[idx] * beta + gamma,
+                proving_key
+                    .polynomials
+                    .witness
+                    .ordered_range_constraints_2()[idx],
+                id,
+            );
+            let mut n4 = T::add_with_public(
+                public[idx] * beta + gamma,
+                proving_key
+                    .polynomials
+                    .witness
+                    .ordered_range_constraints_3()[idx],
+                id,
+            );
+            T::mul_assign_with_public(
+                &mut n4,
+                ordered_extra_range_constraints_numerator[idx] + public[idx] * beta + gamma,
+            );
+            mul1_num.push(n1);
+            mul2_num.push(n2);
+            mul3_num.push(n3);
+            mul4_num.push(n4);
+            let d1 = T::add_with_public(
+                public[idx] * beta + gamma,
+                proving_key
+                    .polynomials
+                    .witness
+                    .ordered_range_constraints_0()[idx],
+                id,
+            );
+            let d2 = T::add_with_public(
+                public[idx] * beta + gamma,
+                proving_key
+                    .polynomials
+                    .witness
+                    .ordered_range_constraints_1()[idx],
+                id,
+            );
+            let d3 = T::add_with_public(
+                public[idx] * beta + gamma,
+                proving_key
+                    .polynomials
+                    .witness
+                    .ordered_range_constraints_2()[idx],
+                id,
+            );
+            let d4 = T::add_with_public(
+                public[idx] * beta + gamma,
+                proving_key
+                    .polynomials
+                    .witness
+                    .ordered_range_constraints_3()[idx],
+                id,
+            );
+            let d5 = T::add_with_public(
+                public[idx] * beta + gamma,
+                proving_key
+                    .polynomials
+                    .witness
+                    .ordered_range_constraints_4()[idx],
+                id,
+            );
+            mul1_denom.push(d1);
+            mul2_denom.push(d2);
+            mul3_denom.push(d3);
+            mul4_denom.push(d4);
+            mul5_denom.push(d5);
+        }
+        let mul = T::mul_many(
+            &[mul1_num, mul3_num, mul1_denom, mul3_denom].concat(),
+            &[mul2_num, mul4_num, mul2_denom, mul4_denom].concat(),
+            net,
+            state,
+        )?;
+        let mul = mul.chunks_exact(mul.len() / 4).collect_vec();
+        debug_assert_eq!(mul.len(), 4);
+
+        let mul = T::mul_many(
+            &[mul[0], mul[2]].concat(),
+            &[mul[1], mul[3]].concat(),
+            net,
+            state,
+        )?;
+        let mul = mul.chunks_exact(mul.len() / 2).collect_vec();
+        debug_assert_eq!(mul.len(), 2);
+        let numerator = mul[0];
+        let denominator = T::mul_many(&mul5_denom, &mul[1], net, state)?;
+        Ok((numerator.to_vec(), denominator))
     }
 
-    fn compute_grand_product_denominator(
-        &self,
+    // To reduce the number of communication rounds, we implement the array_prod_mul macro according to https://www.usenix.org/system/files/sec22-ozdemir.pdf, p11 first paragraph.
+    //TODO FLORIN: Deduplicate with common
+    fn array_prod_mul(
+        &mut self,
+        inp: &[T::ArithmeticShare],
+    ) -> HonkProofResult<Vec<T::ArithmeticShare>> {
+        // Do the multiplications of inp[i] * inp[i-1] in constant rounds
+        let len = inp.len();
+
+        let r = (0..=len)
+            .map(|_| T::rand(self.net, self.state))
+            .collect::<Result<Vec<_>, _>>()?;
+        let r_inv = T::inv_many(&r, self.net, self.state)?;
+        let r_inv0 = vec![r_inv[0]; len];
+
+        let mut unblind = T::mul_many(&r_inv0, &r[1..], self.net, self.state)?;
+
+        let mul = T::mul_many(&r[..len], inp, self.net, self.state)?;
+        let mut open = T::mul_open_many(&mul, &r_inv[1..], self.net, self.state)?;
+
+        for i in 1..open.len() {
+            open[i] = open[i] * open[i - 1];
+        }
+
+        for (unblind, open) in unblind.iter_mut().zip(open.iter()) {
+            *unblind = T::mul_with_public(*open, *unblind);
+        }
+        Ok(unblind)
+    }
+
+    fn compute_grand_product(
+        &mut self,
         proving_key: &ProvingKey<T, P, TranslatorFlavour>,
-        i: usize,
-        lagrange_masking_term: P::ScalarField,
-    ) -> P::ScalarField {
-        tracing::trace!("compute grand product denominator");
-
-        let ordered_range_constraints_0 = &proving_key
-            .polynomials
-            .witness
-            .ordered_range_constraints_0()[i];
-        let ordered_range_constraints_1 = &proving_key
-            .polynomials
-            .witness
-            .ordered_range_constraints_1()[i];
-        let ordered_range_constraints_2 = &proving_key
-            .polynomials
-            .witness
-            .ordered_range_constraints_2()[i];
-        let ordered_range_constraints_3 = &proving_key
-            .polynomials
-            .witness
-            .ordered_range_constraints_3()[i];
-        let ordered_range_constraints_4 = &proving_key
-            .polynomials
-            .witness
-            .ordered_range_constraints_4()[i];
-
-        (*ordered_range_constraints_0 + lagrange_masking_term)
-            * (*ordered_range_constraints_1 + lagrange_masking_term)
-            * (*ordered_range_constraints_2 + lagrange_masking_term)
-            * (*ordered_range_constraints_3 + lagrange_masking_term)
-            * (*ordered_range_constraints_4 + lagrange_masking_term)
-    }
-
-    fn compute_grand_product(&mut self, proving_key: &ProvingKey<T, P, TranslatorFlavour>) {
+    ) -> HonkProofResult<()> {
         tracing::trace!("compute grand product");
 
         let has_active_ranges = proving_key.active_region_data.size() > 0;
@@ -470,59 +573,45 @@ where
         };
 
         // In Barretenberg circuit size is taken from the q_c polynomial
-        let mut numerator = Vec::with_capacity(active_domain_size - 1);
-        let mut denominator = Vec::with_capacity(active_domain_size - 1);
-
         // Step (1)
         // Populate `numerator` and `denominator` with the algebra described by Relation
 
-        for i in 0..active_domain_size - 1 {
-            let idx = if has_active_ranges {
-                proving_key.active_region_data.get_idx(i)
-            } else {
-                i
-            };
-            let lagrange_masking = &proving_key.polynomials.precomputed.lagrange_masking()[idx];
-            let gamma = &self.decider.memory.relation_parameters.gamma;
-            let beta = &self.decider.memory.relation_parameters.beta;
-            let lagrange_masking_term = *lagrange_masking * beta + gamma;
-            numerator.push(self.compute_grand_product_numerator(
-                proving_key,
-                idx,
-                lagrange_masking_term,
-            ));
-            denominator.push(self.compute_grand_product_denominator(
-                proving_key,
-                idx,
-                lagrange_masking_term,
-            ));
-        }
+        let (numerator, denominator) = Self::batched_grand_product_num_denom(
+            self.net,
+            self.state,
+            proving_key,
+            &self.decider.memory.relation_parameters.beta,
+            &self.decider.memory.relation_parameters.gamma,
+            active_domain_size - 1,
+            &proving_key.active_region_data,
+        )?;
 
         // Step (2)
         // Compute the accumulating product of the numerator and denominator terms.
         // In Barretenberg, this is done in parallel across multiple threads, however we just do the computation singlethreaded for simplicity
 
-        for i in 1..active_domain_size - 1 {
-            numerator[i] = numerator[i] * numerator[i - 1];
-            denominator[i] = denominator[i] * denominator[i - 1];
-        }
+        let numerator = self.array_prod_mul(&numerator)?;
+        let mut denominator = self.array_prod_mul(&denominator)?;
+
         // invert denominator
-        UltraHonkUtils::batch_invert(&mut denominator);
+        CoUtils::batch_invert::<T, P, N>(&mut denominator, self.net, self.state)?;
 
         // Step (3) Compute z_perm[i] = numerator[i] / denominator[i]
+        let mul = T::mul_many(&numerator, &denominator, self.net, self.state)?;
+
         self.memory.z_perm.resize(
             proving_key.circuit_size as usize,
             T::ArithmeticShare::default(),
         );
 
         // Compute grand product values corresponding only to the active regions of the trace
-        for i in 0..active_domain_size - 1 {
+        for (i, mul) in mul.into_iter().enumerate() {
             let idx = if has_active_ranges {
                 proving_key.active_region_data.get_idx(i + 1)
             } else {
                 i + 1
             };
-            self.memory.z_perm[idx] = numerator[i] * denominator[i];
+            self.memory.z_perm[idx] = mul
         }
 
         // Final step: If active/inactive regions have been specified, the value of the grand product in the inactive
@@ -542,6 +631,8 @@ where
                 }
             }
         }
+
+        Ok(())
     }
 
     fn add_polynomials_to_memory(
