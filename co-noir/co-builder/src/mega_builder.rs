@@ -48,6 +48,7 @@ pub struct MegaCircuitBuilder<
     pub(crate) tau: BTreeMap<u32, u32>,
 }
 
+#[expect(private_interfaces)]
 impl<P, T, D> GenericBuilder<P, T> for MegaCircuitBuilder<P, T, D>
 where
     P: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,

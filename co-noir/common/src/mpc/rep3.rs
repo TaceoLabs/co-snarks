@@ -361,15 +361,20 @@ impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for Rep3UltraH
         arithmetic::le_public(lhs, rhs, net, state)
     }
 
-    fn base_field_share_to_field_shares<N: Network>(
+    // TODO TACEO: Currently the implementation only works for LIMB_BITS = 136
+    fn base_field_share_to_field_shares<N: Network, const LIMB_BITS: usize>(
         x: Self::BaseFieldArithmeticShare,
         net: &N,
         state: &mut Self::State,
     ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
+        assert_eq!(
+            LIMB_BITS, 136,
+            "Only LIMB_BITS = 136 is supported, i.e. two Bn254::Fr elements per Bn254::Fq element"
+        );
         let bin_share = conversion::a2b(x, net, state).unwrap();
         let low: Rep3BigUintShare<P::BaseField> =
-            bin_share.clone() & ((BigUint::from(1u8) << 136) - BigUint::from(1u8));
-        let high: Rep3BigUintShare<P::BaseField> = bin_share >> 136;
+            bin_share.clone() & ((BigUint::from(1u8) << LIMB_BITS) - BigUint::from(1u8));
+        let high: Rep3BigUintShare<P::BaseField> = bin_share >> LIMB_BITS;
 
         let low = Rep3BigUintShare::new(low.a.clone(), low.b.clone());
         let high = Rep3BigUintShare::new(high.a.clone(), high.b.clone());

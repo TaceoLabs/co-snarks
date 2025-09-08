@@ -23,7 +23,6 @@ use serde::Serialize;
 use std::array;
 
 #[derive(Clone, Default)]
-#[expect(dead_code)]
 pub struct ScalarMul<C: CurveGroup> {
     pub pc: u32,
     pub scalar: BigUint,
@@ -1402,11 +1401,11 @@ mod test {
 
         let expected_result = (
             field_from_hex_string(
-                "0x1ba2c8d6ff259fa8c79d53093767cd1002d67810d1cb07c131d4fbfac46bf8c9",
+                "0x0b8ab330373e7c36cab04db25e7f2a1119d7820f8941279a4ec3718c0ebe742c",
             )
             .unwrap(),
             field_from_hex_string(
-                "0x0b8ab330373e7c36cab04db25e7f2a1119d7820f8941279a4ec3718c0ebe742c",
+                "0x1ba2c8d6ff259fa8c79d53093767cd1002d67810d1cb07c131d4fbfac46bf8c9",
             )
             .unwrap(),
         );

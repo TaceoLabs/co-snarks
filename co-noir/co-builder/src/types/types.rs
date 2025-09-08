@@ -244,26 +244,6 @@ impl<T: Default> MegaTraceBlocks<T> {
             &self.overflow,
         ]
     }
-
-    pub fn get_mut(&mut self) -> [&mut T; 11] {
-        [
-            &mut self.ecc_op,
-            &mut self.busread,
-            &mut self.pub_inputs,
-            &mut self.lookup,
-            &mut self.arithmetic,
-            &mut self.delta_range,
-            &mut self.elliptic,
-            &mut self.aux,
-            &mut self.poseidon2_external,
-            &mut self.poseidon2_internal,
-            &mut self.overflow,
-        ]
-    }
-
-    pub fn get_pub_inputs(&self) -> &T {
-        &self.pub_inputs
-    }
 }
 
 pub const NUM_WIRES: usize = 4;
@@ -505,6 +485,7 @@ impl<F: PrimeField> MegaTraceBlock<F> {
         &mut self.selectors[Self::Q_4]
     }
 
+    #[expect(dead_code)]
     pub(crate) fn q_busread(&mut self) -> &mut Vec<F> {
         &mut self.selectors[Self::Q_BUSREAD]
     }

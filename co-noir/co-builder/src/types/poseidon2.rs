@@ -16,15 +16,6 @@ use mpc_core::gadgets::poseidon2::{Poseidon2, Poseidon2Params};
 use num_bigint::BigUint;
 use std::{any::TypeId, array};
 
-// This workaround is required due to mutability issues
-macro_rules! create_dummy_gate {
-    ($builder:expr, $block:expr, $ixd:expr) => {
-        $builder.create_dummy_gate($block, $ixd[0].witness_index, $ixd[1].witness_index, $ixd[2].witness_index, $ixd[3].witness_index);
-        $builder.check_selector_length_consistency();
-        $builder.increment_num_gates(); // necessary because create dummy gate cannot increment num_gates itself
-    };
-}
-
 /// A struct representing the Poseidon2 permutation.
 pub(crate) struct Poseidon2CT<F: PrimeField, const T: usize, const D: u64> {
     /// The struct containing the parameters for the Poseidon2 permutation.

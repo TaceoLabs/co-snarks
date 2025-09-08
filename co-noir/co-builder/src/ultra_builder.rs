@@ -60,6 +60,7 @@ type GateBlocks<F> = UltraTraceBlocks<UltraTraceBlock<F>>;
 pub type UltraCircuitBuilder<P> =
     GenericUltraCircuitBuilder<P, PlainAcvmSolver<<P as PrimeGroup>::ScalarField>>;
 
+#[expect(private_interfaces)]
 impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> GenericBuilder<P, T>
     for GenericUltraCircuitBuilder<P, T>
 {
@@ -1071,69 +1072,6 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
 
         self.check_selector_length_consistency();
 
-        self.num_gates += 1;
-    }
-
-    pub(crate) fn create_poseidon2_internal_gate(&mut self, inp: &Poseidon2InternalGate) {
-        self.blocks
-            .poseidon2_internal
-            .populate_wires(inp.a, inp.b, inp.c, inp.d);
-        self.blocks
-            .poseidon2_internal
-            .q_m()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .poseidon2_internal
-            .q_1()
-            .push(P::ScalarField::from(BigUint::from(
-                POSEIDON2_BN254_T4_PARAMS.round_constants_internal[inp.round_idx],
-            )));
-        self.blocks
-            .poseidon2_internal
-            .q_2()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .poseidon2_internal
-            .q_3()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .poseidon2_internal
-            .q_c()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .poseidon2_internal
-            .q_arith()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .poseidon2_internal
-            .q_4()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .poseidon2_internal
-            .q_delta_range()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .poseidon2_internal
-            .q_lookup_type()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .poseidon2_internal
-            .q_elliptic()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .poseidon2_internal
-            .q_aux()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .poseidon2_internal
-            .q_poseidon2_external()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .poseidon2_internal
-            .q_poseidon2_internal()
-            .push(P::ScalarField::one());
-
-        self.check_selector_length_consistency();
         self.num_gates += 1;
     }
 

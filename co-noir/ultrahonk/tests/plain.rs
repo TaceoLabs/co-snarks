@@ -18,8 +18,8 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(
     witness_file: &str,
     has_zk: ZeroKnowledge,
 ) {
-    const CRS_PATH_G1: &str = "../co-builder/src/crs/bn254_g1.dat";
-    const CRS_PATH_G2: &str = "../co-builder/src/crs/bn254_g2.dat";
+    const CRS_PATH_G1: &str = "../common/src/crs/bn254_g1.dat";
+    const CRS_PATH_G2: &str = "../common/src/crs/bn254_g2.dat";
 
     let constraint_system =
         constraint_system_from_reader(File::open(circuit_file).unwrap(), true).unwrap();

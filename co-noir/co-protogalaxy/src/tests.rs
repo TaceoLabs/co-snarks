@@ -51,11 +51,11 @@ use crate::{
 const EXTENDED_LENGTH: usize = (MAX_TOTAL_RELATION_LENGTH - 1) * (NUM_KEYS - 1) + 1;
 const CRS_PATH_G1: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../co-builder/src/crs/bn254_g1.dat"
+    "/../common/src/crs/bn254_g1.dat"
 );
 const CRS_PATH_G2: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../co-builder/src/crs/bn254_g2.dat"
+    "/../common/src/crs/bn254_g2.dat"
 );
 type F = TranscriptFieldType;
 type C = ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>;

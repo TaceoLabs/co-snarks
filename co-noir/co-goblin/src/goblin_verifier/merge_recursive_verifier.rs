@@ -1,3 +1,4 @@
+#![expect(non_snake_case)] // Just to be consistent with barretenberg
 use ark_ff::FftField;
 use ark_ff::Field;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
@@ -24,6 +25,7 @@ pub struct OpeningClaim<
     pub opening_pair: (FieldCT<P::ScalarField>, FieldCT<P::ScalarField>),
     pub commitment: GoblinElement<P, T>,
 }
+
 pub struct MergeRecursiveVerifier;
 
 impl MergeRecursiveVerifier {
@@ -35,9 +37,7 @@ impl MergeRecursiveVerifier {
      * previous stage. For each column we have the relationship T_j = t_j + right_shift(T_{j,prev}, k), where k is the
      * length of the subtable columns t_j. This protocol demonstrates, assuming the length of t is at most k, that the
      * aggregate ecc op table has been constructed correctly via the simple Schwartz-Zippel check:
-     *
-     *      T_j(\kappa) = t_j(\kappa) + \kappa^k * (T_{j,prev}(\kappa)).
-     *
+     * T_j(\kappa) = t_j(\kappa) + \kappa^k * (T_{j,prev}(\kappa)).
      * @tparam CircuitBuilder
      * @param proof
      * @return std::array<typename Flavor::GroupElement, 2> Inputs to final pairing

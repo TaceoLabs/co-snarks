@@ -184,13 +184,6 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     /// Returns the share if the value is shared
     fn get_shared(a: &Self::AcvmType) -> Option<Self::ArithmeticShare>;
 
-    // TODO CESAR
-    fn get_shared_native_point<C: CurveGroup<ScalarField = F>>(
-        a: &Self::AcvmNativePoint<C>,
-    ) -> Option<Self::NativePointShare<C>> {
-        unimplemented!()
-    }
-
     /// Returns the value if the value is public
     fn get_public(a: &Self::AcvmType) -> Option<F>;
 
@@ -450,16 +443,6 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         is_infinity: Self::AcvmType,
     ) -> eyre::Result<Self::AcvmPoint<C>>;
 
-    // TODO CESAR
-    fn field_shares_to_native_pointshare<C: CurveGroup<ScalarField = F>>(
-        &mut self,
-        x: Self::AcvmType,
-        y: Self::AcvmType,
-        is_infinity: Self::AcvmType,
-    ) -> eyre::Result<Self::AcvmNativePoint<C>> {
-        unimplemented!()
-    }
-
     /// Translates a share of the point to a share of its coordinates
     fn pointshare_to_field_shares<C: CurveGroup<BaseField = F>>(
         &mut self,
@@ -529,4 +512,21 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         input_bitsize: usize,
         output_bitsize: usize,
     ) -> eyre::Result<Self::AcvmType>;
+
+    // TODO CESAR
+    fn get_shared_native_point<C: CurveGroup<ScalarField = F>>(
+        a: &Self::AcvmNativePoint<C>,
+    ) -> Option<Self::NativePointShare<C>> {
+        unimplemented!()
+    }
+
+    // TODO CESAR
+    fn field_shares_to_native_pointshare<C: CurveGroup<ScalarField = F>>(
+        &mut self,
+        x: Self::AcvmType,
+        y: Self::AcvmType,
+        is_infinity: Self::AcvmType,
+    ) -> eyre::Result<Self::AcvmNativePoint<C>> {
+        unimplemented!()
+    }
 }

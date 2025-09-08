@@ -224,11 +224,11 @@ mod tests {
 
     const CRS_PATH_G1: &str = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../co-builder/src/crs/bn254_g1.dat"
+        "/../common/src/crs/bn254_g1.dat"
     );
     const CRS_PATH_G2: &str = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../co-builder/src/crs/bn254_g2.dat"
+        "/../common/src/crs/bn254_g2.dat"
     );
     const PROOF_FILE: &str = concat!(
         env!("CARGO_MANIFEST_DIR"),

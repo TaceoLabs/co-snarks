@@ -234,63 +234,6 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> Default for CoEccvmRowTracker<T, 
     }
 }
 
-impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoEccvmRowTracker<T, C> {
-    pub fn get_number_of_muls(&self) -> T::ArithmeticShare {
-        T::add(self.cached_num_muls, self.cached_active_msm_count)
-    }
-
-    pub fn num_eccvm_msm_rows(
-        msm_size: T::ArithmeticShare,
-        id: <T::State as MpcState>::PartyID,
-    ) -> T::ArithmeticShare {
-        // let rows_per_wnaf_digit = (msm_size / ADDITIONS_PER_ROW)
-        //     + if msm_size % ADDITIONS_PER_ROW != 0 {
-        //         1
-        //     } else {
-        //         0
-        //     };
-        // let num_rows_for_all_rounds = (NUM_WNAF_DIGITS_PER_SCALAR + 1) * rows_per_wnaf_digit;
-        // let num_double_rounds = NUM_WNAF_DIGITS_PER_SCALAR - 1;
-        // T::add_with_public(
-        //     C::ScalarField::from(num_double_rounds as u32),
-        //     num_rows_for_all_rounds,
-        //     id,
-        // )
-        todo!()
-    }
-
-    pub fn get_num_msm_rows(&self) -> T::ArithmeticShare {
-        // let mut msm_rows = self.num_msm_rows as usize + 2;
-        // if self.cached_active_msm_count > 0 {
-        //     msm_rows += Self::num_eccvm_msm_rows(self.cached_active_msm_count as usize) as usize;
-        // }
-        // msm_rows
-        todo!()
-    }
-
-    pub fn get_num_rows(&self) -> T::ArithmeticShare {
-        // let transcript_rows = self.num_transcript_rows as usize + 2;
-        // let mut msm_rows = self.num_msm_rows as usize + 2;
-        // let mut precompute_rows = self.num_precompute_table_rows as usize + 1;
-        // if self.cached_active_msm_count > 0 {
-        //     msm_rows += Self::num_eccvm_msm_rows(self.cached_active_msm_count as usize) as usize;
-        //     precompute_rows += Self::get_precompute_table_row_count_for_single_msm(
-        //         self.cached_active_msm_count as usize,
-        //     ) as usize;
-        // }
-        // std::cmp::max(transcript_rows, std::cmp::max(msm_rows, precompute_rows))
-        todo!()
-    }
-
-    pub fn get_precompute_table_row_count_for_single_msm(
-        msm_count: T::ArithmeticShare,
-    ) -> T::ArithmeticShare {
-        // let num_precompute_rows_per_scalar = NUM_WNAF_DIGITS_PER_SCALAR / WNAF_DIGITS_PER_ROW;
-        // (msm_count * num_precompute_rows_per_scalar) as u32
-        todo!()
-    }
-}
-
 pub struct CoECCOpQueue<T: NoirUltraHonkProver<C>, C: CurveGroup> {
     pub eccvm_ops_table: CoEccvmOpsTable<T, C>,
     pub ultra_ops_table: CoUltraEccOpsTable<T, C>,
@@ -367,27 +310,6 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoECCOpQueue<T, C> {
             self.construct_full_eccvm_ops_table();
         }
         &self.eccvm_ops_reconstructed
-    }
-
-    /**
-     * @brief Get the number of rows in the 'msm' column section, for all msms in the circuit
-     */
-    pub fn get_num_msm_rows(&self) -> T::ArithmeticShare {
-        self.eccvm_row_tracker.get_num_msm_rows()
-    }
-
-    /**
-     * @brief Get the number of rows for the current ECCVM circuit
-     */
-    pub fn get_num_rows(&self) -> T::ArithmeticShare {
-        self.eccvm_row_tracker.get_num_rows()
-    }
-
-    /**
-     * @brief get number of muls for the current ECCVM circuit
-     */
-    pub fn get_number_of_muls(&self) -> T::ArithmeticShare {
-        self.eccvm_row_tracker.get_number_of_muls()
     }
 
     /**
@@ -548,16 +470,16 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup<ScalarField = TranscriptFieldType>
         // Decompose point coordinates (Fq) into hi-lo chunks (Fr)
         // TODO CESAR: Use CHUNK_SIZE
         const CHUNK_SIZE: usize = 2 * NUM_LIMB_BITS_IN_FIELD_SIMULATION;
-        let [x_lo, x_hi] = T::base_field_share_to_field_shares(x, net, state)
+        let [x_lo, x_hi] = T::base_field_share_to_field_shares::<N, CHUNK_SIZE>(x, net, state)
             .unwrap()
             .try_into()
             .unwrap();
-        let [y_lo, y_hi] = T::base_field_share_to_field_shares(y, net, state)
+        let [y_lo, y_hi] = T::base_field_share_to_field_shares::<N, CHUNK_SIZE>(y, net, state)
             .unwrap()
             .try_into()
             .unwrap();
         let [return_is_infinity, _] =
-            T::base_field_share_to_field_shares(is_point_at_infinity, net, state)
+            T::base_field_share_to_field_shares::<N, CHUNK_SIZE>(is_point_at_infinity, net, state)
                 .unwrap()
                 .try_into()
                 .unwrap();
@@ -948,11 +870,11 @@ mod test {
 
         let expected_result: Vec<Scalar> = vec![
             field_from_hex_string(
-                "0x1ba2c8d6ff259fa8c79d53093767cd1002d67810d1cb07c131d4fbfac46bf8c9",
+                "0x0b8ab330373e7c36cab04db25e7f2a1119d7820f8941279a4ec3718c0ebe742c",
             )
             .unwrap(),
             field_from_hex_string(
-                "0x0b8ab330373e7c36cab04db25e7f2a1119d7820f8941279a4ec3718c0ebe742c",
+                "0x1ba2c8d6ff259fa8c79d53093767cd1002d67810d1cb07c131d4fbfac46bf8c9",
             )
             .unwrap(),
         ];

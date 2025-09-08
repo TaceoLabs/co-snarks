@@ -454,7 +454,7 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
     }
 
     // TODO CESAR
-    fn base_field_share_to_field_shares<N: Network>(
+    fn base_field_share_to_field_shares<N: Network, const LIMB_BITS: usize>(
         x: Self::BaseFieldArithmeticShare,
         net: &N,
         state: &mut Self::State,

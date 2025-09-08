@@ -16,10 +16,8 @@ use common::polynomials::polynomial::NUM_TRANSLATION_EVALUATIONS;
 use common::{
     crs::ProverCrs,
     honk_curve::HonkCurve,
-    honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
+    honk_proof::{HonkProofResult, TranscriptFieldType},
     polynomials::polynomial::{NUM_DISABLED_ROWS_IN_SUMCHECK, Polynomial},
-    serialize::{Serialize, SerializeP},
-    types::ZeroKnowledge,
     utils::Utils,
 };
 
