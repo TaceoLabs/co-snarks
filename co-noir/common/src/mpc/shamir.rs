@@ -261,12 +261,23 @@ impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for ShamirUltr
     ) -> Vec<Self::ArithmeticShare> {
         domain.ifft(data)
     }
+
     fn is_zero_many<N: Network>(
         _a: &[Self::ArithmeticShare],
         _net: &N,
         _state: &mut Self::State,
     ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
         panic!("ShamirUltraHonkDriver does not support is_zero_many");
+    }
+
+    // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
+    // Checks if a point share is zero and returns the result as a field share.
+    fn is_point_at_infinity_many<N: Network>(
+        _points: &[Self::PointShare],
+        _net: &N,
+        _state: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
+        unimplemented!()
     }
 
     // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol

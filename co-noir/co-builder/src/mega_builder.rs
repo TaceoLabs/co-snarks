@@ -8,7 +8,7 @@ use num_bigint::BigUint;
 
 use crate::{
     eccvm::{
-        co_ecc_op_queue::{CoECCOpQueue, CoEccOpTuple, CoUltraOp},
+        co_ecc_op_queue::{CoECCOpQueue, CoEccOpTuple, CoUltraOp, CoVMOperation},
         ecc_op_queue::EccOpCode,
     },
     generic_builder::GenericBuilder,
@@ -1036,17 +1036,17 @@ where
      *
      * @param point Point to be added into the accumulator
      */
-    pub fn queue_ecc_add_accum<N: Network>(
+    pub fn queue_ecc_add_accum_no_store<N: Network>(
         &mut self,
         point: D::PointShare,
         net: &N,
         state: &mut D::State,
-    ) -> CoEccOpTuple<D, P> {
+    ) -> (CoEccOpTuple<D, P>, CoVMOperation<D, P>) {
         // Add the operation to the op queue
-        let ultra_op = self.ecc_op_queue.add_accumulate(point, net, state);
+        let (ultra_op, eccvm_op) = self.ecc_op_queue.add_accumulate_no_store(point, net, state);
 
         // Add corresponding gates for the operation
-        self.populate_ecc_op_wires(&ultra_op)
+        (self.populate_ecc_op_wires(&ultra_op), eccvm_op)
     }
 
     /**
@@ -1056,18 +1056,20 @@ where
      * @param scalar The scalar by which point is multiplied prior to being accumulated.
      * @return ECCOpTuple encoding the point and scalar inputs to the mul accum.
      */
-    pub fn queue_ecc_mul_accum<N: Network>(
+    pub fn queue_ecc_mul_accum_no_store<N: Network>(
         &mut self,
         point: D::PointShare,
         scalar: D::ArithmeticShare,
         net: &N,
         state: &mut D::State,
-    ) -> CoEccOpTuple<D, P> {
+    ) -> (CoEccOpTuple<D, P>, CoVMOperation<D, P>) {
         // Add the operation to the op queue
-        let ultra_op = self.ecc_op_queue.mul_accumulate(point, scalar, net, state);
+        let (ultra_op, eccvm_op) = self
+            .ecc_op_queue
+            .mul_accumulate_no_store(point, scalar, net, state);
 
         // Add corresponding gates for the operation
-        self.populate_ecc_op_wires(&ultra_op)
+        (self.populate_ecc_op_wires(&ultra_op), eccvm_op)
     }
 
     /**

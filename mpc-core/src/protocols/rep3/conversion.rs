@@ -831,6 +831,78 @@ where
     Ok((x01_x, x01_y, x2_x, x2_y))
 }
 
+pub(crate) fn point_share_to_fieldshares_pre_many<C: CurveGroup, N: Network>(
+    xs: &[Rep3PointShare<C>],
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<
+    Vec<(
+        Rep3PrimeFieldShare<C::BaseField>,
+        Rep3PrimeFieldShare<C::BaseField>,
+        Rep3PrimeFieldShare<C::BaseField>,
+        Rep3PrimeFieldShare<C::BaseField>,
+    )>,
+>
+where
+    C::BaseField: PrimeField,
+{
+    let mut shares = vec![[Rep3PrimeFieldShare::zero_share(); 4]; xs.len()];
+    for (x, [x01_x, x01_y, x2_x, x2_y]) in izip!(xs, shares.iter_mut()) {
+        let r_x = state.rngs.rand.masking_field_element::<C::BaseField>();
+        let r_y = state.rngs.rand.masking_field_element::<C::BaseField>();
+
+        match state.id {
+            PartyID::ID0 => {
+                x01_x.a = r_x;
+                x01_y.a = r_y;
+                if let Some((x, y)) = x.b.into_affine().xy() {
+                    x2_x.b = x;
+                    x2_y.b = y;
+                }
+            }
+            PartyID::ID1 => {
+                let val = x.a + x.b;
+                if let Some((x, y)) = val.into_affine().xy() {
+                    x01_x.a = x + r_x;
+                    x01_y.a = y + r_y;
+                } else {
+                    x01_x.a = r_x;
+                    x01_y.a = r_y;
+                }
+            }
+            PartyID::ID2 => {
+                x01_x.a = r_x;
+                x01_y.a = r_y;
+                if let Some((x, y)) = x.a.into_affine().xy() {
+                    x2_x.a = x;
+                    x2_y.a = y;
+                }
+            }
+        }
+    }
+
+    // reshare x01s
+    let local_bs: Vec<_> = net.reshare_many(
+        &shares
+            .iter()
+            .flat_map(|s| [s[0].a.to_owned(), s[1].a.to_owned()])
+            .collect::<Vec<_>>(),
+    )?;
+    if local_bs.len() != 2 * xs.len() {
+        eyre::bail!("Expected {} elements", 2 * xs.len());
+    }
+
+    for (local_b, [x01_x, x01_y, _, _]) in izip!(local_bs.chunks(2), shares.iter_mut()) {
+        x01_x.b = local_b[0];
+        x01_y.b = local_b[1];
+    }
+
+    shares
+        .into_iter()
+        .map(|s| Ok((s[0], s[1], s[2], s[3])))
+        .collect()
+}
+
 /// Transforms a replicated point share to shares of its coordinates.
 /// The output will be (x, y, is_infinity). Thereby no statement is made on x, y if is_infinity is true.
 #[expect(clippy::type_complexity)]

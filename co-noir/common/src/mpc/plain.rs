@@ -284,6 +284,16 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
     }
 
     // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
+    // Checks if a point share is zero and returns the result as a field share.
+    fn is_point_at_infinity_many<N: Network>(
+        _points: &[Self::PointShare],
+        _net: &N,
+        _state: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
+        unimplemented!()
+    }
+
+    // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
     /// Add two point shares: \[c\] = \[a\] + \[b\] and stores the result in \[a\].
     fn add_point_assign(a: &mut Self::PointShare, b: Self::PointShare) {
         *a += &b;

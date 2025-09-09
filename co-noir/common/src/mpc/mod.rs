@@ -365,6 +365,14 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
     ) -> eyre::Result<Vec<Self::ArithmeticShare>>;
 
     // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
+    // Checks if a point share is zero and returns the result as a field share.
+    fn is_point_at_infinity_many<N: Network>(
+        points: &[Self::PointShare],
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>>;
+
+    // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
     /// Add two point shares: \[c\] = \[a\] + \[b\] and stores the result in \[a\].
     fn add_point_assign(a: &mut Self::PointShare, b: Self::PointShare);
 

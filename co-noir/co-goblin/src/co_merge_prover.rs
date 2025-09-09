@@ -197,16 +197,14 @@ where
 mod tests {
     use std::thread;
 
-    use co_builder::eccvm::co_ecc_op_queue::{
-        CoEccvmOpsTable, CoEccvmRowTracker, CoUltraEccOpsTable, CoUltraOp,
-    };
+    use co_builder::eccvm::co_ecc_op_queue::{CoEccvmOpsTable, CoUltraEccOpsTable, CoUltraOp};
     use mpc_core::protocols::rep3::share_curve_point;
 
     use super::*;
     use ark_bn254::Bn254;
     use ark_ec::bn::Bn;
     use ark_ec::pairing::Pairing;
-    use co_builder::eccvm::ecc_op_queue::{EccOpCode, EccOpsTable, UltraOp};
+    use co_builder::eccvm::ecc_op_queue::{EccOpCode, EccOpsTable, EccvmRowTracker, UltraOp};
     use common::crs::parse::CrsParser;
     use common::transcript::Poseidon2Sponge;
     use common::{mpc::rep3::Rep3UltraHonkDriver, types::ZeroKnowledge};
@@ -366,7 +364,7 @@ mod tests {
             },
             eccvm_ops_reconstructed: Vec::new(),
             ultra_ops_reconstructed: Vec::new(),
-            eccvm_row_tracker: CoEccvmRowTracker::default(),
+            eccvm_row_tracker: EccvmRowTracker::default(),
         };
 
         let queue: [CoECCOpQueue<Driver, Bn254G1>; 3] = core::array::from_fn(|_| get_queues());

@@ -274,6 +274,23 @@ impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for Rep3UltraH
     }
 
     // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
+    // Checks if a point share is zero and returns the result as a field share.
+    fn is_point_at_infinity_many<N: Network>(
+        points: &[Self::PointShare],
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
+        let is_zero_many = pointshare::is_zero_many(points, net, state)?;
+        let is_zero_many = is_zero_many
+            .into_iter()
+            .map(|(a, b)| {
+                Rep3BigUintShare::<P::ScalarField>::new(BigUint::from(a), BigUint::from(b))
+            })
+            .collect::<Vec<_>>();
+        conversion::bit_inject_many(&is_zero_many, net, state)
+    }
+
+    // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
     /// Add two point shares: \[c\] = \[a\] + \[b\] and stores the result in \[a\].
     fn add_point_assign(a: &mut Self::PointShare, b: Self::PointShare) {
         pointshare::add_assign(a, &b);

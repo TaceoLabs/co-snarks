@@ -1,12 +1,13 @@
 use crate::eccvm::{
     NUM_LIMB_BITS_IN_FIELD_SIMULATION,
-    ecc_op_queue::{Bn254ParamsFr, EccOpCode, EccOpsTable, EndomorphismParams},
+    ecc_op_queue::{Bn254ParamsFr, EccOpCode, EccOpsTable, EccvmRowTracker, EndomorphismParams},
 };
 use ark_ec::CurveGroup;
 use ark_ff::BigInt;
 use ark_ff::FftField;
 use ark_ff::Field;
 use ark_ff::PrimeField;
+use ark_ff::Zero;
 use common::{
     honk_proof::TranscriptFieldType, mpc::NoirUltraHonkProver,
     polynomials::shared_polynomial::SharedPolynomial,
@@ -135,6 +136,41 @@ pub struct CoVMOperation<T: NoirUltraHonkProver<C>, C: CurveGroup> {
     pub z1: T::ArithmeticShare,
     pub z2: T::ArithmeticShare,
     pub mul_scalar_full: T::ArithmeticShare,
+
+    // TACEO TODO
+    pub is_base_point_infinity: Option<bool>,
+    pub is_z1_zero: Option<bool>,
+    pub is_z2_zero: Option<bool>,
+}
+
+type CoVMOperations<T, C> = Vec<CoVMOperation<T, C>>;
+
+pub fn precompute_flags<T: NoirUltraHonkProver<C>, C: CurveGroup>(
+    ops: &mut CoVMOperations<T, C>,
+    net: &impl Network,
+    state: &mut T::State,
+) {
+    let length = ops.len();
+    let z_1_vec: Vec<T::ArithmeticShare> = ops.iter().map(|op| op.z1).collect();
+    let z_2_vec: Vec<T::ArithmeticShare> = ops.iter().map(|op| op.z2).collect();
+    let base_point_vec: Vec<T::PointShare> = ops.iter().map(|op| op.base_point.clone()).collect();
+
+    let z_flags = T::is_zero_many(&[z_1_vec, z_2_vec].concat(), net, state)
+        .expect("Error computing is zero flags for z1 and z2");
+
+    let base_point_flags = T::is_point_at_infinity_many(&base_point_vec, net, state)
+        .expect("Error computing is infinity flags for base points");
+
+    let flags = T::open_many(&[z_flags, base_point_flags].concat(), net, state)
+        .expect("Error opening is zero and is infinity flags");
+
+    let bool_flags: Vec<bool> = flags.iter().map(|f| !f.is_zero()).collect();
+
+    for (i, op) in ops.iter_mut().enumerate() {
+        op.is_z1_zero = Some(bool_flags[i]);
+        op.is_z2_zero = Some(bool_flags[i + length]);
+        op.is_base_point_infinity = Some(bool_flags[i + 2 * length]);
+    }
 }
 
 impl<T: NoirUltraHonkProver<C>, C: CurveGroup> Clone for CoVMOperation<T, C> {
@@ -145,6 +181,9 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> Clone for CoVMOperation<T, C> {
             z1: self.z1,
             z2: self.z2,
             mul_scalar_full: self.mul_scalar_full,
+            is_base_point_infinity: self.is_base_point_infinity,
+            is_z1_zero: self.is_z1_zero,
+            is_z2_zero: self.is_z2_zero,
         }
     }
 }
@@ -157,6 +196,9 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> Default for CoVMOperation<T, C> {
             z1: T::ArithmeticShare::default(),
             z2: T::ArithmeticShare::default(),
             mul_scalar_full: T::ArithmeticShare::default(),
+            is_base_point_infinity: None,
+            is_z1_zero: None,
+            is_z2_zero: None,
         }
     }
 }
@@ -214,22 +256,38 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> Clone for CoUltraOp<T, C> {
     }
 }
 
-#[derive(Debug)]
-pub struct CoEccvmRowTracker<T: NoirUltraHonkProver<C>, C: CurveGroup> {
-    pub cached_num_muls: T::ArithmeticShare,
-    pub cached_active_msm_count: T::ArithmeticShare,
-    pub num_transcript_rows: u32,
-    pub num_precompute_table_rows: T::ArithmeticShare,
-    pub num_msm_rows: T::ArithmeticShare,
-}
-impl<T: NoirUltraHonkProver<C>, C: CurveGroup> Default for CoEccvmRowTracker<T, C> {
-    fn default() -> Self {
-        Self {
-            cached_num_muls: T::ArithmeticShare::default(),
-            cached_active_msm_count: T::ArithmeticShare::default(),
-            num_transcript_rows: 0,
-            num_precompute_table_rows: T::ArithmeticShare::default(),
-            num_msm_rows: T::ArithmeticShare::default(),
+impl EccvmRowTracker {
+    /**
+     * @brief Update cached_active_msm_count or update other row counts and reset cached_active_msm_count.
+     * @details To the OpQueue, an MSM is a sequence of successive mul opcodes (note that mul might better be called
+     * mul_add--its effect on the accumulator is += scalar * point).
+     *
+     * @param op
+     */
+    pub fn update_cached_msms<T: NoirUltraHonkProver<C>, C: CurveGroup>(
+        &mut self,
+        op: &CoVMOperation<T, C>,
+    ) {
+        if op.op_code.mul
+            && !op
+                .is_base_point_infinity
+                .expect("is_base_point_infinity should be precomputed")
+        {
+            if !op.is_z1_zero.expect("is_z1_zero should be precomputed") {
+                self.cached_active_msm_count += 1;
+            }
+            if !op.is_z2_zero.expect("is_z2_zero should be precomputed") {
+                self.cached_active_msm_count += 1;
+            }
+        } else if self.cached_active_msm_count != 0 {
+            self.num_msm_rows +=
+                EccvmRowTracker::num_eccvm_msm_rows(self.cached_active_msm_count as usize);
+            self.num_precompute_table_rows +=
+                EccvmRowTracker::get_precompute_table_row_count_for_single_msm(
+                    self.cached_active_msm_count as usize,
+                );
+            self.cached_num_muls += self.cached_active_msm_count;
+            self.cached_active_msm_count = 0;
         }
     }
 }
@@ -240,7 +298,7 @@ pub struct CoECCOpQueue<T: NoirUltraHonkProver<C>, C: CurveGroup> {
     pub accumulator: T::PointShare,
     pub eccvm_ops_reconstructed: Vec<CoVMOperation<T, C>>,
     pub ultra_ops_reconstructed: Vec<CoUltraOp<T, C>>,
-    pub eccvm_row_tracker: CoEccvmRowTracker<T, C>,
+    pub eccvm_row_tracker: EccvmRowTracker,
 }
 
 impl<T: NoirUltraHonkProver<C>, C: CurveGroup> Default for CoECCOpQueue<T, C> {
@@ -251,7 +309,7 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> Default for CoECCOpQueue<T, C> {
             accumulator: T::PointShare::default(),
             eccvm_ops_reconstructed: Vec::new(),
             ultra_ops_reconstructed: Vec::new(),
-            eccvm_row_tracker: CoEccvmRowTracker::default(),
+            eccvm_row_tracker: EccvmRowTracker::default(),
         }
     }
 }
@@ -323,6 +381,17 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoECCOpQueue<T, C> {
     pub fn get_accumulator(&self) -> &T::PointShare {
         &self.accumulator
     }
+
+    pub fn append_eccvm_op(&mut self, ops: CoVMOperation<T, C>) {
+        self.eccvm_row_tracker.update_cached_msms(&ops);
+        self.eccvm_ops_table.push(ops);
+    }
+
+    pub fn append_eccvm_ops(&mut self, ops: Vec<CoVMOperation<T, C>>) {
+        for op in ops {
+            self.append_eccvm_op(op);
+        }
+    }
 }
 
 impl<T: NoirUltraHonkProver<C>, C: CurveGroup<ScalarField = TranscriptFieldType>>
@@ -347,7 +416,7 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup<ScalarField = TranscriptFieldType>
         };
 
         // Store the eccvm operation
-        self.eccvm_ops_table.push(CoVMOperation {
+        self.append_eccvm_op(CoVMOperation {
             op_code: op_code.clone(),
             base_point: to_add.clone(),
             ..Default::default()
@@ -357,24 +426,99 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup<ScalarField = TranscriptFieldType>
         self.construct_and_populate_ultra_ops(op_code, to_add, None, net, state)
     }
 
+    // /**
+    //  * @brief Write multiply and add op to queue and natively perform operation
+    //  *
+    //  * @param to_mul
+    //  */
+    // pub fn mul_accumulate<N: Network>(
+    //     &mut self,
+    //     to_mul: T::PointShare,
+    //     scalar: T::ArithmeticShare,
+    //     net: &N,
+    //     state: &mut T::State,
+    // ) -> CoUltraOp<T, C> {
+    //     // Update the accumulator natively
+    //     T::add_point_assign(
+    //         &mut self.accumulator,
+    //         T::mul_point_and_scalar(to_mul.clone(), scalar, net, state)
+    //             .expect("Error multiplying point and scalar"),
+    //     );
+    //     let op_code = EccOpCode {
+    //         mul: true,
+    //         ..Default::default()
+    //     };
+
+    //     // Construct and store the operation in the ultra op format
+    //     let ultra_op = self.construct_and_populate_ultra_ops(
+    //         op_code.clone(),
+    //         to_mul.clone(),
+    //         Some(scalar),
+    //         net,
+    //         state,
+    //     );
+
+    //     // Store the eccvm operation
+    //     self.append_eccvm_op(CoVMOperation {
+    //         op_code,
+    //         base_point: to_mul,
+    //         z1: ultra_op.z_1,
+    //         z2: ultra_op.z_2,
+    //         mul_scalar_full: scalar,
+    //     });
+    //     ultra_op
+    // }
+
     /**
-     * @brief Write multiply and add op to queue and natively perform operation
+     * @brief Write point addition op to queue and natively perform addition
      *
-     * @param to_mul
+     * @param to_add
      */
-    pub fn mul_accumulate<N: Network>(
+    pub fn add_accumulate_no_store<N: Network>(
+        &mut self,
+        to_add: T::PointShare,
+        net: &N,
+        state: &mut T::State,
+    ) -> (CoUltraOp<T, C>, CoVMOperation<T, C>) {
+        // Update the accumulator natively
+        T::add_point_assign(&mut self.accumulator, to_add.clone());
+        let op_code = EccOpCode {
+            add: true,
+            ..Default::default()
+        };
+
+        // Construct and store the operation in the ultra op format
+        let ultra_op = self.construct_and_populate_ultra_ops(
+            op_code.clone(),
+            to_add.clone(),
+            None,
+            net,
+            state,
+        );
+
+        let eccvm_op = CoVMOperation {
+            op_code,
+            base_point: to_add,
+            ..Default::default()
+        };
+
+        (ultra_op, eccvm_op)
+    }
+
+    pub fn mul_accumulate_no_store<N: Network>(
         &mut self,
         to_mul: T::PointShare,
         scalar: T::ArithmeticShare,
         net: &N,
         state: &mut T::State,
-    ) -> CoUltraOp<T, C> {
+    ) -> (CoUltraOp<T, C>, CoVMOperation<T, C>) {
         // Update the accumulator natively
         T::add_point_assign(
             &mut self.accumulator,
             T::mul_point_and_scalar(to_mul.clone(), scalar, net, state)
                 .expect("Error multiplying point and scalar"),
         );
+
         let op_code = EccOpCode {
             mul: true,
             ..Default::default()
@@ -389,22 +533,23 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup<ScalarField = TranscriptFieldType>
             state,
         );
 
-        // Store the eccvm operation
-        self.eccvm_ops_table.push(CoVMOperation {
+        let eccvm_op = CoVMOperation {
             op_code,
             base_point: to_mul,
             z1: ultra_op.z_1,
             z2: ultra_op.z_2,
             mul_scalar_full: scalar,
-        });
-        ultra_op
+            ..Default::default()
+        };
+
+        (ultra_op, eccvm_op)
     }
 
     /**
      * @brief Writes a no op (i.e. two zero rows) to the ultra ops table but adds no eccvm operations.
      *
      * @details We want to be able to add zero rows (and, eventually, random rows
-     * https://github.com/AztecProtocol/barretenberg/issues/1360) to the ultra ops table without affecting the
+     * <https://github.com/AztecProtocol/barretenberg/issues/1360>) to the ultra ops table without affecting the
      * operations in the ECCVM.
      */
     pub fn no_op_ultra_only<N: Network>(
@@ -437,7 +582,7 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup<ScalarField = TranscriptFieldType>
         };
 
         // Store the eccvm operation
-        self.eccvm_ops_table.push(CoVMOperation {
+        self.append_eccvm_op(CoVMOperation {
             op_code: op_code.clone(),
             base_point: expected.clone(),
             ..Default::default()
