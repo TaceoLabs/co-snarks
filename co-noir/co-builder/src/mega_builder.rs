@@ -8,7 +8,7 @@ use num_bigint::BigUint;
 
 use crate::{
     eccvm::{
-        co_ecc_op_queue::{CoECCOpQueue, CoEccOpTuple, CoUltraOp, CoVMOperation},
+        co_ecc_op_queue::{CoECCOpQueue, CoEccOpTuple, CoUltraOp, CoVMOperation, precompute_flags},
         ecc_op_queue::EccOpCode,
     },
     generic_builder::GenericBuilder,
@@ -873,6 +873,8 @@ where
             tau: BTreeMap::new(),
             range_lists: BTreeMap::new(),
         };
+        let zero_idx = builder.put_constant_variable(P::ScalarField::zero());
+        builder.zero_idx = zero_idx; // constant 0 is is associated with the zero index
         builder.set_goblin_ecc_op_code_constant_variables();
         builder
     }
@@ -923,6 +925,10 @@ where
         self.blocks
             .arithmetic
             .q_poseidon2_internal()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_busread()
             .push(P::ScalarField::zero());
 
         self.check_selector_length_consistency();
@@ -1047,6 +1053,32 @@ where
 
         // Add corresponding gates for the operation
         (self.populate_ecc_op_wires(&ultra_op), eccvm_op)
+    }
+
+    /**
+     * Add point mul-then-accumulate operation to the op queue and add corresponding gates.
+     *
+     * @param point The affine point to multiply.
+     * @param scalar The scalar by which point is multiplied prior to being accumulated.
+     * @return ECCOpTuple encoding the point and scalar inputs to the mul accum.
+     */
+    pub fn queue_ecc_mul_accum_store<N: Network>(
+        &mut self,
+        point: D::PointShare,
+        scalar: D::ArithmeticShare,
+        net: &N,
+        state: &mut D::State,
+    ) -> CoEccOpTuple<D, P> {
+        // Add the operation to the op queue
+        let (ultra_op, mut eccvm_op) = self
+            .ecc_op_queue
+            .mul_accumulate_no_store(point, scalar, net, state);
+
+        precompute_flags(&mut vec![&mut eccvm_op], net, state);
+        self.ecc_op_queue.append_eccvm_op(eccvm_op);
+
+        // Add corresponding gates for the operation
+        self.populate_ecc_op_wires(&ultra_op)
     }
 
     /**

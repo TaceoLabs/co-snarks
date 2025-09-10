@@ -804,7 +804,7 @@ impl EccOpCode {
         res
     }
 }
-#[derive(Serialize, Deserialize, Default, Debug)]
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
 pub struct EccvmRowTracker {
     pub cached_num_muls: u32,
     pub cached_active_msm_count: u32,
