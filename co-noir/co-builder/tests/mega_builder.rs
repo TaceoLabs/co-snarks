@@ -465,7 +465,6 @@ fn test_mega_builder_construction() {
     let (accumulator, ecc_vm_ops_table, ultra_ops_table, eccvm_row_tracker) =
         results.pop().unwrap();
 
-    println!("{}", expected_accumulator);
     assert_eq!(accumulator, expected_accumulator);
     assert_eq!(ecc_vm_ops_table, expected_eccvm_ops_table);
     assert_eq!(ultra_ops_table, expected_ultra_ops_table);
