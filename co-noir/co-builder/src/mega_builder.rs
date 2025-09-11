@@ -1036,6 +1036,24 @@ where
      *
      * @param point Point to be added into the accumulator
      */
+    pub fn queue_ecc_add_accum<N: Network>(
+        &mut self,
+        point: D::PointShare,
+        net: &N,
+        state: &mut D::State,
+    ) -> CoEccOpTuple<D, P> {
+        // Add the operation to the op queue
+        let ultra_op = self.ecc_op_queue.add_accumulate(point, net, state);
+
+        // Add corresponding gates for the operation
+        self.populate_ecc_op_wires(&ultra_op)
+    }
+
+    /**
+     * @brief Add simple point addition operation to the op queue and add corresponding gates
+     *
+     * @param point Point to be added into the accumulator
+     */
     pub fn queue_ecc_add_accum_no_store<N: Network>(
         &mut self,
         point: D::PointShare,

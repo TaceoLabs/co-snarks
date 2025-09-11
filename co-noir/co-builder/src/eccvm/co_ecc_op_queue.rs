@@ -145,15 +145,16 @@ pub struct CoVMOperation<T: NoirUltraHonkProver<C>, C: CurveGroup> {
 
 type CoVMOperations<T, C> = Vec<CoVMOperation<T, C>>;
 
-pub fn precompute_flags<T: NoirUltraHonkProver<C>, C: CurveGroup>(
+pub fn precompute_mul_ops_flags<T: NoirUltraHonkProver<C>, C: CurveGroup>(
     ops: &mut CoVMOperations<T, C>,
     net: &impl Network,
     state: &mut T::State,
 ) {
-    let length = ops.len();
-    let z_1_vec: Vec<T::ArithmeticShare> = ops.iter().map(|op| op.z1).collect();
-    let z_2_vec: Vec<T::ArithmeticShare> = ops.iter().map(|op| op.z2).collect();
-    let base_point_vec: Vec<T::PointShare> = ops.iter().map(|op| op.base_point.clone()).collect();
+    let z_1_vec: Vec<T::ArithmeticShare> = ops.iter().filter(|op| op.op_code.mul ).map(|op| op.z1).collect();
+    let z_2_vec: Vec<T::ArithmeticShare> = ops.iter().filter(|op| op.op_code.mul ).map(|op| op.z2).collect();
+    let base_point_vec: Vec<T::PointShare> = ops.iter().filter(|op| op.op_code.mul ).map(|op| op.base_point.clone()).collect();
+
+    let length = z_1_vec.len();
 
     let z_flags = T::is_zero_many(&[z_1_vec, z_2_vec].concat(), net, state)
         .expect("Error computing is zero flags for z1 and z2");
@@ -166,7 +167,7 @@ pub fn precompute_flags<T: NoirUltraHonkProver<C>, C: CurveGroup>(
 
     let bool_flags: Vec<bool> = flags.iter().map(|f| !f.is_zero()).collect();
 
-    for (i, op) in ops.iter_mut().enumerate() {
+    for (i, op) in ops.iter_mut().filter(|op| op.op_code.mul).enumerate() {
         op.is_z1_zero = Some(bool_flags[i]);
         op.is_z2_zero = Some(bool_flags[i + length]);
         op.is_base_point_infinity = Some(bool_flags[i + 2 * length]);

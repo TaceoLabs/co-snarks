@@ -227,7 +227,7 @@ const TOTAL_BITS: u32 = 254;
 * @param input
 * @return std::array<bb::fr, 2>
 */
-fn bn254_fq_to_fr(fq: &ark_bn254::Fq) -> (ark_bn254::Fr, ark_bn254::Fr) {
+pub fn bn254_fq_to_fr(fq: &ark_bn254::Fq) -> (ark_bn254::Fr, ark_bn254::Fr) {
     // Goal is to slice up the 64 bit limbs of grumpkin::fr/uint256_t to mirror the 68 bit limbs of bigfield
     // We accomplish this by dividing the grumpkin::fr's value into two 68*2=136 bit pieces.
     const LOWER_BITS: u32 = 2 * NUM_LIMB_BITS;

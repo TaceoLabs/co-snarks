@@ -1375,7 +1375,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T
         }
     }
 
-    pub(crate) fn get_value(&self, driver: &mut T) -> T::AcvmType {
+    pub fn get_value(&self, driver: &mut T) -> T::AcvmType {
         let mut result = self.witness_bool.to_owned();
 
         if self.witness_inverted {
@@ -1385,7 +1385,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T
         result
     }
 
-    fn to_field_ct(&self, driver: &mut T) -> FieldCT<P::ScalarField> {
+    pub fn to_field_ct(&self, driver: &mut T) -> FieldCT<P::ScalarField> {
         if self.is_constant() {
             let value = T::get_public(&self.get_value(driver)).expect("Constants are public");
             let additive_constant = if self.witness_inverted {

@@ -128,7 +128,7 @@ where
         } else if simplified.linear_combinations.len() == 1 {
             //we can solve it!
             tracing::trace!("solving equation...");
-            let (q_l, w_l) = simplified.linear_combinations[0];
+            let (q_l, w_l) = simplified.linear_combinations[0].clone();
             let witness = self.driver.solve_equation(q_l, simplified.q_c)?;
             self.witness().insert(w_l, witness);
             tracing::trace!("we did it!");

@@ -21,6 +21,7 @@ fn downcast<A: 'static, B: 'static>(a: &A) -> Option<&B> {
 pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     type Lookup: LookupTableProvider<F>;
     type ArithmeticShare: Clone;
+    type NativePointShare<C: CurveGroup<ScalarField = F>>: Clone;
     /// A type representing the values encountered during Noir compilation. It should at least contain public field elements and shared values.
     type AcvmType: Copy
         + Clone
@@ -32,6 +33,10 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         + PartialEq
         + Into<<Self::BrilligDriver as BrilligDriver<F>>::BrilligType>;
     type AcvmPoint<C: CurveGroup<BaseField = F>>: Clone + fmt::Debug + fmt::Display + From<C>;
+    type AcvmNativePoint<C: CurveGroup<ScalarField = F>>: Clone
+        + fmt::Debug
+        + fmt::Display
+        + From<C>;
 
     type BrilligDriver: BrilligDriver<F>;
 
@@ -507,4 +512,31 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         input_bitsize: usize,
         output_bitsize: usize,
     ) -> eyre::Result<Self::AcvmType>;
+
+    // TODO CESAR
+    fn get_shared_native_point<C: CurveGroup<ScalarField = F>>(
+        a: &Self::AcvmNativePoint<C>,
+    ) -> Option<Self::NativePointShare<C>> {
+        unimplemented!()
+    }
+
+    // TODO CESAR
+    fn field_shares_to_native_pointshare<C: CurveGroup<ScalarField = F>>(
+        &mut self,
+        x0: Self::AcvmType,
+        y0: Self::AcvmType,
+        x1: Self::AcvmType,
+        y1: Self::AcvmType,
+        is_infinity: Self::AcvmType,
+    ) -> eyre::Result<Self::AcvmNativePoint<C>> {
+        unimplemented!()
+    }
+
+    // TODO CESAR
+    fn negate_native_point<C: CurveGroup<ScalarField = F>>(
+        &mut self,
+        point: &Self::AcvmNativePoint<C>,
+    ) -> eyre::Result<Self::AcvmNativePoint<C>> {
+        unimplemented!()
+    }
 }
