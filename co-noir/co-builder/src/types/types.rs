@@ -485,7 +485,6 @@ impl<F: PrimeField> MegaTraceBlock<F> {
         &mut self.selectors[Self::Q_4]
     }
 
-    #[expect(dead_code)]
     pub(crate) fn q_busread(&mut self) -> &mut Vec<F> {
         &mut self.selectors[Self::Q_BUSREAD]
     }

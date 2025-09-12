@@ -14,6 +14,7 @@ use num_bigint::BigUint;
 use num_traits::Zero;
 use rayon::prelude::*;
 
+#[derive(Debug)]
 pub struct Rep3UltraHonkDriver;
 
 impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {

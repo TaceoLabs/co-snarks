@@ -12,6 +12,7 @@ use common::{
     honk_proof::TranscriptFieldType, mpc::NoirUltraHonkProver,
     polynomials::shared_polynomial::SharedPolynomial,
 };
+use itertools::Itertools;
 use mpc_core::MpcState;
 use mpc_net::Network;
 use std::array;
@@ -22,6 +23,7 @@ pub(crate) const NUM_ROWS_PER_OP: usize = 2; // A single ECC op is split across 
 
 pub type CoEccvmOpsTable<T, C> = EccOpsTable<CoVMOperation<T, C>>;
 
+#[derive(Debug)]
 pub struct CoUltraEccOpsTable<T: NoirUltraHonkProver<C>, C: CurveGroup> {
     pub table: EccOpsTable<CoUltraOp<T, C>>,
 }
@@ -130,6 +132,7 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoUltraEccOpsTable<T, C> {
     }
 }
 
+#[derive(Debug)]
 pub struct CoVMOperation<T: NoirUltraHonkProver<C>, C: CurveGroup> {
     pub op_code: EccOpCode,
     pub base_point: T::PointShare,
@@ -143,16 +146,27 @@ pub struct CoVMOperation<T: NoirUltraHonkProver<C>, C: CurveGroup> {
     pub is_z2_zero: Option<bool>,
 }
 
-type CoVMOperations<T, C> = Vec<CoVMOperation<T, C>>;
-
-pub fn precompute_mul_ops_flags<T: NoirUltraHonkProver<C>, C: CurveGroup>(
-    ops: &mut CoVMOperations<T, C>,
+pub fn precompute_mul_acc_flags<T: NoirUltraHonkProver<C>, C: CurveGroup>(
+    ops: &mut Vec<&mut CoVMOperation<T, C>>,
     net: &impl Network,
     state: &mut T::State,
 ) {
-    let z_1_vec: Vec<T::ArithmeticShare> = ops.iter().filter(|op| op.op_code.mul ).map(|op| op.z1).collect();
-    let z_2_vec: Vec<T::ArithmeticShare> = ops.iter().filter(|op| op.op_code.mul ).map(|op| op.z2).collect();
-    let base_point_vec: Vec<T::PointShare> = ops.iter().filter(|op| op.op_code.mul ).map(|op| op.base_point.clone()).collect();
+    // Only want to precompute flags for mul ops and only if they haven't already been computed
+    let z_1_vec: Vec<T::ArithmeticShare> = ops
+        .iter()
+        .filter(|op| op.op_code.mul && op.is_z1_zero.is_none())
+        .map(|op| op.z1)
+        .collect();
+    let z_2_vec: Vec<T::ArithmeticShare> = ops
+        .iter()
+        .filter(|op| op.op_code.mul && op.is_z2_zero.is_none())
+        .map(|op| op.z2)
+        .collect();
+    let base_point_vec: Vec<T::PointShare> = ops
+        .iter()
+        .filter(|op| op.op_code.mul && op.is_base_point_infinity.is_none())
+        .map(|op| op.base_point.clone())
+        .collect();
 
     let length = z_1_vec.len();
 
@@ -167,7 +181,16 @@ pub fn precompute_mul_ops_flags<T: NoirUltraHonkProver<C>, C: CurveGroup>(
 
     let bool_flags: Vec<bool> = flags.iter().map(|f| !f.is_zero()).collect();
 
-    for (i, op) in ops.iter_mut().filter(|op| op.op_code.mul).enumerate() {
+    for (i, op) in ops
+        .iter_mut()
+        .filter(|op| {
+            op.op_code.mul
+                && op.is_z1_zero.is_none()
+                && op.is_z2_zero.is_none()
+                && op.is_base_point_infinity.is_none()
+        })
+        .enumerate()
+    {
         op.is_z1_zero = Some(bool_flags[i]);
         op.is_z2_zero = Some(bool_flags[i + length]);
         op.is_base_point_infinity = Some(bool_flags[i + 2 * length]);
@@ -230,7 +253,7 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> Default for CoEccOpTuple<T, C> {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct CoUltraOp<T: NoirUltraHonkProver<C>, C: CurveGroup> {
     pub op_code: EccOpCode,
     pub x_lo: T::ArithmeticShare,
@@ -269,6 +292,7 @@ impl EccvmRowTracker {
         &mut self,
         op: &CoVMOperation<T, C>,
     ) {
+        self.num_transcript_rows += 1;
         if op.op_code.mul
             && !op
                 .is_base_point_infinity
@@ -293,6 +317,7 @@ impl EccvmRowTracker {
     }
 }
 
+#[derive(Debug)]
 pub struct CoECCOpQueue<T: NoirUltraHonkProver<C>, C: CurveGroup> {
     pub eccvm_ops_table: CoEccvmOpsTable<T, C>,
     pub ultra_ops_table: CoUltraEccOpsTable<T, C>,
@@ -628,6 +653,21 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup<ScalarField = TranscriptFieldType>
                 .try_into()
                 .unwrap();
 
+        let one_minus_return_is_infinity =
+            T::add_with_public(C::ScalarField::ONE, T::neg(return_is_infinity), state.id());
+
+        let [x_lo, x_hi, y_lo, y_hi] = T::mul_many(
+            &[x_lo, x_hi, y_lo, y_hi],
+            &std::iter::repeat(one_minus_return_is_infinity)
+                .take(4)
+                .collect_vec(),
+            net,
+            state,
+        )
+        .expect("Error multiplying point coordinates by (1 - is_infinity)")
+        .try_into()
+        .unwrap();
+
         let (z_1, z_2) = Self::compute_zetas(scalar, net, state);
 
         let co_ultra_op = CoUltraOp {
@@ -663,6 +703,7 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup<ScalarField = TranscriptFieldType>
 
         let cond = T::le_public(converted, C::ScalarField::from(2).pow([128]), net, state).unwrap();
 
+        // TODO CESAR: cmux many
         let z_1 = T::cmux(cond, scalar, Self::to_montgomery_form(k_1), net, state).unwrap();
         let z_2 = T::cmux(
             cond,

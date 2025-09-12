@@ -6,6 +6,7 @@ use ark_ff::One;
 use ark_ff::UniformRand;
 use ark_poly::DenseUVPolynomial;
 use ark_poly::{Polynomial, univariate::DensePolynomial};
+use itertools::Itertools;
 use mpc_core::MpcState;
 use mpc_net::Network;
 use num_bigint::BigUint;
@@ -388,13 +389,28 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
     }
 
     // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
+    // TODO TACEO: Currently only supports LIMB_BITS = 136, i.e. two Bn254::Fr elements per Bn254::Fq element
     /// Converts a base field share into a vector of field shares, where the field shares
     /// represent the limbs of the base field element. Each limb has at most LIMB_BITS bits.
     fn base_field_share_to_field_shares<N: Network, const LIMB_BITS: usize>(
-        _x: Self::BaseFieldArithmeticShare,
+        x: Self::BaseFieldArithmeticShare,
         _net: &N,
         _state: &mut Self::State,
     ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
-        unimplemented!("Only implemented for MPC backends")
+        assert_eq!(
+            LIMB_BITS, 136,
+            "Only LIMB_BITS = 136 is supported, i.e. two Bn254::Fr elements per Bn254::Fq element"
+        );
+        let as_bigint: BigUint = x
+            .to_base_prime_field_elements()
+            .into_iter()
+            .map(Into::<BigUint>::into)
+            .collect_vec()
+            .pop()
+            .unwrap();
+
+        let low = as_bigint.clone() & ((BigUint::from(1u8) << LIMB_BITS) - BigUint::from(1u8));
+        let high = as_bigint >> LIMB_BITS;
+        Ok(vec![P::ScalarField::from(low), P::ScalarField::from(high)])
     }
 }

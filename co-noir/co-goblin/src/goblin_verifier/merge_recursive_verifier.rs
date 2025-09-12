@@ -1,8 +1,7 @@
 use ark_ff::FftField;
 use ark_ff::Field;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use co_builder::eccvm::co_ecc_op_queue::precompute_mul_ops_flags;
-use co_builder::prelude::PAIRING_POINT_ACCUMULATOR_SIZE;
+use co_builder::eccvm::co_ecc_op_queue::precompute_mul_acc_flags;
 use co_builder::{
     mega_builder::MegaCircuitBuilder,
     prelude::NUM_WIRES,
@@ -17,6 +16,7 @@ use common::{
     honk_proof::{HonkProofResult, TranscriptFieldType},
     mpc::NoirUltraHonkProver,
 };
+use itertools::Itertools;
 use mpc_net::Network;
 
 pub struct OpeningClaim<
@@ -208,7 +208,7 @@ impl MergeRecursiveVerifier {
 
             // TODO TACEO: Assumes that the point is always secret shared, to be solved once CoEccOpQueue is generic only on
             // NoirWitnessExtensionProtocol
-            let point_share = T::get_shared_native_point(&point_value).unwrap();
+            let point_share = T::get_shared_native_point(point_value).unwrap();
             let field_share = T::get_shared(&scalar.get_value(builder, driver)).unwrap();
 
             let (op_tuple, co_eccvm_op) = if scalar_is_constant_equal_one {
@@ -260,7 +260,7 @@ impl MergeRecursiveVerifier {
         }
 
         // Precompute is_zero flags and append the eccvm operations to the builder's eccvm op queue
-        precompute_mul_ops_flags(&mut co_eccvm_ops, net, state);
+        precompute_mul_acc_flags(&mut co_eccvm_ops.iter_mut().collect_vec(), net, state);
         builder.ecc_op_queue.append_eccvm_ops(co_eccvm_ops);
 
         // Populate equality gates based on the internal accumulator point
@@ -364,14 +364,14 @@ impl MergeRecursiveVerifier {
         net: &N,
         state: &mut D::State,
     ) -> GoblinElement<P, T> {
-
         let element_value = element.get_value(builder, driver);
 
-        let result_value = driver.negate_native_point(&element_value)
+        let result_value = driver
+            .negate_native_point(element_value.clone())
             .expect("Failed to negate goblin element");
 
         let op_tuple = builder.queue_ecc_add_accum(
-            T::get_shared_native_point(&element_value).unwrap().into(),
+            T::get_shared_native_point(element_value).unwrap().into(),
             net,
             state,
         );
@@ -387,8 +387,8 @@ impl MergeRecursiveVerifier {
             y_lo.assert_equal(&element.y.limbs[0], builder, driver);
             y_hi.assert_equal(&element.y.limbs[1], builder, driver);
         }
-        
-        let result_share = T::get_shared_native_point(&result_value).unwrap();
+
+        let result_share = T::get_shared_native_point(result_value).unwrap();
         let op_tuple_2 = builder.queue_ecc_add_accum(result_share, net, state);
 
         let result = {

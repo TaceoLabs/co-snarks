@@ -3,7 +3,6 @@ use crate::types::field_ct::BoolCT;
 use crate::types::field_ct::FieldCT;
 use ark_ec::CurveGroup;
 use ark_ff::Field;
-use ark_ff::One;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use common::honk_curve::HonkCurve;
@@ -80,12 +79,11 @@ impl<
         builder: &mut MegaCircuitBuilder<P, T, D>,
         driver: &mut T,
     ) -> T::AcvmNativePoint<P> {
-
-        let (x0, y0) = self.x.get_value(builder, driver);
-        let (x1, y1) = self.y.get_value(builder, driver);
+        let (x0, x1) = self.x.get_value(builder, driver);
+        let (y0, y1) = self.y.get_value(builder, driver);
         let is_infinity = self.is_infinity.get_value(driver);
         driver
-            .field_shares_to_native_pointshare(x0, y0, x1, y1, is_infinity)
+            .field_shares_to_native_pointshare(x0, x1, y0, y1, is_infinity)
             .expect("Failed to convert field shares to native point share")
     }
 
@@ -93,7 +91,7 @@ impl<
         builder: &mut MegaCircuitBuilder<P, T, D>,
     ) -> Self {
         let zero = FieldCT::from_witness_index(builder.zero_idx);
-        
+
         Self {
             x: GoblinField {
                 limbs: [zero.clone(), zero.clone()],

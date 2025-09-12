@@ -1008,6 +1008,7 @@ dependencies = [
  "blake3",
  "co-brillig",
  "co-noir-types",
+ "common",
  "eyre",
  "intmap",
  "itertools 0.14.0",
@@ -1068,6 +1069,7 @@ dependencies = [
  "num-traits",
  "rand 0.8.5",
  "serde",
+ "serde_json",
  "thiserror 2.0.14",
  "tracing",
 ]

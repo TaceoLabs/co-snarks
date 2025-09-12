@@ -3,6 +3,7 @@ use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{BigInteger, MontConfig, One, PrimeField};
 use blake2::{Blake2s256, Digest};
 use co_brillig::mpc::{PlainBrilligDriver, PlainBrilligType};
+use common::honk_curve::HonkCurve;
 use core::panic;
 use libaes::Cipher;
 use mpc_core::{
@@ -897,5 +898,38 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
 
     fn is_zero(&mut self, a: &Self::AcvmType) -> eyre::Result<Self::AcvmType> {
         Ok(F::from(a.is_zero()))
+    }
+
+    // TODO CESAR
+    fn get_shared_native_point<C: HonkCurve<F, ScalarField = F>>(
+        a: Self::AcvmNativePoint<C>,
+    ) -> Option<Self::NativePointShare<C>> {
+        Some(a)
+    }
+
+    // TODO CESAR
+    fn field_shares_to_native_pointshare<C: HonkCurve<F, ScalarField = F>>(
+        &mut self,
+        x0: Self::AcvmType,
+        x1: Self::AcvmType,
+        y0: Self::AcvmType,
+        y1: Self::AcvmType,
+        is_infinity: Self::AcvmType,
+    ) -> eyre::Result<Self::AcvmNativePoint<C>> {
+        let x = C::convert_basefield_back(&[x0, x1]);
+        let y = C::convert_basefield_back(&[y0, y1]);
+        if is_infinity == F::one() {
+            Ok(C::Affine::zero().into())
+        } else {
+            Ok(C::g1_affine_from_xy(x, y).into())
+        }
+    }
+
+    // TODO CESAR
+    fn negate_native_point<C: HonkCurve<F, ScalarField = F>>(
+        &mut self,
+        point: Self::AcvmNativePoint<C>,
+    ) -> eyre::Result<Self::AcvmNativePoint<C>> {
+        Ok(-point)
     }
 }

@@ -1,6 +1,7 @@
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_brillig::mpc::BrilligDriver;
+use common::honk_curve::HonkCurve;
 use mpc_core::{
     gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations},
     lut::LookupTableProvider,
@@ -514,18 +515,18 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     ) -> eyre::Result<Self::AcvmType>;
 
     // TODO CESAR
-    fn get_shared_native_point<C: CurveGroup<ScalarField = F>>(
-        a: &Self::AcvmNativePoint<C>,
+    fn get_shared_native_point<C: HonkCurve<F, ScalarField = F>>(
+        a: Self::AcvmNativePoint<C>,
     ) -> Option<Self::NativePointShare<C>> {
         unimplemented!()
     }
 
     // TODO CESAR
-    fn field_shares_to_native_pointshare<C: CurveGroup<ScalarField = F>>(
+    fn field_shares_to_native_pointshare<C: HonkCurve<F, ScalarField = F>>(
         &mut self,
         x0: Self::AcvmType,
-        y0: Self::AcvmType,
         x1: Self::AcvmType,
+        y0: Self::AcvmType,
         y1: Self::AcvmType,
         is_infinity: Self::AcvmType,
     ) -> eyre::Result<Self::AcvmNativePoint<C>> {
@@ -533,9 +534,9 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     }
 
     // TODO CESAR
-    fn negate_native_point<C: CurveGroup<ScalarField = F>>(
+    fn negate_native_point<C: HonkCurve<F, ScalarField = F>>(
         &mut self,
-        point: &Self::AcvmNativePoint<C>,
+        point: Self::AcvmNativePoint<C>,
     ) -> eyre::Result<Self::AcvmNativePoint<C>> {
         unimplemented!()
     }
