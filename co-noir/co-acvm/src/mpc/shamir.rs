@@ -3,6 +3,7 @@ use ark_ec::CurveGroup;
 use ark_ff::{One, PrimeField};
 use co_brillig::mpc::{ShamirBrilligDriver, ShamirBrilligType};
 use co_noir_types::ShamirType;
+use common::honk_curve::HonkCurve;
 use core::panic;
 use mpc_core::{
     MpcState,
@@ -955,5 +956,35 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
 
     fn is_zero(&mut self, _a: &Self::AcvmType) -> eyre::Result<Self::AcvmType> {
         panic!("functionality is_zero not feasible for Shamir")
+    }
+
+    /// Returns the point share if the point is shared
+    fn get_shared_native_point<C: HonkCurve<F, ScalarField = F>>(
+        _a: Self::AcvmNativePoint<C>,
+    ) -> Option<Self::NativePointShare<C>> {
+        panic!("functionality get_shared_native_point not feasible for Shamir")
+    }
+
+    /// Returns the point share with coordinates given as scalar field share limbs
+    fn field_shares_to_native_pointshare<
+        const LIMB_BITS: usize,
+        C: HonkCurve<F, ScalarField = F>,
+    >(
+        &mut self,
+        _x0: Self::AcvmType,
+        _x1: Self::AcvmType,
+        _y0: Self::AcvmType,
+        _y1: Self::AcvmType,
+        _is_infinity: Self::AcvmType,
+    ) -> eyre::Result<Self::AcvmNativePoint<C>> {
+        panic!("functionality field_shares_to_native_pointshare not feasible for Shamir")
+    }
+
+    /// Negates the given native point, i.e., computes -P for a point P.
+    fn negate_native_point<C: HonkCurve<F, ScalarField = F>>(
+        &mut self,
+        _point: Self::AcvmNativePoint<C>,
+    ) -> eyre::Result<Self::AcvmNativePoint<C>> {
+        panic!("functionality negate_native_point not feasible for Shamir")
     }
 }

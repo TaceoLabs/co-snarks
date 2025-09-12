@@ -5,6 +5,7 @@ use ark_ff::{BigInteger, MontConfig, One, PrimeField, Zero};
 use blake2::{Blake2s256, Digest};
 use co_brillig::mpc::{Rep3BrilligDriver, Rep3BrilligType};
 use co_noir_types::Rep3Type;
+use common::honk_curve::HonkCurve;
 use itertools::{Itertools, izip};
 use libaes::Cipher;
 use mpc_core::MpcState as _;
@@ -2220,6 +2221,100 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 let is_zero = arithmetic::eq_public(*a, F::zero(), self.net0, &mut self.state0)?;
                 Ok(Rep3AcvmType::Shared(is_zero))
             }
+        }
+    }
+
+    /// Returns the point share if the point is shared
+    fn get_shared_native_point<C: HonkCurve<F, ScalarField = F>>(
+        a: Self::AcvmNativePoint<C>,
+    ) -> Option<Self::NativePointShare<C>> {
+        match a {
+            Rep3AcvmPoint::Shared(point) => Some(point),
+            Rep3AcvmPoint::Public(_) => None,
+        }
+    }
+
+    // TODO TACEO: Only supports LIMB_BITS = 136, i.e. two Bn254::Fr elements per Bn254::Fq element
+    /// Returns the point share with coordinates given as scalar field share limbs
+    fn field_shares_to_native_pointshare<
+        const LIMB_BITS: usize,
+        C: HonkCurve<F, ScalarField = F>,
+    >(
+        &mut self,
+        x0: Self::AcvmType,
+        x1: Self::AcvmType,
+        y0: Self::AcvmType,
+        y1: Self::AcvmType,
+        is_infinity: Self::AcvmType,
+    ) -> eyre::Result<Self::AcvmNativePoint<C>> {
+        assert_eq!(
+            LIMB_BITS, 136,
+            "Only LIMB_BITS = 136 is supported, i.e. two Bn254::Fr elements per Bn254::Fq element"
+        );
+        match (x0, x1, y0, y1, is_infinity) {
+            (
+                Rep3AcvmType::Public(x0),
+                Rep3AcvmType::Public(x1),
+                Rep3AcvmType::Public(y0),
+                Rep3AcvmType::Public(y1),
+                Rep3AcvmType::Public(is_infinity),
+            ) => PlainAcvmSolver::new()
+                .field_shares_to_native_pointshare::<LIMB_BITS, C>(x0, x1, y0, y1, is_infinity)
+                .map(Rep3AcvmPoint::Public),
+            (
+                Rep3AcvmType::Shared(x0),
+                Rep3AcvmType::Shared(x1),
+                Rep3AcvmType::Shared(y0),
+                Rep3AcvmType::Shared(y1),
+                Rep3AcvmType::Shared(is_infinity),
+            ) => {
+                assert_eq!(
+                    LIMB_BITS, 136,
+                    "Only LIMB_BITS = 136 is supported, i.e. two Bn254::Fr elements per Bn254::Fq element"
+                );
+                let [x0, x1, y0, y1, is_infinity] = conversion::a2b_many(
+                    &[x0, x1, y0, y1, is_infinity],
+                    self.net0,
+                    &mut self.state0,
+                )?
+                .try_into()
+                .expect("We provided the right number of elements");
+
+                let x = x0 ^ (x1 << LIMB_BITS);
+                let y = y0 ^ (y1 << LIMB_BITS);
+
+                let x = Rep3BigUintShare::<C::BaseField>::new(x.a, x.b);
+                let y = Rep3BigUintShare::<C::BaseField>::new(y.a, y.b);
+                let is_infinity =
+                    Rep3BigUintShare::<C::BaseField>::new(is_infinity.a, is_infinity.b);
+
+                let [x, y, is_infinity] =
+                    conversion::b2a_many(&[x, y, is_infinity], self.net0, &mut self.state0)?
+                        .try_into()
+                        .expect("We provided the right number of elements");
+
+                let pointshare = conversion::fieldshares_to_pointshare(
+                    x,
+                    y,
+                    is_infinity,
+                    self.net0,
+                    &mut self.state0,
+                )?;
+
+                Ok(Rep3AcvmPoint::Shared(pointshare))
+            }
+            _ => eyre::bail!("All inputs must either be public or shared"),
+        }
+    }
+
+    /// Negates the given native point, i.e., computes -P for a point P.
+    fn negate_native_point<C: HonkCurve<F, ScalarField = F>>(
+        &mut self,
+        point: Self::AcvmNativePoint<C>,
+    ) -> eyre::Result<Self::AcvmNativePoint<C>> {
+        match point {
+            Rep3AcvmPoint::Public(point) => Ok(Rep3AcvmPoint::Public(-point)),
+            Rep3AcvmPoint::Shared(point) => Ok(Rep3AcvmPoint::Shared(-point)),
         }
     }
 }

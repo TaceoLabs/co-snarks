@@ -256,8 +256,8 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         false
     }
 
-    fn get_shared(_: &Self::AcvmType) -> Option<Self::ArithmeticShare> {
-        None
+    fn get_shared(a: &Self::AcvmType) -> Option<Self::ArithmeticShare> {
+        Some(*a)
     }
 
     fn get_public(a: &Self::AcvmType) -> Option<F> {
@@ -900,15 +900,18 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Ok(F::from(a.is_zero()))
     }
 
-    // TODO CESAR
     fn get_shared_native_point<C: HonkCurve<F, ScalarField = F>>(
         a: Self::AcvmNativePoint<C>,
     ) -> Option<Self::NativePointShare<C>> {
         Some(a)
     }
 
-    // TODO CESAR
-    fn field_shares_to_native_pointshare<C: HonkCurve<F, ScalarField = F>>(
+    // TODO TACEO: Only supports LIMB_BITS = 136, i.e. two Bn254::Fr elements per Bn254::Fq element
+    /// Returns the point share with coordinates given as scalar field share limbs
+    fn field_shares_to_native_pointshare<
+        const LIMB_BITS: usize,
+        C: HonkCurve<F, ScalarField = F>,
+    >(
         &mut self,
         x0: Self::AcvmType,
         x1: Self::AcvmType,
@@ -916,6 +919,10 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         y1: Self::AcvmType,
         is_infinity: Self::AcvmType,
     ) -> eyre::Result<Self::AcvmNativePoint<C>> {
+        assert_eq!(
+            LIMB_BITS, 136,
+            "Only LIMB_BITS = 136 is supported, i.e. two Bn254::Fr elements per Bn254::Fq element"
+        );
         let x = C::convert_basefield_back(&[x0, x1]);
         let y = C::convert_basefield_back(&[y0, y1]);
         if is_infinity == F::one() {
@@ -925,7 +932,6 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         }
     }
 
-    // TODO CESAR
     fn negate_native_point<C: HonkCurve<F, ScalarField = F>>(
         &mut self,
         point: Self::AcvmNativePoint<C>,

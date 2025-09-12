@@ -514,30 +514,24 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         output_bitsize: usize,
     ) -> eyre::Result<Self::AcvmType>;
 
-    // TODO CESAR
+    /// Returns the point share if the point is shared
     fn get_shared_native_point<C: HonkCurve<F, ScalarField = F>>(
         a: Self::AcvmNativePoint<C>,
-    ) -> Option<Self::NativePointShare<C>> {
-        unimplemented!()
-    }
+    ) -> Option<Self::NativePointShare<C>>;
 
-    // TODO CESAR
-    fn field_shares_to_native_pointshare<C: HonkCurve<F, ScalarField = F>>(
+    /// Returns the point share with coordinates given as scalar field share limbs
+    fn field_shares_to_native_pointshare<const LIMB_BITS: usize, C: HonkCurve<F, ScalarField = F>>(
         &mut self,
         x0: Self::AcvmType,
         x1: Self::AcvmType,
         y0: Self::AcvmType,
         y1: Self::AcvmType,
         is_infinity: Self::AcvmType,
-    ) -> eyre::Result<Self::AcvmNativePoint<C>> {
-        unimplemented!()
-    }
+    ) -> eyre::Result<Self::AcvmNativePoint<C>>;
 
-    // TODO CESAR
+    /// Negates the given native point, i.e., computes -P for a point P.
     fn negate_native_point<C: HonkCurve<F, ScalarField = F>>(
         &mut self,
         point: Self::AcvmNativePoint<C>,
-    ) -> eyre::Result<Self::AcvmNativePoint<C>> {
-        unimplemented!()
-    }
+    ) -> eyre::Result<Self::AcvmNativePoint<C>>;
 }
