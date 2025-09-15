@@ -279,6 +279,7 @@ fn to_ecc_op_queues(
 }
 
 #[test]
+#[expect(clippy::type_complexity)]
 fn test_mega_builder_construction() {
     let (
         initial_op_queue,
