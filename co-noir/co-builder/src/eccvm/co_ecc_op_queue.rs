@@ -658,9 +658,7 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup<ScalarField = TranscriptFieldType>
 
         let [x_lo, x_hi, y_lo, y_hi] = T::mul_many(
             &[x_lo, x_hi, y_lo, y_hi],
-            &std::iter::repeat(one_minus_return_is_infinity)
-                .take(4)
-                .collect_vec(),
+            &std::iter::repeat_n(one_minus_return_is_infinity, 4).collect_vec(),
             net,
             state,
         )

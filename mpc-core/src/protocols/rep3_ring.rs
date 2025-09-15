@@ -8,7 +8,8 @@ pub mod casts;
 pub mod conversion;
 mod detail;
 pub mod gadgets;
-pub mod lut;
+pub mod lut_curve;
+pub mod lut_field;
 pub mod ring;
 pub mod yao;
 

@@ -30,10 +30,13 @@ type Fq = ark_bn254::Fq;
 type Fr = ark_bn254::Fr;
 type G1Affine = <Bn254 as Pairing>::G1Affine;
 
+type EccOpsTableTestData<T, Q> = Vec<Vec<([u8; 4], (Q, Q, u8), T, T, T)>>;
+type UltraOpsTableTestData<T> = Vec<Vec<([u8; 4], T, T, T, T, T, T, u8)>>;
+
 type EccOpQueueTestData<T, Q> = (
     (Q, Q, u8),
-    Vec<Vec<([u8; 4], (Q, Q, u8), T, T, T)>>,
-    Vec<Vec<([u8; 4], T, T, T, T, T, T, u8)>>,
+    EccOpsTableTestData<T, Q>,
+    UltraOpsTableTestData<T>,
     [u32; 5],
 );
 
@@ -56,7 +59,7 @@ fn to_field_elements(test_data: EccOpQueueTestData<String, String>) -> EccOpQueu
     let acc_x = to_field!(acc_x);
     let acc_y = to_field!(acc_y);
 
-    let eccvm_ops_table: Vec<Vec<([u8; 4], (Fq, Fq, u8), Fr, Fr, Fr)>> = eccvm_ops_table
+    let eccvm_ops_table: EccOpsTableTestData<Fr, Fq> = eccvm_ops_table
         .into_iter()
         .map(|row| {
             row.into_iter()
@@ -82,7 +85,7 @@ fn to_field_elements(test_data: EccOpQueueTestData<String, String>) -> EccOpQueu
         })
         .collect::<Vec<_>>();
 
-    let ultra_ops_table: Vec<Vec<([u8; 4], Fr, Fr, Fr, Fr, Fr, Fr, u8)>> = ultra_ops_table
+    let ultra_ops_table: UltraOpsTableTestData<Fr> = ultra_ops_table
         .into_iter()
         .map(|row| {
             row.into_iter()
@@ -276,6 +279,7 @@ fn to_ecc_op_queues(
 }
 
 #[test]
+#[expect(clippy::type_complexity)]
 fn test_mega_builder_construction() {
     let (
         initial_op_queue,
@@ -294,22 +298,21 @@ fn test_mega_builder_construction() {
         expected_eccvm_row_tracker,
     ) = to_field_elements(expected_op_queue);
 
-    let expected_eccvm_ops_table: Vec<Vec<([u8; 4], G1Affine, Fr, Fr, Fr)>> =
-        expected_eccvm_ops_table
-            .into_iter()
-            .map(|row| {
-                row.into_iter()
-                    .map(|(op_code, (x, y, is_infinity), z1, z2, mul_scalar_full)| {
-                        let base_point = if is_infinity != 0 {
-                            G1Affine::identity()
-                        } else {
-                            G1Affine::new(x, y)
-                        };
-                        (op_code, base_point, z1, z2, mul_scalar_full)
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .collect::<Vec<_>>();
+    let expected_eccvm_ops_table = expected_eccvm_ops_table
+        .into_iter()
+        .map(|row| {
+            row.into_iter()
+                .map(|(op_code, (x, y, is_infinity), z1, z2, mul_scalar_full)| {
+                    let base_point = if is_infinity != 0 {
+                        G1Affine::identity()
+                    } else {
+                        G1Affine::new(x, y)
+                    };
+                    (op_code, base_point, z1, z2, mul_scalar_full)
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
 
     let expected_accumulator = if is_infinity != 0 {
         G1Affine::identity()

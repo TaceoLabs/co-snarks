@@ -1,0 +1,299 @@
+//! Lookup Table
+//!
+//! This module contains implementation of a LUT
+
+use super::{Rep3RingShare, ring::int_ring::IntRing2k};
+use crate::{
+    lut::LookupTableProvider,
+    protocols::{
+        rep3::{
+            self, Rep3BigUintShare, Rep3PointShare, Rep3PrimeFieldShare, Rep3State,
+            network::Rep3NetworkExt, pointshare,
+        },
+        rep3_ring::{gadgets, lut_field::Rep3FieldLookupTable, ring::bit::Bit},
+    },
+};
+use ark_ec::CurveGroup;
+use mpc_net::Network;
+use rand::{distributions::Standard, prelude::Distribution};
+use std::marker::PhantomData;
+
+/// Implements an enum which stores a lookup table, either consisting of public or private values.
+pub enum PublicPrivateLut<C: CurveGroup> {
+    /// The lookup table has public values
+    Public(Vec<C>),
+    /// The lookup table has secret-shared values
+    Shared(Vec<Rep3PointShare<C>>),
+}
+
+impl<C: CurveGroup> Default for PublicPrivateLut<C> {
+    fn default() -> Self {
+        PublicPrivateLut::Public(Vec::new())
+    }
+}
+
+impl<C: CurveGroup> PublicPrivateLut<C> {
+    /// Returns the number of elements contained in the lookup table
+    pub fn len(&self) -> usize {
+        match self {
+            PublicPrivateLut::Public(lut) => lut.len(),
+            PublicPrivateLut::Shared(lut) => lut.len(),
+        }
+    }
+
+    /// Returns true if the lut is empty
+    pub fn is_empty(&self) -> bool {
+        match self {
+            PublicPrivateLut::Public(lut) => lut.is_empty(),
+            PublicPrivateLut::Shared(lut) => lut.is_empty(),
+        }
+    }
+}
+
+/// Rep3 lookup table
+pub struct Rep3CurveLookupTable<C: CurveGroup> {
+    phantom: PhantomData<C>,
+}
+
+impl<C: CurveGroup> Default for Rep3CurveLookupTable<C> {
+    fn default() -> Self {
+        Self {
+            phantom: PhantomData::<C>,
+        }
+    }
+}
+
+impl<C: CurveGroup> Rep3CurveLookupTable<C> {
+    /// Construct a new [`Rep3CurveLookupTable`]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// This is an optimized protocol that takes multiple public LUTs and looks them up with the same index. It only creates the OHV once.
+    pub fn get_from_public_luts<N: Network>(
+        index: Rep3PrimeFieldShare<C::ScalarField>,
+        luts: &[Vec<C>],
+        net: &N,
+        state: &mut Rep3State,
+    ) -> eyre::Result<Vec<Rep3PointShare<C>>> {
+        let len = luts.iter().map(|l| l.len()).max().unwrap();
+        tracing::debug!("doing read on LUT-map of size {}", len);
+        let bits = rep3::conversion::a2b_selector(index, net, state)?;
+        let k = len.next_power_of_two().ilog2() as usize;
+
+        let result = if k == 1 {
+            Self::get_from_public_luts_internal::<Bit, _>(bits, luts, net, state)?
+        } else if k <= 8 {
+            Self::get_from_public_luts_internal::<u8, _>(bits, luts, net, state)?
+        } else if k <= 16 {
+            Self::get_from_public_luts_internal::<u16, _>(bits, luts, net, state)?
+        } else if k <= 32 {
+            Self::get_from_public_luts_internal::<u32, _>(bits, luts, net, state)?
+        } else {
+            panic!("Table is too large")
+        };
+        tracing::debug!("got a result!");
+        Ok(result)
+    }
+
+    fn get_from_public_luts_internal<T: IntRing2k, N: Network>(
+        index: Rep3BigUintShare<C::ScalarField>,
+        luts: &[Vec<C>],
+        net: &N,
+        state: &mut Rep3State,
+    ) -> eyre::Result<Vec<Rep3PointShare<C>>>
+    where
+        Standard: Distribution<T>,
+    {
+        let a = T::cast_from_biguint(&index.a);
+        let b = T::cast_from_biguint(&index.b);
+        let share = Rep3RingShare::new(a, b);
+
+        gadgets::lut_curve::read_public_luts(luts, share, net, state)
+    }
+
+    fn get_from_lut_internal<T: IntRing2k, N: Network>(
+        index: Rep3BigUintShare<C::ScalarField>,
+        lut: &PublicPrivateLut<C>,
+        net: &N,
+        state: &mut Rep3State,
+    ) -> eyre::Result<Rep3PointShare<C>>
+    where
+        Standard: Distribution<T>,
+    {
+        let a = T::cast_from_biguint(&index.a);
+        let b = T::cast_from_biguint(&index.b);
+        let share = Rep3RingShare::new(a, b);
+        let val = match lut {
+            PublicPrivateLut::Public(vec) => {
+                gadgets::lut_curve::read_public_lut(vec.as_ref(), share, net, state)?
+            }
+            PublicPrivateLut::Shared(vec) => {
+                let f_a = gadgets::lut_curve::read_shared_lut(vec.as_ref(), share, net, state)?;
+                let f_b = net.reshare(f_a)?;
+                Rep3PointShare::new(f_a, f_b)
+            }
+        };
+
+        Ok(val)
+    }
+
+    fn write_to_lut_internal<T: IntRing2k, N: Network>(
+        index: Rep3BigUintShare<C::ScalarField>,
+        lut: &mut PublicPrivateLut<C>,
+        value: &Rep3PointShare<C>,
+        net: &N,
+        state: &mut Rep3State,
+    ) -> eyre::Result<()>
+    where
+        Standard: Distribution<T>,
+    {
+        let a = T::cast_from_biguint(&index.a);
+        let b = T::cast_from_biguint(&index.b);
+        let share = Rep3RingShare::new(a, b);
+        match lut {
+            PublicPrivateLut::Public(vec) => {
+                // There is not really a performance difference (i.e., more multiplications) when both lut and value are secret shared compared to public lut and private value. Thus we promote
+                let id = state.id;
+                let mut shared = vec
+                    .iter()
+                    .map(|v| pointshare::promote_to_trivial_share(id, v))
+                    .collect::<Vec<_>>();
+                gadgets::lut_curve::write_lut(value, &mut shared, share, net, state)?;
+                *lut = PublicPrivateLut::Shared(shared);
+            }
+            PublicPrivateLut::Shared(shared) => {
+                gadgets::lut_curve::write_lut(value, shared, share, net, state)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Creates a shared one-hot-encoded vector from a given shared index
+    pub fn ohv_from_index<N: Network>(
+        index: Rep3PrimeFieldShare<C::ScalarField>,
+        len: usize,
+        net0: &N,
+        net1: &N,
+        state0: &mut Rep3State,
+        state1: &mut Rep3State,
+    ) -> eyre::Result<Vec<Rep3PrimeFieldShare<C::ScalarField>>> {
+        Rep3FieldLookupTable::<C::ScalarField>::ohv_from_index(
+            index, len, net0, net1, state0, state1,
+        )
+    }
+
+    /// Writes to a shared lookup table with the index already being transformed into the shared one-hot-encoded vector
+    pub fn write_to_shared_lut_from_ohv<N: Network>(
+        ohv: &[Rep3PrimeFieldShare<C::ScalarField>],
+        value: Rep3PointShare<C>,
+        lut: &mut [Rep3PointShare<C>],
+        net: &N,
+        state: &mut Rep3State,
+    ) -> eyre::Result<()> {
+        let len = lut.len();
+        tracing::debug!("doing write on LUT-map of size {}", len);
+        gadgets::lut_curve::write_lut_from_ohv(&value, lut, ohv, net, state)?;
+        tracing::debug!("we are done");
+        Ok(())
+    }
+
+    /// Returns true if LUT is public
+    pub fn is_public_lut(lut: &PublicPrivateLut<C>) -> bool {
+        match lut {
+            PublicPrivateLut::Public(_) => true,
+            PublicPrivateLut::Shared(_) => false,
+        }
+    }
+}
+
+impl<C: CurveGroup> LookupTableProvider<C> for Rep3CurveLookupTable<C> {
+    type SecretShare = Rep3PointShare<C>;
+    type IndexSecretShare = Rep3PrimeFieldShare<C::ScalarField>;
+    type LutType = PublicPrivateLut<C>;
+    type State = Rep3State;
+
+    fn init_private(&self, values: Vec<Self::SecretShare>) -> Self::LutType {
+        tracing::debug!("initiating LUT-map (private)");
+        PublicPrivateLut::Shared(values)
+    }
+
+    fn init_public(&self, values: Vec<C>) -> Self::LutType {
+        tracing::debug!("initiating LUT-map (public)");
+        PublicPrivateLut::Public(values)
+    }
+
+    fn get_from_lut<N: Network>(
+        &mut self,
+        index: Self::IndexSecretShare,
+        lut: &Self::LutType,
+        net0: &N,
+        _net1: &N,
+        state0: &mut Rep3State,
+        _state1: &mut Rep3State,
+    ) -> eyre::Result<Self::SecretShare> {
+        let len = lut.len();
+        tracing::debug!("doing read on LUT-map of size {}", len);
+        let bits = rep3::conversion::a2b_selector(index, net0, state0)?;
+        let k = len.next_power_of_two().ilog2() as usize;
+
+        let result = if k == 1 {
+            Self::get_from_lut_internal::<Bit, _>(bits, lut, net0, state0)?
+        } else if k <= 8 {
+            Self::get_from_lut_internal::<u8, _>(bits, lut, net0, state0)?
+        } else if k <= 16 {
+            Self::get_from_lut_internal::<u16, _>(bits, lut, net0, state0)?
+        } else if k <= 32 {
+            Self::get_from_lut_internal::<u32, _>(bits, lut, net0, state0)?
+        } else {
+            panic!("Table is too large")
+        };
+        tracing::debug!("got a result!");
+        Ok(result)
+    }
+
+    fn write_to_lut<N: Network>(
+        &mut self,
+        index: Self::IndexSecretShare,
+        value: Self::SecretShare,
+        lut: &mut Self::LutType,
+        net0: &N,
+        _net1: &N,
+        state0: &mut Rep3State,
+        _state1: &mut Rep3State,
+    ) -> eyre::Result<()> {
+        let len = lut.len();
+        tracing::debug!("doing write on LUT-map of size {}", len);
+        let bits = rep3::conversion::a2b_selector(index, net0, state0)?;
+        let k = len.next_power_of_two().ilog2();
+
+        if k == 1 {
+            Self::write_to_lut_internal::<Bit, _>(bits, lut, &value, net0, state0)?
+        } else if k <= 8 {
+            Self::write_to_lut_internal::<u8, _>(bits, lut, &value, net0, state0)?
+        } else if k <= 16 {
+            Self::write_to_lut_internal::<u16, _>(bits, lut, &value, net0, state0)?
+        } else if k <= 32 {
+            Self::write_to_lut_internal::<u32, _>(bits, lut, &value, net0, state0)?
+        } else {
+            panic!("Table is too large")
+        };
+
+        tracing::debug!("we are done");
+        Ok(())
+    }
+
+    fn get_lut_len(lut: &Self::LutType) -> usize {
+        match lut {
+            PublicPrivateLut::Public(items) => items.len(),
+            PublicPrivateLut::Shared(shares) => shares.len(),
+        }
+    }
+
+    fn get_public_lut(lut: &Self::LutType) -> eyre::Result<&Vec<C>> {
+        match lut {
+            PublicPrivateLut::Public(items) => Ok(items),
+            PublicPrivateLut::Shared(_) => Err(eyre::eyre!("Expected public LUT")),
+        }
+    }
+}

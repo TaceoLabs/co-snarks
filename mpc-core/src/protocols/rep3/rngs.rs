@@ -173,13 +173,13 @@ impl Rep3Rand {
             .collect()
     }
 
-    /// Create a masking elliptic cureve element
+    /// Create a masking elliptic curve element
     pub fn masking_ec_element<C: CurveGroup>(&mut self) -> C {
         let (a, b) = self.random_ecs::<C>();
         a - b
     }
 
-    /// Generate two random elliptic cureve elements
+    /// Generate two random elliptic curve elements
     pub fn random_ecs<C: CurveGroup>(&mut self) -> (C, C) {
         let a = C::rand(&mut self.rng1);
         let b = C::rand(&mut self.rng2);
