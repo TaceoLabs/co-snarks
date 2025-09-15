@@ -25,4 +25,4 @@ Currently, the circuit builder related code in `src/parse/` is only compatible w
 
 ## Usage
 
-For examples and corresponding Barretenberg operations we refer to `collaborative-circom/co-noir/co-noir/Readme.md`.
+For examples and corresponding Barretenberg operations we refer to [this README.md](../co-noir/Readme.md).
