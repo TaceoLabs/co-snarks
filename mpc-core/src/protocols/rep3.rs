@@ -564,6 +564,23 @@ pub fn share_curve_point<C: CurveGroup, R: Rng + CryptoRng>(
     [share1, share2, share3]
 }
 
+/// Secret shares a vector of curve points using replicated secret sharing and the provided random number generator. The points are split into three additive shares each, where each party holds two. The outputs are of type [Rep3PointShare].
+pub fn share_curve_points<C: CurveGroup, R: Rng + CryptoRng>(
+    vals: &[C],
+    rng: &mut R,
+) -> [Vec<Rep3PointShare<C>>; 3] {
+    let mut shares1 = Vec::with_capacity(vals.len());
+    let mut shares2 = Vec::with_capacity(vals.len());
+    let mut shares3 = Vec::with_capacity(vals.len());
+    for val in vals {
+        let [share1, share2, share3] = share_curve_point(*val, rng);
+        shares1.push(share1);
+        shares2.push(share2);
+        shares3.push(share3);
+    }
+    [shares1, shares2, shares3]
+}
+
 /// Reconstructs a field element from its arithmetic replicated shares.
 pub fn combine_field_element<F: PrimeField>(
     share1: Rep3PrimeFieldShare<F>,
@@ -605,4 +622,20 @@ pub fn combine_curve_point<C: CurveGroup>(
     share3: Rep3PointShare<C>,
 ) -> C {
     share1.a + share2.a + share3.a
+}
+
+/// Reconstructs a vector of curve points from its arithmetic replicated shares.
+/// # Panics
+/// Panics if the provided `Vec` sizes do not match.
+pub fn combine_curve_points<C: CurveGroup>(
+    share1: &[Rep3PointShare<C>],
+    share2: &[Rep3PointShare<C>],
+    share3: &[Rep3PointShare<C>],
+) -> Vec<C> {
+    assert_eq!(share1.len(), share2.len());
+    assert_eq!(share2.len(), share3.len());
+
+    itertools::multizip((share1, share2, share3))
+        .map(|(x1, x2, x3)| x1.a + x2.a + x3.a)
+        .collect::<Vec<_>>()
 }

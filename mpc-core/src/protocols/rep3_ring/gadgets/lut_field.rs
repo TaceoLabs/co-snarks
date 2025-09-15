@@ -226,7 +226,6 @@ where
     let n = lut.len();
     let k = n.next_power_of_two().ilog2() as usize;
     assert!(k <= T::K);
-
     let e = gadgets::ohv::ohv::<T, _>(k, index, net, state)?;
     let injected = conversion::bit_inject_from_bits_to_field_many::<F, _>(&e, net, state)?;
 

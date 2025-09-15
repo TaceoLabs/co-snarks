@@ -9,7 +9,7 @@ use mpc_core::{
     gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations},
     protocols::{
         rep3::yao::circuits::SHA256Table,
-        rep3_ring::lut::Rep3LookupTable,
+        rep3_ring::lut_field::Rep3FieldLookupTable,
         shamir::{
             ShamirPointShare, ShamirPrimeFieldShare, ShamirState, arithmetic,
             network::ShamirNetworkExt, pointshare,
@@ -157,7 +157,7 @@ impl<F: PrimeField> From<ShamirBrilligType<F>> for ShamirAcvmType<F> {
 }
 
 impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAcvmSolver<'a, F, N> {
-    type Lookup = Rep3LookupTable<F>; // This is just a dummy and unused
+    type Lookup = Rep3FieldLookupTable<F>; // This is just a dummy and unused
 
     type ArithmeticShare = ShamirPrimeFieldShare<F>;
 

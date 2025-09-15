@@ -19,7 +19,7 @@ use mpc_core::protocols::rep3::{
 use mpc_core::protocols::rep3_ring::gadgets::sort::{radix_sort_fields, radix_sort_fields_vec_by};
 use mpc_core::{
     lut::LookupTableProvider, protocols::rep3::Rep3PrimeFieldShare,
-    protocols::rep3_ring::lut::Rep3LookupTable,
+    protocols::rep3_ring::lut_field::Rep3FieldLookupTable,
 };
 use mpc_net::Network;
 use num_bigint::BigUint;
@@ -38,7 +38,7 @@ pub struct Rep3AcvmSolver<'a, F: PrimeField, N: Network> {
     net1: &'a N,
     state0: Rep3State,
     state1: Rep3State,
-    lut_provider: Rep3LookupTable<F>,
+    lut_provider: Rep3FieldLookupTable<F>,
     plain_solver: PlainAcvmSolver<F>,
     phantom_data: PhantomData<F>,
 }
@@ -53,7 +53,7 @@ impl<'a, F: PrimeField, N: Network> Rep3AcvmSolver<'a, F, N> {
             net1,
             state0,
             state1,
-            lut_provider: Rep3LookupTable::new(),
+            lut_provider: Rep3FieldLookupTable::new(),
             plain_solver: PlainAcvmSolver::<F>::default(),
             phantom_data: PhantomData,
         })
@@ -354,7 +354,7 @@ fn get_base_powers<const NUM_SLICES: usize>(base: u64) -> [BigUint; NUM_SLICES] 
 }
 
 impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3AcvmSolver<'a, F, N> {
-    type Lookup = Rep3LookupTable<F>;
+    type Lookup = Rep3FieldLookupTable<F>;
 
     type ArithmeticShare = Rep3PrimeFieldShare<F>;
 
@@ -665,10 +665,10 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                     .map_err(|_| eyre::eyre!("Index can not be translated to usize"))?;
 
                 match lut {
-                    mpc_core::protocols::rep3_ring::lut::PublicPrivateLut::Public(vec) => {
+                    mpc_core::protocols::rep3_ring::lut_field::PublicPrivateLut::Public(vec) => {
                         Self::AcvmType::from(vec[index].to_owned())
                     }
-                    mpc_core::protocols::rep3_ring::lut::PublicPrivateLut::Shared(vec) => {
+                    mpc_core::protocols::rep3_ring::lut_field::PublicPrivateLut::Shared(vec) => {
                         Self::AcvmType::from(vec[index].to_owned())
                     }
                 }
@@ -701,7 +701,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 }
             }
             Rep3AcvmType::Shared(index) => {
-                let res = Rep3LookupTable::get_from_public_luts(
+                let res = Rep3FieldLookupTable::get_from_public_luts(
                     index,
                     luts,
                     self.net0,
@@ -730,10 +730,10 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                     .map_err(|_| eyre::eyre!("Index can not be translated to usize"))?;
 
                 match lut {
-                    mpc_core::protocols::rep3_ring::lut::PublicPrivateLut::Public(vec) => {
+                    mpc_core::protocols::rep3_ring::lut_field::PublicPrivateLut::Public(vec) => {
                         vec[index] = value;
                     }
-                    mpc_core::protocols::rep3_ring::lut::PublicPrivateLut::Shared(vec) => {
+                    mpc_core::protocols::rep3_ring::lut_field::PublicPrivateLut::Shared(vec) => {
                         vec[index] = arithmetic::promote_to_trivial_share(self.id, value);
                     }
                 }
@@ -744,15 +744,17 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                     .map_err(|_| eyre::eyre!("Index can not be translated to usize"))?;
 
                 match lut {
-                    mpc_core::protocols::rep3_ring::lut::PublicPrivateLut::Public(vec) => {
+                    mpc_core::protocols::rep3_ring::lut_field::PublicPrivateLut::Public(vec) => {
                         let mut vec = vec
                             .iter()
                             .map(|value| arithmetic::promote_to_trivial_share(self.id, *value))
                             .collect::<Vec<_>>();
                         vec[index] = value;
-                        *lut = mpc_core::protocols::rep3_ring::lut::PublicPrivateLut::Shared(vec);
+                        *lut = mpc_core::protocols::rep3_ring::lut_field::PublicPrivateLut::Shared(
+                            vec,
+                        );
                     }
-                    mpc_core::protocols::rep3_ring::lut::PublicPrivateLut::Shared(vec) => {
+                    mpc_core::protocols::rep3_ring::lut_field::PublicPrivateLut::Shared(vec) => {
                         vec[index] = value;
                     }
                 }
@@ -790,7 +792,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         index: Self::ArithmeticShare,
         len: usize,
     ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
-        self.lut_provider.ohv_from_index(
+        mpc_core::protocols::rep3_ring::lut_field::Rep3FieldLookupTable::<F>::ohv_from_index(
             index,
             len,
             self.net0,
@@ -806,8 +808,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         value: Self::ArithmeticShare,
         lut: &mut [Self::ArithmeticShare],
     ) -> eyre::Result<()> {
-        self.lut_provider
-            .write_to_shared_lut_from_ohv(ohv, value, lut, self.net0, &mut self.state0)
+        mpc_core::protocols::rep3_ring::lut_field::Rep3FieldLookupTable::<F>::write_to_shared_lut_from_ohv(ohv, value, lut, self.net0, &mut self.state0)
     }
 
     fn get_length_of_lut(lut: &<Self::Lookup as LookupTableProvider<F>>::LutType) -> usize {
@@ -2117,7 +2118,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
 
         let res0 = conversion::a2b_many(&results[2 * slices..], self.net0, &mut self.state0)?;
 
-        let sbox_lut = mpc_core::protocols::rep3_ring::lut::PublicPrivateLut::Public(
+        let sbox_lut = mpc_core::protocols::rep3_ring::lut_field::PublicPrivateLut::Public(
             sbox.iter().map(|&value| F::from(value)).collect::<Vec<_>>(),
         );
         let base_powers = get_base_powers::<32>(base);
@@ -2125,7 +2126,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         let mut res1 = Vec::with_capacity(res0.len());
         let mut res2 = Vec::with_capacity(res0.len());
         for index_bits in res0 {
-            let sbox_value = Rep3LookupTable::get_from_public_lut_no_b2a_conversion::<u8, _>(
+            let sbox_value = Rep3FieldLookupTable::get_from_public_lut_no_b2a_conversion::<u8, _>(
                 index_bits,
                 &sbox_lut,
                 self.net0,
