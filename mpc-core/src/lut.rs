@@ -8,9 +8,11 @@ use num_bigint::BigUint;
 use std::marker::PhantomData;
 
 /// This is some place holder definition. This will change most likely
-pub trait LookupTableProvider<F: PrimeField>: Default {
+pub trait LookupTableProvider<F: Default>: Default {
     /// The type used in LUTs
     type SecretShare;
+    /// The type of the index
+    type IndexSecretShare;
     /// An input/output LUT (like `Vector`).
     type LutType: Default;
     /// Internal state of used MPC protocol
@@ -33,7 +35,7 @@ pub trait LookupTableProvider<F: PrimeField>: Default {
     ///
     fn get_from_lut<N: Network>(
         &mut self,
-        index: Self::SecretShare,
+        index: Self::IndexSecretShare,
         lut: &Self::LutType,
         net0: &N,
         net1: &N,
@@ -52,7 +54,7 @@ pub trait LookupTableProvider<F: PrimeField>: Default {
     #[expect(clippy::too_many_arguments)]
     fn write_to_lut<N: Network>(
         &mut self,
-        index: Self::SecretShare,
+        index: Self::IndexSecretShare,
         value: Self::SecretShare,
         lut: &mut Self::LutType,
         net0: &N,
@@ -76,6 +78,7 @@ pub struct PlainLookupTableProvider<F: PrimeField> {
 
 impl<F: PrimeField> LookupTableProvider<F> for PlainLookupTableProvider<F> {
     type SecretShare = F;
+    type IndexSecretShare = F;
     type LutType = Vec<F>;
     type State = ();
 
@@ -89,7 +92,7 @@ impl<F: PrimeField> LookupTableProvider<F> for PlainLookupTableProvider<F> {
 
     fn get_from_lut<N: Network>(
         &mut self,
-        index: Self::SecretShare,
+        index: Self::IndexSecretShare,
         lut: &Self::LutType,
         _net0: &N,
         _net1: &N,
@@ -104,7 +107,7 @@ impl<F: PrimeField> LookupTableProvider<F> for PlainLookupTableProvider<F> {
 
     fn write_to_lut<N: Network>(
         &mut self,
-        index: Self::SecretShare,
+        index: Self::IndexSecretShare,
         value: Self::SecretShare,
         lut: &mut Self::LutType,
         _net0: &N,
