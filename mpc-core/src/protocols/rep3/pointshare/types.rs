@@ -21,12 +21,3 @@ impl<C: CurveGroup> Rep3PointShare<C> {
         (self.a, self.b)
     }
 }
-
-impl<C: CurveGroup> Default for Rep3PointShare<C> {
-    fn default() -> Self {
-        Self {
-            a: C::default(),
-            b: C::default(),
-        }
-    }
-}

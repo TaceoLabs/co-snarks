@@ -831,6 +831,7 @@ where
     Ok((x01_x, x01_y, x2_x, x2_y))
 }
 
+#[expect(clippy::type_complexity)]
 pub(crate) fn point_share_to_fieldshares_pre_many<C: CurveGroup, N: Network>(
     xs: &[Rep3PointShare<C>],
     net: &N,
