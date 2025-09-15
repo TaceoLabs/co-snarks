@@ -66,7 +66,7 @@ impl<F: PrimeField> Default for Rep3FieldLookupTable<F> {
 }
 
 impl<F: PrimeField> Rep3FieldLookupTable<F> {
-    /// Construct a new [`Rep3LookupTable`]
+    /// Construct a new [`Rep3FieldLookupTable`]
     pub fn new() -> Self {
         Self::default()
     }

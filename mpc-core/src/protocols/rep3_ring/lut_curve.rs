@@ -64,7 +64,7 @@ impl<C: CurveGroup> Default for Rep3CurveLookupTable<C> {
 }
 
 impl<C: CurveGroup> Rep3CurveLookupTable<C> {
-    /// Construct a new [`Rep3LookupTable`]
+    /// Construct a new [`Rep3CurveLookupTable`]
     pub fn new() -> Self {
         Self::default()
     }
