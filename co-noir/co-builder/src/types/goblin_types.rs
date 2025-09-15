@@ -19,6 +19,7 @@ pub struct GoblinElement<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::Scala
     pub y: GoblinField<P::ScalarField>,
     pub is_infinity: BoolCT<P, T>,
 }
+
 impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> GoblinElement<P, T> {
     pub fn new(x: GoblinField<P::ScalarField>, y: GoblinField<P::ScalarField>) -> Self {
         Self {
@@ -28,6 +29,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> GoblinEleme
         }
     }
 }
+
 impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> Clone for GoblinElement<P, T> {
     fn clone(&self) -> Self {
         Self {
@@ -108,15 +110,14 @@ impl<
     pub fn one<D: NoirUltraHonkProver<P, ArithmeticShare = T::ArithmeticShare>>(
         builder: &mut MegaCircuitBuilder<P, T, D>,
     ) -> Self {
+        let two = FieldCT::from_witness(P::ScalarField::from(2u64).into(), builder);
         let one = FieldCT::from_witness(P::ScalarField::ONE.into(), builder);
         let zero = FieldCT::from_witness_index(builder.zero_idx);
         Self {
             x: GoblinField {
-                limbs: [one.clone(), zero.clone()],
+                limbs: [one, zero.clone()],
             },
-            y: GoblinField {
-                limbs: [one.clone(), zero.clone()],
-            },
+            y: GoblinField { limbs: [two, zero] },
             is_infinity: false.into(),
         }
     }

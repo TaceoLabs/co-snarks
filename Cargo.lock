@@ -1139,6 +1139,7 @@ dependencies = [
  "mpc-net",
  "num-bigint 0.4.6",
  "rand 0.8.5",
+ "serde_json",
  "ultrahonk",
 ]
 

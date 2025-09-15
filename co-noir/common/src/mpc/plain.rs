@@ -14,6 +14,7 @@ use num_traits::Zero;
 use rand::thread_rng;
 use rayon::prelude::*;
 
+#[derive(Clone, Debug)]
 pub struct PlainUltraHonkDriver;
 
 impl<P: CurveGroup> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
@@ -287,11 +288,20 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
     // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
     // Checks if a point share is zero and returns the result as a field share.
     fn is_point_at_infinity_many<N: Network>(
-        _points: &[Self::PointShare],
+        points: &[Self::PointShare],
         _net: &N,
         _state: &mut Self::State,
     ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
-        unimplemented!()
+        Ok(points
+            .iter()
+            .map(|p| {
+                if p.is_zero() {
+                    Self::ArithmeticShare::one()
+                } else {
+                    Self::ArithmeticShare::zero()
+                }
+            })
+            .collect::<Vec<_>>())
     }
 
     // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol

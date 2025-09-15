@@ -17,7 +17,7 @@ use num_bigint::BigUint;
 use std::{any::TypeId, array};
 
 /// A struct representing the Poseidon2 permutation.
-pub(crate) struct Poseidon2CT<F: PrimeField, const T: usize, const D: u64> {
+pub struct Poseidon2CT<F: PrimeField, const T: usize, const D: u64> {
     /// The struct containing the parameters for the Poseidon2 permutation.
     pub poseidon2: Poseidon2<F, T, D>,
 }
