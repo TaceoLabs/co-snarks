@@ -53,11 +53,11 @@ impl<F: PrimeField> PublicPrivateLut<F> {
 }
 
 /// Rep3 lookup table
-pub struct Rep3LookupTable<F: PrimeField> {
+pub struct Rep3FieldLookupTable<F: PrimeField> {
     phantom: PhantomData<F>,
 }
 
-impl<F: PrimeField> Default for Rep3LookupTable<F> {
+impl<F: PrimeField> Default for Rep3FieldLookupTable<F> {
     fn default() -> Self {
         Self {
             phantom: PhantomData::<F>,
@@ -65,7 +65,7 @@ impl<F: PrimeField> Default for Rep3LookupTable<F> {
     }
 }
 
-impl<F: PrimeField> Rep3LookupTable<F> {
+impl<F: PrimeField> Rep3FieldLookupTable<F> {
     /// Construct a new [`Rep3LookupTable`]
     pub fn new() -> Self {
         Self::default()
@@ -255,7 +255,6 @@ impl<F: PrimeField> Rep3LookupTable<F> {
 
     /// Creates a shared one-hot-encoded vector from a given shared index
     pub fn ohv_from_index<N: Network>(
-        &mut self,
         index: Rep3PrimeFieldShare<F>,
         len: usize,
         net0: &N,
@@ -283,7 +282,6 @@ impl<F: PrimeField> Rep3LookupTable<F> {
 
     /// Writes to a shared lookup table with the index already being transformed into the shared one-hot-encoded vector
     pub fn write_to_shared_lut_from_ohv<N: Network>(
-        &mut self,
         ohv: &[Rep3PrimeFieldShare<F>],
         value: Rep3PrimeFieldShare<F>,
         lut: &mut [Rep3PrimeFieldShare<F>],
@@ -306,7 +304,7 @@ impl<F: PrimeField> Rep3LookupTable<F> {
     }
 }
 
-impl<F: PrimeField> LookupTableProvider<F> for Rep3LookupTable<F> {
+impl<F: PrimeField> LookupTableProvider<F> for Rep3FieldLookupTable<F> {
     type SecretShare = Rep3PrimeFieldShare<F>;
     type IndexSecretShare = Rep3PrimeFieldShare<F>;
     type LutType = PublicPrivateLut<F>;

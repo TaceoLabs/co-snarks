@@ -10,7 +10,7 @@ use crate::{
             self, Rep3BigUintShare, Rep3PointShare, Rep3PrimeFieldShare, Rep3State,
             network::Rep3NetworkExt, pointshare,
         },
-        rep3_ring::{conversion, gadgets, ring::bit::Bit},
+        rep3_ring::{gadgets, lut_field::Rep3FieldLookupTable, ring::bit::Bit},
     },
 };
 use ark_ec::CurveGroup;
@@ -51,11 +51,11 @@ impl<C: CurveGroup> PublicPrivateLut<C> {
 }
 
 /// Rep3 lookup table
-pub struct Rep3LookupTable<C: CurveGroup> {
+pub struct Rep3CurveLookupTable<C: CurveGroup> {
     phantom: PhantomData<C>,
 }
 
-impl<C: CurveGroup> Default for Rep3LookupTable<C> {
+impl<C: CurveGroup> Default for Rep3CurveLookupTable<C> {
     fn default() -> Self {
         Self {
             phantom: PhantomData::<C>,
@@ -63,7 +63,7 @@ impl<C: CurveGroup> Default for Rep3LookupTable<C> {
     }
 }
 
-impl<C: CurveGroup> Rep3LookupTable<C> {
+impl<C: CurveGroup> Rep3CurveLookupTable<C> {
     /// Construct a new [`Rep3LookupTable`]
     pub fn new() -> Self {
         Self::default()
@@ -169,24 +169,8 @@ impl<C: CurveGroup> Rep3LookupTable<C> {
         Ok(())
     }
 
-    fn ohv_from_index_internal<T: IntRing2k, N: Network>(
-        index: Rep3BigUintShare<C::ScalarField>,
-        k: usize,
-        net0: &N,
-        _net1: &N,
-        state0: &mut Rep3State,
-        _state1: &mut Rep3State,
-    ) -> eyre::Result<Vec<Rep3RingShare<Bit>>> {
-        let a = T::cast_from_biguint(&index.a);
-        let b = T::cast_from_biguint(&index.b);
-        let bits = Rep3RingShare::new(a, b);
-
-        gadgets::ohv::ohv(k, bits, net0, state0)
-    }
-
     /// Creates a shared one-hot-encoded vector from a given shared index
     pub fn ohv_from_index<N: Network>(
-        &mut self,
         index: Rep3PrimeFieldShare<C::ScalarField>,
         len: usize,
         net0: &N,
@@ -194,27 +178,13 @@ impl<C: CurveGroup> Rep3LookupTable<C> {
         state0: &mut Rep3State,
         state1: &mut Rep3State,
     ) -> eyre::Result<Vec<Rep3PrimeFieldShare<C::ScalarField>>> {
-        let bits = rep3::conversion::a2b_selector(index, net0, state0)?;
-        let k = len.next_power_of_two().ilog2() as usize;
-
-        let e = if k == 1 {
-            Self::ohv_from_index_internal::<Bit, _>(bits, k, net0, net1, state0, state1)?
-        } else if k <= 8 {
-            Self::ohv_from_index_internal::<u8, _>(bits, k, net0, net1, state0, state1)?
-        } else if k <= 16 {
-            Self::ohv_from_index_internal::<u16, _>(bits, k, net0, net1, state0, state1)?
-        } else if k <= 32 {
-            Self::ohv_from_index_internal::<u32, _>(bits, k, net0, net1, state0, state1)?
-        } else {
-            panic!("Table is too large")
-        };
-
-        conversion::bit_inject_from_bits_to_field_many::<C::ScalarField, _>(&e, net0, state0)
+        Rep3FieldLookupTable::<C::ScalarField>::ohv_from_index(
+            index, len, net0, net1, state0, state1,
+        )
     }
 
     /// Writes to a shared lookup table with the index already being transformed into the shared one-hot-encoded vector
     pub fn write_to_shared_lut_from_ohv<N: Network>(
-        &mut self,
         ohv: &[Rep3PrimeFieldShare<C::ScalarField>],
         value: Rep3PointShare<C>,
         lut: &mut [Rep3PointShare<C>],
@@ -237,7 +207,7 @@ impl<C: CurveGroup> Rep3LookupTable<C> {
     }
 }
 
-impl<C: CurveGroup> LookupTableProvider<C> for Rep3LookupTable<C> {
+impl<C: CurveGroup> LookupTableProvider<C> for Rep3CurveLookupTable<C> {
     type SecretShare = Rep3PointShare<C>;
     type IndexSecretShare = Rep3PrimeFieldShare<C::ScalarField>;
     type LutType = PublicPrivateLut<C>;

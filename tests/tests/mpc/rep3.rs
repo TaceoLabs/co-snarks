@@ -2229,7 +2229,7 @@ mod field_share {
                 let rs = conversion::a2b_many(&rs, &net0, &mut state0).unwrap();
                 for key in rs {
                     let sbox_value =
-                        rep3_ring::lut_field::Rep3LookupTable::get_from_public_lut_no_b2a_conversion::<
+                        rep3_ring::lut_field::Rep3FieldLookupTable::get_from_public_lut_no_b2a_conversion::<
                             u8,
                             _,
                         >(
