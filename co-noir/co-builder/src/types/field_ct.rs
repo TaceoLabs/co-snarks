@@ -3085,10 +3085,6 @@ impl<F: PrimeField> CycleScalarCT<F> {
             result.validate_scalar_is_in_field(builder, driver)?;
             Ok(result)
         }
-
-        //     TODO FLORIN: Do we need these tags?
-        //     lo.set_origin_tag(in.get_origin_tag());
-        //     hi.set_origin_tag(in.get_origin_tag());
     }
 
     fn is_constant(&self) -> bool {

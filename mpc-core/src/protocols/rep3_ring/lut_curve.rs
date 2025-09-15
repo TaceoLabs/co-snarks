@@ -51,14 +51,14 @@ impl<C: CurveGroup> PublicPrivateLut<C> {
 }
 
 /// Rep3 lookup table
-pub struct Rep3LookupTable<F: CurveGroup> {
-    phantom: PhantomData<F>,
+pub struct Rep3LookupTable<C: CurveGroup> {
+    phantom: PhantomData<C>,
 }
 
-impl<F: CurveGroup> Default for Rep3LookupTable<F> {
+impl<C: CurveGroup> Default for Rep3LookupTable<C> {
     fn default() -> Self {
         Self {
-            phantom: PhantomData::<F>,
+            phantom: PhantomData::<C>,
         }
     }
 }
@@ -71,7 +71,7 @@ impl<C: CurveGroup> Rep3LookupTable<C> {
 
     /// This is an optimized protocol that takes multiple public LUTs and looks them up with the same index. It only creates the OHV once.
     pub fn get_from_public_luts<N: Network>(
-        index: Rep3PrimeFieldShare<C::ScalarField>, // TODO FLORIN either make it generic over F or idk
+        index: Rep3PrimeFieldShare<C::ScalarField>,
         luts: &[Vec<C>],
         net: &N,
         state: &mut Rep3State,
