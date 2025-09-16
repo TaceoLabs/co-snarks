@@ -413,7 +413,6 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         );
         let as_bigint: BigUint = x
             .to_base_prime_field_elements()
-            .into_iter()
             .map(Into::<BigUint>::into)
             .collect_vec()
             .pop()

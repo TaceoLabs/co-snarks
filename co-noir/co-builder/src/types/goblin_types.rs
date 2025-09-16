@@ -143,7 +143,7 @@ impl<
         // TODO TACEO: Assumes that the point is always secret shared, this issue will be solved once CoEccOpQueue is generic only on
         // NoirWitnessExtensionProtocol
         let op_tuple = builder.queue_ecc_add_accum(
-            T::get_shared_native_point(element_value).unwrap().into(),
+            T::get_shared_native_point(element_value).unwrap(),
             net,
             state,
         );
@@ -162,7 +162,7 @@ impl<
 
         // TODO TACEO: Assumes that the point is always secret shared, this issue will be solved once CoEccOpQueue is generic only on
         // NoirWitnessExtensionProtocol
-        let result_share = T::get_shared_native_point(result_value).unwrap().into();
+        let result_share = T::get_shared_native_point(result_value).unwrap();
         let op_tuple_2 = builder.queue_ecc_add_accum(result_share, net, state);
 
         let result = {
@@ -235,8 +235,8 @@ impl<
                 PointShare = T::NativePointShare<P>,
             >,
     >(
-        points: &Vec<Self>,
-        scalars: &Vec<FieldCT<P::ScalarField>>,
+        points: &[Self],
+        scalars: &[FieldCT<P::ScalarField>],
         builder: &mut MegaCircuitBuilder<P, T, D>,
         driver: &mut T,
         net: &N,
@@ -268,10 +268,10 @@ impl<
 
             let (op_tuple, co_eccvm_op) = if scalar_is_constant_equal_one {
                 // if scalar is 1, there is no need to perform a mul
-                builder.queue_ecc_add_accum_no_store::<N>(point_share.into(), net, state)
+                builder.queue_ecc_add_accum_no_store::<N>(point_share, net, state)
             } else {
                 // otherwise, perform a mul-then-accumulate
-                builder.queue_ecc_mul_accum_no_store(point_share.into(), field_share, net, state)
+                builder.queue_ecc_mul_accum_no_store(point_share, field_share, net, state)
             };
 
             co_eccvm_ops.push(co_eccvm_op);

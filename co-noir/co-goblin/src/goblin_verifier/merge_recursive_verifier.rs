@@ -70,17 +70,17 @@ impl MergeRecursiveVerifier {
         for idx in 0..NUM_WIRES {
             let suffix = idx.to_string();
             t_commitments.push(transcript.receive_point_from_prover(
-                format!("t_CURRENT_{}", suffix),
+                format!("t_CURRENT_{suffix}"),
                 builder,
                 driver,
             )?);
             T_prev_commitments.push(transcript.receive_point_from_prover(
-                format!("T_PREV_{}", suffix),
+                format!("T_PREV_{suffix}"),
                 builder,
                 driver,
             )?);
             T_commitments.push(transcript.receive_point_from_prover(
-                format!("T_CURRENT_{}", suffix),
+                format!("T_CURRENT_{suffix}"),
                 builder,
                 driver,
             )?);
@@ -94,28 +94,28 @@ impl MergeRecursiveVerifier {
         let mut T_evals = Vec::with_capacity(NUM_WIRES);
         let mut opening_claims = Vec::new();
 
-        for idx in 0..NUM_WIRES {
+        for (idx, commitment) in t_commitments.iter().enumerate().take(NUM_WIRES) {
             let eval = transcript.receive_fr_from_prover(format!("t_eval_{}", idx + 1))?;
             t_evals.push(eval.clone());
             opening_claims.push(OpeningClaim {
                 opening_pair: (kappa.clone(), eval),
-                commitment: t_commitments[idx].clone(),
+                commitment: commitment.clone(),
             });
         }
-        for idx in 0..NUM_WIRES {
+        for (idx, commitment) in T_prev_commitments.iter().enumerate().take(NUM_WIRES) {
             let eval = transcript.receive_fr_from_prover(format!("T_prev_eval_{}", idx + 1))?;
             T_prev_evals.push(eval.clone());
             opening_claims.push(OpeningClaim {
                 opening_pair: (kappa.clone(), eval),
-                commitment: T_prev_commitments[idx].clone(),
+                commitment: commitment.clone(),
             });
         }
-        for idx in 0..NUM_WIRES {
+        for (idx, commitment) in T_commitments.iter().enumerate().take(NUM_WIRES) {
             let eval = transcript.receive_fr_from_prover(format!("T_eval_{}", idx + 1))?;
             T_evals.push(eval.clone());
             opening_claims.push(OpeningClaim {
                 opening_pair: (kappa.clone(), eval),
-                commitment: T_commitments[idx].clone(),
+                commitment: commitment.clone(),
             });
         }
 

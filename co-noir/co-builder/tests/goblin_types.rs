@@ -48,12 +48,12 @@ fn test_negate_goblin_element() {
     let mut driver = T::new();
     let goblin = GoblinElement::<Bn254G1, T>::new(
         GoblinField::new([
-            FieldCT::from_witness(x0.into(), &mut builder),
-            FieldCT::from_witness(x1.into(), &mut builder),
+            FieldCT::from_witness(x0, &mut builder),
+            FieldCT::from_witness(x1, &mut builder),
         ]),
         GoblinField::new([
-            FieldCT::from_witness(y0.into(), &mut builder),
-            FieldCT::from_witness(y1.into(), &mut builder),
+            FieldCT::from_witness(y0, &mut builder),
+            FieldCT::from_witness(y1, &mut builder),
         ]),
     );
 
@@ -85,7 +85,6 @@ fn test_negate_goblin_element() {
             y1_expected,
             expected_is_infinity
         ]
-        .map(|f| f.into())
     );
 }
 
@@ -133,12 +132,12 @@ fn test_batch_mul() {
             } else {
                 GoblinElement::<Bn254G1, T>::new(
                     GoblinField::new([
-                        FieldCT::from_witness(x0.into(), &mut builder),
-                        FieldCT::from_witness(x1.into(), &mut builder),
+                        FieldCT::from_witness(x0, &mut builder),
+                        FieldCT::from_witness(x1, &mut builder),
                     ]),
                     GoblinField::new([
-                        FieldCT::from_witness(y0.into(), &mut builder),
-                        FieldCT::from_witness(y1.into(), &mut builder),
+                        FieldCT::from_witness(y0, &mut builder),
+                        FieldCT::from_witness(y1, &mut builder),
                     ]),
                 )
             }
@@ -147,7 +146,7 @@ fn test_batch_mul() {
 
     let scalars = scalars
         .into_iter()
-        .map(|scalar| FieldCT::from_witness(scalar.into(), &mut builder))
+        .map(|scalar| FieldCT::from_witness(scalar, &mut builder))
         .collect::<Vec<_>>();
 
     let result =
@@ -184,6 +183,5 @@ fn test_batch_mul() {
                 Fr::ZERO
             }
         ]
-        .map(|f| f.into())
     );
 }

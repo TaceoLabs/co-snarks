@@ -393,7 +393,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 if cond.is_one() { Ok(truthy) } else { Ok(falsy) }
             }
             (Rep3AcvmType::Shared(cond), truthy, falsy) => {
-                let b_min_a = self.sub(truthy, falsy.clone());
+                let b_min_a = self.sub(truthy, falsy);
                 let d = self.mul(cond.into(), b_min_a)?;
                 Ok(self.add(falsy, d))
             }
@@ -568,7 +568,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     }
 
     fn add_assign(&mut self, target: &mut Self::AcvmType, rhs: Self::AcvmType) {
-        let result = match (target.clone(), rhs) {
+        let result = match (target.to_owned(), rhs) {
             (Rep3AcvmType::Public(lhs), Rep3AcvmType::Public(rhs)) => {
                 Rep3AcvmType::Public(lhs + rhs)
             }
@@ -2070,10 +2070,10 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         let mut res0 = Vec::with_capacity(sliced_bits.len() / 8);
         for chunk in sliced_bits.chunks_exact(8) {
             let vec_t0 = chunk.to_vec();
-            let mut sum_a = self.mul_with_public(base_powers[0], vec_t0[0].clone());
+            let mut sum_a = self.mul_with_public(base_powers[0], vec_t0[0]);
 
-            for (i, a) in vec_t0.iter().enumerate().skip(1).take(31) {
-                let tmp = self.mul_with_public(base_powers[i], a.clone());
+            for (i, &a) in vec_t0.iter().enumerate().skip(1).take(31) {
+                let tmp = self.mul_with_public(base_powers[i], a);
                 sum_a = self.add(sum_a, tmp);
             }
 

@@ -30,13 +30,15 @@ type Fq = ark_bn254::Fq;
 type Fr = ark_bn254::Fr;
 type G1Affine = <Bn254 as Pairing>::G1Affine;
 
+type EccOpsTableTestData<T, Q> = Vec<Vec<([u8; 4], (Q, Q, u8), T, T, T)>>;
+type UltraOpsTableTestData<T> = Vec<Vec<([u8; 4], T, T, T, T, T, T, u8)>>;
+
 type EccOpQueueTestData<T, Q> = (
     (Q, Q, u8),
-    Vec<Vec<([u8; 4], (Q, Q, u8), T, T, T)>>,
-    Vec<Vec<([u8; 4], T, T, T, T, T, T, u8)>>,
+    EccOpsTableTestData<T, Q>,
+    UltraOpsTableTestData<T>,
     [u32; 5],
 );
-
 macro_rules! to_field {
     ($x:expr) => {
         field_from_hex_string($x.as_str()).unwrap()
@@ -56,7 +58,7 @@ fn to_field_elements(test_data: EccOpQueueTestData<String, String>) -> EccOpQueu
     let acc_x = to_field!(acc_x);
     let acc_y = to_field!(acc_y);
 
-    let eccvm_ops_table: Vec<Vec<([u8; 4], (Fq, Fq, u8), Fr, Fr, Fr)>> = eccvm_ops_table
+    let eccvm_ops_table: EccOpsTableTestData<Fr, Fq> = eccvm_ops_table
         .into_iter()
         .map(|row| {
             row.into_iter()
@@ -82,7 +84,7 @@ fn to_field_elements(test_data: EccOpQueueTestData<String, String>) -> EccOpQueu
         })
         .collect::<Vec<_>>();
 
-    let ultra_ops_table: Vec<Vec<([u8; 4], Fr, Fr, Fr, Fr, Fr, Fr, u8)>> = ultra_ops_table
+    let ultra_ops_table: UltraOpsTableTestData<Fr> = ultra_ops_table
         .into_iter()
         .map(|row| {
             row.into_iter()
@@ -122,7 +124,7 @@ fn to_ecc_op_queues(
         G1Affine::new(acc_x, acc_y)
     };
 
-    let accumulators = std::iter::repeat(accumulator).take(3);
+    let accumulators = std::iter::repeat_n(accumulator, 3);
 
     let eccvm_ops_tables: [Vec<Vec<CoVMOperation<D, Bn254G1>>>; 3] = eccvm_ops_table
         .into_iter()
@@ -144,10 +146,10 @@ fn to_ecc_op_queues(
                     };
 
                     izip!(
-                        std::iter::repeat(base_point).take(3),
-                        std::iter::repeat(z1).take(3),
-                        std::iter::repeat(z2).take(3),
-                        std::iter::repeat(mul_scalar_full).take(3)
+                        std::iter::repeat_n(base_point, 3),
+                        std::iter::repeat_n(z1, 3),
+                        std::iter::repeat_n(z2, 3),
+                        std::iter::repeat_n(mul_scalar_full, 3)
                     )
                     .map(
                         |(base_point_share, z1_share, z2_share, mul_scalar_full_share)| {
@@ -195,13 +197,13 @@ fn to_ecc_op_queues(
                     };
 
                     izip!(
-                        std::iter::repeat(x_lo).take(3),
-                        std::iter::repeat(x_hi).take(3),
-                        std::iter::repeat(y_lo).take(3),
-                        std::iter::repeat(y_hi).take(3),
-                        std::iter::repeat(z_1).take(3),
-                        std::iter::repeat(z_2).take(3),
-                        std::iter::repeat(is_infinity).take(3)
+                        std::iter::repeat_n(x_lo, 3),
+                        std::iter::repeat_n(x_hi, 3),
+                        std::iter::repeat_n(y_lo, 3),
+                        std::iter::repeat_n(y_hi, 3),
+                        std::iter::repeat_n(z_1, 3),
+                        std::iter::repeat_n(z_2, 3),
+                        std::iter::repeat_n(is_infinity, 3)
                     )
                     .map(
                         |(
@@ -274,6 +276,7 @@ fn to_ecc_op_queues(
 }
 
 #[test]
+#[expect(clippy::type_complexity)]
 fn test_recursive_merge_verifier() {
     let (
         fold_proof,
