@@ -8,9 +8,10 @@ use co_builder::{
     HonkProofResult, TranscriptFieldType,
     prelude::{HonkCurve, ProverCrs, Utils},
 };
+use common::mpc::NoirUltraHonkProver;
 use common::transcript::{Transcript, TranscriptHasher};
-use common::{HonkProof, mpc::NoirUltraHonkProver};
 use mpc_net::Network;
+use noir_types::HonkProof;
 use std::marker::PhantomData;
 use ultrahonk::prelude::ZeroKnowledge;
 pub(crate) struct CoDecider<

@@ -2,11 +2,11 @@ use ark_ec::AdditiveGroup;
 use ark_ff::Field;
 use co_builder::prelude::{HonkCurve, Polynomial, ProverCrs, Utils};
 use co_builder::{HonkProofResult, TranscriptFieldType};
-use common::HonkProof;
 use common::shplemini::OpeningPair;
 use common::shplemini::ShpleminiOpeningClaim;
 use common::transcript::Transcript;
 use common::transcript::TranscriptHasher;
+use ultrahonk::prelude::HonkProof;
 
 use crate::eccvm::ecc_op_queue::ECCOpQueue;
 

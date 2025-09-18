@@ -17,7 +17,7 @@ pub use crate::polynomials::polynomial_types::{
     Polynomials, PrecomputedEntities, ProverWitnessEntities, ShiftedWitnessEntities,
     WitnessEntities,
 };
-pub use crate::serialize::{Serialize, SerializeP};
+pub use crate::serialize::SerializeP;
 pub use crate::types::aes128::AES128_SBOX;
 pub use crate::types::generators::{derive_generators, offset_generator, offset_generator_scaled};
 pub use crate::types::types::{
@@ -27,3 +27,4 @@ pub use crate::types::types::{
 pub use crate::ultra_builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder};
 pub use crate::utils::Utils;
 pub use co_acvm::PlainAcvmSolver;
+pub use noir_types::SerializeF;

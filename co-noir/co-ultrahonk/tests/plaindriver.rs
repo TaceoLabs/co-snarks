@@ -8,9 +8,9 @@ use co_builder::flavours::ultra_flavour::UltraFlavour;
 use co_builder::prelude::constraint_system_from_reader;
 use co_builder::prelude::{CrsParser, HonkRecursion};
 use co_ultrahonk::prelude::{CoUltraHonk, PlainCoBuilder, ProvingKey};
-use common::HonkProof;
 use common::mpc::plain::PlainUltraHonkDriver;
 use common::transcript::{Poseidon2Sponge, TranscriptHasher};
+use noir_types::HonkProof;
 use sha3::Keccak256;
 use ultrahonk::prelude::{UltraHonk, ZeroKnowledge};
 

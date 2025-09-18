@@ -11,8 +11,8 @@ use co_builder::{
     HonkProofResult,
     prelude::{HonkCurve, ProverCrs, ZeroKnowledge},
 };
-use common::HonkProof;
 use common::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
+use noir_types::HonkProof;
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
 use std::marker::PhantomData;

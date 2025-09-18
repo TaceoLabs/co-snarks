@@ -26,6 +26,10 @@ pub use ark_ec::pairing::Pairing;
 pub use co_acvm::{Rep3AcvmType, ShamirAcvmType};
 pub use co_builder::prelude::constraint_system_from_reader;
 pub use co_builder::prelude::get_constraint_system_from_artifact;
+pub use co_noir_types::merge_input_shares;
+pub use co_noir_types::split_input_rep3;
+pub use co_noir_types::split_witness_rep3;
+pub use co_noir_types::split_witness_shamir;
 pub use co_ultrahonk::{
     Rep3CoBuilder, ShamirCoBuilder,
     prelude::{
@@ -34,17 +38,13 @@ pub use co_ultrahonk::{
         UltraHonk, VerifyingKey, VerifyingKeyBarretenberg,
     },
 };
-pub use common::HonkProof;
 pub use common::transcript::{Poseidon2Sponge, TranscriptHasher};
+pub use noir_types::HonkProof;
+pub use noir_types::SerializeF;
 pub use noir_types::program_artifact_from_reader;
 pub use noir_types::witness_from_reader;
 pub use noirc_artifacts::program::ProgramArtifact;
 pub use sha3::Keccak256;
-
-pub use co_noir_types::merge_input_shares;
-pub use co_noir_types::split_input_rep3;
-pub use co_noir_types::split_witness_rep3;
-pub use co_noir_types::split_witness_shamir;
 
 pub type Bn254G1 = <ark_ec::bn::Bn<ark_bn254::Config> as ark_ec::pairing::Pairing>::G1;
 

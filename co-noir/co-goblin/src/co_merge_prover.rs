@@ -10,9 +10,9 @@ use common::shared_polynomial::SharedPolynomial;
 use common::transcript::Transcript;
 use common::transcript::TranscriptHasher;
 
-use common::HonkProof;
 use itertools::{Itertools, izip};
 use mpc_net::Network;
+use ultrahonk::prelude::HonkProof;
 
 use crate::eccvm::co_ecc_op_queue::CoECCOpQueue;
 

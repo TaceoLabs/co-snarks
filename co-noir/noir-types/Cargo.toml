@@ -19,5 +19,6 @@ eyre = { workspace = true }
 co-noir-types = { version = "0.1.0", path = "../co-noir-types" }
 serde_json = { workspace = true }
 toml.workspace = true
+num-bigint.workspace = true
 
 [dev-dependencies]

@@ -1,8 +1,8 @@
 use ark_bn254::Bn254;
 use ark_ff::Zero;
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use co_builder::{flavours::ultra_flavour::UltraFlavour, prelude::Serialize as FieldSerialize};
-use co_noir::Bn254G1;
+use co_builder::flavours::ultra_flavour::UltraFlavour;
+use co_noir::{Bn254G1, HonkProof, SerializeF};
 use co_noir_types::{PubPrivate, Rep3SharedInput, Rep3Type};
 use co_ultrahonk::prelude::{
     CrsParser, ProvingKey, Rep3CoUltraHonk, ShamirCoUltraHonk, UltraHonk, VerifyingKey,
@@ -10,7 +10,6 @@ use co_ultrahonk::prelude::{
 };
 use color_eyre::eyre::{self, Context, ContextCompat};
 use common::{
-    HonkProof,
     mpc::{rep3::Rep3UltraHonkDriver, shamir::ShamirUltraHonkDriver},
     transcript::Poseidon2Sponge,
 };
@@ -1488,7 +1487,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             std::fs::File::create(public_input_filename).context("while creating output file")?,
         );
 
-        let public_inputs_u8 = FieldSerialize::to_buffer(&public_input, false);
+        let public_inputs_u8 = SerializeF::to_buffer(&public_input, false);
         out_file
             .write(public_inputs_u8.as_slice())
             .context("while writing proof to file")?;
@@ -1719,7 +1718,7 @@ fn run_build_and_generate_proof(
             std::fs::File::create(public_input_filename).context("while creating output file")?,
         );
 
-        let public_inputs_u8 = FieldSerialize::to_buffer(&public_input, false);
+        let public_inputs_u8 = SerializeF::to_buffer(&public_input, false);
         out_file
             .write(public_inputs_u8.as_slice())
             .context("while writing public input to file")?;
@@ -1894,7 +1893,7 @@ fn run_verify(config: VerifyConfig) -> color_eyre::Result<ExitCode> {
             .map(|e| ark_bn254::Fr::new(ark_ff::BigInt::from_str(&e).expect("valid field")))
             .collect()
     } else {
-        FieldSerialize::from_buffer(&public_inputs_u8, false)
+        SerializeF::from_buffer(&public_inputs_u8, false)
             .context("while deserializing public_inputs")?
     };
 
