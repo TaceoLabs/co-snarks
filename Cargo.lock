@@ -2916,7 +2916,7 @@ dependencies = [
  "num-traits",
  "paste",
  "rand 0.8.5",
- "rand_chacha 0.3.1",
+ "rand_chacha 0.9.0",
  "rayon",
  "scuttlebutt",
  "serde",
@@ -5251,7 +5251,7 @@ dependencies = [
  "num-bigint 0.4.6",
  "num-traits",
  "rand 0.8.5",
- "rand_chacha 0.3.1",
+ "rand_chacha 0.9.0",
  "sha3",
  "tracing",
 ]

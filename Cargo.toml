@@ -71,7 +71,7 @@ num-bigint = { version = "0.4.5" }
 num-traits = { version = "0.2.18", default-features = false }
 paste = "1.0.15"
 rand = "0.8.5"
-rand_chacha = "0.3"
+rand_chacha = "0.9"
 rayon = "1.8.1"
 rcgen = "0.13"
 rustls = "0.23.15"
