@@ -11,7 +11,6 @@ use co_builder::{
     prover_flavour::Flavour,
 };
 use co_builder::{TranscriptFieldType, flavours::ultra_flavour::UltraFlavour};
-use common::HonkProof;
 use common::mpc::{
     NoirUltraHonkProver, plain::PlainUltraHonkDriver, rep3::Rep3UltraHonkDriver,
     shamir::ShamirUltraHonkDriver,
@@ -22,6 +21,7 @@ use mpc_core::protocols::{
     shamir::{ShamirPreprocessing, ShamirState},
 };
 use mpc_net::Network;
+use noir_types::HonkProof;
 use std::marker::PhantomData;
 use ultrahonk::prelude::ZeroKnowledge;
 

@@ -9,8 +9,8 @@ use co_builder::{
     prelude::{HonkCurve, PAIRING_POINT_ACCUMULATOR_SIZE, ProvingKey, ZeroKnowledge},
     prover_flavour::Flavour,
 };
-use common::HonkProof;
 use common::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
+use noir_types::HonkProof;
 use std::marker::PhantomData;
 
 pub struct UltraHonk<

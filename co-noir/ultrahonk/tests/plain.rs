@@ -7,8 +7,8 @@ use co_builder::prelude::CrsParser;
 use co_builder::prelude::HonkRecursion;
 use co_builder::prelude::ZeroKnowledge;
 use co_builder::prelude::constraint_system_from_reader;
-use common::HonkProof;
 use common::transcript::{Poseidon2Sponge, TranscriptHasher};
+use noir_types::HonkProof;
 use sha3::Keccak256;
 use ultrahonk::prelude::{PlainAcvmSolver, UltraCircuitBuilder, UltraHonk};
 

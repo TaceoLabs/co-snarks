@@ -12,8 +12,7 @@ use co_builder::{
 
 use itertools::{Itertools, izip};
 
-use common::HonkProof;
-use ultrahonk::decider::types::RelationParameters;
+use ultrahonk::{decider::types::RelationParameters, prelude::HonkProof};
 use ultrahonk::{
     oink::oink_prover::Oink,
     plain_prover_flavour::UnivariateTrait,

@@ -5,7 +5,7 @@ use co_builder::TranscriptFieldType;
 use co_builder::flavours::eccvm_flavour::ECCVMFlavour;
 use co_builder::flavours::translator_flavour::TranslatorFlavour;
 use co_builder::prelude::HonkCurve;
-use co_builder::prelude::{CrsParser, Serialize, SerializeP};
+use co_builder::prelude::{CrsParser, SerializeF, SerializeP};
 use common::transcript::Poseidon2Sponge;
 use common::transcript::Transcript;
 use goblin::prelude::ECCOpQueue;
@@ -50,9 +50,10 @@ fn deserialize_ecc_op_queue<P: HonkCurve<TranscriptFieldType>>(path: PathBuf) ->
             };
             offset += 1;
             let base_point = SerializeP::<P>::read_g1_element(buf, &mut offset, false);
-            let z1 = Serialize::<P::ScalarField>::read_biguint(buf, 4, &mut offset);
-            let z2 = Serialize::<P::ScalarField>::read_biguint(buf, 4, &mut offset);
-            let mul_scalar_full = Serialize::<P::ScalarField>::read_field_element(buf, &mut offset);
+            let z1 = SerializeF::<P::ScalarField>::read_biguint(buf, 4, &mut offset);
+            let z2 = SerializeF::<P::ScalarField>::read_biguint(buf, 4, &mut offset);
+            let mul_scalar_full =
+                SerializeF::<P::ScalarField>::read_field_element(buf, &mut offset);
             tmp.push(VMOperation {
                 op_code,
                 base_point,
@@ -78,12 +79,12 @@ fn deserialize_ecc_op_queue<P: HonkCurve<TranscriptFieldType>>(path: PathBuf) ->
                 reset: (op_code & 0b1000) != 0,
             };
             offset += 1;
-            let x_lo = Serialize::<P::ScalarField>::read_field_element(buf, &mut offset);
-            let x_hi = Serialize::<P::ScalarField>::read_field_element(buf, &mut offset);
-            let y_lo = Serialize::<P::ScalarField>::read_field_element(buf, &mut offset);
-            let y_hi = Serialize::<P::ScalarField>::read_field_element(buf, &mut offset);
-            let z_1 = Serialize::<P::ScalarField>::read_field_element(buf, &mut offset);
-            let z_2 = Serialize::<P::ScalarField>::read_field_element(buf, &mut offset);
+            let x_lo = SerializeF::<P::ScalarField>::read_field_element(buf, &mut offset);
+            let x_hi = SerializeF::<P::ScalarField>::read_field_element(buf, &mut offset);
+            let y_lo = SerializeF::<P::ScalarField>::read_field_element(buf, &mut offset);
+            let y_hi = SerializeF::<P::ScalarField>::read_field_element(buf, &mut offset);
+            let z_1 = SerializeF::<P::ScalarField>::read_field_element(buf, &mut offset);
+            let z_2 = SerializeF::<P::ScalarField>::read_field_element(buf, &mut offset);
             let return_is_infinity = buf[offset] != 0;
             offset += 1;
             tmp.push(UltraOp {
@@ -102,11 +103,11 @@ fn deserialize_ecc_op_queue<P: HonkCurve<TranscriptFieldType>>(path: PathBuf) ->
     let ultra_ops_table = UltraEccOpsTable {
         table: ultra_ops_table,
     };
-    let cached_num_muls = Serialize::<P::ScalarField>::read_u32(buf, &mut offset);
-    let cached_active_msm_count = Serialize::<P::ScalarField>::read_u32(buf, &mut offset);
-    let num_transcript_rows = Serialize::<P::ScalarField>::read_u32(buf, &mut offset);
-    let num_precompute_table_rows = Serialize::<P::ScalarField>::read_u32(buf, &mut offset);
-    let num_msm_rows = Serialize::<P::ScalarField>::read_u32(buf, &mut offset);
+    let cached_num_muls = SerializeF::<P::ScalarField>::read_u32(buf, &mut offset);
+    let cached_active_msm_count = SerializeF::<P::ScalarField>::read_u32(buf, &mut offset);
+    let num_transcript_rows = SerializeF::<P::ScalarField>::read_u32(buf, &mut offset);
+    let num_precompute_table_rows = SerializeF::<P::ScalarField>::read_u32(buf, &mut offset);
+    let num_msm_rows = SerializeF::<P::ScalarField>::read_u32(buf, &mut offset);
     let eccvm_row_tracker = EccvmRowTracker {
         cached_num_muls,
         cached_active_msm_count,

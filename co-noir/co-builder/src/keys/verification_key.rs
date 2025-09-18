@@ -1,18 +1,14 @@
 use crate::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use crate::{
-    HonkProofError, HonkProofResult, TranscriptFieldType,
-    crs::ProverCrs,
-    flavours::ultra_flavour::UltraFlavour,
-    honk_curve::HonkCurve,
-    prover_flavour::ProverFlavour,
-    serialize::{Serialize, SerializeP},
-    ultra_builder::UltraCircuitBuilder,
-    utils::Utils,
+    HonkProofError, HonkProofResult, TranscriptFieldType, crs::ProverCrs,
+    flavours::ultra_flavour::UltraFlavour, honk_curve::HonkCurve, prover_flavour::ProverFlavour,
+    serialize::SerializeP, ultra_builder::UltraCircuitBuilder, utils::Utils,
 };
 use ark_ec::CurveGroup;
 use ark_ec::{AffineRepr, pairing::Pairing};
 use ark_ff::Zero;
 use co_acvm::PlainAcvmSolver;
+use noir_types::SerializeF;
 use serde::{Deserialize, Serialize as SerdeSerialize};
 use std::sync::Arc;
 
@@ -132,11 +128,11 @@ impl<P: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<P, UltraFlavour
     pub fn to_buffer(&self) -> Vec<u8> {
         let mut buffer = Vec::with_capacity(Self::SER_FULL_SIZE);
 
-        Serialize::<P::ScalarField>::write_u64(&mut buffer, self.circuit_size);
-        Serialize::<P::ScalarField>::write_u64(&mut buffer, self.log_circuit_size);
-        Serialize::<P::ScalarField>::write_u64(&mut buffer, self.num_public_inputs);
-        Serialize::<P::ScalarField>::write_u64(&mut buffer, self.pub_inputs_offset);
-        Serialize::<P::ScalarField>::write_u32(
+        SerializeF::<P::ScalarField>::write_u64(&mut buffer, self.circuit_size);
+        SerializeF::<P::ScalarField>::write_u64(&mut buffer, self.log_circuit_size);
+        SerializeF::<P::ScalarField>::write_u64(&mut buffer, self.num_public_inputs);
+        SerializeF::<P::ScalarField>::write_u64(&mut buffer, self.pub_inputs_offset);
+        SerializeF::<P::ScalarField>::write_u32(
             &mut buffer,
             self.pairing_inputs_public_input_key.start_idx,
         );
@@ -152,10 +148,10 @@ impl<P: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<P, UltraFlavour
     pub fn to_buffer_keccak(&self) -> Vec<u8> {
         let mut buffer = Vec::with_capacity(Self::SER_COMPRESSED_SIZE);
 
-        Serialize::<P::ScalarField>::write_u64(&mut buffer, self.circuit_size);
-        Serialize::<P::ScalarField>::write_u64(&mut buffer, self.log_circuit_size);
-        Serialize::<P::ScalarField>::write_u64(&mut buffer, self.num_public_inputs);
-        Serialize::<P::ScalarField>::write_u64(&mut buffer, self.pub_inputs_offset);
+        SerializeF::<P::ScalarField>::write_u64(&mut buffer, self.circuit_size);
+        SerializeF::<P::ScalarField>::write_u64(&mut buffer, self.log_circuit_size);
+        SerializeF::<P::ScalarField>::write_u64(&mut buffer, self.num_public_inputs);
+        SerializeF::<P::ScalarField>::write_u64(&mut buffer, self.pub_inputs_offset);
 
         for el in self.commitments.iter() {
             SerializeP::<P>::write_g1_element(&mut buffer, el, true);
@@ -173,13 +169,13 @@ impl<P: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<P, UltraFlavour
         }
 
         // Read data
-        let circuit_size = Serialize::<P::ScalarField>::read_u64(buf, &mut offset);
-        let log_circuit_size = Serialize::<P::ScalarField>::read_u64(buf, &mut offset);
-        let num_public_inputs = Serialize::<P::ScalarField>::read_u64(buf, &mut offset);
-        let pub_inputs_offset = Serialize::<P::ScalarField>::read_u64(buf, &mut offset);
+        let circuit_size = SerializeF::<P::ScalarField>::read_u64(buf, &mut offset);
+        let log_circuit_size = SerializeF::<P::ScalarField>::read_u64(buf, &mut offset);
+        let num_public_inputs = SerializeF::<P::ScalarField>::read_u64(buf, &mut offset);
+        let pub_inputs_offset = SerializeF::<P::ScalarField>::read_u64(buf, &mut offset);
         let pairing_inputs_public_input_key = if size == Self::SER_FULL_SIZE {
             PublicComponentKey {
-                start_idx: Serialize::<P::ScalarField>::read_u32(buf, &mut offset),
+                start_idx: SerializeF::<P::ScalarField>::read_u32(buf, &mut offset),
             }
         } else {
             Default::default()

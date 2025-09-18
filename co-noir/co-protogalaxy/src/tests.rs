@@ -17,7 +17,6 @@ use co_ultrahonk::{
 };
 use co_ultrahonk::{co_decider::univariates::SharedUnivariate, types::AllEntities};
 use common::{
-    HonkProof,
     mpc::{NoirUltraHonkProver, rep3::Rep3UltraHonkDriver},
     shared_polynomial::SharedPolynomial,
 };
@@ -32,7 +31,7 @@ use rand::thread_rng;
 use serde::de::DeserializeOwned;
 
 use ultrahonk::prelude::{
-    GateSeparatorPolynomial, Poseidon2Sponge, Transcript, Univariate, ZeroKnowledge,
+    GateSeparatorPolynomial, HonkProof, Poseidon2Sponge, Transcript, Univariate, ZeroKnowledge,
 };
 
 use crate::{

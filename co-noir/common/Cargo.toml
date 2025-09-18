@@ -14,6 +14,7 @@ readme.workspace = true
 mpc-core = { version = "0.9.0", path = "../../mpc-core" }
 mpc-net = { version = "0.4.0", path = "../../mpc-net" }
 co-builder = { version = "0.4.0", path = "../co-builder" }
+noir-types = { version = "0.1.0", path = "../noir-types" }
 rayon.workspace = true
 ark-serialize.workspace = true
 ark-poly.workspace = true

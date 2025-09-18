@@ -6,8 +6,8 @@ use crate::{
 };
 use ark_ec::pairing::Pairing;
 use co_builder::prelude::{HonkCurve, VerifyingKey, ZeroKnowledge};
-use common::HonkProof;
 use common::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
+use noir_types::HonkProof;
 
 pub(crate) type HonkVerifyResult<T> = std::result::Result<T, eyre::Report>;
 

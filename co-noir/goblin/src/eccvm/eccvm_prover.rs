@@ -17,7 +17,6 @@ use co_builder::{
     HonkProofResult, TranscriptFieldType,
     prelude::{HonkCurve, Polynomial, ProverCrs},
 };
-use common::HonkProof;
 use common::shplemini::OpeningPair;
 use common::shplemini::ShpleminiOpeningClaim;
 use common::transcript::Transcript;
@@ -26,6 +25,7 @@ use itertools::izip;
 use std::iter;
 use ultrahonk::NUM_SMALL_IPA_EVALUATIONS;
 use ultrahonk::prelude::AllEntities;
+use ultrahonk::prelude::HonkProof;
 use ultrahonk::prelude::ZeroKnowledge;
 use ultrahonk::{
     Utils as UltraHonkUtils,

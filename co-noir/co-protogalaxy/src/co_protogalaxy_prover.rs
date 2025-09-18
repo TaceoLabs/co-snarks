@@ -15,13 +15,12 @@ use co_ultrahonk::co_decider::types::RelationParameters;
 use co_ultrahonk::co_oink::co_oink_prover::CoOink;
 use common::transcript::Transcript;
 use common::{
-    HonkProof, mpc::NoirUltraHonkProver, shared_polynomial::SharedPolynomial,
-    transcript::TranscriptHasher,
+    mpc::NoirUltraHonkProver, shared_polynomial::SharedPolynomial, transcript::TranscriptHasher,
 };
 use mpc_net::Network;
 use ultrahonk::{
     plain_prover_flavour::UnivariateTrait,
-    prelude::{GateSeparatorPolynomial, Univariate, ZeroKnowledge},
+    prelude::{GateSeparatorPolynomial, HonkProof, Univariate, ZeroKnowledge},
 };
 
 use crate::co_protogalaxy_prover_internal::{

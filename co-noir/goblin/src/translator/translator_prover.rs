@@ -8,13 +8,13 @@ use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::prelude::Utils;
 use co_builder::prelude::{HonkCurve, Polynomial, Polynomials, ProverCrs};
-use common::HonkProof;
 use common::compute_opening_proof;
 use common::transcript::{Transcript, TranscriptFieldType};
 use itertools::izip;
 use num_bigint::BigUint;
 use std::iter;
 use ultrahonk::Utils as UltraHonkUtils;
+use ultrahonk::prelude::HonkProof;
 use ultrahonk::prelude::ZeroKnowledge;
 use ultrahonk::prelude::{
     AllEntities, Decider, ProvingKey, SmallSubgroupIPAProver, SumcheckOutput, TranscriptHasher,

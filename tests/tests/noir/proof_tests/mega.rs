@@ -6,6 +6,7 @@ use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
 use co_builder::prover_flavour::ProverFlavour;
 use co_builder::{flavours::mega_flavour::MegaFlavour, TranscriptFieldType};
 use co_noir::Bn254G1;
+use co_noir::HonkProof;
 use co_noir::VerifyingKey;
 pub use co_ultrahonk::prelude::PlainProvingKey;
 use co_ultrahonk::prelude::{
@@ -15,7 +16,6 @@ use common::mpc::plain::PlainUltraHonkDriver;
 use common::mpc::rep3::Rep3UltraHonkDriver;
 use common::transcript::Poseidon2Sponge;
 use common::transcript::TranscriptHasher;
-use common::HonkProof;
 use itertools::izip;
 use mpc_core::protocols::rep3;
 use mpc_net::local::LocalNetwork;

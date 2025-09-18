@@ -4,8 +4,7 @@ use ark_ff::PrimeField;
 use clap::{Parser, ValueEnum};
 use co_acvm::{PlainAcvmSolver, solver::PlainCoSolver};
 use co_builder::flavours::ultra_flavour::UltraFlavour;
-use co_builder::prelude::Serialize as FieldSerialize;
-use co_noir::{Bn254G1, HonkRecursion};
+use co_noir::{Bn254G1, HonkRecursion, SerializeF};
 use co_ultrahonk::{
     PlainCoBuilder,
     prelude::{CoUltraHonk, CrsParser, ProvingKey, UltraHonk, VerifyingKey, ZeroKnowledge},
@@ -266,7 +265,7 @@ fn main() -> color_eyre::Result<ExitCode> {
     let mut out_file = BufWriter::new(
         std::fs::File::create(&out_path).context("while creating output file for proof")?,
     );
-    let public_inputs_u8 = FieldSerialize::to_buffer(&public_inputs, false);
+    let public_inputs_u8 = SerializeF::to_buffer(&public_inputs, false);
     out_file
         .write(public_inputs_u8.as_slice())
         .context("while writing proof to file")?;
