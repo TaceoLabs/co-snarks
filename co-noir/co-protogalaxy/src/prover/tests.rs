@@ -34,13 +34,13 @@ use serde::de::DeserializeOwned;
 
 use ultrahonk::prelude::{GateSeparatorPolynomial, Poseidon2Sponge, Transcript, Univariate};
 
-use crate::{
+use crate::prover::{
     co_protogalaxy_prover::{BATCHED_EXTENDED_LENGTH, MAX_TOTAL_RELATION_LENGTH, NUM_KEYS},
     co_protogalaxy_prover_internal::{
         compute_and_extend_alphas, compute_extended_relation_parameters,
     },
 };
-use crate::{
+use crate::prover::{
     co_protogalaxy_prover::{CONST_PG_LOG_N, CoProtogalaxyProver, DeciderProverMemory},
     co_protogalaxy_prover_internal::{
         compute_combiner, compute_combiner_quotient, compute_perturbator, compute_row_evaluations,

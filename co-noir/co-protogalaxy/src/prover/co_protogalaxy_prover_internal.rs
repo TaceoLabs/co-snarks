@@ -1,4 +1,4 @@
-use crate::co_protogalaxy_prover::{BATCHED_EXTENDED_LENGTH, NUM_KEYS};
+use crate::prover::co_protogalaxy_prover::{BATCHED_EXTENDED_LENGTH, NUM_KEYS};
 use ark_ec::AdditiveGroup;
 use ark_ff::Field;
 use co_builder::flavours::mega_flavour::MegaFlavour;
@@ -18,7 +18,7 @@ use rayon::prelude::*;
 use ultrahonk::plain_prover_flavour::UnivariateTrait;
 use ultrahonk::prelude::{GateSeparatorPolynomial, Univariate};
 
-use crate::co_protogalaxy_prover::{
+use crate::prover::co_protogalaxy_prover::{
     CONST_PG_LOG_N, DeciderProverMemory, ExtendedRelationParameters,
 };
 

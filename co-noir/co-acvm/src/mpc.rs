@@ -529,9 +529,49 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         is_infinity: Self::AcvmType,
     ) -> eyre::Result<Self::AcvmNativePoint<C>>;
 
+    fn native_pointshare_to_field_shares<
+        const LIMB_BITS: usize,
+        C: HonkCurve<F, ScalarField = F>,
+    >(
+        &mut self,
+        point: Self::AcvmNativePoint<C>,
+    ) -> eyre::Result<(
+        Self::AcvmType,
+        Self::AcvmType,
+        Self::AcvmType,
+        Self::AcvmType,
+        Self::AcvmType,
+    )> {
+        unimplemented!()
+    }
+
     /// Negates the given native point, i.e., computes -P for a point P.
     fn negate_native_point<C: HonkCurve<F, ScalarField = F>>(
         &mut self,
         point: Self::AcvmNativePoint<C>,
     ) -> eyre::Result<Self::AcvmNativePoint<C>>;
+
+    fn add_native_points<C: HonkCurve<F, ScalarField = F>>(
+        &mut self,
+        point_1: Self::AcvmNativePoint<C>,
+        point_2: Self::AcvmNativePoint<C>,
+    ) -> eyre::Result<Self::AcvmNativePoint<C>> {
+        unimplemented!()
+    }
+
+    fn scale_native_point<C: HonkCurve<F, ScalarField = F>>(
+        &mut self,
+        point: Self::AcvmNativePoint<C>,
+        scalar: Self::AcvmType,
+    ) -> eyre::Result<Self::AcvmNativePoint<C>> {
+        unimplemented!()
+    }
+
+    fn scale_native_point_many<C: HonkCurve<F, ScalarField = F>>(
+        &mut self,
+        points: &[Self::AcvmNativePoint<C>],
+        scalars: &[Self::AcvmType],
+    ) -> eyre::Result<Vec<Self::AcvmNativePoint<C>>> {
+        unimplemented!()
+    }
 }

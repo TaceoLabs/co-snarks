@@ -24,7 +24,7 @@ use ultrahonk::{
     prelude::{GateSeparatorPolynomial, Univariate},
 };
 
-use crate::co_protogalaxy_prover_internal::{
+use crate::prover::co_protogalaxy_prover_internal::{
     compute_and_extend_alphas, compute_combiner, compute_combiner_quotient,
     compute_extended_relation_parameters, compute_perturbator,
 };
