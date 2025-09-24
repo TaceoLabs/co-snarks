@@ -301,8 +301,8 @@ fn gen_bit_perm<N: Network>(
     }
 
     // Private inputs
-    let mul1 = arithmetic::local_mul_vec(&priv_f0, &s0[..priv_len], state);
-    let mul2 = arithmetic::local_mul_vec(&priv_f1, &s1[..priv_len], state);
+            let mul1 = arithmetic::local_mul_many(&priv_f0, &s0[..priv_len], state);
+        let mul2 = arithmetic::local_mul_many(&priv_f1, &s1[..priv_len], state);
     let perm_a = mul1.into_iter().zip(mul2).map(|(a, b)| a + b).collect();
     let mut perm = arithmetic::reshare_vec(perm_a, net)?;
 

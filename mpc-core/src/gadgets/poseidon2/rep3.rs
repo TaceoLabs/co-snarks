@@ -23,8 +23,8 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         for _ in 0..num_sbox {
             r.push(arithmetic::rand(state));
         }
-        let r2 = arithmetic::mul_vec(&r, &r, net, state)?;
-        let r4 = arithmetic::mul_vec(&r2, &r2, net, state)?;
+        let r2 = arithmetic::mul_many(&r, &r, net, state)?;
+        let r4 = arithmetic::mul_many(&r2, &r2, net, state)?;
 
         let mut lhs = Vec::with_capacity(num_sbox * 2);
         let mut rhs = Vec::with_capacity(num_sbox * 2);
@@ -37,7 +37,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
             rhs.push(r4);
         }
 
-        let mut r3 = arithmetic::mul_vec(&lhs, &rhs, net, state)?;
+        let mut r3 = arithmetic::mul_many(&lhs, &rhs, net, state)?;
         let r5 = r3.split_off(num_sbox);
 
         Ok(Poseidon2Precomputations {
@@ -434,10 +434,10 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
     ) -> eyre::Result<[F; T]> {
         assert_eq!(D, 5);
         // Square
-        let sq: Vec<Rep3PrimeFieldShare<F>> = arithmetic::mul_vec(input, input, net, state)?;
+        let sq: Vec<Rep3PrimeFieldShare<F>> = arithmetic::mul_many(input, input, net, state)?;
 
         // Quad
-        let qu = arithmetic::mul_vec(&sq, &sq, net, state)?;
+        let qu = arithmetic::mul_many(&sq, &sq, net, state)?;
 
         // Quint
         let res = array::from_fn(|i| qu[i] * input[i]);

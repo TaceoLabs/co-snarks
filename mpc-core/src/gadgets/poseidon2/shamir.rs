@@ -45,8 +45,8 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         for _ in 0..num_sbox {
             r.push(state.rand(net)?);
         }
-        let r2 = arithmetic::mul_vec(&r, &r, net, state)?;
-        let r4 = arithmetic::mul_vec(&r2, &r2, net, state)?;
+        let r2 = arithmetic::mul_many(&r, &r, net, state)?;
+        let r4 = arithmetic::mul_many(&r2, &r2, net, state)?;
 
         let mut lhs = Vec::with_capacity(num_sbox * 2);
         let mut rhs = Vec::with_capacity(num_sbox * 2);
@@ -59,7 +59,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
             rhs.push(r4);
         }
 
-        let mut r3 = arithmetic::mul_vec(&lhs, &rhs, net, state)?;
+        let mut r3 = arithmetic::mul_many(&lhs, &rhs, net, state)?;
         let r5 = r3.split_off(num_sbox);
 
         Ok(Poseidon2Precomputations {

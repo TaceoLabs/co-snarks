@@ -80,7 +80,7 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
     ///
     /// # Security
     /// You must *NOT* perform additional non-linear operations on the result of this function.
-    fn local_mul_vec(
+    fn local_mul_many(
         a: Vec<Self::ArithmeticShare>,
         b: Vec<Self::ArithmeticShare>,
         state: &mut Self::State,

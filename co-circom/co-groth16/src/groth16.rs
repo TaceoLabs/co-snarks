@@ -288,7 +288,7 @@ impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
         );
 
         let rs_span = tracing::debug_span!("r*s without networking").entered();
-        let rs = T::local_mul_vec(vec![r], vec![s], state0).pop().unwrap();
+        let rs = T::local_mul_many(vec![r], vec![s], state0).pop().unwrap();
         let r_s_delta_g1 = T::scalar_mul_public_point_hs(&delta_g1, rs);
         rs_span.exit();
 
