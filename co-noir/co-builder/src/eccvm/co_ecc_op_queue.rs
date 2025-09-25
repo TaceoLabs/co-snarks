@@ -148,17 +148,17 @@ pub fn precompute_flags<
     // Only want to precompute flags for mul ops and only if they haven't already been computed
     let z_1_vec: Vec<T::AcvmType> = ops
         .iter()
-        .filter(|op| op.op_code.mul && op.is_z1_zero.is_none())
+        .filter(|op| (op.op_code.mul || op.op_code.add) && op.is_z1_zero.is_none())
         .map(|op| op.z1)
         .collect();
     let z_2_vec: Vec<T::AcvmType> = ops
         .iter()
-        .filter(|op| op.op_code.mul && op.is_z2_zero.is_none())
+        .filter(|op| (op.op_code.mul || op.op_code.add) && op.is_z2_zero.is_none())
         .map(|op| op.z2)
         .collect();
     let base_point_vec: Vec<T::OtherAcvmPoint<C>> = ops
         .iter()
-        .filter(|op| op.op_code.mul && op.is_base_point_infinity.is_none())
+        .filter(|op| (op.op_code.mul || op.op_code.add) && op.is_base_point_infinity.is_none())
         .map(|op| op.base_point.clone())
         .collect();
 
@@ -173,7 +173,7 @@ pub fn precompute_flags<
     for (i, op) in ops
         .iter_mut()
         .filter(|op| {
-            op.op_code.mul
+            (op.op_code.mul || op.op_code.add)
                 && op.is_z1_zero.is_none()
                 && op.is_z2_zero.is_none()
                 && op.is_base_point_infinity.is_none()
