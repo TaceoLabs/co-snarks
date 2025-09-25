@@ -2223,4 +2223,69 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             }
         }
     }
+
+    fn convert_fields_back<C: CurveGroup<BaseField = F>>(
+        &mut self,
+        a: &[Self::OtherAcvmType<C>],
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
+        if a.iter().any(|v| Self::is_shared_other::<C>(v)) {
+            let a: Vec<Rep3PrimeFieldShare<C::ScalarField>> = (0..a.len())
+                .map(|i| match a[i] {
+                    Rep3AcvmType::Public(public) => {
+                        arithmetic::promote_to_trivial_share(self.id, public)
+                    }
+                    Rep3AcvmType::Shared(shared) => shared,
+                })
+                .collect();
+            let a2b = conversion::a2b_many(&a, self.net0, &mut self.state0)?;
+            let a2b = a2b
+                .into_iter()
+                .map(|y| Rep3BigUintShare::<F>::new(y.a, y.b))
+                .collect::<Vec<_>>();
+            let result: Vec<Rep3PrimeFieldShare<F>> =
+                conversion::b2a_many::<F, N>(&a2b, self.net0, &mut self.state0)?;
+            result
+                .iter()
+                .map(|x| Ok(Self::AcvmType::Shared(*x)))
+                .collect()
+        } else {
+            if a.iter().any(|v| {
+                let v_biguint: num_bigint::BigUint =
+                    (Self::get_public_other::<C>(v).expect("We checked types")).into();
+                v_biguint > C::ScalarField::MODULUS.into()
+            }) {
+                eyre::bail!("This is "); //TODO FLORIN
+            }
+            a.iter()
+                .map(|x| {
+                    let x: BigUint =
+                        (Self::get_public_other::<C>(x).expect("We checked types")).into();
+                    let x: F = x.into();
+                    Ok(Self::AcvmType::Public(x))
+                })
+                .collect()
+        }
+    }
+
+    fn is_shared_other<C: CurveGroup<BaseField = F>>(a: &Self::OtherAcvmType<C>) -> bool {
+        matches!(a, Rep3AcvmType::Shared(_))
+    }
+    fn get_public_other<C: CurveGroup<BaseField = F>>(
+        a: &Self::OtherAcvmType<C>,
+    ) -> Option<C::ScalarField> {
+        match a {
+            Rep3AcvmType::Public(public) => Some(*public),
+            Rep3AcvmType::Shared(_) => None,
+        }
+    }
+
+    fn mul_assign_with_public(shared: &mut Self::AcvmType, public: F) {
+        let result = match shared.to_owned() {
+            Rep3AcvmType::Public(secret) => Rep3AcvmType::Public(public * secret),
+            Rep3AcvmType::Shared(secret) => {
+                Rep3AcvmType::Shared(arithmetic::mul_public(secret, public))
+            }
+        };
+        *shared = result;
+    }
 }

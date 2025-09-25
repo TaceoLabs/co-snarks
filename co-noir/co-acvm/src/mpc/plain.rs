@@ -898,4 +898,37 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     fn is_zero(&mut self, a: &Self::AcvmType) -> eyre::Result<Self::AcvmType> {
         Ok(F::from(a.is_zero()))
     }
+
+    fn convert_fields_back<C: CurveGroup<BaseField = F>>(
+        &mut self,
+        a: &[Self::OtherAcvmType<C>],
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
+        if a.iter().any(|v| {
+            let v_biguint: num_bigint::BigUint = (*v).into();
+            v_biguint > C::BaseField::MODULUS.into()
+        }) {
+            eyre::bail!("This is ");
+        }
+        a.iter()
+            .map(|x| {
+                let x: BigUint = (*x).into();
+                let x: C::BaseField = x.into();
+                Ok(x)
+            })
+            .collect()
+    }
+
+    fn is_shared_other<C: CurveGroup<BaseField = F>>(a: &Self::OtherAcvmType<C>) -> bool {
+        false
+    }
+
+    fn get_public_other<C: CurveGroup<BaseField = F>>(
+        a: &Self::OtherAcvmType<C>,
+    ) -> Option<C::ScalarField> {
+        Some((*a).into())
+    }
+
+    fn mul_assign_with_public(shared: &mut Self::AcvmType, public: F) {
+        shared.mul_assign(&public);
+    }
 }

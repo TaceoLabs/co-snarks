@@ -600,6 +600,9 @@ impl<T: Default> TranslatorProverWitnessEntities<T> {
     pub fn wire_non_shifted_mut(&mut self) -> &mut T {
         &mut self.elements[TranslatorFlavour::OP]
     }
+    pub fn wire_non_shifted(&self) -> &T {
+        &self.elements[TranslatorFlavour::OP]
+    }
     pub fn op(&self) -> &T {
         &self.elements[TranslatorFlavour::OP]
     }
@@ -607,8 +610,16 @@ impl<T: Default> TranslatorProverWitnessEntities<T> {
         &mut self.elements[TranslatorFlavour::X_LO_Y_HI
             ..=TranslatorFlavour::RELATION_WIDE_LIMBS_RANGE_CONSTRAINT_3]
     }
+    pub fn wire_to_be_shifted(&self) -> &[T] {
+        &self.elements[TranslatorFlavour::X_LO_Y_HI
+            ..=TranslatorFlavour::RELATION_WIDE_LIMBS_RANGE_CONSTRAINT_3]
+    }
     pub fn get_ordered_range_constraints_mut(&mut self) -> &mut [T] {
         &mut self.elements[TranslatorFlavour::ORDERED_RANGE_CONSTRAINTS_0
+            ..=TranslatorFlavour::ORDERED_RANGE_CONSTRAINTS_4]
+    }
+    pub fn get_ordered_range_constraints(&self) -> &[T] {
+        &self.elements[TranslatorFlavour::ORDERED_RANGE_CONSTRAINTS_0
             ..=TranslatorFlavour::ORDERED_RANGE_CONSTRAINTS_4]
     }
     pub fn interleaved_range_constraints_0(&self) -> &T {

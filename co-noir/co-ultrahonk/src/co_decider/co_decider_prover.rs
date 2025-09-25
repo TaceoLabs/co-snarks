@@ -21,8 +21,8 @@ pub struct CoDecider<
     N: Network,
     L: MPCProverFlavour,
 > {
-    pub(crate) net: &'a N,
-    pub(crate) state: &'a mut T::State,
+    pub net: &'a N,
+    pub state: &'a mut T::State,
     pub memory: ProverMemory<T, P, L>,
     pub(crate) has_zk: ZeroKnowledge,
     phantom_data: PhantomData<(P, H)>,

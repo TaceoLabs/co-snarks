@@ -52,8 +52,6 @@ where
     H: TranscriptHasher<TranscriptFieldType>,
     N: Network,
 {
-    net: &'a N,
-    state: &'a mut T::State,
     decider: CoDecider<'a, T, P, H, N, TranslatorFlavour>, // We need the decider struct here for being able to use sumcheck, shplemini, shplonk
     memory: ProverMemory<T, P>, //This is somewhat equivalent to the Oink Memory (i.e stores the lookup_inverses and zPeccv_perm)
     batching_challenge_v: P::BaseField,
@@ -67,8 +65,6 @@ where
     N: Network,
 {
     pub(crate) fn new(
-        net: &'a N,
-        state: &'a mut T::State,
         decider: CoDecider<'a, T, P, H, N, TranslatorFlavour>,
         memory: ProverMemory<T, P>,
         batching_challenge_v: P::BaseField,
@@ -79,8 +75,6 @@ where
             batching_challenge_v,
             evaluation_input_x,
             memory,
-            net,
-            state,
         }
     }
 
@@ -93,18 +87,19 @@ where
         tracing::trace!("TranslatorProver::construct_proof");
         let circuit_size = proving_key.circuit_size;
 
-        // Add circuit size public input size and public inputs to transcript.
-        self.execute_preamble_round(&mut transcript, &mut proving_key)?;
+        // We combine the preamble round and the wire commitments round, to batch openings.
 
+        // Add circuit size public input size and public inputs to transcript.
         // Compute first three wire commitments
-        self.execute_wire_and_sorted_constraints_commitments_round(
+        self.execute_preamble_and_wire_and_sorted_constraints_commitments_round(
             &mut transcript,
             &mut proving_key,
+            crs,
         )?;
 
         // Fiat-Shamir: gamma
         // Compute grand product(s) and commitments.
-        self.execute_grand_product_computation_round(&mut transcript, &proving_key)?;
+        self.execute_grand_product_computation_round(&mut transcript, &proving_key, crs)?;
 
         self.add_polynomials_to_memory(proving_key.polynomials);
 
@@ -125,15 +120,16 @@ where
         Ok(transcript.get_proof())
     }
 
-    fn execute_preamble_round(
+    fn execute_preamble_and_wire_and_sorted_constraints_commitments_round(
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         proving_key: &mut ProvingKey<T, P, TranslatorFlavour>,
+        crs: &ProverCrs<P>,
     ) -> HonkProofResult<()> {
         const NUM_LIMB_BITS: usize = TranslatorFlavour::NUM_LIMB_BITS;
-        // let shift: P::ScalarField = (BigUint::from(1u32) << NUM_LIMB_BITS).into();
-        // let shiftx2: P::ScalarField = (BigUint::from(1u32) << (NUM_LIMB_BITS * 2)).into();
-        // let shiftx3: P::ScalarField = (BigUint::from(1u32) << (NUM_LIMB_BITS * 3)).into();
+        let shift: BigUint = BigUint::from(1u32) << NUM_LIMB_BITS;
+        let shiftx2: BigUint = BigUint::from(1u32) << (NUM_LIMB_BITS * 2);
+        let shiftx3: BigUint = BigUint::from(1u32) << (NUM_LIMB_BITS * 3);
         const RESULT_ROW: usize = TranslatorFlavour::RESULT_ROW;
 
         let first = proving_key
@@ -153,72 +149,58 @@ where
             .witness
             .accumulators_binary_limbs_3()[RESULT_ROW];
 
-        let accumulated_result = T::accumulate_limbs_for_translator(
-            &[first, second, third, fourth],
-            NUM_LIMB_BITS,
-            self.state,
-            self.net,
-        );
-
-        //TODO FLORIN
-        // self.decider.memory.relation_parameters.accumulated_result = vec![
-        //     proving_key
-        //         .polynomials
-        //         .witness
-        //         .accumulators_binary_limbs_0()[RESULT_ROW],
-        //     proving_key
-        //         .polynomials
-        //         .witness
-        //         .accumulators_binary_limbs_1()[RESULT_ROW],
-        //     proving_key
-        //         .polynomials
-        //         .witness
-        //         .accumulators_binary_limbs_2()[RESULT_ROW],
-        //     proving_key
-        //         .polynomials
-        //         .witness
-        //         .accumulators_binary_limbs_3()[RESULT_ROW],
-        // ]
-        // .try_into()
-        // .expect("We should have 4 limbs in the result");
-
-        transcript.send_fq_to_verifier::<P>("accumulated_result".to_string(), accumulated_result);
-        Ok(())
-    }
-
-    fn execute_wire_and_sorted_constraints_commitments_round(
-        &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
-        proving_key: &mut ProvingKey<T, P, TranslatorFlavour>,
-    ) -> HonkProofResult<()> {
-        let non_shifted_label = TranslatorFlavour::wire_non_shifted_labels();
-        let wire_non_shifted = proving_key.polynomials.witness.wire_non_shifted_mut();
-        // self.commit_to_witness_polynomial(
-        //     wire_non_shifted,
-        //     non_shifted_label,
-        //     &proving_key.crs,
-        //     transcript,
-        // )?;
-
         let to_be_shifted_labels = TranslatorFlavour::wire_to_be_shifted_labels();
-        let wire_to_be_shifted = proving_key.polynomials.witness.wire_to_be_shifted_mut();
-        for (wire, label) in wire_to_be_shifted
-            .iter_mut()
-            .zip(to_be_shifted_labels.iter())
-        {
-            // self.commit_to_witness_polynomial(wire, label, &proving_key.crs, transcript)?;
-        }
         let ordered_range_constraints_labels =
             TranslatorFlavour::get_ordered_range_constraints_labels();
+        let mut commitments = Vec::with_capacity(
+            1 + to_be_shifted_labels.len() + ordered_range_constraints_labels.len(),
+        );
+        let non_shifted_label = TranslatorFlavour::wire_non_shifted_labels();
+        let wire_non_shifted_commitment = CoUtils::commit::<T, P>(
+            proving_key.polynomials.witness.wire_non_shifted().as_ref(),
+            crs,
+        );
+        commitments.push(wire_non_shifted_commitment);
+
+        let wire_to_be_shifted = proving_key.polynomials.witness.wire_to_be_shifted_mut();
+        for wire in wire_to_be_shifted.iter() {
+            let commitment = CoUtils::commit::<T, P>(wire.as_ref(), crs);
+            commitments.push(commitment);
+        }
+
         let ordered_range_constraints = proving_key
             .polynomials
             .witness
             .get_ordered_range_constraints_mut();
-        for (constraint, label) in ordered_range_constraints
-            .iter_mut()
-            .zip(ordered_range_constraints_labels.iter())
+        for constraint in ordered_range_constraints.iter() {
+            let commitment = CoUtils::commit::<T, P>(constraint.as_ref(), crs);
+            commitments.push(commitment);
+        }
+        let open = T::open_point_and_field_many(
+            &commitments,
+            &vec![first, second, third, fourth],
+            self.decider.net,
+            self.decider.state,
+        )?;
+        // Note: We open the limbs here, as the accumulated result (which is sent to the verifier) is computed from the limbs, meaning they would be exposed to the verifier anyway. The first three limbs should be 68 bits, the last one 50 bits, there is just one edge case where the result is larger than the scalarfield modulus.
+        let first: BigUint = open.1[0].into();
+        let second: BigUint = open.1[1].into();
+        let third: BigUint = open.1[2].into();
+        let fourth: BigUint = open.1[3].into();
+        let accumulated_result: P::BaseField =
+            (first + second * &shift + third * &shiftx2 + fourth * &shiftx3).into();
+        self.decider.memory.relation_parameters.accumulated_result =
+            vec![open.1[0], open.1[1], open.1[2], open.1[3]]
+                .try_into()
+                .expect("We should have 4 limbs in the result");
+        transcript.send_fq_to_verifier::<P>("accumulated_result".to_string(), accumulated_result);
+
+        for (label, commitment) in std::iter::once(&non_shifted_label)
+            .chain(to_be_shifted_labels.iter())
+            .chain(ordered_range_constraints_labels.iter())
+            .zip(open.0.into_iter())
         {
-            // self.commit_to_witness_polynomial(constraint, label, &proving_key.crs, transcript)?;
+            transcript.send_point_to_verifier::<P>(label.to_string(), commitment.into());
         }
 
         Ok(())
@@ -227,6 +209,7 @@ where
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         proving_key: &ProvingKey<T, P, TranslatorFlavour>,
+        crs: &ProverCrs<P>,
     ) -> HonkProofResult<()> {
         let beta = transcript.get_challenge::<P>("BETA".to_string());
         let gamma = transcript.get_challenge::<P>("GAMMA".to_string());
@@ -293,10 +276,13 @@ where
 
         // Compute permutation grand product and their commitments
         self.compute_grand_product(proving_key)?;
-        // we do std::mem::take here to avoid borrowing issues with self
-        let mut z_perm_tmp = std::mem::take(&mut self.memory.z_perm);
-        // self.commit_to_witness_polynomial(&mut z_perm_tmp, "Z_PERM", &proving_key.crs, transcript)?;
-        std::mem::swap(&mut self.memory.z_perm, &mut z_perm_tmp);
+
+        let open = T::open_point(
+            CoUtils::commit::<T, P>(self.memory.z_perm.as_ref(), crs),
+            self.decider.net,
+            self.decider.state,
+        )?;
+        transcript.send_point_to_verifier::<P>("Z_PERM".to_string(), open.into());
 
         Ok(())
     }
@@ -327,8 +313,8 @@ where
                 UltraHonkUtils::get_msb64(circuit_size as u64) as usize,
                 transcript,
                 commitment_key,
-                self.net,
-                self.state,
+                self.decider.net,
+                self.decider.state,
             )?;
 
         Ok((
@@ -357,7 +343,12 @@ where
             "Libra:".to_string(),
             &sumcheck_output.challenges,
         )?;
-        small_subgroup_ipa_prover.prove::<H, N>(self.net, self.state, transcript, crs)?;
+        small_subgroup_ipa_prover.prove::<H, N>(
+            self.decider.net,
+            self.decider.state,
+            transcript,
+            crs,
+        )?;
 
         let witness_polynomials = small_subgroup_ipa_prover.into_witness_polynomials();
 
@@ -369,7 +360,13 @@ where
             Some(witness_polynomials),
         )?;
 
-        compute_co_opening_proof(self.net, self.state, prover_opening_claim, transcript, crs)
+        compute_co_opening_proof(
+            self.decider.net,
+            self.decider.state,
+            prover_opening_claim,
+            transcript,
+            crs,
+        )
     }
 
     #[expect(clippy::type_complexity)]
@@ -519,7 +516,7 @@ where
     }
 
     // To reduce the number of communication rounds, we implement the array_prod_mul macro according to https://www.usenix.org/system/files/sec22-ozdemir.pdf, p11 first paragraph.
-    //TODO FLORIN: Deduplicate with common
+    //TODO FLORIN: Deduplicate with common (after rebasing on eccvm prover)
     fn array_prod_mul(
         &mut self,
         inp: &[T::ArithmeticShare],
@@ -528,15 +525,15 @@ where
         let len = inp.len();
 
         let r = (0..=len)
-            .map(|_| T::rand(self.net, self.state))
+            .map(|_| T::rand(self.decider.net, self.decider.state))
             .collect::<Result<Vec<_>, _>>()?;
-        let r_inv = T::inv_many(&r, self.net, self.state)?;
+        let r_inv = T::inv_many(&r, self.decider.net, self.decider.state)?;
         let r_inv0 = vec![r_inv[0]; len];
 
-        let mut unblind = T::mul_many(&r_inv0, &r[1..], self.net, self.state)?;
+        let mut unblind = T::mul_many(&r_inv0, &r[1..], self.decider.net, self.decider.state)?;
 
-        let mul = T::mul_many(&r[..len], inp, self.net, self.state)?;
-        let mut open = T::mul_open_many(&mul, &r_inv[1..], self.net, self.state)?;
+        let mul = T::mul_many(&r[..len], inp, self.decider.net, self.decider.state)?;
+        let mut open = T::mul_open_many(&mul, &r_inv[1..], self.decider.net, self.decider.state)?;
 
         for i in 1..open.len() {
             open[i] = open[i] * open[i - 1];
@@ -573,8 +570,8 @@ where
         // Populate `numerator` and `denominator` with the algebra described by Relation
 
         let (numerator, denominator) = Self::batched_grand_product_num_denom(
-            self.net,
-            self.state,
+            self.decider.net,
+            self.decider.state,
             proving_key,
             &self.decider.memory.relation_parameters.beta,
             &self.decider.memory.relation_parameters.gamma,
@@ -590,10 +587,15 @@ where
         let mut denominator = self.array_prod_mul(&denominator)?;
 
         // invert denominator
-        CoUtils::batch_invert::<T, P, N>(&mut denominator, self.net, self.state)?;
+        CoUtils::batch_invert::<T, P, N>(&mut denominator, self.decider.net, self.decider.state)?;
 
         // Step (3) Compute z_perm[i] = numerator[i] / denominator[i]
-        let mul = T::mul_many(&numerator, &denominator, self.net, self.state)?;
+        let mul = T::mul_many(
+            &numerator,
+            &denominator,
+            self.decider.net,
+            self.decider.state,
+        )?;
 
         self.memory.z_perm.resize(
             proving_key.circuit_size as usize,

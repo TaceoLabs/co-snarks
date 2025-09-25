@@ -134,6 +134,32 @@ pub fn open_point_and_field<C: CurveGroup, N: Network>(
     Ok((a.a + a.b + c.0, b.a + b.b + c.1))
 }
 
+/// Opens a vector shared points and a vector of shared field elements together
+pub fn open_point_and_field_many<C: CurveGroup, N: Network>(
+    a: &[PointShare<C>],
+    b: &[FieldShare<C::ScalarField>],
+    net: &N,
+) -> eyre::Result<(Vec<C>, Vec<C::ScalarField>)> {
+    if a.len() != b.len() {
+        eyre::bail!(
+            "Mismatched lengths in open_point_and_field_many: {} vs {}",
+            a.len(),
+            b.len()
+        );
+    }
+    let a_bs = a.iter().map(|x| x.b).collect_vec();
+    let b_bs = b.iter().map(|x| x.b).collect_vec();
+
+    let (c1, c2) = net.reshare((a_bs, b_bs))?;
+    let mut res_a = Vec::with_capacity(a.len());
+    let mut res_b = Vec::with_capacity(b.len());
+    for (x, y, c1, c2) in izip!(a, b, c1, c2) {
+        res_a.push(x.a + x.b + c1);
+        res_b.push(y.a + y.b + c2);
+    }
+    Ok((res_a, res_b))
+}
+
 /// Perform msm between `points` and `scalars`
 pub fn msm_public_points<C: CurveGroup>(
     points: &[C::Affine],

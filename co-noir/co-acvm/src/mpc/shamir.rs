@@ -73,7 +73,7 @@ impl<C: CurveGroup> From<C> for ShamirAcvmPoint<C> {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Copy)]
 pub enum ShamirAcvmType<F: PrimeField> {
     Public(
         #[serde(
@@ -163,6 +163,10 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
 
     type AcvmType = ShamirAcvmType<F>;
     type AcvmPoint<C: CurveGroup<BaseField = F>> = ShamirAcvmPoint<C>;
+
+    type OtherArithmeticShare<C: CurveGroup<BaseField = F>> = ShamirPrimeFieldShare<C::ScalarField>;
+
+    type OtherAcvmType<C: CurveGroup<BaseField = F>> = ShamirAcvmType<C::ScalarField>;
 
     type BrilligDriver = ShamirBrilligDriver<'a, F, N>;
 
@@ -953,5 +957,34 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
 
     fn is_zero(&mut self, _a: &Self::AcvmType) -> eyre::Result<Self::AcvmType> {
         panic!("functionality is_zero not feasible for Shamir")
+    }
+
+    fn convert_fields_back<C: CurveGroup<BaseField = F>>(
+        &mut self,
+        _a: &[Self::OtherAcvmType<C>],
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
+        unimplemented!("convert_fields not implemented for Shamir")
+    }
+
+    fn is_shared_other<C: CurveGroup<BaseField = F>>(a: &Self::OtherAcvmType<C>) -> bool {
+        matches!(a, ShamirAcvmType::Shared(_))
+    }
+
+    fn get_public_other<C: CurveGroup<BaseField = F>>(
+        a: &Self::OtherAcvmType<C>,
+    ) -> Option<C::ScalarField> {
+        match a {
+            ShamirAcvmType::Public(public) => Some(*public),
+            _ => None,
+        }
+    }
+    fn mul_assign_with_public(shared: &mut Self::AcvmType, public: F) {
+        let result = match shared.to_owned() {
+            ShamirAcvmType::Public(secret) => ShamirAcvmType::Public(public * secret),
+            ShamirAcvmType::Shared(secret) => {
+                ShamirAcvmType::Shared(arithmetic::mul_public(secret, public))
+            }
+        };
+        *shared = result;
     }
 }

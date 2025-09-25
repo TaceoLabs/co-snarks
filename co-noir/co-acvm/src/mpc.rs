@@ -25,6 +25,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     /// A type representing the values encountered during Noir compilation. It should at least contain public field elements and shared values.
     type AcvmType: Clone
         + Default
+        + Copy
         + fmt::Debug
         + fmt::Display
         + From<Self::ArithmeticShare>
@@ -32,7 +33,6 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         + PartialEq
         + Into<<Self::BrilligDriver as BrilligDriver<F>>::BrilligType>;
     type AcvmPoint<C: CurveGroup<BaseField = F>>: Clone + fmt::Debug + fmt::Display + From<C>;
-
     type OtherAcvmType<C: CurveGroup<BaseField = F>>: Clone
         + Default
         + Copy
@@ -184,6 +184,8 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
 
     /// Returns true if the value is shared
     fn is_shared(a: &Self::AcvmType) -> bool;
+
+    fn is_shared_other<C: CurveGroup<BaseField = F>>(a: &Self::OtherAcvmType<C>) -> bool;
 
     /// Returns the share if the value is shared
     fn get_shared(a: &Self::AcvmType) -> Option<Self::ArithmeticShare>;
@@ -516,4 +518,16 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         input_bitsize: usize,
         output_bitsize: usize,
     ) -> eyre::Result<Self::AcvmType>;
+
+    fn convert_fields_back<C: CurveGroup<BaseField = F>>(
+        &mut self,
+        a: &[Self::OtherAcvmType<C>],
+    ) -> eyre::Result<Vec<Self::AcvmType>>;
+
+    fn get_public_other<C: CurveGroup<BaseField = F>>(
+        a: &Self::OtherAcvmType<C>,
+    ) -> Option<C::ScalarField>;
+
+    /// Multiply a share b by a public value a: c = \[a\] * b and stores the result in \[a\];
+    fn mul_assign_with_public(shared: &mut Self::AcvmType, public: F);
 }

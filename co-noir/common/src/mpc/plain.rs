@@ -2,13 +2,11 @@ use super::NoirUltraHonkProver;
 use ark_ec::CurveGroup;
 use ark_ff::Field;
 use ark_ff::One;
-use ark_ff::PrimeField;
 use ark_ff::UniformRand;
 use ark_poly::DenseUVPolynomial;
 use ark_poly::{Polynomial, univariate::DensePolynomial};
 use mpc_core::MpcState;
 use mpc_net::Network;
-use num_bigint::BigUint;
 use num_traits::Zero;
 use rand::thread_rng;
 use rayon::prelude::*;
@@ -282,23 +280,12 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         Ok(res)
     }
 
-    fn accumulate_limbs_for_translator<N: Network>(
-        limbs: &[Self::ArithmeticShare],
-        num_limbs: usize,
-        _state: &mut Self::State,
+    fn open_point_and_field_many<N: Network>(
+        a: &[Self::PointShare],
+        b: &[Self::ArithmeticShare],
         _net: &N,
-    ) -> <P as CurveGroup>::BaseField
-    where
-        P::BaseField: PrimeField,
-    {
-        let shift: BigUint = BigUint::from(1u32) << num_limbs;
-        let shiftx2: BigUint = BigUint::from(1u32) << (num_limbs * 2);
-        let shiftx3: BigUint = BigUint::from(1u32) << (num_limbs * 3);
-        let first: BigUint = limbs[0].into();
-        let second: BigUint = limbs[1].into();
-        let third: BigUint = limbs[2].into();
-        let fourth: BigUint = limbs[3].into();
-
-        (first + second * &shift + third * &shiftx2 + fourth * &shiftx3).into()
+        _state: &mut Self::State,
+    ) -> eyre::Result<(Vec<P>, Vec<P::ScalarField>)> {
+        Ok((a.to_vec(), b.to_vec()))
     }
 }

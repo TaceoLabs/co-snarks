@@ -13,11 +13,16 @@ pub(crate) const NUM_ROWS_PER_OP: usize = 2; // A single ECC op is split across 
 
 pub(crate) type CoEccvmOpsTable<T, C> = EccOpsTable<CoVMOperation<T, C>>;
 
-pub(crate) struct CoUltraEccOpsTable<T: NoirUltraHonkProver<C>, C: HonkCurve<TranscriptFieldType>> {
-    pub(crate) table: EccOpsTable<CoUltraOp<T, C>>,
+pub struct CoUltraEccOpsTable<
+    T: NoirWitnessExtensionProtocol<C::BaseField>,
+    C: CurveGroup<BaseField: PrimeField>,
+> {
+    pub table: EccOpsTable<CoUltraOp<T, C>>,
 }
 
-impl<T: NoirUltraHonkProver<C>, C: HonkCurve<TranscriptFieldType>> CoUltraEccOpsTable<T, C> {
+impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: CurveGroup<BaseField: PrimeField>>
+    CoUltraEccOpsTable<T, C>
+{
     pub fn ultra_table_size(&self) -> usize {
         self.table.size() * NUM_ROWS_PER_OP
     }
@@ -26,78 +31,8 @@ impl<T: NoirUltraHonkProver<C>, C: HonkCurve<TranscriptFieldType>> CoUltraEccOps
         self.table.get()[0].len() * NUM_ROWS_PER_OP
     }
 
-    pub fn previous_ultra_table_size(&self) -> usize {
-        self.ultra_table_size() - self.current_ultra_subtable_size()
-    }
-
     pub fn create_new_subtable(&mut self, size_hint: usize) {
         self.table.create_new_subtable(size_hint);
-    }
-
-    pub fn construct_table_columns(&self) -> [SharedPolynomial<T, C>; TABLE_WIDTH] {
-        let poly_size = self.ultra_table_size();
-        let subtable_start_idx = 0; // include all subtables
-        let subtable_end_idx = self.table.num_subtables();
-
-        self.construct_column_polynomials_from_subtables(
-            poly_size,
-            subtable_start_idx,
-            subtable_end_idx,
-        )
-    }
-
-    pub fn construct_previous_table_columns(&self) -> [SharedPolynomial<T, C>; TABLE_WIDTH] {
-        let poly_size = self.previous_ultra_table_size();
-        let subtable_start_idx = 1; // exclude the 0th subtable
-        let subtable_end_idx = self.table.num_subtables();
-
-        self.construct_column_polynomials_from_subtables(
-            poly_size,
-            subtable_start_idx,
-            subtable_end_idx,
-        )
-    }
-
-    pub fn construct_current_ultra_ops_subtable_columns(
-        &self,
-    ) -> [SharedPolynomial<T, C>; TABLE_WIDTH] {
-        let poly_size = self.current_ultra_subtable_size();
-        let subtable_start_idx = 0;
-        let subtable_end_idx = 1; // include only the 0th subtable
-
-        self.construct_column_polynomials_from_subtables(
-            poly_size,
-            subtable_start_idx,
-            subtable_end_idx,
-        )
-    }
-
-    fn construct_column_polynomials_from_subtables(
-        &self,
-        poly_size: usize,
-        subtable_start_idx: usize,
-        subtable_end_idx: usize,
-    ) -> [SharedPolynomial<T, C>; TABLE_WIDTH] {
-        let mut column_polynomials: [SharedPolynomial<T, C>; TABLE_WIDTH] =
-            array::from_fn(|_| SharedPolynomial::new_zero(poly_size));
-
-        let mut i = 0;
-        for subtable_idx in subtable_start_idx..subtable_end_idx {
-            let subtable = &self.table.get()[subtable_idx];
-            for op in subtable {
-                column_polynomials[0][i] = op.op_code.value();
-                column_polynomials[1][i] = op.x_lo;
-                column_polynomials[2][i] = op.x_hi;
-                column_polynomials[3][i] = op.y_lo;
-                i += 1;
-                column_polynomials[0][i] = T::ArithmeticShare::default(); // only the first 'op' field is utilized
-                column_polynomials[1][i] = op.y_hi;
-                column_polynomials[2][i] = op.z_1;
-                column_polynomials[3][i] = op.z_2;
-                i += 1;
-            }
-        }
-        column_polynomials
     }
 }
 
@@ -108,8 +43,11 @@ pub struct CoVMOperation<
 > {
     pub op_code: EccOpCode,
     pub base_point: T::AcvmPoint<C>,
-    pub z1: T::AcvmType, //TODO FLORIN: I think this does not have to be a binary share (It is a uint256 in bb)
-    pub z2: T::AcvmType, //TODO FLORIN: I think this does not have to be a binary share (It is a uint256 in bb)
+    pub z1: T::AcvmType,
+    pub z2: T::AcvmType,
+    pub z1_is_zero: bool,
+    pub z2_is_zero: bool,
+    pub base_point_is_zero: bool,
     pub mul_scalar_full: T::OtherAcvmType<C>,
 }
 impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: CurveGroup<BaseField: PrimeField>> Clone
@@ -118,24 +56,45 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: CurveGroup<BaseField: Pri
     fn clone(&self) -> Self {
         Self {
             op_code: self.op_code.clone(),
-            base_point: self.base_point,
+            base_point: self.base_point.clone(),
             z1: self.z1,
             z2: self.z2,
             mul_scalar_full: self.mul_scalar_full,
+            z1_is_zero: self.z1_is_zero,
+            z2_is_zero: self.z2_is_zero,
+            base_point_is_zero: self.base_point_is_zero,
         }
     }
 }
 
-#[derive(Clone)]
-pub struct CoUltraOp<T: NoirUltraHonkProver<C>, C: HonkCurve<TranscriptFieldType>> {
-    pub op_code: CoEccOpCode<T, C>,
-    pub x_lo: T::ArithmeticShare,
-    pub x_hi: T::ArithmeticShare,
-    pub y_lo: T::ArithmeticShare,
-    pub y_hi: T::ArithmeticShare,
-    pub z_1: T::ArithmeticShare,
-    pub z_2: T::ArithmeticShare,
+pub struct CoUltraOp<
+    T: NoirWitnessExtensionProtocol<C::BaseField>,
+    C: CurveGroup<BaseField: PrimeField>,
+> {
+    pub op_code: EccOpCode,
+    pub x_lo: T::OtherAcvmType<C>,
+    pub x_hi: T::OtherAcvmType<C>,
+    pub y_lo: T::OtherAcvmType<C>,
+    pub y_hi: T::OtherAcvmType<C>,
+    pub z_1: T::OtherAcvmType<C>,
+    pub z_2: T::OtherAcvmType<C>,
     pub return_is_infinity: bool,
+}
+impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: CurveGroup<BaseField: PrimeField>> Clone
+    for CoUltraOp<T, C>
+{
+    fn clone(&self) -> Self {
+        Self {
+            op_code: self.op_code.clone(),
+            x_lo: self.x_lo,
+            x_hi: self.x_hi,
+            y_lo: self.y_lo,
+            y_hi: self.y_hi,
+            z_1: self.z_1,
+            z_2: self.z_2,
+            return_is_infinity: self.return_is_infinity,
+        }
+    }
 }
 
 #[derive(Default, PartialEq, Eq, Debug, Clone)]
@@ -170,39 +129,31 @@ pub struct CoECCOpQueue<
     T: NoirWitnessExtensionProtocol<C::BaseField>,
     C: CurveGroup<BaseField: PrimeField>,
 > {
-    pub(crate) eccvm_ops_table: CoEccvmOpsTable<T, C>,
-    pub(crate) ultra_ops_table: CoUltraEccOpsTable<T, C>,
-    pub(crate) accumulator: T::AcvmPoint<C>,
-    pub(crate) eccvm_ops_reconstructed: Vec<CoVMOperation<T, C>>,
+    pub eccvm_ops_table: CoEccvmOpsTable<T, C>,
+    pub ultra_ops_table: CoUltraEccOpsTable<T, C>,
+    pub accumulator: T::AcvmPoint<C>,
+    pub eccvm_ops_reconstructed: Vec<CoVMOperation<T, C>>,
     pub ultra_ops_reconstructed: Vec<CoUltraOp<T, C>>,
-    pub(crate) eccvm_row_tracker: CoEccvmRowTracker<T, C>,
+    pub eccvm_row_tracker: EccvmRowTracker,
 }
 
-impl<T: NoirUltraHonkProver<C>, C: HonkCurve<TranscriptFieldType>> CoECCOpQueue<T, C> {
+impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: CurveGroup<BaseField: PrimeField>>
+    CoECCOpQueue<T, C>
+{
     // Initialize a new subtable of ECCVM ops and Ultra ops corresponding to an individual circuit
     pub fn initialize_new_subtable(&mut self) {
         self.eccvm_ops_table.create_new_subtable(0);
         self.ultra_ops_table.create_new_subtable(0);
     }
 
-    // Construct polynomials corresponding to the columns of the full aggregate ultra ecc ops table
-    pub fn construct_ultra_ops_table_columns(&self) -> [SharedPolynomial<T, C>; TABLE_WIDTH] {
-        self.ultra_ops_table.construct_table_columns()
+    // Reconstruct the full table of eccvm ops in contiguous memory from the independent subtables
+    pub fn construct_full_eccvm_ops_table(&mut self) {
+        self.eccvm_ops_reconstructed = self.eccvm_ops_table.get_reconstructed();
     }
 
-    // Construct polys corresponding to the columns of the aggregate ultra ops table, excluding the most recent subtable
-    pub fn construct_previous_ultra_ops_table_columns(
-        &self,
-    ) -> [SharedPolynomial<T, C>; TABLE_WIDTH] {
-        self.ultra_ops_table.construct_previous_table_columns()
-    }
-
-    // Construct polynomials corresponding to the columns of the current subtable of ultra ecc ops
-    pub fn construct_current_ultra_ops_subtable_columns(
-        &self,
-    ) -> [SharedPolynomial<T, C>; TABLE_WIDTH] {
-        self.ultra_ops_table
-            .construct_current_ultra_ops_subtable_columns()
+    // Reconstruct the full table of ultra ops in contiguous memory from the independent subtables
+    pub fn construct_full_ultra_ops_table(&mut self) {
+        self.ultra_ops_reconstructed = self.ultra_ops_table.table.get_reconstructed();
     }
 
     pub fn get_ultra_ops_table_num_rows(&self) -> usize {
@@ -211,6 +162,13 @@ impl<T: NoirUltraHonkProver<C>, C: HonkCurve<TranscriptFieldType>> CoECCOpQueue<
 
     pub fn get_current_ultra_ops_subtable_num_rows(&self) -> usize {
         self.ultra_ops_table.current_ultra_subtable_size()
+    }
+    // Get the full table of ECCVM ops in contiguous memory; construct it if it has not been constructed already
+    pub fn get_eccvm_ops(&mut self) -> &Vec<CoVMOperation<T, C>> {
+        if self.eccvm_ops_reconstructed.is_empty() {
+            self.construct_full_eccvm_ops_table();
+        }
+        &self.eccvm_ops_reconstructed
     }
 
     /**
@@ -238,11 +196,18 @@ impl<T: NoirUltraHonkProver<C>, C: HonkCurve<TranscriptFieldType>> CoECCOpQueue<
      * @brief A fuzzing only method for setting eccvm ops directly
      *
      */
-    pub fn set_eccvm_ops_for_fuzzing(&mut self, eccvm_ops_in: Vec<CoECCVMOperation<T, C>>) {
+    pub fn set_eccvm_ops_for_fuzzing(&mut self, eccvm_ops_in: Vec<CoVMOperation<T, C>>) {
         self.eccvm_ops_reconstructed = eccvm_ops_in;
     }
 
-    pub fn get_accumulator(&self) -> C::Affine {
-        self.accumulator
+    pub fn get_accumulator(&self) -> &T::AcvmPoint<C> {
+        &self.accumulator
+    }
+
+    pub fn get_ultra_ops(&mut self) -> &Vec<CoUltraOp<T, C>> {
+        if self.ultra_ops_reconstructed.is_empty() {
+            self.construct_full_ultra_ops_table();
+        }
+        &self.ultra_ops_reconstructed
     }
 }

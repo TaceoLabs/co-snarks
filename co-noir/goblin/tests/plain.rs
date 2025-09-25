@@ -188,11 +188,9 @@ fn test_translator_prover() {
     let path = PathBuf::from(ecc_op_queue_file);
     let mut queue: ECCOpQueue<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>> =
         deserialize_ecc_op_queue(path);
-    let start = std::time::Instant::now();
     // We need to do this as the ecc_op_queue is necessary for the translator builder and gets modified in there
     // TACEO TODO: find a nicer way to do this
     let _ = construct_from_builder::<short_weierstrass::Projective<GrumpkinConfig>>(&mut queue);
-    println!("Time to reconstruct eccvm ops: {:?}", start.elapsed());
 
     let transcript = std::io::BufReader::new(std::fs::File::open(transcript_path).unwrap());
     let transcript: Transcript<TranscriptFieldType, Poseidon2Sponge> =

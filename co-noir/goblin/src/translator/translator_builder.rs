@@ -433,10 +433,7 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
             + base_op;
 
         // We also need to compute the quotient
-        let modulus_big: BigUint = {
-            // Assuming existence of modulus retrieval
-            P::BaseField::MODULUS.into()
-        };
+        let modulus_big: BigUint = { P::BaseField::MODULUS.into() };
 
         let uint_remainder: BigUint = remainder.into();
 

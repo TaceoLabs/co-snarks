@@ -1,6 +1,6 @@
 use super::NoirUltraHonkProver;
 use ark_ec::CurveGroup;
-use ark_ff::{Field, PrimeField};
+use ark_ff::Field;
 use itertools::izip;
 use mpc_core::{
     MpcState,
@@ -9,7 +9,6 @@ use mpc_core::{
     },
 };
 use mpc_net::Network;
-use num_bigint::BigUint;
 use num_traits::Zero;
 use rayon::prelude::*;
 
@@ -270,38 +269,12 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
         arithmetic::eq_public_many(a, &zeroes, net, state)
     }
 
-    //TODO FLORIN batch opening with later calls
-    fn accumulate_limbs_for_translator<N: Network>(
-        limbs: &[Self::ArithmeticShare],
-        num_limbs: usize,
-        _state: &mut Self::State,
+    fn open_point_and_field_many<N: Network>(
+        a: &[Self::PointShare],
+        b: &[Self::ArithmeticShare],
         net: &N,
-    ) -> <P as CurveGroup>::BaseField
-    where
-        P::BaseField: PrimeField,
-    {
-        debug_assert_eq!(limbs.len(), 4);
-        let shift: BigUint = BigUint::from(1u32) << num_limbs;
-        let shiftx2: BigUint = BigUint::from(1u32) << (num_limbs * 2);
-        let shiftx3: BigUint = BigUint::from(1u32) << (num_limbs * 3);
-        let (first_biguint_a, first_biguint_b): (BigUint, BigUint) =
-            (limbs[0].a.into(), limbs[0].b.into());
-        let (mut second_biguint_a, mut second_biguint_b): (BigUint, BigUint) =
-            (limbs[1].a.into(), limbs[1].b.into());
-        let (mut third_biguint_a, mut third_biguint_b): (BigUint, BigUint) =
-            (limbs[2].a.into(), limbs[2].b.into());
-        let (mut fourth_biguint_a, mut fourth_biguint_b): (BigUint, BigUint) =
-            (limbs[3].a.into(), limbs[3].b.into());
-        second_biguint_a *= &shift;
-        second_biguint_b *= &shift;
-        third_biguint_a *= &shiftx2;
-        third_biguint_b *= &shiftx2;
-        fourth_biguint_a *= &shiftx3;
-        fourth_biguint_b *= &shiftx3;
-        let result_a = first_biguint_a + second_biguint_a + third_biguint_a + fourth_biguint_a;
-        let result_b = first_biguint_b + second_biguint_b + third_biguint_b + fourth_biguint_b;
-        let accumulated_result =
-            Rep3PrimeFieldShare::<P::BaseField>::new(result_a.into(), result_b.into());
-        arithmetic::open_vec(&[accumulated_result], net).unwrap()[0]
+        _state: &mut Self::State,
+    ) -> eyre::Result<(Vec<P>, Vec<<P>::ScalarField>)> {
+        pointshare::open_point_and_field_many(a, b, net)
     }
 }

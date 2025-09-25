@@ -1,5 +1,4 @@
 use ark_ec::CurveGroup;
-use ark_ff::PrimeField;
 use ark_poly::EvaluationDomain;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use mpc_core::MpcState;
@@ -309,6 +308,14 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
         state: &mut Self::State,
     ) -> eyre::Result<(P, P::ScalarField)>;
 
+    /// Reconstructs slices of shared points and field elements: (A,B) = Open(\[(A,B)\])
+    fn open_point_and_field_many<N: Network>(
+        a: &[Self::PointShare],
+        b: &[Self::ArithmeticShare],
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<(Vec<P>, Vec<P::ScalarField>)>;
+
     /// This function performs a multiplication directly followed by an opening. This safes one round of communication in some MPC protocols compared to calling `mul` and `open` separately.
     fn mul_open_many<N: Network>(
         a: &[Self::ArithmeticShare],
@@ -366,13 +373,4 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
         net: &N,
         state: &mut Self::State,
     ) -> eyre::Result<Vec<Self::ArithmeticShare>>;
-
-    fn accumulate_limbs_for_translator<N: Network>(
-        limbs: &[Self::ArithmeticShare],
-        num_limbs: usize,
-        state: &mut Self::State,
-        net: &N,
-    ) -> P::BaseField
-    where
-        P::BaseField: PrimeField;
 }
