@@ -1,9 +1,11 @@
 use std::collections::BTreeMap;
 
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType, mpc::NoirUltraHonkProver};
+use common::{
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProofResult, TranscriptFieldType},
+};
 use mpc_core::gadgets::poseidon2::POSEIDON2_BN254_T4_PARAMS;
-use mpc_net::Network;
 use num_bigint::BigUint;
 
 use crate::{
@@ -25,8 +27,7 @@ type GateBlocks<F> = MegaTraceBlocks<MegaTraceBlock<F>>;
 
 pub struct MegaCircuitBuilder<
     P: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
-    T: NoirWitnessExtensionProtocol<TranscriptFieldType>,
-    D: NoirUltraHonkProver<P>,
+    T: NoirWitnessExtensionProtocol<P::ScalarField>,
 > {
     pub variables: Vec<T::AcvmType>,
     next_var_index: Vec<u32>,
@@ -40,7 +41,7 @@ pub struct MegaCircuitBuilder<
     pub(crate) real_variable_tags: Vec<u32>,
     pub(crate) current_tag: u32,
     pub(crate) blocks: GateBlocks<P::ScalarField>,
-    pub ecc_op_queue: CoECCOpQueue<D, P>,
+    pub ecc_op_queue: CoECCOpQueue<T, P>,
     pub(crate) zero_idx: u32,
     pub(crate) add_accum_op_idx: u32,
     pub(crate) mul_accum_op_idx: u32,
@@ -49,11 +50,10 @@ pub struct MegaCircuitBuilder<
 }
 
 #[expect(private_interfaces)]
-impl<P, T, D> GenericBuilder<P, T> for MegaCircuitBuilder<P, T, D>
+impl<P, T> GenericBuilder<P, T> for MegaCircuitBuilder<P, T>
 where
     P: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
-    T: NoirWitnessExtensionProtocol<TranscriptFieldType>,
-    D: NoirUltraHonkProver<P, ArithmeticShare = T::ArithmeticShare>,
+    T: NoirWitnessExtensionProtocol<P::ScalarField>,
 {
     type TraceBlock = MegaTraceBlock<P::ScalarField>;
 
@@ -840,18 +840,17 @@ where
     }
 }
 
-impl<P, T, D> MegaCircuitBuilder<P, T, D>
+impl<P, T> MegaCircuitBuilder<P, T>
 where
     P: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
     T: NoirWitnessExtensionProtocol<TranscriptFieldType>,
-    D: NoirUltraHonkProver<P, ArithmeticShare = T::ArithmeticShare>,
 {
     pub(crate) const DUMMY_TAG: u32 = 0;
     pub(crate) const REAL_VARIABLE: u32 = u32::MAX - 1;
     pub(crate) const FIRST_VARIABLE_IN_CLASS: u32 = u32::MAX - 2;
     pub(crate) const DEFAULT_PLOOKUP_RANGE_STEP_SIZE: usize = 3;
 
-    pub fn new(mut ecc_op_queue: CoECCOpQueue<D, P>) -> Self {
+    pub fn new(mut ecc_op_queue: CoECCOpQueue<T, P>) -> Self {
         ecc_op_queue.initialize_new_subtable();
         let mut builder = Self {
             variables: vec![],
@@ -988,14 +987,14 @@ where
      * @param ultra_op Operation data expressed in the ultra format
      * @note All selectors are set to 0 since the ecc op selector is derived later based on the block size/location.
      */
-    fn populate_ecc_op_wires(&mut self, ultra_op: &CoUltraOp<D, P>) -> CoEccOpTuple<D, P> {
+    fn populate_ecc_op_wires(&mut self, ultra_op: &CoUltraOp<T, P>) -> CoEccOpTuple<T, P> {
         let op = self.get_ecc_op_idx(&ultra_op.op_code);
-        let x_lo = self.add_variable(ultra_op.x_lo.clone().into());
-        let x_hi = self.add_variable(ultra_op.x_hi.clone().into());
-        let y_lo = self.add_variable(ultra_op.y_lo.clone().into());
-        let y_hi = self.add_variable(ultra_op.y_hi.clone().into());
-        let z_1 = self.add_variable(ultra_op.z_1.clone().into());
-        let z_2 = self.add_variable(ultra_op.z_2.clone().into());
+        let x_lo = self.add_variable(ultra_op.x_lo.clone());
+        let x_hi = self.add_variable(ultra_op.x_hi.clone());
+        let y_lo = self.add_variable(ultra_op.y_lo.clone());
+        let y_hi = self.add_variable(ultra_op.y_hi.clone());
+        let z_1 = self.add_variable(ultra_op.z_1.clone());
+        let z_2 = self.add_variable(ultra_op.z_2.clone());
 
         // First set of wires
         self.blocks.ecc_op.populate_wires(op, x_lo, x_hi, y_lo);
@@ -1042,17 +1041,16 @@ where
      *
      * @param point Point to be added into the accumulator
      */
-    pub fn queue_ecc_add_accum_no_store<N: Network>(
+    pub fn queue_ecc_add_accum_no_store(
         &mut self,
-        point: D::PointShare,
-        net: &N,
-        state: &mut D::State,
-    ) -> (CoEccOpTuple<D, P>, CoVMOperation<D, P>) {
+        point: T::OtherAcvmPoint<P>,
+        driver: &mut T,
+    ) -> HonkProofResult<(CoEccOpTuple<T, P>, CoVMOperation<T, P>)> {
         // Add the operation to the op queue
-        let (ultra_op, eccvm_op) = self.ecc_op_queue.add_accumulate_no_store(point, net, state);
+        let (ultra_op, eccvm_op) = self.ecc_op_queue.add_accumulate_no_store(point, driver)?;
 
         // Add corresponding gates for the operation
-        (self.populate_ecc_op_wires(&ultra_op), eccvm_op)
+        Ok((self.populate_ecc_op_wires(&ultra_op), eccvm_op))
     }
 
     /**
@@ -1062,23 +1060,22 @@ where
      * @param scalar The scalar by which point is multiplied prior to being accumulated.
      * @return ECCOpTuple encoding the point and scalar inputs to the mul accum.
      */
-    pub fn queue_ecc_mul_accum_store<N: Network>(
+    pub fn queue_ecc_mul_accum_store(
         &mut self,
-        point: D::PointShare,
-        scalar: D::ArithmeticShare,
-        net: &N,
-        state: &mut D::State,
-    ) -> CoEccOpTuple<D, P> {
+        point: T::OtherAcvmPoint<P>,
+        scalar: T::AcvmType,
+        driver: &mut T,
+    ) -> HonkProofResult<CoEccOpTuple<T, P>> {
         // Add the operation to the op queue
         let (ultra_op, mut eccvm_op) = self
             .ecc_op_queue
-            .mul_accumulate_no_store(point, scalar, net, state);
+            .mul_accumulate_no_store(point, scalar, driver)?;
 
-        precompute_flags(&mut vec![&mut eccvm_op], net, state);
+        precompute_flags(&mut vec![&mut eccvm_op], driver)?;
         self.ecc_op_queue.append_eccvm_op(eccvm_op);
 
         // Add corresponding gates for the operation
-        self.populate_ecc_op_wires(&ultra_op)
+        Ok(self.populate_ecc_op_wires(&ultra_op))
     }
 
     /**
@@ -1088,20 +1085,19 @@ where
      * @param scalar The scalar by which point is multiplied prior to being accumulated.
      * @return ECCOpTuple encoding the point and scalar inputs to the mul accum.
      */
-    pub fn queue_ecc_mul_accum_no_store<N: Network>(
+    pub fn queue_ecc_mul_accum_no_store(
         &mut self,
-        point: D::PointShare,
-        scalar: D::ArithmeticShare,
-        net: &N,
-        state: &mut D::State,
-    ) -> (CoEccOpTuple<D, P>, CoVMOperation<D, P>) {
+        point: T::OtherAcvmPoint<P>,
+        scalar: T::AcvmType,
+        driver: &mut T,
+    ) -> HonkProofResult<(CoEccOpTuple<T, P>, CoVMOperation<T, P>)> {
         // Add the operation to the op queue
         let (ultra_op, eccvm_op) = self
             .ecc_op_queue
-            .mul_accumulate_no_store(point, scalar, net, state);
+            .mul_accumulate_no_store(point, scalar, driver)?;
 
         // Add corresponding gates for the operation
-        (self.populate_ecc_op_wires(&ultra_op), eccvm_op)
+        Ok((self.populate_ecc_op_wires(&ultra_op), eccvm_op))
     }
 
     /**
@@ -1110,18 +1106,14 @@ where
      *
      * @return ecc_op_tuple encoding the point to which equality has been asserted
      */
-    pub fn queue_ecc_eq<N: Network>(
-        &mut self,
-        net: &N,
-        state: &mut D::State,
-    ) -> CoEccOpTuple<D, P> {
+    pub fn queue_ecc_eq(&mut self, driver: &mut T) -> HonkProofResult<CoEccOpTuple<T, P>> {
         // Add the operation to the op queue
-        let ultra_op = self.ecc_op_queue.eq_and_reset(net, state);
+        let ultra_op = self.ecc_op_queue.eq_and_reset(driver)?;
 
         // Add corresponding gates for the operation
         let mut op_tuple = self.populate_ecc_op_wires(&ultra_op);
         op_tuple.return_is_infinity = ultra_op.return_is_infinity;
-        op_tuple
+        Ok(op_tuple)
     }
 
     /**
@@ -1129,16 +1121,12 @@ where
      *
      * @return ecc_op_tuple with all its fields set to zero
      */
-    pub fn queue_ecc_no_op<N: Network>(
-        &mut self,
-        net: &N,
-        state: &mut D::State,
-    ) -> CoEccOpTuple<D, P> {
+    pub fn queue_ecc_no_op(&mut self, driver: &mut T) -> HonkProofResult<CoEccOpTuple<T, P>> {
         // Add the operation to the op queue
-        let ultra_op = self.ecc_op_queue.no_op_ultra_only(net, state);
+        let ultra_op = self.ecc_op_queue.no_op_ultra_only(driver)?;
 
         // Add corresponding gates for the operation
-        self.populate_ecc_op_wires(&ultra_op)
+        Ok(self.populate_ecc_op_wires(&ultra_op))
     }
 
     pub fn add_public_variable(&mut self, value: T::AcvmType) -> u32 {

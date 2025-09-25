@@ -1,10 +1,14 @@
 use std::thread;
 
 use ark_bn254::Bn254;
+use ark_ec::CurveGroup;
 use ark_ec::pairing::Pairing;
 use ark_ff::AdditiveGroup;
 use ark_ff::Field;
+use co_acvm::Rep3AcvmPoint;
 use co_acvm::Rep3AcvmSolver;
+use co_acvm::Rep3AcvmType;
+use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_builder::{
     eccvm::{
         co_ecc_op_queue::{
@@ -15,17 +19,16 @@ use co_builder::{
     mega_builder::MegaCircuitBuilder,
     transcript::TranscriptFieldType,
 };
-use common::mpc::{NoirUltraHonkProver, rep3::Rep3UltraHonkDriver};
 use itertools::{Itertools, izip, multiunzip};
+use mpc_core::protocols::rep3::pointshare;
 use mpc_core::{
     gadgets::field_from_hex_string,
-    protocols::rep3::{Rep3State, conversion::A2BType, share_curve_point, share_field_element},
+    protocols::rep3::{conversion::A2BType, share_curve_point, share_field_element},
 };
 use mpc_net::local::LocalNetwork;
 
 type Bn254G1 = <Bn254 as Pairing>::G1;
 type T<'a> = Rep3AcvmSolver<'a, TranscriptFieldType, LocalNetwork>;
-type D = Rep3UltraHonkDriver;
 type Fq = ark_bn254::Fq;
 type Fr = ark_bn254::Fr;
 type G1Affine = <Bn254 as Pairing>::G1Affine;
@@ -113,9 +116,9 @@ fn to_field_elements(test_data: EccOpQueueTestData<String, String>) -> EccOpQueu
     )
 }
 
-fn to_ecc_op_queues(
+fn to_ecc_op_queues<'a>(
     test_data: EccOpQueueTestData<String, String>,
-) -> [CoECCOpQueue<D, Bn254G1>; 3] {
+) -> Vec<CoECCOpQueue<T<'a>, Bn254G1>> {
     let ((acc_x, acc_y, is_infinity), eccvm_ops_table, ultra_ops_table, eccvm_row_tracker) =
         to_field_elements(test_data);
 
@@ -129,7 +132,7 @@ fn to_ecc_op_queues(
 
     let accumulators = share_curve_point(accumulator.into(), &mut rng);
 
-    let eccvm_ops_tables: [Vec<Vec<CoVMOperation<D, Bn254G1>>>; 3] = eccvm_ops_table
+    let eccvm_ops_tables: [Vec<Vec<CoVMOperation<T, Bn254G1>>>; 3] = eccvm_ops_table
         .into_iter()
         .map(|row| {
             let tmp: Vec<_> = row
@@ -158,10 +161,10 @@ fn to_ecc_op_queues(
                         |(base_point_share, z1_share, z2_share, mul_scalar_full_share)| {
                             CoVMOperation {
                                 op_code: op_code.clone(),
-                                base_point: base_point_share,
-                                z1: z1_share,
-                                z2: z2_share,
-                                mul_scalar_full: mul_scalar_full_share,
+                                base_point: Rep3AcvmPoint::Shared(base_point_share),
+                                z1: z1_share.into(),
+                                z2: z2_share.into(),
+                                mul_scalar_full: mul_scalar_full_share.into(),
                                 ..Default::default()
                             }
                         },
@@ -185,7 +188,7 @@ fn to_ecc_op_queues(
 
     let eccvm_ops_tables = eccvm_ops_tables.map(|table| CoEccvmOpsTable { table });
 
-    let ultra_ops_tables: [Vec<Vec<CoUltraOp<D, Bn254G1>>>; 3] = ultra_ops_table
+    let ultra_ops_tables: [Vec<Vec<CoUltraOp<T, Bn254G1>>>; 3] = ultra_ops_table
         .into_iter()
         .map(|row| {
             let tmp: Vec<_> = row
@@ -219,13 +222,13 @@ fn to_ecc_op_queues(
                             is_infinity_share,
                         )| CoUltraOp {
                             op_code: op_code.clone(),
-                            x_lo: x_lo_share,
-                            x_hi: x_hi_share,
-                            y_lo: y_lo_share,
-                            y_hi: y_hi_share,
-                            z_1: z_1_share,
-                            z_2: z_2_share,
-                            return_is_infinity: is_infinity_share,
+                            x_lo: x_lo_share.into(),
+                            x_hi: x_hi_share.into(),
+                            y_lo: y_lo_share.into(),
+                            y_hi: y_hi_share.into(),
+                            z_1: z_1_share.into(),
+                            z_2: z_2_share.into(),
+                            return_is_infinity: is_infinity_share.into(),
                         },
                     )
                     .collect_tuple()
@@ -266,7 +269,7 @@ fn to_ecc_op_queues(
     izip!(accumulators, eccvm_ops_tables, ultra_ops_tables)
         .map(
             |(accumulator, eccvm_ops_table, ultra_ops_table)| CoECCOpQueue {
-                accumulator,
+                accumulator: Rep3AcvmPoint::Shared(accumulator),
                 eccvm_ops_table,
                 ultra_ops_table,
                 eccvm_row_tracker: eccvm_row_tracker.clone(),
@@ -274,8 +277,6 @@ fn to_ecc_op_queues(
             },
         )
         .collect::<Vec<_>>()
-        .try_into()
-        .unwrap()
 }
 
 #[test]
@@ -324,33 +325,43 @@ fn test_mega_builder_construction() {
     let random_scalar = to_field!(random_scalar);
 
     let rng = &mut rand::thread_rng();
-    let random_point_shares = share_curve_point(random_point.into(), rng);
-    let random_scalar_shares = share_field_element(random_scalar, rng);
+    let random_point_shares = share_curve_point(random_point.into(), rng)
+        .into_iter()
+        .map(Rep3AcvmPoint::Shared)
+        .collect::<Vec<_>>();
+    let random_scalar_shares = share_field_element(random_scalar, rng)
+        .into_iter()
+        .map(Rep3AcvmType::Shared)
+        .collect::<Vec<_>>();
 
     let initial_op_queues = to_ecc_op_queues(initial_op_queue);
 
-    let nets = LocalNetwork::new_3_parties();
+    let nets_1 = LocalNetwork::new_3_parties();
+    let nets_2 = LocalNetwork::new_3_parties();
+
     let mut threads = Vec::with_capacity(3);
 
-    for (net, co_ecc_op_queue, random_scalar_share, random_point_share) in izip!(
-        nets,
-        initial_op_queues,
+    let builders = initial_op_queues
+        .into_iter()
+        .map(|queue| MegaCircuitBuilder::<Bn254G1, T>::new(queue))
+        .collect::<Vec<_>>();
+
+    for (net_1, net_2, mut builder, random_scalar_share, random_point_share) in izip!(
+        nets_1,
+        nets_2,
+        builders,
         random_scalar_shares,
         random_point_shares
     ) {
+        let net_1b = Box::leak(Box::new(net_1));
+        let net_2b = Box::leak(Box::new(net_2));
         threads.push(thread::spawn(move || {
-            let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
-
-            let mut builder = MegaCircuitBuilder::<Bn254G1, T, D>::new(co_ecc_op_queue);
-
-            builder.queue_ecc_no_op(&net, &mut state);
-            builder.queue_ecc_mul_accum_store(
-                random_point_share,
-                random_scalar_share,
-                &net,
-                &mut state,
-            );
-            builder.queue_ecc_eq(&net, &mut state);
+            let mut driver = T::new(net_1b, net_2b, A2BType::Direct).unwrap();
+            builder.queue_ecc_no_op(&mut driver).unwrap();
+            builder
+                .queue_ecc_mul_accum_store(random_point_share, random_scalar_share, &mut driver)
+                .unwrap();
+            builder.queue_ecc_eq(&mut driver).unwrap();
 
             let CoECCOpQueue {
                 eccvm_ops_table,
@@ -360,23 +371,27 @@ fn test_mega_builder_construction() {
                 ..
             } = builder.ecc_op_queue;
 
-            let accumulator = D::open_point(accumulator, &net, &mut state).unwrap();
+            let accumulator = match accumulator {
+                Rep3AcvmPoint::Public(p) => p.into(),
+                Rep3AcvmPoint::Shared(point) => match pointshare::open_point(&point, net_1b) {
+                    Ok(point) => point.into_affine(),
+                    Err(_) => panic!("Failed to open point"),
+                },
+            };
             let ecc_vm_ops_table = eccvm_ops_table
                 .table
                 .into_iter()
                 .map(|row| {
                     row.into_iter()
                         .map(|op| {
-                            let base_point: G1Affine =
-                                D::open_point(op.base_point, &net, &mut state)
-                                    .unwrap()
-                                    .into();
-                            let [z1, z2, mul_scalar_full]: [Fr; 3] =
-                                <D as NoirUltraHonkProver<Bn254G1>>::open_many(
-                                    &[op.z1, op.z2, op.mul_scalar_full],
-                                    &net,
-                                    &mut state,
-                                )
+                            let base_point = match op.base_point {
+                                Rep3AcvmPoint::Public(p) => p.into(),
+                                Rep3AcvmPoint::Shared(p) => {
+                                    pointshare::open_point(&p, net_1b).unwrap().into_affine()
+                                }
+                            };
+                            let [z1, z2, mul_scalar_full]: [Fr; 3] = driver
+                                .open_many_acvm_type(&[op.z1, op.z2, op.mul_scalar_full])
                                 .unwrap()
                                 .try_into()
                                 .unwrap();
@@ -400,8 +415,8 @@ fn test_mega_builder_construction() {
                         row.into_iter()
                             .map(|op| {
                                 let [x_lo, x_hi, y_lo, y_hi, z_1, z_2, return_is_infinity]: [Fr;
-                                    7] = <D as NoirUltraHonkProver<Bn254G1>>::open_many(
-                                    &[
+                                    7] = driver
+                                    .open_many_acvm_type(&[
                                         op.x_lo,
                                         op.x_hi,
                                         op.y_lo,
@@ -409,13 +424,10 @@ fn test_mega_builder_construction() {
                                         op.z_1,
                                         op.z_2,
                                         op.return_is_infinity,
-                                    ],
-                                    &net,
-                                    &mut state,
-                                )
-                                .unwrap()
-                                .try_into()
-                                .unwrap();
+                                    ])
+                                    .unwrap()
+                                    .try_into()
+                                    .unwrap();
                                 let op_code = [
                                     if op.op_code.add { 1 } else { 0 },
                                     if op.op_code.mul { 1 } else { 0 },
