@@ -1,4 +1,3 @@
-
 use std::collections::VecDeque;
 
 use ark_ff::Field;
@@ -6,13 +5,17 @@ use ark_ff::Zero;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use common::crs::ProverCrs;
 use common::honk_curve::HonkCurve;
-use common::honk_proof::{HonkProof, HonkProofResult, TranscriptFieldType};
+use common::honk_proof::{HonkProofResult, TranscriptFieldType};
 use common::transcript::Transcript;
 use common::transcript::TranscriptHasher;
 
 use itertools::{Itertools, izip};
 
 use co_builder::eccvm::co_ecc_op_queue::CoECCOpQueue;
+use ultrahonk::prelude::HonkProof;
+
+// (Polynomial, Evaluation, Challenge)
+type OpeningClaim<T, F> = (Vec<T>, T, F);
 
 const NUM_WIRES: usize = 4;
 pub struct CoMergeProver<C, H, T>
@@ -66,8 +69,7 @@ where
                     .iter()
                     .map(|x| {
                         if let Some(public) = T::get_public(x) {
-                            let share = driver.promote_to_trivial_share(public);
-                            share
+                            driver.promote_to_trivial_share(public)
                         } else if let Some(secret) = T::get_shared(x) {
                             secret
                         } else {
@@ -85,8 +87,7 @@ where
                     .iter()
                     .map(|x| {
                         if let Some(public) = T::get_public(x) {
-                            let share = driver.promote_to_trivial_share(public);
-                            share
+                            driver.promote_to_trivial_share(public)
                         } else if let Some(secret) = T::get_shared(x) {
                             secret
                         } else {
@@ -104,8 +105,7 @@ where
                     .iter()
                     .map(|x| {
                         if let Some(public) = T::get_public(x) {
-                            let share = driver.promote_to_trivial_share(public);
-                            share
+                            driver.promote_to_trivial_share(public)
                         } else if let Some(secret) = T::get_shared(x) {
                             secret
                         } else {
@@ -161,7 +161,7 @@ where
 
         let kappa = self.transcript.get_challenge::<C>("kappa".to_owned());
 
-        let mut opening_claims: Vec<(Vec<T::AcvmType>, T::AcvmType, C::ScalarField)> =
+        let mut opening_claims: Vec<OpeningClaim<T::AcvmType, C::ScalarField>> =
             Vec::with_capacity(3 * NUM_WIRES);
 
         self.compute_opening_claims(
@@ -202,7 +202,7 @@ where
                     .zip(scaled_poly.iter())
                     .for_each(|(a, b)| driver.add_assign(a, *b));
 
-                let scaled_evaluation = driver.mul_with_public(alpha_pow.into(), *evaluation);
+                let scaled_evaluation = driver.mul_with_public(alpha_pow, *evaluation);
                 driver.add_assign(&mut batched_eval, scaled_evaluation);
                 alpha_pow *= alpha;
                 acc
@@ -224,7 +224,7 @@ where
         &mut self,
         polynomials: &[Vec<T::AcvmType>],
         label: &str,
-        opening_claims: &mut Vec<(Vec<T::AcvmType>, T::AcvmType, C::ScalarField)>,
+        opening_claims: &mut Vec<OpeningClaim<T::AcvmType, C::ScalarField>>,
         kappa: C::ScalarField,
         driver: &mut T,
     ) -> eyre::Result<()> {
@@ -264,8 +264,7 @@ where
             .iter()
             .map(|x| {
                 if let Some(public) = T::get_public(x) {
-                    let share = driver.promote_to_trivial_share(public);
-                    share
+driver.promote_to_trivial_share(public)
                 } else if let Some(secret) = T::get_shared(x) {
                     secret
                 } else {
@@ -276,7 +275,7 @@ where
 
         // Compute the commitment to the quotient polynomial
         let monomials = &crs.monomials[..quotient.len()];
-        let quotient_commitment = driver.msm_public_points::<C>(&monomials, &quotient);
+        let quotient_commitment = driver.msm_public_points::<C>(monomials, &quotient);
         // AZTEC TODO(#479): for now we compute the KZG commitment directly to unify the KZG and IPA interfaces but in the
         // future we might need to adjust this to use the incoming alternative to work queue (i.e. variation of
         // pthreads) or even the work queue itself

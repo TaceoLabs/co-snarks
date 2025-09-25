@@ -9,7 +9,7 @@ use common::mpc::NoirUltraHonkProver;
 use common::transcript::{Transcript, TranscriptHasher};
 use common::{
     crs::ProverCrs,
-    honk_proof::{HonkProof, HonkProofResult, TranscriptFieldType},
+    honk_proof::{HonkProofResult, TranscriptFieldType},
     types::ZeroKnowledge,
     utils::Utils,
 };

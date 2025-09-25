@@ -642,7 +642,7 @@ impl<
             .try_into()
             .unwrap();
 
-        let mut one_minus_return_is_infinity = return_is_infinity.clone();
+        let mut one_minus_return_is_infinity = return_is_infinity;
         driver.negate_inplace(&mut one_minus_return_is_infinity);
         driver.add_assign_with_public(C::ScalarField::ONE, &mut one_minus_return_is_infinity);
 

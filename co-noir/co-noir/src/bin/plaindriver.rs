@@ -10,12 +10,13 @@ use co_ultrahonk::{
     prelude::{CoUltraHonk, ProvingKey, UltraHonk, VerifyingKey},
 };
 use color_eyre::eyre::Context;
-use common::{crs::parse::CrsParser, serialize::Serialize as FieldSerialize, types::ZeroKnowledge};
+use common::{crs::parse::CrsParser, types::ZeroKnowledge};
 use common::{mpc::plain::PlainUltraHonkDriver, transcript::Poseidon2Sponge};
 use figment::{
     Figment,
     providers::{Env, Format, Serialized, Toml},
 };
+use noir_types::SerializeF;
 use serde::{Deserialize, Serialize};
 use sha3::Keccak256;
 use std::{

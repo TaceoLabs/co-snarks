@@ -11,7 +11,7 @@ use common::transcript::{Transcript, TranscriptHasher};
 use common::{
     crs::ProverCrs,
     honk_curve::HonkCurve,
-    honk_proof::{HonkProof, HonkProofResult, TranscriptFieldType},
+    honk_proof::{HonkProofResult, TranscriptFieldType},
     mpc::{
         NoirUltraHonkProver, plain::PlainUltraHonkDriver, rep3::Rep3UltraHonkDriver,
         shamir::ShamirUltraHonkDriver,

@@ -12,7 +12,6 @@ use co_noir::VerifyingKey;
 pub use co_ultrahonk::prelude::PlainProvingKey;
 use co_ultrahonk::prelude::{MPCProverFlavour, ProvingKey, Rep3CoUltraHonk, UltraHonk, Utils};
 use common::crs::parse::CrsParser;
-use common::honk_proof::HonkProof;
 use common::honk_proof::TranscriptFieldType;
 use common::mpc::plain::PlainUltraHonkDriver;
 use common::mpc::rep3::Rep3UltraHonkDriver;

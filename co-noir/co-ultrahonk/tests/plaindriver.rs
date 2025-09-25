@@ -8,10 +8,11 @@ use co_builder::prelude::HonkRecursion;
 use co_builder::prelude::constraint_system_from_reader;
 use co_ultrahonk::prelude::{CoUltraHonk, PlainCoBuilder, ProvingKey};
 use common::crs::parse::CrsParser;
-use common::honk_proof::{HonkProof, TranscriptFieldType};
+use common::honk_proof::TranscriptFieldType;
 use common::mpc::plain::PlainUltraHonkDriver;
 use common::transcript::{Poseidon2Sponge, TranscriptHasher};
 use common::types::ZeroKnowledge;
+use noir_types::HonkProof;
 use sha3::Keccak256;
 use ultrahonk::prelude::UltraHonk;
 

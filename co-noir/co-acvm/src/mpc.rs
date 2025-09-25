@@ -539,6 +539,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     fn le(&mut self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> eyre::Result<Self::AcvmType>;
 
     /// Given a pointshare, decomposes it into its x and y coordinates and the is_infinity flag, all as base field shares
+    #[expect(clippy::type_complexity)]
     fn other_pointshare_to_other_field_shares<
         C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
     >(
@@ -570,6 +571,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     ) -> eyre::Result<Vec<Self::AcvmType>>;
 
     // Opens a vector of ACVM-types, which can either be public or shared. The result is in the same order as the input.
+    #[expect(clippy::type_complexity)]
     fn open_many_acvm_type(&mut self, a: &[Self::AcvmType]) -> eyre::Result<Vec<F>> {
         let (indexed_shares, indexed_public): (
             Vec<(usize, Self::ArithmeticShare)>,
@@ -594,7 +596,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         // Merge sort by index
         Ok(opened_shares
             .into_iter()
-            .chain(indexed_public.into_iter())
+            .chain(indexed_public)
             .sorted_by_key(|(i, _)| *i)
             .map(|(_, val)| val)
             .collect::<Vec<F>>())

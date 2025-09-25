@@ -2382,6 +2382,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     }
 
     // For each value in a, checks whether the value is zero. The result is a vector of ACVM-types that are 1 if the value is zero and 0 otherwise.
+    #[expect(clippy::type_complexity)]
     fn is_zero_many(&mut self, a: &[Self::AcvmType]) -> eyre::Result<Vec<Self::AcvmType>> {
         let (indexed_shares, indexed_public): (
             Vec<(usize, Self::ArithmeticShare)>,
@@ -2414,13 +2415,14 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         // Merge sort by index
         Ok(opened_shares
             .into_iter()
-            .chain(indexed_public.into_iter())
+            .chain(indexed_public)
             .sorted_by_key(|(i, _)| *i)
             .map(|(_, val)| val)
             .collect::<Vec<Self::AcvmType>>())
     }
 
     // For each point in a, checks whether the point is the point at infinity. The result is a vector of ACVM-types that are 1 if the point is at infinity and 0 otherwise.
+    #[expect(clippy::type_complexity)]
     fn is_point_at_infinity_many_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         a: &[Self::OtherAcvmPoint<C>],
@@ -2459,7 +2461,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         // Merge sort by index
         Ok(opened_shares
             .into_iter()
-            .chain(indexed_public.into_iter())
+            .chain(indexed_public)
             .sorted_by_key(|(i, _)| *i)
             .map(|(_, val)| val)
             .collect::<Vec<Self::AcvmType>>())
@@ -2513,7 +2515,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             .map(|&i| {
                 let a = &secrets_1[i];
                 let b = &secrets_2[i];
-                self.mul(a.clone(), b.clone())
+                self.mul(*a, *b)
             })
             .collect::<Result<Vec<_>, _>>()?;
         let mul_any_public_indexed = any_public_indices
@@ -2524,7 +2526,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         // Merge sort by index
         Ok(mul_all_shared_indexed
             .into_iter()
-            .chain(mul_any_public_indexed.into_iter())
+            .chain(mul_any_public_indexed)
             .sorted_by_key(|(i, _)| *i)
             .map(|(_, val)| val)
             .collect::<Vec<Self::AcvmType>>())
@@ -2559,6 +2561,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         Rep3AcvmPoint::Shared(pointshare::msm_public_points(points, scalars))
     }
 
+    #[expect(clippy::type_complexity)]
     fn open_many_points_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         a: &[Self::OtherAcvmPoint<C>],
@@ -2586,7 +2589,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         // Merge sort by index
         Ok(opened_shares
             .into_iter()
-            .chain(indexed_public.into_iter())
+            .chain(indexed_public)
             .sorted_by_key(|(i, _)| *i)
             .map(|(_, val)| val)
             .collect::<Vec<C::Affine>>())

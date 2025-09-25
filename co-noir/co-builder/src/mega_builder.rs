@@ -989,12 +989,12 @@ where
      */
     fn populate_ecc_op_wires(&mut self, ultra_op: &CoUltraOp<T, P>) -> CoEccOpTuple<T, P> {
         let op = self.get_ecc_op_idx(&ultra_op.op_code);
-        let x_lo = self.add_variable(ultra_op.x_lo.clone());
-        let x_hi = self.add_variable(ultra_op.x_hi.clone());
-        let y_lo = self.add_variable(ultra_op.y_lo.clone());
-        let y_hi = self.add_variable(ultra_op.y_hi.clone());
-        let z_1 = self.add_variable(ultra_op.z_1.clone());
-        let z_2 = self.add_variable(ultra_op.z_2.clone());
+        let x_lo = self.add_variable(ultra_op.x_lo);
+        let x_hi = self.add_variable(ultra_op.x_hi);
+        let y_lo = self.add_variable(ultra_op.y_lo);
+        let y_hi = self.add_variable(ultra_op.y_hi);
+        let z_1 = self.add_variable(ultra_op.z_1);
+        let z_2 = self.add_variable(ultra_op.z_2);
 
         // First set of wires
         self.blocks.ecc_op.populate_wires(op, x_lo, x_hi, y_lo);
