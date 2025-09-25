@@ -10,9 +10,10 @@ use co_builder::{
 };
 use common::honk_curve::HonkCurve;
 use common::honk_proof::TranscriptFieldType;
-use common::honk_proof::{HonkProof, HonkProofResult};
+use common::honk_proof::{HonkProofResult};
 use common::transcript::{Transcript, TranscriptHasher};
 use common::types::ZeroKnowledge;
+use noir_types::HonkProof;
 use std::marker::PhantomData;
 
 pub struct UltraHonk<

@@ -7,6 +7,7 @@ use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
 use co_builder::prover_flavour::ProverFlavour;
 use co_noir::Bn254G1;
+use co_noir::HonkProof;
 use co_noir::VerifyingKey;
 pub use co_ultrahonk::prelude::PlainProvingKey;
 use co_ultrahonk::prelude::{MPCProverFlavour, ProvingKey, Rep3CoUltraHonk, UltraHonk, Utils};

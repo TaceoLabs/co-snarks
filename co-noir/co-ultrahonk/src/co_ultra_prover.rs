@@ -23,6 +23,7 @@ use mpc_core::protocols::{
     shamir::{ShamirPreprocessing, ShamirState},
 };
 use mpc_net::Network;
+use noir_types::HonkProof;
 use std::marker::PhantomData;
 
 pub type Rep3CoUltraHonk<P, H, L> = CoUltraHonk<Rep3UltraHonkDriver, P, H, L>;

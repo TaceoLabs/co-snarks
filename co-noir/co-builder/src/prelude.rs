@@ -17,3 +17,4 @@ pub use crate::types::types::{
 };
 pub use crate::ultra_builder::{GenericUltraCircuitBuilder, UltraCircuitBuilder};
 pub use co_acvm::PlainAcvmSolver;
+pub use noir_types::SerializeF;

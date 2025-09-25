@@ -14,6 +14,7 @@ use common::{
     utils::Utils,
 };
 use mpc_net::Network;
+use noir_types::HonkProof;
 use std::marker::PhantomData;
 pub(crate) struct CoDecider<
     'a,
