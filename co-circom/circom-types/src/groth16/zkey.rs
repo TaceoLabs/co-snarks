@@ -90,7 +90,7 @@ impl<P: Pairing> From<ZKey<P>> for (ConstraintMatrices<P::ScalarField>, ProvingK
         (
             ConstraintMatrices {
                 num_instance_variables: zkey.n_public + 1,
-                num_witness_variables: zkey.a_query.len(),
+                num_witness_variables: zkey.a_query.len() - zkey.n_public - 1,
                 num_constraints: zkey.num_constraints,
                 a_num_non_zero: zkey.a_matrix.len(),
                 b_num_non_zero: zkey.b_matrix.len(),
