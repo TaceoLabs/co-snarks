@@ -264,7 +264,7 @@ where
             .iter()
             .map(|x| {
                 if let Some(public) = T::get_public(x) {
-driver.promote_to_trivial_share(public)
+                    driver.promote_to_trivial_share(public)
                 } else if let Some(secret) = T::get_shared(x) {
                     secret
                 } else {
