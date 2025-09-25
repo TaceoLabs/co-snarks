@@ -507,7 +507,7 @@ mod tests {
             share_curve_point(Bn254G1Affine::identity().into(), &mut thread_rng()).into();
 
         let mut get_queues = || CoECCOpQueue::<Driver, Bn254G1> {
-            accumulator: Rep3AcvmPoint::Shared(acc.pop_front().unwrap().into()),
+            accumulator: Rep3AcvmPoint::Shared(acc.pop_front().unwrap()),
             eccvm_ops_table: CoEccvmOpsTable::new(),
             ultra_ops_table: CoUltraEccOpsTable {
                 table: EccOpsTable {

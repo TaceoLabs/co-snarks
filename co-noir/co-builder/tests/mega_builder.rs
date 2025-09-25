@@ -343,7 +343,7 @@ fn test_mega_builder_construction() {
 
     let builders = initial_op_queues
         .into_iter()
-        .map(|queue| MegaCircuitBuilder::<Bn254G1, T>::new(queue))
+        .map(MegaCircuitBuilder::<Bn254G1, T>::new)
         .collect::<Vec<_>>();
 
     for (net_1, net_2, mut builder, random_scalar_share, random_point_share) in izip!(
