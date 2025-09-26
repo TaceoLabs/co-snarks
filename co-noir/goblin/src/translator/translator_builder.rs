@@ -603,7 +603,7 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
         );
 
         // Start filling the witness container
-        let mut input = AccumulationInput::new(ultra_op.clone(), P::ScalarField::from(0u64));
+        let mut input = AccumulationInput::new(ultra_op.clone());
         input.p_x_limbs = p_x_limbs;
         input.p_x_microlimbs = p_x_microlimbs;
         input.p_y_limbs = p_y_limbs;
@@ -979,7 +979,8 @@ struct AccumulationInput<P: HonkCurve<TranscriptFieldType>> {
 }
 
 impl<P: HonkCurve<TranscriptFieldType>> AccumulationInput<P> {
-    fn new(ultra_op: UltraOp<P>, zero: P::ScalarField) -> Self {
+    fn new(ultra_op: UltraOp<P>) -> Self {
+        let zero = P::ScalarField::zero();
         Self {
             ultra_op,
             p_x_limbs: [zero; NUM_BINARY_LIMBS],
