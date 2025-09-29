@@ -3061,11 +3061,10 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         &mut self,
         secrets: &[Self::AcvmType],
     ) -> eyre::Result<Vec<Self::AcvmType>> {
-        //TODO FLORIN Do these after the shared check
-        let is_zero = self.is_zero_many(secrets)?;
-        let ones = vec![Rep3AcvmType::Public(F::one()); secrets.len()];
-        let to_invert = self.cmux_many(&is_zero, &ones, secrets)?;
-        if to_invert.iter().any(|v| Self::is_shared(v)) {
+        if secrets.iter().any(|v| Self::is_shared(v)) {
+            let is_zero = self.is_zero_many(secrets)?;
+            let ones = vec![Rep3AcvmType::Public(F::one()); secrets.len()];
+            let to_invert = self.cmux_many(&is_zero, &ones, secrets)?;
             let to_invert: Vec<Rep3PrimeFieldShare<F>> = (0..to_invert.len())
                 .map(|i| match to_invert[i] {
                     Rep3AcvmType::Public(public) => {
@@ -3082,8 +3081,8 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 .collect::<Vec<_>>();
             self.cmux_many(&is_zero, &zeroes, &inverses)
         } else {
-            let to_invert: Vec<F> = (0..to_invert.len())
-                .map(|i| Self::get_public(&to_invert[i]).expect("Already checked it is public"))
+            let to_invert: Vec<F> = (0..secrets.len())
+                .map(|i| Self::get_public(&secrets[i]).expect("Already checked it is public"))
                 .collect();
             to_invert
                 .iter()
