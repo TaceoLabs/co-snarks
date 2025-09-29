@@ -855,9 +855,8 @@ fn test_protogalaxy_prover() {
                     polynomials.public_iter().cloned().collect::<Vec<Vec<_>>>();
                 let shared_polynomials = polynomials
                     .shared_iter()
-                    .cloned()
                     .map(|shared| {
-                        <Driver as NoirUltraHonkProver<C>>::open_many(&shared, &net, &mut state)
+                        <Driver as NoirUltraHonkProver<C>>::open_many(shared, &net, &mut state)
                             .unwrap()
                     })
                     .collect::<Vec<_>>();
