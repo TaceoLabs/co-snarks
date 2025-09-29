@@ -718,6 +718,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         a: &[Self::AcvmType],
     ) -> eyre::Result<Vec<Self::OtherAcvmType<C>>>;
 
+    /// Computes wnaf digits, other auxiliary values and the rows needed for PointTablePrecomputationRow computation in the ECCVM builder.
     #[expect(clippy::type_complexity)]
     fn compute_wnaf_digits_and_compute_rows_many(
         &mut self,

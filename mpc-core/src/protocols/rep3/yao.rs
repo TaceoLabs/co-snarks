@@ -1472,7 +1472,7 @@ pub fn accumulate_from_sparse_bytes<F: PrimeField, N: Network>(
     )
 }
 
-/// TODO FLORIN DOC
+/// Computes wnaf digits and rows needed in the ECCVM builder.
 pub fn compute_wnaf_digits_and_compute_rows_many<F: PrimeField, N: Network>(
     input: &[Rep3PrimeFieldShare<F>],
     net: &N,
