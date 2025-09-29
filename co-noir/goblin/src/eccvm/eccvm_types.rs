@@ -866,6 +866,7 @@ pub fn construct_from_builder<C: HonkCurve<TranscriptFieldType>>(
     polys.precomputed.lagrange_second_mut()[1] = C::ScalarField::one();
     polys.precomputed.lagrange_last_mut()[unmasked_witness_size - 1] = C::ScalarField::one();
 
+    #[allow(clippy::needless_range_loop)]
     for i in 0..point_table_read_counts[0].len() {
         // Explanation of off-by-one offset:
         // When computing the WNAF slice for a point at point counter value `pc` and a round index `round`, the

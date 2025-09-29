@@ -345,16 +345,11 @@ pub(crate) struct RomTranscript<F: Clone> {
     pub(crate) records: Vec<RomRecord<F>>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub(crate) enum RamAccessType {
+    #[default]
     Read,
     Write,
-}
-
-impl Default for RamAccessType {
-    fn default() -> Self {
-        Self::Read
-    }
 }
 
 #[derive(Clone)]

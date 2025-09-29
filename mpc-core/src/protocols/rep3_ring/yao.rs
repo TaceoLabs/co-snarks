@@ -589,7 +589,6 @@ macro_rules! decompose_circuit_compose_blueprint {
         Ok(res)
     }};
 }
-pub(crate) use decompose_circuit_compose_blueprint;
 
 /// An upcast of a vector Rep3RingShares from a smaller ring to a larger ring
 pub fn upcast_many<T: IntRing2k, U: IntRing2k, N: Network>(

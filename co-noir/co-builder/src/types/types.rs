@@ -128,19 +128,14 @@ pub(crate) struct MemOp<F: PrimeField> {
     pub(crate) value: PolyTriple<F>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Default)]
 #[expect(clippy::upper_case_acronyms)]
 pub(crate) enum BlockType {
+    #[default]
     ROM = 0,
     RAM = 1,
     CallData = 2,
     ReturnData = 3,
-}
-
-impl Default for BlockType {
-    fn default() -> Self {
-        Self::ROM
-    }
 }
 
 #[derive(Default)]
