@@ -8,11 +8,9 @@ use ark_ec::pairing::Pairing;
 use co_builder::prelude::VerifyingKey;
 use common::honk_curve::HonkCurve;
 use common::honk_proof::TranscriptFieldType;
+use common::transcript::{Transcript, TranscriptHasher};
 use common::types::ZeroKnowledge;
-use common::{
-    honk_proof::HonkProof,
-    transcript::{Transcript, TranscriptHasher},
-};
+use noir_types::HonkProof;
 
 pub(crate) type HonkVerifyResult<T> = std::result::Result<T, eyre::Report>;
 

@@ -17,7 +17,7 @@ use co_ultrahonk::{
 use co_ultrahonk::{co_decider::univariates::SharedUnivariate, types::AllEntities};
 use common::{
     crs::parse::CrsParser,
-    honk_proof::{HonkProof, TranscriptFieldType},
+    honk_proof::TranscriptFieldType,
     mpc::{NoirUltraHonkProver, rep3::Rep3UltraHonkDriver},
     polynomials::{polynomial::Polynomial, shared_polynomial::SharedPolynomial},
     types::ZeroKnowledge,
@@ -32,7 +32,9 @@ use mpc_net::local::LocalNetwork;
 use rand::thread_rng;
 use serde::de::DeserializeOwned;
 
-use ultrahonk::prelude::{GateSeparatorPolynomial, Poseidon2Sponge, Transcript, Univariate};
+use ultrahonk::prelude::{
+    GateSeparatorPolynomial, HonkProof, Poseidon2Sponge, Transcript, Univariate,
+};
 
 use crate::{
     co_protogalaxy_prover::{BATCHED_EXTENDED_LENGTH, MAX_TOTAL_RELATION_LENGTH, NUM_KEYS},

@@ -7,12 +7,13 @@ use common::transcript::TranscriptHasher;
 use common::{
     crs::ProverCrs,
     honk_curve::HonkCurve,
-    honk_proof::{HonkProof, HonkProofResult, TranscriptFieldType},
+    honk_proof::{HonkProofResult, TranscriptFieldType},
     polynomials::polynomial::Polynomial,
     utils::Utils,
 };
 
 use co_builder::eccvm::ecc_op_queue::ECCOpQueue;
+use ultrahonk::prelude::HonkProof;
 
 const NUM_WIRES: usize = 4;
 

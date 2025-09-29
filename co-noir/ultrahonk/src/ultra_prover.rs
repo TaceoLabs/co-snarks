@@ -9,10 +9,11 @@ use co_builder::{
     prover_flavour::Flavour,
 };
 use common::honk_curve::HonkCurve;
+use common::honk_proof::HonkProofResult;
 use common::honk_proof::TranscriptFieldType;
-use common::honk_proof::{HonkProof, HonkProofResult};
 use common::transcript::{Transcript, TranscriptHasher};
 use common::types::ZeroKnowledge;
+use noir_types::HonkProof;
 use std::marker::PhantomData;
 
 pub struct UltraHonk<

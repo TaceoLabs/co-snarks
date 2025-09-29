@@ -48,6 +48,12 @@ pub enum ShamirAcvmPoint<C: CurveGroup> {
     Shared(ShamirPointShare<C>),
 }
 
+impl<C: CurveGroup> Default for ShamirAcvmPoint<C> {
+    fn default() -> Self {
+        Self::Public(C::zero())
+    }
+}
+
 impl<C: CurveGroup> std::fmt::Debug for ShamirAcvmPoint<C> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -165,7 +171,12 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
 
     type AcvmType = ShamirAcvmType<F>;
     type AcvmPoint<C: CurveGroup<BaseField = F>> = ShamirAcvmPoint<C>;
-    type AcvmNativePoint<C: CurveGroup<ScalarField = F>> = ShamirAcvmPoint<C>;
+
+    type OtherAcvmPoint<C: CurveGroup<ScalarField = F, BaseField: PrimeField>> = ShamirAcvmPoint<C>;
+    type OtherArithmeticShare<C: CurveGroup<ScalarField = F, BaseField: PrimeField>> =
+        ShamirPrimeFieldShare<C::BaseField>;
+    type OtherAcvmType<C: CurveGroup<ScalarField = F, BaseField: PrimeField>> =
+        ShamirAcvmType<C::BaseField>;
 
     type BrilligDriver = ShamirBrilligDriver<'a, F, N>;
 
@@ -958,11 +969,108 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
         panic!("functionality is_zero not feasible for Shamir")
     }
 
+    // Scales a point by a scalar. Both can either be public or shared
+    fn scale_point_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        _point: Self::OtherAcvmPoint<C>,
+        _scalar: Self::AcvmType,
+    ) -> eyre::Result<Self::OtherAcvmPoint<C>> {
+        panic!("functionality scale_point_other not feasible for Shamir")
+    }
+
+    // checks if lhs <= rhs. Returns 1 if true, 0 otherwise.
+    fn le(&mut self, _lhs: Self::AcvmType, _rhs: Self::AcvmType) -> eyre::Result<Self::AcvmType> {
+        panic!("functionality le not feasible for Shamir")
+    }
+
+    /// Given a pointshare, decomposes it into its x and y coordinates and the is_infinity flag, all as base field shares
+    fn other_pointshare_to_other_field_shares<
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
+        &mut self,
+        _point: Self::OtherAcvmPoint<C>,
+    ) -> eyre::Result<(
+        Self::OtherAcvmType<C>,
+        Self::OtherAcvmType<C>,
+        Self::OtherAcvmType<C>,
+    )> {
+        panic!("functionality other_pointshare_to_other_field_shares not feasible for Shamir")
+    }
+
+    // TODO TACEO: Currently only supports LIMB_BITS = 136, i.e. two Bn254::Fr elements per Bn254::Fq element
+    /// Converts a base field share into a vector of field shares, where the field shares
+    /// represent the limbs of the base field element. Each limb has at most LIMB_BITS bits.
+    fn other_field_shares_to_field_shares<
+        const LIMB_BITS: usize,
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
+        &mut self,
+        _input: Self::OtherAcvmType<C>,
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
+        panic!("functionality other_field_shares_to_field_shares not feasible for Shamir")
+    }
+
+    // Similar to decompose_arithmetic, but works on the full AcvmType, which can either be public or shared
+    fn decompose_acvm_type(
+        &mut self,
+        _input: Self::AcvmType,
+        _total_bit_size_per_field: usize,
+        _decompose_bit_size: usize,
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
+        panic!("functionality decompose_acvm_type not feasible for Shamir")
+    }
+
+    // For each value in a, checks whether the value is zero. The result is a vector of ACVM-types that are 1 if the value is zero and 0 otherwise.
+    fn is_zero_many(&mut self, _a: &[Self::AcvmType]) -> eyre::Result<Vec<Self::AcvmType>> {
+        panic!("functionality is_zero_many not feasible for Shamir")
+    }
+
+    // For each point in a, checks whether the point is the point at infinity. The result is a vector of ACVM-types that are 1 if the point is at infinity and 0 otherwise.
+    fn is_point_at_infinity_many_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        _a: &[Self::OtherAcvmPoint<C>],
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
+        panic!("functionality is_point_at_infinity_many_other not feasible for Shamir")
+    }
+
+    /// Multiply two slices of ACVM-types elementwise: \[c_i\] = \[secret_1_i\] * \[secret_2_i\].
+    fn mul_many(
+        &mut self,
+        _secrets_1: &[Self::AcvmType],
+        _secrets_2: &[Self::AcvmType],
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
+        panic!("functionality mul_many not feasible for Shamir")
+    }
+
+    // Given two points, adds them together. Both can either be public or shared
+    fn add_points_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &self,
+        _lhs: Self::OtherAcvmPoint<C>,
+        _rhs: Self::OtherAcvmPoint<C>,
+    ) -> Self::OtherAcvmPoint<C> {
+        panic!("functionality add_points_other not feasible for Shamir")
+    }
+
+    fn msm_public_points<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        _points: &[C::Affine],
+        _scalars: &[Self::ArithmeticShare],
+    ) -> Self::OtherAcvmPoint<C> {
+        panic!("functionality msm_public_points not feasible for Shamir")
+    }
+
+    fn open_many_points_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        _a: &[Self::OtherAcvmPoint<C>],
+    ) -> eyre::Result<Vec<C::Affine>> {
+        panic!("functionality open_many_points_other not feasible for Shamir")
+    }
+
     /// Returns the point share if the point is shared
-    fn get_shared_native_point<C: HonkCurve<F, ScalarField = F>>(
-        _a: Self::AcvmNativePoint<C>,
-    ) -> Option<Self::NativePointShare<C>> {
-        panic!("functionality get_shared_native_point not feasible for Shamir")
+    fn get_shared_point_other<C: HonkCurve<F, ScalarField = F>>(
+        a: Self::OtherAcvmPoint<C>,
+    ) -> Option<Self::OtherAcvmPoint<C>> {
+        Some(a)
     }
 
     /// Returns the point share with coordinates given as scalar field share limbs
@@ -976,15 +1084,14 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
         _y0: Self::AcvmType,
         _y1: Self::AcvmType,
         _is_infinity: Self::AcvmType,
-    ) -> eyre::Result<Self::AcvmNativePoint<C>> {
+    ) -> eyre::Result<Self::OtherAcvmPoint<C>> {
         panic!("functionality field_shares_to_native_pointshare not feasible for Shamir")
     }
 
-    /// Negates the given native point, i.e., computes -P for a point P.
-    fn negate_native_point<C: HonkCurve<F, ScalarField = F>>(
+    fn negate_point_other<C: HonkCurve<F, ScalarField = F>>(
         &mut self,
-        _point: Self::AcvmNativePoint<C>,
-    ) -> eyre::Result<Self::AcvmNativePoint<C>> {
-        panic!("functionality negate_native_point not feasible for Shamir")
+        _point: Self::OtherAcvmPoint<C>,
+    ) -> eyre::Result<Self::OtherAcvmPoint<C>> {
+        panic!("functionality negate_point_other not feasible for Shamir")
     }
 }

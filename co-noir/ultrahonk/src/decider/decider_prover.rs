@@ -10,11 +10,12 @@ use crate::{
 use common::{
     crs::ProverCrs,
     honk_curve::HonkCurve,
-    honk_proof::{HonkProof, HonkProofResult, TranscriptFieldType},
+    honk_proof::{HonkProofResult, TranscriptFieldType},
     types::ZeroKnowledge,
 };
 
 use common::transcript::{Transcript, TranscriptHasher};
+use noir_types::HonkProof;
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
 use std::marker::PhantomData;

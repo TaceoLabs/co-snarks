@@ -10,12 +10,13 @@ use co_ultrahonk::{
     prelude::{CoUltraHonk, ProvingKey, UltraHonk, VerifyingKey},
 };
 use color_eyre::eyre::Context;
-use common::{crs::parse::CrsParser, serialize::Serialize as FieldSerialize, types::ZeroKnowledge};
+use common::{crs::parse::CrsParser, types::ZeroKnowledge};
 use common::{mpc::plain::PlainUltraHonkDriver, transcript::Poseidon2Sponge};
 use figment::{
     Figment,
     providers::{Env, Format, Serialized, Toml},
 };
+use noir_types::SerializeF;
 use serde::{Deserialize, Serialize};
 use sha3::Keccak256;
 use std::{
@@ -266,7 +267,7 @@ fn main() -> color_eyre::Result<ExitCode> {
     let mut out_file = BufWriter::new(
         std::fs::File::create(&out_path).context("while creating output file for proof")?,
     );
-    let public_inputs_u8 = FieldSerialize::to_buffer(&public_inputs, false);
+    let public_inputs_u8 = SerializeF::to_buffer(&public_inputs, false);
     out_file
         .write(public_inputs_u8.as_slice())
         .context("while writing proof to file")?;

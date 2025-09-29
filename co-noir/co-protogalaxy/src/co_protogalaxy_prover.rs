@@ -7,7 +7,6 @@ use co_builder::flavours::mega_flavour::MegaFlavour;
 use co_ultrahonk::prelude::ProvingKey;
 use common::crs::ProverCrs;
 use common::honk_curve::HonkCurve;
-use common::honk_proof::HonkProof;
 use common::honk_proof::{HonkProofResult, TranscriptFieldType};
 use common::polynomials::polynomial::Polynomial;
 use common::polynomials::shared_polynomial::SharedPolynomial;
@@ -19,6 +18,7 @@ use co_ultrahonk::co_oink::co_oink_prover::CoOink;
 use common::transcript::Transcript;
 use common::{mpc::NoirUltraHonkProver, transcript::TranscriptHasher};
 use mpc_net::Network;
+use ultrahonk::prelude::HonkProof;
 use ultrahonk::{
     plain_prover_flavour::UnivariateTrait,
     prelude::{GateSeparatorPolynomial, Univariate},

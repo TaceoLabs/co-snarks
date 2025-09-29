@@ -9,11 +9,12 @@ use common::mpc::NoirUltraHonkProver;
 use common::transcript::{Transcript, TranscriptHasher};
 use common::{
     crs::ProverCrs,
-    honk_proof::{HonkProof, HonkProofResult, TranscriptFieldType},
+    honk_proof::{HonkProofResult, TranscriptFieldType},
     types::ZeroKnowledge,
     utils::Utils,
 };
 use mpc_net::Network;
+use noir_types::HonkProof;
 use std::marker::PhantomData;
 pub(crate) struct CoDecider<
     'a,

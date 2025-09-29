@@ -8,13 +8,9 @@ use ark_ff::FftField;
 use ark_ff::Field;
 use ark_ff::PrimeField;
 use ark_ff::Zero;
-use common::{
-    honk_proof::TranscriptFieldType, mpc::NoirUltraHonkProver,
-    polynomials::shared_polynomial::SharedPolynomial,
-};
+use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use common::honk_proof::{HonkProofResult, TranscriptFieldType};
 use itertools::Itertools;
-use mpc_core::MpcState;
-use mpc_net::Network;
 use std::array;
 use std::ops::Shl;
 
@@ -24,11 +20,16 @@ pub(crate) const NUM_ROWS_PER_OP: usize = 2; // A single ECC op is split across 
 pub type CoEccvmOpsTable<T, C> = EccOpsTable<CoVMOperation<T, C>>;
 
 #[derive(Debug)]
-pub struct CoUltraEccOpsTable<T: NoirUltraHonkProver<C>, C: CurveGroup> {
+pub struct CoUltraEccOpsTable<
+    T: NoirWitnessExtensionProtocol<C::ScalarField>,
+    C: CurveGroup<BaseField: PrimeField>,
+> {
     pub table: EccOpsTable<CoUltraOp<T, C>>,
 }
 
-impl<T: NoirUltraHonkProver<C>, C: CurveGroup> Default for CoUltraEccOpsTable<T, C> {
+impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: CurveGroup<BaseField: PrimeField>> Default
+    for CoUltraEccOpsTable<T, C>
+{
     fn default() -> Self {
         Self {
             table: EccOpsTable::<CoUltraOp<T, C>>::new(),
@@ -36,7 +37,9 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> Default for CoUltraEccOpsTable<T,
     }
 }
 
-impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoUltraEccOpsTable<T, C> {
+impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: CurveGroup<BaseField: PrimeField>>
+    CoUltraEccOpsTable<T, C>
+{
     pub fn ultra_table_size(&self) -> usize {
         self.table.size() * NUM_ROWS_PER_OP
     }
@@ -53,10 +56,7 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoUltraEccOpsTable<T, C> {
         self.table.create_new_subtable(size_hint);
     }
 
-    pub fn construct_table_columns(
-        &self,
-        id: <T::State as MpcState>::PartyID,
-    ) -> [SharedPolynomial<T, C>; TABLE_WIDTH] {
+    pub fn construct_table_columns(&self) -> [Vec<T::AcvmType>; TABLE_WIDTH] {
         let poly_size = self.ultra_table_size();
         let subtable_start_idx = 0; // include all subtables
         let subtable_end_idx = self.table.num_subtables();
@@ -65,14 +65,10 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoUltraEccOpsTable<T, C> {
             poly_size,
             subtable_start_idx,
             subtable_end_idx,
-            id,
         )
     }
 
-    pub fn construct_previous_table_columns(
-        &self,
-        id: <T::State as MpcState>::PartyID,
-    ) -> [SharedPolynomial<T, C>; TABLE_WIDTH] {
+    pub fn construct_previous_table_columns(&self) -> [Vec<T::AcvmType>; TABLE_WIDTH] {
         let poly_size = self.previous_ultra_table_size();
         let subtable_start_idx = 1; // exclude the 0th subtable
         let subtable_end_idx = self.table.num_subtables();
@@ -81,14 +77,10 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoUltraEccOpsTable<T, C> {
             poly_size,
             subtable_start_idx,
             subtable_end_idx,
-            id,
         )
     }
 
-    pub fn construct_current_ultra_ops_subtable_columns(
-        &self,
-        id: <T::State as MpcState>::PartyID,
-    ) -> [SharedPolynomial<T, C>; TABLE_WIDTH] {
+    pub fn construct_current_ultra_ops_subtable_columns(&self) -> [Vec<T::AcvmType>; TABLE_WIDTH] {
         let poly_size = self.current_ultra_subtable_size();
         let subtable_start_idx = 0;
         let subtable_end_idx = 1; // include only the 0th subtable
@@ -97,7 +89,6 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoUltraEccOpsTable<T, C> {
             poly_size,
             subtable_start_idx,
             subtable_end_idx,
-            id,
         )
     }
 
@@ -106,22 +97,20 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoUltraEccOpsTable<T, C> {
         poly_size: usize,
         subtable_start_idx: usize,
         subtable_end_idx: usize,
-        id: <T::State as MpcState>::PartyID,
-    ) -> [SharedPolynomial<T, C>; TABLE_WIDTH] {
-        let mut column_polynomials: [SharedPolynomial<T, C>; TABLE_WIDTH] =
-            array::from_fn(|_| SharedPolynomial::new_zero(poly_size));
+    ) -> [Vec<T::AcvmType>; TABLE_WIDTH] {
+        let mut column_polynomials: [Vec<T::AcvmType>; TABLE_WIDTH] =
+            array::from_fn(|_| vec![T::AcvmType::default(); poly_size]);
 
         let mut i = 0;
         for subtable_idx in subtable_start_idx..subtable_end_idx {
             let subtable = &self.table.get()[subtable_idx];
             for op in subtable {
-                column_polynomials[0][i] =
-                    T::promote_to_trivial_share(id, C::ScalarField::from(op.op_code.value()));
+                column_polynomials[0][i] = C::ScalarField::from(op.op_code.value()).into();
                 column_polynomials[1][i] = op.x_lo;
                 column_polynomials[2][i] = op.x_hi;
                 column_polynomials[3][i] = op.y_lo;
                 i += 1;
-                column_polynomials[0][i] = T::ArithmeticShare::default(); // only the first 'op' field is utilized
+                column_polynomials[0][i] = T::AcvmType::default(); // only the first 'op' field is utilized
                 column_polynomials[1][i] = op.y_hi;
                 column_polynomials[2][i] = op.z_1;
                 column_polynomials[3][i] = op.z_2;
@@ -133,58 +122,58 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoUltraEccOpsTable<T, C> {
 }
 
 #[derive(Debug)]
-pub struct CoVMOperation<T: NoirUltraHonkProver<C>, C: CurveGroup> {
+pub struct CoVMOperation<
+    T: NoirWitnessExtensionProtocol<C::ScalarField>,
+    C: CurveGroup<BaseField: PrimeField>,
+> {
     pub op_code: EccOpCode,
-    pub base_point: T::PointShare,
-    pub z1: T::ArithmeticShare,
-    pub z2: T::ArithmeticShare,
-    pub mul_scalar_full: T::ArithmeticShare,
-
-    // TACEO TODO
+    pub base_point: T::OtherAcvmPoint<C>,
+    pub z1: T::AcvmType,
+    pub z2: T::AcvmType,
+    pub mul_scalar_full: T::AcvmType,
     pub is_base_point_infinity: Option<bool>,
     pub is_z1_zero: Option<bool>,
     pub is_z2_zero: Option<bool>,
 }
 
-pub fn precompute_mul_acc_flags<T: NoirUltraHonkProver<C>, C: CurveGroup>(
+pub fn precompute_mul_acc_flags<
+    T: NoirWitnessExtensionProtocol<C::ScalarField>,
+    C: CurveGroup<BaseField: PrimeField>,
+>(
     ops: &mut Vec<&mut CoVMOperation<T, C>>,
-    net: &impl Network,
-    state: &mut T::State,
-) {
+    driver: &mut T,
+) -> HonkProofResult<()> {
     // Only want to precompute flags for mul ops and only if they haven't already been computed
-    let z_1_vec: Vec<T::ArithmeticShare> = ops
+    let z_1_vec: Vec<T::AcvmType> = ops
         .iter()
-        .filter(|op| op.op_code.mul && op.is_z1_zero.is_none())
+        .filter(|op| (op.op_code.mul || op.op_code.add) && op.is_z1_zero.is_none())
         .map(|op| op.z1)
         .collect();
-    let z_2_vec: Vec<T::ArithmeticShare> = ops
+    let z_2_vec: Vec<T::AcvmType> = ops
         .iter()
-        .filter(|op| op.op_code.mul && op.is_z2_zero.is_none())
+        .filter(|op| (op.op_code.mul || op.op_code.add) && op.is_z2_zero.is_none())
         .map(|op| op.z2)
         .collect();
-    let base_point_vec: Vec<T::PointShare> = ops
+    let base_point_vec: Vec<T::OtherAcvmPoint<C>> = ops
         .iter()
-        .filter(|op| op.op_code.mul && op.is_base_point_infinity.is_none())
+        .filter(|op| (op.op_code.mul || op.op_code.add) && op.is_base_point_infinity.is_none())
         .map(|op| op.base_point.clone())
         .collect();
 
     let length = z_1_vec.len();
 
-    let z_flags = T::is_zero_many(&[z_1_vec, z_2_vec].concat(), net, state)
-        .expect("Error computing is zero flags for z1 and z2");
+    let z_flags = driver.is_zero_many(&[z_1_vec, z_2_vec].concat())?;
 
-    let base_point_flags = T::is_point_at_infinity_many(&base_point_vec, net, state)
-        .expect("Error computing is infinity flags for base points");
+    let base_point_flags = driver.is_point_at_infinity_many_other(&base_point_vec)?;
 
-    let flags = T::open_many(&[z_flags, base_point_flags].concat(), net, state)
-        .expect("Error opening is zero and is infinity flags");
+    let flags = driver.open_many_acvm_type(&[z_flags, base_point_flags].concat())?;
 
     let bool_flags: Vec<bool> = flags.iter().map(|f| !f.is_zero()).collect();
 
     for (i, op) in ops
         .iter_mut()
         .filter(|op| {
-            op.op_code.mul
+            (op.op_code.mul || op.op_code.add)
                 && op.is_z1_zero.is_none()
                 && op.is_z2_zero.is_none()
                 && op.is_base_point_infinity.is_none()
@@ -195,9 +184,12 @@ pub fn precompute_mul_acc_flags<T: NoirUltraHonkProver<C>, C: CurveGroup>(
         op.is_z2_zero = Some(bool_flags[i + length]);
         op.is_base_point_infinity = Some(bool_flags[i + 2 * length]);
     }
+    Ok(())
 }
 
-impl<T: NoirUltraHonkProver<C>, C: CurveGroup> Clone for CoVMOperation<T, C> {
+impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: CurveGroup<BaseField: PrimeField>> Clone
+    for CoVMOperation<T, C>
+{
     fn clone(&self) -> Self {
         Self {
             op_code: self.op_code.clone(),
@@ -212,14 +204,16 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> Clone for CoVMOperation<T, C> {
     }
 }
 
-impl<T: NoirUltraHonkProver<C>, C: CurveGroup> Default for CoVMOperation<T, C> {
+impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: CurveGroup<BaseField: PrimeField>> Default
+    for CoVMOperation<T, C>
+{
     fn default() -> Self {
         Self {
             op_code: EccOpCode::default(),
-            base_point: T::PointShare::default(),
-            z1: T::ArithmeticShare::default(),
-            z2: T::ArithmeticShare::default(),
-            mul_scalar_full: T::ArithmeticShare::default(),
+            base_point: T::OtherAcvmPoint::default(),
+            z1: T::AcvmType::default(),
+            z2: T::AcvmType::default(),
+            mul_scalar_full: T::AcvmType::default(),
             is_base_point_infinity: None,
             is_z1_zero: None,
             is_z2_zero: None,
@@ -227,7 +221,10 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> Default for CoVMOperation<T, C> {
     }
 }
 
-pub struct CoEccOpTuple<T: NoirUltraHonkProver<C>, C: CurveGroup> {
+pub struct CoEccOpTuple<
+    T: NoirWitnessExtensionProtocol<C::ScalarField>,
+    C: CurveGroup<BaseField: PrimeField>,
+> {
     pub op: u32,
     pub x_lo: u32,
     pub x_hi: u32,
@@ -235,10 +232,12 @@ pub struct CoEccOpTuple<T: NoirUltraHonkProver<C>, C: CurveGroup> {
     pub y_hi: u32,
     pub z_1: u32,
     pub z_2: u32,
-    pub return_is_infinity: T::ArithmeticShare,
+    pub return_is_infinity: T::AcvmType,
 }
 
-impl<T: NoirUltraHonkProver<C>, C: CurveGroup> Default for CoEccOpTuple<T, C> {
+impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: CurveGroup<BaseField: PrimeField>> Default
+    for CoEccOpTuple<T, C>
+{
     fn default() -> Self {
         Self {
             op: 0,
@@ -248,24 +247,29 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> Default for CoEccOpTuple<T, C> {
             y_hi: 0,
             z_1: 0,
             z_2: 0,
-            return_is_infinity: T::ArithmeticShare::default(),
+            return_is_infinity: T::AcvmType::default(),
         }
     }
 }
 
 #[derive(Default, Debug)]
-pub struct CoUltraOp<T: NoirUltraHonkProver<C>, C: CurveGroup> {
+pub struct CoUltraOp<
+    T: NoirWitnessExtensionProtocol<C::ScalarField>,
+    C: CurveGroup<BaseField: PrimeField>,
+> {
     pub op_code: EccOpCode,
-    pub x_lo: T::ArithmeticShare,
-    pub x_hi: T::ArithmeticShare,
-    pub y_lo: T::ArithmeticShare,
-    pub y_hi: T::ArithmeticShare,
-    pub z_1: T::ArithmeticShare,
-    pub z_2: T::ArithmeticShare,
-    pub return_is_infinity: T::ArithmeticShare,
+    pub x_lo: T::AcvmType,
+    pub x_hi: T::AcvmType,
+    pub y_lo: T::AcvmType,
+    pub y_hi: T::AcvmType,
+    pub z_1: T::AcvmType,
+    pub z_2: T::AcvmType,
+    pub return_is_infinity: T::AcvmType,
 }
 
-impl<T: NoirUltraHonkProver<C>, C: CurveGroup> Clone for CoUltraOp<T, C> {
+impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: CurveGroup<BaseField: PrimeField>> Clone
+    for CoUltraOp<T, C>
+{
     fn clone(&self) -> Self {
         Self {
             op_code: self.op_code.clone(),
@@ -288,7 +292,10 @@ impl EccvmRowTracker {
      *
      * @param op
      */
-    pub fn update_cached_msms<T: NoirUltraHonkProver<C>, C: CurveGroup>(
+    pub fn update_cached_msms<
+        T: NoirWitnessExtensionProtocol<C::ScalarField>,
+        C: CurveGroup<BaseField: PrimeField>,
+    >(
         &mut self,
         op: &CoVMOperation<T, C>,
     ) {
@@ -318,21 +325,26 @@ impl EccvmRowTracker {
 }
 
 #[derive(Debug)]
-pub struct CoECCOpQueue<T: NoirUltraHonkProver<C>, C: CurveGroup> {
+pub struct CoECCOpQueue<
+    T: NoirWitnessExtensionProtocol<C::ScalarField>,
+    C: CurveGroup<BaseField: PrimeField>,
+> {
     pub eccvm_ops_table: CoEccvmOpsTable<T, C>,
     pub ultra_ops_table: CoUltraEccOpsTable<T, C>,
-    pub accumulator: T::PointShare,
+    pub accumulator: T::OtherAcvmPoint<C>,
     pub eccvm_ops_reconstructed: Vec<CoVMOperation<T, C>>,
     pub ultra_ops_reconstructed: Vec<CoUltraOp<T, C>>,
     pub eccvm_row_tracker: EccvmRowTracker,
 }
 
-impl<T: NoirUltraHonkProver<C>, C: CurveGroup> Default for CoECCOpQueue<T, C> {
+impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: CurveGroup<BaseField: PrimeField>> Default
+    for CoECCOpQueue<T, C>
+{
     fn default() -> Self {
         Self {
             eccvm_ops_table: CoEccvmOpsTable::default(),
             ultra_ops_table: CoUltraEccOpsTable::default(),
-            accumulator: T::PointShare::default(),
+            accumulator: T::OtherAcvmPoint::default(),
             eccvm_ops_reconstructed: Vec::new(),
             ultra_ops_reconstructed: Vec::new(),
             eccvm_row_tracker: EccvmRowTracker::default(),
@@ -340,7 +352,9 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> Default for CoECCOpQueue<T, C> {
     }
 }
 
-impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoECCOpQueue<T, C> {
+impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: CurveGroup<BaseField: PrimeField>>
+    CoECCOpQueue<T, C>
+{
     // Initialize a new subtable of ECCVM ops and Ultra ops corresponding to an individual circuit
     pub fn initialize_new_subtable(&mut self) {
         self.eccvm_ops_table.create_new_subtable(0);
@@ -348,28 +362,19 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoECCOpQueue<T, C> {
     }
 
     // Construct polynomials corresponding to the columns of the full aggregate ultra ecc ops table
-    pub fn construct_ultra_ops_table_columns(
-        &self,
-        id: <T::State as MpcState>::PartyID,
-    ) -> [SharedPolynomial<T, C>; TABLE_WIDTH] {
-        self.ultra_ops_table.construct_table_columns(id)
+    pub fn construct_ultra_ops_table_columns(&self) -> [Vec<T::AcvmType>; TABLE_WIDTH] {
+        self.ultra_ops_table.construct_table_columns()
     }
 
     // Construct polys corresponding to the columns of the aggregate ultra ops table, excluding the most recent subtable
-    pub fn construct_previous_ultra_ops_table_columns(
-        &self,
-        id: <T::State as MpcState>::PartyID,
-    ) -> [SharedPolynomial<T, C>; TABLE_WIDTH] {
-        self.ultra_ops_table.construct_previous_table_columns(id)
+    pub fn construct_previous_ultra_ops_table_columns(&self) -> [Vec<T::AcvmType>; TABLE_WIDTH] {
+        self.ultra_ops_table.construct_previous_table_columns()
     }
 
     // Construct polynomials corresponding to the columns of the current subtable of ultra ecc ops
-    pub fn construct_current_ultra_ops_subtable_columns(
-        &self,
-        id: <T::State as MpcState>::PartyID,
-    ) -> [SharedPolynomial<T, C>; TABLE_WIDTH] {
+    pub fn construct_current_ultra_ops_subtable_columns(&self) -> [Vec<T::AcvmType>; TABLE_WIDTH] {
         self.ultra_ops_table
-            .construct_current_ultra_ops_subtable_columns(id)
+            .construct_current_ultra_ops_subtable_columns()
     }
     // Reconstruct the full table of eccvm ops in contiguous memory from the independent subtables
     pub fn construct_full_eccvm_ops_table(&mut self) {
@@ -404,7 +409,7 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoECCOpQueue<T, C> {
         self.eccvm_ops_reconstructed = eccvm_ops_in;
     }
 
-    pub fn get_accumulator(&self) -> &T::PointShare {
+    pub fn get_accumulator(&self) -> &T::OtherAcvmPoint<C> {
         &self.accumulator
     }
 
@@ -420,22 +425,23 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> CoECCOpQueue<T, C> {
     }
 }
 
-impl<T: NoirUltraHonkProver<C>, C: CurveGroup<ScalarField = TranscriptFieldType>>
-    CoECCOpQueue<T, C>
+impl<
+    T: NoirWitnessExtensionProtocol<C::ScalarField>,
+    C: CurveGroup<BaseField: PrimeField, ScalarField = TranscriptFieldType>,
+> CoECCOpQueue<T, C>
 {
     /**
      * @brief Write point addition op to queue and natively perform addition
      *
      * @param to_add
      */
-    pub fn add_accumulate<N: Network>(
+    pub fn add_accumulate(
         &mut self,
-        to_add: T::PointShare,
-        net: &N,
-        state: &mut T::State,
-    ) -> CoUltraOp<T, C> {
+        to_add: T::OtherAcvmPoint<C>,
+        driver: &mut T,
+    ) -> HonkProofResult<CoUltraOp<T, C>> {
         // Update the accumulator natively
-        T::add_point_assign(&mut self.accumulator, to_add.clone());
+        self.accumulator = driver.add_points_other(self.accumulator.clone(), to_add.clone());
         let op_code = EccOpCode {
             add: true,
             ..Default::default()
@@ -449,7 +455,7 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup<ScalarField = TranscriptFieldType>
         });
 
         // Construct and store the operation in the ultra op format
-        self.construct_and_populate_ultra_ops(op_code, to_add, None, net, state)
+        self.construct_and_populate_ultra_ops(op_code, to_add, None, driver)
     }
 
     // /**
@@ -500,27 +506,21 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup<ScalarField = TranscriptFieldType>
      *
      * @param to_add
      */
-    pub fn add_accumulate_no_store<N: Network>(
+    pub fn add_accumulate_no_store(
         &mut self,
-        to_add: T::PointShare,
-        net: &N,
-        state: &mut T::State,
-    ) -> (CoUltraOp<T, C>, CoVMOperation<T, C>) {
+        to_add: T::OtherAcvmPoint<C>,
+        driver: &mut T,
+    ) -> HonkProofResult<(CoUltraOp<T, C>, CoVMOperation<T, C>)> {
         // Update the accumulator natively
-        T::add_point_assign(&mut self.accumulator, to_add.clone());
+        self.accumulator = driver.add_points_other(self.accumulator.clone(), to_add.clone());
         let op_code = EccOpCode {
             add: true,
             ..Default::default()
         };
 
         // Construct and store the operation in the ultra op format
-        let ultra_op = self.construct_and_populate_ultra_ops(
-            op_code.clone(),
-            to_add.clone(),
-            None,
-            net,
-            state,
-        );
+        let ultra_op =
+            self.construct_and_populate_ultra_ops(op_code.clone(), to_add.clone(), None, driver)?;
 
         let eccvm_op = CoVMOperation {
             op_code,
@@ -528,22 +528,18 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup<ScalarField = TranscriptFieldType>
             ..Default::default()
         };
 
-        (ultra_op, eccvm_op)
+        Ok((ultra_op, eccvm_op))
     }
 
-    pub fn mul_accumulate_no_store<N: Network>(
+    pub fn mul_accumulate_no_store(
         &mut self,
-        to_mul: T::PointShare,
-        scalar: T::ArithmeticShare,
-        net: &N,
-        state: &mut T::State,
-    ) -> (CoUltraOp<T, C>, CoVMOperation<T, C>) {
+        to_mul: T::OtherAcvmPoint<C>,
+        scalar: T::AcvmType,
+        driver: &mut T,
+    ) -> HonkProofResult<(CoUltraOp<T, C>, CoVMOperation<T, C>)> {
         // Update the accumulator natively
-        T::add_point_assign(
-            &mut self.accumulator,
-            T::mul_point_and_scalar(to_mul.clone(), scalar, net, state)
-                .expect("Error multiplying point and scalar"),
-        );
+        let tmp = driver.scale_point_other(to_mul.clone(), scalar)?;
+        self.accumulator = driver.add_points_other(self.accumulator.clone(), tmp);
 
         let op_code = EccOpCode {
             mul: true,
@@ -555,9 +551,8 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup<ScalarField = TranscriptFieldType>
             op_code.clone(),
             to_mul.clone(),
             Some(scalar),
-            net,
-            state,
-        );
+            driver,
+        )?;
 
         let eccvm_op = CoVMOperation {
             op_code,
@@ -568,7 +563,7 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup<ScalarField = TranscriptFieldType>
             ..Default::default()
         };
 
-        (ultra_op, eccvm_op)
+        Ok((ultra_op, eccvm_op))
     }
 
     /**
@@ -578,17 +573,12 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup<ScalarField = TranscriptFieldType>
      * <https://github.com/AztecProtocol/barretenberg/issues/1360>) to the ultra ops table without affecting the
      * operations in the ECCVM.
      */
-    pub fn no_op_ultra_only<N: Network>(
-        &mut self,
-        net: &N,
-        state: &mut T::State,
-    ) -> CoUltraOp<T, C> {
+    pub fn no_op_ultra_only(&mut self, driver: &mut T) -> HonkProofResult<CoUltraOp<T, C>> {
         self.construct_and_populate_ultra_ops(
             EccOpCode::default(),
             self.accumulator.clone(),
             None,
-            net,
-            state,
+            driver,
         )
     }
 
@@ -597,10 +587,10 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup<ScalarField = TranscriptFieldType>
      *
      * @return current internal accumulator point (prior to reset to 0)
      */
-    pub fn eq_and_reset<N: Network>(&mut self, net: &N, state: &mut T::State) -> CoUltraOp<T, C> {
+    pub fn eq_and_reset(&mut self, driver: &mut T) -> HonkProofResult<CoUltraOp<T, C>> {
         let expected = self.accumulator.clone();
 
-        self.accumulator = T::PointShare::default();
+        self.accumulator = T::OtherAcvmPoint::default();
         let op_code = EccOpCode {
             eq: true,
             reset: true,
@@ -615,7 +605,7 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup<ScalarField = TranscriptFieldType>
         });
 
         // Construct and store the operation in the ultra op format
-        self.construct_and_populate_ultra_ops(op_code, expected, None, net, state)
+        self.construct_and_populate_ultra_ops(op_code, expected, None, driver)
     }
 
     /**
@@ -626,47 +616,45 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup<ScalarField = TranscriptFieldType>
      * @param scalar
      * @return UltraOp
      */
-    pub fn construct_and_populate_ultra_ops<N: Network>(
+    pub fn construct_and_populate_ultra_ops(
         &mut self,
         op_code: EccOpCode,
-        point: T::PointShare,
-        scalar: Option<T::ArithmeticShare>,
-        net: &N,
-        state: &mut T::State,
-    ) -> CoUltraOp<T, C> {
-        let (x, y, is_point_at_infinity) = T::point_share_to_fieldshares(point, net, state)
+        point: T::OtherAcvmPoint<C>,
+        scalar: Option<T::AcvmType>,
+        driver: &mut T,
+    ) -> HonkProofResult<CoUltraOp<T, C>> {
+        let (x, y, is_point_at_infinity) = driver
+            .other_pointshare_to_other_field_shares(point)
             .expect("Error converting point to field shares");
 
         // Decompose point coordinates (Fq) into hi-lo chunks (Fr)
         const CHUNK_SIZE: usize = 2 * NUM_LIMB_BITS_IN_FIELD_SIMULATION;
-        let [x_lo, x_hi] = T::base_field_share_to_field_shares::<N, CHUNK_SIZE>(x, net, state)
-            .unwrap()
+        let [x_lo, x_hi] = driver
+            .other_field_shares_to_field_shares::<CHUNK_SIZE, _>(x)?
             .try_into()
             .unwrap();
-        let [y_lo, y_hi] = T::base_field_share_to_field_shares::<N, CHUNK_SIZE>(y, net, state)
-            .unwrap()
+        let [y_lo, y_hi] = driver
+            .other_field_shares_to_field_shares::<CHUNK_SIZE, _>(y)?
             .try_into()
             .unwrap();
-        let [return_is_infinity, _] =
-            T::base_field_share_to_field_shares::<N, CHUNK_SIZE>(is_point_at_infinity, net, state)
-                .unwrap()
-                .try_into()
-                .unwrap();
+        let [return_is_infinity, _] = driver
+            .other_field_shares_to_field_shares::<CHUNK_SIZE, _>(is_point_at_infinity)?
+            .try_into()
+            .unwrap();
 
-        let one_minus_return_is_infinity =
-            T::add_with_public(C::ScalarField::ONE, T::neg(return_is_infinity), state.id());
+        let mut one_minus_return_is_infinity = return_is_infinity;
+        driver.negate_inplace(&mut one_minus_return_is_infinity);
+        driver.add_assign_with_public(C::ScalarField::ONE, &mut one_minus_return_is_infinity);
 
-        let [x_lo, x_hi, y_lo, y_hi] = T::mul_many(
-            &[x_lo, x_hi, y_lo, y_hi],
-            &std::iter::repeat_n(one_minus_return_is_infinity, 4).collect_vec(),
-            net,
-            state,
-        )
-        .expect("Error multiplying point coordinates by (1 - is_infinity)")
-        .try_into()
-        .unwrap();
+        let [x_lo, x_hi, y_lo, y_hi] = driver
+            .mul_many(
+                &[x_lo, x_hi, y_lo, y_hi],
+                &std::iter::repeat_n(one_minus_return_is_infinity, 4).collect_vec(),
+            )?
+            .try_into()
+            .unwrap();
 
-        let (z_1, z_2) = Self::compute_zetas(scalar, net, state);
+        let (z_1, z_2) = Self::compute_zetas(scalar, driver)?;
 
         let co_ultra_op = CoUltraOp {
             op_code,
@@ -680,39 +668,36 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup<ScalarField = TranscriptFieldType>
         };
 
         self.ultra_ops_table.table.push(co_ultra_op.clone());
-        co_ultra_op
+        Ok(co_ultra_op)
     }
 
     fn compute_zetas(
-        scalar: Option<T::ArithmeticShare>,
-        net: &impl Network,
-        state: &mut T::State,
-    ) -> (T::ArithmeticShare, T::ArithmeticShare) {
+        scalar: Option<T::AcvmType>,
+        driver: &mut T,
+    ) -> HonkProofResult<(T::AcvmType, T::AcvmType)> {
         if scalar.is_none() {
-            return (T::ArithmeticShare::default(), T::ArithmeticShare::default());
+            return Ok((T::AcvmType::default(), T::AcvmType::default()));
         }
 
         let scalar = scalar.unwrap();
-        let converted = CoECCOpQueue::<T, C>::from_montgomery_form(scalar);
+        let converted = CoECCOpQueue::<T, C>::from_montgomery_form(scalar, driver);
 
-        let (k_1, k_2) = CoECCOpQueue::<T, C>::split_into_endomorphism_scalars::<_, Bn254ParamsFr>(
-            converted, net, state,
+        let (k_1, k_2) = CoECCOpQueue::<T, C>::split_into_endomorphism_scalars::<Bn254ParamsFr>(
+            converted, driver,
+        )?;
+
+        let rhs = C::ScalarField::from(2).pow([128]);
+        let cond = driver.le(converted, rhs.into()).unwrap();
+
+        let (mont_k1, mont_k2) = (
+            Self::to_montgomery_form(k_1, driver),
+            Self::to_montgomery_form(k_2, driver),
         );
-
-        let cond = T::le_public(converted, C::ScalarField::from(2).pow([128]), net, state).unwrap();
-
-        // TODO CESAR: cmux many
-        let z_1 = T::cmux(cond, scalar, Self::to_montgomery_form(k_1), net, state).unwrap();
-        let z_2 = T::cmux(
-            cond,
-            T::ArithmeticShare::default(),
-            Self::to_montgomery_form(k_2),
-            net,
-            state,
-        )
-        .unwrap();
-
-        (z_1, z_2)
+        let [k1, k2] = driver
+            .cmux_many(cond, &[scalar, T::AcvmType::default()], &[mont_k1, mont_k2])?
+            .try_into()
+            .unwrap();
+        Ok((k1, k2))
     }
 
     /**
@@ -739,11 +724,10 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup<ScalarField = TranscriptFieldType>
      * We pre-compute scalars g1 = (2^256 * b1) / n, g2 = (2^256 * b2) / n, to avoid having to perform long division
      * on 512-bit scalars
      **/
-    pub fn split_into_endomorphism_scalars<N: Network, Params: EndomorphismParams>(
-        scalar: T::ArithmeticShare,
-        net: &N,
-        state: &mut T::State,
-    ) -> (T::ArithmeticShare, T::ArithmeticShare) {
+    pub fn split_into_endomorphism_scalars<Params: EndomorphismParams>(
+        scalar: T::AcvmType,
+        driver: &mut T,
+    ) -> HonkProofResult<(T::AcvmType, T::AcvmType)> {
         let endo_g1 = BigInt([
             Params::ENDO_G1_LO,
             Params::ENDO_G1_MID,
@@ -754,56 +738,52 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup<ScalarField = TranscriptFieldType>
         let endo_minus_b1 = BigInt([Params::ENDO_MINUS_B1_LO, Params::ENDO_MINUS_B1_MID, 0, 0]);
         let endo_b2 = BigInt([Params::ENDO_B2_LO, Params::ENDO_B2_MID, 0, 0]);
 
-        let scalar_montgomery = CoECCOpQueue::<T, C>::to_montgomery_form(scalar);
-        let scalar_chunks: [T::ArithmeticShare; 4] = T::decompose_arithmetic(
-            scalar_montgomery,
-            C::ScalarField::MODULUS_BIT_SIZE as usize,
-            u64::BITS as usize,
-            net,
-            state,
-        )
-        .expect("Failed to decompose scalar")
-        .try_into()
-        .expect("Failed to convert scalar chunks");
+        let scalar_montgomery = CoECCOpQueue::<T, C>::to_montgomery_form(scalar, driver);
+        let scalar_chunks: [T::AcvmType; 4] = driver
+            .decompose_acvm_type(
+                scalar_montgomery,
+                C::ScalarField::MODULUS_BIT_SIZE as usize,
+                u64::BITS as usize,
+            )?
+            .try_into()
+            .expect("Failed to convert scalar chunks");
 
-        let c1 = CoECCOpQueue::<T, C>::mul_high(scalar_chunks, endo_g2, net, state);
-        let c2 = CoECCOpQueue::<T, C>::mul_high(scalar_chunks, endo_g1, net, state);
-        let q1 = CoECCOpQueue::<T, C>::mul_low(c1, endo_minus_b1, net, state);
-        let q2 = CoECCOpQueue::<T, C>::mul_low(c2, endo_b2, net, state);
+        let c1 = CoECCOpQueue::<T, C>::mul_high(scalar_chunks, endo_g2, driver)?;
+        let c2 = CoECCOpQueue::<T, C>::mul_high(scalar_chunks, endo_g1, driver)?;
+        let q1 = CoECCOpQueue::<T, C>::mul_low(c1, endo_minus_b1, driver)?;
+        let q2 = CoECCOpQueue::<T, C>::mul_low(c2, endo_b2, driver)?;
 
-        let q1 = CoECCOpQueue::<T, C>::recompose_shares(q1);
-        let q2 = CoECCOpQueue::<T, C>::recompose_shares(q2);
+        let q1 = CoECCOpQueue::<T, C>::recompose_shares(q1, driver);
+        let q2 = CoECCOpQueue::<T, C>::recompose_shares(q2, driver);
 
-        let q1 = CoECCOpQueue::<T, C>::from_montgomery_form(q1);
-        let q2 = CoECCOpQueue::<T, C>::from_montgomery_form(q2);
+        let q1 = CoECCOpQueue::<T, C>::from_montgomery_form(q1, driver);
+        let q2 = CoECCOpQueue::<T, C>::from_montgomery_form(q2, driver);
 
-        let t1 = T::sub(q2, q1);
+        let t1 = driver.sub(q2, q1);
 
         let beta = C::ScalarField::get_root_of_unity(3).unwrap();
-        let t2 = T::add(T::mul_with_public(beta, t1), scalar);
-        (t2, t1)
+
+        let tmp = driver.mul_with_public(beta, t1);
+        let t2 = driver.add(tmp, scalar);
+        Ok((t2, t1))
     }
 
-    fn recompose_shares(x: [T::ArithmeticShare; 4]) -> T::ArithmeticShare {
-        let mut res = T::ArithmeticShare::default();
+    fn recompose_shares(x: [T::AcvmType; 4], driver: &mut T) -> T::AcvmType {
+        let mut res = T::AcvmType::default();
         for (i, chunk) in x.into_iter().enumerate() {
             let shift = C::ScalarField::from_bigint(
                 BigInt::from(1u64).shl((i * u64::BITS as usize).try_into().unwrap()),
             )
             .unwrap();
-            T::add_assign(&mut res, T::mul_with_public(shift, chunk));
+            let tmp = driver.mul_with_public(shift, chunk);
+            res = driver.add(res, tmp);
         }
         res
     }
 
     // TODO TACEO: Optimize this function to avoid decomposing so much
-    fn mul<N: Network>(
-        x: [T::ArithmeticShare; 4],
-        y: BigInt<4>,
-        net: &N,
-        state: &mut T::State,
-    ) -> [T::ArithmeticShare; 8] {
-        let mut res = [T::ArithmeticShare::default(); 8];
+    fn mul(x: [T::AcvmType; 4], y: BigInt<4>, driver: &mut T) -> HonkProofResult<[T::AcvmType; 8]> {
+        let mut res = [T::AcvmType::default(); 8];
         let mut prev_column_carry = Vec::new();
         for col in 0..7 {
             let mut column_values = Vec::new();
@@ -817,9 +797,8 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup<ScalarField = TranscriptFieldType>
                             *x_limb,
                             *y_limb,
                             prev_column_carry.pop().unwrap_or_default(),
-                            net,
-                            state,
-                        );
+                            driver,
+                        )?;
                         column_values.push(product);
                         row_carries.push(row_carry);
                     }
@@ -831,7 +810,7 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup<ScalarField = TranscriptFieldType>
 
             // Add all values and previous carry
             let (column_sum, column_carry) =
-                CoECCOpQueue::<T, C>::add_many_carry(column_values, res[col], net, state);
+                CoECCOpQueue::<T, C>::add_many_carry(column_values, res[col], driver)?;
             res[col] = column_sum;
 
             // Add carry to next column
@@ -839,84 +818,84 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup<ScalarField = TranscriptFieldType>
                 res[col + 1] = column_carry;
             }
         }
-        res
+        Ok(res)
     }
 
-    fn mul_low<N: Network>(
-        x: [T::ArithmeticShare; 4],
+    fn mul_low(
+        x: [T::AcvmType; 4],
         y: BigInt<4>,
-        net: &N,
-        state: &mut T::State,
-    ) -> [T::ArithmeticShare; 4] {
-        CoECCOpQueue::<T, C>::mul(x, y, net, state)[..4]
-            .try_into()
-            .expect("Failed to convert scalar chunks")
+        driver: &mut T,
+    ) -> HonkProofResult<[T::AcvmType; 4]> {
+        CoECCOpQueue::<T, C>::mul(x, y, driver).map(|res| {
+            res[..4]
+                .try_into()
+                .expect("Failed to convert scalar chunks")
+        })
     }
 
-    fn mul_high<N: Network>(
-        x: [T::ArithmeticShare; 4],
+    fn mul_high(
+        x: [T::AcvmType; 4],
         y: BigInt<4>,
-        net: &N,
-        state: &mut T::State,
-    ) -> [T::ArithmeticShare; 4] {
-        CoECCOpQueue::<T, C>::mul(x, y, net, state)[4..]
-            .try_into()
-            .expect("Failed to convert scalar chunks")
+        driver: &mut T,
+    ) -> HonkProofResult<[T::AcvmType; 4]> {
+        CoECCOpQueue::<T, C>::mul(x, y, driver).map(|res| {
+            res[4..]
+                .try_into()
+                .expect("Failed to convert scalar chunks")
+        })
     }
 
-    fn mul_carry<N: Network>(
-        x: T::ArithmeticShare,
+    fn mul_carry(
+        x: T::AcvmType,
         y: u64,
-        carry: T::ArithmeticShare,
-        net: &N,
-        state: &mut T::State,
-    ) -> (T::ArithmeticShare, T::ArithmeticShare) {
-        let total_res = T::add(T::mul_with_public(C::ScalarField::from(y), x), carry);
+        carry: T::AcvmType,
+        driver: &mut T,
+    ) -> HonkProofResult<(T::AcvmType, T::AcvmType)> {
+        let tmp = driver.mul_with_public(C::ScalarField::from(y), x);
+        let total_res = driver.add(tmp, carry);
 
-        let [result, carry, _, _] = T::decompose_arithmetic(
-            total_res,
-            C::ScalarField::MODULUS_BIT_SIZE as usize,
-            u64::BITS as usize,
-            net,
-            state,
-        )
-        .expect("Failed to decompose scalar")
-        .try_into()
-        .expect("Failed to convert scalar chunks");
+        let [result, carry, _, _] = driver
+            .decompose_acvm_type(
+                total_res,
+                C::ScalarField::MODULUS_BIT_SIZE as usize,
+                u64::BITS as usize,
+            )?
+            .try_into()
+            .expect("Failed to convert scalar chunks");
 
-        (result, carry)
+        Ok((result, carry))
     }
 
-    fn add_many_carry<N: Network>(
-        x: Vec<T::ArithmeticShare>,
-        carry: T::ArithmeticShare,
-        net: &N,
-        state: &mut T::State,
-    ) -> (T::ArithmeticShare, T::ArithmeticShare) {
-        let total_res = T::add(x.into_iter().reduce(T::add).unwrap(), carry);
+    fn add_many_carry(
+        x: Vec<T::AcvmType>,
+        carry: T::AcvmType,
+        driver: &mut T,
+    ) -> HonkProofResult<(T::AcvmType, T::AcvmType)> {
+        let total_res = driver.add(
+            x.into_iter().reduce(|a, b| driver.add(a, b)).unwrap(),
+            carry,
+        );
 
-        let [result, carry, _, _] = T::decompose_arithmetic(
-            total_res,
-            C::ScalarField::MODULUS_BIT_SIZE as usize,
-            u64::BITS as usize,
-            net,
-            state,
-        )
-        .expect("Failed to decompose scalar")
-        .try_into()
-        .expect("Failed to convert scalar chunks");
+        let [result, carry, _, _] = driver
+            .decompose_acvm_type(
+                total_res,
+                C::ScalarField::MODULUS_BIT_SIZE as usize,
+                u64::BITS as usize,
+            )?
+            .try_into()
+            .expect("Failed to convert scalar chunks");
 
-        (result, carry)
+        Ok((result, carry))
     }
 
-    fn from_montgomery_form(x: T::ArithmeticShare) -> T::ArithmeticShare {
+    fn from_montgomery_form(x: T::AcvmType, driver: &mut T) -> T::AcvmType {
         let mont_r: C::ScalarField = C::ScalarField::MODULUS.montgomery_r().into();
-        T::mul_with_public(mont_r.inverse().unwrap(), x)
+        driver.mul_with_public(mont_r.inverse().unwrap(), x)
     }
 
-    fn to_montgomery_form(x: T::ArithmeticShare) -> T::ArithmeticShare {
+    fn to_montgomery_form(x: T::AcvmType, driver: &mut T) -> T::AcvmType {
         let mont_r = C::ScalarField::MODULUS.montgomery_r().into();
-        T::mul_with_public(mont_r, x)
+        driver.mul_with_public(mont_r, x)
     }
 }
 
@@ -924,13 +903,13 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup<ScalarField = TranscriptFieldType>
 mod test {
     use std::thread;
 
-    use ark_bn254::{Bn254, G1Affine, G1Projective};
+    use ark_bn254::{Bn254, Fr, G1Affine, G1Projective};
     use ark_ec::pairing::Pairing;
-    use common::mpc::{NoirUltraHonkProver, rep3::Rep3UltraHonkDriver};
+    use co_acvm::{Rep3AcvmPoint, Rep3AcvmSolver, Rep3AcvmType, mpc::NoirWitnessExtensionProtocol};
     use itertools::izip;
     use mpc_core::{
         gadgets::field_from_hex_string,
-        protocols::rep3::{Rep3State, conversion::A2BType, share_curve_point, share_field_element},
+        protocols::rep3::{conversion::A2BType, share_curve_point, share_field_element},
     };
     use mpc_net::local::LocalNetwork;
     use rand::thread_rng;
@@ -941,6 +920,7 @@ mod test {
     type P = Bn254;
     type Bn254G1 = ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>;
     type Scalar = <P as Pairing>::ScalarField;
+    type Driver<'a> = Rep3AcvmSolver<'a, Fr, LocalNetwork>;
 
     #[test]
     fn test_construct_and_populate_ultra_ops() {
@@ -975,7 +955,7 @@ mod test {
 
         let shared_scalar = share_field_element(scalar, &mut thread_rng());
 
-        let expected_result = [
+        let expected_result: [Fr; 6] = [
             field_from_hex_string(
                 "0x000000000000000000000000000000e49f458da76ade6a1f5a2bad3dd20ed047",
             )
@@ -1008,15 +988,16 @@ mod test {
         for (net, point_share, scalar_share) in izip!(nets.into_iter(), shared_point, shared_scalar)
         {
             threads.push(thread::spawn(move || {
-                let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
-                let mut op_queue = CoECCOpQueue::<Rep3UltraHonkDriver, Bn254G1>::default();
-                let co_ultra_op = op_queue.construct_and_populate_ultra_ops::<LocalNetwork>(
-                    EccOpCode::default(),
-                    point_share,
-                    Some(scalar_share),
-                    &net,
-                    &mut state,
-                );
+                let mut driver = Driver::new(&net, &net, A2BType::default()).unwrap();
+                let mut op_queue = CoECCOpQueue::<Driver, Bn254G1>::default();
+                let co_ultra_op = op_queue
+                    .construct_and_populate_ultra_ops(
+                        EccOpCode::default(),
+                        Rep3AcvmPoint::Shared(point_share),
+                        Some(scalar_share.into()),
+                        &mut driver,
+                    )
+                    .unwrap();
 
                 let result = [
                     co_ultra_op.x_lo,
@@ -1026,10 +1007,8 @@ mod test {
                     co_ultra_op.z_1,
                     co_ultra_op.z_2,
                 ];
-                <Rep3UltraHonkDriver as NoirUltraHonkProver<Bn254G1>>::open_many(
-                    &result, &net, &mut state,
-                )
-                .unwrap()
+
+                driver.open_many_acvm_type(&result).unwrap()
             }));
         }
 
@@ -1066,18 +1045,12 @@ mod test {
 
         for (net, share) in nets.into_iter().zip(scalar_shares.into_iter()) {
             threads.push(thread::spawn(move || {
-                let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
-                let (a, b) =
-                    CoECCOpQueue::<Rep3UltraHonkDriver, Bn254G1>::split_into_endomorphism_scalars::<
-                        LocalNetwork,
-                        Bn254ParamsFr,
-                    >(share, &net, &mut state);
-                <Rep3UltraHonkDriver as NoirUltraHonkProver<Bn254G1>>::open_many(
-                    &[a, b],
-                    &net,
-                    &mut state,
-                )
-                .unwrap()
+                let mut driver = Driver::new(&net, &net, A2BType::default()).unwrap();
+                let (a, b) = CoECCOpQueue::<Driver, Bn254G1>::split_into_endomorphism_scalars::<
+                    Bn254ParamsFr,
+                >(Rep3AcvmType::Shared(share), &mut driver)
+                .unwrap();
+                driver.open_many_acvm_type(&[a, b]).unwrap()
             }));
         }
 
