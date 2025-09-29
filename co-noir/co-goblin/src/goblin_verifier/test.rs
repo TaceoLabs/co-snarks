@@ -153,11 +153,11 @@ fn to_ecc_op_queues(
                     .map(
                         |(base_point_share, z1_share, z2_share, mul_scalar_full_share)| {
                             CoVMOperation {
-                                op_code: op_code.clone().into(),
+                                op_code: op_code.clone(),
                                 base_point: base_point_share.into(),
-                                z1: z1_share.into(),
-                                z2: z2_share.into(),
-                                mul_scalar_full: mul_scalar_full_share.into(),
+                                z1: z1_share,
+                                z2: z2_share,
+                                mul_scalar_full: mul_scalar_full_share,
                                 ..Default::default()
                             }
                         },
