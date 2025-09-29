@@ -336,14 +336,6 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         T::scale_many_in_place(&mut scaled_transition_is_zero, minus_one);
         T::add_assign_public_many(&mut scaled_transition_is_zero, scaling_factors, id);
 
-        // let range_constraint_slice_to_2_bits =
-        //     |s: &SharedUnivariate<T, P, SIZE>, acc: &mut SharedUnivariate<T, P, 5>| {
-        //         let tmp = ((s - 1).sqr() - 1) * ((s - 2).sqr() - 1)      //             * scaling_factor;
-        //         for i in 0..acc.evaluations.len() {
-        //             acc.evaluations[i] += tmp.evaluations[i];
-        //         }
-        //     };
-
         let mut lhs1 = Vec::with_capacity(
             2 * (slices[0].len()
                 + slices[1].len()
@@ -393,9 +385,6 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         rhs1.extend(T::add_scalar(slices[7], minus_two, id)); // second sqr() of the above range_constraint_slice_to_2_bits
         rhs1.extend(T::add_scalar(s1_shift, minus_three, id));
 
-        // let s1_shift_msb_set = MUL1;
-        // let mut tmp20 = scaled_transition.to_owned() * precompute_select_shift * s1_shift_msb_set;
-
         let convert_to_wnaf = |s0: &Vec<<T as NoirUltraHonkProver<P>>::ArithmeticShare>,
                                s1: &Vec<<T as NoirUltraHonkProver<P>>::ArithmeticShare>|
          -> Vec<<T as NoirUltraHonkProver<P>>::ArithmeticShare> {
@@ -420,14 +409,13 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         T::scale_many_in_place(&mut row_slice, P::ScalarField::from(16));
         T::add_assign_many(&mut row_slice, &w3);
 
-        let mut sum_delta = scalar_sum.to_owned(); // * P::ScalarField::from(1u64 << 16) + row_slice;
+        let mut sum_delta = scalar_sum.to_owned();
         T::scale_many_in_place(&mut sum_delta, P::ScalarField::from(1u64 << 16));
         T::add_assign_many(&mut sum_delta, &row_slice);
         let check_sum = T::sub_many(scalar_sum_new, &sum_delta);
 
-        lhs1.extend(precompute_select.clone()); //8 
-        rhs1.extend(check_sum.clone()); // 8
-        // let tmp8 = MUL1 * scaled_transition_is_zero;
+        lhs1.extend(precompute_select.clone());
+        rhs1.extend(check_sum.clone());
 
         let mut round_check = round.to_owned();
         T::scale_many_in_place(&mut round_check, minus_one);
@@ -440,13 +428,8 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
             &round_check,
         );
 
-        lhs1.extend(precompute_select.clone()); // 9,10,11
-        rhs1.extend(scaled_transition.clone()); // 9,10,11
-        // let tmp9 = MUL1 * tmp9_3;
-
-        // let tmp10 = MUL1 * round_shift;
-
-        // let tmp11 = MUL1 * scalar_sum_new;
+        lhs1.extend(precompute_select.clone());
+        rhs1.extend(scaled_transition.clone());
 
         let pc_delta = T::sub_many(pc_shift, pc);
         let pc_delta_scaled = pc_delta
@@ -459,13 +442,11 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
             .map(|a| T::add_with_public(minus_one, T::mul_with_public(minus_two, *a), id))
             .collect_vec();
 
-        lhs1.extend(scaled_transition.clone()); // 12
-        rhs1.extend(pc_delta_minus_two.clone()); // 12
-        // let tmp12 = precompute_select.to_owned() * (MUL1 + pc_delta_scaled);
+        lhs1.extend(scaled_transition.clone());
+        rhs1.extend(pc_delta_minus_two.clone());
 
-        lhs1.extend(precompute_skew.clone()); // 13
-        rhs1.extend(T::add_scalar(precompute_skew, minus_seven, id)); // 13
-        // let tmp13 = precompute_select.to_owned() * (MUL1);
+        lhs1.extend(precompute_skew.clone());
+        rhs1.extend(T::add_scalar(precompute_skew, minus_seven, id));
 
         let precompute_select_zero = precompute_select
             .iter()
@@ -482,24 +463,18 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         T::add_scalar_in_place(&mut w2, fifteen, id);
         T::add_scalar_in_place(&mut w3, fifteen, id);
 
-        lhs1.extend(precompute_select_zero.clone()); // 14
-        rhs1.extend(w0); // 14
-        // let tmp14 = MUL1;
-        lhs1.extend(precompute_select_zero.clone()); // 15
-        rhs1.extend(w1); // 15
-        // let tmp15 = MUL1;
-        lhs1.extend(precompute_select_zero.clone()); // 16
-        rhs1.extend(w2); // 16
-        // let tmp16 = MUL1;
-        lhs1.extend(precompute_select_zero.clone()); // 17
-        rhs1.extend(w3); // 17
-        // let tmp17 = MUL1;
-        lhs1.extend(precompute_select_zero.clone()); // 18
-        rhs1.extend(round); // 18
-        // let tmp18 = MUL1;
-        lhs1.extend(precompute_select_zero.clone()); // 19
-        rhs1.extend(pc); // 19
-        // let tmp19 = MUL1;
+        lhs1.extend(precompute_select_zero.clone());
+        rhs1.extend(w0);
+        lhs1.extend(precompute_select_zero.clone());
+        rhs1.extend(w1);
+        lhs1.extend(precompute_select_zero.clone());
+        rhs1.extend(w2);
+        lhs1.extend(precompute_select_zero.clone());
+        rhs1.extend(w3);
+        lhs1.extend(precompute_select_zero.clone());
+        rhs1.extend(round);
+        lhs1.extend(precompute_select_zero.clone());
+        rhs1.extend(pc);
 
         let mul1 = T::mul_many(&lhs1, &rhs1, net, state)?;
         let mul1 = mul1.chunks_exact(mul1.len() / 27).collect_vec();

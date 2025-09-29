@@ -720,9 +720,8 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         rhs.extend(acc_x.to_owned());
         rhs.extend(acc_y.to_owned());
 
-        //  TODO AFTER 1ST MUL:[
-        // let mut add_relation = lambda1.to_owned() * (x.clone() - x1) - (y - y1); // degree 3 //TODO AFTER 2ND MUL
-        // let y_t1 = lambda1.to_owned() * (x1.to_owned() - x_t1.to_owned()) - y1;] //TODO AFTER 2ND MUL
+        // let mut add_relation = lambda1.to_owned() * (x.clone() - x1) - (y - y1); // degree 3
+        // let y_t1 = lambda1.to_owned() * (x1.to_owned() - x_t1.to_owned()) - y1;]
 
         // Do the lambda_i squares:
         lhs.extend(lambda1.to_owned());
@@ -1288,61 +1287,6 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
 
         // ADD operations (if row represents ADD round, not SKEW or DOUBLE)
 
-        // let mut x2_collision_relation = Univariate::default();
-        // let mut x3_collision_relation = Univariate::default();
-        // let mut x4_collision_relation = Univariate::default();
-        // If msm_transition = 1, we have started a new MSM. We need to treat the current value of [Acc] as the point at
-        // infinity!
-        // let (x_out_1, y_out_1) = {
-        // L * (1 - s) = 0
-        // (combine) (L * (xb - xa - 1) - yb - ya) * s + L = 0
-        // add_relation += add2.to_owned()
-        //     * (add_relation_1_mul- y2 + y_t1) //(lambda2.to_owned() * (x2.to_owned() - x_t1 - &one) - y2 + y_t1)
-        //     + lambda2;
-        // x2_collision_relation += add2.to_owned() * (x2.to_owned() - x_t1);
-
-        // x3 = L.L + (-xb - xa) * q + (1 - q) xa
-        // let x_out_1 = lambda2_sqr + (x2.to_owned() * minus_one - x_t1 - x_t1) * add2 + x_t1;
-
-        // y3 = L . (xa - x3) - ya * q + (1 - q) ya
-        // let y_out_1 = lambda2.to_owned() * (x_t1.to_owned() - &x_out_1)
-        //     + (y_t1.to_owned() * minus_one - y_t1) * add2
-        //     + y_t1;
-
-        //     (x_out_1, y_out_1)
-        // };
-
-        // let (x_out_2, y_out_2) = {
-        // add_relation += add3.to_owned()
-        //     * (lambda3.to_owned() * (x3.to_owned() - x_out_1 - &one) - y3 + y_out_1)
-        //     + lambda3;
-        // x3_collision_relation += add3.to_owned() * (x3.to_owned() - x_out_1);
-
-        // let x_out_2 =
-        //     lambda3_sqr + (x3.to_owned() * minus_one - x_out_1 - x_out_1) * add3 + x_out_1;
-
-        // let y_out_2 = lambda3.to_owned() * (x_out_1.to_owned() - &x_out_2)
-        //     + (y_out_1.to_owned() * minus_one - y_out_1) * add3
-        //     + y_out_1;
-
-        //     (x_out_2, y_out_2)
-        // };
-        // let (x_out_3, y_out_3) = {
-        // add_relation += add4.to_owned()
-        //     * (lambda4.to_owned() * (x4.to_owned() - x_out_2 - &one) - y4 + y_out_2)
-        //     + lambda4;
-        // x4_collision_relation += add4.to_owned() * (x4.to_owned() - x_out_2);
-
-        // let x_out_3 =
-        //     lambda4_sqr + (x4.to_owned() * minus_one - x_out_2 - x_out_2) * add4 + x_out_2;
-
-        // let y_out_3 = lambda4.to_owned() * (x_out_2.to_owned() - &x_out_3)
-        //     + (y_out_2.to_owned() * minus_one - y_out_2) * add4
-        //     + y_out_2;
-
-        //     (x_out_3, y_out_3)
-        // };
-
         // Validate accumulator output matches ADD output if q_add = 1
         // (this is a degree-6 relation)
         let mut tmp = tmp_r0.to_owned(); //q_add.to_owned() * (acc_x_shift.to_owned() - x_out_3) * scaling_factors;
@@ -1390,49 +1334,6 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
          * The value of `msm_round` can only update when `q_double = 1` and we use this to ensure Prover correctly sets
          * `q_double`. (see round transition relations further down)
          */
-        // let mut double_relation = Univariate::default();
-        // let (x_out_dbl_1, y_out_dbl_1) = {
-        //     let mut two_x = acc_x.to_owned();
-        //     T::scale_many(&mut two_x, P::ScalarField::from(2));
-        //     // let double_relation = lambda1.to_owned() * (acc_y.to_owned() + acc_y)
-        //     //     - (two_x.to_owned() + acc_x) * acc_x;
-        //     // let x_out_dbl_1 = lambda1_sqr - two_x;
-        //     let y_out_dbl_1 = lambda1.to_owned() * (acc_x.to_owned() - &x_out_dbl_1) - acc_y;
-        //     (x_out_dbl_1, y_out_dbl_1)
-        // };
-
-        // let (x_out_dbl_2, y_out_dbl_2) = {
-        //     let two_x = x_out_dbl_1.to_owned();
-        //     T::scale_many(&mut two_x, P::ScalarField::from(2));
-        //     // double_relation += lambda2.to_owned() * (y_out_dbl_1.to_owned() + y_out_dbl_1)
-        //     //     - (two_x.to_owned() + x_out_dbl_1) * x_out_dbl_1;
-        //     // let x_out_dbl_2 = lambda2_sqr - two_x;
-        //     // let y_out_dbl_2 =
-        //     //     lambda2.to_owned() * (x_out_dbl_1.to_owned() - &x_out_dbl_2) - y_out_dbl_1;
-        //     (x_out_dbl_2, y_out_dbl_2)
-        // };
-
-        // let (x_out_dbl_3, y_out_dbl_3) = {
-        //     let two_x = x_out_dbl_2.to_owned();
-        //     T::scale_many(&mut two_x, P::ScalarField::from(2));
-        //     // double_relation += lambda3.to_owned() * (y_out_dbl_2.to_owned() + y_out_dbl_2)
-        //     //     - (two_x.to_owned() + x_out_dbl_2) * x_out_dbl_2;
-        //     // let x_out_dbl_3 = lambda3_sqr - two_x;
-        //     // let y_out_dbl_3 =
-        //     //     lambda3.to_owned() * (x_out_dbl_2.to_owned() - &x_out_dbl_3) - y_out_dbl_2;
-        //     (x_out_dbl_3, y_out_dbl_3)
-        // };
-
-        // let (x_out_dbl_4, y_out_dbl_4) = {
-        //     let two_x = x_out_dbl_3.to_owned();
-        //     T::scale_many(&mut two_x, P::ScalarField::from(2));
-        //     // double_relation += lambda4.to_owned() * (y_out_dbl_3.to_owned() + y_out_dbl_3)
-        //     //     - (two_x.to_owned() + x_out_dbl_3) * x_out_dbl_3;
-        //     // let x_out_dbl_4 = lambda4_sqr - two_x;
-        //     // let y_out_dbl_4 =
-        //     //     lambda4.to_owned() * (x_out_dbl_3.to_owned() - &x_out_dbl_4) - y_out_dbl_3;
-        //     (x_out_dbl_4, y_out_dbl_4)
-        // };
 
         let mut tmp = tmp_r10.to_owned(); //q_double.to_owned() * (acc_x_shift.to_owned() - x_out_dbl_4) * scaling_factors;
         T::mul_assign_with_public_many(&mut tmp, scaling_factors);
@@ -1454,83 +1355,6 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
          * If scalar slice == 0, we do not add into accumulator
          * i.e. for the skew round we can use the slice values as our "selector" when doing conditional point adds
          */
-        // let mut skew_relation = Univariate::default();
-
-        // let mut x1_skew_collision_relation = Univariate::default();
-        // let mut x2_skew_collision_relation = Univariate::default();
-        // let mut x3_skew_collision_relation = Univariate::default();
-        // let mut x4_skew_collision_relation = Univariate::default();
-        // add skew points iff row is a SKEW row AND slice = 7 (point_table[7] maps to -[P])
-        // N.B. while it would be nice to have one `add` relation for both ADD and SKEW rounds,
-        // this would increase degree of sumcheck identity vs evaluating them separately.
-        // This is because, for add rounds, the result of adding [P1], [Acc] is [P1 + Acc] or [P1]
-        //             but for skew rounds, the result of adding [P1], [Acc] is [P1 + Acc] or [Acc]
-        // let (x_out_21, y_out_21) = {
-        // skew_relation +=
-        //   skew1_select.to_owned()
-        // * (lambda1.to_owned() * (x1.to_owned() - acc_x - &one) - y1 + acc_y)
-        // + lambda1;
-        //   *x1_skew_collision_relation += skew1_select.to_owned() * (x1.to_owned() - acc_x);
-
-        // let x_out_21 = lambda1.to_owned().sqr() + (x1.to_owned() * minus_one - acc_x - acc_x) * skew1_select + acc_x;
-
-        // let y_out_21 = lambda1.to_owned() * (acc_x.to_owned() - &x_out_21)
-        //     + (acc_y.to_owned() * minus_one - acc_y) * skew1_select
-        //     + acc_y;
-
-        //     (x_out_21, y_out_21)
-        // };
-
-        // let (x_out_22, y_out_22) = {
-        // skew_relation += skew2_select.to_owned()
-        //     * (lambda2.to_owned() * (x2.to_owned() - x_out_21 - &one) - y2 + y_out_21)
-        //     + lambda2;
-        // x2_skew_collision_relation += skew2_select.to_owned() * (x2.to_owned() - x_out_21);
-
-        // let x_out_22 = lambda2_sqr
-        //     + (x2.to_owned() * minus_one - x_out_21 - x_out_21) * skew2_select
-        //     + x_out_21;
-
-        // let y_out_22 = lambda2.to_owned() * (x_out_21.to_owned() - &x_out_22)
-        //     + (y_out_21.to_owned() * minus_one - y_out_21) * skew2_select
-        //     + y_out_21;
-
-        //     (x_out_22, y_out_22)
-        // };
-
-        // let (x_out_23, y_out_23) = {
-        // skew_relation += skew3_select.to_owned()
-        //     * (lambda3.to_owned() * (x3.to_owned() - x_out_22 - &one) - y3 + y_out_22)
-        //     + lambda3;
-        // x3_skew_collision_relation += skew3_select.to_owned() * (x3.to_owned() - x_out_22);
-
-        // let x_out_23 = lambda3_sqr
-        //     + (x3.to_owned() * minus_one - x_out_22 - x_out_22) * skew3_select
-        //     + x_out_22;
-
-        // let y_out_23 = lambda3.to_owned() * (x_out_22.to_owned() - &x_out_23)
-        //     + (y_out_22.to_owned() * minus_one - y_out_22) * skew3_select
-        //     + y_out_22;
-
-        //     (x_out_23, y_out_23)
-        // };
-
-        // let (x_out_24, y_out_24) = {
-        // skew_relation += skew4_select.to_owned()
-        //     * (lambda4.to_owned() * (x4.to_owned() - x_out_23 - &one) - y4 + y_out_23)
-        //     + lambda4;
-        // x4_skew_collision_relation += skew4_select.to_owned() * (x4.to_owned() - x_out_23);
-
-        // let x_out_24 = lambda4_sqr
-        //     + (x4.to_owned() * minus_one - x_out_23 - x_out_23) * skew4_select
-        //     + x_out_23;
-
-        // let y_out_24 = lambda4.to_owned() * (x_out_23.to_owned() - &x_out_24)
-        //     + (y_out_23.to_owned() * minus_one - y_out_23) * skew4_select
-        //     + y_out_23;
-
-        //     (x_out_24, y_out_24)
-        // };
 
         // Validate accumulator output matches SKEW output if q_skew = 1
         // (this is a degree-6 relation)
@@ -1554,10 +1378,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let add_third_point = T::add_many(add3_mul_q_add, q_skew_mul_skew3_select);
         let add_fourth_point = T::add_many(add4_mul_q_add, q_skew_mul_skew4_select);
         // Step 2: construct the delta between x-coordinates for each point add (depending on if row is ADD or SKEW)
-        // let x1_delta = x1_skew_collision_relation * q_skew + x1_collision_relation * q_add;
-        // let x2_delta = x2_skew_collision_relation * q_skew + x2_collision_relation * q_add;
-        // let x3_delta = x3_skew_collision_relation * q_skew + x3_collision_relation * q_add;
-        // let x4_delta = x4_skew_collision_relation * q_skew + x4_collision_relation * q_add;
+
         // Step 3: x_delta * inverse - 1 = 0 if we performed a point addition (else x_delta * inverse = 0)
         let mut tmp = tmp_r6.to_owned(); // (x1_delta * collision_inverse1 - add_first_point) * scaling_factors;
         T::sub_assign_many(&mut tmp, &add_first_point);
@@ -1668,9 +1489,6 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         // if msm_transition = 0 and round_transition = 0, count_shift = count + add1 + add2 + add3 + add4
         // todo: we need this?
         let mut tmp = tmp_r24.to_owned();
-        //  msm_transition_shift_scaled_mul_round_delta_scaled
-        //     * (count_shift.to_owned() - count - add1 - add2 - add3 - add4) // TODO AFTER 1ST MUL
-        //     * scaling_factors;
         T::mul_assign_with_public_many(&mut tmp, scaling_factors);
         fold_accumulator!(univariate_accumulator.r24, tmp, SIZE);
 

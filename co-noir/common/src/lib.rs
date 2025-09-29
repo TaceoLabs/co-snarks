@@ -20,6 +20,12 @@ pub mod shplemini;
 pub mod sponge_hasher;
 pub mod transcript;
 
+pub const NUM_SCALAR_BITS: usize = 128; // The length of scalars handled by the ECCVVM
+pub const NUM_WNAF_DIGIT_BITS: usize = 4; // Scalars are decompose into base 16 in wNAF form
+pub const NUM_WNAF_DIGITS_PER_SCALAR: usize = NUM_SCALAR_BITS / NUM_WNAF_DIGIT_BITS; // 32
+pub const WNAF_MASK: u64 = (1 << NUM_WNAF_DIGIT_BITS) - 1;
+pub const WNAF_DIGITS_PER_ROW: usize = 4;
+
 pub fn compute_opening_proof<
     P: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
