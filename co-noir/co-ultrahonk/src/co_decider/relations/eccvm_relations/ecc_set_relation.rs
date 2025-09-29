@@ -628,10 +628,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
             &mut msm_result_read,
             &T::scale_many(transcript_msm_y, beta_sqr),
         );
-        // T::add_assign_many(
-        //     &mut msm_result_read,
-        //     &T::scale_many(transcript_msm_count, beta_cube), //TODO FLORIN: Removed this?
-        // );
+
         T::add_assign_many(&mut msm_result_read, transcript_pc_shift);
         T::add_scalar_in_place(&mut msm_result_read, gamma, id);
 

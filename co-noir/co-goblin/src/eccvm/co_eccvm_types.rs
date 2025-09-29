@@ -243,12 +243,11 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseF
         state: &CoVMState<C, T>,
         driver: &mut T,
     ) -> eyre::Result<()> {
-        // TODO FLORIN BATCH THIS
+        //TACEO TODO batch this with other process_ calls
         let p = entry.base_point;
         let r = state.msm_accumulator;
 
-        //TACEO TODO Can we batch these scalar muls?
-        let mul = driver.msm(&[p], &[entry.mul_scalar_full])?[0];
+        let mul = driver.scale_point_by_scalar(p, entry.mul_scalar_full)?;
         updated_state.msm_accumulator = driver.add_points(r, mul);
 
         Ok(())
@@ -261,13 +260,12 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseF
         is_accumulator_empty: T::OtherAcvmType<C>,
         driver: &mut T,
     ) -> eyre::Result<()> {
-        // TODO FLORIN BATCH THIS
+        //TACEO TODO batch this with other process_ calls
         let mul = driver.mul_with_public_other(-C::ScalarField::one(), is_accumulator_empty);
         let inv = driver.add_other(T::OtherAcvmType::from(C::ScalarField::one()), mul);
         let other = driver.add_points(old_state.accumulator, entry.base_point);
-        let mul = driver.msm(&[entry.base_point, other], &[is_accumulator_empty, inv])?;
-        let result = driver.add_points(mul[0], mul[1]);
-        updated_state.accumulator = result;
+        updated_state.accumulator =
+            driver.msm(&[entry.base_point, other], &[is_accumulator_empty, inv])?;
 
         updated_state.is_accumulator_empty =
             driver.point_is_zero_many(&[updated_state.accumulator])?[0];
@@ -281,8 +279,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseF
         is_accumulator_empty: T::OtherAcvmType<C>,
         driver: &mut T,
     ) -> eyre::Result<()> {
-        // TODO FLORIN BATCH THIS
-
+        //TACEO TODO batch this with other process_ calls
         let mul = driver.mul_with_public_other(-C::ScalarField::one(), is_accumulator_empty);
         let inv = driver.add_other(T::OtherAcvmType::from(C::ScalarField::one()), mul);
         let if_value = driver.add_points(
@@ -296,19 +293,19 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseF
             else_value,
             T::AcvmPoint::from(-offset_generator_scaled::<C>().into()),
         );
-        let mul = driver.msm(&[if_value, else_value], &[is_accumulator_empty, inv])?;
 
-        updated_state.accumulator = driver.add_points(mul[0], mul[1]);
+        updated_state.accumulator =
+            driver.msm(&[if_value, else_value], &[is_accumulator_empty, inv])?;
 
         let msm_output = driver.sub_points(
             updated_state.msm_accumulator,
             T::AcvmPoint::from(offset_generator_scaled::<C>().into()),
         );
+        //TACEO TODO: Batch this is_zero check with others
         let is_zero = driver.point_is_zero_many(&[msm_output, updated_state.accumulator])?;
 
         updated_state.is_accumulator_empty = is_zero[1];
 
-        //TACEO TODO: Batch this is_zero check with others
         row.transcript_msm_infinity = is_zero[0];
         Ok(())
     }
@@ -399,31 +396,22 @@ fn compute_inverse_trace_coordinates<
     inverse_trace_y: &mut T::AcvmType,
     driver: &mut T,
 ) -> eyre::Result<()> {
-    //TODO FLORIN: use cmuxes here
-
     let row_msm_infinity = row.transcript_msm_infinity;
-    let mul = driver.mul_with_public(-C::BaseField::one(), row_msm_infinity);
-    let inv_row_msm_infinity = driver.add(T::AcvmType::from(C::BaseField::one()), mul);
-
-    let mul = driver.mul_with_public(-C::BaseField::one(), msm_accumulator_trace_infinity);
-    let inv_accumulator_trace_infinity = driver.add(T::AcvmType::from(C::BaseField::one()), mul);
-
-    let bb_infinity_default =
-        driver.mul_with_public(C::get_bb_infinity_default(), msm_accumulator_trace_infinity);
-
-    let mul = driver.mul_many(
-        &[msm_accumulator_trace_x],
-        &[inv_accumulator_trace_infinity],
+    //TACEO TODO: Batch this cmuxes
+    let mut first_cmux = driver.cmux(
+        msm_accumulator_trace_infinity,
+        T::AcvmType::from(C::get_bb_infinity_default()),
+        msm_accumulator_trace_x,
     )?;
-    let mut result = driver.add(mul[0].to_owned(), bb_infinity_default);
     driver.add_assign_with_public(
         -offset_generator_scaled::<C>()
             .x()
             .expect("Offset generator x-coordinate should not be zero"),
-        &mut result,
+        &mut first_cmux,
     );
 
-    *transcript_msm_x_inverse_trace = driver.mul(result, inv_row_msm_infinity)?;
+    *transcript_msm_x_inverse_trace =
+        driver.cmux(row_msm_infinity, T::AcvmType::default(), first_cmux)?;
 
     let (lhsx, lhsy) = if msm_transition {
         (
@@ -534,7 +522,7 @@ where
 {
     let mut final_row = CoTranscriptRow::<C, T>::default();
 
-    let (result_x, result_y, _) = driver.pointshare_to_field_shares(updated_state.accumulator)?; //TODO FLORIN: batch this outside?
+    let (result_x, result_y, _) = driver.pointshare_to_field_shares(updated_state.accumulator)?; //TACEO TODO: Maybe we can batch this somewhere?
 
     final_row.accumulator_x = result_x;
     final_row.accumulator_y = result_y;

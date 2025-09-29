@@ -1155,20 +1155,28 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
         &mut self,
         _a: &[Self::AcvmPoint<C>],
         _b: &[Self::OtherAcvmType<C>],
-    ) -> eyre::Result<Vec<Self::AcvmPoint<C>>> {
+    ) -> eyre::Result<Self::AcvmPoint<C>> {
         unimplemented!("msm not implemented for Shamir")
     }
 
-    fn msm_public_scalar<C: CurveGroup<BaseField = F>>(
+    fn scale_point_by_scalar<C: CurveGroup<BaseField = F>>(
         &mut self,
         point: Self::AcvmPoint<C>,
-        scalar: C::ScalarField,
-    ) -> Self::AcvmPoint<C> {
-        match point {
-            ShamirAcvmPoint::Shared(shared) => {
-                ShamirAcvmPoint::Shared(pointshare::scalar_mul_public_scalar(&shared, &scalar))
+        scalar: Self::OtherAcvmType<C>,
+    ) -> eyre::Result<Self::AcvmPoint<C>> {
+        match (point, scalar) {
+            (ShamirAcvmPoint::Public(public), ShamirAcvmType::Public(scalar)) => {
+                Ok(ShamirAcvmPoint::Public(public * scalar))
             }
-            ShamirAcvmPoint::Public(public) => ShamirAcvmPoint::Public(public * scalar),
+            (ShamirAcvmPoint::Public(point), ShamirAcvmType::Shared(shared)) => Ok(
+                ShamirAcvmPoint::Shared(pointshare::scalar_mul_public_point(shared, &point)),
+            ),
+            (ShamirAcvmPoint::Shared(shared), ShamirAcvmType::Public(scalar)) => Ok(
+                ShamirAcvmPoint::Shared(pointshare::scalar_mul_public_scalar(&shared, &scalar)),
+            ),
+            (ShamirAcvmPoint::Shared(_), ShamirAcvmType::Shared(_)) => {
+                unimplemented!("not implemented for Shamir")
+            }
         }
     }
 

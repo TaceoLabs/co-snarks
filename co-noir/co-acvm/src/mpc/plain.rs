@@ -1065,19 +1065,19 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         &mut self,
         a: &[Self::AcvmPoint<C>],
         b: &[Self::OtherAcvmType<C>],
-    ) -> eyre::Result<Vec<Self::AcvmPoint<C>>> {
+    ) -> eyre::Result<Self::AcvmPoint<C>> {
         if a.len() != b.len() {
             eyre::bail!("Points and scalars must have the same length");
         }
-        Ok(a.iter().zip(b.iter()).map(|(p, s)| *p * s).collect())
+        Ok(a.iter().zip(b.iter()).map(|(p, s)| *p * s).sum())
     }
 
-    fn msm_public_scalar<C: CurveGroup<BaseField = F>>(
+    fn scale_point_by_scalar<C: CurveGroup<BaseField = F>>(
         &mut self,
         point: Self::AcvmPoint<C>,
         scalar: C::ScalarField,
-    ) -> Self::AcvmPoint<C> {
-        point * scalar
+    ) -> eyre::Result<Self::AcvmPoint<C>> {
+        Ok(point * scalar)
     }
 
     fn convert_fields<C: CurveGroup<BaseField = F>>(
@@ -1088,7 +1088,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
             let v_biguint: num_bigint::BigUint = (*v).into();
             v_biguint > C::ScalarField::MODULUS.into()
         }) {
-            eyre::bail!("This is "); //TODO FLORIN
+            eyre::bail!("Element too large to fit in target field");
         }
         a.iter()
             .map(|x| {
