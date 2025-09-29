@@ -2766,11 +2766,12 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         Ok(res)
     }
 
+    // TACEO TODO: Optimize the MSM
     fn msm<C: CurveGroup<BaseField = F>>(
         &mut self,
         a: &[Self::AcvmPoint<C>],
         b: &[Self::OtherAcvmType<C>],
-    ) -> eyre::Result<Vec<Self::AcvmPoint<C>>> {
+    ) -> eyre::Result<Self::AcvmPoint<C>> {
         if a.iter().any(|v| Self::is_shared_point(v))
             || b.iter().any(|v| Self::is_shared_other::<C>(v))
         {
@@ -2791,9 +2792,12 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 })
                 .collect();
             let res = pointshare::scalar_mul_many(&a, &b, self.net0, &mut self.state0)?;
-            res.iter()
-                .map(|y| Ok(Rep3AcvmPoint::Shared(*y)))
-                .collect::<Result<Vec<_>, _>>()
+            let sum = res
+                .iter()
+                .copied()
+                .reduce(|acc, x| pointshare::add(&acc, &x))
+                .unwrap_or_else(|| pointshare::promote_to_trivial_share(self.id, &C::zero()));
+            Ok(Rep3AcvmPoint::Shared(sum))
         } else {
             let a: Vec<C> = (0..a.len())
                 .map(|i| Self::get_public_point(&a[i]).expect("Already checked it is public"))
@@ -2801,20 +2805,37 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             let b: Vec<C::ScalarField> = (0..b.len())
                 .map(|i| Self::get_public_other::<C>(&b[i]).expect("Already checked it is public"))
                 .collect();
-            let res: Vec<C> = a.iter().zip(b.iter()).map(|(x, y)| *x * *y).collect();
-            res.iter().map(|x| Ok(Rep3AcvmPoint::Public(*x))).collect()
+            let res = a.iter().zip(b.iter()).map(|(x, y)| *x * *y).sum();
+            Ok(Rep3AcvmPoint::Public(res))
         }
     }
 
-    fn msm_public_scalar<C: CurveGroup<BaseField = F>>(
+    fn scale_point_by_scalar<C: CurveGroup<BaseField = F>>(
         &mut self,
         point: Self::AcvmPoint<C>,
-        scalar: C::ScalarField,
-    ) -> Self::AcvmPoint<C> {
-        match point {
-            Rep3AcvmPoint::Public(public) => Rep3AcvmPoint::Public(public * scalar),
-            Rep3AcvmPoint::Shared(shared) => {
-                Rep3AcvmPoint::Shared(pointshare::scalar_mul_public_scalar(&shared, scalar))
+        scalar: Self::OtherAcvmType<C>,
+    ) -> eyre::Result<Self::AcvmPoint<C>> {
+        match (point, scalar) {
+            (Rep3AcvmPoint::Public(public), Rep3AcvmType::Public(scalar)) => {
+                Ok(Rep3AcvmPoint::Public(public * scalar))
+            }
+            (Rep3AcvmPoint::Public(public), Rep3AcvmType::Shared(scalar)) => Ok(
+                Rep3AcvmPoint::Shared(pointshare::scalar_mul_public_point(&public, scalar)),
+            ),
+            (Rep3AcvmPoint::Shared(shared), Rep3AcvmType::Public(scalar)) => Ok(
+                Rep3AcvmPoint::Shared(pointshare::scalar_mul_public_scalar(&shared, scalar)),
+            ),
+            (
+                Rep3AcvmPoint::Shared(rep3_point_share),
+                Rep3AcvmType::Shared(rep3_prime_field_share),
+            ) => {
+                let res = pointshare::scalar_mul(
+                    &rep3_point_share,
+                    rep3_prime_field_share,
+                    self.net0,
+                    &mut self.state0,
+                )?;
+                Ok(Rep3AcvmPoint::Shared(res))
             }
         }
     }
@@ -2849,7 +2870,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                     (Self::get_public(v).expect("We checked types")).into();
                 v_biguint > C::ScalarField::MODULUS.into()
             }) {
-                eyre::bail!("This is "); //TODO FLORIN
+                eyre::bail!("Element too large to fit in target field");
             }
             a.iter()
                 .map(|x| {

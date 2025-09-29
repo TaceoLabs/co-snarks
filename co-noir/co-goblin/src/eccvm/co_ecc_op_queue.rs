@@ -11,7 +11,6 @@ use goblin::{
     ADDITIONS_PER_ROW, NUM_WNAF_DIGITS_PER_SCALAR, POINT_TABLE_SIZE,
     prelude::{EccOpCode, EccOpsTable},
 };
-use itertools::Itertools;
 use num_bigint::BigUint;
 use std::array;
 
@@ -248,26 +247,32 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
     pub(crate) fn get_msms(&mut self, driver: &mut T) -> eyre::Result<Vec<Msm<C, T>>> {
         let num_muls = self.get_number_of_muls();
 
-        let compute_precomputed_table = |base_point: T::AcvmPoint<C>,
-                                         driver: &mut T|
-         -> [T::AcvmPoint<C>; POINT_TABLE_SIZE + 1] {
-            let d2 = driver.msm_public_scalar(base_point, C::ScalarField::from(2u32));
-            let mut table = [T::AcvmPoint::default(); POINT_TABLE_SIZE + 1];
-            table[POINT_TABLE_SIZE] = d2;
-            table[POINT_TABLE_SIZE / 2] = base_point;
+        let compute_precomputed_table =
+            |base_point: T::AcvmPoint<C>,
+             driver: &mut T|
+             -> eyre::Result<[T::AcvmPoint<C>; POINT_TABLE_SIZE + 1]> {
+                let d2 = driver.scale_point_by_scalar(
+                    base_point,
+                    T::OtherAcvmType::<C>::from(C::ScalarField::from(2u32)),
+                )?;
+                let mut table = [T::AcvmPoint::default(); POINT_TABLE_SIZE + 1];
+                table[POINT_TABLE_SIZE] = d2;
+                table[POINT_TABLE_SIZE / 2] = base_point;
 
-            for i in 1..(POINT_TABLE_SIZE / 2) {
-                table[i + POINT_TABLE_SIZE / 2] =
-                    driver.add_points(table[i + POINT_TABLE_SIZE / 2 - 1], d2);
-            }
+                for i in 1..(POINT_TABLE_SIZE / 2) {
+                    table[i + POINT_TABLE_SIZE / 2] =
+                        driver.add_points(table[i + POINT_TABLE_SIZE / 2 - 1], d2);
+                }
 
-            for i in 0..(POINT_TABLE_SIZE / 2) {
-                table[i] = driver
-                    .msm_public_scalar(table[POINT_TABLE_SIZE - 1 - i], -C::ScalarField::one());
-            }
+                for i in 0..(POINT_TABLE_SIZE / 2) {
+                    table[i] = driver.scale_point_by_scalar(
+                        table[POINT_TABLE_SIZE - 1 - i],
+                        T::OtherAcvmType::<C>::from(-C::ScalarField::one()),
+                    )?;
+                }
 
-            table
-        };
+                Ok(table)
+            };
 
         let mut msm_count = 0;
         let mut active_mul_count = 0;
@@ -342,7 +347,7 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
                     wnaf_skew: z1_even[z1_index],
                     wnaf_digits_sign: z1_wnaf_digits_sign[z1_index],
                     wnaf_si: z1_wnaf_s_i[z1_index],
-                    precomputed_table: compute_precomputed_table(op.base_point, driver),
+                    precomputed_table: compute_precomputed_table(op.base_point, driver)?,
                     row_chunks: z1_row_chunks[z1_index],
                     row_chunks_sign: z1_row_chunks_sign[z1_index],
                 };
@@ -365,7 +370,7 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
                     base_point: endo_point,
                     wnaf_digits: z2_wnaf_digits[z2_index],
                     wnaf_skew: z2_even[z2_index],
-                    precomputed_table: compute_precomputed_table(endo_point, driver),
+                    precomputed_table: compute_precomputed_table(endo_point, driver)?,
                     wnaf_digits_sign: z2_wnaf_digits_sign[z2_index],
                     wnaf_si: z2_wnaf_s_i[z2_index],
                     row_chunks: z2_row_chunks[z2_index],
@@ -739,7 +744,6 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/973): Reinstate multitreading?
         // populate point trace, and the components of the MSM execution trace that do not relate to affine point
         // operations
-
         for msm_idx in 0..msms.len() {
             let mut accumulator = offset_generator;
             let msm = &msms[msm_idx];
@@ -783,15 +787,6 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
                         // form of the WNAF slice value. (compressed = no gaps in the value range. i.e. -15,
                         // -13, ..., 15 maps to 0, ..., 15).
                         add_state.slice = if add_state.add {
-                            // let mut tmp = slice; //((slice + 15) / 2) as usize; //Attention FLORIN, this is already done for the slices
-                            // driver.add_assign_with_public(C::BaseField::from(15), &mut tmp);
-                            // tmp = driver.mul_with_public(
-                            //     C::BaseField::from(2)
-                            //         .inverse()
-                            //         .expect("2 should have an inverse..."),
-                            //     tmp,
-                            // );
-                            // tmp
                             slice
                         } else {
                             T::AcvmType::default()
@@ -800,8 +795,7 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
                             let lut = driver.init_lut_by_acvm_point(
                                 msm[offset + point_idx].precomputed_table.to_vec(),
                             );
-                            //TODO FLORIN: Batch this outside the loop
-                            let index = driver.convert_fields::<C>(&[add_state.slice])?[0];
+                            let index = driver.convert_fields::<C>(&[add_state.slice])?[0]; // TACEO TODO batch these conversions
                             driver.read_lut_by_acvm_point(index, &lut)?
                         } else {
                             T::AcvmPoint::<C>::default()
@@ -874,11 +868,6 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
                                     C::BaseField::from(7),
                                     msm[offset + point_idx].wnaf_skew,
                                 )
-                                // if msm[offset + point_idx].wnaf_skew {
-                                //     T::AcvmType::from(C::BaseField::from(7))
-                                // } else {
-                                //     T::AcvmType::default()
-                                // }
                             } else {
                                 T::AcvmType::default()
                             };
@@ -888,8 +877,7 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
                                 let lut = driver.init_lut_by_acvm_point(
                                     msm[offset + point_idx].precomputed_table.to_vec(),
                                 );
-                                //TODO FLORIN: Batch this outside the loop
-                                let index = driver.convert_fields::<C>(&[add_state.slice])?[0];
+                                let index = driver.convert_fields::<C>(&[add_state.slice])?[0]; // TACEO TODO batch these conversions
                                 driver.read_lut_by_acvm_point(index, &lut)?
                             } else {
                                 T::AcvmPoint::<C>::default()
@@ -903,16 +891,15 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
                             accumulator = {
                                 let added_points = driver.add_points(accumulator, add_state.point);
                                 let converted_add_predicate: T::OtherAcvmType<_> =
-                                    driver.convert_fields::<C>(&[add_predicate])?[0];
+                                    driver.convert_fields::<C>(&[add_predicate])?[0]; // TACEO TODO batch these conversions
                                 let add_predicate_inverted = driver.sub_other(
                                     T::OtherAcvmType::from(C::ScalarField::one()),
                                     converted_add_predicate,
                                 );
-                                let result = driver.msm(
+                                driver.msm(
                                     &[accumulator, added_points],
                                     &[add_predicate_inverted, converted_add_predicate],
-                                )?;
-                                driver.add_points(result[0], result[1])
+                                )?
                             };
                             //  if add_predicate {
                             //     driver.add_points(accumulator, add_state.point)
@@ -952,7 +939,6 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
         let (p2_ys, acc_ys) = rest.split_at(num_point_adds_and_doubles);
 
         for operation_idx in 0..num_point_adds_and_doubles {
-            //TODO FLORIN: BATCH THIS outside the loop
             let (tmp1_x, tmp1_y) = (p1_xs[operation_idx], p1_ys[operation_idx]);
             let tmp2_x = p2_xs[operation_idx];
 
@@ -1021,16 +1007,17 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
                     let acc_y = normalized_accumulator_y;
                     row.accumulator_x = acc_x;
                     row.accumulator_y = acc_y;
-                    for point_idx in 0..ADDITIONS_PER_ROW {
+
+                    let p1_x_s = &p1_xs[trace_index..trace_index + ADDITIONS_PER_ROW];
+                    let inverses = &inverse_trace[trace_index..trace_index + ADDITIONS_PER_ROW];
+                    let three_dx = driver.scale_many(p1_x_s, C::BaseField::from(3));
+                    //TACEO TODO batch these multiplications outside
+                    let three_dx_dx = driver.mul_many(&three_dx, p1_x_s)?;
+                    let res = driver.mul_many(&three_dx_dx, inverses)?; //((*dx + dx + dx) * dx) * inverse;
+                    for (point_idx, point) in res.iter().enumerate().take(ADDITIONS_PER_ROW) {
                         let add_state = &mut row.add_state[point_idx];
                         add_state.collision_inverse = T::AcvmType::default();
-                        let p1_x = p1_xs[trace_index];
-                        let dx = &p1_x;
-                        let inverse = &inverse_trace[trace_index];
-                        // TODO FLORIN: BATCH THIS
-                        let three_dx = driver.mul_with_public(C::BaseField::from(3), *dx);
-                        let three_dx_dx = driver.mul(three_dx, *dx)?;
-                        add_state.lambda = driver.mul(three_dx_dx, *inverse)?; //((*dx + dx + dx) * dx) * inverse;
+                        add_state.lambda = *point;
                         trace_index += 1;
                     }
                     accumulator_index += 1;
@@ -1043,29 +1030,35 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
                             (acc_xs[accumulator_index], acc_ys[accumulator_index]);
                         row.accumulator_x = normalized_accumulator_x;
                         row.accumulator_y = normalized_accumulator_y;
+                        let p1_ys = &p1_ys[trace_index..trace_index + ADDITIONS_PER_ROW];
+                        let p2_ys = &p2_ys[trace_index..trace_index + ADDITIONS_PER_ROW];
+                        let inverses = &inverse_trace[trace_index..trace_index + ADDITIONS_PER_ROW];
+                        let sub = driver.sub_many(p2_ys, p1_ys);
+                        let add_predicates = row.add_state[0..ADDITIONS_PER_ROW]
+                            .iter()
+                            .enumerate()
+                            .map(|(point_idx, s)| {
+                                if s.add {
+                                    msm[offset + point_idx].wnaf_skew
+                                } else {
+                                    T::AcvmType::default()
+                                }
+                            })
+                            .collect::<Vec<T::AcvmType>>();
+                        //TACEO TODO batch these multiplications outside
+                        let res = driver.mul_many(
+                            &[sub, add_predicates.clone()].concat(),
+                            &[inverses, inverses].concat(),
+                        )?;
+                        let first_half = &res[0..ADDITIONS_PER_ROW];
+                        let second_half = &res[ADDITIONS_PER_ROW..];
+                        let res = driver.mul_many(first_half, &add_predicates)?;
+
                         for point_idx in 0..ADDITIONS_PER_ROW {
                             let add_state = &mut row.add_state[point_idx];
-                            let add_predicate = if add_state.add {
-                                msm[offset + point_idx].wnaf_skew
-                            } else {
-                                T::AcvmType::default()
-                            };
 
-                            let inverse = &inverse_trace[trace_index];
-                            add_state.collision_inverse = driver.mul(*inverse, add_predicate)?; //TODO FLORIN BATCH THIS
-                            // if add_predicate {
-                            //     *inverse
-                            // } else {
-                            //     T::AcvmType::default()
-                            // };
-                            //TODO FLORIN: BATCH THIS
-                            add_state.lambda = {
-                                let p1_y = p1_ys[trace_index];
-                                let p2_y = p2_ys[trace_index];
-                                let sub = driver.sub(p2_y, p1_y);
-                                let inverse = driver.mul(sub, *inverse)?;
-                                driver.mul(inverse, add_predicate)?
-                            };
+                            add_state.lambda = res[point_idx];
+                            add_state.collision_inverse = second_half[point_idx];
 
                             trace_index += 1;
                         }

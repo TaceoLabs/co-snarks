@@ -698,19 +698,19 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         output_bitsize: usize,
     ) -> eyre::Result<Self::AcvmType>;
 
-    /// Perform msm between `points` and `scalars` //TODO FLORIN: lol this is not a msm
+    /// Perform msm between `points` and `scalars`
     fn msm<C: CurveGroup<BaseField = F>>(
         &mut self,
         points: &[Self::AcvmPoint<C>],
         scalars: &[Self::OtherAcvmType<C>],
-    ) -> eyre::Result<Vec<Self::AcvmPoint<C>>>;
+    ) -> eyre::Result<Self::AcvmPoint<C>>;
 
     /// Perform msm between `points` and public `scalars`
-    fn msm_public_scalar<C: CurveGroup<BaseField = F>>(
+    fn scale_point_by_scalar<C: CurveGroup<BaseField = F>>(
         &mut self,
         point: Self::AcvmPoint<C>,
-        scalar: C::ScalarField,
-    ) -> Self::AcvmPoint<C>;
+        scalar: Self::OtherAcvmType<C>,
+    ) -> eyre::Result<Self::AcvmPoint<C>>;
 
     /// Converts a vector of field elements into another acvm type, this is used for converting arithmetic shares of 0/1 and indices for lut calls into arithmetic shares of the other field.
     fn convert_fields<C: CurveGroup<BaseField = F>>(

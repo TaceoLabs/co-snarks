@@ -104,7 +104,6 @@ pub fn scalar_mul_many<C: CurveGroup, N: Network>(
     for (a, b) in izip!(a, b) {
         local_a.push(*b * a + state.rngs.rand.masking_ec_element::<C>());
     }
-    // let local_a = b * a + state.rngs.rand.masking_ec_element::<C>();
     let local_b = net.reshare_many(&local_a)?;
     let result = local_a
         .iter()
