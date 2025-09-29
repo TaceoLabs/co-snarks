@@ -3871,6 +3871,7 @@ impl GarbledCircuits {
         Ok(result)
     }
 
+    /// Computes wnaf digits and rows needed in the ECCVM builder.
     pub(crate) fn compute_wnaf_digits_many<G: FancyBinary + FancyBinaryConstant, F: PrimeField>(
         g: &mut G,
         wires_x1: &BinaryBundle<G::Item>,
@@ -3882,10 +3883,6 @@ impl GarbledCircuits {
         debug_assert_eq!(wires_x1.size(), wires_x2.size());
         let length = wires_x1.size();
         debug_assert_eq!(length % 2, 0);
-        // let num_decomps_per_field = total_output_bitlen_per_field.div_ceil(base_bit);
-
-        // debug_assert_eq!(wires_c.size(), total_output_elements * input_bitlen);
-        // debug_assert_eq!((length / 2) % input_bitlen, 0);
 
         let mut results = Vec::with_capacity(wires_c.size());
 
@@ -3914,7 +3911,7 @@ impl GarbledCircuits {
         Ok(BinaryBundle::new(results))
     }
 
-    /// TODO FLORIN DOC
+    /// Computes wnaf digits and rows needed in the ECCVM builder.
     fn compute_wnaf_digits<G: FancyBinary + FancyBinaryConstant, F: PrimeField>(
         g: &mut G,
         wires_a: &[G::Item],
@@ -3931,14 +3928,7 @@ impl GarbledCircuits {
         let input_bitlen = F::MODULUS_BIT_SIZE as usize;
         let mut rands = wires_c.chunks(input_bitlen);
 
-        // TODO FLORIN: add checks
-        // let num_decomps_per_field = total_output_bitlen.div_ceil(decompose_bitlen);
-        // debug_assert_eq!(wires_a.len(), wires_b.len());
-        // let input_bitlen = wires_a.len();
-        // debug_assert_eq!(input_bitlen, F::MODULUS_BIT_SIZE as usize);
-        // debug_assert!(input_bitlen >= total_output_bitlen);
-        // debug_assert!(decompose_bitlen <= total_output_bitlen);
-        // debug_assert_eq!(wires_c.len(), input_bitlen * num_decomps_per_field);
+        debug_assert_eq!(wires_a.len(), wires_b.len());
 
         let mut input_bits =
             Self::adder_mod_p_with_output_size::<_, F>(g, wires_a, wires_b, total_output_bitlen)?;
@@ -4058,7 +4048,7 @@ impl GarbledCircuits {
             let mut slice3_no_shift = slice3.to_vec();
             slice3_no_shift.resize(32, slice3.last().cloned().unwrap_or(g.const_one()?));
 
-            // TODO FLORIN: optimize this
+            // TACEO TODO: can we optimize this as it is just composing?
             let row_chunk = Self::bin_addition_no_carry(g, &slice3_no_shift, &slice2_shift4)?;
             let row_chunk = Self::bin_addition_no_carry(g, &row_chunk, &slice1_shift8)?;
             let row_chunk = Self::bin_addition_no_carry(g, &row_chunk, &slice0_shift12)?;
