@@ -736,15 +736,4 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         point: &Self::AcvmPoint<C>,
         cube_root_of_unity: F,
     ) -> eyre::Result<Self::AcvmPoint<C>>;
-
-    fn return_id(&self) -> usize {
-        todo!()
-    }
-
-    fn open_point<C: CurveGroup<BaseField = F>>(
-        &mut self,
-        point: Self::AcvmPoint<C>,
-    ) -> eyre::Result<C> {
-        todo!()
-    }
 }

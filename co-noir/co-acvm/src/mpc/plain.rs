@@ -1111,12 +1111,12 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Vec<[Self::AcvmType; 8]>, // Returns the (absolute) value of the row_chunk (also in PointTablePrecomputationRow computation)
         Vec<[Self::AcvmType; 8]>, // Returns the sign of the row_chunk (also in PointTablePrecomputationRow computation)
     )> {
-        //TODO FLORIN: Move constants somewhere else
-        pub const NUM_SCALAR_BITS: usize = 128; // The length of scalars handled by the ECCVVM
-        pub const NUM_WNAF_DIGIT_BITS: usize = 4; // Scalars are decompose into base 16 in wNAF form
-        pub const NUM_WNAF_DIGITS_PER_SCALAR: usize = NUM_SCALAR_BITS / NUM_WNAF_DIGIT_BITS; // 32
-        pub const WNAF_MASK: u64 = (1 << NUM_WNAF_DIGIT_BITS) - 1;
-        pub const WNAF_DIGITS_PER_ROW: usize = 4;
+        //TODO: Move constants somewhere else
+        const NUM_SCALAR_BITS: usize = 128; // The length of scalars handled by the ECCVVM
+        const NUM_WNAF_DIGIT_BITS: usize = 4; // Scalars are decompose into base 16 in wNAF form
+        const NUM_WNAF_DIGITS_PER_SCALAR: usize = NUM_SCALAR_BITS / NUM_WNAF_DIGIT_BITS; // 32
+        const WNAF_MASK: u64 = (1 << NUM_WNAF_DIGIT_BITS) - 1;
+        const WNAF_DIGITS_PER_ROW: usize = 4;
         let num_rows_per_scalar = NUM_WNAF_DIGITS_PER_SCALAR / WNAF_DIGITS_PER_ROW;
 
         let mut is_even = Vec::with_capacity(zs.len());
@@ -1325,16 +1325,5 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
 
     fn get_as_shared(&mut self, value: &Self::AcvmType) -> Self::ArithmeticShare {
         *value
-    }
-
-    fn return_id(&self) -> usize {
-        0
-    }
-
-    fn open_point<C: CurveGroup<BaseField = F>>(
-        &mut self,
-        point: Self::AcvmPoint<C>,
-    ) -> eyre::Result<C> {
-        Ok(point)
     }
 }

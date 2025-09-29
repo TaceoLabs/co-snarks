@@ -183,7 +183,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
 
         lhs.extend(numerator);
         rhs.extend(wnaf_slice_input1);
-        // numerator *= wnaf_slice_input1; // degree-2 DONE HERE
+        // numerator *= wnaf_slice_input1; // degree-2
 
         let s0 = input.witness.precompute_s3hi();
         let s1 = input.witness.precompute_s3lo();
@@ -199,7 +199,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
                 &T::scale_many(&T::add_scalar(&precompute_round4, two, id), beta_sqr),
             ),
         );
-        // numerator *= wnaf_slice_input2; // degree-3 TODO
+        // numerator *= wnaf_slice_input2; // degree-3
         lhs.extend(wnaf_slice_input2);
 
         let s0 = input.witness.precompute_s4hi();
@@ -216,7 +216,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
                 &T::scale_many(&T::add_scalar(&precompute_round4, three, id), beta_sqr),
             ),
         );
-        // numerator *= wnaf_slice_input3; // degree-4 TODO
+        // numerator *= wnaf_slice_input3; // degree-4
         rhs.extend(wnaf_slice_input3);
 
         // skew product if relevant
@@ -234,21 +234,9 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         T::scale_many_in_place(&mut skew_input_summand, minus_one);
         T::add_scalar_in_place(&mut skew_input_summand, one, id);
 
-        // skew
-        //     + &gamma
-        //     + precompute_pc.to_owned() * beta
-        //     + (precompute_round4 + &P::ScalarField::from(4)) * beta_sqr;
         lhs.extend(precompute_point_transition.clone());
         rhs.extend(&skew_input_factor);
-        // let skew_input = precompute_point_transition.to_owned() * skew_input_factor
-        //     + (T::add_scalar(
-        //         &T::scale_many(precompute_point_transition, minus_one),
-        //         one,
-        //         id,
-        //     )); TODO
-        // numerator *= skew_input; // degree-5 TODO
 
-        // let eccvm_set_permutation_delta = relation_parameters.eccvm_set_permutation_delta;
         let mut numerator_factor_7 = precompute_select.to_owned();
         T::scale_many_in_place(
             &mut numerator_factor_7,
@@ -259,8 +247,6 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
             relation_parameters.eccvm_set_permutation_delta,
             id,
         );
-        // numerator *= numerator_factor_7 TODO
-        // ); // degree-7
 
         // Second term: tuple of (point-counter, P.x, P.y, scala r-multiplier), used in ECCVMWnafRelation and
         // ECCVMPointTableRelation. ECCVMWnafRelation validates the sum of the wnaf slices associated with point-counter
@@ -324,10 +310,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
 
         let precompute_point_transition = input.witness.precompute_point_transition();
 
-        let mut point_table_init_read = table_x.to_owned(); // * beta
-        //     + precompute_pc
-        //     + table_y.to_owned() * beta_sqr
-        //     + scalar_sum_full * beta_cube;
+        let mut point_table_init_read = table_x.to_owned();
         T::scale_many_in_place(&mut point_table_init_read, beta);
         T::add_assign_many(&mut point_table_init_read, precompute_pc);
         T::add_assign_many(
@@ -338,16 +321,11 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
             ),
         );
         T::add_scalar_in_place(&mut point_table_init_read, gamma, id);
-        // let mut point_table_init_read = precompute_point_transition.to_owned()
-        //     * (point_table_init_read + &gamma)
-        //     + (precompute_point_transition.to_owned() * minus_one + &P::ScalarField::one());
         let mut point_table_init_read_summand = precompute_point_transition.to_owned();
         T::scale_many_in_place(&mut point_table_init_read_summand, minus_one);
         T::add_scalar_in_place(&mut point_table_init_read_summand, one, id);
         lhs.extend(precompute_point_transition);
         rhs.extend(point_table_init_read);
-
-        // numerator *= point_table_init_read; // degree-9 TODO
 
         // Third term: tuple of (point-counter, P.x, P.y, msm-size) from ECCVMMSMRelation.
         // (P.x, P.y) is the output of a multi-scalar-multiplication evaluated in ECCVMMSMRelation.
@@ -380,9 +358,6 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
 
         lhs.extend(&msm_transition_shift);
         rhs.extend(T::add_scalar(&msm_result_write, gamma, id));
-        // msm_result_write = msm_transition_shift.to_owned() * (msm_result_write + &gamma)
-        //     + (msm_transition_shift * minus_one + &P::ScalarField::one()); //TODO subtract this from the product
-        // numerator *= msm_result_write; // degree-11 TODO
 
         // numerator
         tracing::trace!("compute grand product numinator finished");
@@ -405,12 +380,6 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let add1 = input.witness.msm_add1();
         let msm_slice1 = input.witness.msm_slice1();
 
-        // let wnaf_slice_output1 = add1.to_owned()
-        //     * (msm_slice1.to_owned()
-        //         + &gamma
-        //         + (msm_pc.to_owned() - msm_count) * beta
-        //         + msm_round.to_owned() * beta_sqr)
-        //     + (add1.to_owned() * minus_one + &P::ScalarField::one());
         let mut wnaf_slice_output1_factor = msm_slice1.to_owned();
         T::add_scalar_in_place(&mut wnaf_slice_output1_factor, gamma, id);
         T::add_assign_many(
@@ -429,17 +398,10 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         T::add_scalar_in_place(&mut wnaf_slice_output1_summand, one, id);
         lhs.extend(add1);
         rhs.extend(wnaf_slice_output1_factor);
-        // denominator *= wnaf_slice_output1; // degree-2 TODO
 
         let add2 = input.witness.msm_add2();
         let msm_slice2 = input.witness.msm_slice2();
 
-        // let wnaf_slice_output2 = add2.to_owned()
-        //     * (msm_slice2.to_owned()
-        //         + &gamma
-        //         + (msm_pc.to_owned() - msm_count + &minus_one) * beta
-        //         + msm_round.to_owned() * beta_sqr)
-        //     + (add2.to_owned() * minus_one + &P::ScalarField::one());
         let mut wnaf_slice_output2_factor = msm_slice2.to_owned();
         T::add_scalar_in_place(&mut wnaf_slice_output2_factor, gamma, id);
         T::add_assign_many(
@@ -458,17 +420,11 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         T::add_scalar_in_place(&mut wnaf_slice_output2_summand, one, id);
         lhs.extend(add2);
         rhs.extend(wnaf_slice_output2_factor);
-        // denominator *= wnaf_slice_output2; // degree-4 TODO
+        // denominator *= wnaf_slice_output2; // degree-4
 
         let add3 = input.witness.msm_add3();
         let msm_slice3 = input.witness.msm_slice3();
 
-        // let wnaf_slice_output3 = add3.to_owned()
-        //     * (msm_slice3.to_owned()
-        //         + &gamma
-        //         + (msm_pc.to_owned() - msm_count + &P::ScalarField::from(-2)) * beta
-        //         + msm_round.to_owned() * beta_sqr)
-        //     + (add3.to_owned() * minus_one + &P::ScalarField::one());
         let mut wnaf_slice_output3_factor = msm_slice3.to_owned();
         T::add_scalar_in_place(&mut wnaf_slice_output3_factor, gamma, id);
         T::add_assign_many(
@@ -487,17 +443,11 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         T::add_scalar_in_place(&mut wnaf_slice_output3_summand, one, id);
         lhs.extend(add3);
         rhs.extend(wnaf_slice_output3_factor);
-        // denominator *= wnaf_slice_output3; // degree-6 TODO
+        // denominator *= wnaf_slice_output3; // degree-6
 
         let add4 = input.witness.msm_add4();
         let msm_slice4 = input.witness.msm_slice4();
 
-        // let wnaf_slice_output4 = add4.to_owned()
-        //     * (msm_slice4.to_owned()
-        //         + &gamma
-        //         + (msm_pc.to_owned() - msm_count + &P::ScalarField::from(-3)) * beta
-        //         + msm_round.to_owned() * beta_sqr)
-        //     + (add4.to_owned() * minus_one + &P::ScalarField::one());
         let mut wnaf_slice_output4_factor = msm_slice4.to_owned();
         T::add_scalar_in_place(&mut wnaf_slice_output4_factor, gamma, id);
         T::add_assign_many(
@@ -516,7 +466,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         T::add_scalar_in_place(&mut wnaf_slice_output4_summand, one, id);
         lhs.extend(add4);
         rhs.extend(wnaf_slice_output4_factor);
-        // denominator *= wnaf_slice_output4; // degree-8 TODO
+        // denominator *= wnaf_slice_output4; // degree-8
 
         /*
          * @brief Second term: tuple of (transcript_pc, transcript_Px, transcript_Py, z1) OR (transcript_pc, \lambda *
@@ -540,10 +490,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         T::add_scalar_in_place(&mut lookup_second, one, id);
         let endomorphism_base_field_shift = P::CycleGroup::get_cube_root_of_unity();
 
-        let mut transcript_input1 = transcript_px.to_owned(); // * beta
-        // + transcript_pc
-        // + transcript_py.to_owned() * beta_sqr
-        // + z1.to_owned() * beta_cube; // degree = 1
+        let mut transcript_input1 = transcript_px.to_owned();
         T::scale_many_in_place(&mut transcript_input1, beta);
         T::add_assign_many(&mut transcript_input1, transcript_pc);
         T::add_assign_many(
@@ -551,11 +498,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
             &T::scale_many(transcript_py, beta_sqr),
         );
         T::add_assign_many(&mut transcript_input1, &T::scale_many(z1, beta_cube));
-        let mut transcript_input2 = transcript_px.to_owned(); // * endomorphism_base_field_shift * beta
-        // + transcript_pc.to_owned()
-        // + &minus_one
-        // + transcript_py.to_owned() * beta_sqr * minus_one
-        // + z2.to_owned() * beta_cube; // degree = 2
+        let mut transcript_input2 = transcript_px.to_owned(); // degree = 2
         T::scale_many_in_place(&mut transcript_input2, endomorphism_base_field_shift);
         T::scale_many_in_place(&mut transcript_input2, beta);
         T::add_assign_many(&mut transcript_input2, transcript_pc);
@@ -567,23 +510,15 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         T::add_assign_many(&mut transcript_input2, &T::scale_many(z2, beta_cube));
 
         // transcript_input1 = (transcript_input1 + &gamma) * lookup_first.clone()
-        //     + (lookup_first.to_owned() * minus_one + &P::ScalarField::one()); // degree 2 TODO ADD THIS
+        //     + (lookup_first.to_owned() * minus_one + &P::ScalarField::one()); // degree 2
         T::add_scalar_in_place(&mut transcript_input1, gamma, id);
         lhs.extend(transcript_input1);
         rhs.extend(lookup_first.clone());
         // transcript_input2 = (transcript_input2 + &gamma) * lookup_second.clone()
-        //     + (lookup_second.to_owned() * minus_one + &P::ScalarField::one()); // degree 3 TODO ADD THIS
+        //     + (lookup_second.to_owned() * minus_one + &P::ScalarField::one()); // degree 3
         T::add_scalar_in_place(&mut transcript_input2, gamma, id);
         lhs.extend(transcript_input2);
         rhs.extend(lookup_second.clone());
-
-        // let transcript_product = (transcript_input1 * transcript_input2)
-        //     * (base_infinity.to_owned() * minus_one + &P::ScalarField::one())
-        //     + base_infinity; // degree 6 TODO
-
-        // let point_table_init_write = transcript_mul.to_owned() * transcript_product
-        //     + (transcript_mul.to_owned() * minus_one + &P::ScalarField::one()); TODO
-        // denominator *= point_table_init_write; // degree 17 TODO
 
         /*
          * @brief Third term: tuple of (point-counter, P.x, P.y, msm-size) from ECCVMTranscriptRelation.
@@ -602,11 +537,6 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let transcript_mul = input.witness.transcript_mul();
         let base_infinity = input.witness.transcript_base_infinity();
 
-        //  let full_msm_count = transcript_mul.to_owned()
-        // * ((z1_zero.to_owned() * minus_one + &P::ScalarField::one())
-        //     + (z2_zero.to_owned() * minus_one + &P::ScalarField::one()))
-        // * (base_infinity.to_owned() * minus_one + &P::ScalarField::one())
-        // + transcript_msm_count;
         let full_msm_count_factor_1 = transcript_mul;
         let mut full_msm_count_factor_2 = z1_zero.to_owned();
         T::scale_many_in_place(&mut full_msm_count_factor_2, minus_one);
@@ -619,10 +549,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         lhs.extend(full_msm_count_factor_1);
         rhs.extend(full_msm_count_factor_2);
 
-        let mut msm_result_read = transcript_msm_x.to_owned(); // * beta
-        // + transcript_msm_y.to_owned() * beta_sqr
-        // + full_msm_count.to_owned() * beta_cube
-        // + transcript_pc_shift;
+        let mut msm_result_read = transcript_msm_x.to_owned();
         T::scale_many_in_place(&mut msm_result_read, beta);
         T::add_assign_many(
             &mut msm_result_read,
@@ -632,23 +559,19 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         T::add_assign_many(&mut msm_result_read, transcript_pc_shift);
         T::add_scalar_in_place(&mut msm_result_read, gamma, id);
 
-        // msm_result_read = transcript_msm_transition.to_owned() * (msm_result_read + &gamma)<- DONE
-        //     + (transcript_msm_transition.to_owned() * minus_one + &P::ScalarField::one()); TODO
-        // denominator *= msm_result_read; // degree-20 TODO
-
         let mul = T::mul_many(&lhs, &rhs, net, state)?;
         let mul = mul.chunks_exact(mul.len() / 12).collect_vec();
         debug_assert_eq!(mul.len(), 12);
 
         // Numerator stuff:
         let numerator_2 = mul[0].to_owned();
-        let wnaf2wnaf3 = mul[1].to_owned(); //TODO multiply to numerator
-        let mut skew_input = mul[2].to_owned(); //TODO multiply to numerator
+        let wnaf2wnaf3 = mul[1].to_owned();
+        let mut skew_input = mul[2].to_owned();
         T::sub_assign_many(&mut skew_input, precompute_point_transition);
         T::add_scalar_in_place(&mut skew_input, one, id);
-        let mut point_table_init_read = mul[3].to_owned(); //TODO multiply to numerator
+        let mut point_table_init_read = mul[3].to_owned();
         T::add_assign_many(&mut point_table_init_read, &point_table_init_read_summand);
-        let mut msm_result_write = mul[4].to_owned(); //TODO multiply to numerator
+        let mut msm_result_write = mul[4].to_owned();
         T::sub_assign_many(&mut msm_result_write, &msm_transition_shift);
         T::add_scalar_in_place(&mut msm_result_write, one, id);
 
@@ -668,9 +591,6 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         T::sub_assign_many(&mut transcript_input2, &lookup_second);
         T::add_scalar_in_place(&mut transcript_input2, one, id);
         let full_msm_count = mul[11].to_owned();
-        // let mut msm_result_read = mul[12].to_owned(); // TODO multiply to denominator
-        // T::sub_assign_many(&mut msm_result_read, &transcript_msm_transition);
-        // T::add_scalar_in_place(&mut msm_result_read, one, id);
 
         let mut lhs2 = Vec::with_capacity(mul[0].len() * 4);
         let mut rhs2 = Vec::with_capacity(lhs2.len());
@@ -704,7 +624,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
             &T::scale_many(base_infinity, minus_one),
             one,
             id,
-        )); // TODO: add base_infinity to this result
+        ));
         let mut full_msm_count = T::add_many(mul2[5], full_msm_count_summand);
         T::scale_many_in_place(&mut full_msm_count, beta_cube);
         T::add_assign_many(&mut msm_result_read, &full_msm_count);
@@ -771,14 +691,6 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         T::mul_assign_with_public_many(&mut tmp, scaling_factors);
 
         fold_accumulator!(univariate_accumulator.r0, tmp, SIZE);
-
-        // // degree-21
-        // let mut tmp = ((z_perm.to_owned() + lagrange_first) * numerator_evaluation
-        //     - (z_perm_shift.to_owned() + lagrange_last) * denominator_evaluation)
-        //     * scaling_factors;
-        // for i in 0..univariate_accumulator.r0.evaluations.len() {
-        //     univariate_accumulator.r0.evaluations[i] += tmp.evaluations[i];
-        // }
 
         // // Contribution (2)
         let mut tmp = z_perm_shift.to_owned(); // lagrange_last.to_owned() * * scaling_factors;

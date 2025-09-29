@@ -3121,25 +3121,4 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             )
         }
     }
-    fn return_id(&self) -> usize {
-        self.id as usize
-    }
-
-    fn open_point<C: CurveGroup<BaseField = F>>(
-        &mut self,
-        point: Self::AcvmPoint<C>,
-    ) -> eyre::Result<C> {
-        if Self::is_shared_point(&point) {
-            let point = match point {
-                Rep3AcvmPoint::Public(public) => {
-                    pointshare::promote_to_trivial_share(self.id, &public)
-                }
-                Rep3AcvmPoint::Shared(shared) => shared,
-            };
-            let opened = pointshare::open_point(&point, self.net0)?;
-            Ok(opened)
-        } else {
-            Ok(Self::get_public_point(&point).expect("Already checked it is public"))
-        }
-    }
 }
