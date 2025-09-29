@@ -760,6 +760,10 @@ fn compute_transcript_rows<
     )?;
     let (vm_inf_and_acc_inf, res) = vm_inf_and_acc_inf.split_at(vm_points_inf.len());
     let (inv_vm_inf_and_acc_inf, vm_x_squared) = res.split_at(inv_vm_points_inf.len());
+    let neg_vm_inf_and_acc_inf = vm_inf_and_acc_inf
+        .iter()
+        .map(|x| driver.sub(T::AcvmType::from(C::BaseField::one()), *x))
+        .collect::<Vec<_>>();
 
     let vm_x_squared_times_3 = driver.scale_many(vm_x_squared, C::BaseField::from(3u32));
     let vm_y_doubled = driver.add_many(vm_points_y, vm_points_y);
@@ -773,13 +777,27 @@ fn compute_transcript_rows<
     )?;
     let (is_zero_transcript_add_x, is_zero_transcript_add_y) =
         is_zero_transcript_add.split_at(is_zero_transcript_add.len() / 2);
-    let transcript_add_values_x = driver.add_many(is_zero_transcript_add_x, vm_inf_and_acc_inf);
-    let transcript_add_values_y = driver.add_many(is_zero_transcript_add_y, vm_inf_and_acc_inf);
-    let mut transcript_add_values =
-        driver.is_zero_many(&[transcript_add_values_x, transcript_add_values_y].concat())?; //TODO FLORIN: is there a better way to do this OR?
+
+    let neg_transcript_add_values_x = is_zero_transcript_add_x
+        .iter()
+        .map(|x| driver.sub(T::AcvmType::from(C::BaseField::one()), *x))
+        .collect::<Vec<_>>();
+    let neg_transcript_add_values_y = is_zero_transcript_add_y
+        .iter()
+        .map(|x| driver.sub(T::AcvmType::from(C::BaseField::one()), *x))
+        .collect::<Vec<_>>();
+    let mut transcript_add_values = driver.mul_many(
+        &[neg_transcript_add_values_x, neg_transcript_add_values_y].concat(),
+        &[
+            neg_vm_inf_and_acc_inf.as_slice(),
+            neg_vm_inf_and_acc_inf.as_slice(),
+        ]
+        .concat(),
+    )?;
     transcript_add_values.iter_mut().for_each(|x| {
         *x = driver.sub(T::AcvmType::from(C::BaseField::one()), *x);
     });
+
     let (transcript_add_x_equal, transcript_add_y_equal) =
         transcript_add_values.split_at(transcript_add_values.len() / 2);
 
@@ -811,10 +829,6 @@ fn compute_transcript_rows<
             add_lambda_denominator.to_vec(),
         )
     };
-    // let mut add_lambda_denominator = {
-    //     let else_if_res = driver.cmux_many(else_if_mul, &acc_x_minus_vm_x, &zeroes)?;
-    //     driver.cmux_many(if_mul, &vm_y_doubled, &else_if_res)?
-    // };
 
     for i in 0..accumulator_trace_len {
         let row = &mut transcript_state[i + 1];
