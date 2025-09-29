@@ -506,6 +506,7 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
 
         let update_read_count = |point_idx: usize,
                                  slice: T::AcvmType,
+                                 mut index: T::AcvmType,
                                  is_negative: T::AcvmType,
                                  point_table_read_counts: &mut [T::AcvmType],
                                  driver: &mut T|
@@ -528,17 +529,8 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
                 C::BaseField::from(num_rows_in_read_counts_table as u32),
                 is_negative,
             );
-            let summand = driver.mul_many(
-                &[
-                    is_negative,
-                    driver.sub(T::AcvmType::from(C::BaseField::one()), is_negative),
-                ],
-                &[
-                    slice,
-                    driver.sub(T::AcvmType::from(C::BaseField::from(15u32)), slice),
-                ],
-            )?;
-            let mut index = driver.add(column_index, driver.add(summand[0], summand[1]));
+
+            driver.add_assign(&mut index, column_index);
             driver.add_assign(
                 &mut index,
                 T::AcvmType::from(C::BaseField::from(row_index_offset as u32)),
@@ -646,6 +638,46 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
         let mut msm_rows = vec![MSMRow::default(); num_msm_rows];
         msm_rows[0] = MSMRow::default();
 
+        let mut slices_for_cmux = Vec::with_capacity(msms.len() * NUM_WNAF_DIGITS_PER_SCALAR);
+        let mut signs_for_cmux = Vec::with_capacity(msms.len() * NUM_WNAF_DIGITS_PER_SCALAR);
+        for msm in msms.iter() {
+            for digit_idx in 0..NUM_WNAF_DIGITS_PER_SCALAR {
+                let msm_size = msm.len();
+                let num_rows_per_digit = (msm_size / ADDITIONS_PER_ROW)
+                    + if msm_size % ADDITIONS_PER_ROW != 0 {
+                        1
+                    } else {
+                        0
+                    };
+                for relative_row_idx in 0..num_rows_per_digit {
+                    let num_points_in_row = if (relative_row_idx + 1) * ADDITIONS_PER_ROW > msm_size
+                    {
+                        msm_size % ADDITIONS_PER_ROW
+                    } else {
+                        ADDITIONS_PER_ROW
+                    };
+                    let offset = relative_row_idx * ADDITIONS_PER_ROW;
+                    for relative_point_idx in 0..ADDITIONS_PER_ROW {
+                        let point_idx = offset + relative_point_idx;
+                        let add = num_points_in_row > relative_point_idx;
+                        if add {
+                            slices_for_cmux.push(msm[point_idx].wnaf_digits[digit_idx]);
+                            signs_for_cmux.push(msm[point_idx].wnaf_digits_sign[digit_idx]);
+                        }
+                    }
+                }
+            }
+        }
+        let cmux_results = driver.cmux_many(
+            &signs_for_cmux,
+            &slices_for_cmux,
+            &slices_for_cmux
+                .iter()
+                .map(|x| driver.sub(T::AcvmType::from(C::BaseField::from(15u32)), *x))
+                .collect::<Vec<_>>(),
+        )?;
+        let mut j = 0;
+
         for (msm_idx, msm) in msms.iter().enumerate() {
             for digit_idx in 0..NUM_WNAF_DIGITS_PER_SCALAR {
                 let pc = pc_values[msm_idx];
@@ -675,15 +707,41 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
                             update_read_count(
                                 (total_number_of_muls - pc) as usize + point_idx,
                                 slice,
+                                cmux_results[j],
                                 is_negative,
                                 &mut point_table_read_counts,
                                 driver,
                             )?;
+                            j += 1;
                         }
                     }
                 }
 
                 if digit_idx == NUM_WNAF_DIGITS_PER_SCALAR - 1 {
+                    let mut cmux = Vec::with_capacity(num_rows_per_digit * ADDITIONS_PER_ROW);
+
+                    for row_idx in 0..num_rows_per_digit {
+                        let num_points_in_row = if (row_idx + 1) * ADDITIONS_PER_ROW > msm_size {
+                            msm_size % ADDITIONS_PER_ROW
+                        } else {
+                            ADDITIONS_PER_ROW
+                        };
+                        let offset = row_idx * ADDITIONS_PER_ROW;
+                        for relative_point_idx in 0..ADDITIONS_PER_ROW {
+                            let add = num_points_in_row > relative_point_idx;
+                            let point_idx = offset + relative_point_idx;
+                            if add {
+                                cmux.push(msm[point_idx].wnaf_skew);
+                            }
+                        }
+                    }
+                    let cmux_result = driver.cmux_many(
+                        &cmux,
+                        &vec![T::AcvmType::from(-C::BaseField::from(1u32)); cmux.len()],
+                        &vec![T::AcvmType::from(-C::BaseField::from(15u32)); cmux.len()],
+                    )?;
+
+                    let mut i = 0;
                     for row_idx in 0..num_rows_per_digit {
                         let num_points_in_row = if (row_idx + 1) * ADDITIONS_PER_ROW > msm_size {
                             msm_size % ADDITIONS_PER_ROW
@@ -696,12 +754,7 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
                             let add = num_points_in_row > relative_point_idx;
                             let point_idx = offset + relative_point_idx;
                             if add {
-                                // TACEO TODO batch this outside the loop
-                                let slice = driver.cmux(
-                                    msm[point_idx].wnaf_skew,
-                                    T::AcvmType::from(-C::BaseField::from(1u32)),
-                                    T::AcvmType::from(-C::BaseField::from(15u32)),
-                                )?;
+                                let slice = cmux_result[i];
                                 //if msm[point_idx].wnaf_skew { -1 } else { -15 };
                                 update_read_count_negative(
                                     (total_number_of_muls - pc) as usize + point_idx,
@@ -709,6 +762,7 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
                                     &mut point_table_read_counts,
                                     driver,
                                 )?;
+                                i += 1;
                             }
                         }
                     }
