@@ -698,30 +698,53 @@ fn compute_transcript_rows<
         transcript_state.push(row);
     }
 
-    //FLORIN DONE UNTIL HERE
-
     // add required affine coordinates to the transcript
+    // and
+    // process the slopes when adding points or results of MSMs. to increase efficiency, we use batch inversion
+    // after the loop
 
     let accumulator_trace_len = accumulator_trace.len();
     let msm_accumulator_trace_len = msm_accumulator_trace.len();
+    let intermediate_accumulator_trace_len = intermediate_accumulator_trace.len();
+
+    let mut is_zero_vm_point = Vec::new();
+    for i in 0..accumulator_trace_len {
+        let entry = &vm_operations[i];
+        if entry.op_code.add {
+            is_zero_vm_point.push(vm_operations[i].base_point);
+        } else {
+            is_zero_vm_point.push(intermediate_accumulator_trace[i]);
+        }
+    }
+
     let (xs, ys, inf) = driver.pointshare_to_field_shares_many(
         &[
             accumulator_trace.clone(),
             msm_accumulator_trace.clone(),
             intermediate_accumulator_trace.clone(),
+            is_zero_vm_point.clone(),
         ]
         .concat(),
     )?;
-    //TODO FLORIN: check sizes
-    let len_acc = accumulator_trace_len;
-    let len_msm = msm_accumulator_trace_len;
-    let (acc_xs, rest) = xs.split_at(len_acc);
-    let (msm_xs, int_xs) = rest.split_at(len_msm);
-    let (acc_ys, rest) = ys.split_at(len_acc);
-    let (msm_ys, int_ys) = rest.split_at(len_msm);
-    let (acc_inf, rest) = inf.split_at(len_acc);
-    let (msm_inf, _int_inf) = rest.split_at(len_msm);
 
+    let (acc_xs, rest) = xs.split_at(accumulator_trace_len);
+    let (msm_xs, int_xs, vm_points_x) = {
+        let (a, r) = rest.split_at(msm_accumulator_trace_len);
+        let (b, c) = r.split_at(intermediate_accumulator_trace_len);
+        (a, b, c)
+    };
+    let (acc_ys, rest) = ys.split_at(accumulator_trace_len);
+    let (msm_ys, int_ys, vm_points_y) = {
+        let (a, r) = rest.split_at(msm_accumulator_trace_len);
+        let (b, c) = r.split_at(intermediate_accumulator_trace_len);
+        (a, b, c)
+    };
+    let (acc_inf, rest) = inf.split_at(accumulator_trace_len);
+    let (msm_inf, _int_inf, vm_points_inf) = {
+        let (a, r) = rest.split_at(msm_accumulator_trace_len);
+        let (b, c) = r.split_at(intermediate_accumulator_trace_len);
+        (a, b, c)
+    };
     for i in 0..accumulator_trace_len {
         let row = &mut transcript_state[i + 1];
         row.accumulator_x = acc_xs[i];
@@ -734,27 +757,6 @@ fn compute_transcript_rows<
 
     // this is the end of add_affine_coordinates_to_transcript
 
-    // process the slopes when adding points or results of MSMs. to increase efficiency, we use batch inversion
-    // after the loop
-
-    let mut is_zero_vm_point = Vec::new();
-    for i in 0..accumulator_trace_len {
-        let entry = &vm_operations[i];
-        if entry.op_code.add {
-            is_zero_vm_point.push(vm_operations[i].base_point);
-        } else {
-            is_zero_vm_point.push(intermediate_accumulator_trace[i]);
-        }
-    }
-    //TODO FLORIN: BATCH ALL THESE as much as possible
-    let (vm_points_x, vm_points_y, vm_points_inf) =
-        driver.pointshare_to_field_shares_many(&is_zero_vm_point)?; //TODO FLORIN BATCH THIS INTO THE ABOVE CALL
-    let vm_x_squared = driver.mul_many(&vm_points_x, &vm_points_x)?; //TODO FLORIN BATCH THIS INTO THE ABOVE CALL
-    let vm_x_squared_times_3 = driver.scale_many(&vm_x_squared, C::BaseField::from(3u32));
-    let vm_y_doubled = driver.add_many(&vm_points_y, &vm_points_y);
-    let acc_x_minus_vm_x = driver.sub_many(acc_xs, &vm_points_x);
-    let acc_y_minus_vm_y = driver.sub_many(acc_ys, &vm_points_y);
-
     let inv_vm_points_inf = vm_points_inf
         .iter()
         .map(|x| driver.sub(T::AcvmType::from(C::BaseField::one()), *x))
@@ -765,11 +767,16 @@ fn compute_transcript_rows<
         .collect::<Vec<_>>();
 
     let vm_inf_and_acc_inf = driver.mul_many(
-        &[vm_points_inf, inv_vm_points_inf].concat(),
-        &[acc_inf, &inv_acc_inf].concat(),
+        &[vm_points_inf, &inv_vm_points_inf, vm_points_x].concat(),
+        &[acc_inf, &inv_acc_inf, vm_points_x].concat(),
     )?;
-    let (vm_inf_and_acc_inf, inv_vm_inf_and_acc_inf) =
-        vm_inf_and_acc_inf.split_at(vm_inf_and_acc_inf.len() / 2);
+    let (vm_inf_and_acc_inf, res) = vm_inf_and_acc_inf.split_at(vm_points_inf.len());
+    let (inv_vm_inf_and_acc_inf, vm_x_squared) = res.split_at(inv_vm_points_inf.len());
+
+    let vm_x_squared_times_3 = driver.scale_many(vm_x_squared, C::BaseField::from(3u32));
+    let vm_y_doubled = driver.add_many(vm_points_y, vm_points_y);
+    let acc_x_minus_vm_x = driver.sub_many(acc_xs, vm_points_x);
+    let acc_y_minus_vm_y = driver.sub_many(acc_ys, vm_points_y);
 
     // Compute row.transcript_add_x_equal and row.transcript_add_y_equal:
     let is_zero_transcript_add = driver.equal_many(
@@ -788,21 +795,38 @@ fn compute_transcript_rows<
     let (transcript_add_x_equal, transcript_add_y_equal) =
         transcript_add_values.split_at(transcript_add_values.len() / 2);
 
-    let mul = driver.mul_many(is_zero_transcript_add_x, is_zero_transcript_add_y)?; //(accumulator_x == vm_x) && (accumulator_y == vm_y)
-    let if_mul = driver.mul_many(&mul, inv_vm_inf_and_acc_inf)?; //(accumulator_x == vm_x) && (accumulator_y == vm_y) && !vm_infinity && !accumulator_infinity
     let scale = driver.scale_many(transcript_add_x_equal, -C::BaseField::one());
     let inv_transcript_add_x_equal = driver.add_scalar(&scale, C::BaseField::one());
+    let mul = driver.mul_many(is_zero_transcript_add_x, is_zero_transcript_add_y)?; //(accumulator_x == vm_x) && (accumulator_y == vm_y)
+    let res = driver.mul_many(
+        &[mul, inv_transcript_add_x_equal].concat(),
+        &[inv_vm_inf_and_acc_inf, inv_vm_inf_and_acc_inf].concat(),
+    )?;
+    let (if_mul, else_if_mul) = res.split_at(is_zero_transcript_add_x.len()); //(accumulator_x == vm_x) && (accumulator_y == vm_y) && !vm_infinity && !accumulator_infinity
+    // and (accumulator_x != vm_x) && !vm_infinity && !accumulator_infinity
 
-    let else_if_mul = driver.mul_many(inv_vm_inf_and_acc_inf, &inv_transcript_add_x_equal)?; //(accumulator_x != vm_x) && !vm_infinity && !accumulator_infinity
-    let zeroes = vec![T::AcvmType::default(); accumulator_trace_len];
-    let mut add_lambda_numerator = {
-        let else_if_res = driver.cmux_many(&else_if_mul, &acc_y_minus_vm_y, &zeroes)?;
-        driver.cmux_many(&if_mul, &vm_x_squared_times_3, &else_if_res)?
+    let zeroes = vec![T::AcvmType::default(); 2 * accumulator_trace_len];
+    let (mut add_lambda_numerator, mut add_lambda_denominator) = {
+        let else_if_res = driver.cmux_many(
+            &[else_if_mul, else_if_mul].concat(),
+            &[acc_y_minus_vm_y, acc_x_minus_vm_x].concat(),
+            &zeroes,
+        )?;
+        let res = driver.cmux_many(
+            &[if_mul, if_mul].concat(),
+            &[vm_x_squared_times_3, vm_y_doubled].concat(),
+            &else_if_res,
+        )?;
+        let (add_lambda_numerator, add_lambda_denominator) = res.split_at(accumulator_trace_len);
+        (
+            add_lambda_numerator.to_vec(),
+            add_lambda_denominator.to_vec(),
+        )
     };
-    let mut add_lambda_denominator = {
-        let else_if_res = driver.cmux_many(&else_if_mul, &acc_x_minus_vm_x, &zeroes)?;
-        driver.cmux_many(&if_mul, &vm_y_doubled, &else_if_res)?
-    };
+    // let mut add_lambda_denominator = {
+    //     let else_if_res = driver.cmux_many(else_if_mul, &acc_x_minus_vm_x, &zeroes)?;
+    //     driver.cmux_many(if_mul, &vm_y_doubled, &else_if_res)?
+    // };
 
     for i in 0..accumulator_trace_len {
         let row = &mut transcript_state[i + 1];

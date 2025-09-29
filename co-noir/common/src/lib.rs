@@ -158,67 +158,6 @@ impl CoUtils {
         Ok(unblind)
     }
 
-    //TODO FLORIN REMOVE IF REALLY NOT NEEDED
-    // // To reduce the number of communication rounds, we implement the array_prod_mul macro according to https://www.usenix.org/system/files/sec22-ozdemir.pdf, p11 first paragraph.
-    // // Batched version of the above, multiplies together many arrays of the same length component wise
-    // pub fn array_prod_mul_many<T: NoirUltraHonkProver<P>, P: CurveGroup, N: Network>(
-    //     net: &N,
-    //     state: &mut T::State,
-    //     inp: &[Vec<T::ArithmeticShare>],
-    // ) -> eyre::Result<Vec<Vec<T::ArithmeticShare>>> {
-    //     // Do the multiplications of inp[i] * inp[i-1] in constant rounds
-    //     let depth = inp.len();
-    //     let width = inp[0].len();
-    //     debug_assert!(
-    //         inp.iter().all(|v| v.len() == width),
-    //         "All input slices must have the same length"
-    //     );
-
-    //     let r = (0..width * (depth + 1))
-    //         .map(|_| T::rand(net, state))
-    //         .collect::<Result<Vec<_>, _>>()?;
-    //     let r_inv = T::inv_many(&r, net, state)?;
-    //     let mut r_inv0s = Vec::with_capacity(depth * width);
-    //     let mut r_chunks = Vec::with_capacity(depth * width);
-    //     let mut mul_r = Vec::with_capacity(depth * width);
-    //     let mut r_invs_mul = Vec::with_capacity(depth * width);
-
-    //     for (r_, r_inv_) in izip!(r.chunks(depth + 1), r_inv.chunks(depth + 1)) {
-    //         r_inv0s.extend(vec![r_inv_[0]; depth]);
-    //         r_chunks.extend(r_[1..].to_vec());
-    //         mul_r.extend(r_[..depth].to_vec());
-    //         r_invs_mul.extend(r_inv_[1..].to_vec());
-    //     }
-
-    //     let mut unblind = T::mul_many(&r_inv0s, &r_chunks, net, state)?;
-
-    //     let input = (0..width)
-    //         .flat_map(|i| inp.iter().map(move |v| v[i]))
-    //         .collect::<Vec<_>>();
-
-    //     let mul = T::mul_many(&mul_r, &input, net, state)?;
-    //     let mut open = T::mul_open_many(&mul, &r_invs_mul, net, state)?;
-
-    //     for open_ in open.chunks_mut(depth) {
-    //         for i in 1..open_.len() {
-    //             open_[i] *= open_[i - 1];
-    //         }
-    //     }
-
-    //     for (unblind, open) in unblind.iter_mut().zip(open.iter()) {
-    //         *unblind = T::mul_with_public(*open, *unblind);
-    //     }
-
-    //     let mut out = vec![Vec::with_capacity(width); depth];
-    //     for chunk in unblind.chunks(depth) {
-    //         for (i, val) in chunk.iter().enumerate() {
-    //             out[i].push(val.to_owned());
-    //         }
-    //     }
-
-    //     Ok(out)
-    // }
-
     // To reduce the number of communication rounds, we implement the array_prod_mul macro according to https://www.usenix.org/system/files/sec22-ozdemir.pdf, p11 first paragraph.
     // Batched version of the above, multiplies every inner array separately
     pub fn array_prod_inner_mul_many<T: NoirUltraHonkProver<P>, P: CurveGroup, N: Network>(
