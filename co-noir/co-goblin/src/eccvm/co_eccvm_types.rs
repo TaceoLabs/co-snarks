@@ -992,6 +992,14 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseF
 
         // current impl doesn't work if not 4
         assert_eq!(WNAF_DIGITS_PER_ROW, 4);
+        let mut chunk_negatives: Vec<_> = Vec::with_capacity(msms.len() * num_rows_per_scalar);
+        let mut row_chunks: Vec<_> = Vec::with_capacity(msms.len() * num_rows_per_scalar);
+        for entry in msms.iter() {
+            chunk_negatives.extend_from_slice(&entry.row_chunks_sign);
+            row_chunks.extend_from_slice(&entry.row_chunks);
+        }
+        let row_chunks_negative = driver.scale_many(&row_chunks, -C::BaseField::one());
+        let summands = driver.cmux_many(&chunk_negatives, &row_chunks_negative, &row_chunks)?;
 
         for (j, entry) in msms.iter().enumerate() {
             let mut scalar_sum = T::AcvmType::default();
@@ -1021,14 +1029,10 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseF
                 row.scalar_sum = scalar_sum;
 
                 // Ensure slice1 is positive for the first row of each scalar sum
-                let row_chunk = entry.row_chunks[i]; //slice3 + (slice2 << 4) + (slice1 << 8) + (slice0 << 12);
-                let chunk_negative = entry.row_chunks_sign[i];
-                let truthy = driver.mul_with_public(-C::BaseField::one(), row_chunk);
-                let summand = driver.cmux(chunk_negative, truthy, row_chunk)?; // TACEO TODO Batch this function (OR TODO FLORIN)
+                let summand = summands[j * num_rows_per_scalar + i];
 
                 let factor = 1 << (NUM_WNAF_DIGIT_BITS * WNAF_DIGITS_PER_ROW);
                 scalar_sum = driver.mul_with_public(C::BaseField::from(factor), scalar_sum);
-                // scalar_sum <<= NUM_WNAF_DIGIT_BITS * WNAF_DIGITS_PER_ROW;
                 driver.add_assign(&mut scalar_sum, summand);
 
                 row.round = i as u32;
