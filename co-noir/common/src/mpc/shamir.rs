@@ -178,12 +178,12 @@ impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for ShamirUltr
     }
 
     fn open_point_and_field_many<N: Network>(
-        a: &[Self::PointShare],
-        b: &[Self::ArithmeticShare],
-        net: &N,
-        state: &mut Self::State,
+        _a: &[Self::PointShare],
+        _b: &[Self::ArithmeticShare],
+        _net: &N,
+        _state: &mut Self::State,
     ) -> eyre::Result<(Vec<P>, Vec<<P>::ScalarField>)> {
-        pointshare::open_point_and_field_many(a, b, net, state)
+        unimplemented!("open_point_and_field_many is not implemented for ShamirUltraHonkDriver");
     }
 
     fn mul_open_many<N: Network>(

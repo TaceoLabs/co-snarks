@@ -1,8 +1,6 @@
 #[cfg(test)]
 mod tests {
     use ark_ec::AffineRepr;
-    use ark_ec::bn::Bn;
-    use ark_ec::pairing::Pairing;
     use ark_ec::short_weierstrass;
     use ark_ff::Zero;
     use ark_grumpkin::GrumpkinConfig;
@@ -44,8 +42,6 @@ mod tests {
     use std::{path::PathBuf, sync::Arc};
     use ultrahonk::prelude::ZeroKnowledge;
 
-    type F = <Bn<ark_bn254::Config> as Pairing>::ScalarField;
-    type ProverDriver = Rep3UltraHonkDriver;
     type WitExtDriver<'a, F, N> = Rep3AcvmSolver<'a, F, N>;
 
     const ECCVM_OPS_TABLE_SIZE: usize = 15;
@@ -421,15 +417,12 @@ mod tests {
                     A2BType::default(),
                 )
                 .unwrap();
-                let allstart = std::time::Instant::now();
-                let start = std::time::Instant::now();
                 let polys = construct_from_builder::<
                     short_weierstrass::Projective<GrumpkinConfig>,
                     Rep3UltraHonkDriver,
                     Rep3AcvmSolver<ark_grumpkin::Fr, LocalNetwork>,
                 >(&mut queue, &mut driver)
                 .unwrap();
-                println!("Time to construct polynomials: {:?}", start.elapsed());
                 let mut proving_key = ProvingKey::<
                     Rep3UltraHonkDriver,
                     short_weierstrass::Projective<GrumpkinConfig>,
@@ -449,12 +442,9 @@ mod tests {
                     Rep3UltraHonkDriver,
                     LocalNetwork,
                 >::new(net0b, &mut state);
-                let start = std::time::Instant::now();
                 let (a, b) = prover
                     .construct_proof(transcript, proving_key, &crs)
                     .unwrap();
-                println!("Time to create proof: {:?}", start.elapsed());
-                println!("Total time: {:?}", allstart.elapsed());
                 (a, b)
             }));
         }
@@ -469,8 +459,6 @@ mod tests {
         for p in ipa_proofs.iter().skip(1) {
             assert_eq!(ipa_proof, *p);
         }
-        println!("first_proof: {:?}", proof);
-        println!("ipa_proof: {:?}", ipa_proof);
     }
 
     // TACEO TODO: This was tested with all the randomness set to 1 (also in bb) and then compared the proofs. By default, the ECCVM Prover has ZK enabled, so without a dedicated ECCVM Verifier it is difficult to test it. For now, you can compare it against the proof.txt in the same folder by deactivating the randomness (->F::one()) everywhere (mask() in the prover, random element in zk_data, random polys in univariate.rs and polynomial.rs)
@@ -533,7 +521,5 @@ mod tests {
         let (_transcript, _ipa_transcript) = prover
             .construct_proof(transcript, proving_key, &prover_crs)
             .unwrap();
-        println!("transcript: {:?}", _transcript);
-        println!("ipa_transcript: {:?}", _ipa_transcript);
     }
 }
