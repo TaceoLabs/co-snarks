@@ -798,6 +798,26 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/973): Reinstate multitreading?
         // populate point trace, and the components of the MSM execution trace that do not relate to affine point
         // operations
+
+        let wnaf_skews: Vec<_> = msms
+            .iter()
+            .flat_map(|msm| msm.iter().map(|mul| mul.wnaf_skew))
+            .collect();
+        let wnaf_digits: Vec<_> = msms
+            .iter()
+            .flat_map(|msm| msm.iter().flat_map(|mul| mul.wnaf_digits.iter().copied()))
+            .collect();
+        let wnaf_digits_len = wnaf_digits.len();
+
+        let mut to_convert = Vec::with_capacity(wnaf_digits.len() + wnaf_skews.len());
+        to_convert.extend(wnaf_digits);
+        to_convert.extend(wnaf_skews);
+
+        let converted = driver.convert_fields::<C>(&to_convert)?;
+        let (converted_wnaf_digits, converted_wnaf_skews) = converted.split_at(wnaf_digits_len);
+
+        let mut msm_offset_wnaf_digits = 0;
+        let mut msm_offset_wnaf_skews = 0;
         for msm_idx in 0..msms.len() {
             let mut accumulator = offset_generator;
             let msm = &msms[msm_idx];
@@ -849,7 +869,9 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
                             let lut = driver.init_lut_by_acvm_point(
                                 msm[offset + point_idx].precomputed_table.to_vec(),
                             );
-                            let index = driver.convert_fields::<C>(&[add_state.slice])?[0]; // TACEO TODO batch these conversions
+                            let index = converted_wnaf_digits[msm_offset_wnaf_digits
+                                + (offset + point_idx) * NUM_WNAF_DIGITS_PER_SCALAR
+                                + digit_idx];
                             driver.read_lut_by_acvm_point(index, &lut)?
                         } else {
                             T::AcvmPoint::<C>::default()
@@ -925,27 +947,29 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
                             } else {
                                 T::AcvmType::default()
                             };
-
+                            let converted_wnaf_skew =
+                                &converted_wnaf_skews[msm_offset_wnaf_skews + offset + point_idx];
                             add_state.point = if add_state.add {
                                 // msm[offset + point_idx].precomputed_table[add_state.slice as usize]
                                 let lut = driver.init_lut_by_acvm_point(
                                     msm[offset + point_idx].precomputed_table.to_vec(),
                                 );
-                                let index = driver.convert_fields::<C>(&[add_state.slice])?[0]; // TACEO TODO batch these conversions
+                                let index = driver.mul_with_public_other::<C>(
+                                    C::ScalarField::from(7),
+                                    *converted_wnaf_skew,
+                                );
                                 driver.read_lut_by_acvm_point(index, &lut)?
                             } else {
                                 T::AcvmPoint::<C>::default()
                             };
-                            let add_predicate = if add_state.add {
-                                msm[offset + point_idx].wnaf_skew
+                            let converted_add_predicate = if add_state.add {
+                                *converted_wnaf_skew
                             } else {
-                                T::AcvmType::default()
+                                T::OtherAcvmType::<C>::default()
                             };
                             let p1 = accumulator;
                             accumulator = {
                                 let added_points = driver.add_points(accumulator, add_state.point);
-                                let converted_add_predicate: T::OtherAcvmType<_> =
-                                    driver.convert_fields::<C>(&[add_predicate])?[0]; // TACEO TODO batch these conversions
                                 let add_predicate_inverted = driver.sub_other(
                                     T::OtherAcvmType::from(C::ScalarField::one()),
                                     converted_add_predicate,
@@ -955,11 +979,6 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
                                     &[add_predicate_inverted, converted_add_predicate],
                                 )?
                             };
-                            //  if add_predicate {
-                            //     driver.add_points(accumulator, add_state.point)
-                            // } else {
-                            //     accumulator
-                            // };
                             p1_trace[trace_index] = p1;
                             p2_trace[trace_index] = add_state.point;
                             p3_trace[trace_index] = accumulator;
@@ -978,6 +997,8 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
                     }
                 }
             }
+            msm_offset_wnaf_digits += msm.len() * NUM_WNAF_DIGITS_PER_SCALAR;
+            msm_offset_wnaf_skews += msm.len();
         }
 
         // inverse_trace is used to compute the value of the `collision_inverse` column in the ECCVM.
