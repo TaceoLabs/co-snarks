@@ -450,7 +450,7 @@ impl<
      * @param commitment_key
      * @param opening_claims
      * @param transcript
-     * @return ProverOpeningClaim<Curve>
+     * @return `ProverOpeningClaim<Curve>`
      */
     pub fn shplonk_prove(
         &mut self,
