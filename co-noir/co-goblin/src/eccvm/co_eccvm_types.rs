@@ -705,6 +705,7 @@ fn compute_transcript_rows<
         }
     }
 
+    //TACEO TODO: investigate, this (or one of the following) batching actually made things slower
     let (xs, ys, inf) = driver.pointshare_to_field_shares_many(
         &[
             accumulator_trace.clone(),
@@ -804,6 +805,7 @@ fn compute_transcript_rows<
     let scale = driver.scale_many(transcript_add_x_equal, -C::BaseField::one());
     let inv_transcript_add_x_equal = driver.add_scalar(&scale, C::BaseField::one());
     let mul = driver.mul_many(is_zero_transcript_add_x, is_zero_transcript_add_y)?; //(accumulator_x == vm_x) && (accumulator_y == vm_y)
+    //TACEO TODO: investigate, this (or one of the following) batching actually made things slower
     let res = driver.mul_many(
         &[mul, inv_transcript_add_x_equal].concat(),
         &[inv_vm_inf_and_acc_inf, inv_vm_inf_and_acc_inf].concat(),
@@ -813,6 +815,7 @@ fn compute_transcript_rows<
 
     let zeroes = vec![T::AcvmType::default(); 2 * accumulator_trace_len];
     let (mut add_lambda_numerator, mut add_lambda_denominator) = {
+        //TACEO TODO: investigate, this (or one of the previous) batching actually made things slower
         let else_if_res = driver.cmux_many(
             &[else_if_mul, else_if_mul].concat(),
             &[acc_y_minus_vm_y, acc_x_minus_vm_x].concat(),
