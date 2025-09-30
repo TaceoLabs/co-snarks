@@ -24,7 +24,6 @@ use co_builder::{
 use common::{mpc::NoirUltraHonkProver, transcript::TranscriptFieldType};
 use ultrahonk::prelude::Univariate;
 
-#[derive(Debug)]
 pub struct AllRelationAccECCVM<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) r_ecc_transcript: EccTranscriptRelationAcc<T, P>,
     pub(crate) r_ecc_point_table: EccPointTableRelationAcc<T, P>,
@@ -114,6 +113,7 @@ fn extend_and_batch_univariates_template<
 impl MPCProverFlavour for ECCVMFlavour {
     type AllRelationAcc<T: common::mpc::NoirUltraHonkProver<P>, P: ark_ec::CurveGroup> =
         AllRelationAccECCVM<T, P>;
+    type AllRelationEvaluations<T: NoirUltraHonkProver<P>, P: CurveGroup> = (); // No evaluations needed
 
     type AllRelationAccHalfShared<T: common::mpc::NoirUltraHonkProver<P>, P: ark_ec::CurveGroup> =
         AllRelationAccECCVM<T, P>;
@@ -139,8 +139,6 @@ impl MPCProverFlavour for ECCVMFlavour {
     type AllEntitiesBatchRelations<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> =
         AllEntitiesBatchRelationsECCVM<T, P>;
 
-    type Alphas<F: ark_ff::PrimeField> = F;
-
     const NUM_SUBRELATIONS: usize = EccTranscriptRelation::NUM_RELATIONS
         + EccPointTableRelation::NUM_RELATIONS
         + EccWnafRelation::NUM_RELATIONS
@@ -160,9 +158,11 @@ impl MPCProverFlavour for ECCVMFlavour {
     fn scale<T: common::mpc::NoirUltraHonkProver<P>, P: ark_ec::CurveGroup>(
         acc: &mut Self::AllRelationAcc<T, P>,
         first_scalar: P::ScalarField,
-        elements: &Self::Alphas<P::ScalarField>,
+        elements: &[P::ScalarField],
     ) {
         tracing::trace!("Prove::Scale");
+        assert!(elements.len() == 1);
+        let elements = &elements[0];
         let mut current_scalar = first_scalar;
         acc.r_ecc_transcript.scale(&mut current_scalar, elements);
         acc.r_ecc_point_table.scale(&mut current_scalar, elements);
@@ -216,7 +216,7 @@ impl MPCProverFlavour for ECCVMFlavour {
         state: &mut T::State,
         univariate_accumulators: &mut Self::AllRelationAccHalfShared<T, P>,
         sum_check_data: &Self::AllEntitiesBatchRelations<T, P>,
-        relation_parameters: &crate::co_decider::types::RelationParameters<P::ScalarField, Self>,
+        relation_parameters: &crate::co_decider::types::RelationParameters<P::ScalarField>,
     ) -> co_builder::HonkProofResult<()> {
         tracing::trace!("Accumulate relations");
         SumcheckRound::accumulate_one_relation_univariates_batch::<
@@ -331,10 +331,9 @@ impl MPCProverFlavour for ECCVMFlavour {
         P: co_builder::prelude::HonkCurve<F>,
     >(
         _transcript: &mut common::transcript::Transcript<F, H>,
-        _alphas: &mut Self::Alphas<P::ScalarField>,
+        _alphas: &mut Vec<P::ScalarField>,
     ) {
-        //Let's not implement this for now, as we will remove alphas later
-        todo!()
+        unimplemented!("this is not needed for the ECCVM flavour")
     }
 
     fn reshare<

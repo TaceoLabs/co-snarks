@@ -41,7 +41,7 @@ use co_builder::prover_flavour::ProverFlavour;
 use common::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
 use std::array;
 
-#[derive(Default, Debug)]
+#[derive(Default)]
 pub struct AllRelationAccMega<F: PrimeField> {
     pub(crate) r_arith: UltraArithmeticRelationAcc<F>,
     pub(crate) r_perm: UltraPermutationRelationAccType<F>,

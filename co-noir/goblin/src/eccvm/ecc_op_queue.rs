@@ -1,7 +1,3 @@
-use crate::{
-    ADDITIONS_PER_ROW, NUM_LIMB_BITS_IN_FIELD_SIMULATION, NUM_ROWS_PER_OP, NUM_WNAF_DIGIT_BITS,
-    NUM_WNAF_DIGITS_PER_SCALAR, POINT_TABLE_SIZE, TABLE_WIDTH, WNAF_DIGITS_PER_ROW, WNAF_MASK,
-};
 use ark_ec::AffineRepr;
 use ark_ec::CurveGroup;
 use ark_ff::One;
@@ -12,6 +8,10 @@ use co_builder::prelude::HonkCurve;
 use co_builder::prelude::Polynomial;
 use co_builder::prelude::Utils;
 use co_builder::prelude::offset_generator;
+use common::{
+    ADDITIONS_PER_ROW, NUM_LIMB_BITS_IN_FIELD_SIMULATION, NUM_ROWS_PER_OP, NUM_WNAF_DIGIT_BITS,
+    NUM_WNAF_DIGITS_PER_SCALAR, POINT_TABLE_SIZE, TABLE_WIDTH, WNAF_DIGITS_PER_ROW, WNAF_MASK,
+};
 use num_bigint::BigUint;
 use serde::Deserialize;
 use serde::Serialize;
@@ -175,9 +175,6 @@ impl<C: HonkCurve<TranscriptFieldType>> MSMRow<C> {
         // In what follows, either p1 + p2 = p3, or p1.dbl() = p3
         // We create 1 vector to store the entire point trace. We split into multiple containers using std::span
         // (we want 1 vector object to more efficiently batch normalize points)
-        const NUM_POINTS_IN_ADDITION_RELATION: usize = 3;
-        let num_points_to_normalize =
-            (num_point_adds_and_doubles * NUM_POINTS_IN_ADDITION_RELATION) + num_accumulators;
         let mut p1_trace = vec![C::Affine::zero(); num_point_adds_and_doubles];
         let mut p2_trace = vec![C::Affine::zero(); num_point_adds_and_doubles];
         let mut p3_trace = vec![C::Affine::zero(); num_point_adds_and_doubles];

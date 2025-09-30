@@ -35,7 +35,7 @@ use crate::decider::relations::{
 };
 use ark_ff::AdditiveGroup;
 
-#[derive(Default, Debug)]
+#[derive(Default)]
 pub struct AllRelationAccUltra<F: PrimeField> {
     pub(crate) r_arith: UltraArithmeticRelationAcc<F>,
     pub(crate) r_perm: UltraPermutationRelationAccType<F>,

@@ -40,7 +40,7 @@ use common::mpc::NoirUltraHonkProver;
 use mpc_net::Network;
 use std::array;
 use ultrahonk::prelude::Univariate;
-#[derive(Debug)]
+
 pub struct AllRelationAccUltra<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) r_arith: UltraArithmeticRelationAcc<T, P>,
     pub(crate) r_perm: UltraPermutationRelationAccType<T, P>,
@@ -51,7 +51,7 @@ pub struct AllRelationAccUltra<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) r_pos_ext: Poseidon2ExternalRelationAcc<T, P>,
     pub(crate) r_pos_int: Poseidon2InternalRelationAcc<T, P>,
 }
-#[derive(Debug)]
+
 pub struct AllRelationAccHalfSharedUltra<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) r_arith: UltraArithmeticRelationAccHalfShared<T, P>,
     pub(crate) r_perm: UltraPermutationRelationAccType<T, P>,

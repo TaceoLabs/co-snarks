@@ -21,14 +21,16 @@ use co_ultrahonk::prelude::SharedSmallSubgroupIPAProver;
 use co_ultrahonk::prelude::SharedUnivariate;
 use co_ultrahonk::prelude::SharedUnivariateTrait;
 use common::CoUtils;
+use common::ECCVM_FIXED_SIZE;
+use common::NUM_WNAF_DIGIT_BITS;
+use common::NUM_WNAF_DIGITS_PER_SCALAR;
+use common::POINT_TABLE_SIZE;
+use common::WNAF_DIGITS_PER_ROW;
 use common::shared_polynomial::SharedPolynomial;
 use common::{
     mpc::NoirUltraHonkProver,
     transcript::{Transcript, TranscriptFieldType, TranscriptHasher},
 };
-use goblin::ECCVM_FIXED_SIZE;
-use goblin::{NUM_WNAF_DIGIT_BITS, NUM_WNAF_DIGITS_PER_SCALAR};
-use goblin::{POINT_TABLE_SIZE, WNAF_DIGITS_PER_ROW};
 use mpc_net::Network;
 use std::marker::PhantomData;
 

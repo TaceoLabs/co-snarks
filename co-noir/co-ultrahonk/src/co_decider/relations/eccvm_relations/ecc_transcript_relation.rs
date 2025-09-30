@@ -305,6 +305,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
     for EccTranscriptRelation
 {
     type Acc = EccTranscriptRelationAcc<T, P>;
+    type VerifyAcc = (); // Not need for ECCVM
 
     fn can_skip(_entity: &crate::co_decider::types::ProverUnivariates<T, P, ECCVMFlavour>) -> bool {
         false
@@ -361,7 +362,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         state: &mut T::State,
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesBatch<T, P, ECCVMFlavour>,
-        _relation_parameters: &RelationParameters<<P>::ScalarField, ECCVMFlavour>,
+        _relation_parameters: &RelationParameters<<P>::ScalarField>,
         scaling_factors: &[P::ScalarField],
     ) -> HonkProofResult<()> {
         let id = state.id();
