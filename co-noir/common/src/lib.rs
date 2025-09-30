@@ -153,7 +153,7 @@ impl CoUtils {
             "Insufficient space for masking"
         );
         for i in (virtual_size - NUM_MASKED_ROWS as usize..virtual_size).rev() {
-            // polynomial.coefficients[i] = T::rand(net, state)?; // TODO FLORIN
+            polynomial.coefficients[i] = T::rand(net, state)?;
         }
 
         Ok(())

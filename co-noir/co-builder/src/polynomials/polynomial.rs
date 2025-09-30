@@ -235,7 +235,7 @@ impl<F: PrimeField> Polynomial<F> {
     }
 
     pub fn random<R: Rng + CryptoRng>(size: usize, rng: &mut R) -> Self {
-        let coefficients = (0..size).map(|_| F::one()).collect(); //TODO FLORIN REMOVE
+        let coefficients = (0..size).map(|_| F::rand(rng)).collect();
         Self { coefficients }
     }
 

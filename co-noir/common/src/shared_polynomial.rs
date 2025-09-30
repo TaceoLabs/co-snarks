@@ -140,11 +140,8 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup> SharedPolynomial<T, P> {
     }
 
     pub fn random<N: Network>(size: usize, net: &N, state: &mut T::State) -> eyre::Result<Self> {
-        // let coefficients: Result<Vec<_>, _> = (0..size).map(|_| T::rand(net, state)).collect();
-        let coefficients: Vec<_> = (0..size)
-            .map(|_| T::promote_to_trivial_share(state.id(), P::ScalarField::one())) //TODO FLORIN REMOVE //T::rand(net, state))
-            .collect();
-        // let coefficients = coefficients?;
+        let coefficients: Result<Vec<_>, _> = (0..size).map(|_| T::rand(net, state)).collect();
+        let coefficients = coefficients?;
         Ok(Self { coefficients })
     }
 
