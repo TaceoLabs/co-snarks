@@ -705,7 +705,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         scalars: &[Self::OtherAcvmType<C>],
     ) -> eyre::Result<Self::AcvmPoint<C>>;
 
-    /// Perform msm between `points` and public `scalars`
+    /// Multiply a point by a scalar
     fn scale_point_by_scalar<C: CurveGroup<BaseField = F>>(
         &mut self,
         point: Self::AcvmPoint<C>,
