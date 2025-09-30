@@ -1120,6 +1120,7 @@ pub fn construct_from_builder<
 
     let unmasked_witness_size = dyadic_num_rows - NUM_DISABLED_ROWS_IN_SUMCHECK as usize;
 
+    // TACEO TODO: Actually a lot of the polynomials in the following are public, we should really optimize for that
     let mut polys =
         Polynomials::<U::ArithmeticShare, C::ScalarField, ECCVMFlavour>::new(dyadic_num_rows);
 
