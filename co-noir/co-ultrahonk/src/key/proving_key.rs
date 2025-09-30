@@ -432,31 +432,6 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCProverFlavour> ProvingKey<T
             pairing_inputs_public_input_key,
         })
     }
-
-    pub fn new(
-        circuit_size: usize,
-        num_public_inputs: usize,
-        final_active_wire_idx: usize,
-        pairing_inputs_public_input_key: PublicComponentKey,
-    ) -> Self {
-        tracing::trace!("ProvingKey new");
-        let polynomials = Polynomials::new(circuit_size);
-
-        Self {
-            circuit_size: circuit_size as u32,
-            public_inputs: Vec::with_capacity(num_public_inputs),
-            num_public_inputs: num_public_inputs as u32,
-            pub_inputs_offset: 0,
-            polynomials,
-            memory_read_records: Vec::new(),
-            memory_write_records: Vec::new(),
-            final_active_wire_idx,
-            phantom: PhantomData,
-            memory_records_shared: BTreeMap::new(),
-            active_region_data: ActiveRegionData::new(),
-            pairing_inputs_public_input_key,
-        }
-    }
 }
 
 pub fn to_plain_pk<P: CurveGroup, L: MPCProverFlavour>(

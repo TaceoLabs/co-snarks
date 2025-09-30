@@ -5,11 +5,10 @@ use co_builder::{
     HonkProofResult, TranscriptFieldType,
     prelude::{HonkCurve, ProverCrs},
 };
+use common::CONST_ECCVM_LOG_N;
 use common::shplemini::ShpleminiOpeningClaim;
 use common::transcript::{Transcript, TranscriptHasher};
 use ultrahonk::Utils as UltraHonkUtils;
-
-use crate::CONST_ECCVM_LOG_N;
 
 pub(crate) fn compute_ipa_opening_proof<
     P: HonkCurve<TranscriptFieldType>,

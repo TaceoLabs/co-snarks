@@ -40,7 +40,7 @@ impl EccLookupRelation {
         const SIZE: usize,
     >(
         input: &ProverUnivariatesBatch<T, P, ECCVMFlavour>,
-        relation_parameters: &RelationParameters<<P>::ScalarField, ECCVMFlavour>,
+        relation_parameters: &RelationParameters<<P>::ScalarField>,
         read_index: usize,
         id: <T::State as MpcState>::PartyID,
     ) -> Vec<T::ArithmeticShare> {
@@ -175,7 +175,7 @@ impl EccLookupRelation {
         const SIZE: usize,
     >(
         input: &ProverUnivariatesBatch<T, P, ECCVMFlavour>,
-        relation_parameters: &RelationParameters<<P>::ScalarField, ECCVMFlavour>,
+        relation_parameters: &RelationParameters<<P>::ScalarField>,
         write_index: usize,
         id: <T::State as MpcState>::PartyID,
     ) -> Vec<T::ArithmeticShare> {
@@ -302,6 +302,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
     for EccLookupRelation
 {
     type Acc = EccLookupRelationAcc<T, P>;
+    type VerifyAcc = (); // Not need for ECCVM
 
     fn can_skip(_entity: &crate::co_decider::types::ProverUnivariates<T, P, ECCVMFlavour>) -> bool {
         false
@@ -346,7 +347,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         state: &mut T::State,
         univariate_accumulator: &mut Self::Acc,
         input: &ProverUnivariatesBatch<T, P, ECCVMFlavour>,
-        relation_parameters: &RelationParameters<<P>::ScalarField, ECCVMFlavour>,
+        relation_parameters: &RelationParameters<<P>::ScalarField>,
         scaling_factors: &[P::ScalarField],
     ) -> HonkProofResult<()> {
         const NUM_TOTAL_TERMS: usize =

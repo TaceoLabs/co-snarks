@@ -323,7 +323,7 @@ pub fn generate_vk_barretenberg<P: HonkCurve<TranscriptFieldType>>(
 }
 
 /// Split a proving key into RPE3 shares
-pub fn split_proving_key_rep3<P: CurveGroup<BaseField: PrimeField>, R: Rng + CryptoRng>(
+pub fn split_proving_key_rep3<P: CurveGroup<BaseField: PrimeField>>(
     proving_key: PlainProvingKey<P, UltraFlavour>,
 ) -> Result<[Rep3ProvingKey<P, UltraFlavour>; 3]> {
     let mut rng = rand::thread_rng();
@@ -350,7 +350,7 @@ pub fn split_proving_key_rep3<P: CurveGroup<BaseField: PrimeField>, R: Rng + Cry
 }
 
 /// Split a proving key into shamir shares
-pub fn split_proving_key_shamir<P: CurveGroup<BaseField: PrimeField>, R: Rng + CryptoRng>(
+pub fn split_proving_key_shamir<P: CurveGroup<BaseField: PrimeField>>(
     proving_key: PlainProvingKey<P, UltraFlavour>,
     degree: usize,
     num_parties: usize,

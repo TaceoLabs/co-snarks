@@ -1280,6 +1280,7 @@ dependencies = [
  "ark-std",
  "co-acvm",
  "co-builder",
+ "co-ultrahonk",
  "common",
  "eyre",
  "goblin",

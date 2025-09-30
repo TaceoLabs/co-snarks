@@ -5,12 +5,12 @@ use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_builder::TranscriptFieldType;
 use co_builder::prelude::HonkCurve;
 use co_builder::prelude::offset_generator;
-use goblin::WNAF_DIGITS_PER_ROW;
-use goblin::prelude::EccvmRowTracker;
-use goblin::{
-    ADDITIONS_PER_ROW, NUM_WNAF_DIGITS_PER_SCALAR, POINT_TABLE_SIZE,
-    prelude::{EccOpCode, EccOpsTable},
+use common::{
+    ADDITIONS_PER_ROW, NUM_SCALAR_BITS, NUM_WNAF_DIGITS_PER_SCALAR, POINT_TABLE_SIZE,
+    WNAF_DIGITS_PER_ROW,
 };
+use goblin::prelude::EccvmRowTracker;
+use goblin::prelude::{EccOpCode, EccOpsTable};
 use num_bigint::BigUint;
 use std::array;
 
@@ -318,11 +318,8 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
             }
         }
 
-        let wnaf_result = T::compute_wnaf_digits_and_compute_rows_many(
-            driver,
-            &z1_and_z2,
-            goblin::NUM_SCALAR_BITS,
-        )?;
+        let wnaf_result =
+            T::compute_wnaf_digits_and_compute_rows_many(driver, &z1_and_z2, NUM_SCALAR_BITS)?;
 
         let (z1_even, z2_even) = wnaf_result.0.split_at(z1_len);
         let (z1_wnaf_digits, z2_wnaf_digits) = wnaf_result.1.split_at(z1_len);
@@ -505,7 +502,6 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
             vec![T::AcvmType::default(); num_rows_in_read_counts_table * 2];
 
         let update_read_count = |point_idx: usize,
-                                 slice: T::AcvmType,
                                  mut index: T::AcvmType,
                                  is_negative: T::AcvmType,
                                  point_table_read_counts: &mut [T::AcvmType],
@@ -702,13 +698,10 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
                         let point_idx = offset + relative_point_idx;
                         let add = num_points_in_row > relative_point_idx;
                         if add {
-                            let slice = msm[point_idx].wnaf_digits[digit_idx];
-                            let is_negative = msm[point_idx].wnaf_digits_sign[digit_idx];
                             update_read_count(
                                 (total_number_of_muls - pc) as usize + point_idx,
-                                slice,
                                 cmux_results[j],
-                                is_negative,
+                                msm[point_idx].wnaf_digits_sign[digit_idx],
                                 &mut point_table_read_counts,
                                 driver,
                             )?;
@@ -947,8 +940,11 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
                             } else {
                                 T::AcvmType::default()
                             };
-                            let converted_wnaf_skew =
-                                &converted_wnaf_skews[msm_offset_wnaf_skews + offset + point_idx];
+                            let converted_wnaf_skew = if add_state.add {
+                                converted_wnaf_skews[msm_offset_wnaf_skews + offset + point_idx]
+                            } else {
+                                T::OtherAcvmType::<C>::default()
+                            };
                             add_state.point = if add_state.add {
                                 // msm[offset + point_idx].precomputed_table[add_state.slice as usize]
                                 let lut = driver.init_lut_by_acvm_point(
@@ -956,27 +952,23 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
                                 );
                                 let index = driver.mul_with_public_other::<C>(
                                     C::ScalarField::from(7),
-                                    *converted_wnaf_skew,
+                                    converted_wnaf_skew,
                                 );
                                 driver.read_lut_by_acvm_point(index, &lut)?
                             } else {
                                 T::AcvmPoint::<C>::default()
                             };
-                            let converted_add_predicate = if add_state.add {
-                                *converted_wnaf_skew
-                            } else {
-                                T::OtherAcvmType::<C>::default()
-                            };
+
                             let p1 = accumulator;
                             accumulator = {
                                 let added_points = driver.add_points(accumulator, add_state.point);
                                 let add_predicate_inverted = driver.sub_other(
                                     T::OtherAcvmType::from(C::ScalarField::one()),
-                                    converted_add_predicate,
+                                    converted_wnaf_skew,
                                 );
                                 driver.msm(
                                     &[accumulator, added_points],
-                                    &[add_predicate_inverted, converted_add_predicate],
+                                    &[add_predicate_inverted, converted_wnaf_skew],
                                 )?
                             };
                             p1_trace[trace_index] = p1;

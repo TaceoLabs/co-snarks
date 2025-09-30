@@ -5,11 +5,11 @@ use co_builder::{
     HonkProofResult, TranscriptFieldType,
     prelude::{HonkCurve, ProverCrs},
 };
+use common::CONST_ECCVM_LOG_N;
 use common::CoUtils;
 use common::co_shplemini::ShpleminiOpeningClaim;
 use common::mpc::NoirUltraHonkProver;
 use common::transcript::{Transcript, TranscriptHasher};
-use goblin::CONST_ECCVM_LOG_N;
 use mpc_net::Network;
 use ultrahonk::Utils as UltraHonkUtils;
 

@@ -2,10 +2,6 @@ use crate::eccvm::ecc_op_queue::ECCOpQueue;
 use crate::eccvm::ecc_op_queue::MSMRow;
 use crate::eccvm::ecc_op_queue::ScalarMul;
 use crate::eccvm::ecc_op_queue::VMOperation;
-use crate::{
-    ECCVM_FIXED_SIZE, NUM_WNAF_DIGIT_BITS, NUM_WNAF_DIGITS_PER_SCALAR, POINT_TABLE_SIZE,
-    WNAF_DIGITS_PER_ROW,
-};
 use ark_ec::AffineRepr;
 use ark_ec::CurveGroup;
 use ark_ff::One;
@@ -24,6 +20,10 @@ use co_builder::prelude::offset_generator_scaled;
 use co_builder::{flavours::eccvm_flavour::ECCVMFlavour, prelude::Polynomials};
 use common::transcript::Transcript;
 use common::transcript::TranscriptHasher;
+use common::{
+    ECCVM_FIXED_SIZE, NUM_WNAF_DIGIT_BITS, NUM_WNAF_DIGITS_PER_SCALAR, POINT_TABLE_SIZE,
+    WNAF_DIGITS_PER_ROW,
+};
 use num_bigint::BigUint;
 use ultrahonk::Utils as UltraHonkUtils;
 use ultrahonk::plain_prover_flavour::UnivariateTrait;
