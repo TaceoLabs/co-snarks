@@ -5,7 +5,7 @@ use super::{
 use crate::mpc_vm::VMConfig;
 use ark_ff::{One, PrimeField};
 use co_circom_types::Rep3InputType;
-use eyre::{bail, eyre};
+use eyre::bail;
 use itertools::Itertools;
 use mpc_core::{
     MpcState,

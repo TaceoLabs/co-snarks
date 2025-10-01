@@ -31,7 +31,7 @@ impl MergeRecursiveVerifier {
      * length of the subtable columns t_j. This protocol demonstrates, assuming the length of t is at most k, that the
      * aggregate ecc op table has been constructed correctly via the simple Schwartz-Zippel check:
      *
-     *      T_j(\kappa) = t_j(\kappa) + \kappa^k * (T_{j,prev}(\kappa)).
+     * T_j(\kappa) = t_j(\kappa) + \kappa^k * (T_{j,prev}(\kappa)).
      *
      * @tparam CircuitBuilder
      * @param proof
@@ -110,7 +110,7 @@ impl MergeRecursiveVerifier {
         }
 
         // Check the identity T_j(kappa) = t_j(kappa) + kappa^m * T_{j,prev}(kappa)
-        let kappa_pow = kappa.pow(&subtable_size, builder, driver);
+        let kappa_pow = kappa.pow(&subtable_size, builder, driver)?;
         for idx in 0..NUM_WIRES {
             let T_prev_shifted_eval_reconstructed = T_prev_evals[idx]
                 .multiply(&kappa_pow, builder, driver)

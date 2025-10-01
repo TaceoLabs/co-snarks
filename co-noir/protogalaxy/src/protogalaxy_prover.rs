@@ -96,7 +96,7 @@ where
             .collect::<Vec<_>>();
 
         // An honest prover with valid initial key computes that the perturbator is 0 in the first round
-        // TODO TACEO: Fix once ClientIVC::accumulate is implemented
+        // TACEO TODO: Fix once ClientIVC::accumulate is implemented
         let perturbator = if true {
             compute_perturbator(accumulator, deltas.as_slice(), accumulator_prover_memory)
         } else {

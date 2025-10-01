@@ -502,7 +502,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         _relation_parameters: &RelationParameters<Univariate<P::ScalarField, SIZE>>,
         scaling_factor: &P::ScalarField,
     ) -> HonkProofResult<()> {
-        // TODO TACEO: Reconcile skip check and `can_skip`
+        // TACEO TODO: Reconcile skip check and `can_skip`
         if input.precomputed.q_arith().iter().all(|x| x.is_zero()) {
             return Ok(());
         }

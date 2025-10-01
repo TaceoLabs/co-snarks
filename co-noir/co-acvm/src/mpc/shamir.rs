@@ -5,6 +5,7 @@ use co_brillig::mpc::{ShamirBrilligDriver, ShamirBrilligType};
 use co_noir_types::ShamirType;
 use common::honk_curve::HonkCurve;
 use core::panic;
+use itertools::{Either, Itertools};
 use mpc_core::{
     MpcState,
     gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations},
@@ -997,7 +998,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
         panic!("functionality other_pointshare_to_other_field_shares not feasible for Shamir")
     }
 
-    // TODO TACEO: Currently only supports LIMB_BITS = 136, i.e. two Bn254::Fr elements per Bn254::Fq element
+    // TACEO TODO: Currently only supports LIMB_BITS = 136, i.e. two Bn254::Fr elements per Bn254::Fq element
     /// Converts a base field share into a vector of field shares, where the field shares
     /// represent the limbs of the base field element. Each limb has at most LIMB_BITS bits.
     fn other_field_shares_to_field_shares<
@@ -1036,34 +1037,128 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
     /// Multiply two slices of ACVM-types elementwise: \[c_i\] = \[secret_1_i\] * \[secret_2_i\].
     fn mul_many(
         &mut self,
-        _secrets_1: &[Self::AcvmType],
-        _secrets_2: &[Self::AcvmType],
+        secrets_1: &[Self::AcvmType],
+        secrets_2: &[Self::AcvmType],
     ) -> eyre::Result<Vec<Self::AcvmType>> {
-        panic!("functionality mul_many not feasible for Shamir")
+        if secrets_1.len() != secrets_2.len() {
+            eyre::bail!("Vectors must have the same length");
+        }
+        // For each coordinate we have four cases:
+        // 1. Both are shared
+        // 2. First is shared, second is public
+        // 3. First is public, second is shared
+        // 4. Both are public
+        // We handle case one separately, in order to use batching and then combine the results.
+        let (all_shared_indices, any_public_indices): (Vec<usize>, Vec<usize>) = (0..secrets_1
+            .len())
+            .partition(|&i| Self::is_shared(&secrets_1[i]) && Self::is_shared(&secrets_2[i]));
+
+        // Case 1: Both are shared
+        let (indices, shares_1, shares_2): (
+            Vec<usize>,
+            Vec<Self::ArithmeticShare>,
+            Vec<Self::ArithmeticShare>,
+        ) = all_shared_indices
+            .into_iter()
+            .map(|i| {
+                (
+                    i,
+                    Self::get_shared(&secrets_1[i]).unwrap(),
+                    Self::get_shared(&secrets_2[i]).unwrap(),
+                )
+            })
+            .multiunzip();
+        let mul_all_shared = arithmetic::mul_vec(&shares_1, &shares_2, self.net, &mut self.state)?;
+        let mul_all_shared = mul_all_shared.into_iter().map(ShamirAcvmType::Shared);
+        let mul_all_shared_indexed = indices
+            .into_iter()
+            .zip(mul_all_shared)
+            .collect::<Vec<(usize, Self::AcvmType)>>();
+
+        // For all the other cases, we can just call self.mul
+        let mul_any_public = any_public_indices
+            .iter()
+            .map(|&i| {
+                let a = &secrets_1[i];
+                let b = &secrets_2[i];
+                self.mul(*a, *b)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let mul_any_public_indexed = any_public_indices
+            .into_iter()
+            .zip(mul_any_public)
+            .collect::<Vec<(usize, Self::AcvmType)>>();
+
+        // Merge sort by index
+        Ok(mul_all_shared_indexed
+            .into_iter()
+            .chain(mul_any_public_indexed)
+            .sorted_by_key(|(i, _)| *i)
+            .map(|(_, val)| val)
+            .collect::<Vec<Self::AcvmType>>())
     }
 
     // Given two points, adds them together. Both can either be public or shared
     fn add_points_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &self,
-        _lhs: Self::OtherAcvmPoint<C>,
-        _rhs: Self::OtherAcvmPoint<C>,
+        lhs: Self::OtherAcvmPoint<C>,
+        rhs: Self::OtherAcvmPoint<C>,
     ) -> Self::OtherAcvmPoint<C> {
-        panic!("functionality add_points_other not feasible for Shamir")
+        match (lhs, rhs) {
+            (ShamirAcvmPoint::Public(lhs), ShamirAcvmPoint::Public(rhs)) => {
+                ShamirAcvmPoint::Public(lhs + rhs)
+            }
+            (ShamirAcvmPoint::Public(public), ShamirAcvmPoint::Shared(mut shared))
+            | (ShamirAcvmPoint::Shared(mut shared), ShamirAcvmPoint::Public(public)) => {
+                pointshare::add_assign_public(&mut shared, &public);
+                ShamirAcvmPoint::Shared(shared)
+            }
+            (ShamirAcvmPoint::Shared(lhs), ShamirAcvmPoint::Shared(rhs)) => {
+                ShamirAcvmPoint::Shared(pointshare::add(&lhs, &rhs))
+            }
+        }
     }
 
     fn msm_public_points<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        _points: &[C::Affine],
-        _scalars: &[Self::ArithmeticShare],
+        points: &[C::Affine],
+        scalars: &[Self::ArithmeticShare],
     ) -> Self::OtherAcvmPoint<C> {
-        panic!("functionality msm_public_points not feasible for Shamir")
+        ShamirAcvmPoint::Shared(pointshare::msm_public_points(points, scalars))
     }
 
+    #[expect(clippy::type_complexity)]
     fn open_many_points_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        _a: &[Self::OtherAcvmPoint<C>],
+        a: &[Self::OtherAcvmPoint<C>],
     ) -> eyre::Result<Vec<C::Affine>> {
-        panic!("functionality open_many_points_other not feasible for Shamir")
+        let (indexed_shares, indexed_public): (
+            Vec<(usize, ShamirPointShare<C>)>,
+            Vec<(usize, C::Affine)>,
+        ) = a.iter().enumerate().partition_map(|(i, val)| match val {
+            ShamirAcvmPoint::Shared(share) => Either::Left((i, share.clone())),
+            ShamirAcvmPoint::Public(public) => Either::Right((i, public.into_affine())),
+        });
+
+        let (indices, shares): (Vec<usize>, Vec<ShamirPointShare<C>>) =
+            indexed_shares.into_iter().unzip();
+
+        let opened_shares = pointshare::open_point_many(&shares, self.net, &mut self.state)?
+            .into_iter()
+            .map(|p| p.into_affine())
+            .collect::<Vec<_>>();
+        let opened_shares = indices
+            .into_iter()
+            .zip(opened_shares)
+            .collect::<Vec<(usize, C::Affine)>>();
+
+        // Merge sort by index
+        Ok(opened_shares
+            .into_iter()
+            .chain(indexed_public)
+            .sorted_by_key(|(i, _)| *i)
+            .map(|(_, val)| val)
+            .collect::<Vec<C::Affine>>())
     }
 
     /// Returns the point share if the point is shared

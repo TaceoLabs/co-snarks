@@ -15,7 +15,7 @@ use super::{
 use ark_ff::{PrimeField, Zero};
 use circuits::{GarbledCircuits, SHA256Table};
 use fancy_garbling::{BinaryBundle, WireLabel, WireMod2, hash_wires, util::tweak2};
-use itertools::{Itertools, izip};
+use itertools::Itertools;
 use mpc_net::Network;
 use num_bigint::BigUint;
 use rand::{CryptoRng, Rng};
