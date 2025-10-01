@@ -22,6 +22,7 @@ ark-ec.workspace = true
 ark-ff.workspace = true
 ark-bn254.workspace = true
 eyre.workspace = true
+tracing.workspace = true
 num-bigint.workspace = true
 sha3.workspace = true
 itertools.workspace = true

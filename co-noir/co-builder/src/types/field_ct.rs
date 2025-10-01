@@ -2035,7 +2035,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         &self,
         builder: &GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> eyre::Result<T::AcvmPoint<P::CycleGroup>> {
+    ) -> eyre::Result<T::CycleGroupAcvmPoint<P::CycleGroup>> {
         let x = self.x.get_value(builder, driver);
         let y = self.y.get_value(builder, driver);
         let is_infinity = self.is_infinity.get_value(driver);
@@ -2343,7 +2343,9 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 
         for (point, offset_generator) in base_points.iter().zip(offset_generators.iter().skip(1)) {
             let mut native_straus_table = Vec::with_capacity(table_size);
-            native_straus_table.push(T::AcvmPoint::from(offset_generator.to_owned().into()));
+            native_straus_table.push(T::CycleGroupAcvmPoint::from(
+                offset_generator.to_owned().into(),
+            ));
             for j in 1..table_size {
                 let val = point.get_value(builder, driver)?;
                 let val = driver.add_points(val, native_straus_table[j - 1].to_owned());
@@ -2395,7 +2397,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         }
 
         let accumulator: P::CycleGroup = offset_generators[0].to_owned().into();
-        let mut accumulator = T::AcvmPoint::from(accumulator);
+        let mut accumulator = T::CycleGroupAcvmPoint::from(accumulator);
         for i in 0..num_rounds {
             if i != 0 {
                 for _ in 0..Self::TABLE_BITS {
@@ -2543,7 +2545,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
     // Evaluates a doubling. Uses Ultra double gate
     fn dbl(
         &self,
-        hint: Option<T::AcvmPoint<P::CycleGroup>>,
+        hint: Option<T::CycleGroupAcvmPoint<P::CycleGroup>>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Self> {
@@ -2653,7 +2655,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
     fn checked_unconditional_add(
         &self,
         other: &Self,
-        hint: Option<T::AcvmPoint<P::CycleGroup>>,
+        hint: Option<T::CycleGroupAcvmPoint<P::CycleGroup>>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Self> {
@@ -2673,7 +2675,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
     fn unconditional_add(
         &self,
         other: &Self,
-        hint: Option<T::AcvmPoint<P::CycleGroup>>,
+        hint: Option<T::CycleGroupAcvmPoint<P::CycleGroup>>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Self> {
@@ -3338,7 +3340,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         base_point: &CycleGroupCT<P, T>,
         offset_generator: CycleGroupCT<P, T>,
         table_bits: usize,
-        hints: Option<Vec<T::AcvmPoint<P::CycleGroup>>>,
+        hints: Option<Vec<T::CycleGroupAcvmPoint<P::CycleGroup>>>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Self> {
@@ -3466,21 +3468,21 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
     }
 
     fn compute_straus_lookup_table_hints(
-        base_point: T::AcvmPoint<P::CycleGroup>,
+        base_point: T::CycleGroupAcvmPoint<P::CycleGroup>,
         offset_generator: <P::CycleGroup as CurveGroup>::Affine,
         table_bits: usize,
         driver: &mut T,
-    ) -> eyre::Result<Vec<T::AcvmPoint<P::CycleGroup>>> {
+    ) -> eyre::Result<Vec<T::CycleGroupAcvmPoint<P::CycleGroup>>> {
         let tables_size = (1 << table_bits) as usize;
 
         // let base_point = if base_point == 0 {::CycleGroup::generator() else base_point;
         let base_point = driver.set_point_to_value_if_zero(
             base_point,
-            T::AcvmPoint::from(P::CycleGroup::generator()),
+            T::CycleGroupAcvmPoint::from(P::CycleGroup::generator()),
         )?;
 
         let mut hints = Vec::with_capacity(tables_size);
-        hints.push(T::AcvmPoint::from(offset_generator.into()));
+        hints.push(T::CycleGroupAcvmPoint::from(offset_generator.into()));
         for i in 1..tables_size {
             hints.push(driver.add_points(hints[i - 1].to_owned(), base_point.to_owned()));
         }

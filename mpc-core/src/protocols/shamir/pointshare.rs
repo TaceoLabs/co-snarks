@@ -107,6 +107,11 @@ pub fn open_half_point<C: CurveGroup, N: Network>(
     Ok(res)
 }
 
+/// Transforms a public value into a shared value: \[a\] = a.
+pub fn promote_to_trivial_share<C: CurveGroup>(a: &C) -> PointShare<C> {
+    PointShare::new(*a)
+}
+
 /// Performs opening of a point share.
 pub fn open_point<C: CurveGroup, N: Network>(
     a: &PointShare<C>,

@@ -472,6 +472,9 @@ impl<T: Default + Debug> WitnessEntitiesFlavour<T> for ECCVMWitnessEntities<T> {
     fn get_unshifted(&self) -> &[T] {
         &self.elements
     }
+    fn z_perm_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::Z_PERM]
+    }
 }
 impl<T: Default + Debug> ShiftedWitnessEntitiesFlavour<T> for ECCVMShiftedWitnessEntities<T> {
     fn new() -> Self {
@@ -1047,8 +1050,14 @@ impl<T: Default> ECCVMWitnessEntities<T> {
     pub fn precompute_dx(&self) -> &T {
         &self.elements[ECCVMFlavour::PRECOMPUTE_DX]
     }
+    pub fn precompute_dx_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::PRECOMPUTE_DX]
+    }
     pub fn precompute_dy(&self) -> &T {
         &self.elements[ECCVMFlavour::PRECOMPUTE_DY]
+    }
+    pub fn precompute_dy_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::PRECOMPUTE_DY]
     }
     pub fn precompute_point_transition(&self) -> &T {
         &self.elements[ECCVMFlavour::PRECOMPUTE_POINT_TRANSITION]
@@ -1155,6 +1164,9 @@ impl<T: Default> ECCVMWitnessEntities<T> {
     pub fn transcript_op(&self) -> &T {
         &self.elements[ECCVMFlavour::TRANSCRIPT_OP]
     }
+    pub fn transcript_op_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::TRANSCRIPT_OP]
+    }
     pub fn transcript_py(&self) -> &T {
         &self.elements[ECCVMFlavour::TRANSCRIPT_PY]
     }
@@ -1176,8 +1188,14 @@ impl<T: Default> ECCVMWitnessEntities<T> {
     pub fn transcript_base_x_inverse(&self) -> &T {
         &self.elements[ECCVMFlavour::TRANSCRIPT_BASE_X_INVERSE]
     }
+    pub fn transcript_base_x_inverse_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::TRANSCRIPT_BASE_X_INVERSE]
+    }
     pub fn transcript_base_y_inverse(&self) -> &T {
         &self.elements[ECCVMFlavour::TRANSCRIPT_BASE_Y_INVERSE]
+    }
+    pub fn transcript_base_y_inverse_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::TRANSCRIPT_BASE_Y_INVERSE]
     }
     pub fn transcript_mul(&self) -> &T {
         &self.elements[ECCVMFlavour::TRANSCRIPT_MUL]
@@ -1317,83 +1335,164 @@ impl<T: Default> ECCVMWitnessEntities<T> {
     pub fn transcript_msm_count_zero_at_transition(&self) -> &T {
         &self.elements[ECCVMFlavour::TRANSCRIPT_MSM_COUNT_ZERO_AT_TRANSITION]
     }
+    pub fn transcript_msm_count_zero_at_transition_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::TRANSCRIPT_MSM_COUNT_ZERO_AT_TRANSITION]
+    }
     pub fn transcript_msm_count_at_transition_inverse(&self) -> &T {
         &self.elements[ECCVMFlavour::TRANSCRIPT_MSM_COUNT_AT_TRANSITION_INVERSE]
+    }
+    pub fn transcript_msm_count_at_transition_inverse_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::TRANSCRIPT_MSM_COUNT_AT_TRANSITION_INVERSE]
     }
     pub fn transcript_add(&self) -> &T {
         &self.elements[ECCVMFlavour::TRANSCRIPT_ADD]
     }
+    pub fn transcript_add_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::TRANSCRIPT_ADD]
+    }
     pub fn transcript_eq(&self) -> &T {
         &self.elements[ECCVMFlavour::TRANSCRIPT_EQ]
+    }
+    pub fn transcript_eq_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::TRANSCRIPT_EQ]
     }
     pub fn transcript_accumulator_empty(&self) -> &T {
         &self.elements[ECCVMFlavour::TRANSCRIPT_ACCUMULATOR_EMPTY]
     }
+    pub fn transcript_accumulator_empty_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::TRANSCRIPT_ACCUMULATOR_EMPTY]
+    }
     pub fn transcript_accumulator_x(&self) -> &T {
         &self.elements[ECCVMFlavour::TRANSCRIPT_ACCUMULATOR_X]
+    }
+    pub fn transcript_accumulator_x_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::TRANSCRIPT_ACCUMULATOR_X]
     }
     pub fn transcript_accumulator_y(&self) -> &T {
         &self.elements[ECCVMFlavour::TRANSCRIPT_ACCUMULATOR_Y]
     }
+    pub fn transcript_accumulator_y_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::TRANSCRIPT_ACCUMULATOR_Y]
+    }
     pub fn transcript_reset_accumulator(&self) -> &T {
         &self.elements[ECCVMFlavour::TRANSCRIPT_RESET_ACCUMULATOR]
+    }
+    pub fn transcript_reset_accumulator_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::TRANSCRIPT_RESET_ACCUMULATOR]
     }
     pub fn transcript_msm_intermediate_x(&self) -> &T {
         &self.elements[ECCVMFlavour::TRANSCRIPT_MSM_INTERMEDIATE_X]
     }
+    pub fn transcript_msm_intermediate_x_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::TRANSCRIPT_MSM_INTERMEDIATE_X]
+    }
     pub fn transcript_msm_intermediate_y(&self) -> &T {
         &self.elements[ECCVMFlavour::TRANSCRIPT_MSM_INTERMEDIATE_Y]
+    }
+    pub fn transcript_msm_intermediate_y_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::TRANSCRIPT_MSM_INTERMEDIATE_Y]
     }
     pub fn transcript_msm_infinity(&self) -> &T {
         &self.elements[ECCVMFlavour::TRANSCRIPT_MSM_INFINITY]
     }
+    pub fn transcript_msm_infinity_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::TRANSCRIPT_MSM_INFINITY]
+    }
     pub fn transcript_msm_x_inverse(&self) -> &T {
         &self.elements[ECCVMFlavour::TRANSCRIPT_MSM_X_INVERSE]
+    }
+    pub fn transcript_msm_x_inverse_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::TRANSCRIPT_MSM_X_INVERSE]
     }
     pub fn transcript_add_x_equal(&self) -> &T {
         &self.elements[ECCVMFlavour::TRANSCRIPT_ADD_X_EQUAL]
     }
+    pub fn transcript_add_x_equal_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::TRANSCRIPT_ADD_X_EQUAL]
+    }
     pub fn transcript_add_y_equal(&self) -> &T {
         &self.elements[ECCVMFlavour::TRANSCRIPT_ADD_Y_EQUAL]
+    }
+    pub fn transcript_add_y_equal_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::TRANSCRIPT_ADD_Y_EQUAL]
     }
     pub fn transcript_add_lambda(&self) -> &T {
         &self.elements[ECCVMFlavour::TRANSCRIPT_ADD_LAMBDA]
     }
+    pub fn transcript_add_lambda_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::TRANSCRIPT_ADD_LAMBDA]
+    }
     pub fn msm_transition(&self) -> &T {
         &self.elements[ECCVMFlavour::MSM_TRANSITION]
+    }
+    pub fn msm_transition_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::MSM_TRANSITION]
     }
     pub fn msm_double(&self) -> &T {
         &self.elements[ECCVMFlavour::MSM_DOUBLE]
     }
+    pub fn msm_double_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::MSM_DOUBLE]
+    }
     pub fn msm_collision_x1(&self) -> &T {
         &self.elements[ECCVMFlavour::MSM_COLLISION_X1]
+    }
+    pub fn msm_collision_x1_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::MSM_COLLISION_X1]
     }
     pub fn msm_collision_x2(&self) -> &T {
         &self.elements[ECCVMFlavour::MSM_COLLISION_X2]
     }
+    pub fn msm_collision_x2_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::MSM_COLLISION_X2]
+    }
     pub fn msm_collision_x3(&self) -> &T {
         &self.elements[ECCVMFlavour::MSM_COLLISION_X3]
+    }
+    pub fn msm_collision_x3_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::MSM_COLLISION_X3]
     }
     pub fn msm_collision_x4(&self) -> &T {
         &self.elements[ECCVMFlavour::MSM_COLLISION_X4]
     }
+    pub fn msm_collision_x4_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::MSM_COLLISION_X4]
+    }
     pub fn msm_lambda1(&self) -> &T {
         &self.elements[ECCVMFlavour::MSM_LAMBDA1]
+    }
+    pub fn msm_lambda1_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::MSM_LAMBDA1]
     }
     pub fn msm_lambda2(&self) -> &T {
         &self.elements[ECCVMFlavour::MSM_LAMBDA2]
     }
+    pub fn msm_lambda2_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::MSM_LAMBDA2]
+    }
     pub fn msm_lambda3(&self) -> &T {
         &self.elements[ECCVMFlavour::MSM_LAMBDA3]
+    }
+    pub fn msm_lambda3_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::MSM_LAMBDA3]
     }
     pub fn msm_lambda4(&self) -> &T {
         &self.elements[ECCVMFlavour::MSM_LAMBDA4]
     }
+    pub fn msm_lambda4_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::MSM_LAMBDA4]
+    }
     pub fn msm_accumulator_x(&self) -> &T {
         &self.elements[ECCVMFlavour::MSM_ACCUMULATOR_X]
     }
+    pub fn msm_accumulator_x_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::MSM_ACCUMULATOR_X]
+    }
     pub fn msm_accumulator_y(&self) -> &T {
         &self.elements[ECCVMFlavour::MSM_ACCUMULATOR_Y]
+    }
+    pub fn msm_accumulator_y_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::MSM_ACCUMULATOR_Y]
     }
     pub fn lookup_read_counts_0(&self) -> &T {
         &self.elements[ECCVMFlavour::LOOKUP_READ_COUNTS_0]
@@ -1413,79 +1512,157 @@ impl<T: Default> ECCVMShiftedWitnessEntities<T> {
     pub fn z_perm_shift(&self) -> &T {
         &self.elements[ECCVMFlavour::Z_PERM_SHIFT]
     }
+    pub fn z_perm_shift_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::Z_PERM_SHIFT]
+    }
     pub fn transcript_mul_shift(&self) -> &T {
         &self.elements[ECCVMFlavour::TRANSCRIPT_MUL_SHIFT]
     } // column 0
+    pub fn transcript_mul_shift_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::TRANSCRIPT_MUL_SHIFT]
+    }
     pub fn transcript_msm_count_shift(&self) -> &T {
         &self.elements[ECCVMFlavour::TRANSCRIPT_MSM_COUNT_SHIFT]
     } // column 1
+    pub fn transcript_msm_count_shift_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::TRANSCRIPT_MSM_COUNT_SHIFT]
+    }
     pub fn precompute_scalar_sum_shift(&self) -> &T {
         &self.elements[ECCVMFlavour::PRECOMPUTE_SCALAR_SUM_SHIFT]
     } // column 2
+    pub fn precompute_scalar_sum_shift_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::PRECOMPUTE_SCALAR_SUM_SHIFT]
+    }
     pub fn precompute_s1hi_shift(&self) -> &T {
         &self.elements[ECCVMFlavour::PRECOMPUTE_S1HI_SHIFT]
     } // column 3
+    pub fn precompute_s1hi_shift_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::PRECOMPUTE_S1HI_SHIFT]
+    }
     pub fn precompute_dx_shift(&self) -> &T {
         &self.elements[ECCVMFlavour::PRECOMPUTE_DX_SHIFT]
     } // column 4
+    pub fn precompute_dx_shift_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::PRECOMPUTE_DX_SHIFT]
+    }
     pub fn precompute_dy_shift(&self) -> &T {
         &self.elements[ECCVMFlavour::PRECOMPUTE_DY_SHIFT]
     } // column 5
+    pub fn precompute_dy_shift_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::PRECOMPUTE_DY_SHIFT]
+    }
     pub fn precompute_tx_shift(&self) -> &T {
         &self.elements[ECCVMFlavour::PRECOMPUTE_TX_SHIFT]
     } // column 6
+    pub fn precompute_tx_shift_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::PRECOMPUTE_TX_SHIFT]
+    }
     pub fn precompute_ty_shift(&self) -> &T {
         &self.elements[ECCVMFlavour::PRECOMPUTE_TY_SHIFT]
     } // column 7
+    pub fn precompute_ty_shift_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::PRECOMPUTE_TY_SHIFT]
+    }
     pub fn msm_transition_shift(&self) -> &T {
         &self.elements[ECCVMFlavour::MSM_TRANSITION_SHIFT]
     } // column 8
+    pub fn msm_transition_shift_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::MSM_TRANSITION_SHIFT]
+    }
     pub fn msm_add_shift(&self) -> &T {
         &self.elements[ECCVMFlavour::MSM_ADD_SHIFT]
     } // column 9
+    pub fn msm_add_shift_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::MSM_ADD_SHIFT]
+    }
     pub fn msm_double_shift(&self) -> &T {
         &self.elements[ECCVMFlavour::MSM_DOUBLE_SHIFT]
     } // column 10
+    pub fn msm_double_shift_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::MSM_DOUBLE_SHIFT]
+    }
     pub fn msm_skew_shift(&self) -> &T {
         &self.elements[ECCVMFlavour::MSM_SKEW_SHIFT]
     } // column 11
+    pub fn msm_skew_shift_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::MSM_SKEW_SHIFT]
+    }
     pub fn msm_accumulator_x_shift(&self) -> &T {
         &self.elements[ECCVMFlavour::MSM_ACCUMULATOR_X_SHIFT]
     } // column 12
+    pub fn msm_accumulator_x_shift_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::MSM_ACCUMULATOR_X_SHIFT]
+    }
     pub fn msm_accumulator_y_shift(&self) -> &T {
         &self.elements[ECCVMFlavour::MSM_ACCUMULATOR_Y_SHIFT]
     } // column 13
+    pub fn msm_accumulator_y_shift_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::MSM_ACCUMULATOR_Y_SHIFT]
+    }
     pub fn msm_count_shift(&self) -> &T {
         &self.elements[ECCVMFlavour::MSM_COUNT_SHIFT]
     } // column 14
+    pub fn msm_count_shift_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::MSM_COUNT_SHIFT]
+    }
     pub fn msm_round_shift(&self) -> &T {
         &self.elements[ECCVMFlavour::MSM_ROUND_SHIFT]
     } // column 15
+    pub fn msm_round_shift_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::MSM_ROUND_SHIFT]
+    }
     pub fn msm_add1_shift(&self) -> &T {
         &self.elements[ECCVMFlavour::MSM_ADD1_SHIFT]
     } // column 16
+    pub fn msm_add1_shift_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::MSM_ADD1_SHIFT]
+    }
     pub fn msm_pc_shift(&self) -> &T {
         &self.elements[ECCVMFlavour::MSM_PC_SHIFT]
     } // column 17
+    pub fn msm_pc_shift_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::MSM_PC_SHIFT]
+    }
     pub fn precompute_pc_shift(&self) -> &T {
         &self.elements[ECCVMFlavour::PRECOMPUTE_PC_SHIFT]
     } // column 18
+    pub fn precompute_pc_shift_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::PRECOMPUTE_PC_SHIFT]
+    }
     pub fn transcript_pc_shift(&self) -> &T {
         &self.elements[ECCVMFlavour::TRANSCRIPT_PC_SHIFT]
     } // column 19
+    pub fn transcript_pc_shift_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::TRANSCRIPT_PC_SHIFT]
+    }
     pub fn precompute_round_shift(&self) -> &T {
         &self.elements[ECCVMFlavour::PRECOMPUTE_ROUND_SHIFT]
     } // column 20
+    pub fn precompute_round_shift_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::PRECOMPUTE_ROUND_SHIFT]
+    }
     pub fn precompute_select_shift(&self) -> &T {
         &self.elements[ECCVMFlavour::PRECOMPUTE_SELECT_SHIFT]
     } // column 21
+    pub fn precompute_select_shift_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::PRECOMPUTE_SELECT_SHIFT]
+    }
     pub fn transcript_accumulator_empty_shift(&self) -> &T {
         &self.elements[ECCVMFlavour::TRANSCRIPT_ACCUMULATOR_EMPTY_SHIFT]
     } // column 22
+    pub fn transcript_accumulator_empty_shift_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::TRANSCRIPT_ACCUMULATOR_EMPTY_SHIFT]
+    }
     pub fn transcript_accumulator_x_shift(&self) -> &T {
         &self.elements[ECCVMFlavour::TRANSCRIPT_ACCUMULATOR_X_SHIFT]
     } // column 23
+    pub fn transcript_accumulator_x_shift_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::TRANSCRIPT_ACCUMULATOR_X_SHIFT]
+    }
     pub fn transcript_accumulator_y_shift(&self) -> &T {
         &self.elements[ECCVMFlavour::TRANSCRIPT_ACCUMULATOR_Y_SHIFT]
+    }
+    pub fn transcript_accumulator_y_shift_mut(&mut self) -> &mut T {
+        &mut self.elements[ECCVMFlavour::TRANSCRIPT_ACCUMULATOR_Y_SHIFT]
     }
 }

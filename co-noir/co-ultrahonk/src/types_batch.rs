@@ -1,5 +1,6 @@
 use crate::mpc_prover_flavour::SharedUnivariateTrait;
 use ark_ec::CurveGroup;
+use co_builder::flavours::eccvm_flavour::ECCVMFlavour;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
@@ -546,5 +547,1030 @@ where
         self.precomputed
             .lagrange_ecc_op_mut()
             .extend(entity.precomputed.lagrange_ecc_op().evaluations_as_ref())
+    }
+}
+
+impl<T, P> AllEntitiesBatch<T, P, ECCVMFlavour>
+where
+    P: CurveGroup,
+    T: NoirUltraHonkProver<P>,
+{
+    pub fn add_lagrange_second(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.precomputed
+            .lagrange_second_mut()
+            .extend(entity.precomputed.lagrange_second().evaluations_as_ref())
+    }
+    pub fn add_transcript_mul_shift(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.shifted_witness.transcript_mul_shift_mut().extend(
+            entity
+                .shifted_witness
+                .transcript_mul_shift()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_transcript_msm_count_shift(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.shifted_witness
+            .transcript_msm_count_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .transcript_msm_count_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_precompute_scalar_sum_shift(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.shifted_witness
+            .precompute_scalar_sum_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .precompute_scalar_sum_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_precompute_s1hi_shift(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.shifted_witness.precompute_s1hi_shift_mut().extend(
+            entity
+                .shifted_witness
+                .precompute_s1hi_shift()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_precompute_dx_shift(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.shifted_witness.precompute_dx_shift_mut().extend(
+            entity
+                .shifted_witness
+                .precompute_dx_shift()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_precompute_dy_shift(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.shifted_witness.precompute_dy_shift_mut().extend(
+            entity
+                .shifted_witness
+                .precompute_dy_shift()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_precompute_tx_shift(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.shifted_witness.precompute_tx_shift_mut().extend(
+            entity
+                .shifted_witness
+                .precompute_tx_shift()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_precompute_ty_shift(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.shifted_witness.precompute_ty_shift_mut().extend(
+            entity
+                .shifted_witness
+                .precompute_ty_shift()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_msm_transition_shift(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.shifted_witness.msm_transition_shift_mut().extend(
+            entity
+                .shifted_witness
+                .msm_transition_shift()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_msm_add_shift(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.shifted_witness
+            .msm_add_shift_mut()
+            .extend(entity.shifted_witness.msm_add_shift().evaluations_as_ref())
+    }
+    pub fn add_msm_double_shift(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.shifted_witness.msm_double_shift_mut().extend(
+            entity
+                .shifted_witness
+                .msm_double_shift()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_msm_skew_shift(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.shifted_witness
+            .msm_skew_shift_mut()
+            .extend(entity.shifted_witness.msm_skew_shift().evaluations_as_ref())
+    }
+    pub fn add_msm_accumulator_x_shift(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.shifted_witness.msm_accumulator_x_shift_mut().extend(
+            entity
+                .shifted_witness
+                .msm_accumulator_x_shift()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_msm_accumulator_y_shift(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.shifted_witness.msm_accumulator_y_shift_mut().extend(
+            entity
+                .shifted_witness
+                .msm_accumulator_y_shift()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_msm_count_shift(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.shifted_witness.msm_count_shift_mut().extend(
+            entity
+                .shifted_witness
+                .msm_count_shift()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_msm_round_shift(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.shifted_witness.msm_round_shift_mut().extend(
+            entity
+                .shifted_witness
+                .msm_round_shift()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_msm_add1_shift(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.shifted_witness
+            .msm_add1_shift_mut()
+            .extend(entity.shifted_witness.msm_add1_shift().evaluations_as_ref())
+    }
+    pub fn add_msm_pc_shift(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.shifted_witness
+            .msm_pc_shift_mut()
+            .extend(entity.shifted_witness.msm_pc_shift().evaluations_as_ref())
+    }
+    pub fn add_precompute_pc_shift(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.shifted_witness.precompute_pc_shift_mut().extend(
+            entity
+                .shifted_witness
+                .precompute_pc_shift()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_transcript_pc_shift(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.shifted_witness.transcript_pc_shift_mut().extend(
+            entity
+                .shifted_witness
+                .transcript_pc_shift()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_precompute_round_shift(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.shifted_witness.precompute_round_shift_mut().extend(
+            entity
+                .shifted_witness
+                .precompute_round_shift()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_precompute_select_shift(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.shifted_witness.precompute_select_shift_mut().extend(
+            entity
+                .shifted_witness
+                .precompute_select_shift()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_transcript_accumulator_empty_shift(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.shifted_witness
+            .transcript_accumulator_empty_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .transcript_accumulator_empty_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_transcript_accumulator_x_shift(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.shifted_witness
+            .transcript_accumulator_x_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .transcript_accumulator_x_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_transcript_accumulator_y_shift(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.shifted_witness
+            .transcript_accumulator_y_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .transcript_accumulator_y_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_z_perm_shift(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.shifted_witness
+            .z_perm_shift_mut()
+            .extend(entity.shifted_witness.z_perm_shift().evaluations_as_ref())
+    }
+    pub fn add_transcript_add(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .transcript_add_mut()
+            .extend(entity.witness.transcript_add().evaluations_as_ref())
+    }
+    pub fn add_transcript_eq(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .transcript_eq_mut()
+            .extend(entity.witness.transcript_eq().evaluations_as_ref())
+    }
+    pub fn add_transcript_msm_transition(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness.transcript_msm_transition_mut().extend(
+            entity
+                .witness
+                .transcript_msm_transition()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_transcript_px(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .transcript_px_mut()
+            .extend(entity.witness.transcript_px().evaluations_as_ref())
+    }
+    pub fn add_transcript_py(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .transcript_py_mut()
+            .extend(entity.witness.transcript_py().evaluations_as_ref())
+    }
+    pub fn add_transcript_z1(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .transcript_z1_mut()
+            .extend(entity.witness.transcript_z1().evaluations_as_ref())
+    }
+    pub fn add_transcript_z2(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .transcript_z2_mut()
+            .extend(entity.witness.transcript_z2().evaluations_as_ref())
+    }
+    pub fn add_transcript_z1zero(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .transcript_z1zero_mut()
+            .extend(entity.witness.transcript_z1zero().evaluations_as_ref())
+    }
+    pub fn add_transcript_z2zero(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .transcript_z2zero_mut()
+            .extend(entity.witness.transcript_z2zero().evaluations_as_ref())
+    }
+    pub fn add_transcript_op(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .transcript_op_mut()
+            .extend(entity.witness.transcript_op().evaluations_as_ref())
+    }
+    pub fn add_transcript_msm_x(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .transcript_msm_x_mut()
+            .extend(entity.witness.transcript_msm_x().evaluations_as_ref())
+    }
+    pub fn add_transcript_msm_y(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .transcript_msm_y_mut()
+            .extend(entity.witness.transcript_msm_y().evaluations_as_ref())
+    }
+    pub fn add_precompute_point_transition(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness.precompute_point_transition_mut().extend(
+            entity
+                .witness
+                .precompute_point_transition()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_precompute_s1lo(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .precompute_s1lo_mut()
+            .extend(entity.witness.precompute_s1lo().evaluations_as_ref())
+    }
+    pub fn add_precompute_s2hi(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .precompute_s2hi_mut()
+            .extend(entity.witness.precompute_s2hi().evaluations_as_ref())
+    }
+    pub fn add_precompute_s2lo(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .precompute_s2lo_mut()
+            .extend(entity.witness.precompute_s2lo().evaluations_as_ref())
+    }
+    pub fn add_precompute_s3hi(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .precompute_s3hi_mut()
+            .extend(entity.witness.precompute_s3hi().evaluations_as_ref())
+    }
+    pub fn add_precompute_s3lo(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .precompute_s3lo_mut()
+            .extend(entity.witness.precompute_s3lo().evaluations_as_ref())
+    }
+    pub fn add_precompute_s4hi(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .precompute_s4hi_mut()
+            .extend(entity.witness.precompute_s4hi().evaluations_as_ref())
+    }
+    pub fn add_precompute_s4lo(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .precompute_s4lo_mut()
+            .extend(entity.witness.precompute_s4lo().evaluations_as_ref())
+    }
+    pub fn add_precompute_skew(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .precompute_skew_mut()
+            .extend(entity.witness.precompute_skew().evaluations_as_ref())
+    }
+    pub fn add_msm_size_of_msm(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .msm_size_of_msm_mut()
+            .extend(entity.witness.msm_size_of_msm().evaluations_as_ref())
+    }
+    pub fn add_msm_add2(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .msm_add2_mut()
+            .extend(entity.witness.msm_add2().evaluations_as_ref())
+    }
+    pub fn add_msm_add3(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .msm_add3_mut()
+            .extend(entity.witness.msm_add3().evaluations_as_ref())
+    }
+    pub fn add_msm_add4(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .msm_add4_mut()
+            .extend(entity.witness.msm_add4().evaluations_as_ref())
+    }
+    pub fn add_msm_x1(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .msm_x1_mut()
+            .extend(entity.witness.msm_x1().evaluations_as_ref())
+    }
+    pub fn add_msm_y1(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .msm_y1_mut()
+            .extend(entity.witness.msm_y1().evaluations_as_ref())
+    }
+    pub fn add_msm_x2(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .msm_x2_mut()
+            .extend(entity.witness.msm_x2().evaluations_as_ref())
+    }
+    pub fn add_msm_y2(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .msm_y2_mut()
+            .extend(entity.witness.msm_y2().evaluations_as_ref())
+    }
+    pub fn add_msm_x3(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .msm_x3_mut()
+            .extend(entity.witness.msm_x3().evaluations_as_ref())
+    }
+    pub fn add_msm_y3(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .msm_y3_mut()
+            .extend(entity.witness.msm_y3().evaluations_as_ref())
+    }
+    pub fn add_msm_x4(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .msm_x4_mut()
+            .extend(entity.witness.msm_x4().evaluations_as_ref())
+    }
+    pub fn add_msm_y4(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .msm_y4_mut()
+            .extend(entity.witness.msm_y4().evaluations_as_ref())
+    }
+    pub fn add_msm_collision_x1(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .msm_collision_x1_mut()
+            .extend(entity.witness.msm_collision_x1().evaluations_as_ref())
+    }
+    pub fn add_msm_collision_x2(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .msm_collision_x2_mut()
+            .extend(entity.witness.msm_collision_x2().evaluations_as_ref())
+    }
+    pub fn add_msm_collision_x3(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .msm_collision_x3_mut()
+            .extend(entity.witness.msm_collision_x3().evaluations_as_ref())
+    }
+    pub fn add_msm_collision_x4(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .msm_collision_x4_mut()
+            .extend(entity.witness.msm_collision_x4().evaluations_as_ref())
+    }
+    pub fn add_msm_lambda1(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .msm_lambda1_mut()
+            .extend(entity.witness.msm_lambda1().evaluations_as_ref())
+    }
+    pub fn add_msm_lambda2(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .msm_lambda2_mut()
+            .extend(entity.witness.msm_lambda2().evaluations_as_ref())
+    }
+    pub fn add_msm_lambda3(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .msm_lambda3_mut()
+            .extend(entity.witness.msm_lambda3().evaluations_as_ref())
+    }
+    pub fn add_msm_lambda4(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .msm_lambda4_mut()
+            .extend(entity.witness.msm_lambda4().evaluations_as_ref())
+    }
+    pub fn add_msm_slice1(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .msm_slice1_mut()
+            .extend(entity.witness.msm_slice1().evaluations_as_ref())
+    }
+    pub fn add_msm_slice2(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .msm_slice2_mut()
+            .extend(entity.witness.msm_slice2().evaluations_as_ref())
+    }
+    pub fn add_msm_slice3(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .msm_slice3_mut()
+            .extend(entity.witness.msm_slice3().evaluations_as_ref())
+    }
+    pub fn add_msm_slice4(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .msm_slice4_mut()
+            .extend(entity.witness.msm_slice4().evaluations_as_ref())
+    }
+    pub fn add_transcript_reset_accumulator(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness.transcript_reset_accumulator_mut().extend(
+            entity
+                .witness
+                .transcript_reset_accumulator()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_lookup_read_counts_0(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .lookup_read_counts_0_mut()
+            .extend(entity.witness.lookup_read_counts_0().evaluations_as_ref())
+    }
+    pub fn add_lookup_read_counts_1(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .lookup_read_counts_1_mut()
+            .extend(entity.witness.lookup_read_counts_1().evaluations_as_ref())
+    }
+    pub fn add_transcript_base_infinity(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness.transcript_base_infinity_mut().extend(
+            entity
+                .witness
+                .transcript_base_infinity()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_transcript_base_x_inverse(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness.transcript_base_x_inverse_mut().extend(
+            entity
+                .witness
+                .transcript_base_x_inverse()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_transcript_base_y_inverse(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness.transcript_base_y_inverse_mut().extend(
+            entity
+                .witness
+                .transcript_base_y_inverse()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_transcript_add_x_equal(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .transcript_add_x_equal_mut()
+            .extend(entity.witness.transcript_add_x_equal().evaluations_as_ref())
+    }
+    pub fn add_transcript_add_y_equal(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .transcript_add_y_equal_mut()
+            .extend(entity.witness.transcript_add_y_equal().evaluations_as_ref())
+    }
+    pub fn add_transcript_add_lambda(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .transcript_add_lambda_mut()
+            .extend(entity.witness.transcript_add_lambda().evaluations_as_ref())
+    }
+    pub fn add_transcript_msm_intermediate_x(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness.transcript_msm_intermediate_x_mut().extend(
+            entity
+                .witness
+                .transcript_msm_intermediate_x()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_transcript_msm_intermediate_y(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness.transcript_msm_intermediate_y_mut().extend(
+            entity
+                .witness
+                .transcript_msm_intermediate_y()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_transcript_msm_infinity(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness.transcript_msm_infinity_mut().extend(
+            entity
+                .witness
+                .transcript_msm_infinity()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_transcript_msm_x_inverse(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness.transcript_msm_x_inverse_mut().extend(
+            entity
+                .witness
+                .transcript_msm_x_inverse()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_transcript_msm_count_zero_at_transition(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .transcript_msm_count_zero_at_transition_mut()
+            .extend(
+                entity
+                    .witness
+                    .transcript_msm_count_zero_at_transition()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_transcript_msm_count_at_transition_inverse(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .transcript_msm_count_at_transition_inverse_mut()
+            .extend(
+                entity
+                    .witness
+                    .transcript_msm_count_at_transition_inverse()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_transcript_mul(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .transcript_mul_mut()
+            .extend(entity.witness.transcript_mul().evaluations_as_ref())
+    }
+    pub fn add_transcript_msm_count(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .transcript_msm_count_mut()
+            .extend(entity.witness.transcript_msm_count().evaluations_as_ref())
+    }
+    pub fn add_precompute_scalar_sum(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .precompute_scalar_sum_mut()
+            .extend(entity.witness.precompute_scalar_sum().evaluations_as_ref())
+    }
+    pub fn add_precompute_s1hi(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .precompute_s1hi_mut()
+            .extend(entity.witness.precompute_s1hi().evaluations_as_ref())
+    }
+    pub fn add_precompute_dx(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .precompute_dx_mut()
+            .extend(entity.witness.precompute_dx().evaluations_as_ref())
+    }
+    pub fn add_precompute_dy(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .precompute_dy_mut()
+            .extend(entity.witness.precompute_dy().evaluations_as_ref())
+    }
+    pub fn add_precompute_tx(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .precompute_tx_mut()
+            .extend(entity.witness.precompute_tx().evaluations_as_ref())
+    }
+    pub fn add_precompute_ty(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .precompute_ty_mut()
+            .extend(entity.witness.precompute_ty().evaluations_as_ref())
+    }
+    pub fn add_msm_transition(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .msm_transition_mut()
+            .extend(entity.witness.msm_transition().evaluations_as_ref())
+    }
+    pub fn add_msm_add(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .msm_add_mut()
+            .extend(entity.witness.msm_add().evaluations_as_ref())
+    }
+    pub fn add_msm_double(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .msm_double_mut()
+            .extend(entity.witness.msm_double().evaluations_as_ref())
+    }
+    pub fn add_msm_skew(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .msm_skew_mut()
+            .extend(entity.witness.msm_skew().evaluations_as_ref())
+    }
+    pub fn add_msm_accumulator_x(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .msm_accumulator_x_mut()
+            .extend(entity.witness.msm_accumulator_x().evaluations_as_ref())
+    }
+    pub fn add_msm_accumulator_y(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .msm_accumulator_y_mut()
+            .extend(entity.witness.msm_accumulator_y().evaluations_as_ref())
+    }
+    pub fn add_msm_count(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .msm_count_mut()
+            .extend(entity.witness.msm_count().evaluations_as_ref())
+    }
+    pub fn add_msm_round(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .msm_round_mut()
+            .extend(entity.witness.msm_round().evaluations_as_ref())
+    }
+    pub fn add_msm_add1(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .msm_add1_mut()
+            .extend(entity.witness.msm_add1().evaluations_as_ref())
+    }
+    pub fn add_msm_pc(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .msm_pc_mut()
+            .extend(entity.witness.msm_pc().evaluations_as_ref())
+    }
+    pub fn add_precompute_pc(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .precompute_pc_mut()
+            .extend(entity.witness.precompute_pc().evaluations_as_ref())
+    }
+    pub fn add_transcript_pc(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .transcript_pc_mut()
+            .extend(entity.witness.transcript_pc().evaluations_as_ref())
+    }
+    pub fn add_precompute_round(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .precompute_round_mut()
+            .extend(entity.witness.precompute_round().evaluations_as_ref())
+    }
+    pub fn add_precompute_select(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness
+            .precompute_select_mut()
+            .extend(entity.witness.precompute_select().evaluations_as_ref())
+    }
+    pub fn add_transcript_accumulator_empty(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness.transcript_accumulator_empty_mut().extend(
+            entity
+                .witness
+                .transcript_accumulator_empty()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_transcript_accumulator_x(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness.transcript_accumulator_x_mut().extend(
+            entity
+                .witness
+                .transcript_accumulator_x()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_transcript_accumulator_y(
+        &mut self,
+        entity: &AllEntities<Shared<T, P, ECCVMFlavour>, Public<P, ECCVMFlavour>, ECCVMFlavour>,
+    ) {
+        self.witness.transcript_accumulator_y_mut().extend(
+            entity
+                .witness
+                .transcript_accumulator_y()
+                .evaluations_as_ref(),
+        )
     }
 }

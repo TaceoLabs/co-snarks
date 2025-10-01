@@ -1,5 +1,3 @@
-use crate::CONST_ECCVM_LOG_N;
-use crate::NUM_OPENING_CLAIMS;
 use crate::eccvm::eccvm_types::TranslationData;
 use crate::ipa::compute_ipa_opening_proof;
 use ark_ec::CurveGroup;
@@ -21,6 +19,7 @@ use common::shplemini::OpeningPair;
 use common::shplemini::ShpleminiOpeningClaim;
 use common::transcript::Transcript;
 use common::transcript::TranscriptHasher;
+use common::{CONST_ECCVM_LOG_N, NUM_OPENING_CLAIMS};
 use itertools::izip;
 use std::iter;
 use ultrahonk::NUM_SMALL_IPA_EVALUATIONS;
@@ -358,7 +357,6 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
                 let write_term = self.compute_write_term(proving_key, i, write_idx);
                 denominator *= write_term;
             }
-
             self.memory.lookup_inverses[i] = denominator;
         }
 

@@ -8,9 +8,10 @@ use ark_ec::CurveGroup;
 use ark_ff::One;
 use ark_ff::Zero;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
-use co_builder::HonkProofError;
 use co_builder::HonkProofResult;
 use co_builder::TranscriptFieldType;
+use co_builder::prelude::NUM_DISABLED_ROWS_IN_SUMCHECK;
+use co_builder::prelude::NUM_TRANSLATION_EVALUATIONS;
 use co_builder::prelude::{HonkCurve, Polynomial, ProverCrs};
 use common::CoUtils;
 use common::mpc::NoirUltraHonkProver;
@@ -19,45 +20,43 @@ use common::transcript::{Transcript, TranscriptHasher};
 use mpc_core::MpcState;
 use mpc_net::Network;
 
-pub(crate) struct SharedSmallSubgroupIPAProver<T: NoirUltraHonkProver<P>, P: CurveGroup> {
-    interpolation_domain: Vec<P::ScalarField>,
-    concatenated_polynomial: SharedPolynomial<T, P>,
-    libra_concatenated_lagrange_form: SharedPolynomial<T, P>,
-    challenge_polynomial: Polynomial<P::ScalarField>,
-    challenge_polynomial_lagrange: Polynomial<P::ScalarField>,
-    grand_sum_polynomial_unmasked: SharedPolynomial<T, P>,
-    grand_sum_polynomial: SharedPolynomial<T, P>,
-    grand_sum_lagrange_coeffs: Vec<T::ArithmeticShare>,
-    grand_sum_identity_polynomial: SharedPolynomial<T, P>,
-    grand_sum_identity_quotient: SharedPolynomial<T, P>,
-    domain: GeneralEvaluationDomain<P::ScalarField>,
-    phantom_data: PhantomData<T>,
+pub struct SharedSmallSubgroupIPAProver<T: NoirUltraHonkProver<P>, P: CurveGroup> {
+    pub interpolation_domain: Vec<P::ScalarField>,
+    pub concatenated_polynomial: SharedPolynomial<T, P>,
+    pub libra_concatenated_lagrange_form: SharedPolynomial<T, P>,
+    pub challenge_polynomial: Polynomial<P::ScalarField>,
+    pub challenge_polynomial_lagrange: Polynomial<P::ScalarField>,
+    pub grand_sum_polynomial_unmasked: SharedPolynomial<T, P>,
+    pub grand_sum_polynomial: SharedPolynomial<T, P>,
+    pub grand_sum_lagrange_coeffs: Vec<T::ArithmeticShare>,
+    pub grand_sum_identity_polynomial: SharedPolynomial<T, P>,
+    pub grand_sum_identity_quotient: SharedPolynomial<T, P>,
+    pub claimed_inner_product: P::ScalarField,
+    pub prefix_label: String,
+    pub phantom_data: PhantomData<T>,
 }
 
 impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
     SharedSmallSubgroupIPAProver<T, P>
 {
-    const SUBGROUP_SIZE: usize = P::SUBGROUP_SIZE;
+    pub const SUBGROUP_SIZE: usize = P::SUBGROUP_SIZE;
     // A masking term of length 2 (degree 1) is required to mask [G] and G(r).
     const WITNESS_MASKING_TERM_LENGTH: usize = 2;
     const MASKED_CONCATENATED_WITNESS_LENGTH: usize =
         Self::SUBGROUP_SIZE + Self::WITNESS_MASKING_TERM_LENGTH;
-    const QUOTIENT_LENGTH: usize = Self::SUBGROUP_SIZE + 2;
+    pub const QUOTIENT_LENGTH: usize = Self::SUBGROUP_SIZE + 2;
     // A masking term of length 3 (degree 2) is required to mask [A], A(r), and A(g*r)
     const GRAND_SUM_MASKING_TERM_LENGTH: usize = 3;
-    const MASKED_GRAND_SUM_LENGTH: usize =
+    pub const MASKED_GRAND_SUM_LENGTH: usize =
         Self::SUBGROUP_SIZE + Self::GRAND_SUM_MASKING_TERM_LENGTH;
     // Length of the big sum identity polynomial C. It is equal to the length of the highest degree term X * F(X) * G(X)
-    const GRAND_SUM_IDENTITY_LENGTH: usize =
+    pub const GRAND_SUM_IDENTITY_LENGTH: usize =
         Self::MASKED_CONCATENATED_WITNESS_LENGTH + Self::SUBGROUP_SIZE;
-    pub(crate) fn new<H: TranscriptHasher<TranscriptFieldType>, N: Network>(
-        net: &N,
-        state: &mut T::State,
+    pub fn new(
         zk_sumcheck_data: SharedZKSumcheckData<T, P>,
+        claimed_inner_product: P::ScalarField,
+        prefix_label: String,
         multivariate_challenge: &[P::ScalarField],
-        claimed_ipa_eval: P::ScalarField,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
-        commitment_key: &ProverCrs<P>,
     ) -> HonkProofResult<Self> {
         let mut prover = SharedSmallSubgroupIPAProver {
             interpolation_domain: zk_sumcheck_data.interpolation_domain,
@@ -73,39 +72,51 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
                 Self::GRAND_SUM_IDENTITY_LENGTH,
             ),
             grand_sum_identity_quotient: SharedPolynomial::<T, P>::new_zero(Self::QUOTIENT_LENGTH),
-            domain: GeneralEvaluationDomain::<P::ScalarField>::new(Self::SUBGROUP_SIZE)
-                .ok_or(HonkProofError::LargeSubgroup)?,
+            claimed_inner_product,
+            prefix_label,
             phantom_data: PhantomData,
         };
-        prover.compute_challenge_polynomial(multivariate_challenge);
-        prover.compute_grand_sum_polynomial(net, state)?;
+        let domain = GeneralEvaluationDomain::<P::ScalarField>::new(Self::SUBGROUP_SIZE);
+        prover.compute_challenge_polynomial(multivariate_challenge, &domain);
+        Ok(prover)
+    }
+
+    pub fn prove<H: TranscriptHasher<TranscriptFieldType>, N: Network>(
+        &mut self,
+        net: &N,
+        state: &mut T::State,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
+        commitment_key: &ProverCrs<P>,
+    ) -> HonkProofResult<()> {
+        let domain = GeneralEvaluationDomain::<P::ScalarField>::new(Self::SUBGROUP_SIZE);
+        self.compute_grand_sum_polynomial(net, state, &domain)?;
 
         let libra_grand_sum_commitment_shared = CoUtils::commit::<T, P>(
-            prover.grand_sum_polynomial.coefficients.as_ref(),
+            self.grand_sum_polynomial.coefficients.as_ref(),
             commitment_key,
         );
         let libra_grand_sum_commitment =
             T::open_point(libra_grand_sum_commitment_shared, net, state)?;
         transcript.send_point_to_verifier::<P>(
-            "Libra:grand_sum_commitment".to_string(),
+            self.prefix_label.clone() + "grand_sum_commitment",
             libra_grand_sum_commitment.into(),
         );
 
-        prover.compute_grand_sum_identity_polynomial(claimed_ipa_eval, state.id());
-        prover.compute_batched_quotient();
+        self.compute_grand_sum_identity_polynomial(state.id(), &domain);
+        self.compute_batched_quotient();
 
         let libra_quotient_commitment_shared = CoUtils::commit::<T, P>(
-            prover.grand_sum_identity_quotient.coefficients.as_ref(),
+            self.grand_sum_identity_quotient.coefficients.as_ref(),
             commitment_key,
         );
         let libra_quotient_commitment =
             T::open_point(libra_quotient_commitment_shared, net, state)?;
         transcript.send_point_to_verifier::<P>(
-            "Libra:quotient_commitment".to_string(),
+            self.prefix_label.clone() + "quotient_commitment",
             libra_quotient_commitment.into(),
         );
 
-        Ok(prover)
+        Ok(())
     }
 
     /**
@@ -132,7 +143,11 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
      *
      * @param multivariate_challenge A vector of field elements used to compute the challenge polynomial.
      */
-    fn compute_challenge_polynomial(&mut self, multivariate_challenge: &[P::ScalarField]) {
+    fn compute_challenge_polynomial(
+        &mut self,
+        multivariate_challenge: &[P::ScalarField],
+        domain: &Option<GeneralEvaluationDomain<P::ScalarField>>,
+    ) {
         let mut coeffs_lagrange_basis = vec![P::ScalarField::zero(); Self::SUBGROUP_SIZE];
         coeffs_lagrange_basis[0] = P::ScalarField::one();
 
@@ -157,12 +172,10 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
         };
 
         // Compute monomial coefficients
-        let challenge_polynomial_ifft = self
-            .domain
-            .ifft(self.challenge_polynomial_lagrange.coefficients.as_slice());
-        self.challenge_polynomial = Polynomial {
-            coefficients: challenge_polynomial_ifft,
-        };
+        self.challenge_polynomial = self.compute_momomial_coefficients(
+            domain,
+            self.challenge_polynomial_lagrange.coefficients.as_slice(),
+        );
     }
 
     /**
@@ -186,6 +199,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
         &mut self,
         net: &N,
         state: &mut T::State,
+        domain: &Option<GeneralEvaluationDomain<P::ScalarField>>,
     ) -> HonkProofResult<()> {
         self.grand_sum_lagrange_coeffs[0] = T::ArithmeticShare::default();
 
@@ -201,10 +215,8 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
         }
 
         //  Get the coefficients in the monomial basis
-        let grand_sum_ifft = T::ifft(&self.grand_sum_lagrange_coeffs, &self.domain);
-        self.grand_sum_polynomial_unmasked = SharedPolynomial {
-            coefficients: grand_sum_ifft,
-        };
+        self.grand_sum_polynomial_unmasked =
+            self.compute_momomial_coefficients_shared(domain, &self.grand_sum_lagrange_coeffs);
 
         //  Generate random masking_term of degree 2, add Z_H(X) * masking_term
         let masking_term = SharedUnivariate::<T, P, 3>::get_random(net, state)?;
@@ -231,8 +243,8 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
      */
     fn compute_grand_sum_identity_polynomial(
         &mut self,
-        claimed_evaluation: P::ScalarField,
         id: <T::State as MpcState>::PartyID,
+        domain: &Option<GeneralEvaluationDomain<P::ScalarField>>,
     ) {
         // Compute shifted big sum polynomial A(gX)
         let mut shifted_grand_sum = SharedPolynomial::<T, P>::new_zero(Self::SUBGROUP_SIZE + 3);
@@ -244,7 +256,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
             );
         }
 
-        let (lagrange_first, lagrange_last) = self.compute_lagrange_first_and_last();
+        let (lagrange_first, lagrange_last) = self.compute_lagrange_first_and_last(domain);
 
         // Compute -F(X)*G(X), the negated product of challenge_polynomial and libra_concatenated_monomial_form
         for i in 0..self.concatenated_polynomial.coefficients.len() {
@@ -299,7 +311,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
         // Subtract L_{|H|} * s
         for idx in 0..Self::SUBGROUP_SIZE {
             self.grand_sum_identity_polynomial.coefficients[idx] = T::add_with_public(
-                -lagrange_last.coefficients[idx] * claimed_evaluation,
+                -lagrange_last.coefficients[idx] * self.claimed_inner_product,
                 self.grand_sum_identity_polynomial.coefficients[idx],
                 id,
             );
@@ -331,37 +343,107 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
      */
     fn compute_lagrange_first_and_last(
         &self,
+        domain: &Option<GeneralEvaluationDomain<P::ScalarField>>,
     ) -> (Polynomial<P::ScalarField>, Polynomial<P::ScalarField>) {
         // Compute the monomial coefficients of L_1
         let mut lagrange_coeffs = vec![P::ScalarField::zero(); Self::SUBGROUP_SIZE];
         lagrange_coeffs[0] = P::ScalarField::one();
 
-        let lagrange_first_ifft = self.domain.ifft(&lagrange_coeffs);
-
-        let lagrange_first_monomial = Polynomial {
-            coefficients: lagrange_first_ifft,
-        };
+        let lagrange_first_monomial = self.compute_momomial_coefficients(domain, &lagrange_coeffs);
 
         // Compute the monomial coefficients of L_{|H|}, the last Lagrange polynomial
         lagrange_coeffs[0] = P::ScalarField::zero();
         lagrange_coeffs[Self::SUBGROUP_SIZE - 1] = P::ScalarField::one();
 
-        let lagrange_last_ifft = self.domain.ifft(&lagrange_coeffs);
-
-        let lagrange_last_monomial = Polynomial {
-            coefficients: lagrange_last_ifft,
-        };
+        let lagrange_last_monomial = self.compute_momomial_coefficients(domain, &lagrange_coeffs);
 
         (lagrange_first_monomial, lagrange_last_monomial)
     }
 
     // Getter to pass the witnesses to ShpleminiProver. Big sum polynomial is evaluated at 2 points (and is small)
-    pub(crate) fn into_witness_polynomials(self) -> [SharedPolynomial<T, P>; 4] {
+    pub fn into_witness_polynomials(self) -> [SharedPolynomial<T, P>; 4] {
         [
             self.concatenated_polynomial,
             self.grand_sum_polynomial.to_owned(),
             self.grand_sum_polynomial,
             self.grand_sum_identity_quotient,
         ]
+    }
+
+    pub fn compute_eccvm_challenge_polynomial(
+        &mut self,
+        evaluation_challenge_x: P::ScalarField,
+        batching_challenge_v: P::ScalarField,
+    ) {
+        let coeffs_lagrange_basis =
+            Self::compute_eccvm_challenge_coeffs(evaluation_challenge_x, batching_challenge_v);
+
+        self.challenge_polynomial_lagrange = Polynomial {
+            coefficients: coeffs_lagrange_basis,
+        };
+
+        // Compute monomial coefficients
+        self.challenge_polynomial = Polynomial::interpolate_from_evals(
+            &self.interpolation_domain,
+            &self.challenge_polynomial_lagrange.coefficients,
+            Self::SUBGROUP_SIZE,
+        );
+    }
+
+    pub fn compute_eccvm_challenge_coeffs(
+        evaluation_challenge_x: P::ScalarField,
+        batching_challenge_v: P::ScalarField,
+    ) -> Vec<P::ScalarField> {
+        let mut coeffs_lagrange_basis = vec![P::ScalarField::zero(); Self::SUBGROUP_SIZE];
+
+        let mut v_power = P::ScalarField::one();
+        for poly_idx in 0..NUM_TRANSLATION_EVALUATIONS {
+            let start = NUM_DISABLED_ROWS_IN_SUMCHECK * poly_idx;
+            coeffs_lagrange_basis[start as usize] = v_power;
+
+            for idx in (start + 1)..(start + NUM_DISABLED_ROWS_IN_SUMCHECK) {
+                coeffs_lagrange_basis[idx as usize] =
+                    coeffs_lagrange_basis[idx as usize - 1] * evaluation_challenge_x;
+            }
+
+            v_power *= batching_challenge_v;
+        }
+
+        coeffs_lagrange_basis
+    }
+
+    fn compute_momomial_coefficients(
+        &self,
+        domain: &Option<GeneralEvaluationDomain<P::ScalarField>>,
+        coefficients: &[P::ScalarField],
+    ) -> Polynomial<P::ScalarField> {
+        if let Some(domain) = domain {
+            Polynomial {
+                coefficients: domain.ifft(coefficients),
+            }
+        } else {
+            Polynomial::interpolate_from_evals(
+                &self.interpolation_domain,
+                coefficients,
+                Self::SUBGROUP_SIZE,
+            )
+        }
+    }
+    fn compute_momomial_coefficients_shared(
+        &self,
+        domain: &Option<GeneralEvaluationDomain<P::ScalarField>>,
+        coefficients: &[T::ArithmeticShare],
+    ) -> SharedPolynomial<T, P> {
+        if let Some(domain) = domain {
+            SharedPolynomial {
+                coefficients: T::ifft(&self.grand_sum_lagrange_coeffs, domain),
+            }
+        } else {
+            SharedPolynomial::interpolate_from_evals(
+                &self.interpolation_domain,
+                coefficients,
+                Self::SUBGROUP_SIZE,
+            )
+        }
     }
 }

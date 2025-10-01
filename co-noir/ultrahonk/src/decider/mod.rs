@@ -1,4 +1,3 @@
-pub(crate) mod barycentric;
 pub(crate) mod decider_prover;
 pub(crate) mod decider_verifier;
 pub(crate) mod relations;

@@ -249,6 +249,7 @@ impl<
             zk_sumcheck_data,
             &mut row_disabling_polynomial,
         );
+
         if L::IS_GRUMPKIN_FLAVOUR {
             Self::commit_to_round_univariate(
                 round_idx,

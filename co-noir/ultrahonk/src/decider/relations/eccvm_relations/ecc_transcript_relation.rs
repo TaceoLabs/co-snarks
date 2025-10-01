@@ -415,7 +415,6 @@ impl EccTranscriptRelation {
          */
         let msm_transition_check =
             (q_mul_shift.to_owned() * minus_one + &P::ScalarField::one()) * q_mul; // degree 2
-        // let num_muls_total = msm_count + num_muls_in_row;
         let msm_count_zero_at_transition = input.witness.transcript_msm_count_zero_at_transition();
         let msm_count_at_transition_inverse =
             input.witness.transcript_msm_count_at_transition_inverse();

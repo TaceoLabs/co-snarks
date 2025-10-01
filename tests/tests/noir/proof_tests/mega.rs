@@ -1,6 +1,7 @@
 use crate::proof_tests::{CRS_PATH_G1, CRS_PATH_G2};
 use ark_bn254::Bn254;
 use ark_ec::CurveGroup;
+use ark_ff::PrimeField;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
 use co_builder::prover_flavour::ProverFlavour;
@@ -22,7 +23,11 @@ use mpc_net::local::LocalNetwork;
 use rand::{CryptoRng, Rng};
 use std::{fs::File, io::BufReader, thread};
 
-pub fn split_plain_proving_key_rep3<P: CurveGroup, R: Rng + CryptoRng, L: MPCProverFlavour>(
+pub fn split_plain_proving_key_rep3<
+    P: CurveGroup<BaseField: PrimeField>,
+    R: Rng + CryptoRng,
+    L: MPCProverFlavour,
+>(
     proving_key: PlainProvingKey<P, L>,
     rng: &mut R,
 ) -> eyre::Result<[ProvingKey<Rep3UltraHonkDriver, P, L>; 3]> {

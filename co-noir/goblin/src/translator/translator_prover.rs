@@ -1,4 +1,3 @@
-use crate::CONST_TRANSLATOR_LOG_N;
 use ark_ec::CurveGroup;
 use ark_ff::Zero;
 use co_builder::HonkProofResult;
@@ -8,6 +7,7 @@ use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::prelude::Utils;
 use co_builder::prelude::{HonkCurve, Polynomial, Polynomials, ProverCrs};
+use common::CONST_TRANSLATOR_LOG_N;
 use common::compute_opening_proof;
 use common::transcript::{Transcript, TranscriptFieldType};
 use itertools::izip;

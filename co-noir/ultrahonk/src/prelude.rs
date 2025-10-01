@@ -1,5 +1,4 @@
 pub use crate::NUM_SMALL_IPA_EVALUATIONS;
-pub use crate::decider::barycentric::Barycentric;
 pub use crate::decider::decider_prover::Decider;
 pub use crate::decider::small_subgroup_ipa::SmallSubgroupIPAProver;
 pub use crate::decider::sumcheck::{SumcheckOutput, zk_data::ZKSumcheckData};

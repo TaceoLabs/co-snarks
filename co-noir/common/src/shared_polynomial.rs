@@ -1,5 +1,5 @@
 use ark_ec::CurveGroup;
-use ark_ff::{Field, Zero};
+use ark_ff::{Field, One, Zero};
 use co_builder::prelude::{Polynomial, Utils};
 use mpc_core::MpcState;
 use mpc_net::Network;
@@ -19,6 +19,10 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup> SharedPolynomial<T, P> {
         Self {
             coefficients: vec![Default::default(); size],
         }
+    }
+
+    pub fn new(coefficients: Vec<T::ArithmeticShare>) -> Self {
+        Self { coefficients }
     }
 
     pub fn promote_poly(
@@ -192,6 +196,119 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup> SharedPolynomial<T, P> {
         }
 
         result
+    }
+
+    // Create the degree-(m-1) polynomial T(X) that interpolates the given evaluations.
+    pub fn interpolate_from_evals(
+        interpolation_points: &[P::ScalarField],
+        evaluations: &[T::ArithmeticShare],
+        m: usize,
+    ) -> Self {
+        let mut dest = Self::new(vec![T::ArithmeticShare::default(); m]);
+        debug_assert_eq!(m, evaluations.len());
+        let mut numerator_polynomial = vec![P::ScalarField::zero(); m + 1];
+        {
+            let mut scratch_space = interpolation_points.to_vec();
+
+            numerator_polynomial[m] = P::ScalarField::one();
+            numerator_polynomial[m - 1] = -scratch_space.iter().copied().sum::<P::ScalarField>();
+
+            let mut temp;
+            let mut constant = P::ScalarField::one();
+            for i in 0..m - 1 {
+                temp = P::ScalarField::zero();
+                for j in 0..m - 1 - i {
+                    scratch_space[j] = interpolation_points[j]
+                        * scratch_space[j + 1..]
+                            .iter()
+                            .take(m - 1 - i - j)
+                            .copied()
+                            .sum::<P::ScalarField>();
+                    temp += scratch_space[j];
+                }
+                numerator_polynomial[m - 2 - i] = temp * constant;
+                constant *= -P::ScalarField::one();
+            }
+        }
+        let mut roots_and_denominators = vec![P::ScalarField::zero(); 2 * m];
+        for i in 0..m {
+            roots_and_denominators[i] = -interpolation_points[i];
+            roots_and_denominators[m + i] = P::ScalarField::one();
+            for j in 0..m {
+                if j != i {
+                    roots_and_denominators[m + i] *=
+                        interpolation_points[i] - interpolation_points[j];
+                }
+            }
+        }
+        ark_ff::batch_inversion(roots_and_denominators.as_mut_slice());
+
+        let mut temp_dest = vec![T::ArithmeticShare::default(); m];
+        let mut idx_zero = 0;
+        let mut interpolation_domain_contains_zero: bool = false;
+        if numerator_polynomial[0] == P::ScalarField::zero() {
+            for (i, pt) in interpolation_points.iter().enumerate() {
+                if pt.is_zero() {
+                    idx_zero = i;
+                    interpolation_domain_contains_zero = true;
+                    break;
+                }
+            }
+        }
+        if !interpolation_domain_contains_zero {
+            for i in 0..m {
+                // set z = - 1/x_i for x_i <> 0
+                let z = roots_and_denominators[i];
+                // temp_src[i] is y_i, it gets multiplied by 1/d_i
+                let multiplier = T::mul_with_public(roots_and_denominators[m + i], evaluations[i]);
+                temp_dest[0] = T::mul_with_public(numerator_polynomial[0], multiplier);
+                T::mul_assign_with_public(&mut temp_dest[0], z);
+                T::add_assign(&mut dest.coefficients[0], temp_dest[0]);
+                for j in 1..m {
+                    temp_dest[j] = T::sub(
+                        T::mul_with_public(numerator_polynomial[j], multiplier),
+                        temp_dest[j - 1],
+                    );
+                    T::mul_assign_with_public(&mut temp_dest[j], z);
+                    T::add_assign(&mut dest.coefficients[j], temp_dest[j]);
+                }
+            }
+        } else {
+            for i in 0..m {
+                if i == idx_zero {
+                    // the contribution from the term corresponding to i_0 is computed separately
+                    continue;
+                }
+                // get the next inverted root
+                let z = roots_and_denominators[i];
+                // compute f(x_i) * d_{x_i}^{-1}
+                let multiplier = T::mul_with_public(roots_and_denominators[m + i], evaluations[i]);
+                // get x_i^{-1} * f(x_i) * d_{x_i}^{-1} into the "free" term
+                temp_dest[1] = T::mul_with_public(numerator_polynomial[1], multiplier);
+                T::mul_assign_with_public(&mut temp_dest[1], z);
+                // correct the first coefficient as it is now accumulating free terms from
+                // f(x_i) d_i^{-1} prod_(X-x_i, x_i != 0) (X-x_i) * 1/(X-x_i)
+                T::add_assign(&mut dest.coefficients[1], temp_dest[1]);
+                // compute the quotient N(X)/(X-x_i) f(x_i)/d_{x_i} and its contribution to the target coefficients
+                for j in 2..m {
+                    temp_dest[j] = T::sub(
+                        T::mul_with_public(numerator_polynomial[j], multiplier),
+                        temp_dest[j - 1],
+                    );
+                    T::mul_assign_with_public(&mut temp_dest[j], z);
+                    T::add_assign(&mut dest.coefficients[j], temp_dest[j]);
+                }
+            }
+            // correct the target coefficients by the contribution from q_{0} = N(X)/X * d_{i_0}^{-1} * f(0)
+            for i in 0..m {
+                let mut tmp =
+                    T::mul_with_public(roots_and_denominators[m + idx_zero], evaluations[idx_zero]);
+                T::mul_assign_with_public(&mut tmp, numerator_polynomial[i + 1]);
+                T::add_assign(&mut dest.coefficients[i], tmp);
+            }
+        }
+
+        dest
     }
 }
 

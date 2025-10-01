@@ -11,7 +11,7 @@ use ark_ff::PrimeField;
 use co_builder::prelude::Polynomial;
 
 pub struct SumcheckOutput<F: PrimeField, L: PlainProverFlavour> {
-    pub(crate) _claimed_evaluations: ClaimedEvaluations<F, L>,
+    pub(crate) _claimed_evaluations: ClaimedEvaluations<F, L>, // TACEO TODO: Is this ever needed?
     pub challenges: Vec<F>,
     pub claimed_libra_evaluation: Option<F>,
     pub round_univariates: Option<Vec<Polynomial<F>>>,
