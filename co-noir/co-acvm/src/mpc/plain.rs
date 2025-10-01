@@ -341,7 +341,9 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Some(*a)
     }
 
-    fn get_public_point<C: CurveGroup<BaseField = F>>(a: &Self::CycleGroupAcvmPoint<C>) -> Option<C> {
+    fn get_public_point<C: CurveGroup<BaseField = F>>(
+        a: &Self::CycleGroupAcvmPoint<C>,
+    ) -> Option<C> {
         Some(*a)
     }
 

@@ -2343,7 +2343,9 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 
         for (point, offset_generator) in base_points.iter().zip(offset_generators.iter().skip(1)) {
             let mut native_straus_table = Vec::with_capacity(table_size);
-            native_straus_table.push(T::CycleGroupAcvmPoint::from(offset_generator.to_owned().into()));
+            native_straus_table.push(T::CycleGroupAcvmPoint::from(
+                offset_generator.to_owned().into(),
+            ));
             for j in 1..table_size {
                 let val = point.get_value(builder, driver)?;
                 let val = driver.add_points(val, native_straus_table[j - 1].to_owned());
