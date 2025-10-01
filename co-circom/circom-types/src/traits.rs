@@ -153,7 +153,7 @@ mod $mod_name {
                 let x = parse_field(x)?;
                 let y = parse_field(y)?;
                 let z = parse_field(z)?;
-                let p = Self::G1Affine::from($curve::G1Projective::new(x, y, z));
+                let p = Self::G1Affine::from($curve::G1Projective::new_unchecked(x, y, z));
                 if p.is_zero() {
                     return Ok(p);
                 }
@@ -196,7 +196,7 @@ mod $mod_name {
                 let x = $curve::Fq2::new(x0, x1);
                 let y = $curve::Fq2::new(y0, y1);
                 let z = $curve::Fq2::new(z0, z1);
-                let p = $curve::G2Affine::from($curve::G2Projective::new(x, y, z));
+                let p = $curve::G2Affine::from($curve::G2Projective::new_unchecked(x, y, z));
                 if p.is_zero() {
                     return Ok(p);
                 }
@@ -212,7 +212,7 @@ mod $mod_name {
             }
 
             fn serialize_g2<S: Serializer>(p: &Self::G2Affine, ser: S) -> Result<S::Ok, S::Error> {
-                let (x, y) = p.xy().unwrap();
+                let (x, y) = p.xy().unwrap_or((Fq2::zero(), Fq2::zero()));
                 let mut x_seq = ser.serialize_seq(Some(3))?;
                 x_seq.serialize_element(&vec![x.c0.to_string(), x.c1.to_string()])?;
                 x_seq.serialize_element(&vec![y.c0.to_string(), y.c1.to_string()])?;
@@ -487,10 +487,8 @@ where
                 z.len()
             )))
         } else {
-            Ok(
-                P::g2_from_strings_projective(&x[0], &x[1], &y[0], &y[1], &z[0], &z[1], self.check)
-                    .unwrap(),
-            )
+            P::g2_from_strings_projective(&x[0], &x[1], &y[0], &y[1], &z[0], &z[1], self.check)
+                .map_err(|_| de::Error::custom("invalid data"))
         }
     }
 }
@@ -620,7 +618,7 @@ where
     /// Serializes element of G1 using serializer
     fn serialize_g1<S: Serializer>(p: &Self::G1Affine, ser: S) -> Result<S::Ok, S::Error> {
         let strings = Self::g1_to_strings_projective(p);
-        let mut seq = ser.serialize_seq(Some(strings.len())).unwrap();
+        let mut seq = ser.serialize_seq(Some(strings.len()))?;
         for ele in strings {
             seq.serialize_element(&ele)?;
         }
