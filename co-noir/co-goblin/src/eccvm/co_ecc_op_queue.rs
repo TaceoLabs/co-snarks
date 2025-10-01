@@ -321,6 +321,7 @@ impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: HonkCurve<TranscriptFie
             }
         }
 
+        // TACEO TODO: this is another bottleneck as it is a pretty large gc
         let wnaf_result =
             T::compute_wnaf_digits_and_compute_rows_many(driver, &z1_and_z2, NUM_SCALAR_BITS)?;
 
@@ -684,6 +685,7 @@ impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: HonkCurve<TranscriptFie
         )?;
         let mut j = 0;
 
+        // TACEO TODO: this loop is a/the bottleneck in the ECCVM part, as we are creating a ohv for each update_read_count
         for (msm_idx, msm) in msms.iter().enumerate() {
             for digit_idx in 0..NUM_WNAF_DIGITS_PER_SCALAR {
                 let pc = pc_values[msm_idx];
@@ -821,6 +823,8 @@ impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: HonkCurve<TranscriptFie
 
         let mut msm_offset_wnaf_digits = 0;
         let mut msm_offset_wnaf_skews = 0;
+
+        //TACEO TODO: This loop is another bottleneck because of the calls to read_lut_by_acvm_point
         for msm_idx in 0..msms.len() {
             let mut accumulator = offset_generator;
             let msm = &msms[msm_idx];
