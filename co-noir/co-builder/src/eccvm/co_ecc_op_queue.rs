@@ -458,49 +458,6 @@ impl<
         self.construct_and_populate_ultra_ops(op_code, to_add, None, driver)
     }
 
-    // /**
-    //  * @brief Write multiply and add op to queue and natively perform operation
-    //  *
-    //  * @param to_mul
-    //  */
-    // pub fn mul_accumulate<N: Network>(
-    //     &mut self,
-    //     to_mul: T::PointShare,
-    //     scalar: T::ArithmeticShare,
-    //     net: &N,
-    //     state: &mut T::State,
-    // ) -> CoUltraOp<T, C> {
-    //     // Update the accumulator natively
-    //     T::add_point_assign(
-    //         &mut self.accumulator,
-    //         T::mul_point_and_scalar(to_mul.clone(), scalar, net, state)
-    //             .expect("Error multiplying point and scalar"),
-    //     );
-    //     let op_code = EccOpCode {
-    //         mul: true,
-    //         ..Default::default()
-    //     };
-
-    //     // Construct and store the operation in the ultra op format
-    //     let ultra_op = self.construct_and_populate_ultra_ops(
-    //         op_code.clone(),
-    //         to_mul.clone(),
-    //         Some(scalar),
-    //         net,
-    //         state,
-    //     );
-
-    //     // Store the eccvm operation
-    //     self.append_eccvm_op(CoVMOperation {
-    //         op_code,
-    //         base_point: to_mul,
-    //         z1: ultra_op.z_1,
-    //         z2: ultra_op.z_2,
-    //         mul_scalar_full: scalar,
-    //     });
-    //     ultra_op
-    // }
-
     /**
      * @brief Write point addition op to queue and natively perform addition
      *
@@ -781,7 +738,7 @@ impl<
         res
     }
 
-    // TODO TACEO: Optimize this function to avoid decomposing so much
+    // TACEO TODO: Optimize this function to avoid decomposing so much
     fn mul(x: [T::AcvmType; 4], y: BigInt<4>, driver: &mut T) -> HonkProofResult<[T::AcvmType; 8]> {
         let mut res = [T::AcvmType::default(); 8];
         let mut prev_column_carry = Vec::new();

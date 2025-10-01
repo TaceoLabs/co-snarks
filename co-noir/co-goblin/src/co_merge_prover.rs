@@ -154,7 +154,9 @@ where
             for label in ["current_subtable_", "previous_table_", "current_table_"] {
                 self.transcript.send_point_to_verifier::<C>(
                     format!("{label}{i}"),
-                    commitments.pop_front().unwrap(),
+                    commitments
+                        .pop_front()
+                        .expect("Commitment vector is not empty"),
                 );
             }
         }
@@ -164,27 +166,13 @@ where
         let mut opening_claims: Vec<OpeningClaim<T::AcvmType, C::ScalarField>> =
             Vec::with_capacity(3 * NUM_WIRES);
 
-        self.compute_opening_claims(
-            &curr_subtable,
-            "current_subtable",
-            &mut opening_claims,
-            kappa,
-            driver,
-        )?;
-        self.compute_opening_claims(
-            &prev_table,
-            "previous_table",
-            &mut opening_claims,
-            kappa,
-            driver,
-        )?;
-        self.compute_opening_claims(
-            &curr_table,
-            "current_table",
-            &mut opening_claims,
-            kappa,
-            driver,
-        )?;
+        let all_polys = curr_subtable
+            .into_iter()
+            .chain(prev_table.into_iter())
+            .chain(curr_table.into_iter())
+            .collect_vec();
+
+        self.compute_opening_claims(&all_polys, "all_polys", &mut opening_claims, kappa, driver)?;
 
         let alpha = self.transcript.get_challenge::<C>("alpha".to_owned());
 
@@ -282,7 +270,7 @@ where
         let quotient_commitment: C::Affine = driver
             .open_many_points_other(&[quotient_commitment])?
             .pop()
-            .unwrap();
+            .expect("Commitment vector is not empty");
         transcript.send_point_to_verifier::<C>("KZG:W".to_string(), quotient_commitment);
         Ok(())
     }

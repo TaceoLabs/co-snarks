@@ -457,11 +457,12 @@ impl<F: PrimeField> FieldCT<F> {
         exponent: &FieldCT<P::ScalarField>,
         builder: &mut impl GenericBuilder<P, T>,
         driver: &mut T,
-    ) -> Self {
+    ) -> eyre::Result<Self> {
         let mut exponent_value = exponent.get_value(builder, driver);
         let exponent_constant = exponent.is_constant();
 
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/446): optimize by allowing smaller exponent
+        // TACEO TODO: Also optimize this for the mpc case
         let mut exponent_bits = vec![BoolCT::default(); 32];
         for i in 0..32 {
             let value_bit = driver
@@ -470,7 +471,7 @@ impl<F: PrimeField> FieldCT<F> {
             let bit =
                 BoolCT::from_witness_ct(WitnessCT::from_acvm_type(value_bit, builder), builder);
             exponent_bits[31 - i] = bit;
-            exponent_value = driver.right_shift(exponent_value, 1).unwrap();
+            exponent_value = driver.right_shift(exponent_value, 1)?;
         }
 
         if !exponent_constant {
@@ -492,12 +493,11 @@ impl<F: PrimeField> FieldCT<F> {
             let rhs = mul_coefficient
                 .madd(&bit, &FieldCT::from(F::one()), builder, driver)
                 .unwrap();
-            accumulator.mul_assign(&rhs, builder, driver).unwrap();
+            accumulator.mul_assign(&rhs, builder, driver)?;
         }
 
-        accumulator = accumulator.normalize(builder, driver);
-        // TODO TACEO: Origin Tags
-        accumulator
+        // TACEO TODO: Origin Tags
+        Ok(accumulator.normalize(builder, driver))
     }
 
     pub fn add<P: CurveGroup<ScalarField = F>, T: NoirWitnessExtensionProtocol<P::ScalarField>>(

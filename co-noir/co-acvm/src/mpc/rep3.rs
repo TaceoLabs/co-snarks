@@ -2308,7 +2308,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
     }
 
-    // TODO TACEO: Currently only supports LIMB_BITS = 136, i.e. two Bn254::Fr elements per Bn254::Fq element
+    // TACEO TODO: Currently only supports LIMB_BITS = 136, i.e. two Bn254::Fr elements per Bn254::Fq element
     /// Converts a base field share into a vector of field shares, where the field shares
     /// represent the limbs of the base field element. Each limb has at most LIMB_BITS bits.
     fn other_field_shares_to_field_shares<
@@ -2337,7 +2337,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 Ok(limbs)
             }
             Rep3AcvmType::Shared(input) => {
-                let bin_share = conversion::a2b(input, self.net0, &mut self.state0).unwrap();
+                let bin_share = conversion::a2b(input, self.net0, &mut self.state0)?;
                 let low: Rep3BigUintShare<C::BaseField> =
                     bin_share.clone() & ((BigUint::from(1u8) << LIMB_BITS) - BigUint::from(1u8));
                 let high: Rep3BigUintShare<C::BaseField> = bin_share >> LIMB_BITS;
@@ -2345,14 +2345,11 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 let low = Rep3BigUintShare::new(low.a.clone(), low.b.clone());
                 let high = Rep3BigUintShare::new(high.a.clone(), high.b.clone());
 
-                Ok(vec![
-                    conversion::b2a(&low, self.net0, &mut self.state0)
-                        .unwrap()
-                        .into(),
-                    conversion::b2a(&high, self.net0, &mut self.state0)
-                        .unwrap()
-                        .into(),
-                ])
+                conversion::b2a_many(&[low, high], self.net0, &mut self.state0).map(|v| {
+                    v.into_iter()
+                        .map(Rep3AcvmType::Shared)
+                        .collect::<Vec<Rep3AcvmType<F>>>()
+                })
             }
         }
     }
@@ -2496,8 +2493,8 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             .map(|i| {
                 (
                     i,
-                    Self::get_shared(&secrets_1[i]).unwrap(),
-                    Self::get_shared(&secrets_2[i]).unwrap(),
+                    Self::get_shared(&secrets_1[i]).expect("We already checked it is shared"),
+                    Self::get_shared(&secrets_2[i]).expect("We already checked it is shared"),
                 )
             })
             .multiunzip();
