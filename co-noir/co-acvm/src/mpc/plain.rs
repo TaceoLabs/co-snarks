@@ -87,8 +87,8 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     type CurveLookup<C: CurveGroup<ScalarField = F>> = PlainCurveLookupTableProvider<C>;
     type ArithmeticShare = F;
     type AcvmType = F;
-    type AcvmPoint<C: CurveGroup<BaseField = F>> = C;
-    type OtherAcvmPoint<C: CurveGroup<ScalarField = F, BaseField: PrimeField>> = C;
+    type CycleGroupAcvmPoint<C: CurveGroup<BaseField = F>> = C;
+    type NativeAcvmPoint<C: CurveGroup<ScalarField = F, BaseField: PrimeField>> = C;
     type OtherArithmeticShare<C: CurveGroup<ScalarField = F, BaseField: PrimeField>> = C::BaseField;
     type OtherAcvmType<C: CurveGroup<ScalarField = F, BaseField: PrimeField>> = C::BaseField;
 
@@ -143,17 +143,17 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
 
     fn add_points<C: CurveGroup<BaseField = F>>(
         &self,
-        lhs: Self::AcvmPoint<C>,
-        rhs: Self::AcvmPoint<C>,
-    ) -> Self::AcvmPoint<C> {
+        lhs: Self::CycleGroupAcvmPoint<C>,
+        rhs: Self::CycleGroupAcvmPoint<C>,
+    ) -> Self::CycleGroupAcvmPoint<C> {
         lhs + rhs
     }
 
     fn add_points_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &self,
-        lhs: Self::OtherAcvmPoint<C>,
-        rhs: Self::OtherAcvmPoint<C>,
-    ) -> Self::OtherAcvmPoint<C> {
+        lhs: Self::NativeAcvmPoint<C>,
+        rhs: Self::NativeAcvmPoint<C>,
+    ) -> Self::NativeAcvmPoint<C> {
         lhs + rhs
     }
 
@@ -341,7 +341,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Some(*a)
     }
 
-    fn get_public_point<C: CurveGroup<BaseField = F>>(a: &Self::AcvmPoint<C>) -> Option<C> {
+    fn get_public_point<C: CurveGroup<BaseField = F>>(a: &Self::CycleGroupAcvmPoint<C>) -> Option<C> {
         Some(*a)
     }
 
@@ -718,7 +718,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         x: Self::AcvmType,
         y: Self::AcvmType,
         is_infinity: Self::AcvmType,
-    ) -> eyre::Result<Self::AcvmPoint<C>> {
+    ) -> eyre::Result<Self::CycleGroupAcvmPoint<C>> {
         // This is very hardcoded to the grumpkin curve
         if TypeId::of::<F>() != TypeId::of::<ark_bn254::Fr>() {
             panic!("Only BN254 is supported");
@@ -747,7 +747,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
 
     fn pointshare_to_field_shares<C: CurveGroup<BaseField = F>>(
         &mut self,
-        point: Self::AcvmPoint<C>,
+        point: Self::CycleGroupAcvmPoint<C>,
     ) -> eyre::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
         if let Some((out_x, out_y)) = point.into_affine().xy() {
             Ok((out_x, out_y, F::zero()))
@@ -767,9 +767,9 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
 
     fn set_point_to_value_if_zero<C: CurveGroup<BaseField = F>>(
         &mut self,
-        point: Self::AcvmPoint<C>,
-        value: Self::AcvmPoint<C>,
-    ) -> eyre::Result<Self::AcvmPoint<C>> {
+        point: Self::CycleGroupAcvmPoint<C>,
+        value: Self::CycleGroupAcvmPoint<C>,
+    ) -> eyre::Result<Self::CycleGroupAcvmPoint<C>> {
         if point.is_zero() {
             Ok(value)
         } else {
@@ -1008,7 +1008,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
     >(
         &mut self,
-        point: &Self::OtherAcvmPoint<C>,
+        point: &Self::NativeAcvmPoint<C>,
     ) -> eyre::Result<(
         Self::OtherAcvmType<C>,
         Self::OtherAcvmType<C>,
@@ -1029,7 +1029,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
     >(
         &mut self,
-        points: &[Self::OtherAcvmPoint<C>],
+        points: &[Self::NativeAcvmPoint<C>],
     ) -> eyre::Result<(
         Vec<Self::OtherAcvmType<C>>,
         Vec<Self::OtherAcvmType<C>>,
@@ -1099,9 +1099,9 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
 
     fn sub_points<C: CurveGroup<BaseField = F>>(
         &self,
-        lhs: Self::AcvmPoint<C>,
-        rhs: Self::AcvmPoint<C>,
-    ) -> Self::AcvmPoint<C> {
+        lhs: Self::CycleGroupAcvmPoint<C>,
+        rhs: Self::CycleGroupAcvmPoint<C>,
+    ) -> Self::CycleGroupAcvmPoint<C> {
         lhs - rhs
     }
 
@@ -1127,7 +1127,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
 
     fn init_lut_by_acvm_point<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        values: Vec<Self::OtherAcvmPoint<C>>,
+        values: Vec<Self::NativeAcvmPoint<C>>,
     ) -> <Self::CurveLookup<C> as LookupTableProvider<C>>::LutType {
         // TACEO TODO: Since the NoirWitnessExtensionProtocol is not generic over the curve, I could not think of a better way to do this
         let lut = PlainCurveLookupTableProvider::<C>::default();
@@ -1138,7 +1138,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         &mut self,
         index: Self::AcvmType,
         lut: &<Self::CurveLookup<C> as LookupTableProvider<C>>::LutType,
-    ) -> eyre::Result<Self::OtherAcvmPoint<C>> {
+    ) -> eyre::Result<Self::NativeAcvmPoint<C>> {
         let mut lut_ = PlainCurveLookupTableProvider::<C>::default();
         lut_.get_from_lut(index, lut, &(), &(), &mut (), &mut ())
     }
@@ -1147,7 +1147,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         &mut self,
         index: Self::AcvmType,
         luts: &[Vec<C>],
-    ) -> eyre::Result<Vec<Self::OtherAcvmPoint<C>>> {
+    ) -> eyre::Result<Vec<Self::NativeAcvmPoint<C>>> {
         let mut lut_ = PlainCurveLookupTableProvider::<C>::default();
         let mut result = Vec::with_capacity(luts.len());
         for lut in luts {
@@ -1160,7 +1160,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     fn write_lut_by_acvm_point<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         index: Self::AcvmType,
-        value: Self::OtherAcvmPoint<C>,
+        value: Self::NativeAcvmPoint<C>,
         lut: &mut <Self::CurveLookup<C> as LookupTableProvider<C>>::LutType,
     ) -> eyre::Result<()> {
         let mut lut_ = PlainCurveLookupTableProvider::<C>::default();
@@ -1169,16 +1169,16 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
 
     fn point_is_zero_many<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        a: &[Self::OtherAcvmPoint<C>],
+        a: &[Self::NativeAcvmPoint<C>],
     ) -> eyre::Result<Vec<Self::OtherAcvmType<C>>> {
         Ok(a.iter().map(|p| C::BaseField::from(p.is_zero())).collect())
     }
 
     fn msm<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        a: &[Self::OtherAcvmPoint<C>],
+        a: &[Self::NativeAcvmPoint<C>],
         b: &[Self::AcvmType],
-    ) -> eyre::Result<Self::OtherAcvmPoint<C>> {
+    ) -> eyre::Result<Self::NativeAcvmPoint<C>> {
         if a.len() != b.len() {
             eyre::bail!("Points and scalars must have the same length");
         }
@@ -1187,9 +1187,9 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
 
     fn scale_point_by_scalar_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        point: Self::OtherAcvmPoint<C>,
+        point: Self::NativeAcvmPoint<C>,
         scalar: Self::AcvmType,
-    ) -> eyre::Result<Self::OtherAcvmPoint<C>> {
+    ) -> eyre::Result<Self::NativeAcvmPoint<C>> {
         Ok(point * scalar)
     }
 
@@ -1378,9 +1378,9 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     }
 
     fn compute_endo_point<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
-        point: &Self::OtherAcvmPoint<C>,
+        point: &Self::NativeAcvmPoint<C>,
         cube_root_of_unity: C::BaseField,
-    ) -> eyre::Result<Self::OtherAcvmPoint<C>> {
+    ) -> eyre::Result<Self::NativeAcvmPoint<C>> {
         // This is very hardcoded to the bn254 curve
         if TypeId::of::<C>()
             != TypeId::of::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>()
@@ -1402,7 +1402,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     }
 
     fn is_shared_point<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
-        _a: &Self::OtherAcvmPoint<C>,
+        _a: &Self::NativeAcvmPoint<C>,
     ) -> bool {
         false
     }
@@ -1458,7 +1458,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     }
 
     fn get_public_point_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
-        a: &Self::OtherAcvmPoint<C>,
+        a: &Self::NativeAcvmPoint<C>,
     ) -> Option<C> {
         Some(*a)
     }

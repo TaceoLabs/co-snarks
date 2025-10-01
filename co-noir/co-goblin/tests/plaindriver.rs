@@ -233,7 +233,7 @@ mod tests {
                 let vm_operation = &queue.eccvm_ops_table.table[j][i];
                 let vm_op = CoVMOperation::<T, C> {
                     op_code: vm_operation.op_code.clone(),
-                    base_point: T::OtherAcvmPoint::<C>::from(vm_operation.base_point.into()),
+                    base_point: T::NativeAcvmPoint::<C>::from(vm_operation.base_point.into()),
                     z1: T::OtherAcvmType::from(C::BaseField::from(vm_operation.z1.clone())),
                     z2: T::OtherAcvmType::from(C::BaseField::from(vm_operation.z2.clone())),
                     mul_scalar_full: T::AcvmType::from(vm_operation.mul_scalar_full),
@@ -273,7 +273,7 @@ mod tests {
                 table: ultra_ops_table,
             },
         };
-        let accumulator = T::OtherAcvmPoint::<C>::from(queue.accumulator.into());
+        let accumulator = T::NativeAcvmPoint::<C>::from(queue.accumulator.into());
         CoECCOpQueue {
             accumulator,
             eccvm_ops_table,

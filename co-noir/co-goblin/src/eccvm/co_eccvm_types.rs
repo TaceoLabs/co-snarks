@@ -210,8 +210,8 @@ struct CoVMState<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProto
 {
     pc: T::OtherAcvmType<C>,
     count: u32,
-    accumulator: T::OtherAcvmPoint<C>,
-    msm_accumulator: T::OtherAcvmPoint<C>,
+    accumulator: T::NativeAcvmPoint<C>,
+    msm_accumulator: T::NativeAcvmPoint<C>,
     is_accumulator_empty: T::OtherAcvmType<C>, //bool
 }
 
@@ -235,8 +235,8 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         Self {
             pc: T::OtherAcvmType::default(),
             count: 0,
-            accumulator: T::OtherAcvmPoint::default(),
-            msm_accumulator: T::OtherAcvmPoint::from(offset_generator_scaled::<C>().into()),
+            accumulator: T::NativeAcvmPoint::default(),
+            msm_accumulator: T::NativeAcvmPoint::from(offset_generator_scaled::<C>().into()),
             is_accumulator_empty: T::OtherAcvmType::from(C::BaseField::one()), //true
         }
     }
@@ -288,14 +288,14 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         let inv = driver.add(T::AcvmType::from(C::ScalarField::one()), mul);
         let if_value = driver.add_points_other(
             updated_state.msm_accumulator,
-            T::OtherAcvmPoint::from(-offset_generator_scaled::<C>().into()),
+            T::NativeAcvmPoint::from(-offset_generator_scaled::<C>().into()),
         );
 
         let mut else_value =
             driver.add_points_other(old_state.accumulator, updated_state.msm_accumulator);
         else_value = driver.add_points_other(
             else_value,
-            T::OtherAcvmPoint::from(-offset_generator_scaled::<C>().into()),
+            T::NativeAcvmPoint::from(-offset_generator_scaled::<C>().into()),
         );
 
         updated_state.accumulator =
@@ -303,7 +303,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
 
         let msm_output = driver.add_points_other(
             updated_state.msm_accumulator,
-            T::OtherAcvmPoint::from(-offset_generator_scaled::<C>().into()),
+            T::NativeAcvmPoint::from(-offset_generator_scaled::<C>().into()),
         );
         //TACEO TODO: Batch this is_zero check with others
         let is_zero = driver.point_is_zero_many(&[msm_output, updated_state.accumulator])?;
@@ -557,16 +557,16 @@ fn compute_transcript_rows<
     let mut transcript_msm_x_inverse_trace = vec![T::OtherAcvmType::default(); num_vm_entries];
     let mut msm_count_at_transition_inverse_trace = vec![C::BaseField::zero(); num_vm_entries];
 
-    let mut msm_accumulator_trace: Vec<_> = vec![T::OtherAcvmPoint::<C>::default(); num_vm_entries];
-    let mut accumulator_trace: Vec<_> = vec![T::OtherAcvmPoint::<C>::default(); num_vm_entries];
+    let mut msm_accumulator_trace: Vec<_> = vec![T::NativeAcvmPoint::<C>::default(); num_vm_entries];
+    let mut accumulator_trace: Vec<_> = vec![T::NativeAcvmPoint::<C>::default(); num_vm_entries];
     let mut intermediate_accumulator_trace: Vec<_> =
-        vec![T::OtherAcvmPoint::<C>::default(); num_vm_entries];
+        vec![T::NativeAcvmPoint::<C>::default(); num_vm_entries];
 
     let mut state = CoVMState::<C, T> {
         pc: T::OtherAcvmType::from(C::BaseField::from(total_number_of_muls)),
         count: 0,
-        accumulator: T::OtherAcvmPoint::<C>::default(),
-        msm_accumulator: T::OtherAcvmPoint::<C>::from(offset_generator_scaled::<C>().into()),
+        accumulator: T::NativeAcvmPoint::<C>::default(),
+        msm_accumulator: T::NativeAcvmPoint::<C>::from(offset_generator_scaled::<C>().into()),
         is_accumulator_empty: T::OtherAcvmType::from(C::BaseField::one()), //true
     };
 
@@ -603,9 +603,9 @@ fn compute_transcript_rows<
 
         if entry.op_code.reset {
             updated_state.is_accumulator_empty = T::OtherAcvmType::from(C::BaseField::one()); //true;
-            updated_state.accumulator = T::OtherAcvmPoint::<C>::default();
+            updated_state.accumulator = T::NativeAcvmPoint::<C>::default();
             updated_state.msm_accumulator =
-                T::OtherAcvmPoint::from(offset_generator_scaled::<C>().into());
+                T::NativeAcvmPoint::from(offset_generator_scaled::<C>().into());
         }
 
         let last_row = i == (num_vm_entries - 1);
@@ -639,8 +639,8 @@ fn compute_transcript_rows<
                 driver,
             )?;
         } else {
-            msm_accumulator_trace[i] = T::OtherAcvmPoint::<C>::default();
-            intermediate_accumulator_trace[i] = T::OtherAcvmPoint::<C>::default();
+            msm_accumulator_trace[i] = T::NativeAcvmPoint::<C>::default();
+            intermediate_accumulator_trace[i] = T::NativeAcvmPoint::<C>::default();
         }
 
         if is_add {
@@ -675,21 +675,21 @@ fn compute_transcript_rows<
         msm_accumulator_trace[i] = if msm_transition {
             updated_state.msm_accumulator
         } else {
-            T::OtherAcvmPoint::<C>::default()
+            T::NativeAcvmPoint::<C>::default()
         };
         intermediate_accumulator_trace[i] = if msm_transition {
             driver.add_points_other(
                 updated_state.msm_accumulator,
-                T::OtherAcvmPoint::from(-offset_generator_scaled::<C>().into()),
+                T::NativeAcvmPoint::from(-offset_generator_scaled::<C>().into()),
             )
         } else {
-            T::OtherAcvmPoint::<C>::default()
+            T::NativeAcvmPoint::<C>::default()
         };
 
         state = updated_state.clone();
 
         if is_mul && next_not_msm {
-            state.msm_accumulator = T::OtherAcvmPoint::from(offset_generator_scaled::<C>().into());
+            state.msm_accumulator = T::NativeAcvmPoint::from(offset_generator_scaled::<C>().into());
         }
         transcript_state.push(row);
     }
@@ -935,8 +935,8 @@ struct PointTablePrecomputationRow<
     pc: u32,
     round: u32,
     scalar_sum: T::OtherAcvmType<C>,
-    precompute_accumulator: T::OtherAcvmPoint<C>,
-    precompute_double: T::OtherAcvmPoint<C>,
+    precompute_accumulator: T::NativeAcvmPoint<C>,
+    precompute_double: T::NativeAcvmPoint<C>,
 }
 
 impl<C: CurveGroup<BaseField: PrimeField>, T: NoirWitnessExtensionProtocol<C::ScalarField>> Default
@@ -957,8 +957,8 @@ impl<C: CurveGroup<BaseField: PrimeField>, T: NoirWitnessExtensionProtocol<C::Sc
             pc: 0,
             round: 0,
             scalar_sum: T::OtherAcvmType::default(),
-            precompute_accumulator: T::OtherAcvmPoint::<C>::default(),
-            precompute_double: T::OtherAcvmPoint::<C>::default(),
+            precompute_accumulator: T::NativeAcvmPoint::<C>::default(),
+            precompute_double: T::NativeAcvmPoint::<C>::default(),
         }
     }
 }

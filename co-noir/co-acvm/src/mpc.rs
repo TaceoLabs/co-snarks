@@ -34,7 +34,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         + From<F>
         + PartialEq
         + Into<<Self::BrilligDriver as BrilligDriver<F>>::BrilligType>;
-    type AcvmPoint<C: CurveGroup<BaseField = F>>: Clone
+    type CycleGroupAcvmPoint<C: CurveGroup<BaseField = F>>: Clone
         + fmt::Debug
         + fmt::Display
         + Default
@@ -48,7 +48,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         + From<Self::OtherArithmeticShare<C>>
         + From<C::BaseField>
         + PartialEq;
-    type OtherAcvmPoint<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>: Clone
+    type NativeAcvmPoint<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>: Clone
         + Copy
         + fmt::Debug
         + fmt::Display
@@ -103,6 +103,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     /// Adds a public value to an ACVM-type in place: *\[target\] += public
     fn add_assign_with_public(&mut self, public: F, target: &mut Self::AcvmType);
 
+    /// Adds a public value to an ACVM-type in place: *\[target\] += public
     fn add_assign_with_public_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         public: C::BaseField,
@@ -141,22 +142,22 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     /// Adds two acvm points. Both can either be public or shared
     fn add_points<C: CurveGroup<BaseField = F>>(
         &self,
-        lhs: Self::AcvmPoint<C>,
-        rhs: Self::AcvmPoint<C>,
-    ) -> Self::AcvmPoint<C>;
+        lhs: Self::CycleGroupAcvmPoint<C>,
+        rhs: Self::CycleGroupAcvmPoint<C>,
+    ) -> Self::CycleGroupAcvmPoint<C>;
 
     fn add_points_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &self,
-        lhs: Self::OtherAcvmPoint<C>,
-        rhs: Self::OtherAcvmPoint<C>,
-    ) -> Self::OtherAcvmPoint<C>;
+        lhs: Self::NativeAcvmPoint<C>,
+        rhs: Self::NativeAcvmPoint<C>,
+    ) -> Self::NativeAcvmPoint<C>;
 
     /// Subs two acvm points. Both can either be public or shared
     fn sub_points<C: CurveGroup<BaseField = F>>(
         &self,
-        lhs: Self::AcvmPoint<C>,
-        rhs: Self::AcvmPoint<C>,
-    ) -> Self::AcvmPoint<C>;
+        lhs: Self::CycleGroupAcvmPoint<C>,
+        rhs: Self::CycleGroupAcvmPoint<C>,
+    ) -> Self::CycleGroupAcvmPoint<C>;
 
     /// Subtracts two ACVM-type values: secret - secret
     fn sub(&self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType;
@@ -334,7 +335,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     /// we create the table from either public or shared values.
     fn init_lut_by_acvm_point<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        values: Vec<Self::OtherAcvmPoint<C>>,
+        values: Vec<Self::NativeAcvmPoint<C>>,
     ) -> <Self::CurveLookup<C> as LookupTableProvider<C>>::LutType;
 
     /// Wrapper around reading from a LUT by the [`Self::AcvmType`] as this can either be a
@@ -351,7 +352,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         &mut self,
         index: Self::AcvmType,
         lut: &<Self::CurveLookup<C> as LookupTableProvider<C>>::LutType,
-    ) -> eyre::Result<Self::OtherAcvmPoint<C>>;
+    ) -> eyre::Result<Self::NativeAcvmPoint<C>>;
 
     /// Reads from multiple public LUTs.
     fn read_from_public_luts(
@@ -365,7 +366,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         &mut self,
         index: Self::AcvmType,
         luts: &[Vec<C>],
-    ) -> eyre::Result<Vec<Self::OtherAcvmPoint<C>>>;
+    ) -> eyre::Result<Vec<Self::NativeAcvmPoint<C>>>;
 
     /// Wrapper around writing a value to a LUT. The index and the value can be shared or public.
     fn write_lut_by_acvm_type(
@@ -379,7 +380,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     fn write_lut_by_acvm_point<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         index: Self::AcvmType,
-        value: Self::OtherAcvmPoint<C>,
+        value: Self::NativeAcvmPoint<C>,
         lut: &mut <Self::CurveLookup<C> as LookupTableProvider<C>>::LutType,
     ) -> eyre::Result<()>;
 
@@ -422,7 +423,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     fn is_shared(a: &Self::AcvmType) -> bool;
 
     fn is_shared_point<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
-        a: &Self::OtherAcvmPoint<C>,
+        a: &Self::NativeAcvmPoint<C>,
     ) -> bool;
 
     fn is_shared_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
@@ -452,11 +453,13 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     ) -> Option<C::BaseField>;
 
     /// Returns the value if the point is public
-    fn get_public_point<C: CurveGroup<BaseField = F>>(a: &Self::AcvmPoint<C>) -> Option<C>;
+    fn get_public_point<C: CurveGroup<BaseField = F>>(
+        a: &Self::CycleGroupAcvmPoint<C>,
+    ) -> Option<C>;
 
     /// Returns the value if the point is public
     fn get_public_point_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
-        a: &Self::OtherAcvmPoint<C>,
+        a: &Self::NativeAcvmPoint<C>,
     ) -> Option<C>;
 
     /// Checks if two shared values are equal. The result is a shared value that has value 1 if the two shared values are equal and 0 otherwise.
@@ -491,7 +494,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
 
     fn point_is_zero_many<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        a: &[Self::OtherAcvmPoint<C>],
+        a: &[Self::NativeAcvmPoint<C>],
     ) -> eyre::Result<Vec<Self::OtherAcvmType<C>>>;
 
     // TODO do we want this here?
@@ -733,12 +736,12 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         x: Self::AcvmType,
         y: Self::AcvmType,
         is_infinity: Self::AcvmType,
-    ) -> eyre::Result<Self::AcvmPoint<C>>;
+    ) -> eyre::Result<Self::CycleGroupAcvmPoint<C>>;
 
     /// Translates a share of the point to a share of its coordinates
     fn pointshare_to_field_shares<C: CurveGroup<BaseField = F>>(
         &mut self,
-        point: Self::AcvmPoint<C>,
+        point: Self::CycleGroupAcvmPoint<C>,
     ) -> eyre::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)>;
 
     /// Translates a share of the point to a share of its coordinates
@@ -747,7 +750,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
     >(
         &mut self,
-        point: &Self::OtherAcvmPoint<C>,
+        point: &Self::NativeAcvmPoint<C>,
     ) -> eyre::Result<(
         Self::OtherAcvmType<C>,
         Self::OtherAcvmType<C>,
@@ -760,7 +763,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
     >(
         &mut self,
-        points: &[Self::OtherAcvmPoint<C>],
+        points: &[Self::NativeAcvmPoint<C>],
     ) -> eyre::Result<(
         Vec<Self::OtherAcvmType<C>>,
         Vec<Self::OtherAcvmType<C>>,
@@ -778,9 +781,9 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     /// Computes: result = if point == 0 { value } else { point }
     fn set_point_to_value_if_zero<C: CurveGroup<BaseField = F>>(
         &mut self,
-        point: Self::AcvmPoint<C>,
-        value: Self::AcvmPoint<C>,
-    ) -> eyre::Result<Self::AcvmPoint<C>>;
+        point: Self::CycleGroupAcvmPoint<C>,
+        value: Self::CycleGroupAcvmPoint<C>,
+    ) -> eyre::Result<Self::CycleGroupAcvmPoint<C>>;
 
     /// Computes the SHA256 compression from a given state and message.
     fn sha256_compression(
@@ -834,16 +837,16 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     /// Perform msm between `points` and `scalars`
     fn msm<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        points: &[Self::OtherAcvmPoint<C>],
+        points: &[Self::NativeAcvmPoint<C>],
         scalars: &[Self::AcvmType],
-    ) -> eyre::Result<Self::OtherAcvmPoint<C>>;
+    ) -> eyre::Result<Self::NativeAcvmPoint<C>>;
 
     /// Multiply a point by a scalar
     fn scale_point_by_scalar_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        point: Self::OtherAcvmPoint<C>,
+        point: Self::NativeAcvmPoint<C>,
         scalar: Self::AcvmType,
-    ) -> eyre::Result<Self::OtherAcvmPoint<C>>;
+    ) -> eyre::Result<Self::NativeAcvmPoint<C>>;
 
     /// Converts a vector of field elements into another acvm type, this is used for converting arithmetic shares of 0/1 and indices for lut calls into arithmetic shares of the other field.
     fn convert_fields<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
@@ -869,7 +872,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     )>;
 
     fn compute_endo_point<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
-        point: &Self::OtherAcvmPoint<C>,
+        point: &Self::NativeAcvmPoint<C>,
         cube_root_of_unity: C::BaseField,
-    ) -> eyre::Result<Self::OtherAcvmPoint<C>>;
+    ) -> eyre::Result<Self::NativeAcvmPoint<C>>;
 }

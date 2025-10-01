@@ -431,9 +431,9 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     type ArithmeticShare = Rep3PrimeFieldShare<F>;
 
     type AcvmType = Rep3AcvmType<F>;
-    type AcvmPoint<C: CurveGroup<BaseField = F>> = Rep3AcvmPoint<C>;
+    type CycleGroupAcvmPoint<C: CurveGroup<BaseField = F>> = Rep3AcvmPoint<C>;
 
-    type OtherAcvmPoint<C: CurveGroup<ScalarField = F, BaseField: PrimeField>> = Rep3AcvmPoint<C>;
+    type NativeAcvmPoint<C: CurveGroup<ScalarField = F, BaseField: PrimeField>> = Rep3AcvmPoint<C>;
     type OtherArithmeticShare<C: CurveGroup<ScalarField = F, BaseField: PrimeField>> =
         Rep3PrimeFieldShare<C::BaseField>;
     type OtherAcvmType<C: CurveGroup<ScalarField = F, BaseField: PrimeField>> =
@@ -574,9 +574,9 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
 
     fn add_points<C: CurveGroup<BaseField = F>>(
         &self,
-        lhs: Self::AcvmPoint<C>,
-        rhs: Self::AcvmPoint<C>,
-    ) -> Self::AcvmPoint<C> {
+        lhs: Self::CycleGroupAcvmPoint<C>,
+        rhs: Self::CycleGroupAcvmPoint<C>,
+    ) -> Self::CycleGroupAcvmPoint<C> {
         match (lhs, rhs) {
             (Rep3AcvmPoint::Public(lhs), Rep3AcvmPoint::Public(rhs)) => {
                 Rep3AcvmPoint::Public(lhs + rhs)
@@ -595,9 +595,9 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
 
     fn add_points_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &self,
-        lhs: Self::OtherAcvmPoint<C>,
-        rhs: Self::OtherAcvmPoint<C>,
-    ) -> Self::OtherAcvmPoint<C> {
+        lhs: Self::NativeAcvmPoint<C>,
+        rhs: Self::NativeAcvmPoint<C>,
+    ) -> Self::NativeAcvmPoint<C> {
         match (lhs, rhs) {
             (Rep3AcvmPoint::Public(lhs), Rep3AcvmPoint::Public(rhs)) => {
                 Rep3AcvmPoint::Public(lhs + rhs)
@@ -1028,7 +1028,9 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
     }
 
-    fn get_public_point<C: CurveGroup<BaseField = F>>(a: &Self::AcvmPoint<C>) -> Option<C> {
+    fn get_public_point<C: CurveGroup<BaseField = F>>(
+        a: &Self::CycleGroupAcvmPoint<C>,
+    ) -> Option<C> {
         match a {
             Rep3AcvmPoint::Public(public) => Some(*public),
             _ => None,
@@ -1036,7 +1038,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     }
 
     fn get_public_point_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
-        a: &Self::OtherAcvmPoint<C>,
+        a: &Self::NativeAcvmPoint<C>,
     ) -> Option<C> {
         match a {
             Rep3AcvmPoint::Public(public) => Some(*public),
@@ -1802,7 +1804,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         x: Self::AcvmType,
         y: Self::AcvmType,
         is_infinity: Self::AcvmType,
-    ) -> eyre::Result<Self::AcvmPoint<C>> {
+    ) -> eyre::Result<Self::CycleGroupAcvmPoint<C>> {
         // This is very hardcoded to the grumpkin curve
         if TypeId::of::<F>() != TypeId::of::<ark_bn254::Fr>() {
             panic!("Only BN254 is supported");
@@ -1822,7 +1824,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         let point =
             Self::create_grumpkin_point(x, y, is_infinity, self.net0, &mut self.state0, true)?;
 
-        let y = downcast::<_, Self::AcvmPoint<C>>(&point)
+        let y = downcast::<_, Self::CycleGroupAcvmPoint<C>>(&point)
             .expect("We checked types")
             .to_owned();
 
@@ -1831,7 +1833,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
 
     fn pointshare_to_field_shares<C: CurveGroup<BaseField = F>>(
         &mut self,
-        point: Self::AcvmPoint<C>,
+        point: Self::CycleGroupAcvmPoint<C>,
     ) -> eyre::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
         let res = match point {
             Rep3AcvmPoint::Public(point) => {
@@ -1889,9 +1891,9 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
 
     fn set_point_to_value_if_zero<C: CurveGroup<BaseField = F>>(
         &mut self,
-        point: Self::AcvmPoint<C>,
-        value: Self::AcvmPoint<C>,
-    ) -> eyre::Result<Self::AcvmPoint<C>> {
+        point: Self::CycleGroupAcvmPoint<C>,
+        value: Self::CycleGroupAcvmPoint<C>,
+    ) -> eyre::Result<Self::CycleGroupAcvmPoint<C>> {
         match point {
             Rep3AcvmPoint::Public(point) => {
                 if point.is_zero() {
@@ -2543,7 +2545,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
     >(
         &mut self,
-        point: &Self::OtherAcvmPoint<C>,
+        point: &Self::NativeAcvmPoint<C>,
     ) -> eyre::Result<(
         Self::OtherAcvmType<C>,
         Self::OtherAcvmType<C>,
@@ -2579,7 +2581,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
     >(
         &mut self,
-        points: &[Self::OtherAcvmPoint<C>],
+        points: &[Self::NativeAcvmPoint<C>],
     ) -> eyre::Result<(
         Vec<Self::OtherAcvmType<C>>,
         Vec<Self::OtherAcvmType<C>>,
@@ -2814,9 +2816,9 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
 
     fn sub_points<C: CurveGroup<BaseField = F>>(
         &self,
-        lhs: Self::AcvmPoint<C>,
-        rhs: Self::AcvmPoint<C>,
-    ) -> Self::AcvmPoint<C> {
+        lhs: Self::CycleGroupAcvmPoint<C>,
+        rhs: Self::CycleGroupAcvmPoint<C>,
+    ) -> Self::CycleGroupAcvmPoint<C> {
         match (lhs, rhs) {
             (Rep3AcvmPoint::Public(lhs), Rep3AcvmPoint::Public(rhs)) => {
                 Rep3AcvmPoint::Public(lhs - rhs)
@@ -2880,7 +2882,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
 
     fn init_lut_by_acvm_point<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        values: Vec<Self::OtherAcvmPoint<C>>,
+        values: Vec<Self::NativeAcvmPoint<C>>,
     ) -> <Self::CurveLookup<C> as LookupTableProvider<C>>::LutType {
         let lut_ = Rep3CurveLookupTable::<C>::default();
         if values.iter().any(|v| Self::is_shared_point(v)) {
@@ -2909,7 +2911,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         &mut self,
         index: Self::AcvmType,
         lut: &<Self::CurveLookup<C> as LookupTableProvider<C>>::LutType,
-    ) -> eyre::Result<Self::OtherAcvmPoint<C>> {
+    ) -> eyre::Result<Self::NativeAcvmPoint<C>> {
         let mut lut_ = Rep3CurveLookupTable::<C>::default();
         let result = match index {
             Rep3AcvmType::Public(public) => {
@@ -2919,7 +2921,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
 
                 match lut {
                     mpc_core::protocols::rep3_ring::lut_curve::PublicPrivateLut::Public(vec) => {
-                        Self::OtherAcvmPoint::from(vec[index].to_owned())
+                        Self::NativeAcvmPoint::from(vec[index].to_owned())
                     }
                     mpc_core::protocols::rep3_ring::lut_curve::PublicPrivateLut::Shared(vec) => {
                         Rep3AcvmPoint::Shared(vec[index].to_owned())
@@ -2942,7 +2944,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         &mut self,
         index: Self::AcvmType,
         luts: &[Vec<C>],
-    ) -> eyre::Result<Vec<Self::OtherAcvmPoint<C>>> {
+    ) -> eyre::Result<Vec<Self::NativeAcvmPoint<C>>> {
         let mut result = Vec::with_capacity(luts.len());
         match index {
             Rep3AcvmType::Public(index) => {
@@ -2971,7 +2973,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     fn write_lut_by_acvm_point<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         index: Self::AcvmType,
-        value: Self::OtherAcvmPoint<C>,
+        value: Self::NativeAcvmPoint<C>,
         lut: &mut <Self::CurveLookup<C> as LookupTableProvider<C>>::LutType,
     ) -> eyre::Result<()> {
         let mut lut_ = Rep3CurveLookupTable::<C>::default();
@@ -3041,7 +3043,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
 
     fn point_is_zero_many<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        a: &[Self::OtherAcvmPoint<C>],
+        a: &[Self::NativeAcvmPoint<C>],
     ) -> eyre::Result<Vec<Self::OtherAcvmType<C>>> {
         if a.iter().any(|v| Self::is_shared_point(v)) {
             let a: Vec<Rep3PointShare<C>> = (0..a.len())
@@ -3086,9 +3088,9 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     // TACEO TODO: Optimize the MSM
     fn msm<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        a: &[Self::OtherAcvmPoint<C>],
+        a: &[Self::NativeAcvmPoint<C>],
         b: &[Self::AcvmType],
-    ) -> eyre::Result<Self::OtherAcvmPoint<C>> {
+    ) -> eyre::Result<Self::NativeAcvmPoint<C>> {
         if a.iter().any(|v| Self::is_shared_point(v)) || b.iter().any(|v| Self::is_shared(v)) {
             let a: Vec<Rep3PointShare<C>> = (0..a.len())
                 .map(|i| match a[i] {
@@ -3127,9 +3129,9 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
 
     fn scale_point_by_scalar_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        point: Self::OtherAcvmPoint<C>,
+        point: Self::NativeAcvmPoint<C>,
         scalar: Self::AcvmType,
-    ) -> eyre::Result<Self::OtherAcvmPoint<C>> {
+    ) -> eyre::Result<Self::NativeAcvmPoint<C>> {
         match (point, scalar) {
             (Rep3AcvmPoint::Public(public), Rep3AcvmType::Public(scalar)) => {
                 Ok(Rep3AcvmPoint::Public(public * scalar))
@@ -3321,9 +3323,9 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     }
 
     fn compute_endo_point<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
-        point: &Self::OtherAcvmPoint<C>,
+        point: &Self::NativeAcvmPoint<C>,
         cube_root_of_unity: C::BaseField,
-    ) -> eyre::Result<Self::OtherAcvmPoint<C>> {
+    ) -> eyre::Result<Self::NativeAcvmPoint<C>> {
         if TypeId::of::<C>()
             != TypeId::of::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>()
         {
@@ -3374,7 +3376,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     }
 
     fn is_shared_point<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
-        a: &Self::OtherAcvmPoint<C>,
+        a: &Self::NativeAcvmPoint<C>,
     ) -> bool {
         match a {
             Rep3AcvmPoint::Public(_) => false,

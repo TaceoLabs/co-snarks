@@ -171,11 +171,12 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
     type ArithmeticShare = ShamirPrimeFieldShare<F>;
 
     type AcvmType = ShamirAcvmType<F>;
-    type AcvmPoint<C: CurveGroup<BaseField = F>> = ShamirAcvmPoint<C>;
+    type CycleGroupAcvmPoint<C: CurveGroup<BaseField = F>> = ShamirAcvmPoint<C>;
 
     type OtherArithmeticShare<C: CurveGroup<ScalarField = F, BaseField: PrimeField>> =
         ShamirPrimeFieldShare<C::BaseField>;
-    type OtherAcvmPoint<C: CurveGroup<ScalarField = F, BaseField: PrimeField>> = ShamirAcvmPoint<C>;
+    type NativeAcvmPoint<C: CurveGroup<ScalarField = F, BaseField: PrimeField>> =
+        ShamirAcvmPoint<C>;
 
     type OtherAcvmType<C: CurveGroup<ScalarField = F, BaseField: PrimeField>> =
         ShamirAcvmType<C::BaseField>;
@@ -297,9 +298,9 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
 
     fn add_points<C: CurveGroup<BaseField = F>>(
         &self,
-        lhs: Self::AcvmPoint<C>,
-        rhs: Self::AcvmPoint<C>,
-    ) -> Self::AcvmPoint<C> {
+        lhs: Self::CycleGroupAcvmPoint<C>,
+        rhs: Self::CycleGroupAcvmPoint<C>,
+    ) -> Self::CycleGroupAcvmPoint<C> {
         match (lhs, rhs) {
             (ShamirAcvmPoint::Public(lhs), ShamirAcvmPoint::Public(rhs)) => {
                 ShamirAcvmPoint::Public(lhs + rhs)
@@ -318,9 +319,9 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
 
     fn add_points_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &self,
-        lhs: Self::OtherAcvmPoint<C>,
-        rhs: Self::OtherAcvmPoint<C>,
-    ) -> Self::OtherAcvmPoint<C> {
+        lhs: Self::NativeAcvmPoint<C>,
+        rhs: Self::NativeAcvmPoint<C>,
+    ) -> Self::NativeAcvmPoint<C> {
         match (lhs, rhs) {
             (ShamirAcvmPoint::Public(lhs), ShamirAcvmPoint::Public(rhs)) => {
                 ShamirAcvmPoint::Public(lhs + rhs)
@@ -605,7 +606,9 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
         }
     }
 
-    fn get_public_point<C: CurveGroup<BaseField = F>>(a: &Self::AcvmPoint<C>) -> Option<C> {
+    fn get_public_point<C: CurveGroup<BaseField = F>>(
+        a: &Self::CycleGroupAcvmPoint<C>,
+    ) -> Option<C> {
         match a {
             ShamirAcvmPoint::Public(public) => Some(*public),
             _ => None,
@@ -914,13 +917,13 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
         _x: Self::AcvmType,
         _y: Self::AcvmType,
         _is_infinity: Self::AcvmType,
-    ) -> eyre::Result<Self::AcvmPoint<C>> {
+    ) -> eyre::Result<Self::CycleGroupAcvmPoint<C>> {
         panic!("functionality field_share_to_pointshare not feasible for Shamir")
     }
 
     fn pointshare_to_field_shares<C: CurveGroup<BaseField = F>>(
         &mut self,
-        _point: Self::AcvmPoint<C>,
+        _point: Self::CycleGroupAcvmPoint<C>,
     ) -> eyre::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
         panic!("functionality pointshare_to_field_shares not feasible for Shamir")
     }
@@ -931,9 +934,9 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
 
     fn set_point_to_value_if_zero<C: CurveGroup<BaseField = F>>(
         &mut self,
-        _point: Self::AcvmPoint<C>,
-        _value: Self::AcvmPoint<C>,
-    ) -> eyre::Result<Self::AcvmPoint<C>> {
+        _point: Self::CycleGroupAcvmPoint<C>,
+        _value: Self::CycleGroupAcvmPoint<C>,
+    ) -> eyre::Result<Self::CycleGroupAcvmPoint<C>> {
         panic!("functionality set_point_to_value_if_zero not feasible for Shamir")
     }
 
@@ -1074,7 +1077,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
         C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
     >(
         &mut self,
-        _point: &Self::OtherAcvmPoint<C>,
+        _point: &Self::NativeAcvmPoint<C>,
     ) -> eyre::Result<(
         Self::OtherAcvmType<C>,
         Self::OtherAcvmType<C>,
@@ -1087,7 +1090,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
         C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
     >(
         &mut self,
-        _point: &[Self::OtherAcvmPoint<C>],
+        _point: &[Self::NativeAcvmPoint<C>],
     ) -> eyre::Result<(
         Vec<Self::OtherAcvmType<C>>,
         Vec<Self::OtherAcvmType<C>>,
@@ -1177,9 +1180,9 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
 
     fn sub_points<C: CurveGroup<BaseField = F>>(
         &self,
-        lhs: Self::AcvmPoint<C>,
-        rhs: Self::AcvmPoint<C>,
-    ) -> Self::AcvmPoint<C> {
+        lhs: Self::CycleGroupAcvmPoint<C>,
+        rhs: Self::CycleGroupAcvmPoint<C>,
+    ) -> Self::CycleGroupAcvmPoint<C> {
         match (lhs, rhs) {
             (ShamirAcvmPoint::Public(lhs), ShamirAcvmPoint::Public(rhs)) => {
                 ShamirAcvmPoint::Public(lhs - rhs)
@@ -1243,7 +1246,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
 
     fn init_lut_by_acvm_point<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        _values: Vec<Self::OtherAcvmPoint<C>>,
+        _values: Vec<Self::NativeAcvmPoint<C>>,
     ) -> <Self::CurveLookup<C> as LookupTableProvider<C>>::LutType {
         panic!("functionality init_lut_by_acvm_point not feasible for Shamir")
     }
@@ -1252,7 +1255,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
         &mut self,
         _index: Self::AcvmType,
         _lut: &<Self::CurveLookup<C> as LookupTableProvider<C>>::LutType,
-    ) -> eyre::Result<Self::OtherAcvmPoint<C>> {
+    ) -> eyre::Result<Self::NativeAcvmPoint<C>> {
         panic!("functionality read_lut_by_acvm_point not feasible for Shamir")
     }
 
@@ -1260,14 +1263,14 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
         &mut self,
         _index: Self::AcvmType,
         _luts: &[Vec<C>],
-    ) -> eyre::Result<Vec<Self::OtherAcvmPoint<C>>> {
+    ) -> eyre::Result<Vec<Self::NativeAcvmPoint<C>>> {
         panic!("functionality read_from_public_curve_luts not feasible for Shamir")
     }
 
     fn write_lut_by_acvm_point<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         _index: Self::AcvmType,
-        _value: Self::OtherAcvmPoint<C>,
+        _value: Self::NativeAcvmPoint<C>,
         _lut: &mut <Self::CurveLookup<C> as LookupTableProvider<C>>::LutType,
     ) -> eyre::Result<()> {
         panic!("functionality write_lut_by_acvm_point not feasible for Shamir")
@@ -1275,24 +1278,24 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
 
     fn point_is_zero_many<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        _a: &[Self::OtherAcvmPoint<C>],
+        _a: &[Self::NativeAcvmPoint<C>],
     ) -> eyre::Result<Vec<Self::OtherAcvmType<C>>> {
         panic!("functionality point_is_zero_many not feasible for Shamir")
     }
 
     fn msm<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        _points: &[Self::OtherAcvmPoint<C>],
+        _points: &[Self::NativeAcvmPoint<C>],
         _scalars: &[Self::AcvmType],
-    ) -> eyre::Result<Self::OtherAcvmPoint<C>> {
+    ) -> eyre::Result<Self::NativeAcvmPoint<C>> {
         unimplemented!("msm not implemented for Shamir")
     }
 
     fn scale_point_by_scalar_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        point: Self::OtherAcvmPoint<C>,
+        point: Self::NativeAcvmPoint<C>,
         scalar: Self::AcvmType,
-    ) -> eyre::Result<Self::OtherAcvmPoint<C>> {
+    ) -> eyre::Result<Self::NativeAcvmPoint<C>> {
         match (point, scalar) {
             (ShamirAcvmPoint::Public(public), ShamirAcvmType::Public(scalar)) => {
                 Ok(ShamirAcvmPoint::Public(public * scalar))
@@ -1334,14 +1337,14 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
     }
 
     fn compute_endo_point<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
-        _point: &Self::OtherAcvmPoint<C>,
+        _point: &Self::NativeAcvmPoint<C>,
         _cube_root_of_unity: C::BaseField,
-    ) -> eyre::Result<Self::OtherAcvmPoint<C>> {
+    ) -> eyre::Result<Self::NativeAcvmPoint<C>> {
         unimplemented!("compute_endo_point not implemented for Shamir")
     }
 
     fn is_shared_point<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
-        a: &Self::OtherAcvmPoint<C>,
+        a: &Self::NativeAcvmPoint<C>,
     ) -> bool {
         match a {
             ShamirAcvmPoint::Shared(_) => true,
@@ -1425,7 +1428,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
     }
 
     fn get_public_point_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
-        a: &Self::OtherAcvmPoint<C>,
+        a: &Self::NativeAcvmPoint<C>,
     ) -> Option<C> {
         match a {
             ShamirAcvmPoint::Public(public) => Some(*public),
