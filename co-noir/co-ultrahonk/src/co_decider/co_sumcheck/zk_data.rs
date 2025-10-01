@@ -37,7 +37,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> SharedZKSumch
         net: &N,
         state: &mut T::State,
     ) -> HonkProofResult<Self> {
-        let constant_term = T::promote_to_trivial_share(state.id(), P::ScalarField::one()); // T::rand(net, state)?; TODO FLORIN
+        let constant_term = T::rand(net, state)?;
         let libra_univariates = Self::generate_libra_univariates(
             multivariate_d,
             P::LIBRA_UNIVARIATES_LENGTH,
