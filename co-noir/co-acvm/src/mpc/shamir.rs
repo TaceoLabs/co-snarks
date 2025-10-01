@@ -997,6 +997,22 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
         panic!("functionality other_pointshare_to_other_field_shares not feasible for Shamir")
     }
 
+    fn other_pointshare_to_field_shares<
+        const LIMB_BITS: usize,
+        C: HonkCurve<F, ScalarField = F>,
+    >(
+        &mut self,
+        _point: Self::OtherAcvmPoint<C>,
+    ) -> eyre::Result<(
+        Self::AcvmType,
+        Self::AcvmType,
+        Self::AcvmType,
+        Self::AcvmType,
+        Self::AcvmType,
+    )> {
+        panic!("functionality other_pointshare_to_field_shares not feasible for Shamir")
+    }
+
     // TODO TACEO: Currently only supports LIMB_BITS = 136, i.e. two Bn254::Fr elements per Bn254::Fq element
     /// Converts a base field share into a vector of field shares, where the field shares
     /// represent the limbs of the base field element. Each limb has at most LIMB_BITS bits.

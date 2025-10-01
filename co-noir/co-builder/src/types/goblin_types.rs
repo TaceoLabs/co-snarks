@@ -48,7 +48,7 @@ impl<
 > Debug for GoblinElement<P, T>
 {
     // Prints like: { {x.limbs[0], x.limbs[1]}, {y.limbs[0], y.limbs[1]} }
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         panic!("no debug implementation for goblin elements");
     }
 }

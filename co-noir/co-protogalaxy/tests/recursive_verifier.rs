@@ -32,18 +32,8 @@ type Fr = ark_bn254::Fr;
 
 type ProtogalaxyKeyTestData = (
     String,
-    Vec<String>,
     String,
     String,
-    String,
-    String,
-    Vec<String>,
-    Vec<String>,
-    Vec<((String, String), (String, String), u8)>,
-    Vec<((String, String), (String, String), u8)>,
-);
-
-type ProtogalaxyKeyResultTestData = (
     String,
     Vec<String>,
     Vec<String>,
@@ -72,11 +62,10 @@ fn test_recursive_protogalaxy_recursive_verifier() {
         (
             (
                 target_sum_1,
-                gate_challenges,
                 circuit_size_1,
-                _,
                 num_public_inputs_1,
                 pub_inputs_offset_1,
+                gate_challenges_1,
                 alphas_1,
                 relation_parameters_1,
                 precomputed_commitments_1,
@@ -84,11 +73,10 @@ fn test_recursive_protogalaxy_recursive_verifier() {
             ),
             (
                 _,
-                _,
                 circuit_size_2,
-                _,
                 num_public_inputs_2,
                 pub_inputs_offset_2,
+                _,
                 alphas_2,
                 relation_parameters_2,
                 precomputed_commitments_2,
@@ -97,6 +85,9 @@ fn test_recursive_protogalaxy_recursive_verifier() {
         ),
         (
             target_sum_result,
+            _,
+            _,
+            _,
             gate_challenges_result,
             alphas_result,
             relation_parameters_result,
@@ -106,7 +97,7 @@ fn test_recursive_protogalaxy_recursive_verifier() {
     ): (
         Vec<String>,
         (ProtogalaxyKeyTestData, ProtogalaxyKeyTestData),
-        ProtogalaxyKeyResultTestData,
+        ProtogalaxyKeyTestData,
     ) = serde_json::from_str(include_str!("recursive_verifier_testdata")).unwrap();
 
     let fold_proof = to_field!(fold_proof, 1);
@@ -117,7 +108,7 @@ fn test_recursive_protogalaxy_recursive_verifier() {
         to_field!(pub_inputs_offset_1),
     );
     let target_sum_1 = to_field!(target_sum_1);
-    let gate_challenges_1 = to_field!(gate_challenges, 1);
+    let gate_challenges_1 = to_field!(gate_challenges_1, 1);
     let alphas_1 = to_field!(alphas_1, 1);
     let relation_parameters_1 = to_field!(relation_parameters_1, 1);
     let precomputed_commitments_1 = precomputed_commitments_1

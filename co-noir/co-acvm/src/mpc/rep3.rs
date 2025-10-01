@@ -2359,6 +2359,41 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
     }
 
+    fn other_pointshare_to_field_shares<
+        const LIMB_BITS: usize,
+        C: HonkCurve<F, ScalarField = F>,
+    >(
+        &mut self,
+        point: Self::OtherAcvmPoint<C>,
+    ) -> eyre::Result<(
+        Self::AcvmType,
+        Self::AcvmType,
+        Self::AcvmType,
+        Self::AcvmType,
+        Self::AcvmType,
+    )> {
+        assert_eq!(
+            LIMB_BITS, 136,
+            "Only LIMB_BITS = 136 is supported, i.e. two Bn254::Fr elements per Bn254::Fq element"
+        );
+
+        let (x, y, _) = self.other_pointshare_to_other_field_shares(point.clone())?;
+        let inf = self
+            .is_point_at_infinity_many_other(&[point])?
+            .pop()
+            .unwrap();
+        let mut x_limbs = self.other_field_shares_to_field_shares::<LIMB_BITS, C>(x)?;
+        let mut y_limbs = self.other_field_shares_to_field_shares::<LIMB_BITS, C>(y)?;
+
+        Ok((
+            x_limbs.pop().unwrap(),
+            x_limbs.pop().unwrap(),
+            y_limbs.pop().unwrap(),
+            y_limbs.pop().unwrap(),
+            inf,
+        ))
+    }
+
     // Similar to decompose_arithmetic, but works on the full AcvmType, which can either be public or shared
     fn decompose_acvm_type(
         &mut self,

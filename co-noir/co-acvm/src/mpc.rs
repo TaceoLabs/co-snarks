@@ -553,10 +553,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         Self::OtherAcvmType<C>,
     )>;
 
-    fn other_pointshare_to_field_shares<
-        const LIMB_BITS: usize,
-        C: HonkCurve<F, ScalarField = F>,
-    >(
+    fn other_pointshare_to_field_shares<const LIMB_BITS: usize, C: HonkCurve<F, ScalarField = F>>(
         &mut self,
         point: Self::OtherAcvmPoint<C>,
     ) -> eyre::Result<(
@@ -565,9 +562,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         Self::AcvmType,
         Self::AcvmType,
         Self::AcvmType,
-    )> {
-        unimplemented!()
-    }
+    )>;
 
     // TODO TACEO: Currently only supports LIMB_BITS = 136, i.e. two Bn254::Fr elements per Bn254::Fq element
     /// Converts a base field share into a vector of field shares, where the field shares
