@@ -67,7 +67,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         crs: &ProverCrs<P>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
     ) -> HonkProofResult<()> {
-        // polynomial.mask(&mut self.decider.rng); // TODO FLORIN
+        polynomial.mask(&mut self.decider.rng);
 
         // Commit to the polynomial
         let commitment = UltraHonkUtils::commit(polynomial.as_ref(), crs)?;
