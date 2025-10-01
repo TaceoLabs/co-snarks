@@ -466,8 +466,7 @@ impl<F: PrimeField> FieldCT<F> {
         let mut exponent_bits = vec![BoolCT::default(); 32];
         for i in 0..32 {
             let value_bit = driver
-                .integer_bitwise_and(exponent_value, P::ScalarField::ONE.into(), 32)
-                .unwrap();
+                .integer_bitwise_and(exponent_value, P::ScalarField::ONE.into(), 32)?;
             let bit =
                 BoolCT::from_witness_ct(WitnessCT::from_acvm_type(value_bit, builder), builder);
             exponent_bits[31 - i] = bit;
@@ -487,12 +486,10 @@ impl<F: PrimeField> FieldCT<F> {
         let mul_coefficient = self.sub(&FieldCT::from(F::one()), builder, driver);
         for bit in exponent_bits.iter().take(32) {
             accumulator
-                .mul_assign(&accumulator.clone(), builder, driver)
-                .unwrap();
+                .mul_assign(&accumulator.clone(), builder, driver)?;
             let bit = bit.to_field_ct(driver);
             let rhs = mul_coefficient
-                .madd(&bit, &FieldCT::from(F::one()), builder, driver)
-                .unwrap();
+                .madd(&bit, &FieldCT::from(F::one()), builder, driver)?;
             accumulator.mul_assign(&rhs, builder, driver)?;
         }
 

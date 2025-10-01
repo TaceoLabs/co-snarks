@@ -2604,7 +2604,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
     }
 
-    // TODO TACEO: Only supports LIMB_BITS = 136, i.e. two Bn254::Fr elements per Bn254::Fq element
+    // TACEO TODO: Only supports LIMB_BITS = 136, i.e. two Bn254::Fr elements per Bn254::Fq element
     /// Returns the point share with coordinates given as scalar field share limbs
     fn field_shares_to_native_pointshare<
         const LIMB_BITS: usize,

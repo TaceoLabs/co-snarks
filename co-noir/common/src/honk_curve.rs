@@ -214,6 +214,7 @@ impl HonkCurve<ark_bn254::Fr> for short_weierstrass::Projective<GrumpkinConfig> 
 const NUM_LIMB_BITS: u32 = 68;
 const TOTAL_BITS: u32 = 254;
 
+#[allow(rustdoc::invalid_html_tags)]
 /**
 * @brief Converts grumpkin::fr to 2 bb::fr elements
 * @details First, this function must return 2 bb::fr elements because the grumpkin::fr field has a larger modulus than

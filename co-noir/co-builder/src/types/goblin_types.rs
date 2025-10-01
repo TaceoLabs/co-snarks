@@ -124,8 +124,6 @@ impl<
 
         let result_value = driver.negate_point_other(element_value.clone())?;
 
-        // TODO TACEO: Assumes that the point is always secret shared, this issue will be solved once CoEccOpQueue is generic only on
-        // NoirWitnessExtensionProtocol
         let op_tuple = builder.queue_ecc_add_accum(element_value, driver)?;
 
         {
@@ -140,8 +138,6 @@ impl<
             y_hi.assert_equal(&self.y.limbs[1], builder, driver);
         }
 
-        // TODO TACEO: Assumes that the point is always secret shared, this issue will be solved once CoEccOpQueue is generic only on
-        // NoirWitnessExtensionProtocol
         let op_tuple_2 = builder.queue_ecc_add_accum(result_value, driver)?;
 
         let result = {
@@ -212,7 +208,7 @@ impl<
         builder: &mut MegaCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<GoblinElement<P, T>> {
-        // TODO TACEO: Assert?
+        // TACEO TODO: Assert?
         // Assert the accumulator is zero at the start
         // assert!(builder.ecc_op_queue.get_accumulator().is_zero_point());
 
@@ -222,7 +218,7 @@ impl<
             let point = &points[i];
             let scalar = &scalars[i];
 
-            // TODO TACEO: Origin Tags?
+            // TACEO TODO: Origin Tags?
 
             // Populate the goblin-style ecc op gates for the given mul inputs
             // If scalar is 1, there is no need to perform a mul
@@ -256,8 +252,8 @@ impl<
             // Note: These constraints do not assume or enforce that the coordinates of the original point have been
             // asserted to be in the field, only that they are less than the smallest power of 2 greater than the field
             // modulus (a la the bigfield(lo, hi) constructor with can_overflow == false).
-            // TODO TACEO: assert!(point.x.get_maximum_value() <= P::BaseField::default_maximum_remainder());
-            // TODO TACEO: assert!(point.y.get_maximum_value() <= P::BaseField::default_maximum_remainder());
+            // TACEO TODO: assert!(point.x.get_maximum_value() <= P::BaseField::default_maximum_remainder());
+            // TACEO TODO: assert!(point.y.get_maximum_value() <= P::BaseField::default_maximum_remainder());
             x_lo.assert_equal(&point.x.limbs[0], builder, driver);
             x_hi.assert_equal(&point.x.limbs[1], builder, driver);
             y_lo.assert_equal(&point.y.limbs[0], builder, driver);
@@ -268,7 +264,7 @@ impl<
                 let z_1 = FieldCT::from_witness_index(op_tuple.z_1);
                 let z_2 = FieldCT::from_witness_index(op_tuple.z_2);
                 let beta = FieldCT::from_witness(
-                    P::ScalarField::get_root_of_unity(3).unwrap().into(),
+                    P::ScalarField::get_root_of_unity(3).expect("P::ScalarField should have a cube root of unity").into(),
                     builder,
                 );
                 scalar.assert_equal(
@@ -307,7 +303,7 @@ impl<
             .is_zero(builder, driver)?;
         result.set_point_at_infinity(op2_is_infinity);
 
-        // TODO TACEO: Origin Tags?
+        // TACEO TODO: Origin Tags?
 
         Ok(result)
     }
