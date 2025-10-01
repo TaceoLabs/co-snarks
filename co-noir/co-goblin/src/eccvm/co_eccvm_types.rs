@@ -557,7 +557,8 @@ fn compute_transcript_rows<
     let mut transcript_msm_x_inverse_trace = vec![T::OtherAcvmType::default(); num_vm_entries];
     let mut msm_count_at_transition_inverse_trace = vec![C::BaseField::zero(); num_vm_entries];
 
-    let mut msm_accumulator_trace: Vec<_> = vec![T::NativeAcvmPoint::<C>::default(); num_vm_entries];
+    let mut msm_accumulator_trace: Vec<_> =
+        vec![T::NativeAcvmPoint::<C>::default(); num_vm_entries];
     let mut accumulator_trace: Vec<_> = vec![T::NativeAcvmPoint::<C>::default(); num_vm_entries];
     let mut intermediate_accumulator_trace: Vec<_> =
         vec![T::NativeAcvmPoint::<C>::default(); num_vm_entries];
