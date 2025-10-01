@@ -6,9 +6,9 @@ use crate::eccvm::{
 use crate::prelude::offset_generator;
 use ark_ec::AffineRepr;
 use ark_ec::CurveGroup;
+use ark_ff::One;
 use ark_ff::PrimeField;
 use ark_ff::Zero;
-use ark_ff::{One};
 use common::{
     honk_curve::HonkCurve, honk_proof::TranscriptFieldType, polynomials::polynomial::Polynomial,
     utils::Utils,

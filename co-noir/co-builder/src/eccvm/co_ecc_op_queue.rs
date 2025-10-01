@@ -425,7 +425,6 @@ impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: CurveGroup<BaseField: P
     }
 }
 
-
 pub trait EndomorphismParams {
     const ENDO_G1_LO: u64;
     const ENDO_G1_MID: u64;
@@ -900,6 +899,8 @@ impl<
 mod test {
     use std::thread;
 
+    use crate::eccvm::co_ecc_op_queue::Bn254ParamsFr;
+    use crate::eccvm::{co_ecc_op_queue::CoECCOpQueue, ecc_op_queue::EccOpCode};
     use ark_bn254::{Bn254, Fr, G1Affine, G1Projective};
     use ark_ec::pairing::Pairing;
     use co_acvm::{Rep3AcvmPoint, Rep3AcvmSolver, Rep3AcvmType, mpc::NoirWitnessExtensionProtocol};
@@ -910,8 +911,6 @@ mod test {
     };
     use mpc_net::local::LocalNetwork;
     use rand::thread_rng;
-    use crate::eccvm::{co_ecc_op_queue::CoECCOpQueue, ecc_op_queue::EccOpCode};
-    use crate::eccvm::co_ecc_op_queue::Bn254ParamsFr;
 
     type P = Bn254;
     type Bn254G1 = ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>;

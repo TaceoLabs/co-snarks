@@ -1,8 +1,14 @@
-use ark_ec::{AffineRepr, CurveGroup};
-use ark_ff::{BigInt, BigInteger, Field, PrimeField};
-use co_builder::{eccvm::{ecc_op_queue::{EccOpCode, UltraOp}, NUM_LIMB_BITS_IN_FIELD_SIMULATION}, transcript::TranscriptFieldType};
 use ark_ec::AdditiveGroup;
+use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::FftField;
+use ark_ff::{BigInt, BigInteger, Field, PrimeField};
+use co_builder::{
+    eccvm::{
+        NUM_LIMB_BITS_IN_FIELD_SIMULATION,
+        ecc_op_queue::{EccOpCode, UltraOp},
+    },
+    transcript::TranscriptFieldType,
+};
 
 // Reference implementations for CoEccOpQueue
 pub trait EndomorphismParams {
@@ -44,7 +50,6 @@ impl EndomorphismParams for Bn254ParamsFq {
     const ENDO_B2_MID: u64 = 0x0000000000000000;
 }
 
-
 /**
  * For short Weierstrass curves y^2 = x^3 + b mod r, if there exists a cube root of unity mod r,
  * we can take advantage of an enodmorphism to decompose a 254 bit scalar into 2 128 bit scalars.
@@ -71,14 +76,14 @@ impl EndomorphismParams for Bn254ParamsFq {
  **/
 pub fn split_into_endomorphism_scalars<
     P: CurveGroup<ScalarField = TranscriptFieldType, BaseField: PrimeField>,
-    Params: EndomorphismParams
+    Params: EndomorphismParams,
 >(
     scalar: P::ScalarField,
 ) -> (P::ScalarField, P::ScalarField) {
     let endo_g1 = BigInt([
         Params::ENDO_G1_LO,
         Params::ENDO_G1_MID,
-        Params::ENDO_G1_HI, 
+        Params::ENDO_G1_HI,
         0,
     ]);
 
@@ -115,7 +120,9 @@ pub fn split_into_endomorphism_scalars<
  * @param scalar
  * @return UltraOp
  */
-pub fn construct_and_populate_ultra_ops<P: CurveGroup<ScalarField = TranscriptFieldType, BaseField: PrimeField>>(
+pub fn construct_and_populate_ultra_ops<
+    P: CurveGroup<ScalarField = TranscriptFieldType, BaseField: PrimeField>,
+>(
     op_code: EccOpCode,
     point: P::Affine,
     scalar: P::ScalarField,
@@ -152,8 +159,7 @@ pub fn construct_and_populate_ultra_ops<P: CurveGroup<ScalarField = TranscriptFi
     let (z_1, z_2) = if converted_bigint.num_bits() <= 128 {
         (scalar, P::ScalarField::ZERO)
     } else {
-        let (z_1, z_2) =
-            split_into_endomorphism_scalars::<P, Bn254ParamsFr>(converted);
+        let (z_1, z_2) = split_into_endomorphism_scalars::<P, Bn254ParamsFr>(converted);
         (to_montgomery_form(z_1), to_montgomery_form(z_2))
     };
 
@@ -186,7 +192,7 @@ mod test {
     use co_builder::eccvm::ecc_op_queue::{EccOpCode, UltraOp};
     use mpc_core::gadgets::field_from_hex_string;
 
-    use crate::{construct_and_populate_ultra_ops, split_into_endomorphism_scalars, Bn254ParamsFr};
+    use crate::{Bn254ParamsFr, construct_and_populate_ultra_ops, split_into_endomorphism_scalars};
 
     type P = Bn254;
     type Bn254G1 = ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>;
@@ -220,11 +226,8 @@ mod test {
         )
         .unwrap();
 
-        let ultra_op: UltraOp<_> = construct_and_populate_ultra_ops::<Bn254G1>(
-            EccOpCode::default(),
-            point,
-            scalar,
-        );
+        let ultra_op: UltraOp<_> =
+            construct_and_populate_ultra_ops::<Bn254G1>(EccOpCode::default(), point, scalar);
 
         let expected_ultra_op = UltraOp {
             op_code: EccOpCode::default(),
