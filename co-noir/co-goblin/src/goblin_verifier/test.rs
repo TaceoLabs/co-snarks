@@ -17,7 +17,7 @@ use co_builder::{
         goblin_types::{GoblinElement, GoblinField},
     },
 };
-use common::{honk_proof::TranscriptFieldType, mpc::plain::PlainUltraHonkDriver};
+use common::honk_proof::TranscriptFieldType;
 use itertools::{Itertools, izip, multiunzip};
 use mpc_core::gadgets::field_from_hex_string;
 
@@ -25,7 +25,6 @@ use crate::goblin_verifier::merge_recursive_verifier::MergeRecursiveVerifier;
 
 type Bn254G1 = <Bn254 as Pairing>::G1;
 type T<'a> = PlainAcvmSolver<TranscriptFieldType>;
-type D = PlainUltraHonkDriver;
 type Fq = ark_bn254::Fq;
 type Fr = ark_bn254::Fr;
 type G1Affine = <Bn254 as Pairing>::G1Affine;
@@ -114,7 +113,7 @@ fn to_field_elements(test_data: EccOpQueueTestData<String, String>) -> EccOpQueu
 
 fn to_ecc_op_queues(
     test_data: EccOpQueueTestData<String, String>,
-) -> [CoECCOpQueue<D, Bn254G1>; 3] {
+) -> Vec<CoECCOpQueue<T<'static>, Bn254G1>> {
     let ((acc_x, acc_y, is_infinity), eccvm_ops_table, ultra_ops_table, eccvm_row_tracker) =
         to_field_elements(test_data);
 
@@ -126,7 +125,7 @@ fn to_ecc_op_queues(
 
     let accumulators = std::iter::repeat_n(accumulator, 3);
 
-    let eccvm_ops_tables: [Vec<Vec<CoVMOperation<D, Bn254G1>>>; 3] = eccvm_ops_table
+    let eccvm_ops_tables: [Vec<Vec<CoVMOperation<T, Bn254G1>>>; 3] = eccvm_ops_table
         .into_iter()
         .map(|row| {
             let tmp: Vec<_> = row
@@ -182,7 +181,7 @@ fn to_ecc_op_queues(
 
     let eccvm_ops_tables = eccvm_ops_tables.map(|table| CoEccvmOpsTable { table });
 
-    let ultra_ops_tables: [Vec<Vec<CoUltraOp<D, Bn254G1>>>; 3] = ultra_ops_table
+    let ultra_ops_tables: [Vec<Vec<CoUltraOp<T, Bn254G1>>>; 3] = ultra_ops_table
         .into_iter()
         .map(|row| {
             let tmp: Vec<_> = row
@@ -271,8 +270,6 @@ fn to_ecc_op_queues(
             },
         )
         .collect::<Vec<_>>()
-        .try_into()
-        .unwrap()
 }
 
 #[test]
@@ -300,10 +297,8 @@ fn test_recursive_merge_verifier() {
     let merge_proof: Vec<Fr> = to_field!(merge_proof, 1);
     let ecc_op_queues = to_ecc_op_queues(ecc_op_queue);
 
-    let net = ();
-    let mut state = ();
     let op_queue = ecc_op_queues.into_iter().next().unwrap();
-    let mut builder = MegaCircuitBuilder::<Bn254G1, T, D>::new(op_queue);
+    let mut builder = MegaCircuitBuilder::<Bn254G1, T>::new(op_queue);
     let mut driver = T::new();
 
     let pairing_point_0_limbs: ((Fr, Fr), (Fr, Fr)) = (
@@ -348,9 +343,11 @@ fn test_recursive_merge_verifier() {
         ]),
     );
 
-    builder.queue_ecc_no_op(&net, &mut state);
-    builder.queue_ecc_mul_accum_store(random_point.into(), random_scalar, &net, &mut state);
-    builder.queue_ecc_eq(&net, &mut state);
+    builder.queue_ecc_no_op(&mut driver).unwrap();
+    builder
+        .queue_ecc_mul_accum_store(random_point.into(), random_scalar, &mut driver)
+        .unwrap();
+    builder.queue_ecc_eq(&mut driver).unwrap();
 
     for &fr in &fold_proof {
         builder.add_public_variable(fr);
@@ -362,13 +359,7 @@ fn test_recursive_merge_verifier() {
     }
 
     let result = MergeRecursiveVerifier
-        .verify_proof::<_, _, _, _, Poseidon2Sponge>(
-            stdlib_merge_proof,
-            &mut builder,
-            &mut driver,
-            &net,
-            &mut state,
-        )
+        .verify_proof::<_, _, Poseidon2Sponge>(stdlib_merge_proof, &mut builder, &mut driver)
         .unwrap();
     assert_eq!(
         (

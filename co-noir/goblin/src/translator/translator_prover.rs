@@ -9,7 +9,6 @@ use co_builder::prelude::Polynomials;
 use common::compute_opening_proof;
 use common::crs::ProverCrs;
 use common::honk_curve::HonkCurve;
-use common::honk_proof::HonkProof;
 use common::honk_proof::HonkProofResult;
 use common::honk_proof::TranscriptFieldType;
 use common::polynomials::polynomial::Polynomial;
@@ -21,8 +20,8 @@ use num_bigint::BigUint;
 use std::iter;
 use ultrahonk::Utils as UltraHonkUtils;
 use ultrahonk::prelude::{
-    AllEntities, Decider, ProvingKey, SmallSubgroupIPAProver, SumcheckOutput, TranscriptHasher,
-    ZKSumcheckData,
+    AllEntities, Decider, HonkProof, ProvingKey, SmallSubgroupIPAProver, SumcheckOutput,
+    TranscriptHasher, ZKSumcheckData,
 };
 
 #[derive(Default)]

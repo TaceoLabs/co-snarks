@@ -2,24 +2,25 @@ use ark_bn254::Bn254;
 use ark_ff::Zero;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use co_builder::flavours::ultra_flavour::UltraFlavour;
-use co_noir::Bn254G1;
+use co_noir::{Bn254G1, SerializeF};
 use co_noir_types::{PubPrivate, Rep3SharedInput, Rep3Type};
 use co_ultrahonk::prelude::{
     ProvingKey, Rep3CoUltraHonk, ShamirCoUltraHonk, UltraHonk, VerifyingKey,
     VerifyingKeyBarretenberg,
 };
 use color_eyre::eyre::{self, Context, ContextCompat};
+use common::types::ZeroKnowledge;
 use common::{
     crs::parse::CrsParser,
     mpc::{rep3::Rep3UltraHonkDriver, shamir::ShamirUltraHonkDriver},
     transcript::Poseidon2Sponge,
 };
-use common::{honk_proof::HonkProof, serialize::Serialize as FieldSerialize, types::ZeroKnowledge};
 use figment::{
     Figment,
     providers::{Env, Format, Serialized, Toml},
 };
 use mpc_net::tcp::{NetworkConfig, TcpNetwork};
+use noir_types::HonkProof;
 use serde::{Deserialize, Serialize};
 use sha3::Keccak256;
 use std::{
@@ -1489,7 +1490,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             std::fs::File::create(public_input_filename).context("while creating output file")?,
         );
 
-        let public_inputs_u8 = FieldSerialize::to_buffer(&public_input, false);
+        let public_inputs_u8 = SerializeF::to_buffer(&public_input, false);
         out_file
             .write(public_inputs_u8.as_slice())
             .context("while writing proof to file")?;
@@ -1720,7 +1721,7 @@ fn run_build_and_generate_proof(
             std::fs::File::create(public_input_filename).context("while creating output file")?,
         );
 
-        let public_inputs_u8 = FieldSerialize::to_buffer(&public_input, false);
+        let public_inputs_u8 = SerializeF::to_buffer(&public_input, false);
         out_file
             .write(public_inputs_u8.as_slice())
             .context("while writing public input to file")?;
@@ -1895,7 +1896,7 @@ fn run_verify(config: VerifyConfig) -> color_eyre::Result<ExitCode> {
             .map(|e| ark_bn254::Fr::new(ark_ff::BigInt::from_str(&e).expect("valid field")))
             .collect()
     } else {
-        FieldSerialize::from_buffer(&public_inputs_u8, false)
+        SerializeF::from_buffer(&public_inputs_u8, false)
             .context("while deserializing public_inputs")?
     };
 

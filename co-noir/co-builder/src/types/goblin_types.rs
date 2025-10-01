@@ -13,9 +13,7 @@ use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use common::honk_curve::HonkCurve;
 use common::honk_proof::HonkProofResult;
 use common::honk_proof::TranscriptFieldType;
-use common::mpc::NoirUltraHonkProver;
 use itertools::Itertools;
-use mpc_net::Network;
 const LIMB_BITS: usize = 136; // Each GoblinField element is represented as 2 field elements of 136 bits each
 
 pub struct GoblinElement<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
@@ -47,7 +45,9 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> Clone for G
 impl<
     P: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
     T: NoirWitnessExtensionProtocol<TranscriptFieldType>,
-> Debug for GoblinElement<P, T> {
+> Debug for GoblinElement<P, T>
+{
+    // Prints like: { {x.limbs[0], x.limbs[1]}, {y.limbs[0], y.limbs[1]} }
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         panic!("no debug implementation for goblin elements");
     }
@@ -56,7 +56,8 @@ impl<
 impl<
     P: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
     T: NoirWitnessExtensionProtocol<TranscriptFieldType>,
-> Default for GoblinElement<P, T> {
+> Default for GoblinElement<P, T>
+{
     fn default() -> Self {
         panic!("no default implementation for goblin elements");
     }
@@ -83,10 +84,9 @@ impl GoblinField<TranscriptFieldType> {
     pub fn get_value<
         P: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
         T: NoirWitnessExtensionProtocol<TranscriptFieldType>,
-        D: NoirUltraHonkProver<P, ArithmeticShare = T::ArithmeticShare>,
     >(
         &self,
-        builder: &mut MegaCircuitBuilder<P, T, D>,
+        builder: &mut MegaCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> (T::AcvmType, T::AcvmType) {
         let x = self.limbs[0].get_value(builder, driver);
@@ -100,31 +100,36 @@ impl<
     T: NoirWitnessExtensionProtocol<TranscriptFieldType>,
 > GoblinElement<P, T>
 {
-
-    pub fn from_witness<
-        D: NoirUltraHonkProver<P, ArithmeticShare = T::ArithmeticShare>,
-    >(
-        point: T::AcvmNativePoint<P>,
-        builder: &mut MegaCircuitBuilder<P, T, D>,
+    pub fn from_witness(
+        point: T::OtherAcvmPoint<P>,
+        builder: &mut MegaCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> HonkProofResult<Self> {
         let (x0, x1, y0, y1, is_infinity) =
-            driver.native_pointshare_to_field_shares::<LIMB_BITS, _>(point)?;
+            driver.other_pointshare_to_field_shares::<LIMB_BITS, _>(point)?;
         let x_lo = FieldCT::from_witness(x0, builder);
         let x_hi = FieldCT::from_witness(x1, builder);
         let y_lo = FieldCT::from_witness(y0, builder);
         let y_hi = FieldCT::from_witness(y1, builder);
         Ok(Self {
-            x: GoblinField { limbs: [x_lo, x_hi] },
-            y: GoblinField { limbs: [y_lo, y_hi] },
-            is_infinity: BoolCT::from_witness_ct(WitnessCT::from_acvm_type(is_infinity, builder), builder)
+            x: GoblinField {
+                limbs: [x_lo, x_hi],
+            },
+            y: GoblinField {
+                limbs: [y_lo, y_hi],
+            },
+            is_infinity: BoolCT::from_witness_ct(
+                WitnessCT::from_acvm_type(is_infinity, builder),
+                builder,
+            ),
         })
     }
-    pub fn get_value<D: NoirUltraHonkProver<P, ArithmeticShare = T::ArithmeticShare>>(
+
+    pub fn get_value(
         &self,
-        builder: &mut MegaCircuitBuilder<P, T, D>,
+        builder: &mut MegaCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> T::AcvmNativePoint<P> {
+    ) -> T::OtherAcvmPoint<P> {
         let (x0, x1) = self.x.get_value(builder, driver);
         let (y0, y1) = self.y.get_value(builder, driver);
         let is_infinity = self.is_infinity.get_value(driver);
@@ -133,9 +138,7 @@ impl<
             .expect("Failed to convert field shares to native point share")
     }
 
-    pub fn point_at_infinity<D: NoirUltraHonkProver<P, ArithmeticShare = T::ArithmeticShare>>(
-        builder: &mut MegaCircuitBuilder<P, T, D>,
-    ) -> Self {
+    pub fn point_at_infinity(builder: &mut MegaCircuitBuilder<P, T>) -> Self {
         let zero = FieldCT::from_witness_index(builder.zero_idx);
 
         Self {
@@ -149,9 +152,7 @@ impl<
         }
     }
 
-    pub fn one<D: NoirUltraHonkProver<P, ArithmeticShare = T::ArithmeticShare>>(
-        builder: &mut MegaCircuitBuilder<P, T, D>,
-    ) -> Self {
+    pub fn one(builder: &mut MegaCircuitBuilder<P, T>) -> Self {
         let two = FieldCT::from_witness(P::ScalarField::from(2u64).into(), builder);
         let one = FieldCT::from_witness(P::ScalarField::ONE.into(), builder);
         let zero = FieldCT::from_witness_index(builder.zero_idx);
@@ -164,31 +165,18 @@ impl<
         }
     }
 
-    pub fn neg<
-        N: Network,
-        D: NoirUltraHonkProver<
-                P,
-                ArithmeticShare = T::ArithmeticShare,
-                PointShare = T::NativePointShare<P>,
-            >,
-    >(
+    pub fn neg(
         &self,
-        builder: &mut MegaCircuitBuilder<P, T, D>,
+        builder: &mut MegaCircuitBuilder<P, T>,
         driver: &mut T,
-        net: &N,
-        state: &mut D::State,
     ) -> eyre::Result<GoblinElement<P, T>> {
         let element_value = self.get_value(builder, driver);
 
-        let result_value = driver.negate_native_point(element_value.clone())?;
+        let result_value = driver.negate_point_other(element_value.clone())?;
 
         // TODO TACEO: Assumes that the point is always secret shared, this issue will be solved once CoEccOpQueue is generic only on
         // NoirWitnessExtensionProtocol
-        let op_tuple = builder.queue_ecc_add_accum(
-            T::get_shared_native_point(element_value).unwrap(),
-            net,
-            state,
-        );
+        let op_tuple = builder.queue_ecc_add_accum(element_value, driver)?;
 
         {
             let x_lo = FieldCT::from_witness_index(op_tuple.x_lo);
@@ -204,8 +192,7 @@ impl<
 
         // TODO TACEO: Assumes that the point is always secret shared, this issue will be solved once CoEccOpQueue is generic only on
         // NoirWitnessExtensionProtocol
-        let result_share = T::get_shared_native_point(result_value).unwrap();
-        let op_tuple_2 = builder.queue_ecc_add_accum(result_share, net, state);
+        let op_tuple_2 = builder.queue_ecc_add_accum(result_value, driver)?;
 
         let result = {
             let x_lo = FieldCT::from_witness_index(op_tuple_2.x_lo);
@@ -229,7 +216,7 @@ impl<
             result
         };
 
-        let ecc_op_tuple_3 = builder.queue_ecc_eq(net, state);
+        let ecc_op_tuple_3 = builder.queue_ecc_eq(driver)?;
         let point_at_infinity = GoblinElement::point_at_infinity(builder);
         {
             let x_lo = FieldCT::from_witness_index(ecc_op_tuple_3.x_lo);
@@ -269,20 +256,11 @@ impl<
      * @param max_num_bits
      * @return element<C, Fq, Fr, G>
      */
-    pub fn batch_mul<
-        N: Network,
-        D: NoirUltraHonkProver<
-                P,
-                ArithmeticShare = T::ArithmeticShare,
-                PointShare = T::NativePointShare<P>,
-            >,
-    >(
+    pub fn batch_mul(
         points: &[Self],
         scalars: &[FieldCT<P::ScalarField>],
-        builder: &mut MegaCircuitBuilder<P, T, D>,
+        builder: &mut MegaCircuitBuilder<P, T>,
         driver: &mut T,
-        net: &N,
-        state: &mut D::State,
     ) -> eyre::Result<GoblinElement<P, T>> {
         // TODO TACEO: Assert?
         // Assert the accumulator is zero at the start
@@ -303,17 +281,16 @@ impl<
 
             let point_value = point.get_value(builder, driver);
 
-            // TODO TACEO: Assumes that the point is always secret shared, this issue will be solved once CoEccOpQueue is generic only on
-            // NoirWitnessExtensionProtocol
-            let point_share = T::get_shared_native_point(point_value).unwrap();
-            let field_share = T::get_shared(&scalar.get_value(builder, driver)).unwrap();
-
             let (op_tuple, co_eccvm_op) = if scalar_is_constant_equal_one {
                 // if scalar is 1, there is no need to perform a mul
-                builder.queue_ecc_add_accum_no_store::<N>(point_share, net, state)
+                builder.queue_ecc_add_accum_no_store(point_value, driver)?
             } else {
                 // otherwise, perform a mul-then-accumulate
-                builder.queue_ecc_mul_accum_no_store(point_share, field_share, net, state)
+                builder.queue_ecc_mul_accum_no_store(
+                    point_value,
+                    scalar.get_value(builder, driver),
+                    driver,
+                )?
             };
 
             co_eccvm_ops.push(co_eccvm_op);
@@ -353,11 +330,11 @@ impl<
         }
 
         // Precompute is_zero flags and append the eccvm operations to the builder's eccvm op queue
-        precompute_mul_acc_flags(&mut co_eccvm_ops.iter_mut().collect_vec(), net, state);
+        precompute_mul_acc_flags(&mut co_eccvm_ops.iter_mut().collect_vec(), driver)?;
         builder.ecc_op_queue.append_eccvm_ops(co_eccvm_ops);
 
         // Populate equality gates based on the internal accumulator point
-        let op_tuple = builder.queue_ecc_eq(net, state);
+        let op_tuple = builder.queue_ecc_eq(driver)?;
 
         // Reconstruct the result of the batch mul using indices into the variables array
         let x_lo = FieldCT::from_witness_index(op_tuple.x_lo);

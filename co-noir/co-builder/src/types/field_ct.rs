@@ -589,10 +589,7 @@ impl<F: PrimeField> FieldCT<F> {
     }
 
     // this * to_mul + to_add
-    pub fn madd<
-        P: CurveGroup<ScalarField = F>,
-        T: NoirWitnessExtensionProtocol<P::ScalarField>,
-    >(
+    pub fn madd<P: CurveGroup<ScalarField = F>, T: NoirWitnessExtensionProtocol<P::ScalarField>>(
         &self,
         to_mul: &Self,
         to_add: &Self,
@@ -896,7 +893,7 @@ impl<F: PrimeField> FieldCT<F> {
         builder.create_poly_gate(&PolyTriple {
             a: self.witness_index,             // input value
             b: inverse.witness_index,          // inverse
-            c: builder.zero_idx(),               // no output
+            c: builder.zero_idx(),             // no output
             q_m: self.multiplicative_constant, // a * b * mul_const
             q_l: P::ScalarField::zero(),       // a * 0
             q_r: self.additive_constant,       // b * mul_const
@@ -1295,7 +1292,7 @@ impl<F: PrimeField> Default for FieldCT<F> {
     }
 }
 
-pub(crate) struct WitnessCT<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
+pub struct WitnessCT<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
     pub(crate) witness: T::AcvmType,
     pub(crate) witness_index: u32,
 }
@@ -1304,10 +1301,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> WitnessCT<P
     #[expect(dead_code)]
     const IS_CONSTANT: u32 = FieldCT::<P::ScalarField>::IS_CONSTANT;
 
-    pub(crate) fn from_acvm_type(
-        value: T::AcvmType,
-        builder: &mut impl GenericBuilder<P, T>,
-    ) -> Self {
+    pub fn from_acvm_type(value: T::AcvmType, builder: &mut impl GenericBuilder<P, T>) -> Self {
         let witness_index = builder.add_variable(value.to_owned());
         Self {
             witness: value,
@@ -1367,7 +1361,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T
     }
 
     // It is assumed here that the value of the WitnessCT is boolean (secret-shared)
-    pub(crate) fn from_witness_ct(
+    pub fn from_witness_ct(
         witness: WitnessCT<P, T>,
         builder: &mut impl GenericBuilder<P, T>,
     ) -> Self {

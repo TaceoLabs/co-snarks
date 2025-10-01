@@ -1,11 +1,12 @@
 use crate::{
     honk_curve::HonkCurve,
-    honk_proof::{HonkProof, HonkProofError, HonkProofResult, TranscriptFieldType},
+    honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
     sponge_hasher::{FieldHash, FieldSponge},
 };
 use ark_ec::AffineRepr;
 use ark_ff::{One, PrimeField, Zero};
 use mpc_core::gadgets::poseidon2::Poseidon2;
+use noir_types::HonkProof;
 use num_bigint::BigUint;
 use serde::Deserialize;
 use serde::Serialize;

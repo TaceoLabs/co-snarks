@@ -1,118 +1,155 @@
-use std::fmt::format;
-
-use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use co_builder::{flavours::mega_flavour::MegaFlavour, mega_builder::MegaCircuitBuilder, polynomials::polynomial_flavours::WitnessEntitiesFlavour, prover_flavour::ProverFlavour, transcript::{TranscriptCT, TranscriptFieldType, TranscriptHasherCT}, types::{field_ct::FieldCT, goblin_types::GoblinElement}};
-use co_ultrahonk::key;
-use common::{honk_curve::HonkCurve, honk_proof::HonkProofResult, mpc::NoirUltraHonkProver, transcript::{Transcript, TranscriptHasher}};
-use itertools::{izip, Itertools};
-use mpc_net::Network;
-use ark_ff::Field;
 use ark_ff::AdditiveGroup;
-use rayon::vec;
+use ark_ff::Field;
+use ark_ff::Zero;
+use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use co_builder::{
+    flavours::mega_flavour::MegaFlavour,
+    mega_builder::MegaCircuitBuilder,
+    polynomials::polynomial_flavours::{PrecomputedEntitiesFlavour, WitnessEntitiesFlavour},
+    prover_flavour::ProverFlavour,
+    transcript::{TranscriptCT, TranscriptFieldType, TranscriptHasherCT},
+    types::{field_ct::FieldCT, goblin_types::GoblinElement},
+};
+use common::{honk_curve::HonkCurve, honk_proof::HonkProofResult};
+use itertools::{Itertools, izip};
+use ultrahonk::prelude::Barycentric;
 
-use crate::{prover::co_protogalaxy_prover::{BATCHED_EXTENDED_LENGTH, CONST_PG_LOG_N, NUM_KEYS}, recursive_verifier::{oink_recursive_verifier::OinkRecursiveVerifier, recursive_decider_verification_key::RecursiveDeciderVerificationKey}};
+use crate::{
+    prover::co_protogalaxy_prover::{BATCHED_EXTENDED_LENGTH, CONST_PG_LOG_N, NUM_KEYS},
+    recursive_verifier::{
+        oink_recursive_verifier::OinkRecursiveVerifier,
+        recursive_decider_verification_key::RecursiveDeciderVerificationKey,
+    },
+};
 
 pub(crate) const COMBINER_LENGTH: usize = BATCHED_EXTENDED_LENGTH - NUM_KEYS;
-pub(crate) const NUM_FOLDED_ENTITIES: usize = MegaFlavour::WITNESS_ENTITIES_SIZE + MegaFlavour::PRECOMPUTED_ENTITIES_SIZE;
+pub(crate) const NUM_FOLDED_ENTITIES: usize =
+    MegaFlavour::WITNESS_ENTITIES_SIZE + MegaFlavour::PRECOMPUTED_ENTITIES_SIZE;
+pub struct ProtogalaxyRecursiveVerifier;
 
-// TODO CESAR: Remove this cumbersome Generic bounds once the eccvm is generic over the witness extension protocol
-pub struct ProtogalaxyRecursiveVerifier<'a,T, D, C, H, N>
-where
-
-        N: Network,
+impl ProtogalaxyRecursiveVerifier {
+    fn run_oink_verifier_on_one_incomplete_key<
         C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
         T: NoirWitnessExtensionProtocol<TranscriptFieldType>,
-        D: NoirUltraHonkProver<
-                C,
-                ArithmeticShare = T::ArithmeticShare,
-                PointShare = T::NativePointShare<C>,
-            >,
         H: TranscriptHasherCT<C>,
+    >(
+        verification_key: &mut RecursiveDeciderVerificationKey<C, T>,
+        transcript: &mut TranscriptCT<C, H>,
+        builder: &mut MegaCircuitBuilder<C, T>,
+        driver: &mut T,
+    ) -> HonkProofResult<()> {
+        OinkRecursiveVerifier::verify(verification_key, transcript, builder, driver)
+    }
 
-{
-    pub phantom: std::marker::PhantomData<&'a (T, D, C, H, N)>,
-}
-
-// TODO CESAR: Remove these cumbersome Generic bounds once the eccvm is generic over the witness extension protocol
-impl<'a, T, D, C, H, N> ProtogalaxyRecursiveVerifier<'a, T, D, C, H, N>
-where
-
-        N: Network,
+    fn run_oink_verifier_on_each_incomplete_key<
         C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
         T: NoirWitnessExtensionProtocol<TranscriptFieldType>,
-        D: NoirUltraHonkProver<
-                C,
-                ArithmeticShare = T::ArithmeticShare,
-                PointShare = T::NativePointShare<C  >,
-            >,
-        H: TranscriptHasherCT<C>
-{
-
-    fn run_oink_verifier_on_one_incomplete_key(&self, verification_key: &mut RecursiveDeciderVerificationKey<C, T>, transcript: &mut TranscriptCT<C, H>, builder: &mut MegaCircuitBuilder<C, T, D>, driver: &mut T) -> HonkProofResult<()> {
-        OinkRecursiveVerifier::<T, D, C, H, N>::verify(verification_key, transcript, builder, driver)
-    }
-
-    fn run_oink_verifier_on_each_incomplete_key(&self, keys_to_fold: &mut [RecursiveDeciderVerificationKey<C, T>; NUM_KEYS], transcript: &mut TranscriptCT<C, H>, builder: &mut MegaCircuitBuilder<C, T, D>, driver: &mut T) -> HonkProofResult<()> {
-        let key = &mut keys_to_fold[0];
-        if !key.is_accumulator {
-            self.run_oink_verifier_on_one_incomplete_key(key, transcript, builder, driver)?;
-            key.target_sum = FieldCT::from_witness(C::ScalarField::ZERO.into(), builder);
-            key.gate_challenges = vec![FieldCT::from_witness(C::ScalarField::ZERO.into(), builder); CONST_PG_LOG_N];
-        } 
-
-        for key in keys_to_fold.iter_mut().skip(1) {
-            self.run_oink_verifier_on_one_incomplete_key(key, transcript, builder, driver)?;
-        }
-        Ok(())
-    }
-
-    fn verify_folding_proofs(&self, keys_to_fold: &mut [RecursiveDeciderVerificationKey<C, T>; NUM_KEYS], proof: Vec<FieldCT<C::ScalarField>>, builder: &mut MegaCircuitBuilder<C, T, D>, driver: &mut T,
-    net: &N, state: &mut D::State
+        H: TranscriptHasherCT<C>,
+    >(
+        accumulator: &mut RecursiveDeciderVerificationKey<C, T>,
+        key_to_fold: &mut RecursiveDeciderVerificationKey<C, T>,
+        transcript: &mut TranscriptCT<C, H>,
+        builder: &mut MegaCircuitBuilder<C, T>,
+        driver: &mut T,
     ) -> HonkProofResult<()> {
+        if !accumulator.is_accumulator {
+            Self::run_oink_verifier_on_one_incomplete_key(
+                accumulator,
+                transcript,
+                builder,
+                driver,
+            )?;
+            accumulator.target_sum = FieldCT::from_witness(C::ScalarField::ZERO.into(), builder);
+            accumulator.gate_challenges =
+                vec![FieldCT::from_witness(C::ScalarField::ZERO.into(), builder); CONST_PG_LOG_N];
+        }
 
+        Self::run_oink_verifier_on_one_incomplete_key(key_to_fold, transcript, builder, driver)
+    }
+
+    pub fn verify_folding_proofs<
+        C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
+        T: NoirWitnessExtensionProtocol<TranscriptFieldType>,
+        H: TranscriptHasherCT<C>,
+    >(
+        accumulator: &mut RecursiveDeciderVerificationKey<C, T>,
+        key_to_fold: &mut RecursiveDeciderVerificationKey<C, T>,
+        proof: Vec<FieldCT<C::ScalarField>>,
+        builder: &mut MegaCircuitBuilder<C, T>,
+        driver: &mut T,
+    ) -> HonkProofResult<()> {
         let one = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
 
-        let mut transcript = TranscriptCT::new_verifier(proof);
-        self.run_oink_verifier_on_each_incomplete_key(keys_to_fold, &mut transcript, builder, driver)?;
-
-        let accumulator = &keys_to_fold[0];
+        let mut transcript = TranscriptCT::<C, H>::new_verifier(proof);
+        Self::run_oink_verifier_on_each_incomplete_key(
+            accumulator,
+            key_to_fold,
+            &mut transcript,
+            builder,
+            driver,
+        )?;
 
         let delta = transcript.get_challenge("delta".to_owned(), builder, driver)?;
-        
-        // TODO CESAR: Handle unwraps properly
-        let deltas = std::iter::successors(Some(delta), |x| Some(x.multiply(&x, builder, driver).unwrap()))
-            .take(CONST_PG_LOG_N)
-            .collect::<Vec<_>>();
+
+        let deltas = std::iter::successors(Some(delta), |x| {
+            Some(
+                x.multiply(&x, builder, driver)
+                    .expect("Failed to square delta"),
+            )
+        })
+        .take(CONST_PG_LOG_N)
+        .collect::<Vec<_>>();
 
         let perturbator_coeffs = (1..CONST_PG_LOG_N + 1)
-        //TODO CESAR: Handle unwraps properly
-            .map(|idx| transcript.get_challenge(format!("perturbator_{idx}"), builder, driver).unwrap())
+            .map(|idx| {
+                transcript
+                    .receive_fr_from_prover(format!("perturbator_{idx}"))
+                    .expect("Failed to get perturbator challenge")
+            })
             .collect::<Vec<_>>();
 
-        let perturbator_coeffs = [
-            vec![accumulator.target_sum.clone()],
-            perturbator_coeffs
-        ].concat();
+        let perturbator_coeffs =
+            [vec![accumulator.target_sum.clone()], perturbator_coeffs].concat();
 
-        let perturbator_challenge = transcript.get_challenge("perturbator_challenge".to_owned(), builder, driver)?;
+        let perturbator_challenge =
+            transcript.get_challenge("perturbator_challenge".to_owned(), builder, driver)?;
 
-        let perturbator_evaluation = self.evaluate_perturbator(&perturbator_challenge, &perturbator_coeffs, builder, driver)?;
+        let perturbator_evaluation = Self::evaluate_perturbator(
+            &perturbator_challenge,
+            &perturbator_coeffs,
+            builder,
+            driver,
+        )?;
 
-        // TODO CESAR: Handle unwraps properly
         let combiner_quotient_evals = (0..COMBINER_LENGTH)
-            .map(|idx| transcript.receive_fr_from_prover(format!("combiner_quotient_{idx}")).unwrap())
+            .map(|idx| {
+                transcript
+                    .receive_fr_from_prover(format!("combiner_quotient_{idx}"))
+                    .expect("Failed to receive combiner quotient")
+            })
             .collect::<Vec<_>>();
 
-        let combiner_challenge = transcript.get_challenge("combiner_quotient_challenge".to_owned(), builder, driver)?;
+        let combiner_challenge =
+            transcript.get_challenge("combiner_quotient_challenge".to_owned(), builder, driver)?;
 
-        // TODO CESAR: evaluate combiner polynomial at combiner_challenge
-        let combiner_quotient_at_challenge = todo!();
+        let combiner_quotient_at_challenge =
+            Self::evaluate_with_domain_start::<COMBINER_LENGTH, _, _>(
+                &combiner_quotient_evals
+                    .try_into()
+                    .expect("Failed to convert combiner quotient evals"),
+                combiner_challenge.clone(),
+                NUM_KEYS,
+                builder,
+                driver,
+            )?;
 
-        let vanishing_polynomial_at_challenge = combiner_challenge.sub(&one, builder, driver).multiply(&combiner_challenge, builder, driver)?;
-    
+        let vanishing_polynomial_at_challenge = combiner_challenge
+            .sub(&one, builder, driver)
+            .multiply(&combiner_challenge, builder, driver)?;
+
         let lagranges = [
             one.sub(&combiner_challenge, builder, driver),
-            combiner_challenge
+            combiner_challenge.clone(),
         ];
 
         /*
@@ -146,33 +183,43 @@ where
         equivalent to 9 ECCVM rows. Something to pay attention to
         */
 
-        let accumulator_commitments = Vec::new();
-        let instance_commitments = Vec::new();
+        let mut accumulator_commitments = Vec::new();
+        let mut instance_commitments = Vec::new();
 
-        // TODO CESAR: Logic for instance commitments
+        for (a, b) in izip!(
+            accumulator.precomputed_commitments.iter(),
+            key_to_fold.precomputed_commitments.iter()
+        ) {
+            accumulator_commitments.push(a.clone());
+            instance_commitments.push(b.clone());
+        }
 
-        let [key_1, key_2, ..] = keys_to_fold;
-        for (a, b) in izip!(key_1.witness_commitments.iter(), key_2.witness_commitments.iter()) {
+        for (a, b) in izip!(
+            accumulator.witness_commitments.iter(),
+            key_to_fold.witness_commitments.iter()
+        ) {
             accumulator_commitments.push(a.clone());
             instance_commitments.push(b.clone());
         }
 
         let mut output_commitments = Vec::new();
-        let lhs_scalar = one.sub(&combiner_challenge, builder, driver).get_value(builder, driver);
+        let lhs_scalar = one
+            .sub(&combiner_challenge, builder, driver)
+            .get_value(builder, driver);
         let rhs_scalar = combiner_challenge.get_value(builder, driver);
 
-        for (i, (accumulator_commitment, instance_commitment) )in izip!(accumulator_commitments.iter(), instance_commitments.iter()).enumerate() {
+        for (i, (accumulator_commitment, instance_commitment)) in
+            izip!(accumulator_commitments.iter(), instance_commitments.iter()).enumerate()
+        {
             let lhs = accumulator_commitment.get_value(builder, driver);
             let rhs = instance_commitment.get_value(builder, driver);
 
-            let points = driver.scale_native_point_many(
-                &[lhs, rhs],
-                &[lhs_scalar, rhs_scalar]
-            )?;
+            let lhs_scaled = driver.scale_point_other(lhs, lhs_scalar)?;
+            let rhs_scaled = driver.scale_point_other(rhs, rhs_scalar)?;
 
-            let output = driver.add_native_points(lhs, rhs)?;
+            let output = driver.add_points_other(lhs_scaled, rhs_scaled);
             let output_commitment = GoblinElement::from_witness(output, builder, driver)?;
-            
+
             output_commitments.push(output_commitment.clone());
 
             // Add the output commitment to the transcript to ensure that they can't be spoofed
@@ -182,44 +229,24 @@ where
             );
         }
 
-        let labels = (0..NUM_FOLDED_ENTITIES).map(|i| format!("accumulator_combination_challenges_{i}")).collect_vec();
+        let labels = (0..NUM_FOLDED_ENTITIES)
+            .map(|i| format!("accumulator_combination_challenges_{i}"))
+            .collect_vec();
         let scalars = transcript.get_challenges(&labels, builder, driver)?;
 
+        let accumulator_sum =
+            GoblinElement::batch_mul(&accumulator_commitments, &scalars, builder, driver)?;
 
-        let accumulator_sum = GoblinElement::batch_mul(
-            &accumulator_commitments,
-            &scalars,
-            builder,
-            driver,
-            net, 
-            state,
-        )?;
+        let instance_sum =
+            GoblinElement::batch_mul(&instance_commitments, &scalars, builder, driver)?;
 
-        let instance_sum = GoblinElement::batch_mul(
-            &instance_commitments,
-            &scalars,
-            builder,
-            driver,
-            net, 
-            state,
-        )?;
-
-        let output_sum = GoblinElement::batch_mul(
-            &output_commitments,
-            &scalars,
-            builder,
-            driver,
-            net, 
-            state,
-        )?;
+        let output_sum = GoblinElement::batch_mul(&output_commitments, &scalars, builder, driver)?;
 
         let folded_sum = GoblinElement::batch_mul(
             &[accumulator_sum, instance_sum],
             &lagranges,
             builder,
             driver,
-            net, 
-            state,
         )?;
 
         output_sum.x.limbs[0].assert_equal(&folded_sum.x.limbs[0], builder, driver);
@@ -229,23 +256,90 @@ where
 
         // Compute next folding parameters
         accumulator.is_accumulator = true;
-        accumulator.target_sum = lagranges[0].multiply(&perturbator_evaluation, builder, driver)?.add(
-            &vanishing_polynomial_at_challenge.multiply(&combiner_quotient_at_challenge, builder, driver)?,
-            builder, driver);
+        accumulator.target_sum = lagranges[0]
+            .multiply(&perturbator_evaluation, builder, driver)?
+            .add(
+                &vanishing_polynomial_at_challenge.multiply(
+                    &combiner_quotient_at_challenge,
+                    builder,
+                    driver,
+                )?,
+                builder,
+                driver,
+            );
 
-        accumulator.gate_challenges.iter_mut().zip(deltas).for_each(|(c, delta)| {
-            let tmp = perturbator_challenge.multiply(&delta, builder, driver).expect("Failed to multiply perturbator challenge and delta");
-            *c = c.add(&tmp, builder, driver);
+        // Update gate challenges
+        accumulator
+            .gate_challenges
+            .iter_mut()
+            .zip(deltas)
+            .for_each(|(c, delta)| {
+                let tmp = perturbator_challenge
+                    .multiply(&delta, builder, driver)
+                    .expect("Failed to multiply perturbator challenge and delta");
+                *c = c.add(&tmp, builder, driver);
+            });
+
+        // Update alphas
+        izip!(accumulator.alphas.iter_mut(), key_to_fold.alphas.iter()).for_each(
+            |(acc_alpha, alpha_2)| {
+                let a = acc_alpha
+                    .clone()
+                    .multiply(&lagranges[0], builder, driver)
+                    .expect("Failed to multiply acc_alpha and lagrange[0]");
+                let b = alpha_2
+                    .clone()
+                    .multiply(&lagranges[1], builder, driver)
+                    .expect("Failed to multiply alpha_2 and lagrange[1]");
+                *acc_alpha = a.add(&b, builder, driver);
+            },
+        );
+
+        // Update relation parameters
+        izip!(
+            accumulator.relation_parameters.get_params_as_mut(),
+            key_to_fold.relation_parameters.get_params().into_iter()
+        )
+        .for_each(|(acc_param, param_2)| {
+            let a = acc_param
+                .multiply(&lagranges[0], builder, driver)
+                .expect("Failed to multiply acc_param and lagrange[0]");
+            let b = param_2
+                .multiply(&lagranges[1], builder, driver)
+                .expect("Failed to multiply param_2 and lagrange[1]");
+            *acc_param = a.add(&b, builder, driver);
+        });
+
+        // Update precomputed commitments
+        izip!(
+            accumulator.precomputed_commitments.iter_mut(),
+            output_commitments.iter()
+        )
+        .for_each(|(acc_commitment, new_commitment)| {
+            *acc_commitment = new_commitment.clone();
+        });
+
+        // Update witness commitments
+        izip!(
+            accumulator.witness_commitments.iter_mut(),
+            output_commitments
+                .iter()
+                .skip(MegaFlavour::PRECOMPUTED_ENTITIES_SIZE)
+        )
+        .for_each(|(acc_commitment, new_commitment)| {
+            *acc_commitment = new_commitment.clone();
         });
 
         Ok(())
     }
 
-    fn evaluate_perturbator(
-        &self,
+    fn evaluate_perturbator<
+        C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
+        T: NoirWitnessExtensionProtocol<TranscriptFieldType>,
+    >(
         point: &FieldCT<C::ScalarField>,
         coeffs: &[FieldCT<C::ScalarField>],
-        builder: &mut MegaCircuitBuilder<C, T, D>,
+        builder: &mut MegaCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<FieldCT<C::ScalarField>> {
         let mut point_acc = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
@@ -256,5 +350,50 @@ where
         }
 
         Ok(result)
+    }
+
+    pub fn evaluate_with_domain_start<
+        const SIZE: usize,
+        C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
+        T: NoirWitnessExtensionProtocol<TranscriptFieldType>,
+    >(
+        evals: &[FieldCT<C::ScalarField>; SIZE],
+        u: FieldCT<C::ScalarField>,
+        domain_start: usize,
+        builder: &mut MegaCircuitBuilder<C, T>,
+        driver: &mut T,
+    ) -> HonkProofResult<FieldCT<C::ScalarField>> {
+        let one = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
+        let mut full_numerator_value = one.clone();
+        for i in domain_start..SIZE + domain_start {
+            let coeff = FieldCT::from_witness(C::ScalarField::from(i as u64).into(), builder);
+            let tmp = u.sub(&coeff, builder, driver);
+            full_numerator_value = full_numerator_value.multiply(&tmp, builder, driver)?;
+        }
+
+        let big_domain = (domain_start..domain_start + SIZE)
+            .map(|i| C::ScalarField::from(i as u64))
+            .collect::<Vec<_>>();
+        let lagrange_denominators = Barycentric::construct_lagrange_denominators(SIZE, &big_domain);
+
+        let mut denominator_inverses = vec![FieldCT::default(); SIZE];
+        for i in 0..SIZE {
+            let mut inv = FieldCT::from_witness(lagrange_denominators[i].into(), builder);
+            let tmp = u.sub(&big_domain[i].into(), builder, driver);
+            inv = inv.multiply(&tmp, builder, driver)?;
+            inv = one.divide(&inv, builder, driver)?;
+            denominator_inverses[i] = inv;
+        }
+
+        let mut result = FieldCT::from_witness(C::ScalarField::zero().into(), builder);
+        // Compute each term v_j / (d_j*(x-x_j)) of the sum
+        for (i, inverse) in denominator_inverses.iter().enumerate() {
+            let mut term = evals[i].clone();
+            term = term.multiply(inverse, builder, driver)?;
+            result = result.add(&term, builder, driver);
+        }
+
+        // Scale the sum by the value of B(x)
+        Ok(result.multiply(&full_numerator_value, builder, driver)?)
     }
 }

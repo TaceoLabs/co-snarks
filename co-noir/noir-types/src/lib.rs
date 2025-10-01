@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, io};
 
 use acir::FieldElement;
 use acir::native_types::{WitnessMap, WitnessStack};
-use ark_ff::Zero;
+use ark_ff::{Field, PrimeField, Zero};
 use co_noir_types::PubPrivate;
 use noirc_abi::errors::InputParserError;
 use noirc_abi::input_parser::json::JsonTypes;
@@ -11,6 +11,171 @@ use noirc_abi::input_parser::{Format, InputValue};
 pub use noirc_abi::Abi;
 use noirc_abi::MAIN_RETURN_NAME;
 pub use noirc_artifacts::program::ProgramArtifact;
+use num_bigint::BigUint;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HonkProof<F: PrimeField> {
+    proof: Vec<F>,
+}
+
+impl<F: PrimeField> HonkProof<F> {
+    pub fn new(proof: Vec<F>) -> Self {
+        Self { proof }
+    }
+
+    pub fn inner(self) -> Vec<F> {
+        self.proof
+    }
+
+    pub fn to_buffer(&self) -> Vec<u8> {
+        SerializeF::to_buffer(&self.proof, false)
+    }
+
+    pub fn from_buffer(buf: &[u8]) -> eyre::Result<Self> {
+        let res = SerializeF::from_buffer(buf, false)?;
+        Ok(Self::new(res))
+    }
+
+    pub fn separate_proof_and_public_inputs(self, num_public_inputs: usize) -> (Self, Vec<F>) {
+        let (public_inputs, proof) = self.proof.split_at(num_public_inputs);
+        (Self::new(proof.to_vec()), public_inputs.to_vec())
+    }
+
+    pub fn insert_public_inputs(self, public_inputs: Vec<F>) -> Self {
+        let mut proof = public_inputs;
+        proof.extend(self.proof.to_owned());
+        Self::new(proof)
+    }
+}
+
+pub struct SerializeF<F: Field> {
+    phantom: std::marker::PhantomData<F>,
+}
+
+impl<F: Field> SerializeF<F> {
+    const NUM_64_LIMBS: u32 = <F::BasePrimeField as PrimeField>::MODULUS_BIT_SIZE.div_ceil(64);
+    const FIELDSIZE_BYTES: u32 = Self::NUM_64_LIMBS * 8;
+    const VEC_LEN_BYTES: u32 = 4;
+
+    // TODO maybe change to impl Read?
+    pub fn from_buffer(buf: &[u8], size_included: bool) -> eyre::Result<Vec<F>> {
+        let size = buf.len();
+        let mut offset = 0;
+
+        // Check sizes
+        let num_elements = if size_included {
+            let num_elements =
+                (size - Self::VEC_LEN_BYTES as usize) / Self::FIELDSIZE_BYTES as usize;
+            if num_elements * Self::FIELDSIZE_BYTES as usize + Self::VEC_LEN_BYTES as usize != size
+            {
+                eyre::bail!("invalid length");
+            }
+
+            let read_num_elements = Self::read_u32(buf, &mut offset);
+            if read_num_elements != num_elements as u32 {
+                eyre::bail!("invalid length");
+            }
+            num_elements
+        } else {
+            let num_elements = size / Self::FIELDSIZE_BYTES as usize;
+            if num_elements * Self::FIELDSIZE_BYTES as usize != size {
+                eyre::bail!("invalid length");
+            }
+            num_elements
+        };
+
+        // Read data
+        let mut res = Vec::with_capacity(num_elements);
+        for _ in 0..num_elements {
+            res.push(Self::read_field_element(buf, &mut offset));
+        }
+        debug_assert_eq!(offset, size);
+        Ok(res)
+    }
+
+    pub(crate) fn field_size() -> usize {
+        Self::FIELDSIZE_BYTES as usize * F::extension_degree() as usize
+    }
+
+    pub fn to_buffer(buf: &[F], include_size: bool) -> Vec<u8> {
+        let total_size = buf.len() as u32 * Self::field_size() as u32
+            + if include_size { Self::VEC_LEN_BYTES } else { 0 };
+
+        let mut res = Vec::with_capacity(total_size as usize);
+        if include_size {
+            Self::write_u32(&mut res, buf.len() as u32);
+        }
+        for el in buf.iter().cloned() {
+            Self::write_field_element(&mut res, el);
+        }
+        debug_assert_eq!(res.len(), total_size as usize);
+        res
+    }
+
+    pub fn read_u32(buf: &[u8], offset: &mut usize) -> u32 {
+        const BYTES: usize = 4;
+        let res = u32::from_be_bytes(buf[*offset..*offset + BYTES].try_into().unwrap());
+        *offset += BYTES;
+        res
+    }
+
+    pub fn read_u64(buf: &[u8], offset: &mut usize) -> u64 {
+        const BYTES: usize = 8;
+        let res = u64::from_be_bytes(buf[*offset..*offset + BYTES].try_into().unwrap());
+        *offset += BYTES;
+        res
+    }
+
+    pub fn read_biguint(buf: &[u8], num_64_limbs: usize, offset: &mut usize) -> BigUint {
+        let mut bigint = BigUint::default();
+        for _ in 0..num_64_limbs {
+            let data = Self::read_u64(buf, offset);
+            bigint <<= 64;
+            bigint += data;
+        }
+        bigint
+    }
+
+    pub fn write_u32(buf: &mut Vec<u8>, val: u32) {
+        buf.extend(val.to_be_bytes());
+    }
+
+    pub fn write_u64(buf: &mut Vec<u8>, val: u64) {
+        buf.extend(val.to_be_bytes());
+    }
+
+    pub fn write_field_element(buf: &mut Vec<u8>, el: F) {
+        let prev_len = buf.len();
+        for el in el.to_base_prime_field_elements() {
+            let el = el.into_bigint(); // Gets rid of montgomery form
+
+            for data in el.as_ref().iter().rev().cloned() {
+                Self::write_u64(buf, data);
+            }
+
+            debug_assert_eq!(
+                buf.len() - prev_len,
+                Self::FIELDSIZE_BYTES as usize * F::extension_degree() as usize
+            );
+        }
+    }
+
+    pub fn read_field_element(buf: &[u8], offset: &mut usize) -> F {
+        let mut fields = Vec::with_capacity(F::extension_degree() as usize);
+
+        for _ in 0..F::extension_degree() {
+            let mut bigint: BigUint = Default::default();
+            for _ in 0..Self::NUM_64_LIMBS {
+                let data = Self::read_u64(buf, offset);
+                bigint <<= 64;
+                bigint += data;
+            }
+            fields.push(F::BasePrimeField::from(bigint));
+        }
+
+        F::from_base_prime_field_elems(fields).expect("Should work")
+    }
+}
 
 /// A map from of fields which correspond to some ABI to their values
 pub type Input = serde_json::Map<String, serde_json::Value>;

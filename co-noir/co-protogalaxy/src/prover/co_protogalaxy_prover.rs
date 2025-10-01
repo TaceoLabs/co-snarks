@@ -7,7 +7,6 @@ use co_builder::flavours::mega_flavour::MegaFlavour;
 use co_ultrahonk::prelude::ProvingKey;
 use common::crs::ProverCrs;
 use common::honk_curve::HonkCurve;
-use common::honk_proof::HonkProof;
 use common::honk_proof::{HonkProofResult, TranscriptFieldType};
 use common::polynomials::polynomial::Polynomial;
 use common::polynomials::shared_polynomial::SharedPolynomial;
@@ -19,6 +18,7 @@ use co_ultrahonk::co_oink::co_oink_prover::CoOink;
 use common::transcript::Transcript;
 use common::{mpc::NoirUltraHonkProver, transcript::TranscriptHasher};
 use mpc_net::Network;
+use ultrahonk::prelude::HonkProof;
 use ultrahonk::{
     plain_prover_flavour::UnivariateTrait,
     prelude::{GateSeparatorPolynomial, Univariate},
@@ -28,17 +28,17 @@ use crate::prover::co_protogalaxy_prover_internal::{
     compute_and_extend_alphas, compute_combiner, compute_combiner_quotient,
     compute_extended_relation_parameters, compute_perturbator,
 };
-pub(crate) const CONST_PG_LOG_N: usize = 20;
-pub(crate) const MAX_TOTAL_RELATION_LENGTH: usize = 11;
+pub const CONST_PG_LOG_N: usize = 20;
+pub const MAX_TOTAL_RELATION_LENGTH: usize = 11;
 
 // Mega Protogalaxy prover only supports 2 keys
-pub(crate) const NUM_KEYS: usize = 2;
+pub const NUM_KEYS: usize = 2;
 
-pub(crate) const BATCHED_EXTENDED_LENGTH: usize =
+pub const BATCHED_EXTENDED_LENGTH: usize =
     (MAX_TOTAL_RELATION_LENGTH - 1 + NUM_KEYS - 1) * (NUM_KEYS - 1) + 1;
 
-pub(crate) type OinkProverMemory<T, C> = co_ultrahonk::co_oink::types::ProverMemory<T, C>;
-pub(crate) type DeciderProverMemory<T, C> =
+pub type OinkProverMemory<T, C> = co_ultrahonk::co_oink::types::ProverMemory<T, C>;
+pub type DeciderProverMemory<T, C> =
     co_ultrahonk::co_decider::types::ProverMemory<T, C, MegaFlavour>;
 pub(crate) type PerturbatorRoundResult<F> = HonkProofResult<(Vec<F>, Polynomial<F>)>;
 pub(crate) type CombinerQuotientRoundResult<F> = HonkProofResult<(

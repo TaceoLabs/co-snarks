@@ -2,6 +2,7 @@ use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_brillig::mpc::BrilligDriver;
 use common::honk_curve::HonkCurve;
+use itertools::{Either, Itertools};
 use mpc_core::{
     gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations},
     lut::LookupTableProvider,
@@ -33,11 +34,27 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         + From<F>
         + PartialEq
         + Into<<Self::BrilligDriver as BrilligDriver<F>>::BrilligType>;
-    type AcvmPoint<C: CurveGroup<BaseField = F>>: Clone + fmt::Debug + fmt::Display + From<C>;
-    type AcvmNativePoint<C: CurveGroup<ScalarField = F>>: Clone
+    type AcvmPoint<C: CurveGroup<BaseField = F>>: Clone
         + fmt::Debug
         + fmt::Display
-        + From<C>;
+        + From<C>
+        + Default;
+
+    type OtherArithmeticShare<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>: Clone
+        + fmt::Debug;
+    type OtherAcvmType<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>: Clone
+        + Default
+        + Copy
+        + fmt::Debug
+        + fmt::Display
+        + From<Self::OtherArithmeticShare<C>>
+        + From<C::BaseField>
+        + PartialEq;
+    type OtherAcvmPoint<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>: Clone
+        + fmt::Debug
+        + fmt::Display
+        + From<C>
+        + Default;
 
     type BrilligDriver: BrilligDriver<F>;
 
@@ -444,7 +461,6 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         is_infinity: Self::AcvmType,
     ) -> eyre::Result<Self::AcvmPoint<C>>;
 
-    /// Translates a share of the point to a share of its coordinates
     fn pointshare_to_field_shares<C: CurveGroup<BaseField = F>>(
         &mut self,
         point: Self::AcvmPoint<C>,
@@ -514,27 +530,35 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         output_bitsize: usize,
     ) -> eyre::Result<Self::AcvmType>;
 
-    /// Returns the point share if the point is shared
-    fn get_shared_native_point<C: HonkCurve<F, ScalarField = F>>(
-        a: Self::AcvmNativePoint<C>,
-    ) -> Option<Self::NativePointShare<C>>;
-
-    /// Returns the point share with coordinates given as scalar field share limbs
-    fn field_shares_to_native_pointshare<const LIMB_BITS: usize, C: HonkCurve<F, ScalarField = F>>(
+    // Scales a point by a scalar. Both can either be public or shared
+    fn scale_point_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        x0: Self::AcvmType,
-        x1: Self::AcvmType,
-        y0: Self::AcvmType,
-        y1: Self::AcvmType,
-        is_infinity: Self::AcvmType,
-    ) -> eyre::Result<Self::AcvmNativePoint<C>>;
+        point: Self::OtherAcvmPoint<C>,
+        scalar: Self::AcvmType,
+    ) -> eyre::Result<Self::OtherAcvmPoint<C>>;
 
-    fn native_pointshare_to_field_shares<
+    // checks if lhs <= rhs. Returns 1 if true, 0 otherwise.
+    fn le(&mut self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> eyre::Result<Self::AcvmType>;
+
+    /// Given a pointshare, decomposes it into its x and y coordinates and the is_infinity flag, all as base field shares
+    #[expect(clippy::type_complexity)]
+    fn other_pointshare_to_other_field_shares<
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
+        &mut self,
+        point: Self::OtherAcvmPoint<C>,
+    ) -> eyre::Result<(
+        Self::OtherAcvmType<C>,
+        Self::OtherAcvmType<C>,
+        Self::OtherAcvmType<C>,
+    )>;
+
+    fn other_pointshare_to_field_shares<
         const LIMB_BITS: usize,
         C: HonkCurve<F, ScalarField = F>,
     >(
         &mut self,
-        point: Self::AcvmNativePoint<C>,
+        point: Self::OtherAcvmPoint<C>,
     ) -> eyre::Result<(
         Self::AcvmType,
         Self::AcvmType,
@@ -545,33 +569,148 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         unimplemented!()
     }
 
-    /// Negates the given native point, i.e., computes -P for a point P.
-    fn negate_native_point<C: HonkCurve<F, ScalarField = F>>(
+    // TODO TACEO: Currently only supports LIMB_BITS = 136, i.e. two Bn254::Fr elements per Bn254::Fq element
+    /// Converts a base field share into a vector of field shares, where the field shares
+    /// represent the limbs of the base field element. Each limb has at most LIMB_BITS bits.
+    fn other_field_shares_to_field_shares<
+        const LIMB_BITS: usize,
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
         &mut self,
-        point: Self::AcvmNativePoint<C>,
-    ) -> eyre::Result<Self::AcvmNativePoint<C>>;
+        input: Self::OtherAcvmType<C>,
+    ) -> eyre::Result<Vec<Self::AcvmType>>;
 
-    fn add_native_points<C: HonkCurve<F, ScalarField = F>>(
+    // Similar to decompose_arithmetic, but works on the full AcvmType, which can either be public or shared
+    fn decompose_acvm_type(
         &mut self,
-        point_1: Self::AcvmNativePoint<C>,
-        point_2: Self::AcvmNativePoint<C>,
-    ) -> eyre::Result<Self::AcvmNativePoint<C>> {
-        unimplemented!()
+        input: Self::AcvmType,
+        total_bit_size_per_field: usize,
+        decompose_bit_size: usize,
+    ) -> eyre::Result<Vec<Self::AcvmType>>;
+
+    // Opens a vector of ACVM-types, which can either be public or shared. The result is in the same order as the input.
+    #[expect(clippy::type_complexity)]
+    fn open_many_acvm_type(&mut self, a: &[Self::AcvmType]) -> eyre::Result<Vec<F>> {
+        let (indexed_shares, indexed_public): (
+            Vec<(usize, Self::ArithmeticShare)>,
+            Vec<(usize, F)>,
+        ) = a.iter().enumerate().partition_map(|(i, val)| {
+            if let Some(share) = Self::get_shared(val) {
+                Either::Left((i, share))
+            } else if let Some(pub_val) = Self::get_public(val) {
+                Either::Right((i, pub_val))
+            } else {
+                panic!("Value is neither shared nor public");
+            }
+        });
+
+        let (indices, shares): (Vec<usize>, Vec<Self::ArithmeticShare>) =
+            indexed_shares.into_iter().unzip();
+        let opened_shares = indices
+            .into_iter()
+            .zip(self.open_many(&shares)?)
+            .collect::<Vec<(usize, F)>>();
+
+        // Merge sort by index
+        Ok(opened_shares
+            .into_iter()
+            .chain(indexed_public)
+            .sorted_by_key(|(i, _)| *i)
+            .map(|(_, val)| val)
+            .collect::<Vec<F>>())
     }
 
-    fn scale_native_point<C: HonkCurve<F, ScalarField = F>>(
+    fn open_many_points_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        point: Self::AcvmNativePoint<C>,
-        scalar: Self::AcvmType,
-    ) -> eyre::Result<Self::AcvmNativePoint<C>> {
-        unimplemented!()
+        a: &[Self::OtherAcvmPoint<C>],
+    ) -> eyre::Result<Vec<C::Affine>>;
+
+    // For each value in a, checks whether the value is zero. The result is a vector of ACVM-types that are 1 if the value is zero and 0 otherwise.
+    fn is_zero_many(&mut self, a: &[Self::AcvmType]) -> eyre::Result<Vec<Self::AcvmType>>;
+
+    // For each point in a, checks whether the point is the point at infinity. The result is a vector of ACVM-types that are 1 if the point is at infinity and 0 otherwise.
+    fn is_point_at_infinity_many_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[Self::OtherAcvmPoint<C>],
+    ) -> eyre::Result<Vec<Self::AcvmType>>;
+
+    /// Multiply two slices of ACVM-types elementwise: \[c_i\] = \[secret_1_i\] * \[secret_2_i\].
+    fn mul_many(
+        &mut self,
+        secrets_1: &[Self::AcvmType],
+        secrets_2: &[Self::AcvmType],
+    ) -> eyre::Result<Vec<Self::AcvmType>>;
+
+    // Given two points, adds them together. Both can either be public or shared
+    fn add_points_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &self,
+        lhs: Self::OtherAcvmPoint<C>,
+        rhs: Self::OtherAcvmPoint<C>,
+    ) -> Self::OtherAcvmPoint<C>;
+
+    // Returns a vector where for each index i, the result[i] = if cond == 1 { truthy[i] } else { falsy[i] }.
+    fn cmux_many(
+        &mut self,
+        cond: Self::AcvmType,
+        truthy: &[Self::AcvmType],
+        falsy: &[Self::AcvmType],
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
+        if truthy.len() != falsy.len() {
+            eyre::bail!("Vectors must have the same length");
+        }
+        let t_minus_f = truthy
+            .iter()
+            .zip(falsy.iter())
+            .map(|(a, b)| self.sub(*a, *b))
+            .collect::<Vec<_>>();
+        let cond_t_minus_f = self.mul_many(t_minus_f.as_slice(), &vec![cond; t_minus_f.len()])?;
+        Ok(cond_t_minus_f
+            .iter()
+            .zip(falsy.iter())
+            .map(|(a, b)| self.add(*a, *b))
+            .collect())
     }
 
-    fn scale_native_point_many<C: HonkCurve<F, ScalarField = F>>(
+    fn msm_public_points<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        points: &[Self::AcvmNativePoint<C>],
-        scalars: &[Self::AcvmType],
-    ) -> eyre::Result<Vec<Self::AcvmNativePoint<C>>> {
-        unimplemented!()
+        points: &[C::Affine],
+        scalars: &[Self::ArithmeticShare],
+    ) -> Self::OtherAcvmPoint<C>;
+
+    fn eval_poly(&mut self, coeffs: &[Self::AcvmType], x: F) -> eyre::Result<Self::AcvmType> {
+        let x_pows = std::iter::successors(Some(F::ONE), |x_pow| Some(*x_pow * x))
+            .take(coeffs.len())
+            .collect::<Vec<_>>();
+        let result = self.mul_many(
+            &x_pows.into_iter().map(Into::into).collect::<Vec<_>>(),
+            coeffs,
+        )?;
+        let result = result
+            .into_iter()
+            .reduce(|a, b| self.add(a, b))
+            .unwrap_or_else(|| Self::public_zero());
+
+        Ok(result)
     }
+
+    /// Returns the point share if the point is shared
+    fn get_shared_point_other<C: HonkCurve<F, ScalarField = F>>(
+        a: Self::OtherAcvmPoint<C>,
+    ) -> Option<Self::OtherAcvmPoint<C>>;
+
+    /// Returns the point share with coordinates given as scalar field share limbs
+    fn field_shares_to_native_pointshare<const LIMB_BITS: usize, C: HonkCurve<F, ScalarField = F>>(
+        &mut self,
+        x0: Self::AcvmType,
+        x1: Self::AcvmType,
+        y0: Self::AcvmType,
+        y1: Self::AcvmType,
+        is_infinity: Self::AcvmType,
+    ) -> eyre::Result<Self::OtherAcvmPoint<C>>;
+
+    /// Negates the given point, i.e., computes -P for a point P.
+    fn negate_point_other<C: HonkCurve<F, ScalarField = F>>(
+        &mut self,
+        point: Self::OtherAcvmPoint<C>,
+    ) -> eyre::Result<Self::OtherAcvmPoint<C>>;
 }

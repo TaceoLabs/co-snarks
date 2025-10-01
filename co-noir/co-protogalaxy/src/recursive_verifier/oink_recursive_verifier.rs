@@ -1,114 +1,199 @@
-use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use co_builder::{flavours::mega_flavour::{MegaFlavour, MegaWitnessEntities}, mega_builder::MegaCircuitBuilder, polynomials::polynomial_flavours::WitnessEntitiesFlavour, prelude::WitnessEntities, transcript::{TranscriptCT, TranscriptHasherCT}, types::{field_ct::FieldCT, goblin_types::GoblinElement}};
-use co_ultrahonk::{co_decider::types::RelationParameters, prelude::MPCProverFlavour};
-use common::{honk_curve::HonkCurve, honk_proof::{HonkProofResult, TranscriptFieldType}, mpc::NoirUltraHonkProver};
-use mpc_net::Network;
 use ark_ff::{Field, PrimeField};
+use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use co_builder::{
+    flavours::mega_flavour::MegaFlavour,
+    mega_builder::MegaCircuitBuilder,
+    polynomials::polynomial_flavours::WitnessEntitiesFlavour,
+    prover_flavour::ProverFlavour,
+    transcript::{TranscriptCT, TranscriptHasherCT},
+    types::{field_ct::FieldCT, goblin_types::GoblinElement},
+};
+use co_ultrahonk::{co_decider::types::RelationParameters, prelude::MPCProverFlavour};
+use common::{
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProofResult, TranscriptFieldType},
+};
 
-use crate::recursive_verifier::{recursive_decider_verification_key::RecursiveDeciderVerificationKey, WitnessCommitments};
+use crate::recursive_verifier::{
+    WitnessCommitments, recursive_decider_verification_key::RecursiveDeciderVerificationKey,
+};
 
-pub struct OinkRecursiveVerifier<'a,T, D, C, H, N>
-where
+pub(crate) struct OinkRecursiveVerifier;
 
-        N: Network,
+impl OinkRecursiveVerifier {
+    pub fn verify<
         C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
-        T: NoirWitnessExtensionProtocol<TranscriptFieldType>,
-        D: NoirUltraHonkProver<
-                C,
-                ArithmeticShare = T::ArithmeticShare,
-                PointShare = T::NativePointShare<C>,
-            >,
+        T: NoirWitnessExtensionProtocol<C::ScalarField>,
         H: TranscriptHasherCT<C>,
-
-{
-    pub phantom: std::marker::PhantomData<&'a (T, D, C, H, N)>,
-}
-
-impl<'a, T, D, C, H, N> OinkRecursiveVerifier<'a, T, D, C, H, N>
-where
-
-        N: Network,
-        C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
-        T: NoirWitnessExtensionProtocol<TranscriptFieldType>,
-        D: NoirUltraHonkProver<
-                C,
-                ArithmeticShare = T::ArithmeticShare,
-                PointShare = T::NativePointShare<C  >,
-            >,
-        H: TranscriptHasherCT<C>
-{
-
-    pub fn verify(verification_key: &mut RecursiveDeciderVerificationKey<C, T>, transcript: &mut TranscriptCT<C, H>, builder: &mut MegaCircuitBuilder<C, T, D>, driver: &mut T) -> HonkProofResult<()> {
+    >(
+        verification_key: &mut RecursiveDeciderVerificationKey<C, T>,
+        transcript: &mut TranscriptCT<C, H>,
+        builder: &mut MegaCircuitBuilder<C, T>,
+        driver: &mut T,
+    ) -> HonkProofResult<()> {
         let circuit_size = verification_key.verification_key.circuit_size.clone();
         let public_input_size = verification_key.verification_key.num_public_inputs.clone();
         let pub_inputs_offset = verification_key.verification_key.pub_inputs_offset.clone();
 
-        transcript.add_element_frs_to_hash_buffer("circuit_size".to_owned(), &[circuit_size.clone()]);
-        transcript.add_element_frs_to_hash_buffer("public_input_size".to_owned(), &[public_input_size.clone()]);
-        transcript.add_element_frs_to_hash_buffer("pub_inputs_offset".to_owned(), &[pub_inputs_offset.clone()]);
+        transcript
+            .add_element_frs_to_hash_buffer("circuit_size".to_owned(), &[circuit_size.clone()]);
+        transcript.add_element_frs_to_hash_buffer(
+            "public_input_size".to_owned(),
+            &[public_input_size.clone()],
+        );
+        transcript.add_element_frs_to_hash_buffer(
+            "pub_inputs_offset".to_owned(),
+            &[pub_inputs_offset.clone()],
+        );
 
-        let public_input_size_bigint = T::get_public(&public_input_size.get_value(builder, driver)).expect("public_input_size should be public").into_bigint();
+        let public_input_size_bigint = T::get_public(&public_input_size.get_value(builder, driver))
+            .expect("public_input_size should be public")
+            .into_bigint();
 
         // Ensure that only the first limb is used
-        assert!(public_input_size_bigint.0[1..].iter().all(|&x| x == 0), "public_input_size should fit within a single limb");
+        assert!(
+            public_input_size_bigint.0[1..].iter().all(|&x| x == 0),
+            "public_input_size should fit within a single limb"
+        );
         let public_input_size_int = public_input_size_bigint.0[0] as usize;
 
-        let public_inputs = (0..public_input_size_int).map(|i| {
-            transcript.receive_fr_from_prover(format!("public_input_{}", i))
-        }).collect::<HonkProofResult<Vec<FieldCT<C::ScalarField>>>>()?;
+        let public_inputs = (0..public_input_size_int)
+            .map(|i| transcript.receive_fr_from_prover(format!("public_input_{}", i)))
+            .collect::<HonkProofResult<Vec<FieldCT<C::ScalarField>>>>()?;
 
-        let mut commitments = WitnessCommitments::<C, T>::new();
-    
+        let mut commitments = WitnessCommitments::<C, T>::from_elements(
+            (0..MegaFlavour::WITNESS_ENTITIES_SIZE)
+                .map(|_| GoblinElement::point_at_infinity(builder))
+                .collect::<Vec<_>>(),
+        );
+
         // Get commitments to first three wire polynomials
-        *commitments.w_l_mut() = transcript.receive_point_from_prover("W_L".to_owned(), builder, driver)?;
-        *commitments.w_r_mut() = transcript.receive_point_from_prover("W_R".to_owned(), builder, driver)?;
-        *commitments.w_o_mut() = transcript.receive_point_from_prover("W_O".to_owned(), builder, driver)?;
+        *commitments.w_l_mut() =
+            transcript.receive_point_from_prover("W_L".to_owned(), builder, driver)?;
+        *commitments.w_r_mut() =
+            transcript.receive_point_from_prover("W_R".to_owned(), builder, driver)?;
+        *commitments.w_o_mut() =
+            transcript.receive_point_from_prover("W_O".to_owned(), builder, driver)?;
 
         // Since we are in the Mega Flavor case, get commitments to ECC op wire polynomials and DataBus columns
-        *commitments.ecc_op_wire_1_mut() = transcript.receive_point_from_prover("ECC_OP_WIRE_1".to_owned(), builder, driver)?;
-        *commitments.ecc_op_wire_2_mut() = transcript.receive_point_from_prover("ECC_OP_WIRE_2".to_owned(), builder, driver)?;
-        *commitments.ecc_op_wire_3_mut() = transcript.receive_point_from_prover("ECC_OP_WIRE_3".to_owned(), builder, driver)?;
-        *commitments.ecc_op_wire_4_mut() = transcript.receive_point_from_prover("ECC_OP_WIRE_4".to_owned(), builder, driver)?;
+        *commitments.ecc_op_wire_1_mut() =
+            transcript.receive_point_from_prover("ECC_OP_WIRE_1".to_owned(), builder, driver)?;
+        *commitments.ecc_op_wire_2_mut() =
+            transcript.receive_point_from_prover("ECC_OP_WIRE_2".to_owned(), builder, driver)?;
+        *commitments.ecc_op_wire_3_mut() =
+            transcript.receive_point_from_prover("ECC_OP_WIRE_3".to_owned(), builder, driver)?;
+        *commitments.ecc_op_wire_4_mut() =
+            transcript.receive_point_from_prover("ECC_OP_WIRE_4".to_owned(), builder, driver)?;
 
         // Receive DataBus related polynomial commitments
-        *commitments.calldata_mut() = transcript.receive_point_from_prover("CALLDATA".to_owned(), builder, driver)?;
-        *commitments.calldata_read_counts_mut() = transcript.receive_point_from_prover("CALLDATA_READ_COUNTS".to_owned(), builder, driver)?;
-        *commitments.calldata_read_tags_mut() = transcript.receive_point_from_prover("CALLDATA_READ_TAGS".to_owned(), builder, driver)?;
+        *commitments.calldata_mut() =
+            transcript.receive_point_from_prover("CALLDATA".to_owned(), builder, driver)?;
+        *commitments.calldata_read_counts_mut() = transcript.receive_point_from_prover(
+            "CALLDATA_READ_COUNTS".to_owned(),
+            builder,
+            driver,
+        )?;
+        *commitments.calldata_read_tags_mut() = transcript.receive_point_from_prover(
+            "CALLDATA_READ_TAGS".to_owned(),
+            builder,
+            driver,
+        )?;
 
-        *commitments.secondary_calldata_mut() = transcript.receive_point_from_prover("SECONDARY_CALLDATA".to_owned(), builder, driver)?;
-        *commitments.secondary_calldata_read_counts_mut() = transcript.receive_point_from_prover("SECONDARY_CALLDATA_READ_COUNTS".to_owned(), builder, driver)?;
-        *commitments.secondary_calldata_read_tags_mut() = transcript.receive_point_from_prover("SECONDARY_CALLDATA_READ_TAGS".to_owned(), builder, driver)?;
+        *commitments.secondary_calldata_mut() = transcript.receive_point_from_prover(
+            "SECONDARY_CALLDATA".to_owned(),
+            builder,
+            driver,
+        )?;
+        *commitments.secondary_calldata_read_counts_mut() = transcript.receive_point_from_prover(
+            "SECONDARY_CALLDATA_READ_COUNTS".to_owned(),
+            builder,
+            driver,
+        )?;
+        *commitments.secondary_calldata_read_tags_mut() = transcript.receive_point_from_prover(
+            "SECONDARY_CALLDATA_READ_TAGS".to_owned(),
+            builder,
+            driver,
+        )?;
 
-        *commitments.return_data_mut() = transcript.receive_point_from_prover("RETURN_DATA".to_owned(), builder, driver)?;
-        *commitments.return_data_read_counts_mut() = transcript.receive_point_from_prover("RETURN_DATA_READ_COUNTS".to_owned(), builder, driver)?;
-        *commitments.return_data_read_tags_mut() = transcript.receive_point_from_prover("RETURN_DATA_READ_TAGS".to_owned(), builder, driver)?;
+        *commitments.return_data_mut() =
+            transcript.receive_point_from_prover("RETURN_DATA".to_owned(), builder, driver)?;
+        *commitments.return_data_read_counts_mut() = transcript.receive_point_from_prover(
+            "RETURN_DATA_READ_COUNTS".to_owned(),
+            builder,
+            driver,
+        )?;
+        *commitments.return_data_read_tags_mut() = transcript.receive_point_from_prover(
+            "RETURN_DATA_READ_TAGS".to_owned(),
+            builder,
+            driver,
+        )?;
 
         // Get eta challenges: used in RAM/ROM memory records and log derivative lookup argument
-        let [eta_1, eta_2, eta_3] = transcript.receive_n_from_prover("eta_challenges".to_owned(), 3)?.try_into().unwrap();
+        let [eta_1, eta_2, eta_3] = transcript
+            .get_challenges(
+                &["eta_1".to_owned(), "eta_2".to_owned(), "eta_3".to_owned()],
+                builder,
+                driver,
+            )?
+            .try_into()
+            .unwrap();
 
         // Get commitments to lookup argument polynomials and fourth wire
-        *commitments.lookup_read_counts_mut() = transcript.receive_point_from_prover("LOOKUP_READ_COUNTS".to_owned(), builder, driver)?;
-        *commitments.lookup_read_tags_mut() = transcript.receive_point_from_prover("LOOKUP_READ_TAGS".to_owned(), builder, driver)?;
-        *commitments.w_4_mut() = transcript.receive_point_from_prover("W_4".to_owned(), builder, driver)?;
+        *commitments.lookup_read_counts_mut() = transcript.receive_point_from_prover(
+            "LOOKUP_READ_COUNTS".to_owned(),
+            builder,
+            driver,
+        )?;
+        *commitments.lookup_read_tags_mut() =
+            transcript.receive_point_from_prover("LOOKUP_READ_TAGS".to_owned(), builder, driver)?;
+        *commitments.w_4_mut() =
+            transcript.receive_point_from_prover("W_4".to_owned(), builder, driver)?;
 
         // Get permutation challenges
-        let [beta, gamma] = transcript.receive_n_from_prover("permutation_challenges".to_owned(), 2)?.try_into().unwrap();
+        let [beta, gamma] = transcript
+            .get_challenges(&["beta".to_owned(), "gamma".to_owned()], builder, driver)?
+            .try_into()
+            .unwrap();
 
-        *commitments.lookup_inverses_mut() = transcript.receive_point_from_prover("LOOKUP_INVERSES".to_owned(), builder, driver)?;
+        *commitments.lookup_inverses_mut() =
+            transcript.receive_point_from_prover("LOOKUP_INVERSES".to_owned(), builder, driver)?;
 
         // Since we are in the Mega Flavor case, receive commitments to log-deriv inverses polynomials
-        *commitments.calldata_inverses_mut() = transcript.receive_point_from_prover("CALLDATA_INVERSES".to_owned(), builder, driver)?;
-        *commitments.secondary_calldata_inverses_mut() = transcript.receive_point_from_prover("SECONDARY_CALLDATA_INVERSES".to_owned(), builder, driver)?;
-        *commitments.return_data_inverses_mut() = transcript.receive_point_from_prover("RETURN_DATA_INVERSES".to_owned(), builder, driver)?;
+        *commitments.calldata_inverses_mut() = transcript.receive_point_from_prover(
+            "CALLDATA_INVERSES".to_owned(),
+            builder,
+            driver,
+        )?;
+        *commitments.secondary_calldata_inverses_mut() = transcript.receive_point_from_prover(
+            "SECONDARY_CALLDATA_INVERSES".to_owned(),
+            builder,
+            driver,
+        )?;
+        *commitments.return_data_inverses_mut() = transcript.receive_point_from_prover(
+            "RETURN_DATA_INVERSES".to_owned(),
+            builder,
+            driver,
+        )?;
 
         // TODO CESAR: Compute public input delta
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1283): Suspicious get_value().
-        let public_input_delta = Self::compute_public_input_delta(&public_inputs, &beta, &gamma, &circuit_size, &pub_inputs_offset, builder, driver)?;
+        let public_input_delta = Self::compute_public_input_delta(
+            &public_inputs,
+            &beta,
+            &gamma,
+            &circuit_size,
+            &pub_inputs_offset,
+            builder,
+            driver,
+        )?;
 
         // Get commitments to permutation and lookup grand products
-        *commitments.z_perm_mut() = transcript.receive_point_from_prover("Z_PERM".to_owned(), builder, driver)?;
+        *commitments.z_perm_mut() =
+            transcript.receive_point_from_prover("Z_PERM".to_owned(), builder, driver)?;
 
-        let labels = (0..MegaFlavour::NUM_ALPHAS).map(|i| format!("alpha_{}", i)).collect::<Vec<_>>();
+        let labels = (0..MegaFlavour::NUM_ALPHAS)
+            .map(|i| format!("alpha_{}", i))
+            .collect::<Vec<_>>();
         let alphas = transcript.get_challenges(&labels, builder, driver)?;
 
         verification_key.relation_parameters = RelationParameters {
@@ -124,9 +209,9 @@ where
         verification_key.public_inputs = public_inputs;
         verification_key.alphas = alphas;
         Ok(())
-   }
+    }
 
-   /**
+    /**
      * @brief Compute the correction term for the permutation argument.
      *
      * @tparam Field
@@ -138,9 +223,18 @@ where
      * of a leading zero row or Goblin style ECC op gates at the top of the execution trace.
      * @return Field Public input Δ
      */
-   fn compute_public_input_delta(public_inputs: &[FieldCT<C::ScalarField>], 
-    beta: &FieldCT<C::ScalarField>, gamma: &FieldCT<C::ScalarField>, domain_size: &FieldCT<C::ScalarField>, offset: &FieldCT<C::ScalarField>,
-    builder: &mut MegaCircuitBuilder<C, T, D>, driver: &mut T) -> HonkProofResult<FieldCT<C::ScalarField>> {
+    fn compute_public_input_delta<
+        C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
+        T: NoirWitnessExtensionProtocol<C::ScalarField>,
+    >(
+        public_inputs: &[FieldCT<C::ScalarField>],
+        beta: &FieldCT<C::ScalarField>,
+        gamma: &FieldCT<C::ScalarField>,
+        domain_size: &FieldCT<C::ScalarField>,
+        offset: &FieldCT<C::ScalarField>,
+        builder: &mut MegaCircuitBuilder<C, T>,
+        driver: &mut T,
+    ) -> HonkProofResult<FieldCT<C::ScalarField>> {
         let one = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
         let mut numerator = one.clone();
         let mut denominator = one.clone();
@@ -181,8 +275,13 @@ where
 
         for i in 0..public_inputs.len() {
             let input = &public_inputs[i];
-            numerator = numerator.multiply(&numerator_acc.add(input, builder, driver), builder, driver)?;
-            denominator = denominator.multiply(&denominator_acc.add(input, builder, driver), builder, driver)?;
+            numerator =
+                numerator.multiply(&numerator_acc.add(input, builder, driver), builder, driver)?;
+            denominator = denominator.multiply(
+                &denominator_acc.add(input, builder, driver),
+                builder,
+                driver,
+            )?;
 
             if i != public_inputs.len() - 1 {
                 numerator_acc = numerator_acc.add(beta, builder, driver);

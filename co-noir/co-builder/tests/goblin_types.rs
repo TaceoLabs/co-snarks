@@ -14,14 +14,13 @@ use co_builder::{
         goblin_types::{GoblinElement, GoblinField},
     },
 };
-use common::{honk_curve::bn254_fq_to_fr, mpc::plain::PlainUltraHonkDriver};
+use common::honk_curve::bn254_fq_to_fr;
 
 type Bn254G1 = <Bn254 as Pairing>::G1;
 type G1Affine = <Bn254 as Pairing>::G1Affine;
 type Fq = ark_bn254::Fq;
 type Fr = ark_bn254::Fr;
 type T<'a> = PlainAcvmSolver<Fr>;
-type D = PlainUltraHonkDriver;
 
 #[test]
 fn test_negate_goblin_element() {
@@ -44,7 +43,7 @@ fn test_negate_goblin_element() {
         Fr::ZERO
     };
 
-    let mut builder = MegaCircuitBuilder::<Bn254G1, T, D>::new(CoECCOpQueue::default());
+    let mut builder = MegaCircuitBuilder::<Bn254G1, T>::new(CoECCOpQueue::default());
     let mut driver = T::new();
     let goblin = GoblinElement::<Bn254G1, T>::new(
         GoblinField::new([
@@ -57,7 +56,7 @@ fn test_negate_goblin_element() {
         ]),
     );
 
-    let result = goblin.neg(&mut builder, &mut driver, &(), &mut ());
+    let result = goblin.neg(&mut builder, &mut driver);
 
     let GoblinElement {
         x: GoblinField {
@@ -116,7 +115,7 @@ fn test_batch_mul() {
     let ((x0_expected, x1_expected), (y0_expected, y1_expected)) =
         (bn254_fq_to_fr(&x), bn254_fq_to_fr(&y));
 
-    let mut builder = MegaCircuitBuilder::<Bn254G1, T, D>::new(CoECCOpQueue::default());
+    let mut builder = MegaCircuitBuilder::<Bn254G1, T>::new(CoECCOpQueue::default());
     let mut driver = T::new();
     let points = points
         .into_iter()
@@ -149,9 +148,7 @@ fn test_batch_mul() {
         .map(|scalar| FieldCT::from_witness(scalar, &mut builder))
         .collect::<Vec<_>>();
 
-    let result =
-        GoblinElement::batch_mul(&points, &scalars, &mut builder, &mut driver, &(), &mut ())
-            .unwrap();
+    let result = GoblinElement::batch_mul(&points, &scalars, &mut builder, &mut driver).unwrap();
 
     let GoblinElement {
         x: GoblinField {

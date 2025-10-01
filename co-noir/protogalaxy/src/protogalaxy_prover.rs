@@ -8,13 +8,13 @@ use co_builder::{flavours::mega_flavour::MegaFlavour, prelude::ProvingKey};
 
 use common::{
     honk_curve::HonkCurve,
-    honk_proof::{HonkProof, HonkProofResult, TranscriptFieldType},
+    honk_proof::{HonkProofResult, TranscriptFieldType},
     polynomials::polynomial::Polynomial,
     types::ZeroKnowledge,
 };
 use itertools::{Itertools, izip};
 
-use ultrahonk::decider::types::RelationParameters;
+use ultrahonk::{decider::types::RelationParameters, prelude::HonkProof};
 use ultrahonk::{
     oink::oink_prover::Oink,
     plain_prover_flavour::UnivariateTrait,

@@ -10,9 +10,7 @@ use co_builder::{
 use common::{
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
-    mpc::NoirUltraHonkProver,
 };
-use mpc_net::Network;
 
 pub struct OpeningClaim<
     P: HonkCurve<TranscriptFieldType>,
@@ -40,22 +38,14 @@ impl MergeRecursiveVerifier {
      * @return std::array<typename Flavor::GroupElement, 2> Inputs to final pairing
      */
     pub fn verify_proof<
-        N: Network,
         P: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
         T: NoirWitnessExtensionProtocol<TranscriptFieldType>,
-        D: NoirUltraHonkProver<
-                P,
-                ArithmeticShare = T::ArithmeticShare,
-                PointShare = T::NativePointShare<P>,
-            >,
         H: TranscriptHasherCT<P>,
     >(
         &self,
         proof: Vec<FieldCT<P::ScalarField>>,
-        builder: &mut MegaCircuitBuilder<P, T, D>,
+        builder: &mut MegaCircuitBuilder<P, T>,
         driver: &mut T,
-        net: &N,
-        state: &mut D::State,
     ) -> HonkProofResult<(GoblinElement<P, T>, GoblinElement<P, T>)> {
         // Transform proof into a stdlib object
         let mut transcript = TranscriptCT::<P, H>::new_verifier(proof);
@@ -148,21 +138,13 @@ impl MergeRecursiveVerifier {
             alpha_pow = alpha_pow.multiply(&alpha, builder, driver).unwrap();
         }
 
-        let batched_commitment =
-            GoblinElement::batch_mul(&commitments, &scalars, builder, driver, net, state)?;
+        let batched_commitment = GoblinElement::batch_mul(&commitments, &scalars, builder, driver)?;
         let opening_claim = OpeningClaim {
             commitment: batched_commitment,
             opening_pair: (kappa, batched_eval),
         };
 
-        MergeRecursiveVerifier::reduce_verify(
-            opening_claim,
-            &mut transcript,
-            builder,
-            driver,
-            net,
-            state,
-        )
+        MergeRecursiveVerifier::reduce_verify(opening_claim, &mut transcript, builder, driver)
     }
 
     /**
@@ -176,22 +158,14 @@ impl MergeRecursiveVerifier {
      *      - P₁ = - [W(x)]₁
      */
     fn reduce_verify<
-        N: Network,
         P: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
         T: NoirWitnessExtensionProtocol<TranscriptFieldType>,
-        D: NoirUltraHonkProver<
-                P,
-                ArithmeticShare = T::ArithmeticShare,
-                PointShare = T::NativePointShare<P>,
-            >,
         H: TranscriptHasherCT<P>,
     >(
         opening_claim: OpeningClaim<P, T>,
         transcript: &mut TranscriptCT<P, H>,
-        builder: &mut MegaCircuitBuilder<P, T, D>,
+        builder: &mut MegaCircuitBuilder<P, T>,
         driver: &mut T,
-        net: &N,
-        state: &mut D::State,
     ) -> HonkProofResult<(GoblinElement<P, T>, GoblinElement<P, T>)> {
         let quotient_commitment =
             transcript.receive_point_from_prover("KZG:W".to_owned(), builder, driver)?;
@@ -211,10 +185,10 @@ impl MergeRecursiveVerifier {
             opening_claim.opening_pair.1.neg(),
         ];
 
-        let p_0 = GoblinElement::batch_mul(&commitments, &scalars, builder, driver, net, state)?;
+        let p_0 = GoblinElement::batch_mul(&commitments, &scalars, builder, driver)?;
 
         // Construct P₁ = -[W(x)]
-        let p_1 = quotient_commitment.neg(builder, driver, net, state)?;
+        let p_1 = quotient_commitment.neg(builder, driver)?;
 
         Ok((p_0, p_1))
     }

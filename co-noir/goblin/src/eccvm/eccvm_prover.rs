@@ -12,7 +12,6 @@ use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::prelude::Polynomials;
-use common::honk_proof::HonkProof;
 
 use common::shplemini::OpeningPair;
 use common::shplemini::ShpleminiOpeningClaim;
@@ -29,6 +28,7 @@ use itertools::izip;
 use std::iter;
 use ultrahonk::NUM_SMALL_IPA_EVALUATIONS;
 use ultrahonk::prelude::AllEntities;
+use ultrahonk::prelude::HonkProof;
 use ultrahonk::{
     Utils as UltraHonkUtils,
     prelude::{Decider, ProvingKey, SmallSubgroupIPAProver, SumcheckOutput, ZKSumcheckData},
