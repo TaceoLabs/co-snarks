@@ -1,6 +1,6 @@
 use crate::eccvm::{
     NUM_LIMB_BITS_IN_FIELD_SIMULATION,
-    ecc_op_queue::{Bn254ParamsFr, EccOpCode, EccOpsTable, EccvmRowTracker, EndomorphismParams},
+    ecc_op_queue::{EccOpCode, EccOpsTable, EccvmRowTracker},
 };
 use ark_ec::CurveGroup;
 use ark_ff::BigInt;
@@ -423,6 +423,46 @@ impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: CurveGroup<BaseField: P
             self.append_eccvm_op(op);
         }
     }
+}
+
+
+pub trait EndomorphismParams {
+    const ENDO_G1_LO: u64;
+    const ENDO_G1_MID: u64;
+    const ENDO_G1_HI: u64;
+    const ENDO_G2_LO: u64;
+    const ENDO_G2_MID: u64;
+    const ENDO_MINUS_B1_LO: u64;
+    const ENDO_MINUS_B1_MID: u64;
+    const ENDO_B2_LO: u64;
+    const ENDO_B2_MID: u64;
+}
+
+pub struct Bn254ParamsFr;
+pub struct Bn254ParamsFq;
+
+impl EndomorphismParams for Bn254ParamsFr {
+    const ENDO_G1_LO: u64 = 0x7a7bd9d4391eb18d;
+    const ENDO_G1_MID: u64 = 0x4ccef014a773d2cf;
+    const ENDO_G1_HI: u64 = 0x0000000000000002;
+    const ENDO_G2_LO: u64 = 0xd91d232ec7e0b3d7;
+    const ENDO_G2_MID: u64 = 0x0000000000000002;
+    const ENDO_MINUS_B1_LO: u64 = 0x8211bbeb7d4f1128;
+    const ENDO_MINUS_B1_MID: u64 = 0x6f4d8248eeb859fc;
+    const ENDO_B2_LO: u64 = 0x89d3256894d213e3;
+    const ENDO_B2_MID: u64 = 0x0000000000000000;
+}
+
+impl EndomorphismParams for Bn254ParamsFq {
+    const ENDO_G1_LO: u64 = 0x7a7bd9d4391eb18d;
+    const ENDO_G1_MID: u64 = 0x4ccef014a773d2cf;
+    const ENDO_G1_HI: u64 = 0x0000000000000002;
+    const ENDO_G2_LO: u64 = 0xd91d232ec7e0b3d2;
+    const ENDO_G2_MID: u64 = 0x0000000000000002;
+    const ENDO_MINUS_B1_LO: u64 = 0x8211bbeb7d4f1129;
+    const ENDO_MINUS_B1_MID: u64 = 0x6f4d8248eeb859fc;
+    const ENDO_B2_LO: u64 = 0x89d3256894d213e2;
+    const ENDO_B2_MID: u64 = 0x0000000000000000;
 }
 
 impl<
@@ -870,9 +910,8 @@ mod test {
     };
     use mpc_net::local::LocalNetwork;
     use rand::thread_rng;
-
-    use crate::eccvm::ecc_op_queue::Bn254ParamsFr;
     use crate::eccvm::{co_ecc_op_queue::CoECCOpQueue, ecc_op_queue::EccOpCode};
+    use crate::eccvm::co_ecc_op_queue::Bn254ParamsFr;
 
     type P = Bn254;
     type Bn254G1 = ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>;

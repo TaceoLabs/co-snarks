@@ -168,8 +168,8 @@ where
 
         let all_polys = curr_subtable
             .into_iter()
-            .chain(prev_table.into_iter())
-            .chain(curr_table.into_iter())
+            .chain(prev_table)
+            .chain(curr_table)
             .collect_vec();
 
         self.compute_opening_claims(&all_polys, "all_polys", &mut opening_claims, kappa, driver)?;
@@ -217,7 +217,7 @@ where
         driver: &mut T,
     ) -> eyre::Result<()> {
         // Compute the evaluations of the shared polynomials at kappa
-        let shared_evals = (0..NUM_WIRES)
+        let shared_evals = (0..3 * NUM_WIRES)
             .map(|i| driver.eval_poly(&polynomials[i], kappa))
             .collect::<Result<Vec<_>, _>>()?;
 

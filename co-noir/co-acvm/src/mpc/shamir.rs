@@ -1125,6 +1125,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
         ShamirAcvmPoint::Shared(pointshare::msm_public_points(points, scalars))
     }
 
+    #[expect(clippy::type_complexity)]
     fn open_many_points_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         a: &[Self::OtherAcvmPoint<C>],
