@@ -346,7 +346,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         lut: &<Self::Lookup as LookupTableProvider<F>>::LutType,
     ) -> eyre::Result<Self::AcvmType>;
 
-    /// Wrapper around reading from a LUT by the [`Self::AcvmPoint`] as this can either be a
+    /// Wrapper around reading from a LUT by the [`Self::NativeAcvmPoint`] as this can either be a
     /// public or a shared read.
     fn read_lut_by_acvm_point<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
