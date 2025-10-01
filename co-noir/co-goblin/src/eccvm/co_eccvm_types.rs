@@ -2,6 +2,7 @@ use crate::eccvm::co_ecc_op_queue::{CoECCOpQueue, CoVMOperation};
 use crate::eccvm::co_ecc_op_queue::{CoScalarMul, MSMRow};
 use ark_ec::AffineRepr;
 use ark_ec::CurveGroup;
+use ark_ec::PrimeGroup;
 use ark_ff::One;
 use ark_ff::PrimeField;
 use ark_ff::Zero;
@@ -205,15 +206,16 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> SharedTransla
     }
 }
 
-struct CoVMState<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseField>> {
-    pc: T::AcvmType,
+struct CoVMState<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::ScalarField>>
+{
+    pc: T::OtherAcvmType<C>,
     count: u32,
-    accumulator: T::AcvmPoint<C>,
-    msm_accumulator: T::AcvmPoint<C>,
-    is_accumulator_empty: T::AcvmType, //bool
+    accumulator: T::OtherAcvmPoint<C>,
+    msm_accumulator: T::OtherAcvmPoint<C>,
+    is_accumulator_empty: T::OtherAcvmType<C>, //bool
 }
 
-impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseField>> Clone
+impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::ScalarField>> Clone
     for CoVMState<C, T>
 {
     fn clone(&self) -> Self {
@@ -226,16 +228,16 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseF
         }
     }
 }
-impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseField>>
+impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::ScalarField>>
     CoVMState<C, T>
 {
     fn new() -> Self {
         Self {
-            pc: T::AcvmType::default(),
+            pc: T::OtherAcvmType::default(),
             count: 0,
-            accumulator: T::AcvmPoint::<C>::default(),
-            msm_accumulator: T::AcvmPoint::from(offset_generator_scaled::<C>().into()),
-            is_accumulator_empty: T::AcvmType::from(C::BaseField::one()), //true
+            accumulator: T::OtherAcvmPoint::default(),
+            msm_accumulator: T::OtherAcvmPoint::from(offset_generator_scaled::<C>().into()),
+            is_accumulator_empty: T::OtherAcvmType::from(C::BaseField::one()), //true
         }
     }
 
@@ -249,8 +251,8 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseF
         let p = entry.base_point;
         let r = state.msm_accumulator;
 
-        let mul = driver.scale_point_by_scalar(p, entry.mul_scalar_full)?;
-        updated_state.msm_accumulator = driver.add_points(r, mul);
+        let mul = driver.scale_point_by_scalar_other(p, entry.mul_scalar_full)?;
+        updated_state.msm_accumulator = driver.add_points_other(r, mul);
 
         Ok(())
     }
@@ -259,13 +261,13 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseF
         entry: &CoVMOperation<T, C>,
         updated_state: &mut CoVMState<C, T>,
         old_state: &CoVMState<C, T>,
-        is_accumulator_empty: T::OtherAcvmType<C>,
+        is_accumulator_empty: T::AcvmType,
         driver: &mut T,
     ) -> eyre::Result<()> {
         //TACEO TODO batch this with other process_ calls
-        let mul = driver.mul_with_public_other(-C::ScalarField::one(), is_accumulator_empty);
-        let inv = driver.add_other(T::OtherAcvmType::from(C::ScalarField::one()), mul);
-        let other = driver.add_points(old_state.accumulator, entry.base_point);
+        let mul = driver.mul_with_public(-C::ScalarField::one(), is_accumulator_empty);
+        let inv = driver.add(T::AcvmType::from(C::ScalarField::one()), mul);
+        let other = driver.add_points_other(old_state.accumulator, entry.base_point);
         updated_state.accumulator =
             driver.msm(&[entry.base_point, other], &[is_accumulator_empty, inv])?;
 
@@ -278,30 +280,30 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseF
         row: &mut CoTranscriptRow<C, T>,
         updated_state: &mut CoVMState<C, T>,
         old_state: &CoVMState<C, T>,
-        is_accumulator_empty: T::OtherAcvmType<C>,
+        is_accumulator_empty: T::AcvmType,
         driver: &mut T,
     ) -> eyre::Result<()> {
         //TACEO TODO batch this with other process_ calls
-        let mul = driver.mul_with_public_other(-C::ScalarField::one(), is_accumulator_empty);
-        let inv = driver.add_other(T::OtherAcvmType::from(C::ScalarField::one()), mul);
-        let if_value = driver.add_points(
+        let mul = driver.mul_with_public(-C::ScalarField::one(), is_accumulator_empty);
+        let inv = driver.add(T::AcvmType::from(C::ScalarField::one()), mul);
+        let if_value = driver.add_points_other(
             updated_state.msm_accumulator,
-            T::AcvmPoint::from(-offset_generator_scaled::<C>().into()),
+            T::OtherAcvmPoint::from(-offset_generator_scaled::<C>().into()),
         );
 
         let mut else_value =
-            driver.add_points(old_state.accumulator, updated_state.msm_accumulator);
-        else_value = driver.add_points(
+            driver.add_points_other(old_state.accumulator, updated_state.msm_accumulator);
+        else_value = driver.add_points_other(
             else_value,
-            T::AcvmPoint::from(-offset_generator_scaled::<C>().into()),
+            T::OtherAcvmPoint::from(-offset_generator_scaled::<C>().into()),
         );
 
         updated_state.accumulator =
             driver.msm(&[if_value, else_value], &[is_accumulator_empty, inv])?;
 
-        let msm_output = driver.sub_points(
+        let msm_output = driver.add_points_other(
             updated_state.msm_accumulator,
-            T::AcvmPoint::from(offset_generator_scaled::<C>().into()),
+            T::OtherAcvmPoint::from(-offset_generator_scaled::<C>().into()),
         );
         //TACEO TODO: Batch this is_zero check with others
         let is_zero = driver.point_is_zero_many(&[msm_output, updated_state.accumulator])?;
@@ -335,12 +337,12 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseF
             (state.count + num_muls == 0) && entry.op_code.mul && next_not_msm;
         //TACEO TODO Batch this function
         let base_point = if !base_point_infinity {
-            let res = driver.pointshare_to_field_shares(entry.base_point)?;
+            let res = driver.other_pointshare_to_other_field_share(&entry.base_point)?;
             (res.0, res.1)
         } else {
             (
-                T::AcvmType::from(C::BaseField::zero()),
-                T::AcvmType::from(C::BaseField::zero()),
+                T::OtherAcvmType::from(C::BaseField::zero()),
+                T::OtherAcvmType::from(C::BaseField::zero()),
             )
         };
         row.base_x = if (entry.op_code.add || entry.op_code.mul || entry.op_code.eq)
@@ -348,14 +350,14 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseF
         {
             base_point.0
         } else {
-            T::AcvmType::default()
+            T::OtherAcvmType::default()
         };
         row.base_y = if (entry.op_code.add || entry.op_code.mul || entry.op_code.eq)
             && !base_point_infinity
         {
             base_point.1
         } else {
-            T::AcvmType::default()
+            T::OtherAcvmType::default()
         };
         row.base_infinity = if entry.op_code.add || entry.op_code.mul || entry.op_code.eq {
             base_point_infinity
@@ -365,12 +367,12 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseF
         row.z1 = if entry.op_code.mul {
             entry.z1
         } else {
-            T::AcvmType::default()
+            T::OtherAcvmType::default()
         };
         row.z2 = if entry.op_code.mul {
             entry.z2
         } else {
-            T::AcvmType::default()
+            T::OtherAcvmType::default()
         };
         row.z1_zero = entry.z1_is_zero;
         row.z2_zero = entry.z2_is_zero;
@@ -383,29 +385,29 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseF
 #[expect(clippy::too_many_arguments)]
 fn compute_inverse_trace_coordinates<
     C: HonkCurve<TranscriptFieldType>,
-    T: NoirWitnessExtensionProtocol<C::BaseField>,
+    T: NoirWitnessExtensionProtocol<C::ScalarField>,
 >(
     msm_transition: bool,
     row: &CoTranscriptRow<C, T>,
-    intermediate_accumulator_trace_x: T::AcvmType,
-    intermediate_accumulator_trace_y: T::AcvmType,
-    transcript_msm_x_inverse_trace: &mut T::AcvmType,
-    msm_accumulator_trace_x: T::AcvmType,
-    msm_accumulator_trace_infinity: T::AcvmType,
-    accumulator_trace_x: T::AcvmType,
-    accumulator_trace_y: T::AcvmType,
-    inverse_trace_x: &mut T::AcvmType,
-    inverse_trace_y: &mut T::AcvmType,
+    intermediate_accumulator_trace_x: T::OtherAcvmType<C>,
+    intermediate_accumulator_trace_y: T::OtherAcvmType<C>,
+    transcript_msm_x_inverse_trace: &mut T::OtherAcvmType<C>,
+    msm_accumulator_trace_x: T::OtherAcvmType<C>,
+    msm_accumulator_trace_infinity: T::OtherAcvmType<C>,
+    accumulator_trace_x: T::OtherAcvmType<C>,
+    accumulator_trace_y: T::OtherAcvmType<C>,
+    inverse_trace_x: &mut T::OtherAcvmType<C>,
+    inverse_trace_y: &mut T::OtherAcvmType<C>,
     driver: &mut T,
 ) -> eyre::Result<()> {
     let row_msm_infinity = row.transcript_msm_infinity;
     //TACEO TODO: Batch this cmuxes
-    let mut first_cmux = driver.cmux(
+    let mut first_cmux = driver.cmux_other(
         msm_accumulator_trace_infinity,
-        T::AcvmType::from(C::get_bb_infinity_default()),
+        T::OtherAcvmType::<C>::from(C::get_bb_infinity_default()),
         msm_accumulator_trace_x,
     )?;
-    driver.add_assign_with_public(
+    driver.add_assign_with_public_other(
         -offset_generator_scaled::<C>()
             .x()
             .expect("Offset generator x-coordinate should not be zero"),
@@ -413,7 +415,7 @@ fn compute_inverse_trace_coordinates<
     );
 
     *transcript_msm_x_inverse_trace =
-        driver.cmux(row_msm_infinity, T::AcvmType::default(), first_cmux)?;
+        driver.cmux_other(row_msm_infinity, T::OtherAcvmType::default(), first_cmux)?;
 
     let (lhsx, lhsy) = if msm_transition {
         (
@@ -426,95 +428,95 @@ fn compute_inverse_trace_coordinates<
 
     let (rhsx, rhsy) = (accumulator_trace_x, accumulator_trace_y);
 
-    *inverse_trace_x = driver.sub(lhsx, rhsx);
-    *inverse_trace_y = driver.sub(lhsy, rhsy);
+    *inverse_trace_x = driver.sub_other(lhsx, rhsx);
+    *inverse_trace_y = driver.sub_other(lhsy, rhsy);
 
     Ok(())
 }
 
 struct CoTranscriptRow<
     C: HonkCurve<TranscriptFieldType>,
-    T: NoirWitnessExtensionProtocol<C::BaseField>,
+    T: NoirWitnessExtensionProtocol<C::ScalarField>,
 > {
-    transcript_msm_infinity: T::AcvmType, //bool
-    accumulator_empty: T::AcvmType,
+    transcript_msm_infinity: T::OtherAcvmType<C>, //bool
+    accumulator_empty: T::OtherAcvmType<C>,
     q_add: bool,
     q_mul: bool,
     q_eq: bool,
     q_reset_accumulator: bool,
     msm_transition: bool,
-    pc: T::AcvmType,
+    pc: T::OtherAcvmType<C>,
     msm_count: u32,
     msm_count_zero_at_transition: bool,
-    base_x: T::AcvmType,
-    base_y: T::AcvmType,
+    base_x: T::OtherAcvmType<C>,
+    base_y: T::OtherAcvmType<C>,
     base_infinity: bool,
-    z1: T::AcvmType,
-    z2: T::AcvmType,
+    z1: T::OtherAcvmType<C>,
+    z2: T::OtherAcvmType<C>,
     z1_zero: bool,
     z2_zero: bool,
     opcode: u32,
 
-    accumulator_x: T::AcvmType,
-    accumulator_y: T::AcvmType,
-    msm_output_x: T::AcvmType,
-    msm_output_y: T::AcvmType,
-    transcript_msm_intermediate_x: T::AcvmType,
-    transcript_msm_intermediate_y: T::AcvmType,
+    accumulator_x: T::OtherAcvmType<C>,
+    accumulator_y: T::OtherAcvmType<C>,
+    msm_output_x: T::OtherAcvmType<C>,
+    msm_output_y: T::OtherAcvmType<C>,
+    transcript_msm_intermediate_x: T::OtherAcvmType<C>,
+    transcript_msm_intermediate_y: T::OtherAcvmType<C>,
 
-    transcript_add_x_equal: T::AcvmType,
-    transcript_add_y_equal: T::AcvmType,
+    transcript_add_x_equal: T::OtherAcvmType<C>,
+    transcript_add_y_equal: T::OtherAcvmType<C>,
 
-    base_x_inverse: T::AcvmType,
-    base_y_inverse: T::AcvmType,
-    transcript_add_lambda: T::AcvmType,
-    transcript_msm_x_inverse: T::AcvmType,
-    msm_count_at_transition_inverse: T::AcvmType,
+    base_x_inverse: T::OtherAcvmType<C>,
+    base_y_inverse: T::OtherAcvmType<C>,
+    transcript_add_lambda: T::OtherAcvmType<C>,
+    transcript_msm_x_inverse: T::OtherAcvmType<C>,
+    msm_count_at_transition_inverse: T::OtherAcvmType<C>,
 }
 
-impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseField>> Default
+impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::ScalarField>> Default
     for CoTranscriptRow<C, T>
 {
     fn default() -> Self {
         Self {
-            transcript_msm_infinity: T::AcvmType::default(),
-            accumulator_empty: T::AcvmType::default(),
+            transcript_msm_infinity: T::OtherAcvmType::default(),
+            accumulator_empty: T::OtherAcvmType::default(),
             q_add: false,
             q_mul: false,
             q_eq: false,
             q_reset_accumulator: false,
             msm_transition: false,
-            pc: T::AcvmType::default(),
+            pc: T::OtherAcvmType::default(),
             msm_count: 0,
             msm_count_zero_at_transition: false,
-            base_x: T::AcvmType::default(),
-            base_y: T::AcvmType::default(),
+            base_x: T::OtherAcvmType::default(),
+            base_y: T::OtherAcvmType::default(),
             base_infinity: false,
-            z1: T::AcvmType::default(),
-            z2: T::AcvmType::default(),
+            z1: T::OtherAcvmType::default(),
+            z2: T::OtherAcvmType::default(),
             z1_zero: false,
             z2_zero: false,
             opcode: 0,
-            accumulator_x: T::AcvmType::default(),
-            accumulator_y: T::AcvmType::default(),
-            msm_output_x: T::AcvmType::default(),
-            msm_output_y: T::AcvmType::default(),
-            transcript_msm_intermediate_x: T::AcvmType::default(),
-            transcript_msm_intermediate_y: T::AcvmType::default(),
-            transcript_add_x_equal: T::AcvmType::default(),
-            transcript_add_y_equal: T::AcvmType::default(),
-            base_x_inverse: T::AcvmType::default(),
-            base_y_inverse: T::AcvmType::default(),
-            transcript_add_lambda: T::AcvmType::default(),
-            transcript_msm_x_inverse: T::AcvmType::default(),
-            msm_count_at_transition_inverse: T::AcvmType::default(),
+            accumulator_x: T::OtherAcvmType::default(),
+            accumulator_y: T::OtherAcvmType::default(),
+            msm_output_x: T::OtherAcvmType::default(),
+            msm_output_y: T::OtherAcvmType::default(),
+            transcript_msm_intermediate_x: T::OtherAcvmType::default(),
+            transcript_msm_intermediate_y: T::OtherAcvmType::default(),
+            transcript_add_x_equal: T::OtherAcvmType::default(),
+            transcript_add_y_equal: T::OtherAcvmType::default(),
+            base_x_inverse: T::OtherAcvmType::default(),
+            base_y_inverse: T::OtherAcvmType::default(),
+            transcript_add_lambda: T::OtherAcvmType::default(),
+            transcript_msm_x_inverse: T::OtherAcvmType::default(),
+            msm_count_at_transition_inverse: T::OtherAcvmType::default(),
         }
     }
 }
 
 fn finalize_transcript<
     C: HonkCurve<TranscriptFieldType>,
-    T: NoirWitnessExtensionProtocol<C::BaseField>,
+    T: NoirWitnessExtensionProtocol<C::ScalarField>,
 >(
     updated_state: &CoVMState<C, T>,
     driver: &mut T,
@@ -524,7 +526,8 @@ where
 {
     let mut final_row = CoTranscriptRow::<C, T>::default();
 
-    let (result_x, result_y, _) = driver.pointshare_to_field_shares(updated_state.accumulator)?; //TACEO TODO: Maybe we can batch this somewhere?
+    let (result_x, result_y, _) =
+        driver.other_pointshare_to_other_field_share(&updated_state.accumulator)?; //TACEO TODO: Maybe we can batch this somewhere?
 
     final_row.accumulator_x = result_x;
     final_row.accumulator_y = result_y;
@@ -536,7 +539,7 @@ where
 
 fn compute_transcript_rows<
     C: HonkCurve<TranscriptFieldType>,
-    T: NoirWitnessExtensionProtocol<C::BaseField>,
+    T: NoirWitnessExtensionProtocol<C::ScalarField>,
 >(
     vm_operations: &[CoVMOperation<T, C>],
     total_number_of_muls: u32,
@@ -549,22 +552,22 @@ fn compute_transcript_rows<
 
     // These vectors track quantities that we need to invert.
     // We fill these vectors and then perform batch inversions to amortize the cost of FF inverts
-    let mut inverse_trace_x = vec![T::AcvmType::default(); num_vm_entries];
-    let mut inverse_trace_y = vec![T::AcvmType::default(); num_vm_entries];
-    let mut transcript_msm_x_inverse_trace = vec![T::AcvmType::default(); num_vm_entries];
+    let mut inverse_trace_x = vec![T::OtherAcvmType::default(); num_vm_entries];
+    let mut inverse_trace_y = vec![T::OtherAcvmType::default(); num_vm_entries];
+    let mut transcript_msm_x_inverse_trace = vec![T::OtherAcvmType::default(); num_vm_entries];
     let mut msm_count_at_transition_inverse_trace = vec![C::BaseField::zero(); num_vm_entries];
 
-    let mut msm_accumulator_trace: Vec<_> = vec![T::AcvmPoint::<C>::default(); num_vm_entries];
-    let mut accumulator_trace: Vec<_> = vec![T::AcvmPoint::<C>::default(); num_vm_entries];
+    let mut msm_accumulator_trace: Vec<_> = vec![T::OtherAcvmPoint::<C>::default(); num_vm_entries];
+    let mut accumulator_trace: Vec<_> = vec![T::OtherAcvmPoint::<C>::default(); num_vm_entries];
     let mut intermediate_accumulator_trace: Vec<_> =
-        vec![T::AcvmPoint::<C>::default(); num_vm_entries];
+        vec![T::OtherAcvmPoint::<C>::default(); num_vm_entries];
 
     let mut state = CoVMState::<C, T> {
-        pc: T::AcvmType::from(C::BaseField::from(total_number_of_muls)),
+        pc: T::OtherAcvmType::from(C::BaseField::from(total_number_of_muls)),
         count: 0,
-        accumulator: T::AcvmPoint::<C>::default(),
-        msm_accumulator: T::AcvmPoint::<C>::from(offset_generator_scaled::<C>().into()),
-        is_accumulator_empty: T::AcvmType::from(C::BaseField::one()), //true
+        accumulator: T::OtherAcvmPoint::<C>::default(),
+        msm_accumulator: T::OtherAcvmPoint::<C>::from(offset_generator_scaled::<C>().into()),
+        is_accumulator_empty: T::OtherAcvmType::from(C::BaseField::one()), //true
     };
 
     let mut updated_state = CoVMState::<C, T>::new();
@@ -593,13 +596,16 @@ fn compute_transcript_rows<
                 num_muls = 0;
             }
         }
-        updated_state.pc = driver.sub(state.pc, T::AcvmType::from(C::BaseField::from(num_muls)));
+        updated_state.pc = driver.sub_other(
+            state.pc,
+            T::OtherAcvmType::from(C::BaseField::from(num_muls)),
+        );
 
         if entry.op_code.reset {
-            updated_state.is_accumulator_empty = T::AcvmType::from(C::BaseField::one()); //true;
-            updated_state.accumulator = T::AcvmPoint::<C>::default();
+            updated_state.is_accumulator_empty = T::OtherAcvmType::from(C::BaseField::one()); //true;
+            updated_state.accumulator = T::OtherAcvmPoint::<C>::default();
             updated_state.msm_accumulator =
-                T::AcvmPoint::from(offset_generator_scaled::<C>().into());
+                T::OtherAcvmPoint::from(offset_generator_scaled::<C>().into());
         }
 
         let last_row = i == (num_vm_entries - 1);
@@ -633,8 +639,8 @@ fn compute_transcript_rows<
                 driver,
             )?;
         } else {
-            msm_accumulator_trace[i] = T::AcvmPoint::<C>::default();
-            intermediate_accumulator_trace[i] = T::AcvmPoint::<C>::default();
+            msm_accumulator_trace[i] = T::OtherAcvmPoint::<C>::default();
+            intermediate_accumulator_trace[i] = T::OtherAcvmPoint::<C>::default();
         }
 
         if is_add {
@@ -669,21 +675,21 @@ fn compute_transcript_rows<
         msm_accumulator_trace[i] = if msm_transition {
             updated_state.msm_accumulator
         } else {
-            T::AcvmPoint::<C>::default()
+            T::OtherAcvmPoint::<C>::default()
         };
         intermediate_accumulator_trace[i] = if msm_transition {
-            driver.add_points(
+            driver.add_points_other(
                 updated_state.msm_accumulator,
-                T::AcvmPoint::from(-offset_generator_scaled::<C>().into()),
+                T::OtherAcvmPoint::from(-offset_generator_scaled::<C>().into()),
             )
         } else {
-            T::AcvmPoint::<C>::default()
+            T::OtherAcvmPoint::<C>::default()
         };
 
         state = updated_state.clone();
 
         if is_mul && next_not_msm {
-            state.msm_accumulator = T::AcvmPoint::from(offset_generator_scaled::<C>().into());
+            state.msm_accumulator = T::OtherAcvmPoint::from(offset_generator_scaled::<C>().into());
         }
         transcript_state.push(row);
     }
@@ -708,7 +714,7 @@ fn compute_transcript_rows<
     }
 
     //TACEO TODO: investigate, this (or one of the following) batching actually made things slower
-    let (xs, ys, inf) = driver.pointshare_to_field_shares_many(
+    let (xs, ys, inf) = driver.other_pointshare_to_other_field_shares_many(
         &[
             accumulator_trace.clone(),
             msm_accumulator_trace.clone(),
@@ -750,14 +756,14 @@ fn compute_transcript_rows<
 
     let inv_vm_points_inf = vm_points_inf
         .iter()
-        .map(|x| driver.sub(T::AcvmType::from(C::BaseField::one()), *x))
+        .map(|x| driver.sub_other(T::OtherAcvmType::from(C::BaseField::one()), *x))
         .collect::<Vec<_>>();
     let inv_acc_inf = acc_inf
         .iter()
-        .map(|x| driver.sub(T::AcvmType::from(C::BaseField::one()), *x))
+        .map(|x| driver.sub_other(T::OtherAcvmType::from(C::BaseField::one()), *x))
         .collect::<Vec<_>>();
 
-    let vm_inf_and_acc_inf = driver.mul_many(
+    let vm_inf_and_acc_inf = driver.mul_many_other(
         &[vm_points_inf, &inv_vm_points_inf, vm_points_x].concat(),
         &[acc_inf, &inv_acc_inf, vm_points_x].concat(),
     )?;
@@ -765,16 +771,16 @@ fn compute_transcript_rows<
     let (inv_vm_inf_and_acc_inf, vm_x_squared) = res.split_at(inv_vm_points_inf.len());
     let neg_vm_inf_and_acc_inf = vm_inf_and_acc_inf
         .iter()
-        .map(|x| driver.sub(T::AcvmType::from(C::BaseField::one()), *x))
+        .map(|x| driver.sub_other(T::OtherAcvmType::from(C::BaseField::one()), *x))
         .collect::<Vec<_>>();
 
-    let vm_x_squared_times_3 = driver.scale_many(vm_x_squared, C::BaseField::from(3u32));
-    let vm_y_doubled = driver.add_many(vm_points_y, vm_points_y);
-    let acc_x_minus_vm_x = driver.sub_many(acc_xs, vm_points_x);
-    let acc_y_minus_vm_y = driver.sub_many(acc_ys, vm_points_y);
+    let vm_x_squared_times_3 = driver.scale_many_other(vm_x_squared, C::BaseField::from(3u32));
+    let vm_y_doubled = driver.add_many_other(vm_points_y, vm_points_y);
+    let acc_x_minus_vm_x = driver.sub_many_other(acc_xs, vm_points_x);
+    let acc_y_minus_vm_y = driver.sub_many_other(acc_ys, vm_points_y);
 
     // Compute row.transcript_add_x_equal and row.transcript_add_y_equal:
-    let is_zero_transcript_add = driver.equal_many(
+    let is_zero_transcript_add = driver.equal_many_other(
         &[vm_points_x, vm_points_y].concat(),
         &[acc_xs, acc_ys].concat(),
     )?;
@@ -783,13 +789,13 @@ fn compute_transcript_rows<
 
     let neg_transcript_add_values_x = is_zero_transcript_add_x
         .iter()
-        .map(|x| driver.sub(T::AcvmType::from(C::BaseField::one()), *x))
+        .map(|x| driver.sub_other(T::OtherAcvmType::from(C::BaseField::one()), *x))
         .collect::<Vec<_>>();
     let neg_transcript_add_values_y = is_zero_transcript_add_y
         .iter()
-        .map(|x| driver.sub(T::AcvmType::from(C::BaseField::one()), *x))
+        .map(|x| driver.sub_other(T::OtherAcvmType::from(C::BaseField::one()), *x))
         .collect::<Vec<_>>();
-    let mut transcript_add_values = driver.mul_many(
+    let mut transcript_add_values = driver.mul_many_other(
         &[neg_transcript_add_values_x, neg_transcript_add_values_y].concat(),
         &[
             neg_vm_inf_and_acc_inf.as_slice(),
@@ -798,32 +804,32 @@ fn compute_transcript_rows<
         .concat(),
     )?;
     transcript_add_values.iter_mut().for_each(|x| {
-        *x = driver.sub(T::AcvmType::from(C::BaseField::one()), *x);
+        *x = driver.sub_other(T::OtherAcvmType::from(C::BaseField::one()), *x);
     });
 
     let (transcript_add_x_equal, transcript_add_y_equal) =
         transcript_add_values.split_at(transcript_add_values.len() / 2);
 
-    let scale = driver.scale_many(transcript_add_x_equal, -C::BaseField::one());
-    let inv_transcript_add_x_equal = driver.add_scalar(&scale, C::BaseField::one());
-    let mul = driver.mul_many(is_zero_transcript_add_x, is_zero_transcript_add_y)?; //(accumulator_x == vm_x) && (accumulator_y == vm_y)
+    let scale = driver.scale_many_other(transcript_add_x_equal, -C::BaseField::one());
+    let inv_transcript_add_x_equal = driver.add_scalar_other(&scale, C::BaseField::one());
+    let mul = driver.mul_many_other(is_zero_transcript_add_x, is_zero_transcript_add_y)?; //(accumulator_x == vm_x) && (accumulator_y == vm_y)
     //TACEO TODO: investigate, this (or one of the following) batching actually made things slower
-    let res = driver.mul_many(
+    let res = driver.mul_many_other(
         &[mul, inv_transcript_add_x_equal].concat(),
         &[inv_vm_inf_and_acc_inf, inv_vm_inf_and_acc_inf].concat(),
     )?;
     let (if_mul, else_if_mul) = res.split_at(is_zero_transcript_add_x.len()); //(accumulator_x == vm_x) && (accumulator_y == vm_y) && !vm_infinity && !accumulator_infinity
     // and (accumulator_x != vm_x) && !vm_infinity && !accumulator_infinity
 
-    let zeroes = vec![T::AcvmType::default(); 2 * accumulator_trace_len];
+    let zeroes = vec![T::OtherAcvmType::default(); 2 * accumulator_trace_len];
     let (mut add_lambda_numerator, mut add_lambda_denominator) = {
         //TACEO TODO: investigate, this (or one of the previous) batching actually made things slower
-        let else_if_res = driver.cmux_many(
+        let else_if_res = driver.cmux_many_other(
             &[else_if_mul, else_if_mul].concat(),
             &[acc_y_minus_vm_y, acc_x_minus_vm_x].concat(),
             &zeroes,
         )?;
-        let res = driver.cmux_many(
+        let res = driver.cmux_many_other(
             &[if_mul, if_mul].concat(),
             &[vm_x_squared_times_3, vm_y_doubled].concat(),
             &else_if_res,
@@ -860,12 +866,12 @@ fn compute_transcript_rows<
             row.transcript_add_x_equal = transcript_add_x_equal[i]; //(vm_x == accumulator_x) || (vm_infinity && accumulator_infinity);
             row.transcript_add_y_equal = transcript_add_y_equal[i]; //(vm_y == accumulator_y) || (vm_infinity && accumulator_infinity);
         } else {
-            row.transcript_add_x_equal = T::AcvmType::default();
-            row.transcript_add_y_equal = T::AcvmType::default();
-            add_lambda_numerator[i] = T::AcvmType::default();
-            add_lambda_denominator[i] = T::AcvmType::default();
-            inverse_trace_x[i] = T::AcvmType::default();
-            inverse_trace_y[i] = T::AcvmType::default();
+            row.transcript_add_x_equal = T::OtherAcvmType::default();
+            row.transcript_add_y_equal = T::OtherAcvmType::default();
+            add_lambda_numerator[i] = T::OtherAcvmType::default();
+            add_lambda_denominator[i] = T::OtherAcvmType::default();
+            inverse_trace_x[i] = T::OtherAcvmType::default();
+            inverse_trace_y[i] = T::OtherAcvmType::default();
         }
     }
 
@@ -875,7 +881,7 @@ fn compute_transcript_rows<
     let transcript_msm_x_inverse_trace_len = transcript_msm_x_inverse_trace.len();
 
     ark_ff::batch_inversion(&mut msm_count_at_transition_inverse_trace);
-    let result = driver.inverse_or_zero_many(
+    let result = driver.inverse_or_zero_many_other(
         &[
             inverse_trace_x,
             inverse_trace_y,
@@ -894,7 +900,7 @@ fn compute_transcript_rows<
     add_lambda_denominator = res_add_lambda_denominator.to_vec();
 
     // Populate the fields of the transcript row containing inverted scalars
-    let mul = driver.mul_many(&add_lambda_numerator, &add_lambda_denominator)?;
+    let mul = driver.mul_many_other(&add_lambda_numerator, &add_lambda_denominator)?;
     for i in 0..num_vm_entries {
         let row = &mut transcript_state[i + 1];
         row.base_x_inverse = inverse_trace_x[i];
@@ -902,7 +908,7 @@ fn compute_transcript_rows<
         row.transcript_msm_x_inverse = transcript_msm_x_inverse_trace[i];
         row.transcript_add_lambda = mul[i];
         row.msm_count_at_transition_inverse =
-            T::AcvmType::from(msm_count_at_transition_inverse_trace[i]);
+            T::OtherAcvmType::from(msm_count_at_transition_inverse_trace[i]);
     }
 
     // process the final row containing the result of the sequence of group ops in ECCOpQueue
@@ -914,49 +920,49 @@ fn compute_transcript_rows<
 #[derive(Debug)]
 struct PointTablePrecomputationRow<
     C: CurveGroup<BaseField: PrimeField>,
-    T: NoirWitnessExtensionProtocol<C::BaseField>,
+    T: NoirWitnessExtensionProtocol<C::ScalarField>,
 > {
-    s1: T::AcvmType,
-    s2: T::AcvmType,
-    s3: T::AcvmType,
-    s4: T::AcvmType,
-    s5: T::AcvmType,
-    s6: T::AcvmType,
-    s7: T::AcvmType,
-    s8: T::AcvmType,
-    skew: T::AcvmType,
+    s1: T::OtherAcvmType<C>,
+    s2: T::OtherAcvmType<C>,
+    s3: T::OtherAcvmType<C>,
+    s4: T::OtherAcvmType<C>,
+    s5: T::OtherAcvmType<C>,
+    s6: T::OtherAcvmType<C>,
+    s7: T::OtherAcvmType<C>,
+    s8: T::OtherAcvmType<C>,
+    skew: T::OtherAcvmType<C>,
     point_transition: bool,
     pc: u32,
     round: u32,
-    scalar_sum: T::AcvmType,
-    precompute_accumulator: T::AcvmPoint<C>,
-    precompute_double: T::AcvmPoint<C>,
+    scalar_sum: T::OtherAcvmType<C>,
+    precompute_accumulator: T::OtherAcvmPoint<C>,
+    precompute_double: T::OtherAcvmPoint<C>,
 }
 
-impl<C: CurveGroup<BaseField: PrimeField>, T: NoirWitnessExtensionProtocol<C::BaseField>> Default
+impl<C: CurveGroup<BaseField: PrimeField>, T: NoirWitnessExtensionProtocol<C::ScalarField>> Default
     for PointTablePrecomputationRow<C, T>
 {
     fn default() -> Self {
         Self {
-            s1: T::AcvmType::default(),
-            s2: T::AcvmType::default(),
-            s3: T::AcvmType::default(),
-            s4: T::AcvmType::default(),
-            s5: T::AcvmType::default(),
-            s6: T::AcvmType::default(),
-            s7: T::AcvmType::default(),
-            s8: T::AcvmType::default(),
-            skew: T::AcvmType::default(),
+            s1: T::OtherAcvmType::default(),
+            s2: T::OtherAcvmType::default(),
+            s3: T::OtherAcvmType::default(),
+            s4: T::OtherAcvmType::default(),
+            s5: T::OtherAcvmType::default(),
+            s6: T::OtherAcvmType::default(),
+            s7: T::OtherAcvmType::default(),
+            s8: T::OtherAcvmType::default(),
+            skew: T::OtherAcvmType::default(),
             point_transition: false,
             pc: 0,
             round: 0,
-            scalar_sum: T::AcvmType::default(),
-            precompute_accumulator: T::AcvmPoint::<C>::default(),
-            precompute_double: T::AcvmPoint::<C>::default(),
+            scalar_sum: T::OtherAcvmType::default(),
+            precompute_accumulator: T::OtherAcvmPoint::<C>::default(),
+            precompute_double: T::OtherAcvmPoint::<C>::default(),
         }
     }
 }
-impl<C: CurveGroup<BaseField: PrimeField>, T: NoirWitnessExtensionProtocol<C::BaseField>> Clone
+impl<C: CurveGroup<BaseField: PrimeField>, T: NoirWitnessExtensionProtocol<C::ScalarField>> Clone
     for PointTablePrecomputationRow<C, T>
 {
     fn clone(&self) -> Self {
@@ -980,7 +986,7 @@ impl<C: CurveGroup<BaseField: PrimeField>, T: NoirWitnessExtensionProtocol<C::Ba
     }
 }
 
-impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseField>>
+impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::ScalarField>>
     PointTablePrecomputationRow<C, T>
 {
     fn compute_point_table_rows(
@@ -1003,11 +1009,12 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseF
             chunk_negatives.extend_from_slice(&entry.row_chunks_sign);
             row_chunks.extend_from_slice(&entry.row_chunks);
         }
-        let row_chunks_negative = driver.scale_many(&row_chunks, -C::BaseField::one());
-        let summands = driver.cmux_many(&chunk_negatives, &row_chunks_negative, &row_chunks)?;
+        let row_chunks_negative = driver.scale_many_other(&row_chunks, -C::BaseField::one());
+        let summands =
+            driver.cmux_many_other(&chunk_negatives, &row_chunks_negative, &row_chunks)?;
 
         for (j, entry) in msms.iter().enumerate() {
-            let mut scalar_sum = T::AcvmType::default();
+            let mut scalar_sum = T::OtherAcvmType::default();
 
             for i in 0..num_rows_per_scalar {
                 let row_si = entry.wnaf_si[i * 8..(i + 1) * 8].to_vec();
@@ -1029,7 +1036,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseF
                 row.skew = if last_row {
                     entry.wnaf_skew
                 } else {
-                    T::AcvmType::default()
+                    T::OtherAcvmType::default()
                 };
                 row.scalar_sum = scalar_sum;
 
@@ -1037,8 +1044,8 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseF
                 let summand = summands[j * num_rows_per_scalar + i];
 
                 let factor = 1 << (NUM_WNAF_DIGIT_BITS * WNAF_DIGITS_PER_ROW);
-                scalar_sum = driver.mul_with_public(C::BaseField::from(factor), scalar_sum);
-                driver.add_assign(&mut scalar_sum, summand);
+                scalar_sum = driver.mul_with_public_other(C::BaseField::from(factor), scalar_sum);
+                driver.add_assign_other(&mut scalar_sum, summand);
 
                 row.round = i as u32;
                 row.point_transition = last_row;
@@ -1067,8 +1074,8 @@ pub fn construct_from_builder<
     C: HonkCurve<TranscriptFieldType>,
     U: NoirUltraHonkProver<C>,
     T: NoirWitnessExtensionProtocol<
-            <<C as HonkCurve<TranscriptFieldType>>::CycleGroup as CurveGroup>::BaseField,
-            ArithmeticShare = U::ArithmeticShare,
+            <C::CycleGroup as PrimeGroup>::ScalarField,
+            OtherArithmeticShare<C::CycleGroup> = U::ArithmeticShare,
         >,
 >(
     op_queue: &mut CoECCOpQueue<T, C::CycleGroup>,
@@ -1136,73 +1143,85 @@ pub fn construct_from_builder<
         // // empty row at the start of the WNAF columns that is not accounted for (index of lookup_read_counts
         // // maps to the row in our WNAF columns that computes a slice for a given value of pc and round)
         polys.witness.lookup_read_counts_0_mut()[i + 1] =
-            driver.get_as_shared(&point_table_read_counts[0][i]);
+            driver.get_as_shared_other(&point_table_read_counts[0][i]);
         polys.witness.lookup_read_counts_1_mut()[i + 1] =
-            driver.get_as_shared(&point_table_read_counts[1][i]);
+            driver.get_as_shared_other(&point_table_read_counts[1][i]);
     }
 
     // Compute polynomials for transcript columns
     for (i, row) in transcript_rows.iter().enumerate() {
         polys.witness.transcript_accumulator_empty_mut()[i] =
-            driver.get_as_shared(&row.accumulator_empty);
-        polys.witness.transcript_add_mut()[i] =
-            driver.get_as_shared(&T::AcvmType::from(C::ScalarField::from(row.q_add)));
-        polys.witness.transcript_mul_mut()[i] =
-            driver.get_as_shared(&T::AcvmType::from(C::ScalarField::from(row.q_mul)));
-        polys.witness.transcript_eq_mut()[i] =
-            driver.get_as_shared(&T::AcvmType::from(C::ScalarField::from(row.q_eq)));
-        polys.witness.transcript_reset_accumulator_mut()[i] = driver.get_as_shared(
-            &T::AcvmType::from(C::ScalarField::from(row.q_reset_accumulator)),
+            driver.get_as_shared_other(&row.accumulator_empty);
+        polys.witness.transcript_add_mut()[i] = driver.get_as_shared_other::<C::CycleGroup>(
+            &T::OtherAcvmType::from(C::ScalarField::from(row.q_add)),
         );
-        polys.witness.transcript_msm_transition_mut()[i] = driver.get_as_shared(
-            &T::AcvmType::from(C::ScalarField::from(row.msm_transition as u32)),
+        polys.witness.transcript_mul_mut()[i] = driver.get_as_shared_other::<C::CycleGroup>(
+            &T::OtherAcvmType::from(C::ScalarField::from(row.q_mul)),
         );
-        polys.witness.transcript_pc_mut()[i] = driver.get_as_shared(&row.pc);
-        polys.witness.transcript_msm_count_mut()[i] =
-            driver.get_as_shared(&T::AcvmType::from(C::ScalarField::from(row.msm_count)));
-        polys.witness.transcript_px_mut()[i] = driver.get_as_shared(&row.base_x);
-        polys.witness.transcript_py_mut()[i] = driver.get_as_shared(&row.base_y);
-        polys.witness.transcript_z1_mut()[i] = driver.get_as_shared(&row.z1);
-        polys.witness.transcript_z2_mut()[i] = driver.get_as_shared(&row.z2);
-        polys.witness.transcript_z1zero_mut()[i] =
-            driver.get_as_shared(&T::AcvmType::from(C::ScalarField::from(row.z1_zero as u32)));
-        polys.witness.transcript_z2zero_mut()[i] =
-            driver.get_as_shared(&T::AcvmType::from(C::ScalarField::from(row.z2_zero as u32)));
-        polys.witness.transcript_op_mut()[i] =
-            driver.get_as_shared(&T::AcvmType::from(C::ScalarField::from(row.opcode)));
-        polys.witness.transcript_accumulator_x_mut()[i] = driver.get_as_shared(&row.accumulator_x);
-        polys.witness.transcript_accumulator_y_mut()[i] = driver.get_as_shared(&row.accumulator_y);
-        polys.witness.transcript_msm_x_mut()[i] = driver.get_as_shared(&row.msm_output_x);
-        polys.witness.transcript_msm_y_mut()[i] = driver.get_as_shared(&row.msm_output_y);
-        polys.witness.transcript_base_infinity_mut()[i] = driver.get_as_shared(&T::AcvmType::from(
-            C::ScalarField::from(row.base_infinity as u32),
-        ));
+        polys.witness.transcript_eq_mut()[i] = driver.get_as_shared_other::<C::CycleGroup>(
+            &T::OtherAcvmType::from(C::ScalarField::from(row.q_eq)),
+        );
+        polys.witness.transcript_reset_accumulator_mut()[i] = driver
+            .get_as_shared_other::<C::CycleGroup>(&T::OtherAcvmType::from(C::ScalarField::from(
+                row.q_reset_accumulator,
+            )));
+        polys.witness.transcript_msm_transition_mut()[i] = driver
+            .get_as_shared_other::<C::CycleGroup>(&T::OtherAcvmType::from(C::ScalarField::from(
+                row.msm_transition as u32,
+            )));
+        polys.witness.transcript_pc_mut()[i] = driver.get_as_shared_other(&row.pc);
+        polys.witness.transcript_msm_count_mut()[i] = driver.get_as_shared_other::<C::CycleGroup>(
+            &T::OtherAcvmType::from(C::ScalarField::from(row.msm_count)),
+        );
+        polys.witness.transcript_px_mut()[i] = driver.get_as_shared_other(&row.base_x);
+        polys.witness.transcript_py_mut()[i] = driver.get_as_shared_other(&row.base_y);
+        polys.witness.transcript_z1_mut()[i] = driver.get_as_shared_other(&row.z1);
+        polys.witness.transcript_z2_mut()[i] = driver.get_as_shared_other(&row.z2);
+        polys.witness.transcript_z1zero_mut()[i] = driver.get_as_shared_other::<C::CycleGroup>(
+            &T::OtherAcvmType::from(C::ScalarField::from(row.z1_zero as u32)),
+        );
+        polys.witness.transcript_z2zero_mut()[i] = driver.get_as_shared_other::<C::CycleGroup>(
+            &T::OtherAcvmType::from(C::ScalarField::from(row.z2_zero as u32)),
+        );
+        polys.witness.transcript_op_mut()[i] = driver.get_as_shared_other::<C::CycleGroup>(
+            &T::OtherAcvmType::from(C::ScalarField::from(row.opcode)),
+        );
+        polys.witness.transcript_accumulator_x_mut()[i] =
+            driver.get_as_shared_other(&row.accumulator_x);
+        polys.witness.transcript_accumulator_y_mut()[i] =
+            driver.get_as_shared_other(&row.accumulator_y);
+        polys.witness.transcript_msm_x_mut()[i] = driver.get_as_shared_other(&row.msm_output_x);
+        polys.witness.transcript_msm_y_mut()[i] = driver.get_as_shared_other(&row.msm_output_y);
+        polys.witness.transcript_base_infinity_mut()[i] = driver
+            .get_as_shared_other::<C::CycleGroup>(&T::OtherAcvmType::from(C::ScalarField::from(
+                row.base_infinity as u32,
+            )));
         polys.witness.transcript_base_x_inverse_mut()[i] =
-            driver.get_as_shared(&row.base_x_inverse);
+            driver.get_as_shared_other(&row.base_x_inverse);
         polys.witness.transcript_base_y_inverse_mut()[i] =
-            driver.get_as_shared(&row.base_y_inverse);
+            driver.get_as_shared_other(&row.base_y_inverse);
         polys.witness.transcript_add_x_equal_mut()[i] =
-            driver.get_as_shared(&row.transcript_add_x_equal);
+            driver.get_as_shared_other(&row.transcript_add_x_equal);
         polys.witness.transcript_add_y_equal_mut()[i] =
-            driver.get_as_shared(&row.transcript_add_y_equal);
+            driver.get_as_shared_other(&row.transcript_add_y_equal);
         polys.witness.transcript_add_lambda_mut()[i] =
-            driver.get_as_shared(&row.transcript_add_lambda);
+            driver.get_as_shared_other(&row.transcript_add_lambda);
         polys.witness.transcript_msm_intermediate_x_mut()[i] =
-            driver.get_as_shared(&row.transcript_msm_intermediate_x);
+            driver.get_as_shared_other(&row.transcript_msm_intermediate_x);
         polys.witness.transcript_msm_intermediate_y_mut()[i] =
-            driver.get_as_shared(&row.transcript_msm_intermediate_y);
+            driver.get_as_shared_other(&row.transcript_msm_intermediate_y);
         polys.witness.transcript_msm_infinity_mut()[i] =
-            driver.get_as_shared(&row.transcript_msm_infinity);
+            driver.get_as_shared_other(&row.transcript_msm_infinity);
         polys.witness.transcript_msm_x_inverse_mut()[i] =
-            driver.get_as_shared(&row.transcript_msm_x_inverse);
-        polys.witness.transcript_msm_count_zero_at_transition_mut()[i] =
-            driver.get_as_shared(&T::AcvmType::from(C::ScalarField::from(
+            driver.get_as_shared_other(&row.transcript_msm_x_inverse);
+        polys.witness.transcript_msm_count_zero_at_transition_mut()[i] = driver
+            .get_as_shared_other::<C::CycleGroup>(&T::OtherAcvmType::from(C::ScalarField::from(
                 row.msm_count_zero_at_transition as u32,
             )));
         polys
             .witness
             .transcript_msm_count_at_transition_inverse_mut()[i] =
-            driver.get_as_shared(&row.msm_count_at_transition_inverse);
+            driver.get_as_shared_other(&row.msm_count_at_transition_inverse);
     }
 
     // AZTEC TODO(@zac-williamson) if final opcode resets accumulator, all subsequent "is_accumulator_empty" row
@@ -1210,7 +1229,7 @@ pub fn construct_from_builder<
     // values that are all zero (issue #2217)
     if transcript_rows.last().is_some() {
         for i in transcript_rows.len()..unmasked_witness_size {
-            polys.witness.transcript_accumulator_empty_mut()[i] = driver.get_as_shared(
+            polys.witness.transcript_accumulator_empty_mut()[i] = driver.get_as_shared_other(
                 &transcript_rows
                     .last()
                     .expect("We checked it is non-empty")
@@ -1240,104 +1259,134 @@ pub fn construct_from_builder<
         batch_point_to_field_shares.push(row.add_state[3].point);
     }
 
-    let field_shares = driver.pointshare_to_field_shares_many(&batch_point_to_field_shares)?;
+    let field_shares =
+        driver.other_pointshare_to_other_field_shares_many(&batch_point_to_field_shares)?;
 
     for (i, row) in point_table_rows.iter().enumerate() {
         // first row is always an empty row (to accommodate shifted polynomials which must have 0 as 1st
         // coefficient). All other rows in the point_table_rows represent active wnaf gates (i.e.
         // precompute_select = 1)
         polys.witness.precompute_select_mut()[i] = if i != 0 {
-            driver.get_as_shared(&T::AcvmType::from(C::ScalarField::one()))
+            driver.get_as_shared_other::<C::CycleGroup>(&T::OtherAcvmType::from(
+                C::ScalarField::one(),
+            ))
         } else {
-            driver.get_as_shared(&T::AcvmType::from(C::ScalarField::zero()))
+            driver.get_as_shared_other::<C::CycleGroup>(&T::OtherAcvmType::from(
+                C::ScalarField::zero(),
+            ))
         };
-        polys.witness.precompute_pc_mut()[i] =
-            driver.get_as_shared(&T::AcvmType::from(C::ScalarField::from(row.pc)));
-        polys.witness.precompute_point_transition_mut()[i] = driver.get_as_shared(
-            &T::AcvmType::from(C::ScalarField::from(row.point_transition as u32)),
+        polys.witness.precompute_pc_mut()[i] = driver.get_as_shared_other::<C::CycleGroup>(
+            &T::OtherAcvmType::from(C::ScalarField::from(row.pc)),
         );
-        polys.witness.precompute_round_mut()[i] =
-            driver.get_as_shared(&T::AcvmType::from(C::ScalarField::from(row.round)));
+        polys.witness.precompute_point_transition_mut()[i] = driver
+            .get_as_shared_other::<C::CycleGroup>(&T::OtherAcvmType::from(C::ScalarField::from(
+                row.point_transition as u32,
+            )));
+        polys.witness.precompute_round_mut()[i] = driver.get_as_shared_other::<C::CycleGroup>(
+            &T::OtherAcvmType::from(C::ScalarField::from(row.round)),
+        );
         polys.witness.precompute_scalar_sum_mut()[i] =
-            driver.get_as_shared(&row.scalar_sum.clone());
-        polys.witness.precompute_s1hi_mut()[i] = driver.get_as_shared(&row.s1);
-        polys.witness.precompute_s1lo_mut()[i] = driver.get_as_shared(&row.s2);
-        polys.witness.precompute_s2hi_mut()[i] = driver.get_as_shared(&row.s3);
-        polys.witness.precompute_s2lo_mut()[i] = driver.get_as_shared(&row.s4);
-        polys.witness.precompute_s3hi_mut()[i] = driver.get_as_shared(&row.s5);
-        polys.witness.precompute_s3lo_mut()[i] = driver.get_as_shared(&row.s6);
-        polys.witness.precompute_s4hi_mut()[i] = driver.get_as_shared(&row.s7);
-        polys.witness.precompute_s4lo_mut()[i] = driver.get_as_shared(&row.s8);
+            driver.get_as_shared_other(&row.scalar_sum.clone());
+        polys.witness.precompute_s1hi_mut()[i] = driver.get_as_shared_other(&row.s1);
+        polys.witness.precompute_s1lo_mut()[i] = driver.get_as_shared_other(&row.s2);
+        polys.witness.precompute_s2hi_mut()[i] = driver.get_as_shared_other(&row.s3);
+        polys.witness.precompute_s2lo_mut()[i] = driver.get_as_shared_other(&row.s4);
+        polys.witness.precompute_s3hi_mut()[i] = driver.get_as_shared_other(&row.s5);
+        polys.witness.precompute_s3lo_mut()[i] = driver.get_as_shared_other(&row.s6);
+        polys.witness.precompute_s4hi_mut()[i] = driver.get_as_shared_other(&row.s7);
+        polys.witness.precompute_s4lo_mut()[i] = driver.get_as_shared_other(&row.s8);
         // If skew is active (i.e. we need to subtract a base point from the msm result),
         // write `7` into rows.precompute_skew. `7`, in binary representation, equals `-1` when converted
         // into WNAF form
-        let tmp = driver.mul_with_public(C::ScalarField::from(7u32), row.skew);
-        polys.witness.precompute_skew_mut()[i] = driver.get_as_shared(&tmp);
-        polys.witness.precompute_dx_mut()[i] = driver.get_as_shared(&field_shares.0[i * 2]);
-        polys.witness.precompute_dy_mut()[i] = driver.get_as_shared(&field_shares.1[i * 2]);
-        polys.witness.precompute_tx_mut()[i] = driver.get_as_shared(&field_shares.0[2 * i + 1]);
-        polys.witness.precompute_ty_mut()[i] = driver.get_as_shared(&field_shares.1[2 * i + 1]);
+        let tmp = driver.mul_with_public_other(C::ScalarField::from(7u32), row.skew);
+        polys.witness.precompute_skew_mut()[i] = driver.get_as_shared_other(&tmp);
+        polys.witness.precompute_dx_mut()[i] = driver.get_as_shared_other(&field_shares.0[i * 2]);
+        polys.witness.precompute_dy_mut()[i] = driver.get_as_shared_other(&field_shares.1[i * 2]);
+        polys.witness.precompute_tx_mut()[i] =
+            driver.get_as_shared_other(&field_shares.0[2 * i + 1]);
+        polys.witness.precompute_ty_mut()[i] =
+            driver.get_as_shared_other(&field_shares.1[2 * i + 1]);
     }
     let offset = point_table_rows.len() * 2;
 
     // Compute polynomials for the MSM rows
     for (i, row) in msm_rows.iter().enumerate() {
-        polys.witness.msm_transition_mut()[i] = driver.get_as_shared(&T::AcvmType::from(
-            C::ScalarField::from(row.msm_transition as u64),
-        ));
-        polys.witness.msm_add_mut()[i] =
-            driver.get_as_shared(&T::AcvmType::from(C::ScalarField::from(row.q_add as u64)));
-        polys.witness.msm_double_mut()[i] = driver.get_as_shared(&T::AcvmType::from(
-            C::ScalarField::from(row.q_double as u64),
-        ));
-        polys.witness.msm_skew_mut()[i] =
-            driver.get_as_shared(&T::AcvmType::from(C::ScalarField::from(row.q_skew as u64)));
-        polys.witness.msm_accumulator_y_mut()[i] = driver.get_as_shared(&row.accumulator_y);
-        polys.witness.msm_accumulator_x_mut()[i] = driver.get_as_shared(&row.accumulator_x);
-        polys.witness.msm_pc_mut()[i] =
-            driver.get_as_shared(&T::AcvmType::from(C::ScalarField::from(row.pc as u32)));
-        polys.witness.msm_size_of_msm_mut()[i] =
-            driver.get_as_shared(&T::AcvmType::from(C::ScalarField::from(row.msm_size)));
-        polys.witness.msm_count_mut()[i] =
-            driver.get_as_shared(&T::AcvmType::from(C::ScalarField::from(row.msm_count)));
-        polys.witness.msm_round_mut()[i] =
-            driver.get_as_shared(&T::AcvmType::from(C::ScalarField::from(row.msm_round)));
-        polys.witness.msm_add1_mut()[i] = driver.get_as_shared(&T::AcvmType::from(
-            C::ScalarField::from(msm_rows[i].add_state[0].add),
-        ));
-        polys.witness.msm_add2_mut()[i] = driver.get_as_shared(&T::AcvmType::from(
-            C::ScalarField::from(msm_rows[i].add_state[1].add),
-        ));
-        polys.witness.msm_add3_mut()[i] = driver.get_as_shared(&T::AcvmType::from(
-            C::ScalarField::from(msm_rows[i].add_state[2].add),
-        ));
-        polys.witness.msm_add4_mut()[i] = driver.get_as_shared(&T::AcvmType::from(
-            C::ScalarField::from(msm_rows[i].add_state[3].add),
-        ));
-        polys.witness.msm_x1_mut()[i] = driver.get_as_shared(&field_shares.0[offset + i * 4]);
-        polys.witness.msm_y1_mut()[i] = driver.get_as_shared(&field_shares.1[offset + i * 4]);
-        polys.witness.msm_x2_mut()[i] = driver.get_as_shared(&field_shares.0[offset + i * 4 + 1]);
-        polys.witness.msm_y2_mut()[i] = driver.get_as_shared(&field_shares.1[offset + i * 4 + 1]);
-        polys.witness.msm_x3_mut()[i] = driver.get_as_shared(&field_shares.0[offset + i * 4 + 2]);
-        polys.witness.msm_y3_mut()[i] = driver.get_as_shared(&field_shares.1[offset + i * 4 + 2]);
-        polys.witness.msm_x4_mut()[i] = driver.get_as_shared(&field_shares.0[offset + i * 4 + 3]);
-        polys.witness.msm_y4_mut()[i] = driver.get_as_shared(&field_shares.1[offset + i * 4 + 3]);
+        polys.witness.msm_transition_mut()[i] = driver.get_as_shared_other::<C::CycleGroup>(
+            &T::OtherAcvmType::from(C::ScalarField::from(row.msm_transition as u64)),
+        );
+        polys.witness.msm_add_mut()[i] = driver.get_as_shared_other::<C::CycleGroup>(
+            &T::OtherAcvmType::from(C::ScalarField::from(row.q_add as u64)),
+        );
+        polys.witness.msm_double_mut()[i] = driver.get_as_shared_other::<C::CycleGroup>(
+            &T::OtherAcvmType::from(C::ScalarField::from(row.q_double as u64)),
+        );
+        polys.witness.msm_skew_mut()[i] = driver.get_as_shared_other::<C::CycleGroup>(
+            &T::OtherAcvmType::from(C::ScalarField::from(row.q_skew as u64)),
+        );
+        polys.witness.msm_accumulator_y_mut()[i] = driver.get_as_shared_other(&row.accumulator_y);
+        polys.witness.msm_accumulator_x_mut()[i] = driver.get_as_shared_other(&row.accumulator_x);
+        polys.witness.msm_pc_mut()[i] = driver.get_as_shared_other::<C::CycleGroup>(
+            &T::OtherAcvmType::from(C::ScalarField::from(row.pc as u32)),
+        );
+        polys.witness.msm_size_of_msm_mut()[i] = driver.get_as_shared_other::<C::CycleGroup>(
+            &T::OtherAcvmType::from(C::ScalarField::from(row.msm_size)),
+        );
+        polys.witness.msm_count_mut()[i] = driver.get_as_shared_other::<C::CycleGroup>(
+            &T::OtherAcvmType::from(C::ScalarField::from(row.msm_count)),
+        );
+        polys.witness.msm_round_mut()[i] = driver.get_as_shared_other::<C::CycleGroup>(
+            &T::OtherAcvmType::from(C::ScalarField::from(row.msm_round)),
+        );
+        polys.witness.msm_add1_mut()[i] = driver.get_as_shared_other::<C::CycleGroup>(
+            &T::OtherAcvmType::from(C::ScalarField::from(msm_rows[i].add_state[0].add)),
+        );
+        polys.witness.msm_add2_mut()[i] = driver.get_as_shared_other::<C::CycleGroup>(
+            &T::OtherAcvmType::from(C::ScalarField::from(msm_rows[i].add_state[1].add)),
+        );
+        polys.witness.msm_add3_mut()[i] = driver.get_as_shared_other::<C::CycleGroup>(
+            &T::OtherAcvmType::from(C::ScalarField::from(msm_rows[i].add_state[2].add)),
+        );
+        polys.witness.msm_add4_mut()[i] = driver.get_as_shared_other::<C::CycleGroup>(
+            &T::OtherAcvmType::from(C::ScalarField::from(msm_rows[i].add_state[3].add)),
+        );
+        polys.witness.msm_x1_mut()[i] = driver.get_as_shared_other(&field_shares.0[offset + i * 4]);
+        polys.witness.msm_y1_mut()[i] = driver.get_as_shared_other(&field_shares.1[offset + i * 4]);
+        polys.witness.msm_x2_mut()[i] =
+            driver.get_as_shared_other(&field_shares.0[offset + i * 4 + 1]);
+        polys.witness.msm_y2_mut()[i] =
+            driver.get_as_shared_other(&field_shares.1[offset + i * 4 + 1]);
+        polys.witness.msm_x3_mut()[i] =
+            driver.get_as_shared_other(&field_shares.0[offset + i * 4 + 2]);
+        polys.witness.msm_y3_mut()[i] =
+            driver.get_as_shared_other(&field_shares.1[offset + i * 4 + 2]);
+        polys.witness.msm_x4_mut()[i] =
+            driver.get_as_shared_other(&field_shares.0[offset + i * 4 + 3]);
+        polys.witness.msm_y4_mut()[i] =
+            driver.get_as_shared_other(&field_shares.1[offset + i * 4 + 3]);
         polys.witness.msm_collision_x1_mut()[i] =
-            driver.get_as_shared(&msm_rows[i].add_state[0].collision_inverse);
+            driver.get_as_shared_other(&msm_rows[i].add_state[0].collision_inverse);
         polys.witness.msm_collision_x2_mut()[i] =
-            driver.get_as_shared(&msm_rows[i].add_state[1].collision_inverse);
+            driver.get_as_shared_other(&msm_rows[i].add_state[1].collision_inverse);
         polys.witness.msm_collision_x3_mut()[i] =
-            driver.get_as_shared(&msm_rows[i].add_state[2].collision_inverse);
+            driver.get_as_shared_other(&msm_rows[i].add_state[2].collision_inverse);
         polys.witness.msm_collision_x4_mut()[i] =
-            driver.get_as_shared(&msm_rows[i].add_state[3].collision_inverse);
-        polys.witness.msm_lambda1_mut()[i] = driver.get_as_shared(&msm_rows[i].add_state[0].lambda);
-        polys.witness.msm_lambda2_mut()[i] = driver.get_as_shared(&msm_rows[i].add_state[1].lambda);
-        polys.witness.msm_lambda3_mut()[i] = driver.get_as_shared(&msm_rows[i].add_state[2].lambda);
-        polys.witness.msm_lambda4_mut()[i] = driver.get_as_shared(&msm_rows[i].add_state[3].lambda);
-        polys.witness.msm_slice1_mut()[i] = driver.get_as_shared(&msm_rows[i].add_state[0].slice);
-        polys.witness.msm_slice2_mut()[i] = driver.get_as_shared(&msm_rows[i].add_state[1].slice);
-        polys.witness.msm_slice3_mut()[i] = driver.get_as_shared(&msm_rows[i].add_state[2].slice);
-        polys.witness.msm_slice4_mut()[i] = driver.get_as_shared(&msm_rows[i].add_state[3].slice);
+            driver.get_as_shared_other(&msm_rows[i].add_state[3].collision_inverse);
+        polys.witness.msm_lambda1_mut()[i] =
+            driver.get_as_shared_other(&msm_rows[i].add_state[0].lambda);
+        polys.witness.msm_lambda2_mut()[i] =
+            driver.get_as_shared_other(&msm_rows[i].add_state[1].lambda);
+        polys.witness.msm_lambda3_mut()[i] =
+            driver.get_as_shared_other(&msm_rows[i].add_state[2].lambda);
+        polys.witness.msm_lambda4_mut()[i] =
+            driver.get_as_shared_other(&msm_rows[i].add_state[3].lambda);
+        polys.witness.msm_slice1_mut()[i] =
+            driver.get_as_shared_other(&msm_rows[i].add_state[0].slice);
+        polys.witness.msm_slice2_mut()[i] =
+            driver.get_as_shared_other(&msm_rows[i].add_state[1].slice);
+        polys.witness.msm_slice3_mut()[i] =
+            driver.get_as_shared_other(&msm_rows[i].add_state[2].slice);
+        polys.witness.msm_slice4_mut()[i] =
+            driver.get_as_shared_other(&msm_rows[i].add_state[3].slice);
     }
     Ok(polys)
 }

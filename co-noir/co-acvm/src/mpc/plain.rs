@@ -1,5 +1,6 @@
 use super::{NoirWitnessExtensionProtocol, downcast};
 use ark_ec::{AffineRepr, CurveGroup};
+use ark_ff::Field;
 use ark_ff::Zero;
 use ark_ff::{BigInteger, MontConfig, One, PrimeField};
 use blake2::{Blake2s256, Digest};
@@ -83,12 +84,13 @@ impl<F: PrimeField> Default for PlainAcvmSolver<F> {
 
 impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     type Lookup = PlainLookupTableProvider<F>;
-    type CurveLookup<C: CurveGroup<BaseField = F>> = PlainCurveLookupTableProvider<C>;
+    type CurveLookup<C: CurveGroup<ScalarField = F>> = PlainCurveLookupTableProvider<C>;
     type ArithmeticShare = F;
     type AcvmType = F;
     type AcvmPoint<C: CurveGroup<BaseField = F>> = C;
-    type OtherArithmeticShare<C: CurveGroup<BaseField = F>> = C::ScalarField;
-    type OtherAcvmType<C: CurveGroup<BaseField = F>> = C::ScalarField;
+    type OtherAcvmPoint<C: CurveGroup<ScalarField = F, BaseField: PrimeField>> = C;
+    type OtherArithmeticShare<C: CurveGroup<ScalarField = F, BaseField: PrimeField>> = C::BaseField;
+    type OtherAcvmType<C: CurveGroup<ScalarField = F, BaseField: PrimeField>> = C::BaseField;
 
     type BrilligDriver = PlainBrilligDriver<F>;
 
@@ -125,6 +127,16 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         if cond.is_one() { Ok(truthy) } else { Ok(falsy) }
     }
 
+    fn cmux_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        cond: Self::OtherAcvmType<C>,
+        truthy: Self::OtherAcvmType<C>,
+        falsy: Self::OtherAcvmType<C>,
+    ) -> eyre::Result<Self::OtherAcvmType<C>> {
+        assert!(cond.is_one() || cond.is_zero());
+        if cond.is_one() { Ok(truthy) } else { Ok(falsy) }
+    }
+
     fn add(&self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> Self::AcvmType {
         lhs + rhs
     }
@@ -137,8 +149,24 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         lhs + rhs
     }
 
+    fn add_points_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &self,
+        lhs: Self::OtherAcvmPoint<C>,
+        rhs: Self::OtherAcvmPoint<C>,
+    ) -> Self::OtherAcvmPoint<C> {
+        lhs + rhs
+    }
+
     fn add_assign_with_public(&mut self, public: F, secret: &mut Self::AcvmType) {
         *secret += public;
+    }
+
+    fn add_assign_with_public_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        public: C::BaseField,
+        target: &mut Self::OtherAcvmType<C>,
+    ) {
+        *target += public;
     }
 
     fn sub(&self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType {
@@ -172,6 +200,14 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     }
 
     fn add_assign(&mut self, lhs: &mut Self::AcvmType, rhs: Self::AcvmType) {
+        *lhs += rhs;
+    }
+
+    fn add_assign_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        lhs: &mut Self::OtherAcvmType<C>,
+        rhs: Self::OtherAcvmType<C>,
+    ) {
         *lhs += rhs;
     }
 
@@ -256,6 +292,21 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Ok(result)
     }
 
+    fn one_hot_vector_from_shared_index_other<
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
+        &mut self,
+        index: Self::OtherArithmeticShare<C>,
+        len: usize,
+    ) -> eyre::Result<Vec<Self::OtherArithmeticShare<C>>> {
+        let len_ = len.next_power_of_two();
+        let mut result = vec![C::BaseField::zero(); len_];
+        let index: BigUint = index.into();
+        let index = usize::try_from(index).expect("Index to large for usize");
+        result[index] = C::BaseField::one();
+        Ok(result)
+    }
+
     fn write_to_shared_lut_from_ohv(
         &mut self,
         ohv: &[Self::ArithmeticShare],
@@ -277,6 +328,12 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     }
 
     fn get_shared(_: &Self::AcvmType) -> Option<Self::ArithmeticShare> {
+        None
+    }
+
+    fn get_shared_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        _a: &Self::OtherAcvmType<C>,
+    ) -> Option<Self::OtherArithmeticShare<C>> {
         None
     }
 
@@ -541,6 +598,14 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Ok(Self::ArithmeticShare::from(a == b))
     }
 
+    fn equal_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &Self::OtherAcvmType<C>,
+        b: &Self::OtherAcvmType<C>,
+    ) -> eyre::Result<Self::OtherAcvmType<C>> {
+        Ok(Self::OtherArithmeticShare::<C>::from(a == b))
+    }
+
     fn equal_many(
         &mut self,
         a: &[Self::AcvmType],
@@ -556,6 +621,25 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         let mut result = Vec::with_capacity(a.len());
         for (a_i, b_i) in a.iter().zip(b.iter()) {
             result.push(Self::ArithmeticShare::from(a_i == b_i));
+        }
+        Ok(result)
+    }
+
+    fn equal_many_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[Self::OtherAcvmType<C>],
+        b: &[Self::OtherAcvmType<C>],
+    ) -> eyre::Result<Vec<Self::OtherAcvmType<C>>> {
+        if a.len() != b.len() {
+            eyre::bail!(
+                "Vectors must have the same length. Length of a : {} and length of b: {}",
+                a.len(),
+                b.len()
+            );
+        }
+        let mut result = Vec::with_capacity(a.len());
+        for (a_i, b_i) in a.iter().zip(b.iter()) {
+            result.push(Self::OtherArithmeticShare::<C>::from(a_i == b_i));
         }
         Ok(result)
     }
@@ -920,13 +1004,36 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Ok(F::from(a.is_zero()))
     }
 
-    fn pointshare_to_field_shares_many<C: CurveGroup<BaseField = F>>(
+    fn other_pointshare_to_other_field_share<
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
         &mut self,
-        points: &[Self::AcvmPoint<C>],
+        point: &Self::OtherAcvmPoint<C>,
     ) -> eyre::Result<(
-        Vec<Self::AcvmType>,
-        Vec<Self::AcvmType>,
-        Vec<Self::AcvmType>,
+        Self::OtherAcvmType<C>,
+        Self::OtherAcvmType<C>,
+        Self::OtherAcvmType<C>,
+    )> {
+        if let Some((out_x, out_y)) = point.into_affine().xy() {
+            Ok((out_x, out_y, C::BaseField::zero()))
+        } else {
+            Ok((
+                C::BaseField::zero(),
+                C::BaseField::zero(),
+                C::BaseField::one(),
+            ))
+        }
+    }
+
+    fn other_pointshare_to_other_field_shares_many<
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
+        &mut self,
+        points: &[Self::OtherAcvmPoint<C>],
+    ) -> eyre::Result<(
+        Vec<Self::OtherAcvmType<C>>,
+        Vec<Self::OtherAcvmType<C>>,
+        Vec<Self::OtherAcvmType<C>>,
     )> {
         let mut x_coords = Vec::with_capacity(points.len());
         let mut y_coords = Vec::with_capacity(points.len());
@@ -935,11 +1042,11 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
             if let Some((out_x, out_y)) = p.into_affine().xy() {
                 x_coords.push(out_x);
                 y_coords.push(out_y);
-                is_infinity.push(F::zero());
+                is_infinity.push(C::BaseField::zero());
             } else {
-                x_coords.push(F::zero());
-                y_coords.push(F::zero());
-                is_infinity.push(F::one());
+                x_coords.push(C::BaseField::zero());
+                y_coords.push(C::BaseField::zero());
+                is_infinity.push(C::BaseField::one());
             }
         });
         Ok((x_coords, y_coords, is_infinity))
@@ -954,11 +1061,35 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Ok(a.iter().zip(b.iter()).map(|(a, b)| *a * b).collect())
     }
 
-    fn is_zero_many(&mut self, a: &[Self::AcvmType]) -> eyre::Result<Vec<Self::AcvmType>> {
-        Ok(a.iter().map(|x| F::from(x.is_zero())).collect())
+    fn mul_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        secret_1: Self::OtherAcvmType<C>,
+        secret_2: Self::OtherAcvmType<C>,
+    ) -> eyre::Result<Self::OtherAcvmType<C>> {
+        Ok(secret_1 * secret_2)
     }
 
-    fn add_other<C: CurveGroup<BaseField = F>>(
+    fn mul_many_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        secrets_1: &[Self::OtherAcvmType<C>],
+        secrets_2: &[Self::OtherAcvmType<C>],
+    ) -> eyre::Result<Vec<Self::OtherAcvmType<C>>> {
+        debug_assert_eq!(secrets_1.len(), secrets_2.len());
+        Ok(secrets_1
+            .iter()
+            .zip(secrets_2.iter())
+            .map(|(a, b)| *a * b)
+            .collect())
+    }
+
+    fn is_zero_many_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[Self::OtherAcvmType<C>],
+    ) -> eyre::Result<Vec<Self::OtherAcvmType<C>>> {
+        Ok(a.iter().map(|x| C::BaseField::from(x.is_zero())).collect())
+    }
+
+    fn add_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &self,
         lhs: Self::OtherAcvmType<C>,
         rhs: Self::OtherAcvmType<C>,
@@ -974,7 +1105,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         lhs - rhs
     }
 
-    fn sub_other<C: CurveGroup<BaseField = F>>(
+    fn sub_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &self,
         lhs: Self::OtherAcvmType<C>,
         rhs: Self::OtherAcvmType<C>,
@@ -986,37 +1117,37 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         shared.mul_assign(&public);
     }
 
-    fn mul_with_public_other<C: CurveGroup<BaseField = F>>(
+    fn mul_with_public_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        public: C::ScalarField,
+        public: C::BaseField,
         secret: Self::OtherAcvmType<C>,
     ) -> Self::OtherAcvmType<C> {
         public * secret
     }
 
-    fn init_lut_by_acvm_point<C: CurveGroup<BaseField = F>>(
+    fn init_lut_by_acvm_point<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        values: Vec<Self::AcvmPoint<C>>,
+        values: Vec<Self::OtherAcvmPoint<C>>,
     ) -> <Self::CurveLookup<C> as LookupTableProvider<C>>::LutType {
         // TACEO TODO: Since the NoirWitnessExtensionProtocol is not generic over the curve, I could not think of a better way to do this
         let lut = PlainCurveLookupTableProvider::<C>::default();
         lut.init_public(values)
     }
 
-    fn read_lut_by_acvm_point<C: CurveGroup<BaseField = F>>(
+    fn read_lut_by_acvm_point<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        index: Self::OtherAcvmType<C>,
+        index: Self::AcvmType,
         lut: &<Self::CurveLookup<C> as LookupTableProvider<C>>::LutType,
-    ) -> eyre::Result<Self::AcvmPoint<C>> {
+    ) -> eyre::Result<Self::OtherAcvmPoint<C>> {
         let mut lut_ = PlainCurveLookupTableProvider::<C>::default();
         lut_.get_from_lut(index, lut, &(), &(), &mut (), &mut ())
     }
 
-    fn read_from_public_curve_luts<C: CurveGroup<BaseField = F>>(
+    fn read_from_public_curve_luts<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        index: Self::OtherAcvmType<C>,
+        index: Self::AcvmType,
         luts: &[Vec<C>],
-    ) -> eyre::Result<Vec<Self::AcvmPoint<C>>> {
+    ) -> eyre::Result<Vec<Self::OtherAcvmPoint<C>>> {
         let mut lut_ = PlainCurveLookupTableProvider::<C>::default();
         let mut result = Vec::with_capacity(luts.len());
         for lut in luts {
@@ -1026,64 +1157,46 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Ok(result)
     }
 
-    fn write_lut_by_acvm_point<C: CurveGroup<BaseField = F>>(
+    fn write_lut_by_acvm_point<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        index: Self::OtherAcvmType<C>,
-        value: Self::AcvmPoint<C>,
+        index: Self::AcvmType,
+        value: Self::OtherAcvmPoint<C>,
         lut: &mut <Self::CurveLookup<C> as LookupTableProvider<C>>::LutType,
     ) -> eyre::Result<()> {
         let mut lut_ = PlainCurveLookupTableProvider::<C>::default();
         lut_.write_to_lut(index, value, lut, &(), &(), &mut (), &mut ())
     }
 
-    fn point_is_zero_many<C: CurveGroup<BaseField = F>>(
+    fn point_is_zero_many<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        a: &[Self::AcvmPoint<C>],
-    ) -> eyre::Result<Vec<Self::AcvmType>> {
-        Ok(a.iter().map(|p| F::from(p.is_zero())).collect())
+        a: &[Self::OtherAcvmPoint<C>],
+    ) -> eyre::Result<Vec<Self::OtherAcvmType<C>>> {
+        Ok(a.iter().map(|p| C::BaseField::from(p.is_zero())).collect())
     }
 
-    fn field_shares_to_pointshare_many<C: CurveGroup<BaseField = F>>(
+    fn msm<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        x: &[Self::AcvmType],
-        y: &[Self::AcvmType],
-        is_infinity: &[Self::AcvmType],
-    ) -> eyre::Result<Vec<Self::AcvmPoint<C>>> {
-        if x.len() != y.len() || x.len() != is_infinity.len() {
-            eyre::bail!("All inputs must have the same length");
-        }
-        x.iter()
-            .zip(y.iter())
-            .zip(is_infinity.iter())
-            .map(|((x, y), is_infinity)| {
-                Self::field_shares_to_pointshare(self, *x, *y, *is_infinity)
-            })
-            .collect()
-    }
-
-    fn msm<C: CurveGroup<BaseField = F>>(
-        &mut self,
-        a: &[Self::AcvmPoint<C>],
-        b: &[Self::OtherAcvmType<C>],
-    ) -> eyre::Result<Self::AcvmPoint<C>> {
+        a: &[Self::OtherAcvmPoint<C>],
+        b: &[Self::AcvmType],
+    ) -> eyre::Result<Self::OtherAcvmPoint<C>> {
         if a.len() != b.len() {
             eyre::bail!("Points and scalars must have the same length");
         }
         Ok(a.iter().zip(b.iter()).map(|(p, s)| *p * s).sum())
     }
 
-    fn scale_point_by_scalar<C: CurveGroup<BaseField = F>>(
+    fn scale_point_by_scalar_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        point: Self::AcvmPoint<C>,
-        scalar: C::ScalarField,
-    ) -> eyre::Result<Self::AcvmPoint<C>> {
+        point: Self::OtherAcvmPoint<C>,
+        scalar: Self::AcvmType,
+    ) -> eyre::Result<Self::OtherAcvmPoint<C>> {
         Ok(point * scalar)
     }
 
-    fn convert_fields<C: CurveGroup<BaseField = F>>(
+    fn convert_fields<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        a: &[Self::AcvmType],
-    ) -> eyre::Result<Vec<Self::OtherAcvmType<C>>> {
+        a: &[Self::OtherAcvmType<C>],
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
         if a.iter().any(|v| {
             let v_biguint: num_bigint::BigUint = (*v).into();
             v_biguint > C::ScalarField::MODULUS.into()
@@ -1099,17 +1212,19 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
             .collect()
     }
 
-    fn compute_wnaf_digits_and_compute_rows_many(
+    fn compute_wnaf_digits_and_compute_rows_many<
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
         &mut self,
-        zs: &[Self::AcvmType],
+        zs: &[Self::OtherAcvmType<C>],
         _num_bits: usize,
     ) -> eyre::Result<(
-        Vec<Self::AcvmType>,       // Returns whether the input is even
-        Vec<[Self::AcvmType; 32]>, // Returns the wnaf digits (They are already positive (by adding +15 (and also dividing by 2)))
-        Vec<[Self::AcvmType; 32]>, // Returns whether the wnaf digit is negative
-        Vec<[Self::AcvmType; 64]>, // Returns s1,...,s8 for every 4 wnaf digits (needed later for PointTablePrecomputationRow computation)
-        Vec<[Self::AcvmType; 8]>, // Returns the (absolute) value of the row_chunk (also in PointTablePrecomputationRow computation)
-        Vec<[Self::AcvmType; 8]>, // Returns the sign of the row_chunk (also in PointTablePrecomputationRow computation)
+        Vec<Self::OtherAcvmType<C>>,       // Returns whether the input is even
+        Vec<[Self::OtherAcvmType<C>; 32]>, // Returns the wnaf digits (They are already positive (by adding +15 (and also dividing by 2)))
+        Vec<[Self::OtherAcvmType<C>; 32]>, // Returns whether the wnaf digit is negative
+        Vec<[Self::OtherAcvmType<C>; 64]>, // Returns s1,...,s8 for every 4 wnaf digits (needed later for PointTablePrecomputationRow computation)
+        Vec<[Self::OtherAcvmType<C>; 8]>, // Returns the (absolute) value of the row_chunk (also in PointTablePrecomputationRow computation)
+        Vec<[Self::OtherAcvmType<C>; 8]>, // Returns the sign of the row_chunk (also in PointTablePrecomputationRow computation)
     )> {
         //TODO: Move constants somewhere else
         const NUM_SCALAR_BITS: usize = 128; // The length of scalars handled by the ECCVVM
@@ -1166,26 +1281,26 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         for z in zs {
             let z_biguint: BigUint = (*z).into();
             let wnaf_digits_tmp = compute_wnaf_digits(z_biguint.clone());
-            let wnaf_digits_normalized: [F; 32] = wnaf_digits_tmp
+            let wnaf_digits_normalized: [C::BaseField; 32] = wnaf_digits_tmp
                 .iter()
-                .map(|d| F::from(((*d + 15) / 2) as u64))
-                .collect::<Vec<F>>()
+                .map(|d| C::BaseField::from(((*d + 15) / 2) as u64))
+                .collect::<Vec<C::BaseField>>()
                 .try_into()
                 .expect("We know the length is 32");
             wnaf_digits.push(wnaf_digits_normalized);
-            is_even.push(F::from(
+            is_even.push(C::BaseField::from(
                 (z_biguint & BigUint::from(1u32)) == BigUint::zero(),
             ));
-            let mut wnaf_digits_signs = [F::zero(); 32];
+            let mut wnaf_digits_signs = [C::BaseField::zero(); 32];
             for (i, digit) in wnaf_digits_tmp.iter().enumerate() {
                 if *digit < 0 {
-                    wnaf_digits_signs[i] = F::one();
+                    wnaf_digits_signs[i] = C::BaseField::one();
                 }
             }
             wnaf_is_negative.push(wnaf_digits_signs);
-            let mut tmp_si = [F::zero(); 64];
-            let mut tmp_row_chunk_values = [F::zero(); 8];
-            let mut tmp_row_chunk_signs = [F::zero(); 8];
+            let mut tmp_si = [C::BaseField::zero(); 64];
+            let mut tmp_row_chunk_values = [C::BaseField::zero(); 8];
+            let mut tmp_row_chunk_signs = [C::BaseField::zero(); 8];
             for i in 0..num_rows_per_scalar {
                 let slice0 = &wnaf_digits_tmp[i * WNAF_DIGITS_PER_ROW];
                 let slice1 = &wnaf_digits_tmp[i * WNAF_DIGITS_PER_ROW + 1];
@@ -1198,35 +1313,35 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
 
                 let row_s_1 = {
                     let val: BigUint = (*slice0base2).into();
-                    F::from(val >> 2)
+                    C::BaseField::from(val >> 2)
                 };
                 let row_s_2 = {
                     let val: BigUint = (*slice0base2).into();
-                    F::from(val & BigUint::from(3u32))
+                    C::BaseField::from(val & BigUint::from(3u32))
                 };
                 let row_s_3 = {
                     let val: BigUint = (*slice1base2).into();
-                    F::from(val >> 2)
+                    C::BaseField::from(val >> 2)
                 };
                 let row_s_4 = {
                     let val: BigUint = (*slice1base2).into();
-                    F::from(val & BigUint::from(3u32))
+                    C::BaseField::from(val & BigUint::from(3u32))
                 };
                 let row_s_5 = {
                     let val: BigUint = (*slice2base2).into();
-                    F::from(val >> 2)
+                    C::BaseField::from(val >> 2)
                 };
                 let row_s_6 = {
                     let val: BigUint = (*slice2base2).into();
-                    F::from(val & BigUint::from(3u32))
+                    C::BaseField::from(val & BigUint::from(3u32))
                 };
                 let row_s_7 = {
                     let val: BigUint = (*slice3base2).into();
-                    F::from(val >> 2)
+                    C::BaseField::from(val >> 2)
                 };
                 let row_s_8 = {
                     let val: BigUint = (*slice3base2).into();
-                    F::from(val & BigUint::from(3u32))
+                    C::BaseField::from(val & BigUint::from(3u32))
                 };
                 tmp_si[i * 8] = row_s_1;
                 tmp_si[i * 8 + 1] = row_s_2;
@@ -1240,8 +1355,12 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
                 let chunk_negative = row_chunk < 0;
                 let row_chunk_value = row_chunk.unsigned_abs() as u64;
                 let row_chunk_value: BigUint = row_chunk_value.into();
-                tmp_row_chunk_values[i] = F::from(row_chunk_value);
-                tmp_row_chunk_signs[i] = if chunk_negative { F::one() } else { F::zero() };
+                tmp_row_chunk_values[i] = C::BaseField::from(row_chunk_value);
+                tmp_row_chunk_signs[i] = if chunk_negative {
+                    C::BaseField::one()
+                } else {
+                    C::BaseField::zero()
+                };
             }
             row_si.push(tmp_si);
             row_chunk_values.push(tmp_row_chunk_values);
@@ -1258,10 +1377,10 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         ))
     }
 
-    fn compute_endo_point<C: CurveGroup<BaseField = F>>(
-        point: &Self::AcvmPoint<C>,
-        cube_root_of_unity: F,
-    ) -> eyre::Result<Self::AcvmPoint<C>> {
+    fn compute_endo_point<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        point: &Self::OtherAcvmPoint<C>,
+        cube_root_of_unity: C::BaseField,
+    ) -> eyre::Result<Self::OtherAcvmPoint<C>> {
         // This is very hardcoded to the bn254 curve
         if TypeId::of::<C>()
             != TypeId::of::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>()
@@ -1282,36 +1401,40 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         }
     }
 
-    fn is_shared_point<C: CurveGroup<BaseField = F>>(_a: &Self::AcvmPoint<C>) -> bool {
+    fn is_shared_point<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        _a: &Self::OtherAcvmPoint<C>,
+    ) -> bool {
         false
     }
 
-    fn is_shared_other<C: CurveGroup<BaseField = F>>(_a: &Self::OtherAcvmType<C>) -> bool {
+    fn is_shared_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        _a: &Self::OtherAcvmType<C>,
+    ) -> bool {
         false
     }
 
-    fn get_public_other<C: CurveGroup<BaseField = F>>(
+    fn get_public_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         a: &Self::OtherAcvmType<C>,
-    ) -> Option<C::ScalarField> {
+    ) -> Option<C::BaseField> {
         Some(*a)
     }
 
-    fn inverse_or_zero_many(
+    fn inverse_or_zero_many_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        secrets: &[Self::AcvmType],
-    ) -> eyre::Result<Vec<Self::AcvmType>> {
+        secrets: &[Self::OtherAcvmType<C>],
+    ) -> eyre::Result<Vec<Self::OtherAcvmType<C>>> {
         Ok(secrets
             .iter()
-            .map(|x| x.inverse().unwrap_or(F::zero()))
+            .map(|x| x.inverse().unwrap_or(C::BaseField::zero()))
             .collect())
     }
 
-    fn cmux_many(
+    fn cmux_many_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        cond: &[Self::AcvmType],
-        truthy: &[Self::AcvmType],
-        falsy: &[Self::AcvmType],
-    ) -> eyre::Result<Vec<Self::AcvmType>> {
+        cond: &[Self::OtherAcvmType<C>],
+        truthy: &[Self::OtherAcvmType<C>],
+        falsy: &[Self::OtherAcvmType<C>],
+    ) -> eyre::Result<Vec<Self::OtherAcvmType<C>>> {
         if cond.len() != truthy.len() || cond.len() != falsy.len() {
             eyre::bail!("All inputs must have the same length");
         }
@@ -1325,5 +1448,18 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
 
     fn get_as_shared(&mut self, value: &Self::AcvmType) -> Self::ArithmeticShare {
         *value
+    }
+
+    fn get_as_shared_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        value: &Self::OtherAcvmType<C>,
+    ) -> Self::OtherArithmeticShare<C> {
+        *value
+    }
+
+    fn get_public_point_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        a: &Self::OtherAcvmPoint<C>,
+    ) -> Option<C> {
+        Some(*a)
     }
 }

@@ -19,13 +19,13 @@ pub(crate) const NUM_ROWS_PER_OP: usize = 2; // A single ECC op is split across 
 pub type CoEccvmOpsTable<T, C> = EccOpsTable<CoVMOperation<T, C>>;
 
 pub struct CoUltraEccOpsTable<
-    T: NoirWitnessExtensionProtocol<C::BaseField>,
+    T: NoirWitnessExtensionProtocol<C::ScalarField>,
     C: CurveGroup<BaseField: PrimeField>,
 > {
     pub table: EccOpsTable<CoUltraOp<T, C>>,
 }
 
-impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: CurveGroup<BaseField: PrimeField>>
+impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: CurveGroup<BaseField: PrimeField>>
     CoUltraEccOpsTable<T, C>
 {
     pub fn ultra_table_size(&self) -> usize {
@@ -43,19 +43,19 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: CurveGroup<BaseField: Pri
 
 #[derive(Default)]
 pub struct CoVMOperation<
-    T: NoirWitnessExtensionProtocol<C::BaseField>,
+    T: NoirWitnessExtensionProtocol<C::ScalarField>,
     C: CurveGroup<BaseField: PrimeField>,
 > {
     pub op_code: EccOpCode,
-    pub base_point: T::AcvmPoint<C>,
-    pub z1: T::AcvmType,
-    pub z2: T::AcvmType,
+    pub base_point: T::OtherAcvmPoint<C>,
+    pub z1: T::OtherAcvmType<C>,
+    pub z2: T::OtherAcvmType<C>,
     pub z1_is_zero: bool,
     pub z2_is_zero: bool,
     pub base_point_is_zero: bool,
-    pub mul_scalar_full: T::OtherAcvmType<C>,
+    pub mul_scalar_full: T::AcvmType,
 }
-impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: CurveGroup<BaseField: PrimeField>> Clone
+impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: CurveGroup<BaseField: PrimeField>> Clone
     for CoVMOperation<T, C>
 {
     fn clone(&self) -> Self {
@@ -73,20 +73,20 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: CurveGroup<BaseField: Pri
 }
 
 pub struct CoUltraOp<
-    T: NoirWitnessExtensionProtocol<C::BaseField>,
+    T: NoirWitnessExtensionProtocol<C::ScalarField>,
     C: CurveGroup<BaseField: PrimeField>,
 > {
     pub op_code: EccOpCode,
-    pub x_lo: T::OtherAcvmType<C>,
-    pub x_hi: T::OtherAcvmType<C>,
-    pub y_lo: T::OtherAcvmType<C>,
-    pub y_hi: T::OtherAcvmType<C>,
-    pub z_1: T::OtherAcvmType<C>,
-    pub z_2: T::OtherAcvmType<C>,
+    pub x_lo: T::AcvmType,
+    pub x_hi: T::AcvmType,
+    pub y_lo: T::AcvmType,
+    pub y_hi: T::AcvmType,
+    pub z_1: T::AcvmType,
+    pub z_2: T::AcvmType,
     pub return_is_infinity: bool,
 }
 
-impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: CurveGroup<BaseField: PrimeField>> Clone
+impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: CurveGroup<BaseField: PrimeField>> Clone
     for CoUltraOp<T, C>
 {
     fn clone(&self) -> Self {
@@ -104,18 +104,18 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: CurveGroup<BaseField: Pri
 }
 
 pub struct CoECCOpQueue<
-    T: NoirWitnessExtensionProtocol<C::BaseField>,
+    T: NoirWitnessExtensionProtocol<C::ScalarField>,
     C: CurveGroup<BaseField: PrimeField>,
 > {
     pub eccvm_ops_table: CoEccvmOpsTable<T, C>,
     pub ultra_ops_table: CoUltraEccOpsTable<T, C>,
-    pub accumulator: T::AcvmPoint<C>,
+    pub accumulator: T::OtherAcvmPoint<C>,
     pub eccvm_ops_reconstructed: Vec<CoVMOperation<T, C>>,
     pub ultra_ops_reconstructed: Vec<CoUltraOp<T, C>>,
     pub eccvm_row_tracker: EccvmRowTracker,
 }
 
-impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: CurveGroup<BaseField: PrimeField>>
+impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: CurveGroup<BaseField: PrimeField>>
     CoECCOpQueue<T, C>
 {
     // Initialize a new subtable of ECCVM ops and Ultra ops corresponding to an individual circuit
@@ -178,49 +178,52 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: CurveGroup<BaseField: Pri
         self.eccvm_ops_reconstructed = eccvm_ops_in;
     }
 
-    pub fn get_accumulator(&self) -> &T::AcvmPoint<C> {
+    pub fn get_accumulator(&self) -> &T::OtherAcvmPoint<C> {
         &self.accumulator
     }
 }
 
 pub(crate) struct CoScalarMul<
-    T: NoirWitnessExtensionProtocol<C::BaseField>,
+    T: NoirWitnessExtensionProtocol<C::ScalarField>,
     C: CurveGroup<BaseField: PrimeField>,
 > {
     pub(crate) pc: u32,
-    pub(crate) scalar: T::AcvmType,
-    pub(crate) base_point: T::AcvmPoint<C>,
-    pub(crate) wnaf_digits: [T::AcvmType; NUM_WNAF_DIGITS_PER_SCALAR],
-    pub(crate) wnaf_digits_sign: [T::AcvmType; NUM_WNAF_DIGITS_PER_SCALAR],
-    pub(crate) wnaf_si: [T::AcvmType; 8 * (NUM_WNAF_DIGITS_PER_SCALAR / WNAF_DIGITS_PER_ROW)],
-    pub(crate) wnaf_skew: T::AcvmType,
-    pub(crate) row_chunks: [T::AcvmType; NUM_WNAF_DIGITS_PER_SCALAR / WNAF_DIGITS_PER_ROW],
-    pub(crate) row_chunks_sign: [T::AcvmType; NUM_WNAF_DIGITS_PER_SCALAR / WNAF_DIGITS_PER_ROW],
+    pub(crate) scalar: T::OtherAcvmType<C>,
+    pub(crate) base_point: T::OtherAcvmPoint<C>,
+    pub(crate) wnaf_digits: [T::OtherAcvmType<C>; NUM_WNAF_DIGITS_PER_SCALAR],
+    pub(crate) wnaf_digits_sign: [T::OtherAcvmType<C>; NUM_WNAF_DIGITS_PER_SCALAR],
+    pub(crate) wnaf_si:
+        [T::OtherAcvmType<C>; 8 * (NUM_WNAF_DIGITS_PER_SCALAR / WNAF_DIGITS_PER_ROW)],
+    pub(crate) wnaf_skew: T::OtherAcvmType<C>,
+    pub(crate) row_chunks: [T::OtherAcvmType<C>; NUM_WNAF_DIGITS_PER_SCALAR / WNAF_DIGITS_PER_ROW],
+    pub(crate) row_chunks_sign:
+        [T::OtherAcvmType<C>; NUM_WNAF_DIGITS_PER_SCALAR / WNAF_DIGITS_PER_ROW],
     // size bumped by 1 to record base_point.dbl()
-    pub(crate) precomputed_table: [T::AcvmPoint<C>; POINT_TABLE_SIZE + 1],
+    pub(crate) precomputed_table: [T::OtherAcvmPoint<C>; POINT_TABLE_SIZE + 1],
 }
 
-impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: CurveGroup<BaseField: PrimeField>> Default
+impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: CurveGroup<BaseField: PrimeField>> Default
     for CoScalarMul<T, C>
 {
     fn default() -> Self {
         Self {
             pc: 0,
-            scalar: T::AcvmType::default(),
-            base_point: T::AcvmPoint::<C>::default(),
-            wnaf_digits: [T::AcvmType::default(); NUM_WNAF_DIGITS_PER_SCALAR],
-            wnaf_skew: T::AcvmType::default(),
-            precomputed_table: [T::AcvmPoint::<C>::default(); POINT_TABLE_SIZE + 1],
-            wnaf_digits_sign: [T::AcvmType::default(); NUM_WNAF_DIGITS_PER_SCALAR],
-            wnaf_si: [T::AcvmType::default();
+            scalar: T::OtherAcvmType::<C>::default(),
+            base_point: T::OtherAcvmPoint::<C>::default(),
+            wnaf_digits: [T::OtherAcvmType::<C>::default(); NUM_WNAF_DIGITS_PER_SCALAR],
+            wnaf_skew: T::OtherAcvmType::<C>::default(),
+            precomputed_table: [T::OtherAcvmPoint::<C>::default(); POINT_TABLE_SIZE + 1],
+            wnaf_digits_sign: [T::OtherAcvmType::<C>::default(); NUM_WNAF_DIGITS_PER_SCALAR],
+            wnaf_si: [T::OtherAcvmType::<C>::default();
                 8 * (NUM_WNAF_DIGITS_PER_SCALAR / WNAF_DIGITS_PER_ROW)],
-            row_chunks: [T::AcvmType::default(); NUM_WNAF_DIGITS_PER_SCALAR / WNAF_DIGITS_PER_ROW],
-            row_chunks_sign: [T::AcvmType::default();
+            row_chunks: [T::OtherAcvmType::<C>::default();
+                NUM_WNAF_DIGITS_PER_SCALAR / WNAF_DIGITS_PER_ROW],
+            row_chunks_sign: [T::OtherAcvmType::<C>::default();
                 NUM_WNAF_DIGITS_PER_SCALAR / WNAF_DIGITS_PER_ROW],
         }
     }
 }
-impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: CurveGroup<BaseField: PrimeField>> Clone
+impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: CurveGroup<BaseField: PrimeField>> Clone
     for CoScalarMul<T, C>
 {
     fn clone(&self) -> Self {
@@ -241,33 +244,33 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: CurveGroup<BaseField: Pri
 
 pub(crate) type Msm<C, T> = Vec<CoScalarMul<T, C>>;
 
-impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptFieldType>>
+impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: HonkCurve<TranscriptFieldType>>
     CoECCOpQueue<T, C>
 {
     pub(crate) fn get_msms(&mut self, driver: &mut T) -> eyre::Result<Vec<Msm<C, T>>> {
         let num_muls = self.get_number_of_muls();
 
         let compute_precomputed_table =
-            |base_point: T::AcvmPoint<C>,
+            |base_point: T::OtherAcvmPoint<C>,
              driver: &mut T|
-             -> eyre::Result<[T::AcvmPoint<C>; POINT_TABLE_SIZE + 1]> {
-                let d2 = driver.scale_point_by_scalar(
+             -> eyre::Result<[T::OtherAcvmPoint<C>; POINT_TABLE_SIZE + 1]> {
+                let d2 = driver.scale_point_by_scalar_other(
                     base_point,
-                    T::OtherAcvmType::<C>::from(C::ScalarField::from(2u32)),
+                    T::AcvmType::from(C::ScalarField::from(2u32)),
                 )?;
-                let mut table = [T::AcvmPoint::default(); POINT_TABLE_SIZE + 1];
+                let mut table = [T::OtherAcvmPoint::<C>::default(); POINT_TABLE_SIZE + 1];
                 table[POINT_TABLE_SIZE] = d2;
                 table[POINT_TABLE_SIZE / 2] = base_point;
 
                 for i in 1..(POINT_TABLE_SIZE / 2) {
                     table[i + POINT_TABLE_SIZE / 2] =
-                        driver.add_points(table[i + POINT_TABLE_SIZE / 2 - 1], d2);
+                        driver.add_points_other(table[i + POINT_TABLE_SIZE / 2 - 1], d2);
                 }
 
                 for i in 0..(POINT_TABLE_SIZE / 2) {
-                    table[i] = driver.scale_point_by_scalar(
+                    table[i] = driver.scale_point_by_scalar_other(
                         table[POINT_TABLE_SIZE - 1 - i],
-                        T::OtherAcvmType::<C>::from(-C::ScalarField::one()),
+                        T::AcvmType::from(-C::ScalarField::one()),
                     )?;
                 }
 
@@ -390,28 +393,28 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
 }
 pub(crate) struct AddState<
     C: CurveGroup<BaseField: PrimeField>,
-    T: NoirWitnessExtensionProtocol<C::BaseField>,
+    T: NoirWitnessExtensionProtocol<C::ScalarField>,
 > {
     pub add: bool,
-    pub slice: T::AcvmType,
-    pub point: T::AcvmPoint<C>,
-    pub lambda: T::AcvmType,
-    pub collision_inverse: T::AcvmType,
+    pub slice: T::OtherAcvmType<C>,
+    pub point: T::OtherAcvmPoint<C>,
+    pub lambda: T::OtherAcvmType<C>,
+    pub collision_inverse: T::OtherAcvmType<C>,
 }
-impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: CurveGroup<BaseField: PrimeField>> Default
+impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: CurveGroup<BaseField: PrimeField>> Default
     for AddState<C, T>
 {
     fn default() -> Self {
         Self {
             add: false,
-            slice: T::AcvmType::default(),
-            point: T::AcvmPoint::<C>::default(),
-            lambda: T::AcvmType::default(),
-            collision_inverse: T::AcvmType::default(),
+            slice: T::OtherAcvmType::<C>::default(),
+            point: T::OtherAcvmPoint::<C>::default(),
+            lambda: T::OtherAcvmType::<C>::default(),
+            collision_inverse: T::OtherAcvmType::<C>::default(),
         }
     }
 }
-impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: CurveGroup<BaseField: PrimeField>> Clone
+impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: CurveGroup<BaseField: PrimeField>> Clone
     for AddState<C, T>
 {
     fn clone(&self) -> Self {
@@ -427,7 +430,7 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: CurveGroup<BaseField: Pri
 
 pub(crate) struct MSMRow<
     C: CurveGroup<BaseField: PrimeField>,
-    T: NoirWitnessExtensionProtocol<C::BaseField>,
+    T: NoirWitnessExtensionProtocol<C::ScalarField>,
 > {
     // Counter over all half-length scalar muls used to compute the required MSMs
     pub(crate) pc: usize,
@@ -440,11 +443,11 @@ pub(crate) struct MSMRow<
     pub(crate) q_double: bool,
     pub(crate) q_skew: bool,
     pub(crate) add_state: [AddState<C, T>; 4],
-    pub(crate) accumulator_x: T::AcvmType,
-    pub(crate) accumulator_y: T::AcvmType,
+    pub(crate) accumulator_x: T::OtherAcvmType<C>,
+    pub(crate) accumulator_y: T::OtherAcvmType<C>,
     phantom: std::marker::PhantomData<T>,
 }
-impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: CurveGroup<BaseField: PrimeField>> Default
+impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: CurveGroup<BaseField: PrimeField>> Default
     for MSMRow<C, T>
 {
     fn default() -> Self {
@@ -458,14 +461,14 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: CurveGroup<BaseField: Pri
             q_double: false,
             q_skew: false,
             add_state: array::from_fn(|_| AddState::default()),
-            accumulator_x: T::AcvmType::default(),
-            accumulator_y: T::AcvmType::default(),
+            accumulator_x: T::OtherAcvmType::<C>::default(),
+            accumulator_y: T::OtherAcvmType::<C>::default(),
             phantom: std::marker::PhantomData,
         }
     }
 }
 
-impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: CurveGroup<BaseField: PrimeField>> Clone
+impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: CurveGroup<BaseField: PrimeField>> Clone
     for MSMRow<C, T>
 {
     fn clone(&self) -> Self {
@@ -486,7 +489,7 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: CurveGroup<BaseField: Pri
     }
 }
 
-impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptFieldType>>
+impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: HonkCurve<TranscriptFieldType>>
     MSMRow<C, T>
 {
     #[expect(clippy::type_complexity)]
@@ -495,16 +498,16 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
         total_number_of_muls: u32,
         num_msm_rows: usize,
         driver: &mut T,
-    ) -> eyre::Result<(Vec<Self>, [Vec<T::AcvmType>; 2])> {
+    ) -> eyre::Result<(Vec<Self>, [Vec<T::OtherAcvmType<C>>; 2])> {
         let num_rows_in_read_counts_table =
             (total_number_of_muls as usize) * (POINT_TABLE_SIZE / 2);
         let mut point_table_read_counts =
-            vec![T::AcvmType::default(); num_rows_in_read_counts_table * 2];
+            vec![T::OtherAcvmType::<C>::default(); num_rows_in_read_counts_table * 2];
 
         let update_read_count = |point_idx: usize,
-                                 mut index: T::AcvmType,
-                                 is_negative: T::AcvmType,
-                                 point_table_read_counts: &mut [T::AcvmType],
+                                 mut index: T::OtherAcvmType<C>,
+                                 is_negative: T::OtherAcvmType<C>,
+                                 point_table_read_counts: &mut [T::OtherAcvmType<C>],
                                  driver: &mut T|
          -> eyre::Result<()> {
             let row_index_offset = point_idx * 8;
@@ -521,36 +524,37 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
             //         1;
             // }
 
-            let column_index = driver.mul_with_public(
+            let column_index = driver.mul_with_public_other(
                 C::BaseField::from(num_rows_in_read_counts_table as u32),
                 is_negative,
             );
 
-            driver.add_assign(&mut index, column_index);
-            driver.add_assign(
+            driver.add_assign_other(&mut index, column_index);
+            driver.add_assign_other(
                 &mut index,
-                T::AcvmType::from(C::BaseField::from(row_index_offset as u32)),
+                T::OtherAcvmType::<C>::from(C::BaseField::from(row_index_offset as u32)),
             );
 
-            if T::is_shared(&index) {
-                let ohv = driver.one_hot_vector_from_shared_index(
-                    T::get_shared(&index).expect("Checked it is shared"),
+            if T::is_shared_other(&index) {
+                let ohv = driver.one_hot_vector_from_shared_index_other(
+                    T::get_shared_other(&index).expect("Checked it is shared"),
                     num_rows_in_read_counts_table * 2,
                 )?;
                 for (point_table_read_count, x) in
                     point_table_read_counts.iter_mut().zip(ohv.iter())
                 {
-                    let tmp = T::AcvmType::from(x.to_owned());
-                    driver.add_assign(point_table_read_count, tmp);
+                    let tmp = T::OtherAcvmType::<C>::from(x.to_owned());
+                    driver.add_assign_other(point_table_read_count, tmp);
                 }
             } else {
-                let index_value: BigUint =
-                    T::get_public(&index).expect("Checked it is public").into();
+                let index_value: BigUint = T::get_public_other(&index)
+                    .expect("Checked it is public")
+                    .into();
                 let index_value = usize::try_from(index_value)
                     .map_err(|_| eyre::eyre!("Index can not be translated to usize"))?;
-                driver.add_assign(
+                driver.add_assign_other(
                     &mut point_table_read_counts[index_value],
-                    T::AcvmType::from(C::BaseField::one()),
+                    T::OtherAcvmType::<C>::from(C::BaseField::one()),
                 );
             }
 
@@ -558,8 +562,8 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
         };
 
         let update_read_count_negative = |point_idx: usize,
-                                          slice: T::AcvmType,
-                                          point_table_read_counts: &mut [T::AcvmType],
+                                          slice: T::OtherAcvmType<C>,
+                                          point_table_read_counts: &mut [T::OtherAcvmType<C>],
                                           driver: &mut T|
          -> eyre::Result<()> {
             // we mimic this functionality, but we already know that we are in the negative branch:
@@ -575,19 +579,22 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
             // }
 
             let row_index_offset = point_idx * 8;
-            let relative_row_idx = driver.add(slice, T::AcvmType::from(C::BaseField::from(15u32)));
+            let relative_row_idx = driver.add_other(
+                slice,
+                T::OtherAcvmType::<C>::from(C::BaseField::from(15u32)),
+            );
             let two_inverse = C::BaseField::from(2u32)
                 .inverse()
                 .expect("2 has an inverse");
-            let relative_row_idx = driver.mul_with_public(two_inverse, relative_row_idx);
+            let relative_row_idx = driver.mul_with_public_other(two_inverse, relative_row_idx);
 
-            let index = driver.add(
+            let index = driver.add_other(
                 relative_row_idx,
-                T::AcvmType::from(C::BaseField::from(row_index_offset as u32)),
+                T::OtherAcvmType::<C>::from(C::BaseField::from(row_index_offset as u32)),
             );
-            if T::is_shared(&index) {
-                let ohv = driver.one_hot_vector_from_shared_index(
-                    T::get_shared(&index).expect("Checked it is shared"),
+            if T::is_shared_other(&index) {
+                let ohv = driver.one_hot_vector_from_shared_index_other(
+                    T::get_shared_other(&index).expect("Checked it is shared"),
                     num_rows_in_read_counts_table,
                 )?;
                 for (point_table_read_count, x) in point_table_read_counts
@@ -595,18 +602,19 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
                     .iter_mut()
                     .zip(ohv.iter())
                 {
-                    let tmp = T::AcvmType::from(x.to_owned());
-                    driver.add_assign(point_table_read_count, tmp);
+                    let tmp = T::OtherAcvmType::<C>::from(x.to_owned());
+                    driver.add_assign_other(point_table_read_count, tmp);
                 }
             } else {
-                let index_value: BigUint =
-                    T::get_public(&index).expect("Checked it is public").into();
+                let index_value: BigUint = T::get_public_other(&index)
+                    .expect("Checked it is public")
+                    .into();
                 let mut index_value =
                     usize::try_from(index_value).expect("Index to large for usize");
                 index_value += num_rows_in_read_counts_table; // we are in the negative branch
-                driver.add_assign(
+                driver.add_assign_other(
                     &mut point_table_read_counts[index_value],
-                    T::AcvmType::from(C::BaseField::one()),
+                    T::OtherAcvmType::<C>::from(C::BaseField::one()),
                 );
             }
 
@@ -664,12 +672,14 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
                 }
             }
         }
-        let cmux_results = driver.cmux_many(
+        let cmux_results = driver.cmux_many_other(
             &signs_for_cmux,
             &slices_for_cmux,
             &slices_for_cmux
                 .iter()
-                .map(|x| driver.sub(T::AcvmType::from(C::BaseField::from(15u32)), *x))
+                .map(|x| {
+                    driver.sub_other(T::OtherAcvmType::<C>::from(C::BaseField::from(15u32)), *x)
+                })
                 .collect::<Vec<_>>(),
         )?;
         let mut j = 0;
@@ -728,10 +738,10 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
                             }
                         }
                     }
-                    let cmux_result = driver.cmux_many(
+                    let cmux_result = driver.cmux_many_other(
                         &cmux,
-                        &vec![T::AcvmType::from(-C::BaseField::from(1u32)); cmux.len()],
-                        &vec![T::AcvmType::from(-C::BaseField::from(15u32)); cmux.len()],
+                        &vec![T::OtherAcvmType::<C>::from(-C::BaseField::from(1u32)); cmux.len()],
+                        &vec![T::OtherAcvmType::<C>::from(-C::BaseField::from(15u32)); cmux.len()],
                     )?;
 
                     let mut i = 0;
@@ -776,16 +786,16 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
         // We create 1 vector to store the entire point trace. We split into multiple containers using std::span
         // (we want 1 vector object to more efficiently batch normalize points)
 
-        let mut p1_trace = vec![T::AcvmPoint::<C>::default(); num_point_adds_and_doubles];
-        let mut p2_trace = vec![T::AcvmPoint::<C>::default(); num_point_adds_and_doubles];
-        let mut p3_trace = vec![T::AcvmPoint::<C>::default(); num_point_adds_and_doubles];
+        let mut p1_trace = vec![T::OtherAcvmPoint::<C>::default(); num_point_adds_and_doubles];
+        let mut p2_trace = vec![T::OtherAcvmPoint::<C>::default(); num_point_adds_and_doubles];
+        let mut p3_trace = vec![T::OtherAcvmPoint::<C>::default(); num_point_adds_and_doubles];
         // operation_trace records whether an entry in the p1/p2/p3 trace represents a point addition or doubling
         let mut operation_trace = vec![false; num_point_adds_and_doubles];
         // accumulator_trace tracks the value of the ECCVM accumulator for each row
-        let mut accumulator_trace = vec![T::AcvmPoint::<C>::default(); num_accumulators];
+        let mut accumulator_trace = vec![T::OtherAcvmPoint::<C>::default(); num_accumulators];
 
         // we start the accumulator at the offset generator point. This ensures we can support an MSM that produces a
-        let offset_generator = T::AcvmPoint::from(offset_generator::<C>().into());
+        let offset_generator = T::OtherAcvmPoint::from(offset_generator::<C>().into());
         accumulator_trace[0] = offset_generator;
 
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/973): Reinstate multitreading?
@@ -842,7 +852,7 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
                         let slice = if add_state.add {
                             msm[offset + point_idx].wnaf_digits[digit_idx]
                         } else {
-                            T::AcvmType::default()
+                            T::OtherAcvmType::default()
                         };
                         // In the MSM columns in the ECCVM circuit, we can add up to 4 points per row.
                         // if `row.add_state[point_idx].add = true`, this indicates that we want to add the
@@ -856,7 +866,7 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
                         add_state.slice = if add_state.add {
                             slice
                         } else {
-                            T::AcvmType::default()
+                            T::OtherAcvmType::default()
                         };
                         add_state.point = if add_state.add {
                             let lut = driver.init_lut_by_acvm_point(
@@ -867,13 +877,13 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
                                 + digit_idx];
                             driver.read_lut_by_acvm_point(index, &lut)?
                         } else {
-                            T::AcvmPoint::<C>::default()
+                            T::OtherAcvmPoint::<C>::default()
                         };
 
                         let p1 = accumulator;
                         let p2 = add_state.point;
                         accumulator = if add_state.add {
-                            driver.add_points(accumulator, add_state.point)
+                            driver.add_points_other(accumulator, add_state.point)
                         } else {
                             p1
                         };
@@ -906,12 +916,12 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
                     for point_idx in 0..ADDITIONS_PER_ROW {
                         let add_state = &mut row.add_state[point_idx];
                         add_state.add = false;
-                        add_state.slice = T::AcvmType::default();
-                        add_state.point = T::AcvmPoint::default();
-                        add_state.collision_inverse = T::AcvmType::default();
+                        add_state.slice = T::OtherAcvmType::default();
+                        add_state.point = T::OtherAcvmPoint::default();
+                        add_state.collision_inverse = T::OtherAcvmType::default();
                         p1_trace[trace_index] = accumulator;
                         p2_trace[trace_index] = accumulator;
-                        accumulator = driver.add_points(accumulator, accumulator);
+                        accumulator = driver.add_points_other(accumulator, accumulator);
                         p3_trace[trace_index] = accumulator;
                         operation_trace[trace_index] = true;
                         trace_index += 1;
@@ -933,37 +943,36 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
                             let add_state = &mut row.add_state[point_idx];
                             add_state.add = num_points_in_row > point_idx;
                             add_state.slice = if add_state.add {
-                                driver.mul_with_public(
+                                driver.mul_with_public_other(
                                     C::BaseField::from(7),
                                     msm[offset + point_idx].wnaf_skew,
                                 )
                             } else {
-                                T::AcvmType::default()
+                                T::OtherAcvmType::default()
                             };
                             let converted_wnaf_skew = if add_state.add {
                                 converted_wnaf_skews[msm_offset_wnaf_skews + offset + point_idx]
                             } else {
-                                T::OtherAcvmType::<C>::default()
+                                T::AcvmType::default()
                             };
                             add_state.point = if add_state.add {
                                 // msm[offset + point_idx].precomputed_table[add_state.slice as usize]
                                 let lut = driver.init_lut_by_acvm_point(
                                     msm[offset + point_idx].precomputed_table.to_vec(),
                                 );
-                                let index = driver.mul_with_public_other::<C>(
-                                    C::ScalarField::from(7),
-                                    converted_wnaf_skew,
-                                );
+                                let index = driver
+                                    .mul_with_public(C::ScalarField::from(7), converted_wnaf_skew);
                                 driver.read_lut_by_acvm_point(index, &lut)?
                             } else {
-                                T::AcvmPoint::<C>::default()
+                                T::OtherAcvmPoint::<C>::default()
                             };
 
                             let p1 = accumulator;
                             accumulator = {
-                                let added_points = driver.add_points(accumulator, add_state.point);
-                                let add_predicate_inverted = driver.sub_other(
-                                    T::OtherAcvmType::from(C::ScalarField::one()),
+                                let added_points =
+                                    driver.add_points_other(accumulator, add_state.point);
+                                let add_predicate_inverted = driver.sub(
+                                    T::AcvmType::from(C::ScalarField::one()),
                                     converted_wnaf_skew,
                                 );
                                 driver.msm(
@@ -999,7 +1008,7 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
         tmp.extend_from_slice(&p1_trace);
         tmp.extend_from_slice(&p2_trace);
         tmp.extend_from_slice(&accumulator_trace);
-        let (xs, ys, _) = driver.pointshare_to_field_shares_many(&tmp)?;
+        let (xs, ys, _) = driver.other_pointshare_to_other_field_shares_many(&tmp)?;
         let (p1_xs, rest) = xs.split_at(num_point_adds_and_doubles);
         let (p2_xs, acc_xs) = rest.split_at(num_point_adds_and_doubles);
         let (p1_ys, rest) = ys.split_at(num_point_adds_and_doubles);
@@ -1010,13 +1019,13 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
             let tmp2_x = p2_xs[operation_idx];
 
             if operation_trace[operation_idx] {
-                inverse_trace.push(driver.add(tmp1_y, tmp1_y));
+                inverse_trace.push(driver.add_other(tmp1_y, tmp1_y));
             } else {
-                inverse_trace.push(driver.sub(tmp2_x, tmp1_x));
+                inverse_trace.push(driver.sub_other(tmp2_x, tmp1_x));
             }
         }
 
-        let inverse_trace = driver.inverse_or_zero_many(&inverse_trace)?;
+        let inverse_trace = driver.inverse_or_zero_many_other(&inverse_trace)?;
 
         // complete the computation of the ECCVM execution trace, by adding the affine intermediate point data
         // i.e. row.accumulator_x, row.accumulator_y, row.add_state[0...3].collision_inverse,
@@ -1050,15 +1059,15 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
                         add_state.collision_inverse = if add_state.add {
                             *inverse
                         } else {
-                            T::AcvmType::default()
+                            T::OtherAcvmType::default()
                         };
                         add_state.lambda = if add_state.add {
                             let p1_y = p1_ys[trace_index];
                             let p2_y = p2_ys[trace_index];
-                            let sub = driver.sub(p2_y, p1_y);
-                            driver.mul(sub, *inverse)?
+                            let sub = driver.sub_other(p2_y, p1_y);
+                            driver.mul_other(sub, *inverse)?
                         } else {
-                            T::AcvmType::default()
+                            T::OtherAcvmType::default()
                         };
                         trace_index += 1;
                     }
@@ -1077,13 +1086,13 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
 
                     let p1_x_s = &p1_xs[trace_index..trace_index + ADDITIONS_PER_ROW];
                     let inverses = &inverse_trace[trace_index..trace_index + ADDITIONS_PER_ROW];
-                    let three_dx = driver.scale_many(p1_x_s, C::BaseField::from(3));
+                    let three_dx = driver.scale_many_other(p1_x_s, C::BaseField::from(3));
                     //TACEO TODO batch these multiplications outside
-                    let three_dx_dx = driver.mul_many(&three_dx, p1_x_s)?;
-                    let res = driver.mul_many(&three_dx_dx, inverses)?; //((*dx + dx + dx) * dx) * inverse;
+                    let three_dx_dx = driver.mul_many_other(&three_dx, p1_x_s)?;
+                    let res = driver.mul_many_other(&three_dx_dx, inverses)?; //((*dx + dx + dx) * dx) * inverse;
                     for (point_idx, point) in res.iter().enumerate().take(ADDITIONS_PER_ROW) {
                         let add_state = &mut row.add_state[point_idx];
-                        add_state.collision_inverse = T::AcvmType::default();
+                        add_state.collision_inverse = T::OtherAcvmType::default();
                         add_state.lambda = *point;
                         trace_index += 1;
                     }
@@ -1100,7 +1109,7 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
                         let p1_ys = &p1_ys[trace_index..trace_index + ADDITIONS_PER_ROW];
                         let p2_ys = &p2_ys[trace_index..trace_index + ADDITIONS_PER_ROW];
                         let inverses = &inverse_trace[trace_index..trace_index + ADDITIONS_PER_ROW];
-                        let sub = driver.sub_many(p2_ys, p1_ys);
+                        let sub = driver.sub_many_other(p2_ys, p1_ys);
                         let add_predicates = row.add_state[0..ADDITIONS_PER_ROW]
                             .iter()
                             .enumerate()
@@ -1108,18 +1117,18 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
                                 if s.add {
                                     msm[offset + point_idx].wnaf_skew
                                 } else {
-                                    T::AcvmType::default()
+                                    T::OtherAcvmType::default()
                                 }
                             })
-                            .collect::<Vec<T::AcvmType>>();
+                            .collect::<Vec<T::OtherAcvmType<C>>>();
                         //TACEO TODO batch these multiplications outside
-                        let res = driver.mul_many(
+                        let res = driver.mul_many_other(
                             &[sub, add_predicates.clone()].concat(),
                             &[inverses, inverses].concat(),
                         )?;
                         let first_half = &res[0..ADDITIONS_PER_ROW];
                         let second_half = &res[ADDITIONS_PER_ROW..];
-                        let res = driver.mul_many(first_half, &add_predicates)?;
+                        let res = driver.mul_many_other(first_half, &add_predicates)?;
 
                         for point_idx in 0..ADDITIONS_PER_ROW {
                             let add_state = &mut row.add_state[point_idx];
@@ -1145,7 +1154,8 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
         let final_row = &mut msm_rows.last_mut().expect("Should have at least one row");
         final_row.pc = *pc_values.last().expect("Should have at least one pc value") as usize;
         final_row.msm_transition = true;
-        let (final_x, final_y, _) = driver.pointshare_to_field_shares(*final_accumulator)?;
+        let (final_x, final_y, _) =
+            driver.other_pointshare_to_other_field_share(final_accumulator)?;
         final_row.accumulator_x = final_x;
         final_row.accumulator_y = final_y;
         final_row.msm_size = 0;
@@ -1156,31 +1166,31 @@ impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptField
         final_row.add_state = [
             AddState {
                 add: false,
-                slice: T::AcvmType::default(),
-                point: T::AcvmPoint::<C>::default(),
-                lambda: T::AcvmType::default(),
-                collision_inverse: T::AcvmType::default(),
+                slice: T::OtherAcvmType::default(),
+                point: T::OtherAcvmPoint::<C>::default(),
+                lambda: T::OtherAcvmType::default(),
+                collision_inverse: T::OtherAcvmType::default(),
             },
             AddState {
                 add: false,
-                slice: T::AcvmType::default(),
-                point: T::AcvmPoint::<C>::default(),
-                lambda: T::AcvmType::default(),
-                collision_inverse: T::AcvmType::default(),
+                slice: T::OtherAcvmType::default(),
+                point: T::OtherAcvmPoint::<C>::default(),
+                lambda: T::OtherAcvmType::default(),
+                collision_inverse: T::OtherAcvmType::default(),
             },
             AddState {
                 add: false,
-                slice: T::AcvmType::default(),
-                point: T::AcvmPoint::<C>::default(),
-                lambda: T::AcvmType::default(),
-                collision_inverse: T::AcvmType::default(),
+                slice: T::OtherAcvmType::default(),
+                point: T::OtherAcvmPoint::<C>::default(),
+                lambda: T::OtherAcvmType::default(),
+                collision_inverse: T::OtherAcvmType::default(),
             },
             AddState {
                 add: false,
-                slice: T::AcvmType::default(),
-                point: T::AcvmPoint::<C>::default(),
-                lambda: T::AcvmType::default(),
-                collision_inverse: T::AcvmType::default(),
+                slice: T::OtherAcvmType::default(),
+                point: T::OtherAcvmPoint::<C>::default(),
+                lambda: T::OtherAcvmType::default(),
+                collision_inverse: T::OtherAcvmType::default(),
             },
         ];
 
