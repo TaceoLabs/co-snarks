@@ -133,10 +133,10 @@ impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
                 public_inputs.len()
             )
         }
-        let num_witness_variables = private_witness.witness.len() + public_inputs.len();
+        let num_witness_variables = private_witness.witness.len();
         if num_witness_variables != matrices.num_witness_variables {
             eyre::bail!(
-                "amount of witness variables does not match with provided constraint system! Expected {}, but got {}",
+                "amount of private witness variables does not match with provided constraint system! Expected {}, but got {}",
                 matrices.num_witness_variables,
                 num_witness_variables
             )
