@@ -146,7 +146,7 @@ mod tests {
 
     fn co_ultra_op_from_ultra_op<C: HonkCurve<TranscriptFieldType>>(
         ultra_op: UltraOp<C>,
-    ) -> Vec<CoUltraOp<WitExtDriver<'static, C::BaseField, LocalNetwork>, C>> {
+    ) -> Vec<CoUltraOp<WitExtDriver<'static, C::ScalarField, LocalNetwork>, C>> {
         let mut rng = thread_rng();
         izip!(
         share_field_element(ultra_op.x_lo, &mut rng),
@@ -162,28 +162,28 @@ mod tests {
             op_code: ultra_op.op_code.clone(),
             x_lo:
                 <co_acvm::Rep3AcvmSolver<'_, _, LocalNetwork> as co_acvm::mpc::NoirWitnessExtensionProtocol<
-                    C::BaseField,
-                >>::OtherAcvmType::<C>::from(x_lo),
+                    C::ScalarField,
+                >>::AcvmType::from(x_lo),
             x_hi:
                 <co_acvm::Rep3AcvmSolver<'_, _, LocalNetwork> as co_acvm::mpc::NoirWitnessExtensionProtocol<
-                    C::BaseField,
-                >>::OtherAcvmType::<C>::from(x_hi),
+                    C::ScalarField,
+                >>::AcvmType::from(x_hi),
             y_lo:
                 <co_acvm::Rep3AcvmSolver<'_, _, LocalNetwork> as co_acvm::mpc::NoirWitnessExtensionProtocol<
-                    C::BaseField,
-                >>::OtherAcvmType::<C>::from(y_lo),
+                    C::ScalarField,
+                >>::AcvmType::from(y_lo),
             y_hi:
                 <co_acvm::Rep3AcvmSolver<'_, _, LocalNetwork> as co_acvm::mpc::NoirWitnessExtensionProtocol<
-                    C::BaseField,
-                >>::OtherAcvmType::<C>::from(y_hi),
+                    C::ScalarField,
+                >>::AcvmType::from(y_hi),
             z_1:
                 <co_acvm::Rep3AcvmSolver<'_, _, LocalNetwork> as co_acvm::mpc::NoirWitnessExtensionProtocol<
-                    C::BaseField,
-                >>::OtherAcvmType::<C>::from(z_1),
+                    C::ScalarField,
+                >>::AcvmType::from(z_1),
             z_2:
                 <co_acvm::Rep3AcvmSolver<'_, _, LocalNetwork> as co_acvm::mpc::NoirWitnessExtensionProtocol<
-                    C::BaseField,
-                >>::OtherAcvmType::<C>::from(z_2),
+                    C::ScalarField,
+                >>::AcvmType::from(z_2),
             return_is_infinity:
                ultra_op.return_is_infinity,
         },
@@ -192,7 +192,7 @@ mod tests {
 
     fn co_vm_operation_from_vm_operation<C: HonkCurve<TranscriptFieldType>>(
         vm_operation: VMOperation<C>,
-    ) -> Vec<CoVMOperation<WitExtDriver<'static, C::BaseField, LocalNetwork>, C>> {
+    ) -> Vec<CoVMOperation<WitExtDriver<'static, C::ScalarField, LocalNetwork>, C>> {
         let mut rng = thread_rng();
         izip!(
         share_curve_point(vm_operation.base_point.into(), &mut rng),
@@ -204,14 +204,14 @@ mod tests {
         op_code: vm_operation.op_code.clone(),
     base_point: co_acvm::Rep3AcvmPoint::<C>::from(    base_point),
         z1: <co_acvm::Rep3AcvmSolver<'_, _, LocalNetwork> as co_acvm::mpc::NoirWitnessExtensionProtocol<
-            C::BaseField,
-        >>::AcvmType::from(z1),
+            C::ScalarField,
+        >>::OtherAcvmType::<C>::from(z1),
         z2: <co_acvm::Rep3AcvmSolver<'_, _, LocalNetwork> as co_acvm::mpc::NoirWitnessExtensionProtocol<
-            C::BaseField,
-        >>::AcvmType::from(z2),
+            C::ScalarField,
+        >>::OtherAcvmType::<C>::from(z2),
         mul_scalar_full: <co_acvm::Rep3AcvmSolver<'_, _, LocalNetwork> as co_acvm::mpc::NoirWitnessExtensionProtocol<
-            C::BaseField,
-        >>::OtherAcvmType::<C>::from(mul_scalar_full),
+            C::ScalarField,
+        >>::AcvmType::from(mul_scalar_full),
         z1_is_zero: vm_operation.z1.is_zero(),
         z2_is_zero: vm_operation.z2.is_zero(),
         base_point_is_zero: vm_operation.base_point.is_zero(),
@@ -221,7 +221,7 @@ mod tests {
 
     fn ecc_op_queue_into_co_ecc_op_queue<
         C: HonkCurve<TranscriptFieldType>,
-        T: NoirWitnessExtensionProtocol<C::BaseField>,
+        T: NoirWitnessExtensionProtocol<C::ScalarField>,
     >(
         queue: ECCOpQueue<C>,
     ) -> CoECCOpQueue<T, C> {
@@ -233,10 +233,10 @@ mod tests {
                 let vm_operation = &queue.eccvm_ops_table.table[j][i];
                 let vm_op = CoVMOperation::<T, C> {
                     op_code: vm_operation.op_code.clone(),
-                    base_point: T::AcvmPoint::<C>::from(vm_operation.base_point.into()),
-                    z1: T::AcvmType::from(C::BaseField::from(vm_operation.z1.clone())),
-                    z2: T::AcvmType::from(C::BaseField::from(vm_operation.z2.clone())),
-                    mul_scalar_full: T::OtherAcvmType::from(vm_operation.mul_scalar_full),
+                    base_point: T::OtherAcvmPoint::<C>::from(vm_operation.base_point.into()),
+                    z1: T::OtherAcvmType::from(C::BaseField::from(vm_operation.z1.clone())),
+                    z2: T::OtherAcvmType::from(C::BaseField::from(vm_operation.z2.clone())),
+                    mul_scalar_full: T::AcvmType::from(vm_operation.mul_scalar_full),
                     z1_is_zero: vm_operation.z1.is_zero(),
                     z2_is_zero: vm_operation.z2.is_zero(),
                     base_point_is_zero: vm_operation.base_point.is_zero(),
@@ -256,12 +256,12 @@ mod tests {
                 let ultra_operation = &queue.ultra_ops_table.table[j][i];
                 let ultra_op = CoUltraOp::<T, C> {
                     op_code: ultra_operation.op_code.clone(),
-                    x_lo: T::OtherAcvmType::from(ultra_operation.x_lo),
-                    x_hi: T::OtherAcvmType::from(ultra_operation.x_hi),
-                    y_lo: T::OtherAcvmType::from(ultra_operation.y_lo),
-                    y_hi: T::OtherAcvmType::from(ultra_operation.y_hi),
-                    z_1: T::OtherAcvmType::from(ultra_operation.z_1),
-                    z_2: T::OtherAcvmType::from(ultra_operation.z_2),
+                    x_lo: T::AcvmType::from(ultra_operation.x_lo),
+                    x_hi: T::AcvmType::from(ultra_operation.x_hi),
+                    y_lo: T::AcvmType::from(ultra_operation.y_lo),
+                    y_hi: T::AcvmType::from(ultra_operation.y_hi),
+                    z_1: T::AcvmType::from(ultra_operation.z_1),
+                    z_2: T::AcvmType::from(ultra_operation.z_2),
                     return_is_infinity: ultra_operation.return_is_infinity,
                 };
                 tmp.push(ultra_op);
@@ -273,7 +273,7 @@ mod tests {
                 table: ultra_ops_table,
             },
         };
-        let accumulator = T::AcvmPoint::<C>::from(queue.accumulator.into());
+        let accumulator = T::OtherAcvmPoint::<C>::from(queue.accumulator.into());
         CoECCOpQueue {
             accumulator,
             eccvm_ops_table,
@@ -286,7 +286,7 @@ mod tests {
 
     fn ecc_op_queue_into_shared_co_ecc_op_queue<C: HonkCurve<TranscriptFieldType>>(
         queue: ECCOpQueue<C>,
-    ) -> [CoECCOpQueue<Rep3AcvmSolver<'static, C::BaseField, LocalNetwork>, C>; 3] {
+    ) -> [CoECCOpQueue<Rep3AcvmSolver<'static, C::ScalarField, LocalNetwork>, C>; 3] {
         let mut ultra_ops_share_1 = Vec::with_capacity(ULTRA_OPS_TABLE_SIZE);
         let mut ultra_ops_share_2 = Vec::with_capacity(ULTRA_OPS_TABLE_SIZE);
         let mut ultra_ops_share_3 = Vec::with_capacity(ULTRA_OPS_TABLE_SIZE);
@@ -411,7 +411,7 @@ mod tests {
             let net1b = Box::leak(Box::new(net1));
 
             threads.push(thread::spawn(move || {
-                let mut driver = Rep3AcvmSolver::<ark_grumpkin::Fr, LocalNetwork>::new(
+                let mut driver = Rep3AcvmSolver::<ark_grumpkin::Fq, LocalNetwork>::new(
                     net0b,
                     net1b,
                     A2BType::default(),
@@ -420,7 +420,7 @@ mod tests {
                 let polys = construct_from_builder::<
                     short_weierstrass::Projective<GrumpkinConfig>,
                     Rep3UltraHonkDriver,
-                    Rep3AcvmSolver<ark_grumpkin::Fr, LocalNetwork>,
+                    Rep3AcvmSolver<ark_grumpkin::Fq, LocalNetwork>,
                 >(&mut queue, &mut driver)
                 .unwrap();
                 let mut proving_key = ProvingKey::<
@@ -479,7 +479,7 @@ mod tests {
             deserialize_ecc_op_queue(path);
         let mut co_queue = ecc_op_queue_into_co_ecc_op_queue::<
             ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>,
-            PlainAcvmSolver<ark_grumpkin::Fr>,
+            PlainAcvmSolver<ark_grumpkin::Fq>,
         >(queue);
         let circuit_size = 65536;
         let prover_crs = Arc::new(
@@ -494,7 +494,7 @@ mod tests {
         let polys = construct_from_builder::<
             short_weierstrass::Projective<GrumpkinConfig>,
             PlainUltraHonkDriver,
-            PlainAcvmSolver<ark_grumpkin::Fr>,
+            PlainAcvmSolver<ark_grumpkin::Fq>,
         >(&mut co_queue, &mut driver)
         .unwrap();
         let mut proving_key = ProvingKey::<
