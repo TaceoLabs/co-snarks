@@ -264,7 +264,9 @@ impl<
                 let z_1 = FieldCT::from_witness_index(op_tuple.z_1);
                 let z_2 = FieldCT::from_witness_index(op_tuple.z_2);
                 let beta = FieldCT::from_witness(
-                    P::ScalarField::get_root_of_unity(3).expect("P::ScalarField should have a cube root of unity").into(),
+                    P::ScalarField::get_root_of_unity(3)
+                        .expect("P::ScalarField should have a cube root of unity")
+                        .into(),
                     builder,
                 );
                 scalar.assert_equal(
