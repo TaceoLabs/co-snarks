@@ -28,11 +28,11 @@ use crate::eccvm::co_ecc_op_queue::CoUltraOp;
 const NUM_WIRES: usize = 81;
 const ZERO_IDX: usize = 0;
 
-pub struct TranslatorBuilder<C: CurveGroup, T: NoirWitnessExtensionProtocol<C::BaseField>>
+pub struct TranslatorBuilder<C: CurveGroup, T: NoirWitnessExtensionProtocol<C::ScalarField>>
 where
     C::BaseField: PrimeField,
 {
-    pub variables: Vec<T::OtherAcvmType<C>>,
+    pub variables: Vec<T::AcvmType>,
     next_var_index: Vec<u32>,
     prev_var_index: Vec<u32>,
     pub real_variable_index: Vec<u32>,
@@ -42,14 +42,14 @@ where
     wires: [Vec<u32>; NUM_WIRES],
     num_gates: usize,
 }
-impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseField>> Default
+impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::ScalarField>> Default
     for TranslatorBuilder<C, T>
 {
     fn default() -> Self {
         Self::new()
     }
 }
-impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseField>>
+impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::ScalarField>>
     TranslatorBuilder<C, T>
 {
     pub(crate) const DUMMY_TAG: u32 = 0;
@@ -68,7 +68,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseF
             num_gates: 0,
         }
     }
-    pub(crate) fn add_variable(&mut self, value: T::OtherAcvmType<C>) -> u32 {
+    pub(crate) fn add_variable(&mut self, value: T::AcvmType) -> u32 {
         let idx = self.variables.len() as u32;
         self.variables.push(value);
         self.real_variable_index.push(idx);
@@ -87,8 +87,8 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseF
         self.evaluation_input_x = evaluation_input_x;
         self.batching_challenge_v = batching_challenge_v;
         let ultra_ops = ecc_op_queue.get_ultra_ops();
-        let mut accumulator_trace: Vec<T::AcvmType> = Vec::new();
-        let mut current_accumulator = T::AcvmType::default();
+        let mut accumulator_trace: Vec<T::OtherAcvmType<C>> = Vec::new();
+        let mut current_accumulator = T::OtherAcvmType::<C>::default();
         if ultra_ops.is_empty() {
             return Ok(());
         }
@@ -127,7 +127,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseF
         let shift: C::BaseField = (BigUint::one() << shift_bits).into();
         let converted = driver.convert_fields_back::<C>(&batch_convert)?;
         for (i, ultra_op) in ultra_ops.iter().skip(1).rev().enumerate() {
-            T::mul_assign_with_public(&mut current_accumulator, evaluation_input_x);
+            T::mul_assign_with_public_other(&mut current_accumulator, evaluation_input_x);
             let x_hi = converted[i * 6 + 0];
             let x_lo = converted[i * 6 + 1];
             let y_hi = converted[i * 6 + 2];
@@ -136,32 +136,32 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseF
             let z_2 = converted[i * 6 + 5];
             let (x_256, y_256) = if ultra_op.return_is_infinity {
                 (
-                    T::AcvmType::from(C::BaseField::zero()),
-                    T::AcvmType::from(C::BaseField::zero()),
+                    T::OtherAcvmType::from(C::BaseField::zero()),
+                    T::OtherAcvmType::from(C::BaseField::zero()),
                 )
             } else {
                 let mut x_256 = x_hi;
-                T::mul_assign_with_public(&mut x_256, shift);
-                driver.add_assign(&mut x_256, x_lo);
+                T::mul_assign_with_public_other(&mut x_256, shift);
+                driver.add_assign_other(&mut x_256, x_lo);
 
                 let mut y_256 = y_hi;
-                T::mul_assign_with_public(&mut y_256, shift);
-                driver.add_assign(&mut y_256, y_lo);
+                T::mul_assign_with_public_other(&mut y_256, shift);
+                driver.add_assign_other(&mut y_256, y_lo);
 
                 (x_256, y_256)
             };
 
             let mut tmp = z_2;
-            T::mul_assign_with_public(&mut tmp, batching_challenge_v);
-            driver.add_assign(&mut tmp, z_1);
-            T::mul_assign_with_public(&mut tmp, batching_challenge_v);
-            driver.add_assign(&mut tmp, y_256);
-            T::mul_assign_with_public(&mut tmp, batching_challenge_v);
-            driver.add_assign(&mut tmp, x_256);
-            T::mul_assign_with_public(&mut tmp, batching_challenge_v);
+            T::mul_assign_with_public_other(&mut tmp, batching_challenge_v);
+            driver.add_assign_other(&mut tmp, z_1);
+            T::mul_assign_with_public_other(&mut tmp, batching_challenge_v);
+            driver.add_assign_other(&mut tmp, y_256);
+            T::mul_assign_with_public_other(&mut tmp, batching_challenge_v);
+            driver.add_assign_other(&mut tmp, x_256);
+            T::mul_assign_with_public_other(&mut tmp, batching_challenge_v);
             let op_code_value: C::BaseField = C::BaseField::from(ultra_op.op_code.value());
-            driver.add_assign_with_public(op_code_value, &mut tmp);
-            driver.add_assign(&mut current_accumulator, tmp);
+            driver.add_assign_with_public_other(op_code_value, &mut tmp);
+            driver.add_assign_other(&mut current_accumulator, tmp);
             accumulator_trace.push(current_accumulator);
         }
 
@@ -184,7 +184,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseF
         ];
         // Generate witness values from all the UltraOps
         for ultra_op in ultra_ops.iter().skip(1) {
-            let mut previous_accumulator = T::AcvmType::default();
+            let mut previous_accumulator = T::OtherAcvmType::default();
             // Pop the last value from accumulator trace and use it as previous accumulator
             if let Some(last) = accumulator_trace.pop() {
                 previous_accumulator = last;
@@ -205,7 +205,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseF
     }
 
     fn populate_wires_from_ultra_op(&mut self, ultra_op: &CoUltraOp<T, C>) {
-        let idx = self.add_variable(T::OtherAcvmType::from(C::ScalarField::from(
+        let idx = self.add_variable(T::AcvmType::from(C::ScalarField::from(
             ultra_op.op_code.value(),
         )));
         self.wires[WireIds::OP.as_usize()].push(idx);
@@ -219,8 +219,8 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseF
     fn insert_pair_into_wire(
         &mut self,
         wire_index: WireIds,
-        first: T::OtherAcvmType<C>,
-        second: T::OtherAcvmType<C>,
+        first: T::AcvmType,
+        second: T::AcvmType,
     ) {
         let first_idx = self.add_variable(first);
         let second_idx = self.add_variable(second);
@@ -232,7 +232,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseF
     fn generate_witness_values(
         &self,
         ultra_op: &CoUltraOp<T, C>,
-        previous_accumulator: T::AcvmType,
+        previous_accumulator: T::OtherAcvmType<C>,
         batching_challenge_v: C::BaseField,
         evaluation_input_x: C::BaseField,
         negative_modulus_limbs: &[C::ScalarField; 5],
@@ -262,7 +262,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseF
          * convert to Fr
          *
          */
-        let uint512_t_to_limbs = |original: &BigUint| -> [T::OtherAcvmType<C>; NUM_BINARY_LIMBS] {
+        let uint512_t_to_limbs = |original: &BigUint| -> [T::AcvmType; NUM_BINARY_LIMBS] {
             // let mut out = [C::ScalarField::from(0u64); NUM_BINARY_LIMBS];
             // for (i, limb) in out.iter_mut().enumerate() {
             //     //TACEO TODO: Batch these decompositions
@@ -280,26 +280,25 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseF
          * @brief A method for splitting wide limbs (P_x_lo, P_y_hi, etc) into two limbs
          *
          */
-        let split_wide_limb_into_2_limbs =
-            |wide_limb: T::OtherAcvmType<C>| -> [T::OtherAcvmType<C>; NUM_Z_LIMBS] {
-                // let wide: BigUint = wide_limb.into();
-                // [
-                //     //TACEO TODO: Batch these decompositions
-                //     C::ScalarField::from(Utils::slice_u256(&wide, 0, NUM_LIMB_BITS as u64)),
-                //     C::ScalarField::from(Utils::slice_u256(
-                //         &wide,
-                //         NUM_LIMB_BITS as u64,
-                //         2 * NUM_LIMB_BITS as u64,
-                //     )),
-                // ]
-                todo!()
-            };
+        let split_wide_limb_into_2_limbs = |wide_limb: T::AcvmType| -> [T::AcvmType; NUM_Z_LIMBS] {
+            // let wide: BigUint = wide_limb.into();
+            // [
+            //     //TACEO TODO: Batch these decompositions
+            //     C::ScalarField::from(Utils::slice_u256(&wide, 0, NUM_LIMB_BITS as u64)),
+            //     C::ScalarField::from(Utils::slice_u256(
+            //         &wide,
+            //         NUM_LIMB_BITS as u64,
+            //         2 * NUM_LIMB_BITS as u64,
+            //     )),
+            // ]
+            todo!()
+        };
         /*
          * @brief A method to split a full 68-bit limb into 5 14-bit limb and 1 shifted limb for a more secure constraint
          *
          */
         let split_standard_limb_into_micro_limbs =
-            |limb: T::OtherAcvmType<C>| -> [T::OtherAcvmType<C>; NUM_MICRO_LIMBS] {
+            |limb: T::AcvmType| -> [T::AcvmType; NUM_MICRO_LIMBS] {
                 // // static_assert(MICRO_LIMB_BITS == 14);
                 // //TACEO TODO: Batch these decompositions
                 // let val: BigUint = limb.into();
@@ -329,93 +328,90 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseF
          * (plus there is 1 extra space for other constraints)
          *
          */
-        let split_top_limb_into_micro_limbs = |limb: T::OtherAcvmType<C>,
-                                               last_limb_bits: usize|
-         -> [T::OtherAcvmType<C>; NUM_MICRO_LIMBS] {
-            // // static_assert(MICRO_LIMB_BITS == 14);
-            // //TACEO TODO: Batch these decompositions
-            // let val: BigUint = limb.into();
-            // let a0 = Utils::slice_u256(&val, 0, MICRO_LIMB_BITS as u64);
-            // let a1 = Utils::slice_u256(&val, MICRO_LIMB_BITS as u64, 2 * MICRO_LIMB_BITS as u64);
-            // let a2 =
-            //     Utils::slice_u256(&val, 2 * MICRO_LIMB_BITS as u64, 3 * MICRO_LIMB_BITS as u64);
-            // let a3 =
-            //     Utils::slice_u256(&val, 3 * MICRO_LIMB_BITS as u64, 4 * MICRO_LIMB_BITS as u64);
-            // let a4 =
-            //     Utils::slice_u256(&val, 3 * MICRO_LIMB_BITS as u64, 4 * MICRO_LIMB_BITS as u64)
-            //         << (MICRO_LIMB_BITS - (last_limb_bits % MICRO_LIMB_BITS));
+        let split_top_limb_into_micro_limbs =
+            |limb: T::AcvmType, last_limb_bits: usize| -> [T::AcvmType; NUM_MICRO_LIMBS] {
+                // // static_assert(MICRO_LIMB_BITS == 14);
+                // //TACEO TODO: Batch these decompositions
+                // let val: BigUint = limb.into();
+                // let a0 = Utils::slice_u256(&val, 0, MICRO_LIMB_BITS as u64);
+                // let a1 = Utils::slice_u256(&val, MICRO_LIMB_BITS as u64, 2 * MICRO_LIMB_BITS as u64);
+                // let a2 =
+                //     Utils::slice_u256(&val, 2 * MICRO_LIMB_BITS as u64, 3 * MICRO_LIMB_BITS as u64);
+                // let a3 =
+                //     Utils::slice_u256(&val, 3 * MICRO_LIMB_BITS as u64, 4 * MICRO_LIMB_BITS as u64);
+                // let a4 =
+                //     Utils::slice_u256(&val, 3 * MICRO_LIMB_BITS as u64, 4 * MICRO_LIMB_BITS as u64)
+                //         << (MICRO_LIMB_BITS - (last_limb_bits % MICRO_LIMB_BITS));
 
-            // [
-            //     C::ScalarField::from(a0),
-            //     C::ScalarField::from(a1),
-            //     C::ScalarField::from(a2),
-            //     C::ScalarField::from(a3),
-            //     C::ScalarField::from(a4),
-            //     C::ScalarField::from(0u64),
-            // ]
-            todo!()
-        };
+                // [
+                //     C::ScalarField::from(a0),
+                //     C::ScalarField::from(a1),
+                //     C::ScalarField::from(a2),
+                //     C::ScalarField::from(a3),
+                //     C::ScalarField::from(a4),
+                //     C::ScalarField::from(0u64),
+                // ]
+                todo!()
+            };
 
         /*
          * @brief A method for splitting the top 60-bit z limb into microlimbs (differs from the 68-bit limb by the shift in
          * the last limb)
          *
          */
-        let split_top_z_limb_into_micro_limbs = |limb: T::OtherAcvmType<C>,
-                                                 last_limb_bits: usize|
-         -> [T::OtherAcvmType<C>; NUM_MICRO_LIMBS] {
-            // // static_assert(MICRO_LIMB_BITS == 14);
-            // //TACEO TODO: Batch these decompositions
-            // let val: BigUint = limb.into();
-            // let a0 = Utils::slice_u256(&val, 0, MICRO_LIMB_BITS as u64);
-            // let a1 = Utils::slice_u256(&val, MICRO_LIMB_BITS as u64, 2 * MICRO_LIMB_BITS as u64);
-            // let a2 =
-            //     Utils::slice_u256(&val, 2 * MICRO_LIMB_BITS as u64, 3 * MICRO_LIMB_BITS as u64);
-            // let a3 =
-            //     Utils::slice_u256(&val, 3 * MICRO_LIMB_BITS as u64, 4 * MICRO_LIMB_BITS as u64);
-            // let a4 =
-            //     Utils::slice_u256(&val, 4 * MICRO_LIMB_BITS as u64, 5 * MICRO_LIMB_BITS as u64);
-            // let a5 =
-            //     Utils::slice_u256(&val, 4 * MICRO_LIMB_BITS as u64, 5 * MICRO_LIMB_BITS as u64)
-            //         << (MICRO_LIMB_BITS - (last_limb_bits % MICRO_LIMB_BITS));
+        let split_top_z_limb_into_micro_limbs =
+            |limb: T::AcvmType, last_limb_bits: usize| -> [T::AcvmType; NUM_MICRO_LIMBS] {
+                // // static_assert(MICRO_LIMB_BITS == 14);
+                // //TACEO TODO: Batch these decompositions
+                // let val: BigUint = limb.into();
+                // let a0 = Utils::slice_u256(&val, 0, MICRO_LIMB_BITS as u64);
+                // let a1 = Utils::slice_u256(&val, MICRO_LIMB_BITS as u64, 2 * MICRO_LIMB_BITS as u64);
+                // let a2 =
+                //     Utils::slice_u256(&val, 2 * MICRO_LIMB_BITS as u64, 3 * MICRO_LIMB_BITS as u64);
+                // let a3 =
+                //     Utils::slice_u256(&val, 3 * MICRO_LIMB_BITS as u64, 4 * MICRO_LIMB_BITS as u64);
+                // let a4 =
+                //     Utils::slice_u256(&val, 4 * MICRO_LIMB_BITS as u64, 5 * MICRO_LIMB_BITS as u64);
+                // let a5 =
+                //     Utils::slice_u256(&val, 4 * MICRO_LIMB_BITS as u64, 5 * MICRO_LIMB_BITS as u64)
+                //         << (MICRO_LIMB_BITS - (last_limb_bits % MICRO_LIMB_BITS));
 
-            // [
-            //     C::ScalarField::from(a0),
-            //     C::ScalarField::from(a1),
-            //     C::ScalarField::from(a2),
-            //     C::ScalarField::from(a3),
-            //     C::ScalarField::from(a4),
-            //     C::ScalarField::from(a5),
-            // ]
-            todo!()
-        };
+                // [
+                //     C::ScalarField::from(a0),
+                //     C::ScalarField::from(a1),
+                //     C::ScalarField::from(a2),
+                //     C::ScalarField::from(a3),
+                //     C::ScalarField::from(a4),
+                //     C::ScalarField::from(a5),
+                // ]
+                todo!()
+            };
 
         /*
          * @brief Split a 72-bit relation limb into 6 14-bit limbs (we can allow the slack here, since we only need to
          * ensure non-overflow of the modulus)
          *
          */
-        let split_relation_limb_into_micro_limbs =
-            |limb: T::OtherAcvmType<C>| -> [T::OtherAcvmType<C>; 6] {
-                // // static_assert(MICRO_LIMB_BITS == 14);
-                // let val: BigUint = limb.into();
-                // let mut out = [C::ScalarField::from(0u64); 6];
-                // //TACEO TODO: Batch these decompositions
-                // for (i, slot) in out.iter_mut().enumerate() {
-                //     let part = Utils::slice_u256(
-                //         &val,
-                //         (i * MICRO_LIMB_BITS) as u64,
-                //         ((i + 1) * MICRO_LIMB_BITS) as u64,
-                //     );
-                //     *slot = C::ScalarField::from(part);
-                // }
-                // out
-                todo!()
-            };
+        let split_relation_limb_into_micro_limbs = |limb: T::AcvmType| -> [T::AcvmType; 6] {
+            // // static_assert(MICRO_LIMB_BITS == 14);
+            // let val: BigUint = limb.into();
+            // let mut out = [C::ScalarField::from(0u64); 6];
+            // //TACEO TODO: Batch these decompositions
+            // for (i, slot) in out.iter_mut().enumerate() {
+            //     let part = Utils::slice_u256(
+            //         &val,
+            //         (i * MICRO_LIMB_BITS) as u64,
+            //         ((i + 1) * MICRO_LIMB_BITS) as u64,
+            //     );
+            //     *slot = C::ScalarField::from(part);
+            // }
+            // out
+            todo!()
+        };
 
         // Helper: split base field element into NUM_BINARY_LIMBS limbs of NUM_LIMB_BITS, returned as ScalarField
         let split_fq_into_limbs_shared =
-            |x: T::AcvmType| -> [T::OtherAcvmType<C>; NUM_BINARY_LIMBS] {
+            |x: T::OtherAcvmType<C>| -> [T::AcvmType; NUM_BINARY_LIMBS] {
                 // let xb: BigUint = x.into();
                 // let mut out = [C::ScalarField::from(0u64); NUM_BINARY_LIMBS];
 
@@ -449,7 +445,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseF
 
         // Helper: split base field element into NUM_BINARY_LIMBS limbs of NUM_LIMB_BITS, returned as ScalarField
         let split_fq_into_limbs_shared =
-            |x: T::AcvmType| -> [T::OtherAcvmType<C>; NUM_BINARY_LIMBS] {
+            |x: T::OtherAcvmType<C>| -> [T::AcvmType; NUM_BINARY_LIMBS] {
                 // let xb: BigUint = x.into();
                 // let mut out = [C::ScalarField::from(0u64); NUM_BINARY_LIMBS];
                 // //TACEO TODO: Batch these decompositions
@@ -531,7 +527,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseF
         // The formula is `accumulator = accumulator⋅x + (op + v⋅p.x + v²⋅p.y + v³⋅z₁ + v⁴z₂)`. We need to compute the
         // remainder (new accumulator value)
 
-        let remainder: T::AcvmType = previous_accumulator;
+        let remainder: T::OtherAcvmType<C> = previous_accumulator;
         //TODO FLORIN:
         //* evaluation_input_x
         // + base_z_2 * v_quarted
@@ -654,16 +650,13 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseF
 
         const LAST_LIMB_INDEX: usize = NUM_BINARY_LIMBS - 1;
 
-        let mut p_x_microlimbs =
-            [[T::OtherAcvmType::<C>::default(); NUM_MICRO_LIMBS]; NUM_BINARY_LIMBS];
-        let mut p_y_microlimbs =
-            [[T::OtherAcvmType::<C>::default(); NUM_MICRO_LIMBS]; NUM_BINARY_LIMBS];
-        let mut z_1_microlimbs = [[T::OtherAcvmType::<C>::default(); NUM_MICRO_LIMBS]; NUM_Z_LIMBS];
-        let mut z_2_microlimbs = [[T::OtherAcvmType::<C>::default(); NUM_MICRO_LIMBS]; NUM_Z_LIMBS];
+        let mut p_x_microlimbs = [[T::AcvmType::default(); NUM_MICRO_LIMBS]; NUM_BINARY_LIMBS];
+        let mut p_y_microlimbs = [[T::AcvmType::default(); NUM_MICRO_LIMBS]; NUM_BINARY_LIMBS];
+        let mut z_1_microlimbs = [[T::AcvmType::default(); NUM_MICRO_LIMBS]; NUM_Z_LIMBS];
+        let mut z_2_microlimbs = [[T::AcvmType::default(); NUM_MICRO_LIMBS]; NUM_Z_LIMBS];
         let mut current_accumulator_microlimbs =
-            [[T::OtherAcvmType::<C>::default(); NUM_MICRO_LIMBS]; NUM_BINARY_LIMBS];
-        let mut quotient_microlimbs =
-            [[T::OtherAcvmType::<C>::default(); NUM_MICRO_LIMBS]; NUM_BINARY_LIMBS];
+            [[T::AcvmType::default(); NUM_MICRO_LIMBS]; NUM_BINARY_LIMBS];
+        let mut quotient_microlimbs = [[T::AcvmType::default(); NUM_MICRO_LIMBS]; NUM_BINARY_LIMBS];
 
         // Split P_x into microlimbs for range constraining
         for i in 0..LAST_LIMB_INDEX {
@@ -847,7 +840,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseF
          * @brief Put several values in sequential wires
          *
          */
-        let mut lay_limbs_in_row = |input: &[T::OtherAcvmType<C>], starting_wire: WireIds| {
+        let mut lay_limbs_in_row = |input: &[T::AcvmType], starting_wire: WireIds| {
             let mut wire_index = starting_wire.as_usize();
             for &element in input.iter() {
                 let var_idx = self.add_variable(element);
@@ -962,57 +955,56 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::BaseF
 
 #[derive(Clone)]
 struct CoAccumulationInput<
-    T: NoirWitnessExtensionProtocol<C::BaseField>,
+    T: NoirWitnessExtensionProtocol<C::ScalarField>,
     C: HonkCurve<TranscriptFieldType>,
 > {
     // Members necessary for the gate creation
     ultra_op: CoUltraOp<T, C>,
 
-    p_x_limbs: [T::OtherAcvmType<C>; NUM_BINARY_LIMBS],
-    p_x_microlimbs: [[T::OtherAcvmType<C>; NUM_MICRO_LIMBS]; NUM_BINARY_LIMBS],
+    p_x_limbs: [T::AcvmType; NUM_BINARY_LIMBS],
+    p_x_microlimbs: [[T::AcvmType; NUM_MICRO_LIMBS]; NUM_BINARY_LIMBS],
 
-    p_y_limbs: [T::OtherAcvmType<C>; NUM_BINARY_LIMBS],
-    p_y_microlimbs: [[T::OtherAcvmType<C>; NUM_MICRO_LIMBS]; NUM_BINARY_LIMBS],
+    p_y_limbs: [T::AcvmType; NUM_BINARY_LIMBS],
+    p_y_microlimbs: [[T::AcvmType; NUM_MICRO_LIMBS]; NUM_BINARY_LIMBS],
 
-    z_1_limbs: [T::OtherAcvmType<C>; NUM_Z_LIMBS],
-    z_1_microlimbs: [[T::OtherAcvmType<C>; NUM_MICRO_LIMBS]; NUM_Z_LIMBS],
-    z_2_limbs: [T::OtherAcvmType<C>; NUM_Z_LIMBS],
-    z_2_microlimbs: [[T::OtherAcvmType<C>; NUM_MICRO_LIMBS]; NUM_Z_LIMBS],
+    z_1_limbs: [T::AcvmType; NUM_Z_LIMBS],
+    z_1_microlimbs: [[T::AcvmType; NUM_MICRO_LIMBS]; NUM_Z_LIMBS],
+    z_2_limbs: [T::AcvmType; NUM_Z_LIMBS],
+    z_2_microlimbs: [[T::AcvmType; NUM_MICRO_LIMBS]; NUM_Z_LIMBS],
 
-    previous_accumulator: [T::OtherAcvmType<C>; NUM_BINARY_LIMBS],
-    current_accumulator: [T::OtherAcvmType<C>; NUM_BINARY_LIMBS],
-    current_accumulator_microlimbs: [[T::OtherAcvmType<C>; NUM_MICRO_LIMBS]; NUM_BINARY_LIMBS],
+    previous_accumulator: [T::AcvmType; NUM_BINARY_LIMBS],
+    current_accumulator: [T::AcvmType; NUM_BINARY_LIMBS],
+    current_accumulator_microlimbs: [[T::AcvmType; NUM_MICRO_LIMBS]; NUM_BINARY_LIMBS],
 
-    quotient_binary_limbs: [T::OtherAcvmType<C>; NUM_BINARY_LIMBS],
-    quotient_microlimbs: [[T::OtherAcvmType<C>; NUM_MICRO_LIMBS]; NUM_BINARY_LIMBS],
+    quotient_binary_limbs: [T::AcvmType; NUM_BINARY_LIMBS],
+    quotient_microlimbs: [[T::AcvmType; NUM_MICRO_LIMBS]; NUM_BINARY_LIMBS],
 
-    relation_wide_limbs: [T::OtherAcvmType<C>; NUM_RELATION_WIDE_LIMBS],
-    relation_wide_microlimbs: [[T::OtherAcvmType<C>; NUM_MICRO_LIMBS]; 2],
+    relation_wide_limbs: [T::AcvmType; NUM_RELATION_WIDE_LIMBS],
+    relation_wide_microlimbs: [[T::AcvmType; NUM_MICRO_LIMBS]; 2],
 }
 
-impl<T: NoirWitnessExtensionProtocol<C::BaseField>, C: HonkCurve<TranscriptFieldType>>
+impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: HonkCurve<TranscriptFieldType>>
     CoAccumulationInput<T, C>
 {
     fn new(ultra_op: CoUltraOp<T, C>) -> Self {
         Self {
             ultra_op,
-            p_x_limbs: [T::OtherAcvmType::<C>::default(); NUM_BINARY_LIMBS],
-            p_x_microlimbs: [[T::OtherAcvmType::<C>::default(); NUM_MICRO_LIMBS]; NUM_BINARY_LIMBS],
-            p_y_limbs: [T::OtherAcvmType::<C>::default(); NUM_BINARY_LIMBS],
-            p_y_microlimbs: [[T::OtherAcvmType::<C>::default(); NUM_MICRO_LIMBS]; NUM_BINARY_LIMBS],
-            z_1_limbs: [T::OtherAcvmType::<C>::default(); NUM_Z_LIMBS],
-            z_1_microlimbs: [[T::OtherAcvmType::<C>::default(); NUM_MICRO_LIMBS]; NUM_Z_LIMBS],
-            z_2_limbs: [T::OtherAcvmType::<C>::default(); NUM_Z_LIMBS],
-            z_2_microlimbs: [[T::OtherAcvmType::<C>::default(); NUM_MICRO_LIMBS]; NUM_Z_LIMBS],
-            previous_accumulator: [T::OtherAcvmType::<C>::default(); NUM_BINARY_LIMBS],
-            current_accumulator: [T::OtherAcvmType::<C>::default(); NUM_BINARY_LIMBS],
-            current_accumulator_microlimbs: [[T::OtherAcvmType::<C>::default(); NUM_MICRO_LIMBS];
+            p_x_limbs: [T::AcvmType::default(); NUM_BINARY_LIMBS],
+            p_x_microlimbs: [[T::AcvmType::default(); NUM_MICRO_LIMBS]; NUM_BINARY_LIMBS],
+            p_y_limbs: [T::AcvmType::default(); NUM_BINARY_LIMBS],
+            p_y_microlimbs: [[T::AcvmType::default(); NUM_MICRO_LIMBS]; NUM_BINARY_LIMBS],
+            z_1_limbs: [T::AcvmType::default(); NUM_Z_LIMBS],
+            z_1_microlimbs: [[T::AcvmType::default(); NUM_MICRO_LIMBS]; NUM_Z_LIMBS],
+            z_2_limbs: [T::AcvmType::default(); NUM_Z_LIMBS],
+            z_2_microlimbs: [[T::AcvmType::default(); NUM_MICRO_LIMBS]; NUM_Z_LIMBS],
+            previous_accumulator: [T::AcvmType::default(); NUM_BINARY_LIMBS],
+            current_accumulator: [T::AcvmType::default(); NUM_BINARY_LIMBS],
+            current_accumulator_microlimbs: [[T::AcvmType::default(); NUM_MICRO_LIMBS];
                 NUM_BINARY_LIMBS],
-            quotient_binary_limbs: [T::OtherAcvmType::<C>::default(); NUM_BINARY_LIMBS],
-            quotient_microlimbs: [[T::OtherAcvmType::<C>::default(); NUM_MICRO_LIMBS];
-                NUM_BINARY_LIMBS],
-            relation_wide_limbs: [T::OtherAcvmType::<C>::default(); NUM_RELATION_WIDE_LIMBS],
-            relation_wide_microlimbs: [[T::OtherAcvmType::<C>::default(); NUM_MICRO_LIMBS]; 2],
+            quotient_binary_limbs: [T::AcvmType::default(); NUM_BINARY_LIMBS],
+            quotient_microlimbs: [[T::AcvmType::default(); NUM_MICRO_LIMBS]; NUM_BINARY_LIMBS],
+            relation_wide_limbs: [T::AcvmType::default(); NUM_RELATION_WIDE_LIMBS],
+            relation_wide_microlimbs: [[T::AcvmType::default(); NUM_MICRO_LIMBS]; 2],
         }
     }
 }
