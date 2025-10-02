@@ -553,6 +553,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         Self::OtherAcvmType<C>,
     )>;
 
+    #[expect(clippy::type_complexity)]
     fn other_pointshare_to_field_shares<const LIMB_BITS: usize, C: HonkCurve<F, ScalarField = F>>(
         &mut self,
         point: Self::OtherAcvmPoint<C>,

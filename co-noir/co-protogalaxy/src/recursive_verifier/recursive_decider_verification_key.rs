@@ -23,6 +23,7 @@ pub struct RecursiveDeciderVerificationKey<
 
 pub struct VerificationKey<P: CurveGroup> {
     pub circuit_size: FieldCT<P::ScalarField>,
+    pub log_circuit_size: FieldCT<P::ScalarField>,
     pub num_public_inputs: FieldCT<P::ScalarField>,
     pub pub_inputs_offset: FieldCT<P::ScalarField>,
 }

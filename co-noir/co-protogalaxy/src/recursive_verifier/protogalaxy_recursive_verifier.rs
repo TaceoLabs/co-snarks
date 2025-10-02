@@ -93,7 +93,7 @@ impl ProtogalaxyRecursiveVerifier {
 
         let deltas = std::iter::successors(Some(delta), |x| {
             Some(
-                x.multiply(&x, builder, driver)
+                x.multiply(x, builder, driver)
                     .expect("Failed to square delta"),
             )
         })
@@ -224,7 +224,7 @@ impl ProtogalaxyRecursiveVerifier {
 
             // Add the output commitment to the transcript to ensure that they can't be spoofed
             transcript.add_point_to_hash_buffer(
-                format!("new_accumulator_commitment_{}", i),
+                format!("new_accumulator_commitment_{i}"),
                 &output_commitment,
             );
         }
@@ -279,6 +279,48 @@ impl ProtogalaxyRecursiveVerifier {
                     .expect("Failed to multiply perturbator challenge and delta");
                 *c = c.add(&tmp, builder, driver);
             });
+
+        // Update circuit size
+        let accumulator_circuit_size_value = accumulator
+            .verification_key
+            .circuit_size
+            .get_value(builder, driver);
+        let key_to_fold_circuit_size_value = key_to_fold
+            .verification_key
+            .circuit_size
+            .get_value(builder, driver);
+        let accumulator_log_circuit_size_value = accumulator
+            .verification_key
+            .log_circuit_size
+            .get_value(builder, driver);
+        let key_to_fold_log_circuit_size_value = key_to_fold
+            .verification_key
+            .log_circuit_size
+            .get_value(builder, driver);
+
+        let accumulator_is_smaller = driver.lt(
+            accumulator_circuit_size_value,
+            key_to_fold_circuit_size_value,
+        )?;
+
+        let [circuit_size, log_circuit_size] = driver
+            .cmux_many(
+                accumulator_is_smaller,
+                &[
+                    key_to_fold_circuit_size_value,
+                    key_to_fold_log_circuit_size_value,
+                ],
+                &[
+                    accumulator_circuit_size_value,
+                    accumulator_log_circuit_size_value,
+                ],
+            )?
+            .try_into()
+            .expect("Failed to convert cmux output into array");
+
+        accumulator.verification_key.circuit_size = FieldCT::from_witness(circuit_size, builder);
+        accumulator.verification_key.log_circuit_size =
+            FieldCT::from_witness(log_circuit_size, builder);
 
         // Update alphas
         izip!(accumulator.alphas.iter_mut(), key_to_fold.alphas.iter()).for_each(
@@ -344,8 +386,8 @@ impl ProtogalaxyRecursiveVerifier {
     ) -> HonkProofResult<FieldCT<C::ScalarField>> {
         let mut point_acc = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
         let mut result = FieldCT::from_witness(C::ScalarField::ZERO.into(), builder);
-        for i in 0..=CONST_PG_LOG_N {
-            result = coeffs[i].madd(&point_acc, &result, builder, driver)?;
+        for coeff in coeffs.iter().take(CONST_PG_LOG_N + 1) {
+            result = coeff.madd(&point_acc, &result, builder, driver)?;
             point_acc = point_acc.multiply(point, builder, driver)?;
         }
 

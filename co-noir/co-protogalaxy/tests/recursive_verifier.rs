@@ -1,6 +1,8 @@
 use ark_bn254::Bn254;
 use ark_ec::pairing::Pairing;
 use ark_ff::AdditiveGroup;
+use ark_ff::BigInteger;
+use ark_ff::PrimeField;
 use co_acvm::PlainAcvmSolver;
 use co_builder::eccvm::co_ecc_op_queue::CoECCOpQueue;
 use co_builder::flavours::mega_flavour::MegaFlavour;
@@ -102,11 +104,12 @@ fn test_recursive_protogalaxy_recursive_verifier() {
 
     let fold_proof = to_field!(fold_proof, 1);
 
-    let (circuit_size_1, num_public_inputs_1, pub_inputs_offset_1) = (
+    let (circuit_size_1, num_public_inputs_1, pub_inputs_offset_1): (Fr, Fr, Fr) = (
         to_field!(circuit_size_1),
         to_field!(num_public_inputs_1),
         to_field!(pub_inputs_offset_1),
     );
+    let log_circuit_size_1 = Fr::from(circuit_size_1.into_bigint().num_bits() as u64);
     let target_sum_1 = to_field!(target_sum_1);
     let gate_challenges_1 = to_field!(gate_challenges_1, 1);
     let alphas_1 = to_field!(alphas_1, 1);
@@ -124,11 +127,12 @@ fn test_recursive_protogalaxy_recursive_verifier() {
         })
         .collect::<Vec<_>>();
 
-    let (circuit_size_2, num_public_inputs_2, pub_inputs_offset_2) = (
+    let (circuit_size_2, num_public_inputs_2, pub_inputs_offset_2): (Fr, Fr, Fr) = (
         to_field!(circuit_size_2),
         to_field!(num_public_inputs_2),
         to_field!(pub_inputs_offset_2),
     );
+    let log_circuit_size_2 = Fr::from(circuit_size_2.into_bigint().num_bits() as u64);
     let alphas_2 = to_field!(alphas_2, 1);
     let relation_parameters_2 = to_field!(relation_parameters_2, 1);
     let precomputed_commitments_2 = precomputed_commitments_2
@@ -287,6 +291,7 @@ fn test_recursive_protogalaxy_recursive_verifier() {
     let mut accumulator = RecursiveDeciderVerificationKey {
         verification_key: VerificationKey {
             circuit_size: FieldCT::from_witness(circuit_size_1, &mut builder),
+            log_circuit_size: FieldCT::from_witness(log_circuit_size_1, &mut builder),
             num_public_inputs: FieldCT::from_witness(num_public_inputs_1, &mut builder),
             pub_inputs_offset: FieldCT::from_witness(pub_inputs_offset_1, &mut builder),
         },
@@ -303,6 +308,7 @@ fn test_recursive_protogalaxy_recursive_verifier() {
     let mut key_to_fold = RecursiveDeciderVerificationKey {
         verification_key: VerificationKey {
             circuit_size: FieldCT::from_witness(circuit_size_2, &mut builder),
+            log_circuit_size: FieldCT::from_witness(log_circuit_size_2, &mut builder),
             num_public_inputs: FieldCT::from_witness(num_public_inputs_2, &mut builder),
             pub_inputs_offset: FieldCT::from_witness(pub_inputs_offset_2, &mut builder),
         },

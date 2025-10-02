@@ -35,15 +35,17 @@ impl OinkRecursiveVerifier {
         let public_input_size = verification_key.verification_key.num_public_inputs.clone();
         let pub_inputs_offset = verification_key.verification_key.pub_inputs_offset.clone();
 
-        transcript
-            .add_element_frs_to_hash_buffer("circuit_size".to_owned(), &[circuit_size.clone()]);
+        transcript.add_element_frs_to_hash_buffer(
+            "circuit_size".to_owned(),
+            std::slice::from_ref(&circuit_size),
+        );
         transcript.add_element_frs_to_hash_buffer(
             "public_input_size".to_owned(),
-            &[public_input_size.clone()],
+            std::slice::from_ref(&public_input_size),
         );
         transcript.add_element_frs_to_hash_buffer(
             "pub_inputs_offset".to_owned(),
-            &[pub_inputs_offset.clone()],
+            std::slice::from_ref(&pub_inputs_offset),
         );
 
         let public_input_size_bigint = T::get_public(&public_input_size.get_value(builder, driver))
@@ -58,7 +60,7 @@ impl OinkRecursiveVerifier {
         let public_input_size_int = public_input_size_bigint.0[0] as usize;
 
         let public_inputs = (0..public_input_size_int)
-            .map(|i| transcript.receive_fr_from_prover(format!("public_input_{}", i)))
+            .map(|i| transcript.receive_fr_from_prover(format!("public_input_{i}")))
             .collect::<HonkProofResult<Vec<FieldCT<C::ScalarField>>>>()?;
 
         let mut commitments = WitnessCommitments::<C, T>::from_elements(
@@ -175,7 +177,6 @@ impl OinkRecursiveVerifier {
             driver,
         )?;
 
-        // TODO CESAR: Compute public input delta
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1283): Suspicious get_value().
         let public_input_delta = Self::compute_public_input_delta(
             &public_inputs,
@@ -192,7 +193,7 @@ impl OinkRecursiveVerifier {
             transcript.receive_point_from_prover("Z_PERM".to_owned(), builder, driver)?;
 
         let labels = (0..MegaFlavour::NUM_ALPHAS)
-            .map(|i| format!("alpha_{}", i))
+            .map(|i| format!("alpha_{i}"))
             .collect::<Vec<_>>();
         let alphas = transcript.get_challenges(&labels, builder, driver)?;
 
@@ -262,7 +263,7 @@ impl OinkRecursiveVerifier {
         // initial zero row or Goblin-stlye ECC op gates. Accordingly, the indices i in the above formulas are given by i =
         // [0, m-1] + offset, i.e. i = offset, 1 + offset, …, m - 1 + offset.
 
-        // TODO(https://github.com/AztecProtocol/barretenberg/issues/1158): Ensure correct construction of public input
+        // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1158): Ensure correct construction of public input
         // delta in the face of increases to virtual size caused by execution trace overflow
         let n_plus_i = domain_size.add(offset, builder, driver);
         let one_plus_i = one.add(offset, builder, driver);
