@@ -166,6 +166,16 @@ pub fn precompute_flags<
 
     let base_point_flags = driver.is_point_at_infinity_many_other(&base_point_vec)?;
 
+    // NOTE: At this point we open (reveal) which points are at infinity, which scalars are zero, and which scalars
+    // are less than 128 bits (c.f. `compute_zetas` at the end of this file). This is acceptable leakage because
+    // the points at infinity naturally occur during the first round of the merge prover when previous_ultra_ops_table_columns
+    // are empty, as well as during the process of batching proofs to constant size.
+    // In src/barretenberg/stdlib/honk_verifier/decider_recursive_verifier.cpp, the function
+    // `compute_padding_indicator_array<Curve, CONST_PROOF_SIZE_LOG_N>(accumulator->verification_key->log_circuit_size)`
+    // calculates a padding array that depends only on circuit size, which for our test case has 10 zeros at the back of the array.
+    // Along with the 4 infinity points from the first merge prover round, this accounts for all the infinity points we expect to see.
+    // The case where scalar!=0 in `construct_and_populate_ultra_ops` and simultaneously z1=0 or z2=0 in the else branch
+    // (where we split into endomorphism scalars) never actually occurs in practice.
     let flags = driver.open_many_acvm_type(&[z_flags, base_point_flags].concat())?;
 
     let bool_flags: Vec<bool> = flags.iter().map(|f| !f.is_zero()).collect();
