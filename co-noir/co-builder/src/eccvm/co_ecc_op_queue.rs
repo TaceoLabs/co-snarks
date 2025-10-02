@@ -136,15 +136,13 @@ pub struct CoVMOperation<
     pub is_z2_zero: Option<bool>,
 }
 
-pub fn precompute_flags<
+pub fn precompute_mul_acc_flags<
     T: NoirWitnessExtensionProtocol<C::ScalarField>,
     C: CurveGroup<BaseField: PrimeField>,
 >(
     ops: &mut Vec<&mut CoVMOperation<T, C>>,
     driver: &mut T,
 ) -> HonkProofResult<()> {
-    let length = ops.len();
-
     // Only want to precompute flags for mul ops and only if they haven't already been computed
     let z_1_vec: Vec<T::AcvmType> = ops
         .iter()
@@ -161,6 +159,8 @@ pub fn precompute_flags<
         .filter(|op| (op.op_code.mul || op.op_code.add) && op.is_base_point_infinity.is_none())
         .map(|op| op.base_point.clone())
         .collect();
+
+    let length = z_1_vec.len();
 
     let z_flags = driver.is_zero_many(&[z_1_vec, z_2_vec].concat())?;
 

@@ -11,6 +11,7 @@ use num_traits::Zero;
 use rand::thread_rng;
 use rayon::prelude::*;
 
+#[derive(Clone, Debug)]
 pub struct PlainUltraHonkDriver;
 
 impl<P: CurveGroup> NoirUltraHonkProver<P> for PlainUltraHonkDriver {

@@ -1,6 +1,7 @@
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_brillig::mpc::BrilligDriver;
+use common::honk_curve::HonkCurve;
 use itertools::{Either, Itertools};
 use mpc_core::{
     gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations},
@@ -22,6 +23,7 @@ fn downcast<A: 'static, B: 'static>(a: &A) -> Option<&B> {
 pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     type Lookup: LookupTableProvider<F>;
     type ArithmeticShare: Clone;
+    type NativePointShare<C: CurveGroup<ScalarField = F>>: Clone;
     /// A type representing the values encountered during Noir compilation. It should at least contain public field elements and shared values.
     type AcvmType: Copy
         + Clone
@@ -674,4 +676,25 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
 
         Ok(result)
     }
+
+    /// Returns the point share if the point is shared
+    fn get_shared_point_other<C: HonkCurve<F, ScalarField = F>>(
+        a: Self::OtherAcvmPoint<C>,
+    ) -> Option<Self::OtherAcvmPoint<C>>;
+
+    /// Returns the point share with coordinates given as scalar field share limbs
+    fn field_shares_to_native_pointshare<const LIMB_BITS: usize, C: HonkCurve<F, ScalarField = F>>(
+        &mut self,
+        x0: Self::AcvmType,
+        x1: Self::AcvmType,
+        y0: Self::AcvmType,
+        y1: Self::AcvmType,
+        is_infinity: Self::AcvmType,
+    ) -> eyre::Result<Self::OtherAcvmPoint<C>>;
+
+    /// Negates the given point, i.e., computes -P for a point P.
+    fn negate_point_other<C: HonkCurve<F, ScalarField = F>>(
+        &mut self,
+        point: Self::OtherAcvmPoint<C>,
+    ) -> eyre::Result<Self::OtherAcvmPoint<C>>;
 }

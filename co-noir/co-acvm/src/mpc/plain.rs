@@ -1,9 +1,10 @@
 use super::{NoirWitnessExtensionProtocol, downcast};
 use ark_ec::{AffineRepr, CurveGroup};
-use ark_ff::Zero;
 use ark_ff::{BigInteger, MontConfig, One, PrimeField};
+use ark_ff::{Field, Zero};
 use blake2::{Blake2s256, Digest};
 use co_brillig::mpc::{PlainBrilligDriver, PlainBrilligType};
+use common::honk_curve::HonkCurve;
 use core::panic;
 use itertools::Itertools;
 use libaes::Cipher;
@@ -65,6 +66,7 @@ impl<F: PrimeField> Default for PlainAcvmSolver<F> {
 
 impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     type Lookup = PlainLookupTableProvider<F>;
+    type NativePointShare<C: CurveGroup<ScalarField = F>> = C;
     type ArithmeticShare = F;
     type AcvmType = F;
     type AcvmPoint<C: CurveGroup<BaseField = F>> = C;
@@ -258,8 +260,8 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         false
     }
 
-    fn get_shared(_: &Self::AcvmType) -> Option<Self::ArithmeticShare> {
-        None
+    fn get_shared(a: &Self::AcvmType) -> Option<Self::ArithmeticShare> {
+        Some(*a)
     }
 
     fn get_public(a: &Self::AcvmType) -> Option<F> {
@@ -938,15 +940,30 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Ok((x, y, point_at_infinity))
     }
 
-    // Given a field element in the base field of the curve, decomposes it into CHUNK_SIZE bit chunks and returns these as field shares
+    // TACEO TODO: Currently only supports LIMB_BITS = 136, i.e. two Bn254::Fr elements per Bn254::Fq element
+    /// Converts a base field share into a vector of field shares, where the field shares
+    /// represent the limbs of the base field element. Each limb has at most LIMB_BITS bits.
     fn other_field_shares_to_field_shares<
-        const CHUNK_SIZE: usize,
+        const LIMB_BITS: usize,
         C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
     >(
         &mut self,
-        _input: Self::OtherAcvmType<C>,
+        input: Self::OtherAcvmType<C>,
     ) -> eyre::Result<Vec<Self::AcvmType>> {
-        unimplemented!("Only implemented for MPC backends");
+        assert_eq!(
+            LIMB_BITS, 136,
+            "Only LIMB_BITS = 136 is supported, i.e. two Bn254::Fr elements per Bn254::Fq element"
+        );
+        let as_bigint: BigUint = input
+            .to_base_prime_field_elements()
+            .map(Into::<BigUint>::into)
+            .collect_vec()
+            .pop()
+            .expect("We always have at least one element");
+
+        let low = as_bigint.clone() & ((BigUint::from(1u8) << LIMB_BITS) - BigUint::from(1u8));
+        let high = as_bigint >> LIMB_BITS;
+        Ok(vec![C::ScalarField::from(low), C::ScalarField::from(high)])
     }
 
     // Similar to decompose_arithmetic, but works on the full AcvmType, which can either be public or shared
@@ -1016,5 +1033,44 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         a: &[Self::OtherAcvmPoint<C>],
     ) -> eyre::Result<Vec<C::Affine>> {
         Ok(a.iter().map(|x| x.into_affine()).collect())
+    }
+
+    fn get_shared_point_other<C: HonkCurve<F, ScalarField = F>>(
+        a: Self::OtherAcvmPoint<C>,
+    ) -> Option<Self::OtherAcvmPoint<C>> {
+        Some(a)
+    }
+
+    // TACEO TODO: Only supports LIMB_BITS = 136, i.e. two Bn254::Fr elements per Bn254::Fq element
+    /// Returns the point share with coordinates given as scalar field share limbs
+    fn field_shares_to_native_pointshare<
+        const LIMB_BITS: usize,
+        C: HonkCurve<F, ScalarField = F>,
+    >(
+        &mut self,
+        x0: Self::AcvmType,
+        x1: Self::AcvmType,
+        y0: Self::AcvmType,
+        y1: Self::AcvmType,
+        is_infinity: Self::AcvmType,
+    ) -> eyre::Result<Self::OtherAcvmPoint<C>> {
+        assert_eq!(
+            LIMB_BITS, 136,
+            "Only LIMB_BITS = 136 is supported, i.e. two Bn254::Fr elements per Bn254::Fq element"
+        );
+        let x = C::convert_basefield_back(&[x0, x1]);
+        let y = C::convert_basefield_back(&[y0, y1]);
+        if is_infinity == F::one() {
+            Ok(C::Affine::zero().into())
+        } else {
+            Ok(C::g1_affine_from_xy(x, y).into())
+        }
+    }
+
+    fn negate_point_other<C: HonkCurve<F, ScalarField = F>>(
+        &mut self,
+        point: Self::OtherAcvmPoint<C>,
+    ) -> eyre::Result<Self::OtherAcvmPoint<C>> {
+        Ok(-point)
     }
 }

@@ -10,7 +10,9 @@ use num_bigint::BigUint;
 
 use crate::{
     eccvm::{
-        co_ecc_op_queue::{CoECCOpQueue, CoEccOpTuple, CoUltraOp, CoVMOperation, precompute_flags},
+        co_ecc_op_queue::{
+            CoECCOpQueue, CoEccOpTuple, CoUltraOp, CoVMOperation, precompute_mul_acc_flags,
+        },
         ecc_op_queue::EccOpCode,
     },
     generic_builder::GenericBuilder,
@@ -196,6 +198,10 @@ where
             .arithmetic
             .q_poseidon2_internal()
             .push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_busread()
+            .push(P::ScalarField::zero());
 
         self.check_selector_length_consistency();
         self.num_gates += 1;
@@ -234,6 +240,10 @@ where
         self.blocks
             .arithmetic
             .q_poseidon2_internal()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_busread()
             .push(P::ScalarField::zero());
 
         self.check_selector_length_consistency();
@@ -274,6 +284,10 @@ where
         self.blocks
             .arithmetic
             .q_poseidon2_internal()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_busread()
             .push(P::ScalarField::zero());
 
         self.check_selector_length_consistency();
@@ -317,6 +331,10 @@ where
         self.blocks
             .arithmetic
             .q_poseidon2_internal()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_busread()
             .push(P::ScalarField::zero());
 
         self.check_selector_length_consistency();
@@ -363,6 +381,10 @@ where
         self.blocks
             .arithmetic
             .q_poseidon2_internal()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_busread()
             .push(P::ScalarField::zero());
 
         self.check_selector_length_consistency();
@@ -433,6 +455,10 @@ where
             .poseidon2_external
             .q_poseidon2_internal()
             .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_external
+            .q_busread()
+            .push(P::ScalarField::zero());
 
         self.check_selector_length_consistency();
         self.num_gates += 1;
@@ -496,6 +522,10 @@ where
             .poseidon2_internal
             .q_poseidon2_internal()
             .push(P::ScalarField::one());
+        self.blocks
+            .poseidon2_internal
+            .q_busread()
+            .push(P::ScalarField::zero());
 
         self.check_selector_length_consistency();
         self.num_gates += 1;
@@ -599,6 +629,7 @@ where
         block.q_aux().push(P::ScalarField::zero());
         block.q_poseidon2_external().push(P::ScalarField::zero());
         block.q_poseidon2_internal().push(P::ScalarField::zero());
+        block.q_busread().push(P::ScalarField::zero());
 
         // TACEO TODO these are uncommented due to mutability issues
         // Taken care of by the caller uisng the create_dummy_gate! macro
@@ -1041,6 +1072,23 @@ where
      *
      * @param point Point to be added into the accumulator
      */
+    pub fn queue_ecc_add_accum(
+        &mut self,
+        point: T::OtherAcvmPoint<P>,
+        driver: &mut T,
+    ) -> HonkProofResult<CoEccOpTuple<T, P>> {
+        // Add the operation to the op queue
+        let ultra_op = self.ecc_op_queue.add_accumulate(point, driver)?;
+
+        // Add corresponding gates for the operation
+        Ok(self.populate_ecc_op_wires(&ultra_op))
+    }
+
+    /**
+     * @brief Add simple point addition operation to the op queue and add corresponding gates
+     *
+     * @param point Point to be added into the accumulator
+     */
     pub fn queue_ecc_add_accum_no_store(
         &mut self,
         point: T::OtherAcvmPoint<P>,
@@ -1071,7 +1119,7 @@ where
             .ecc_op_queue
             .mul_accumulate_no_store(point, scalar, driver)?;
 
-        precompute_flags(&mut vec![&mut eccvm_op], driver)?;
+        precompute_mul_acc_flags(&mut vec![&mut eccvm_op], driver)?;
         self.ecc_op_queue.append_eccvm_op(eccvm_op);
 
         // Add corresponding gates for the operation

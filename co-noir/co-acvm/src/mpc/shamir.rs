@@ -3,6 +3,7 @@ use ark_ec::CurveGroup;
 use ark_ff::{One, PrimeField};
 use co_brillig::mpc::{ShamirBrilligDriver, ShamirBrilligType};
 use co_noir_types::ShamirType;
+use common::honk_curve::HonkCurve;
 use core::panic;
 use itertools::{Either, Itertools};
 use mpc_core::{
@@ -167,6 +168,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
     type Lookup = Rep3FieldLookupTable<F>; // This is just a dummy and unused
 
     type ArithmeticShare = ShamirPrimeFieldShare<F>;
+    type NativePointShare<C: CurveGroup<ScalarField = F>> = ShamirPointShare<C>;
 
     type AcvmType = ShamirAcvmType<F>;
     type AcvmPoint<C: CurveGroup<BaseField = F>> = ShamirAcvmPoint<C>;
@@ -384,7 +386,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
     }
 
     fn add_assign(&mut self, target: &mut Self::AcvmType, rhs: Self::AcvmType) {
-        let result = match (*target, rhs) {
+        let result = match (target.to_owned(), rhs) {
             (ShamirAcvmType::Public(lhs), ShamirAcvmType::Public(rhs)) => {
                 ShamirAcvmType::Public(lhs + rhs)
             }
@@ -1157,5 +1159,34 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
             .sorted_by_key(|(i, _)| *i)
             .map(|(_, val)| val)
             .collect::<Vec<C::Affine>>())
+    }
+
+    /// Returns the point share if the point is shared
+    fn get_shared_point_other<C: HonkCurve<F, ScalarField = F>>(
+        a: Self::OtherAcvmPoint<C>,
+    ) -> Option<Self::OtherAcvmPoint<C>> {
+        Some(a)
+    }
+
+    /// Returns the point share with coordinates given as scalar field share limbs
+    fn field_shares_to_native_pointshare<
+        const LIMB_BITS: usize,
+        C: HonkCurve<F, ScalarField = F>,
+    >(
+        &mut self,
+        _x0: Self::AcvmType,
+        _x1: Self::AcvmType,
+        _y0: Self::AcvmType,
+        _y1: Self::AcvmType,
+        _is_infinity: Self::AcvmType,
+    ) -> eyre::Result<Self::OtherAcvmPoint<C>> {
+        panic!("functionality field_shares_to_native_pointshare not feasible for Shamir")
+    }
+
+    fn negate_point_other<C: HonkCurve<F, ScalarField = F>>(
+        &mut self,
+        _point: Self::OtherAcvmPoint<C>,
+    ) -> eyre::Result<Self::OtherAcvmPoint<C>> {
+        panic!("functionality negate_point_other not feasible for Shamir")
     }
 }

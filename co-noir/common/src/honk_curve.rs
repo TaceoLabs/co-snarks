@@ -214,6 +214,7 @@ impl HonkCurve<ark_bn254::Fr> for short_weierstrass::Projective<GrumpkinConfig> 
 const NUM_LIMB_BITS: u32 = 68;
 const TOTAL_BITS: u32 = 254;
 
+#[allow(rustdoc::invalid_html_tags)]
 /**
 * @brief Converts grumpkin::fr to 2 bb::fr elements
 * @details First, this function must return 2 bb::fr elements because the grumpkin::fr field has a larger modulus than
@@ -227,7 +228,7 @@ const TOTAL_BITS: u32 = 254;
 * @param input
 * @return std::array<bb::fr, 2>
 */
-fn bn254_fq_to_fr(fq: &ark_bn254::Fq) -> (ark_bn254::Fr, ark_bn254::Fr) {
+pub fn bn254_fq_to_fr(fq: &ark_bn254::Fq) -> (ark_bn254::Fr, ark_bn254::Fr) {
     // Goal is to slice up the 64 bit limbs of grumpkin::fr/uint256_t to mirror the 68 bit limbs of bigfield
     // We accomplish this by dividing the grumpkin::fr's value into two 68*2=136 bit pieces.
     const LOWER_BITS: u32 = 2 * NUM_LIMB_BITS;
