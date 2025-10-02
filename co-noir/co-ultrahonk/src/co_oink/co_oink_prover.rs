@@ -23,23 +23,26 @@ use crate::{
     mpc_prover_flavour::MPCProverFlavour,
 };
 use ark_ff::{One, Zero};
-use co_builder::TranscriptFieldType;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
 
-use co_builder::{
-    HonkProofError, HonkProofResult,
-    prelude::{ActiveRegionData, HonkCurve, NUM_MASKED_ROWS, Polynomial, ProverCrs},
-    prover_flavour::Flavour,
-};
+use co_builder::prelude::ActiveRegionData;
+use co_builder::prover_flavour::Flavour;
 use common::CoUtils;
 use common::mpc::NoirUltraHonkProver;
+use common::polynomials::polynomial::NUM_MASKED_ROWS;
 use common::transcript::{Transcript, TranscriptHasher};
+use common::{
+    crs::ProverCrs,
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
+    polynomials::polynomial::Polynomial,
+    types::ZeroKnowledge,
+};
 use itertools::izip;
 use mpc_core::MpcState as _;
 use mpc_net::Network;
 use std::marker::PhantomData;
-use ultrahonk::prelude::ZeroKnowledge;
 pub struct CoOink<
     'a,
     T: NoirUltraHonkProver<P>,

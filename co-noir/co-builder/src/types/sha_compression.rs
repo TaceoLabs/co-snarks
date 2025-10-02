@@ -1,10 +1,8 @@
-use crate::{
-    TranscriptFieldType, prelude::HonkCurve, ultra_builder::GenericUltraCircuitBuilder,
-    utils::Utils,
-};
+use crate::ultra_builder::GenericUltraCircuitBuilder;
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType, utils::Utils};
 use num_bigint::BigUint;
 use std::{array, marker::PhantomData};
 
@@ -12,6 +10,7 @@ use super::{
     field_ct::{FieldCT, WitnessCT},
     plookup::{ColumnIdx, MultiTableId, Plookup},
 };
+use crate::generic_builder::GenericBuilder;
 pub struct SHA256<F: PrimeField> {
     phantom: PhantomData<F>,
 }

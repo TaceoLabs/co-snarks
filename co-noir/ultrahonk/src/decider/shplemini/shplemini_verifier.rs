@@ -13,10 +13,9 @@ use ark_ec::AffineRepr;
 use ark_ff::{Field, One, Zero};
 use co_builder::polynomials::polynomial_flavours::PolyGFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
-use co_builder::prelude::HonkCurve;
-use co_builder::prelude::ZeroKnowledge;
+use common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType, types::ZeroKnowledge};
+
 use common::shplemini::ShpleminiVerifierOpeningClaim;
-use common::transcript::TranscriptFieldType;
 use common::transcript::{Transcript, TranscriptHasher};
 
 impl<
@@ -103,7 +102,7 @@ impl<
             denominators.push(*shplonk_eval_challenge + *gemini_eval_challenge_power);
         }
 
-        co_builder::prelude::Utils::batch_invert(&mut denominators);
+        common::utils::Utils::batch_invert(&mut denominators);
 
         denominators
     }
@@ -715,7 +714,7 @@ impl<
         }
 
         // Invert/Batch invert denominators
-        co_builder::prelude::Utils::batch_invert(&mut denominators);
+        common::utils::Utils::batch_invert(&mut denominators);
 
         let mut result = [P::ScalarField::zero(); 3];
 

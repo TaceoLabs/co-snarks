@@ -180,3 +180,26 @@ where
     let b = !is_equal.b.is_zero();
     Ok((a, b))
 }
+
+/// Checks whether the shared points are zero/infinity.
+pub fn is_zero_many<C: CurveGroup, N: Network>(
+    xs: &[PointShare<C>],
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Vec<(bool, bool)>>
+where
+    C::BaseField: PrimeField,
+{
+    let (a_xs, b_xs): (Vec<_>, Vec<_>) =
+        conversion::point_share_to_fieldshares_pre_many::<C, N>(xs, net, state)
+            .map(|v| v.into_iter().map(|(a, _, c, _)| (a, c)).unzip())?;
+    let is_equal_shares = arithmetic::eq_bit_many(a_xs.as_slice(), b_xs.as_slice(), net, state)?;
+    Ok(is_equal_shares
+        .into_iter()
+        .map(|is_equal| {
+            let a = !is_equal.a.is_zero();
+            let b = !is_equal.b.is_zero();
+            (a, b)
+        })
+        .collect())
+}

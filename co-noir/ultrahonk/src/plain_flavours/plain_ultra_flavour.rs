@@ -7,11 +7,9 @@ use crate::decider::types::{ClaimedEvaluations, ProverUnivariates, RelationParam
 use crate::plain_prover_flavour::PlainProverFlavour;
 use crate::prelude::Univariate;
 use ark_ff::PrimeField;
-use co_builder::HonkProofResult;
 use co_builder::flavours::ultra_flavour::UltraFlavour;
-use co_builder::prelude::HonkCurve;
 use co_builder::prover_flavour::ProverFlavour;
-use common::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
+use common::transcript::{Transcript, TranscriptHasher};
 use std::array;
 
 use crate::decider::relations::{
@@ -34,6 +32,9 @@ use crate::decider::relations::{
     },
 };
 use ark_ff::AdditiveGroup;
+use common::honk_curve::HonkCurve;
+use common::honk_proof::HonkProofResult;
+use common::honk_proof::TranscriptFieldType;
 
 #[derive(Default)]
 pub struct AllRelationAccUltra<F: PrimeField> {

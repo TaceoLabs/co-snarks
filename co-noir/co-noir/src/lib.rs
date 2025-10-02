@@ -5,13 +5,16 @@ use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::pss_store::PssStore;
 use co_acvm::{PlainAcvmSolver, Rep3AcvmSolver, ShamirAcvmSolver, solver::Rep3CoSolver};
+use co_builder::flavours::ultra_flavour::UltraFlavour;
 use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
 use co_builder::prover_flavour::ProverFlavour;
-use co_builder::{TranscriptFieldType, flavours::ultra_flavour::UltraFlavour};
 use co_noir_types::{Rep3SharedInput, Rep3SharedWitness, ShamirType};
 use co_noir_types::{Rep3Type, ShamirSharedWitness};
-use co_ultrahonk::prelude::{HonkCurve, ProverCrs};
 use color_eyre::eyre::{self, Context, Result};
+use common::crs::ProverCrs;
+use common::honk_curve::HonkCurve;
+use common::honk_proof::TranscriptFieldType;
+use common::polynomials::polynomial::Polynomial;
 use mpc_core::protocols::{
     rep3::{self, conversion::A2BType, id::PartyID},
     shamir::{self, ShamirPreprocessing, ShamirPrimeFieldShare, ShamirState},
@@ -33,9 +36,9 @@ pub use co_noir_types::split_witness_shamir;
 pub use co_ultrahonk::{
     Rep3CoBuilder, ShamirCoBuilder,
     prelude::{
-        AcirFormat, CrsParser, HonkRecursion, PlainProvingKey, Polynomial, Polynomials,
-        Rep3CoUltraHonk, Rep3ProvingKey, ShamirCoUltraHonk, ShamirProvingKey, UltraCircuitBuilder,
-        UltraHonk, VerifyingKey, VerifyingKeyBarretenberg,
+        AcirFormat, HonkRecursion, PlainProvingKey, Polynomials, Rep3CoUltraHonk, Rep3ProvingKey,
+        ShamirCoUltraHonk, ShamirProvingKey, UltraCircuitBuilder, UltraHonk, VerifyingKey,
+        VerifyingKeyBarretenberg,
     },
 };
 pub use common::transcript::{Poseidon2Sponge, TranscriptHasher};
@@ -126,7 +129,7 @@ type ShamirProverWitnessEntities<T> =
     <UltraFlavour as ProverFlavour>::ProverWitnessEntities<Polynomial<ShamirPrimeFieldShare<T>>>;
 
 /// Translate a REP3 shared proving key to a shamir shared proving key
-pub fn translate_proving_key<P: CurveGroup, N: Network>(
+pub fn translate_proving_key<P: CurveGroup<BaseField: PrimeField>, N: Network>(
     proving_key: Rep3ProvingKey<P, UltraFlavour>,
     net: &N,
 ) -> Result<ShamirProvingKey<P, UltraFlavour>> {
@@ -322,7 +325,7 @@ pub fn generate_vk_barretenberg<P: HonkCurve<TranscriptFieldType>>(
 }
 
 /// Split a proving key into RPE3 shares
-pub fn split_proving_key_rep3<P: CurveGroup>(
+pub fn split_proving_key_rep3<P: CurveGroup<BaseField: PrimeField>>(
     proving_key: PlainProvingKey<P, UltraFlavour>,
 ) -> Result<[Rep3ProvingKey<P, UltraFlavour>; 3]> {
     let mut rng = rand::thread_rng();
@@ -349,7 +352,7 @@ pub fn split_proving_key_rep3<P: CurveGroup>(
 }
 
 /// Split a proving key into shamir shares
-pub fn split_proving_key_shamir<P: CurveGroup>(
+pub fn split_proving_key_shamir<P: CurveGroup<BaseField: PrimeField>>(
     proving_key: PlainProvingKey<P, UltraFlavour>,
     degree: usize,
     num_parties: usize,
