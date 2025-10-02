@@ -2,14 +2,16 @@ use ark_bn254::Bn254;
 use ark_ff::Zero;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use co_builder::flavours::ultra_flavour::UltraFlavour;
-use co_noir::{Bn254G1, HonkProof, SerializeF};
+use co_noir::{Bn254G1, SerializeF};
 use co_noir_types::{PubPrivate, Rep3SharedInput, Rep3Type};
 use co_ultrahonk::prelude::{
-    CrsParser, ProvingKey, Rep3CoUltraHonk, ShamirCoUltraHonk, UltraHonk, VerifyingKey,
-    VerifyingKeyBarretenberg, ZeroKnowledge,
+    ProvingKey, Rep3CoUltraHonk, ShamirCoUltraHonk, UltraHonk, VerifyingKey,
+    VerifyingKeyBarretenberg,
 };
 use color_eyre::eyre::{self, Context, ContextCompat};
+use common::types::ZeroKnowledge;
 use common::{
+    crs::parse::CrsParser,
     mpc::{rep3::Rep3UltraHonkDriver, shamir::ShamirUltraHonkDriver},
     transcript::Poseidon2Sponge,
 };
@@ -18,6 +20,7 @@ use figment::{
     providers::{Env, Format, Serialized, Toml},
 };
 use mpc_net::tcp::{NetworkConfig, TcpNetwork};
+use noir_types::HonkProof;
 use serde::{Deserialize, Serialize};
 use sha3::Keccak256;
 use std::{

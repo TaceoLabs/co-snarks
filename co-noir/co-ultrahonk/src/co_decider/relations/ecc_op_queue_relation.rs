@@ -5,12 +5,11 @@ use crate::co_decider::types::RelationParameters;
 use crate::types::AllEntities;
 use ark_ec::CurveGroup;
 use ark_ff::Zero;
-use co_builder::HonkProofResult;
-use co_builder::TranscriptFieldType;
 use co_builder::polynomials::polynomial_flavours::{
     PrecomputedEntitiesFlavour, ShiftedWitnessEntitiesFlavour, WitnessEntitiesFlavour,
 };
-use co_builder::prelude::HonkCurve;
+use common::honk_curve::HonkCurve;
+use common::honk_proof::{HonkProofResult, TranscriptFieldType};
 use itertools::Itertools;
 use mpc_net::Network;
 use ultrahonk::prelude::Univariate;
@@ -333,7 +332,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         _relation_parameters: &RelationParameters<Univariate<P::ScalarField, SIZE>>,
         scaling_factor: &P::ScalarField,
     ) -> HonkProofResult<()> {
-        // TODO TACEO: Reconcile skip check and `can_skip`
+        // TACEO TODO: Reconcile skip check and `can_skip`
         if input
             .precomputed
             .lagrange_ecc_op()

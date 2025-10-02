@@ -1,6 +1,6 @@
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
-use co_builder::prelude::Polynomial;
+use common::polynomials::polynomial::Polynomial;
 
 use common::mpc::NoirUltraHonkProver;
 pub struct ProverMemory<T: NoirUltraHonkProver<P>, P: CurveGroup> {

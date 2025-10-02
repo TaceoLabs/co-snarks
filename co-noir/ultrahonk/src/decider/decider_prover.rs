@@ -7,11 +7,14 @@ use crate::{
     CONST_PROOF_SIZE_LOG_N, Utils, decider::small_subgroup_ipa::SmallSubgroupIPAProver,
     plain_prover_flavour::PlainProverFlavour,
 };
-use co_builder::{
-    HonkProofResult,
-    prelude::{HonkCurve, ProverCrs, ZeroKnowledge},
+use common::{
+    crs::ProverCrs,
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProofResult, TranscriptFieldType},
+    types::ZeroKnowledge,
 };
-use common::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
+
+use common::transcript::{Transcript, TranscriptHasher};
 use noir_types::HonkProof;
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;

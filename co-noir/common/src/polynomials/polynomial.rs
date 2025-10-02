@@ -51,8 +51,10 @@ impl<F: Clone> ShiftedPoly<'_, F> {
         res.push(self.zero.clone());
         res
     }
+}
 
-    pub fn as_ref(&self) -> &[F] {
+impl<F: Clone> AsRef<[F]> for ShiftedPoly<'_, F> {
+    fn as_ref(&self) -> &[F] {
         self.coefficients
     }
 }

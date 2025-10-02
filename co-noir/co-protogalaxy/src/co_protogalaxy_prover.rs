@@ -2,25 +2,26 @@ use std::vec;
 
 use ark_ff::fields::Field;
 
-use co_builder::{
-    HonkProofResult, TranscriptFieldType,
-    flavours::mega_flavour::MegaFlavour,
-    prelude::{HonkCurve, Polynomial, ProverCrs},
-};
+use co_builder::flavours::mega_flavour::MegaFlavour;
 
 use co_ultrahonk::prelude::ProvingKey;
+use common::crs::ProverCrs;
+use common::honk_curve::HonkCurve;
+use common::honk_proof::{HonkProofResult, TranscriptFieldType};
+use common::polynomials::polynomial::Polynomial;
+use common::polynomials::shared_polynomial::SharedPolynomial;
+use common::types::ZeroKnowledge;
 use itertools::{Itertools, izip};
 
 use co_ultrahonk::co_decider::types::RelationParameters;
 use co_ultrahonk::co_oink::co_oink_prover::CoOink;
 use common::transcript::Transcript;
-use common::{
-    mpc::NoirUltraHonkProver, shared_polynomial::SharedPolynomial, transcript::TranscriptHasher,
-};
+use common::{mpc::NoirUltraHonkProver, transcript::TranscriptHasher};
 use mpc_net::Network;
+use ultrahonk::prelude::HonkProof;
 use ultrahonk::{
     plain_prover_flavour::UnivariateTrait,
-    prelude::{GateSeparatorPolynomial, HonkProof, Univariate, ZeroKnowledge},
+    prelude::{GateSeparatorPolynomial, Univariate},
 };
 
 use crate::co_protogalaxy_prover_internal::{
@@ -123,7 +124,7 @@ where
             .collect::<Vec<_>>();
 
         // An honest prover with valid initial key computes that the perturbator is 0 in the first round
-        // TODO TACEO: Fix once ClientIVC::accumulate is implemented
+        // TACEO TODO: Fix once ClientIVC::accumulate is implemented
         let perturbator = if true {
             compute_perturbator(
                 self.net,

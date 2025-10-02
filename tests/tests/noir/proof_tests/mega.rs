@@ -1,28 +1,34 @@
 use crate::proof_tests::{CRS_PATH_G1, CRS_PATH_G2};
 use ark_bn254::Bn254;
 use ark_ec::CurveGroup;
+use ark_ff::PrimeField;
+use co_builder::flavours::mega_flavour::MegaFlavour;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
 use co_builder::prover_flavour::ProverFlavour;
-use co_builder::{flavours::mega_flavour::MegaFlavour, TranscriptFieldType};
 use co_noir::Bn254G1;
 use co_noir::HonkProof;
 use co_noir::VerifyingKey;
 pub use co_ultrahonk::prelude::PlainProvingKey;
-use co_ultrahonk::prelude::{
-    CrsParser, MPCProverFlavour, ProvingKey, Rep3CoUltraHonk, UltraHonk, Utils, ZeroKnowledge,
-};
+use co_ultrahonk::prelude::{MPCProverFlavour, ProvingKey, Rep3CoUltraHonk, UltraHonk, Utils};
+use common::crs::parse::CrsParser;
+use common::honk_proof::TranscriptFieldType;
 use common::mpc::plain::PlainUltraHonkDriver;
 use common::mpc::rep3::Rep3UltraHonkDriver;
 use common::transcript::Poseidon2Sponge;
 use common::transcript::TranscriptHasher;
+use common::types::ZeroKnowledge;
 use itertools::izip;
 use mpc_core::protocols::rep3;
 use mpc_net::local::LocalNetwork;
 use rand::{CryptoRng, Rng};
 use std::{fs::File, io::BufReader, thread};
 
-pub fn split_plain_proving_key_rep3<P: CurveGroup, R: Rng + CryptoRng, L: MPCProverFlavour>(
+pub fn split_plain_proving_key_rep3<
+    P: CurveGroup<BaseField: PrimeField>,
+    R: Rng + CryptoRng,
+    L: MPCProverFlavour,
+>(
     proving_key: PlainProvingKey<P, L>,
     rng: &mut R,
 ) -> eyre::Result<[ProvingKey<Rep3UltraHonkDriver, P, L>; 3]> {

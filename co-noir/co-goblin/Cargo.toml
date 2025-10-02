@@ -17,6 +17,7 @@ ultrahonk = { version = "0.5.0", path = "../ultrahonk" }
 goblin = { version = "0.1.0", path = "../goblin" }
 mpc-net = { version = "0.4.0", path = "../../mpc-net" }
 common = { version = "0.1.0", path = "../common" }
+co-acvm = { version = "0.6.0", path = "../co-acvm" }
 ark-ec.workspace = true
 ark-ff.workspace = true
 ark-bn254.workspace = true

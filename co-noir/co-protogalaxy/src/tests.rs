@@ -4,9 +4,8 @@ use ark_bn254::Bn254;
 use ark_ec::{bn::Bn, pairing::Pairing};
 use ark_ff::AdditiveGroup;
 use co_builder::{
-    TranscriptFieldType,
     flavours::mega_flavour::{MegaFlavour, MegaPrecomputedEntities, MegaProverWitnessEntities},
-    prelude::{ActiveRegionData, CrsParser, Polynomial, PublicComponentKey},
+    prelude::{ActiveRegionData, PublicComponentKey},
     prover_flavour::ProverFlavour,
 };
 use co_ultrahonk::{
@@ -17,8 +16,11 @@ use co_ultrahonk::{
 };
 use co_ultrahonk::{co_decider::univariates::SharedUnivariate, types::AllEntities};
 use common::{
+    crs::parse::CrsParser,
+    honk_proof::TranscriptFieldType,
     mpc::{NoirUltraHonkProver, rep3::Rep3UltraHonkDriver},
-    shared_polynomial::SharedPolynomial,
+    polynomials::{polynomial::Polynomial, shared_polynomial::SharedPolynomial},
+    types::ZeroKnowledge,
 };
 use flate2::read::GzDecoder;
 use itertools::izip;
@@ -31,7 +33,7 @@ use rand::thread_rng;
 use serde::de::DeserializeOwned;
 
 use ultrahonk::prelude::{
-    GateSeparatorPolynomial, HonkProof, Poseidon2Sponge, Transcript, Univariate, ZeroKnowledge,
+    GateSeparatorPolynomial, HonkProof, Poseidon2Sponge, Transcript, Univariate,
 };
 
 use crate::{
@@ -51,11 +53,11 @@ use crate::{
 const EXTENDED_LENGTH: usize = (MAX_TOTAL_RELATION_LENGTH - 1) * (NUM_KEYS - 1) + 1;
 const CRS_PATH_G1: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../co-builder/src/crs/bn254_g1.dat"
+    "/../common/src/crs/bn254_g1.dat"
 );
 const CRS_PATH_G2: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../co-builder/src/crs/bn254_g2.dat"
+    "/../common/src/crs/bn254_g2.dat"
 );
 type F = TranscriptFieldType;
 type C = ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>;

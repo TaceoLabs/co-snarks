@@ -7,11 +7,9 @@ pub use crate::{
 };
 // Re-exporting the following types from `ultrahonk` and `co_builder` crates:
 pub use co_builder::prelude::{
-    AcirFormat, HonkRecursion, NUM_MASKED_ROWS, ProvingKey as PlainProvingKey, VerifyingKey,
+    AcirFormat, HonkRecursion, ProvingKey as PlainProvingKey, VerifyingKey,
 };
-pub use co_builder::prelude::{Crs, CrsParser, HonkCurve, Polynomial, ProverCrs};
 pub use ultrahonk::Utils;
 pub use ultrahonk::prelude::UltraCircuitBuilder;
 pub use ultrahonk::prelude::UltraHonk;
 pub use ultrahonk::prelude::VerifyingKeyBarretenberg;
-pub use ultrahonk::prelude::ZeroKnowledge;

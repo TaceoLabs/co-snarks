@@ -6,23 +6,21 @@ use crate::{
 };
 use ark_ec::AffineRepr;
 use ark_ff::{Field, One, Zero};
-use co_builder::HonkProofResult;
-use co_builder::TranscriptFieldType;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
-use co_builder::{
-    HonkProofError,
-    prelude::{HonkCurve, Polynomial, ProverCrs},
-};
 use common::CoUtils;
 use common::co_shplemini::{OpeningPair, ShpleminiOpeningClaim};
+use common::crs::ProverCrs;
+use common::honk_curve::HonkCurve;
+use common::honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType};
 use common::mpc::NoirUltraHonkProver;
-use common::shared_polynomial::SharedPolynomial;
+use common::polynomials::polynomial::Polynomial;
+use common::polynomials::shared_polynomial::SharedPolynomial;
 use common::transcript::{Transcript, TranscriptHasher};
+use common::types::ZeroKnowledge;
 use itertools::izip;
 use mpc_core::MpcState as _;
 use mpc_net::Network;
-use ultrahonk::prelude::ZeroKnowledge;
 use ultrahonk::{NUM_INTERLEAVING_CLAIMS, NUM_SMALL_IPA_EVALUATIONS, Utils};
 
 impl<

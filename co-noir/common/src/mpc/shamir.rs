@@ -1,6 +1,7 @@
 use super::NoirUltraHonkProver;
 use ark_ec::CurveGroup;
 use ark_ff::Field;
+use ark_ff::PrimeField;
 use itertools::izip;
 use mpc_core::MpcState;
 use mpc_core::protocols::shamir::ShamirState;
@@ -15,8 +16,9 @@ use rayon::prelude::*;
 /// A UltraHonk driver using shamir secret sharing
 pub struct ShamirUltraHonkDriver;
 
-impl<P: CurveGroup> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
+impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
     type ArithmeticShare = ShamirPrimeFieldShare<P::ScalarField>;
+    type BaseFieldArithmeticShare = ShamirPrimeFieldShare<P::BaseField>;
     type PointShare = ShamirPointShare<P>;
     type State = ShamirState<P::ScalarField>;
 
@@ -259,6 +261,7 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
     ) -> Vec<Self::ArithmeticShare> {
         domain.ifft(data)
     }
+
     fn is_zero_many<N: Network>(
         _a: &[Self::ArithmeticShare],
         _net: &N,

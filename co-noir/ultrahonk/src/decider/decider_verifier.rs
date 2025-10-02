@@ -5,10 +5,8 @@ use crate::{Utils, plain_prover_flavour::PlainProverFlavour, ultra_verifier::Hon
 use ark_ec::AffineRepr;
 use ark_ec::pairing::Pairing;
 use ark_ff::{One, Zero};
-use co_builder::{
-    TranscriptFieldType,
-    prelude::{HonkCurve, ZeroKnowledge},
-};
+use common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType, types::ZeroKnowledge};
+
 use common::shplemini::ShpleminiVerifierOpeningClaim;
 use common::transcript::{Transcript, TranscriptHasher};
 use std::marker::PhantomData;

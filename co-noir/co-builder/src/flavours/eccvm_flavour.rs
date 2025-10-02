@@ -325,15 +325,15 @@ impl ProverFlavour for ECCVMFlavour {
     const WITNESS_RETURN_DATA_READ_TAGS: usize = usize::MAX;
     const WITNESS_RETURN_DATA_INVERSES: usize = usize::MAX;
     fn prover_witness_entity_from_vec<T: Default + Sync + Clone>(
-        vec: Vec<crate::prelude::Polynomial<T>>,
-    ) -> Self::ProverWitnessEntities<crate::prelude::Polynomial<T>> {
+        vec: Vec<common::polynomials::polynomial::Polynomial<T>>,
+    ) -> Self::ProverWitnessEntities<common::polynomials::polynomial::Polynomial<T>> {
         ECCVMProverWitnessEntities {
             elements: std::array::from_fn(|i| vec[i].clone()),
         }
     }
     fn precomputed_entity_from_vec<T: Default + Debug + Clone + Sync>(
-        vec: Vec<crate::prelude::Polynomial<T>>,
-    ) -> Self::PrecomputedEntities<crate::prelude::Polynomial<T>> {
+        vec: Vec<common::polynomials::polynomial::Polynomial<T>>,
+    ) -> Self::PrecomputedEntities<common::polynomials::polynomial::Polynomial<T>> {
         ECCVMPrecomputedEntities {
             elements: std::array::from_fn(|i| vec[i].clone()),
         }
