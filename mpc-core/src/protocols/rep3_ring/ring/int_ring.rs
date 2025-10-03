@@ -35,7 +35,6 @@ pub trait IntRing2k:
     + BitAndAssign
     + BitOrAssign
     + From<bool>
-    + Into<u128>
     + TryInto<usize, Error: Debug>
     + Copy
     + Debug
@@ -142,7 +141,7 @@ impl IntRing2k for u8 {
         if *self == 0 {
             return 0;
         }
-        self.ilog2() as usize
+        self.ilog2() as usize + 1
     }
 
     fn cast_to_biguint(&self) -> BigUint {
@@ -172,7 +171,7 @@ impl IntRing2k for u16 {
         if *self == 0 {
             return 0;
         }
-        self.ilog2() as usize
+        self.ilog2() as usize + 1
     }
 
     fn cast_to_biguint(&self) -> BigUint {
@@ -202,7 +201,7 @@ impl IntRing2k for u32 {
         if *self == 0 {
             return 0;
         }
-        self.ilog2() as usize
+        self.ilog2() as usize + 1
     }
 
     fn cast_to_biguint(&self) -> BigUint {
@@ -232,7 +231,7 @@ impl IntRing2k for u64 {
         if *self == 0 {
             return 0;
         }
-        self.ilog2() as usize
+        self.ilog2() as usize + 1
     }
 
     fn cast_to_biguint(&self) -> BigUint {
@@ -262,7 +261,7 @@ impl IntRing2k for u128 {
         if *self == 0 {
             return 0;
         }
-        self.ilog2() as usize
+        self.ilog2() as usize + 1
     }
 
     fn cast_to_biguint(&self) -> BigUint {
@@ -349,23 +348,11 @@ impl From<u128> for U512 {
     }
 }
 
-impl From<U512> for u128 {
-    fn from(v: U512) -> u128 {
-        let le = v.0.to_le_bytes::<{ U512::BYTES }>();
-        let mut arr = [0u8; 16];
-        arr.copy_from_slice(&le[..16]);
-        u128::from_le_bytes(arr)
-    }
-}
 impl TryFrom<U512> for usize {
     type Error = &'static str;
     fn try_from(v: U512) -> Result<Self, Self::Error> {
-        let x: u128 = v.into();
-        if x <= usize::MAX as u128 {
-            Ok(x as usize)
-        } else {
-            Err("value does not fit into usize")
-        }
+        v.0.try_into()
+            .map_err(|_| "U512 value too large to fit into usize")
     }
 }
 
@@ -437,11 +424,7 @@ impl ShrAssign<usize> for U512 {
 impl Neg for U512 {
     type Output = Self;
     fn neg(self) -> Self::Output {
-        if self.0.is_zero() {
-            self
-        } else {
-            U512((!self.0).wrapping_add(Uint::<512, 8>::from(1u8)))
-        }
+        U512(-self.0)
     }
 }
 
@@ -523,9 +506,7 @@ impl IntRing2k for U512 {
         if self.is_zero() {
             return 0;
         }
-        self.0
-            .checked_log2()
-            .expect("We checked before it is non-zero")
+        self.0.bit_len()
     }
 
     fn cast_to_biguint(&self) -> BigUint {
