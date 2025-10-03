@@ -38,6 +38,8 @@ sha3 = { workspace = true }
 tracing.workspace = true
 thiserror = { workspace = true }
 nom = { workspace = true }
+ruint = { workspace = true }
+hex = "0.4.3"
 
 [dev-dependencies]
 ark-std = { workspace = true }
