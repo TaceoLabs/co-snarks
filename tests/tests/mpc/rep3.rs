@@ -606,6 +606,41 @@ mod field_share {
     bool_op_test!(ge, >=);
 
     #[test]
+    fn rep3_pow_public_field() {
+        use mpc_core::protocols::rep3::arithmetic;
+        let exponents: [u64; 6] = [0, 1, 2, 3, 5, 10];
+        let mut rng = thread_rng();
+
+        for &exp in &exponents {
+            let nets = LocalNetwork::new_3_parties();
+            let base = ark_bn254::Fr::rand(&mut rng);
+            let base_shares = rep3::share_field_element(base, &mut rng);
+            let public_exp = ark_bn254::Fr::from(exp);
+
+            let (tx1, rx1) = mpsc::channel();
+            let (tx2, rx2) = mpsc::channel();
+            let (tx3, rx3) = mpsc::channel();
+            for (net, tx, share) in izip!(nets, [tx1, tx2, tx3], base_shares) {
+                std::thread::spawn(move || {
+                    let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
+                    let res = arithmetic::pow_public(share, public_exp, &net, &mut state).unwrap();
+                    tx.send(res).unwrap();
+                });
+            }
+            let res1 = rx1.recv().unwrap();
+            let res2 = rx2.recv().unwrap();
+            let res3 = rx3.recv().unwrap();
+            let got = rep3::combine_field_element(res1, res2, res3);
+
+            let mut expected = ark_bn254::Fr::one();
+            for _ in 0..exp {
+                expected *= base;
+            }
+            assert_eq!(got, expected);
+        }
+    }
+
+    #[test]
     fn rep3_a2b_zero() {
         let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
