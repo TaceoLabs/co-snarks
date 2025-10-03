@@ -196,7 +196,8 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
                 batching_challenge_v,
                 evaluation_input_x,
                 &negative_modulus_limbs,
-            );
+                driver,
+            )?;
 
             // And put them into the wires
             self.create_accumulation_gate(one_accumulation_step);
@@ -236,7 +237,8 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         batching_challenge_v: C::BaseField,
         evaluation_input_x: C::BaseField,
         negative_modulus_limbs: &[C::ScalarField; 5],
-    ) -> CoAccumulationInput<T, C> {
+        driver: &mut T,
+    ) -> eyre::Result<CoAccumulationInput<T, C>> {
         const NUM_LIMB_BITS: usize = 68;
         let shift_1: C::ScalarField = (BigUint::one() << NUM_LIMB_BITS).into();
         let shift_2 = BigUint::one() << (NUM_LIMB_BITS << 1);
@@ -477,39 +479,87 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         // To calculate the quotient, we need to evaluate the expression in integers. So we need uint512_t versions of all
         // elements involved
         let op_code = ultra_op.op_code.value() as u64;
-        let uint_previous_accumulator: BigUint = previous_accumulator.into();
-        let uint_x: BigUint = evaluation_input_x.into();
-        let uint_op = BigUint::from(op_code);
+        // let uint_previous_accumulator = previous_accumulator;
+        // let uint_x: BigUint = evaluation_input_x.into();
+        // let uint_op = BigUint::from(op_code);
         let num_limb_shift = 2 * NUM_LIMB_BITS;
 
-        let x_lo: BigUint = ultra_op.x_lo.into();
-        let x_hi: BigUint = ultra_op.x_hi.into();
-        let y_lo: BigUint = ultra_op.y_lo.into();
-        let y_hi: BigUint = ultra_op.y_hi.into();
-        let z1_b: BigUint = ultra_op.z_1.into();
-        let z2_b: BigUint = ultra_op.z_2.into();
-        let uint_v: BigUint = batching_challenge_v.into();
-        let uint_v_squared: BigUint = v_squared.into();
-        let uint_v_cubed: BigUint = v_cubed.into();
-        let uint_v_quarted: BigUint = v_quarted.into();
+        let x_lo = ultra_op.x_lo;
+        let x_hi = ultra_op.x_hi;
+        let y_lo = ultra_op.y_lo;
+        let y_hi = ultra_op.y_hi;
+        let z_1 = ultra_op.z_1;
+        let z_2 = ultra_op.z_2;
+        // let uint_v: BigUint = batching_challenge_v.into();
+        // let uint_v_squared: BigUint = v_squared.into();
+        // let uint_v_cubed: BigUint = v_cubed.into();
+        // let uint_v_quarted: BigUint = v_quarted.into();
 
-        let uint_p_x = &x_lo + (&x_hi << num_limb_shift);
-        let uint_p_y = &y_lo + (&y_hi << num_limb_shift);
-        let uint_z1 = z1_b.clone();
-        let uint_z2 = z2_b.clone();
+        // let uint_p_x = &x_lo + (&x_hi << num_limb_shift);
+        // let uint_p_y = &y_lo + (&y_hi << num_limb_shift);
+        // let uint_z1 = z1_b.clone();
+        // let uint_z2 = z2_b.clone();
 
-        // Construct Fq for op, P.x, P.y, z_1, z_2 for use in witness computation
-        let base_op = C::BaseField::from(op_code);
-        let base_p_x = {
-            // reconstruct as base field
-            // x_lo + (x_hi << (2*NUM_LIMB_BITS))
-            // Convert back assuming into fits
-            // (Simplified assumption: direct BigUint -> BaseField via try_from implemented elsewhere)
-            C::BaseField::from(uint_p_x.clone())
-        };
-        let base_p_y = C::BaseField::from(uint_p_y.clone());
-        let base_z_1 = C::BaseField::from(uint_z1.clone());
-        let base_z_2 = C::BaseField::from(uint_z2.clone());
+        // // Construct Fq for op, P.x, P.y, z_1, z_2 for use in witness computation
+        // let base_op = C::BaseField::from(op_code);
+        // let base_p_x = {
+        //     // reconstruct as base field
+        //     // x_lo + (x_hi << (2*NUM_LIMB_BITS))
+        //     // Convert back assuming into fits
+        //     // (Simplified assumption: direct BigUint -> BaseField via try_from implemented elsewhere)
+        //     C::BaseField::from(uint_p_x.clone())
+        // };
+        // //       Fq base_p_x = Fq(uint256_t(ultra_op.x_lo) + (uint256_t(ultra_op.x_hi) << (NUM_LIMB_BITS << 1)));
+        // // Fq base_p_y = Fq(uint256_t(ultra_op.y_lo) + (uint256_t(ultra_op.y_hi) << (NUM_LIMB_BITS << 1)));
+        // let base_p_y = C::BaseField::from(uint_p_y.clone());
+        // let base_z_1 = C::BaseField::from(uint_z1.clone());
+        // let base_z_2 = C::BaseField::from(uint_z2.clone());
+
+        // // The formula is `accumulator = accumulator⋅x + (op + v⋅p.x + v²⋅p.y + v³⋅z₁ + v⁴z₂)`. We need to compute the
+        // // remainder (new accumulator value)
+
+        // //TODO FLORIN:
+        // let remainder: T::OtherAcvmType<C> = previous_accumulator * evaluation_input_x
+        //     + base_z_2 * v_quarted
+        //     + base_z_1 * v_cubed
+        //     + base_p_y * v_squared
+        //     + base_p_x * batching_challenge_v
+        //     + base_op;
+
+        // // We also need to compute the quotient
+        // let modulus_big: BigUint = { C::BaseField::MODULUS.into() };
+
+        // let uint_remainder: BigUint = remainder.into();
+
+        // let quotient_by_modulus = &uint_previous_accumulator * &uint_x
+        //     + &uint_z2 * &uint_v_quarted
+        //     + &uint_z1 * &uint_v_cubed
+        //     + &uint_p_y * &uint_v_squared
+        //     + &uint_p_x * &uint_v
+        //     + &uint_op
+        //     - &uint_remainder;
+
+        // let quotient = &quotient_by_modulus / &modulus_big;
+
+        // debug_assert!(
+        //     quotient_by_modulus == &quotient * &modulus_big,
+        //     "Quotient reconstruction failed"
+        // );
+
+        // Compute quotient and remainder bigfield representation
+        let (quotient_limbs, remainder_limbs) = driver.compute_remainder_limbs_and_quotient_limbs(
+            x_lo,
+            x_hi,
+            y_lo,
+            y_hi,
+            z_1,
+            z_2,
+            evaluation_input_x,
+            batching_challenge_v,
+            previous_accumulator,
+            op_code,
+            num_limb_shift,
+        )?;
 
         // Construct bigfield representations of P.x and P.y
         let [p_x_0, p_x_1] = split_wide_limb_into_2_limbs(ultra_op.x_lo);
@@ -524,129 +574,148 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         let z_1_limbs = split_wide_limb_into_2_limbs(ultra_op.z_1);
         let z_2_limbs = split_wide_limb_into_2_limbs(ultra_op.z_2);
 
-        // The formula is `accumulator = accumulator⋅x + (op + v⋅p.x + v²⋅p.y + v³⋅z₁ + v⁴z₂)`. We need to compute the
-        // remainder (new accumulator value)
-
-        let remainder: T::OtherAcvmType<C> = previous_accumulator;
-        //TODO FLORIN:
-        //* evaluation_input_x
-        // + base_z_2 * v_quarted
-        // + base_z_1 * v_cubed
-        // + base_p_y * v_squared
-        // + base_p_x * batching_challenge_v
-        // + base_op;
-
-        // We also need to compute the quotient
-        let modulus_big: BigUint = { C::BaseField::MODULUS.into() };
-
-        let uint_remainder: BigUint = remainder.into();
-
-        let quotient_by_modulus = &uint_previous_accumulator * &uint_x
-            + &uint_z2 * &uint_v_quarted
-            + &uint_z1 * &uint_v_cubed
-            + &uint_p_y * &uint_v_squared
-            + &uint_p_x * &uint_v
-            + &uint_op
-            - &uint_remainder;
-
-        let quotient = &quotient_by_modulus / &modulus_big;
-
-        debug_assert!(
-            quotient_by_modulus == &quotient * &modulus_big,
-            "Quotient reconstruction failed"
-        );
-
-        // Compute quotient and remainder bigfield representation
-        let remainder_limbs = split_fq_into_limbs_shared(remainder);
-        let quotient_limbs = uint512_t_to_limbs(&quotient);
-
         // We will divide by shift_2 instantly in the relation itself, but first we need to compute the low part (0*0) and
         // the high part (0*1, 1*0) multiplied by a single limb shift
-        let low_wide_relation_limb_part_1 = previous_accumulator_limbs[0] * x_witnesses[0]
-            + C::ScalarField::from(op_code)
-            + v_witnesses[0] * p_x_limbs[0]
-            + v_squared_witnesses[0] * p_y_limbs[0]
-            + v_cubed_witnesses[0] * z_1_limbs[0]
-            + v_quarted_witnesses[0] * z_2_limbs[0]
-            + quotient_limbs[0] * negative_modulus_limbs[0]
-            - remainder_limbs[0]; // This covers the lowest limb
+        let mut low_wide_relation_limb_part_1 = T::AcvmType::from(C::ScalarField::from(op_code));
+        let summand1 = driver.mul_with_public(x_witnesses[0], previous_accumulator_limbs[0]);
+        let summand2 = driver.mul_with_public(v_witnesses[0], p_x_limbs[0]);
+        let summand3 = driver.mul_with_public(v_squared_witnesses[0], p_y_limbs[0]);
+        let summand4 = driver.mul_with_public(v_cubed_witnesses[0], z_1_limbs[0]);
+        let summand5 = driver.mul_with_public(v_quarted_witnesses[0], z_2_limbs[0]);
+        let summand6 = driver.mul_with_public(negative_modulus_limbs[0], quotient_limbs[0]);
+        driver.add_assign(&mut low_wide_relation_limb_part_1, summand1);
+        driver.add_assign(&mut low_wide_relation_limb_part_1, summand2);
+        driver.add_assign(&mut low_wide_relation_limb_part_1, summand3);
+        driver.add_assign(&mut low_wide_relation_limb_part_1, summand4);
+        driver.add_assign(&mut low_wide_relation_limb_part_1, summand5);
+        driver.add_assign(&mut low_wide_relation_limb_part_1, summand6);
+        low_wide_relation_limb_part_1 =
+            driver.sub(low_wide_relation_limb_part_1, remainder_limbs[0]);
+        // This covers the lowest limb
 
-        let low_wide_relation_limb = low_wide_relation_limb_part_1
-            + (previous_accumulator_limbs[1] * x_witnesses[0]
-                + previous_accumulator_limbs[0] * x_witnesses[1]
-                + v_witnesses[1] * p_x_limbs[0]
-                + p_x_limbs[1] * v_witnesses[0]
-                + v_squared_witnesses[1] * p_y_limbs[0]
-                + v_squared_witnesses[0] * p_y_limbs[1]
-                + v_cubed_witnesses[1] * z_1_limbs[0]
-                + z_1_limbs[1] * v_cubed_witnesses[0]
-                + v_quarted_witnesses[1] * z_2_limbs[0]
-                + v_quarted_witnesses[0] * z_2_limbs[1]
-                + quotient_limbs[0] * negative_modulus_limbs[1]
-                + quotient_limbs[1] * negative_modulus_limbs[0]
-                - remainder_limbs[1])
-                * shift_1;
+        let mut low_wide_relation_limb = low_wide_relation_limb_part_1;
+        let summand1 = driver.mul_with_public(x_witnesses[0], previous_accumulator_limbs[1]);
+        let summand2 = driver.mul_with_public(x_witnesses[1], previous_accumulator_limbs[0]);
+        let summand3 = driver.mul_with_public(v_witnesses[1], p_x_limbs[0]);
+        let summand4 = driver.mul_with_public(v_witnesses[0], p_x_limbs[1]);
+        let summand5 = driver.mul_with_public(v_squared_witnesses[1], p_y_limbs[0]);
+        let summand6 = driver.mul_with_public(v_squared_witnesses[0], p_y_limbs[1]);
+        let summand7 = driver.mul_with_public(v_cubed_witnesses[1], z_1_limbs[0]);
+        let summand8 = driver.mul_with_public(v_cubed_witnesses[0], z_1_limbs[1]);
+        let summand9 = driver.mul_with_public(v_quarted_witnesses[1], z_2_limbs[0]);
+        let summand10 = driver.mul_with_public(v_quarted_witnesses[0], z_2_limbs[1]);
+        let summand11 = driver.mul_with_public(negative_modulus_limbs[1], quotient_limbs[0]);
+        let summand12 = driver.mul_with_public(negative_modulus_limbs[0], quotient_limbs[1]);
+        driver.add_assign(&mut low_wide_relation_limb, summand1);
+        driver.add_assign(&mut low_wide_relation_limb, summand2);
+        driver.add_assign(&mut low_wide_relation_limb, summand3);
+        driver.add_assign(&mut low_wide_relation_limb, summand4);
+        driver.add_assign(&mut low_wide_relation_limb, summand5);
+        driver.add_assign(&mut low_wide_relation_limb, summand6);
+        driver.add_assign(&mut low_wide_relation_limb, summand7);
+        driver.add_assign(&mut low_wide_relation_limb, summand8);
+        driver.add_assign(&mut low_wide_relation_limb, summand9);
+        driver.add_assign(&mut low_wide_relation_limb, summand10);
+        driver.add_assign(&mut low_wide_relation_limb, summand11);
+        driver.add_assign(&mut low_wide_relation_limb, summand12);
+        low_wide_relation_limb = driver.sub(low_wide_relation_limb, remainder_limbs[1]);
+        low_wide_relation_limb = driver.mul_with_public(shift_1, low_wide_relation_limb);
 
         // Low bits have to be zero
-        debug_assert!(
-            Utils::slice_u256(&low_wide_relation_limb.into(), 0, 2 * NUM_LIMB_BITS as u64)
-                .is_zero()
-        );
 
-        let low_wide_relation_limb_divided = low_wide_relation_limb * shift_2_inverse;
+        let low_wide_relation_limb_divided =
+            driver.mul_with_public(shift_2_inverse, low_wide_relation_limb);
 
         // The high relation limb is the accumulation of the low limb divided by 2¹³⁶ and the combination of limbs with
         // indices (0*2,1*1,2*0) with limbs with indices (0*3,1*2,2*1,3*0) multiplied by 2⁶⁸
 
-        let high_wide_relation_limb = low_wide_relation_limb_divided
-            + previous_accumulator_limbs[2] * x_witnesses[0]
-            + previous_accumulator_limbs[1] * x_witnesses[1]
-            + previous_accumulator_limbs[0] * x_witnesses[2]
-            + v_witnesses[2] * p_x_limbs[0]
-            + v_witnesses[1] * p_x_limbs[1]
-            + v_witnesses[0] * p_x_limbs[2]
-            + v_squared_witnesses[2] * p_y_limbs[0]
-            + v_squared_witnesses[1] * p_y_limbs[1]
-            + v_squared_witnesses[0] * p_y_limbs[2]
-            + v_cubed_witnesses[2] * z_1_limbs[0]
-            + v_cubed_witnesses[1] * z_1_limbs[1]
-            + v_quarted_witnesses[2] * z_2_limbs[0]
-            + v_quarted_witnesses[1] * z_2_limbs[1]
-            + quotient_limbs[2] * negative_modulus_limbs[0]
-            + quotient_limbs[1] * negative_modulus_limbs[1]
-            + quotient_limbs[0] * negative_modulus_limbs[2]
-            - remainder_limbs[2]
-            + (previous_accumulator_limbs[3] * x_witnesses[0]
-                + previous_accumulator_limbs[2] * x_witnesses[1]
-                + previous_accumulator_limbs[1] * x_witnesses[2]
-                + previous_accumulator_limbs[0] * x_witnesses[3]
-                + v_witnesses[3] * p_x_limbs[0]
-                + v_witnesses[2] * p_x_limbs[1]
-                + v_witnesses[1] * p_x_limbs[2]
-                + v_witnesses[0] * p_x_limbs[3]
-                + v_squared_witnesses[3] * p_y_limbs[0]
-                + v_squared_witnesses[2] * p_y_limbs[1]
-                + v_squared_witnesses[1] * p_y_limbs[2]
-                + v_squared_witnesses[0] * p_y_limbs[3]
-                + v_cubed_witnesses[3] * z_1_limbs[0]
-                + v_cubed_witnesses[2] * z_1_limbs[1]
-                + v_quarted_witnesses[3] * z_2_limbs[0]
-                + v_quarted_witnesses[2] * z_2_limbs[1]
-                + quotient_limbs[3] * negative_modulus_limbs[0]
-                + quotient_limbs[2] * negative_modulus_limbs[1]
-                + quotient_limbs[1] * negative_modulus_limbs[2]
-                + quotient_limbs[0] * negative_modulus_limbs[3]
-                - remainder_limbs[3])
-                * shift_1;
+        let mut high_wide_relation_limb = low_wide_relation_limb_divided;
+        let summand1 = driver.mul_with_public(x_witnesses[0], previous_accumulator_limbs[2]);
+        let summand2 = driver.mul_with_public(x_witnesses[1], previous_accumulator_limbs[1]);
+        let summand3 = driver.mul_with_public(x_witnesses[2], previous_accumulator_limbs[0]);
+        let summand4 = driver.mul_with_public(v_witnesses[2], p_x_limbs[0]);
+        let summand5 = driver.mul_with_public(v_witnesses[1], p_x_limbs[1]);
+        let summand6 = driver.mul_with_public(v_witnesses[0], p_x_limbs[2]);
+        let summand7 = driver.mul_with_public(v_squared_witnesses[2], p_y_limbs[0]);
+        let summand8 = driver.mul_with_public(v_squared_witnesses[1], p_y_limbs[1]);
+        let summand9 = driver.mul_with_public(v_squared_witnesses[0], p_y_limbs[2]);
+        let summand10 = driver.mul_with_public(v_cubed_witnesses[2], z_1_limbs[0]);
+        let summand11 = driver.mul_with_public(v_cubed_witnesses[1], z_1_limbs[1]);
+        let summand12 = driver.mul_with_public(v_quarted_witnesses[2], z_2_limbs[0]);
+        let summand13 = driver.mul_with_public(v_quarted_witnesses[1], z_2_limbs[1]);
+        let summand14 = driver.mul_with_public(negative_modulus_limbs[0], quotient_limbs[2]);
+        let summand15 = driver.mul_with_public(negative_modulus_limbs[1], quotient_limbs[1]);
+        let summand16 = driver.mul_with_public(negative_modulus_limbs[2], quotient_limbs[0]);
+        driver.add_assign(&mut high_wide_relation_limb, summand1);
+        driver.add_assign(&mut high_wide_relation_limb, summand2);
+        driver.add_assign(&mut high_wide_relation_limb, summand3);
+        driver.add_assign(&mut high_wide_relation_limb, summand4);
+        driver.add_assign(&mut high_wide_relation_limb, summand5);
+        driver.add_assign(&mut high_wide_relation_limb, summand6);
+        driver.add_assign(&mut high_wide_relation_limb, summand7);
+        driver.add_assign(&mut high_wide_relation_limb, summand8);
+        driver.add_assign(&mut high_wide_relation_limb, summand9);
+        driver.add_assign(&mut high_wide_relation_limb, summand10);
+        driver.add_assign(&mut high_wide_relation_limb, summand11);
+        driver.add_assign(&mut high_wide_relation_limb, summand12);
+        driver.add_assign(&mut high_wide_relation_limb, summand13);
+        driver.add_assign(&mut high_wide_relation_limb, summand14);
+        driver.add_assign(&mut high_wide_relation_limb, summand15);
+        driver.add_assign(&mut high_wide_relation_limb, summand16);
+        high_wide_relation_limb = driver.sub(high_wide_relation_limb, remainder_limbs[2]);
+        let mut second_part = driver.mul_with_public(x_witnesses[0], previous_accumulator_limbs[3]);
 
+        let summand1 = driver.mul_with_public(x_witnesses[1], previous_accumulator_limbs[2]);
+        let summand2 = driver.mul_with_public(x_witnesses[2], previous_accumulator_limbs[1]);
+        let summand3 = driver.mul_with_public(x_witnesses[3], previous_accumulator_limbs[0]);
+        let summand4 = driver.mul_with_public(v_witnesses[3], p_x_limbs[0]);
+        let summand5 = driver.mul_with_public(v_witnesses[2], p_x_limbs[1]);
+        let summand6 = driver.mul_with_public(v_witnesses[1], p_x_limbs[2]);
+        let summand7 = driver.mul_with_public(v_witnesses[0], p_x_limbs[3]);
+        let summand8 = driver.mul_with_public(v_squared_witnesses[3], p_y_limbs[0]);
+        let summand9 = driver.mul_with_public(v_squared_witnesses[2], p_y_limbs[1]);
+        let summand10 = driver.mul_with_public(v_squared_witnesses[1], p_y_limbs[2]);
+        let summand11 = driver.mul_with_public(v_squared_witnesses[0], p_y_limbs[3]);
+        let summand12 = driver.mul_with_public(v_cubed_witnesses[3], z_1_limbs[0]);
+        let summand13 = driver.mul_with_public(v_cubed_witnesses[2], z_1_limbs[1]);
+        let summand14 = driver.mul_with_public(v_quarted_witnesses[3], z_2_limbs[0]);
+        let summand15 = driver.mul_with_public(v_quarted_witnesses[2], z_2_limbs[1]);
+        let summand16 = driver.mul_with_public(negative_modulus_limbs[0], quotient_limbs[3]);
+        let summand17 = driver.mul_with_public(negative_modulus_limbs[1], quotient_limbs[2]);
+        let summand18 = driver.mul_with_public(negative_modulus_limbs[2], quotient_limbs[1]);
+        let summand19 = driver.mul_with_public(negative_modulus_limbs[3], quotient_limbs[0]);
+        driver.add_assign(&mut second_part, summand1);
+        driver.add_assign(&mut second_part, summand2);
+        driver.add_assign(&mut second_part, summand3);
+        driver.add_assign(&mut second_part, summand4);
+        driver.add_assign(&mut second_part, summand5);
+        driver.add_assign(&mut second_part, summand6);
+        driver.add_assign(&mut second_part, summand7);
+        driver.add_assign(&mut second_part, summand8);
+        driver.add_assign(&mut second_part, summand9);
+        driver.add_assign(&mut second_part, summand10);
+        driver.add_assign(&mut second_part, summand11);
+        driver.add_assign(&mut second_part, summand12);
+        driver.add_assign(&mut second_part, summand13);
+        driver.add_assign(&mut second_part, summand14);
+        driver.add_assign(&mut second_part, summand15);
+        driver.add_assign(&mut second_part, summand16);
+        driver.add_assign(&mut second_part, summand17);
+        driver.add_assign(&mut second_part, summand18);
+        driver.add_assign(&mut second_part, summand19);
+        high_wide_relation_limb = driver.sub(second_part, remainder_limbs[3]);
+        high_wide_relation_limb = driver.mul_with_public(shift_1, high_wide_relation_limb);
+
+        // We dont do this assert
         // Check that the results lower 136 bits are zero
-        debug_assert!(
-            Utils::slice_u256(&high_wide_relation_limb.into(), 0, 2 * NUM_LIMB_BITS as u64)
-                .is_zero()
-        );
+        // debug_assert!(
+        //     Utils::slice_u256(&high_wide_relation_limb.into(), 0, 2 * NUM_LIMB_BITS as u64)
+        //         .is_zero()
+        // );
 
         // Get divided version
-        let high_wide_relation_limb_divided = high_wide_relation_limb * shift_2_inverse;
+        let high_wide_relation_limb_divided =
+            driver.mul_with_public(shift_2_inverse, high_wide_relation_limb);
 
         const LAST_LIMB_INDEX: usize = NUM_BINARY_LIMBS - 1;
 
@@ -716,9 +785,9 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         input.z_2_limbs = z_2_limbs;
         input.z_2_microlimbs = z_2_microlimbs;
         input.previous_accumulator = previous_accumulator_limbs;
-        input.current_accumulator = remainder_limbs;
+        input.current_accumulator = remainder_limbs.try_into().expect("Should have 4 limbs");
         input.current_accumulator_microlimbs = current_accumulator_microlimbs;
-        input.quotient_binary_limbs = quotient_limbs;
+        input.quotient_binary_limbs = quotient_limbs.try_into().expect("Should have 4 limbs");
         input.quotient_microlimbs = quotient_microlimbs;
         input.relation_wide_limbs = [
             low_wide_relation_limb_divided,
@@ -729,7 +798,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
             split_relation_limb_into_micro_limbs(high_wide_relation_limb_divided),
         ];
 
-        input
+        Ok(input)
     }
 
     /**

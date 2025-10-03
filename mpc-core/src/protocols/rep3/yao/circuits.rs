@@ -1448,7 +1448,7 @@ impl GarbledCircuits {
         let divisor = Self::bin_addition_no_carry(g, x1s, x2s)?;
 
         debug_assert_eq!(dividend.len(), input_bitlen);
-        debug_assert_eq!(dividend.len(), dividend.len());
+        debug_assert_eq!(divisor.len(), dividend.len());
         let quotient = Self::bin_div_by_shared(g, dividend, &divisor)?;
 
         let mut added = Vec::with_capacity(input_bitlen);
@@ -1664,6 +1664,88 @@ impl GarbledCircuits {
             )?);
         }
         Ok(BinaryBundle::new(results))
+    }
+
+    /// TODO
+    pub fn todo_florin_many<G: FancyBinary + FancyBinaryConstant, F: PrimeField>(
+        g: &mut G,
+        wires_x1: &BinaryBundle<G::Item>,
+        wires_x2: &BinaryBundle<G::Item>,
+        wires_c: &BinaryBundle<G::Item>,
+        input_bitlen: usize,
+        output_bitlen: usize,
+        divisor: &[bool],
+    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+        // debug_assert_eq!(wires_x1.size(), wires_x2.size());
+        let length = wires_x1.size();
+        // debug_assert_eq!(length % 2, 0);
+
+        // debug_assert_eq!(length / 2 % input_bitlen, 0);
+        // debug_assert_eq!(wires_c.size(), length / 2);
+
+        let mut results = Vec::with_capacity(wires_c.size());
+        let num_outputs_per_chunk = 8; //TODO FLORIN: make this nicer
+
+        for (chunk_x1, chunk_x2, chunk_y1, chunk_y2, chunk_c) in izip!(
+            wires_x1.wires()[0..length / 2].chunks(input_bitlen),
+            wires_x2.wires()[0..length / 2].chunks(input_bitlen),
+            wires_x1.wires()[length / 2..].chunks(input_bitlen),
+            wires_x2.wires()[length / 2..].chunks(input_bitlen),
+            wires_c
+                .wires()
+                .chunks(num_outputs_per_chunk * F::MODULUS_BIT_SIZE as usize),
+        ) {
+            results.extend(Self::todo_florin::<_, F>(
+                g,
+                chunk_x1,
+                chunk_x2,
+                chunk_y1,
+                chunk_y2,
+                chunk_c,
+                divisor,
+                input_bitlen,
+                output_bitlen,
+            )?);
+        }
+        Ok(BinaryBundle::new(results))
+    }
+
+    /// Divides a ring element by another. The ring elements are represented as bitdecompositions x1s, x2s, y1s and y2s which need to be added first. The output is composed using wires_c, whereas wires_c are the same size as the input wires.
+    #[expect(clippy::too_many_arguments)]
+    fn todo_florin<G: FancyBinary + FancyBinaryConstant, F: PrimeField>(
+        g: &mut G,
+        x1s: &[G::Item],
+        x2s: &[G::Item],
+        y1s: &[G::Item],
+        y2s: &[G::Item],
+        wires_c: &[G::Item],
+        divisor: &[bool],
+        input_bitlen: usize,
+        output_bitlen: usize,
+    ) -> Result<Vec<G::Item>, G::Error> {
+        let quotient = Self::bin_addition_no_carry(g, x1s, x2s)?;
+        let remainder = Self::bin_addition_no_carry(g, y1s, y2s)?;
+
+        debug_assert_eq!(quotient.len(), input_bitlen);
+        debug_assert_eq!(quotient.len(), divisor.len());
+        let quotient = Self::bin_div_by_public(g, &quotient, divisor)?.to_vec();
+
+        let mut results = Vec::with_capacity(input_bitlen); // TODO FLORIN
+        let mut rands = wires_c.chunks(F::MODULUS_BIT_SIZE as usize);
+
+        // TODO FLORIN: make this 4 nicer
+        for inp in quotient
+            .chunks(output_bitlen)
+            .take(4)
+            .chain(remainder.chunks(output_bitlen).take(4))
+        {
+            results.extend(Self::compose_field_element::<_, F>(
+                g,
+                inp,
+                rands.next().unwrap(),
+            )?);
+        }
+        Ok(results)
     }
 
     /// Binary division for two vecs of inputs. The ring elements are represented as two bitdecompositions wires_a, wires_b which need to be split first to get the two inputs. The output is composed using wires_c, whereas wires_c is half the size as wires_a and wires_b.

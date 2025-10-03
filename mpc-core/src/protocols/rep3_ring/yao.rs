@@ -11,7 +11,7 @@ use crate::protocols::{
             garbler::Rep3Garbler,
         },
     },
-    rep3_ring::conversion,
+    rep3_ring::{conversion, ring::int_ring::U512},
 };
 use ark_ff::PrimeField;
 use fancy_garbling::{BinaryBundle, WireLabel, WireMod2};
@@ -591,6 +591,96 @@ macro_rules! decompose_circuit_compose_blueprint {
 }
 pub(crate) use decompose_circuit_compose_blueprint;
 
+macro_rules! decompose_circuit_compose_to_fields_blueprint {
+    ($inputs:expr, $net:expr, $state:expr, $output_size:expr, $t:ty ,$circuit:expr, ($( $args:expr ),*)) => {{
+        use itertools::izip;
+        use $crate::protocols::rep3_ring::yao;
+        use $crate::protocols::rep3::Rep3PrimeFieldShare;
+
+        let delta = $state
+            .rngs
+            .generate_random_garbler_delta($state.id);
+
+        let [x01, x2] = yao::joint_input_arithmetic_added_many($inputs, delta, $net, $state)?;
+
+        let mut res = vec![Rep3PrimeFieldShare::zero_share(); $output_size];
+
+        match $state.id {
+            PartyID::ID0 => {
+                for res in res.iter_mut() {
+          let k3 = $state.rngs.bitcomp2.random_fes_3keys::<F>();
+                    res.b = (k3.0 + k3.1 + k3.2).neg();
+                }
+
+                // TODO this can be parallelized with joint_input_arithmetic_added_many
+        let x23 = crate::protocols::rep3::yao::input_field_id2_many::<F, _>(None, None, $output_size, $net, $state)?;
+
+                let mut evaluator = rep3::yao::evaluator::Rep3Evaluator::new($net);
+                evaluator.receive_circuit()?;
+
+                let x1 = $circuit(&mut evaluator, &x01, &x2, &x23, $($args),*);
+                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let x1 = evaluator.output_to_id0_and_id1(x1.wires())?;
+
+                // Compose the bits
+                   for (res, x1) in izip!(res.iter_mut(), x1.chunks(F::MODULUS_BIT_SIZE as usize)) {
+                    res.a = yao::GCUtils::bits_to_field(x1)?;
+                }
+            }
+            PartyID::ID1 => {
+                for res in res.iter_mut() {
+                               let k2 = $state.rngs.bitcomp1.random_fes_3keys::<F>();
+                    res.a = (k2.0 + k2.1 + k2.2).neg();
+                }
+
+                // TODO this can be parallelized with joint_input_arithmetic_added_many
+               let x23 = crate::protocols::rep3::yao::input_field_id2_many::<F, _>(None, None, $output_size, $net, $state)?;
+
+                let mut garbler =
+                    rep3::yao::garbler::Rep3Garbler::new_with_delta($net, $state, delta.expect("Delta not provided"));
+
+                let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*);
+                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
+                let x1 = x1.ok_or(eyre::eyre!("No output received"))?;
+
+                // Compose the bits
+                      for (res, x1) in izip!(res.iter_mut(), x1.chunks(F::MODULUS_BIT_SIZE as usize)) {
+                    res.b = yao::GCUtils::bits_to_field(x1)?;
+                }
+            }
+            PartyID::ID2 => {
+                let mut x23 = Vec::with_capacity($output_size);
+                for res in res.iter_mut() {
+                                      let k2 = $state.rngs.bitcomp1.random_fes_3keys::<F>();
+                    let k3 = $state.rngs.bitcomp2.random_fes_3keys::<F>();
+                    let k2_comp = k2.0 + k2.1 + k2.2;
+                    let k3_comp = k3.0 + k3.1 + k3.2;
+                    x23.push(k2_comp + k3_comp);
+                    res.a = k3_comp.neg();
+                    res.b = k2_comp.neg();
+                }
+
+                // TODO this can be parallelized with joint_input_arithmetic_added_many
+               let x23 = crate::protocols::rep3::yao::input_field_id2_many(Some(x23), delta, $output_size, $net, $state)?;
+
+                let mut garbler =
+                   rep3::yao::garbler::Rep3Garbler::new_with_delta($net, $state, delta.expect("Delta not provided"));
+
+                let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*);
+                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
+                if x1.is_some() {
+                    eyre::bail!("Unexpected output received");
+                }
+            }
+        }
+
+        Ok(res)
+    }};
+}
+pub(crate) use decompose_circuit_compose_to_fields_blueprint;
+
 /// An upcast of a vector Rep3RingShares from a smaller ring to a larger ring
 pub fn upcast_many<T: IntRing2k, U: IntRing2k, N: Network>(
     inputs: &[Rep3RingShare<T>],
@@ -693,6 +783,38 @@ where
         T,
         GarbledCircuits::ring_div_many,
         (T::K)
+    )
+}
+
+/// Divides a vector of ring elements by another.
+pub fn todo_florin_many<T: IntRing2k, N: Network, F: PrimeField>(
+    input1: &[Rep3RingShare<T>],
+    input2: &[Rep3RingShare<T>],
+    slice_size: usize,
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Vec<Rep3PrimeFieldShare<F>>>
+where
+    Standard: Distribution<T>,
+{
+    let num_inputs = input1.len();
+    debug_assert_eq!(input1.len(), input2.len());
+
+    let f_modulus_as_bits =
+        GCUtils::ring_to_bits::<U512>(RingElement(U512::cast_from_biguint(&F::MODULUS.into())));
+
+    let mut combined_inputs = Vec::with_capacity(input1.len() + input2.len());
+    combined_inputs.extend_from_slice(input1);
+    combined_inputs.extend_from_slice(input2);
+
+    decompose_circuit_compose_to_fields_blueprint!(
+        &combined_inputs,
+        net,
+        state,
+        8 * num_inputs,
+        T,
+        GarbledCircuits::todo_florin_many::<_, F>,
+        (T::K, slice_size, &f_modulus_as_bits)
     )
 }
 

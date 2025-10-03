@@ -869,4 +869,25 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         point: &Self::NativeAcvmPoint<C>,
         cube_root_of_unity: C::BaseField,
     ) -> eyre::Result<Self::NativeAcvmPoint<C>>;
+
+    // TODO FLORIN: smoothen the interface here
+    #[expect(clippy::too_many_arguments, clippy::type_complexity)]
+    fn compute_remainder_limbs_and_quotient_limbs<
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
+        &mut self,
+        x_lo: Self::AcvmType,
+        x_hi: Self::AcvmType,
+        y_lo: Self::AcvmType,
+        y_hi: Self::AcvmType,
+        z_1: Self::AcvmType,
+        z_2: Self::AcvmType,
+        evaluation_input_x: C::BaseField,
+        batching_challenge_v: C::BaseField,
+        previous_accumulator: Self::OtherAcvmType<C>,
+        op_code: u64,
+        num_limb_shift: usize,
+    ) -> eyre::Result<(Vec<Self::AcvmType>, Vec<Self::AcvmType>)> {
+        unimplemented!()
+    }
 }

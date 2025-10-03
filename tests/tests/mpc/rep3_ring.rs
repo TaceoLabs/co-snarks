@@ -1749,6 +1749,107 @@ mod ring_share {
         apply_to_all!(rep3_bin_div_via_yao_t, [u8, u16, u32, u64, u128]); //Too slow for U512
     }
 
+    //TODO FLORIN MAKE THIS TEST NICER
+    fn rep3_bin_divtest<T: IntRing2k, F: PrimeField>()
+    where
+        Standard: Distribution<T>,
+    {
+        const VEC_SIZE: usize = 1;
+        const SLICE_SIZE: u64 = 68;
+
+        fn slice_u256(value: &BigUint, start: u64, end: u64) -> BigUint {
+            if end <= start {
+                return BigUint::zero();
+            }
+            let range = end - start;
+            let mask = if range == 256 {
+                (BigUint::from(1u64) << 256) - BigUint::one()
+            } else {
+                (BigUint::one() << range) - BigUint::one()
+            };
+            (value >> start) & mask
+        }
+
+        let nets = LocalNetwork::new_3_parties();
+        let mut rng = thread_rng();
+        let x = (0..VEC_SIZE)
+            .map(|_| {
+                // Generate a random BigUint with at least 400 significant bits
+                let mut bytes = vec![0u8; (T::K - 1).max(400).div_ceil(8)];
+                rand::RngCore::fill_bytes(&mut rng, &mut bytes);
+                // Ensure the highest bit is set for at least 400 bits
+                if bytes.len() * 8 >= 400 {
+                    let highest_byte = bytes.len() - 1;
+                    bytes[highest_byte] |= 1 << ((400 - 1) % 8);
+                }
+                let biguint = BigUint::from_bytes_le(&bytes);
+                // Convert BigUint to RingElement<T>
+                RingElement(T::cast_from_biguint(&biguint))
+            })
+            .collect_vec();
+        let y = (0..VEC_SIZE)
+            .map(|_| rng.gen::<RingElement<T>>())
+            .collect_vec();
+        let x_shares = rep3_ring::share_ring_elements(&x, &mut rng);
+        let y_shares = rep3_ring::share_ring_elements(&y, &mut rng);
+        let mut should_result1: Vec<RingElement<T>> = Vec::with_capacity(VEC_SIZE);
+        for x in x.into_iter() {
+            should_result1.push(RingElement(T::cast_from_biguint(
+                &(x.0.cast_to_biguint() / F::MODULUS.into()),
+            )));
+        }
+        println!("should_result1: {:?}", should_result1);
+        let mut slices1 = Vec::with_capacity(VEC_SIZE);
+        for x in &should_result1 {
+            let x_biguint = x.0.cast_to_biguint();
+
+            slices1.push(slice_u256(&x_biguint, 0, SLICE_SIZE));
+            slices1.push(slice_u256(&x_biguint, SLICE_SIZE, 2 * SLICE_SIZE));
+            slices1.push(slice_u256(&x_biguint, 2 * SLICE_SIZE, 3 * SLICE_SIZE));
+            slices1.push(slice_u256(&x_biguint, 3 * SLICE_SIZE, 4 * SLICE_SIZE));
+        }
+        let mut slices2 = Vec::with_capacity(VEC_SIZE);
+        for y in y {
+            let y_biguint = y.0.cast_to_biguint();
+            slices2.push(slice_u256(&y_biguint, 0, SLICE_SIZE));
+            slices2.push(slice_u256(&y_biguint, SLICE_SIZE, 2 * SLICE_SIZE));
+            slices2.push(slice_u256(&y_biguint, 2 * SLICE_SIZE, 3 * SLICE_SIZE));
+            slices2.push(slice_u256(&y_biguint, 3 * SLICE_SIZE, 4 * SLICE_SIZE));
+        }
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx, x, y) in izip!(
+            nets,
+            [tx1, tx2, tx3],
+            x_shares.into_iter(),
+            y_shares.into_iter()
+        ) {
+            std::thread::spawn(move || {
+                let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
+
+                let div = yao::todo_florin_many(&x, &y, 68, &net, &mut state).unwrap();
+                tx.send(div)
+            });
+        }
+
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result: Vec<F> = rep3::combine_field_elements(&result1, &result2, &result3);
+        println!("is_result: {:?}", is_result);
+        println!("slices1: {:?}", slices1);
+        println!("slices2: {:?}", slices2);
+        println!("should_result: {:?}", should_result1);
+        // assert_eq!(is_result, should_result);
+    }
+
+    #[test]
+    fn rep3_bin_divtestas() {
+        rep3_bin_divtest::<U512, ark_bn254::Fr>();
+    }
+
     fn rep3_bin_div_by_public_via_yao_t<T: IntRing2k>()
     where
         Standard: Distribution<T>,
@@ -1931,7 +2032,8 @@ mod ring_share {
                 let lut = lut.clone();
                 std::thread::spawn(move || {
                     let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
-                    let res = gadgets::lut::read_public_lut(&lut, x, &net, &mut state).unwrap();
+                    let res =
+                        gadgets::lut_field::read_public_lut(&lut, x, &net, &mut state).unwrap();
                     tx.send(res)
                 });
             }
@@ -1984,7 +2086,7 @@ mod ring_share {
                     let mut state0 = Rep3State::new(&net0, A2BType::default()).unwrap();
                     let mut state1 = state0.fork(0).unwrap();
 
-                    let res = gadgets::lut::read_public_lut_low_depth(
+                    let res = gadgets::lut_field::read_public_lut_low_depth(
                         &lut,
                         x,
                         &net0,
@@ -2043,7 +2145,8 @@ mod ring_share {
                 std::thread::spawn(move || {
                     let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
 
-                    let res = gadgets::lut::read_shared_lut(&lut, x, &net, &mut state).unwrap();
+                    let res =
+                        gadgets::lut_field::read_shared_lut(&lut, x, &net, &mut state).unwrap();
                     tx.send(res)
                 });
             }
@@ -2095,7 +2198,7 @@ mod ring_share {
                 std::thread::spawn(move || {
                     let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
 
-                    gadgets::lut::write_lut(&y, &mut lut, x, &net, &mut state).unwrap();
+                    gadgets::lut_field::write_lut(&y, &mut lut, x, &net, &mut state).unwrap();
                     tx.send(lut)
                 });
             }
@@ -2111,5 +2214,26 @@ mod ring_share {
     #[test]
     fn rep3_write_lut_test() {
         apply_to_all!(rep3_write_lut_test_t, [u8, u16]);
+    }
+
+    #[test]
+    fn test_conversion() {
+        let mut rng = thread_rng();
+        const NUM_LIMB_BITS: usize = 68;
+        for _ in 0..50 {
+            let x = ark_bn254::Fq::rand(&mut rng);
+            let mut x_biguint: BigUint = x.into();
+            let mask = (BigUint::from(1u64) << 136) - BigUint::one();
+            x_biguint &= &mask;
+            let x: ark_bn254::Fq = x_biguint.clone().into();
+            let y = ark_bn254::Fq::rand(&mut rng);
+            let mut y_biguint: BigUint = y.into();
+            y_biguint &= &mask;
+            let y: ark_bn254::Fq = y_biguint.clone().into();
+            let should_result_biguint = x_biguint + (y_biguint << (NUM_LIMB_BITS << 1));
+            let should_result: ark_bn254::Fq = should_result_biguint.into();
+            let is_result = x + (y * ark_bn254::Fq::from(BigUint::one() << (NUM_LIMB_BITS << 1)));
+            assert_eq!(is_result, should_result);
+        }
     }
 }

@@ -19,6 +19,9 @@ use mpc_core::protocols::rep3::{
 };
 use mpc_core::protocols::rep3_ring::gadgets::sort::{radix_sort_fields, radix_sort_fields_vec_by};
 use mpc_core::protocols::rep3_ring::lut_curve::Rep3CurveLookupTable;
+use mpc_core::protocols::rep3_ring::ring::int_ring::{IntRing2k, U512};
+use mpc_core::protocols::rep3_ring::ring::ring_impl::RingElement;
+use mpc_core::protocols::rep3_ring::{self, casts};
 use mpc_core::{
     lut::LookupTableProvider, protocols::rep3::Rep3PrimeFieldShare,
     protocols::rep3_ring::lut_field::Rep3FieldLookupTable,
@@ -3397,5 +3400,154 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 Self::get_public_other::<C>(value).expect("Already checked it is public"),
             )
         }
+    }
+
+    fn compute_remainder_limbs_and_quotient_limbs<
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
+        &mut self,
+        x_lo: Self::AcvmType,
+        x_hi: Self::AcvmType,
+        y_lo: Self::AcvmType,
+        y_hi: Self::AcvmType,
+        z_1: Self::AcvmType,
+        z_2: Self::AcvmType,
+        evaluation_input_x: C::BaseField,
+        batching_challenge_v: C::BaseField,
+        previous_accumulator: Self::OtherAcvmType<C>,
+        op_code: u64,
+        num_limb_shift: usize,
+    ) -> eyre::Result<(Vec<Self::AcvmType>, Vec<Self::AcvmType>)> {
+        const NUM_LIMB_BITS: usize = 68;
+        let v_squared = batching_challenge_v * batching_challenge_v;
+        let v_cubed = v_squared * batching_challenge_v;
+        let v_quarted = v_cubed * batching_challenge_v;
+        let uint_x = RingElement::from(U512::cast_from_biguint(&evaluation_input_x.into()));
+        let uint_op = RingElement::from(U512::cast_from_biguint(&op_code.into()));
+        let uint_v = RingElement::from(U512::cast_from_biguint(&batching_challenge_v.into()));
+        let uint_v_squared = RingElement::from(U512::cast_from_biguint(&v_squared.into()));
+        let uint_v_cubed = RingElement::from(U512::cast_from_biguint(&v_cubed.into()));
+        let uint_v_quarted = RingElement::from(U512::cast_from_biguint(&v_quarted.into()));
+        //TODO FLORIN: Batch this
+        let uint_z1 = casts::field_to_ring_a2b::<_, U512, _>(
+            Self::get_shared(&z_1).unwrap(),
+            self.net0,
+            &mut self.state0,
+        )?;
+        let uint_z2 = casts::field_to_ring_a2b::<_, U512, _>(
+            Self::get_shared(&z_2).unwrap(),
+            self.net0,
+            &mut self.state0,
+        )?;
+        let uint_x_lo = casts::field_to_ring_a2b::<_, U512, _>(
+            Self::get_shared(&x_lo).unwrap(),
+            self.net0,
+            &mut self.state0,
+        )?;
+        let uint_x_hi = casts::field_to_ring_a2b::<_, U512, _>(
+            Self::get_shared(&x_hi).unwrap(),
+            self.net0,
+            &mut self.state0,
+        )?;
+        let uint_y_lo = casts::field_to_ring_a2b::<_, U512, _>(
+            Self::get_shared(&y_lo).unwrap(),
+            self.net0,
+            &mut self.state0,
+        )?;
+        let uint_y_hi = casts::field_to_ring_a2b::<_, U512, _>(
+            Self::get_shared(&y_hi).unwrap(),
+            self.net0,
+            &mut self.state0,
+        )?;
+        let uint_previous_accumulator = casts::field_to_ring_a2b::<_, U512, _>(
+            Self::get_shared_other::<C>(&previous_accumulator).unwrap(),
+            self.net0,
+            &mut self.state0,
+        )?;
+        let uint_p_x = rep3_ring::arithmetic::add(
+            uint_x_lo,
+            rep3_ring::arithmetic::mul_public(
+                uint_x_hi,
+                RingElement::from(U512::cast_from_biguint(
+                    &(BigUint::from(1u64) << (num_limb_shift)),
+                )),
+            ),
+        );
+        let uint_p_y = rep3_ring::arithmetic::add(
+            uint_y_lo,
+            rep3_ring::arithmetic::mul_public(
+                uint_y_hi,
+                RingElement::from(U512::cast_from_biguint(
+                    &(BigUint::from(1u64) << (num_limb_shift)),
+                )),
+            ),
+        );
+        let quotient_by_modulus_no_remainder = rep3_ring::arithmetic::add_public(
+            uint_previous_accumulator * uint_x
+                + uint_z2 * uint_v_quarted
+                + uint_z1 * uint_v_cubed
+                + uint_p_y * uint_v_squared
+                + uint_p_x * uint_v,
+            uint_op,
+            self.state0.id(),
+        );
+
+        let base_op = C::BaseField::from(op_code);
+        let mut base_forms = self.convert_fields_back::<C>(&[x_lo, x_hi, y_lo, y_hi, z_1, z_2])?;
+        let base_z_2 = base_forms.pop().unwrap();
+        let base_z_1 = base_forms.pop().unwrap();
+        let base_y_hi = base_forms.pop().unwrap();
+        let base_y_lo = base_forms.pop().unwrap();
+        let base_x_hi = base_forms.pop().unwrap();
+        let base_x_lo = base_forms.pop().unwrap();
+        let shift = self.mul_with_public_other::<C>(
+            C::BaseField::from(BigUint::one() << num_limb_shift),
+            base_x_hi,
+        );
+        let base_p_x = self.add_other::<C>(base_x_lo, shift);
+        let shift = self.mul_with_public_other::<C>(
+            C::BaseField::from(BigUint::one() << num_limb_shift),
+            base_y_hi,
+        );
+        let base_p_y = self.add_other::<C>(base_y_lo, shift);
+        let mut remainder =
+            self.mul_with_public_other::<C>(evaluation_input_x, previous_accumulator);
+        let base_z_2_v_quarted = self.mul_with_public_other::<C>(v_quarted, base_z_2);
+        let base_z_1_v_cubed = self.mul_with_public_other::<C>(v_cubed, base_z_1);
+        let base_p_y_v_squared = self.mul_with_public_other::<C>(v_squared, base_p_y);
+        let base_p_x_v = self.mul_with_public_other::<C>(batching_challenge_v, base_p_x);
+        remainder = self.add_other::<C>(remainder, base_z_2_v_quarted);
+        remainder = self.add_other::<C>(remainder, base_z_1_v_cubed);
+        remainder = self.add_other::<C>(remainder, base_p_y_v_squared);
+        remainder = self.add_other::<C>(remainder, base_p_x_v);
+        remainder = self.add_other::<C>(remainder, Self::OtherAcvmType::<C>::Public(base_op));
+        let uint_remainder = casts::field_to_ring_a2b::<_, U512, _>(
+            Self::get_shared_other::<C>(&remainder).unwrap(),
+            self.net0,
+            &mut self.state0,
+        )?;
+        let quotient_by_modulus =
+            rep3_ring::arithmetic::sub(quotient_by_modulus_no_remainder, uint_remainder);
+
+        let result = rep3_ring::yao::todo_florin_many::<U512, N, C::ScalarField>(
+            &[quotient_by_modulus],
+            &[uint_remainder],
+            NUM_LIMB_BITS,
+            self.net0,
+            &mut self.state0,
+        )?;
+        let quotient_limbs = result[..4].to_vec();
+        let remainder_limbs = result[4..].to_vec();
+
+        Ok((
+            quotient_limbs
+                .iter()
+                .map(|x| Rep3AcvmType::<F>::Shared(*x))
+                .collect::<Vec<_>>(),
+            remainder_limbs
+                .iter()
+                .map(|x| Rep3AcvmType::<F>::Shared(*x))
+                .collect::<Vec<_>>(),
+        ))
     }
 }
