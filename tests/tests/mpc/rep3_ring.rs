@@ -20,6 +20,7 @@ mod ring_share {
     use mpc_core::protocols::rep3_ring::gadgets;
     use mpc_core::protocols::rep3_ring::ring::bit::Bit;
     use mpc_core::protocols::rep3_ring::ring::int_ring::IntRing2k;
+    use mpc_core::protocols::rep3_ring::ring::int_ring::U512;
     use mpc_core::protocols::rep3_ring::ring::ring_impl::RingElement;
     use mpc_core::protocols::rep3_ring::yao;
     use mpc_core::MpcState;
@@ -92,7 +93,7 @@ mod ring_share {
 
     #[test]
     fn rep3_add() {
-        apply_to_all!(rep3_add_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_add_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_sub_t<T: IntRing2k>()
@@ -120,7 +121,7 @@ mod ring_share {
 
     #[test]
     fn rep3_sub() {
-        apply_to_all!(rep3_sub_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_sub_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_sub_shared_by_public_t<T: IntRing2k>()
@@ -151,7 +152,10 @@ mod ring_share {
 
     #[test]
     fn rep3_sub_shared_by_public() {
-        apply_to_all!(rep3_sub_shared_by_public_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(
+            rep3_sub_shared_by_public_t,
+            [Bit, u8, u16, u32, u64, u128, U512]
+        );
     }
 
     fn rep3_sub_public_by_shared_t<T: IntRing2k>()
@@ -182,7 +186,10 @@ mod ring_share {
 
     #[test]
     fn rep3_sub_public_by_shared() {
-        apply_to_all!(rep3_sub_public_by_shared_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(
+            rep3_sub_public_by_shared_t,
+            [Bit, u8, u16, u32, u64, u128, U512]
+        );
     }
 
     fn rep3_mul_t<T: IntRing2k>()
@@ -220,7 +227,7 @@ mod ring_share {
 
     #[test]
     fn rep3_mul() {
-        apply_to_all!(rep3_mul_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_mul_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_fork_mul_t<T: IntRing2k>()
@@ -268,7 +275,7 @@ mod ring_share {
 
     #[test]
     fn rep3_fork_mul() {
-        apply_to_all!(rep3_fork_mul_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_fork_mul_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_mul2_then_add_t<T: IntRing2k>()
@@ -307,7 +314,7 @@ mod ring_share {
 
     #[test]
     fn rep3_mul2_then_add() {
-        apply_to_all!(rep3_mul2_then_add_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_mul2_then_add_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_mul_vec_t<T: IntRing2k>()
@@ -355,7 +362,7 @@ mod ring_share {
 
     #[test]
     fn rep3_mul_vec() {
-        apply_to_all!(rep3_mul_vec_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_mul_vec_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_neg_t<T: IntRing2k>()
@@ -381,7 +388,7 @@ mod ring_share {
 
     #[test]
     fn rep3_neg() {
-        apply_to_all!(rep3_neg_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_neg_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_bit_inject_t<T: IntRing2k>()
@@ -420,7 +427,7 @@ mod ring_share {
 
     #[test]
     fn rep3_bit_inject() {
-        apply_to_all!(rep3_bit_inject_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_bit_inject_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_bit_inject_many_t<T: IntRing2k>()
@@ -471,7 +478,7 @@ mod ring_share {
 
     #[test]
     fn rep3_bit_inject_many() {
-        apply_to_all!(rep3_bit_inject_many_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_bit_inject_many_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     use arithmetic::ge_public;
@@ -522,7 +529,7 @@ mod ring_share {
                     #[test]
                     fn $name() {
                         // $name_t::<Bit>();
-                        apply_to_all!($name_t,[u8, u16, u32, u64, u128]);
+                        apply_to_all!($name_t,[u8, u16, u32, u64, u128,U512]);
                     }
                 }
             };
@@ -563,7 +570,7 @@ mod ring_share {
 
     #[test]
     fn rep3_a2b_zero() {
-        apply_to_all!(rep3_a2b_zero_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_a2b_zero_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_a2y2b_zero_t<T: IntRing2k>()
@@ -597,7 +604,7 @@ mod ring_share {
 
     #[test]
     fn rep3_a2y2b_zero() {
-        apply_to_all!(rep3_a2y2b_zero_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_a2y2b_zero_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_a2y2b_streaming_zero_t<T: IntRing2k>()
@@ -631,7 +638,10 @@ mod ring_share {
 
     #[test]
     fn rep3_a2y2b_streaming_zero() {
-        apply_to_all!(rep3_a2y2b_streaming_zero_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(
+            rep3_a2y2b_streaming_zero_t,
+            [Bit, u8, u16, u32, u64, u128, U512]
+        );
     }
 
     fn rep3_a2b_t<T: IntRing2k>()
@@ -665,7 +675,7 @@ mod ring_share {
 
     #[test]
     fn rep3_a2b() {
-        apply_to_all!(rep3_a2b_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_a2b_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_a2y2b_t<T: IntRing2k>()
@@ -699,7 +709,7 @@ mod ring_share {
 
     #[test]
     fn rep3_a2y2b() {
-        apply_to_all!(rep3_a2y2b_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_a2y2b_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_a2y2b_streaming_t<T: IntRing2k>()
@@ -733,7 +743,7 @@ mod ring_share {
 
     #[test]
     fn rep3_a2y2b_streaming() {
-        apply_to_all!(rep3_a2y2b_streaming_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_a2y2b_streaming_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_b2a_t<T: IntRing2k>()
@@ -767,7 +777,7 @@ mod ring_share {
 
     #[test]
     fn rep3_b2a() {
-        apply_to_all!(rep3_b2a_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_b2a_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_b2y2a_t<T: IntRing2k>()
@@ -801,7 +811,7 @@ mod ring_share {
 
     #[test]
     fn rep3_b2y2a() {
-        apply_to_all!(rep3_b2y2a_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_b2y2a_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_b2y2a_streaming_t<T: IntRing2k>()
@@ -835,7 +845,7 @@ mod ring_share {
 
     #[test]
     fn rep3_b2y2a_streaming() {
-        apply_to_all!(rep3_b2y2a_streaming_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_b2y2a_streaming_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_gc_t<T: IntRing2k>()
@@ -909,7 +919,7 @@ mod ring_share {
 
     #[test]
     fn rep3_gc() {
-        apply_to_all!(rep3_gc_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_gc_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_gc_streaming_t<T: IntRing2k>()
@@ -982,7 +992,7 @@ mod ring_share {
 
     #[test]
     fn rep3_gc_streaming() {
-        apply_to_all!(rep3_gc_streaming_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_gc_streaming_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_a2y_t<T: IntRing2k>()
@@ -1034,7 +1044,7 @@ mod ring_share {
 
     #[test]
     fn rep3_a2y() {
-        apply_to_all!(rep3_a2y_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_a2y_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_a2y_streaming_t<T: IntRing2k>()
@@ -1085,7 +1095,7 @@ mod ring_share {
 
     #[test]
     fn rep3_a2y_streaming() {
-        apply_to_all!(rep3_a2y_streaming_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_a2y_streaming_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_y2a_t<T: IntRing2k>()
@@ -1124,7 +1134,7 @@ mod ring_share {
 
     #[test]
     fn rep3_y2a() {
-        apply_to_all!(rep3_y2a_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_y2a_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_y2a_streaming_t<T: IntRing2k>()
@@ -1164,7 +1174,7 @@ mod ring_share {
 
     #[test]
     fn rep3_y2a_streaming() {
-        apply_to_all!(rep3_y2a_streaming_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_y2a_streaming_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_b2y_t<T: IntRing2k>()
@@ -1218,7 +1228,7 @@ mod ring_share {
 
     #[test]
     fn rep3_b2y() {
-        apply_to_all!(rep3_b2y_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_b2y_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_b2y_streaming_t<T: IntRing2k>()
@@ -1271,7 +1281,7 @@ mod ring_share {
 
     #[test]
     fn rep3_b2y_streaming() {
-        apply_to_all!(rep3_b2y_streaming_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_b2y_streaming_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_y2b_t<T: IntRing2k>()
@@ -1310,7 +1320,7 @@ mod ring_share {
 
     #[test]
     fn rep3_y2b() {
-        apply_to_all!(rep3_y2b_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_y2b_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_ring_cast_a2b_t<T, U>()
@@ -1345,8 +1355,8 @@ mod ring_share {
     fn rep3_ring_cast_a2b() {
         apply_to_all2!(
             rep3_ring_cast_a2b_t,
-            [Bit, u8, u16, u32, u64, u128],
-            [Bit, u8, u16, u32, u64, u128]
+            [Bit, u8, u16, u32, u64, u128, U512],
+            [Bit, u8, u16, u32, u64, u128, U512]
         );
     }
 
@@ -1381,7 +1391,7 @@ mod ring_share {
     fn rep3_field_to_ring_a2b_cast() {
         apply_to_all!(
             rep3_field_to_ring_cast_a2b_t,
-            [Bit, u8, u16, u32, u64, u128]
+            [Bit, u8, u16, u32, u64, u128, U512]
         );
     }
 
@@ -1542,8 +1552,8 @@ mod ring_share {
     fn rep3_ring_upcast_gc() {
         apply_to_all2!(
             rep3_ring_upcast_gc_t,
-            [Bit, u8, u16, u32, u64, u128],
-            [Bit, u8, u16, u32, u64, u128]
+            [Bit, u8, u16, u32, u64, u128, U512],
+            [Bit, u8, u16, u32, u64, u128, U512]
         );
     }
 
@@ -1579,8 +1589,8 @@ mod ring_share {
     fn rep3_ring_cast_gc() {
         apply_to_all2!(
             rep3_ring_cast_gc_t,
-            [Bit, u8, u16, u32, u64, u128],
-            [Bit, u8, u16, u32, u64, u128]
+            [Bit, u8, u16, u32, u64, u128, U512],
+            [Bit, u8, u16, u32, u64, u128, U512]
         );
     }
 
@@ -1635,7 +1645,7 @@ mod ring_share {
     fn rep3_decompose_shared_field_many_via_yao() {
         apply_to_all!(
             rep3_decompose_shared_field_many_via_yao_t,
-            [Bit, u8, u16, u32, u64, u128]
+            [Bit, u8, u16, u32, u64, u128, U512]
         );
     }
 
@@ -1681,7 +1691,10 @@ mod ring_share {
 
     #[test]
     fn rep3_div_power_2_via_yao() {
-        apply_to_all!(rep3_div_power_2_via_yao_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(
+            rep3_div_power_2_via_yao_t,
+            [Bit, u8, u16, u32, u64, u128, U512]
+        );
     }
 
     fn rep3_bin_div_via_yao_t<T: IntRing2k>()
@@ -1733,7 +1746,7 @@ mod ring_share {
 
     #[test]
     fn rep3_bin_div_via_yao() {
-        apply_to_all!(rep3_bin_div_via_yao_t, [u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_bin_div_via_yao_t, [u8, u16, u32, u64, u128]); //Too slow for U512
     }
 
     fn rep3_bin_div_by_public_via_yao_t<T: IntRing2k>()
@@ -1827,7 +1840,10 @@ mod ring_share {
 
     #[test]
     fn rep3_bin_div_by_shared_via_yao() {
-        apply_to_all!(rep3_bin_div_by_shared_via_yao_t, [u8, u16, u32, u64, u128]);
+        apply_to_all!(
+            rep3_bin_div_by_shared_via_yao_t,
+            [u8, u16, u32, u64, u128] //Too slow for U512
+        );
     }
 
     fn rep3_rand_ohv_test_t<T: IntRing2k>()

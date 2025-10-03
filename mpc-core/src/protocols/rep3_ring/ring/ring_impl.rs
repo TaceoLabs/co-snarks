@@ -403,6 +403,7 @@ impl<T: IntRing2k> From<T> for RingElement<T> {
 mod unsafe_test {
     use super::*;
     use crate::protocols::rep3_ring::ring::bit::Bit;
+    use crate::protocols::rep3_ring::ring::int_ring::U512;
     use rand::{Rng, SeedableRng};
     use rand_chacha::ChaCha12Rng;
 
@@ -445,6 +446,7 @@ mod unsafe_test {
         [u16, u16_test],
         [u32, u32_test],
         [u64, u64_test],
-        [u128, u128_test]
+        [u128, u128_test],
+        [U512, u512_test]
     }
 }
