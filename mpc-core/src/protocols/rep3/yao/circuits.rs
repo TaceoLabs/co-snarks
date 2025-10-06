@@ -3933,9 +3933,7 @@ impl GarbledCircuits {
         let mut input_bits =
             Self::adder_mod_p_with_output_size::<_, F>(g, wires_a, wires_b, total_output_bitlen)?;
         let input_bitlen = input_bits.len();
-        let mut previous_slice = vec![g.const_zero()?];
-        previous_slice.resize(5, g.const_zero()?);
-        let borrow_constant = [false, false, false, false, true]; // 16 in binary
+        let mut previous_slice = vec![g.const_zero()?; 5];
         let constant_fifteen = Self::constant_bundle_from_usize(g, 15, 5)?;
 
         let mut results = Vec::with_capacity(wires_c.len());
@@ -3952,21 +3950,30 @@ impl GarbledCircuits {
 
         for i in 0..NUM_WNAF_DIGITS_PER_SCALAR {
             let raw_slice = &input_bits[..4];
-            let is_even = g.negate(&raw_slice[0])?; //(&raw_slice & const_one) == BigUint::zero();
-            let mut is_even = vec![is_even];
-            is_even.resize(raw_slice.len(), g.const_zero()?);
+            let is_even = g.negate(&raw_slice[0])?;
+            let is_even = [is_even, g.const_zero()?, g.const_zero()?, g.const_zero()?];
 
             let mut wnaf_slice = raw_slice.to_owned();
             let mut underflow_bit = g.const_zero()?;
 
-            if i == 0 {
-                wnaf_slice = Self::bin_addition_no_carry(g, &wnaf_slice, &is_even)?;
-            } else {
-                wnaf_slice = Self::bin_addition_no_carry(g, &wnaf_slice, &is_even)?;
-                let mut subtrahend = Self::bin_mul_with_public(g, &is_even, &borrow_constant)?;
-                subtrahend.resize(5, g.const_zero()?);
-                (previous_slice, underflow_bit) =
-                    Self::bin_subtraction(g, &previous_slice, &subtrahend)?;
+            wnaf_slice = Self::bin_addition_no_carry(g, &wnaf_slice, &is_even)?;
+            if i != 0 {
+                // We optimize the following code
+                // let subtrahend = [
+                //     g.const_zero()?,
+                //     g.const_zero()?,
+                //     g.const_zero()?,
+                //     g.const_zero()?,
+                //     is_even[0].clone(),
+                // ]; // Either 0 or 16, depending on is_even
+                // (previous_slice, underflow_bit) =
+                //     Self::bin_subtraction(g, &previous_slice, &subtrahend)?;
+
+                // Last bit with is_even[0]
+                let y = g.negate(&is_even[0])?;
+                let res = Self::full_adder_cin_set(g, &previous_slice[4], &y)?;
+                previous_slice[4] = res.0;
+                underflow_bit = res.1;
             }
 
             if i > 0 {
@@ -3974,7 +3981,6 @@ impl GarbledCircuits {
                 underflow_bits.push(underflow_bit);
             }
             previous_slice = wnaf_slice;
-            previous_slice.resize(5, g.const_zero()?);
 
             input_bits = input_bits[4..].to_vec();
             input_bits.resize(input_bitlen, g.const_zero()?);
@@ -3994,10 +4000,10 @@ impl GarbledCircuits {
             let underflow2 = &underflow_bits[i * WNAF_DIGITS_PER_ROW + 2];
             let underflow3 = &underflow_bits[i * WNAF_DIGITS_PER_ROW + 3];
 
-            let mut slice0base2 = Self::bin_addition_no_carry(g, slice0, &constant_fifteen)?; // The results of this later get (x + 15) / 2. Since these are always even, we can just add 15 and shift 
-            let mut slice1base2 = Self::bin_addition_no_carry(g, slice1, &constant_fifteen)?; // The results of this later get (x + 15) / 2. Since these are always even, we can just add 15 and shift 
-            let mut slice2base2 = Self::bin_addition_no_carry(g, slice2, &constant_fifteen)?; // The results of this later get (x + 15) / 2. Since these are always even, we can just add 15 and shift 
-            let mut slice3base2 = Self::bin_addition_no_carry(g, slice3, &constant_fifteen)?; // The results of this later get (x + 15) / 2. Since these are always even, we can just add 15 and shift 
+            let mut slice0base2 = Self::bin_addition_no_carry(g, slice0, &constant_fifteen)?; // The results of this later get (x + 15) / 2. Since these are always even, we can just add 15 and shift
+            let mut slice1base2 = Self::bin_addition_no_carry(g, slice1, &constant_fifteen)?; // The results of this later get (x + 15) / 2. Since these are always even, we can just add 15 and shift
+            let mut slice2base2 = Self::bin_addition_no_carry(g, slice2, &constant_fifteen)?; // The results of this later get (x + 15) / 2. Since these are always even, we can just add 15 and shift
+            let mut slice3base2 = Self::bin_addition_no_carry(g, slice3, &constant_fifteen)?; // The results of this later get (x + 15) / 2. Since these are always even, we can just add 15 and shift
             for (slice, overflow) in [
                 (&mut slice0base2, underflow0),
                 (&mut slice1base2, underflow1),
