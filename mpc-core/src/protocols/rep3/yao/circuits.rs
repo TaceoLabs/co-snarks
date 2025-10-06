@@ -102,6 +102,16 @@ impl GarbledCircuits {
         Ok((s, c))
     }
 
+    fn half_adder_const<G: FancyBinary>(
+        g: &mut G,
+        a: &G::Item,
+        b: bool,
+    ) -> Result<(G::Item, G::Item), G::Error> {
+        let s = if b { g.negate(a)? } else { a.to_owned() };
+        let c = a.to_owned();
+        Ok((s, c))
+    }
+
     /// Full adder, just outputs carry
     fn full_adder_carry<G: FancyBinary>(
         g: &mut G,
@@ -219,6 +229,45 @@ impl GarbledCircuits {
 
         // Finally, just the xor of the full_adder
         let z1 = g.xor(xs.last().unwrap(), ys.last().unwrap())?;
+        let s = g.xor(&z1, &c)?;
+        result.push(s);
+
+        Ok(result)
+    }
+
+    /// Binary addition. Returns just the result.
+    fn bin_addition_constant_no_carry<G: FancyBinary>(
+        g: &mut G,
+        xs: &[G::Item],
+        ys: &[bool],
+    ) -> Result<Vec<G::Item>, G::Error> {
+        debug_assert_eq!(xs.len(), ys.len());
+        if xs.len() == 1 {
+            if ys[0] {
+                return Ok(vec![g.negate(&xs[0])?]);
+            } else {
+                return Ok(vec![xs[0].clone()]);
+            }
+        }
+
+        let mut result = Vec::with_capacity(xs.len());
+
+        let (mut s, mut c) = Self::half_adder_const(g, &xs[0], ys[0])?;
+        result.push(s);
+
+        for (x, y) in xs.iter().zip(ys.iter()).take(xs.len() - 1).skip(1) {
+            let res = Self::full_adder_const(g, x, *y, &c)?;
+            s = res.0;
+            c = res.1;
+            result.push(s);
+        }
+
+        // Finally, just the xor of the full_adder
+        let z1 = if *ys.last().unwrap() {
+            g.negate(xs.last().unwrap())?
+        } else {
+            xs.last().unwrap().clone()
+        };
         let s = g.xor(&z1, &c)?;
         result.push(s);
 
@@ -3934,7 +3983,7 @@ impl GarbledCircuits {
             Self::adder_mod_p_with_output_size::<_, F>(g, wires_a, wires_b, total_output_bitlen)?;
         let input_bitlen = input_bits.len();
         let mut previous_slice = vec![g.const_zero()?; 5];
-        let constant_fifteen = Self::constant_bundle_from_usize(g, 15, 5)?;
+        let constant_fifteen = [true, true, true, true, false];
 
         let mut results = Vec::with_capacity(wires_c.len());
 
@@ -3981,6 +4030,7 @@ impl GarbledCircuits {
                 underflow_bits.push(underflow_bit);
             }
             previous_slice = wnaf_slice;
+            previous_slice.resize(5, g.const_zero()?);
 
             input_bits = input_bits[4..].to_vec();
             input_bits.resize(input_bitlen, g.const_zero()?);
@@ -4000,10 +4050,14 @@ impl GarbledCircuits {
             let underflow2 = &underflow_bits[i * WNAF_DIGITS_PER_ROW + 2];
             let underflow3 = &underflow_bits[i * WNAF_DIGITS_PER_ROW + 3];
 
-            let mut slice0base2 = Self::bin_addition_no_carry(g, slice0, &constant_fifteen)?; // The results of this later get (x + 15) / 2. Since these are always even, we can just add 15 and shift
-            let mut slice1base2 = Self::bin_addition_no_carry(g, slice1, &constant_fifteen)?; // The results of this later get (x + 15) / 2. Since these are always even, we can just add 15 and shift
-            let mut slice2base2 = Self::bin_addition_no_carry(g, slice2, &constant_fifteen)?; // The results of this later get (x + 15) / 2. Since these are always even, we can just add 15 and shift
-            let mut slice3base2 = Self::bin_addition_no_carry(g, slice3, &constant_fifteen)?; // The results of this later get (x + 15) / 2. Since these are always even, we can just add 15 and shift
+            let mut slice0base2 =
+                Self::bin_addition_constant_no_carry(g, slice0, &constant_fifteen)?; // The results of this later get (x + 15) / 2. Since these are always even, we can just add 15 and shift
+            let mut slice1base2 =
+                Self::bin_addition_constant_no_carry(g, slice1, &constant_fifteen)?; // The results of this later get (x + 15) / 2. Since these are always even, we can just add 15 and shift
+            let mut slice2base2 =
+                Self::bin_addition_constant_no_carry(g, slice2, &constant_fifteen)?; // The results of this later get (x + 15) / 2. Since these are always even, we can just add 15 and shift
+            let mut slice3base2 =
+                Self::bin_addition_constant_no_carry(g, slice3, &constant_fifteen)?; // The results of this later get (x + 15) / 2. Since these are always even, we can just add 15 and shift
             for (slice, overflow) in [
                 (&mut slice0base2, underflow0),
                 (&mut slice1base2, underflow1),
