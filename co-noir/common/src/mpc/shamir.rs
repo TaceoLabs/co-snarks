@@ -293,16 +293,6 @@ impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for ShamirUltr
         pointshare::sub(a, b)
     }
 
-    fn inverse_or_zero_many_in_place<N: Network>(
-        _net: &N,
-        _state: &mut Self::State,
-        _a: &mut [Self::ArithmeticShare],
-    ) -> eyre::Result<()> {
-        unimplemented!(
-            "inverse_or_zero_many_in_place is not implemented for ShamirUltraHonkDriver"
-        );
-    }
-
     fn scalar_mul_public_point(a: &P, b: Self::ArithmeticShare) -> Self::PointShare {
         pointshare::scalar_mul_public_point(b, a)
     }

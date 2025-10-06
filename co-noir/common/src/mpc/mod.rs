@@ -353,13 +353,6 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized + std::fmt::Debug {
         state: &mut Self::State,
     ) -> eyre::Result<()>;
 
-    /// Inverts an ACVM-type and returns a share of zero if the input is zero: \[c\] = \[secret\]^(-1) if secret != 0 else \[c\] = 0.
-    fn inverse_or_zero_many_in_place<N: Network>(
-        net: &N,
-        state: &mut Self::State,
-        a: &mut [Self::ArithmeticShare],
-    ) -> eyre::Result<()>;
-
     /// Perform msm between `points` and `scalars`
     fn msm_public_points(
         points: &[P::Affine],

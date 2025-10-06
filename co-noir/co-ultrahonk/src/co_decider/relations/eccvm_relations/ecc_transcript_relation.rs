@@ -446,7 +446,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
          */
 
         let mut lhs = Vec::with_capacity(45 * z1.len());
-        let mut rhs = Vec::with_capacity(lhs.len());
+        let mut rhs = Vec::with_capacity(45 * z1.len());
         lhs.extend(z1.to_owned());
         rhs.extend(z1_zero.to_owned());
 

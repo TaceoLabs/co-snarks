@@ -715,7 +715,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         T::scale_many_in_place(&mut y_summand, oyu);
 
         let mut lhs = Vec::with_capacity(msm_transition_scaled.len() * 39);
-        let mut rhs = Vec::with_capacity(lhs.len());
+        let mut rhs = Vec::with_capacity(msm_transition_scaled.len() * 39);
         lhs.extend(msm_transition_scaled.clone());
         lhs.extend(msm_transition_scaled);
         rhs.extend(acc_x.to_owned());
@@ -1402,7 +1402,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         fold_accumulator!(univariate_accumulator.r9, tmp, SIZE);
 
         // Validate that if q_add = 1 or q_skew = 1, add1 also is 1
-        // TODO(@zac-williamson) Once we have a stable base to work off of, remove q_add1 and replace with q_msm_add +
+        // AZTEC TODO(@zac-williamson) Once we have a stable base to work off of, remove q_add1 and replace with q_msm_add +
         // q_msm_skew (issue ?)
         let mut tmp = add1.to_owned(); // - q_add - q_skew) * scaling_factors;
         T::sub_assign_many(&mut tmp, q_add);

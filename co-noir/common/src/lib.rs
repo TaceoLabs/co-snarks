@@ -132,14 +132,6 @@ impl CoUtils {
         T::inv_many_in_place_leaking_zeros(poly, net, state)
     }
 
-    pub fn batch_invert_or_zero_many<T: NoirUltraHonkProver<P>, P: CurveGroup, N: Network>(
-        poly: &mut [T::ArithmeticShare],
-        net: &N,
-        state: &mut T::State,
-    ) -> eyre::Result<()> {
-        T::inverse_or_zero_many_in_place(net, state, poly)
-    }
-
     pub fn mask_polynomial<T: NoirUltraHonkProver<P>, P: CurveGroup, N: Network>(
         net: &N,
         state: &mut T::State,

@@ -376,7 +376,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         }
 
         let mut lhs = Vec::with_capacity(lookup_terms[0].len() * 3);
-        let mut rhs = Vec::with_capacity(lhs.len());
+        let mut rhs = Vec::with_capacity(lookup_terms[0].len() * 3);
         lhs.extend(lookup_terms[0].to_owned());
         rhs.extend(lookup_terms[1].to_owned());
         lhs.extend(lookup_terms[2].to_owned());
@@ -390,7 +390,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let x2x3 = mul[1];
         let x4x5 = mul[2];
         let mut lhs = Vec::with_capacity(x0x1.len() * 2);
-        let mut rhs = Vec::with_capacity(lhs.len());
+        let mut rhs = Vec::with_capacity(x0x1.len() * 2);
         lhs.extend(x0x1.to_owned());
         rhs.extend(lookup_terms[2].to_owned());
         lhs.extend(x0x1.to_owned());
@@ -401,7 +401,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let x0x1x2 = mul[0];
         let x0x1x2x3 = mul[1];
         let mut lhs = Vec::with_capacity(x0x1x2x3.len() * 2);
-        let mut rhs = Vec::with_capacity(lhs.len());
+        let mut rhs = Vec::with_capacity(x0x1x2x3.len() * 2);
         lhs.extend(x0x1x2x3.to_owned());
         rhs.extend(lookup_terms[4].to_owned());
         lhs.extend(x0x1x2x3.to_owned());
@@ -423,7 +423,10 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
             denominator_accumulator[NUM_TOTAL_TERMS - 1].len()
                 + input.witness.precompute_select().len(),
         );
-        let mut rhs = Vec::with_capacity(lhs.len());
+        let mut rhs = Vec::with_capacity(
+            denominator_accumulator[NUM_TOTAL_TERMS - 1].len()
+                + input.witness.precompute_select().len(),
+        );
 
         // let inverse_exists = {
         let row_has_write = input.witness.precompute_select();

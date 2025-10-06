@@ -1538,7 +1538,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         a: &[Self::AcvmType],
         b: &[Self::AcvmType],
     ) -> eyre::Result<Vec<Self::AcvmType>> {
-        // TODO: we probably want to compare public values directly if there happen to be any in the same index
+        // TACEO TODO: we probably want to compare public values directly if there happen to be any in the same index
         let bool_a = a.iter().any(|v| Self::is_shared(v));
         let bool_b = b.iter().any(|v| Self::is_shared(v));
         if !bool_a && !bool_b {
@@ -1779,7 +1779,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                     &mut self.state0,
                 )?;
                 // Set x,y to 0 of infinity is one.
-                // TODO is this even necesary?
+                // Note: If we don't need the coordinates to be zero in the infinity case, we could add an option to skip this
                 let mul = arithmetic::sub_public_by_shared(ark_bn254::Fr::one(), i, self.id);
                 let res = arithmetic::mul_vec(&[x, y], &[mul, mul], self.net0, &mut self.state0)?;
 
@@ -1847,7 +1847,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 let (x, y, i) =
                     conversion::point_share_to_fieldshares(point, self.net0, &mut self.state0)?;
                 // Set x,y to 0 if infinity is one.
-                // TODO is this even necesary?
+                // Note: If we don't need the coordinates to be zero in the infinity case, we could add an option to skip this
                 let mul = arithmetic::sub_public_by_shared(F::one(), i, self.id);
                 let res = arithmetic::mul_vec(&[x, y], &[mul, mul], self.net0, &mut self.state0)?;
 
@@ -2253,7 +2253,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         let i = *downcast(&i).expect("We checked types");
 
         // Set x,y to 0 of infinity is one.
-        // TODO is this even necesary?
+        // Note: If we don't need the coordinates to be zero in the infinity case, we could add an option to skip this
         let mul = arithmetic::sub_public_by_shared(F::one(), i, self.id);
         let res = arithmetic::mul_vec(&[x, y], &[mul, mul], self.net0, &mut self.state0)?;
 
@@ -2567,7 +2567,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 let (x, y, i) =
                     conversion::point_share_to_fieldshares(*point, self.net0, &mut self.state0)?;
                 // Set x,y to 0 if infinity is one.
-                // TODO is this even necesary?
+                // Note: If we don't need the coordinates to be zero in the infinity case, we could add an option to skip this
                 let mul = arithmetic::sub_public_by_shared(C::BaseField::one(), i, self.id);
                 let res = arithmetic::mul_vec(&[x, y], &[mul, mul], self.net0, &mut self.state0)?;
 
@@ -2599,7 +2599,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             let (x_shares, y_shares, infinity_shares) =
                 conversion::point_share_to_fieldshares_many(&points, self.net0, &mut self.state0)?;
             // Set x,y to 0 if infinity is one.
-            // TODO is this even necesary?
+            // Note: If we don't need the coordinates to be zero in the infinity case, we could add an option to skip this
             let mul = infinity_shares
                 .iter()
                 .map(|i| arithmetic::sub_public_by_shared(C::BaseField::one(), *i, self.id))
@@ -3014,7 +3014,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 }
             }
             (Rep3AcvmType::Shared(index), Rep3AcvmPoint::Public(value)) => {
-                // TODO there might be a more efficient implementation for this if the table is also public
+                // TACEO TODO there might be a more efficient implementation for this if the table is also public
                 let value = pointshare::promote_to_trivial_share(self.id, &value);
                 lut_.write_to_lut(
                     index,

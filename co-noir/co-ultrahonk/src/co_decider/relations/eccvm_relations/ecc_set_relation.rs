@@ -180,7 +180,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
             ),
         );
         let mut lhs = Vec::with_capacity(15 * numerator.len());
-        let mut rhs = Vec::with_capacity(lhs.len());
+        let mut rhs = Vec::with_capacity(15 * numerator.len());
 
         lhs.extend(numerator);
         rhs.extend(wnaf_slice_input1);

@@ -250,7 +250,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let mut two_y = ty.to_owned();
         T::scale_many_in_place(&mut two_y, P::ScalarField::from(2u64));
         let mut lhs = Vec::with_capacity(three_x.len() + two_y.len());
-        let mut rhs = Vec::with_capacity(lhs.len());
+        let mut rhs = Vec::with_capacity(three_x.len() + two_y.len());
         lhs.extend(three_x);
         lhs.extend(two_y.clone());
         rhs.extend(tx);
@@ -263,7 +263,9 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let mut lhs = Vec::with_capacity(
             three_xx.len() + ty.len() + three_xx.len() + three_xx.len() + dx.len(),
         );
-        let mut rhs = Vec::with_capacity(lhs.len());
+        let mut rhs = Vec::with_capacity(
+            three_xx.len() + ty.len() + three_xx.len() + three_xx.len() + dx.len(),
+        );
         lhs.extend(three_xx);
         lhs.extend(T::add_many(ty, dy));
         lhs.extend(three_xx);
@@ -352,7 +354,13 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
                 + 3 * lambda_denominator.len()
                 + 3 * lambda_numerator.len(),
         );
-        let mut rhs = Vec::with_capacity(lhs.len());
+        let mut rhs = Vec::with_capacity(
+            x_double_check.len()
+                + y_double_check.len()
+                + 2 * precompute_point_transition_modified.len()
+                + 3 * lambda_denominator.len()
+                + 3 * lambda_numerator.len(),
+        );
         lhs.extend(x_double_check);
         lhs.extend(y_double_check);
         lhs.extend(precompute_point_transition_modified.clone());
@@ -393,7 +401,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
 
         let y_add_check = T::add_many(&T::add_many(mul[6], mul[7]), &T::sub_many(mul[8], mul[9]));
         let mut lhs = Vec::with_capacity(2 * precompute_point_transition_modified.len());
-        let mut rhs = Vec::with_capacity(lhs.len());
+        let mut rhs = Vec::with_capacity(2 * precompute_point_transition_modified.len());
         lhs.extend(precompute_point_transition_modified.clone());
         lhs.extend(precompute_point_transition_modified);
         rhs.extend(x_add_check);

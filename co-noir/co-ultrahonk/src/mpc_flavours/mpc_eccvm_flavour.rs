@@ -333,7 +333,9 @@ impl MPCProverFlavour for ECCVMFlavour {
         _transcript: &mut common::transcript::Transcript<F, H>,
         _alphas: &mut Vec<P::ScalarField>,
     ) {
-        unimplemented!("this is not needed for the ECCVM flavour")
+        panic!(
+            "This is used in the Oink Prover and thus should not be called with the ECCVM flavour"
+        );
     }
 
     fn reshare<

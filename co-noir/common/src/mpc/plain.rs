@@ -305,19 +305,6 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         public_value
     }
 
-    fn inverse_or_zero_many_in_place<N: Network>(
-        _net: &N,
-        _state: &mut Self::State,
-        a: &mut [Self::ArithmeticShare],
-    ) -> eyre::Result<()> {
-        a.iter_mut().for_each(|x| {
-            if !x.is_zero() {
-                *x = x.inverse().expect("We checked it was not zero");
-            }
-        });
-        Ok(())
-    }
-
     fn scalar_mul_public_point(a: &P, b: Self::ArithmeticShare) -> Self::PointShare {
         *a * b
     }

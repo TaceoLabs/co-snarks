@@ -67,8 +67,6 @@ where
 {
     pub fn new(net: &'a N, state: &'a mut T::State) -> Self {
         Self {
-            // net,
-            // state,
             decider: CoDecider::new(net, state, Default::default(), ZeroKnowledge::Yes),
             memory: ProverMemory::default(),
         }
@@ -85,42 +83,21 @@ where
     )> {
         let circuit_size = proving_key.circuit_size;
         let unmasked_witness_size = (circuit_size - NUM_DISABLED_ROWS_IN_SUMCHECK) as usize;
-        let start = std::time::Instant::now();
         self.execute_wire_commitments_round(&mut transcript, &mut proving_key, crs)?;
-        println!(
-            "Time for wire commitment round: {:?}",
-            std::time::Instant::now() - start
-        );
-        let start = std::time::Instant::now();
         self.execute_log_derivative_commitments_round(
             &mut transcript,
             &proving_key,
             unmasked_witness_size,
         )?;
-        println!(
-            "Time for log derivative commitment round: {:?}",
-            std::time::Instant::now() - start
-        );
-        let start = std::time::Instant::now();
         self.execute_grand_product_computation_round(
             &mut transcript,
             &proving_key,
             unmasked_witness_size,
             crs,
         )?;
-        println!(
-            "Time for grand product computation round: {:?}",
-            std::time::Instant::now() - start
-        );
         self.add_polynomials_to_memory(proving_key.polynomials);
-        let start = std::time::Instant::now();
         let (sumcheck_output, zk_sumcheck_data) =
             self.execute_relation_check_rounds(&mut transcript, crs, circuit_size)?;
-        println!(
-            "Time for relation check rounds: {:?}",
-            std::time::Instant::now() - start
-        );
-        let start = std::time::Instant::now();
         let ipa_transcript = self.execute_pcs_rounds(
             sumcheck_output,
             zk_sumcheck_data,
@@ -128,10 +105,6 @@ where
             crs,
             circuit_size,
         )?;
-        println!(
-            "Time for PCS rounds: {:?}",
-            std::time::Instant::now() - start
-        );
 
         Ok((transcript.get_proof(), ipa_transcript.get_proof()))
     }
@@ -382,7 +355,7 @@ where
             .precompute_select()
             .coefficients[..circuit_size];
         let mut lhs = Vec::with_capacity(a.len() + b.len() + c.len());
-        let mut rhs = Vec::with_capacity(lhs.len());
+        let mut rhs = Vec::with_capacity(a.len() + b.len() + c.len());
         lhs.extend(a.to_owned());
         rhs.extend(b.to_owned());
         lhs.extend(a.to_owned());
@@ -442,7 +415,8 @@ where
 
         // Compute inverse polynomial I in place by inverting the product at each row
         // Note: zeroes are ignored as they are not used anyway
-        CoUtils::batch_invert_or_zero_many::<T, P, N>(
+        // Because of the constant gamma terms in compute read and write term, we do not expect any zeroes here anyway
+        CoUtils::batch_invert_leaking_zeros::<T, P, N>(
             self.memory.lookup_inverses.as_mut(),
             self.decider.net,
             self.decider.state,
@@ -574,7 +548,7 @@ where
             ),
         );
         let mut lhs = Vec::with_capacity(15 * numerator.len());
-        let mut rhs = Vec::with_capacity(lhs.len());
+        let mut rhs = Vec::with_capacity(15 * numerator.len());
 
         lhs.extend(numerator);
         rhs.extend(wnaf_slice_input1);
@@ -1273,6 +1247,7 @@ where
                     // Set the value of the polynomial if the index falls in an inactive region
                     if i >= previous_range_end && i < next_range_start {
                         self.memory.z_perm[i + 1] = self.memory.z_perm[next_range_start];
+                        break;
                     }
                 }
             }

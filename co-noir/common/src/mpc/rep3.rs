@@ -1,7 +1,7 @@
 use super::NoirUltraHonkProver;
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
-use ark_ff::{Field, One, Zero};
+use ark_ff::{Field, Zero};
 use itertools::izip;
 use mpc_core::{
     MpcState,
@@ -291,40 +291,6 @@ impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for Rep3UltraH
 
     fn point_sub(a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare {
         pointshare::sub(a, b)
-    }
-
-    fn inverse_or_zero_many_in_place<N: Network>(
-        net: &N,
-        state: &mut Self::State,
-        secrets: &mut [Self::ArithmeticShare],
-    ) -> eyre::Result<()> {
-        let zeroes = vec![P::ScalarField::zero(); secrets.len()];
-        let is_zero = arithmetic::eq_public_many(secrets, &zeroes, net, state)?;
-        let inv_is_zero = is_zero
-            .iter()
-            .map(|x| arithmetic::add_public(arithmetic::neg(*x), P::ScalarField::one(), state.id()))
-            .collect::<Vec<_>>();
-
-        let mut to_invert = arithmetic::mul_vec(secrets, &inv_is_zero, net, state)?;
-        to_invert.iter_mut().zip(is_zero.iter()).for_each(|(x, y)| {
-            arithmetic::add_assign(x, *y);
-        });
-        let r = (0..secrets.len())
-            .map(|_| <Self as NoirUltraHonkProver<P>>::rand(net, state))
-            .collect::<Result<Vec<_>, _>>()?;
-        let y: Vec<P::ScalarField> =
-            <Self as NoirUltraHonkProver<P>>::mul_open_many(&to_invert, &r, net, state)?;
-
-        for (a, r, y) in izip!(to_invert.iter_mut(), r, y) {
-            if y.is_zero() {
-                eyre::bail!("Element should not be zero",);
-            } else {
-                *a = r * y.inverse().unwrap();
-            }
-        }
-        secrets.copy_from_slice(&to_invert);
-
-        Ok(())
     }
 
     fn scalar_mul_public_point(a: &P, b: Self::ArithmeticShare) -> Self::PointShare {
