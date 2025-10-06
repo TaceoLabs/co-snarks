@@ -4077,47 +4077,52 @@ impl GarbledCircuits {
                     rands.next().unwrap(),
                 )?);
             }
-            let mut row_s1 = slice0base2[2..].to_vec();
-            row_s1.extend([g.const_zero()?, g.const_zero()?]);
-            let row_s2 = slice0base2[0..2].to_vec();
-            let mut row_s3 = slice1base2[2..].to_vec();
-            row_s3.extend([g.const_zero()?, g.const_zero()?]);
-            let row_s4 = slice1base2[0..2].to_vec();
-            let mut row_s5 = slice2base2[2..].to_vec();
-            row_s5.extend([g.const_zero()?, g.const_zero()?]);
-            let row_s6 = slice2base2[0..2].to_vec();
-            let mut row_s7 = slice3base2[2..].to_vec();
-            row_s7.extend([g.const_zero()?, g.const_zero()?]);
-            let row_s8 = slice3base2[0..2].to_vec();
+
+            let row_s1 = &slice0base2[2..];
+            let row_s2 = &slice0base2[0..2];
+            let row_s3 = &slice1base2[2..];
+            let row_s4 = &slice1base2[0..2];
+            let row_s5 = &slice2base2[2..];
+            let row_s6 = &slice2base2[0..2];
+            let row_s7 = &slice3base2[2..];
+            let row_s8 = &slice3base2[0..2];
             for row in [
                 row_s1, row_s2, row_s3, row_s4, row_s5, row_s6, row_s7, row_s8,
             ] {
                 results.extend(Self::compose_field_element::<_, F>(
                     g,
-                    &row,
+                    row,
                     rands.next().unwrap(),
                 )?);
             }
+            // let row_chunk = slice3 + (slice2 << 4) + (slice1 << 8) + (slice0 << 12); but all slices have 5 bit and might be negative
+            let mut slice3_ = vec![slice3[4].to_owned(); 32];
+            let mut slice2_ = vec![slice2[4].to_owned(); 28];
+            let mut slice1_ = vec![slice1[4].to_owned(); 24];
+            let mut slice0_ = vec![slice0[4].to_owned(); 20];
+            slice3_[..4].clone_from_slice(&slice3[..4]);
+            slice2_[..4].clone_from_slice(&slice2[..4]);
+            slice1_[..4].clone_from_slice(&slice1[..4]);
+            slice0_[..4].clone_from_slice(&slice0[..4]);
 
-            let mut slice2_shift4 = [vec![g.const_zero()?; 4], slice2.to_vec()].concat();
-            slice2_shift4.resize(32, slice2.last().cloned().unwrap_or(g.const_one()?));
-            let mut slice1_shift8 = [vec![g.const_zero()?; 8], slice1.to_vec()].concat();
-            slice1_shift8.resize(32, slice1.last().cloned().unwrap_or(g.const_one()?));
-            let mut slice0_shift12 = [vec![g.const_zero()?; 12], slice0.to_vec()].concat();
-            slice0_shift12.resize(32, slice0.last().cloned().unwrap_or(g.const_one()?));
-            let mut slice3_no_shift = slice3.to_vec();
-            slice3_no_shift.resize(32, slice3.last().cloned().unwrap_or(g.const_one()?));
+            let add1 = Self::bin_addition_no_carry(g, &slice3_[4..], &slice2_)?;
+            let add2 = Self::bin_addition_no_carry(g, &slice1_[4..], &slice0_)?;
+            slice3_[4..].clone_from_slice(&add1);
+            slice1_[4..].clone_from_slice(&add2);
+            let add3 = Self::bin_addition_no_carry(g, &slice3_[8..], &slice1_)?;
+            slice3_[8..].clone_from_slice(&add3);
+            let mut row_chunk = slice3_;
 
-            // TACEO TODO: can we optimize this as it is just composing?
-            let row_chunk = Self::bin_addition_no_carry(g, &slice3_no_shift, &slice2_shift4)?;
-            let row_chunk = Self::bin_addition_no_carry(g, &row_chunk, &slice1_shift8)?;
-            let row_chunk = Self::bin_addition_no_carry(g, &row_chunk, &slice0_shift12)?;
-            let is_negative_value = row_chunk[31].clone();
-            let mut const_is_negative = vec![is_negative_value.clone()];
-            let is_negative: [_; 32] = core::array::from_fn(|_| is_negative_value.clone());
-            const_is_negative.resize(32, g.const_zero()?);
-            let row_chunk = Self::xor_many_as_wires(g, &row_chunk, &is_negative)?;
+            // twos complement if negative
+            let is_negative_value = row_chunk.last().unwrap().to_owned();
+            for x in &mut row_chunk {
+                *x = g.xor(x, &is_negative_value)?;
+            }
+
+            let mut const_is_negative = vec![g.const_zero()?; 32];
+            const_is_negative[0] = is_negative_value.clone();
             let row_chunk = Self::bin_addition_no_carry(g, &row_chunk, &const_is_negative)?;
+
             results.extend(Self::compose_field_element::<_, F>(
                 g,
                 &row_chunk,
