@@ -3229,92 +3229,58 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 &mut self.state0,
                 num_bits,
             )?;
-            let mut is_result_even = Vec::new();
-            let mut is_result_values = Vec::new();
-            let mut is_result_pos = Vec::new();
-            let mut row_s = Vec::new();
-            let mut row_chunks_abs = Vec::new();
-            let mut row_chunks_neg = Vec::new();
+            let mut is_result_even = Vec::with_capacity(32 * zs.len());
+            let mut is_result_values =
+                Vec::<Rep3PrimeFieldShare<C::BaseField>>::with_capacity(32 * zs.len());
+            let mut is_result_pos =
+                Vec::<Rep3PrimeFieldShare<C::BaseField>>::with_capacity(zs.len());
+            let mut row_s = Vec::with_capacity(8 * 8 * zs.len());
+            let mut row_chunks_abs = Vec::with_capacity(8 * zs.len());
+            let mut row_chunks_neg = Vec::with_capacity(8 * zs.len());
 
             let chunk_size = 32 + 32 + 1 + 8 * 8 + 8 + 8;
             for chunk in result.chunks(chunk_size) {
-                is_result_even.push(chunk[0]);
+                is_result_even.push(Rep3AcvmType::Shared(chunk[0]));
 
                 for second_chunk in chunk[1..].chunks(18) {
-                    let tmp_values: Vec<_> =
-                        second_chunk.iter().step_by(2).take(4).cloned().collect();
-                    is_result_values.extend_from_slice(&tmp_values);
-                    let tmp_values: Vec<_> = second_chunk
-                        .iter()
-                        .skip(1)
-                        .step_by(2)
-                        .take(4)
-                        .cloned()
-                        .collect();
-                    is_result_pos.extend_from_slice(&tmp_values);
+                    let tmp_values = second_chunk.iter().step_by(2).take(4);
+                    is_result_values.extend(tmp_values);
+                    let tmp_values = second_chunk.iter().skip(1).step_by(2).take(4);
+                    is_result_pos.extend(tmp_values);
                     row_s.extend_from_slice(&second_chunk[8..16]);
                     row_chunks_abs.push(second_chunk[16]);
                     row_chunks_neg.push(second_chunk[17]);
                 }
             }
             Ok((
-                is_result_even
-                    .into_iter()
-                    .map(Rep3AcvmType::Shared)
-                    .collect(),
+                is_result_even,
                 is_result_values
                     .chunks(32)
-                    .map(|chunk| {
-                        let mut arr = Vec::with_capacity(32);
-                        for x in chunk.iter() {
-                            arr.push(Rep3AcvmType::Shared(*x));
-                        }
-                        arr.try_into().expect("We checked the length")
-                    })
+                    .map(|chunk| array::from_fn(|i| Rep3AcvmType::Shared(chunk[i])))
                     .collect(),
                 is_result_pos
                     .chunks(32)
                     .map(|chunk| {
-                        let mut arr = Vec::with_capacity(32);
-                        for x in chunk.iter() {
-                            arr.push(Rep3AcvmType::Shared(arithmetic::sub_public_by_shared(
+                        array::from_fn(|i| {
+                            Rep3AcvmType::Shared(arithmetic::sub_public_by_shared(
                                 C::BaseField::one(),
-                                *x,
+                                chunk[i],
                                 self.id,
-                            )));
-                        }
-                        arr.try_into().expect("We checked the length")
+                            ))
+                        })
                     })
                     .collect(),
                 row_s
                     .chunks(64)
-                    .map(|chunk| {
-                        let mut arr = Vec::with_capacity(64);
-                        for x in chunk.iter() {
-                            arr.push(Rep3AcvmType::Shared(*x));
-                        }
-                        arr.try_into().expect("We checked the length")
-                    })
+                    .map(|chunk| array::from_fn(|i| Rep3AcvmType::Shared(chunk[i])))
                     .collect(),
                 row_chunks_abs
                     .chunks(8)
-                    .map(|chunk| {
-                        let mut arr = Vec::with_capacity(8);
-                        for x in chunk.iter() {
-                            arr.push(Rep3AcvmType::Shared(*x));
-                        }
-                        arr.try_into().expect("We checked the length")
-                    })
+                    .map(|chunk| array::from_fn(|i| Rep3AcvmType::Shared(chunk[i])))
                     .collect(),
                 row_chunks_neg
                     .chunks(8)
-                    .map(|chunk| {
-                        let mut arr = Vec::with_capacity(8);
-                        for x in chunk.iter() {
-                            arr.push(Rep3AcvmType::Shared(*x));
-                        }
-                        arr.try_into().expect("We checked the length")
-                    })
+                    .map(|chunk| array::from_fn(|i| Rep3AcvmType::Shared(chunk[i])))
                     .collect(),
             ))
         } else {

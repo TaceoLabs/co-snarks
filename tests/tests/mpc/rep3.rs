@@ -1568,11 +1568,11 @@ mod field_share {
             for i in 0..NUM_WNAF_DIGITS_PER_SCALAR {
                 let raw_slice = &scalar & BigUint::from(WNAF_MASK);
                 let is_even = (&raw_slice & BigUint::one()) == BigUint::zero();
-                let mut wnaf_slice = if let Some(&digit) = raw_slice.to_u32_digits().first() {
-                    digit as i32
-                } else {
-                    0
-                };
+                let mut wnaf_slice = raw_slice
+                    .to_u32_digits()
+                    .first()
+                    .cloned()
+                    .unwrap_or_default() as i32;
 
                 if i == 0 && is_even {
                     wnaf_slice += 1;
@@ -1605,7 +1605,7 @@ mod field_share {
             let x: BigUint = x.into();
             let (wnaf_digits, neg_output, outputs_unchanged) = compute_wnaf_digits(x.clone());
             let is_even = (x & BigUint::one()) == BigUint::zero();
-            should_result_even.push(ark_bn254::Fr::from(if is_even { 1 } else { 0 }));
+            should_result_even.push(ark_bn254::Fr::from(is_even as u64));
             should_result.extend(wnaf_digits.iter().map(|&d| ark_bn254::Fr::from(d as u64)));
             should_result_pos.extend(neg_output);
             should_result_unchanged.extend(outputs_unchanged);
@@ -1685,28 +1685,22 @@ mod field_share {
         let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_field_elements(&result1, &result2, &result3);
 
-        let mut is_result_even = Vec::new();
-        let mut is_result_values = Vec::new();
-        let mut is_result_pos = Vec::new();
-        let mut row_s = Vec::new();
-        let mut row_chunks_abs = Vec::new();
-        let mut row_chunks_neg = Vec::new();
+        let mut is_result_even = Vec::with_capacity(32 * VEC_SIZE);
+        let mut is_result_values = Vec::<ark_bn254::Fr>::with_capacity(32 * VEC_SIZE);
+        let mut is_result_pos = Vec::<ark_bn254::Fr>::with_capacity(VEC_SIZE);
+        let mut row_s = Vec::with_capacity(8 * 8 * VEC_SIZE);
+        let mut row_chunks_abs = Vec::with_capacity(8 * VEC_SIZE);
+        let mut row_chunks_neg = Vec::with_capacity(8 * VEC_SIZE);
 
-        let chunk_size = 32 + 32 + 1 + 8 * 8 + 8 + 8;
+        let chunk_size: usize = 32 + 32 + 1 + 8 * 8 + 8 + 8;
         for chunk in is_result.chunks(chunk_size) {
             is_result_even.push(chunk[0]);
 
             for second_chunk in chunk[1..].chunks(18) {
-                let tmp_values: Vec<_> = second_chunk.iter().step_by(2).take(4).cloned().collect();
-                is_result_values.extend_from_slice(&tmp_values);
-                let tmp_values: Vec<_> = second_chunk
-                    .iter()
-                    .skip(1)
-                    .step_by(2)
-                    .take(4)
-                    .cloned()
-                    .collect();
-                is_result_pos.extend_from_slice(&tmp_values);
+                let tmp_values = second_chunk.iter().step_by(2).take(4);
+                is_result_values.extend(tmp_values);
+                let tmp_values = second_chunk.iter().skip(1).step_by(2).take(4);
+                is_result_pos.extend(tmp_values);
                 row_s.extend_from_slice(&second_chunk[8..16]);
                 row_chunks_abs.push(second_chunk[16]);
                 row_chunks_neg.push(second_chunk[17]);
