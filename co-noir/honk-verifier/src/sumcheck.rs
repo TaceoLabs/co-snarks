@@ -1,0 +1,212 @@
+use crate::verifier_relations::AllRelationsEvals;
+use crate::verifier_relations::compute_full_relation_purported_value;
+use ark_ff::Field;
+use ark_ff::Zero;
+use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use co_builder::transcript;
+use co_builder::types::gate_separator::GateSeparatorPolynomial;
+use co_builder::{
+    flavours::mega_flavour::MegaFlavour,
+    mega_builder::MegaCircuitBuilder,
+    prover_flavour::ProverFlavour,
+    transcript::{TranscriptCT, TranscriptHasherCT},
+    types::field_ct::FieldCT,
+};
+use co_ultrahonk::co_decider::types::RelationParameters;
+use co_ultrahonk::types::AllEntities;
+use common::polynomials::polynomial::RowDisablingPolynomial;
+use common::{
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProofResult, TranscriptFieldType},
+    transcript::TranscriptHasher,
+};
+use mpc_core::protocols::shamir::precompute_interpolation_polys;
+use std::{fmt::format, iter::Sum};
+use ultrahonk::prelude::Barycentric;
+
+pub struct SumcheckOutput<C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> {
+    pub challenges: Vec<FieldCT<C::ScalarField>>,
+    pub claimed_evaluations:
+        AllEntities<FieldCT<C::ScalarField>, FieldCT<C::ScalarField>, MegaFlavour>,
+}
+
+pub struct SumcheckVerifier;
+
+impl SumcheckVerifier {
+    pub fn verify<
+        C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
+        T: NoirWitnessExtensionProtocol<C::ScalarField>,
+        H: TranscriptHasherCT<C>,
+    >(
+        transcript: &mut TranscriptCT<C, H>,
+        mut target_sum: FieldCT<C::ScalarField>,
+        relation_parameters: RelationParameters<FieldCT<C::ScalarField>>,
+        alphas: Vec<FieldCT<C::ScalarField>>,
+        gate_challenges: Vec<FieldCT<C::ScalarField>>,
+        padding_indicator_array: &Vec<FieldCT<C::ScalarField>>,
+        builder: &mut MegaCircuitBuilder<C, T>,
+        driver: &mut T,
+    ) -> HonkProofResult<SumcheckOutput<C>> {
+        let one = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
+        // TODO CESAR: Use padding?
+
+        let mut gate_separators =
+            GateSeparatorPolynomial::new_without_products(gate_challenges, builder);
+
+        // MegaRecursiveFlavor does not have ZK
+        let mut multivariate_challenge = Vec::with_capacity(padding_indicator_array.len());
+        for round_idx in 0..padding_indicator_array.len() {
+            let round_univariate = transcript.receive_n_from_prover(
+                format!("Sumcheck:univariate_{round_idx}"),
+                MegaFlavour::BATCHED_RELATION_PARTIAL_LENGTH,
+            )?;
+            let round_challenge =
+                transcript.get_challenge(format!("Sumcheck:u_{round_idx}"), builder, driver)?;
+            multivariate_challenge.push(round_challenge.clone());
+
+            // TODO CESAR: DO we need a boolean here?
+            SumcheckVerifier::check_sum(
+                &round_univariate,
+                &target_sum,
+                &padding_indicator_array[round_idx],
+                builder,
+                driver,
+            )?;
+
+            // Update the target sum for the next round
+            let lhs = one
+                .sub(&padding_indicator_array[round_idx].clone(), builder, driver)
+                .multiply(&target_sum, builder, driver)?;
+            let rhs = evaluate_with_domain_start::<
+                { MegaFlavour::BATCHED_RELATION_PARTIAL_LENGTH },
+                _,
+                _,
+            >(
+                &round_univariate.try_into().unwrap(),
+                round_challenge.clone(),
+                0,
+                builder,
+                driver,
+            )?
+            .multiply(&padding_indicator_array[round_idx], builder, driver)?;
+            target_sum = lhs.add(&rhs, builder, driver);
+
+            // Partially evaluate the gate separator polynomial
+            gate_separators.partially_evaluate_with_padding(
+                round_challenge,
+                padding_indicator_array[round_idx].clone(),
+                builder,
+                driver,
+            )?;
+
+            // TODO CESAR: Update boolean?
+        }
+
+        let transcript_evaluations = transcript.receive_n_from_prover(
+            "Sumcheck:evaluations".to_owned(),
+            MegaFlavour::NUM_ALL_ENTITIES,
+        )?;
+
+        // For ZK Flavors: the evaluation of the Row Disabling Polynomial at the sumcheck challenge
+        // Evaluate the Honk relation at the point (u_0, ..., u_{d-1}) using claimed evaluations of prover polynomials.
+        // In ZK Flavors, the evaluation is corrected by full_libra_purported_value
+        let (precomputed, witness) =
+            transcript_evaluations.split_at(MegaFlavour::PRECOMPUTED_ENTITIES_SIZE);
+        let claimed_evaluations =
+            AllEntities::from_elements(precomputed.to_vec(), witness.to_vec());
+        let full_honk_purported_value = compute_full_relation_purported_value(
+            &claimed_evaluations,
+            &mut AllRelationsEvals::default(),
+            &relation_parameters,
+            gate_separators,
+            &alphas,
+            builder,
+            driver,
+        )?;
+
+        // Final Verification Step
+        full_honk_purported_value.assert_equal(&target_sum, builder, driver);
+
+        Ok(SumcheckOutput {
+            challenges: multivariate_challenge,
+            claimed_evaluations,
+        })
+    }
+
+    /**
+     * @brief Check that the round target sum is correct
+     * @details The verifier receives the claimed evaluations of the round univariate \f$ \tilde{S}^i \f$ at \f$X_i =
+     * 0,\ldots, D \f$ and checks \f$\sigma_i = \tilde{S}^{i-1}(u_{i-1}) \stackrel{?}{=} \tilde{S}^i(0) + \tilde{S}^i(1)
+     * \f$
+     * @param univariate Round univariate \f$\tilde{S}^{i}\f$ represented by its evaluations over \f$0,\ldots,D\f$.
+     *
+     */
+    fn check_sum<
+        C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
+        T: NoirWitnessExtensionProtocol<C::ScalarField>,
+    >(
+        univariate: &[FieldCT<C::ScalarField>],
+        target_sum: &FieldCT<C::ScalarField>,
+        indicator: &FieldCT<C::ScalarField>,
+        builder: &mut MegaCircuitBuilder<C, T>,
+        driver: &mut T,
+    ) -> HonkProofResult<()> {
+        // TODO CESAR: Maybe add more stuff?
+        let one = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
+        let lhs = one
+            .sub(indicator, builder, driver)
+            .multiply(target_sum, builder, driver)?;
+        let rhs = univariate[0]
+            .add(&univariate[1], builder, driver)
+            .multiply(indicator, builder, driver)?;
+        let total_sum = lhs.add(&rhs, builder, driver);
+
+        target_sum.assert_equal(&total_sum, builder, driver);
+        Ok(())
+    }
+}
+
+pub fn evaluate_with_domain_start<
+    const SIZE: usize,
+    C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
+    T: NoirWitnessExtensionProtocol<TranscriptFieldType>,
+>(
+    evals: &[FieldCT<C::ScalarField>; SIZE],
+    u: FieldCT<C::ScalarField>,
+    domain_start: usize,
+    builder: &mut MegaCircuitBuilder<C, T>,
+    driver: &mut T,
+) -> HonkProofResult<FieldCT<C::ScalarField>> {
+    let one = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
+    let mut full_numerator_value = one.clone();
+    for i in domain_start..SIZE + domain_start {
+        let coeff = FieldCT::from_witness(C::ScalarField::from(i as u64).into(), builder);
+        let tmp = u.sub(&coeff, builder, driver);
+        full_numerator_value = full_numerator_value.multiply(&tmp, builder, driver)?;
+    }
+
+    let big_domain = (domain_start..domain_start + SIZE)
+        .map(|i| C::ScalarField::from(i as u64))
+        .collect::<Vec<_>>();
+    let lagrange_denominators = Barycentric::construct_lagrange_denominators(SIZE, &big_domain);
+
+    let mut denominator_inverses = vec![FieldCT::default(); SIZE];
+    for i in 0..SIZE {
+        let mut inv = FieldCT::from_witness(lagrange_denominators[i].into(), builder);
+        let tmp = u.sub(&big_domain[i].into(), builder, driver);
+        inv = inv.multiply(&tmp, builder, driver)?;
+        inv = one.divide(&inv, builder, driver)?;
+        denominator_inverses[i] = inv;
+    }
+
+    let mut result = FieldCT::from_witness(C::ScalarField::zero().into(), builder);
+    // Compute each term v_j / (d_j*(x-x_j)) of the sum
+    for (i, inverse) in denominator_inverses.iter().enumerate() {
+        let mut term = evals[i].clone();
+        term = term.multiply(inverse, builder, driver)?;
+        result = result.add(&term, builder, driver);
+    }
+
+    // Scale the sum by the value of B(x)
+    Ok(result.multiply(&full_numerator_value, builder, driver)?)
+}
