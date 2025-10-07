@@ -200,7 +200,18 @@ impl HonkCurve<ark_bn254::Fr> for short_weierstrass::Projective<GrumpkinConfig> 
         val
     }
     fn get_cube_root_of_unity() -> Self::BaseField {
-        todo!("cube root of unity for grumpkin::Fq")
+        // Compute λ = (-1 + sqrt(-3)) / 2 in the base field
+        let minus_three = -ark_grumpkin::Fq::from(3u64);
+        let sqrt_minus_three = minus_three
+            .sqrt()
+            .expect("sqrt(-3) must exist in grumpkin::Fq");
+        let two_inv = ark_grumpkin::Fq::from(2u64).inverse().unwrap();
+        let lambda = (-ark_grumpkin::Fq::one() + sqrt_minus_three) * two_inv;
+
+        debug_assert!(lambda != ark_grumpkin::Fq::one());
+        debug_assert_eq!(lambda.pow([3u64]), ark_grumpkin::Fq::one());
+
+        lambda
     }
 
     fn get_bb_infinity_default() -> Self::BaseField {
