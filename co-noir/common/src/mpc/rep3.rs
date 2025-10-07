@@ -1,6 +1,7 @@
 use super::NoirUltraHonkProver;
 use ark_ec::CurveGroup;
-use ark_ff::Field;
+use ark_ff::PrimeField;
+use ark_ff::{Field, Zero};
 use itertools::izip;
 use mpc_core::{
     MpcState,
@@ -9,12 +10,11 @@ use mpc_core::{
     },
 };
 use mpc_net::Network;
-use num_traits::Zero;
 use rayon::prelude::*;
-
+#[derive(Debug)]
 pub struct Rep3UltraHonkDriver;
 
-impl<P: CurveGroup> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
+impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
     type ArithmeticShare = Rep3PrimeFieldShare<P::ScalarField>;
     type PointShare = Rep3PointShare<P>;
     type State = Rep3State;
@@ -176,6 +176,15 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
         pointshare::open_point_and_field(&a, &b, net)
     }
 
+    fn open_point_and_field_many<N: Network>(
+        a: &[Self::PointShare],
+        b: &[Self::ArithmeticShare],
+        net: &N,
+        _state: &mut Self::State,
+    ) -> eyre::Result<(Vec<P>, Vec<<P>::ScalarField>)> {
+        pointshare::open_point_and_field_many(a, b, net)
+    }
+
     fn mul_open_many<N: Network>(
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
@@ -243,6 +252,10 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
         pointshare::msm_public_points(points, scalars)
     }
 
+    fn point_add(a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare {
+        pointshare::add(a, b)
+    }
+
     fn eval_poly(coeffs: &[Self::ArithmeticShare], point: P::ScalarField) -> Self::ArithmeticShare {
         poly::eval_poly(coeffs, point)
     }
@@ -267,5 +280,20 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
     ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
         let zeroes = vec![P::ScalarField::zero(); a.len()];
         arithmetic::eq_public_many(a, &zeroes, net, state)
+    }
+
+    fn promote_to_trivial_point_share(
+        id: <Self::State as MpcState>::PartyID,
+        public_value: P,
+    ) -> Self::PointShare {
+        pointshare::promote_to_trivial_share(id, &public_value)
+    }
+
+    fn point_sub(a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare {
+        pointshare::sub(a, b)
+    }
+
+    fn scalar_mul_public_point(a: &P, b: Self::ArithmeticShare) -> Self::PointShare {
+        pointshare::scalar_mul_public_point(a, b)
     }
 }

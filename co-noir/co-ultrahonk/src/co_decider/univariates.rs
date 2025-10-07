@@ -1,8 +1,9 @@
 use ark_ec::CurveGroup;
 use ark_ff::Field;
+use common::barycentric::Barycentric;
 use mpc_net::Network;
 use std::array;
-use ultrahonk::prelude::{Barycentric, Univariate};
+use ultrahonk::prelude::Univariate;
 
 use crate::mpc_prover_flavour::SharedUnivariateTrait;
 use common::mpc::NoirUltraHonkProver;

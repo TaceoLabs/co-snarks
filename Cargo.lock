@@ -1276,7 +1276,11 @@ dependencies = [
  "ark-bn254",
  "ark-ec",
  "ark-ff 0.5.0",
+ "ark-grumpkin",
+ "ark-std 0.5.0",
+ "co-acvm",
  "co-builder",
+ "co-ultrahonk",
  "common",
  "eyre",
  "goblin",
@@ -1285,6 +1289,7 @@ dependencies = [
  "mpc-net",
  "num-bigint 0.4.6",
  "rand 0.8.5",
+ "tracing",
  "ultrahonk",
 ]
 
@@ -1546,6 +1551,7 @@ dependencies = [
  "rayon",
  "serde",
  "sha3",
+ "tracing",
 ]
 
 [[package]]
@@ -2430,6 +2436,8 @@ dependencies = [
  "ark-ec",
  "ark-ff 0.5.0",
  "ark-grumpkin",
+ "ark-poly",
+ "ark-serialize 0.5.0",
  "bincode",
  "co-builder",
  "common",
@@ -2437,7 +2445,10 @@ dependencies = [
  "itertools 0.14.0",
  "mpc-core",
  "num-bigint 0.4.6",
+ "num-traits",
  "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "rayon",
  "serde",
  "tracing",
  "ultrahonk",

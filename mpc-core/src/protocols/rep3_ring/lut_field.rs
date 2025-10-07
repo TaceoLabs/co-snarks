@@ -2,8 +2,7 @@
 //!
 //! This module contains implementation of a LUT
 
-use std::marker::PhantomData;
-
+use super::{Rep3RingShare, ring::int_ring::IntRing2k};
 use crate::{
     lut::LookupTableProvider,
     protocols::{
@@ -17,8 +16,7 @@ use crate::{
 use ark_ff::PrimeField;
 use mpc_net::Network;
 use rand::{distributions::Standard, prelude::Distribution};
-
-use super::{Rep3RingShare, ring::int_ring::IntRing2k};
+use std::marker::PhantomData;
 
 /// Implements an enum which stores a lookup table, either consisting of public or private values.
 pub enum PublicPrivateLut<F: PrimeField> {

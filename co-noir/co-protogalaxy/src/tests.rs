@@ -89,7 +89,7 @@ macro_rules! to_field {
     };
 }
 
-fn structure_parameters<T: PartialEq>(
+fn structure_parameters<T: PartialEq + Default>(
     [
         eta_1,
         eta_2,
@@ -108,6 +108,7 @@ fn structure_parameters<T: PartialEq>(
         gamma,
         public_input_delta,
         lookup_grand_product_delta,
+        ..Default::default()
     }
 }
 #[test]

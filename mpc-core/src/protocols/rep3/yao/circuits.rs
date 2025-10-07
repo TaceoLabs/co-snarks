@@ -102,6 +102,16 @@ impl GarbledCircuits {
         Ok((s, c))
     }
 
+    fn half_adder_const<G: FancyBinary>(
+        g: &mut G,
+        a: &G::Item,
+        b: bool,
+    ) -> Result<(G::Item, G::Item), G::Error> {
+        let s = if b { g.negate(a)? } else { a.to_owned() };
+        let c = a.to_owned();
+        Ok((s, c))
+    }
+
     /// Full adder, just outputs carry
     fn full_adder_carry<G: FancyBinary>(
         g: &mut G,
@@ -225,10 +235,49 @@ impl GarbledCircuits {
         Ok(result)
     }
 
+    /// Binary addition. Returns just the result.
+    fn bin_addition_constant_no_carry<G: FancyBinary>(
+        g: &mut G,
+        xs: &[G::Item],
+        ys: &[bool],
+    ) -> Result<Vec<G::Item>, G::Error> {
+        debug_assert_eq!(xs.len(), ys.len());
+        if xs.len() == 1 {
+            if ys[0] {
+                return Ok(vec![g.negate(&xs[0])?]);
+            } else {
+                return Ok(vec![xs[0].clone()]);
+            }
+        }
+
+        let mut result = Vec::with_capacity(xs.len());
+
+        let (mut s, mut c) = Self::half_adder_const(g, &xs[0], ys[0])?;
+        result.push(s);
+
+        for (x, y) in xs.iter().zip(ys.iter()).take(xs.len() - 1).skip(1) {
+            let res = Self::full_adder_const(g, x, *y, &c)?;
+            s = res.0;
+            c = res.1;
+            result.push(s);
+        }
+
+        // Finally, just the xor of the full_adder
+        let z1 = if *ys.last().unwrap() {
+            g.negate(xs.last().unwrap())?
+        } else {
+            xs.last().unwrap().clone()
+        };
+        let s = g.xor(&z1, &c)?;
+        result.push(s);
+
+        Ok(result)
+    }
+
     /// Binary subtraction. Returns the result and whether it underflowed.
     /// I.e., calculates 2^k + x1 - x2
     #[expect(clippy::type_complexity)]
-    fn bin_subtraction<G: FancyBinary>(
+    pub fn bin_subtraction<G: FancyBinary>(
         g: &mut G,
         xs: &[G::Item],
         ys: &[G::Item],
@@ -3869,6 +3918,224 @@ impl GarbledCircuits {
             Err(e) => return Err(G::Error::from(FancyError::from(e))),
         };
         Ok(result)
+    }
+
+    /// Computes wnaf digits and rows needed in the ECCVM builder.
+    pub(crate) fn compute_wnaf_digits_many<G: FancyBinary + FancyBinaryConstant, F: PrimeField>(
+        g: &mut G,
+        wires_x1: &BinaryBundle<G::Item>,
+        wires_x2: &BinaryBundle<G::Item>,
+        wires_c: &BinaryBundle<G::Item>,
+        total_output_bitlen_per_field: usize,
+    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+        let input_bitlen = F::MODULUS_BIT_SIZE as usize;
+        debug_assert_eq!(wires_x1.size(), wires_x2.size());
+        let length = wires_x1.size();
+        debug_assert_eq!(length % 2, 0);
+
+        let mut results = Vec::with_capacity(wires_c.size());
+
+        for (chunk_x1, chunk_x2, chunk_c) in izip!(
+            wires_x1.wires().chunks(input_bitlen),
+            wires_x2.wires().chunks(input_bitlen),
+            wires_c.wires().chunks(
+                32 * input_bitlen
+                    + 32 * input_bitlen
+                    + input_bitlen
+                    + 8 * 8 * input_bitlen
+                    + 8 * input_bitlen
+                    + 8 * input_bitlen
+            ),
+        ) {
+            let value = Self::compute_wnaf_digits::<G, F>(
+                g,
+                chunk_x1,
+                chunk_x2,
+                chunk_c,
+                total_output_bitlen_per_field,
+            )?;
+
+            results.extend(value);
+        }
+        Ok(BinaryBundle::new(results))
+    }
+
+    /// Computes wnaf digits and rows needed in the ECCVM builder.
+    fn compute_wnaf_digits<G: FancyBinary + FancyBinaryConstant, F: PrimeField>(
+        g: &mut G,
+        wires_a: &[G::Item],
+        wires_b: &[G::Item],
+        wires_c: &[G::Item],
+        total_output_bitlen: usize,
+    ) -> Result<Vec<G::Item>, G::Error> {
+        const NUM_SCALAR_BITS: usize = 128; // The length of scalars handled by the ECCVVM
+        const NUM_WNAF_DIGIT_BITS: usize = 4; // Scalars are decompose into base 16 in wNAF form
+        const NUM_WNAF_DIGITS_PER_SCALAR: usize = NUM_SCALAR_BITS / NUM_WNAF_DIGIT_BITS; // 32
+        const WNAF_DIGITS_PER_ROW: usize = 4;
+        let num_rows_per_scalar = NUM_WNAF_DIGITS_PER_SCALAR / WNAF_DIGITS_PER_ROW;
+
+        let input_bitlen = F::MODULUS_BIT_SIZE as usize;
+        let mut rands = wires_c.chunks(input_bitlen);
+
+        debug_assert_eq!(wires_a.len(), wires_b.len());
+
+        let mut input_bits =
+            Self::adder_mod_p_with_output_size::<_, F>(g, wires_a, wires_b, total_output_bitlen)?;
+        let input_bitlen = input_bits.len();
+        let mut previous_slice = vec![g.const_zero()?; 5];
+        let constant_fifteen = [true, true, true, true, false];
+
+        let mut results = Vec::with_capacity(wires_c.len());
+
+        let is_even = g.negate(&input_bits[0])?; //Gives us whether the input is odd or even
+
+        results.extend(Self::compose_field_element::<_, F>(
+            g,
+            &[is_even],
+            rands.next().unwrap(),
+        )?);
+        let mut outputs = Vec::with_capacity(NUM_WNAF_DIGITS_PER_SCALAR - 1);
+        let mut underflow_bits = Vec::with_capacity(NUM_WNAF_DIGITS_PER_SCALAR - 1);
+
+        for i in 0..NUM_WNAF_DIGITS_PER_SCALAR {
+            let raw_slice = &input_bits[..4];
+            let is_even = g.negate(&raw_slice[0])?;
+            let is_even = [is_even, g.const_zero()?, g.const_zero()?, g.const_zero()?];
+
+            let mut wnaf_slice = raw_slice.to_owned();
+            let mut underflow_bit = g.const_zero()?;
+
+            wnaf_slice = Self::bin_addition_no_carry(g, &wnaf_slice, &is_even)?;
+            if i != 0 {
+                // We optimize the following code
+                // let subtrahend = [
+                //     g.const_zero()?,
+                //     g.const_zero()?,
+                //     g.const_zero()?,
+                //     g.const_zero()?,
+                //     is_even[0].clone(),
+                // ]; // Either 0 or 16, depending on is_even
+                // (previous_slice, underflow_bit) =
+                //     Self::bin_subtraction(g, &previous_slice, &subtrahend)?;
+
+                // Last bit with is_even[0]
+                let y = g.negate(&is_even[0])?;
+                let res = Self::full_adder_cin_set(g, &previous_slice[4], &y)?;
+                previous_slice[4] = res.0;
+                underflow_bit = res.1;
+            }
+
+            if i > 0 {
+                outputs.push(previous_slice);
+                underflow_bits.push(underflow_bit);
+            }
+            previous_slice = wnaf_slice;
+            previous_slice.resize(5, g.const_zero()?);
+
+            input_bits = input_bits[4..].to_vec();
+            input_bits.resize(input_bitlen, g.const_zero()?);
+        }
+        outputs.push(previous_slice);
+        outputs.reverse();
+        underflow_bits.push(g.const_one()?);
+        underflow_bits.reverse();
+
+        for i in 0..num_rows_per_scalar {
+            let slice0 = &outputs[i * WNAF_DIGITS_PER_ROW];
+            let slice1 = &outputs[i * WNAF_DIGITS_PER_ROW + 1];
+            let slice2 = &outputs[i * WNAF_DIGITS_PER_ROW + 2];
+            let slice3 = &outputs[i * WNAF_DIGITS_PER_ROW + 3];
+            let underflow0 = &underflow_bits[i * WNAF_DIGITS_PER_ROW];
+            let underflow1 = &underflow_bits[i * WNAF_DIGITS_PER_ROW + 1];
+            let underflow2 = &underflow_bits[i * WNAF_DIGITS_PER_ROW + 2];
+            let underflow3 = &underflow_bits[i * WNAF_DIGITS_PER_ROW + 3];
+
+            let mut slice0base2 =
+                Self::bin_addition_constant_no_carry(g, slice0, &constant_fifteen)?; // The results of this later get (x + 15) / 2. Since these are always even, we can just add 15 and shift
+            let mut slice1base2 =
+                Self::bin_addition_constant_no_carry(g, slice1, &constant_fifteen)?; // The results of this later get (x + 15) / 2. Since these are always even, we can just add 15 and shift
+            let mut slice2base2 =
+                Self::bin_addition_constant_no_carry(g, slice2, &constant_fifteen)?; // The results of this later get (x + 15) / 2. Since these are always even, we can just add 15 and shift
+            let mut slice3base2 =
+                Self::bin_addition_constant_no_carry(g, slice3, &constant_fifteen)?; // The results of this later get (x + 15) / 2. Since these are always even, we can just add 15 and shift
+            for (slice, overflow) in [
+                (&mut slice0base2, underflow0),
+                (&mut slice1base2, underflow1),
+                (&mut slice2base2, underflow2),
+                (&mut slice3base2, underflow3),
+            ] {
+                slice.remove(0);
+                slice.push(g.const_zero()?);
+                results.extend(Self::compose_field_element::<_, F>(
+                    g,
+                    slice,
+                    rands.next().unwrap(),
+                )?);
+                results.extend(Self::compose_field_element::<_, F>(
+                    g,
+                    std::slice::from_ref(overflow),
+                    rands.next().unwrap(),
+                )?);
+            }
+
+            let row_s1 = &slice0base2[2..];
+            let row_s2 = &slice0base2[0..2];
+            let row_s3 = &slice1base2[2..];
+            let row_s4 = &slice1base2[0..2];
+            let row_s5 = &slice2base2[2..];
+            let row_s6 = &slice2base2[0..2];
+            let row_s7 = &slice3base2[2..];
+            let row_s8 = &slice3base2[0..2];
+            for row in [
+                row_s1, row_s2, row_s3, row_s4, row_s5, row_s6, row_s7, row_s8,
+            ] {
+                results.extend(Self::compose_field_element::<_, F>(
+                    g,
+                    row,
+                    rands.next().unwrap(),
+                )?);
+            }
+            // let row_chunk = slice3 + (slice2 << 4) + (slice1 << 8) + (slice0 << 12); but all slices have 5 bit and might be negative
+            let mut slice3_ = vec![slice3[4].to_owned(); 32];
+            let mut slice2_ = vec![slice2[4].to_owned(); 28];
+            let mut slice1_ = vec![slice1[4].to_owned(); 24];
+            let mut slice0_ = vec![slice0[4].to_owned(); 20];
+            slice3_[..4].clone_from_slice(&slice3[..4]);
+            slice2_[..4].clone_from_slice(&slice2[..4]);
+            slice1_[..4].clone_from_slice(&slice1[..4]);
+            slice0_[..4].clone_from_slice(&slice0[..4]);
+
+            let add1 = Self::bin_addition_no_carry(g, &slice3_[4..], &slice2_)?;
+            let add2 = Self::bin_addition_no_carry(g, &slice1_[4..], &slice0_)?;
+            slice3_[4..].clone_from_slice(&add1);
+            slice1_[4..].clone_from_slice(&add2);
+            let add3 = Self::bin_addition_no_carry(g, &slice3_[8..], &slice1_)?;
+            slice3_[8..].clone_from_slice(&add3);
+            let mut row_chunk = slice3_;
+
+            // twos complement if negative
+            let is_negative_value = row_chunk.last().unwrap().to_owned();
+            for x in &mut row_chunk {
+                *x = g.xor(x, &is_negative_value)?;
+            }
+
+            let mut const_is_negative = vec![g.const_zero()?; 32];
+            const_is_negative[0] = is_negative_value.clone();
+            let row_chunk = Self::bin_addition_no_carry(g, &row_chunk, &const_is_negative)?;
+
+            results.extend(Self::compose_field_element::<_, F>(
+                g,
+                &row_chunk,
+                rands.next().unwrap(),
+            )?);
+            results.extend(Self::compose_field_element::<_, F>(
+                g,
+                &[is_negative_value],
+                rands.next().unwrap(),
+            )?);
+        }
+
+        Ok(results)
     }
 }
 

@@ -1,6 +1,6 @@
-use crate::decider::barycentric::Barycentric;
 use crate::plain_prover_flavour::UnivariateTrait;
 use ark_ff::{PrimeField, Zero};
+use common::barycentric::Barycentric;
 use rand::{CryptoRng, Rng};
 use std::{
     array,

@@ -11,6 +11,7 @@ use num_traits::Zero;
 use rand::thread_rng;
 use rayon::prelude::*;
 
+#[derive(Debug)]
 pub struct PlainUltraHonkDriver;
 
 impl<P: CurveGroup> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
@@ -183,6 +184,15 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         Ok((a, b))
     }
 
+    fn open_point_and_field_many<N: Network>(
+        a: &[Self::PointShare],
+        b: &[Self::ArithmeticShare],
+        _net: &N,
+        _state: &mut Self::State,
+    ) -> eyre::Result<(Vec<P>, Vec<P::ScalarField>)> {
+        Ok((a.to_vec(), b.to_vec()))
+    }
+
     fn mul_open_many<N: Network>(
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
@@ -278,5 +288,24 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
             }
         }
         Ok(res)
+    }
+
+    fn point_add(a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare {
+        *a + b
+    }
+
+    fn point_sub(a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare {
+        *a - b
+    }
+
+    fn promote_to_trivial_point_share(
+        _id: <Self::State as MpcState>::PartyID,
+        public_value: P,
+    ) -> Self::PointShare {
+        public_value
+    }
+
+    fn scalar_mul_public_point(a: &P, b: Self::ArithmeticShare) -> Self::PointShare {
+        *a * b
     }
 }

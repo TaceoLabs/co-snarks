@@ -371,9 +371,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
         let native_state: [_; T] = array::from_fn(|i| state[i].get_value(builder, driver));
 
         if native_state.iter().any(|x| WT::is_shared(x)) {
-            let mut shared_state = array::from_fn(|i| {
-                GenericUltraCircuitBuilder::<P, WT>::get_as_shared(&native_state[i], driver)
-            });
+            let mut shared_state = array::from_fn(|i| driver.get_as_shared(&native_state[i]));
             self.permutation_in_place_shared(state, &mut shared_state, builder, driver)?;
         } else {
             let mut plain_state = array::from_fn(|i| {

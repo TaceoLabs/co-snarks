@@ -1,8 +1,4 @@
-use crate::{MICRO_LIMB_BITS, NUM_LAST_LIMB_BITS, NUM_QUOTIENT_BITS, NUM_Z_BITS};
-use crate::{
-    NUM_BINARY_LIMBS, NUM_MICRO_LIMBS, NUM_RELATION_WIDE_LIMBS, NUM_Z_LIMBS,
-    eccvm::ecc_op_queue::ECCOpQueue, prelude::UltraOp,
-};
+use crate::{eccvm::ecc_op_queue::ECCOpQueue, prelude::UltraOp};
 use ark_ec::CurveGroup;
 use ark_ff::Field;
 use ark_ff::One;
@@ -13,6 +9,10 @@ use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
 use co_builder::prelude::{Polynomial, Polynomials, Utils};
 use co_builder::{TranscriptFieldType, prelude::HonkCurve};
+use common::{
+    MICRO_LIMB_BITS, NUM_BINARY_LIMBS, NUM_LAST_LIMB_BITS, NUM_MICRO_LIMBS, NUM_QUOTIENT_BITS,
+    NUM_RELATION_WIDE_LIMBS, NUM_Z_BITS, NUM_Z_LIMBS,
+};
 use num_bigint::BigUint;
 use std::str::FromStr;
 

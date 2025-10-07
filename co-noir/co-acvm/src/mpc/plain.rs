@@ -1,10 +1,13 @@
 use super::{NoirWitnessExtensionProtocol, downcast};
 use ark_ec::{AffineRepr, CurveGroup};
+use ark_ff::Field;
+use ark_ff::Zero;
 use ark_ff::{BigInteger, MontConfig, One, PrimeField};
 use blake2::{Blake2s256, Digest};
 use co_brillig::mpc::{PlainBrilligDriver, PlainBrilligType};
 use core::panic;
 use libaes::Cipher;
+use mpc_core::lut::PlainCurveLookupTableProvider;
 use mpc_core::{
     gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations},
     lut::{LookupTableProvider, PlainLookupTableProvider},
@@ -45,6 +48,24 @@ impl<F: PrimeField> PlainAcvmSolver<F> {
         Ok(point)
     }
 
+    pub(crate) fn create_bn254_point(
+        x: ark_bn254::Fq,
+        y: ark_bn254::Fq,
+        is_infinity: bool,
+    ) -> eyre::Result<ark_bn254::G1Affine> {
+        if is_infinity {
+            return Ok(ark_bn254::G1Affine::zero());
+        }
+        let point = ark_bn254::G1Affine::new_unchecked(x, y);
+        if !point.is_on_curve() {
+            eyre::bail!("Point ({}, {}) is not on curve", x, y);
+        };
+        if !point.is_in_correct_subgroup_assuming_on_curve() {
+            eyre::bail!("Point ({}, {}) is not in correct subgroup", x, y);
+        };
+        Ok(point)
+    }
+
     pub(crate) fn bn254_fr_to_u128(inp: ark_bn254::Fr) -> eyre::Result<u128> {
         let inp_bigint = inp.into_bigint();
         if inp_bigint.0[2] != 0 || inp_bigint.0[3] != 0 {
@@ -63,9 +84,13 @@ impl<F: PrimeField> Default for PlainAcvmSolver<F> {
 
 impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     type Lookup = PlainLookupTableProvider<F>;
+    type CurveLookup<C: CurveGroup<ScalarField = F>> = PlainCurveLookupTableProvider<C>;
     type ArithmeticShare = F;
     type AcvmType = F;
-    type AcvmPoint<C: CurveGroup<BaseField = F>> = C;
+    type CycleGroupAcvmPoint<C: CurveGroup<BaseField = F>> = C;
+    type NativeAcvmPoint<C: CurveGroup<ScalarField = F, BaseField: PrimeField>> = C;
+    type OtherArithmeticShare<C: CurveGroup<ScalarField = F, BaseField: PrimeField>> = C::BaseField;
+    type OtherAcvmType<C: CurveGroup<ScalarField = F, BaseField: PrimeField>> = C::BaseField;
 
     type BrilligDriver = PlainBrilligDriver<F>;
 
@@ -102,15 +127,33 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         if cond.is_one() { Ok(truthy) } else { Ok(falsy) }
     }
 
+    fn cmux_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        cond: Self::OtherAcvmType<C>,
+        truthy: Self::OtherAcvmType<C>,
+        falsy: Self::OtherAcvmType<C>,
+    ) -> eyre::Result<Self::OtherAcvmType<C>> {
+        assert!(cond.is_one() || cond.is_zero());
+        if cond.is_one() { Ok(truthy) } else { Ok(falsy) }
+    }
+
     fn add(&self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> Self::AcvmType {
         lhs + rhs
     }
 
     fn add_points<C: CurveGroup<BaseField = F>>(
         &self,
-        lhs: Self::AcvmPoint<C>,
-        rhs: Self::AcvmPoint<C>,
-    ) -> Self::AcvmPoint<C> {
+        lhs: Self::CycleGroupAcvmPoint<C>,
+        rhs: Self::CycleGroupAcvmPoint<C>,
+    ) -> Self::CycleGroupAcvmPoint<C> {
+        lhs + rhs
+    }
+
+    fn add_points_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &self,
+        lhs: Self::NativeAcvmPoint<C>,
+        rhs: Self::NativeAcvmPoint<C>,
+    ) -> Self::NativeAcvmPoint<C> {
         lhs + rhs
     }
 
@@ -118,7 +161,15 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         *secret += public;
     }
 
-    fn sub(&mut self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType {
+    fn add_assign_with_public_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        public: C::BaseField,
+        target: &mut Self::OtherAcvmType<C>,
+    ) {
+        *target += public;
+    }
+
+    fn sub(&self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType {
         share_1 - share_2
     }
 
@@ -149,6 +200,14 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     }
 
     fn add_assign(&mut self, lhs: &mut Self::AcvmType, rhs: Self::AcvmType) {
+        *lhs += rhs;
+    }
+
+    fn add_assign_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        lhs: &mut Self::OtherAcvmType<C>,
+        rhs: Self::OtherAcvmType<C>,
+    ) {
         *lhs += rhs;
     }
 
@@ -233,6 +292,21 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Ok(result)
     }
 
+    fn one_hot_vector_from_shared_index_other<
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
+        &mut self,
+        index: Self::OtherArithmeticShare<C>,
+        len: usize,
+    ) -> eyre::Result<Vec<Self::OtherArithmeticShare<C>>> {
+        let len_ = len.next_power_of_two();
+        let mut result = vec![C::BaseField::zero(); len_];
+        let index: BigUint = index.into();
+        let index = usize::try_from(index).expect("Index to large for usize");
+        result[index] = C::BaseField::one();
+        Ok(result)
+    }
+
     fn write_to_shared_lut_from_ohv(
         &mut self,
         ohv: &[Self::ArithmeticShare],
@@ -257,11 +331,19 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         None
     }
 
+    fn get_shared_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        _a: &Self::OtherAcvmType<C>,
+    ) -> Option<Self::OtherArithmeticShare<C>> {
+        None
+    }
+
     fn get_public(a: &Self::AcvmType) -> Option<F> {
         Some(*a)
     }
 
-    fn get_public_point<C: CurveGroup<BaseField = F>>(a: &Self::AcvmPoint<C>) -> Option<C> {
+    fn get_public_point<C: CurveGroup<BaseField = F>>(
+        a: &Self::CycleGroupAcvmPoint<C>,
+    ) -> Option<C> {
         Some(*a)
     }
 
@@ -518,6 +600,14 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Ok(Self::ArithmeticShare::from(a == b))
     }
 
+    fn equal_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &Self::OtherAcvmType<C>,
+        b: &Self::OtherAcvmType<C>,
+    ) -> eyre::Result<Self::OtherAcvmType<C>> {
+        Ok(Self::OtherArithmeticShare::<C>::from(a == b))
+    }
+
     fn equal_many(
         &mut self,
         a: &[Self::AcvmType],
@@ -533,6 +623,25 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         let mut result = Vec::with_capacity(a.len());
         for (a_i, b_i) in a.iter().zip(b.iter()) {
             result.push(Self::ArithmeticShare::from(a_i == b_i));
+        }
+        Ok(result)
+    }
+
+    fn equal_many_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[Self::OtherAcvmType<C>],
+        b: &[Self::OtherAcvmType<C>],
+    ) -> eyre::Result<Vec<Self::OtherAcvmType<C>>> {
+        if a.len() != b.len() {
+            eyre::bail!(
+                "Vectors must have the same length. Length of a : {} and length of b: {}",
+                a.len(),
+                b.len()
+            );
+        }
+        let mut result = Vec::with_capacity(a.len());
+        for (a_i, b_i) in a.iter().zip(b.iter()) {
+            result.push(Self::OtherArithmeticShare::<C>::from(a_i == b_i));
         }
         Ok(result)
     }
@@ -611,7 +720,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         x: Self::AcvmType,
         y: Self::AcvmType,
         is_infinity: Self::AcvmType,
-    ) -> eyre::Result<Self::AcvmPoint<C>> {
+    ) -> eyre::Result<Self::CycleGroupAcvmPoint<C>> {
         // This is very hardcoded to the grumpkin curve
         if TypeId::of::<F>() != TypeId::of::<ark_bn254::Fr>() {
             panic!("Only BN254 is supported");
@@ -640,7 +749,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
 
     fn pointshare_to_field_shares<C: CurveGroup<BaseField = F>>(
         &mut self,
-        point: Self::AcvmPoint<C>,
+        point: Self::CycleGroupAcvmPoint<C>,
     ) -> eyre::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
         if let Some((out_x, out_y)) = point.into_affine().xy() {
             Ok((out_x, out_y, F::zero()))
@@ -660,9 +769,9 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
 
     fn set_point_to_value_if_zero<C: CurveGroup<BaseField = F>>(
         &mut self,
-        point: Self::AcvmPoint<C>,
-        value: Self::AcvmPoint<C>,
-    ) -> eyre::Result<Self::AcvmPoint<C>> {
+        point: Self::CycleGroupAcvmPoint<C>,
+        value: Self::CycleGroupAcvmPoint<C>,
+    ) -> eyre::Result<Self::CycleGroupAcvmPoint<C>> {
         if point.is_zero() {
             Ok(value)
         } else {
@@ -895,5 +1004,464 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
 
     fn is_zero(&mut self, a: &Self::AcvmType) -> eyre::Result<Self::AcvmType> {
         Ok(F::from(a.is_zero()))
+    }
+
+    fn other_pointshare_to_other_field_share<
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
+        &mut self,
+        point: &Self::NativeAcvmPoint<C>,
+    ) -> eyre::Result<(
+        Self::OtherAcvmType<C>,
+        Self::OtherAcvmType<C>,
+        Self::OtherAcvmType<C>,
+    )> {
+        if let Some((out_x, out_y)) = point.into_affine().xy() {
+            Ok((out_x, out_y, C::BaseField::zero()))
+        } else {
+            Ok((
+                C::BaseField::zero(),
+                C::BaseField::zero(),
+                C::BaseField::one(),
+            ))
+        }
+    }
+
+    fn other_pointshare_to_other_field_shares_many<
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
+        &mut self,
+        points: &[Self::NativeAcvmPoint<C>],
+    ) -> eyre::Result<(
+        Vec<Self::OtherAcvmType<C>>,
+        Vec<Self::OtherAcvmType<C>>,
+        Vec<Self::OtherAcvmType<C>>,
+    )> {
+        let mut x_coords = Vec::with_capacity(points.len());
+        let mut y_coords = Vec::with_capacity(points.len());
+        let mut is_infinity = Vec::with_capacity(points.len());
+        points.iter().for_each(|p| {
+            if let Some((out_x, out_y)) = p.into_affine().xy() {
+                x_coords.push(out_x);
+                y_coords.push(out_y);
+                is_infinity.push(C::BaseField::zero());
+            } else {
+                x_coords.push(C::BaseField::zero());
+                y_coords.push(C::BaseField::zero());
+                is_infinity.push(C::BaseField::one());
+            }
+        });
+        Ok((x_coords, y_coords, is_infinity))
+    }
+
+    fn mul_many(
+        &mut self,
+        a: &[Self::AcvmType],
+        b: &[Self::AcvmType],
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
+        debug_assert_eq!(a.len(), b.len());
+        Ok(a.iter().zip(b.iter()).map(|(a, b)| *a * b).collect())
+    }
+
+    fn mul_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        secret_1: Self::OtherAcvmType<C>,
+        secret_2: Self::OtherAcvmType<C>,
+    ) -> eyre::Result<Self::OtherAcvmType<C>> {
+        Ok(secret_1 * secret_2)
+    }
+
+    fn mul_many_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        secrets_1: &[Self::OtherAcvmType<C>],
+        secrets_2: &[Self::OtherAcvmType<C>],
+    ) -> eyre::Result<Vec<Self::OtherAcvmType<C>>> {
+        debug_assert_eq!(secrets_1.len(), secrets_2.len());
+        Ok(secrets_1
+            .iter()
+            .zip(secrets_2.iter())
+            .map(|(a, b)| *a * b)
+            .collect())
+    }
+
+    fn is_zero_many_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[Self::OtherAcvmType<C>],
+    ) -> eyre::Result<Vec<Self::OtherAcvmType<C>>> {
+        Ok(a.iter().map(|x| C::BaseField::from(x.is_zero())).collect())
+    }
+
+    fn add_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &self,
+        lhs: Self::OtherAcvmType<C>,
+        rhs: Self::OtherAcvmType<C>,
+    ) -> Self::OtherAcvmType<C> {
+        lhs + rhs
+    }
+
+    fn sub_points<C: CurveGroup<BaseField = F>>(
+        &self,
+        lhs: Self::CycleGroupAcvmPoint<C>,
+        rhs: Self::CycleGroupAcvmPoint<C>,
+    ) -> Self::CycleGroupAcvmPoint<C> {
+        lhs - rhs
+    }
+
+    fn sub_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &self,
+        lhs: Self::OtherAcvmType<C>,
+        rhs: Self::OtherAcvmType<C>,
+    ) -> Self::OtherAcvmType<C> {
+        lhs - rhs
+    }
+
+    fn mul_assign_with_public(shared: &mut Self::AcvmType, public: F) {
+        shared.mul_assign(&public);
+    }
+
+    fn mul_with_public_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        public: C::BaseField,
+        secret: Self::OtherAcvmType<C>,
+    ) -> Self::OtherAcvmType<C> {
+        public * secret
+    }
+
+    fn init_lut_by_acvm_point<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        values: Vec<Self::NativeAcvmPoint<C>>,
+    ) -> <Self::CurveLookup<C> as LookupTableProvider<C>>::LutType {
+        // TACEO TODO: Since the NoirWitnessExtensionProtocol is not generic over the curve, I could not think of a better way to do this
+        let lut = PlainCurveLookupTableProvider::<C>::default();
+        lut.init_public(values)
+    }
+
+    fn read_lut_by_acvm_point<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        index: Self::AcvmType,
+        lut: &<Self::CurveLookup<C> as LookupTableProvider<C>>::LutType,
+    ) -> eyre::Result<Self::NativeAcvmPoint<C>> {
+        let mut lut_ = PlainCurveLookupTableProvider::<C>::default();
+        lut_.get_from_lut(index, lut, &(), &(), &mut (), &mut ())
+    }
+
+    fn read_from_public_curve_luts<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        index: Self::AcvmType,
+        luts: &[Vec<C>],
+    ) -> eyre::Result<Vec<Self::NativeAcvmPoint<C>>> {
+        let mut lut_ = PlainCurveLookupTableProvider::<C>::default();
+        let mut result = Vec::with_capacity(luts.len());
+        for lut in luts {
+            let res = lut_.get_from_lut(index, lut, &(), &(), &mut (), &mut ())?;
+            result.push(res);
+        }
+        Ok(result)
+    }
+
+    fn write_lut_by_acvm_point<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        index: Self::AcvmType,
+        value: Self::NativeAcvmPoint<C>,
+        lut: &mut <Self::CurveLookup<C> as LookupTableProvider<C>>::LutType,
+    ) -> eyre::Result<()> {
+        let mut lut_ = PlainCurveLookupTableProvider::<C>::default();
+        lut_.write_to_lut(index, value, lut, &(), &(), &mut (), &mut ())
+    }
+
+    fn point_is_zero_many<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[Self::NativeAcvmPoint<C>],
+    ) -> eyre::Result<Vec<Self::OtherAcvmType<C>>> {
+        Ok(a.iter().map(|p| C::BaseField::from(p.is_zero())).collect())
+    }
+
+    fn msm<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[Self::NativeAcvmPoint<C>],
+        b: &[Self::AcvmType],
+    ) -> eyre::Result<Self::NativeAcvmPoint<C>> {
+        if a.len() != b.len() {
+            eyre::bail!("Points and scalars must have the same length");
+        }
+        Ok(a.iter().zip(b.iter()).map(|(p, s)| *p * s).sum())
+    }
+
+    fn scale_point_by_scalar_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        point: Self::NativeAcvmPoint<C>,
+        scalar: Self::AcvmType,
+    ) -> eyre::Result<Self::NativeAcvmPoint<C>> {
+        Ok(point * scalar)
+    }
+
+    fn convert_fields<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[Self::OtherAcvmType<C>],
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
+        if a.iter().any(|v| {
+            let v_biguint: num_bigint::BigUint = (*v).into();
+            v_biguint > C::ScalarField::MODULUS.into()
+        }) {
+            eyre::bail!("Element too large to fit in target field");
+        }
+        a.iter()
+            .map(|x| {
+                let x: BigUint = (*x).into();
+                let x: C::ScalarField = x.into();
+                Ok(x)
+            })
+            .collect()
+    }
+
+    fn compute_wnaf_digits_and_compute_rows_many<
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
+        &mut self,
+        zs: &[Self::OtherAcvmType<C>],
+        _num_bits: usize,
+    ) -> eyre::Result<(
+        Vec<Self::OtherAcvmType<C>>,       // Returns whether the input is even
+        Vec<[Self::OtherAcvmType<C>; 32]>, // Returns the wnaf digits (They are already positive (by adding +15 (and also dividing by 2)))
+        Vec<[Self::OtherAcvmType<C>; 32]>, // Returns whether the wnaf digit is negative
+        Vec<[Self::OtherAcvmType<C>; 64]>, // Returns s1,...,s8 for every 4 wnaf digits (needed later for PointTablePrecomputationRow computation)
+        Vec<[Self::OtherAcvmType<C>; 8]>, // Returns the (absolute) value of the row_chunk (also in PointTablePrecomputationRow computation)
+        Vec<[Self::OtherAcvmType<C>; 8]>, // Returns the sign of the row_chunk (also in PointTablePrecomputationRow computation)
+    )> {
+        //TODO: Move constants somewhere else
+        const NUM_SCALAR_BITS: usize = 128; // The length of scalars handled by the ECCVVM
+        const NUM_WNAF_DIGIT_BITS: usize = 4; // Scalars are decompose into base 16 in wNAF form
+        const NUM_WNAF_DIGITS_PER_SCALAR: usize = NUM_SCALAR_BITS / NUM_WNAF_DIGIT_BITS; // 32
+        const WNAF_MASK: u64 = (1 << NUM_WNAF_DIGIT_BITS) - 1;
+        const WNAF_DIGITS_PER_ROW: usize = 4;
+        let num_rows_per_scalar = NUM_WNAF_DIGITS_PER_SCALAR / WNAF_DIGITS_PER_ROW;
+
+        let mut is_even = Vec::with_capacity(zs.len());
+        let mut wnaf_digits = Vec::with_capacity(zs.len());
+        let mut wnaf_is_negative = Vec::with_capacity(zs.len());
+        let mut row_si = Vec::with_capacity(zs.len());
+        let mut row_chunk_values = Vec::with_capacity(zs.len());
+        let mut row_chunk_signs = Vec::with_capacity(zs.len());
+        // let mut s_values = Vec::with_capacity(zs.len());
+        // let mut row_chunk_values = Vec::with_capacity(zs.len());
+        // let mut row_chunk_signs = Vec::with_capacity(zs.len());
+        let compute_wnaf_digits = |mut scalar: BigUint| -> [i32; NUM_WNAF_DIGITS_PER_SCALAR] {
+            let mut output = [0; NUM_WNAF_DIGITS_PER_SCALAR];
+            let mut previous_slice = 0;
+            const BORROW_CONSTANT: i32 = 1 << NUM_WNAF_DIGIT_BITS;
+
+            for i in 0..NUM_WNAF_DIGITS_PER_SCALAR {
+                let raw_slice = &scalar & BigUint::from(WNAF_MASK);
+                let is_even = (&raw_slice & BigUint::one()) == BigUint::zero();
+                let mut wnaf_slice = if let Some(&digit) = raw_slice.to_u32_digits().first() {
+                    digit as i32
+                } else {
+                    0
+                };
+
+                if i == 0 && is_even {
+                    wnaf_slice += 1;
+                } else if is_even {
+                    previous_slice -= BORROW_CONSTANT;
+                    wnaf_slice += 1;
+                }
+
+                if i > 0 {
+                    output[NUM_WNAF_DIGITS_PER_SCALAR - i] = previous_slice;
+                }
+                previous_slice = wnaf_slice;
+
+                scalar >>= NUM_WNAF_DIGIT_BITS;
+            }
+
+            assert!(scalar.is_zero());
+            output[0] = previous_slice;
+
+            output
+        };
+
+        for z in zs {
+            let z_biguint: BigUint = (*z).into();
+            let wnaf_digits_tmp = compute_wnaf_digits(z_biguint.clone());
+            let wnaf_digits_normalized: [C::BaseField; 32] = wnaf_digits_tmp
+                .iter()
+                .map(|d| C::BaseField::from(((*d + 15) / 2) as u64))
+                .collect::<Vec<C::BaseField>>()
+                .try_into()
+                .expect("We know the length is 32");
+            wnaf_digits.push(wnaf_digits_normalized);
+            is_even.push(C::BaseField::from(
+                (z_biguint & BigUint::from(1u32)) == BigUint::zero(),
+            ));
+            let mut wnaf_digits_signs = [C::BaseField::zero(); 32];
+            for (i, digit) in wnaf_digits_tmp.iter().enumerate() {
+                if *digit < 0 {
+                    wnaf_digits_signs[i] = C::BaseField::one();
+                }
+            }
+            wnaf_is_negative.push(wnaf_digits_signs);
+            let mut tmp_si = [C::BaseField::zero(); 64];
+            let mut tmp_row_chunk_values = [C::BaseField::zero(); 8];
+            let mut tmp_row_chunk_signs = [C::BaseField::zero(); 8];
+            for i in 0..num_rows_per_scalar {
+                let slice0 = &wnaf_digits_tmp[i * WNAF_DIGITS_PER_ROW];
+                let slice1 = &wnaf_digits_tmp[i * WNAF_DIGITS_PER_ROW + 1];
+                let slice2 = &wnaf_digits_tmp[i * WNAF_DIGITS_PER_ROW + 2];
+                let slice3 = &wnaf_digits_tmp[i * WNAF_DIGITS_PER_ROW + 3];
+                let slice0base2 = &wnaf_digits_normalized[i * WNAF_DIGITS_PER_ROW];
+                let slice1base2 = &wnaf_digits_normalized[i * WNAF_DIGITS_PER_ROW + 1];
+                let slice2base2 = &wnaf_digits_normalized[i * WNAF_DIGITS_PER_ROW + 2];
+                let slice3base2 = &wnaf_digits_normalized[i * WNAF_DIGITS_PER_ROW + 3];
+
+                let row_s_1 = {
+                    let val: BigUint = (*slice0base2).into();
+                    C::BaseField::from(val >> 2)
+                };
+                let row_s_2 = {
+                    let val: BigUint = (*slice0base2).into();
+                    C::BaseField::from(val & BigUint::from(3u32))
+                };
+                let row_s_3 = {
+                    let val: BigUint = (*slice1base2).into();
+                    C::BaseField::from(val >> 2)
+                };
+                let row_s_4 = {
+                    let val: BigUint = (*slice1base2).into();
+                    C::BaseField::from(val & BigUint::from(3u32))
+                };
+                let row_s_5 = {
+                    let val: BigUint = (*slice2base2).into();
+                    C::BaseField::from(val >> 2)
+                };
+                let row_s_6 = {
+                    let val: BigUint = (*slice2base2).into();
+                    C::BaseField::from(val & BigUint::from(3u32))
+                };
+                let row_s_7 = {
+                    let val: BigUint = (*slice3base2).into();
+                    C::BaseField::from(val >> 2)
+                };
+                let row_s_8 = {
+                    let val: BigUint = (*slice3base2).into();
+                    C::BaseField::from(val & BigUint::from(3u32))
+                };
+                tmp_si[i * 8] = row_s_1;
+                tmp_si[i * 8 + 1] = row_s_2;
+                tmp_si[i * 8 + 2] = row_s_3;
+                tmp_si[i * 8 + 3] = row_s_4;
+                tmp_si[i * 8 + 4] = row_s_5;
+                tmp_si[i * 8 + 5] = row_s_6;
+                tmp_si[i * 8 + 6] = row_s_7;
+                tmp_si[i * 8 + 7] = row_s_8;
+                let row_chunk = slice3 + (slice2 << 4) + (slice1 << 8) + (slice0 << 12);
+                let chunk_negative = row_chunk < 0;
+                let row_chunk_value = row_chunk.unsigned_abs() as u64;
+                let row_chunk_value: BigUint = row_chunk_value.into();
+                tmp_row_chunk_values[i] = C::BaseField::from(row_chunk_value);
+                tmp_row_chunk_signs[i] = if chunk_negative {
+                    C::BaseField::one()
+                } else {
+                    C::BaseField::zero()
+                };
+            }
+            row_si.push(tmp_si);
+            row_chunk_values.push(tmp_row_chunk_values);
+            row_chunk_signs.push(tmp_row_chunk_signs);
+        }
+
+        Ok((
+            is_even,
+            wnaf_digits,
+            wnaf_is_negative,
+            row_si,
+            row_chunk_values,
+            row_chunk_signs,
+        ))
+    }
+
+    fn compute_endo_point<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        point: &Self::NativeAcvmPoint<C>,
+        cube_root_of_unity: C::BaseField,
+    ) -> eyre::Result<Self::NativeAcvmPoint<C>> {
+        // This is very hardcoded to the bn254 curve
+        if TypeId::of::<C>()
+            != TypeId::of::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>()
+        {
+            eyre::bail!("Only BN254 is supported");
+        }
+
+        if let Some((out_x, out_y)) = point.into_affine().xy() {
+            let (x, y, inf) = (out_x, out_y, false);
+            let x = x * cube_root_of_unity;
+            let x: ark_bn254::Fq = *downcast(&x).expect("We checked types");
+            let y: ark_bn254::Fq = *downcast(&y).expect("We checked types");
+            let point = Self::create_bn254_point(x, -y, inf)?;
+            let point = *downcast(&point).expect("We checked types");
+            Ok(C::from(point))
+        } else {
+            Ok(C::zero())
+        }
+    }
+
+    fn is_shared_point<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        _a: &Self::NativeAcvmPoint<C>,
+    ) -> bool {
+        false
+    }
+
+    fn is_shared_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        _a: &Self::OtherAcvmType<C>,
+    ) -> bool {
+        false
+    }
+
+    fn get_public_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        a: &Self::OtherAcvmType<C>,
+    ) -> Option<C::BaseField> {
+        Some(*a)
+    }
+
+    fn inverse_or_zero_many_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        secrets: &[Self::OtherAcvmType<C>],
+    ) -> eyre::Result<Vec<Self::OtherAcvmType<C>>> {
+        Ok(secrets
+            .iter()
+            .map(|x| x.inverse().unwrap_or(C::BaseField::zero()))
+            .collect())
+    }
+
+    fn cmux_many_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        cond: &[Self::OtherAcvmType<C>],
+        truthy: &[Self::OtherAcvmType<C>],
+        falsy: &[Self::OtherAcvmType<C>],
+    ) -> eyre::Result<Vec<Self::OtherAcvmType<C>>> {
+        if cond.len() != truthy.len() || cond.len() != falsy.len() {
+            eyre::bail!("All inputs must have the same length");
+        }
+        Ok(cond
+            .iter()
+            .zip(truthy.iter())
+            .zip(falsy.iter())
+            .map(|((c, t), f)| if c.is_zero() { *f } else { *t })
+            .collect())
+    }
+
+    fn get_as_shared(&mut self, value: &Self::AcvmType) -> Self::ArithmeticShare {
+        *value
+    }
+
+    fn get_as_shared_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        value: &Self::OtherAcvmType<C>,
+    ) -> Self::OtherArithmeticShare<C> {
+        *value
+    }
+
+    fn get_public_point_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        a: &Self::NativeAcvmPoint<C>,
+    ) -> Option<C> {
+        Some(*a)
     }
 }

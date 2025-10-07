@@ -29,7 +29,7 @@ use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
 
 use co_builder::{
     HonkProofError, HonkProofResult,
-    prelude::{ActiveRegionData, HonkCurve, NUM_MASKED_ROWS, Polynomial, ProverCrs},
+    prelude::{ActiveRegionData, HonkCurve, Polynomial, ProverCrs},
     prover_flavour::Flavour,
 };
 use common::CoUtils;
@@ -72,24 +72,6 @@ impl<
             phantom_data: PhantomData,
             has_zk,
         }
-    }
-
-    fn mask_polynomial(
-        &mut self,
-        polynomial: &mut Polynomial<T::ArithmeticShare>,
-    ) -> HonkProofResult<()> {
-        tracing::trace!("mask polynomial");
-
-        let virtual_size = polynomial.coefficients.len();
-        assert!(
-            virtual_size >= NUM_MASKED_ROWS as usize,
-            "Insufficient space for masking"
-        );
-        for i in (virtual_size - NUM_MASKED_ROWS as usize..virtual_size).rev() {
-            polynomial.coefficients[i] = T::rand(self.net, self.state)?;
-        }
-
-        Ok(())
     }
 
     fn compute_w4_inner(&mut self, proving_key: &ProvingKey<T, P, L>, gate_idx: usize) {
@@ -651,35 +633,6 @@ impl<
         Ok(T::mul_many(&mul1, &mul2, net, state)?)
     }
 
-    // To reduce the number of communication rounds, we implement the array_prod_mul macro according to https://www.usenix.org/system/files/sec22-ozdemir.pdf, p11 first paragraph.
-    fn array_prod_mul(
-        &mut self,
-        inp: &[T::ArithmeticShare],
-    ) -> HonkProofResult<Vec<T::ArithmeticShare>> {
-        // Do the multiplications of inp[i] * inp[i-1] in constant rounds
-        let len = inp.len();
-
-        let r = (0..=len)
-            .map(|_| T::rand(self.net, self.state))
-            .collect::<Result<Vec<_>, _>>()?;
-        let r_inv = T::inv_many(&r, self.net, self.state)?;
-        let r_inv0 = vec![r_inv[0]; len];
-
-        let mut unblind = T::mul_many(&r_inv0, &r[1..], self.net, self.state)?;
-
-        let mul = T::mul_many(&r[..len], inp, self.net, self.state)?;
-        let mut open = T::mul_open_many(&mul, &r_inv[1..], self.net, self.state)?;
-
-        for i in 1..open.len() {
-            open[i] = open[i] * open[i - 1];
-        }
-
-        for (unblind, open) in unblind.iter_mut().zip(open.iter()) {
-            *unblind = T::mul_with_public(*open, *unblind);
-        }
-        Ok(unblind)
-    }
-
     fn compute_grand_product(&mut self, proving_key: &ProvingKey<T, P, L>) -> HonkProofResult<()> {
         tracing::trace!("compute grand product");
 
@@ -760,8 +713,9 @@ impl<
 
         // TACEO TODO could batch here as well
         // Do the multiplications of num[i] * num[i-1] and den[i] * den[i-1] in constant rounds
-        let numerator = self.array_prod_mul(&numerator)?;
-        let mut denominator = self.array_prod_mul(&denominator)?;
+        let numerator = CoUtils::array_prod_mul::<T, P, N>(self.net, self.state, &numerator)?;
+        let mut denominator =
+            CoUtils::array_prod_mul::<T, P, N>(self.net, self.state, &denominator)?;
 
         // invert denominator
         CoUtils::batch_invert::<T, P, N>(&mut denominator, self.net, self.state)?;
@@ -858,34 +812,76 @@ impl<
 
         // Mask the polynomial when proving in zero-knowledge
         if self.has_zk == ZeroKnowledge::Yes {
-            self.mask_polynomial(proving_key.polynomials.witness.w_l_mut())?;
-            self.mask_polynomial(proving_key.polynomials.witness.w_r_mut())?;
-            self.mask_polynomial(proving_key.polynomials.witness.w_o_mut())?;
+            CoUtils::mask_polynomial::<T, P, N>(
+                self.net,
+                self.state,
+                proving_key.polynomials.witness.w_l_mut(),
+            )?;
+            CoUtils::mask_polynomial::<T, P, N>(
+                self.net,
+                self.state,
+                proving_key.polynomials.witness.w_r_mut(),
+            )?;
+            CoUtils::mask_polynomial::<T, P, N>(
+                self.net,
+                self.state,
+                proving_key.polynomials.witness.w_o_mut(),
+            )?;
             if L::FLAVOUR == Flavour::Mega {
-                self.mask_polynomial(proving_key.polynomials.witness.calldata_mut())?;
-                self.mask_polynomial(proving_key.polynomials.witness.calldata_read_counts_mut())?;
-                self.mask_polynomial(proving_key.polynomials.witness.calldata_read_tags_mut())?;
-                self.mask_polynomial(proving_key.polynomials.witness.secondary_calldata_mut())?;
-                self.mask_polynomial(
+                CoUtils::mask_polynomial::<T, P, N>(
+                    self.net,
+                    self.state,
+                    proving_key.polynomials.witness.calldata_mut(),
+                )?;
+                CoUtils::mask_polynomial::<T, P, N>(
+                    self.net,
+                    self.state,
+                    proving_key.polynomials.witness.calldata_read_counts_mut(),
+                )?;
+                CoUtils::mask_polynomial::<T, P, N>(
+                    self.net,
+                    self.state,
+                    proving_key.polynomials.witness.calldata_read_tags_mut(),
+                )?;
+                CoUtils::mask_polynomial::<T, P, N>(
+                    self.net,
+                    self.state,
+                    proving_key.polynomials.witness.secondary_calldata_mut(),
+                )?;
+                CoUtils::mask_polynomial::<T, P, N>(
+                    self.net,
+                    self.state,
                     proving_key
                         .polynomials
                         .witness
                         .secondary_calldata_read_counts_mut(),
                 )?;
-                self.mask_polynomial(
+                CoUtils::mask_polynomial::<T, P, N>(
+                    self.net,
+                    self.state,
                     proving_key
                         .polynomials
                         .witness
                         .secondary_calldata_read_tags_mut(),
                 )?;
-                self.mask_polynomial(proving_key.polynomials.witness.return_data_mut())?;
-                self.mask_polynomial(
+                CoUtils::mask_polynomial::<T, P, N>(
+                    self.net,
+                    self.state,
+                    proving_key.polynomials.witness.return_data_mut(),
+                )?;
+                CoUtils::mask_polynomial::<T, P, N>(
+                    self.net,
+                    self.state,
                     proving_key
                         .polynomials
                         .witness
                         .return_data_read_counts_mut(),
                 )?;
-                self.mask_polynomial(proving_key.polynomials.witness.return_data_read_tags_mut())?;
+                CoUtils::mask_polynomial::<T, P, N>(
+                    self.net,
+                    self.state,
+                    proving_key.polynomials.witness.return_data_read_tags_mut(),
+                )?;
             }
         };
 
@@ -1060,11 +1056,19 @@ impl<
 
         // Mask the polynomial when proving in zero-knowledge
         if self.has_zk == ZeroKnowledge::Yes {
-            self.mask_polynomial(proving_key.polynomials.witness.lookup_read_counts_mut())?;
-            self.mask_polynomial(proving_key.polynomials.witness.lookup_read_tags_mut())?;
+            CoUtils::mask_polynomial::<T, P, N>(
+                self.net,
+                self.state,
+                proving_key.polynomials.witness.lookup_read_counts_mut(),
+            )?;
+            CoUtils::mask_polynomial::<T, P, N>(
+                self.net,
+                self.state,
+                proving_key.polynomials.witness.lookup_read_tags_mut(),
+            )?;
             // we do std::mem::take here to avoid borrowing issues with self
             let mut w_4_tmp = std::mem::take(&mut self.memory.w_4);
-            self.mask_polynomial(&mut w_4_tmp)?;
+            CoUtils::mask_polynomial::<T, P, N>(self.net, self.state, &mut w_4_tmp)?;
             std::mem::swap(&mut self.memory.w_4, &mut w_4_tmp);
         };
 
@@ -1131,10 +1135,10 @@ impl<
         if self.has_zk == ZeroKnowledge::Yes {
             // we do std::mem::take here to avoid borrowing issues with self
             let mut lookup_inverses_mut = std::mem::take(&mut self.memory.lookup_inverses);
-            self.mask_polynomial(&mut lookup_inverses_mut)?;
+            CoUtils::mask_polynomial::<T, P, N>(self.net, self.state, &mut lookup_inverses_mut)?;
             std::mem::swap(&mut self.memory.lookup_inverses, &mut lookup_inverses_mut);
             let mut z_perm_mut = std::mem::take(&mut self.memory.z_perm);
-            self.mask_polynomial(&mut z_perm_mut)?;
+            CoUtils::mask_polynomial::<T, P, N>(self.net, self.state, &mut z_perm_mut)?;
             std::mem::swap(&mut self.memory.z_perm, &mut z_perm_mut);
         };
 
@@ -1151,21 +1155,33 @@ impl<
         } else if L::FLAVOUR == Flavour::Mega {
             if self.has_zk == ZeroKnowledge::Yes {
                 let mut calldata_inverses_mut = std::mem::take(&mut self.memory.calldata_inverses);
-                self.mask_polynomial(&mut calldata_inverses_mut)?;
+                CoUtils::mask_polynomial::<T, P, N>(
+                    self.net,
+                    self.state,
+                    &mut calldata_inverses_mut,
+                )?;
                 std::mem::swap(
                     &mut self.memory.calldata_inverses,
                     &mut calldata_inverses_mut,
                 );
                 let mut secondary_calldata_inverses_mut =
                     std::mem::take(&mut self.memory.secondary_calldata_inverses);
-                self.mask_polynomial(&mut secondary_calldata_inverses_mut)?;
+                CoUtils::mask_polynomial::<T, P, N>(
+                    self.net,
+                    self.state,
+                    &mut secondary_calldata_inverses_mut,
+                )?;
                 std::mem::swap(
                     &mut self.memory.secondary_calldata_inverses,
                     &mut secondary_calldata_inverses_mut,
                 );
                 let mut return_data_inverses_mut =
                     std::mem::take(&mut self.memory.return_data_inverses);
-                self.mask_polynomial(&mut return_data_inverses_mut)?;
+                CoUtils::mask_polynomial::<T, P, N>(
+                    self.net,
+                    self.state,
+                    &mut return_data_inverses_mut,
+                )?;
                 std::mem::swap(
                     &mut self.memory.return_data_inverses,
                     &mut return_data_inverses_mut,

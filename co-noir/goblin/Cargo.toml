@@ -18,14 +18,19 @@ ultrahonk = { version = "0.5.0", path = "../ultrahonk" }
 ark-ec.workspace = true
 ark-ff.workspace = true
 ark-bn254.workspace = true
+ark-serialize.workspace = true
+ark-poly.workspace = true
 eyre.workspace = true
 itertools.workspace = true
 num-bigint.workspace = true
+bincode.workspace = true
+num-traits.workspace = true
 ark-grumpkin.workspace = true
 tracing.workspace = true
 rand.workspace = true
+rayon.workspace = true
 serde.workspace = true
-bincode.workspace = true
+rand_chacha.workspace = true
 
 
 [dev-dependencies]

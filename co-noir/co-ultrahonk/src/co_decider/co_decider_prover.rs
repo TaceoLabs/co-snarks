@@ -3,7 +3,7 @@ use super::{
     small_subgroup_ipa::SharedSmallSubgroupIPAProver,
     types::ProverMemory,
 };
-use crate::mpc_prover_flavour::MPCProverFlavour;
+use crate::{CONST_PROOF_SIZE_LOG_N, mpc_prover_flavour::MPCProverFlavour};
 use co_builder::{
     HonkProofResult, TranscriptFieldType,
     prelude::{HonkCurve, ProverCrs, Utils},
@@ -14,7 +14,7 @@ use mpc_net::Network;
 use noir_types::HonkProof;
 use std::marker::PhantomData;
 use ultrahonk::prelude::ZeroKnowledge;
-pub(crate) struct CoDecider<
+pub struct CoDecider<
     'a,
     T: NoirUltraHonkProver<P>,
     P: HonkCurve<TranscriptFieldType>,
@@ -22,10 +22,10 @@ pub(crate) struct CoDecider<
     N: Network,
     L: MPCProverFlavour,
 > {
-    pub(crate) net: &'a N,
-    pub(crate) state: &'a mut T::State,
-    pub(super) memory: ProverMemory<T, P, L>,
-    pub(crate) has_zk: ZeroKnowledge,
+    pub net: &'a N,
+    pub state: &'a mut T::State,
+    pub memory: ProverMemory<T, P, L>,
+    pub has_zk: ZeroKnowledge,
     phantom_data: PhantomData<(P, H)>,
 }
 
@@ -64,10 +64,7 @@ impl<
         transcript: &mut Transcript<TranscriptFieldType, H>,
         crs: &ProverCrs<P>,
         circuit_size: u32,
-    ) -> HonkProofResult<(
-        SumcheckOutput<P::ScalarField, L>,
-        Option<SharedZKSumcheckData<T, P>>,
-    )> {
+    ) -> HonkProofResult<(SumcheckOutput<T, P, L>, Option<SharedZKSumcheckData<T, P>>)> {
         if self.has_zk == ZeroKnowledge::Yes {
             let log_subgroup_size = Utils::get_msb64(P::SUBGROUP_SIZE as u64);
             let commitment_key = &crs.monomials[..1 << (log_subgroup_size + 1)];
@@ -81,7 +78,12 @@ impl<
                 )?;
 
             Ok((
-                self.sumcheck_prove_zk(transcript, circuit_size, &mut zk_sumcheck_data)?,
+                self.sumcheck_prove_zk::<CONST_PROOF_SIZE_LOG_N>(
+                    transcript,
+                    circuit_size,
+                    &mut zk_sumcheck_data,
+                    crs,
+                )?,
                 Some(zk_sumcheck_data),
             ))
         } else {
@@ -101,7 +103,7 @@ impl<
         transcript: &mut Transcript<TranscriptFieldType, H>,
         circuit_size: u32,
         crs: &ProverCrs<P>,
-        sumcheck_output: SumcheckOutput<P::ScalarField, L>,
+        sumcheck_output: SumcheckOutput<T, P, L>,
         zk_sumcheck_data: Option<SharedZKSumcheckData<T, P>>,
     ) -> HonkProofResult<()> {
         if self.has_zk == ZeroKnowledge::No {
@@ -115,17 +117,15 @@ impl<
                 crs,
             )
         } else {
-            let small_subgroup_ipa_prover = SharedSmallSubgroupIPAProver::<T, P>::new(
-                self.net,
-                self.state,
+            let mut small_subgroup_ipa_prover = SharedSmallSubgroupIPAProver::<T, P>::new(
                 zk_sumcheck_data.expect("We have ZK"),
-                &sumcheck_output.challenges,
                 sumcheck_output
                     .claimed_libra_evaluation
                     .expect("We have ZK"),
-                transcript,
-                crs,
+                "Libra:".to_string(),
+                &sumcheck_output.challenges,
             )?;
+            small_subgroup_ipa_prover.prove::<H, N>(self.net, self.state, transcript, crs)?;
             let witness_polynomials = small_subgroup_ipa_prover.into_witness_polynomials();
             let prover_opening_claim = self.shplemini_prove(
                 transcript,
