@@ -76,11 +76,11 @@ impl LogDerivLookupRelation {
             .add(gamma, builder, driver);
 
         // (w_1 + \gamma q_2*w_1_shift) + η(w_2 + q_m*w_2_shift) + η₂(w_3 + q_c*w_3_shift) + η₃q_index.
-        let mut derived_table_entry_2 = negative_column_2_step_size
+        let derived_table_entry_2 = negative_column_2_step_size
             .multiply(&w_2_shift, builder, driver)?
             .add(&w_2, builder, driver)
             .multiply(eta_1, builder, driver)?;
-        let mut derived_table_entry_3 = negative_column_3_step_size
+        let derived_table_entry_3 = negative_column_3_step_size
             .multiply(&w_3_shift, builder, driver)?
             .add(&w_3, builder, driver)
             .multiply(eta_2, builder, driver)?;

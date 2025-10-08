@@ -8,6 +8,7 @@ use co_builder::{
     transcript::{TranscriptCT, TranscriptHasherCT},
     types::field_ct::FieldCT,
 };
+use ultrahonk::NUM_INTERLEAVING_CLAIMS;
 
 use crate::claim_batcher::ClaimBatcher;
 use ark_ff::AdditiveGroup;
@@ -90,6 +91,7 @@ impl ShpleminiVerifier {
 
         // Compute the powers of ν that are required for batching Gemini, SmallSubgroupIPA, and committed sumcheck
         // univariate opening claims.
+        let num_powers = 2 * virtual_log_n + NUM_INTERLEAVING_CLAIMS as usize;
         let shplonk_batching_challenge_powers = std::iter::successors(
             Some(FieldCT::from_witness(C::ScalarField::ONE.into(), builder)),
             |last| {
@@ -99,10 +101,11 @@ impl ShpleminiVerifier {
                 )
             },
         )
-        .take(virtual_log_n)
+        .take(num_powers)
         .collect::<Vec<_>>();
 
         // - Get the quotient commitment for the Shplonk batching of Gemini opening claims
+        #[expect(clippy::non_snake_case)]
         let Q_commitment =
             transcript.receive_point_from_prover("Shplonk:Q".to_string(), builder, driver)?;
 
@@ -118,8 +121,9 @@ impl ShpleminiVerifier {
         let mut constant_term_accumulator =
             FieldCT::from_witness(C::ScalarField::ZERO.into(), builder);
 
-        // Initialize the vector of scalars placing the scalar 1 correposnding to Q_commitment
-        let mut scalars = vec![constant_term_accumulator.clone()];
+        let mut scalars = vec![
+            FieldCT::from_witness(C::ScalarField::ONE.into(), builder),
+        ];
 
         // Compute 1/(z − r), 1/(z + r), 1/(z - r²),  1/(z + r²), … , 1/(z - r^{2^{d-1}}), 1/(z + r^{2^{d-1}})
         // These represent the denominators of the summand terms in Shplonk partially evaluated polynomial Q_z
@@ -313,15 +317,14 @@ impl ShpleminiVerifier {
         driver: &mut T,
     ) -> HonkProofResult<Vec<FieldCT<C::ScalarField>>> {
         let virtual_log_n = evaluation_point.len();
-        let mut evals = fold_neg_evals.to_vec();
+        let evals = fold_neg_evals.to_vec();
         let mut eval_pos_prev = batched_evaluation.clone();
-        let zero = FieldCT::from_witness(C::ScalarField::ZERO.into(), builder);
         let one = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
 
         let mut fold_pos_evaluations = Vec::with_capacity(virtual_log_n);
 
         // Add the contribution of P-((-r)ˢ) to get A_0(-r), which is 0 if there are no interleaved polynomials
-        evals[0] = zero.clone();
+        // evals[0] += p_neg
 
         // Solve the sequence of linear equations
         for l in (1..=virtual_log_n).rev() {
@@ -466,18 +469,25 @@ impl ShpleminiVerifier {
 
             // Accumulate the const term contribution given by
             // v^{2j} * A_j(r^{2^j}) /(z - r^{2^j}) + v^{2j+1} * A_j(-r^{2^j}) /(z+ r^{2^j})
-            let tmp = FieldCT::multiply_many(
-                &[scaling_factor_neg.clone(), scaling_factor_pos.clone()],
-                &[
-                    gemini_neg_evaluations[j].clone(),
-                    gemini_pos_evaluations[j].clone(),
-                ],
-                builder,
-                driver,
-            )?;
+
+            // TODO CESAR: multiply_many does not work
+            // let tmp = FieldCT::multiply_many(
+            //     &[scaling_factor_neg.clone(), scaling_factor_pos.clone()],
+            //     &[
+            //         gemini_neg_evaluations[j].clone(),
+            //         gemini_pos_evaluations[j].clone(),
+            //     ],
+            //     builder,
+            //     driver,
+            // )?;
+            let tmp_1 = 
+                scaling_factor_neg.multiply(&gemini_neg_evaluations[j], builder, driver)?;
+            let tmp_2 =
+                scaling_factor_pos.multiply(&gemini_pos_evaluations[j], builder, driver)?;
+
             *constant_term_accumulator = constant_term_accumulator
-                .add(&tmp[0], builder, driver)
-                .add(&tmp[1], builder, driver);
+                .add(&tmp_1, builder, driver)
+                .add(&tmp_2, builder, driver);
 
             // Place the scaling factor to the 'scalars' vector
             let tmp = padding_indicator_array[j].neg().multiply(

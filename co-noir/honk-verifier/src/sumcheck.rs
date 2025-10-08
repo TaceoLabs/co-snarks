@@ -1,9 +1,9 @@
 use crate::verifier_relations::AllRelationsEvals;
 use crate::verifier_relations::compute_full_relation_purported_value;
+use ark_ff::AdditiveGroup;
 use ark_ff::Field;
 use ark_ff::Zero;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use co_builder::transcript;
 use co_builder::types::gate_separator::GateSeparatorPolynomial;
 use co_builder::{
     flavours::mega_flavour::MegaFlavour,
@@ -14,14 +14,11 @@ use co_builder::{
 };
 use co_ultrahonk::co_decider::types::RelationParameters;
 use co_ultrahonk::types::AllEntities;
-use common::polynomials::polynomial::RowDisablingPolynomial;
 use common::{
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
-    transcript::TranscriptHasher,
 };
-use mpc_core::protocols::shamir::precompute_interpolation_polys;
-use std::{fmt::format, iter::Sum};
+use ultrahonk::CONST_PROOF_SIZE_LOG_N;
 use ultrahonk::prelude::Barycentric;
 
 pub struct SumcheckOutput<C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> {
@@ -39,19 +36,20 @@ impl SumcheckVerifier {
         H: TranscriptHasherCT<C>,
     >(
         transcript: &mut TranscriptCT<C, H>,
-        mut target_sum: FieldCT<C::ScalarField>,
-        relation_parameters: RelationParameters<FieldCT<C::ScalarField>>,
-        alphas: Vec<FieldCT<C::ScalarField>>,
-        gate_challenges: Vec<FieldCT<C::ScalarField>>,
+        target_sum: &mut FieldCT<C::ScalarField>,
+        relation_parameters: &RelationParameters<FieldCT<C::ScalarField>>,
+        alphas: &Vec<FieldCT<C::ScalarField>>,
+        gate_challenges: &mut Vec<FieldCT<C::ScalarField>>,
         padding_indicator_array: &Vec<FieldCT<C::ScalarField>>,
         builder: &mut MegaCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<SumcheckOutput<C>> {
         let one = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
-        // TODO CESAR: Use padding?
+
+        Self::pad_gate_challenges::<C, T>(gate_challenges, builder);
 
         let mut gate_separators =
-            GateSeparatorPolynomial::new_without_products(gate_challenges, builder);
+            GateSeparatorPolynomial::new_without_products(gate_challenges.clone(), builder);
 
         // MegaRecursiveFlavor does not have ZK
         let mut multivariate_challenge = Vec::with_capacity(padding_indicator_array.len());
@@ -60,11 +58,12 @@ impl SumcheckVerifier {
                 format!("Sumcheck:univariate_{round_idx}"),
                 MegaFlavour::BATCHED_RELATION_PARTIAL_LENGTH,
             )?;
+
             let round_challenge =
                 transcript.get_challenge(format!("Sumcheck:u_{round_idx}"), builder, driver)?;
+
             multivariate_challenge.push(round_challenge.clone());
 
-            // TODO CESAR: DO we need a boolean here?
             SumcheckVerifier::check_sum(
                 &round_univariate,
                 &target_sum,
@@ -89,7 +88,7 @@ impl SumcheckVerifier {
                 driver,
             )?
             .multiply(&padding_indicator_array[round_idx], builder, driver)?;
-            target_sum = lhs.add(&rhs, builder, driver);
+            *target_sum = lhs.add(&rhs, builder, driver);
 
             // Partially evaluate the gate separator polynomial
             gate_separators.partially_evaluate_with_padding(
@@ -98,8 +97,6 @@ impl SumcheckVerifier {
                 builder,
                 driver,
             )?;
-
-            // TODO CESAR: Update boolean?
         }
 
         let transcript_evaluations = transcript.receive_n_from_prover(
@@ -113,7 +110,8 @@ impl SumcheckVerifier {
         let (precomputed, witness) =
             transcript_evaluations.split_at(MegaFlavour::PRECOMPUTED_ENTITIES_SIZE);
         let claimed_evaluations =
-            AllEntities::from_elements(precomputed.to_vec(), witness.to_vec());
+            AllEntities::from_elements(witness.to_vec(), precomputed.to_vec());
+
         let full_honk_purported_value = compute_full_relation_purported_value(
             &claimed_evaluations,
             &mut AllRelationsEvals::default(),
@@ -163,6 +161,21 @@ impl SumcheckVerifier {
 
         target_sum.assert_equal(&total_sum, builder, driver);
         Ok(())
+    }
+
+    fn pad_gate_challenges<
+        C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
+        T: NoirWitnessExtensionProtocol<C::ScalarField>,
+    >(
+        gate_challenges: &mut Vec<FieldCT<C::ScalarField>>,
+        builder: &mut MegaCircuitBuilder<C, T>,
+    ) {
+        if gate_challenges.len() < CONST_PROOF_SIZE_LOG_N {
+            let zero = FieldCT::from_witness(C::ScalarField::ZERO.into(), builder);
+            for _ in gate_challenges.len()..CONST_PROOF_SIZE_LOG_N {
+                gate_challenges.push(zero.clone());
+            }
+        }
     }
 }
 

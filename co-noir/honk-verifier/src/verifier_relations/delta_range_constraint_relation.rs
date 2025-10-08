@@ -30,11 +30,6 @@ impl_relation_evals!(DeltaRangeConstraintRelationEvals, r0, r1, r2, r3);
 
 pub(crate) struct DeltaRangeConstraintRelation;
 
-impl DeltaRangeConstraintRelation {
-    pub(crate) const NUM_RELATIONS: usize = 4;
-    pub(crate) const CRAND_PAIRS_FACTOR: usize = 12;
-}
-
 impl<C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> Relation<C>
     for DeltaRangeConstraintRelation
 {
@@ -43,7 +38,7 @@ impl<C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> Relat
     fn accumulate_evaluations<T: NoirWitnessExtensionProtocol<C::ScalarField>>(
         accumulator: &mut Self::VerifyAcc,
         input: &AllEntities<FieldCT<C::ScalarField>, FieldCT<C::ScalarField>, MegaFlavour>,
-        relation_parameters: &RelationParameters<FieldCT<C::ScalarField>>,
+        _relation_parameters: &RelationParameters<FieldCT<C::ScalarField>>,
         scaling_factor: &FieldCT<C::ScalarField>,
         builder: &mut MegaCircuitBuilder<C, T>,
         driver: &mut T,
@@ -54,9 +49,8 @@ impl<C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> Relat
         let w_4 = input.witness.w_4().to_owned();
         let w_1_shift = input.shifted_witness.w_l().to_owned();
         let q_delta_range = input.precomputed.q_delta_range().to_owned();
-        let minus_one = FieldCT::from_witness(T::AcvmType::from(-C::ScalarField::one()), builder);
-        let minus_two =
-            FieldCT::from_witness(T::AcvmType::from(-C::ScalarField::from(2u64)), builder);
+        let minus_one = FieldCT::from_witness((-C::ScalarField::one()).into(), builder);
+        let minus_two = FieldCT::from_witness((-C::ScalarField::from(2u64)).into(), builder);
 
         // Compute wire differences
         let delta_1 = w_2.sub(&w_1, builder, driver);
@@ -64,14 +58,14 @@ impl<C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> Relat
         let delta_3 = w_4.sub(&w_3, builder, driver);
         let delta_4 = w_1_shift.sub(&w_4, builder, driver);
 
-        let tmp_1 = minus_one.sub(&delta_1, builder, driver);
-        let tmp_2 = minus_one.sub(&delta_2, builder, driver);
-        let tmp_3 = minus_one.sub(&delta_3, builder, driver);
-        let tmp_4 = minus_one.sub(&delta_4, builder, driver);
-        let tmp_1_2 = minus_two.sub(&delta_1, builder, driver);
-        let tmp_2_2 = minus_two.sub(&delta_2, builder, driver);
-        let tmp_3_2 = minus_two.sub(&delta_3, builder, driver);
-        let tmp_4_2 = minus_two.sub(&delta_4, builder, driver);
+        let tmp_1 = minus_one.add(&delta_1, builder, driver);
+        let tmp_2 = minus_one.add(&delta_2, builder, driver);
+        let tmp_3 = minus_one.add(&delta_3, builder, driver);
+        let tmp_4 = minus_one.add(&delta_4, builder, driver);
+        let tmp_1_2 = minus_two.add(&delta_1, builder, driver);
+        let tmp_2_2 = minus_two.add(&delta_2, builder, driver);
+        let tmp_3_2 = minus_two.add(&delta_3, builder, driver);
+        let tmp_4_2 = minus_two.add(&delta_4, builder, driver);
 
         let lhs = vec![
             tmp_1, tmp_2, tmp_3, tmp_4, tmp_1_2, tmp_2_2, tmp_3_2, tmp_4_2,

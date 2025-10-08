@@ -1,6 +1,3 @@
-use std::env::var;
-use std::sync::Arc;
-
 use super::types::{AddQuad, EccDblGate, MulQuad};
 
 use crate::generic_builder::GenericBuilder;
@@ -228,7 +225,7 @@ impl<F: PrimeField> FieldCT<F> {
             .iter()
             .zip(rhs.iter())
             .enumerate()
-            .partition(|(i, (l, r))| l.is_constant() || r.is_constant());
+            .partition(|(_, (l, r))| l.is_constant() || r.is_constant());
 
         let constant_operand = constant_operand
             .into_iter()
@@ -252,15 +249,11 @@ impl<F: PrimeField> FieldCT<F> {
         //  * Right wire value: b.v
         //  * Output wire value: result.v (with q_o = -1)
         //  */
-        let (indices, values) = variable_operands
+        let values = variable_operands
             .iter()
-            .map(|(i, (l, r))| {
-                (
-                    *i,
-                    (l.get_value(builder, driver), r.get_value(builder, driver)),
-                )
-            })
-            .unzip::<_, _, Vec<_>, Vec<_>>();
+            .map(|(_, (l, r))| {
+                (l.get_value(builder, driver), r.get_value(builder, driver))
+            }).collect::<Vec<_>>();
 
         let (left_vals, right_vals) = values.clone().into_iter().unzip::<_, _, Vec<_>, Vec<_>>();
 
@@ -411,7 +404,7 @@ impl<F: PrimeField> FieldCT<F> {
         Ok(result)
     }
 
-    pub(crate) fn mul_assign<
+    pub fn mul_assign<
         P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
@@ -648,7 +641,7 @@ impl<F: PrimeField> FieldCT<F> {
         result
     }
 
-    pub(crate) fn add_assign<
+    pub fn add_assign<
         P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(

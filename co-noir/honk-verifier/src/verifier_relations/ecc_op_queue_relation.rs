@@ -10,7 +10,6 @@ use co_ultrahonk::co_decider::types::RelationParameters;
 use co_ultrahonk::types::AllEntities;
 use common::honk_curve::HonkCurve;
 use common::honk_proof::{HonkProofResult, TranscriptFieldType};
-use common::mpc::NoirUltraHonkProver;
 
 use crate::impl_relation_evals;
 use crate::verifier_relations::Relation;
@@ -32,11 +31,6 @@ impl_relation_evals!(EccOpQueueRelationEvals, r0, r1, r2, r3, r4, r5, r6, r7);
 
 pub(crate) struct EccOpQueueRelation;
 
-impl EccOpQueueRelation {
-    pub(crate) const NUM_RELATIONS: usize = 8;
-    // pub(crate) const CRAND_PAIRS_FACTOR: usize = 0;
-}
-
 impl<C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> Relation<C>
     for EccOpQueueRelation
 {
@@ -45,7 +39,7 @@ impl<C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> Relat
     fn accumulate_evaluations<T: NoirWitnessExtensionProtocol<C::ScalarField>>(
         accumulator: &mut Self::VerifyAcc,
         input: &AllEntities<FieldCT<C::ScalarField>, FieldCT<C::ScalarField>, MegaFlavour>,
-        relation_parameters: &RelationParameters<FieldCT<C::ScalarField>>,
+        _relation_parameters: &RelationParameters<FieldCT<C::ScalarField>>,
         scaling_factor: &FieldCT<C::ScalarField>,
         builder: &mut MegaCircuitBuilder<C, T>,
         driver: &mut T,
@@ -71,43 +65,56 @@ impl<C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> Relat
         // If lagrange_ecc_op is the indicator for ecc_op_gates, this is the indicator for the complement
 
         let lagrange_by_scaling = lagrange_ecc_op.multiply(scaling_factor, builder, driver)?;
-        let complement_ecc_op_by_scaling = lagrange_by_scaling.sub(scaling_factor, builder, driver);
+        let complement_ecc_op_by_scaling =
+            scaling_factor.sub(&lagrange_by_scaling, builder, driver);
 
         // Contribution (1)
-        let tmp = op_wire_1.sub(&w_1_shift, builder, driver);
-        let prod = lagrange_by_scaling.multiply(&tmp, builder, driver)?;
-        accumulator.r0 = accumulator.r0.add(&prod, builder, driver);
+        let tmp = op_wire_1.sub(&w_1_shift, builder, driver).multiply(
+            &lagrange_by_scaling,
+            builder,
+            driver,
+        )?;
+        accumulator.r0 = accumulator.r0.add(&tmp, builder, driver);
 
         // Contribution (2)
-        let tmp = op_wire_2.sub(&w_2_shift, builder, driver);
-        let prod = lagrange_by_scaling.multiply(&tmp, builder, driver)?;
-        accumulator.r1 = accumulator.r1.add(&prod, builder, driver);
+        let tmp = op_wire_2.sub(&w_2_shift, builder, driver).multiply(
+            &lagrange_by_scaling,
+            builder,
+            driver,
+        )?;
+        accumulator.r1 = accumulator.r1.add(&tmp, builder, driver);
 
         // Contribution (3)
-        let tmp = op_wire_3.sub(&w_3_shift, builder, driver);
-        let prod = lagrange_by_scaling.multiply(&tmp, builder, driver)?;
-        accumulator.r2 = accumulator.r2.add(&prod, builder, driver);
+        let tmp = op_wire_3.sub(&w_3_shift, builder, driver).multiply(
+            &lagrange_by_scaling,
+            builder,
+            driver,
+        )?;
+        accumulator.r2 = accumulator.r2.add(&tmp, builder, driver);
 
         // Contribution (4)
-        let tmp = op_wire_4.sub(&w_4_shift, builder, driver);
-        let prod = lagrange_by_scaling.multiply(&tmp, builder, driver)?;
-        accumulator.r3 = accumulator.r3.add(&prod, builder, driver);
+        let tmp = op_wire_4.sub(&w_4_shift, builder, driver).multiply(
+            &lagrange_by_scaling,
+            builder,
+            driver,
+        )?;
+        accumulator.r3 = accumulator.r3.add(&tmp, builder, driver);
 
         // Contribution (5)
-        let prod = complement_ecc_op_by_scaling.multiply(&op_wire_1, builder, driver)?;
-        accumulator.r4 = accumulator.r4.add(&prod, builder, driver);
+        let tmp = complement_ecc_op_by_scaling.multiply(&op_wire_1, builder, driver)?;
+        accumulator.r4 = accumulator.r4.add(&tmp, builder, driver);
 
         // Contribution (6)
-        let prod = complement_ecc_op_by_scaling.multiply(&op_wire_2, builder, driver)?;
-        accumulator.r5 = accumulator.r5.add(&prod, builder, driver);
+        let tmp = complement_ecc_op_by_scaling.multiply(&op_wire_2, builder, driver)?;
+        accumulator.r5 = accumulator.r5.add(&tmp, builder, driver);
 
         // Contribution (7)
-        let prod = complement_ecc_op_by_scaling.multiply(&op_wire_3, builder, driver)?;
-        accumulator.r6 = accumulator.r6.add(&prod, builder, driver);
+        let tmp = complement_ecc_op_by_scaling.multiply(&op_wire_3, builder, driver)?;
+        accumulator.r6 = accumulator.r6.add(&tmp, builder, driver);
 
         // Contribution (8)
-        let prod = complement_ecc_op_by_scaling.multiply(&op_wire_4, builder, driver)?;
-        accumulator.r7 = accumulator.r7.add(&prod, builder, driver);
+        let tmp = complement_ecc_op_by_scaling.multiply(&op_wire_4, builder, driver)?;
+        accumulator.r7 = accumulator.r7.add(&tmp, builder, driver);
 
         Ok(())
     }

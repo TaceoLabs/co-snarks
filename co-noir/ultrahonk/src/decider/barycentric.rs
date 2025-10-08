@@ -1,5 +1,5 @@
 use crate::Utils;
-use ark_ff::PrimeField;
+use ark_ff::{PrimeField};
 
 pub struct Barycentric {}
 
@@ -44,16 +44,21 @@ impl Barycentric {
         lagrange_denominators: &[F],
     ) -> Vec<F> {
         let domain_size = lagrange_denominators.len();
-        let big_domain_size = big_domain.len();
-        assert_eq!(big_domain_size, std::cmp::max(domain_size, num_evals));
-
         let res_size = domain_size * num_evals;
+
         let mut res = vec![F::zero(); res_size]; // default init to 0 since below does not init all elements
 
-        for k in domain_size..num_evals {
-            for j in 0..domain_size {
-                let inv = lagrange_denominators[j] * (big_domain[k] - big_domain[j]);
-                res[k * domain_size + j] = inv;
+        if num_evals == 1 {
+            res = lagrange_denominators.to_vec();
+        } else {
+            let big_domain_size = big_domain.len();
+            assert_eq!(big_domain_size, std::cmp::max(domain_size, num_evals));
+
+            for k in domain_size..num_evals {
+                for j in 0..domain_size {
+                    let inv = lagrange_denominators[j] * (big_domain[k] - big_domain[j]);
+                    res[k * domain_size + j] = inv;
+                }
             }
         }
 

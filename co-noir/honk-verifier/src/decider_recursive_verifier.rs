@@ -1,7 +1,6 @@
 use ark_ff::AdditiveGroup;
 use ark_ff::fields::Field;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use co_builder::flavours::mega_flavour::MegaFlavour;
 use co_builder::mega_builder::MegaCircuitBuilder;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::transcript::TranscriptCT;
@@ -9,13 +8,11 @@ use co_builder::transcript::TranscriptHasherCT;
 use co_builder::types::field_ct::FieldCT;
 use co_builder::types::goblin_types::GoblinElement;
 use co_protogalaxy::RecursiveDeciderVerificationKey;
-use co_ultrahonk::types::AllEntities;
 use common::honk_curve::HonkCurve;
 use common::honk_proof::HonkProofResult;
 use common::honk_proof::TranscriptFieldType;
 use ultrahonk::prelude::Barycentric;
 
-use crate::claim_batcher;
 use crate::claim_batcher::Batch;
 use crate::claim_batcher::ClaimBatcher;
 use crate::kzg::KZG;
@@ -35,32 +32,31 @@ impl DeciderRecursiveVerifier {
         H: TranscriptHasherCT<C>,
     >(
         proof: Vec<FieldCT<C::ScalarField>>,
-        accumulator: &RecursiveDeciderVerificationKey<C, T>,
+        accumulator: &mut RecursiveDeciderVerificationKey<C, T>,
         builder: &mut MegaCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<(GoblinElement<C, T>, GoblinElement<C, T>)> {
         let mut transcript = TranscriptCT::<C, H>::new_verifier(proof);
 
         let padding_indicator_array = Self::padding_indicator_array::<C, T, CONST_PROOF_SIZE_LOG_N>(
-            accumulator.verification_key.log_circuit_size.clone(),
+            &accumulator.verification_key.log_circuit_size,
             builder,
             driver,
         )?;
 
         Self::constrain_log_circuit_size::<C, T, CONST_PROOF_SIZE_LOG_N>(
             &padding_indicator_array,
-            accumulator.verification_key.circuit_size.clone(),
+            &accumulator.verification_key.circuit_size,
             builder,
             driver,
         )?;
 
-        // TODO CESAR: Remove clones
         let output = SumcheckVerifier::verify(
             &mut transcript,
-            accumulator.target_sum.clone(),
-            accumulator.relation_parameters.clone(),
-            accumulator.alphas.clone(),
-            accumulator.gate_challenges.clone(),
+            &mut accumulator.target_sum,
+            &accumulator.relation_parameters,
+            &accumulator.alphas,
+            &mut accumulator.gate_challenges,
             &padding_indicator_array,
             builder,
             driver,
@@ -134,7 +130,7 @@ impl DeciderRecursiveVerifier {
         T: NoirWitnessExtensionProtocol<C::ScalarField>,
         const VIRTUAL_LOG_N: usize,
     >(
-        log_n: FieldCT<C::ScalarField>,
+        log_n: &FieldCT<C::ScalarField>,
         builder: &mut MegaCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<Vec<FieldCT<C::ScalarField>>> {
@@ -174,7 +170,7 @@ impl DeciderRecursiveVerifier {
         //    suffix[virtual_log_n] = 1.
         let mut suffix = vec![one.clone(); VIRTUAL_LOG_N + 1];
         for i in (1..=VIRTUAL_LOG_N).rev() {
-            suffix[i] = suffix[i + 1].multiply(&terms[i - 1], builder, driver)?;
+            suffix[i - 1] = suffix[i].multiply(&terms[i - 1], builder, driver)?;
         }
 
         // To ensure 0 < log_n < N, note that suffix[1] = \prod_{i=1}^{N-1} (x - 1 - i), therefore we just need to ensure
@@ -221,17 +217,20 @@ impl DeciderRecursiveVerifier {
         const VIRTUAL_LOG_N: usize,
     >(
         padding_indicator_array: &[FieldCT<C::ScalarField>],
-        n: FieldCT<C::ScalarField>,
+        n: &FieldCT<C::ScalarField>,
         builder: &mut MegaCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<()> {
         let one = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
-        let mut accumulated_circuit_size = one.clone();
+        let mut accumulated_circuit_size =
+            FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
 
         for indicator in padding_indicator_array {
-            let incremented = indicator.add(&one, builder, driver);
-            accumulated_circuit_size =
-                accumulated_circuit_size.multiply(&incremented, builder, driver)?;
+            accumulated_circuit_size.mul_assign(
+                &indicator.add(&one, builder, driver),
+                builder,
+                driver,
+            )?;
         }
 
         n.assert_equal(&accumulated_circuit_size, builder, driver);

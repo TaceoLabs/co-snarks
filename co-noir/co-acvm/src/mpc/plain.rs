@@ -260,8 +260,8 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         false
     }
 
-    fn get_shared(a: &Self::AcvmType) -> Option<Self::ArithmeticShare> {
-        Some(*a)
+    fn get_shared(_: &Self::AcvmType) -> Option<Self::ArithmeticShare> {
+        None
     }
 
     fn get_public(a: &Self::AcvmType) -> Option<F> {

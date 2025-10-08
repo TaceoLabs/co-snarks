@@ -1,6 +1,5 @@
 use ark_ec::CurveGroup;
 use ark_ff::Field;
-use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use eyre::Ok;
 

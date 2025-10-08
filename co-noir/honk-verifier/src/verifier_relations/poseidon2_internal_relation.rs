@@ -28,11 +28,6 @@ pub(crate) struct Poseidon2InternalRelationEvals<F: PrimeField> {
 impl_relation_evals!(Poseidon2InternalRelationEvals, r0, r1, r2, r3);
 pub(crate) struct Poseidon2InternalRelation;
 
-impl Poseidon2InternalRelation {
-    pub(crate) const NUM_RELATIONS: usize = 4;
-    pub(crate) const CRAND_PAIRS_FACTOR: usize = 12;
-}
-
 impl<C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> Relation<C>
     for Poseidon2InternalRelation
 {

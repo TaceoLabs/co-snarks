@@ -10,7 +10,6 @@ pub mod goblin_types;
 pub(crate) mod plookup;
 pub(crate) mod poseidon2;
 pub(crate) mod rom_ram;
-pub mod row_disabling_polynomial;
 pub(crate) mod sha_compression;
 #[expect(clippy::module_inception)]
 pub(crate) mod types;

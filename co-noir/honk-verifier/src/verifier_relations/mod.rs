@@ -38,16 +38,16 @@ use common::{honk_curve::HonkCurve, honk_proof::HonkProofResult};
 
 #[derive(Default)]
 pub struct AllRelationsEvals<F: PrimeField> {
-    pub r_arith: UltraArithmeticRelationEvals<F>,
-    pub r_perm: UltraPermutationRelationEvals<F>,
-    pub r_lookup: LogDerivLookupRelationEvals<F>,
-    pub r_delta: DeltaRangeConstraintRelationEvals<F>,
-    pub r_elliptic: EllipticRelationEvals<F>,
-    pub r_aux: AuxiliaryRelationEvals<F>,
-    pub r_ecc_op_queue: EccOpQueueRelationEvals<F>,
-    pub r_databus: DataBusLookupRelationEvals<F>,
-    pub r_pos_ext: Poseidon2ExternalRelationEvals<F>,
-    pub r_pos_int: Poseidon2InternalRelationEvals<F>,
+    r_arith: UltraArithmeticRelationEvals<F>,
+    r_perm: UltraPermutationRelationEvals<F>,
+    r_lookup: LogDerivLookupRelationEvals<F>,
+    r_delta: DeltaRangeConstraintRelationEvals<F>,
+    r_elliptic: EllipticRelationEvals<F>,
+    r_aux: AuxiliaryRelationEvals<F>,
+    r_ecc_op_queue: EccOpQueueRelationEvals<F>,
+    r_databus: DataBusLookupRelationEvals<F>,
+    r_pos_ext: Poseidon2ExternalRelationEvals<F>,
+    r_pos_int: Poseidon2InternalRelationEvals<F>,
 }
 
 pub(crate) trait VerifyAccGetter<
@@ -62,7 +62,8 @@ pub(crate) trait VerifyAccGetter<
         builder: &mut MegaCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<()> {
-        for (entry, challenge) in self.get_accumulators().iter().zip(challenges) {
+            for (entry, challenge) in self.get_accumulators().iter().zip(challenges) {
+
             *result = entry.madd(&challenge, &result, builder, driver)?;
         }
         Ok(())

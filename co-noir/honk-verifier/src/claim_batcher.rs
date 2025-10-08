@@ -1,32 +1,15 @@
-use crate::verifier_relations::AllRelationsEvals;
-use crate::verifier_relations::compute_full_relation_purported_value;
-use ark_ff::AdditiveGroup;
 use ark_ff::Field;
-use ark_ff::Zero;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use co_builder::transcript;
-use co_builder::types::gate_separator::GateSeparatorPolynomial;
 use co_builder::types::goblin_types::GoblinElement;
 use co_builder::{
-    flavours::mega_flavour::MegaFlavour,
     mega_builder::MegaCircuitBuilder,
-    prover_flavour::ProverFlavour,
-    transcript::{TranscriptCT, TranscriptHasherCT},
     types::field_ct::FieldCT,
 };
-use co_ultrahonk::co_decider::types::RelationParameters;
-use co_ultrahonk::types::AllEntities;
-use common::polynomials::polynomial::RowDisablingPolynomial;
 use common::{
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
-    transcript::TranscriptHasher,
 };
-use core::num;
 use itertools::izip;
-use mpc_core::protocols::shamir::precompute_interpolation_polys;
-use std::{fmt::format, iter::Sum};
-use ultrahonk::prelude::Barycentric;
 
 pub struct Batch<
     C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
@@ -95,8 +78,8 @@ impl<
 
         // r⁻¹ ⋅ (1/(z−r) − ν/(z+r))
         let inverse_r = one.divide(r_challenge, builder, driver)?;
-        self.shifted.scalar = mul_expr
-            .sub(inverse_vanishing_eval_pos, builder, driver)
+        self.shifted.scalar = inverse_vanishing_eval_pos
+            .sub(&mul_expr, builder, driver)
             .multiply(&inverse_r, builder, driver)?;
 
         Ok(())
@@ -135,9 +118,12 @@ impl<
                     commitments.push(commitment.clone());
                     scalars.push(batch.scalar.neg().multiply(rho_power, builder, driver)?);
 
-                    *batched_evaluation =
-                        evaluation.madd(rho_power, batched_evaluation, builder, driver)?;
-                    *rho_power = rho.clone().multiply(rho_power, builder, driver)?;
+                    *batched_evaluation = batched_evaluation.add(
+                        &evaluation.multiply(rho_power, builder, driver)?,
+                        builder,
+                        driver,
+                    );
+                    *rho_power = rho.multiply(rho_power, builder, driver)?;
                 }
                 HonkProofResult::Ok(())
             };

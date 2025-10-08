@@ -66,7 +66,8 @@ impl<C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> Relat
 
         let t1 = id_1
             .multiply(&beta, builder, driver)?
-            .add(&w_1_plus_gamma, builder, driver);
+            .add(&w_1_plus_gamma, builder, driver)
+            .multiply(scaling_factor, builder, driver)?;
         let t2 = id_2
             .multiply(&beta, builder, driver)?
             .add(&w_2_plus_gamma, builder, driver);
@@ -79,7 +80,8 @@ impl<C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> Relat
 
         let t5 = sigma_1
             .multiply(&beta, builder, driver)?
-            .add(&w_1_plus_gamma, builder, driver);
+            .add(&w_1_plus_gamma, builder, driver)
+            .multiply(scaling_factor, builder, driver)?;
         let t6 = sigma_2
             .multiply(&beta, builder, driver)?
             .add(&w_2_plus_gamma, builder, driver);

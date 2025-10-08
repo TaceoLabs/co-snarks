@@ -16,7 +16,7 @@ use common::honk_curve::HonkCurve;
 use common::honk_proof::{HonkProofResult, TranscriptFieldType};
 
 #[derive(Clone, Debug)]
-pub struct UltraArithmeticRelationEvals<F: PrimeField> {
+pub(crate) struct UltraArithmeticRelationEvals<F: PrimeField> {
     pub(crate) r0: FieldCT<F>,
     pub(crate) r1: FieldCT<F>,
 }
@@ -24,11 +24,6 @@ pub struct UltraArithmeticRelationEvals<F: PrimeField> {
 impl_relation_evals!(UltraArithmeticRelationEvals, r0, r1);
 
 pub(crate) struct UltraArithmeticRelation;
-
-impl UltraArithmeticRelation {
-    pub(crate) const NUM_RELATIONS: usize = 2;
-    pub(crate) const CRAND_PAIRS_FACTOR: usize = 1;
-}
 
 impl UltraArithmeticRelation {
     fn compute_r0_verifier<
@@ -136,7 +131,7 @@ impl<C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> Relat
         driver: &mut T,
     ) -> HonkProofResult<()> {
         Self::compute_r0_verifier(&mut accumulator.r0, input, scaling_factor, builder, driver)?;
-        Self::compute_r1_verifier(&mut accumulator.r1, input, scaling_factor, builder, driver);
+        Self::compute_r1_verifier(&mut accumulator.r1, input, scaling_factor, builder, driver)?;
         Ok(())
     }
 }

@@ -27,11 +27,6 @@ impl_relation_evals!(Poseidon2ExternalRelationEvals, r0, r1, r2, r3);
 
 pub(crate) struct Poseidon2ExternalRelation;
 
-impl Poseidon2ExternalRelation {
-    pub(crate) const NUM_RELATIONS: usize = 4;
-    pub(crate) const CRAND_PAIRS_FACTOR: usize = 12;
-}
-
 impl<C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> Relation<C>
     for Poseidon2ExternalRelation
 {
@@ -88,7 +83,7 @@ impl<C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> Relat
         let v3 = t2.add(&v4, builder, driver); // u_1 + 3u_2 + 5u_3 + 7u_4
 
         let q_pos_by_scaling = q_poseidon2_external.multiply(scaling_factor, builder, driver)?;
-        let mut tmp =
+        let tmp =
             v1.sub(&w_l_shift, builder, driver)
                 .multiply(&q_pos_by_scaling, builder, driver)?;
 
@@ -96,19 +91,19 @@ impl<C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> Relat
 
         ///////////////////////////////////////////////////////////////////////
 
-        let mut tmp =
+        let tmp =
             v2.sub(&w_r_shift, builder, driver)
                 .multiply(&q_pos_by_scaling, builder, driver)?;
         accumulator.r1 = accumulator.r1.add(&tmp, builder, driver);
 
         ///////////////////////////////////////////////////////////////////////
-        let mut tmp =
+        let tmp =
             v3.sub(&w_o_shift, builder, driver)
                 .multiply(&q_pos_by_scaling, builder, driver)?;
         accumulator.r2 = accumulator.r2.add(&tmp, builder, driver);
 
-        ///////////////////////////////////////////////////////////////////////
-        let mut tmp =
+        //////////////////////////////////////////////////////////////////////
+        let tmp =
             v4.sub(&w_4_shift, builder, driver)
                 .multiply(&q_pos_by_scaling, builder, driver)?;
         accumulator.r3 = accumulator.r3.add(&tmp, builder, driver);

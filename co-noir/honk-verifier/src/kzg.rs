@@ -1,33 +1,15 @@
+#![expect(clippy::non_snake_case)]
 use crate::shplemini::BatchOpeningClaim;
-use crate::verifier_relations::AllRelationsEvals;
-use crate::verifier_relations::compute_full_relation_purported_value;
-use ark_ff::AdditiveGroup;
-use ark_ff::Field;
-use ark_ff::Zero;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use co_builder::transcript;
-use co_builder::types::gate_separator::GateSeparatorPolynomial;
 use co_builder::types::goblin_types::GoblinElement;
 use co_builder::{
-    flavours::mega_flavour::MegaFlavour,
     mega_builder::MegaCircuitBuilder,
-    prover_flavour::ProverFlavour,
     transcript::{TranscriptCT, TranscriptHasherCT},
-    types::field_ct::FieldCT,
 };
-use co_ultrahonk::co_decider::types::RelationParameters;
-use co_ultrahonk::types::AllEntities;
-use common::polynomials::polynomial::RowDisablingPolynomial;
 use common::{
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
-    transcript::TranscriptHasher,
 };
-use core::num;
-use itertools::izip;
-use mpc_core::protocols::shamir::precompute_interpolation_polys;
-use std::{fmt::format, iter::Sum};
-use ultrahonk::prelude::Barycentric;
 
 pub(crate) struct KZG;
 

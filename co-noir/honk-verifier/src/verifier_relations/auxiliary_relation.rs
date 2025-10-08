@@ -128,7 +128,7 @@ impl<C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> Relat
             .multiply(q_2, builder, driver)?;
 
         // ((((w2' * 2^14 + w1') * 2^14 + w3) * 2^14 + w2) * 2^14 + w1 - w4) * qm
-        let mut limb_accumulator_1 = w_2_shift
+        let limb_accumulator_1 = w_2_shift
             .to_owned()
             .multiply(&sublimb_shift, builder, driver)?
             .add(w_1_shift, builder, driver)
@@ -155,7 +155,7 @@ impl<C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> Relat
             .sub(w_4_shift, builder, driver)
             .multiply(&q_m, builder, driver)?;
 
-        let mut limb_accumulator_identity = limb_accumulator_1
+        let limb_accumulator_identity = limb_accumulator_1
             .add(&limb_accumulator_2, builder, driver)
             .multiply(q_3, builder, driver)?;
 
@@ -197,9 +197,9 @@ impl<C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> Relat
          *
          * For ROM gates, qc = 0
          */
-        let mut tmp1 = w_2.to_owned().multiply(eta_two, builder, driver)?;
-        let mut tmp2 = w_1.to_owned().multiply(eta, builder, driver)?;
-        let mut partial_record_check = w_3
+        let tmp1 = w_2.to_owned().multiply(eta_two, builder, driver)?;
+        let tmp2 = w_1.to_owned().multiply(eta, builder, driver)?;
+        let partial_record_check = w_3
             .to_owned()
             .multiply(eta_three, builder, driver)?
             .add(&tmp1, builder, driver)
@@ -223,7 +223,7 @@ impl<C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> Relat
         let index_delta = w_1_shift.to_owned().sub(w_1, builder, driver);
         let record_delta = w_4_shift.to_owned().sub(w_4, builder, driver);
 
-        let mut index_delta_one = index_delta.neg().add(
+        let index_delta_one = index_delta.neg().add(
             &FieldCT::from_witness(C::ScalarField::one().into(), builder),
             builder,
             driver,
@@ -296,8 +296,8 @@ impl<C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> Relat
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/757): If we sorted in
         // reverse order we could re-use `partial_record_check`  1 -  (w3' * eta_three + w2' * eta_two + w1' *
         // eta)
-        let mut tmp1 = w_2_shift.to_owned().multiply(eta_two, builder, driver)?;
-        let mut tmp2 = w_1_shift.to_owned().multiply(eta, builder, driver)?;
+        let tmp1 = w_2_shift.to_owned().multiply(eta_two, builder, driver)?;
+        let tmp2 = w_1_shift.to_owned().multiply(eta, builder, driver)?;
         let mut next_gate_access_type =
             w_3_shift.to_owned().multiply(eta_three, builder, driver)?;
         next_gate_access_type = next_gate_access_type
@@ -370,7 +370,7 @@ impl<C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> Relat
         ram_timestamp_check_identity =
             ram_timestamp_check_identity.multiply(&q_4_q_1, builder, driver)?;
         memory_record_check = memory_record_check.multiply(&q_m_q_1, builder, driver)?;
-        let mut memory_identity = rom_consistency_check_identity
+        let memory_identity = rom_consistency_check_identity
             .add(&ram_timestamp_check_identity, builder, driver)
             .add(&memory_record_check, builder, driver)
             .add(&ram_consistency_check_identity, builder, driver)

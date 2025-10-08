@@ -4,9 +4,8 @@ use super::Relation;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_ultrahonk::co_decider::types::RelationParameters;
-use co_ultrahonk::impl_relation_acc_type_methods;
 use co_ultrahonk::types::AllEntities;
-use common::mpc::NoirUltraHonkProver;
+use itertools::izip;
 
 use crate::verifier_relations::VerifyAccGetter;
 use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
@@ -27,11 +26,6 @@ pub(crate) struct EllipticRelationEvals<F: PrimeField> {
 impl_relation_evals!(EllipticRelationEvals, r0, r1);
 
 pub(crate) struct EllipticRelation;
-
-impl EllipticRelation {
-    pub(crate) const NUM_RELATIONS: usize = 2;
-    pub(crate) const CRAND_PAIRS_FACTOR: usize = 12;
-}
 
 impl<C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> Relation<C>
     for EllipticRelation
@@ -70,6 +64,7 @@ impl<C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> Relat
             .sub(&y_1, builder, driver);
 
         let x1_mul_3 = x_1.add(&x_1, builder, driver).add(&x_1, builder, driver);
+        let x3_sub_x1 = x_3.sub(&x_1, builder, driver);
         let lhs = vec![
             y_1.clone(),
             y_2.clone(),
@@ -86,11 +81,17 @@ impl<C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> Relat
             y_2.clone(),
             x_diff.clone(),
             x_diff.clone(),
-            x_3.sub(&x_1, builder, driver),
+            x3_sub_x1.clone(),
             x_1.clone(),
         ];
 
-        let mul1 = FieldCT::multiply_many(&lhs, &rhs, builder, driver)?;
+        // TODO CESAR: This doesn't work
+        // let mul1 = FieldCT::multiply_many(&lhs, &rhs, builder, driver)?;
+
+        let mul1 = izip!(&lhs, &rhs)
+            .map(|(l, r)| FieldCT::multiply(l, r, builder, driver).unwrap())
+            .collect::<Vec<_>>();
+
         // Second round of multiplications
         let curve_b = C::get_curve_b(); // here we need the extra constraint on the Curve
         let y1_sqr = mul1[0].clone();
@@ -100,11 +101,11 @@ impl<C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> Relat
 
         let lhs = vec![
             x_3.add(&x_2, builder, driver).add(&x_1, builder, driver),
-            y1_sqr.multiply(
-                &FieldCT::from_witness(T::AcvmType::from(-curve_b), builder),
+            y1_sqr.add(
+                &FieldCT::from_witness((-curve_b).into(), builder),
                 builder,
                 driver,
-            )?,
+            ),
             x_3.add(&x_1, builder, driver).add(&x_1, builder, driver),
             x1_sqr_mul_3,
             y_1.add(&y_1, builder, driver),
@@ -118,7 +119,12 @@ impl<C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> Relat
             y1_plus_y3,
         ];
 
-        let mul2 = FieldCT::multiply_many(&lhs, &rhs, builder, driver)?;
+        // TODO CESAR: This doesn't work
+        // let mul2 = FieldCT::multiply_many(&lhs, &rhs, builder, driver)?;
+
+        let mul2 = izip!(&lhs, &rhs)
+            .map(|(l, r)| FieldCT::multiply(l, r, builder, driver).unwrap())
+            .collect::<Vec<_>>();
 
         // Contribution (1) point addition, x-coordinate check
         // q_elliptic * (x3 + x2 + x1)(x2 - x1)(x2 - x1) - y2^2 - y1^2 + 2(y2y1)*q_sign = 0
