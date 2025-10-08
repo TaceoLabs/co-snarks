@@ -10,7 +10,7 @@ use ark_ff::PrimeField;
 use ark_ff::{One, Zero};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType, utils::Utils};
-use itertools::izip;
+use itertools::{Itertools, izip};
 use num_bigint::BigUint;
 
 #[derive(Clone, Debug)]
@@ -209,6 +209,100 @@ impl<F: PrimeField> FieldCT<F> {
         self.normalize(builder, driver).witness_index
     }
 
+    pub fn multiply_many<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        lhs: &[Self],
+        rhs: &[Self],
+        builder: &mut impl GenericBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<Vec<Self>> {
+        let (constant_operand, variable_operands): (
+            Vec<(usize, (&Self, &Self))>,
+            Vec<(usize, (&Self, &Self))>,
+        ) = lhs
+            .iter()
+            .zip(rhs.iter())
+            .enumerate()
+            .partition(|(_, (l, r))| l.is_constant() || r.is_constant());
+
+        let constant_operand = constant_operand
+            .into_iter()
+            .map(|(i, (l, r))| l.multiply(r, builder, driver).map(|res| (i, res)))
+            .collect::<eyre::Result<Vec<_>>>()?;
+
+        // Both inputs map to circuit varaibles: create a `*` constraint.
+
+        // /**
+        //  * Value of this   = a.v * a.mul + a.add;
+        //  * Value of other  = b.v * b.mul + b.add;
+        //  * Value of result = a * b
+        //  *            = [a.v * b.v] * [a.mul * b.mul] + a.v * [a.mul * b.add] + b.v * [a.add * b.mul] + [a.ac * b.add]
+        //  *            = [a.v * b.v] * [     q_m     ] + a.v * [     q_l     ] + b.v * [     q_r     ] + [    q_c     ]
+        //  *            ^               ^Notice the add/mul_constants form selectors when a gate is created.
+        //  *            |                Only the witnesses (pointed-to by the witness_indexes) form the wires in/out of
+        //  *            |                the gate.
+        //  *            ^This entire value is pushed to ctx->variables as a new witness. The
+        //  *             implied additive & multiplicative constants of the new witness are 0 & 1 resp.
+        //  * Left wire value: a.v
+        //  * Right wire value: b.v
+        //  * Output wire value: result.v (with q_o = -1)
+        //  */
+        let values = variable_operands
+            .iter()
+            .map(|(_, (l, r))| {
+                (l.get_value(builder, driver), r.get_value(builder, driver))
+            }).collect::<Vec<_>>();
+
+        let (left_vals, right_vals) = values.clone().into_iter().unzip::<_, _, Vec<_>, Vec<_>>();
+
+        let point_wise_products = driver.mul_many(&left_vals, &right_vals)?;
+
+        let variable_operands = izip!(variable_operands, values, point_wise_products)
+            .map(|((i, (l, r)), (l_val, r_val), p)| {
+                let mut result = FieldCT::default();
+
+                let q_c = l.additive_constant * r.additive_constant;
+                let q_r = l.additive_constant * r.multiplicative_constant;
+                let q_l = l.multiplicative_constant * r.additive_constant;
+                let q_m = l.multiplicative_constant * r.multiplicative_constant;
+
+                let mut out = driver.mul_with_public(q_m, p);
+
+                let t0 = driver.mul_with_public(q_l, l_val);
+                driver.add_assign(&mut out, t0);
+
+                let t0 = driver.mul_with_public(q_r, r_val);
+                driver.add_assign(&mut out, t0);
+                driver.add_assign_with_public(q_c, &mut out);
+
+                result.witness_index = builder.add_variable(out);
+                builder.create_poly_gate(&PolyTriple {
+                    a: l.witness_index,
+                    b: r.witness_index,
+                    c: result.witness_index,
+                    q_m,
+                    q_l,
+                    q_r,
+                    q_o: -P::ScalarField::one(),
+                    q_c,
+                });
+
+                (i, result)
+            })
+            .collect::<Vec<(usize, FieldCT<F>)>>();
+
+        let result = constant_operand
+            .into_iter()
+            .chain(variable_operands.into_iter())
+            .sorted_by_key(|(i, _)| *i)
+            .map(|(_, res)| res)
+            .collect::<Vec<_>>();
+
+        Ok(result)
+    }
+
     pub fn multiply<
         P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
@@ -310,7 +404,7 @@ impl<F: PrimeField> FieldCT<F> {
         Ok(result)
     }
 
-    pub(crate) fn mul_assign<
+    pub fn mul_assign<
         P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
@@ -547,7 +641,7 @@ impl<F: PrimeField> FieldCT<F> {
         result
     }
 
-    pub(crate) fn add_assign<
+    pub fn add_assign<
         P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(

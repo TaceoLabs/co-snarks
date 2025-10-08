@@ -4,6 +4,7 @@ pub(crate) mod blake2s;
 pub(crate) mod blake3;
 pub(crate) mod blake_util;
 pub mod field_ct;
+pub mod gate_separator;
 pub(crate) mod generators;
 pub mod goblin_types;
 pub(crate) mod plookup;
