@@ -2336,6 +2336,10 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                     limbs.push(Rep3AcvmType::Public(F::from(limb)));
                     temp >>= LIMB_BITS;
                 }
+
+                while limbs.len() < 2 {
+                    limbs.push(Rep3AcvmType::Public(F::zero()));
+                }
                 Ok(limbs)
             }
             Rep3AcvmType::Shared(input) => {
@@ -2438,7 +2442,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             indexed_shares.into_iter().unzip();
         let is_zero_many = arithmetic::eq_public_many(
             &shares,
-            &vec![F::zero(); a.len()],
+            &vec![F::zero(); shares.len()],
             self.net0,
             &mut self.state0,
         )?
