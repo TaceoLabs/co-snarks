@@ -532,4 +532,34 @@ where
 
         Ok(())
     }
+
+    pub(super) fn solve_r1cs_blackbox(
+        &mut self,
+        bb_func: &BlackBoxFuncCall<GenericFieldElement<F>>,
+    ) -> CoAcvmResult<()> {
+        tracing::trace!("solving blackbox");
+
+        let pedantic_solving = self.pedantic_solving();
+        let initial_witness = &mut self.witness_map[self.function_index];
+
+        let inputs = bb_func.get_inputs_vec();
+
+        if !Self::contains_all_inputs(initial_witness, &inputs) {
+            let unassigned_witness = Self::first_missing_assignment(initial_witness, &inputs)
+                .expect("Some assignments must be missing because it does not contain all inputs");
+            Err(eyre::eyre!(
+                "missing assignment for witness: {}",
+                unassigned_witness.0
+            ))?;
+        }
+
+        match bb_func {
+            BlackBoxFuncCall::RANGE { input } => {
+                Self::solve_range_opcode(initial_witness, input, pedantic_solving)?
+            }
+            _ => todo!("solve blackbox function {} not supported", bb_func.name()),
+        }
+
+        Ok(())
+    }
 }
