@@ -1,6 +1,7 @@
 use crate::mpc_prover_flavour::SharedUnivariateTrait;
 use ark_ec::CurveGroup;
 use co_builder::flavours::eccvm_flavour::ECCVMFlavour;
+use co_builder::flavours::translator_flavour::TranslatorFlavour;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
@@ -1572,5 +1573,2928 @@ where
                 .transcript_accumulator_y()
                 .evaluations_as_ref(),
         )
+    }
+}
+
+impl<T, P> AllEntitiesBatch<T, P, TranslatorFlavour>
+where
+    P: CurveGroup,
+    T: NoirUltraHonkProver<P>,
+{
+    pub fn add_lagrange_odd_in_minicircuit(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.precomputed.lagrange_odd_in_minicircuit_mut().extend(
+            entity
+                .precomputed
+                .lagrange_odd_in_minicircuit()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_lagrange_result_row(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.precomputed.lagrange_result_row_mut().extend(
+            entity
+                .precomputed
+                .lagrange_result_row()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_lagrange_last_in_minicircuit(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.precomputed.lagrange_last_in_minicircuit_mut().extend(
+            entity
+                .precomputed
+                .lagrange_last_in_minicircuit()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_accumulators_binary_limbs_0_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .accumulators_binary_limbs_0_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .accumulators_binary_limbs_0_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_accumulators_binary_limbs_1_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .accumulators_binary_limbs_1_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .accumulators_binary_limbs_1_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_accumulators_binary_limbs_2_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .accumulators_binary_limbs_2_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .accumulators_binary_limbs_2_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_accumulators_binary_limbs_3_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .accumulators_binary_limbs_3_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .accumulators_binary_limbs_3_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_accumulators_binary_limbs_0(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.accumulators_binary_limbs_0_mut().extend(
+            entity
+                .witness
+                .accumulators_binary_limbs_0()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_accumulators_binary_limbs_1(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.accumulators_binary_limbs_1_mut().extend(
+            entity
+                .witness
+                .accumulators_binary_limbs_1()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_accumulators_binary_limbs_2(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.accumulators_binary_limbs_2_mut().extend(
+            entity
+                .witness
+                .accumulators_binary_limbs_2()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_accumulators_binary_limbs_3(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.accumulators_binary_limbs_3_mut().extend(
+            entity
+                .witness
+                .accumulators_binary_limbs_3()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_p_x_low_limbs(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .p_x_low_limbs_mut()
+            .extend(entity.witness.p_x_low_limbs().evaluations_as_ref())
+    }
+    pub fn add_p_x_low_limbs_range_constraint_0(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.p_x_low_limbs_range_constraint_0_mut().extend(
+            entity
+                .witness
+                .p_x_low_limbs_range_constraint_0()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_p_x_low_limbs_range_constraint_1(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.p_x_low_limbs_range_constraint_1_mut().extend(
+            entity
+                .witness
+                .p_x_low_limbs_range_constraint_1()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_p_x_low_limbs_range_constraint_2(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.p_x_low_limbs_range_constraint_2_mut().extend(
+            entity
+                .witness
+                .p_x_low_limbs_range_constraint_2()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_p_x_low_limbs_range_constraint_3(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.p_x_low_limbs_range_constraint_3_mut().extend(
+            entity
+                .witness
+                .p_x_low_limbs_range_constraint_3()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_p_x_low_limbs_range_constraint_4(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.p_x_low_limbs_range_constraint_4_mut().extend(
+            entity
+                .witness
+                .p_x_low_limbs_range_constraint_4()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_p_x_high_limbs(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .p_x_high_limbs_mut()
+            .extend(entity.witness.p_x_high_limbs().evaluations_as_ref())
+    }
+    pub fn add_p_x_high_limbs_range_constraint_0(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.p_x_high_limbs_range_constraint_0_mut().extend(
+            entity
+                .witness
+                .p_x_high_limbs_range_constraint_0()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_p_x_high_limbs_range_constraint_1(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.p_x_high_limbs_range_constraint_1_mut().extend(
+            entity
+                .witness
+                .p_x_high_limbs_range_constraint_1()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_p_x_high_limbs_range_constraint_2(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.p_x_high_limbs_range_constraint_2_mut().extend(
+            entity
+                .witness
+                .p_x_high_limbs_range_constraint_2()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_p_x_high_limbs_range_constraint_3(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.p_x_high_limbs_range_constraint_3_mut().extend(
+            entity
+                .witness
+                .p_x_high_limbs_range_constraint_3()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_p_x_high_limbs_range_constraint_4(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.p_x_high_limbs_range_constraint_4_mut().extend(
+            entity
+                .witness
+                .p_x_high_limbs_range_constraint_4()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_p_y_low_limbs(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .p_y_low_limbs_mut()
+            .extend(entity.witness.p_y_low_limbs().evaluations_as_ref())
+    }
+    pub fn add_p_y_low_limbs_range_constraint_0(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.p_y_low_limbs_range_constraint_0_mut().extend(
+            entity
+                .witness
+                .p_y_low_limbs_range_constraint_0()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_p_y_low_limbs_range_constraint_1(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.p_y_low_limbs_range_constraint_1_mut().extend(
+            entity
+                .witness
+                .p_y_low_limbs_range_constraint_1()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_p_y_low_limbs_range_constraint_2(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.p_y_low_limbs_range_constraint_2_mut().extend(
+            entity
+                .witness
+                .p_y_low_limbs_range_constraint_2()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_p_y_low_limbs_range_constraint_3(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.p_y_low_limbs_range_constraint_3_mut().extend(
+            entity
+                .witness
+                .p_y_low_limbs_range_constraint_3()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_p_y_low_limbs_range_constraint_4(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.p_y_low_limbs_range_constraint_4_mut().extend(
+            entity
+                .witness
+                .p_y_low_limbs_range_constraint_4()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_p_y_high_limbs(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .p_y_high_limbs_mut()
+            .extend(entity.witness.p_y_high_limbs().evaluations_as_ref())
+    }
+    pub fn add_p_y_high_limbs_range_constraint_0(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.p_y_high_limbs_range_constraint_0_mut().extend(
+            entity
+                .witness
+                .p_y_high_limbs_range_constraint_0()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_p_y_high_limbs_range_constraint_1(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.p_y_high_limbs_range_constraint_1_mut().extend(
+            entity
+                .witness
+                .p_y_high_limbs_range_constraint_1()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_p_y_high_limbs_range_constraint_2(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.p_y_high_limbs_range_constraint_2_mut().extend(
+            entity
+                .witness
+                .p_y_high_limbs_range_constraint_2()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_p_y_high_limbs_range_constraint_3(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.p_y_high_limbs_range_constraint_3_mut().extend(
+            entity
+                .witness
+                .p_y_high_limbs_range_constraint_3()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_p_y_high_limbs_range_constraint_4(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.p_y_high_limbs_range_constraint_4_mut().extend(
+            entity
+                .witness
+                .p_y_high_limbs_range_constraint_4()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_z_low_limbs(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .z_low_limbs_mut()
+            .extend(entity.witness.z_low_limbs().evaluations_as_ref())
+    }
+    pub fn add_z_low_limbs_range_constraint_0(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.z_low_limbs_range_constraint_0_mut().extend(
+            entity
+                .witness
+                .z_low_limbs_range_constraint_0()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_z_low_limbs_range_constraint_1(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.z_low_limbs_range_constraint_1_mut().extend(
+            entity
+                .witness
+                .z_low_limbs_range_constraint_1()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_z_low_limbs_range_constraint_2(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.z_low_limbs_range_constraint_2_mut().extend(
+            entity
+                .witness
+                .z_low_limbs_range_constraint_2()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_z_low_limbs_range_constraint_3(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.z_low_limbs_range_constraint_3_mut().extend(
+            entity
+                .witness
+                .z_low_limbs_range_constraint_3()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_z_low_limbs_range_constraint_4(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.z_low_limbs_range_constraint_4_mut().extend(
+            entity
+                .witness
+                .z_low_limbs_range_constraint_4()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_z_high_limbs(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .z_high_limbs_mut()
+            .extend(entity.witness.z_high_limbs().evaluations_as_ref())
+    }
+    pub fn add_z_high_limbs_range_constraint_0(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.z_high_limbs_range_constraint_0_mut().extend(
+            entity
+                .witness
+                .z_high_limbs_range_constraint_0()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_z_high_limbs_range_constraint_1(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.z_high_limbs_range_constraint_1_mut().extend(
+            entity
+                .witness
+                .z_high_limbs_range_constraint_1()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_z_high_limbs_range_constraint_2(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.z_high_limbs_range_constraint_2_mut().extend(
+            entity
+                .witness
+                .z_high_limbs_range_constraint_2()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_z_high_limbs_range_constraint_3(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.z_high_limbs_range_constraint_3_mut().extend(
+            entity
+                .witness
+                .z_high_limbs_range_constraint_3()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_z_high_limbs_range_constraint_4(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.z_high_limbs_range_constraint_4_mut().extend(
+            entity
+                .witness
+                .z_high_limbs_range_constraint_4()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_accumulator_low_limbs_range_constraint_0(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .accumulator_low_limbs_range_constraint_0_mut()
+            .extend(
+                entity
+                    .witness
+                    .accumulator_low_limbs_range_constraint_0()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_accumulator_low_limbs_range_constraint_1(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .accumulator_low_limbs_range_constraint_1_mut()
+            .extend(
+                entity
+                    .witness
+                    .accumulator_low_limbs_range_constraint_1()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_accumulator_low_limbs_range_constraint_2(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .accumulator_low_limbs_range_constraint_2_mut()
+            .extend(
+                entity
+                    .witness
+                    .accumulator_low_limbs_range_constraint_2()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_accumulator_low_limbs_range_constraint_3(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .accumulator_low_limbs_range_constraint_3_mut()
+            .extend(
+                entity
+                    .witness
+                    .accumulator_low_limbs_range_constraint_3()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_accumulator_low_limbs_range_constraint_4(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .accumulator_low_limbs_range_constraint_4_mut()
+            .extend(
+                entity
+                    .witness
+                    .accumulator_low_limbs_range_constraint_4()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_accumulator_high_limbs_range_constraint_0(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .accumulator_high_limbs_range_constraint_0_mut()
+            .extend(
+                entity
+                    .witness
+                    .accumulator_high_limbs_range_constraint_0()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_accumulator_high_limbs_range_constraint_1(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .accumulator_high_limbs_range_constraint_1_mut()
+            .extend(
+                entity
+                    .witness
+                    .accumulator_high_limbs_range_constraint_1()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_accumulator_high_limbs_range_constraint_2(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .accumulator_high_limbs_range_constraint_2_mut()
+            .extend(
+                entity
+                    .witness
+                    .accumulator_high_limbs_range_constraint_2()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_accumulator_high_limbs_range_constraint_3(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .accumulator_high_limbs_range_constraint_3_mut()
+            .extend(
+                entity
+                    .witness
+                    .accumulator_high_limbs_range_constraint_3()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_accumulator_high_limbs_range_constraint_4(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .accumulator_high_limbs_range_constraint_4_mut()
+            .extend(
+                entity
+                    .witness
+                    .accumulator_high_limbs_range_constraint_4()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_quotient_low_binary_limbs(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.quotient_low_binary_limbs_mut().extend(
+            entity
+                .witness
+                .quotient_low_binary_limbs()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_quotient_low_limbs_range_constraint_0(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .quotient_low_limbs_range_constraint_0_mut()
+            .extend(
+                entity
+                    .witness
+                    .quotient_low_limbs_range_constraint_0()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_quotient_low_limbs_range_constraint_1(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .quotient_low_limbs_range_constraint_1_mut()
+            .extend(
+                entity
+                    .witness
+                    .quotient_low_limbs_range_constraint_1()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_quotient_low_limbs_range_constraint_2(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .quotient_low_limbs_range_constraint_2_mut()
+            .extend(
+                entity
+                    .witness
+                    .quotient_low_limbs_range_constraint_2()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_quotient_low_limbs_range_constraint_3(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .quotient_low_limbs_range_constraint_3_mut()
+            .extend(
+                entity
+                    .witness
+                    .quotient_low_limbs_range_constraint_3()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_quotient_low_limbs_range_constraint_4(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .quotient_low_limbs_range_constraint_4_mut()
+            .extend(
+                entity
+                    .witness
+                    .quotient_low_limbs_range_constraint_4()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_quotient_high_binary_limbs(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.quotient_high_binary_limbs_mut().extend(
+            entity
+                .witness
+                .quotient_high_binary_limbs()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_quotient_high_limbs_range_constraint_0(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .quotient_high_limbs_range_constraint_0_mut()
+            .extend(
+                entity
+                    .witness
+                    .quotient_high_limbs_range_constraint_0()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_quotient_high_limbs_range_constraint_1(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .quotient_high_limbs_range_constraint_1_mut()
+            .extend(
+                entity
+                    .witness
+                    .quotient_high_limbs_range_constraint_1()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_quotient_high_limbs_range_constraint_2(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .quotient_high_limbs_range_constraint_2_mut()
+            .extend(
+                entity
+                    .witness
+                    .quotient_high_limbs_range_constraint_2()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_quotient_high_limbs_range_constraint_3(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .quotient_high_limbs_range_constraint_3_mut()
+            .extend(
+                entity
+                    .witness
+                    .quotient_high_limbs_range_constraint_3()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_quotient_high_limbs_range_constraint_4(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .quotient_high_limbs_range_constraint_4_mut()
+            .extend(
+                entity
+                    .witness
+                    .quotient_high_limbs_range_constraint_4()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_relation_wide_limbs(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .relation_wide_limbs_mut()
+            .extend(entity.witness.relation_wide_limbs().evaluations_as_ref())
+    }
+    pub fn add_relation_wide_limbs_range_constraint_0(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .relation_wide_limbs_range_constraint_0_mut()
+            .extend(
+                entity
+                    .witness
+                    .relation_wide_limbs_range_constraint_0()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_relation_wide_limbs_range_constraint_1(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .relation_wide_limbs_range_constraint_1_mut()
+            .extend(
+                entity
+                    .witness
+                    .relation_wide_limbs_range_constraint_1()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_relation_wide_limbs_range_constraint_2(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .relation_wide_limbs_range_constraint_2_mut()
+            .extend(
+                entity
+                    .witness
+                    .relation_wide_limbs_range_constraint_2()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_relation_wide_limbs_range_constraint_3(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .relation_wide_limbs_range_constraint_3_mut()
+            .extend(
+                entity
+                    .witness
+                    .relation_wide_limbs_range_constraint_3()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_p_x_low_limbs_range_constraint_tail(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .p_x_low_limbs_range_constraint_tail_mut()
+            .extend(
+                entity
+                    .witness
+                    .p_x_low_limbs_range_constraint_tail()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_p_x_high_limbs_range_constraint_tail(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .p_x_high_limbs_range_constraint_tail_mut()
+            .extend(
+                entity
+                    .witness
+                    .p_x_high_limbs_range_constraint_tail()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_p_y_low_limbs_range_constraint_tail(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .p_y_low_limbs_range_constraint_tail_mut()
+            .extend(
+                entity
+                    .witness
+                    .p_y_low_limbs_range_constraint_tail()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_p_y_high_limbs_range_constraint_tail(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .p_y_high_limbs_range_constraint_tail_mut()
+            .extend(
+                entity
+                    .witness
+                    .p_y_high_limbs_range_constraint_tail()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_z_low_limbs_range_constraint_tail(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.z_low_limbs_range_constraint_tail_mut().extend(
+            entity
+                .witness
+                .z_low_limbs_range_constraint_tail()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_z_high_limbs_range_constraint_tail(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .z_high_limbs_range_constraint_tail_mut()
+            .extend(
+                entity
+                    .witness
+                    .z_high_limbs_range_constraint_tail()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_accumulator_low_limbs_range_constraint_tail(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .accumulator_low_limbs_range_constraint_tail_mut()
+            .extend(
+                entity
+                    .witness
+                    .accumulator_low_limbs_range_constraint_tail()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_accumulator_high_limbs_range_constraint_tail(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .accumulator_high_limbs_range_constraint_tail_mut()
+            .extend(
+                entity
+                    .witness
+                    .accumulator_high_limbs_range_constraint_tail()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_quotient_low_limbs_range_constraint_tail(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .quotient_low_limbs_range_constraint_tail_mut()
+            .extend(
+                entity
+                    .witness
+                    .quotient_low_limbs_range_constraint_tail()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_quotient_high_limbs_range_constraint_tail(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .quotient_high_limbs_range_constraint_tail_mut()
+            .extend(
+                entity
+                    .witness
+                    .quotient_high_limbs_range_constraint_tail()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_x_lo_y_hi(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .x_lo_y_hi_mut()
+            .extend(entity.witness.x_lo_y_hi().evaluations_as_ref())
+    }
+    pub fn add_x_hi_z_1(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .x_hi_z_1_mut()
+            .extend(entity.witness.x_hi_z_1().evaluations_as_ref())
+    }
+    pub fn add_y_lo_z_2(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .y_lo_z_2_mut()
+            .extend(entity.witness.y_lo_z_2().evaluations_as_ref())
+    }
+    pub fn add_lagrange_even_in_minicircuit(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.precomputed.lagrange_even_in_minicircuit_mut().extend(
+            entity
+                .precomputed
+                .lagrange_even_in_minicircuit()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_p_x_low_limbs_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness.p_x_low_limbs_shift_mut().extend(
+            entity
+                .shifted_witness
+                .p_x_low_limbs_shift()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_p_x_low_limbs_range_constraint_0_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .p_x_low_limbs_range_constraint_0_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .p_x_low_limbs_range_constraint_0_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_p_x_low_limbs_range_constraint_1_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .p_x_low_limbs_range_constraint_1_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .p_x_low_limbs_range_constraint_1_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_p_x_low_limbs_range_constraint_2_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .p_x_low_limbs_range_constraint_2_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .p_x_low_limbs_range_constraint_2_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_p_x_low_limbs_range_constraint_3_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .p_x_low_limbs_range_constraint_3_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .p_x_low_limbs_range_constraint_3_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_p_x_low_limbs_range_constraint_4_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .p_x_low_limbs_range_constraint_4_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .p_x_low_limbs_range_constraint_4_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_p_x_high_limbs_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness.p_x_high_limbs_shift_mut().extend(
+            entity
+                .shifted_witness
+                .p_x_high_limbs_shift()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_p_x_high_limbs_range_constraint_0_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .p_x_high_limbs_range_constraint_0_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .p_x_high_limbs_range_constraint_0_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_p_x_high_limbs_range_constraint_1_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .p_x_high_limbs_range_constraint_1_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .p_x_high_limbs_range_constraint_1_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_p_x_high_limbs_range_constraint_2_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .p_x_high_limbs_range_constraint_2_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .p_x_high_limbs_range_constraint_2_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_p_x_high_limbs_range_constraint_3_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .p_x_high_limbs_range_constraint_3_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .p_x_high_limbs_range_constraint_3_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_p_y_low_limbs_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness.p_y_low_limbs_shift_mut().extend(
+            entity
+                .shifted_witness
+                .p_y_low_limbs_shift()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_p_y_low_limbs_range_constraint_0_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .p_y_low_limbs_range_constraint_0_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .p_y_low_limbs_range_constraint_0_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_p_y_low_limbs_range_constraint_1_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .p_y_low_limbs_range_constraint_1_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .p_y_low_limbs_range_constraint_1_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_p_y_low_limbs_range_constraint_2_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .p_y_low_limbs_range_constraint_2_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .p_y_low_limbs_range_constraint_2_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_p_y_low_limbs_range_constraint_3_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .p_y_low_limbs_range_constraint_3_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .p_y_low_limbs_range_constraint_3_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_p_y_low_limbs_range_constraint_4_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .p_y_low_limbs_range_constraint_4_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .p_y_low_limbs_range_constraint_4_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_p_y_high_limbs_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness.p_y_high_limbs_shift_mut().extend(
+            entity
+                .shifted_witness
+                .p_y_high_limbs_shift()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_p_y_high_limbs_range_constraint_0_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .p_y_high_limbs_range_constraint_0_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .p_y_high_limbs_range_constraint_0_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_p_y_high_limbs_range_constraint_1_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .p_y_high_limbs_range_constraint_1_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .p_y_high_limbs_range_constraint_1_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_p_y_high_limbs_range_constraint_2_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .p_y_high_limbs_range_constraint_2_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .p_y_high_limbs_range_constraint_2_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_p_y_high_limbs_range_constraint_3_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .p_y_high_limbs_range_constraint_3_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .p_y_high_limbs_range_constraint_3_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_z_low_limbs_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness.z_low_limbs_shift_mut().extend(
+            entity
+                .shifted_witness
+                .z_low_limbs_shift()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_z_low_limbs_range_constraint_0_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .z_low_limbs_range_constraint_0_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .z_low_limbs_range_constraint_0_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_z_low_limbs_range_constraint_1_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .z_low_limbs_range_constraint_1_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .z_low_limbs_range_constraint_1_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_z_low_limbs_range_constraint_2_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .z_low_limbs_range_constraint_2_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .z_low_limbs_range_constraint_2_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_z_low_limbs_range_constraint_3_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .z_low_limbs_range_constraint_3_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .z_low_limbs_range_constraint_3_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_z_low_limbs_range_constraint_4_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .z_low_limbs_range_constraint_4_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .z_low_limbs_range_constraint_4_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_z_high_limbs_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness.z_high_limbs_shift_mut().extend(
+            entity
+                .shifted_witness
+                .z_high_limbs_shift()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_z_high_limbs_range_constraint_0_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .z_high_limbs_range_constraint_0_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .z_high_limbs_range_constraint_0_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_z_high_limbs_range_constraint_1_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .z_high_limbs_range_constraint_1_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .z_high_limbs_range_constraint_1_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_z_high_limbs_range_constraint_2_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .z_high_limbs_range_constraint_2_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .z_high_limbs_range_constraint_2_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_z_high_limbs_range_constraint_3_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .z_high_limbs_range_constraint_3_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .z_high_limbs_range_constraint_3_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_z_high_limbs_range_constraint_4_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .z_high_limbs_range_constraint_4_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .z_high_limbs_range_constraint_4_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_accumulator_low_limbs_range_constraint_0_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .accumulator_low_limbs_range_constraint_0_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .accumulator_low_limbs_range_constraint_0_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_accumulator_low_limbs_range_constraint_1_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .accumulator_low_limbs_range_constraint_1_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .accumulator_low_limbs_range_constraint_1_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_accumulator_low_limbs_range_constraint_2_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .accumulator_low_limbs_range_constraint_2_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .accumulator_low_limbs_range_constraint_2_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_accumulator_low_limbs_range_constraint_3_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .accumulator_low_limbs_range_constraint_3_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .accumulator_low_limbs_range_constraint_3_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_accumulator_low_limbs_range_constraint_4_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .accumulator_low_limbs_range_constraint_4_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .accumulator_low_limbs_range_constraint_4_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_accumulator_high_limbs_range_constraint_0_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .accumulator_high_limbs_range_constraint_0_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .accumulator_high_limbs_range_constraint_0_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_accumulator_high_limbs_range_constraint_1_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .accumulator_high_limbs_range_constraint_1_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .accumulator_high_limbs_range_constraint_1_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_accumulator_high_limbs_range_constraint_2_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .accumulator_high_limbs_range_constraint_2_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .accumulator_high_limbs_range_constraint_2_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_accumulator_high_limbs_range_constraint_3_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .accumulator_high_limbs_range_constraint_3_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .accumulator_high_limbs_range_constraint_3_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_quotient_low_binary_limbs_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .quotient_low_binary_limbs_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .quotient_low_binary_limbs_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_quotient_low_limbs_range_constraint_0_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .quotient_low_limbs_range_constraint_0_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .quotient_low_limbs_range_constraint_0_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_quotient_low_limbs_range_constraint_1_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .quotient_low_limbs_range_constraint_1_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .quotient_low_limbs_range_constraint_1_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_quotient_low_limbs_range_constraint_2_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .quotient_low_limbs_range_constraint_2_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .quotient_low_limbs_range_constraint_2_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_quotient_low_limbs_range_constraint_3_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .quotient_low_limbs_range_constraint_3_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .quotient_low_limbs_range_constraint_3_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_quotient_low_limbs_range_constraint_4_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .quotient_low_limbs_range_constraint_4_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .quotient_low_limbs_range_constraint_4_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_quotient_high_binary_limbs_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .quotient_high_binary_limbs_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .quotient_high_binary_limbs_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_quotient_high_limbs_range_constraint_0_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .quotient_high_limbs_range_constraint_0_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .quotient_high_limbs_range_constraint_0_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_quotient_high_limbs_range_constraint_1_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .quotient_high_limbs_range_constraint_1_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .quotient_high_limbs_range_constraint_1_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_quotient_high_limbs_range_constraint_2_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .quotient_high_limbs_range_constraint_2_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .quotient_high_limbs_range_constraint_2_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_quotient_high_limbs_range_constraint_3_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .quotient_high_limbs_range_constraint_3_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .quotient_high_limbs_range_constraint_3_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_p_x_high_limbs_range_constraint_tail_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .p_x_high_limbs_range_constraint_tail_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .p_x_high_limbs_range_constraint_tail_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_accumulator_high_limbs_range_constraint_tail_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .accumulator_high_limbs_range_constraint_tail_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .accumulator_high_limbs_range_constraint_tail_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_relation_wide_limbs_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness.relation_wide_limbs_shift_mut().extend(
+            entity
+                .shifted_witness
+                .relation_wide_limbs_shift()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_relation_wide_limbs_range_constraint_0_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .relation_wide_limbs_range_constraint_0_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .relation_wide_limbs_range_constraint_0_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_relation_wide_limbs_range_constraint_1_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .relation_wide_limbs_range_constraint_1_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .relation_wide_limbs_range_constraint_1_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_relation_wide_limbs_range_constraint_2_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .relation_wide_limbs_range_constraint_2_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .relation_wide_limbs_range_constraint_2_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_relation_wide_limbs_range_constraint_3_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .relation_wide_limbs_range_constraint_3_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .relation_wide_limbs_range_constraint_3_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_p_y_high_limbs_range_constraint_tail_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .p_y_high_limbs_range_constraint_tail_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .p_y_high_limbs_range_constraint_tail_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_quotient_high_limbs_range_constraint_tail_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .quotient_high_limbs_range_constraint_tail_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .quotient_high_limbs_range_constraint_tail_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_p_x_low_limbs_range_constraint_tail_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .p_x_low_limbs_range_constraint_tail_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .p_x_low_limbs_range_constraint_tail_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_p_x_high_limbs_range_constraint_4_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .p_x_high_limbs_range_constraint_4_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .p_x_high_limbs_range_constraint_4_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_p_y_low_limbs_range_constraint_tail_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .p_y_low_limbs_range_constraint_tail_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .p_y_low_limbs_range_constraint_tail_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_p_y_high_limbs_range_constraint_4_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .p_y_high_limbs_range_constraint_4_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .p_y_high_limbs_range_constraint_4_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_z_low_limbs_range_constraint_tail_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .z_low_limbs_range_constraint_tail_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .z_low_limbs_range_constraint_tail_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_z_high_limbs_range_constraint_tail_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .z_high_limbs_range_constraint_tail_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .z_high_limbs_range_constraint_tail_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_accumulator_low_limbs_range_constraint_tail_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .accumulator_low_limbs_range_constraint_tail_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .accumulator_low_limbs_range_constraint_tail_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_accumulator_high_limbs_range_constraint_4_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .accumulator_high_limbs_range_constraint_4_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .accumulator_high_limbs_range_constraint_4_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_quotient_low_limbs_range_constraint_tail_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .quotient_low_limbs_range_constraint_tail_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .quotient_low_limbs_range_constraint_tail_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_quotient_high_limbs_range_constraint_4_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .quotient_high_limbs_range_constraint_4_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .quotient_high_limbs_range_constraint_4_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_x_lo_y_hi_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness.x_lo_y_hi_shift_mut().extend(
+            entity
+                .shifted_witness
+                .x_lo_y_hi_shift()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_x_hi_z_1_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .x_hi_z_1_shift_mut()
+            .extend(entity.shifted_witness.x_hi_z_1_shift().evaluations_as_ref())
+    }
+    pub fn add_y_lo_z_2_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .y_lo_z_2_shift_mut()
+            .extend(entity.shifted_witness.y_lo_z_2_shift().evaluations_as_ref())
+    }
+    pub fn add_ordered_range_constraints_0(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.ordered_range_constraints_0_mut().extend(
+            entity
+                .witness
+                .ordered_range_constraints_0()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_ordered_range_constraints_1(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.ordered_range_constraints_1_mut().extend(
+            entity
+                .witness
+                .ordered_range_constraints_1()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_ordered_range_constraints_2(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.ordered_range_constraints_2_mut().extend(
+            entity
+                .witness
+                .ordered_range_constraints_2()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_ordered_range_constraints_3(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.ordered_range_constraints_3_mut().extend(
+            entity
+                .witness
+                .ordered_range_constraints_3()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_ordered_range_constraints_4(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.ordered_range_constraints_4_mut().extend(
+            entity
+                .witness
+                .ordered_range_constraints_4()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_ordered_range_constraints_0_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .ordered_range_constraints_0_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .ordered_range_constraints_0_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_ordered_range_constraints_1_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .ordered_range_constraints_1_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .ordered_range_constraints_1_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_ordered_range_constraints_2_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .ordered_range_constraints_2_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .ordered_range_constraints_2_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_ordered_range_constraints_3_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .ordered_range_constraints_3_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .ordered_range_constraints_3_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_ordered_range_constraints_4_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .ordered_range_constraints_4_shift_mut()
+            .extend(
+                entity
+                    .shifted_witness
+                    .ordered_range_constraints_4_shift()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_lagrange_real_last(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.precomputed
+            .lagrange_real_last_mut()
+            .extend(entity.precomputed.lagrange_real_last().evaluations_as_ref())
+    }
+    pub fn add_lagrange_masking(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.precomputed
+            .lagrange_masking_mut()
+            .extend(entity.precomputed.lagrange_masking().evaluations_as_ref())
+    }
+    pub fn add_ordered_extra_range_constraints_numerator(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.precomputed
+            .ordered_extra_range_constraints_numerator_mut()
+            .extend(
+                entity
+                    .precomputed
+                    .ordered_extra_range_constraints_numerator()
+                    .evaluations_as_ref(),
+            )
+    }
+    pub fn add_op(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness
+            .op_mut()
+            .extend(entity.witness.op().evaluations_as_ref())
+    }
+
+    pub fn add_interleaved_range_constraints_0(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.interleaved_range_constraints_0_mut().extend(
+            entity
+                .witness
+                .interleaved_range_constraints_0()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_interleaved_range_constraints_1(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.interleaved_range_constraints_1_mut().extend(
+            entity
+                .witness
+                .interleaved_range_constraints_1()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_interleaved_range_constraints_2(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.interleaved_range_constraints_2_mut().extend(
+            entity
+                .witness
+                .interleaved_range_constraints_2()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn add_interleaved_range_constraints_3(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.witness.interleaved_range_constraints_3_mut().extend(
+            entity
+                .witness
+                .interleaved_range_constraints_3()
+                .evaluations_as_ref(),
+        )
+    }
+    pub fn z_perm_shift(
+        &mut self,
+        entity: &AllEntities<
+            Shared<T, P, TranslatorFlavour>,
+            Public<P, TranslatorFlavour>,
+            TranslatorFlavour,
+        >,
+    ) {
+        self.shifted_witness
+            .z_perm_shift_mut()
+            .extend(entity.shifted_witness.z_perm_shift().evaluations_as_ref())
     }
 }
