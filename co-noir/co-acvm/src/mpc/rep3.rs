@@ -61,6 +61,14 @@ impl<'a, F: PrimeField, N: Network> Rep3AcvmSolver<'a, F, N> {
         })
     }
 
+    pub fn get_net0(&mut self) -> (&N, &mut Rep3State) {
+        (self.net0, &mut self.state0)
+    }
+
+    pub fn get_net1(&mut self) -> (&N, &mut Rep3State) {
+        (self.net1, &mut self.state1)
+    }
+
     fn combine_grumpkin_scalar_field_limbs(
         low: &Rep3AcvmType<ark_bn254::Fr>,
         high: &Rep3AcvmType<ark_bn254::Fr>,
