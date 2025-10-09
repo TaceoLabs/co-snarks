@@ -61,6 +61,36 @@ impl Barycentric {
         res
     }
 
+    // for each x_k in the big domain, build set of domain size-many denominator inverses
+    // 1/(d_i*(x_k - x_j)). will multiply against each of these (rather than to divide by something)
+    // for each barycentric evaluation
+    pub fn construct_denominator_inverses_runtime<F: PrimeField>(
+        num_evals: usize,
+        big_domain: &[F],
+        lagrange_denominators: &[F],
+    ) -> Vec<F> {
+        let domain_size = lagrange_denominators.len();
+        let big_domain_size = big_domain.len();
+        assert_eq!(big_domain_size, std::cmp::max(domain_size, num_evals));
+
+        let res_size = domain_size * num_evals;
+        let mut res = vec![F::zero(); res_size]; // default init to 0 since below does not init all elements
+
+        if num_evals == 1 {
+            res = lagrange_denominators.to_vec();
+        } else {
+            for k in domain_size..num_evals {
+                for j in 0..domain_size {
+                    let inv = lagrange_denominators[j] * (big_domain[k] - big_domain[j]);
+                    res[k * domain_size + j] = inv;
+                }
+            }
+        }
+
+        Utils::batch_invert(&mut res);
+        res
+    }
+
     // get full numerator values
     // full numerator is M(x) = \prod_{i} (x-x_i)
     // these will be zero for i < domain_size, but that's ok because
