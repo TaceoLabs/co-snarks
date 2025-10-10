@@ -1158,6 +1158,7 @@ dependencies = [
  "blake2",
  "blake3",
  "co-brillig",
+ "co-noir-common",
  "co-noir-types",
  "eyre",
  "intmap",
@@ -1292,6 +1293,7 @@ dependencies = [
  "mpc-net",
  "num-bigint 0.4.6",
  "rand 0.8.5",
+ "serde_json",
  "tracing",
  "ultrahonk",
 ]

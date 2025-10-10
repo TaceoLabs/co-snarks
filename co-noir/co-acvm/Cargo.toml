@@ -21,6 +21,7 @@ blake3.workspace = true
 co-brillig = { version = "0.3.0", path = "../co-brillig" }
 co-noir-types = { version = "0.1.0", path = "../co-noir-types" }
 noir-types = { version = "0.1.0", path = "../noir-types" }
+co-noir-common = { version = "0.1.0", path = "../co-noir-common" }
 eyre.workspace = true
 intmap.workspace = true
 itertools.workspace = true

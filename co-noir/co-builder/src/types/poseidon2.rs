@@ -17,7 +17,7 @@ use num_bigint::BigUint;
 use std::{any::TypeId, array};
 
 /// A struct representing the Poseidon2 permutation.
-pub(crate) struct Poseidon2CT<F: PrimeField, const T: usize, const D: u64> {
+pub struct Poseidon2CT<F: PrimeField, const T: usize, const D: u64> {
     /// The struct containing the parameters for the Poseidon2 permutation.
     pub poseidon2: Poseidon2<F, T, D>,
 }
@@ -414,7 +414,6 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
     }
 
     /// Performs the Poseidon2 Permutation on the given state.
-    #[expect(dead_code)]
     pub fn permutation<
         P: CurveGroup<ScalarField = F>,
         WT: NoirWitnessExtensionProtocol<P::ScalarField>,
@@ -448,7 +447,6 @@ impl<F: PrimeField> Default for Poseidon2CT<F, 4, 5> {
 }
 
 pub trait FieldHashCT<P: CurveGroup, const T: usize> {
-    #[expect(dead_code)]
     fn permutation<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
         &self,
         input: &[FieldCT<P::ScalarField>; T],

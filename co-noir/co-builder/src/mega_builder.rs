@@ -196,6 +196,10 @@ where
             .arithmetic
             .q_poseidon2_internal()
             .push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_busread()
+            .push(P::ScalarField::zero());
 
         self.check_selector_length_consistency();
         self.num_gates += 1;
@@ -234,6 +238,10 @@ where
         self.blocks
             .arithmetic
             .q_poseidon2_internal()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_busread()
             .push(P::ScalarField::zero());
 
         self.check_selector_length_consistency();
@@ -274,6 +282,10 @@ where
         self.blocks
             .arithmetic
             .q_poseidon2_internal()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_busread()
             .push(P::ScalarField::zero());
 
         self.check_selector_length_consistency();
@@ -317,6 +329,10 @@ where
         self.blocks
             .arithmetic
             .q_poseidon2_internal()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_busread()
             .push(P::ScalarField::zero());
 
         self.check_selector_length_consistency();
@@ -363,6 +379,10 @@ where
         self.blocks
             .arithmetic
             .q_poseidon2_internal()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_busread()
             .push(P::ScalarField::zero());
 
         self.check_selector_length_consistency();
@@ -433,6 +453,10 @@ where
             .poseidon2_external
             .q_poseidon2_internal()
             .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_external
+            .q_busread()
+            .push(P::ScalarField::zero());
 
         self.check_selector_length_consistency();
         self.num_gates += 1;
@@ -496,6 +520,10 @@ where
             .poseidon2_internal
             .q_poseidon2_internal()
             .push(P::ScalarField::one());
+        self.blocks
+            .poseidon2_internal
+            .q_busread()
+            .push(P::ScalarField::zero());
 
         self.check_selector_length_consistency();
         self.num_gates += 1;
@@ -599,6 +627,7 @@ where
         block.q_aux().push(P::ScalarField::zero());
         block.q_poseidon2_external().push(P::ScalarField::zero());
         block.q_poseidon2_internal().push(P::ScalarField::zero());
+        block.q_busread().push(P::ScalarField::zero());
 
         // TACEO TODO these are uncommented due to mutability issues
         // Taken care of by the caller uisng the create_dummy_gate! macro
@@ -1041,13 +1070,36 @@ where
      *
      * @param point Point to be added into the accumulator
      */
+    pub fn queue_ecc_add_accum(
+        &mut self,
+        point: T::NativeAcvmPoint<P>,
+        precomputed_point_limbs: Option<[T::AcvmType; 5]>,
+        driver: &mut T,
+    ) -> HonkProofResult<CoEccOpTuple<T, P>> {
+        // Add the operation to the op queue
+        let ultra_op = self
+            .ecc_op_queue
+            .add_accumulate(point, precomputed_point_limbs, driver)?;
+
+        // Add corresponding gates for the operation
+        Ok(self.populate_ecc_op_wires(&ultra_op))
+    }
+
+    /**
+     * @brief Add simple point addition operation to the op queue and add corresponding gates
+     *
+     * @param point Point to be added into the accumulator
+     */
     pub fn queue_ecc_add_accum_no_store(
         &mut self,
         point: T::NativeAcvmPoint<P>,
+        precomputed_point_limbs: Option<[T::AcvmType; 5]>,
         driver: &mut T,
     ) -> HonkProofResult<(CoEccOpTuple<T, P>, CoVMOperation<T, P>)> {
         // Add the operation to the op queue
-        let (ultra_op, eccvm_op) = self.ecc_op_queue.add_accumulate_no_store(point, driver)?;
+        let (ultra_op, eccvm_op) =
+            self.ecc_op_queue
+                .add_accumulate_no_store(point, precomputed_point_limbs, driver)?;
 
         // Add corresponding gates for the operation
         Ok((self.populate_ecc_op_wires(&ultra_op), eccvm_op))
@@ -1063,13 +1115,17 @@ where
     pub fn queue_ecc_mul_accum_store(
         &mut self,
         point: T::NativeAcvmPoint<P>,
+        precomputed_point_limbs: Option<[T::AcvmType; 5]>,
         scalar: T::AcvmType,
         driver: &mut T,
     ) -> HonkProofResult<CoEccOpTuple<T, P>> {
         // Add the operation to the op queue
-        let (ultra_op, eccvm_op) = self
-            .ecc_op_queue
-            .mul_accumulate_no_store(point, scalar, driver)?;
+        let (ultra_op, eccvm_op) = self.ecc_op_queue.mul_accumulate_no_store(
+            point,
+            precomputed_point_limbs,
+            scalar,
+            driver,
+        )?;
 
         let mut ops = vec![eccvm_op];
         precompute_flags(&mut ops, driver)?;
@@ -1089,13 +1145,17 @@ where
     pub fn queue_ecc_mul_accum_no_store(
         &mut self,
         point: T::NativeAcvmPoint<P>,
+        precomputed_point_limbs: Option<[T::AcvmType; 5]>,
         scalar: T::AcvmType,
         driver: &mut T,
     ) -> HonkProofResult<(CoEccOpTuple<T, P>, CoVMOperation<T, P>)> {
         // Add the operation to the op queue
-        let (ultra_op, eccvm_op) = self
-            .ecc_op_queue
-            .mul_accumulate_no_store(point, scalar, driver)?;
+        let (ultra_op, eccvm_op) = self.ecc_op_queue.mul_accumulate_no_store(
+            point,
+            precomputed_point_limbs,
+            scalar,
+            driver,
+        )?;
 
         // Add corresponding gates for the operation
         Ok((self.populate_ecc_op_wires(&ultra_op), eccvm_op))

@@ -1,3 +1,5 @@
+mod goblin_verifier;
+
 #[cfg(test)]
 mod tests {
     use ark_ec::AdditiveGroup;

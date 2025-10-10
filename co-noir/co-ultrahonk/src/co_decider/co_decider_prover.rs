@@ -4,12 +4,12 @@ use super::{
     types::ProverMemory,
 };
 use crate::{CONST_PROOF_SIZE_LOG_N, mpc_prover_flavour::MPCProverFlavour};
-use co_noir_common::honk_curve::HonkCurve;
-use co_noir_common::mpc::NoirUltraHonkProver;
 use co_noir_common::transcript::{Transcript, TranscriptHasher};
 use co_noir_common::{
     crs::ProverCrs,
+    honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
+    mpc::NoirUltraHonkProver,
     types::ZeroKnowledge,
     utils::Utils,
 };

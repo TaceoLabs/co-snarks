@@ -1014,6 +1014,11 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Ok(F::from(a.is_zero()))
     }
 
+    // checks if lhs <= rhs. Returns 1 if true, 0 otherwise.
+    fn le(&mut self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> eyre::Result<Self::AcvmType> {
+        Ok(F::from(lhs <= rhs))
+    }
+
     fn other_pointshare_to_other_field_share<
         C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
     >(
@@ -1474,11 +1479,6 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Ok(point * scalar)
     }
 
-    // checks if lhs <= rhs. Returns 1 if true, 0 otherwise.
-    fn le(&mut self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> eyre::Result<Self::AcvmType> {
-        Ok(F::from(lhs <= rhs))
-    }
-
     /// Given a pointshare, decomposes it into its x and y coordinates and the is_infinity flag, all as base field shares
     fn native_point_to_other_acvm_types<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
@@ -1499,15 +1499,30 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Ok((x, y, point_at_infinity))
     }
 
-    // Given a field element in the base field of the curve, decomposes it into CHUNK_SIZE bit chunks and returns these as field shares
+    // TACEO TODO: Currently only supports LIMB_BITS = 136, i.e. two Bn254::Fr elements per Bn254::Fq element
+    /// Converts a base field share into a vector of field shares, where the field shares
+    /// represent the limbs of the base field element. Each limb has at most LIMB_BITS bits.
     fn other_field_shares_to_field_shares<
-        const CHUNK_SIZE: usize,
+        const LIMB_BITS: usize,
         C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
     >(
         &mut self,
-        _input: Self::OtherAcvmType<C>,
+        input: Self::OtherAcvmType<C>,
     ) -> eyre::Result<Vec<Self::AcvmType>> {
-        unimplemented!("Only implemented for MPC backends");
+        assert_eq!(
+            LIMB_BITS, 136,
+            "Only LIMB_BITS = 136 is supported, i.e. two Bn254::Fr elements per Bn254::Fq element"
+        );
+        let as_bigint: BigUint = input
+            .to_base_prime_field_elements()
+            .map(Into::<BigUint>::into)
+            .collect_vec()
+            .pop()
+            .expect("We always have at least one element");
+
+        let low = as_bigint.clone() & ((BigUint::from(1u8) << LIMB_BITS) - BigUint::from(1u8));
+        let high = as_bigint >> LIMB_BITS;
+        Ok(vec![C::ScalarField::from(low), C::ScalarField::from(high)])
     }
 
     // Similar to decompose_arithmetic, but works on the full AcvmType, which can either be public or shared
@@ -1571,5 +1586,38 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
             .iter()
             .map(|v| C::BaseField::from(v.into_bigint().as_ref()[0]))
             .collect())
+    }
+
+    // TACEO TODO: Only supports LIMB_BITS = 136, i.e. two Bn254::Fr elements per Bn254::Fq element
+    /// Returns the point share with coordinates given as scalar field share limbs
+    fn acvm_types_to_native_point<
+        const LIMB_BITS: usize,
+        C: co_noir_common::honk_curve::HonkCurve<F, ScalarField = F>,
+    >(
+        &mut self,
+        x0: Self::AcvmType,
+        x1: Self::AcvmType,
+        y0: Self::AcvmType,
+        y1: Self::AcvmType,
+        is_infinity: Self::AcvmType,
+    ) -> eyre::Result<Self::NativeAcvmPoint<C>> {
+        assert_eq!(
+            LIMB_BITS, 136,
+            "Only LIMB_BITS = 136 is supported, i.e. two Bn254::Fr elements per Bn254::Fq element"
+        );
+        let x = C::convert_basefield_back(&[x0, x1]);
+        let y = C::convert_basefield_back(&[y0, y1]);
+        if is_infinity == F::one() {
+            Ok(C::Affine::zero().into())
+        } else {
+            Ok(C::g1_affine_from_xy(x, y).into())
+        }
+    }
+
+    fn negate_native_point<C: co_noir_common::honk_curve::HonkCurve<F, ScalarField = F>>(
+        &mut self,
+        point: Self::NativeAcvmPoint<C>,
+    ) -> eyre::Result<Self::NativeAcvmPoint<C>> {
+        Ok(-point)
     }
 }
