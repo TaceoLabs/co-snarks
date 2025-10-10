@@ -1,7 +1,7 @@
 pub mod eccvm;
 pub mod merge_prover;
 pub mod prelude;
-pub mod translator;
+pub(crate) mod translator;
 
 // Translator constans:
 pub(crate) const CONST_TRANSLATOR_LOG_N: usize = 18;

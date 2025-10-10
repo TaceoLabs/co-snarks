@@ -7,8 +7,8 @@ use crate::{
 };
 use co_builder::flavours::ultra_flavour::UltraFlavour;
 use co_builder::{prelude::PAIRING_POINT_ACCUMULATOR_SIZE, prover_flavour::Flavour};
-use common::transcript::{Transcript, TranscriptHasher};
-use common::{
+use co_noir_common::transcript::{Transcript, TranscriptHasher};
+use co_noir_common::{
     crs::ProverCrs,
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},

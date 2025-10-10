@@ -33,7 +33,7 @@ type Fq = ark_bn254::Fq;
 type Fr = ark_bn254::Fr;
 type G1Affine = <Bn254 as Pairing>::G1Affine;
 
-type EccOpsTableTestData<T, Q> = Vec<Vec<([u8; 4], (Q, Q, u8), T, T, T)>>;
+type EccOpsTableTestData<T, Q> = Vec<Vec<([u8; 4], (Q, Q, u8), Q, Q, T)>>;
 type UltraOpsTableTestData<T> = Vec<Vec<([u8; 4], T, T, T, T, T, T, u8)>>;
 
 type EccOpQueueTestData<T, Q> = (
@@ -75,11 +75,12 @@ fn to_field_elements(test_data: EccOpQueueTestData<String, String>) -> EccOpQueu
                         mul_scalar_full,
                     )| {
                         let (x, y): (Fq, Fq) = (to_field!(base_point_x), to_field!(base_point_y));
+                        let (z1, z2): (Fq, Fq) = (to_field!(z1), to_field!(z2));
                         (
                             op_code,
                             (x, y, is_infinity),
-                            to_field!(z1),
-                            to_field!(z2),
+                            z1,
+                            z2,
                             to_field!(mul_scalar_full),
                         )
                     },
@@ -359,7 +360,12 @@ fn test_mega_builder_construction() {
             let mut driver = T::new(net_1b, net_2b, A2BType::Direct).unwrap();
             builder.queue_ecc_no_op(&mut driver).unwrap();
             builder
-                .queue_ecc_mul_accum_store(random_point_share, random_scalar_share, &mut driver)
+                .queue_ecc_mul_accum_store(
+                    random_point_share,
+                    None,
+                    random_scalar_share,
+                    &mut driver,
+                )
                 .unwrap();
             builder.queue_ecc_eq(&mut driver).unwrap();
 
@@ -390,10 +396,15 @@ fn test_mega_builder_construction() {
                                     pointshare::open_point(&p, net_1b).unwrap().into_affine()
                                 }
                             };
-                            let [z1, z2, mul_scalar_full]: [Fr; 3] = driver
-                                .open_many_acvm_type(&[op.z1, op.z2, op.mul_scalar_full])
+                            let [z1, z2]: [Fq; 2] = driver
+                                .open_many_other_acvm_type::<Bn254G1>(&[op.z1, op.z2])
                                 .unwrap()
                                 .try_into()
+                                .unwrap();
+                            let mul_scalar_full: Fr = driver
+                                .open_many_acvm_type(&[op.mul_scalar_full])
+                                .unwrap()
+                                .pop()
                                 .unwrap();
                             let op_code = [
                                 if op.op_code.add { 1 } else { 0 },

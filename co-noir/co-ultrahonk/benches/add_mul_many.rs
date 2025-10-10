@@ -2,7 +2,7 @@ use criterion::*;
 
 type B = <ark_ec::bn::Bn<ark_bn254::Config> as ark_ec::pairing::Pairing>::G1;
 use ark_ff::Zero as _;
-use common::mpc::{NoirUltraHonkProver as P, plain::PlainUltraHonkDriver as D};
+use co_noir_common::mpc::{NoirUltraHonkProver as P, plain::PlainUltraHonkDriver as D};
 use itertools::izip;
 use rand::{RngCore, thread_rng};
 use rayon::prelude::*;

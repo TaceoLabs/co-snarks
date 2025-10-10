@@ -10,10 +10,10 @@ use co_builder::flavours::translator_flavour::TranslatorFlavour;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
 use co_builder::prelude::Polynomials;
-use common::honk_curve::HonkCurve;
-use common::honk_proof::TranscriptFieldType;
-use common::polynomials::polynomial::Polynomial;
-use common::utils::Utils;
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::polynomials::polynomial::Polynomial;
+use co_noir_common::utils::Utils;
 use num_bigint::BigUint;
 use std::str::FromStr;
 

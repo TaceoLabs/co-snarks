@@ -12,11 +12,11 @@ use crate::{
 };
 use ark_ec::CurveGroup;
 use ark_ff::One;
-use common::honk_curve::HonkCurve;
-use common::honk_proof::HonkProofResult;
-use common::honk_proof::TranscriptFieldType;
-use common::mpc::NoirUltraHonkProver;
-use common::polynomials::polynomial::RowDisablingPolynomial;
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::HonkProofResult;
+use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::mpc::NoirUltraHonkProver;
+use co_noir_common::polynomials::polynomial::RowDisablingPolynomial;
 use mpc_net::Network;
 use ultrahonk::plain_prover_flavour::UnivariateTrait;
 use ultrahonk::prelude::GateSeparatorPolynomial;
@@ -231,19 +231,19 @@ impl SumcheckRound {
         let mut univariate_accumulators = L::AllRelationAccHalfShared::<T, P>::default();
         while start < self.round_size {
             let end = (start + batch_size).min(self.round_size);
-            let mut all_entites = L::AllEntitiesBatchRelations::new();
+            let mut all_entities = L::AllEntitiesBatchRelations::new();
             for edge_idx in (start..end).step_by(2) {
                 let mut extended_edges = ProverUnivariates::<T, P, L>::default();
                 Self::extend_edges(&mut extended_edges, polynomials, edge_idx);
                 let scaling_factor =
                     gate_separators.beta_products[(edge_idx >> 1) * gate_separators.periodicity];
-                all_entites.fold_and_filter(extended_edges, scaling_factor);
+                all_entities.fold_and_filter(extended_edges, scaling_factor);
             }
             L::accumulate_relation_univariates_batch(
                 net,
                 state,
                 &mut univariate_accumulators,
-                &all_entites,
+                &all_entities,
                 relation_parameters,
             )?;
             start = end;
@@ -414,8 +414,9 @@ impl SumcheckRound {
         } else {
             // Note: Currently not happening
             let mut libra_round_univariate_extended = L::SumcheckRoundOutputZK::<T, P>::default();
-            libra_round_univariate_extended
-                .extend_from(libra_round_univariate.evaluations_as_ref());
+            libra_round_univariate_extended.extend_from(
+                &libra_round_univariate.evaluations_as_ref()[..P::LIBRA_UNIVARIATES_LENGTH],
+            ); //It's important that the poly gets extended from the right length
             libra_round_univariate_extended
         }
     }

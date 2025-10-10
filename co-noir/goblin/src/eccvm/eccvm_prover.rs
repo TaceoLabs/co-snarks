@@ -13,11 +13,11 @@ use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::prelude::Polynomials;
 
-use common::shplemini::OpeningPair;
-use common::shplemini::ShpleminiOpeningClaim;
-use common::transcript::Transcript;
-use common::transcript::TranscriptHasher;
-use common::{
+use co_noir_common::shplemini::OpeningPair;
+use co_noir_common::shplemini::ShpleminiOpeningClaim;
+use co_noir_common::transcript::Transcript;
+use co_noir_common::transcript::TranscriptHasher;
+use co_noir_common::{
     crs::ProverCrs,
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
@@ -360,7 +360,6 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
                 let write_term = self.compute_write_term(proving_key, i, write_idx);
                 denominator *= write_term;
             }
-
             self.memory.lookup_inverses[i] = denominator;
         }
 

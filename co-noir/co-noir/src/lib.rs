@@ -8,13 +8,13 @@ use co_acvm::{PlainAcvmSolver, Rep3AcvmSolver, ShamirAcvmSolver, solver::Rep3CoS
 use co_builder::flavours::ultra_flavour::UltraFlavour;
 use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
 use co_builder::prover_flavour::ProverFlavour;
+use co_noir_common::crs::ProverCrs;
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::polynomials::polynomial::Polynomial;
 use co_noir_types::{Rep3SharedInput, Rep3SharedWitness, ShamirType};
 use co_noir_types::{Rep3Type, ShamirSharedWitness};
 use color_eyre::eyre::{self, Context, Result};
-use common::crs::ProverCrs;
-use common::honk_curve::HonkCurve;
-use common::honk_proof::TranscriptFieldType;
-use common::polynomials::polynomial::Polynomial;
 use mpc_core::protocols::{
     rep3::{self, conversion::A2BType, id::PartyID},
     shamir::{self, ShamirPreprocessing, ShamirPrimeFieldShare, ShamirState},
@@ -29,6 +29,7 @@ pub use ark_ec::pairing::Pairing;
 pub use co_acvm::{Rep3AcvmType, ShamirAcvmType};
 pub use co_builder::prelude::constraint_system_from_reader;
 pub use co_builder::prelude::get_constraint_system_from_artifact;
+pub use co_noir_common::transcript::{Poseidon2Sponge, TranscriptHasher};
 pub use co_noir_types::merge_input_shares;
 pub use co_noir_types::split_input_rep3;
 pub use co_noir_types::split_witness_rep3;
@@ -41,7 +42,6 @@ pub use co_ultrahonk::{
         VerifyingKeyBarretenberg,
     },
 };
-pub use common::transcript::{Poseidon2Sponge, TranscriptHasher};
 pub use noir_types::HonkProof;
 pub use noir_types::SerializeF;
 pub use noir_types::program_artifact_from_reader;
@@ -129,6 +129,7 @@ type ShamirProverWitnessEntities<T> =
     <UltraFlavour as ProverFlavour>::ProverWitnessEntities<Polynomial<ShamirPrimeFieldShare<T>>>;
 
 /// Translate a REP3 shared proving key to a shamir shared proving key
+#[allow(clippy::complexity)]
 pub fn translate_proving_key<P: CurveGroup<BaseField: PrimeField>, N: Network>(
     proving_key: Rep3ProvingKey<P, UltraFlavour>,
     net: &N,

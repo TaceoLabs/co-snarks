@@ -1,8 +1,8 @@
 use ark_ec::CurveGroup;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_builder::{transcript::TranscriptFieldType, types::field_ct::FieldCT};
+use co_noir_common::honk_curve::HonkCurve;
 use co_ultrahonk::co_decider::types::RelationParameters;
-use common::honk_curve::HonkCurve;
 
 use crate::recursive_verifier::{PrecomputedCommitments, WitnessCommitments};
 

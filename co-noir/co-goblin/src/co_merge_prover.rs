@@ -3,11 +3,11 @@ use std::collections::VecDeque;
 use ark_ff::Field;
 use ark_ff::Zero;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use common::crs::ProverCrs;
-use common::honk_curve::HonkCurve;
-use common::honk_proof::{HonkProofResult, TranscriptFieldType};
-use common::transcript::Transcript;
-use common::transcript::TranscriptHasher;
+use co_noir_common::crs::ProverCrs;
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::{HonkProofResult, TranscriptFieldType};
+use co_noir_common::transcript::Transcript;
+use co_noir_common::transcript::TranscriptHasher;
 
 use itertools::{Itertools, izip};
 
@@ -47,7 +47,6 @@ where
         driver: &mut T,
     ) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
         self.transcript = Transcript::new();
-
         let curr_subtable = self
             .ecc_op_queue
             .construct_current_ultra_ops_subtable_columns();
@@ -120,19 +119,19 @@ where
         let curr_subtable_shared_commitments = (0..NUM_WIRES)
             .map(|i| {
                 let monomials = &commitment_key.monomials[..curr_subtable_shares[i].len()];
-                driver.msm_public_points::<C>(monomials, &curr_subtable_shares[i])
+                driver.msm_public_native_points::<C>(monomials, &curr_subtable_shares[i])
             })
             .collect_vec();
         let prev_table_shared_prev_commitments = (0..NUM_WIRES)
             .map(|i| {
                 let monomials = &commitment_key.monomials[..prev_table_shares[i].len()];
-                driver.msm_public_points::<C>(monomials, &prev_table_shares[i])
+                driver.msm_public_native_points::<C>(monomials, &prev_table_shares[i])
             })
             .collect_vec();
         let curr_table_shared_commitments = (0..NUM_WIRES)
             .map(|i| {
                 let monomials = &commitment_key.monomials[..curr_table_shares[i].len()];
-                driver.msm_public_points::<C>(monomials, &curr_table_shares[i])
+                driver.msm_public_native_points::<C>(monomials, &curr_table_shares[i])
             })
             .collect_vec();
 
@@ -146,7 +145,7 @@ where
         .collect_vec();
 
         let mut commitments: VecDeque<C::Affine> =
-            driver.open_many_points_other(&shared_commitments)?.into();
+            driver.open_many_native_points(&shared_commitments)?.into();
 
         // Send commitments to the verifier
         let num_chunks = commitments.len() / 3;
@@ -154,7 +153,9 @@ where
             for label in ["current_subtable_", "previous_table_", "current_table_"] {
                 self.transcript.send_point_to_verifier::<C>(
                     format!("{label}{i}"),
-                    commitments.pop_front().unwrap(),
+                    commitments
+                        .pop_front()
+                        .expect("Commitment vector is not empty"),
                 );
             }
         }
@@ -164,27 +165,13 @@ where
         let mut opening_claims: Vec<OpeningClaim<T::AcvmType, C::ScalarField>> =
             Vec::with_capacity(3 * NUM_WIRES);
 
-        self.compute_opening_claims(
-            &curr_subtable,
-            "current_subtable",
-            &mut opening_claims,
-            kappa,
-            driver,
-        )?;
-        self.compute_opening_claims(
-            &prev_table,
-            "previous_table",
-            &mut opening_claims,
-            kappa,
-            driver,
-        )?;
-        self.compute_opening_claims(
-            &curr_table,
-            "current_table",
-            &mut opening_claims,
-            kappa,
-            driver,
-        )?;
+        let all_polys = curr_subtable
+            .into_iter()
+            .chain(prev_table)
+            .chain(curr_table)
+            .collect_vec();
+
+        self.compute_opening_claims(&all_polys, "all_polys", &mut opening_claims, kappa, driver)?;
 
         let alpha = self.transcript.get_challenge::<C>("alpha".to_owned());
 
@@ -229,7 +216,7 @@ where
         driver: &mut T,
     ) -> eyre::Result<()> {
         // Compute the evaluations of the shared polynomials at kappa
-        let shared_evals = (0..NUM_WIRES)
+        let shared_evals = (0..3 * NUM_WIRES)
             .map(|i| driver.eval_poly(&polynomials[i], kappa))
             .collect::<Result<Vec<_>, _>>()?;
 
@@ -275,14 +262,14 @@ where
 
         // Compute the commitment to the quotient polynomial
         let monomials = &crs.monomials[..quotient.len()];
-        let quotient_commitment = driver.msm_public_points::<C>(monomials, &quotient);
+        let quotient_commitment = driver.msm_public_native_points::<C>(monomials, &quotient);
         // AZTEC TODO(#479): for now we compute the KZG commitment directly to unify the KZG and IPA interfaces but in the
         // future we might need to adjust this to use the incoming alternative to work queue (i.e. variation of
         // pthreads) or even the work queue itself
         let quotient_commitment: C::Affine = driver
-            .open_many_points_other(&[quotient_commitment])?
+            .open_many_native_points(&[quotient_commitment])?
             .pop()
-            .unwrap();
+            .expect("Commitment vector is not empty");
         transcript.send_point_to_verifier::<C>("KZG:W".to_string(), quotient_commitment);
         Ok(())
     }
@@ -351,16 +338,16 @@ mod tests {
 
     use co_acvm::{Rep3AcvmPoint, Rep3AcvmSolver};
     use co_builder::eccvm::co_ecc_op_queue::{CoEccvmOpsTable, CoUltraEccOpsTable, CoUltraOp};
-    use mpc_core::protocols::rep3::share_curve_point;
+    use mpc_core::protocols::rep3::{Rep3PointShare, share_curve_point};
 
     use super::*;
     use ark_bn254::Bn254;
     use ark_ec::bn::Bn;
     use ark_ec::pairing::Pairing;
     use co_builder::eccvm::ecc_op_queue::{EccOpCode, EccOpsTable, EccvmRowTracker, UltraOp};
-    use common::crs::parse::CrsParser;
-    use common::transcript::Poseidon2Sponge;
-    use common::types::ZeroKnowledge;
+    use co_noir_common::crs::parse::CrsParser;
+    use co_noir_common::transcript::Poseidon2Sponge;
+    use co_noir_common::types::ZeroKnowledge;
     use mpc_core::{
         gadgets::field_from_hex_string,
         protocols::rep3::{conversion::A2BType, share_field_element},
@@ -375,11 +362,11 @@ mod tests {
 
     const CRS_PATH_G1: &str = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../common/src/crs/bn254_g1.dat"
+        "/../co-noir-common/src/crs/bn254_g1.dat"
     );
     const CRS_PATH_G2: &str = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../common/src/crs/bn254_g2.dat"
+        "/../co-noir-common/src/crs/bn254_g2.dat"
     );
     const PROOF_FILE: &str = concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -503,7 +490,7 @@ mod tests {
         };
 
         let mut co_ultra_ops_2: VecDeque<_> = co_ultra_ops_from_ultra_op(ultra_op_2).into();
-        let mut acc: VecDeque<_> =
+        let mut acc: VecDeque<Rep3PointShare<Bn254G1>> =
             share_curve_point(Bn254G1Affine::identity().into(), &mut thread_rng()).into();
 
         let mut get_queues = || CoECCOpQueue::<Driver, Bn254G1> {

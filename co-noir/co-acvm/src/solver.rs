@@ -444,6 +444,9 @@ where
                         }
                     }
                 }
+                Opcode::BlackBoxFuncCall(bb_func) => {
+                    self.solve_r1cs_blackbox(bb_func)?;
+                }
                 _ => todo!("opcode {} detected, not supported", opcode),
             }
         }

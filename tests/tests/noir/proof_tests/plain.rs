@@ -7,14 +7,14 @@ use ark_ff::PrimeField;
 use co_acvm::{solver::PlainCoSolver, PlainAcvmSolver};
 use co_builder::flavours::ultra_flavour::UltraFlavour;
 use co_noir::{Bn254G1, HonkRecursion};
-use co_ultrahonk::prelude::{CoUltraHonk, PlainCoBuilder, ProvingKey, UltraHonk};
-use common::{
+use co_noir_common::{
     crs::parse::CrsParser,
     honk_proof::TranscriptFieldType,
     mpc::plain::PlainUltraHonkDriver,
     transcript::{Poseidon2Sponge, TranscriptHasher},
     types::ZeroKnowledge,
 };
+use co_ultrahonk::prelude::{CoUltraHonk, PlainCoBuilder, ProvingKey, UltraHonk};
 use sha3::Keccak256;
 
 fn witness_map_to_witness_vector<F: PrimeField>(witness_map: WitnessMap<F>) -> Vec<F> {

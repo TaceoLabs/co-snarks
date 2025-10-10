@@ -3,18 +3,18 @@ use ark_ff::Zero;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use co_builder::flavours::ultra_flavour::UltraFlavour;
 use co_noir::{Bn254G1, SerializeF};
+use co_noir_common::types::ZeroKnowledge;
+use co_noir_common::{
+    crs::parse::CrsParser,
+    mpc::{rep3::Rep3UltraHonkDriver, shamir::ShamirUltraHonkDriver},
+    transcript::Poseidon2Sponge,
+};
 use co_noir_types::{PubPrivate, Rep3SharedInput, Rep3Type};
 use co_ultrahonk::prelude::{
     ProvingKey, Rep3CoUltraHonk, ShamirCoUltraHonk, UltraHonk, VerifyingKey,
     VerifyingKeyBarretenberg,
 };
 use color_eyre::eyre::{self, Context, ContextCompat};
-use common::types::ZeroKnowledge;
-use common::{
-    crs::parse::CrsParser,
-    mpc::{rep3::Rep3UltraHonkDriver, shamir::ShamirUltraHonkDriver},
-    transcript::Poseidon2Sponge,
-};
 use figment::{
     Figment,
     providers::{Env, Format, Serialized, Toml},

@@ -9,10 +9,10 @@ use ark_ff::{Field, One, Zero};
 use co_builder::polynomials::polynomial_flavours::PolyGFlavour;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
-use common::shplemini::OpeningPair;
-use common::shplemini::ShpleminiOpeningClaim;
-use common::transcript::{Transcript, TranscriptHasher};
-use common::{
+use co_noir_common::shplemini::OpeningPair;
+use co_noir_common::shplemini::ShpleminiOpeningClaim;
+use co_noir_common::transcript::{Transcript, TranscriptHasher};
+use co_noir_common::{
     crs::ProverCrs,
     honk_curve::HonkCurve,
     honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
@@ -27,15 +27,6 @@ impl<
     L: PlainProverFlavour,
 > Decider<P, H, L>
 {
-    // fn get_f_polynomials(
-    //     polys: &'_ AllEntities<Vec<P::ScalarField>, L>,
-    // ) -> PolyF<'_, Vec<P::ScalarField>, L> {
-    //     PolyF {
-    //         precomputed: &polys.precomputed,
-    //         witness: &polys.witness,
-    //     }
-    // }
-
     fn get_g_polynomials<'a>(
         polys: &'a AllEntities<Vec<P::ScalarField>, L>,
     ) -> L::PolyG<'a, Vec<P::ScalarField>> {
@@ -110,7 +101,8 @@ impl<
 
         let mut batched_to_be_shifted = Polynomial::new_zero(n); // batched to-be-shifted polynomials
 
-        for g_poly in g_polynomials.iter() {
+        let iter = g_polynomials.iter();
+        for g_poly in iter {
             batched_to_be_shifted.add_scaled_slice(g_poly, &running_scalar);
             running_scalar *= rho;
         }

@@ -39,9 +39,9 @@ use ark_ec::pairing::Pairing;
 use ark_ec::{CurveGroup, PrimeGroup};
 use ark_ff::{One, Zero};
 use co_acvm::{PlainAcvmSolver, mpc::NoirWitnessExtensionProtocol};
-use common::crs::ProverCrs;
-use common::honk_curve::HonkCurve;
-use common::{
+use co_noir_common::crs::ProverCrs;
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::{
     honk_proof::{HonkProofResult, TranscriptFieldType},
     polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK,
     utils::Utils,
@@ -2388,19 +2388,15 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         let key: Vec<_> = records.iter().map(|y| y.index).collect();
         let to_sort1: Vec<_> = records
             .iter()
-            .map(|y| Self::get_as_shared(&y.index, driver))
+            .map(|y| driver.get_as_shared(&y.index))
             .collect();
         let to_sort2: Vec<_> = records
             .iter()
-            .map(|y| {
-                Self::get_as_shared(&self.get_variable(y.value_column1_witness as usize), driver)
-            })
+            .map(|y| driver.get_as_shared(&self.get_variable(y.value_column1_witness as usize)))
             .collect();
         let to_sort3: Vec<_> = records
             .iter()
-            .map(|y| {
-                Self::get_as_shared(&self.get_variable(y.value_column2_witness as usize), driver)
-            })
+            .map(|y| driver.get_as_shared(&self.get_variable(y.value_column2_witness as usize)))
             .collect();
         let inputs = vec![to_sort1.as_ref(), to_sort2.as_ref(), to_sort3.as_ref()];
 
@@ -2609,16 +2605,6 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         (last.index_witness, last.timestamp_witness, timestamp_deltas)
     }
 
-    pub(crate) fn get_as_shared(value: &T::AcvmType, driver: &mut T) -> T::ArithmeticShare {
-        if T::is_shared(value) {
-            T::get_shared(value).expect("Already checked it is shared")
-        } else {
-            driver.promote_to_trivial_share(
-                T::get_public(value).expect("Already checked it is public"),
-            )
-        }
-    }
-
     fn process_ram_array_shared_inner(
         &mut self,
         ram_id: usize,
@@ -2645,11 +2631,9 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         let mut to_sort4 = Vec::with_capacity(indexed_to_sort3.len());
         for (i, val) in indexed_to_sort3 {
             key.push(records[i].index.to_owned());
-            to_sort1.push(Self::get_as_shared(&records[i].index, driver));
-            to_sort2.push(Self::get_as_shared(
-                &self.get_variable(records[i].value_witness as usize),
-                driver,
-            ));
+            to_sort1.push(driver.get_as_shared(&records[i].index));
+            to_sort2
+                .push(driver.get_as_shared(&self.get_variable(records[i].value_witness as usize)));
             to_sort3.push(driver.promote_to_trivial_share(val));
             to_sort4.push(driver.promote_to_trivial_share(
                 if records[i].access_type == RamAccessType::Read {
@@ -3082,6 +3066,234 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             )?;
         }
         Ok(())
+    }
+
+    pub(crate) fn create_new_range_constraint(&mut self, variable_index: u32, target_range: u64) {
+        // We ignore this check because it is definitely more expensive in MPC, the proof will just not verify if this constraint is not given
+        // if (uint256_t(self.get_variable(variable_index)).data[0] > target_range) {
+        //     if (!self.failed()) {
+        //         self.failure(msg);
+        //     }
+        // }
+        if !self.range_lists.contains_key(&target_range) {
+            let new_range_list = self.create_range_list(target_range);
+            self.range_lists.insert(target_range, new_range_list);
+        }
+
+        let existing_tag =
+            self.real_variable_tags[self.real_variable_index[variable_index as usize] as usize];
+        // If the variable's tag matches the target range list's tag, do nothing.
+        if existing_tag != self.range_lists[&target_range].range_tag {
+            // If the variable is 'untagged' (i.e., it has the dummy tag), assign it the appropriate tag.
+            // Otherwise, find the range for which the variable has already been tagged.
+            if existing_tag != Self::DUMMY_TAG {
+                let found_tag = false;
+                for (range, range_list) in &self.range_lists {
+                    if range_list.range_tag == existing_tag {
+                        // found_tag = true;
+                        if *range < target_range {
+                            // The variable already has a more restrictive range check, so do nothing.
+                            return;
+                        } else {
+                            // The range constraint we are trying to impose is more restrictive than the existing range
+                            // constraint. It would be difficult to remove an existing range check. Instead deep-copy the
+                            // variable and apply a range check to new variable.
+                            let copied_witness =
+                                self.add_variable(self.get_variable(variable_index as usize));
+
+                            self.create_add_gate(&AddTriple::<P::ScalarField> {
+                                a: variable_index,
+                                b: copied_witness,
+                                c: self.zero_idx,
+                                a_scaling: P::ScalarField::one(),
+                                b_scaling: -P::ScalarField::one(),
+                                c_scaling: P::ScalarField::zero(),
+                                const_scaling: P::ScalarField::zero(),
+                            });
+                            // Recurse with new witness that has no tag attached.
+                            self.create_new_range_constraint(copied_witness, target_range);
+                            return;
+                        }
+                    }
+                }
+                assert!(found_tag);
+            }
+
+            self.assign_tag(variable_index, self.range_lists[&target_range].range_tag);
+            self.range_lists
+                .get_mut(&target_range)
+                .unwrap()
+                .variable_indices
+                .push(variable_index);
+        }
+    }
+
+    pub(crate) fn decompose_into_default_range(
+        &mut self,
+        driver: &mut T,
+        variable_index: u32,
+        num_bits: u64,
+        decompose: Option<&[T::ArithmeticShare]>, // If already decomposed, values are here
+        target_range_bitnum: u64,
+    ) -> eyre::Result<Vec<u32>> {
+        assert!(self.is_valid_variable(variable_index as usize));
+
+        assert!(num_bits > 0);
+        let val = self.get_variable(variable_index as usize);
+
+        // We cannot check that easily in MPC:
+        // If the value is out of range, set the composer error to the given msg.
+        // if val.msb() >= num_bits && !self.failed() {
+        //     self.failure(msg);
+        // }
+        let sublimb_mask: u64 = (1u64 << target_range_bitnum) - 1;
+        // /**
+        //  * AZTEC TODO: Support this commented-out code!
+        //  * At the moment, `decompose_into_default_range` generates a minimum of 1 arithmetic gate.
+        //  * This is not strictly required iff num_bits <= target_range_bitnum.
+        //  * However, this produces an edge-case where a variable is range-constrained but NOT present in an arithmetic gate.
+        //  * This in turn produces an unsatisfiable circuit (see `create_new_range_constraint`). We would need to check for
+        //  * and accommodate/reject this edge case to support not adding addition gates here if not reqiured
+        //  * if (num_bits <= target_range_bitnum) {
+        //  *     const uint64_t expected_range = (1ULL << num_bits) - 1ULL;
+        //  *     create_new_range_constraint(variable_index, expected_range);
+        //  *     return { variable_index };
+        //  * }
+        //  **/
+        let has_remainder_bits = num_bits % target_range_bitnum != 0;
+        let num_limbs = num_bits / target_range_bitnum + if has_remainder_bits { 1 } else { 0 };
+        let last_limb_size = num_bits - (num_bits / target_range_bitnum * target_range_bitnum);
+        let last_limb_range = (1u64 << last_limb_size) - 1;
+
+        let mut sublimb_indices: Vec<u32> = Vec::with_capacity(num_limbs as usize);
+        let sublimbs: Vec<T::AcvmType> = match decompose {
+            // Already decomposed, i.e., we just take the values
+            Some(decomposed) => decomposed
+                .iter()
+                .map(|item| T::AcvmType::from(item.clone()))
+                .collect(),
+            None => {
+                // Not yet decomposed
+                if T::is_shared(&val) {
+                    let decomp = T::decompose_arithmetic(
+                        driver,
+                        T::get_shared(&val).expect("Already checked it is shared"),
+                        num_bits as usize,
+                        target_range_bitnum as usize,
+                    )?;
+                    decomp.into_iter().map(T::AcvmType::from).collect()
+                } else {
+                    let mut accumulator: BigUint = T::get_public(&val)
+                        .expect("Already checked it is public")
+                        .into();
+                    let sublimb_mask: BigUint = sublimb_mask.into();
+                    (0..num_limbs)
+                        .map(|_| {
+                            let sublimb_value = P::ScalarField::from(&accumulator & &sublimb_mask);
+                            accumulator >>= target_range_bitnum;
+                            T::AcvmType::from(sublimb_value)
+                        })
+                        .collect()
+                }
+            }
+        };
+        for (i, sublimb) in sublimbs.iter().enumerate() {
+            let limb_idx = self.add_variable(*sublimb);
+
+            sublimb_indices.push(limb_idx);
+            if i == sublimbs.len() - 1 && has_remainder_bits {
+                self.create_new_range_constraint(limb_idx, last_limb_range);
+            } else {
+                self.create_new_range_constraint(limb_idx, sublimb_mask);
+            }
+        }
+
+        let num_limb_triples = num_limbs / 3 + if num_limbs % 3 != 0 { 1 } else { 0 };
+        let leftovers = if num_limbs % 3 == 0 { 3 } else { num_limbs % 3 };
+
+        let mut accumulator_idx = variable_index;
+        let mut accumulator = val;
+
+        for i in 0..num_limb_triples {
+            let real_limbs = [
+                !(i == num_limb_triples - 1 && leftovers < 1),
+                !(i == num_limb_triples - 1 && leftovers < 2),
+                !(i == num_limb_triples - 1 && leftovers < 3),
+            ];
+
+            let round_sublimbs = [
+                if real_limbs[0] {
+                    sublimbs[3 * i as usize]
+                } else {
+                    T::public_zero()
+                },
+                if real_limbs[1] {
+                    sublimbs[(3 * i + 1) as usize]
+                } else {
+                    T::public_zero()
+                },
+                if real_limbs[2] {
+                    sublimbs[(3 * i + 2) as usize]
+                } else {
+                    T::public_zero()
+                },
+            ];
+
+            let new_limbs = [
+                if real_limbs[0] {
+                    sublimb_indices[3 * i as usize]
+                } else {
+                    self.zero_idx
+                },
+                if real_limbs[1] {
+                    sublimb_indices[(3 * i + 1) as usize]
+                } else {
+                    self.zero_idx
+                },
+                if real_limbs[2] {
+                    sublimb_indices[(3 * i + 2) as usize]
+                } else {
+                    self.zero_idx
+                },
+            ];
+
+            let shifts = [
+                target_range_bitnum * (3 * i),
+                target_range_bitnum * (3 * i + 1),
+                target_range_bitnum * (3 * i + 2),
+            ];
+            let shiftmask = (BigUint::one() << 256) - BigUint::one(); // Simulate u256
+            let shift0 = P::ScalarField::from((BigUint::one() << shifts[0]) & &shiftmask);
+            let shift1 = P::ScalarField::from((BigUint::one() << shifts[1]) & &shiftmask);
+            let shift2 = P::ScalarField::from((BigUint::one() << shifts[2]) & shiftmask);
+
+            let mut subtrahend = T::mul_with_public(driver, shift0, round_sublimbs[0]);
+            let term0 = T::mul_with_public(driver, shift1, round_sublimbs[1]);
+            let term1 = T::mul_with_public(driver, shift2, round_sublimbs[2]);
+            T::add_assign(driver, &mut subtrahend, term0);
+            T::add_assign(driver, &mut subtrahend, term1);
+
+            let new_accumulator = T::sub(driver, accumulator, subtrahend);
+
+            self.create_big_add_gate(
+                &AddQuad {
+                    a: new_limbs[0],
+                    b: new_limbs[1],
+                    c: new_limbs[2],
+                    d: accumulator_idx,
+                    a_scaling: shift0,
+                    b_scaling: shift1,
+                    c_scaling: shift2,
+                    d_scaling: -P::ScalarField::one(),
+                    const_scaling: P::ScalarField::zero(),
+                },
+                i != num_limb_triples - 1,
+            );
+            accumulator_idx = self.add_variable(new_accumulator);
+            accumulator = new_accumulator;
+        }
+
+        Ok(sublimb_indices)
     }
 
     // for now we only need this function for public values

@@ -8,6 +8,13 @@ use co_builder::{
     prelude::{ActiveRegionData, PublicComponentKey},
     prover_flavour::ProverFlavour,
 };
+use co_noir_common::{
+    crs::parse::CrsParser,
+    honk_proof::TranscriptFieldType,
+    mpc::{NoirUltraHonkProver, rep3::Rep3UltraHonkDriver},
+    polynomials::{polynomial::Polynomial, shared_polynomial::SharedPolynomial},
+    types::ZeroKnowledge,
+};
 use co_ultrahonk::{
     co_decider::types::{ProverMemory, RelationParameters},
     co_oink::co_oink_prover::CoOink,
@@ -15,13 +22,6 @@ use co_ultrahonk::{
     types::Polynomials,
 };
 use co_ultrahonk::{co_decider::univariates::SharedUnivariate, types::AllEntities};
-use common::{
-    crs::parse::CrsParser,
-    honk_proof::TranscriptFieldType,
-    mpc::{NoirUltraHonkProver, rep3::Rep3UltraHonkDriver},
-    polynomials::{polynomial::Polynomial, shared_polynomial::SharedPolynomial},
-    types::ZeroKnowledge,
-};
 use flate2::read::GzDecoder;
 use itertools::izip;
 use mpc_core::{
@@ -45,11 +45,11 @@ use ultrahonk::prelude::{
 const EXTENDED_LENGTH: usize = (MAX_TOTAL_RELATION_LENGTH - 1) * (NUM_KEYS - 1) + 1;
 const CRS_PATH_G1: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../common/src/crs/bn254_g1.dat"
+    "/../co-noir-common/src/crs/bn254_g1.dat"
 );
 const CRS_PATH_G2: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../common/src/crs/bn254_g2.dat"
+    "/../co-noir-common/src/crs/bn254_g2.dat"
 );
 type F = TranscriptFieldType;
 type C = ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>;
@@ -83,7 +83,7 @@ macro_rules! to_field {
     };
 }
 
-fn structure_parameters<T: PartialEq>(
+fn structure_parameters<T: PartialEq + Default>(
     [
         eta_1,
         eta_2,
@@ -102,6 +102,7 @@ fn structure_parameters<T: PartialEq>(
         gamma,
         public_input_delta,
         lookup_grand_product_delta,
+        ..Default::default()
     }
 }
 #[test]
@@ -849,9 +850,8 @@ fn test_protogalaxy_prover() {
                     polynomials.public_iter().cloned().collect::<Vec<Vec<_>>>();
                 let shared_polynomials = polynomials
                     .shared_iter()
-                    .cloned()
                     .map(|shared| {
-                        <Driver as NoirUltraHonkProver<C>>::open_many(&shared, &net, &mut state)
+                        <Driver as NoirUltraHonkProver<C>>::open_many(shared, &net, &mut state)
                             .unwrap()
                     })
                     .collect::<Vec<_>>();

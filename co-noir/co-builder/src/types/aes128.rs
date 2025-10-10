@@ -3,7 +3,7 @@ use super::{
     types::WitnessOrConstant,
 };
 use crate::{types::field_ct::FieldCT, ultra_builder::GenericUltraCircuitBuilder};
-use common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType, utils::Utils};
+use co_noir_common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType, utils::Utils};
 
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;

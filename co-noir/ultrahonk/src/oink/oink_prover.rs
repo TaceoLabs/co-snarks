@@ -22,12 +22,12 @@ use crate::{
     Utils, decider::relations::databus_lookup_relation::BusData,
     plain_prover_flavour::PlainProverFlavour,
 };
-use common::transcript::{Transcript, TranscriptHasher};
+use co_noir_common::transcript::{Transcript, TranscriptHasher};
 
 use ark_ff::{One, Zero};
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
-use common::{
+use co_noir_common::{
     crs::ProverCrs,
     honk_curve::HonkCurve,
     honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},

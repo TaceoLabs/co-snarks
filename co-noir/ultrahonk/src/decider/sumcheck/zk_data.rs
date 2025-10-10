@@ -1,6 +1,6 @@
 use crate::Utils;
 use crate::plain_prover_flavour::UnivariateTrait;
-use common::transcript::{Transcript, TranscriptHasher};
+use co_noir_common::transcript::{Transcript, TranscriptHasher};
 
 use crate::prelude::Univariate;
 use ark_ec::CurveGroup;
@@ -9,7 +9,7 @@ use ark_ff::One;
 use ark_ff::UniformRand;
 use ark_ff::Zero;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
-use common::{
+use co_noir_common::{
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
     polynomials::polynomial::Polynomial,

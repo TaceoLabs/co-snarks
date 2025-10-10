@@ -3,7 +3,7 @@ use crate::{
     flavours::ultra_flavour::UltraFlavour, prover_flavour::ProverFlavour,
     ultra_builder::UltraCircuitBuilder,
 };
-use common::{
+use co_noir_common::{
     crs::ProverCrs,
     honk_curve::HonkCurve,
     honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},

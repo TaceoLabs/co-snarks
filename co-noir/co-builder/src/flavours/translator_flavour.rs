@@ -1,4 +1,4 @@
-use common::polynomials::polynomial::Polynomial;
+use co_noir_common::polynomials::polynomial::Polynomial;
 
 use crate::{
     polynomials::polynomial_flavours::{

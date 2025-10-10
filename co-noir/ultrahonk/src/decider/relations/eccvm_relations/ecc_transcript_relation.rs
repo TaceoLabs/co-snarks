@@ -8,7 +8,7 @@ use co_builder::{
     flavours::eccvm_flavour::ECCVMFlavour,
     polynomials::polynomial_flavours::PrecomputedEntitiesFlavour,
 };
-use common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType};
+use co_noir_common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType};
 #[derive(Clone, Debug, Default)]
 pub(crate) struct EccTranscriptRelationAcc<F: PrimeField> {
     pub(crate) r0: Univariate<F, 8>,
@@ -414,7 +414,6 @@ impl EccTranscriptRelation {
          */
         let msm_transition_check =
             (q_mul_shift.to_owned() * minus_one + &P::ScalarField::one()) * q_mul; // degree 2
-        // let num_muls_total = msm_count + num_muls_in_row;
         let msm_count_zero_at_transition = input.witness.transcript_msm_count_zero_at_transition();
         let msm_count_at_transition_inverse =
             input.witness.transcript_msm_count_at_transition_inverse();

@@ -9,10 +9,12 @@ use crate::{
     ultra_verifier::HonkVerifyResult,
 };
 use ark_ff::{One, Zero};
-use common::polynomials::polynomial::RowDisablingPolynomial;
-use common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType, types::ZeroKnowledge};
+use co_noir_common::polynomials::polynomial::RowDisablingPolynomial;
+use co_noir_common::{
+    honk_curve::HonkCurve, honk_proof::TranscriptFieldType, types::ZeroKnowledge,
+};
 
-use common::transcript::{Transcript, TranscriptHasher};
+use co_noir_common::transcript::{Transcript, TranscriptHasher};
 
 // Keep in mind, the UltraHonk protocol (UltraFlavor) does not per default have ZK
 impl<

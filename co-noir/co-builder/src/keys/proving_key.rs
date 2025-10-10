@@ -14,7 +14,7 @@ use crate::{
 use ark_ec::CurveGroup;
 use ark_ff::One;
 use co_acvm::{PlainAcvmSolver, mpc::NoirWitnessExtensionProtocol};
-use common::{
+use co_noir_common::{
     crs::ProverCrs,
     honk_proof::HonkProofResult,
     polynomials::polynomial::{NUM_DISABLED_ROWS_IN_SUMCHECK, Polynomial},
@@ -400,7 +400,7 @@ impl<P: CurveGroup> ProvingKey<P, UltraFlavour> {
                         let wit = T::AcvmType::from(des.to_owned());
                         let src = T::AcvmType::from(src.to_owned());
                         let added = driver.add(wit, src);
-                        *des = GenericUltraCircuitBuilder::<P, T>::get_as_shared(&added, driver);
+                        *des = driver.get_as_shared(&added);
                         // Read count
                     }
 
@@ -439,8 +439,7 @@ impl<P: CurveGroup> ProvingKey<P, UltraFlavour> {
                     // increment the read count at the corresponding index in the full polynomial
                     let mut wit0 = T::AcvmType::from(witness[0][index_in_poly].to_owned());
                     driver.add_assign_with_public(P::ScalarField::one(), &mut wit0);
-                    witness[0][index_in_poly] =
-                        GenericUltraCircuitBuilder::<P, T>::get_as_shared(&wit0, driver); // Read count
+                    witness[0][index_in_poly] = driver.get_as_shared(&wit0); // Read count
 
                     // Set the read tag
                     witness[1][index_in_poly] =

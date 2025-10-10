@@ -19,8 +19,8 @@ use co_builder::{
         goblin_types::{GoblinElement, GoblinField},
     },
 };
+use co_noir_common::honk_proof::TranscriptFieldType;
 use co_ultrahonk::co_decider::types::RelationParameters;
-use common::honk_proof::TranscriptFieldType;
 use mpc_core::gadgets::field_from_hex_string;
 
 use co_protogalaxy::{
@@ -216,6 +216,7 @@ fn test_recursive_protogalaxy_recursive_verifier() {
         gamma: relation_parameters_1[4].clone(),
         public_input_delta: relation_parameters_1[5].clone(),
         lookup_grand_product_delta: relation_parameters_1[6].clone(),
+        ..Default::default()
     };
 
     let alphas_2 = alphas_2
@@ -257,6 +258,7 @@ fn test_recursive_protogalaxy_recursive_verifier() {
         gamma: relation_parameters_2[4].clone(),
         public_input_delta: relation_parameters_2[5].clone(),
         lookup_grand_product_delta: relation_parameters_2[6].clone(),
+        ..Default::default()
     };
 
     let target_sum_result = to_field!(target_sum_result);

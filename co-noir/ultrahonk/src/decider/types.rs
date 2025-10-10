@@ -11,7 +11,7 @@ use co_builder::polynomials::polynomial_flavours::{
 };
 use co_builder::prelude::{Polynomials, VerifyingKey};
 use co_builder::prover_flavour::Flavour;
-use common::polynomials::polynomial::Polynomial;
+use co_noir_common::polynomials::polynomial::Polynomial;
 use itertools::izip;
 use std::{iter, vec};
 

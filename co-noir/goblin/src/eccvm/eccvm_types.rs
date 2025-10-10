@@ -12,8 +12,8 @@ use co_builder::eccvm::{
     WNAF_DIGITS_PER_ROW,
 };
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
-use common::polynomials::polynomial::NUM_TRANSLATION_EVALUATIONS;
-use common::{
+use co_noir_common::polynomials::polynomial::NUM_TRANSLATION_EVALUATIONS;
+use co_noir_common::{
     crs::ProverCrs,
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
@@ -23,9 +23,9 @@ use common::{
 
 use co_builder::prelude::offset_generator_scaled;
 use co_builder::{flavours::eccvm_flavour::ECCVMFlavour, prelude::Polynomials};
-use common::transcript::Transcript;
-use common::transcript::TranscriptHasher;
-use common::utils::Utils as UltraHonkUtils;
+use co_noir_common::transcript::Transcript;
+use co_noir_common::transcript::TranscriptHasher;
+use co_noir_common::utils::Utils as UltraHonkUtils;
 use num_bigint::BigUint;
 use ultrahonk::plain_prover_flavour::UnivariateTrait;
 use ultrahonk::prelude::SmallSubgroupIPAProver;
@@ -274,6 +274,7 @@ impl<C: HonkCurve<TranscriptFieldType>> VMState<C> {
             updated_state.accumulator =
                 (r + updated_state.msm_accumulator - offset_generator_scaled::<C>()).into();
         }
+
         updated_state.is_accumulator_empty = updated_state.accumulator.is_zero();
 
         let msm_output = updated_state.msm_accumulator - offset_generator_scaled::<C>();
@@ -451,7 +452,6 @@ fn compute_lambda_numerator_and_denominator<C: HonkCurve<TranscriptFieldType>>(
 
     let vm_infinity = vm_point.is_zero();
     let accumulator_infinity = accumulator.is_zero();
-
     let vm_x = if vm_infinity {
         C::BaseField::zero()
     } else {
@@ -599,7 +599,6 @@ fn compute_rows<C: HonkCurve<TranscriptFieldType>>(
         } else {
             0
         };
-
         if is_mul {
             VMState::<C>::process_mul(entry, &mut updated_state, &state);
         }
@@ -614,8 +613,7 @@ fn compute_rows<C: HonkCurve<TranscriptFieldType>>(
         if is_add {
             VMState::<C>::process_add(entry, &mut updated_state, &state);
         }
-
-        //     // populate the first group of TranscriptRow entries
+        // populate the first group of TranscriptRow entries
         VMState::<C>::populate_transcript_row(
             &mut row,
             entry,
@@ -867,6 +865,7 @@ pub fn construct_from_builder<C: HonkCurve<TranscriptFieldType>>(
     polys.precomputed.lagrange_second_mut()[1] = C::ScalarField::one();
     polys.precomputed.lagrange_last_mut()[unmasked_witness_size - 1] = C::ScalarField::one();
 
+    #[allow(clippy::needless_range_loop)]
     for i in 0..point_table_read_counts[0].len() {
         // Explanation of off-by-one offset:
         // When computing the WNAF slice for a point at point counter value `pc` and a round index `round`, the

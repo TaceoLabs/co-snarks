@@ -424,7 +424,7 @@ pub fn pow_public<F: PrimeField, N: Network>(
         shared = mul(shared, shared, net, state)?;
         public >>= 1;
     }
-    mul(res, shared, net, state)
+    Ok(res)
 }
 
 /// Returns 1 if lhs < rhs and 0 otherwise. Checks if one shared value is less than another shared value. The result is a shared value that has value 1 if the first shared value is less than the second shared value and 0 otherwise.

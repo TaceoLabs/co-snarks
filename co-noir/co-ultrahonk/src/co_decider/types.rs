@@ -11,7 +11,7 @@ use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::{
     polynomials::polynomial_flavours::PrecomputedEntitiesFlavour, prover_flavour::Flavour,
 };
-use common::mpc::NoirUltraHonkProver;
+use co_noir_common::mpc::NoirUltraHonkProver;
 use itertools::izip;
 use std::iter;
 
@@ -20,6 +20,22 @@ pub struct ProverMemory<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCProverFl
     pub relation_parameters: RelationParameters<P::ScalarField>,
     pub alphas: Vec<P::ScalarField>,
     pub gate_challenges: Vec<P::ScalarField>,
+}
+
+impl<T, P, L> Default for ProverMemory<T, P, L>
+where
+    T: NoirUltraHonkProver<P>,
+    P: CurveGroup,
+    L: MPCProverFlavour,
+{
+    fn default() -> Self {
+        Self {
+            polys: Default::default(),
+            relation_parameters: RelationParameters::<P::ScalarField>::default(),
+            alphas: Default::default(),
+            gate_challenges: Default::default(),
+        }
+    }
 }
 
 pub(crate) type ProverUnivariates<T, P, L> = AllEntities<
@@ -45,6 +61,9 @@ pub struct RelationParameters<T> {
     pub gamma: T,
     pub public_input_delta: T,
     pub lookup_grand_product_delta: T,
+    pub beta_sqr: T,
+    pub beta_cube: T,
+    pub eccvm_set_permutation_delta: T,
 }
 
 impl<T> RelationParameters<T> {
@@ -85,7 +104,7 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCProverFlavour> ProverMemory
             beta: prover_memory.challenges.beta,
             gamma: prover_memory.challenges.gamma,
             public_input_delta: prover_memory.public_input_delta,
-            lookup_grand_product_delta: Default::default(),
+            ..Default::default()
         };
         let alphas = prover_memory.challenges.alphas;
         let gate_challenges = Default::default();

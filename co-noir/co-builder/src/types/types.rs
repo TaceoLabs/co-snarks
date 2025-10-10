@@ -13,7 +13,7 @@ use crate::ultra_builder::UltraCircuitBuilder;
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use common::polynomials::polynomial::Polynomial;
+use co_noir_common::polynomials::polynomial::Polynomial;
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 use std::array;
@@ -114,19 +114,14 @@ pub(crate) struct MemOp<F: PrimeField> {
     pub(crate) value: PolyTriple<F>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Default)]
 #[expect(clippy::upper_case_acronyms)]
 pub(crate) enum BlockType {
+    #[default]
     ROM = 0,
     RAM = 1,
     CallData = 2,
     ReturnData = 3,
-}
-
-impl Default for BlockType {
-    fn default() -> Self {
-        Self::ROM
-    }
 }
 
 #[derive(Default)]

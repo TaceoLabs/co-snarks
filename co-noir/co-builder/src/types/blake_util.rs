@@ -1,5 +1,5 @@
 use crate::ultra_builder::GenericUltraCircuitBuilder;
-use common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType};
+use co_noir_common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType};
 
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;

@@ -39,8 +39,8 @@ use crate::prelude::{Transcript, TranscriptHasher, Univariate};
 use ark_ff::PrimeField;
 use co_builder::flavours::translator_flavour::TranslatorFlavour;
 use co_builder::prover_flavour::ProverFlavour;
-use common::honk_curve::HonkCurve;
-use common::honk_proof::{HonkProofResult, TranscriptFieldType};
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::{HonkProofResult, TranscriptFieldType};
 
 #[derive(Default)]
 pub struct AllRelationAccTranslator<F: PrimeField> {

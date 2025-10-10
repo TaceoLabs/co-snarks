@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use common::{
+use co_noir_common::{
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
 };
@@ -10,9 +10,7 @@ use num_bigint::BigUint;
 
 use crate::{
     eccvm::{
-        co_ecc_op_queue::{
-            CoECCOpQueue, CoEccOpTuple, CoUltraOp, CoVMOperation, precompute_mul_acc_flags,
-        },
+        co_ecc_op_queue::{CoECCOpQueue, CoEccOpTuple, CoUltraOp, CoVMOperation, precompute_flags},
         ecc_op_queue::EccOpCode,
     },
     generic_builder::GenericBuilder,
@@ -1074,11 +1072,14 @@ where
      */
     pub fn queue_ecc_add_accum(
         &mut self,
-        point: T::OtherAcvmPoint<P>,
+        point: T::NativeAcvmPoint<P>,
+        precomputed_point_limbs: Option<[T::AcvmType; 5]>,
         driver: &mut T,
     ) -> HonkProofResult<CoEccOpTuple<T, P>> {
         // Add the operation to the op queue
-        let ultra_op = self.ecc_op_queue.add_accumulate(point, driver)?;
+        let ultra_op = self
+            .ecc_op_queue
+            .add_accumulate(point, precomputed_point_limbs, driver)?;
 
         // Add corresponding gates for the operation
         Ok(self.populate_ecc_op_wires(&ultra_op))
@@ -1091,11 +1092,14 @@ where
      */
     pub fn queue_ecc_add_accum_no_store(
         &mut self,
-        point: T::OtherAcvmPoint<P>,
+        point: T::NativeAcvmPoint<P>,
+        precomputed_point_limbs: Option<[T::AcvmType; 5]>,
         driver: &mut T,
     ) -> HonkProofResult<(CoEccOpTuple<T, P>, CoVMOperation<T, P>)> {
         // Add the operation to the op queue
-        let (ultra_op, eccvm_op) = self.ecc_op_queue.add_accumulate_no_store(point, driver)?;
+        let (ultra_op, eccvm_op) =
+            self.ecc_op_queue
+                .add_accumulate_no_store(point, precomputed_point_limbs, driver)?;
 
         // Add corresponding gates for the operation
         Ok((self.populate_ecc_op_wires(&ultra_op), eccvm_op))
@@ -1110,17 +1114,22 @@ where
      */
     pub fn queue_ecc_mul_accum_store(
         &mut self,
-        point: T::OtherAcvmPoint<P>,
+        point: T::NativeAcvmPoint<P>,
+        precomputed_point_limbs: Option<[T::AcvmType; 5]>,
         scalar: T::AcvmType,
         driver: &mut T,
     ) -> HonkProofResult<CoEccOpTuple<T, P>> {
         // Add the operation to the op queue
-        let (ultra_op, mut eccvm_op) = self
-            .ecc_op_queue
-            .mul_accumulate_no_store(point, scalar, driver)?;
+        let (ultra_op, eccvm_op) = self.ecc_op_queue.mul_accumulate_no_store(
+            point,
+            precomputed_point_limbs,
+            scalar,
+            driver,
+        )?;
 
-        precompute_mul_acc_flags(&mut vec![&mut eccvm_op], driver)?;
-        self.ecc_op_queue.append_eccvm_op(eccvm_op);
+        let mut ops = vec![eccvm_op];
+        precompute_flags(&mut ops, driver)?;
+        self.ecc_op_queue.append_eccvm_op(ops.pop().unwrap());
 
         // Add corresponding gates for the operation
         Ok(self.populate_ecc_op_wires(&ultra_op))
@@ -1135,14 +1144,18 @@ where
      */
     pub fn queue_ecc_mul_accum_no_store(
         &mut self,
-        point: T::OtherAcvmPoint<P>,
+        point: T::NativeAcvmPoint<P>,
+        precomputed_point_limbs: Option<[T::AcvmType; 5]>,
         scalar: T::AcvmType,
         driver: &mut T,
     ) -> HonkProofResult<(CoEccOpTuple<T, P>, CoVMOperation<T, P>)> {
         // Add the operation to the op queue
-        let (ultra_op, eccvm_op) = self
-            .ecc_op_queue
-            .mul_accumulate_no_store(point, scalar, driver)?;
+        let (ultra_op, eccvm_op) = self.ecc_op_queue.mul_accumulate_no_store(
+            point,
+            precomputed_point_limbs,
+            scalar,
+            driver,
+        )?;
 
         // Add corresponding gates for the operation
         Ok((self.populate_ecc_op_wires(&ultra_op), eccvm_op))

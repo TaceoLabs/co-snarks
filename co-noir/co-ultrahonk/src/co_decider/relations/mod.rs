@@ -2,6 +2,7 @@ pub(crate) mod auxiliary_relation;
 pub(crate) mod databus_lookup_relation;
 pub(crate) mod delta_range_constraint_relation;
 pub(crate) mod ecc_op_queue_relation;
+pub(crate) mod eccvm_relations;
 pub(crate) mod elliptic_relation;
 pub(crate) mod logderiv_lookup_relation;
 pub(crate) mod permutation_relation;
@@ -12,9 +13,9 @@ pub(crate) mod ultra_arithmetic_relation;
 use super::types::{ProverUnivariates, ProverUnivariatesBatch, RelationParameters};
 use crate::types::AllEntities;
 use crate::{mpc_prover_flavour::MPCProverFlavour, types_batch::SumCheckDataForRelation};
-use common::honk_curve::HonkCurve;
-use common::honk_proof::{HonkProofResult, TranscriptFieldType};
-use common::mpc::NoirUltraHonkProver;
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::{HonkProofResult, TranscriptFieldType};
+use co_noir_common::mpc::NoirUltraHonkProver;
 use mpc_net::Network;
 
 macro_rules! fold_accumulator {

@@ -6,10 +6,10 @@ use crate::{
 };
 use ark_ec::pairing::Pairing;
 use co_builder::prelude::VerifyingKey;
-use common::honk_curve::HonkCurve;
-use common::honk_proof::TranscriptFieldType;
-use common::transcript::{Transcript, TranscriptHasher};
-use common::types::ZeroKnowledge;
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::transcript::{Transcript, TranscriptHasher};
+use co_noir_common::types::ZeroKnowledge;
 use noir_types::HonkProof;
 
 pub(crate) type HonkVerifyResult<T> = std::result::Result<T, eyre::Report>;

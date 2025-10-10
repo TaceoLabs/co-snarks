@@ -12,7 +12,7 @@ pub mod rep3;
 pub mod shamir;
 
 /// This trait represents the operations used during UltraHonk proof generation
-pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
+pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized + std::fmt::Debug {
     /// The arithmetic share type
     type ArithmeticShare: CanonicalSerialize
         + CanonicalDeserialize
@@ -35,7 +35,7 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
         + std::fmt::Debug
         + 'static;
     /// The G1 point share type
-    type PointShare: Clone + std::fmt::Debug + Send + Default + 'static;
+    type PointShare: std::fmt::Debug + Send + Default + 'static + Clone + Default + Copy;
     /// Internal state of used MPC protocol
     type State: MpcState + Send;
 
@@ -206,6 +206,18 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
         }
     }
 
+    /// Scales all elements in-place in \[a\] by the provided scale, by multiplying every share with the
+    /// public scalar.
+    fn scale_many(
+        shared: &[Self::ArithmeticShare],
+        scale: P::ScalarField,
+    ) -> Vec<Self::ArithmeticShare> {
+        shared
+            .iter()
+            .map(|share| Self::mul_with_public(scale, *share))
+            .collect()
+    }
+
     /// Adds a public scalar to all elements in \[a\].
     fn add_scalar(
         shared: &[Self::ArithmeticShare],
@@ -277,6 +289,11 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
         public_values: &[P::ScalarField],
     ) -> Vec<Self::ArithmeticShare>;
 
+    fn promote_to_trivial_point_share(
+        id: <Self::State as MpcState>::PartyID,
+        public_value: P,
+    ) -> Self::PointShare;
+
     /// Reconstructs a shared point: A = Open(\[A\]).
     fn open_point<N: Network>(
         a: Self::PointShare,
@@ -305,6 +322,14 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
         net: &N,
         state: &mut Self::State,
     ) -> eyre::Result<(P, P::ScalarField)>;
+
+    /// Reconstructs slices of shared points and field elements: (A,B) = Open(\[(A,B)\])
+    fn open_point_and_field_many<N: Network>(
+        a: &[Self::PointShare],
+        b: &[Self::ArithmeticShare],
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<(Vec<P>, Vec<P::ScalarField>)>;
 
     /// This function performs a multiplication directly followed by an opening. This safes one round of communication in some MPC protocols compared to calling `mul` and `open` separately.
     fn mul_open_many<N: Network>(
@@ -343,6 +368,12 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShare;
 
+    /// Adds two shared points: \[c\] = \[a\] + \[b\].
+    fn point_add(a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare;
+
+    /// Subs two shared points: \[c\] = \[a\] - \[b\].
+    fn point_sub(a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare;
+
     /// Evaluates shared polynomials at one point
     fn eval_poly(coeffs: &[Self::ArithmeticShare], point: P::ScalarField) -> Self::ArithmeticShare;
 
@@ -358,85 +389,13 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized {
         domain: &D,
     ) -> Vec<Self::ArithmeticShare>;
 
+    /// Checks which of the shared values are zero. Returns a share of 1 if the value is zero, and a share of 0 otherwise.
     fn is_zero_many<N: Network>(
         a: &[Self::ArithmeticShare],
         net: &N,
         state: &mut Self::State,
     ) -> eyre::Result<Vec<Self::ArithmeticShare>>;
 
-    // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
-    // Checks if a point share is zero and returns the result as a field share.
-    fn is_point_at_infinity_many<N: Network>(
-        points: &[Self::PointShare],
-        net: &N,
-        state: &mut Self::State,
-    ) -> eyre::Result<Vec<Self::ArithmeticShare>>;
-
-    // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
-    /// Add two point shares: \[c\] = \[a\] + \[b\] and stores the result in \[a\].
-    fn add_point_assign(a: &mut Self::PointShare, b: Self::PointShare);
-
-    // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
-    /// Multiply a shared point by a shared field element: \[c\] = \[a\] * b.
-    fn mul_point_and_scalar<N: Network>(
-        point: Self::PointShare,
-        field: Self::ArithmeticShare,
-        net: &N,
-        state: &mut Self::State,
-    ) -> eyre::Result<Self::PointShare>;
-
-    // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
-    /// Given a point share \[P\] returns the shared x and y coordinates, as well as the
-    /// point at infinity as base field shares.
-    fn point_share_to_fieldshares<N: Network>(
-        x: Self::PointShare,
-        net: &N,
-        state: &mut Self::State,
-    ) -> eyre::Result<(
-        Self::BaseFieldArithmeticShare,
-        Self::BaseFieldArithmeticShare,
-        Self::BaseFieldArithmeticShare,
-    )>;
-
-    // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
-    /// Decomposes a shared field element into chunks, which are also represented as shared
-    /// field elements. Per field element, the total bit size of the shared chunks is given
-    /// by total_bit_size_per_field, whereas each chunk has at most (i.e, the last chunk can
-    /// be smaller) decompose_bit_size bits.
-    fn decompose_arithmetic<N: Network>(
-        input: Self::ArithmeticShare,
-        total_bit_size_per_field: usize,
-        decompose_bit_size: usize,
-        net: &N,
-        state: &mut Self::State,
-    ) -> eyre::Result<Vec<Self::ArithmeticShare>>;
-
-    // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
-    /// Computes a CMUX: If cond is 1, returns truthy, otherwise returns falsy.
-    fn cmux<N: Network>(
-        cond: Self::ArithmeticShare,
-        a: Self::ArithmeticShare,
-        b: Self::ArithmeticShare,
-        net: &N,
-        state: &mut Self::State,
-    ) -> eyre::Result<Self::ArithmeticShare>;
-
-    // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
-    /// Compares two shared field elements and returns a shared bit indicating whether
-    /// lhs <= rhs.
-    fn le_public<N: Network>(
-        lhs: Self::ArithmeticShare,
-        rhs: P::ScalarField,
-        net: &N,
-        state: &mut Self::State,
-    ) -> eyre::Result<Self::ArithmeticShare>;
-
-    // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
-    /// Converts a base field share into a vector of field shares, where the field shares
-    /// represent the limbs of the base field element. Each limb has at most LIMB_BITS bits.
-    fn base_field_share_to_field_shares<N: Network, const LIMB_BITS: usize>(
-        x: Self::BaseFieldArithmeticShare,
-        net: &N,
-        state: &mut Self::State,
-    ) -> eyre::Result<Vec<Self::ArithmeticShare>>;
+    /// Multiplies a shared point by a public scalar: \[C\] = a * \[B\].
+    fn scalar_mul_public_point(a: &P, b: Self::ArithmeticShare) -> Self::PointShare;
 }

@@ -15,9 +15,9 @@ use ark_ec::pairing::Pairing;
 use ark_ff::Zero;
 use ark_poly::domain::general::GeneralElements;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use common::honk_curve::HonkCurve;
-use common::honk_proof::HonkProofError;
-use common::honk_proof::HonkProofResult;
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::HonkProofError;
+use co_noir_common::honk_proof::HonkProofResult;
 use std::{collections::BTreeMap, ops::Index};
 
 pub type Bn254G1 = <Bn254 as Pairing>::G1;

@@ -1,5 +1,5 @@
 [package]
-name = "common"
+name = "co-noir-common"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
@@ -21,6 +21,7 @@ ark-ec.workspace = true
 ark-ff.workspace = true
 ark-bn254.workspace = true
 eyre.workspace = true
+tracing.workspace = true
 num-bigint.workspace = true
 sha3.workspace = true
 itertools.workspace = true
@@ -29,4 +30,3 @@ rand.workspace = true
 ark-grumpkin.workspace = true
 thiserror.workspace = true
 serde.workspace = true
-tracing.workspace = true

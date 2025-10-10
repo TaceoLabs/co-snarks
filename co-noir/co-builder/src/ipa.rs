@@ -1,12 +1,12 @@
 use ark_ec::AffineRepr;
 use ark_ff::One;
 use ark_ff::{Field, Zero};
-use common::crs::ProverCrs;
-use common::honk_curve::HonkCurve;
-use common::honk_proof::{HonkProofResult, TranscriptFieldType};
-use common::shplemini::ShpleminiOpeningClaim;
-use common::transcript::{Transcript, TranscriptHasher};
-use common::utils::Utils as UltraHonkUtils;
+use co_noir_common::crs::ProverCrs;
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::{HonkProofResult, TranscriptFieldType};
+use co_noir_common::shplemini::ShpleminiOpeningClaim;
+use co_noir_common::transcript::{Transcript, TranscriptHasher};
+use co_noir_common::utils::Utils as UltraHonkUtils;
 
 use crate::eccvm::CONST_ECCVM_LOG_N;
 

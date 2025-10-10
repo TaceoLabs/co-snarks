@@ -1,15 +1,12 @@
 use super::NoirUltraHonkProver;
-use ark_ec::AffineRepr;
 use ark_ec::CurveGroup;
 use ark_ff::Field;
 use ark_ff::One;
 use ark_ff::UniformRand;
 use ark_poly::DenseUVPolynomial;
 use ark_poly::{Polynomial, univariate::DensePolynomial};
-use itertools::Itertools;
 use mpc_core::MpcState;
 use mpc_net::Network;
-use num_bigint::BigUint;
 use num_traits::Zero;
 use rand::thread_rng;
 use rayon::prelude::*;
@@ -188,6 +185,15 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         Ok((a, b))
     }
 
+    fn open_point_and_field_many<N: Network>(
+        a: &[Self::PointShare],
+        b: &[Self::ArithmeticShare],
+        _net: &N,
+        _state: &mut Self::State,
+    ) -> eyre::Result<(Vec<P>, Vec<P::ScalarField>)> {
+        Ok((a.to_vec(), b.to_vec()))
+    }
+
     fn mul_open_many<N: Network>(
         a: &[Self::ArithmeticShare],
         b: &[Self::ArithmeticShare],
@@ -285,141 +291,22 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         Ok(res)
     }
 
-    // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
-    // Checks if a point share is zero and returns the result as a field share.
-    fn is_point_at_infinity_many<N: Network>(
-        points: &[Self::PointShare],
-        _net: &N,
-        _state: &mut Self::State,
-    ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
-        Ok(points
-            .iter()
-            .map(|p| {
-                if p.is_zero() {
-                    Self::ArithmeticShare::one()
-                } else {
-                    Self::ArithmeticShare::zero()
-                }
-            })
-            .collect::<Vec<_>>())
+    fn point_add(a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare {
+        *a + b
     }
 
-    // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
-    /// Add two point shares: \[c\] = \[a\] + \[b\] and stores the result in \[a\].
-    fn add_point_assign(a: &mut Self::PointShare, b: Self::PointShare) {
-        *a += &b;
+    fn point_sub(a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare {
+        *a - b
     }
 
-    // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
-    /// Multiply a shared point by a shared field element: \[c\] = \[a\] * b.
-    fn mul_point_and_scalar<N: Network>(
-        point: Self::PointShare,
-        field: Self::ArithmeticShare,
-        _net: &N,
-        _state: &mut Self::State,
-    ) -> eyre::Result<Self::PointShare> {
-        Ok(point * field)
+    fn promote_to_trivial_point_share(
+        _id: <Self::State as MpcState>::PartyID,
+        public_value: P,
+    ) -> Self::PointShare {
+        public_value
     }
 
-    // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
-    /// Given a point share \[P\] returns the shared x and y coordinates, as well as the
-    /// point at infinity as base field shares.
-    fn point_share_to_fieldshares<N: Network>(
-        x: Self::PointShare,
-        _net: &N,
-        _state: &mut Self::State,
-    ) -> eyre::Result<(
-        Self::BaseFieldArithmeticShare,
-        Self::BaseFieldArithmeticShare,
-        Self::BaseFieldArithmeticShare,
-    )> {
-        let (x, y, point_at_infinity) = match x.into_affine().xy() {
-            Some((x, y)) => (x, y, Self::BaseFieldArithmeticShare::zero()),
-            None => (
-                Self::BaseFieldArithmeticShare::zero(),
-                Self::BaseFieldArithmeticShare::zero(),
-                Self::BaseFieldArithmeticShare::one(),
-            ),
-        };
-        Ok((x, y, point_at_infinity))
-    }
-
-    // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
-    /// Decomposes a shared field element into chunks, which are also represented as shared
-    /// field elements. Per field element, the total bit size of the shared chunks is given
-    /// by total_bit_size_per_field, whereas each chunk has at most (i.e, the last chunk can
-    /// be smaller) decompose_bit_size bits.
-    fn decompose_arithmetic<N: Network>(
-        input: Self::ArithmeticShare,
-        total_bit_size_per_field: usize,
-        decompose_bit_size: usize,
-        _net: &N,
-        _state: &mut Self::State,
-    ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
-        let mut result = Vec::with_capacity(total_bit_size_per_field.div_ceil(decompose_bit_size));
-        let big_mask = (BigUint::from(1u64) << total_bit_size_per_field) - BigUint::one();
-        let small_mask = (BigUint::from(1u64) << decompose_bit_size) - BigUint::one();
-        let mut x: BigUint = input.into();
-        x &= &big_mask;
-        for _ in 0..total_bit_size_per_field.div_ceil(decompose_bit_size) {
-            let chunk = &x & &small_mask;
-            x >>= decompose_bit_size;
-            result.push(P::ScalarField::from(chunk));
-        }
-        Ok(result)
-    }
-
-    // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
-    /// Computes a CMUX: If cond is 1, returns truthy, otherwise returns falsy.
-    fn cmux<N: Network>(
-        cond: Self::ArithmeticShare,
-        truthy: Self::ArithmeticShare,
-        falsy: Self::ArithmeticShare,
-        _net: &N,
-        _state: &mut Self::State,
-    ) -> eyre::Result<Self::ArithmeticShare> {
-        assert!(cond.is_one() || cond.is_zero());
-        if cond.is_one() { Ok(truthy) } else { Ok(falsy) }
-    }
-
-    // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
-    /// Compares two shared field elements and returns a shared bit indicating whether
-    /// lhs <= rhs.
-    fn le_public<N: Network>(
-        lhs: Self::ArithmeticShare,
-        rhs: P::ScalarField,
-        _net: &N,
-        _state: &mut Self::State,
-    ) -> eyre::Result<Self::ArithmeticShare> {
-        if lhs <= rhs {
-            Ok(Self::ArithmeticShare::one())
-        } else {
-            Ok(Self::ArithmeticShare::zero())
-        }
-    }
-
-    // TODO TACEO: Remove once CoEccOpQueue is generic over a NoirWitnessExtensionProtocol
-    // TODO TACEO: Currently only supports LIMB_BITS = 136, i.e. two Bn254::Fr elements per Bn254::Fq element
-    /// Converts a base field share into a vector of field shares, where the field shares
-    /// represent the limbs of the base field element. Each limb has at most LIMB_BITS bits.
-    fn base_field_share_to_field_shares<N: Network, const LIMB_BITS: usize>(
-        x: Self::BaseFieldArithmeticShare,
-        _net: &N,
-        _state: &mut Self::State,
-    ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
-        assert_eq!(
-            LIMB_BITS, 136,
-            "Only LIMB_BITS = 136 is supported, i.e. two Bn254::Fr elements per Bn254::Fq element"
-        );
-        let as_bigint: BigUint = x
-            .to_base_prime_field_elements()
-            .map(Into::<BigUint>::into)
-            .collect_vec()
-            .pop()
-            .unwrap();
-
-        let low = as_bigint.clone() & ((BigUint::from(1u8) << LIMB_BITS) - BigUint::from(1u8));
-        let high = as_bigint >> LIMB_BITS;
-        Ok(vec![P::ScalarField::from(low), P::ScalarField::from(high)])
+    fn scalar_mul_public_point(a: &P, b: Self::ArithmeticShare) -> Self::PointShare {
+        *a * b
     }
 }

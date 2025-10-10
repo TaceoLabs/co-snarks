@@ -10,9 +10,9 @@ use co_builder::{
     transcript::{TranscriptCT, TranscriptFieldType, TranscriptHasherCT},
     types::{field_ct::FieldCT, goblin_types::GoblinElement},
 };
-use common::{honk_curve::HonkCurve, honk_proof::HonkProofResult};
+use co_noir_common::barycentric::Barycentric;
+use co_noir_common::{honk_curve::HonkCurve, honk_proof::HonkProofResult};
 use itertools::{Itertools, izip};
-use ultrahonk::prelude::Barycentric;
 
 use crate::{
     prover::co_protogalaxy_prover::{BATCHED_EXTENDED_LENGTH, CONST_PG_LOG_N, NUM_KEYS},
@@ -214,10 +214,10 @@ impl ProtogalaxyRecursiveVerifier {
             let lhs = accumulator_commitment.get_value(builder, driver);
             let rhs = instance_commitment.get_value(builder, driver);
 
-            let lhs_scaled = driver.scale_point_other(lhs, lhs_scalar)?;
-            let rhs_scaled = driver.scale_point_other(rhs, rhs_scalar)?;
+            let lhs_scaled = driver.scale_native_point(lhs, lhs_scalar)?;
+            let rhs_scaled = driver.scale_native_point(rhs, rhs_scalar)?;
 
-            let output = driver.add_points_other(lhs_scaled, rhs_scaled);
+            let output = driver.add_native_points(lhs_scaled, rhs_scaled);
             let output_commitment = GoblinElement::from_witness(output, builder, driver)?;
 
             output_commitments.push(output_commitment.clone());

@@ -2,7 +2,7 @@ use crate::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use crate::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
 use crate::prover_flavour::ProverFlavour;
 use ark_ff::PrimeField;
-use common::polynomials::polynomial::Polynomial;
+use co_noir_common::polynomials::polynomial::Polynomial;
 use serde::Deserializer;
 use serde::de;
 use serde::de::SeqAccess;

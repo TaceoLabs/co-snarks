@@ -1,6 +1,4 @@
-use std::fmt::Debug;
-
-use crate::eccvm::co_ecc_op_queue::precompute_mul_acc_flags;
+use crate::eccvm::co_ecc_op_queue::precompute_flags;
 use crate::mega_builder::MegaCircuitBuilder;
 use crate::types::field_ct::BoolCT;
 use crate::types::field_ct::FieldCT;
@@ -10,10 +8,10 @@ use ark_ff::FftField;
 use ark_ff::Field;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use common::honk_curve::HonkCurve;
-use common::honk_proof::HonkProofResult;
-use common::honk_proof::TranscriptFieldType;
-use itertools::Itertools;
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::HonkProofResult;
+use co_noir_common::honk_proof::TranscriptFieldType;
+use std::fmt::Debug;
 const LIMB_BITS: usize = 136; // Each GoblinField element is represented as 2 field elements of 136 bits each
 
 pub struct GoblinElement<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
@@ -78,7 +76,6 @@ impl<F: PrimeField> GoblinField<F> {
         Self { limbs }
     }
 }
-
 impl GoblinField<TranscriptFieldType> {
     pub fn get_value<
         P: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
@@ -99,13 +96,26 @@ impl<
     T: NoirWitnessExtensionProtocol<TranscriptFieldType>,
 > GoblinElement<P, T>
 {
+    pub fn get_value(
+        &self,
+        builder: &mut MegaCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> T::NativeAcvmPoint<P> {
+        let (x0, x1) = self.x.get_value(builder, driver);
+        let (y0, y1) = self.y.get_value(builder, driver);
+        let is_infinity = self.is_infinity.get_value(driver);
+        driver
+            .acvm_types_to_native_point::<LIMB_BITS, _>(x0, x1, y0, y1, is_infinity)
+            .expect("Failed to convert field shares to native point share")
+    }
+
     pub fn from_witness(
-        point: T::OtherAcvmPoint<P>,
+        point: T::NativeAcvmPoint<P>,
         builder: &mut MegaCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> HonkProofResult<Self> {
         let (x0, x1, y0, y1, is_infinity) =
-            driver.other_pointshare_to_field_shares::<LIMB_BITS, _>(point)?;
+            driver.native_point_to_acvm_types::<LIMB_BITS, _>(point)?;
         let x_lo = FieldCT::from_witness(x0, builder);
         let x_hi = FieldCT::from_witness(x1, builder);
         let y_lo = FieldCT::from_witness(y0, builder);
@@ -122,19 +132,6 @@ impl<
                 builder,
             ),
         })
-    }
-
-    pub fn get_value(
-        &self,
-        builder: &mut MegaCircuitBuilder<P, T>,
-        driver: &mut T,
-    ) -> T::OtherAcvmPoint<P> {
-        let (x0, x1) = self.x.get_value(builder, driver);
-        let (y0, y1) = self.y.get_value(builder, driver);
-        let is_infinity = self.is_infinity.get_value(driver);
-        driver
-            .field_shares_to_native_pointshare::<LIMB_BITS, _>(x0, x1, y0, y1, is_infinity)
-            .expect("Failed to convert field shares to native point share")
     }
 
     pub fn point_at_infinity(builder: &mut MegaCircuitBuilder<P, T>) -> Self {
@@ -171,11 +168,18 @@ impl<
     ) -> eyre::Result<GoblinElement<P, T>> {
         let element_value = self.get_value(builder, driver);
 
-        let result_value = driver.negate_point_other(element_value.clone())?;
+        let result_value = driver.negate_native_point(element_value)?;
 
-        // TODO TACEO: Assumes that the point is always secret shared, this issue will be solved once CoEccOpQueue is generic only on
-        // NoirWitnessExtensionProtocol
-        let op_tuple = builder.queue_ecc_add_accum(element_value, driver)?;
+        let element_limbs = [
+            self.x.limbs[0].get_value(builder, driver),
+            self.x.limbs[1].get_value(builder, driver),
+            self.y.limbs[0].get_value(builder, driver),
+            self.y.limbs[1].get_value(builder, driver),
+            self.is_infinity.get_value(driver),
+        ];
+
+        // TACEO TODO: batch these two queue_ecc_add_accum calls
+        let op_tuple = builder.queue_ecc_add_accum(element_value, Some(element_limbs), driver)?;
 
         {
             let x_lo = FieldCT::from_witness_index(op_tuple.x_lo);
@@ -189,9 +193,7 @@ impl<
             y_hi.assert_equal(&self.y.limbs[1], builder, driver);
         }
 
-        // TODO TACEO: Assumes that the point is always secret shared, this issue will be solved once CoEccOpQueue is generic only on
-        // NoirWitnessExtensionProtocol
-        let op_tuple_2 = builder.queue_ecc_add_accum(result_value, driver)?;
+        let op_tuple_2 = builder.queue_ecc_add_accum(result_value, None, driver)?;
 
         let result = {
             let x_lo = FieldCT::from_witness_index(op_tuple_2.x_lo);
@@ -261,17 +263,32 @@ impl<
         builder: &mut MegaCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<GoblinElement<P, T>> {
-        // TODO TACEO: Assert?
+        // TACEO TODO: Assert?
         // Assert the accumulator is zero at the start
         // assert!(builder.ecc_op_queue.get_accumulator().is_zero_point());
 
         let mut co_eccvm_ops = Vec::with_capacity(points.len());
 
+        // Decompose all points into limbs and add them as witness variables
+        let point_limbs = points
+            .iter()
+            .map(|point| {
+                [
+                    point.x.limbs[0].get_value(builder, driver),
+                    point.x.limbs[1].get_value(builder, driver),
+                    point.y.limbs[0].get_value(builder, driver),
+                    point.y.limbs[1].get_value(builder, driver),
+                    point.is_infinity.get_value(driver),
+                ]
+            })
+            .collect::<Vec<_>>();
+
         for i in 0..points.len() {
             let point = &points[i];
             let scalar = &scalars[i];
+            let precomputed_point_limbs = Some(point_limbs[i]);
 
-            // TODO TACEO: Origin Tags?
+            // TACEO TODO: Origin Tags?
 
             // Populate the goblin-style ecc op gates for the given mul inputs
             // If scalar is 1, there is no need to perform a mul
@@ -280,13 +297,19 @@ impl<
 
             let point_value = point.get_value(builder, driver);
 
+            // TACEO TODO: all the points are converted to field shares, so we should batch this
             let (op_tuple, co_eccvm_op) = if scalar_is_constant_equal_one {
                 // if scalar is 1, there is no need to perform a mul
-                builder.queue_ecc_add_accum_no_store(point_value, driver)?
+                builder.queue_ecc_add_accum_no_store(
+                    point_value,
+                    precomputed_point_limbs,
+                    driver,
+                )?
             } else {
                 // otherwise, perform a mul-then-accumulate
                 builder.queue_ecc_mul_accum_no_store(
                     point_value,
+                    precomputed_point_limbs,
                     scalar.get_value(builder, driver),
                     driver,
                 )?
@@ -305,8 +328,8 @@ impl<
             // Note: These constraints do not assume or enforce that the coordinates of the original point have been
             // asserted to be in the field, only that they are less than the smallest power of 2 greater than the field
             // modulus (a la the bigfield(lo, hi) constructor with can_overflow == false).
-            // TODO TACEO: assert!(point.x.get_maximum_value() <= P::BaseField::default_maximum_remainder());
-            // TODO TACEO: assert!(point.y.get_maximum_value() <= P::BaseField::default_maximum_remainder());
+            // TACEO TODO: assert!(point.x.get_maximum_value() <= P::BaseField::default_maximum_remainder());
+            // TACEO TODO: assert!(point.y.get_maximum_value() <= P::BaseField::default_maximum_remainder());
             x_lo.assert_equal(&point.x.limbs[0], builder, driver);
             x_hi.assert_equal(&point.x.limbs[1], builder, driver);
             y_lo.assert_equal(&point.y.limbs[0], builder, driver);
@@ -317,7 +340,9 @@ impl<
                 let z_1 = FieldCT::from_witness_index(op_tuple.z_1);
                 let z_2 = FieldCT::from_witness_index(op_tuple.z_2);
                 let beta = FieldCT::from_witness(
-                    P::ScalarField::get_root_of_unity(3).unwrap().into(),
+                    P::ScalarField::get_root_of_unity(3)
+                        .expect("P::ScalarField should have a cube root of unity")
+                        .into(),
                     builder,
                 );
                 scalar.assert_equal(
@@ -329,7 +354,7 @@ impl<
         }
 
         // Precompute is_zero flags and append the eccvm operations to the builder's eccvm op queue
-        precompute_mul_acc_flags(&mut co_eccvm_ops.iter_mut().collect_vec(), driver)?;
+        precompute_flags(&mut co_eccvm_ops, driver)?;
         builder.ecc_op_queue.append_eccvm_ops(co_eccvm_ops);
 
         // Populate equality gates based on the internal accumulator point
@@ -356,7 +381,7 @@ impl<
             .is_zero(builder, driver)?;
         result.set_point_at_infinity(op2_is_infinity);
 
-        // TODO TACEO: Origin Tags?
+        // TACEO TODO: Origin Tags?
 
         Ok(result)
     }

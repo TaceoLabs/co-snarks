@@ -1,6 +1,6 @@
 use super::field_ct::FieldCT;
 use super::generators;
-use common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType, utils::Utils};
+use co_noir_common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType, utils::Utils};
 
 use crate::types::aes128::{AES128_BASE, AES128_SBOX};
 use crate::ultra_builder::GenericUltraCircuitBuilder;
@@ -1351,8 +1351,8 @@ impl<F: PrimeField> Plookup<F> {
         // At least one key is shared, so we have to do something different
 
         // the case shared/public can probably be optimised (or never happens?)
-        let key_a = GenericUltraCircuitBuilder::<P, T>::get_as_shared(&key_a, driver);
-        let key_b = GenericUltraCircuitBuilder::<P, T>::get_as_shared(&key_b, driver);
+        let key_a = driver.get_as_shared(&key_a);
+        let key_b = driver.get_as_shared(&key_b);
 
         match multi_table.id {
             MultiTableId::Uint32Xor => {

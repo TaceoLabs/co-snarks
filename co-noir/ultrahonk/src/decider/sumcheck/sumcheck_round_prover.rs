@@ -28,7 +28,7 @@ use crate::{
 
 use ark_ff::PrimeField;
 use co_builder::flavours::eccvm_flavour::ECCVMFlavour;
-use common::{
+use co_noir_common::{
     honk_curve::HonkCurve, honk_proof::TranscriptFieldType,
     polynomials::polynomial::RowDisablingPolynomial,
 };

@@ -34,9 +34,9 @@ use ark_ff::AdditiveGroup;
 use ark_ff::PrimeField;
 use co_builder::flavours::ultra_flavour::UltraFlavour;
 use co_builder::prover_flavour::ProverFlavour;
-use common::honk_curve::HonkCurve;
-use common::honk_proof::{HonkProofResult, TranscriptFieldType};
-use common::mpc::NoirUltraHonkProver;
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::{HonkProofResult, TranscriptFieldType};
+use co_noir_common::mpc::NoirUltraHonkProver;
 use mpc_net::Network;
 use std::array;
 use ultrahonk::prelude::Univariate;
@@ -367,10 +367,10 @@ impl MPCProverFlavour for UltraFlavour {
     }
     fn get_alpha_challenges<
         F: ark_ff::PrimeField,
-        H: common::transcript::TranscriptHasher<F>,
+        H: co_noir_common::transcript::TranscriptHasher<F>,
         P: HonkCurve<F>,
     >(
-        transcript: &mut common::transcript::Transcript<F, H>,
+        transcript: &mut co_noir_common::transcript::Transcript<F, H>,
         alphas: &mut Vec<P::ScalarField>,
     ) {
         let args: [String; Self::NUM_ALPHAS] = array::from_fn(|i| format!("alpha_{i}"));

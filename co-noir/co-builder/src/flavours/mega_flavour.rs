@@ -1,3 +1,5 @@
+use co_noir_common::polynomials::polynomial::Polynomial;
+
 use crate::{
     polynomials::{
         polynomial_flavours::{
@@ -174,16 +176,16 @@ impl ProverFlavour for MegaFlavour {
     const WITNESS_RETURN_DATA_INVERSES: usize = 23;
 
     fn prover_witness_entity_from_vec<T: Default + Sync + Clone>(
-        vec: Vec<common::polynomials::polynomial::Polynomial<T>>,
-    ) -> Self::ProverWitnessEntities<common::polynomials::polynomial::Polynomial<T>> {
+        vec: Vec<Polynomial<T>>,
+    ) -> Self::ProverWitnessEntities<Polynomial<T>> {
         MegaProverWitnessEntities {
             elements: std::array::from_fn(|i| vec[i].clone()),
         }
     }
 
     fn precomputed_entity_from_vec<T: Default + Clone + Debug + Sync>(
-        vec: Vec<common::polynomials::polynomial::Polynomial<T>>,
-    ) -> Self::PrecomputedEntities<common::polynomials::polynomial::Polynomial<T>> {
+        vec: Vec<Polynomial<T>>,
+    ) -> Self::PrecomputedEntities<Polynomial<T>> {
         MegaPrecomputedEntities {
             elements: std::array::from_fn(|i| vec[i].clone()),
         }

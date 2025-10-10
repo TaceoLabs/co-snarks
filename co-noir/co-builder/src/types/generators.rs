@@ -1,7 +1,7 @@
 use crate::types::plookup::FixedBaseParams;
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{BigInteger, Field, One, PrimeField};
-use common::{serialize::SerializeC, utils::Utils};
+use co_noir_common::{serialize::SerializeC, utils::Utils};
 use num_bigint::BigUint;
 use std::{any::TypeId, sync::OnceLock};
 

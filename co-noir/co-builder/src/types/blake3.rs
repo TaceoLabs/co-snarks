@@ -9,7 +9,7 @@ use {
     std::array,
 };
 
-use common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType};
+use co_noir_common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType};
 
 // Internal flags
 #[repr(u8)]

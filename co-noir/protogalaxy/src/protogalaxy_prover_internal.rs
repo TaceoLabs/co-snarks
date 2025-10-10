@@ -4,9 +4,9 @@ use ark_ff::Field;
 use co_builder::flavours::mega_flavour::MegaFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 
-use common::honk_curve::HonkCurve;
-use common::honk_proof::TranscriptFieldType;
-use common::polynomials::polynomial::Polynomial;
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::polynomials::polynomial::Polynomial;
 use ultrahonk::plain_prover_flavour::{PlainProverFlavour, UnivariateTrait};
 use ultrahonk::prelude::{AllEntities, GateSeparatorPolynomial, ProvingKey, Univariate};
 

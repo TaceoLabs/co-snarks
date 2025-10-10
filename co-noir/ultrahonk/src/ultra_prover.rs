@@ -8,11 +8,11 @@ use co_builder::{
     prelude::{PAIRING_POINT_ACCUMULATOR_SIZE, ProvingKey},
     prover_flavour::Flavour,
 };
-use common::honk_curve::HonkCurve;
-use common::honk_proof::HonkProofResult;
-use common::honk_proof::TranscriptFieldType;
-use common::transcript::{Transcript, TranscriptHasher};
-use common::types::ZeroKnowledge;
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::HonkProofResult;
+use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::transcript::{Transcript, TranscriptHasher};
+use co_noir_common::types::ZeroKnowledge;
 use noir_types::HonkProof;
 use std::marker::PhantomData;
 

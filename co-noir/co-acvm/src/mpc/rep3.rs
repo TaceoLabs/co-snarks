@@ -1,23 +1,26 @@
 use super::plain::PlainAcvmSolver;
 use super::{NoirWitnessExtensionProtocol, downcast};
 use ark_ec::{AffineRepr, CurveGroup};
+use ark_ff::Field;
 use ark_ff::{BigInteger, MontConfig, One, PrimeField, Zero};
 use blake2::{Blake2s256, Digest};
 use co_brillig::mpc::{Rep3BrilligDriver, Rep3BrilligType};
+use co_noir_common::honk_curve::HonkCurve;
 use co_noir_types::Rep3Type;
-use common::honk_curve::HonkCurve;
 use itertools::{Either, Itertools, izip};
 use libaes::Cipher;
 use mpc_core::MpcState as _;
 use mpc_core::gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations};
 use mpc_core::protocols::rep3::conversion::A2BType;
 use mpc_core::protocols::rep3::id::PartyID;
+use mpc_core::protocols::rep3::poly;
 use mpc_core::protocols::rep3::yao::circuits::SHA256Table;
 use mpc_core::protocols::rep3::{
     Rep3BigUintShare, Rep3PointShare, Rep3State, arithmetic, binary, conversion,
     network::Rep3NetworkExt, pointshare, yao,
 };
 use mpc_core::protocols::rep3_ring::gadgets::sort::{radix_sort_fields, radix_sort_fields_vec_by};
+use mpc_core::protocols::rep3_ring::lut_curve::Rep3CurveLookupTable;
 use mpc_core::{
     lut::LookupTableProvider, protocols::rep3::Rep3PrimeFieldShare,
     protocols::rep3_ring::lut_field::Rep3FieldLookupTable,
@@ -174,6 +177,63 @@ impl<'a, F: PrimeField, N: Network> Rep3AcvmSolver<'a, F, N> {
         Ok(Rep3AcvmPoint::Shared(res))
     }
 
+    // This is not needed atm, but maybe we'll need it in the future
+    #[expect(unused)]
+    fn create_bn254_point_many(
+        x: &[Rep3AcvmType<ark_bn254::Fq>],
+        y: &[Rep3AcvmType<ark_bn254::Fq>],
+        is_infinity: &[Rep3AcvmType<ark_bn254::Fq>],
+        net: &N,
+        state: &mut Rep3State,
+        pedantic_solving: bool,
+    ) -> eyre::Result<Vec<Rep3AcvmPoint<ark_bn254::G1Projective>>> {
+        for inf in is_infinity {
+            if let Rep3AcvmType::Public(is_infinity) = inf {
+                if pedantic_solving && is_infinity > &ark_bn254::Fq::one() {
+                    eyre::bail!(
+                        "--pedantic-solving: is_infinity expected to be a bool, but found to be > 1"
+                    );
+                }
+            }
+        }
+        // TACEO TODO optimize the all public case
+        let x = x
+            .iter()
+            .map(|x| match x {
+                Rep3AcvmType::Public(x) => arithmetic::promote_to_trivial_share(state.id, *x),
+                Rep3AcvmType::Shared(x) => *x,
+            })
+            .collect::<Vec<_>>();
+        let y = y
+            .iter()
+            .map(|y| match y {
+                Rep3AcvmType::Public(y) => arithmetic::promote_to_trivial_share(state.id, *y),
+                Rep3AcvmType::Shared(y) => *y,
+            })
+            .collect::<Vec<_>>();
+        let is_infinity = is_infinity
+            .iter()
+            .map(|is_infinity| match is_infinity {
+                Rep3AcvmType::Public(is_infinity) => {
+                    arithmetic::promote_to_trivial_share(state.id, *is_infinity)
+                }
+                Rep3AcvmType::Shared(is_infinity) => *is_infinity,
+            })
+            .collect::<Vec<_>>();
+
+        let res: Vec<_> = conversion::fieldshares_to_pointshare_many::<ark_bn254::G1Projective, N>(
+            &x,
+            &y,
+            &is_infinity,
+            net,
+            state,
+        )?
+        .iter()
+        .map(|x| Rep3AcvmPoint::Shared(*x))
+        .collect();
+        Ok(res)
+    }
+
     fn scalar_point_mul<C: CurveGroup>(
         a: Rep3AcvmType<C::ScalarField>,
         b: Rep3AcvmPoint<C>,
@@ -218,7 +278,7 @@ impl<'a, F: PrimeField, N: Network> Rep3AcvmSolver<'a, F, N> {
 }
 
 // For some intermediate representations
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub enum Rep3AcvmPoint<C: CurveGroup> {
     Public(C),
     Shared(Rep3PointShare<C>),
@@ -251,6 +311,12 @@ impl<C: CurveGroup> std::fmt::Display for Rep3AcvmPoint<C> {
     }
 }
 
+impl<C: CurveGroup> From<Rep3PointShare<C>> for Rep3AcvmPoint<C> {
+    fn from(value: Rep3PointShare<C>) -> Self {
+        Self::Shared(value)
+    }
+}
+
 impl<C: CurveGroup> From<C> for Rep3AcvmPoint<C> {
     fn from(value: C) -> Self {
         Self::Public(value)
@@ -259,7 +325,7 @@ impl<C: CurveGroup> From<C> for Rep3AcvmPoint<C> {
 
 // TODO maybe we want to merge that with the Rep3VmType?? Atm we do not need
 // binary shares so maybe it is ok..
-#[derive(Copy, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Copy)]
 pub enum Rep3AcvmType<F: PrimeField> {
     Public(
         #[serde(
@@ -362,14 +428,14 @@ fn get_base_powers<const NUM_SLICES: usize>(base: u64) -> [BigUint; NUM_SLICES] 
 
 impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3AcvmSolver<'a, F, N> {
     type Lookup = Rep3FieldLookupTable<F>;
+    type CurveLookup<C: CurveGroup<ScalarField = F>> = Rep3CurveLookupTable<C>;
 
     type ArithmeticShare = Rep3PrimeFieldShare<F>;
-    type NativePointShare<C: CurveGroup<ScalarField = F>> = Rep3PointShare<C>;
 
     type AcvmType = Rep3AcvmType<F>;
-    type AcvmPoint<C: CurveGroup<BaseField = F>> = Rep3AcvmPoint<C>;
+    type CycleGroupAcvmPoint<C: CurveGroup<BaseField = F>> = Rep3AcvmPoint<C>;
 
-    type OtherAcvmPoint<C: CurveGroup<ScalarField = F, BaseField: PrimeField>> = Rep3AcvmPoint<C>;
+    type NativeAcvmPoint<C: CurveGroup<ScalarField = F, BaseField: PrimeField>> = Rep3AcvmPoint<C>;
     type OtherArithmeticShare<C: CurveGroup<ScalarField = F, BaseField: PrimeField>> =
         Rep3PrimeFieldShare<C::BaseField>;
     type OtherAcvmType<C: CurveGroup<ScalarField = F, BaseField: PrimeField>> =
@@ -411,6 +477,36 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
     }
 
+    fn cmux_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        cond: Self::OtherAcvmType<C>,
+        truthy: Self::OtherAcvmType<C>,
+        falsy: Self::OtherAcvmType<C>,
+    ) -> eyre::Result<Self::OtherAcvmType<C>> {
+        match cond {
+            Rep3AcvmType::Public(cond) => {
+                assert!(cond.is_one() || cond.is_zero());
+                if cond.is_one() { Ok(truthy) } else { Ok(falsy) }
+            }
+            Rep3AcvmType::Shared(cond) => {
+                let b_min_a = self.sub_other::<C>(truthy, falsy);
+                let d = self.mul_other::<C>(cond.into(), b_min_a)?;
+                Ok(self.add_other::<C>(falsy, d))
+            }
+        }
+    }
+
+    fn cmux_many_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        cond: &[Self::OtherAcvmType<C>],
+        truthy: &[Self::OtherAcvmType<C>],
+        falsy: &[Self::OtherAcvmType<C>],
+    ) -> eyre::Result<Vec<Self::OtherAcvmType<C>>> {
+        let b_min_a = self.sub_many_other::<C>(truthy, falsy);
+        let d = self.mul_many_other::<C>(cond, &b_min_a)?;
+        Ok(self.add_many_other::<C>(falsy, &d))
+    }
+
     fn shared_zeros(&mut self, len: usize) -> eyre::Result<Vec<Self::AcvmType>> {
         let a = (0..len)
             .map(|_| self.state0.rngs.rand.masking_field_element())
@@ -448,6 +544,20 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         *target = result;
     }
 
+    fn add_assign_with_public_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        public: C::BaseField,
+        target: &mut Self::OtherAcvmType<C>,
+    ) {
+        let result = match target.to_owned() {
+            Rep3AcvmType::Public(secret) => Rep3AcvmType::Public(public + secret),
+            Rep3AcvmType::Shared(secret) => {
+                Rep3AcvmType::Shared(arithmetic::add_public(secret, public, self.id))
+            }
+        };
+        *target = result;
+    }
+
     fn add(&self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> Self::AcvmType {
         match (lhs, rhs) {
             (Rep3AcvmType::Public(lhs), Rep3AcvmType::Public(rhs)) => {
@@ -466,9 +576,9 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
 
     fn add_points<C: CurveGroup<BaseField = F>>(
         &self,
-        lhs: Self::AcvmPoint<C>,
-        rhs: Self::AcvmPoint<C>,
-    ) -> Self::AcvmPoint<C> {
+        lhs: Self::CycleGroupAcvmPoint<C>,
+        rhs: Self::CycleGroupAcvmPoint<C>,
+    ) -> Self::CycleGroupAcvmPoint<C> {
         match (lhs, rhs) {
             (Rep3AcvmPoint::Public(lhs), Rep3AcvmPoint::Public(rhs)) => {
                 Rep3AcvmPoint::Public(lhs + rhs)
@@ -485,7 +595,28 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
     }
 
-    fn sub(&mut self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType {
+    fn add_points_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &self,
+        lhs: Self::NativeAcvmPoint<C>,
+        rhs: Self::NativeAcvmPoint<C>,
+    ) -> Self::NativeAcvmPoint<C> {
+        match (lhs, rhs) {
+            (Rep3AcvmPoint::Public(lhs), Rep3AcvmPoint::Public(rhs)) => {
+                Rep3AcvmPoint::Public(lhs + rhs)
+            }
+            (Rep3AcvmPoint::Public(public), Rep3AcvmPoint::Shared(mut shared))
+            | (Rep3AcvmPoint::Shared(mut shared), Rep3AcvmPoint::Public(public)) => {
+                pointshare::add_assign_public(&mut shared, &public, self.id);
+                Rep3AcvmPoint::Shared(shared)
+            }
+            (Rep3AcvmPoint::Shared(lhs), Rep3AcvmPoint::Shared(rhs)) => {
+                let result = pointshare::add(&lhs, &rhs);
+                Rep3AcvmPoint::Shared(result)
+            }
+        }
+    }
+
+    fn sub(&self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType {
         match (share_1, share_2) {
             (Rep3AcvmType::Public(share_1), Rep3AcvmType::Public(share_2)) => {
                 Rep3AcvmType::Public(share_1 - share_2)
@@ -579,7 +710,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     }
 
     fn add_assign(&mut self, target: &mut Self::AcvmType, rhs: Self::AcvmType) {
-        let result = match (target.to_owned(), rhs) {
+        let result = match (*target, rhs) {
             (Rep3AcvmType::Public(lhs), Rep3AcvmType::Public(rhs)) => {
                 Rep3AcvmType::Public(lhs + rhs)
             }
@@ -592,6 +723,26 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             }
         };
         *target = result;
+    }
+
+    fn add_assign_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        lhs: &mut Self::OtherAcvmType<C>,
+        rhs: Self::OtherAcvmType<C>,
+    ) {
+        let result = match (lhs.to_owned(), rhs) {
+            (Rep3AcvmType::Public(lhs), Rep3AcvmType::Public(rhs)) => {
+                Rep3AcvmType::Public(lhs + rhs)
+            }
+            (Rep3AcvmType::Public(public), Rep3AcvmType::Shared(shared))
+            | (Rep3AcvmType::Shared(shared), Rep3AcvmType::Public(public)) => {
+                Rep3AcvmType::Shared(arithmetic::add_public(shared, public, self.id))
+            }
+            (Rep3AcvmType::Shared(lhs), Rep3AcvmType::Shared(rhs)) => {
+                Rep3AcvmType::Shared(arithmetic::add(lhs, rhs))
+            }
+        };
+        *lhs = result;
     }
 
     fn solve_mul_term(
@@ -816,6 +967,23 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         )
     }
 
+    fn one_hot_vector_from_shared_index_other<
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
+        &mut self,
+        index: Self::OtherArithmeticShare<C>,
+        len: usize,
+    ) -> eyre::Result<Vec<Self::OtherArithmeticShare<C>>> {
+        mpc_core::protocols::rep3_ring::lut_field::Rep3FieldLookupTable::<C::BaseField>::ohv_from_index(
+            index,
+            len,
+            self.net0,
+            self.net1,
+            &mut self.state0,
+            &mut self.state1,
+        )
+    }
+
     fn write_to_shared_lut_from_ohv(
         &mut self,
         ohv: &[Self::ArithmeticShare],
@@ -846,6 +1014,15 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
     }
 
+    fn get_shared_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        a: &Self::OtherAcvmType<C>,
+    ) -> Option<Self::OtherArithmeticShare<C>> {
+        match a {
+            Rep3AcvmType::Shared(shared) => Some(*shared),
+            _ => None,
+        }
+    }
+
     fn get_public(a: &Self::AcvmType) -> Option<F> {
         match a {
             Rep3AcvmType::Public(public) => Some(*public),
@@ -853,7 +1030,18 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
     }
 
-    fn get_public_point<C: CurveGroup<BaseField = F>>(a: &Self::AcvmPoint<C>) -> Option<C> {
+    fn get_public_point<C: CurveGroup<BaseField = F>>(
+        a: &Self::CycleGroupAcvmPoint<C>,
+    ) -> Option<C> {
+        match a {
+            Rep3AcvmPoint::Public(public) => Some(*public),
+            _ => None,
+        }
+    }
+
+    fn get_public_point_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        a: &Self::NativeAcvmPoint<C>,
+    ) -> Option<C> {
         match a {
             Rep3AcvmPoint::Public(public) => Some(*public),
             _ => None,
@@ -866,6 +1054,16 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
 
         izip!(a, cs.iter_mut()).for_each(|(x, c)| *c += x.a + x.b);
 
+        Ok(cs)
+    }
+
+    fn open_many_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[Self::OtherArithmeticShare<C>],
+    ) -> eyre::Result<Vec<C::BaseField>> {
+        let bs = a.iter().map(|x| x.b).collect_vec();
+        let mut cs = self.net0.reshare(bs)?;
+        izip!(a, cs.iter_mut()).for_each(|(x, c)| *c += x.a + x.b);
         Ok(cs)
     }
 
@@ -1314,12 +1512,45 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
     }
 
+    fn equal_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &Self::OtherAcvmType<C>,
+        b: &Self::OtherAcvmType<C>,
+    ) -> eyre::Result<Self::OtherAcvmType<C>> {
+        match (a, b) {
+            (Rep3AcvmType::Public(a), Rep3AcvmType::Public(b)) => {
+                Ok(Rep3AcvmType::Public(C::BaseField::from(a == b)))
+            }
+            (Rep3AcvmType::Public(public), Rep3AcvmType::Shared(shared)) => {
+                Ok(Rep3AcvmType::Shared(arithmetic::eq_public(
+                    *shared,
+                    *public,
+                    self.net0,
+                    &mut self.state0,
+                )?))
+            }
+
+            (Rep3AcvmType::Shared(shared), Rep3AcvmType::Public(public)) => {
+                Ok(Rep3AcvmType::Shared(arithmetic::eq_public(
+                    *shared,
+                    *public,
+                    self.net0,
+                    &mut self.state0,
+                )?))
+            }
+
+            (Rep3AcvmType::Shared(a), Rep3AcvmType::Shared(b)) => Ok(Rep3AcvmType::Shared(
+                arithmetic::eq(*a, *b, self.net0, &mut self.state0)?,
+            )),
+        }
+    }
+
     fn equal_many(
         &mut self,
         a: &[Self::AcvmType],
         b: &[Self::AcvmType],
     ) -> eyre::Result<Vec<Self::AcvmType>> {
-        // TODO: we probably want to compare public values directly if there happen to be any in the same index
+        // TACEO TODO: we probably want to compare public values directly if there happen to be any in the same index
         let bool_a = a.iter().any(|v| Self::is_shared(v));
         let bool_b = b.iter().any(|v| Self::is_shared(v));
         if !bool_a && !bool_b {
@@ -1386,6 +1617,91 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                     } else {
                         self.promote_to_trivial_share(
                             Self::get_public(v).expect("Already checked it is public"),
+                        )
+                    }
+                })
+                .collect();
+            arithmetic::eq_many(&a, &b, self.net0, &mut self.state0)
+                .map(|shares| shares.into_iter().map(Rep3AcvmType::Shared).collect())
+        }
+    }
+
+    fn equal_many_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[Self::OtherAcvmType<C>],
+        b: &[Self::OtherAcvmType<C>],
+    ) -> eyre::Result<Vec<Self::OtherAcvmType<C>>> {
+        // TODO: we probably want to compare public values directly if there happen to be any in the same index
+        let bool_a = a.iter().any(|v| Self::is_shared_other::<C>(v));
+        let bool_b = b.iter().any(|v| Self::is_shared_other::<C>(v));
+        if !bool_a && !bool_b {
+            Ok(a.iter()
+                .zip(b.iter())
+                .map(|(a, b)| Self::equal_other::<C>(self, a, b).unwrap())
+                .collect())
+        } else if bool_a && !bool_b {
+            let b = b
+                .iter()
+                .map(|v| Self::get_public_other::<C>(v).expect("Already checked it is public"))
+                .collect::<Vec<_>>();
+            let a: Vec<Self::OtherArithmeticShare<C>> = a
+                .iter()
+                .map(|v| {
+                    if Self::is_shared_other::<C>(v) {
+                        Self::get_shared_other::<C>(v).expect("Already checked it is shared")
+                    } else {
+                        arithmetic::promote_to_trivial_share(
+                            self.id,
+                            Self::get_public_other::<C>(v).expect("Already checked it is public"),
+                        )
+                    }
+                })
+                .collect();
+            arithmetic::eq_public_many(&a, &b, self.net0, &mut self.state0)
+                .map(|shares| shares.into_iter().map(Rep3AcvmType::Shared).collect())
+        } else if !bool_a && bool_b {
+            let a = a
+                .iter()
+                .map(|v| Self::get_public_other::<C>(v).expect("Already checked it is public"))
+                .collect::<Vec<_>>();
+            let b: Vec<Self::OtherArithmeticShare<C>> = b
+                .iter()
+                .map(|v| {
+                    if Self::is_shared_other::<C>(v) {
+                        Self::get_shared_other::<C>(v).expect("Already checked it is shared")
+                    } else {
+                        arithmetic::promote_to_trivial_share(
+                            self.id,
+                            Self::get_public_other::<C>(v).expect("Already checked it is public"),
+                        )
+                    }
+                })
+                .collect();
+            arithmetic::eq_public_many(&b, &a, self.net0, &mut self.state0)
+                .map(|shares| shares.into_iter().map(Rep3AcvmType::Shared).collect())
+        } else {
+            let a: Vec<Self::OtherArithmeticShare<C>> = a
+                .iter()
+                .map(|v| {
+                    if Self::is_shared_other::<C>(v) {
+                        Self::get_shared_other::<C>(v).expect("Already checked it is shared")
+                    } else {
+                        arithmetic::promote_to_trivial_share(
+                            self.id,
+                            Self::get_public_other::<C>(v).expect("Already checked it is public"),
+                        )
+                    }
+                })
+                .collect();
+            let b: Vec<Self::OtherArithmeticShare<C>> = b
+                .iter()
+                .map(|v| {
+                    if Self::is_shared_other::<C>(v) {
+                        Self::get_shared_other::<C>(v).expect("Already checked it is shared")
+                    } else {
+                        arithmetic::promote_to_trivial_share(
+                            self.id,
+                            Self::get_public_other::<C>(v).expect("Already checked it is public"),
                         )
                     }
                 })
@@ -1475,7 +1791,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                     &mut self.state0,
                 )?;
                 // Set x,y to 0 of infinity is one.
-                // TODO is this even necesary?
+                // Note: If we don't need the coordinates to be zero in the infinity case, we could add an option to skip this
                 let mul = arithmetic::sub_public_by_shared(ark_bn254::Fr::one(), i, self.id);
                 let res = arithmetic::mul_vec(&[x, y], &[mul, mul], self.net0, &mut self.state0)?;
 
@@ -1500,7 +1816,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         x: Self::AcvmType,
         y: Self::AcvmType,
         is_infinity: Self::AcvmType,
-    ) -> eyre::Result<Self::AcvmPoint<C>> {
+    ) -> eyre::Result<Self::CycleGroupAcvmPoint<C>> {
         // This is very hardcoded to the grumpkin curve
         if TypeId::of::<F>() != TypeId::of::<ark_bn254::Fr>() {
             panic!("Only BN254 is supported");
@@ -1520,7 +1836,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         let point =
             Self::create_grumpkin_point(x, y, is_infinity, self.net0, &mut self.state0, true)?;
 
-        let y = downcast::<_, Self::AcvmPoint<C>>(&point)
+        let y = downcast::<_, Self::CycleGroupAcvmPoint<C>>(&point)
             .expect("We checked types")
             .to_owned();
 
@@ -1529,7 +1845,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
 
     fn pointshare_to_field_shares<C: CurveGroup<BaseField = F>>(
         &mut self,
-        point: Self::AcvmPoint<C>,
+        point: Self::CycleGroupAcvmPoint<C>,
     ) -> eyre::Result<(Self::AcvmType, Self::AcvmType, Self::AcvmType)> {
         let res = match point {
             Rep3AcvmPoint::Public(point) => {
@@ -1542,8 +1858,8 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             Rep3AcvmPoint::Shared(point) => {
                 let (x, y, i) =
                     conversion::point_share_to_fieldshares(point, self.net0, &mut self.state0)?;
-                // Set x,y to 0 of infinity is one.
-                // TODO is this even necesary?
+                // Set x,y to 0 if infinity is one.
+                // Note: If we don't need the coordinates to be zero in the infinity case, we could add an option to skip this
                 let mul = arithmetic::sub_public_by_shared(F::one(), i, self.id);
                 let res = arithmetic::mul_vec(&[x, y], &[mul, mul], self.net0, &mut self.state0)?;
 
@@ -1587,9 +1903,9 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
 
     fn set_point_to_value_if_zero<C: CurveGroup<BaseField = F>>(
         &mut self,
-        point: Self::AcvmPoint<C>,
-        value: Self::AcvmPoint<C>,
-    ) -> eyre::Result<Self::AcvmPoint<C>> {
+        point: Self::CycleGroupAcvmPoint<C>,
+        value: Self::CycleGroupAcvmPoint<C>,
+    ) -> eyre::Result<Self::CycleGroupAcvmPoint<C>> {
         match point {
             Rep3AcvmPoint::Public(point) => {
                 if point.is_zero() {
@@ -1949,7 +2265,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         let i = *downcast(&i).expect("We checked types");
 
         // Set x,y to 0 of infinity is one.
-        // TODO is this even necesary?
+        // Note: If we don't need the coordinates to be zero in the infinity case, we could add an option to skip this
         let mul = arithmetic::sub_public_by_shared(F::one(), i, self.id);
         let res = arithmetic::mul_vec(&[x, y], &[mul, mul], self.net0, &mut self.state0)?;
 
@@ -2084,8 +2400,8 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             let vec_t0 = chunk.to_vec();
             let mut sum_a = self.mul_with_public(base_powers[0], vec_t0[0]);
 
-            for (i, &a) in vec_t0.iter().enumerate().skip(1).take(31) {
-                let tmp = self.mul_with_public(base_powers[i], a);
+            for (i, a) in vec_t0.iter().enumerate().skip(1).take(31) {
+                let tmp = self.mul_with_public(base_powers[i], *a);
                 sum_a = self.add(sum_a, tmp);
             }
 
@@ -2237,28 +2553,203 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
     }
 
-    // Scales a point by a scalar. Both can either be public or shared
-    fn scale_point_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+    fn other_pointshare_to_other_field_share<
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
         &mut self,
-        point: Self::OtherAcvmPoint<C>,
-        scalar: Self::AcvmType,
-    ) -> eyre::Result<Self::OtherAcvmPoint<C>> {
-        let match_ = match (point, scalar) {
-            (Rep3AcvmPoint::Public(point), Rep3AcvmType::Public(scalar)) => {
-                Rep3AcvmPoint::Public(point * scalar)
+        point: &Self::NativeAcvmPoint<C>,
+    ) -> eyre::Result<(
+        Self::OtherAcvmType<C>,
+        Self::OtherAcvmType<C>,
+        Self::OtherAcvmType<C>,
+    )> {
+        let res = match point {
+            Rep3AcvmPoint::Public(point) => {
+                if let Some((out_x, out_y)) = point.into_affine().xy() {
+                    (out_x.into(), out_y.into(), C::BaseField::zero().into())
+                } else {
+                    (
+                        C::BaseField::zero().into(),
+                        C::BaseField::zero().into(),
+                        C::BaseField::one().into(),
+                    )
+                }
             }
-            (Rep3AcvmPoint::Shared(point), Rep3AcvmType::Public(scalar)) => {
-                Rep3AcvmPoint::Shared(pointshare::scalar_mul_public_scalar(&point, scalar))
-            }
-            (Rep3AcvmPoint::Public(point), Rep3AcvmType::Shared(scalar)) => {
-                Rep3AcvmPoint::Shared(pointshare::scalar_mul_public_point(&point, scalar))
-            }
-            (Rep3AcvmPoint::Shared(point), Rep3AcvmType::Shared(scalar)) => Rep3AcvmPoint::Shared(
-                pointshare::scalar_mul(&point, scalar, self.net0, &mut self.state0)?,
-            ),
-        };
+            Rep3AcvmPoint::Shared(point) => {
+                let (x, y, i) =
+                    conversion::point_share_to_fieldshares(*point, self.net0, &mut self.state0)?;
+                // Set x,y to 0 if infinity is one.
+                // Note: If we don't need the coordinates to be zero in the infinity case, we could add an option to skip this
+                let mul = arithmetic::sub_public_by_shared(C::BaseField::one(), i, self.id);
+                let res = arithmetic::mul_vec(&[x, y], &[mul, mul], self.net0, &mut self.state0)?;
 
-        Ok(match_)
+                (res[0].into(), res[1].into(), i.into())
+            }
+        };
+        Ok(res)
+    }
+
+    fn other_pointshare_to_other_field_shares_many<
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
+        &mut self,
+        points: &[Self::NativeAcvmPoint<C>],
+    ) -> eyre::Result<(
+        Vec<Self::OtherAcvmType<C>>,
+        Vec<Self::OtherAcvmType<C>>,
+        Vec<Self::OtherAcvmType<C>>,
+    )> {
+        if points.iter().any(|v| Self::is_shared_point(v)) {
+            let points: Vec<Rep3PointShare<C>> = (0..points.len())
+                .map(|i| match points[i] {
+                    Rep3AcvmPoint::Public(public) => {
+                        pointshare::promote_to_trivial_share(self.id, &public)
+                    }
+                    Rep3AcvmPoint::Shared(shared) => shared,
+                })
+                .collect();
+            let (x_shares, y_shares, infinity_shares) =
+                conversion::point_share_to_fieldshares_many(&points, self.net0, &mut self.state0)?;
+            // Set x,y to 0 if infinity is one.
+            // Note: If we don't need the coordinates to be zero in the infinity case, we could add an option to skip this
+            let mul = infinity_shares
+                .iter()
+                .map(|i| arithmetic::sub_public_by_shared(C::BaseField::one(), *i, self.id))
+                .collect::<Vec<_>>();
+            let mut lhs = Vec::with_capacity(x_shares.len() * 2);
+            lhs.extend_from_slice(&x_shares);
+            lhs.extend_from_slice(&y_shares);
+            let mut rhs = Vec::with_capacity(mul.len() * 2);
+            rhs.extend_from_slice(&mul);
+            rhs.extend_from_slice(&mul);
+            let res = arithmetic::mul_vec(&lhs, &rhs, self.net0, &mut self.state0)?;
+            let (x_res, y_res) = res.split_at(res.len() / 2);
+            Ok((
+                x_res
+                    .iter()
+                    .map(|x| Rep3AcvmType::<C::BaseField>::Shared(*x))
+                    .collect(),
+                y_res
+                    .iter()
+                    .map(|x| Rep3AcvmType::<C::BaseField>::Shared(*x))
+                    .collect(),
+                infinity_shares
+                    .iter()
+                    .map(|x| Rep3AcvmType::<C::BaseField>::Shared(*x))
+                    .collect(),
+            ))
+        } else {
+            let mut res1 = Vec::with_capacity(points.len());
+            let mut res2 = Vec::with_capacity(points.len());
+            let mut res3 = Vec::with_capacity(points.len());
+            for point in points {
+                if let Some((out_x, out_y)) = Self::get_public_point_other(point)
+                    .expect("We checked types")
+                    .into_affine()
+                    .xy()
+                {
+                    res1.push(out_x.into());
+                    res2.push(out_y.into());
+                    res3.push(C::BaseField::zero().into());
+                } else {
+                    res1.push(C::BaseField::zero().into());
+                    res2.push(C::BaseField::zero().into());
+                    res3.push(C::BaseField::one().into());
+                }
+            }
+            Ok((res1, res2, res3))
+        }
+    }
+
+    fn mul_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        secret_1: Self::OtherAcvmType<C>,
+        secret_2: Self::OtherAcvmType<C>,
+    ) -> eyre::Result<Self::OtherAcvmType<C>> {
+        match (secret_1, secret_2) {
+            (Rep3AcvmType::Public(secret_1), Rep3AcvmType::Public(secret_2)) => {
+                Ok(Rep3AcvmType::Public(secret_1 * secret_2))
+            }
+            (Rep3AcvmType::Public(secret_1), Rep3AcvmType::Shared(secret_2)) => Ok(
+                Rep3AcvmType::Shared(arithmetic::mul_public(secret_2, secret_1)),
+            ),
+            (Rep3AcvmType::Shared(secret_1), Rep3AcvmType::Public(secret_2)) => Ok(
+                Rep3AcvmType::Shared(arithmetic::mul_public(secret_1, secret_2)),
+            ),
+            (Rep3AcvmType::Shared(secret_1), Rep3AcvmType::Shared(secret_2)) => {
+                let result = arithmetic::mul(secret_1, secret_2, self.net0, &mut self.state0)?;
+                Ok(Rep3AcvmType::Shared(result))
+            }
+        }
+    }
+
+    fn mul_many_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        secrets_1: &[Self::OtherAcvmType<C>],
+        secrets_2: &[Self::OtherAcvmType<C>],
+    ) -> eyre::Result<Vec<Self::OtherAcvmType<C>>> {
+        if secrets_1.len() != secrets_2.len() {
+            eyre::bail!("Vectors must have the same length");
+        }
+        // For each coordinate we have four cases:
+        // 1. Both are shared
+        // 2. First is shared, second is public
+        // 3. First is public, second is shared
+        // 4. Both are public
+        // We handle case one separately, in order to use batching and then combine the results.
+        let (all_shared_indices, any_public_indices): (Vec<usize>, Vec<usize>) =
+            (0..secrets_1.len()).partition(|&i| {
+                Self::is_shared_other::<C>(&secrets_1[i])
+                    && Self::is_shared_other::<C>(&secrets_2[i])
+            });
+
+        // Case 1: Both are shared
+        #[expect(clippy::type_complexity)]
+        let (indices, shares_1, shares_2): (
+            Vec<usize>,
+            Vec<Self::OtherArithmeticShare<C>>,
+            Vec<Self::OtherArithmeticShare<C>>,
+        ) = all_shared_indices
+            .into_iter()
+            .map(|i| {
+                (
+                    i,
+                    Self::get_shared_other::<C>(&secrets_1[i])
+                        .expect("We already checked it is shared"),
+                    Self::get_shared_other::<C>(&secrets_2[i])
+                        .expect("We already checked it is shared"),
+                )
+            })
+            .multiunzip();
+        let mul_all_shared: Vec<Rep3PrimeFieldShare<C::BaseField>> =
+            arithmetic::mul_vec(&shares_1, &shares_2, self.net0, &mut self.state0)?;
+        let mul_all_shared = mul_all_shared.into_iter().map(Rep3AcvmType::Shared);
+        let mul_all_shared_indexed = indices
+            .into_iter()
+            .zip(mul_all_shared)
+            .collect::<Vec<(usize, Self::OtherAcvmType<C>)>>();
+
+        // For all the other cases, we can just call self.mul
+        let mul_any_public = any_public_indices
+            .iter()
+            .map(|&i| {
+                let a = &secrets_1[i];
+                let b = &secrets_2[i];
+                self.mul_other::<C>(*a, *b)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let mul_any_public_indexed = any_public_indices
+            .into_iter()
+            .zip(mul_any_public)
+            .collect::<Vec<(usize, Self::OtherAcvmType<C>)>>();
+
+        // Merge sort by index
+        Ok(mul_all_shared_indexed
+            .into_iter()
+            .chain(mul_any_public_indexed)
+            .sorted_by_key(|(i, _)| *i)
+            .map(|(_, val)| val)
+            .collect::<Vec<Self::OtherAcvmType<C>>>())
     }
 
     // checks if lhs <= rhs. Returns 1 if true, 0 otherwise.
@@ -2279,12 +2770,685 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
     }
 
-    /// Given a pointshare, decomposes it into its x and y coordinates and the is_infinity flag, all as base field shares
-    fn other_pointshare_to_other_field_shares<
+    fn is_zero_many_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[Self::OtherAcvmType<C>],
+    ) -> eyre::Result<Vec<Self::OtherAcvmType<C>>> {
+        if a.iter().any(|v| Self::is_shared_other::<C>(v)) {
+            let a: Vec<Rep3PrimeFieldShare<C::BaseField>> = (0..a.len())
+                .map(|i| match a[i] {
+                    Rep3AcvmType::Public(public) => {
+                        arithmetic::promote_to_trivial_share(self.id, public)
+                    }
+                    Rep3AcvmType::Shared(shared) => shared,
+                })
+                .collect();
+            let zeroes = vec![C::BaseField::zero(); a.len()];
+            let res = arithmetic::eq_public_many(&a, &zeroes, self.net0, &mut self.state0)?;
+            res.iter()
+                .map(|y| Ok(Rep3AcvmType::Shared(*y)))
+                .collect::<Result<Vec<_>, _>>()
+        } else {
+            let a: Vec<C::BaseField> = (0..a.len())
+                .map(|i| Self::get_public_other::<C>(&a[i]).expect("Already checked it is public"))
+                .collect();
+
+            let res: Vec<C::BaseField> = a
+                .iter()
+                .map(|x| {
+                    if x.is_zero() {
+                        C::BaseField::one()
+                    } else {
+                        C::BaseField::zero()
+                    }
+                })
+                .collect();
+            res.iter().map(|x| Ok(Rep3AcvmType::Public(*x))).collect()
+        }
+    }
+
+    fn add_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &self,
+        lhs: Self::OtherAcvmType<C>,
+        rhs: Self::OtherAcvmType<C>,
+    ) -> Self::OtherAcvmType<C> {
+        match (lhs, rhs) {
+            (Rep3AcvmType::Public(lhs), Rep3AcvmType::Public(rhs)) => {
+                Rep3AcvmType::Public(lhs + rhs)
+            }
+            (Rep3AcvmType::Public(public), Rep3AcvmType::Shared(shared))
+            | (Rep3AcvmType::Shared(shared), Rep3AcvmType::Public(public)) => {
+                Rep3AcvmType::Shared(arithmetic::add_public(shared, public, self.id))
+            }
+            (Rep3AcvmType::Shared(lhs), Rep3AcvmType::Shared(rhs)) => {
+                let result = arithmetic::add(lhs, rhs);
+                Rep3AcvmType::Shared(result)
+            }
+        }
+    }
+
+    fn sub_points<C: CurveGroup<BaseField = F>>(
+        &self,
+        lhs: Self::CycleGroupAcvmPoint<C>,
+        rhs: Self::CycleGroupAcvmPoint<C>,
+    ) -> Self::CycleGroupAcvmPoint<C> {
+        match (lhs, rhs) {
+            (Rep3AcvmPoint::Public(lhs), Rep3AcvmPoint::Public(rhs)) => {
+                Rep3AcvmPoint::Public(lhs - rhs)
+            }
+            (Rep3AcvmPoint::Public(public), Rep3AcvmPoint::Shared(mut shared))
+            | (Rep3AcvmPoint::Shared(mut shared), Rep3AcvmPoint::Public(public)) => {
+                pointshare::sub_assign_public(&mut shared, &public, self.id);
+                Rep3AcvmPoint::Shared(shared)
+            }
+            (Rep3AcvmPoint::Shared(lhs), Rep3AcvmPoint::Shared(rhs)) => {
+                let result = pointshare::sub(&lhs, &rhs);
+                Rep3AcvmPoint::Shared(result)
+            }
+        }
+    }
+
+    fn sub_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &self,
+        lhs: Self::OtherAcvmType<C>,
+        rhs: Self::OtherAcvmType<C>,
+    ) -> Self::OtherAcvmType<C> {
+        match (lhs, rhs) {
+            (Rep3AcvmType::Public(share_1), Rep3AcvmType::Public(share_2)) => {
+                Rep3AcvmType::Public(share_1 - share_2)
+            }
+            (Rep3AcvmType::Public(share_1), Rep3AcvmType::Shared(share_2)) => {
+                Rep3AcvmType::Shared(arithmetic::sub_public_by_shared(share_1, share_2, self.id))
+            }
+            (Rep3AcvmType::Shared(share_1), Rep3AcvmType::Public(share_2)) => {
+                Rep3AcvmType::Shared(arithmetic::sub_shared_by_public(share_1, share_2, self.id))
+            }
+            (Rep3AcvmType::Shared(share_1), Rep3AcvmType::Shared(share_2)) => {
+                let result = arithmetic::sub(share_1, share_2);
+                Rep3AcvmType::Shared(result)
+            }
+        }
+    }
+
+    fn mul_assign_with_public(shared: &mut Self::AcvmType, public: F) {
+        let result = match shared.to_owned() {
+            Rep3AcvmType::Public(secret) => Rep3AcvmType::Public(public * secret),
+            Rep3AcvmType::Shared(secret) => {
+                Rep3AcvmType::Shared(arithmetic::mul_public(secret, public))
+            }
+        };
+        *shared = result;
+    }
+
+    fn mul_with_public_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        public: C::BaseField,
+        secret: Self::OtherAcvmType<C>,
+    ) -> Self::OtherAcvmType<C> {
+        match secret {
+            Rep3AcvmType::Public(secret) => Rep3AcvmType::Public(public * secret),
+            Rep3AcvmType::Shared(secret) => {
+                Rep3AcvmType::Shared(arithmetic::mul_public(secret, public))
+            }
+        }
+    }
+
+    fn init_lut_by_acvm_point<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        values: Vec<Self::NativeAcvmPoint<C>>,
+    ) -> <Self::CurveLookup<C> as LookupTableProvider<C>>::LutType {
+        let lut_ = Rep3CurveLookupTable::<C>::default();
+        if values.iter().any(|v| Self::is_shared_point(v)) {
+            let mut shares = Vec::with_capacity(values.len());
+            for val in values {
+                shares.push(match val {
+                    Rep3AcvmPoint::Public(public) => {
+                        pointshare::promote_to_trivial_share(self.id, &public)
+                    }
+                    Rep3AcvmPoint::Shared(shared) => shared,
+                });
+            }
+            lut_.init_private(shares)
+        } else {
+            let mut public = Vec::with_capacity(values.len());
+            for val in values {
+                public.push(
+                    Self::get_public_point_other(&val).expect("Already checked it is public"),
+                );
+            }
+            lut_.init_public(public)
+        }
+    }
+
+    fn read_lut_by_acvm_point<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        index: Self::AcvmType,
+        lut: &<Self::CurveLookup<C> as LookupTableProvider<C>>::LutType,
+    ) -> eyre::Result<Self::NativeAcvmPoint<C>> {
+        let mut lut_ = Rep3CurveLookupTable::<C>::default();
+        let result = match index {
+            Rep3AcvmType::Public(public) => {
+                let index: BigUint = public.into();
+                let index = usize::try_from(index)
+                    .map_err(|_| eyre::eyre!("Index can not be translated to usize"))?;
+
+                match lut {
+                    mpc_core::protocols::rep3_ring::lut_curve::PublicPrivateLut::Public(vec) => {
+                        Self::NativeAcvmPoint::from(vec[index].to_owned())
+                    }
+                    mpc_core::protocols::rep3_ring::lut_curve::PublicPrivateLut::Shared(vec) => {
+                        Rep3AcvmPoint::Shared(vec[index].to_owned())
+                    }
+                }
+            }
+            Rep3AcvmType::Shared(shared) => Rep3AcvmPoint::Shared(lut_.get_from_lut(
+                shared,
+                lut,
+                self.net0,
+                self.net1,
+                &mut self.state0,
+                &mut self.state1,
+            )?),
+        };
+        Ok(result)
+    }
+
+    fn read_from_public_curve_luts<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        index: Self::AcvmType,
+        luts: &[Vec<C>],
+    ) -> eyre::Result<Vec<Self::NativeAcvmPoint<C>>> {
+        let mut result = Vec::with_capacity(luts.len());
+        match index {
+            Rep3AcvmType::Public(index) => {
+                let index: BigUint = index.into();
+                let index = usize::try_from(index)
+                    .map_err(|_| eyre::eyre!("Index can not be translated to usize"))?;
+                for lut in luts {
+                    result.push(Rep3AcvmPoint::Public(lut[index].to_owned()));
+                }
+            }
+            Rep3AcvmType::Shared(index) => {
+                let res = Rep3CurveLookupTable::get_from_public_luts(
+                    index,
+                    luts,
+                    self.net0,
+                    &mut self.state0,
+                )?;
+                for res in res {
+                    result.push(Rep3AcvmPoint::Shared(res));
+                }
+            }
+        }
+        Ok(result)
+    }
+
+    fn write_lut_by_acvm_point<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        index: Self::AcvmType,
+        value: Self::NativeAcvmPoint<C>,
+        lut: &mut <Self::CurveLookup<C> as LookupTableProvider<C>>::LutType,
+    ) -> eyre::Result<()> {
+        let mut lut_ = Rep3CurveLookupTable::<C>::default();
+        match (index, value) {
+            (Rep3AcvmType::Public(index), Rep3AcvmPoint::Public(value)) => {
+                let index: BigUint = (index).into();
+                let index = usize::try_from(index)
+                    .map_err(|_| eyre::eyre!("Index can not be translated to usize"))?;
+
+                match lut {
+                    mpc_core::protocols::rep3_ring::lut_curve::PublicPrivateLut::Public(vec) => {
+                        vec[index] = value;
+                    }
+                    mpc_core::protocols::rep3_ring::lut_curve::PublicPrivateLut::Shared(vec) => {
+                        vec[index] = pointshare::promote_to_trivial_share(self.id, &value);
+                    }
+                }
+            }
+            (Rep3AcvmType::Public(index), Rep3AcvmPoint::Shared(value)) => {
+                let index: BigUint = (index).into();
+                let index = usize::try_from(index)
+                    .map_err(|_| eyre::eyre!("Index can not be translated to usize"))?;
+
+                match lut {
+                    mpc_core::protocols::rep3_ring::lut_curve::PublicPrivateLut::Public(vec) => {
+                        let mut vec = vec
+                            .iter()
+                            .map(|value| pointshare::promote_to_trivial_share(self.id, value))
+                            .collect::<Vec<_>>();
+                        vec[index] = value;
+                        *lut = mpc_core::protocols::rep3_ring::lut_curve::PublicPrivateLut::Shared(
+                            vec,
+                        );
+                    }
+                    mpc_core::protocols::rep3_ring::lut_curve::PublicPrivateLut::Shared(vec) => {
+                        vec[index] = value;
+                    }
+                }
+            }
+            (Rep3AcvmType::Shared(index), Rep3AcvmPoint::Public(value)) => {
+                // TACEO TODO there might be a more efficient implementation for this if the table is also public
+                let value = pointshare::promote_to_trivial_share(self.id, &value);
+                lut_.write_to_lut(
+                    index,
+                    value,
+                    lut,
+                    self.net0,
+                    self.net1,
+                    &mut self.state0,
+                    &mut self.state1,
+                )?;
+            }
+            (Rep3AcvmType::Shared(index), Rep3AcvmPoint::Shared(value)) => {
+                lut_.write_to_lut(
+                    index,
+                    value,
+                    lut,
+                    self.net0,
+                    self.net1,
+                    &mut self.state0,
+                    &mut self.state1,
+                )?;
+            }
+        }
+        Ok(())
+    }
+
+    fn point_is_zero_many<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[Self::NativeAcvmPoint<C>],
+    ) -> eyre::Result<Vec<Self::OtherAcvmType<C>>> {
+        if a.iter().any(|v| Self::is_shared_point(v)) {
+            let a: Vec<Rep3PointShare<C>> = (0..a.len())
+                .map(|i| match a[i] {
+                    Rep3AcvmPoint::Public(public) => {
+                        pointshare::promote_to_trivial_share(self.id, &public)
+                    }
+                    Rep3AcvmPoint::Shared(shared) => shared,
+                })
+                .collect();
+
+            let res = pointshare::is_zero_many(&a, self.net0, &mut self.state0)?;
+
+            let res = res
+                .iter()
+                .map(|y| {
+                    Rep3BigUintShare::<C::BaseField>::new(BigUint::from(y.0), BigUint::from(y.1))
+                })
+                .collect::<Vec<_>>();
+            let res = conversion::bit_inject_many(&res, self.net0, &mut self.state0)?;
+            res.iter()
+                .map(|y| Ok(Rep3AcvmType::Shared(*y)))
+                .collect::<Result<Vec<_>, _>>()
+        } else {
+            let a: Vec<C> = (0..a.len())
+                .map(|i| Self::get_public_point_other(&a[i]).expect("Already checked it is public"))
+                .collect();
+            let res: Vec<C::BaseField> = a
+                .iter()
+                .map(|x| {
+                    if x.is_zero() {
+                        C::BaseField::one()
+                    } else {
+                        C::BaseField::zero()
+                    }
+                })
+                .collect();
+            res.iter().map(|x| Ok(Rep3AcvmType::Public(*x))).collect()
+        }
+    }
+
+    // TACEO TODO: Optimize the MSM
+    fn msm<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[Self::NativeAcvmPoint<C>],
+        b: &[Self::AcvmType],
+    ) -> eyre::Result<Self::NativeAcvmPoint<C>> {
+        if a.iter().any(|v| Self::is_shared_point(v)) || b.iter().any(|v| Self::is_shared(v)) {
+            let a: Vec<Rep3PointShare<C>> = (0..a.len())
+                .map(|i| match a[i] {
+                    Rep3AcvmPoint::Public(public) => {
+                        pointshare::promote_to_trivial_share(self.id, &public)
+                    }
+                    Rep3AcvmPoint::Shared(shared) => shared,
+                })
+                .collect();
+            let b: Vec<Rep3PrimeFieldShare<C::ScalarField>> = (0..b.len())
+                .map(|i| match b[i] {
+                    Rep3AcvmType::Public(public) => {
+                        arithmetic::promote_to_trivial_share(self.id, public)
+                    }
+                    Rep3AcvmType::Shared(shared) => shared,
+                })
+                .collect();
+            let res = pointshare::scalar_mul_many(&a, &b, self.net0, &mut self.state0)?;
+            let sum = res
+                .iter()
+                .copied()
+                .reduce(|acc, x| pointshare::add(&acc, &x))
+                .unwrap_or_else(|| pointshare::promote_to_trivial_share(self.id, &C::zero()));
+            Ok(Rep3AcvmPoint::Shared(sum))
+        } else {
+            let a: Vec<C> = (0..a.len())
+                .map(|i| Self::get_public_point_other(&a[i]).expect("Already checked it is public"))
+                .collect();
+            let b: Vec<C::ScalarField> = (0..b.len())
+                .map(|i| Self::get_public(&b[i]).expect("Already checked it is public"))
+                .collect();
+            let res = a.iter().zip(b.iter()).map(|(x, y)| *x * *y).sum();
+            Ok(Rep3AcvmPoint::Public(res))
+        }
+    }
+
+    fn scale_native_point<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        point: Self::NativeAcvmPoint<C>,
+        scalar: Self::AcvmType,
+    ) -> eyre::Result<Self::NativeAcvmPoint<C>> {
+        match (point, scalar) {
+            (Rep3AcvmPoint::Public(public), Rep3AcvmType::Public(scalar)) => {
+                Ok(Rep3AcvmPoint::Public(public * scalar))
+            }
+            (Rep3AcvmPoint::Public(public), Rep3AcvmType::Shared(scalar)) => Ok(
+                Rep3AcvmPoint::Shared(pointshare::scalar_mul_public_point(&public, scalar)),
+            ),
+            (Rep3AcvmPoint::Shared(shared), Rep3AcvmType::Public(scalar)) => Ok(
+                Rep3AcvmPoint::Shared(pointshare::scalar_mul_public_scalar(&shared, scalar)),
+            ),
+            (
+                Rep3AcvmPoint::Shared(rep3_point_share),
+                Rep3AcvmType::Shared(rep3_prime_field_share),
+            ) => {
+                let res = pointshare::scalar_mul(
+                    &rep3_point_share,
+                    rep3_prime_field_share,
+                    self.net0,
+                    &mut self.state0,
+                )?;
+                Ok(Rep3AcvmPoint::Shared(res))
+            }
+        }
+    }
+
+    fn convert_fields<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[Self::OtherAcvmType<C>],
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
+        if a.iter().any(|v| Self::is_shared_other::<C>(v)) {
+            let a: Vec<Rep3PrimeFieldShare<C::BaseField>> = (0..a.len())
+                .map(|i| match a[i] {
+                    Rep3AcvmType::Public(public) => {
+                        arithmetic::promote_to_trivial_share(self.id, public)
+                    }
+                    Rep3AcvmType::Shared(shared) => shared,
+                })
+                .collect();
+            let a2b = conversion::a2b_many(&a, self.net0, &mut self.state0)?;
+            let a2b = a2b
+                .into_iter()
+                .map(|y| Rep3BigUintShare::<C::ScalarField>::new(y.a, y.b))
+                .collect::<Vec<_>>();
+            let result: Vec<Rep3PrimeFieldShare<C::ScalarField>> =
+                conversion::b2a_many::<C::ScalarField, N>(&a2b, self.net0, &mut self.state0)?;
+            result
+                .iter()
+                .map(|x| Ok(Self::AcvmType::Shared(*x)))
+                .collect()
+        } else {
+            if a.iter().any(|v| {
+                let v_biguint: num_bigint::BigUint =
+                    (Self::get_public_other::<C>(v).expect("We checked types")).into();
+                v_biguint > C::ScalarField::MODULUS.into()
+            }) {
+                eyre::bail!("Element too large to fit in target field");
+            }
+            a.iter()
+                .map(|x| {
+                    let x: BigUint =
+                        (Self::get_public_other::<C>(x).expect("We checked types")).into();
+                    let x: C::ScalarField = x.into();
+                    Ok(Self::AcvmType::Public(x))
+                })
+                .collect()
+        }
+    }
+
+    fn compute_wnaf_digits_and_compute_rows_many<
         C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
     >(
         &mut self,
-        point: Self::OtherAcvmPoint<C>,
+        zs: &[Self::OtherAcvmType<C>],
+        num_bits: usize,
+    ) -> eyre::Result<(
+        Vec<Self::OtherAcvmType<C>>,       // Returns whether the input is even
+        Vec<[Self::OtherAcvmType<C>; 32]>, // Returns the wnaf digits (They are already positive (by adding +15 (and also dividing by 2)))
+        Vec<[Self::OtherAcvmType<C>; 32]>, // Returns whether the wnaf digit is negative
+        Vec<[Self::OtherAcvmType<C>; 64]>, // Returns s1,...,s8 for every 4 wnaf digits (needed later for PointTablePrecomputationRow computation)
+        Vec<[Self::OtherAcvmType<C>; 8]>, // Returns the (absolute) value of the row_chunk (also in PointTablePrecomputationRow computation)
+        Vec<[Self::OtherAcvmType<C>; 8]>, // Returns the sign of the row_chunk (also in PointTablePrecomputationRow computation)
+    )> {
+        if zs.iter().any(|v| Self::is_shared_other::<C>(v)) {
+            let zs: Vec<Rep3PrimeFieldShare<C::BaseField>> = (0..zs.len())
+                .map(|i| match zs[i] {
+                    Rep3AcvmType::Public(public) => {
+                        arithmetic::promote_to_trivial_share(self.id, public)
+                    }
+                    Rep3AcvmType::Shared(shared) => shared,
+                })
+                .collect();
+            let result = yao::compute_wnaf_digits_and_compute_rows_many(
+                &zs,
+                self.net0,
+                &mut self.state0,
+                num_bits,
+            )?;
+            let mut is_result_even = Vec::with_capacity(32 * zs.len());
+            let mut is_result_values =
+                Vec::<Rep3PrimeFieldShare<C::BaseField>>::with_capacity(32 * zs.len());
+            let mut is_result_pos =
+                Vec::<Rep3PrimeFieldShare<C::BaseField>>::with_capacity(zs.len());
+            let mut row_s = Vec::with_capacity(8 * 8 * zs.len());
+            let mut row_chunks_abs = Vec::with_capacity(8 * zs.len());
+            let mut row_chunks_neg = Vec::with_capacity(8 * zs.len());
+
+            let chunk_size = 32 + 32 + 1 + 8 * 8 + 8 + 8;
+            for chunk in result.chunks(chunk_size) {
+                is_result_even.push(Rep3AcvmType::Shared(chunk[0]));
+
+                for second_chunk in chunk[1..].chunks(18) {
+                    let tmp_values = second_chunk.iter().step_by(2).take(4);
+                    is_result_values.extend(tmp_values);
+                    let tmp_values = second_chunk.iter().skip(1).step_by(2).take(4);
+                    is_result_pos.extend(tmp_values);
+                    row_s.extend_from_slice(&second_chunk[8..16]);
+                    row_chunks_abs.push(second_chunk[16]);
+                    row_chunks_neg.push(second_chunk[17]);
+                }
+            }
+            Ok((
+                is_result_even,
+                is_result_values
+                    .chunks(32)
+                    .map(|chunk| array::from_fn(|i| Rep3AcvmType::Shared(chunk[i])))
+                    .collect(),
+                is_result_pos
+                    .chunks(32)
+                    .map(|chunk| {
+                        array::from_fn(|i| {
+                            Rep3AcvmType::Shared(arithmetic::sub_public_by_shared(
+                                C::BaseField::one(),
+                                chunk[i],
+                                self.id,
+                            ))
+                        })
+                    })
+                    .collect(),
+                row_s
+                    .chunks(64)
+                    .map(|chunk| array::from_fn(|i| Rep3AcvmType::Shared(chunk[i])))
+                    .collect(),
+                row_chunks_abs
+                    .chunks(8)
+                    .map(|chunk| array::from_fn(|i| Rep3AcvmType::Shared(chunk[i])))
+                    .collect(),
+                row_chunks_neg
+                    .chunks(8)
+                    .map(|chunk| array::from_fn(|i| Rep3AcvmType::Shared(chunk[i])))
+                    .collect(),
+            ))
+        } else {
+            unimplemented!("This case should really not happen in practice")
+        }
+    }
+
+    fn compute_endo_point<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        point: &Self::NativeAcvmPoint<C>,
+        cube_root_of_unity: C::BaseField,
+    ) -> eyre::Result<Self::NativeAcvmPoint<C>> {
+        if TypeId::of::<C>()
+            != TypeId::of::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>()
+        {
+            panic!("Only BN254 is supported");
+        }
+        match point {
+            Rep3AcvmPoint::Public(point) => {
+                if let Some((out_x, out_y)) = point.into_affine().xy() {
+                    let (x, y, inf) = (out_x, out_y, false);
+                    let x = x * cube_root_of_unity;
+                    let x: ark_bn254::Fq = *downcast(&x).expect("We checked types");
+                    let y: ark_bn254::Fq = *downcast(&y).expect("We checked types");
+                    let point = PlainAcvmSolver::<ark_bn254::Fq>::create_bn254_point(x, -y, inf);
+                    let point = *downcast(&point).expect("We checked types");
+                    Ok(Rep3AcvmPoint::Public(point))
+                } else {
+                    Ok(Rep3AcvmPoint::Public(C::zero()))
+                }
+            }
+            Rep3AcvmPoint::Shared(point) => {
+                let mut point_a_x = point.a.into_affine().x().expect("Should not be infinity");
+                let mut point_b_x = point.b.into_affine().x().expect("Should not be infinity");
+                point_a_x *= cube_root_of_unity;
+                point_b_x *= cube_root_of_unity;
+                let point_a_x: ark_bn254::Fq = *downcast(&point_a_x).expect("We checked types");
+                let point_b_x: ark_bn254::Fq = *downcast(&point_b_x).expect("We checked types");
+                let mut point_a_y = point.a.into_affine().y().expect("Should not be infinity");
+                let mut point_b_y = point.b.into_affine().y().expect("Should not be infinity");
+                point_a_y = -point_a_y;
+                point_b_y = -point_b_y;
+                let point_a_y: ark_bn254::Fq = *downcast(&point_a_y).expect("We checked types");
+                let point_b_y: ark_bn254::Fq = *downcast(&point_b_y).expect("We checked types");
+                let point_a = PlainAcvmSolver::<ark_bn254::Fq>::create_bn254_point(
+                    point_a_x, point_a_y, false,
+                )?;
+                let point_b = PlainAcvmSolver::<ark_bn254::Fq>::create_bn254_point(
+                    point_b_x, point_b_y, false,
+                )?;
+                let point_a: C::Affine = *downcast(&point_a).expect("We checked types");
+                let point_b: C::Affine = *downcast(&point_b).expect("We checked types");
+
+                let pointshare = Rep3PointShare::new(point_a.into(), point_b.into());
+
+                let res = Rep3AcvmPoint::Shared(pointshare);
+                Ok(res)
+            }
+        }
+    }
+
+    fn is_shared_point<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        a: &Self::NativeAcvmPoint<C>,
+    ) -> bool {
+        match a {
+            Rep3AcvmPoint::Public(_) => false,
+            Rep3AcvmPoint::Shared(_) => true,
+        }
+    }
+
+    fn is_shared_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        a: &Self::OtherAcvmType<C>,
+    ) -> bool {
+        match a {
+            Rep3AcvmType::Public(_) => false,
+            Rep3AcvmType::Shared(_) => true,
+        }
+    }
+
+    fn get_public_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        a: &Self::OtherAcvmType<C>,
+    ) -> Option<C::BaseField> {
+        match a {
+            Rep3AcvmType::Public(public) => Some(*public),
+            Rep3AcvmType::Shared(_) => None,
+        }
+    }
+
+    fn inverse_or_zero_many_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        secrets: &[Self::OtherAcvmType<C>],
+    ) -> eyre::Result<Vec<Self::OtherAcvmType<C>>> {
+        if secrets.iter().any(|v| Self::is_shared_other::<C>(v)) {
+            let is_zero = self.is_zero_many_other::<C>(secrets)?;
+            let ones = vec![Rep3AcvmType::Public(C::BaseField::one()); secrets.len()];
+            let to_invert = self.cmux_many_other::<C>(&is_zero, &ones, secrets)?;
+            let to_invert: Vec<Rep3PrimeFieldShare<C::BaseField>> = (0..to_invert.len())
+                .map(|i| match to_invert[i] {
+                    Rep3AcvmType::Public(public) => {
+                        arithmetic::promote_to_trivial_share(self.id, public)
+                    }
+                    Rep3AcvmType::Shared(shared) => shared,
+                })
+                .collect();
+            let zeroes = vec![Rep3AcvmType::Public(C::BaseField::zero()); secrets.len()];
+            let inverses = arithmetic::inv_vec(&to_invert, self.net0, &mut self.state0)?;
+            let inverses = inverses
+                .iter()
+                .map(|y| Rep3AcvmType::Shared(*y))
+                .collect::<Vec<_>>();
+            self.cmux_many_other::<C>(&is_zero, &zeroes, &inverses)
+        } else {
+            let to_invert: Vec<C::BaseField> = (0..secrets.len())
+                .map(|i| {
+                    Self::get_public_other::<C>(&secrets[i]).expect("Already checked it is public")
+                })
+                .collect();
+            to_invert
+                .iter()
+                .map(|x| {
+                    Ok(Rep3AcvmType::Public(
+                        x.inverse().unwrap_or(C::BaseField::zero()),
+                    ))
+                })
+                .collect()
+        }
+    }
+
+    fn get_as_shared(&mut self, value: &Self::AcvmType) -> Self::ArithmeticShare {
+        if Self::is_shared(value) {
+            Self::get_shared(value).expect("Already checked it is shared")
+        } else {
+            self.promote_to_trivial_share(
+                Self::get_public(value).expect("Already checked it is public"),
+            )
+        }
+    }
+
+    fn get_as_shared_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        value: &Self::OtherAcvmType<C>,
+    ) -> Self::OtherArithmeticShare<C> {
+        if Self::is_shared_other::<C>(value) {
+            Self::get_shared_other::<C>(value).expect("Already checked it is shared")
+        } else {
+            arithmetic::promote_to_trivial_share(
+                self.id,
+                Self::get_public_other::<C>(value).expect("Already checked it is public"),
+            )
+        }
+    }
+
+    /// Given a pointshare, decomposes it into its x and y coordinates and the is_infinity flag, all as base field shares
+    fn native_point_to_other_acvm_types<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        point: Self::NativeAcvmPoint<C>,
     ) -> eyre::Result<(
         Self::OtherAcvmType<C>,
         Self::OtherAcvmType<C>,
@@ -2310,7 +3474,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
     }
 
-    // TODO TACEO: Currently only supports LIMB_BITS = 136, i.e. two Bn254::Fr elements per Bn254::Fq element
+    // TACEO TODO: Currently only supports LIMB_BITS = 136, i.e. two Bn254::Fr elements per Bn254::Fq element
     /// Converts a base field share into a vector of field shares, where the field shares
     /// represent the limbs of the base field element. Each limb has at most LIMB_BITS bits.
     fn other_field_shares_to_field_shares<
@@ -2336,10 +3500,14 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                     limbs.push(Rep3AcvmType::Public(F::from(limb)));
                     temp >>= LIMB_BITS;
                 }
+                while limbs.len() < 2 {
+                    limbs.push(Rep3AcvmType::Public(F::zero()));
+                }
+
                 Ok(limbs)
             }
             Rep3AcvmType::Shared(input) => {
-                let bin_share = conversion::a2b(input, self.net0, &mut self.state0).unwrap();
+                let bin_share = conversion::a2b(input, self.net0, &mut self.state0)?;
                 let low: Rep3BigUintShare<C::BaseField> =
                     bin_share.clone() & ((BigUint::from(1u8) << LIMB_BITS) - BigUint::from(1u8));
                 let high: Rep3BigUintShare<C::BaseField> = bin_share >> LIMB_BITS;
@@ -2347,24 +3515,18 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 let low = Rep3BigUintShare::new(low.a.clone(), low.b.clone());
                 let high = Rep3BigUintShare::new(high.a.clone(), high.b.clone());
 
-                Ok(vec![
-                    conversion::b2a(&low, self.net0, &mut self.state0)
-                        .unwrap()
-                        .into(),
-                    conversion::b2a(&high, self.net0, &mut self.state0)
-                        .unwrap()
-                        .into(),
-                ])
+                conversion::b2a_many(&[low, high], self.net0, &mut self.state0).map(|v| {
+                    v.into_iter()
+                        .map(Rep3AcvmType::Shared)
+                        .collect::<Vec<Rep3AcvmType<F>>>()
+                })
             }
         }
     }
 
-    fn other_pointshare_to_field_shares<
-        const LIMB_BITS: usize,
-        C: HonkCurve<F, ScalarField = F>,
-    >(
+    fn native_point_to_acvm_types<const LIMB_BITS: usize, C: HonkCurve<F, ScalarField = F>>(
         &mut self,
-        point: Self::OtherAcvmPoint<C>,
+        point: Self::NativeAcvmPoint<C>,
     ) -> eyre::Result<(
         Self::AcvmType,
         Self::AcvmType,
@@ -2377,9 +3539,9 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             "Only LIMB_BITS = 136 is supported, i.e. two Bn254::Fr elements per Bn254::Fq element"
         );
 
-        let (x, y, _) = self.other_pointshare_to_other_field_shares(point.clone())?;
+        let (x, y, _) = self.native_point_to_other_acvm_types(point.clone())?;
         let inf = self
-            .is_point_at_infinity_many_other(&[point])?
+            .is_native_point_at_infinity_many(&[point])?
             .pop()
             .unwrap();
         let mut x_limbs = self.other_field_shares_to_field_shares::<LIMB_BITS, C>(x)?;
@@ -2460,15 +3622,15 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
 
     // For each point in a, checks whether the point is the point at infinity. The result is a vector of ACVM-types that are 1 if the point is at infinity and 0 otherwise.
     #[expect(clippy::type_complexity)]
-    fn is_point_at_infinity_many_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+    fn is_native_point_at_infinity_many<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        a: &[Self::OtherAcvmPoint<C>],
+        a: &[Self::NativeAcvmPoint<C>],
     ) -> eyre::Result<Vec<Self::AcvmType>> {
         let (indexed_shares, indexed_public): (
             Vec<(usize, Rep3PointShare<C>)>,
             Vec<(usize, Self::AcvmType)>,
         ) = a.iter().enumerate().partition_map(|(i, val)| match val {
-            Rep3AcvmPoint::Shared(share) => Either::Left((i, share.clone())),
+            Rep3AcvmPoint::Shared(share) => Either::Left((i, *share)),
             Rep3AcvmPoint::Public(public) => {
                 let is_infinity = public.into_affine().is_zero();
                 let is_infinity = F::from(is_infinity as u64);
@@ -2533,12 +3695,12 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             .map(|i| {
                 (
                     i,
-                    Self::get_shared(&secrets_1[i]).unwrap(),
-                    Self::get_shared(&secrets_2[i]).unwrap(),
+                    Self::get_shared(&secrets_1[i]).expect("We already checked it is shared"),
+                    Self::get_shared(&secrets_2[i]).expect("We already checked it is shared"),
                 )
             })
             .multiunzip();
-        let mul_all_shared =
+        let mul_all_shared: Vec<Rep3PrimeFieldShare<F>> =
             arithmetic::mul_vec(&shares_1, &shares_2, self.net0, &mut self.state0)?;
         let mul_all_shared = mul_all_shared.into_iter().map(Rep3AcvmType::Shared);
         let mul_all_shared_indexed = indices
@@ -2570,11 +3732,11 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     }
 
     // Given two points, adds them together. Both can either be public or shared
-    fn add_points_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+    fn add_native_points<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &self,
-        lhs: Self::OtherAcvmPoint<C>,
-        rhs: Self::OtherAcvmPoint<C>,
-    ) -> Self::OtherAcvmPoint<C> {
+        lhs: Self::NativeAcvmPoint<C>,
+        rhs: Self::NativeAcvmPoint<C>,
+    ) -> Self::NativeAcvmPoint<C> {
         match (lhs, rhs) {
             (Rep3AcvmPoint::Public(lhs), Rep3AcvmPoint::Public(rhs)) => {
                 Rep3AcvmPoint::Public(lhs + rhs)
@@ -2590,24 +3752,24 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
     }
 
-    fn msm_public_points<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+    fn msm_public_native_points<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         points: &[C::Affine],
         scalars: &[Self::ArithmeticShare],
-    ) -> Self::OtherAcvmPoint<C> {
+    ) -> Self::NativeAcvmPoint<C> {
         Rep3AcvmPoint::Shared(pointshare::msm_public_points(points, scalars))
     }
 
     #[expect(clippy::type_complexity)]
-    fn open_many_points_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+    fn open_many_native_points<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        a: &[Self::OtherAcvmPoint<C>],
+        a: &[Self::NativeAcvmPoint<C>],
     ) -> eyre::Result<Vec<C::Affine>> {
         let (indexed_shares, indexed_public): (
             Vec<(usize, Rep3PointShare<C>)>,
             Vec<(usize, C::Affine)>,
         ) = a.iter().enumerate().partition_map(|(i, val)| match val {
-            Rep3AcvmPoint::Shared(share) => Either::Left((i, share.clone())),
+            Rep3AcvmPoint::Shared(share) => Either::Left((i, *share)),
             Rep3AcvmPoint::Public(public) => Either::Right((i, public.into_affine())),
         });
 
@@ -2632,29 +3794,84 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             .collect::<Vec<C::Affine>>())
     }
 
-    /// Returns the point share if the point is shared
-    fn get_shared_point_other<C: HonkCurve<F, ScalarField = F>>(
-        a: Self::OtherAcvmPoint<C>,
-    ) -> Option<Self::OtherAcvmPoint<C>> {
-        match a {
-            Rep3AcvmPoint::Shared(point) => Some(Rep3AcvmPoint::Shared(point)),
-            Rep3AcvmPoint::Public(_) => None,
-        }
+    fn eval_poly(&mut self, coeffs: &[Self::AcvmType], x: F) -> eyre::Result<Self::AcvmType> {
+        let coeffs = coeffs
+            .iter()
+            .map(|y| {
+                if Self::is_shared(y) {
+                    Self::get_shared(y).expect("Already checked it is shared")
+                } else {
+                    self.promote_to_trivial_share(
+                        Self::get_public(y).expect("Already checked it is public"),
+                    )
+                }
+            })
+            .collect::<Vec<_>>();
+
+        Ok(poly::eval_poly(&coeffs, x).into())
     }
 
-    // TODO TACEO: Only supports LIMB_BITS = 136, i.e. two Bn254::Fr elements per Bn254::Fq element
+    // TACEO TODO: There's probably a more efficient way to do this
+    #[expect(clippy::type_complexity)]
+    fn acvm_type_to_other_acvm_type_many<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        values: &[Self::AcvmType],
+    ) -> eyre::Result<Vec<Self::OtherAcvmType<C>>> {
+        let (indexed_shares, indexed_public): (
+            Vec<(usize, Self::ArithmeticShare)>,
+            Vec<(usize, F)>,
+        ) = values
+            .iter()
+            .enumerate()
+            .partition_map(|(i, val)| match val {
+                Rep3AcvmType::Shared(share) => Either::Left((i, *share)),
+                Rep3AcvmType::Public(public) => Either::Right((i, *public)),
+            });
+
+        let (indices, shares): (Vec<usize>, Vec<Self::ArithmeticShare>) =
+            indexed_shares.into_iter().unzip();
+        let bigint_shares = conversion::a2b_many(&shares, self.net0, &mut self.state0)?
+            .into_iter()
+            .map(|y| Rep3BigUintShare::<C::BaseField>::new(y.a, y.b))
+            .collect::<Vec<_>>();
+
+        let secret = indices
+            .into_iter()
+            .zip(
+                conversion::b2a_many(&bigint_shares, self.net0, &mut self.state0)?
+                    .into_iter()
+                    .map(Rep3AcvmType::Shared),
+            )
+            .collect::<Vec<_>>();
+        let public = indexed_public
+            .into_iter()
+            .map(|(i, val)| {
+                (
+                    i,
+                    Rep3AcvmType::Public(C::BaseField::from(val.into_bigint().as_ref()[0])),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        // Merge sort by index
+        Ok(secret
+            .into_iter()
+            .chain(public)
+            .sorted_by_key(|(i, _)| *i)
+            .map(|(_, val)| val)
+            .collect::<Vec<_>>())
+    }
+
+    // TACEO TODO: Only supports LIMB_BITS = 136, i.e. two Bn254::Fr elements per Bn254::Fq element
     /// Returns the point share with coordinates given as scalar field share limbs
-    fn field_shares_to_native_pointshare<
-        const LIMB_BITS: usize,
-        C: HonkCurve<F, ScalarField = F>,
-    >(
+    fn acvm_types_to_native_point<const LIMB_BITS: usize, C: HonkCurve<F, ScalarField = F>>(
         &mut self,
         x0: Self::AcvmType,
         x1: Self::AcvmType,
         y0: Self::AcvmType,
         y1: Self::AcvmType,
         is_infinity: Self::AcvmType,
-    ) -> eyre::Result<Self::OtherAcvmPoint<C>> {
+    ) -> eyre::Result<Self::NativeAcvmPoint<C>> {
         assert_eq!(
             LIMB_BITS, 136,
             "Only LIMB_BITS = 136 is supported, i.e. two Bn254::Fr elements per Bn254::Fq element"
@@ -2667,7 +3884,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 Rep3AcvmType::Public(y1),
                 Rep3AcvmType::Public(is_infinity),
             ) => PlainAcvmSolver::new()
-                .field_shares_to_native_pointshare::<LIMB_BITS, C>(x0, x1, y0, y1, is_infinity)
+                .acvm_types_to_native_point::<LIMB_BITS, C>(x0, x1, y0, y1, is_infinity)
                 .map(Rep3AcvmPoint::Public),
             (
                 Rep3AcvmType::Shared(x0),
@@ -2715,10 +3932,10 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
     }
 
-    fn negate_point_other<C: HonkCurve<F, ScalarField = F>>(
+    fn negate_native_point<C: HonkCurve<F, ScalarField = F>>(
         &mut self,
-        point: Self::OtherAcvmPoint<C>,
-    ) -> eyre::Result<Self::OtherAcvmPoint<C>> {
+        point: Self::NativeAcvmPoint<C>,
+    ) -> eyre::Result<Self::NativeAcvmPoint<C>> {
         match point {
             Rep3AcvmPoint::Shared(point) => Ok(Rep3AcvmPoint::Shared(-point)),
             Rep3AcvmPoint::Public(point) => Ok(Rep3AcvmPoint::Public(-point)),

@@ -20,11 +20,11 @@ use co_builder::prelude::ProvingKey as PlainProvingKey;
 use co_builder::prelude::VerifyingKey;
 use co_builder::prelude::{GenericUltraCircuitBuilder, PublicComponentKey};
 use co_builder::prover_flavour::ProverFlavour;
-use common::mpc::{
+use co_noir_common::mpc::{
     NoirUltraHonkProver, plain::PlainUltraHonkDriver, rep3::Rep3UltraHonkDriver,
     shamir::ShamirUltraHonkDriver,
 };
-use common::{
+use co_noir_common::{
     crs::ProverCrs,
     honk_curve::HonkCurve,
     honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},

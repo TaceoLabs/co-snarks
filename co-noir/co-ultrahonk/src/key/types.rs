@@ -11,8 +11,8 @@ use co_builder::{
         ActiveRegionData, CycleNode, CyclicPermutation, GenericUltraCircuitBuilder, NUM_WIRES,
     },
 };
-use common::mpc::NoirUltraHonkProver;
-use common::polynomials::polynomial::Polynomial;
+use co_noir_common::mpc::NoirUltraHonkProver;
+use co_noir_common::polynomials::polynomial::Polynomial;
 use mpc_core::MpcState;
 
 pub(crate) struct TraceData<'a, T: NoirUltraHonkProver<P>, P: CurveGroup> {

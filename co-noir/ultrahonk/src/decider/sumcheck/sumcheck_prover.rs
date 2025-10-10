@@ -6,15 +6,15 @@ use crate::plain_prover_flavour::{PlainProverFlavour, UnivariateTrait};
 use crate::types::AllEntities;
 use crate::{CONST_PROOF_SIZE_LOG_N, Utils};
 use ark_ff::Zero;
-use common::polynomials::polynomial::RowDisablingPolynomial;
-use common::{
+use co_noir_common::polynomials::polynomial::RowDisablingPolynomial;
+use co_noir_common::{
     crs::ProverCrs,
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
     polynomials::polynomial::Polynomial,
 };
 
-use common::transcript::{Transcript, TranscriptHasher};
+use co_noir_common::transcript::{Transcript, TranscriptHasher};
 
 use super::zk_data::ZKSumcheckData;
 
@@ -253,6 +253,7 @@ impl<
             zk_sumcheck_data,
             &mut row_disabling_polynomial,
         );
+
         if L::IS_GRUMPKIN_FLAVOUR {
             Self::commit_to_round_univariate(
                 round_idx,

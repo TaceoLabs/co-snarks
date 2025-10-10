@@ -7,7 +7,7 @@ use co_builder::{
     flavours::eccvm_flavour::ECCVMFlavour,
     polynomials::polynomial_flavours::PrecomputedEntitiesFlavour,
 };
-use common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType};
+use co_noir_common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType};
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct EccSetRelationAcc<F: PrimeField> {

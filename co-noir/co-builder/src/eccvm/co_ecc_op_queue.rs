@@ -1,16 +1,25 @@
-use crate::eccvm::{
-    NUM_LIMB_BITS_IN_FIELD_SIMULATION,
-    ecc_op_queue::{Bn254ParamsFr, EccOpCode, EccOpsTable, EccvmRowTracker, EndomorphismParams},
+use crate::eccvm::{NUM_WNAF_DIGITS_PER_SCALAR, POINT_TABLE_SIZE, WNAF_DIGITS_PER_ROW};
+use crate::{
+    eccvm::{
+        ADDITIONS_PER_ROW, NUM_LIMB_BITS_IN_FIELD_SIMULATION, NUM_SCALAR_BITS,
+        ecc_op_queue::{EccOpCode, EccOpsTable, EccvmRowTracker},
+    },
+    prelude::offset_generator,
 };
 use ark_ec::CurveGroup;
 use ark_ff::BigInt;
 use ark_ff::FftField;
 use ark_ff::Field;
+use ark_ff::One;
 use ark_ff::PrimeField;
 use ark_ff::Zero;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use common::honk_proof::{HonkProofResult, TranscriptFieldType};
+use co_noir_common::{
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProofResult, TranscriptFieldType},
+};
 use itertools::Itertools;
+use num_bigint::BigUint;
 use std::array;
 use std::ops::Shl;
 
@@ -127,62 +136,82 @@ pub struct CoVMOperation<
     C: CurveGroup<BaseField: PrimeField>,
 > {
     pub op_code: EccOpCode,
-    pub base_point: T::OtherAcvmPoint<C>,
-    pub z1: T::AcvmType,
-    pub z2: T::AcvmType,
+    pub base_point: T::NativeAcvmPoint<C>,
+    pub z1: T::OtherAcvmType<C>,
+    pub z2: T::OtherAcvmType<C>,
     pub mul_scalar_full: T::AcvmType,
-    pub is_base_point_infinity: Option<bool>,
-    pub is_z1_zero: Option<bool>,
-    pub is_z2_zero: Option<bool>,
+    pub base_point_is_infinity: Option<bool>,
+    pub z1_is_zero: Option<bool>,
+    pub z2_is_zero: Option<bool>,
 }
 
-pub fn precompute_mul_acc_flags<
+pub fn precompute_flags<
     T: NoirWitnessExtensionProtocol<C::ScalarField>,
     C: CurveGroup<BaseField: PrimeField>,
 >(
-    ops: &mut Vec<&mut CoVMOperation<T, C>>,
+    ops: &mut [CoVMOperation<T, C>],
     driver: &mut T,
 ) -> HonkProofResult<()> {
+    let length = ops.len();
+
     // Only want to precompute flags for mul ops and only if they haven't already been computed
-    let z_1_vec: Vec<T::AcvmType> = ops
+    let z_1_vec: Vec<T::OtherAcvmType<C>> = ops
         .iter()
-        .filter(|op| (op.op_code.mul || op.op_code.add) && op.is_z1_zero.is_none())
+        .filter(|op| (op.op_code.mul || op.op_code.add) && op.z1_is_zero.is_none())
         .map(|op| op.z1)
         .collect();
-    let z_2_vec: Vec<T::AcvmType> = ops
+    let z_2_vec: Vec<T::OtherAcvmType<C>> = ops
         .iter()
-        .filter(|op| (op.op_code.mul || op.op_code.add) && op.is_z2_zero.is_none())
+        .filter(|op| (op.op_code.mul || op.op_code.add) && op.z2_is_zero.is_none())
         .map(|op| op.z2)
         .collect();
-    let base_point_vec: Vec<T::OtherAcvmPoint<C>> = ops
+    let base_point_vec: Vec<T::NativeAcvmPoint<C>> = ops
         .iter()
-        .filter(|op| (op.op_code.mul || op.op_code.add) && op.is_base_point_infinity.is_none())
-        .map(|op| op.base_point.clone())
+        .filter(|op| (op.op_code.mul || op.op_code.add) && op.base_point_is_infinity.is_none())
+        .map(|op| op.base_point)
         .collect();
 
-    let length = z_1_vec.len();
+    // TACEO TODO: Batch these four together into a single call to the MPC backend
+    let z_flags = driver.is_zero_many_other(&[z_1_vec, z_2_vec].concat())?;
 
-    let z_flags = driver.is_zero_many(&[z_1_vec, z_2_vec].concat())?;
+    let base_point_flags = driver.is_native_point_at_infinity_many(&base_point_vec)?;
 
-    let base_point_flags = driver.is_point_at_infinity_many_other(&base_point_vec)?;
+    // NOTE: At this point we open (reveal) which points are at infinity, which scalars are zero, and which scalars
+    // are less than 128 bits (c.f. `compute_zetas` at the end of this file). This is acceptable leakage because
+    // the points at infinity naturally occur during the first round of the merge prover when previous_ultra_ops_table_columns
+    // are empty, as well as during the process of batching proofs to constant size.
+    // In src/barretenberg/stdlib/honk_verifier/decider_recursive_verifier.cpp, the function
+    // `compute_padding_indicator_array<Curve, CONST_PROOF_SIZE_LOG_N>(accumulator->verification_key->log_circuit_size)`
+    // calculates a padding array that depends only on circuit size, which for our test case has 10 zeros at the back of the array.
+    // Along with the 4 infinity points from the first merge prover round, this accounts for all the infinity points we expect to see.
+    // The case where scalar!=0 in `construct_and_populate_ultra_ops` and simultaneously z1=0 or z2=0 in the else branch
+    // (where we split into endomorphism scalars) never actually occurs in practice.
+    let z_flags: Vec<bool> = driver
+        .open_many_other_acvm_type(&z_flags)?
+        .iter()
+        .map(|f| !f.is_zero())
+        .collect();
+    let base_point_flags: Vec<bool> = driver
+        .open_many_acvm_type(&base_point_flags)?
+        .iter()
+        .map(|f| !f.is_zero())
+        .collect();
 
-    let flags = driver.open_many_acvm_type(&[z_flags, base_point_flags].concat())?;
-
-    let bool_flags: Vec<bool> = flags.iter().map(|f| !f.is_zero()).collect();
+    let bool_flags = [z_flags, base_point_flags].concat();
 
     for (i, op) in ops
         .iter_mut()
         .filter(|op| {
             (op.op_code.mul || op.op_code.add)
-                && op.is_z1_zero.is_none()
-                && op.is_z2_zero.is_none()
-                && op.is_base_point_infinity.is_none()
+                && op.z1_is_zero.is_none()
+                && op.z2_is_zero.is_none()
+                && op.base_point_is_infinity.is_none()
         })
         .enumerate()
     {
-        op.is_z1_zero = Some(bool_flags[i]);
-        op.is_z2_zero = Some(bool_flags[i + length]);
-        op.is_base_point_infinity = Some(bool_flags[i + 2 * length]);
+        op.z1_is_zero = Some(bool_flags[i]);
+        op.z2_is_zero = Some(bool_flags[i + length]);
+        op.base_point_is_infinity = Some(bool_flags[i + 2 * length]);
     }
     Ok(())
 }
@@ -193,13 +222,13 @@ impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: CurveGroup<BaseField: P
     fn clone(&self) -> Self {
         Self {
             op_code: self.op_code.clone(),
-            base_point: self.base_point.clone(),
+            base_point: self.base_point,
             z1: self.z1,
             z2: self.z2,
             mul_scalar_full: self.mul_scalar_full,
-            is_base_point_infinity: self.is_base_point_infinity,
-            is_z1_zero: self.is_z1_zero,
-            is_z2_zero: self.is_z2_zero,
+            base_point_is_infinity: self.base_point_is_infinity,
+            z1_is_zero: self.z1_is_zero,
+            z2_is_zero: self.z2_is_zero,
         }
     }
 }
@@ -210,13 +239,13 @@ impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: CurveGroup<BaseField: P
     fn default() -> Self {
         Self {
             op_code: EccOpCode::default(),
-            base_point: T::OtherAcvmPoint::default(),
-            z1: T::AcvmType::default(),
-            z2: T::AcvmType::default(),
+            base_point: T::NativeAcvmPoint::default(),
+            z1: T::OtherAcvmType::default(),
+            z2: T::OtherAcvmType::default(),
             mul_scalar_full: T::AcvmType::default(),
-            is_base_point_infinity: None,
-            is_z1_zero: None,
-            is_z2_zero: None,
+            base_point_is_infinity: None,
+            z1_is_zero: None,
+            z2_is_zero: None,
         }
     }
 }
@@ -302,13 +331,13 @@ impl EccvmRowTracker {
         self.num_transcript_rows += 1;
         if op.op_code.mul
             && !op
-                .is_base_point_infinity
-                .expect("is_base_point_infinity should be precomputed")
+                .base_point_is_infinity
+                .expect("base_point_is_infinity should be precomputed")
         {
-            if !op.is_z1_zero.expect("is_z1_zero should be precomputed") {
+            if !op.z1_is_zero.expect("z1_is_zero should be precomputed") {
                 self.cached_active_msm_count += 1;
             }
-            if !op.is_z2_zero.expect("is_z2_zero should be precomputed") {
+            if !op.z2_is_zero.expect("z2_is_zero should be precomputed") {
                 self.cached_active_msm_count += 1;
             }
         } else if self.cached_active_msm_count != 0 {
@@ -331,7 +360,7 @@ pub struct CoECCOpQueue<
 > {
     pub eccvm_ops_table: CoEccvmOpsTable<T, C>,
     pub ultra_ops_table: CoUltraEccOpsTable<T, C>,
-    pub accumulator: T::OtherAcvmPoint<C>,
+    pub accumulator: T::NativeAcvmPoint<C>,
     pub eccvm_ops_reconstructed: Vec<CoVMOperation<T, C>>,
     pub ultra_ops_reconstructed: Vec<CoUltraOp<T, C>>,
     pub eccvm_row_tracker: EccvmRowTracker,
@@ -344,7 +373,7 @@ impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: CurveGroup<BaseField: P
         Self {
             eccvm_ops_table: CoEccvmOpsTable::default(),
             ultra_ops_table: CoUltraEccOpsTable::default(),
-            accumulator: T::OtherAcvmPoint::default(),
+            accumulator: T::NativeAcvmPoint::default(),
             eccvm_ops_reconstructed: Vec::new(),
             ultra_ops_reconstructed: Vec::new(),
             eccvm_row_tracker: EccvmRowTracker::default(),
@@ -393,12 +422,34 @@ impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: CurveGroup<BaseField: P
     pub fn get_current_ultra_ops_subtable_num_rows(&self) -> usize {
         self.ultra_ops_table.current_ultra_subtable_size()
     }
+
     // Get the full table of ECCVM ops in contiguous memory; construct it if it has not been constructed already
-    pub fn get_eccvm_ops(&mut self) -> &Vec<CoVMOperation<T, C>> {
+    pub fn get_eccvm_ops(&mut self) -> &mut Vec<CoVMOperation<T, C>> {
         if self.eccvm_ops_reconstructed.is_empty() {
             self.construct_full_eccvm_ops_table();
         }
-        &self.eccvm_ops_reconstructed
+        &mut self.eccvm_ops_reconstructed
+    }
+
+    /**
+     * @brief Get the number of rows in the 'msm' column section, for all msms in the circuit
+     */
+    pub fn get_num_msm_rows(&self) -> usize {
+        self.eccvm_row_tracker.get_num_msm_rows()
+    }
+
+    /**
+     * @brief Get the number of rows for the current ECCVM circuit
+     */
+    pub fn get_num_rows(&self) -> usize {
+        self.eccvm_row_tracker.get_num_rows()
+    }
+
+    /**
+     * @brief get number of muls for the current ECCVM circuit
+     */
+    pub fn get_number_of_muls(&self) -> u32 {
+        self.eccvm_row_tracker.get_number_of_muls()
     }
 
     /**
@@ -409,7 +460,7 @@ impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: CurveGroup<BaseField: P
         self.eccvm_ops_reconstructed = eccvm_ops_in;
     }
 
-    pub fn get_accumulator(&self) -> &T::OtherAcvmPoint<C> {
+    pub fn get_accumulator(&self) -> &T::NativeAcvmPoint<C> {
         &self.accumulator
     }
 
@@ -425,6 +476,1092 @@ impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: CurveGroup<BaseField: P
     }
 }
 
+pub struct CoScalarMul<
+    T: NoirWitnessExtensionProtocol<C::ScalarField>,
+    C: CurveGroup<BaseField: PrimeField>,
+> {
+    pub pc: u32,
+    pub scalar: T::OtherAcvmType<C>,
+    pub base_point: T::NativeAcvmPoint<C>,
+    pub wnaf_digits: [T::OtherAcvmType<C>; NUM_WNAF_DIGITS_PER_SCALAR],
+    pub wnaf_digits_sign: [T::OtherAcvmType<C>; NUM_WNAF_DIGITS_PER_SCALAR],
+    pub wnaf_si: [T::OtherAcvmType<C>; 8 * (NUM_WNAF_DIGITS_PER_SCALAR / WNAF_DIGITS_PER_ROW)],
+    pub wnaf_skew: T::OtherAcvmType<C>,
+    pub row_chunks: [T::OtherAcvmType<C>; NUM_WNAF_DIGITS_PER_SCALAR / WNAF_DIGITS_PER_ROW],
+    pub row_chunks_sign: [T::OtherAcvmType<C>; NUM_WNAF_DIGITS_PER_SCALAR / WNAF_DIGITS_PER_ROW],
+    // size bumped by 1 to record base_point.dbl()
+    pub precomputed_table: [T::NativeAcvmPoint<C>; POINT_TABLE_SIZE + 1],
+}
+
+impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: CurveGroup<BaseField: PrimeField>> Default
+    for CoScalarMul<T, C>
+{
+    fn default() -> Self {
+        Self {
+            pc: 0,
+            scalar: T::OtherAcvmType::<C>::default(),
+            base_point: T::NativeAcvmPoint::<C>::default(),
+            wnaf_digits: [T::OtherAcvmType::<C>::default(); NUM_WNAF_DIGITS_PER_SCALAR],
+            wnaf_skew: T::OtherAcvmType::<C>::default(),
+            precomputed_table: [T::NativeAcvmPoint::<C>::default(); POINT_TABLE_SIZE + 1],
+            wnaf_digits_sign: [T::OtherAcvmType::<C>::default(); NUM_WNAF_DIGITS_PER_SCALAR],
+            wnaf_si: [T::OtherAcvmType::<C>::default();
+                8 * (NUM_WNAF_DIGITS_PER_SCALAR / WNAF_DIGITS_PER_ROW)],
+            row_chunks: [T::OtherAcvmType::<C>::default();
+                NUM_WNAF_DIGITS_PER_SCALAR / WNAF_DIGITS_PER_ROW],
+            row_chunks_sign: [T::OtherAcvmType::<C>::default();
+                NUM_WNAF_DIGITS_PER_SCALAR / WNAF_DIGITS_PER_ROW],
+        }
+    }
+}
+impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: CurveGroup<BaseField: PrimeField>> Clone
+    for CoScalarMul<T, C>
+{
+    fn clone(&self) -> Self {
+        Self {
+            pc: self.pc,
+            scalar: self.scalar,
+            base_point: self.base_point,
+            wnaf_digits: self.wnaf_digits,
+            wnaf_skew: self.wnaf_skew,
+            precomputed_table: self.precomputed_table,
+            wnaf_digits_sign: self.wnaf_digits_sign,
+            wnaf_si: self.wnaf_si,
+            row_chunks: self.row_chunks,
+            row_chunks_sign: self.row_chunks_sign,
+        }
+    }
+}
+
+pub(crate) type Msm<C, T> = Vec<CoScalarMul<T, C>>;
+
+impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: HonkCurve<TranscriptFieldType>>
+    CoECCOpQueue<T, C>
+{
+    pub fn get_msms(&mut self, driver: &mut T) -> eyre::Result<Vec<Msm<C, T>>> {
+        let num_muls = self.get_number_of_muls();
+
+        let compute_precomputed_table = |base_point: T::NativeAcvmPoint<C>,
+                                         driver: &mut T|
+         -> eyre::Result<
+            [T::NativeAcvmPoint<C>; POINT_TABLE_SIZE + 1],
+        > {
+            let d2 = driver
+                .scale_native_point(base_point, T::AcvmType::from(C::ScalarField::from(2u32)))?;
+            let mut table = [T::NativeAcvmPoint::<C>::default(); POINT_TABLE_SIZE + 1];
+            table[POINT_TABLE_SIZE] = d2;
+            table[POINT_TABLE_SIZE / 2] = base_point;
+
+            for i in 1..(POINT_TABLE_SIZE / 2) {
+                table[i + POINT_TABLE_SIZE / 2] =
+                    driver.add_points_other(table[i + POINT_TABLE_SIZE / 2 - 1], d2);
+            }
+
+            for i in 0..(POINT_TABLE_SIZE / 2) {
+                table[i] = driver.scale_native_point(
+                    table[POINT_TABLE_SIZE - 1 - i],
+                    T::AcvmType::from(-C::ScalarField::one()),
+                )?;
+            }
+
+            Ok(table)
+        };
+
+        let mut msm_count = 0;
+        let mut active_mul_count = 0;
+        let mut msm_opqueue_index = Vec::new();
+        let mut msm_mul_index = Vec::new();
+        let mut msm_sizes = Vec::new();
+
+        let eccvm_ops = self.get_eccvm_ops();
+
+        // Open all the `is_zero` and `is_infinity` flags
+        precompute_flags(eccvm_ops, driver)?;
+
+        for (op_idx, op) in eccvm_ops.iter().enumerate() {
+            let z1_is_zero = op.z1_is_zero.expect("z1_is_zero should be precomputed");
+            let z2_is_zero = op.z2_is_zero.expect("z2_is_zero should be precomputed");
+            let base_point_is_infinity = op
+                .base_point_is_infinity
+                .expect("base_point_is_infinity should be precomputed");
+            if op.op_code.mul {
+                if (!z1_is_zero || !z2_is_zero) && !base_point_is_infinity {
+                    msm_opqueue_index.push(op_idx);
+                    msm_mul_index.push((msm_count, active_mul_count));
+                    active_mul_count += (!z1_is_zero) as usize + (!z2_is_zero) as usize;
+                }
+            } else if active_mul_count > 0 {
+                msm_sizes.push(active_mul_count);
+                msm_count += 1;
+                active_mul_count = 0;
+            }
+        }
+
+        if eccvm_ops.last().is_some_and(|op| op.op_code.mul) && active_mul_count > 0 {
+            msm_sizes.push(active_mul_count);
+            msm_count += 1;
+        }
+
+        let mut result: Vec<Msm<C, T>> = Vec::with_capacity(msm_count);
+        for size in &msm_sizes {
+            result.push(vec![CoScalarMul::default(); *size]);
+        }
+
+        let mut z1_and_z2 = Vec::with_capacity(2 * eccvm_ops.len());
+        for op in eccvm_ops.iter() {
+            if !op.z1_is_zero.expect("z1_is_zero should be precomputed")
+                && !op
+                    .base_point_is_infinity
+                    .expect("base_point_is_infinity should be precomputed")
+            {
+                z1_and_z2.push(op.z1);
+            }
+        }
+        let z1_len = z1_and_z2.len();
+        for op in eccvm_ops.iter() {
+            if !op.z2_is_zero.expect("z2_is_zero should be precomputed")
+                && !op
+                    .base_point_is_infinity
+                    .expect("base_point_is_infinity should be precomputed")
+            {
+                z1_and_z2.push(op.z2);
+            }
+        }
+
+        // TACEO TODO: this is another bottleneck as it is a pretty large gc
+        let wnaf_result =
+            T::compute_wnaf_digits_and_compute_rows_many(driver, &z1_and_z2, NUM_SCALAR_BITS)?;
+
+        let (z1_even, z2_even) = wnaf_result.0.split_at(z1_len);
+        let (z1_wnaf_digits, z2_wnaf_digits) = wnaf_result.1.split_at(z1_len);
+        let (z1_wnaf_digits_sign, z2_wnaf_digits_sign) = wnaf_result.2.split_at(z1_len);
+        let (z1_wnaf_s_i, z2_wnaf_s_i) = wnaf_result.3.split_at(z1_len);
+        let (z1_row_chunks, z2_row_chunks) = wnaf_result.4.split_at(z1_len);
+        let (z1_row_chunks_sign, z2_row_chunks_sign) = wnaf_result.5.split_at(z1_len);
+
+        let mut z1_index = 0;
+        let mut z2_index = 0;
+
+        for (i, &op_idx) in msm_opqueue_index.iter().enumerate() {
+            let op = &eccvm_ops[op_idx];
+            let (msm_index, mut mul_index) = msm_mul_index[i];
+
+            if !op.z1_is_zero.expect("z1_is_zero should be precomputed")
+                && !op
+                    .base_point_is_infinity
+                    .expect("base_point_is_infinity should be precomputed")
+            {
+                result[msm_index][mul_index] = CoScalarMul {
+                    pc: 0,
+                    scalar: op.z1,
+                    base_point: op.base_point,
+                    wnaf_digits: z1_wnaf_digits[z1_index],
+                    wnaf_skew: z1_even[z1_index],
+                    wnaf_digits_sign: z1_wnaf_digits_sign[z1_index],
+                    wnaf_si: z1_wnaf_s_i[z1_index],
+                    precomputed_table: compute_precomputed_table(op.base_point, driver)?,
+                    row_chunks: z1_row_chunks[z1_index],
+                    row_chunks_sign: z1_row_chunks_sign[z1_index],
+                };
+                mul_index += 1;
+                z1_index += 1;
+            }
+
+            if !op.z2_is_zero.expect("z2_is_zero should be precomputed")
+                && !op
+                    .base_point_is_infinity
+                    .expect("base_point_is_infinity should be precomputed")
+            {
+                let endo_point =
+                    T::compute_endo_point(&op.base_point, C::get_cube_root_of_unity())?;
+                // endo_point = C::g1_affine_from_xy(
+                //     op.base_point.x().expect("BasePoint should not be zero")
+                //         * C::get_cube_root_of_unity(),
+                //     -op.base_point.y().expect("BasePoint should not be zero"),
+                // );
+
+                result[msm_index][mul_index] = CoScalarMul {
+                    pc: 0,
+                    scalar: op.z2,
+                    base_point: endo_point,
+                    wnaf_digits: z2_wnaf_digits[z2_index],
+                    wnaf_skew: z2_even[z2_index],
+                    precomputed_table: compute_precomputed_table(endo_point, driver)?,
+                    wnaf_digits_sign: z2_wnaf_digits_sign[z2_index],
+                    wnaf_si: z2_wnaf_s_i[z2_index],
+                    row_chunks: z2_row_chunks[z2_index],
+                    row_chunks_sign: z2_row_chunks_sign[z2_index],
+                };
+                z2_index += 1;
+            }
+        }
+
+        let mut pc = num_muls;
+        for msm in &mut result {
+            for mul in msm {
+                mul.pc = pc;
+                pc -= 1;
+            }
+        }
+
+        Ok(result)
+    }
+}
+pub struct AddState<
+    C: CurveGroup<BaseField: PrimeField>,
+    T: NoirWitnessExtensionProtocol<C::ScalarField>,
+> {
+    pub add: bool,
+    pub slice: T::OtherAcvmType<C>,
+    pub point: T::NativeAcvmPoint<C>,
+    pub lambda: T::OtherAcvmType<C>,
+    pub collision_inverse: T::OtherAcvmType<C>,
+}
+impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: CurveGroup<BaseField: PrimeField>> Default
+    for AddState<C, T>
+{
+    fn default() -> Self {
+        Self {
+            add: false,
+            slice: T::OtherAcvmType::<C>::default(),
+            point: T::NativeAcvmPoint::<C>::default(),
+            lambda: T::OtherAcvmType::<C>::default(),
+            collision_inverse: T::OtherAcvmType::<C>::default(),
+        }
+    }
+}
+impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: CurveGroup<BaseField: PrimeField>> Clone
+    for AddState<C, T>
+{
+    fn clone(&self) -> Self {
+        Self {
+            add: self.add,
+            slice: self.slice,
+            point: self.point,
+            lambda: self.lambda,
+            collision_inverse: self.collision_inverse,
+        }
+    }
+}
+
+pub struct MSMRow<
+    C: CurveGroup<BaseField: PrimeField>,
+    T: NoirWitnessExtensionProtocol<C::ScalarField>,
+> {
+    // Counter over all half-length scalar muls used to compute the required MSMs
+    pub pc: usize,
+    // The number of points that will be scaled and summed
+    pub msm_size: u32,
+    pub msm_count: u32,
+    pub msm_round: u32,
+    pub msm_transition: bool,
+    pub q_add: bool,
+    pub q_double: bool,
+    pub q_skew: bool,
+    pub add_state: [AddState<C, T>; 4],
+    pub accumulator_x: T::OtherAcvmType<C>,
+    pub accumulator_y: T::OtherAcvmType<C>,
+    phantom: std::marker::PhantomData<T>,
+}
+impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: CurveGroup<BaseField: PrimeField>> Default
+    for MSMRow<C, T>
+{
+    fn default() -> Self {
+        Self {
+            pc: 0,
+            msm_size: 0,
+            msm_count: 0,
+            msm_round: 0,
+            msm_transition: false,
+            q_add: false,
+            q_double: false,
+            q_skew: false,
+            add_state: array::from_fn(|_| AddState::default()),
+            accumulator_x: T::OtherAcvmType::<C>::default(),
+            accumulator_y: T::OtherAcvmType::<C>::default(),
+            phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: CurveGroup<BaseField: PrimeField>> Clone
+    for MSMRow<C, T>
+{
+    fn clone(&self) -> Self {
+        Self {
+            pc: self.pc,
+            msm_size: self.msm_size,
+            msm_count: self.msm_count,
+            msm_round: self.msm_round,
+            msm_transition: self.msm_transition,
+            q_add: self.q_add,
+            q_double: self.q_double,
+            q_skew: self.q_skew,
+            add_state: self.add_state.clone(),
+            accumulator_x: self.accumulator_x,
+            accumulator_y: self.accumulator_y,
+            phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<T: NoirWitnessExtensionProtocol<C::ScalarField>, C: HonkCurve<TranscriptFieldType>>
+    MSMRow<C, T>
+{
+    #[expect(clippy::type_complexity)]
+    pub fn compute_rows_msms(
+        msms: &[Msm<C, T>],
+        total_number_of_muls: u32,
+        num_msm_rows: usize,
+        driver: &mut T,
+    ) -> eyre::Result<(Vec<Self>, [Vec<T::OtherAcvmType<C>>; 2])> {
+        let num_rows_in_read_counts_table =
+            (total_number_of_muls as usize) * (POINT_TABLE_SIZE / 2);
+        let mut point_table_read_counts =
+            vec![T::OtherAcvmType::<C>::default(); num_rows_in_read_counts_table * 2];
+
+        let update_read_count = |point_idx: usize,
+                                 mut index: T::OtherAcvmType<C>,
+                                 is_negative: T::OtherAcvmType<C>,
+                                 point_table_read_counts: &mut [T::OtherAcvmType<C>],
+                                 driver: &mut T|
+         -> eyre::Result<()> {
+            let row_index_offset = point_idx * 8;
+
+            // we mimic this functionality:
+            // let digit_is_negative = slice < 0;
+            // let relative_row_idx = ((slice + 15) / 2) as usize; // This is already done in the gc
+            // let column_index = if digit_is_negative { 1 } else { 0 };
+
+            // if digit_is_negative {
+            //     point_table_read_counts[column_index][row_index_offset + relative_row_idx] += 1;
+            // } else {
+            //     point_table_read_counts[column_index][row_index_offset + 15 - relative_row_idx] +=
+            //         1;
+            // }
+
+            let column_index = driver.mul_with_public_other(
+                C::BaseField::from(num_rows_in_read_counts_table as u32),
+                is_negative,
+            );
+
+            driver.add_assign_other(&mut index, column_index);
+            driver.add_assign_other(
+                &mut index,
+                T::OtherAcvmType::<C>::from(C::BaseField::from(row_index_offset as u32)),
+            );
+
+            if T::is_shared_other(&index) {
+                let ohv = driver.one_hot_vector_from_shared_index_other(
+                    T::get_shared_other(&index).expect("Checked it is shared"),
+                    num_rows_in_read_counts_table * 2,
+                )?;
+                for (point_table_read_count, x) in
+                    point_table_read_counts.iter_mut().zip(ohv.iter())
+                {
+                    let tmp = T::OtherAcvmType::<C>::from(x.to_owned());
+                    driver.add_assign_other(point_table_read_count, tmp);
+                }
+            } else {
+                let index_value: BigUint = T::get_public_other(&index)
+                    .expect("Checked it is public")
+                    .into();
+                let index_value = usize::try_from(index_value)
+                    .map_err(|_| eyre::eyre!("Index can not be translated to usize"))?;
+                driver.add_assign_other(
+                    &mut point_table_read_counts[index_value],
+                    T::OtherAcvmType::<C>::from(C::BaseField::one()),
+                );
+            }
+
+            Ok(())
+        };
+
+        let update_read_count_negative = |point_idx: usize,
+                                          slice: T::OtherAcvmType<C>,
+                                          point_table_read_counts: &mut [T::OtherAcvmType<C>],
+                                          driver: &mut T|
+         -> eyre::Result<()> {
+            // we mimic this functionality, but we already know that we are in the negative branch:
+            // let digit_is_negative = slice < 0;
+            // let relative_row_idx = ((slice + 15) / 2) as usize; //Attention FLORIN, this is already done for the slices
+            // let column_index = if digit_is_negative { 1 } else { 0 };
+
+            // if digit_is_negative {
+            //     point_table_read_counts[column_index][row_index_offset + relative_row_idx] += 1;
+            // } else {
+            //     point_table_read_counts[column_index][row_index_offset + 15 - relative_row_idx] +=
+            //         1;
+            // }
+
+            let row_index_offset = point_idx * 8;
+            let relative_row_idx = driver.add_other(
+                slice,
+                T::OtherAcvmType::<C>::from(C::BaseField::from(15u32)),
+            );
+            let two_inverse = C::BaseField::from(2u32)
+                .inverse()
+                .expect("2 has an inverse");
+            let relative_row_idx = driver.mul_with_public_other(two_inverse, relative_row_idx);
+
+            let index = driver.add_other(
+                relative_row_idx,
+                T::OtherAcvmType::<C>::from(C::BaseField::from(row_index_offset as u32)),
+            );
+            if T::is_shared_other(&index) {
+                let ohv = driver.one_hot_vector_from_shared_index_other(
+                    T::get_shared_other(&index).expect("Checked it is shared"),
+                    num_rows_in_read_counts_table,
+                )?;
+                for (point_table_read_count, x) in point_table_read_counts
+                    [num_rows_in_read_counts_table..] // we are in the negative branch
+                    .iter_mut()
+                    .zip(ohv.iter())
+                {
+                    let tmp = T::OtherAcvmType::<C>::from(x.to_owned());
+                    driver.add_assign_other(point_table_read_count, tmp);
+                }
+            } else {
+                let index_value: BigUint = T::get_public_other(&index)
+                    .expect("Checked it is public")
+                    .into();
+                let mut index_value =
+                    usize::try_from(index_value).expect("Index to large for usize");
+                index_value += num_rows_in_read_counts_table; // we are in the negative branch
+                driver.add_assign_other(
+                    &mut point_table_read_counts[index_value],
+                    T::OtherAcvmType::<C>::from(C::BaseField::one()),
+                );
+            }
+
+            Ok(())
+        };
+
+        let mut msm_row_counts = Vec::with_capacity(msms.len() + 1);
+        msm_row_counts.push(1);
+
+        let mut pc_values = Vec::with_capacity(msms.len() + 1);
+        pc_values.push(total_number_of_muls);
+
+        for msm in msms {
+            let num_rows_required = EccvmRowTracker::num_eccvm_msm_rows(msm.len());
+            msm_row_counts.push(
+                msm_row_counts
+                    .last()
+                    .expect("msm_row_counts should not be empty")
+                    + num_rows_required as usize,
+            );
+            pc_values
+                .push(pc_values.last().expect("pc_values should not be empty") - msm.len() as u32);
+        }
+
+        let mut msm_rows = vec![MSMRow::default(); num_msm_rows];
+        msm_rows[0] = MSMRow::default();
+
+        let mut slices_for_cmux = Vec::with_capacity(msms.len() * NUM_WNAF_DIGITS_PER_SCALAR);
+        let mut signs_for_cmux = Vec::with_capacity(msms.len() * NUM_WNAF_DIGITS_PER_SCALAR);
+        for msm in msms.iter() {
+            for digit_idx in 0..NUM_WNAF_DIGITS_PER_SCALAR {
+                let msm_size = msm.len();
+                let num_rows_per_digit = (msm_size / ADDITIONS_PER_ROW)
+                    + if msm_size % ADDITIONS_PER_ROW != 0 {
+                        1
+                    } else {
+                        0
+                    };
+                for relative_row_idx in 0..num_rows_per_digit {
+                    let num_points_in_row = if (relative_row_idx + 1) * ADDITIONS_PER_ROW > msm_size
+                    {
+                        msm_size % ADDITIONS_PER_ROW
+                    } else {
+                        ADDITIONS_PER_ROW
+                    };
+                    let offset = relative_row_idx * ADDITIONS_PER_ROW;
+                    for relative_point_idx in 0..ADDITIONS_PER_ROW {
+                        let point_idx = offset + relative_point_idx;
+                        let add = num_points_in_row > relative_point_idx;
+                        if add {
+                            slices_for_cmux.push(msm[point_idx].wnaf_digits[digit_idx]);
+                            signs_for_cmux.push(msm[point_idx].wnaf_digits_sign[digit_idx]);
+                        }
+                    }
+                }
+            }
+        }
+        let cmux_results = driver.cmux_many_other(
+            &signs_for_cmux,
+            &slices_for_cmux,
+            &slices_for_cmux
+                .iter()
+                .map(|x| {
+                    driver.sub_other(T::OtherAcvmType::<C>::from(C::BaseField::from(15u32)), *x)
+                })
+                .collect::<Vec<_>>(),
+        )?;
+        let mut j = 0;
+
+        // TACEO TODO: this loop is a/the bottleneck in the ECCVM part, as we are creating a ohv for each update_read_count
+        for (msm_idx, msm) in msms.iter().enumerate() {
+            for digit_idx in 0..NUM_WNAF_DIGITS_PER_SCALAR {
+                let pc = pc_values[msm_idx];
+                let msm_size = msm.len();
+                let num_rows_per_digit = (msm_size / ADDITIONS_PER_ROW)
+                    + if msm_size % ADDITIONS_PER_ROW != 0 {
+                        1
+                    } else {
+                        0
+                    };
+
+                for relative_row_idx in 0..num_rows_per_digit {
+                    let num_points_in_row = if (relative_row_idx + 1) * ADDITIONS_PER_ROW > msm_size
+                    {
+                        msm_size % ADDITIONS_PER_ROW
+                    } else {
+                        ADDITIONS_PER_ROW
+                    };
+                    let offset = relative_row_idx * ADDITIONS_PER_ROW;
+
+                    for relative_point_idx in 0..ADDITIONS_PER_ROW {
+                        let point_idx = offset + relative_point_idx;
+                        let add = num_points_in_row > relative_point_idx;
+                        if add {
+                            update_read_count(
+                                (total_number_of_muls - pc) as usize + point_idx,
+                                cmux_results[j],
+                                msm[point_idx].wnaf_digits_sign[digit_idx],
+                                &mut point_table_read_counts,
+                                driver,
+                            )?;
+                            j += 1;
+                        }
+                    }
+                }
+
+                if digit_idx == NUM_WNAF_DIGITS_PER_SCALAR - 1 {
+                    let mut cmux = Vec::with_capacity(num_rows_per_digit * ADDITIONS_PER_ROW);
+
+                    for row_idx in 0..num_rows_per_digit {
+                        let num_points_in_row = if (row_idx + 1) * ADDITIONS_PER_ROW > msm_size {
+                            msm_size % ADDITIONS_PER_ROW
+                        } else {
+                            ADDITIONS_PER_ROW
+                        };
+                        let offset = row_idx * ADDITIONS_PER_ROW;
+                        for relative_point_idx in 0..ADDITIONS_PER_ROW {
+                            let add = num_points_in_row > relative_point_idx;
+                            let point_idx = offset + relative_point_idx;
+                            if add {
+                                cmux.push(msm[point_idx].wnaf_skew);
+                            }
+                        }
+                    }
+                    let cmux_result = driver.cmux_many_other(
+                        &cmux,
+                        &vec![T::OtherAcvmType::<C>::from(-C::BaseField::from(1u32)); cmux.len()],
+                        &vec![T::OtherAcvmType::<C>::from(-C::BaseField::from(15u32)); cmux.len()],
+                    )?;
+
+                    let mut i = 0;
+                    for row_idx in 0..num_rows_per_digit {
+                        let num_points_in_row = if (row_idx + 1) * ADDITIONS_PER_ROW > msm_size {
+                            msm_size % ADDITIONS_PER_ROW
+                        } else {
+                            ADDITIONS_PER_ROW
+                        };
+                        let offset = row_idx * ADDITIONS_PER_ROW;
+
+                        for relative_point_idx in 0..ADDITIONS_PER_ROW {
+                            let add = num_points_in_row > relative_point_idx;
+                            let point_idx = offset + relative_point_idx;
+                            if add {
+                                let slice = cmux_result[i];
+                                //if msm[point_idx].wnaf_skew { -1 } else { -15 };
+                                update_read_count_negative(
+                                    (total_number_of_muls - pc) as usize + point_idx,
+                                    slice, //slice will always be negative here
+                                    &mut point_table_read_counts,
+                                    driver,
+                                )?;
+                                i += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // The execution trace data for the MSM columns requires knowledge of intermediate values from *affine* point
+        // addition. The naive solution to compute this data requires 2 field inversions per in-circuit group addition
+        // evaluation. This is bad! To avoid this, we split the witness computation algorithm into 3 steps.
+        //   Step 1: compute the execution trace group operations in *projective* coordinates
+        //   Step 2: use batch inversion trick to convert all points into affine coordinates
+        //   Step 3: populate the full execution trace, including the intermediate values from affine group operations
+        // This section sets up the data structures we need to store all intermediate ECC operations in projective form
+        let num_point_adds_and_doubles = (num_msm_rows - 2) * 4;
+        let num_accumulators = num_msm_rows - 1;
+        // In what fallows, either p1 + p2 = p3, or p1.dbl() = p3
+        // We create 1 vector to store the entire point trace. We split into multiple containers using std::span
+        // (we want 1 vector object to more efficiently batch normalize points)
+
+        let mut p1_trace = vec![T::NativeAcvmPoint::<C>::default(); num_point_adds_and_doubles];
+        let mut p2_trace = vec![T::NativeAcvmPoint::<C>::default(); num_point_adds_and_doubles];
+        let mut p3_trace = vec![T::NativeAcvmPoint::<C>::default(); num_point_adds_and_doubles];
+        // operation_trace records whether an entry in the p1/p2/p3 trace represents a point addition or doubling
+        let mut operation_trace = vec![false; num_point_adds_and_doubles];
+        // accumulator_trace tracks the value of the ECCVM accumulator for each row
+        let mut accumulator_trace = vec![T::NativeAcvmPoint::<C>::default(); num_accumulators];
+
+        // we start the accumulator at the offset generator point. This ensures we can support an MSM that produces a
+        let offset_generator = T::NativeAcvmPoint::from(offset_generator::<C>().into());
+        accumulator_trace[0] = offset_generator;
+
+        // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/973): Reinstate multitreading?
+        // populate point trace, and the components of the MSM execution trace that do not relate to affine point
+        // operations
+
+        let wnaf_skews: Vec<_> = msms
+            .iter()
+            .flat_map(|msm| msm.iter().map(|mul| mul.wnaf_skew))
+            .collect();
+        let wnaf_digits: Vec<_> = msms
+            .iter()
+            .flat_map(|msm| msm.iter().flat_map(|mul| mul.wnaf_digits.iter().copied()))
+            .collect();
+        let wnaf_digits_len = wnaf_digits.len();
+
+        let mut to_convert = Vec::with_capacity(wnaf_digits.len() + wnaf_skews.len());
+        to_convert.extend(wnaf_digits);
+        to_convert.extend(wnaf_skews);
+
+        let converted = driver.convert_fields::<C>(&to_convert)?;
+        let (converted_wnaf_digits, converted_wnaf_skews) = converted.split_at(wnaf_digits_len);
+
+        let mut msm_offset_wnaf_digits = 0;
+        let mut msm_offset_wnaf_skews = 0;
+
+        //TACEO TODO: This loop is another bottleneck because of the calls to read_lut_by_acvm_point
+        for msm_idx in 0..msms.len() {
+            let mut accumulator = offset_generator;
+            let msm = &msms[msm_idx];
+            let mut msm_row_index = msm_row_counts[msm_idx];
+            let msm_size = msm.len();
+            let num_rows_per_digit = (msm_size / ADDITIONS_PER_ROW)
+                + if msm_size % ADDITIONS_PER_ROW != 0 {
+                    1
+                } else {
+                    0
+                };
+            let mut trace_index = (msm_row_counts[msm_idx] - 1) * 4;
+
+            for digit_idx in 0..NUM_WNAF_DIGITS_PER_SCALAR {
+                let pc = pc_values[msm_idx];
+                for row_idx in 0..num_rows_per_digit {
+                    let num_points_in_row = if (row_idx + 1) * ADDITIONS_PER_ROW > msm_size {
+                        msm_size % ADDITIONS_PER_ROW
+                    } else {
+                        ADDITIONS_PER_ROW
+                    };
+                    let row = &mut msm_rows[msm_row_index];
+                    let offset = row_idx * ADDITIONS_PER_ROW;
+                    row.msm_transition = (digit_idx == 0) && (row_idx == 0);
+
+                    for point_idx in 0..ADDITIONS_PER_ROW {
+                        let add_state = &mut row.add_state[point_idx];
+                        add_state.add = num_points_in_row > point_idx;
+                        let slice = if add_state.add {
+                            msm[offset + point_idx].wnaf_digits[digit_idx]
+                        } else {
+                            T::OtherAcvmType::default()
+                        };
+                        // In the MSM columns in the ECCVM circuit, we can add up to 4 points per row.
+                        // if `row.add_state[point_idx].add = true`, this indicates that we want to add the
+                        // `point_idx`'th point in the MSM columns into the MSM accumulator.
+                        // `add_state.slice` = A 4-bit WNAF slice of the scalar multiplier associated with the point we are adding
+                        // (the specific slice chosen depends on the value of msm_round).
+                        // (WNAF = windowed-non-adjacent-form. Value range is `-15, -13, ..., 15`).
+                        // If `add_state.add = true`, we want `add_state.slice` to be the *compressed*
+                        // form of the WNAF slice value. (compressed = no gaps in the value range. i.e. -15,
+                        // -13, ..., 15 maps to 0, ..., 15).
+                        add_state.slice = if add_state.add {
+                            slice
+                        } else {
+                            T::OtherAcvmType::default()
+                        };
+                        add_state.point = if add_state.add {
+                            let lut = driver.init_lut_by_acvm_point(
+                                msm[offset + point_idx].precomputed_table.to_vec(),
+                            );
+                            let index = converted_wnaf_digits[msm_offset_wnaf_digits
+                                + (offset + point_idx) * NUM_WNAF_DIGITS_PER_SCALAR
+                                + digit_idx];
+                            driver.read_lut_by_acvm_point(index, &lut)?
+                        } else {
+                            T::NativeAcvmPoint::<C>::default()
+                        };
+
+                        let p1 = accumulator;
+                        let p2 = add_state.point;
+                        accumulator = if add_state.add {
+                            driver.add_points_other(accumulator, add_state.point)
+                        } else {
+                            p1
+                        };
+                        p1_trace[trace_index] = p1;
+                        p2_trace[trace_index] = p2;
+                        p3_trace[trace_index] = accumulator;
+                        operation_trace[trace_index] = false;
+                        trace_index += 1;
+                    }
+                    accumulator_trace[msm_row_index] = accumulator;
+                    row.q_add = true;
+                    row.q_double = false;
+                    row.q_skew = false;
+                    row.msm_round = digit_idx as u32;
+                    row.msm_size = msm_size as u32;
+                    row.msm_count = offset as u32;
+                    row.pc = pc as usize;
+                    msm_row_index += 1;
+                }
+                // doubling
+                if digit_idx < NUM_WNAF_DIGITS_PER_SCALAR - 1 {
+                    let row = &mut msm_rows[msm_row_index];
+                    row.msm_transition = false;
+                    row.msm_round = (digit_idx + 1) as u32;
+                    row.msm_size = msm_size as u32;
+                    row.msm_count = 0_u32;
+                    row.q_add = false;
+                    row.q_double = true;
+                    row.q_skew = false;
+                    for point_idx in 0..ADDITIONS_PER_ROW {
+                        let add_state = &mut row.add_state[point_idx];
+                        add_state.add = false;
+                        add_state.slice = T::OtherAcvmType::default();
+                        add_state.point = T::NativeAcvmPoint::default();
+                        add_state.collision_inverse = T::OtherAcvmType::default();
+                        p1_trace[trace_index] = accumulator;
+                        p2_trace[trace_index] = accumulator;
+                        accumulator = driver.add_points_other(accumulator, accumulator);
+                        p3_trace[trace_index] = accumulator;
+                        operation_trace[trace_index] = true;
+                        trace_index += 1;
+                    }
+                    accumulator_trace[msm_row_index] = accumulator;
+                    msm_row_index += 1;
+                } else {
+                    for row_idx in 0..num_rows_per_digit {
+                        let row = &mut msm_rows[msm_row_index];
+
+                        let num_points_in_row = if (row_idx + 1) * ADDITIONS_PER_ROW > msm_size {
+                            msm_size % ADDITIONS_PER_ROW
+                        } else {
+                            ADDITIONS_PER_ROW
+                        };
+                        let offset = row_idx * ADDITIONS_PER_ROW;
+                        row.msm_transition = false;
+                        for point_idx in 0..ADDITIONS_PER_ROW {
+                            let add_state = &mut row.add_state[point_idx];
+                            add_state.add = num_points_in_row > point_idx;
+                            add_state.slice = if add_state.add {
+                                driver.mul_with_public_other(
+                                    C::BaseField::from(7),
+                                    msm[offset + point_idx].wnaf_skew,
+                                )
+                            } else {
+                                T::OtherAcvmType::default()
+                            };
+                            let converted_wnaf_skew = if add_state.add {
+                                converted_wnaf_skews[msm_offset_wnaf_skews + offset + point_idx]
+                            } else {
+                                T::AcvmType::default()
+                            };
+                            add_state.point = if add_state.add {
+                                // msm[offset + point_idx].precomputed_table[add_state.slice as usize]
+                                let lut = driver.init_lut_by_acvm_point(
+                                    msm[offset + point_idx].precomputed_table.to_vec(),
+                                );
+                                let index = driver
+                                    .mul_with_public(C::ScalarField::from(7), converted_wnaf_skew);
+                                driver.read_lut_by_acvm_point(index, &lut)?
+                            } else {
+                                T::NativeAcvmPoint::<C>::default()
+                            };
+
+                            let p1 = accumulator;
+                            accumulator = {
+                                let added_points =
+                                    driver.add_points_other(accumulator, add_state.point);
+                                let add_predicate_inverted = driver.sub(
+                                    T::AcvmType::from(C::ScalarField::one()),
+                                    converted_wnaf_skew,
+                                );
+                                driver.msm(
+                                    &[accumulator, added_points],
+                                    &[add_predicate_inverted, converted_wnaf_skew],
+                                )?
+                            };
+                            p1_trace[trace_index] = p1;
+                            p2_trace[trace_index] = add_state.point;
+                            p3_trace[trace_index] = accumulator;
+                            operation_trace[trace_index] = false;
+                            trace_index += 1;
+                        }
+                        row.q_add = false;
+                        row.q_double = false;
+                        row.q_skew = true;
+                        row.msm_round = (digit_idx + 1) as u32;
+                        row.msm_size = msm_size as u32;
+                        row.msm_count = offset as u32;
+                        row.pc = pc as usize;
+                        accumulator_trace[msm_row_index] = accumulator;
+                        msm_row_index += 1;
+                    }
+                }
+            }
+            msm_offset_wnaf_digits += msm.len() * NUM_WNAF_DIGITS_PER_SCALAR;
+            msm_offset_wnaf_skews += msm.len();
+        }
+
+        // inverse_trace is used to compute the value of the `collision_inverse` column in the ECCVM.
+        let mut inverse_trace = Vec::with_capacity(num_point_adds_and_doubles);
+        let mut tmp = Vec::with_capacity(num_point_adds_and_doubles * 2 + num_accumulators);
+        tmp.extend_from_slice(&p1_trace);
+        tmp.extend_from_slice(&p2_trace);
+        tmp.extend_from_slice(&accumulator_trace);
+        let (xs, ys, _) = driver.other_pointshare_to_other_field_shares_many(&tmp)?;
+        let (p1_xs, rest) = xs.split_at(num_point_adds_and_doubles);
+        let (p2_xs, acc_xs) = rest.split_at(num_point_adds_and_doubles);
+        let (p1_ys, rest) = ys.split_at(num_point_adds_and_doubles);
+        let (p2_ys, acc_ys) = rest.split_at(num_point_adds_and_doubles);
+
+        for operation_idx in 0..num_point_adds_and_doubles {
+            let (tmp1_x, tmp1_y) = (p1_xs[operation_idx], p1_ys[operation_idx]);
+            let tmp2_x = p2_xs[operation_idx];
+
+            if operation_trace[operation_idx] {
+                inverse_trace.push(driver.add_other(tmp1_y, tmp1_y));
+            } else {
+                inverse_trace.push(driver.sub_other(tmp2_x, tmp1_x));
+            }
+        }
+
+        let inverse_trace = driver.inverse_or_zero_many_other(&inverse_trace)?;
+
+        // complete the computation of the ECCVM execution trace, by adding the affine intermediate point data
+        // i.e. row.accumulator_x, row.accumulator_y, row.add_state[0...3].collision_inverse,
+        // row.add_state[0...3].lambda
+        for msm_idx in 0..msms.len() {
+            let msm = &msms[msm_idx];
+            let mut trace_index = (msm_row_counts[msm_idx] - 1) * ADDITIONS_PER_ROW;
+            let mut msm_row_index = msm_row_counts[msm_idx];
+            // 1st MSM row will have accumulator equal to the previous MSM output
+            // (or point at infinity for 1st MSM)
+            let mut accumulator_index = msm_row_counts[msm_idx] - 1;
+            let msm_size = msm.len();
+            let num_rows_per_digit = (msm_size / ADDITIONS_PER_ROW)
+                + (if msm_size % ADDITIONS_PER_ROW != 0 {
+                    1
+                } else {
+                    0
+                });
+
+            for digit_idx in 0..NUM_WNAF_DIGITS_PER_SCALAR {
+                for _ in 0..num_rows_per_digit {
+                    let row = &mut msm_rows[msm_row_index];
+                    let (normalized_accumulator_x, normalized_accumulator_y) =
+                        (acc_xs[accumulator_index], acc_ys[accumulator_index]);
+
+                    row.accumulator_x = normalized_accumulator_x;
+                    row.accumulator_y = normalized_accumulator_y;
+                    for point_idx in 0..ADDITIONS_PER_ROW {
+                        let add_state = &mut row.add_state[point_idx];
+                        let inverse = &inverse_trace[trace_index];
+                        add_state.collision_inverse = if add_state.add {
+                            *inverse
+                        } else {
+                            T::OtherAcvmType::default()
+                        };
+                        add_state.lambda = if add_state.add {
+                            let p1_y = p1_ys[trace_index];
+                            let p2_y = p2_ys[trace_index];
+                            let sub = driver.sub_other(p2_y, p1_y);
+                            driver.mul_other(sub, *inverse)?
+                        } else {
+                            T::OtherAcvmType::default()
+                        };
+                        trace_index += 1;
+                    }
+                    accumulator_index += 1;
+                    msm_row_index += 1;
+                }
+
+                if digit_idx < NUM_WNAF_DIGITS_PER_SCALAR - 1 {
+                    let row = &mut msm_rows[msm_row_index];
+                    let (normalized_accumulator_x, normalized_accumulator_y) =
+                        (acc_xs[accumulator_index], acc_ys[accumulator_index]);
+                    let acc_x = normalized_accumulator_x;
+                    let acc_y = normalized_accumulator_y;
+                    row.accumulator_x = acc_x;
+                    row.accumulator_y = acc_y;
+
+                    let p1_x_s = &p1_xs[trace_index..trace_index + ADDITIONS_PER_ROW];
+                    let inverses = &inverse_trace[trace_index..trace_index + ADDITIONS_PER_ROW];
+                    let three_dx = driver.scale_many_other(p1_x_s, C::BaseField::from(3));
+                    //TACEO TODO batch these multiplications outside
+                    let three_dx_dx = driver.mul_many_other(&three_dx, p1_x_s)?;
+                    let res = driver.mul_many_other(&three_dx_dx, inverses)?; //((*dx + dx + dx) * dx) * inverse;
+                    for (point_idx, point) in res.iter().enumerate().take(ADDITIONS_PER_ROW) {
+                        let add_state = &mut row.add_state[point_idx];
+                        add_state.collision_inverse = T::OtherAcvmType::default();
+                        add_state.lambda = *point;
+                        trace_index += 1;
+                    }
+                    accumulator_index += 1;
+                    msm_row_index += 1;
+                } else {
+                    for row_idx in 0..num_rows_per_digit {
+                        let row = &mut msm_rows[msm_row_index];
+                        let offset = row_idx * ADDITIONS_PER_ROW;
+                        let (normalized_accumulator_x, normalized_accumulator_y) =
+                            (acc_xs[accumulator_index], acc_ys[accumulator_index]);
+                        row.accumulator_x = normalized_accumulator_x;
+                        row.accumulator_y = normalized_accumulator_y;
+                        let p1_ys = &p1_ys[trace_index..trace_index + ADDITIONS_PER_ROW];
+                        let p2_ys = &p2_ys[trace_index..trace_index + ADDITIONS_PER_ROW];
+                        let inverses = &inverse_trace[trace_index..trace_index + ADDITIONS_PER_ROW];
+                        let sub = driver.sub_many_other(p2_ys, p1_ys);
+                        let add_predicates = row.add_state[0..ADDITIONS_PER_ROW]
+                            .iter()
+                            .enumerate()
+                            .map(|(point_idx, s)| {
+                                if s.add {
+                                    msm[offset + point_idx].wnaf_skew
+                                } else {
+                                    T::OtherAcvmType::default()
+                                }
+                            })
+                            .collect::<Vec<T::OtherAcvmType<C>>>();
+                        //TACEO TODO batch these multiplications outside
+                        let res = driver.mul_many_other(
+                            &[sub, add_predicates.clone()].concat(),
+                            &[inverses, inverses].concat(),
+                        )?;
+                        let first_half = &res[0..ADDITIONS_PER_ROW];
+                        let second_half = &res[ADDITIONS_PER_ROW..];
+                        let res = driver.mul_many_other(first_half, &add_predicates)?;
+
+                        for point_idx in 0..ADDITIONS_PER_ROW {
+                            let add_state = &mut row.add_state[point_idx];
+
+                            add_state.lambda = res[point_idx];
+                            add_state.collision_inverse = second_half[point_idx];
+
+                            trace_index += 1;
+                        }
+                        accumulator_index += 1;
+                        msm_row_index += 1;
+                    }
+                }
+            }
+        }
+
+        // populate the final row in the MSM execution trace.
+        // we always require 1 extra row at the end of the trace, because the accumulator x/y coordinates for row `i`
+        // are present at row `i+1`
+        let final_accumulator = accumulator_trace
+            .last()
+            .expect("Should have at least one accumulator");
+        let final_row = &mut msm_rows.last_mut().expect("Should have at least one row");
+        final_row.pc = *pc_values.last().expect("Should have at least one pc value") as usize;
+        final_row.msm_transition = true;
+        let (final_x, final_y, _) =
+            driver.other_pointshare_to_other_field_share(final_accumulator)?;
+        final_row.accumulator_x = final_x;
+        final_row.accumulator_y = final_y;
+        final_row.msm_size = 0;
+        final_row.msm_count = 0;
+        final_row.q_add = false;
+        final_row.q_double = false;
+        final_row.q_skew = false;
+        final_row.add_state = [
+            AddState {
+                add: false,
+                slice: T::OtherAcvmType::default(),
+                point: T::NativeAcvmPoint::<C>::default(),
+                lambda: T::OtherAcvmType::default(),
+                collision_inverse: T::OtherAcvmType::default(),
+            },
+            AddState {
+                add: false,
+                slice: T::OtherAcvmType::default(),
+                point: T::NativeAcvmPoint::<C>::default(),
+                lambda: T::OtherAcvmType::default(),
+                collision_inverse: T::OtherAcvmType::default(),
+            },
+            AddState {
+                add: false,
+                slice: T::OtherAcvmType::default(),
+                point: T::NativeAcvmPoint::<C>::default(),
+                lambda: T::OtherAcvmType::default(),
+                collision_inverse: T::OtherAcvmType::default(),
+            },
+            AddState {
+                add: false,
+                slice: T::OtherAcvmType::default(),
+                point: T::NativeAcvmPoint::<C>::default(),
+                lambda: T::OtherAcvmType::default(),
+                collision_inverse: T::OtherAcvmType::default(),
+            },
+        ];
+
+        let point_table_read_counts = [
+            point_table_read_counts[0..num_rows_in_read_counts_table].to_vec(),
+            point_table_read_counts
+                [num_rows_in_read_counts_table..num_rows_in_read_counts_table * 2]
+                .to_vec(),
+        ];
+        Ok((msm_rows, point_table_read_counts))
+    }
+}
+
+pub trait EndomorphismParams {
+    const ENDO_G1_LO: u64;
+    const ENDO_G1_MID: u64;
+    const ENDO_G1_HI: u64;
+    const ENDO_G2_LO: u64;
+    const ENDO_G2_MID: u64;
+    const ENDO_MINUS_B1_LO: u64;
+    const ENDO_MINUS_B1_MID: u64;
+    const ENDO_B2_LO: u64;
+    const ENDO_B2_MID: u64;
+}
+
+pub struct Bn254ParamsFr;
+pub struct Bn254ParamsFq;
+
+impl EndomorphismParams for Bn254ParamsFr {
+    const ENDO_G1_LO: u64 = 0x7a7bd9d4391eb18d;
+    const ENDO_G1_MID: u64 = 0x4ccef014a773d2cf;
+    const ENDO_G1_HI: u64 = 0x0000000000000002;
+    const ENDO_G2_LO: u64 = 0xd91d232ec7e0b3d7;
+    const ENDO_G2_MID: u64 = 0x0000000000000002;
+    const ENDO_MINUS_B1_LO: u64 = 0x8211bbeb7d4f1128;
+    const ENDO_MINUS_B1_MID: u64 = 0x6f4d8248eeb859fc;
+    const ENDO_B2_LO: u64 = 0x89d3256894d213e3;
+    const ENDO_B2_MID: u64 = 0x0000000000000000;
+}
+
+impl EndomorphismParams for Bn254ParamsFq {
+    const ENDO_G1_LO: u64 = 0x7a7bd9d4391eb18d;
+    const ENDO_G1_MID: u64 = 0x4ccef014a773d2cf;
+    const ENDO_G1_HI: u64 = 0x0000000000000002;
+    const ENDO_G2_LO: u64 = 0xd91d232ec7e0b3d2;
+    const ENDO_G2_MID: u64 = 0x0000000000000002;
+    const ENDO_MINUS_B1_LO: u64 = 0x8211bbeb7d4f1129;
+    const ENDO_MINUS_B1_MID: u64 = 0x6f4d8248eeb859fc;
+    const ENDO_B2_LO: u64 = 0x89d3256894d213e2;
+    const ENDO_B2_MID: u64 = 0x0000000000000000;
+}
+
 impl<
     T: NoirWitnessExtensionProtocol<C::ScalarField>,
     C: CurveGroup<BaseField: PrimeField, ScalarField = TranscriptFieldType>,
@@ -437,11 +1574,12 @@ impl<
      */
     pub fn add_accumulate(
         &mut self,
-        to_add: T::OtherAcvmPoint<C>,
+        to_add: T::NativeAcvmPoint<C>,
+        precomputed_point_limbs: Option<[T::AcvmType; 5]>,
         driver: &mut T,
     ) -> HonkProofResult<CoUltraOp<T, C>> {
         // Update the accumulator natively
-        self.accumulator = driver.add_points_other(self.accumulator.clone(), to_add.clone());
+        self.accumulator = driver.add_points_other(self.accumulator, to_add);
         let op_code = EccOpCode {
             add: true,
             ..Default::default()
@@ -450,56 +1588,19 @@ impl<
         // Store the eccvm operation
         self.append_eccvm_op(CoVMOperation {
             op_code: op_code.clone(),
-            base_point: to_add.clone(),
+            base_point: to_add,
             ..Default::default()
         });
 
         // Construct and store the operation in the ultra op format
-        self.construct_and_populate_ultra_ops(op_code, to_add, None, driver)
+        self.construct_and_populate_ultra_ops(
+            op_code,
+            to_add,
+            precomputed_point_limbs,
+            None,
+            driver,
+        )
     }
-
-    // /**
-    //  * @brief Write multiply and add op to queue and natively perform operation
-    //  *
-    //  * @param to_mul
-    //  */
-    // pub fn mul_accumulate<N: Network>(
-    //     &mut self,
-    //     to_mul: T::PointShare,
-    //     scalar: T::ArithmeticShare,
-    //     net: &N,
-    //     state: &mut T::State,
-    // ) -> CoUltraOp<T, C> {
-    //     // Update the accumulator natively
-    //     T::add_point_assign(
-    //         &mut self.accumulator,
-    //         T::mul_point_and_scalar(to_mul.clone(), scalar, net, state)
-    //             .expect("Error multiplying point and scalar"),
-    //     );
-    //     let op_code = EccOpCode {
-    //         mul: true,
-    //         ..Default::default()
-    //     };
-
-    //     // Construct and store the operation in the ultra op format
-    //     let ultra_op = self.construct_and_populate_ultra_ops(
-    //         op_code.clone(),
-    //         to_mul.clone(),
-    //         Some(scalar),
-    //         net,
-    //         state,
-    //     );
-
-    //     // Store the eccvm operation
-    //     self.append_eccvm_op(CoVMOperation {
-    //         op_code,
-    //         base_point: to_mul,
-    //         z1: ultra_op.z_1,
-    //         z2: ultra_op.z_2,
-    //         mul_scalar_full: scalar,
-    //     });
-    //     ultra_op
-    // }
 
     /**
      * @brief Write point addition op to queue and natively perform addition
@@ -508,19 +1609,25 @@ impl<
      */
     pub fn add_accumulate_no_store(
         &mut self,
-        to_add: T::OtherAcvmPoint<C>,
+        to_add: T::NativeAcvmPoint<C>,
+        precomputed_point_limbs: Option<[T::AcvmType; 5]>,
         driver: &mut T,
     ) -> HonkProofResult<(CoUltraOp<T, C>, CoVMOperation<T, C>)> {
         // Update the accumulator natively
-        self.accumulator = driver.add_points_other(self.accumulator.clone(), to_add.clone());
+        self.accumulator = driver.add_points_other(self.accumulator, to_add);
         let op_code = EccOpCode {
             add: true,
             ..Default::default()
         };
 
         // Construct and store the operation in the ultra op format
-        let ultra_op =
-            self.construct_and_populate_ultra_ops(op_code.clone(), to_add.clone(), None, driver)?;
+        let ultra_op = self.construct_and_populate_ultra_ops(
+            op_code.clone(),
+            to_add,
+            precomputed_point_limbs,
+            None,
+            driver,
+        )?;
 
         let eccvm_op = CoVMOperation {
             op_code,
@@ -533,13 +1640,14 @@ impl<
 
     pub fn mul_accumulate_no_store(
         &mut self,
-        to_mul: T::OtherAcvmPoint<C>,
+        to_mul: T::NativeAcvmPoint<C>,
+        precomputed_point_limbs: Option<[T::AcvmType; 5]>,
         scalar: T::AcvmType,
         driver: &mut T,
     ) -> HonkProofResult<(CoUltraOp<T, C>, CoVMOperation<T, C>)> {
         // Update the accumulator natively
-        let tmp = driver.scale_point_other(to_mul.clone(), scalar)?;
-        self.accumulator = driver.add_points_other(self.accumulator.clone(), tmp);
+        let tmp = driver.scale_native_point(to_mul, scalar)?;
+        self.accumulator = driver.add_points_other(self.accumulator, tmp);
 
         let op_code = EccOpCode {
             mul: true,
@@ -549,16 +1657,21 @@ impl<
         // Construct and store the operation in the ultra op format
         let ultra_op = self.construct_and_populate_ultra_ops(
             op_code.clone(),
-            to_mul.clone(),
+            to_mul,
+            precomputed_point_limbs,
             Some(scalar),
             driver,
         )?;
 
+        let [z1, z2] = driver
+            .acvm_type_to_other_acvm_type_many(&[ultra_op.z_1, ultra_op.z_2])?
+            .try_into()
+            .expect("Failed to convert z1, z2");
         let eccvm_op = CoVMOperation {
             op_code,
             base_point: to_mul,
-            z1: ultra_op.z_1,
-            z2: ultra_op.z_2,
+            z1,
+            z2,
             mul_scalar_full: scalar,
             ..Default::default()
         };
@@ -576,7 +1689,8 @@ impl<
     pub fn no_op_ultra_only(&mut self, driver: &mut T) -> HonkProofResult<CoUltraOp<T, C>> {
         self.construct_and_populate_ultra_ops(
             EccOpCode::default(),
-            self.accumulator.clone(),
+            self.accumulator,
+            None,
             None,
             driver,
         )
@@ -588,9 +1702,8 @@ impl<
      * @return current internal accumulator point (prior to reset to 0)
      */
     pub fn eq_and_reset(&mut self, driver: &mut T) -> HonkProofResult<CoUltraOp<T, C>> {
-        let expected = self.accumulator.clone();
-
-        self.accumulator = T::OtherAcvmPoint::default();
+        let expected = self.accumulator;
+        self.accumulator = T::NativeAcvmPoint::default();
         let op_code = EccOpCode {
             eq: true,
             reset: true,
@@ -600,12 +1713,12 @@ impl<
         // Store the eccvm operation
         self.append_eccvm_op(CoVMOperation {
             op_code: op_code.clone(),
-            base_point: expected.clone(),
+            base_point: expected,
             ..Default::default()
         });
 
         // Construct and store the operation in the ultra op format
-        self.construct_and_populate_ultra_ops(op_code, expected, None, driver)
+        self.construct_and_populate_ultra_ops(op_code, expected, None, None, driver)
     }
 
     /**
@@ -619,40 +1732,17 @@ impl<
     pub fn construct_and_populate_ultra_ops(
         &mut self,
         op_code: EccOpCode,
-        point: T::OtherAcvmPoint<C>,
+        point: T::NativeAcvmPoint<C>,
+        precomputed_point_limbs: Option<[T::AcvmType; 5]>,
         scalar: Option<T::AcvmType>,
         driver: &mut T,
     ) -> HonkProofResult<CoUltraOp<T, C>> {
-        let (x, y, is_point_at_infinity) = driver
-            .other_pointshare_to_other_field_shares(point)
-            .expect("Error converting point to field shares");
-
-        // Decompose point coordinates (Fq) into hi-lo chunks (Fr)
-        const CHUNK_SIZE: usize = 2 * NUM_LIMB_BITS_IN_FIELD_SIMULATION;
-        let [x_lo, x_hi] = driver
-            .other_field_shares_to_field_shares::<CHUNK_SIZE, _>(x)?
-            .try_into()
-            .unwrap();
-        let [y_lo, y_hi] = driver
-            .other_field_shares_to_field_shares::<CHUNK_SIZE, _>(y)?
-            .try_into()
-            .unwrap();
-        let [return_is_infinity, _] = driver
-            .other_field_shares_to_field_shares::<CHUNK_SIZE, _>(is_point_at_infinity)?
-            .try_into()
-            .unwrap();
-
-        let mut one_minus_return_is_infinity = return_is_infinity;
-        driver.negate_inplace(&mut one_minus_return_is_infinity);
-        driver.add_assign_with_public(C::ScalarField::ONE, &mut one_minus_return_is_infinity);
-
-        let [x_lo, x_hi, y_lo, y_hi] = driver
-            .mul_many(
-                &[x_lo, x_hi, y_lo, y_hi],
-                &std::iter::repeat_n(one_minus_return_is_infinity, 4).collect_vec(),
-            )?
-            .try_into()
-            .unwrap();
+        let [x_lo, x_hi, y_lo, y_hi, return_is_infinity] =
+            if let Some(limbs) = precomputed_point_limbs {
+                limbs
+            } else {
+                Self::compute_point_limbs(point, driver)?
+            };
 
         let (z_1, z_2) = Self::compute_zetas(scalar, driver)?;
 
@@ -671,6 +1761,45 @@ impl<
         Ok(co_ultra_op)
     }
 
+    fn compute_point_limbs(
+        point: T::NativeAcvmPoint<C>,
+        driver: &mut T,
+    ) -> HonkProofResult<[T::AcvmType; 5]> {
+        let (x, y, is_point_at_infinity) = driver
+            .native_point_to_other_acvm_types(point)
+            .expect("Error converting point to field shares");
+
+        // Decompose point coordinates (Fq) into hi-lo chunks (Fr)
+        // TACEO TODO: Batch these conversions into one `other_field_shares_to_field_shares_many`
+        const CHUNK_SIZE: usize = 2 * NUM_LIMB_BITS_IN_FIELD_SIMULATION;
+        let [x_lo, x_hi] = driver
+            .other_field_shares_to_field_shares::<CHUNK_SIZE, _>(x)?
+            .try_into()
+            .expect("Failed to convert x_lo, x_hi");
+        let [y_lo, y_hi] = driver
+            .other_field_shares_to_field_shares::<CHUNK_SIZE, _>(y)?
+            .try_into()
+            .expect("Failed to convert y_lo, y_hi");
+        let [is_infinity, _] = driver
+            .other_field_shares_to_field_shares::<CHUNK_SIZE, _>(is_point_at_infinity)?
+            .try_into()
+            .expect("Failed to convert is_point_at_infinity");
+
+        let mut one_minus_is_infinity = is_infinity;
+        driver.negate_inplace(&mut one_minus_is_infinity);
+        driver.add_assign_with_public(C::ScalarField::ONE, &mut one_minus_is_infinity);
+
+        let [x_lo, x_hi, y_lo, y_hi] = driver
+            .mul_many(
+                &[x_lo, x_hi, y_lo, y_hi],
+                &std::iter::repeat_n(one_minus_is_infinity, 4).collect_vec(),
+            )?
+            .try_into()
+            .expect("Failed to convert x_lo, x_hi, y_lo, y_hi");
+
+        Ok([x_lo, x_hi, y_lo, y_hi, is_infinity])
+    }
+
     fn compute_zetas(
         scalar: Option<T::AcvmType>,
         driver: &mut T,
@@ -687,7 +1816,7 @@ impl<
         )?;
 
         let rhs = C::ScalarField::from(2).pow([128]);
-        let cond = driver.le(converted, rhs.into()).unwrap();
+        let cond = driver.le(converted, rhs.into())?;
 
         let (mont_k1, mont_k2) = (
             Self::to_montgomery_form(k_1, driver),
@@ -696,7 +1825,7 @@ impl<
         let [k1, k2] = driver
             .cmux_many(cond, &[scalar, T::AcvmType::default()], &[mont_k1, mont_k2])?
             .try_into()
-            .unwrap();
+            .expect("Failed to convert k1, k2");
         Ok((k1, k2))
     }
 
@@ -761,7 +1890,7 @@ impl<
 
         let t1 = driver.sub(q2, q1);
 
-        let beta = C::ScalarField::get_root_of_unity(3).unwrap();
+        let beta = C::ScalarField::get_root_of_unity(3).expect("No cube root of unity");
 
         let tmp = driver.mul_with_public(beta, t1);
         let t2 = driver.add(tmp, scalar);
@@ -772,16 +1901,20 @@ impl<
         let mut res = T::AcvmType::default();
         for (i, chunk) in x.into_iter().enumerate() {
             let shift = C::ScalarField::from_bigint(
-                BigInt::from(1u64).shl((i * u64::BITS as usize).try_into().unwrap()),
+                BigInt::from(1u64).shl(
+                    (i * u64::BITS as usize)
+                        .try_into()
+                        .expect("Failed to compute shift"),
+                ),
             )
-            .unwrap();
+            .expect("Failed to parse bigint");
             let tmp = driver.mul_with_public(shift, chunk);
             res = driver.add(res, tmp);
         }
         res
     }
 
-    // TODO TACEO: Optimize this function to avoid decomposing so much
+    // TACEO TODO: Optimize this function to avoid decomposing so much
     fn mul(x: [T::AcvmType; 4], y: BigInt<4>, driver: &mut T) -> HonkProofResult<[T::AcvmType; 8]> {
         let mut res = [T::AcvmType::default(); 8];
         let mut prev_column_carry = Vec::new();
@@ -890,7 +2023,12 @@ impl<
 
     fn from_montgomery_form(x: T::AcvmType, driver: &mut T) -> T::AcvmType {
         let mont_r: C::ScalarField = C::ScalarField::MODULUS.montgomery_r().into();
-        driver.mul_with_public(mont_r.inverse().unwrap(), x)
+        driver.mul_with_public(
+            mont_r
+                .inverse()
+                .expect("Montgomery R should have an inverse"),
+            x,
+        )
     }
 
     fn to_montgomery_form(x: T::AcvmType, driver: &mut T) -> T::AcvmType {
@@ -903,6 +2041,8 @@ impl<
 mod test {
     use std::thread;
 
+    use crate::eccvm::co_ecc_op_queue::Bn254ParamsFr;
+    use crate::eccvm::{co_ecc_op_queue::CoECCOpQueue, ecc_op_queue::EccOpCode};
     use ark_bn254::{Bn254, Fr, G1Affine, G1Projective};
     use ark_ec::pairing::Pairing;
     use co_acvm::{Rep3AcvmPoint, Rep3AcvmSolver, Rep3AcvmType, mpc::NoirWitnessExtensionProtocol};
@@ -913,9 +2053,6 @@ mod test {
     };
     use mpc_net::local::LocalNetwork;
     use rand::thread_rng;
-
-    use crate::eccvm::ecc_op_queue::Bn254ParamsFr;
-    use crate::eccvm::{co_ecc_op_queue::CoECCOpQueue, ecc_op_queue::EccOpCode};
 
     type P = Bn254;
     type Bn254G1 = ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>;
@@ -994,6 +2131,7 @@ mod test {
                     .construct_and_populate_ultra_ops(
                         EccOpCode::default(),
                         Rep3AcvmPoint::Shared(point_share),
+                        None,
                         Some(scalar_share.into()),
                         &mut driver,
                     )

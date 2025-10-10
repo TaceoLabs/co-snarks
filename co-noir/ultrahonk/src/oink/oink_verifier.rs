@@ -8,8 +8,8 @@ use co_builder::prelude::VerifyingKey;
 use co_builder::{
     polynomials::polynomial_flavours::WitnessEntitiesFlavour, prover_flavour::Flavour,
 };
-use common::transcript::{Transcript, TranscriptHasher};
-use common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType};
+use co_noir_common::transcript::{Transcript, TranscriptHasher};
+use co_noir_common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType};
 
 pub(crate) struct OinkVerifier<
     P: HonkCurve<TranscriptFieldType>,

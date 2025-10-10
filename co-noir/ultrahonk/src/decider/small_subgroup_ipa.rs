@@ -1,9 +1,9 @@
 use crate::CONST_PROOF_SIZE_LOG_N;
 use crate::Utils;
 use crate::plain_prover_flavour::UnivariateTrait;
-use common::polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK;
-use common::polynomials::polynomial::NUM_TRANSLATION_EVALUATIONS;
-use common::transcript::{Transcript, TranscriptHasher};
+use co_noir_common::polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK;
+use co_noir_common::polynomials::polynomial::NUM_TRANSLATION_EVALUATIONS;
+use co_noir_common::transcript::{Transcript, TranscriptHasher};
 
 use crate::prelude::Univariate;
 
@@ -11,7 +11,7 @@ use ark_ec::CurveGroup;
 use ark_ff::One;
 use ark_ff::Zero;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
-use common::{
+use co_noir_common::{
     crs::ProverCrs,
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
@@ -69,7 +69,6 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
             grand_sum_lagrange_coeffs: vec![P::ScalarField::zero(); Self::SUBGROUP_SIZE],
             grand_sum_identity_polynomial: Polynomial::new_zero(Self::GRAND_SUM_IDENTITY_LENGTH),
             grand_sum_identity_quotient: Polynomial::new_zero(Self::QUOTIENT_LENGTH),
-            // TACEO TODO the ZKSumcheckData also creates the same domain
             claimed_inner_product,
             prefix_label,
         };

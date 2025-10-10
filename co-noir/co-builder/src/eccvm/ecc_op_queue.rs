@@ -7,13 +7,14 @@ use crate::prelude::offset_generator;
 use ark_ec::AffineRepr;
 use ark_ec::CurveGroup;
 use ark_ff::AdditiveGroup;
+use ark_ff::BigInt;
 use ark_ff::BigInteger;
 use ark_ff::FftField;
 use ark_ff::Field;
+use ark_ff::One;
 use ark_ff::PrimeField;
 use ark_ff::Zero;
-use ark_ff::{BigInt, One};
-use common::{
+use co_noir_common::{
     honk_curve::HonkCurve, honk_proof::TranscriptFieldType, polynomials::polynomial::Polynomial,
     utils::Utils,
 };
@@ -179,9 +180,6 @@ impl<C: HonkCurve<TranscriptFieldType>> MSMRow<C> {
         // In what follows, either p1 + p2 = p3, or p1.dbl() = p3
         // We create 1 vector to store the entire point trace. We split into multiple containers using std::span
         // (we want 1 vector object to more efficiently batch normalize points)
-        const NUM_POINTS_IN_ADDITION_RELATION: usize = 3;
-        let num_points_to_normalize =
-            (num_point_adds_and_doubles * NUM_POINTS_IN_ADDITION_RELATION) + num_accumulators;
         let mut p1_trace = vec![C::Affine::zero(); num_point_adds_and_doubles];
         let mut p2_trace = vec![C::Affine::zero(); num_point_adds_and_doubles];
         let mut p3_trace = vec![C::Affine::zero(); num_point_adds_and_doubles];
@@ -286,7 +284,6 @@ impl<C: HonkCurve<TranscriptFieldType>> MSMRow<C> {
                         add_state.slice = 0;
                         add_state.point = C::Affine::default();
                         add_state.collision_inverse = C::BaseField::zero();
-
                         p1_trace[trace_index] = accumulator;
                         p2_trace[trace_index] = accumulator;
                         accumulator = (accumulator + accumulator).into();
@@ -356,21 +353,6 @@ impl<C: HonkCurve<TranscriptFieldType>> MSMRow<C> {
                 }
             }
         }
-
-        // Normalize the points in the point trace
-        let mut points_to_normalize = Vec::with_capacity(num_points_to_normalize);
-        points_to_normalize.extend_from_slice(&p1_trace);
-        points_to_normalize.extend_from_slice(&p2_trace);
-        points_to_normalize.extend_from_slice(&p3_trace);
-        points_to_normalize.extend_from_slice(&accumulator_trace);
-
-        points_to_normalize = Utils::batch_normalize::<C>(&points_to_normalize);
-
-        let p1_trace = &points_to_normalize[0..num_point_adds_and_doubles];
-        let p2_trace =
-            &points_to_normalize[num_point_adds_and_doubles..num_point_adds_and_doubles * 2];
-        let accumulator_trace =
-            &points_to_normalize[num_point_adds_and_doubles * 3..num_points_to_normalize];
 
         // inverse_trace is used to compute the value of the `collision_inverse` column in the ECCVM.
         let mut inverse_trace = Vec::with_capacity(num_point_adds_and_doubles);
@@ -1012,6 +994,7 @@ impl<P: HonkCurve<TranscriptFieldType>> ECCOpQueue<P> {
         let compute_wnaf_digits = |mut scalar: BigUint| -> [i32; NUM_WNAF_DIGITS_PER_SCALAR] {
             let mut output = [0; NUM_WNAF_DIGITS_PER_SCALAR];
             let mut previous_slice = 0;
+            const BORROW_CONSTANT: i32 = 1 << NUM_WNAF_DIGIT_BITS;
 
             for i in 0..NUM_WNAF_DIGITS_PER_SCALAR {
                 let raw_slice = &scalar & BigUint::from(WNAF_MASK);
@@ -1025,7 +1008,6 @@ impl<P: HonkCurve<TranscriptFieldType>> ECCOpQueue<P> {
                 if i == 0 && is_even {
                     wnaf_slice += 1;
                 } else if is_even {
-                    const BORROW_CONSTANT: i32 = 1 << NUM_WNAF_DIGIT_BITS;
                     previous_slice -= BORROW_CONSTANT;
                     wnaf_slice += 1;
                 }

@@ -8,7 +8,7 @@ use co_builder::{
     prelude::{ActiveRegionData, Polynomials, PublicComponentKey},
     prover_flavour::ProverFlavour,
 };
-use common::{
+use co_noir_common::{
     crs::{ProverCrs, parse::CrsParser},
     honk_proof::TranscriptFieldType,
     polynomials::polynomial::Polynomial,
@@ -41,11 +41,11 @@ use crate::{
 const EXTENDED_LENGTH: usize = (MAX_TOTAL_RELATION_LENGTH - 1) * (NUM_KEYS - 1) + 1;
 const CRS_PATH_G1: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../common/src/crs/bn254_g1.dat"
+    "/../co-noir-common/src/crs/bn254_g1.dat"
 );
 const CRS_PATH_G2: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../common/src/crs/bn254_g2.dat"
+    "/../co-noir-common/src/crs/bn254_g2.dat"
 );
 type F = TranscriptFieldType;
 type C = ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>;

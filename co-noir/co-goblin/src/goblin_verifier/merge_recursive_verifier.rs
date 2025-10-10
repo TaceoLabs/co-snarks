@@ -7,7 +7,7 @@ use co_builder::{
     transcript::{TranscriptCT, TranscriptHasherCT},
     types::{field_ct::FieldCT, goblin_types::GoblinElement},
 };
-use common::{
+use co_noir_common::{
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
 };
@@ -31,7 +31,7 @@ impl MergeRecursiveVerifier {
      * length of the subtable columns t_j. This protocol demonstrates, assuming the length of t is at most k, that the
      * aggregate ecc op table has been constructed correctly via the simple Schwartz-Zippel check:
      *
-     *      T_j(\kappa) = t_j(\kappa) + \kappa^k * (T_{j,prev}(\kappa)).
+     * T_j(\kappa) = t_j(\kappa) + \kappa^k * (T_{j,prev}(\kappa)).
      *
      * @tparam CircuitBuilder
      * @param proof
@@ -57,6 +57,7 @@ impl MergeRecursiveVerifier {
         let mut T_prev_commitments = Vec::with_capacity(NUM_WIRES);
         let mut T_commitments = Vec::with_capacity(NUM_WIRES);
 
+        // TACEO TODO: batch `is_zero` calls on `receive_point_from_prover`
         for idx in 0..NUM_WIRES {
             let suffix = idx.to_string();
             t_commitments.push(transcript.receive_point_from_prover(
@@ -110,11 +111,11 @@ impl MergeRecursiveVerifier {
         }
 
         // Check the identity T_j(kappa) = t_j(kappa) + kappa^m * T_{j,prev}(kappa)
-        let kappa_pow = kappa.pow(&subtable_size, builder, driver);
+        let kappa_pow = kappa.pow(&subtable_size, builder, driver)?;
         for idx in 0..NUM_WIRES {
-            let T_prev_shifted_eval_reconstructed = T_prev_evals[idx]
-                .multiply(&kappa_pow, builder, driver)
-                .unwrap();
+            // TACEO TODO: batch these multiplications
+            let T_prev_shifted_eval_reconstructed =
+                T_prev_evals[idx].multiply(&kappa_pow, builder, driver)?;
             let rhs = t_evals[idx].add(&T_prev_shifted_eval_reconstructed, builder, driver);
             T_evals[idx].assert_equal(&rhs, builder, driver);
         }
@@ -131,11 +132,9 @@ impl MergeRecursiveVerifier {
         for claim in opening_claims.iter().skip(1) {
             scalars.push(alpha_pow.clone());
             commitments.push(claim.commitment.clone());
-            let tmp = alpha_pow
-                .multiply(&claim.opening_pair.1, builder, driver)
-                .unwrap();
+            let tmp = alpha_pow.multiply(&claim.opening_pair.1, builder, driver)?;
             batched_eval = batched_eval.add(&tmp, builder, driver);
-            alpha_pow = alpha_pow.multiply(&alpha, builder, driver).unwrap();
+            alpha_pow = alpha_pow.multiply(&alpha, builder, driver)?;
         }
 
         let batched_commitment = GoblinElement::batch_mul(&commitments, &scalars, builder, driver)?;

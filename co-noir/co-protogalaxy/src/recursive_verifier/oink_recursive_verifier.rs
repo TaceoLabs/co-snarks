@@ -8,11 +8,11 @@ use co_builder::{
     transcript::{TranscriptCT, TranscriptHasherCT},
     types::{field_ct::FieldCT, goblin_types::GoblinElement},
 };
-use co_ultrahonk::{co_decider::types::RelationParameters, prelude::MPCProverFlavour};
-use common::{
+use co_noir_common::{
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
 };
+use co_ultrahonk::{co_decider::types::RelationParameters, prelude::MPCProverFlavour};
 
 use crate::recursive_verifier::{
     WitnessCommitments, recursive_decider_verification_key::RecursiveDeciderVerificationKey,
@@ -204,7 +204,7 @@ impl OinkRecursiveVerifier {
             eta_2,
             eta_3,
             public_input_delta,
-            lookup_grand_product_delta: Default::default(),
+            ..Default::default()
         };
         verification_key.witness_commitments = commitments;
         verification_key.public_inputs = public_inputs;

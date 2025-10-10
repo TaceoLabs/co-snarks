@@ -8,10 +8,10 @@ use crate::plain_prover_flavour::PlainProverFlavour;
 
 use super::types::ClaimedEvaluations;
 use ark_ff::PrimeField;
-use common::polynomials::polynomial::Polynomial;
+use co_noir_common::polynomials::polynomial::Polynomial;
 
 pub struct SumcheckOutput<F: PrimeField, L: PlainProverFlavour> {
-    pub(crate) _claimed_evaluations: ClaimedEvaluations<F, L>,
+    pub(crate) _claimed_evaluations: ClaimedEvaluations<F, L>, // TACEO TODO: Is this ever needed?
     pub challenges: Vec<F>,
     pub claimed_libra_evaluation: Option<F>,
     pub round_univariates: Option<Vec<Polynomial<F>>>,

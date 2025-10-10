@@ -15,7 +15,7 @@ use super::{
 use ark_ff::{PrimeField, Zero};
 use circuits::{GarbledCircuits, SHA256Table};
 use fancy_garbling::{BinaryBundle, WireLabel, WireMod2, hash_wires, util::tweak2};
-use itertools::{Itertools, izip};
+use itertools::Itertools;
 use mpc_net::Network;
 use num_bigint::BigUint;
 use rand::{CryptoRng, Rng};
@@ -1469,5 +1469,24 @@ pub fn accumulate_from_sparse_bytes<F: PrimeField, N: Network>(
         total_output_elements,
         GarbledCircuits::accumulate_from_sparse_bytes::<_, F>,
         (input_bitsize, output_bitsize, base)
+    )
+}
+
+/// Computes wnaf digits and rows needed in the ECCVM builder.
+pub fn compute_wnaf_digits_and_compute_rows_many<F: PrimeField, N: Network>(
+    input: &[Rep3PrimeFieldShare<F>],
+    net: &N,
+    state: &mut Rep3State,
+    input_bitsize: usize,
+) -> eyre::Result<Vec<Rep3PrimeFieldShare<F>>> {
+    let total_output_elements = input.len() * (32 + 32 + 1 + 8 * 8 + 8 + 8);
+
+    decompose_circuit_compose_blueprint!(
+        &input,
+        net,
+        state,
+        total_output_elements,
+        GarbledCircuits::compute_wnaf_digits_many::<_, F>,
+        (input_bitsize)
     )
 }

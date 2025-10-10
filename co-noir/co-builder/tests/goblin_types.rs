@@ -14,7 +14,7 @@ use co_builder::{
         goblin_types::{GoblinElement, GoblinField},
     },
 };
-use common::honk_curve::bn254_fq_to_fr;
+use co_noir_common::honk_curve::bn254_fq_to_fr;
 
 type Bn254G1 = <Bn254 as Pairing>::G1;
 type G1Affine = <Bn254 as Pairing>::G1Affine;
@@ -27,7 +27,7 @@ fn test_negate_goblin_element() {
     let mut rng = rand::thread_rng();
     let element = G1Affine::rand(&mut rng);
 
-    let (x, y): (Fq, Fq) = element.xy().expect("Point is should not be at infinity");
+    let (x, y): (Fq, Fq) = element.xy().expect("Point should not be at infinity");
     let ((x0, x1), (y0, y1)) = (bn254_fq_to_fr(&x), bn254_fq_to_fr(&y));
 
     let (x, y, expected_is_infinity) =

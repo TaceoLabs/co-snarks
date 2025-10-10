@@ -5,13 +5,13 @@ use clap::{Parser, ValueEnum};
 use co_acvm::{PlainAcvmSolver, solver::PlainCoSolver};
 use co_builder::flavours::ultra_flavour::UltraFlavour;
 use co_noir::{Bn254G1, HonkRecursion};
+use co_noir_common::{crs::parse::CrsParser, types::ZeroKnowledge};
+use co_noir_common::{mpc::plain::PlainUltraHonkDriver, transcript::Poseidon2Sponge};
 use co_ultrahonk::{
     PlainCoBuilder,
     prelude::{CoUltraHonk, ProvingKey, UltraHonk, VerifyingKey},
 };
 use color_eyre::eyre::Context;
-use common::{crs::parse::CrsParser, types::ZeroKnowledge};
-use common::{mpc::plain::PlainUltraHonkDriver, transcript::Poseidon2Sponge};
 use figment::{
     Figment,
     providers::{Env, Format, Serialized, Toml},

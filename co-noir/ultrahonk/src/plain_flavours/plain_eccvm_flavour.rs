@@ -27,10 +27,10 @@ use crate::prelude::Univariate;
 use ark_ff::PrimeField;
 use co_builder::flavours::eccvm_flavour::ECCVMFlavour;
 use co_builder::prover_flavour::ProverFlavour;
-use common::honk_curve::HonkCurve;
-use common::honk_proof::HonkProofResult;
-use common::honk_proof::TranscriptFieldType;
-use common::transcript::{Transcript, TranscriptHasher};
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::HonkProofResult;
+use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::transcript::{Transcript, TranscriptHasher};
 #[derive(Default)]
 pub struct AllRelationAccECCVM<F: PrimeField> {
     pub(crate) r_ecc_transcript: EccTranscriptRelationAcc<F>,

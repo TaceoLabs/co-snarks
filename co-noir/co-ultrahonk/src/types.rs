@@ -8,8 +8,8 @@ use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::prover_flavour::Flavour;
 use co_builder::prover_flavour::ProverFlavour;
-use common::mpc::NoirUltraHonkProver;
-use common::polynomials::polynomial::Polynomial;
+use co_noir_common::mpc::NoirUltraHonkProver;
+use co_noir_common::polynomials::polynomial::Polynomial;
 use serde::de::{SeqAccess, Visitor};
 use serde::ser::SerializeSeq;
 use serde::{Deserialize, Serialize};
@@ -53,7 +53,7 @@ where
     Polynomial<Shared>: Serialize + for<'a> Deserialize<'a>,
     Polynomial<Public>: Serialize + for<'a> Deserialize<'a>,
 {
-    pub(crate) fn new(circuit_size: usize) -> Self {
+    pub fn new(circuit_size: usize) -> Self {
         let mut polynomials = Self::default();
 
         // Shifting is done at a later point
