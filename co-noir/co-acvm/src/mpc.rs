@@ -897,6 +897,18 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         Self::OtherAcvmType<C>,
     )>;
 
+    #[expect(clippy::type_complexity)]
+    fn native_point_to_acvm_types<const LIMB_BITS: usize, C: HonkCurve<F, ScalarField = F>>(
+        &mut self,
+        point: Self::NativeAcvmPoint<C>,
+    ) -> eyre::Result<(
+        Self::AcvmType,
+        Self::AcvmType,
+        Self::AcvmType,
+        Self::AcvmType,
+        Self::AcvmType,
+    )>;
+
     // TACEO TODO: Currently only supports LIMB_BITS = 136, i.e. two Bn254::Fr elements per Bn254::Fq element
     /// Converts a base field share into a vector of field shares, where the field shares
     /// represent the limbs of the base field element. Each limb has at most LIMB_BITS bits.

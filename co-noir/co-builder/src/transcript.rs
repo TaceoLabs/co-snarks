@@ -118,7 +118,7 @@ where
         &self.manifest
     }
 
-    fn add_element_frs_to_hash_buffer(
+    pub fn add_element_frs_to_hash_buffer(
         &mut self,
         label: String,
         elements: &[FieldCT<P::ScalarField>],
@@ -130,7 +130,7 @@ where
         self.num_frs_written += len;
     }
 
-    fn add_point_to_hash_buffer<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
+    pub fn add_point_to_hash_buffer<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
         &mut self,
         label: String,
         point: &GoblinElement<P, WT>,
@@ -145,7 +145,7 @@ where
         self.add_element_frs_to_hash_buffer(label, &elements);
     }
 
-    fn receive_n_from_prover(
+    pub fn receive_n_from_prover(
         &mut self,
         label: String,
         n: usize,
@@ -278,7 +278,7 @@ where
     pub fn get_challenges<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
         &mut self,
         labels: &[String],
-        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        builder: &mut impl GenericBuilder<P, WT>,
         driver: &mut WT,
     ) -> eyre::Result<Vec<FieldCT<P::ScalarField>>> {
         let num_challenges = labels.len();

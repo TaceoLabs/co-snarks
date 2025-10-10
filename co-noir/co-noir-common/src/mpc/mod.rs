@@ -24,6 +24,16 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized + std::fmt::Debug {
         + PartialEq
         + std::fmt::Debug
         + 'static;
+    type BaseFieldArithmeticShare: CanonicalSerialize
+        + CanonicalDeserialize
+        + Copy
+        + Clone
+        + Default
+        + Send
+        + Sync
+        + PartialEq
+        + std::fmt::Debug
+        + 'static;
     /// The G1 point share type
     type PointShare: std::fmt::Debug + Send + Default + 'static + Clone + Default + Copy;
     /// Internal state of used MPC protocol

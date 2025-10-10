@@ -20,7 +20,7 @@ pub type MegaProverWitnessEntities<T> =
     ProverWitnessEntities<T, { MegaFlavour::PROVER_WITNESS_ENTITIES_SIZE }>;
 type MegaShiftedWitnessEntities<T> =
     ShiftedWitnessEntities<T, { MegaFlavour::SHIFTED_WITNESS_ENTITIES_SIZE }>;
-type MegaWitnessEntities<T> = WitnessEntities<T, { MegaFlavour::WITNESS_ENTITIES_SIZE }>;
+pub type MegaWitnessEntities<T> = WitnessEntities<T, { MegaFlavour::WITNESS_ENTITIES_SIZE }>;
 
 #[derive(Default)]
 pub struct MegaFlavour {}

@@ -16,6 +16,7 @@ pub struct PlainUltraHonkDriver;
 
 impl<P: CurveGroup> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
     type ArithmeticShare = P::ScalarField;
+    type BaseFieldArithmeticShare = P::BaseField;
     type PointShare = P;
     type State = ();
 

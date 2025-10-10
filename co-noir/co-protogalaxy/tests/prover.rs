@@ -32,22 +32,14 @@ use mpc_net::local::LocalNetwork;
 use rand::thread_rng;
 use serde::de::DeserializeOwned;
 
+use co_protogalaxy::{
+    BATCHED_EXTENDED_LENGTH, CONST_PG_LOG_N, CoProtogalaxyProver, DeciderProverMemory,
+    MAX_TOTAL_RELATION_LENGTH, NUM_KEYS, compute_and_extend_alphas, compute_combiner,
+    compute_combiner_quotient, compute_extended_relation_parameters, compute_perturbator,
+    compute_row_evaluations, construct_perturbator_coefficients,
+};
 use ultrahonk::prelude::{
     GateSeparatorPolynomial, HonkProof, Poseidon2Sponge, Transcript, Univariate,
-};
-
-use crate::{
-    co_protogalaxy_prover::{BATCHED_EXTENDED_LENGTH, MAX_TOTAL_RELATION_LENGTH, NUM_KEYS},
-    co_protogalaxy_prover_internal::{
-        compute_and_extend_alphas, compute_extended_relation_parameters,
-    },
-};
-use crate::{
-    co_protogalaxy_prover::{CONST_PG_LOG_N, CoProtogalaxyProver, DeciderProverMemory},
-    co_protogalaxy_prover_internal::{
-        compute_combiner, compute_combiner_quotient, compute_perturbator, compute_row_evaluations,
-        construct_perturbator_coefficients,
-    },
 };
 
 const EXTENDED_LENGTH: usize = (MAX_TOTAL_RELATION_LENGTH - 1) * (NUM_KEYS - 1) + 1;

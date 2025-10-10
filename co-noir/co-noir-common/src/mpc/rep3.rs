@@ -10,12 +10,14 @@ use mpc_core::{
     },
 };
 use mpc_net::Network;
+
 use rayon::prelude::*;
 #[derive(Debug)]
 pub struct Rep3UltraHonkDriver;
 
 impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
     type ArithmeticShare = Rep3PrimeFieldShare<P::ScalarField>;
+    type BaseFieldArithmeticShare = Rep3PrimeFieldShare<P::BaseField>;
     type PointShare = Rep3PointShare<P>;
     type State = Rep3State;
 

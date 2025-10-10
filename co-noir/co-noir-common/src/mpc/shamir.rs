@@ -19,6 +19,7 @@ pub struct ShamirUltraHonkDriver;
 
 impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
     type ArithmeticShare = ShamirPrimeFieldShare<P::ScalarField>;
+    type BaseFieldArithmeticShare = ShamirPrimeFieldShare<P::BaseField>;
     type PointShare = ShamirPointShare<P>;
     type State = ShamirState<P::ScalarField>;
 

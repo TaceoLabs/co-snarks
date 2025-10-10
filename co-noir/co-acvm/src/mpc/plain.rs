@@ -5,6 +5,7 @@ use ark_ff::Zero;
 use ark_ff::{BigInteger, MontConfig, One, PrimeField};
 use blake2::{Blake2s256, Digest};
 use co_brillig::mpc::{PlainBrilligDriver, PlainBrilligType};
+use co_noir_common::honk_curve::HonkCurve;
 use core::panic;
 use itertools::Itertools;
 use libaes::Cipher;
@@ -1523,6 +1524,34 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         let low = as_bigint.clone() & ((BigUint::from(1u8) << LIMB_BITS) - BigUint::from(1u8));
         let high = as_bigint >> LIMB_BITS;
         Ok(vec![C::ScalarField::from(low), C::ScalarField::from(high)])
+    }
+
+    fn native_point_to_acvm_types<const LIMB_BITS: usize, C: HonkCurve<F, ScalarField = F>>(
+        &mut self,
+        point: Self::NativeAcvmPoint<C>,
+    ) -> eyre::Result<(
+        Self::AcvmType,
+        Self::AcvmType,
+        Self::AcvmType,
+        Self::AcvmType,
+        Self::AcvmType,
+    )> {
+        assert_eq!(
+            LIMB_BITS, 136,
+            "Only LIMB_BITS = 136 is supported, i.e. two Bn254::Fr elements per Bn254::Fq element"
+        );
+
+        let (x, y, _) = self.native_point_to_other_acvm_types(point)?;
+
+        let x_limbs = self.other_field_shares_to_field_shares::<LIMB_BITS, C>(x)?;
+        let y_limbs = self.other_field_shares_to_field_shares::<LIMB_BITS, C>(y)?;
+        Ok((
+            x_limbs[0],
+            x_limbs[1],
+            y_limbs[0],
+            y_limbs[1],
+            if point.is_zero() { F::one() } else { F::zero() },
+        ))
     }
 
     // Similar to decompose_arithmetic, but works on the full AcvmType, which can either be public or shared

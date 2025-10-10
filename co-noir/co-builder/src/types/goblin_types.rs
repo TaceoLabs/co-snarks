@@ -2,13 +2,16 @@ use crate::eccvm::co_ecc_op_queue::precompute_flags;
 use crate::mega_builder::MegaCircuitBuilder;
 use crate::types::field_ct::BoolCT;
 use crate::types::field_ct::FieldCT;
+use crate::types::field_ct::WitnessCT;
 use ark_ec::CurveGroup;
 use ark_ff::FftField;
 use ark_ff::Field;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::HonkProofResult;
 use co_noir_common::honk_proof::TranscriptFieldType;
+use std::fmt::Debug;
 const LIMB_BITS: usize = 136; // Each GoblinField element is represented as 2 field elements of 136 bits each
 
 pub struct GoblinElement<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
@@ -37,6 +40,26 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> Clone for G
     }
 }
 
+impl<
+    P: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
+    T: NoirWitnessExtensionProtocol<TranscriptFieldType>,
+> Debug for GoblinElement<P, T>
+{
+    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        panic!("no debug implementation for goblin elements");
+    }
+}
+
+impl<
+    P: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
+    T: NoirWitnessExtensionProtocol<TranscriptFieldType>,
+> Default for GoblinElement<P, T>
+{
+    fn default() -> Self {
+        panic!("no default implementation for goblin elements");
+    }
+}
+
 impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> GoblinElement<P, T> {
     pub fn set_point_at_infinity(&mut self, is_infinity: BoolCT<P, T>) {
         self.is_infinity = is_infinity;
@@ -53,7 +76,6 @@ impl<F: PrimeField> GoblinField<F> {
         Self { limbs }
     }
 }
-
 impl GoblinField<TranscriptFieldType> {
     pub fn get_value<
         P: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
@@ -85,6 +107,31 @@ impl<
         driver
             .acvm_types_to_native_point::<LIMB_BITS, _>(x0, x1, y0, y1, is_infinity)
             .expect("Failed to convert field shares to native point share")
+    }
+
+    pub fn from_witness(
+        point: T::NativeAcvmPoint<P>,
+        builder: &mut MegaCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> HonkProofResult<Self> {
+        let (x0, x1, y0, y1, is_infinity) =
+            driver.native_point_to_acvm_types::<LIMB_BITS, _>(point)?;
+        let x_lo = FieldCT::from_witness(x0, builder);
+        let x_hi = FieldCT::from_witness(x1, builder);
+        let y_lo = FieldCT::from_witness(y0, builder);
+        let y_hi = FieldCT::from_witness(y1, builder);
+        Ok(Self {
+            x: GoblinField {
+                limbs: [x_lo, x_hi],
+            },
+            y: GoblinField {
+                limbs: [y_lo, y_hi],
+            },
+            is_infinity: BoolCT::from_witness_ct(
+                WitnessCT::from_acvm_type(is_infinity, builder),
+                builder,
+            ),
+        })
     }
 
     pub fn point_at_infinity(builder: &mut MegaCircuitBuilder<P, T>) -> Self {
