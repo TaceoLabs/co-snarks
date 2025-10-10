@@ -8,8 +8,10 @@ use crate::types::goblin_types::GoblinField;
 use crate::types::poseidon2::FieldHashCT;
 use crate::types::poseidon2::Poseidon2CT;
 use crate::{prelude::GenericUltraCircuitBuilder, types::poseidon2::FieldSpongeCT};
+use ark_bn254::Bn254;
 use ark_ec::AffineRepr;
 use ark_ec::CurveGroup;
+use ark_ec::pairing::Pairing;
 use ark_ff::Zero;
 use ark_poly::domain::general::GeneralElements;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
@@ -18,9 +20,9 @@ use co_noir_common::honk_proof::HonkProofError;
 use co_noir_common::honk_proof::HonkProofResult;
 use std::{collections::BTreeMap, ops::Index};
 
+pub type Bn254G1 = <Bn254 as Pairing>::G1;
 pub type TranscriptFieldType = ark_bn254::Fr;
-pub(crate) type Poseidon2Sponge =
-    FieldSpongeCT<TranscriptFieldType, 4, 3, Poseidon2CT<TranscriptFieldType, 4, 5>>;
+pub type Poseidon2Sponge = FieldSpongeCT<Bn254G1, 4, 3, Poseidon2CT<TranscriptFieldType, 4, 5>>;
 
 pub trait TranscriptHasherCT<P: CurveGroup> {
     fn hash<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(

@@ -1594,4 +1594,26 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
     ) -> eyre::Result<Vec<Self::OtherAcvmType<C>>> {
         panic!("functionality acvm_type_to_other_acvm_type_many not feasible for Shamir")
     }
+
+    /// Returns the point share with coordinates given as scalar field share limbs
+    fn acvm_types_to_native_point<
+        const LIMB_BITS: usize,
+        C: co_noir_common::honk_curve::HonkCurve<F, ScalarField = F>,
+    >(
+        &mut self,
+        _x0: Self::AcvmType,
+        _x1: Self::AcvmType,
+        _y0: Self::AcvmType,
+        _y1: Self::AcvmType,
+        _is_infinity: Self::AcvmType,
+    ) -> eyre::Result<Self::NativeAcvmPoint<C>> {
+        panic!("functionality acvm_types_to_native_point not feasible for Shamir")
+    }
+
+    fn negate_native_point<C: co_noir_common::honk_curve::HonkCurve<F, ScalarField = F>>(
+        &mut self,
+        _point: Self::NativeAcvmPoint<C>,
+    ) -> eyre::Result<Self::NativeAcvmPoint<C>> {
+        panic!("functionality negate_native_point not feasible for Shamir")
+    }
 }

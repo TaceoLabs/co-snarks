@@ -1,6 +1,7 @@
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_brillig::mpc::BrilligDriver;
+use co_noir_common::honk_curve::HonkCurve;
 use itertools::{Either, Itertools};
 use mpc_core::{
     gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations},
@@ -854,6 +855,9 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         scalar: Self::AcvmType,
     ) -> eyre::Result<Self::NativeAcvmPoint<C>>;
 
+    // checks if lhs <= rhs. Returns 1 if true, 0 otherwise.
+    fn le(&mut self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> eyre::Result<Self::AcvmType>;
+
     /// Converts a vector of field elements into another acvm type, this is used for converting arithmetic shares of 0/1 and indices for lut calls into arithmetic shares of the other field.
     fn convert_fields<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
@@ -881,9 +885,6 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         point: &Self::NativeAcvmPoint<C>,
         cube_root_of_unity: C::BaseField,
     ) -> eyre::Result<Self::NativeAcvmPoint<C>>;
-
-    // checks if lhs <= rhs. Returns 1 if true, 0 otherwise.
-    fn le(&mut self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> eyre::Result<Self::AcvmType>;
 
     /// Given a pointshare, decomposes it into its x and y coordinates and the is_infinity flag, all as base field shares
     #[expect(clippy::type_complexity)]
@@ -1051,4 +1052,20 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         &mut self,
         value: &[Self::AcvmType],
     ) -> eyre::Result<Vec<Self::OtherAcvmType<C>>>;
+
+    /// Returns the point share with coordinates given as scalar field share limbs
+    fn acvm_types_to_native_point<const LIMB_BITS: usize, C: HonkCurve<F, ScalarField = F>>(
+        &mut self,
+        x0: Self::AcvmType,
+        x1: Self::AcvmType,
+        y0: Self::AcvmType,
+        y1: Self::AcvmType,
+        is_infinity: Self::AcvmType,
+    ) -> eyre::Result<Self::NativeAcvmPoint<C>>;
+
+    /// Negates the given point, i.e., computes -P for a point P.
+    fn negate_native_point<C: HonkCurve<F, ScalarField = F>>(
+        &mut self,
+        point: Self::NativeAcvmPoint<C>,
+    ) -> eyre::Result<Self::NativeAcvmPoint<C>>;
 }

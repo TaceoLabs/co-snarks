@@ -1575,6 +1575,7 @@ impl<
     pub fn add_accumulate(
         &mut self,
         to_add: T::NativeAcvmPoint<C>,
+        precomputed_point_limbs: Option<[T::AcvmType; 5]>,
         driver: &mut T,
     ) -> HonkProofResult<CoUltraOp<T, C>> {
         // Update the accumulator natively
@@ -1592,7 +1593,13 @@ impl<
         });
 
         // Construct and store the operation in the ultra op format
-        self.construct_and_populate_ultra_ops(op_code, to_add, None, driver)
+        self.construct_and_populate_ultra_ops(
+            op_code,
+            to_add,
+            precomputed_point_limbs,
+            None,
+            driver,
+        )
     }
 
     /**
@@ -1603,6 +1610,7 @@ impl<
     pub fn add_accumulate_no_store(
         &mut self,
         to_add: T::NativeAcvmPoint<C>,
+        precomputed_point_limbs: Option<[T::AcvmType; 5]>,
         driver: &mut T,
     ) -> HonkProofResult<(CoUltraOp<T, C>, CoVMOperation<T, C>)> {
         // Update the accumulator natively
@@ -1613,8 +1621,13 @@ impl<
         };
 
         // Construct and store the operation in the ultra op format
-        let ultra_op =
-            self.construct_and_populate_ultra_ops(op_code.clone(), to_add, None, driver)?;
+        let ultra_op = self.construct_and_populate_ultra_ops(
+            op_code.clone(),
+            to_add,
+            precomputed_point_limbs,
+            None,
+            driver,
+        )?;
 
         let eccvm_op = CoVMOperation {
             op_code,
@@ -1628,6 +1641,7 @@ impl<
     pub fn mul_accumulate_no_store(
         &mut self,
         to_mul: T::NativeAcvmPoint<C>,
+        precomputed_point_limbs: Option<[T::AcvmType; 5]>,
         scalar: T::AcvmType,
         driver: &mut T,
     ) -> HonkProofResult<(CoUltraOp<T, C>, CoVMOperation<T, C>)> {
@@ -1641,14 +1655,18 @@ impl<
         };
 
         // Construct and store the operation in the ultra op format
-        let ultra_op =
-            self.construct_and_populate_ultra_ops(op_code.clone(), to_mul, Some(scalar), driver)?;
+        let ultra_op = self.construct_and_populate_ultra_ops(
+            op_code.clone(),
+            to_mul,
+            precomputed_point_limbs,
+            Some(scalar),
+            driver,
+        )?;
 
         let [z1, z2] = driver
             .acvm_type_to_other_acvm_type_many(&[ultra_op.z_1, ultra_op.z_2])?
             .try_into()
-            .unwrap();
-
+            .expect("Failed to convert z1, z2");
         let eccvm_op = CoVMOperation {
             op_code,
             base_point: to_mul,
@@ -1669,7 +1687,13 @@ impl<
      * operations in the ECCVM.
      */
     pub fn no_op_ultra_only(&mut self, driver: &mut T) -> HonkProofResult<CoUltraOp<T, C>> {
-        self.construct_and_populate_ultra_ops(EccOpCode::default(), self.accumulator, None, driver)
+        self.construct_and_populate_ultra_ops(
+            EccOpCode::default(),
+            self.accumulator,
+            None,
+            None,
+            driver,
+        )
     }
 
     /**
@@ -1694,7 +1718,7 @@ impl<
         });
 
         // Construct and store the operation in the ultra op format
-        self.construct_and_populate_ultra_ops(op_code, expected, None, driver)
+        self.construct_and_populate_ultra_ops(op_code, expected, None, None, driver)
     }
 
     /**
@@ -1709,40 +1733,16 @@ impl<
         &mut self,
         op_code: EccOpCode,
         point: T::NativeAcvmPoint<C>,
+        precomputed_point_limbs: Option<[T::AcvmType; 5]>,
         scalar: Option<T::AcvmType>,
         driver: &mut T,
     ) -> HonkProofResult<CoUltraOp<T, C>> {
-        let (x, y, is_point_at_infinity) = driver
-            .native_point_to_other_acvm_types(point)
-            .expect("Error converting point to field shares");
-
-        // Decompose point coordinates (Fq) into hi-lo chunks (Fr)
-        // TACEO TODO: Batch these conversions into one `other_field_shares_to_field_shares_many`
-        const CHUNK_SIZE: usize = 2 * NUM_LIMB_BITS_IN_FIELD_SIMULATION;
-        let [x_lo, x_hi] = driver
-            .other_field_shares_to_field_shares::<CHUNK_SIZE, _>(x)?
-            .try_into()
-            .unwrap();
-        let [y_lo, y_hi] = driver
-            .other_field_shares_to_field_shares::<CHUNK_SIZE, _>(y)?
-            .try_into()
-            .unwrap();
-        let [return_is_infinity, _] = driver
-            .other_field_shares_to_field_shares::<CHUNK_SIZE, _>(is_point_at_infinity)?
-            .try_into()
-            .unwrap();
-
-        let mut one_minus_return_is_infinity = return_is_infinity;
-        driver.negate_inplace(&mut one_minus_return_is_infinity);
-        driver.add_assign_with_public(C::ScalarField::ONE, &mut one_minus_return_is_infinity);
-
-        let [x_lo, x_hi, y_lo, y_hi] = driver
-            .mul_many(
-                &[x_lo, x_hi, y_lo, y_hi],
-                &std::iter::repeat_n(one_minus_return_is_infinity, 4).collect_vec(),
-            )?
-            .try_into()
-            .unwrap();
+        let [x_lo, x_hi, y_lo, y_hi, return_is_infinity] =
+            if let Some(limbs) = precomputed_point_limbs {
+                limbs
+            } else {
+                Self::compute_point_limbs(point, driver)?
+            };
 
         let (z_1, z_2) = Self::compute_zetas(scalar, driver)?;
 
@@ -1761,6 +1761,45 @@ impl<
         Ok(co_ultra_op)
     }
 
+    fn compute_point_limbs(
+        point: T::NativeAcvmPoint<C>,
+        driver: &mut T,
+    ) -> HonkProofResult<[T::AcvmType; 5]> {
+        let (x, y, is_point_at_infinity) = driver
+            .native_point_to_other_acvm_types(point)
+            .expect("Error converting point to field shares");
+
+        // Decompose point coordinates (Fq) into hi-lo chunks (Fr)
+        // TACEO TODO: Batch these conversions into one `other_field_shares_to_field_shares_many`
+        const CHUNK_SIZE: usize = 2 * NUM_LIMB_BITS_IN_FIELD_SIMULATION;
+        let [x_lo, x_hi] = driver
+            .other_field_shares_to_field_shares::<CHUNK_SIZE, _>(x)?
+            .try_into()
+            .expect("Failed to convert x_lo, x_hi");
+        let [y_lo, y_hi] = driver
+            .other_field_shares_to_field_shares::<CHUNK_SIZE, _>(y)?
+            .try_into()
+            .expect("Failed to convert y_lo, y_hi");
+        let [is_infinity, _] = driver
+            .other_field_shares_to_field_shares::<CHUNK_SIZE, _>(is_point_at_infinity)?
+            .try_into()
+            .expect("Failed to convert is_point_at_infinity");
+
+        let mut one_minus_is_infinity = is_infinity;
+        driver.negate_inplace(&mut one_minus_is_infinity);
+        driver.add_assign_with_public(C::ScalarField::ONE, &mut one_minus_is_infinity);
+
+        let [x_lo, x_hi, y_lo, y_hi] = driver
+            .mul_many(
+                &[x_lo, x_hi, y_lo, y_hi],
+                &std::iter::repeat_n(one_minus_is_infinity, 4).collect_vec(),
+            )?
+            .try_into()
+            .expect("Failed to convert x_lo, x_hi, y_lo, y_hi");
+
+        Ok([x_lo, x_hi, y_lo, y_hi, is_infinity])
+    }
+
     fn compute_zetas(
         scalar: Option<T::AcvmType>,
         driver: &mut T,
@@ -1777,7 +1816,7 @@ impl<
         )?;
 
         let rhs = C::ScalarField::from(2).pow([128]);
-        let cond = driver.le(converted, rhs.into()).unwrap();
+        let cond = driver.le(converted, rhs.into())?;
 
         let (mont_k1, mont_k2) = (
             Self::to_montgomery_form(k_1, driver),
@@ -1786,7 +1825,7 @@ impl<
         let [k1, k2] = driver
             .cmux_many(cond, &[scalar, T::AcvmType::default()], &[mont_k1, mont_k2])?
             .try_into()
-            .unwrap();
+            .expect("Failed to convert k1, k2");
         Ok((k1, k2))
     }
 
@@ -1851,7 +1890,7 @@ impl<
 
         let t1 = driver.sub(q2, q1);
 
-        let beta = C::ScalarField::get_root_of_unity(3).unwrap();
+        let beta = C::ScalarField::get_root_of_unity(3).expect("No cube root of unity");
 
         let tmp = driver.mul_with_public(beta, t1);
         let t2 = driver.add(tmp, scalar);
@@ -1862,9 +1901,13 @@ impl<
         let mut res = T::AcvmType::default();
         for (i, chunk) in x.into_iter().enumerate() {
             let shift = C::ScalarField::from_bigint(
-                BigInt::from(1u64).shl((i * u64::BITS as usize).try_into().unwrap()),
+                BigInt::from(1u64).shl(
+                    (i * u64::BITS as usize)
+                        .try_into()
+                        .expect("Failed to compute shift"),
+                ),
             )
-            .unwrap();
+            .expect("Failed to parse bigint");
             let tmp = driver.mul_with_public(shift, chunk);
             res = driver.add(res, tmp);
         }
@@ -1980,7 +2023,12 @@ impl<
 
     fn from_montgomery_form(x: T::AcvmType, driver: &mut T) -> T::AcvmType {
         let mont_r: C::ScalarField = C::ScalarField::MODULUS.montgomery_r().into();
-        driver.mul_with_public(mont_r.inverse().unwrap(), x)
+        driver.mul_with_public(
+            mont_r
+                .inverse()
+                .expect("Montgomery R should have an inverse"),
+            x,
+        )
     }
 
     fn to_montgomery_form(x: T::AcvmType, driver: &mut T) -> T::AcvmType {
@@ -2083,6 +2131,7 @@ mod test {
                     .construct_and_populate_ultra_ops(
                         EccOpCode::default(),
                         Rep3AcvmPoint::Shared(point_share),
+                        None,
                         Some(scalar_share.into()),
                         &mut driver,
                     )

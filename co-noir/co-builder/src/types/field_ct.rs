@@ -1226,7 +1226,12 @@ impl<F: PrimeField> FieldCT<F> {
             } else {
                 k_val.inverse().expect("non-zero").into()
             };
-            (BoolCT::from(is_zero), k_inverse_val)
+            let is_zero_witness =
+                WitnessCT::from_acvm_type(F::from(is_zero as u64).into(), builder);
+            (
+                BoolCT::from_witness_ct(is_zero_witness, builder),
+                k_inverse_val,
+            )
         };
         let k_inverse =
             FieldCT::<F>::from(WitnessCT::from_acvm_type(k_inverse.to_owned(), builder));
@@ -1375,7 +1380,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T
         }
     }
 
-    pub(crate) fn get_value(&self, driver: &mut T) -> T::AcvmType {
+    pub fn get_value(&self, driver: &mut T) -> T::AcvmType {
         let mut result = self.witness_bool.to_owned();
 
         if self.witness_inverted {
@@ -1385,7 +1390,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T
         result
     }
 
-    fn to_field_ct(&self, driver: &mut T) -> FieldCT<P::ScalarField> {
+    pub fn to_field_ct(&self, driver: &mut T) -> FieldCT<P::ScalarField> {
         if self.is_constant() {
             let value = T::get_public(&self.get_value(driver)).expect("Constants are public");
             let additive_constant = if self.witness_inverted {
@@ -3090,33 +3095,23 @@ impl<F: PrimeField> CycleScalarCT<F> {
         let lsb = Self::LO_BITS as u8;
         let total_bitsize = 256usize;
         let shift: BigUint = BigUint::one() << Self::LO_BITS;
-        let shift_ct = FieldCT::from(F::from(shift));
-        let (hi_v, lo_v, _) = if T::is_shared(&value) {
+        let shift_ct = FieldCT::from(F::from(shift.clone()));
+        let (hi_v, lo_v) = if T::is_shared(&value) {
             let value = T::get_shared(&value).expect("Already checked it is shared");
-            let [lo, slice, hi] = driver.slice(value, msb - 1, lsb, total_bitsize)?;
-            (
-                T::AcvmType::from(hi),
-                T::AcvmType::from(lo),
-                T::AcvmType::from(slice),
-            )
+            let [lo, _, hi] = driver.slice(value, msb - 1, lsb, total_bitsize)?;
+            (T::AcvmType::from(hi), T::AcvmType::from(lo))
         } else {
             let value: BigUint = T::get_public(&value)
                 .expect("Already checked it is public")
                 .into();
 
-            let hi_mask = (BigUint::one() << (total_bitsize - msb as usize)) - BigUint::one();
-            let hi = (&value >> msb) & hi_mask;
+            let lo = &value & (&shift - BigUint::one());
+            let hi = value >> Self::LO_BITS;
 
-            let lo_mask = (BigUint::one() << lsb) - BigUint::one();
-            let lo = &value & lo_mask;
-
-            let slice_mask = (BigUint::one() << ((msb - lsb) as u32 + 1)) - BigUint::one();
-            let slice = (value >> lsb) & slice_mask;
-
-            let hi_ = T::AcvmType::from(F::from(hi));
-            let lo_ = T::AcvmType::from(F::from(lo));
-            let slice_ = T::AcvmType::from(F::from(slice));
-            (hi_, lo_, slice_)
+            (
+                T::AcvmType::from(F::from(hi)),
+                T::AcvmType::from(F::from(lo)),
+            )
         };
 
         if inp.is_constant() {

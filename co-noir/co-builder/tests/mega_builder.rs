@@ -360,7 +360,12 @@ fn test_mega_builder_construction() {
             let mut driver = T::new(net_1b, net_2b, A2BType::Direct).unwrap();
             builder.queue_ecc_no_op(&mut driver).unwrap();
             builder
-                .queue_ecc_mul_accum_store(random_point_share, random_scalar_share, &mut driver)
+                .queue_ecc_mul_accum_store(
+                    random_point_share,
+                    None,
+                    random_scalar_share,
+                    &mut driver,
+                )
                 .unwrap();
             builder.queue_ecc_eq(&mut driver).unwrap();
 
