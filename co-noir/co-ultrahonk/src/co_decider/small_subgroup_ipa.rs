@@ -8,15 +8,18 @@ use ark_ec::CurveGroup;
 use ark_ff::One;
 use ark_ff::Zero;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
-use co_builder::HonkProofResult;
-use co_builder::TranscriptFieldType;
-use co_builder::prelude::NUM_DISABLED_ROWS_IN_SUMCHECK;
-use co_builder::prelude::NUM_TRANSLATION_EVALUATIONS;
-use co_builder::prelude::{HonkCurve, Polynomial, ProverCrs};
-use common::CoUtils;
-use common::mpc::NoirUltraHonkProver;
-use common::shared_polynomial::SharedPolynomial;
-use common::transcript::{Transcript, TranscriptHasher};
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::HonkProofResult;
+use co_noir_common::honk_proof::TranscriptFieldType;
+
+use co_noir_common::CoUtils;
+use co_noir_common::crs::ProverCrs;
+use co_noir_common::mpc::NoirUltraHonkProver;
+use co_noir_common::polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK;
+use co_noir_common::polynomials::polynomial::NUM_TRANSLATION_EVALUATIONS;
+use co_noir_common::polynomials::polynomial::Polynomial;
+use co_noir_common::polynomials::shared_polynomial::SharedPolynomial;
+use co_noir_common::transcript::{Transcript, TranscriptHasher};
 use mpc_core::MpcState;
 use mpc_net::Network;
 

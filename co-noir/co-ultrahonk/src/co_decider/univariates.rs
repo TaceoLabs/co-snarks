@@ -1,12 +1,12 @@
 use ark_ec::CurveGroup;
 use ark_ff::Field;
-use common::barycentric::Barycentric;
+use co_noir_common::barycentric::Barycentric;
 use mpc_net::Network;
 use std::array;
 use ultrahonk::prelude::Univariate;
 
 use crate::mpc_prover_flavour::SharedUnivariateTrait;
-use common::mpc::NoirUltraHonkProver;
+use co_noir_common::mpc::NoirUltraHonkProver;
 
 pub struct SharedUnivariate<T: NoirUltraHonkProver<P>, P: CurveGroup, const SIZE: usize> {
     pub evaluations: [T::ArithmeticShare; SIZE],

@@ -4,12 +4,15 @@ use ark_bn254::Bn254;
 use ark_ec::{bn::Bn, pairing::Pairing};
 use ark_ff::AdditiveGroup;
 use co_builder::{
-    TranscriptFieldType,
     flavours::mega_flavour::{MegaFlavour, MegaPrecomputedEntities, MegaProverWitnessEntities},
-    prelude::{
-        ActiveRegionData, CrsParser, Polynomial, Polynomials, ProverCrs, PublicComponentKey,
-    },
+    prelude::{ActiveRegionData, Polynomials, PublicComponentKey},
     prover_flavour::ProverFlavour,
+};
+use co_noir_common::{
+    crs::{ProverCrs, parse::CrsParser},
+    honk_proof::TranscriptFieldType,
+    polynomials::polynomial::Polynomial,
+    types::ZeroKnowledge,
 };
 use flate2::read::GzDecoder;
 use mpc_core::gadgets::field_from_hex_string;
@@ -18,9 +21,7 @@ use ultrahonk::prelude::AllEntities;
 use ultrahonk::{
     decider::types::{ProverMemory, RelationParameters},
     oink::oink_prover::Oink,
-    prelude::{
-        GateSeparatorPolynomial, Poseidon2Sponge, ProvingKey, Transcript, Univariate, ZeroKnowledge,
-    },
+    prelude::{GateSeparatorPolynomial, Poseidon2Sponge, ProvingKey, Transcript, Univariate},
 };
 
 use crate::{
@@ -40,11 +41,11 @@ use crate::{
 const EXTENDED_LENGTH: usize = (MAX_TOTAL_RELATION_LENGTH - 1) * (NUM_KEYS - 1) + 1;
 const CRS_PATH_G1: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../co-builder/src/crs/bn254_g1.dat"
+    "/../co-noir-common/src/crs/bn254_g1.dat"
 );
 const CRS_PATH_G2: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../co-builder/src/crs/bn254_g2.dat"
+    "/../co-noir-common/src/crs/bn254_g2.dat"
 );
 type F = TranscriptFieldType;
 type C = ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>;

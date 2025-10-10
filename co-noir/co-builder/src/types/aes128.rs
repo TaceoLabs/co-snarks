@@ -2,10 +2,9 @@ use super::{
     plookup::{ColumnIdx, MultiTableId, Plookup},
     types::WitnessOrConstant,
 };
-use crate::{
-    TranscriptFieldType, prelude::HonkCurve, types::field_ct::FieldCT,
-    ultra_builder::GenericUltraCircuitBuilder, utils::Utils,
-};
+use crate::{types::field_ct::FieldCT, ultra_builder::GenericUltraCircuitBuilder};
+use co_noir_common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType, utils::Utils};
+
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use ark_ff::Zero;

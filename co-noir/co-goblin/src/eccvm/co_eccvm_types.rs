@@ -1,5 +1,3 @@
-use crate::eccvm::co_ecc_op_queue::{CoECCOpQueue, CoVMOperation};
-use crate::eccvm::co_ecc_op_queue::{CoScalarMul, MSMRow};
 use ark_ec::AffineRepr;
 use ark_ec::CurveGroup;
 use ark_ec::PrimeGroup;
@@ -7,30 +5,35 @@ use ark_ff::One;
 use ark_ff::PrimeField;
 use ark_ff::Zero;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use co_builder::eccvm::ECCVM_FIXED_SIZE;
+use co_builder::eccvm::NUM_WNAF_DIGIT_BITS;
+use co_builder::eccvm::NUM_WNAF_DIGITS_PER_SCALAR;
+use co_builder::eccvm::POINT_TABLE_SIZE;
+use co_builder::eccvm::WNAF_DIGITS_PER_ROW;
+use co_builder::eccvm::co_ecc_op_queue::CoECCOpQueue;
+use co_builder::eccvm::co_ecc_op_queue::CoScalarMul;
+use co_builder::eccvm::co_ecc_op_queue::CoVMOperation;
+use co_builder::eccvm::co_ecc_op_queue::MSMRow;
 use co_builder::flavours::eccvm_flavour::ECCVMFlavour;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
-use co_builder::prelude::NUM_DISABLED_ROWS_IN_SUMCHECK;
-use co_builder::prelude::NUM_TRANSLATION_EVALUATIONS;
-use co_builder::prelude::Polynomial;
 use co_builder::prelude::offset_generator_scaled;
-use co_builder::{
-    HonkProofResult,
-    prelude::{HonkCurve, ProverCrs},
-};
+use co_noir_common::CoUtils;
+use co_noir_common::crs::ProverCrs;
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::HonkProofResult;
+use co_noir_common::polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK;
+use co_noir_common::polynomials::polynomial::NUM_TRANSLATION_EVALUATIONS;
+use co_noir_common::polynomials::polynomial::Polynomial;
+use co_noir_common::polynomials::shared_polynomial::SharedPolynomial;
 use co_ultrahonk::prelude::Polynomials;
 use co_ultrahonk::prelude::SharedSmallSubgroupIPAProver;
 use co_ultrahonk::prelude::SharedUnivariate;
 use co_ultrahonk::prelude::SharedUnivariateTrait;
-use common::CoUtils;
-use common::ECCVM_FIXED_SIZE;
-use common::NUM_WNAF_DIGIT_BITS;
-use common::NUM_WNAF_DIGITS_PER_SCALAR;
-use common::POINT_TABLE_SIZE;
-use common::WNAF_DIGITS_PER_ROW;
-use common::shared_polynomial::SharedPolynomial;
-use common::{
+
+use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::{
     mpc::NoirUltraHonkProver,
-    transcript::{Transcript, TranscriptFieldType, TranscriptHasher},
+    transcript::{Transcript, TranscriptHasher},
 };
 use mpc_net::Network;
 use std::marker::PhantomData;
@@ -251,7 +254,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         let p = entry.base_point;
         let r = state.msm_accumulator;
 
-        let mul = driver.scale_point_by_scalar_other(p, entry.mul_scalar_full)?;
+        let mul = driver.scale_native_point(p, entry.mul_scalar_full)?;
         updated_state.msm_accumulator = driver.add_points_other(r, mul);
 
         Ok(())
@@ -323,7 +326,9 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         next_not_msm: bool,
         driver: &mut T,
     ) -> eyre::Result<()> {
-        let base_point_infinity = entry.base_point_is_zero;
+        let base_point_infinity = entry
+            .base_point_is_infinity
+            .expect("base_point_is_infinity should be set for add/mul operations");
 
         row.accumulator_empty = state.is_accumulator_empty;
         row.q_add = entry.op_code.add;
@@ -374,8 +379,12 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         } else {
             T::OtherAcvmType::default()
         };
-        row.z1_zero = entry.z1_is_zero;
-        row.z2_zero = entry.z2_is_zero;
+        row.z1_zero = entry
+            .z1_is_zero
+            .expect("z1_is_zero should be set for mul operations");
+        row.z2_zero = entry
+            .z2_is_zero
+            .expect("z2_is_zero should be set for mul operations");
         row.opcode = entry.op_code.value();
 
         Ok(())
@@ -586,10 +595,24 @@ fn compute_transcript_rows<
 
         let is_mul: bool = entry.op_code.mul;
         let is_add: bool = entry.op_code.add;
-        let z1_zero: bool = if is_mul { entry.z1_is_zero } else { true };
-        let z2_zero: bool = if is_mul { entry.z2_is_zero } else { true };
+        let z1_zero: bool = if is_mul {
+            entry
+                .z1_is_zero
+                .expect("z1_is_zero should be set for mul operations")
+        } else {
+            true
+        };
+        let z2_zero: bool = if is_mul {
+            entry
+                .z2_is_zero
+                .expect("z2_is_zero should be set for mul operations")
+        } else {
+            true
+        };
 
-        let base_point_infinity = entry.base_point_is_zero;
+        let base_point_infinity = entry
+            .base_point_is_infinity
+            .expect("base_point_is_infinity should be set for add/mul operations");
         let mut num_muls: u32 = 0;
         if is_mul {
             num_muls = (!z1_zero as u32) + (!z2_zero as u32);
@@ -1095,12 +1118,8 @@ pub fn construct_from_builder<
             driver,
         )?;
 
-    let result = MSMRow::<C::CycleGroup, T>::compute_rows_msms(
-        &msms,
-        number_of_muls,
-        op_queue.get_num_msm_rows(),
-        driver,
-    )?;
+    let result =
+        MSMRow::compute_rows_msms(&msms, number_of_muls, op_queue.get_num_msm_rows(), driver)?;
 
     let msm_rows = &result.0;
     let point_table_read_counts = &result.1;

@@ -1,15 +1,15 @@
 use ark_ec::AffineRepr;
 use ark_ff::One;
 use ark_ff::{Field, Zero};
-use co_builder::{
-    HonkProofResult, TranscriptFieldType,
-    prelude::{HonkCurve, ProverCrs},
-};
-use common::CONST_ECCVM_LOG_N;
-use common::CoUtils;
-use common::co_shplemini::ShpleminiOpeningClaim;
-use common::mpc::NoirUltraHonkProver;
-use common::transcript::{Transcript, TranscriptHasher};
+use co_builder::eccvm::CONST_ECCVM_LOG_N;
+use co_noir_common::CoUtils;
+use co_noir_common::co_shplemini::ShpleminiOpeningClaim;
+use co_noir_common::crs::ProverCrs;
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::HonkProofResult;
+use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::mpc::NoirUltraHonkProver;
+use co_noir_common::transcript::{Transcript, TranscriptHasher};
 use mpc_net::Network;
 use ultrahonk::Utils as UltraHonkUtils;
 

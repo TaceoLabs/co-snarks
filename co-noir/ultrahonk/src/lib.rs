@@ -10,7 +10,8 @@ pub(crate) mod ultra_verifier;
 
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
-use co_builder::{HonkProofResult, prelude::ProverCrs};
+use co_noir_common::crs::ProverCrs;
+use co_noir_common::honk_proof::HonkProofResult;
 
 /// The log of the max circuit size assumed in order to achieve constant sized Honk proofs
 /// AZTEC TODO(<https://github.com/AztecProtocol/barretenberg/issues/1046>): Remove the need for const sized proofs
@@ -31,29 +32,29 @@ pub struct Utils {}
 
 impl Utils {
     pub fn get_msb32(inp: u32) -> u32 {
-        co_builder::prelude::Utils::get_msb32(inp)
+        co_noir_common::utils::Utils::get_msb32(inp)
     }
 
     pub fn round_up_power_2(inp: usize) -> usize {
-        co_builder::prelude::Utils::round_up_power_2(inp)
+        co_noir_common::utils::Utils::round_up_power_2(inp)
     }
 
     pub fn get_msb64(inp: u64) -> u32 {
-        co_builder::prelude::Utils::get_msb64(inp)
+        co_noir_common::utils::Utils::get_msb64(inp)
     }
 
     pub fn batch_invert<F: PrimeField>(coeffs: &mut [F]) {
-        co_builder::prelude::Utils::batch_invert(coeffs);
+        co_noir_common::utils::Utils::batch_invert(coeffs);
     }
 
     pub fn commit<P: CurveGroup>(
         poly: &[P::ScalarField],
         crs: &ProverCrs<P>,
     ) -> HonkProofResult<P> {
-        co_builder::prelude::Utils::commit(poly, crs)
+        co_noir_common::utils::Utils::commit(poly, crs)
     }
 
     pub fn msm<P: CurveGroup>(poly: &[P::ScalarField], crs: &[P::Affine]) -> HonkProofResult<P> {
-        co_builder::prelude::Utils::msm::<P>(poly, crs)
+        co_noir_common::utils::Utils::msm::<P>(poly, crs)
     }
 }

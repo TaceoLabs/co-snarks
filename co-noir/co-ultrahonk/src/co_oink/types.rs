@@ -1,8 +1,8 @@
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
-use co_builder::prelude::Polynomial;
+use co_noir_common::polynomials::polynomial::Polynomial;
 
-use common::mpc::NoirUltraHonkProver;
+use co_noir_common::mpc::NoirUltraHonkProver;
 pub struct ProverMemory<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) w_4: Polynomial<T::ArithmeticShare>, // column 3
     pub(crate) z_perm: Polynomial<T::ArithmeticShare>, // column 4

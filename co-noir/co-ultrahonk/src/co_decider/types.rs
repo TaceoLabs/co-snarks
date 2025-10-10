@@ -11,7 +11,7 @@ use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::{
     polynomials::polynomial_flavours::PrecomputedEntitiesFlavour, prover_flavour::Flavour,
 };
-use common::mpc::NoirUltraHonkProver;
+use co_noir_common::mpc::NoirUltraHonkProver;
 use itertools::izip;
 use std::iter;
 

@@ -11,14 +11,15 @@ use crate::{
     types::AllEntities,
 };
 use ark_ff::Zero;
-use co_builder::HonkProofResult;
-use co_builder::TranscriptFieldType;
-use co_builder::prelude::ProverCrs;
-use co_builder::prelude::{HonkCurve, RowDisablingPolynomial};
-use common::CoUtils;
-use common::mpc::NoirUltraHonkProver;
-use common::shared_polynomial::SharedPolynomial;
-use common::transcript::{Transcript, TranscriptHasher};
+use co_noir_common::CoUtils;
+use co_noir_common::crs::ProverCrs;
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::HonkProofResult;
+use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::mpc::NoirUltraHonkProver;
+use co_noir_common::polynomials::polynomial::RowDisablingPolynomial;
+use co_noir_common::polynomials::shared_polynomial::SharedPolynomial;
+use co_noir_common::transcript::{Transcript, TranscriptHasher};
 use mpc_core::MpcState;
 use mpc_net::Network;
 use ultrahonk::Utils;

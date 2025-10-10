@@ -5,8 +5,11 @@ use crate::co_decider::{
 };
 use ark_ec::CurveGroup;
 use ark_ff::One;
-use co_builder::{HonkProofResult, flavours::eccvm_flavour::ECCVMFlavour, prelude::HonkCurve};
-use common::{mpc::NoirUltraHonkProver, transcript::TranscriptFieldType};
+use co_builder::flavours::eccvm_flavour::ECCVMFlavour;
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::HonkProofResult;
+use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::mpc::NoirUltraHonkProver;
 use itertools::Itertools;
 use mpc_core::MpcState;
 use mpc_net::Network;

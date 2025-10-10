@@ -1,14 +1,19 @@
 use ark_ec::AdditiveGroup;
 use ark_ff::Field;
-use co_builder::prelude::{HonkCurve, Polynomial, ProverCrs, Utils};
-use co_builder::{HonkProofResult, TranscriptFieldType};
-use common::shplemini::OpeningPair;
-use common::shplemini::ShpleminiOpeningClaim;
-use common::transcript::Transcript;
-use common::transcript::TranscriptHasher;
-use ultrahonk::prelude::HonkProof;
+use co_noir_common::shplemini::OpeningPair;
+use co_noir_common::shplemini::ShpleminiOpeningClaim;
+use co_noir_common::transcript::Transcript;
+use co_noir_common::transcript::TranscriptHasher;
+use co_noir_common::{
+    crs::ProverCrs,
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProofResult, TranscriptFieldType},
+    polynomials::polynomial::Polynomial,
+    utils::Utils,
+};
 
-use crate::eccvm::ecc_op_queue::ECCOpQueue;
+use co_builder::eccvm::ecc_op_queue::ECCOpQueue;
+use ultrahonk::prelude::HonkProof;
 
 const NUM_WIRES: usize = 4;
 
@@ -154,27 +159,27 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::eccvm::ecc_op_queue::{
+    use co_builder::eccvm::ecc_op_queue::{
         EccOpCode, EccvmOpsTable, EccvmRowTracker, UltraEccOpsTable, UltraOp,
     };
 
     use super::*;
     use ark_bn254::Bn254;
-    use co_builder::prelude::CrsParser;
-    use common::transcript::Poseidon2Sponge;
+    use co_noir_common::crs::parse::CrsParser;
+    use co_noir_common::transcript::Poseidon2Sponge;
+    use co_noir_common::types::ZeroKnowledge;
     use mpc_core::gadgets::field_from_hex_string;
-    use ultrahonk::prelude::ZeroKnowledge;
 
     type Bn254G1 = ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>;
     type Bn254G1Affine = ark_bn254::G1Affine;
 
     const CRS_PATH_G1: &str = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../co-builder/src/crs/bn254_g1.dat"
+        "/../co-noir-common/src/crs/bn254_g1.dat"
     );
     const CRS_PATH_G2: &str = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../co-builder/src/crs/bn254_g2.dat"
+        "/../co-noir-common/src/crs/bn254_g2.dat"
     );
     const PROOF_FILE: &str = concat!(
         env!("CARGO_MANIFEST_DIR"),

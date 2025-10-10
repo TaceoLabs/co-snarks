@@ -1,18 +1,19 @@
-use crate::{eccvm::ecc_op_queue::ECCOpQueue, prelude::UltraOp};
+use crate::{MICRO_LIMB_BITS, NUM_LAST_LIMB_BITS, NUM_QUOTIENT_BITS, NUM_Z_BITS};
+use crate::{NUM_BINARY_LIMBS, NUM_MICRO_LIMBS, NUM_RELATION_WIDE_LIMBS, NUM_Z_LIMBS};
 use ark_ec::CurveGroup;
 use ark_ff::Field;
 use ark_ff::One;
 use ark_ff::PrimeField;
 use ark_ff::Zero;
+use co_builder::eccvm::ecc_op_queue::{ECCOpQueue, UltraOp};
 use co_builder::flavours::translator_flavour::TranslatorFlavour;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
-use co_builder::prelude::{Polynomial, Polynomials, Utils};
-use co_builder::{TranscriptFieldType, prelude::HonkCurve};
-use common::{
-    MICRO_LIMB_BITS, NUM_BINARY_LIMBS, NUM_LAST_LIMB_BITS, NUM_MICRO_LIMBS, NUM_QUOTIENT_BITS,
-    NUM_RELATION_WIDE_LIMBS, NUM_Z_BITS, NUM_Z_LIMBS,
-};
+use co_builder::prelude::Polynomials;
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::polynomials::polynomial::Polynomial;
+use co_noir_common::utils::Utils;
 use num_bigint::BigUint;
 use std::str::FromStr;
 

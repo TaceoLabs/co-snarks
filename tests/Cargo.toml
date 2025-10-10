@@ -30,7 +30,7 @@ co-noir-types = { version = "0.1.0", path = "../co-noir/co-noir-types" }
 noir-types = { version = "0.1.0", path = "../co-noir/noir-types" }
 co-plonk = { version = "0.6.1", path = "../co-circom/co-plonk" }
 co-ultrahonk = { version = "0.5.0", path = "../co-noir/co-ultrahonk" }
-common = { version = "0.1.0", path = "../co-noir/common" }
+co-noir-common = { version = "0.1.0", path = "../co-noir/co-noir-common" }
 eyre.workspace = true
 itertools = { workspace = true }
 mpc-core = { version = "0.9.0", path = "../mpc-core" }

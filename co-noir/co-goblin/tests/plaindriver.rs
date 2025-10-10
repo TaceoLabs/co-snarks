@@ -1,36 +1,41 @@
 #[cfg(test)]
 mod tests {
+    use ark_ec::AdditiveGroup;
     use ark_ec::AffineRepr;
     use ark_ec::short_weierstrass;
+    use ark_ff::Field;
     use ark_ff::Zero;
     use ark_grumpkin::GrumpkinConfig;
     use co_acvm::PlainAcvmSolver;
     use co_acvm::Rep3AcvmSolver;
     use co_acvm::mpc::NoirWitnessExtensionProtocol;
-    use co_builder::TranscriptFieldType;
+    use co_builder::eccvm::co_ecc_op_queue::CoECCOpQueue;
+    use co_builder::eccvm::co_ecc_op_queue::CoEccvmOpsTable;
+    use co_builder::eccvm::co_ecc_op_queue::CoUltraEccOpsTable;
+    use co_builder::eccvm::co_ecc_op_queue::CoUltraOp;
+    use co_builder::eccvm::co_ecc_op_queue::CoVMOperation;
+    use co_builder::eccvm::ecc_op_queue::ECCOpQueue;
+    use co_builder::eccvm::ecc_op_queue::EccOpCode;
+    use co_builder::eccvm::ecc_op_queue::EccOpsTable;
+    use co_builder::eccvm::ecc_op_queue::EccvmOpsTable;
+    use co_builder::eccvm::ecc_op_queue::EccvmRowTracker;
+    use co_builder::eccvm::ecc_op_queue::UltraEccOpsTable;
+    use co_builder::eccvm::ecc_op_queue::UltraOp;
+    use co_builder::eccvm::ecc_op_queue::VMOperation;
     use co_builder::flavours::eccvm_flavour::ECCVMFlavour;
-    use co_builder::prelude::HonkCurve;
     use co_builder::prelude::SerializeF;
-    use co_builder::prelude::{CrsParser, SerializeP};
-    use co_goblin::eccvm::co_ecc_op_queue::CoECCOpQueue;
-    use co_goblin::eccvm::co_ecc_op_queue::CoEccvmOpsTable;
-    use co_goblin::eccvm::co_ecc_op_queue::CoUltraEccOpsTable;
-    use co_goblin::eccvm::co_ecc_op_queue::CoUltraOp;
-    use co_goblin::eccvm::co_ecc_op_queue::CoVMOperation;
     use co_goblin::eccvm::co_eccvm_prover::Eccvm;
     use co_goblin::eccvm::co_eccvm_types::construct_from_builder;
+    use co_noir_common::crs::parse::CrsParser;
+    use co_noir_common::honk_curve::HonkCurve;
+    use co_noir_common::honk_proof::TranscriptFieldType;
+    use co_noir_common::mpc::plain::PlainUltraHonkDriver;
+    use co_noir_common::mpc::rep3::Rep3UltraHonkDriver;
+    use co_noir_common::serialize::SerializeP;
+    use co_noir_common::transcript::Poseidon2Sponge;
+    use co_noir_common::transcript::Transcript;
+    use co_noir_common::types::ZeroKnowledge;
     use co_ultrahonk::prelude::ProvingKey;
-    use common::mpc::plain::PlainUltraHonkDriver;
-    use common::mpc::rep3::Rep3UltraHonkDriver;
-    use common::transcript::Poseidon2Sponge;
-    use common::transcript::Transcript;
-    use goblin::prelude::ECCOpQueue;
-    use goblin::prelude::EccOpCode;
-    use goblin::prelude::EccvmOpsTable;
-    use goblin::prelude::EccvmRowTracker;
-    use goblin::prelude::UltraEccOpsTable;
-    use goblin::prelude::UltraOp;
-    use goblin::prelude::VMOperation;
     use itertools::Itertools;
     use itertools::izip;
     use mpc_core::protocols::rep3::Rep3State;
@@ -40,7 +45,6 @@ mod tests {
     use rand::thread_rng;
     use std::thread;
     use std::{path::PathBuf, sync::Arc};
-    use ultrahonk::prelude::ZeroKnowledge;
 
     type WitExtDriver<'a, F, N> = Rep3AcvmSolver<'a, F, N>;
 
@@ -155,10 +159,17 @@ mod tests {
         share_field_element(ultra_op.y_hi, &mut rng),
         share_field_element(ultra_op.z_1, &mut rng),
         share_field_element(ultra_op.z_2, &mut rng),
-
+        share_field_element(
+            if ultra_op.return_is_infinity {
+                C::ScalarField::ONE
+            } else {
+                C::ScalarField::ZERO
+            },
+            &mut rng,
+        )
     )
     .map(
-        |(x_lo, x_hi, y_lo, y_hi, z_1, z_2, )| CoUltraOp {
+        |(x_lo, x_hi, y_lo, y_hi, z_1, z_2, is_inf)| CoUltraOp {
             op_code: ultra_op.op_code.clone(),
             x_lo:
                 <co_acvm::Rep3AcvmSolver<'_, _, LocalNetwork> as co_acvm::mpc::NoirWitnessExtensionProtocol<
@@ -184,8 +195,9 @@ mod tests {
                 <co_acvm::Rep3AcvmSolver<'_, _, LocalNetwork> as co_acvm::mpc::NoirWitnessExtensionProtocol<
                     C::ScalarField,
                 >>::AcvmType::from(z_2),
-            return_is_infinity:
-               ultra_op.return_is_infinity,
+            return_is_infinity: <co_acvm::Rep3AcvmSolver<'_, _, LocalNetwork> as co_acvm::mpc::NoirWitnessExtensionProtocol<
+                    C::ScalarField,
+                >>::AcvmType::from(is_inf),
         },
     ).collect_vec()
     }
@@ -212,9 +224,9 @@ mod tests {
         mul_scalar_full: <co_acvm::Rep3AcvmSolver<'_, _, LocalNetwork> as co_acvm::mpc::NoirWitnessExtensionProtocol<
             C::ScalarField,
         >>::AcvmType::from(mul_scalar_full),
-        z1_is_zero: vm_operation.z1.is_zero(),
-        z2_is_zero: vm_operation.z2.is_zero(),
-        base_point_is_zero: vm_operation.base_point.is_zero(),
+        z1_is_zero: Some(vm_operation.z1.is_zero()),
+        z2_is_zero: Some(vm_operation.z2.is_zero()),
+        base_point_is_infinity: Some(vm_operation.base_point.is_zero()),
     })
     .collect_vec()
     }
@@ -237,9 +249,9 @@ mod tests {
                     z1: T::OtherAcvmType::from(C::BaseField::from(vm_operation.z1.clone())),
                     z2: T::OtherAcvmType::from(C::BaseField::from(vm_operation.z2.clone())),
                     mul_scalar_full: T::AcvmType::from(vm_operation.mul_scalar_full),
-                    z1_is_zero: vm_operation.z1.is_zero(),
-                    z2_is_zero: vm_operation.z2.is_zero(),
-                    base_point_is_zero: vm_operation.base_point.is_zero(),
+                    z1_is_zero: Some(vm_operation.z1.is_zero()),
+                    z2_is_zero: Some(vm_operation.z2.is_zero()),
+                    base_point_is_infinity: Some(vm_operation.base_point.is_zero()),
                 };
                 tmp.push(vm_op);
             }
@@ -262,14 +274,18 @@ mod tests {
                     y_hi: T::AcvmType::from(ultra_operation.y_hi),
                     z_1: T::AcvmType::from(ultra_operation.z_1),
                     z_2: T::AcvmType::from(ultra_operation.z_2),
-                    return_is_infinity: ultra_operation.return_is_infinity,
+                    return_is_infinity: T::AcvmType::from(if ultra_operation.return_is_infinity {
+                        C::ScalarField::ONE
+                    } else {
+                        C::ScalarField::ZERO
+                    }),
                 };
                 tmp.push(ultra_op);
             }
             ultra_ops_table.push(tmp);
         }
         let ultra_ops_table = CoUltraEccOpsTable {
-            table: goblin::prelude::EccOpsTable {
+            table: EccOpsTable {
                 table: ultra_ops_table,
             },
         };
@@ -331,7 +347,7 @@ mod tests {
                     table: vm_ops_share_1,
                 },
                 ultra_ops_table: CoUltraEccOpsTable {
-                    table: goblin::prelude::EccOpsTable {
+                    table: EccOpsTable {
                         table: ultra_ops_share_1,
                     },
                 },
@@ -345,7 +361,7 @@ mod tests {
                     table: vm_ops_share_2,
                 },
                 ultra_ops_table: CoUltraEccOpsTable {
-                    table: goblin::prelude::EccOpsTable {
+                    table: EccOpsTable {
                         table: ultra_ops_share_2,
                     },
                 },
@@ -359,7 +375,7 @@ mod tests {
                     table: vm_ops_share_3,
                 },
                 ultra_ops_table: CoUltraEccOpsTable {
-                    table: goblin::prelude::EccOpsTable {
+                    table: EccOpsTable {
                         table: ultra_ops_share_3,
                     },
                 },

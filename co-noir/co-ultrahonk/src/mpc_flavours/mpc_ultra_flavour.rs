@@ -32,11 +32,11 @@ use crate::{
 use ark_ec::CurveGroup;
 use ark_ff::AdditiveGroup;
 use ark_ff::PrimeField;
-use co_builder::TranscriptFieldType;
 use co_builder::flavours::ultra_flavour::UltraFlavour;
-use co_builder::prelude::HonkCurve;
 use co_builder::prover_flavour::ProverFlavour;
-use common::mpc::NoirUltraHonkProver;
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::{HonkProofResult, TranscriptFieldType};
+use co_noir_common::mpc::NoirUltraHonkProver;
 use mpc_net::Network;
 use std::array;
 use ultrahonk::prelude::Univariate;
@@ -235,7 +235,7 @@ impl MPCProverFlavour for UltraFlavour {
     }
 
     fn accumulate_relation_univariates_batch<
-        P: co_builder::prelude::HonkCurve<co_builder::TranscriptFieldType>,
+        P: HonkCurve<TranscriptFieldType>,
         T: NoirUltraHonkProver<P>,
         N: Network,
     >(
@@ -244,7 +244,7 @@ impl MPCProverFlavour for UltraFlavour {
         univariate_accumulators: &mut Self::AllRelationAccHalfShared<T, P>,
         sum_check_data: &Self::AllEntitiesBatchRelations<T, P>,
         relation_parameters: &crate::co_decider::types::RelationParameters<P::ScalarField>,
-    ) -> co_builder::HonkProofResult<()> {
+    ) -> HonkProofResult<()> {
         tracing::trace!("Accumulate relations");
         SumcheckRound::accumulate_one_relation_univariates_batch::<
             _,
@@ -367,10 +367,10 @@ impl MPCProverFlavour for UltraFlavour {
     }
     fn get_alpha_challenges<
         F: ark_ff::PrimeField,
-        H: common::transcript::TranscriptHasher<F>,
-        P: co_builder::prelude::HonkCurve<F>,
+        H: co_noir_common::transcript::TranscriptHasher<F>,
+        P: HonkCurve<F>,
     >(
-        transcript: &mut common::transcript::Transcript<F, H>,
+        transcript: &mut co_noir_common::transcript::Transcript<F, H>,
         alphas: &mut Vec<P::ScalarField>,
     ) {
         let args: [String; Self::NUM_ALPHAS] = array::from_fn(|i| format!("alpha_{i}"));
@@ -382,7 +382,7 @@ impl MPCProverFlavour for UltraFlavour {
         acc: Self::AllRelationAccHalfShared<T, P>,
         net: &N,
         state: &mut T::State,
-    ) -> co_builder::HonkProofResult<Self::AllRelationAcc<T, P>> {
+    ) -> HonkProofResult<Self::AllRelationAcc<T, P>> {
         let r_arith_r0 = T::reshare(acc.r_arith.r0.evaluations.to_vec(), net, state)?;
         Ok(AllRelationAccUltra {
             r_arith: UltraArithmeticRelationAcc {

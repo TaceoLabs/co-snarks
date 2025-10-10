@@ -1,11 +1,16 @@
 use crate::proof_tests::{CRS_PATH_G1, CRS_PATH_G2};
 use ark_bn254::Bn254;
 use co_acvm::solver::Rep3CoSolver;
-use co_builder::{flavours::ultra_flavour::UltraFlavour, TranscriptFieldType};
+use co_builder::flavours::ultra_flavour::UltraFlavour;
 use co_noir::Bn254G1;
+use co_noir_common::{
+    crs::parse::CrsParser,
+    honk_proof::TranscriptFieldType,
+    transcript::{Poseidon2Sponge, TranscriptHasher},
+    types::ZeroKnowledge,
+};
 use co_noir_types::Rep3Type;
-use co_ultrahonk::prelude::{CrsParser, Rep3CoUltraHonk, UltraHonk, ZeroKnowledge};
-use common::transcript::{Poseidon2Sponge, TranscriptHasher};
+use co_ultrahonk::prelude::{Rep3CoUltraHonk, UltraHonk};
 use mpc_net::local::LocalNetwork;
 use sha3::Keccak256;
 use std::{fs::File, sync::Arc};

@@ -28,7 +28,7 @@ ultrahonk = { version = "0.5.0", path = "../ultrahonk" }
 rand.workspace = true
 rayon.workspace = true
 serde.workspace = true
-common = { version = "0.1.0", path = "../common" }
+co-noir-common = { version = "0.1.0", path = "../co-noir-common" }
 
 [dev-dependencies]
 criterion.workspace = true

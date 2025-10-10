@@ -7,8 +7,7 @@ use ark_ff::{Field, PrimeField, Zero};
 use co_builder::polynomials::polynomial_flavours::{
     PrecomputedEntitiesFlavour, ShiftedWitnessEntitiesFlavour, WitnessEntitiesFlavour,
 };
-use co_builder::prelude::HonkCurve;
-use common::transcript::TranscriptFieldType;
+use co_noir_common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType};
 #[derive(Clone, Debug, Default)]
 pub(crate) struct EllipticRelationAcc<F: PrimeField> {
     pub(crate) r0: Univariate<F, 6>,

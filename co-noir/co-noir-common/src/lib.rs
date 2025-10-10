@@ -1,54 +1,34 @@
 use crate::barycentric::Barycentric;
+use crate::crs::ProverCrs;
+use crate::honk_curve::HonkCurve;
+use crate::honk_proof::HonkProofResult;
+use crate::polynomials::polynomial::NUM_MASKED_ROWS;
+use crate::polynomials::polynomial::Polynomial;
+use crate::utils::Utils;
 use crate::{
+    honk_proof::TranscriptFieldType,
     mpc::NoirUltraHonkProver,
-    transcript::{Transcript, TranscriptFieldType, TranscriptHasher},
+    transcript::{Transcript, TranscriptHasher},
 };
 use ark_ec::CurveGroup;
 use ark_ff::{One, Zero};
-use co_builder::prelude::{NUM_MASKED_ROWS, Polynomial};
-use co_builder::{
-    HonkProofResult,
-    prelude::{HonkCurve, ProverCrs, Utils},
-};
 use itertools::izip;
 use mpc_net::Network;
 
 pub mod barycentric;
 pub mod co_shplemini;
+pub mod crs;
+pub mod honk_curve;
+pub mod honk_proof;
 pub mod keccak_hash;
 pub mod mpc;
-pub mod shared_polynomial;
+pub mod polynomials;
+pub mod serialize;
 pub mod shplemini;
 pub mod sponge_hasher;
 pub mod transcript;
-
-const NUM_SMALL_IPA_EVALUATIONS: usize = 4;
-// ECCVM constants:
-pub const CONST_ECCVM_LOG_N: usize = 16;
-pub const ECCVM_FIXED_SIZE: usize = 1usize << CONST_ECCVM_LOG_N;
-pub const NUM_TRANSLATION_OPENING_CLAIMS: usize = NUM_SMALL_IPA_EVALUATIONS + 1;
-pub const NUM_OPENING_CLAIMS: usize = NUM_TRANSLATION_OPENING_CLAIMS + 1;
-pub const NUM_LIMB_BITS_IN_FIELD_SIMULATION: usize = 68;
-pub const NUM_SCALAR_BITS: usize = 128; // The length of scalars handled by the ECCVVM
-pub const NUM_WNAF_DIGIT_BITS: usize = 4; // Scalars are decompose into base 16 in wNAF form
-pub const NUM_WNAF_DIGITS_PER_SCALAR: usize = NUM_SCALAR_BITS / NUM_WNAF_DIGIT_BITS; // 32
-pub const WNAF_MASK: u64 = (1 << NUM_WNAF_DIGIT_BITS) - 1;
-pub const POINT_TABLE_SIZE: usize = 1 << (NUM_WNAF_DIGIT_BITS);
-pub const WNAF_DIGITS_PER_ROW: usize = 4;
-pub const ADDITIONS_PER_ROW: usize = 4;
-pub const TABLE_WIDTH: usize = 4; // dictated by the number of wires in the Ultra arithmetization
-pub const NUM_ROWS_PER_OP: usize = 2; // A single ECC op is split across two width-4 rows
-
-// Translator constants:
-pub const CONST_TRANSLATOR_LOG_N: usize = 18;
-pub const NUM_BINARY_LIMBS: usize = 4;
-pub const NUM_Z_LIMBS: usize = 2;
-pub const NUM_MICRO_LIMBS: usize = 6;
-pub const NUM_RELATION_WIDE_LIMBS: usize = 2;
-pub const NUM_LAST_LIMB_BITS: usize = 50;
-pub const NUM_QUOTIENT_BITS: usize = 256;
-pub const NUM_Z_BITS: usize = 128;
-pub const MICRO_LIMB_BITS: usize = 14;
+pub mod types;
+pub mod utils;
 
 pub fn compute_opening_proof<
     P: HonkCurve<TranscriptFieldType>,

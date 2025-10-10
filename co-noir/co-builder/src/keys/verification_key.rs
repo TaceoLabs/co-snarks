@@ -1,9 +1,16 @@
 use crate::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use crate::{
-    HonkProofError, HonkProofResult, TranscriptFieldType, crs::ProverCrs,
-    flavours::ultra_flavour::UltraFlavour, honk_curve::HonkCurve, prover_flavour::ProverFlavour,
-    serialize::SerializeP, ultra_builder::UltraCircuitBuilder, utils::Utils,
+    flavours::ultra_flavour::UltraFlavour, prover_flavour::ProverFlavour,
+    ultra_builder::UltraCircuitBuilder,
 };
+use co_noir_common::{
+    crs::ProverCrs,
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
+    serialize::SerializeP,
+    utils::Utils,
+};
+
 use ark_ec::CurveGroup;
 use ark_ec::{AffineRepr, pairing::Pairing};
 use ark_ff::Zero;

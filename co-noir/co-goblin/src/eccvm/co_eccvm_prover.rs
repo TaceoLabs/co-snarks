@@ -3,28 +3,32 @@ use crate::ipa::compute_ipa_opening_proof;
 use ark_ec::CurveGroup;
 use ark_ff::Field;
 use ark_ff::{One, Zero};
+use co_builder::eccvm::CONST_ECCVM_LOG_N;
+use co_builder::eccvm::NUM_OPENING_CLAIMS;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
-use co_builder::{
-    HonkProofResult, TranscriptFieldType,
-    flavours::eccvm_flavour::ECCVMFlavour,
-    prelude::{HonkCurve, NUM_DISABLED_ROWS_IN_SUMCHECK, Polynomial, ProverCrs},
-};
-use co_ultrahonk::prelude::AllEntities;
-use co_ultrahonk::prelude::Polynomials;
-use co_ultrahonk::prelude::ZeroKnowledge;
-use co_ultrahonk::prelude::{
-    CoDecider, ProvingKey, SharedSmallSubgroupIPAProver, SharedZKSumcheckData, SumcheckOutput,
-};
-use common::CoUtils;
-use common::co_shplemini::OpeningPair;
-use common::shared_polynomial::SharedPolynomial;
-use common::{CONST_ECCVM_LOG_N, NUM_OPENING_CLAIMS};
-use common::{
+use co_noir_common::crs::ProverCrs;
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::HonkProofResult;
+use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK;
+use co_noir_common::polynomials::polynomial::Polynomial;
+use co_noir_common::polynomials::shared_polynomial::SharedPolynomial;
+use co_noir_common::types::ZeroKnowledge;
+
+use co_builder::flavours::eccvm_flavour::ECCVMFlavour;
+use co_noir_common::CoUtils;
+use co_noir_common::co_shplemini::OpeningPair;
+use co_noir_common::{
     co_shplemini::ShpleminiOpeningClaim,
     mpc::NoirUltraHonkProver,
     transcript::{Transcript, TranscriptHasher},
+};
+use co_ultrahonk::prelude::AllEntities;
+use co_ultrahonk::prelude::Polynomials;
+use co_ultrahonk::prelude::{
+    CoDecider, ProvingKey, SharedSmallSubgroupIPAProver, SharedZKSumcheckData, SumcheckOutput,
 };
 use itertools::Itertools;
 use itertools::izip;

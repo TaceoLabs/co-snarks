@@ -4,11 +4,10 @@ pub(crate) mod zk_data;
 
 use super::types::ClaimedEvaluations;
 use crate::mpc_prover_flavour::MPCProverFlavour;
-use co_builder::prelude::HonkCurve;
-use common::{
-    mpc::NoirUltraHonkProver, shared_polynomial::SharedPolynomial, transcript::TranscriptFieldType,
+use co_noir_common::polynomials::shared_polynomial::SharedPolynomial;
+use co_noir_common::{
+    honk_curve::HonkCurve, honk_proof::TranscriptFieldType, mpc::NoirUltraHonkProver,
 };
-
 pub struct SumcheckOutput<
     T: NoirUltraHonkProver<P>,
     P: HonkCurve<TranscriptFieldType>,

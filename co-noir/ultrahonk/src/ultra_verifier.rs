@@ -5,8 +5,11 @@ use crate::{
     ultra_prover::UltraHonk,
 };
 use ark_ec::pairing::Pairing;
-use co_builder::prelude::{HonkCurve, VerifyingKey, ZeroKnowledge};
-use common::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
+use co_builder::prelude::VerifyingKey;
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::transcript::{Transcript, TranscriptHasher};
+use co_noir_common::types::ZeroKnowledge;
 use noir_types::HonkProof;
 
 pub(crate) type HonkVerifyResult<T> = std::result::Result<T, eyre::Report>;

@@ -9,15 +9,16 @@ use ark_ff::{Field, One, Zero};
 use co_builder::polynomials::polynomial_flavours::PolyGFlavour;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
-use co_builder::prelude::ZeroKnowledge;
-use co_builder::{
-    HonkProofError, HonkProofResult,
-    prelude::{HonkCurve, Polynomial, ProverCrs},
+use co_noir_common::shplemini::OpeningPair;
+use co_noir_common::shplemini::ShpleminiOpeningClaim;
+use co_noir_common::transcript::{Transcript, TranscriptHasher};
+use co_noir_common::{
+    crs::ProverCrs,
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
+    polynomials::polynomial::Polynomial,
+    types::ZeroKnowledge,
 };
-use common::shplemini::OpeningPair;
-use common::shplemini::ShpleminiOpeningClaim;
-use common::transcript::TranscriptFieldType;
-use common::transcript::{Transcript, TranscriptHasher};
 use itertools::izip;
 
 impl<

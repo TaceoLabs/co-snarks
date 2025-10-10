@@ -1,3 +1,5 @@
+use co_noir_common::polynomials::polynomial::Polynomial;
+
 use crate::{
     polynomials::polynomial_flavours::{
         PolyGFlavour, PrecomputedEntitiesFlavour, ProverWitnessEntitiesFlavour,
@@ -335,14 +337,14 @@ impl ProverFlavour for TranslatorFlavour {
     const WITNESS_RETURN_DATA_INVERSES: usize = usize::MAX;
 
     fn prover_witness_entity_from_vec<T: Default + Sync + Clone>(
-        _vec: Vec<crate::prelude::Polynomial<T>>,
-    ) -> Self::ProverWitnessEntities<crate::prelude::Polynomial<T>> {
+        _vec: Vec<Polynomial<T>>,
+    ) -> Self::ProverWitnessEntities<Polynomial<T>> {
         todo!("Implementation for prover_witness_entity_from_vec in TranslatorFlavour")
     }
 
     fn precomputed_entity_from_vec<T: Default + Clone + Sync + Debug>(
-        _vec: Vec<crate::prelude::Polynomial<T>>,
-    ) -> Self::PrecomputedEntities<crate::prelude::Polynomial<T>> {
+        _vec: Vec<Polynomial<T>>,
+    ) -> Self::PrecomputedEntities<Polynomial<T>> {
         todo!("Implementation for precomputed_entity_from_vec in TranslatorFlavour")
     }
 }

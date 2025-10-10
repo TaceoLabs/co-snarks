@@ -3,8 +3,10 @@ use ark_ec::AdditiveGroup;
 use ark_ff::Field;
 use co_builder::flavours::mega_flavour::MegaFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
-use co_builder::prelude::Polynomial;
-use co_builder::{TranscriptFieldType, prelude::HonkCurve};
+
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::polynomials::polynomial::Polynomial;
 use ultrahonk::plain_prover_flavour::{PlainProverFlavour, UnivariateTrait};
 use ultrahonk::prelude::{AllEntities, GateSeparatorPolynomial, ProvingKey, Univariate};
 

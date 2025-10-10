@@ -8,7 +8,7 @@ use crate::plain_prover_flavour::PlainProverFlavour;
 
 use super::types::ClaimedEvaluations;
 use ark_ff::PrimeField;
-use co_builder::prelude::Polynomial;
+use co_noir_common::polynomials::polynomial::Polynomial;
 
 pub struct SumcheckOutput<F: PrimeField, L: PlainProverFlavour> {
     pub(crate) _claimed_evaluations: ClaimedEvaluations<F, L>, // TACEO TODO: Is this ever needed?

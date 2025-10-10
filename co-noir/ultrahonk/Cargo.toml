@@ -13,7 +13,7 @@ rust-version.workspace = true
 ark-bn254.workspace = true
 ark-ec.workspace = true
 ark-ff.workspace = true
-common = { version = "0.1.0", path = "../common" }
+co-noir-common = { version = "0.1.0", path = "../co-noir-common" }
 co-builder = { version = "0.4.0", path = "../co-builder" }
 noir-types = { version = "0.1.0", path = "../noir-types" }
 mpc-core = { version = "0.9.0", path = "../../mpc-core" }

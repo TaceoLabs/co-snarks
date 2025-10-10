@@ -3,16 +3,18 @@ use std::fs::File;
 use ark_bn254::Bn254;
 use ark_ff::PrimeField;
 use co_acvm::{PlainAcvmSolver, mpc::NoirWitnessExtensionProtocol};
-use co_builder::TranscriptFieldType;
 use co_builder::flavours::ultra_flavour::UltraFlavour;
+use co_builder::prelude::HonkRecursion;
 use co_builder::prelude::constraint_system_from_reader;
-use co_builder::prelude::{CrsParser, HonkRecursion};
+use co_noir_common::crs::parse::CrsParser;
+use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::mpc::plain::PlainUltraHonkDriver;
+use co_noir_common::transcript::{Poseidon2Sponge, TranscriptHasher};
+use co_noir_common::types::ZeroKnowledge;
 use co_ultrahonk::prelude::{CoUltraHonk, PlainCoBuilder, ProvingKey};
-use common::mpc::plain::PlainUltraHonkDriver;
-use common::transcript::{Poseidon2Sponge, TranscriptHasher};
 use noir_types::HonkProof;
 use sha3::Keccak256;
-use ultrahonk::prelude::{UltraHonk, ZeroKnowledge};
+use ultrahonk::prelude::UltraHonk;
 
 fn promote_public_witness_vector<F: PrimeField, T: NoirWitnessExtensionProtocol<F>>(
     witness: Vec<F>,
@@ -26,8 +28,8 @@ fn plaindriver_test<H: TranscriptHasher<TranscriptFieldType>>(
     witness_file: &str,
     has_zk: ZeroKnowledge,
 ) {
-    const CRS_PATH_G1: &str = "../co-builder/src/crs/bn254_g1.dat";
-    const CRS_PATH_G2: &str = "../co-builder/src/crs/bn254_g2.dat";
+    const CRS_PATH_G1: &str = "../co-noir-common/src/crs/bn254_g1.dat";
+    const CRS_PATH_G2: &str = "../co-noir-common/src/crs/bn254_g2.dat";
 
     let constraint_system =
         constraint_system_from_reader(File::open(circuit_file).unwrap(), true).unwrap();
