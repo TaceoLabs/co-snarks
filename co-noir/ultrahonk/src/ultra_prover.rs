@@ -8,17 +8,17 @@ use co_builder::{
     prelude::{PAIRING_POINT_ACCUMULATOR_SIZE, ProvingKey},
     prover_flavour::Flavour,
 };
-use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::HonkProofResult;
 use co_noir_common::honk_proof::TranscriptFieldType;
 use co_noir_common::transcript::{Transcript, TranscriptHasher};
 use co_noir_common::types::ZeroKnowledge;
+use co_noir_common::{honk_curve::HonkCurve, mpc::plain::PlainUltraHonkDriver};
 use noir_types::HonkProof;
 use std::marker::PhantomData;
 
 pub struct UltraHonk<
     P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, P>,
     L: PlainProverFlavour,
 > {
     phantom_data: PhantomData<(P, H, L)>,
@@ -26,12 +26,12 @@ pub struct UltraHonk<
 
 impl<
     P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, P>,
     L: PlainProverFlavour,
 > UltraHonk<P, H, L>
 {
     pub(crate) fn generate_gate_challenges(
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
     ) -> Vec<P::ScalarField> {
         tracing::trace!("generate gate challenges");
 
@@ -50,7 +50,7 @@ impl<
     ) -> HonkProofResult<(HonkProof<TranscriptFieldType>, Vec<TranscriptFieldType>)> {
         tracing::trace!("UltraHonk prove");
 
-        let mut transcript = Transcript::<TranscriptFieldType, H>::new();
+        let mut transcript = Transcript::<TranscriptFieldType, H, PlainUltraHonkDriver, P>::new();
 
         let oink = Oink::new(has_zk);
         let oink_result = oink.prove(&mut proving_key, &mut transcript)?;

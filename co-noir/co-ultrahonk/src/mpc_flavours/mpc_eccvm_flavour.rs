@@ -2,6 +2,7 @@ use crate::co_decider::co_sumcheck::co_sumcheck_round::SumcheckRound;
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::{HonkProofResult, TranscriptFieldType};
 use co_noir_common::transcript::TranscriptHasher;
+use co_noir_common::transcript_mpc::TranscriptRef;
 
 use crate::co_decider::relations::Relation;
 use crate::{
@@ -327,10 +328,17 @@ impl MPCProverFlavour for ECCVMFlavour {
         Ok(())
     }
 
-    fn get_alpha_challenges<F: PrimeField, H: TranscriptHasher<F>, P: HonkCurve<F>>(
-        _transcript: &mut co_noir_common::transcript::Transcript<F, H>,
+    fn get_alpha_challenges<
+        T: NoirUltraHonkProver<P>,
+        H: TranscriptHasher<TranscriptFieldType, T, P>,
+        P: HonkCurve<TranscriptFieldType>,
+        N: Network,
+    >(
+        _transcript: &mut TranscriptRef<TranscriptFieldType, T, P, H>,
         _alphas: &mut Vec<P::ScalarField>,
-    ) {
+        _net: &N,
+        _state: &mut T::State,
+    ) -> eyre::Result<()> {
         panic!(
             "This is used in the Oink Prover and thus should not be called with the ECCVM flavour"
         );

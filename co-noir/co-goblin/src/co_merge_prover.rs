@@ -1,15 +1,19 @@
-use std::collections::VecDeque;
-
 use ark_ff::Field;
 use ark_ff::Zero;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use co_noir_common::CoUtils;
 use co_noir_common::crs::ProverCrs;
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::{HonkProofResult, TranscriptFieldType};
-use co_noir_common::transcript::Transcript;
+use co_noir_common::mpc::NoirUltraHonkProver;
 use co_noir_common::transcript::TranscriptHasher;
-
+use co_noir_common::transcript_mpc::TranscriptRef;
+use co_noir_common::transcript_mpc::TranscriptRep3;
 use itertools::{Itertools, izip};
+use mpc_core::MpcState;
+use mpc_net::Network;
+use std::collections::VecDeque;
+use ultrahonk::prelude::Transcript;
 
 use co_builder::eccvm::co_ecc_op_queue::CoECCOpQueue;
 use ultrahonk::prelude::HonkProof;
@@ -18,58 +22,48 @@ use ultrahonk::prelude::HonkProof;
 type OpeningClaim<T, F> = (Vec<T>, T, F);
 
 const NUM_WIRES: usize = 4;
-pub struct CoMergeProver<C, H, T>
+pub struct CoMergeProver<'a, C, H, N, T>
 where
-    T: NoirWitnessExtensionProtocol<C::ScalarField>,
+    T: NoirUltraHonkProver<C>,
     C: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
+    N: Network,
+    H: TranscriptHasher<TranscriptFieldType, T, C>,
 {
-    ecc_op_queue: CoECCOpQueue<T, C>,
-    transcript: Transcript<TranscriptFieldType, H>,
+    net: &'a N,
+    state: &'a mut T::State,
+    current_ultra_ops_subtable: Vec<Vec<T::ArithmeticShare>>,
+    ultra_ops_table: Vec<Vec<T::ArithmeticShare>>,
+    previous_ultra_ops_table: Vec<Vec<T::ArithmeticShare>>,
+    phantom: std::marker::PhantomData<H>,
 }
 
-impl<C, H, T> CoMergeProver<C, H, T>
+impl<'a, C, H, N, T> CoMergeProver<'a, C, H, N, T>
 where
-    T: NoirWitnessExtensionProtocol<C::ScalarField>,
+    T: NoirUltraHonkProver<C>,
     C: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
+    N: Network,
+    H: TranscriptHasher<TranscriptFieldType, T, C>,
 {
-    pub fn new(ecc_op_queue: CoECCOpQueue<T, C>) -> Self {
-        Self {
-            ecc_op_queue,
-            transcript: Transcript::new(),
-        }
-    }
-
-    pub fn construct_proof(
-        mut self,
-        commitment_key: &ProverCrs<C>,
-        driver: &mut T,
-    ) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
-        self.transcript = Transcript::new();
-        let curr_subtable = self
-            .ecc_op_queue
-            .construct_current_ultra_ops_subtable_columns();
-        let curr_table = self.ecc_op_queue.construct_ultra_ops_table_columns();
-        let prev_table = self
-            .ecc_op_queue
-            .construct_previous_ultra_ops_table_columns();
-
-        let (current_table_size, current_subtable_size) =
-            (curr_table[0].len(), curr_subtable[0].len());
-
-        self.transcript
-            .send_u64_to_verifier("subtable_size".to_owned(), current_subtable_size as u64);
-
+    pub fn new<
+        U: NoirWitnessExtensionProtocol<C::ScalarField, ArithmeticShare = T::ArithmeticShare>,
+    >(
+        net: &'a N,
+        state: &'a mut T::State,
+        ecc_op_queue: CoECCOpQueue<U, C>,
+        driver: &mut U,
+    ) -> Self {
+        let curr_subtable = ecc_op_queue.construct_current_ultra_ops_subtable_columns();
+        let curr_table = ecc_op_queue.construct_ultra_ops_table_columns();
+        let prev_table = ecc_op_queue.construct_previous_ultra_ops_table_columns();
         let curr_subtable_shares = curr_subtable
             .iter()
             .map(|subtable| {
                 subtable
                     .iter()
                     .map(|x| {
-                        if let Some(public) = T::get_public(x) {
+                        if let Some(public) = U::get_public(x) {
                             driver.promote_to_trivial_share(public)
-                        } else if let Some(secret) = T::get_shared(x) {
+                        } else if let Some(secret) = U::get_shared(x) {
                             secret
                         } else {
                             panic!("Value is neither public nor secret")
@@ -85,9 +79,9 @@ where
                 subtable
                     .iter()
                     .map(|x| {
-                        if let Some(public) = T::get_public(x) {
+                        if let Some(public) = U::get_public(x) {
                             driver.promote_to_trivial_share(public)
-                        } else if let Some(secret) = T::get_shared(x) {
+                        } else if let Some(secret) = U::get_shared(x) {
                             secret
                         } else {
                             panic!("Value is neither public nor secret")
@@ -103,9 +97,9 @@ where
                 subtable
                     .iter()
                     .map(|x| {
-                        if let Some(public) = T::get_public(x) {
+                        if let Some(public) = U::get_public(x) {
                             driver.promote_to_trivial_share(public)
-                        } else if let Some(secret) = T::get_shared(x) {
+                        } else if let Some(secret) = U::get_shared(x) {
                             secret
                         } else {
                             panic!("Value is neither public nor secret")
@@ -114,27 +108,80 @@ where
                     .collect_vec()
             })
             .collect_vec();
+        Self {
+            net,
+            state,
+            current_ultra_ops_subtable: curr_subtable_shares,
+            ultra_ops_table: curr_table_shares,
+            previous_ultra_ops_table: prev_table_shares,
+            phantom: std::marker::PhantomData,
+        }
+    }
 
-        // Compute commiments shares
+    pub fn construct_proof_plain_transcript(
+        mut self,
+        commitment_key: &ProverCrs<C>,
+    ) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
+        let mut transcript = Transcript::new();
+        let transcript = TranscriptRef::Plain(&mut transcript);
+        let (proof, _) = self.construct_proof_inner(commitment_key, transcript)?;
+        Ok(proof.expect("Proof is Some"))
+    }
+
+    pub fn construct_proof_rep3_transcript(
+        mut self,
+        commitment_key: &ProverCrs<C>,
+    ) -> HonkProofResult<Vec<T::ArithmeticShare>> {
+        let mut transcript = TranscriptRep3::new();
+        let transcript = TranscriptRef::Rep3(&mut transcript);
+        let (_, proof_shared) = self.construct_proof_inner(commitment_key, transcript)?;
+        Ok(proof_shared.expect("Proof shared is Some"))
+    }
+
+    #[expect(clippy::type_complexity)]
+    pub fn construct_proof_inner(
+        &mut self,
+        commitment_key: &ProverCrs<C>,
+        mut transcript: TranscriptRef<TranscriptFieldType, T, C, H>,
+    ) -> HonkProofResult<(
+        Option<HonkProof<TranscriptFieldType>>,
+        Option<Vec<T::ArithmeticShare>>,
+    )> {
+        let (current_table_size, current_subtable_size) = (
+            self.ultra_ops_table[0].len(),
+            self.current_ultra_ops_subtable[0].len(),
+        );
+
+        match &mut transcript {
+            TranscriptRef::Plain(transcript) => transcript
+                .send_u64_to_verifier("subtable_size".to_owned(), current_subtable_size as u64),
+            TranscriptRef::Rep3(transcript_rep3) => transcript_rep3
+                .send_u64_to_verifier("subtable_size".to_owned(), current_subtable_size as u64),
+        }
+
+        let curr_subtable_shares = &self.current_ultra_ops_subtable;
+        let prev_table_shares = &self.previous_ultra_ops_table;
+        let curr_table_shares = &self.ultra_ops_table;
+
+        // Compute commitments shares
         let curr_subtable_shared_commitments = (0..NUM_WIRES)
             .map(|i| {
                 let monomials = &commitment_key.monomials[..curr_subtable_shares[i].len()];
-                driver.msm_public_native_points::<C>(monomials, &curr_subtable_shares[i])
+                CoUtils::msm::<T, C>(&curr_subtable_shares[i], monomials)
             })
             .collect_vec();
         let prev_table_shared_prev_commitments = (0..NUM_WIRES)
             .map(|i| {
                 let monomials = &commitment_key.monomials[..prev_table_shares[i].len()];
-                driver.msm_public_native_points::<C>(monomials, &prev_table_shares[i])
+                CoUtils::msm::<T, C>(&prev_table_shares[i], monomials)
             })
             .collect_vec();
         let curr_table_shared_commitments = (0..NUM_WIRES)
             .map(|i| {
                 let monomials = &commitment_key.monomials[..curr_table_shares[i].len()];
-                driver.msm_public_native_points::<C>(monomials, &curr_table_shares[i])
+                CoUtils::msm::<T, C>(&curr_table_shares[i], monomials)
             })
             .collect_vec();
-
         // Interleave the commitments and open them
         let shared_commitments = izip!(
             curr_subtable_shared_commitments,
@@ -143,134 +190,181 @@ where
         )
         .flat_map(|(a, b, c)| vec![a, b, c])
         .collect_vec();
+        match &mut transcript {
+            TranscriptRef::Plain(transcript) => {
+                let mut commitments: VecDeque<C> =
+                    T::open_point_many(&shared_commitments, self.net, self.state)?.into();
 
-        let mut commitments: VecDeque<C::Affine> =
-            driver.open_many_native_points(&shared_commitments)?.into();
-
-        // Send commitments to the verifier
-        let num_chunks = commitments.len() / 3;
-        for i in 0..num_chunks {
-            for label in ["current_subtable_", "previous_table_", "current_table_"] {
-                self.transcript.send_point_to_verifier::<C>(
-                    format!("{label}{i}"),
-                    commitments
-                        .pop_front()
-                        .expect("Commitment vector is not empty"),
-                );
+                // Send commitments to the verifier
+                let num_chunks = commitments.len() / 3;
+                for i in 0..num_chunks {
+                    for label in ["current_subtable_", "previous_table_", "current_table_"] {
+                        transcript.send_point_to_verifier::<C>(
+                            format!("{label}{i}"),
+                            commitments
+                                .pop_front()
+                                .expect("Commitment vector is not empty")
+                                .into(),
+                        );
+                    }
+                }
+            }
+            TranscriptRef::Rep3(transcript_rep3) => {
+                let mut shared_commitments: VecDeque<_> = shared_commitments.into();
+                // Send commitments to the verifier
+                let num_chunks = shared_commitments.len() / 3;
+                for i in 0..num_chunks {
+                    for label in ["current_subtable_", "previous_table_", "current_table_"] {
+                        transcript_rep3.send_point_to_verifier_shared(
+                            format!("{label}{i}"),
+                            shared_commitments
+                                .pop_front()
+                                .expect("Commitment vector is not empty"),
+                        );
+                    }
+                }
             }
         }
 
-        let kappa = self.transcript.get_challenge::<C>("kappa".to_owned());
+        let kappa = match &mut transcript {
+            TranscriptRef::Plain(transcript) => transcript.get_challenge::<C>("kappa".to_owned()),
+            TranscriptRef::Rep3(transcript_rep3) => {
+                transcript_rep3.get_challenge("kappa".to_owned(), self.net, self.state)?
+            }
+        };
 
-        let mut opening_claims: Vec<OpeningClaim<T::AcvmType, C::ScalarField>> =
+        let mut opening_claims: Vec<OpeningClaim<T::ArithmeticShare, C::ScalarField>> =
             Vec::with_capacity(3 * NUM_WIRES);
 
-        let all_polys = curr_subtable
+        let all_polys = curr_subtable_shares
+            .clone()
             .into_iter()
-            .chain(prev_table)
-            .chain(curr_table)
+            .chain(prev_table_shares.clone())
+            .chain(curr_table_shares.clone())
             .collect_vec();
 
-        self.compute_opening_claims(&all_polys, "all_polys", &mut opening_claims, kappa, driver)?;
+        self.compute_opening_claims(
+            &all_polys,
+            "all_polys",
+            &mut opening_claims,
+            kappa,
+            &mut transcript,
+        )?;
 
-        let alpha = self.transcript.get_challenge::<C>("alpha".to_owned());
+        let alpha = match &mut transcript {
+            TranscriptRef::Plain(transcript) => transcript.get_challenge::<C>("alpha".to_owned()),
+            TranscriptRef::Rep3(transcript_rep3) => {
+                transcript_rep3.get_challenge("alpha".to_owned(), self.net, self.state)?
+            }
+        };
 
-        let mut batched_eval = T::public_zero();
+        let mut batched_eval = T::ArithmeticShare::default();
         let mut alpha_pow = C::ScalarField::ONE;
 
         let batched_polynomial = opening_claims.iter().fold(
-            vec![T::public_zero(); current_table_size],
+            vec![T::ArithmeticShare::default(); current_table_size],
             |mut acc, (polynomial, evaluation, _)| {
-                let alpha_pow_many = vec![alpha_pow.into(); polynomial.len()];
-                let scaled_poly = driver
-                    .mul_many(polynomial, &alpha_pow_many)
+                let alpha_pow_many =
+                    vec![T::promote_to_trivial_share(self.state.id(), alpha_pow); polynomial.len()];
+                let scaled_poly = T::mul_many(polynomial, &alpha_pow_many, self.net, self.state)
                     .expect("Scaling polynomial by alpha_pow failed");
                 acc.iter_mut()
                     .zip(scaled_poly.iter())
-                    .for_each(|(a, b)| driver.add_assign(a, *b));
+                    .for_each(|(a, b)| T::add_assign(a, *b));
 
-                let scaled_evaluation = driver.mul_with_public(alpha_pow, *evaluation);
-                driver.add_assign(&mut batched_eval, scaled_evaluation);
+                let scaled_evaluation = T::mul_with_public(alpha_pow, *evaluation);
+                T::add_assign(&mut batched_eval, scaled_evaluation);
                 alpha_pow *= alpha;
                 acc
             },
         );
 
-        Self::compute_opening_proof(
+        self.compute_opening_proof(
             batched_polynomial,
             (batched_eval, kappa),
-            &mut self.transcript,
+            &mut transcript,
             commitment_key,
-            driver,
         )?;
 
-        Ok(self.transcript.get_proof())
+        match transcript {
+            TranscriptRef::Plain(t) => Ok((Some(t.get_proof_ref()), None)),
+            TranscriptRef::Rep3(t) => Ok((None, Some(t.get_proof()))),
+        }
     }
 
     fn compute_opening_claims(
         &mut self,
-        polynomials: &[Vec<T::AcvmType>],
+        polynomials: &[Vec<T::ArithmeticShare>],
         label: &str,
-        opening_claims: &mut Vec<OpeningClaim<T::AcvmType, C::ScalarField>>,
+        opening_claims: &mut Vec<OpeningClaim<T::ArithmeticShare, C::ScalarField>>,
         kappa: C::ScalarField,
-        driver: &mut T,
+        transcript: &mut TranscriptRef<TranscriptFieldType, T, C, H>,
     ) -> eyre::Result<()> {
         // Compute the evaluations of the shared polynomials at kappa
         let shared_evals = (0..3 * NUM_WIRES)
-            .map(|i| driver.eval_poly(&polynomials[i], kappa))
-            .collect::<Result<Vec<_>, _>>()?;
+            .map(|i| T::eval_poly(&polynomials[i], kappa))
+            .collect::<Vec<_>>();
 
-        izip!(polynomials.iter(), shared_evals.iter())
-            .for_each(|(poly, &evaluation)| opening_claims.push((poly.clone(), evaluation, kappa)));
-        // Open the evaluations and send them to the verifier
-        let evaluations = driver.open_many_acvm_type(&shared_evals)?;
-        evaluations
-            .into_iter()
-            .enumerate()
-            .for_each(|(i, evaluation)| {
-                self.transcript
-                    .send_fr_to_verifier::<C>(format!("{label}_{i}"), evaluation);
-            });
+        izip!(polynomials.iter(), shared_evals.iter()).for_each(|(poly, &evaluation)| {
+            opening_claims.push((poly.to_vec(), evaluation, kappa))
+        });
+        match transcript {
+            TranscriptRef::Plain(transcript) => {
+                // Open the evaluations and send them to the verifier
+                let evaluations = T::open_many(&shared_evals, self.net, self.state)?;
+                evaluations
+                    .into_iter()
+                    .enumerate()
+                    .for_each(|(i, evaluation)| {
+                        transcript.send_fr_to_verifier::<C>(format!("{label}_{i}"), evaluation);
+                    });
+            }
+            TranscriptRef::Rep3(transcript_rep3) => {
+                shared_evals
+                    .into_iter()
+                    .enumerate()
+                    .for_each(|(i, evaluation)| {
+                        transcript_rep3
+                            .send_fr_to_verifier_shared(format!("{label}_{i}"), evaluation);
+                    });
+            }
+        }
+
         Ok(())
     }
 
     pub fn compute_opening_proof(
-        polynomial: Vec<T::AcvmType>,
-        (evaluation, challenge): (T::AcvmType, C::ScalarField),
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        &mut self,
+        polynomial: Vec<T::ArithmeticShare>,
+        (evaluation, challenge): (T::ArithmeticShare, C::ScalarField),
+        transcript: &mut TranscriptRef<TranscriptFieldType, T, C, H>,
         crs: &ProverCrs<C>,
-        driver: &mut T,
     ) -> HonkProofResult<()> {
         let mut quotient = polynomial;
 
-        quotient[0] = driver.sub(quotient[0], evaluation);
+        quotient[0] = T::sub(quotient[0], evaluation);
         // Computes the coefficients for the quotient polynomial q(X) = (p(X) - v) / (X - r) through an FFT
-        Self::factor_roots(&mut quotient, &challenge, driver);
-
-        let quotient = quotient
-            .iter()
-            .map(|x| {
-                if let Some(public) = T::get_public(x) {
-                    driver.promote_to_trivial_share(public)
-                } else if let Some(secret) = T::get_shared(x) {
-                    secret
-                } else {
-                    panic!("Value is neither public nor secret")
-                }
-            })
-            .collect::<Vec<T::ArithmeticShare>>();
+        self.factor_roots(&mut quotient, &challenge);
 
         // Compute the commitment to the quotient polynomial
         let monomials = &crs.monomials[..quotient.len()];
-        let quotient_commitment = driver.msm_public_native_points::<C>(monomials, &quotient);
-        // AZTEC TODO(#479): for now we compute the KZG commitment directly to unify the KZG and IPA interfaces but in the
-        // future we might need to adjust this to use the incoming alternative to work queue (i.e. variation of
-        // pthreads) or even the work queue itself
-        let quotient_commitment: C::Affine = driver
-            .open_many_native_points(&[quotient_commitment])?
-            .pop()
-            .expect("Commitment vector is not empty");
-        transcript.send_point_to_verifier::<C>("KZG:W".to_string(), quotient_commitment);
+        let quotient_commitment = CoUtils::msm::<T, C>(&quotient, monomials);
+        match transcript {
+            TranscriptRef::Plain(transcript) => {
+                // AZTEC TODO(#479): for now we compute the KZG commitment directly to unify the KZG and IPA interfaces but in the
+                // future we might need to adjust this to use the incoming alternative to work queue (i.e. variation of
+                // pthreads) or even the work queue itself
+                let quotient_commitment = T::open_point(quotient_commitment, self.net, self.state)?;
+
+                transcript
+                    .send_point_to_verifier::<C>("KZG:W".to_string(), quotient_commitment.into());
+            }
+            TranscriptRef::Rep3(transcript_rep3) => {
+                transcript_rep3
+                    .send_point_to_verifier_shared("KZG:W".to_string(), quotient_commitment);
+            }
+        }
+
         Ok(())
     }
 
@@ -278,9 +372,9 @@ where
      * @brief Divides p(X) by (X-r) in-place.
      */
     pub fn factor_roots(
-        coefficients: &mut Vec<T::AcvmType>,
+        &mut self,
+        coefficients: &mut Vec<T::ArithmeticShare>,
         root: &C::ScalarField,
-        driver: &mut T,
     ) {
         if root.is_zero() {
             // if one of the roots is 0 after having divided by all other roots,
@@ -322,8 +416,8 @@ where
             for coeff in coefficients.iter_mut() {
                 // at the start of the loop, temp = bᵢ₋₁
                 // and we can compute bᵢ   = (aᵢ − bᵢ₋₁)⋅(−r)⁻¹
-                temp = driver.sub(*coeff, temp);
-                temp = driver.mul_with_public(root_inverse, temp);
+                temp = T::sub(*coeff, temp);
+                temp = T::mul_with_public(root_inverse, temp);
                 *coeff = temp.to_owned();
             }
             // remove the last (zero) coefficient after synthetic division
@@ -338,16 +432,16 @@ mod tests {
 
     use co_acvm::{Rep3AcvmPoint, Rep3AcvmSolver};
     use co_builder::eccvm::co_ecc_op_queue::{CoEccvmOpsTable, CoUltraEccOpsTable, CoUltraOp};
-    use mpc_core::protocols::rep3::{Rep3PointShare, share_curve_point};
+    use mpc_core::protocols::rep3::{Rep3PointShare, Rep3State, share_curve_point};
 
     use super::*;
     use ark_bn254::Bn254;
     use ark_ec::bn::Bn;
     use ark_ec::pairing::Pairing;
     use co_builder::eccvm::ecc_op_queue::{EccOpCode, EccOpsTable, EccvmRowTracker, UltraOp};
-    use co_noir_common::crs::parse::CrsParser;
     use co_noir_common::transcript::Poseidon2Sponge;
     use co_noir_common::types::ZeroKnowledge;
+    use co_noir_common::{crs::parse::CrsParser, mpc::rep3::Rep3UltraHonkDriver};
     use mpc_core::{
         gadgets::field_from_hex_string,
         protocols::rep3::{conversion::A2BType, share_field_element},
@@ -358,7 +452,7 @@ mod tests {
     type Bn254G1 = ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>;
     type Bn254G1Affine = ark_bn254::G1Affine;
     type F = <Bn<ark_bn254::Config> as Pairing>::ScalarField;
-    type Driver<'a> = Rep3AcvmSolver<'a, F, LocalNetwork>;
+    type AcvmDriver<'a> = Rep3AcvmSolver<'a, F, LocalNetwork>;
 
     const CRS_PATH_G1: &str = concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -375,7 +469,7 @@ mod tests {
 
     fn co_ultra_ops_from_ultra_op(
         ultra_op: UltraOp<Bn254G1>,
-    ) -> Vec<CoUltraOp<Driver<'static>, Bn254G1>> {
+    ) -> Vec<CoUltraOp<AcvmDriver<'static>, Bn254G1>> {
         let mut rng = thread_rng();
         izip!(
             share_field_element(ultra_op.x_lo, &mut rng),
@@ -493,7 +587,7 @@ mod tests {
         let mut acc: VecDeque<Rep3PointShare<Bn254G1>> =
             share_curve_point(Bn254G1Affine::identity().into(), &mut thread_rng()).into();
 
-        let mut get_queues = || CoECCOpQueue::<Driver, Bn254G1> {
+        let mut get_queues = || CoECCOpQueue::<AcvmDriver, Bn254G1> {
             accumulator: Rep3AcvmPoint::Shared(acc.pop_front().unwrap()),
             eccvm_ops_table: CoEccvmOpsTable::new(),
             ultra_ops_table: CoUltraEccOpsTable {
@@ -509,7 +603,7 @@ mod tests {
             eccvm_row_tracker: EccvmRowTracker::default(),
         };
 
-        let queue: [CoECCOpQueue<Driver, Bn254G1>; 3] = core::array::from_fn(|_| get_queues());
+        let queue: [CoECCOpQueue<AcvmDriver, Bn254G1>; 3] = core::array::from_fn(|_| get_queues());
 
         let crs =
             CrsParser::<Bn254G1>::get_crs::<Bn254>(CRS_PATH_G1, CRS_PATH_G2, 5, ZeroKnowledge::No)
@@ -523,9 +617,15 @@ mod tests {
             let crs = prover_crs.clone();
             let net_b = Box::leak(Box::new(net));
             threads.push(thread::spawn(move || {
-                let mut driver = Driver::new(net_b, net_b, A2BType::Direct).unwrap();
-                let prover = CoMergeProver::<Bn254G1, Poseidon2Sponge, Driver>::new(queue);
-                prover.construct_proof(&crs, &mut driver)
+                let mut driver = AcvmDriver::new(net_b, net_b, A2BType::Direct).unwrap();
+                let mut state = Rep3State::new(net_b, A2BType::default()).unwrap();
+                let prover = CoMergeProver::<
+                    Bn254G1,
+                    Poseidon2Sponge,
+                    LocalNetwork,
+                    Rep3UltraHonkDriver,
+                >::new(net_b, &mut state, queue, &mut driver);
+                prover.construct_proof_plain_transcript(&crs)
             }));
         }
 

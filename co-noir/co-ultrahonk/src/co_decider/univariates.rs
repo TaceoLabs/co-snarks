@@ -1,5 +1,5 @@
 use ark_ec::CurveGroup;
-use ark_ff::Field;
+use ark_ff::{Field, One, Zero};
 use co_noir_common::barycentric::Barycentric;
 use mpc_net::Network;
 use std::array;
@@ -50,6 +50,43 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup, const SIZE: usize> SharedUnivaria
         } else {
             result.add_assign(&extended);
         }
+    }
+
+    pub fn evaluate_with_domain_start(
+        &self,
+        u: P::ScalarField,
+        domain_start: usize,
+    ) -> T::ArithmeticShare {
+        let mut full_numerator_value = P::ScalarField::one();
+        for i in domain_start..SIZE + domain_start {
+            full_numerator_value *= u - P::ScalarField::from(i as u64);
+        }
+
+        let big_domain = (domain_start..domain_start + SIZE)
+            .map(|i| P::ScalarField::from(i as u64))
+            .collect::<Vec<_>>();
+        let lagrange_denominators = Barycentric::construct_lagrange_denominators(SIZE, &big_domain);
+
+        let mut denominator_inverses = [P::ScalarField::zero(); SIZE];
+        for i in 0..SIZE {
+            let mut inv = lagrange_denominators[i];
+
+            inv *= u - big_domain[i];
+            inv = P::ScalarField::one() / inv;
+            denominator_inverses[i] = inv;
+        }
+
+        let mut result = T::ArithmeticShare::default();
+        // Compute each term v_j / (d_j*(x-x_j)) of the sum
+        for (i, &inverse) in denominator_inverses.iter().enumerate() {
+            let mut term = self.evaluations[i];
+            T::mul_assign_with_public(&mut term, inverse);
+            T::add_assign(&mut result, term);
+        }
+
+        // Scale the sum by the value of B(x)
+        T::mul_assign_with_public(&mut result, full_numerator_value);
+        result
     }
 }
 

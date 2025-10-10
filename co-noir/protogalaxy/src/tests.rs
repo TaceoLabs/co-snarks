@@ -1,5 +1,18 @@
 use std::{array, io::Read, sync::Arc, vec};
 
+use crate::{
+    protogalaxy_prover::{BATCHED_EXTENDED_LENGTH, MAX_TOTAL_RELATION_LENGTH, NUM_KEYS},
+    protogalaxy_prover_internal::{
+        compute_and_extend_alphas, compute_extended_relation_parameters,
+    },
+};
+use crate::{
+    protogalaxy_prover::{CONST_PG_LOG_N, DeciderProverMemory, ProtogalaxyProver},
+    protogalaxy_prover_internal::{
+        compute_combiner, compute_combiner_quotient, compute_perturbator, compute_row_evaluations,
+        construct_perturbator_coefficients,
+    },
+};
 use ark_bn254::Bn254;
 use ark_ec::{bn::Bn, pairing::Pairing};
 use ark_ff::AdditiveGroup;
@@ -8,6 +21,7 @@ use co_builder::{
     prelude::{ActiveRegionData, Polynomials, PublicComponentKey},
     prover_flavour::ProverFlavour,
 };
+use co_noir_common::mpc::plain::PlainUltraHonkDriver;
 use co_noir_common::{
     crs::{ProverCrs, parse::CrsParser},
     honk_proof::TranscriptFieldType,
@@ -22,20 +36,6 @@ use ultrahonk::{
     decider::types::{ProverMemory, RelationParameters},
     oink::oink_prover::Oink,
     prelude::{GateSeparatorPolynomial, Poseidon2Sponge, ProvingKey, Transcript, Univariate},
-};
-
-use crate::{
-    protogalaxy_prover::{BATCHED_EXTENDED_LENGTH, MAX_TOTAL_RELATION_LENGTH, NUM_KEYS},
-    protogalaxy_prover_internal::{
-        compute_and_extend_alphas, compute_extended_relation_parameters,
-    },
-};
-use crate::{
-    protogalaxy_prover::{CONST_PG_LOG_N, DeciderProverMemory, ProtogalaxyProver},
-    protogalaxy_prover_internal::{
-        compute_combiner, compute_combiner_quotient, compute_perturbator, compute_row_evaluations,
-        construct_perturbator_coefficients,
-    },
 };
 
 const EXTENDED_LENGTH: usize = (MAX_TOTAL_RELATION_LENGTH - 1) * (NUM_KEYS - 1) + 1;
@@ -583,7 +583,7 @@ fn test_protogalaxy_prover() {
     let prover = ProtogalaxyProver::<C, Poseidon2Sponge>::new();
 
     // Compute the first Oink proof
-    let mut transcript = Transcript::<F, Poseidon2Sponge>::new();
+    let mut transcript = Transcript::<F, Poseidon2Sponge, PlainUltraHonkDriver, C>::new();
     let oink = Oink::<C, Poseidon2Sponge, MegaFlavour>::new(ZeroKnowledge::No);
     let oink_memory_1 = oink.prove(&mut accumulator, &mut transcript).unwrap();
 

@@ -12,6 +12,7 @@ use co_builder::eccvm::{
     WNAF_DIGITS_PER_ROW,
 };
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
+use co_noir_common::mpc::plain::PlainUltraHonkDriver;
 use co_noir_common::polynomials::polynomial::NUM_TRANSLATION_EVALUATIONS;
 use co_noir_common::{
     crs::ProverCrs,
@@ -51,11 +52,11 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslationData<P> {
         }
     }
     pub(crate) fn construct_translation_data<
-        H: TranscriptHasher<TranscriptFieldType>,
+        H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, P>,
         R: rand::Rng + rand::CryptoRng,
     >(
         transcript_polynomials: &[Polynomial<P::ScalarField>],
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
         crs: &ProverCrs<P>,
         rng: &mut R,
     ) -> HonkProofResult<Self> {
@@ -86,13 +87,12 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslationData<P> {
     }
 
     pub(crate) fn compute_small_ipa_prover<
-        H: TranscriptHasher<TranscriptFieldType>,
-        // R: rand::Rng + rand::CryptoRng,
+        H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, P>,
     >(
         &mut self,
         evaluation_challenge_x: P::ScalarField,
         batching_challenge_v: P::ScalarField,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
     ) -> HonkProofResult<SmallSubgroupIPAProver<P>> {
         let mut small_ipa_prover = SmallSubgroupIPAProver::<P> {
             interpolation_domain: self.interpolation_domain.to_owned(),

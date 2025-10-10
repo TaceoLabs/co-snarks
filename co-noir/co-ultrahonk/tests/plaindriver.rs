@@ -22,7 +22,9 @@ fn promote_public_witness_vector<F: PrimeField, T: NoirWitnessExtensionProtocol<
     witness.into_iter().map(|w| T::AcvmType::from(w)).collect()
 }
 
-fn plaindriver_test<H: TranscriptHasher<TranscriptFieldType>>(
+fn plaindriver_test<
+    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, ark_bn254::G1Projective>,
+>(
     proof_file: &str,
     circuit_file: &str,
     witness_file: &str,
@@ -37,9 +39,7 @@ fn plaindriver_test<H: TranscriptHasher<TranscriptFieldType>>(
 
     let witness = promote_public_witness_vector::<_, PlainAcvmSolver<ark_bn254::Fr>>(witness);
     let mut driver = PlainAcvmSolver::new();
-    let builder = PlainCoBuilder::<
-        <ark_ec::models::bn::Bn<ark_bn254::Config> as ark_ec::pairing::Pairing>::G1,
-    >::create_circuit(
+    let builder = PlainCoBuilder::<ark_bn254::G1Projective>::create_circuit(
         &constraint_system,
         false, // We don't support recursive atm
         0,
@@ -50,21 +50,23 @@ fn plaindriver_test<H: TranscriptHasher<TranscriptFieldType>>(
     .unwrap();
 
     let crs_size = builder.compute_dyadic_size();
-    let (prover_crs, verifier_crs) = CrsParser::<
-        <ark_ec::bn::Bn<ark_bn254::Config> as ark_ec::pairing::Pairing>::G1,
-    >::get_crs::<Bn254>(
-        CRS_PATH_G1, CRS_PATH_G2, crs_size, has_zk
+    let (prover_crs, verifier_crs) = CrsParser::<ark_bn254::G1Projective>::get_crs::<Bn254>(
+        CRS_PATH_G1,
+        CRS_PATH_G2,
+        crs_size,
+        has_zk,
     )
     .unwrap()
     .split();
     let (proving_key, verifying_key) =
         ProvingKey::create_keys(0, builder, &prover_crs, verifier_crs, &mut driver).unwrap();
 
-    let (proof, public_inputs) = CoUltraHonk::<PlainUltraHonkDriver, _, H, UltraFlavour>::prove(
-        proving_key,
-        &prover_crs,
-        has_zk,
-    )
+    let (proof, public_inputs) = CoUltraHonk::<
+        PlainUltraHonkDriver,
+        ark_bn254::G1Projective,
+        H,
+        UltraFlavour,
+    >::prove(proving_key, &prover_crs, has_zk)
     .unwrap();
 
     if has_zk == ZeroKnowledge::No {

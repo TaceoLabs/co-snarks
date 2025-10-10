@@ -1,23 +1,21 @@
-use std::vec;
-
+use ark_ec::PrimeGroup;
 use ark_ff::fields::Field;
-
 use co_builder::flavours::mega_flavour::MegaFlavour;
-
 use co_noir_common::crs::ProverCrs;
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::{HonkProofResult, TranscriptFieldType};
 use co_noir_common::polynomials::polynomial::Polynomial;
 use co_noir_common::polynomials::shared_polynomial::SharedPolynomial;
-use co_noir_common::types::ZeroKnowledge;
-use co_ultrahonk::prelude::ProvingKey;
-use itertools::{Itertools, izip};
-
 use co_noir_common::transcript::Transcript;
+use co_noir_common::transcript_mpc::{TranscriptRef, TranscriptRep3};
+use co_noir_common::types::ZeroKnowledge;
 use co_noir_common::{mpc::NoirUltraHonkProver, transcript::TranscriptHasher};
 use co_ultrahonk::co_decider::types::RelationParameters;
 use co_ultrahonk::co_oink::co_oink_prover::CoOink;
+use co_ultrahonk::prelude::{ProvingKey, SharedUnivariate};
+use itertools::{Itertools, izip};
 use mpc_net::Network;
+use std::vec;
 use ultrahonk::prelude::HonkProof;
 use ultrahonk::{
     plain_prover_flavour::UnivariateTrait,
@@ -40,13 +38,19 @@ pub const BATCHED_EXTENDED_LENGTH: usize =
 pub type OinkProverMemory<T, C> = co_ultrahonk::co_oink::types::ProverMemory<T, C>;
 pub type DeciderProverMemory<T, C> =
     co_ultrahonk::co_decider::types::ProverMemory<T, C, MegaFlavour>;
-pub(crate) type PerturbatorRoundResult<F> = HonkProofResult<(Vec<F>, Polynomial<F>)>;
-pub(crate) type CombinerQuotientRoundResult<F> = HonkProofResult<(
-    Vec<F>,
-    Vec<Univariate<F, BATCHED_EXTENDED_LENGTH>>,
-    ExtendedRelationParameters<F>,
-    F,
-    Univariate<F, { BATCHED_EXTENDED_LENGTH - NUM_KEYS }>,
+pub(crate) type PerturbatorRoundResult<T, C> = HonkProofResult<(
+    Vec<<C as PrimeGroup>::ScalarField>,
+    Option<Polynomial<<C as PrimeGroup>::ScalarField>>,
+    Option<SharedPolynomial<T, C>>,
+)>;
+pub(crate) type CombinerQuotientRoundResult<T, C> = HonkProofResult<(
+    Vec<<C as PrimeGroup>::ScalarField>,
+    Vec<Univariate<<C as PrimeGroup>::ScalarField, BATCHED_EXTENDED_LENGTH>>,
+    ExtendedRelationParameters<<C as PrimeGroup>::ScalarField>,
+    Option<<C as PrimeGroup>::ScalarField>,
+    Option<<T as NoirUltraHonkProver<C>>::ArithmeticShare>,
+    Option<Univariate<<C as PrimeGroup>::ScalarField, { BATCHED_EXTENDED_LENGTH - NUM_KEYS }>>,
+    Option<SharedUnivariate<T, C, { BATCHED_EXTENDED_LENGTH - NUM_KEYS }>>,
 )>;
 
 pub type ExtendedRelationParameters<F> = RelationParameters<Univariate<F, BATCHED_EXTENDED_LENGTH>>;
@@ -55,28 +59,28 @@ pub struct CoProtogalaxyProver<'a, T, C, H, N>
 where
     T: NoirUltraHonkProver<C>,
     C: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, T, C>,
     N: Network,
 {
-    pub(crate) transcript: Transcript<TranscriptFieldType, H>,
     pub(crate) net: &'a N,
     pub(crate) state: &'a mut T::State,
     pub(crate) crs: &'a ProverCrs<C>,
+    phantom: std::marker::PhantomData<H>,
 }
 
 impl<'a, T, C, H, N> CoProtogalaxyProver<'a, T, C, H, N>
 where
     T: NoirUltraHonkProver<C>,
     C: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, T, C>,
     N: Network,
 {
     pub fn new(net: &'a N, state: &'a mut T::State, crs: &'a ProverCrs<C>) -> Self {
         Self {
-            transcript: Transcript::new(),
             net,
             state,
             crs,
+            phantom: std::marker::PhantomData,
         }
     }
 }
@@ -85,27 +89,29 @@ impl<'a, T, C, H, N> CoProtogalaxyProver<'a, T, C, H, N>
 where
     T: NoirUltraHonkProver<C>,
     C: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, T, C>,
     N: Network,
 {
     fn run_oink_prover_on_one_incomplete_key(
         &mut self,
         proving_key: &mut ProvingKey<T, C, MegaFlavour>,
+        transcript: &mut TranscriptRef<TranscriptFieldType, T, C, H>,
     ) -> HonkProofResult<OinkProverMemory<T, C>> {
         let oink_prover =
             CoOink::<T, C, H, N, MegaFlavour>::new(self.net, self.state, ZeroKnowledge::No);
-        oink_prover.prove(proving_key, &mut self.transcript, self.crs)
+        oink_prover.prove_inner(proving_key, transcript, self.crs)
     }
 
     pub(crate) fn run_oink_prover_on_each_incomplete_key(
         &mut self,
         proving_keys: &mut [ProvingKey<T, C, MegaFlavour>],
+        transcript: &mut TranscriptRef<TranscriptFieldType, T, C, H>,
     ) -> HonkProofResult<Vec<OinkProverMemory<T, C>>> {
         // Assumes accumulator has not been folded
         let mut memory = Vec::with_capacity(proving_keys.len());
 
         for key in proving_keys.iter_mut() {
-            memory.push(self.run_oink_prover_on_one_incomplete_key(key));
+            memory.push(self.run_oink_prover_on_one_incomplete_key(key, transcript));
         }
 
         // unwrap all the results
@@ -116,8 +122,12 @@ where
         &mut self,
         accumulator: &mut ProvingKey<T, C, MegaFlavour>,
         accumulator_prover_memory: &DeciderProverMemory<T, C>,
-    ) -> PerturbatorRoundResult<C::ScalarField> {
-        let delta = self.transcript.get_challenge::<C>("delta".to_owned());
+        transcript: &mut TranscriptRef<TranscriptFieldType, T, C, H>,
+    ) -> PerturbatorRoundResult<T, C> {
+        let delta = match transcript {
+            TranscriptRef::Plain(t) => t.get_challenge::<C>("delta".to_owned()),
+            TranscriptRef::Rep3(t) => t.get_challenge("delta".to_owned(), self.net, self.state)?,
+        };
 
         let deltas = std::iter::successors(Some(delta), |&x| Some(x.square()))
             .take(CONST_PG_LOG_N)
@@ -143,31 +153,44 @@ where
         // the accumulator which the folding verifier has from the previous iteration.
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1087): Verifier circuit for first IVC step is
         // different
-
-        // Open the values of the perturbator
-        let perturbator = Polynomial {
-            // TACEO TODO: We leak stuff here and therefore should not open these shared values,
-            // transcript operations should be performed in MPC.
-            coefficients: T::open_many(&perturbator.coefficients, self.net, self.state)?,
-        };
-
-        (1..=CONST_PG_LOG_N).for_each(|i| {
-            self.transcript
-                .send_fr_to_verifier::<C>(format!("perturbator_{i}"), perturbator.coefficients[i]);
-        });
-
-        Ok((deltas, perturbator))
+        match transcript {
+            TranscriptRef::Plain(t) => {
+                // Open the values of the perturbator
+                let perturbator = Polynomial {
+                    // Note: When using the plain transcript we leak the opened commitments to the verifier/parties which is unintended in ClientIVC (atm)
+                    coefficients: T::open_many(&perturbator.coefficients, self.net, self.state)?,
+                };
+                for i in 1..=CONST_PG_LOG_N {
+                    t.send_fr_to_verifier::<C>(format!("perturbator_{i}"), perturbator[i]);
+                }
+                Ok((deltas, Some(perturbator), None))
+            }
+            TranscriptRef::Rep3(t) => {
+                for i in 1..=CONST_PG_LOG_N {
+                    t.send_fr_to_verifier_shared(
+                        format!("perturbator_{i}"),
+                        perturbator.coefficients[i],
+                    );
+                }
+                Ok((deltas, None, Some(perturbator)))
+            }
+        }
     }
 
     fn combiner_quotient_round(
         &mut self,
         prover_memory: &Vec<&mut DeciderProverMemory<T, C>>,
-        perturbator: Polynomial<C::ScalarField>,
+        perturbator_opened: Option<Polynomial<C::ScalarField>>,
+        perturbator_shared: Option<SharedPolynomial<T, C>>,
         deltas: Vec<C::ScalarField>,
-    ) -> CombinerQuotientRoundResult<C::ScalarField> {
-        let perturbator_challenge = self
-            .transcript
-            .get_challenge::<C>("perturbator_challenge".to_owned());
+        transcript: &mut TranscriptRef<TranscriptFieldType, T, C, H>,
+    ) -> CombinerQuotientRoundResult<T, C> {
+        let perturbator_challenge = match transcript {
+            TranscriptRef::Plain(t) => t.get_challenge::<C>("perturbator_challenge".to_owned()),
+            TranscriptRef::Rep3(t) => {
+                t.get_challenge("perturbator_challenge".to_owned(), self.net, self.state)?
+            }
+        };
 
         let updated_gate_challenges = prover_memory[0]
             .gate_challenges
@@ -191,63 +214,136 @@ where
             &alphas,
         )?;
 
-        let perturbator_evaluation = perturbator.eval_poly(perturbator_challenge);
-        let combiner_quotient =
-            compute_combiner_quotient(self.state, &combiner, perturbator_evaluation);
-
-        // Open the evaluations of the combiner quotient
-        // TACEO TODO: We leak stuff here and therefore should not open these shared values,
-        // transcript operations should be performed in MPC.
-        let combiner_quotient = Univariate {
-            evaluations: T::open_many(&combiner_quotient.evaluations, self.net, self.state)
-                .unwrap()
-                .try_into()
-                .unwrap(),
+        let (eval_open, eval_shared) = match (&perturbator_opened, &perturbator_shared) {
+            (Some(p), None) => (Some(p.eval_poly(perturbator_challenge)), None),
+            (None, Some(p)) => (
+                None,
+                Some(T::eval_poly(&p.coefficients, perturbator_challenge)),
+            ),
+            _ => panic!("Either perturbator_opened or perturbator_shared must be Some"),
         };
+        let combiner_quotient =
+            compute_combiner_quotient(self.state, &combiner, eval_open, eval_shared);
 
-        for (i, eval) in combiner_quotient.evaluations.iter().enumerate() {
-            self.transcript
-                .send_fr_to_verifier::<C>(format!("combiner_quotient_{i}"), *eval);
+        match transcript {
+            TranscriptRef::Plain(t) => {
+                // Open the evaluations of the combiner quotient
+                // Note: When using the plain transcript we leak the opened commitments to the verifier/parties which is unintended in ClientIVC (atm)
+                let combiner_quotient = Univariate {
+                    evaluations: T::open_many(
+                        &combiner_quotient.evaluations,
+                        self.net,
+                        self.state,
+                    )?
+                    .try_into()
+                    .expect("Polynomial has correct length"),
+                };
+                for (i, eval) in combiner_quotient.evaluations.iter().enumerate() {
+                    t.send_fr_to_verifier::<C>(format!("combiner_quotient_{i}"), *eval);
+                }
+                Ok((
+                    updated_gate_challenges,
+                    alphas,
+                    relation_parameters,
+                    eval_open,
+                    eval_shared,
+                    Some(combiner_quotient),
+                    None,
+                ))
+            }
+            TranscriptRef::Rep3(t) => {
+                for (i, eval) in combiner_quotient.evaluations.iter().enumerate() {
+                    t.send_fr_to_verifier_shared(format!("combiner_quotient_{i}"), *eval);
+                }
+                Ok((
+                    updated_gate_challenges,
+                    alphas,
+                    relation_parameters,
+                    eval_open,
+                    eval_shared,
+                    None,
+                    Some(combiner_quotient),
+                ))
+            }
         }
-
-        Ok((
-            updated_gate_challenges,
-            alphas,
-            relation_parameters,
-            perturbator_evaluation,
-            combiner_quotient,
-        ))
     }
 
     /**
      * @brief Given the challenge \gamma, compute Z(\gamma) and {L_0(\gamma),L_1(\gamma)}
      */
+    #[expect(clippy::type_complexity, clippy::too_many_arguments)]
     fn update_target_sum_and_fold(
-        mut self,
+        self,
         prover_memory: &mut Vec<&mut DeciderProverMemory<T, C>>,
-        combiner_quotient: Univariate<C::ScalarField, { BATCHED_EXTENDED_LENGTH - NUM_KEYS }>,
+        combiner_quotient_opened: Option<
+            Univariate<C::ScalarField, { BATCHED_EXTENDED_LENGTH - NUM_KEYS }>,
+        >,
+        combiner_quotient_shared: Option<
+            SharedUnivariate<T, C, { BATCHED_EXTENDED_LENGTH - NUM_KEYS }>,
+        >,
         alphas: Vec<Univariate<C::ScalarField, BATCHED_EXTENDED_LENGTH>>,
         univariate_relation_parameters: ExtendedRelationParameters<C::ScalarField>,
-        perturbator_evaluation: C::ScalarField,
-    ) -> HonkProofResult<(HonkProof<TranscriptFieldType>, C::ScalarField)> {
+        perturbator_evaluation_opened: Option<C::ScalarField>,
+        perturbator_evaluation_shared: Option<T::ArithmeticShare>,
+        transcript: TranscriptRef<TranscriptFieldType, T, C, H>,
+    ) -> HonkProofResult<(
+        Option<HonkProof<TranscriptFieldType>>,
+        Option<Vec<T::ArithmeticShare>>,
+        Option<C::ScalarField>,
+        Option<T::ArithmeticShare>,
+    )> {
         let (accumulator_prover_memory, next_prover_memory) = prover_memory.split_at_mut(1);
         let accumulator_prover_memory = &mut accumulator_prover_memory[0];
         let next_prover_memory = &next_prover_memory[0];
 
-        let combiner_challenge = self
-            .transcript
-            .get_challenge::<C>("combiner_quotient_challenge".to_owned());
-
-        let proof = self.transcript.get_proof();
+        let (combiner_challenge, proof_open, proof_shared) = match transcript {
+            TranscriptRef::Plain(transcript) => {
+                let challenge =
+                    transcript.get_challenge::<C>("combiner_quotient_challenge".to_owned());
+                (challenge, Some(transcript.get_proof_ref()), None)
+            }
+            TranscriptRef::Rep3(transcript_rep3) => {
+                let challenge = transcript_rep3.get_challenge(
+                    "combiner_quotient_challenge".to_owned(),
+                    self.net,
+                    self.state,
+                )?;
+                (challenge, None, Some(transcript_rep3.get_proof()))
+            }
+        };
 
         let (vanishing_polynomial_at_challenge, lagranges) = (
             combiner_challenge * (combiner_challenge - C::ScalarField::ONE),
             vec![C::ScalarField::ONE - combiner_challenge, combiner_challenge],
         );
 
-        let target_sum = perturbator_evaluation * lagranges[0]
-            + vanishing_polynomial_at_challenge
-                * combiner_quotient.evaluate_with_domain_start(combiner_challenge, NUM_KEYS);
+        let (target_sum_open, target_sum_shared) = match (
+            &perturbator_evaluation_opened,
+            &perturbator_evaluation_shared,
+        ) {
+            (Some(p), None) => (
+                Some(
+                    *p * lagranges[0]
+                        + vanishing_polynomial_at_challenge
+                            * combiner_quotient_opened
+                                .expect("combiner_quotient_opened is Some")
+                                .evaluate_with_domain_start(combiner_challenge, NUM_KEYS),
+                ),
+                None,
+            ),
+            (None, Some(p)) => {
+                let tmp = T::mul_with_public(lagranges[0], *p);
+                let mut eval = combiner_quotient_shared
+                    .expect("combiner_quotient_opened is Some")
+                    .evaluate_with_domain_start(combiner_challenge, NUM_KEYS);
+                T::mul_assign_with_public(&mut eval, vanishing_polynomial_at_challenge);
+                T::add_assign(&mut eval, tmp);
+                (None, Some(eval))
+            }
+            _ => panic!(
+                "Either perturbator_evaluation_opened or perturbator_evaluation_shared must be Some"
+            ),
+        };
 
         // Accumulate public polynomials
         accumulator_prover_memory
@@ -311,15 +407,22 @@ where
             *value = univariate.evaluate(combiner_challenge);
         }
 
-        HonkProofResult::Ok((proof, target_sum))
+        HonkProofResult::Ok((proof_open, proof_shared, target_sum_open, target_sum_shared))
     }
 
-    pub fn prove(
+    #[expect(clippy::type_complexity)]
+    pub fn prove_inner(
         mut self,
         accumulator: &mut ProvingKey<T, C, MegaFlavour>,
         accumulator_prover_memory: &mut DeciderProverMemory<T, C>,
         mut next_proving_keys: Vec<ProvingKey<T, C, MegaFlavour>>,
-    ) -> HonkProofResult<(HonkProof<TranscriptFieldType>, C::ScalarField)> {
+        mut transcript: TranscriptRef<TranscriptFieldType, T, C, H>,
+    ) -> HonkProofResult<(
+        Option<HonkProof<TranscriptFieldType>>,
+        Option<Vec<T::ArithmeticShare>>,
+        Option<C::ScalarField>,
+        Option<T::ArithmeticShare>,
+    )> {
         let max_circuit_size = next_proving_keys
             .iter()
             .map(|pk| pk.circuit_size)
@@ -333,7 +436,8 @@ where
         });
 
         // Run Oink prover
-        let oink_memories = self.run_oink_prover_on_each_incomplete_key(&mut next_proving_keys)?;
+        let oink_memories =
+            self.run_oink_prover_on_each_incomplete_key(&mut next_proving_keys, &mut transcript)?;
 
         let mut next_prover_memories =
             izip!(oink_memories.into_iter(), next_proving_keys.into_iter())
@@ -346,8 +450,8 @@ where
                 .collect::<Vec<_>>();
 
         // Perturbator round
-        let (deltas, perturbator) =
-            self.perturbator_round(accumulator, accumulator_prover_memory)?;
+        let (deltas, perturbator_opened, perturbator_shared) =
+            self.perturbator_round(accumulator, accumulator_prover_memory, &mut transcript)?;
 
         let mut prover_memory = std::iter::once(accumulator_prover_memory)
             .chain(next_prover_memories.iter_mut())
@@ -358,19 +462,74 @@ where
             updated_gate_challenges,
             alphas,
             relation_parameters,
-            perturbator_evaluation,
-            combiner_quotient,
-        ) = self.combiner_quotient_round(&prover_memory, perturbator, deltas)?;
+            perturbator_evaluation_open,
+            perturbator_evaluation_shared,
+            combiner_quotient_opened,
+            combiner_quotient_shared,
+        ) = self.combiner_quotient_round(
+            &prover_memory,
+            perturbator_opened,
+            perturbator_shared,
+            deltas,
+            &mut transcript,
+        )?;
 
         prover_memory[0].gate_challenges = updated_gate_challenges;
 
         // update target sum and fold
         self.update_target_sum_and_fold(
             &mut prover_memory,
-            combiner_quotient,
+            combiner_quotient_opened,
+            combiner_quotient_shared,
             alphas,
             relation_parameters,
-            perturbator_evaluation,
+            perturbator_evaluation_open,
+            perturbator_evaluation_shared,
+            transcript,
         )
+    }
+
+    pub fn prove_plain_transcript(
+        self,
+        accumulator: &mut ProvingKey<T, C, MegaFlavour>,
+        accumulator_prover_memory: &mut DeciderProverMemory<T, C>,
+        next_proving_keys: Vec<ProvingKey<T, C, MegaFlavour>>,
+    ) -> HonkProofResult<(HonkProof<TranscriptFieldType>, C::ScalarField)> {
+        let mut transcript = Transcript::new();
+        let transcript = TranscriptRef::Plain(&mut transcript);
+
+        let (proof, _, target_sum_open, _) = self.prove_inner(
+            accumulator,
+            accumulator_prover_memory,
+            next_proving_keys,
+            transcript,
+        )?;
+
+        Ok((
+            proof.expect("Proof is Some"),
+            target_sum_open.expect("Target sum is Some"),
+        ))
+    }
+
+    pub fn prove_rep3_transcript(
+        self,
+        accumulator: &mut ProvingKey<T, C, MegaFlavour>,
+        accumulator_prover_memory: &mut DeciderProverMemory<T, C>,
+        next_proving_keys: Vec<ProvingKey<T, C, MegaFlavour>>,
+    ) -> HonkProofResult<(Vec<T::ArithmeticShare>, T::ArithmeticShare)> {
+        let mut transcript = TranscriptRep3::new();
+        let transcript = TranscriptRef::Rep3(&mut transcript);
+
+        let (_, proof_shared, _, target_sum_shared) = self.prove_inner(
+            accumulator,
+            accumulator_prover_memory,
+            next_proving_keys,
+            transcript,
+        )?;
+
+        Ok((
+            proof_shared.expect("Proof is Some"),
+            target_sum_shared.expect("Target sum is Some"),
+        ))
     }
 }

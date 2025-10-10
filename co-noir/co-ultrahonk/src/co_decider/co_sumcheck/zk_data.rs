@@ -11,9 +11,10 @@ use co_noir_common::honk_proof::HonkProofResult;
 use co_noir_common::honk_proof::TranscriptFieldType;
 use co_noir_common::mpc::NoirUltraHonkProver;
 use co_noir_common::polynomials::shared_polynomial::SharedPolynomial;
-use co_noir_common::transcript::{Transcript, TranscriptHasher};
+use co_noir_common::transcript::TranscriptHasher;
 use mpc_core::MpcState as _;
 use mpc_net::Network;
+use ultrahonk::prelude::Transcript;
 
 pub struct SharedZKSumcheckData<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) constant_term: T::ArithmeticShare,
@@ -30,9 +31,9 @@ pub struct SharedZKSumcheckData<T: NoirUltraHonkProver<P>, P: CurveGroup> {
 }
 
 impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> SharedZKSumcheckData<T, P> {
-    pub fn new<H: TranscriptHasher<TranscriptFieldType>, N: Network>(
+    pub fn new<H: TranscriptHasher<TranscriptFieldType, T, P>, N: Network>(
         multivariate_d: usize,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, T, P>,
         commitment_key: &[P::Affine],
         net: &N,
         state: &mut T::State,

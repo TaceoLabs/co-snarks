@@ -1,5 +1,6 @@
 use crate::Utils;
 use crate::plain_prover_flavour::UnivariateTrait;
+use co_noir_common::mpc::plain::PlainUltraHonkDriver;
 use co_noir_common::transcript::{Transcript, TranscriptHasher};
 
 use crate::prelude::Univariate;
@@ -33,9 +34,12 @@ pub struct ZKSumcheckData<P: CurveGroup> {
 }
 
 impl<P: HonkCurve<TranscriptFieldType>> ZKSumcheckData<P> {
-    pub fn new<H: TranscriptHasher<TranscriptFieldType>, R: Rng + CryptoRng>(
+    pub fn new<
+        H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, P>,
+        R: Rng + CryptoRng,
+    >(
         multivariate_d: usize,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
         commitment_key: &[P::Affine],
         rng: &mut R,
     ) -> HonkProofResult<Self> {

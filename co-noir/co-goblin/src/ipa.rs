@@ -16,12 +16,12 @@ use ultrahonk::Utils as UltraHonkUtils;
 pub(crate) fn compute_ipa_opening_proof<
     T: NoirUltraHonkProver<P>,
     P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, T, P>,
     N: Network,
 >(
     net: &N,
     state: &mut T::State,
-    transcript: &mut Transcript<TranscriptFieldType, H>,
+    transcript: &mut Transcript<TranscriptFieldType, H, T, P>,
     opening_claim: ShpleminiOpeningClaim<T, P>,
     commitment_key: &ProverCrs<P>,
 ) -> HonkProofResult<()> {

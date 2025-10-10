@@ -13,6 +13,7 @@ use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::prelude::Polynomials;
 
+use co_noir_common::mpc::plain::PlainUltraHonkDriver;
 use co_noir_common::shplemini::OpeningPair;
 use co_noir_common::shplemini::ShpleminiOpeningClaim;
 use co_noir_common::transcript::Transcript;
@@ -41,13 +42,18 @@ pub(crate) struct ProverMemory<P: CurveGroup> {
     pub(crate) opening_claims: [ShpleminiOpeningClaim<P::ScalarField>; NUM_OPENING_CLAIMS],
 }
 
-pub struct Eccvm<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> {
+pub struct Eccvm<
+    P: HonkCurve<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, P>,
+> {
     decider: Decider<P, H, ECCVMFlavour>, // We need the decider struct here for being able to use sumcheck, shplemini, shplonk
     memory: ProverMemory<P>, //This is somewhat equivalent to the Oink Memory (i.e stores the lookup_inverses and z_perm)
 }
 
-impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> Default
-    for Eccvm<P, H>
+impl<
+    P: HonkCurve<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, P>,
+> Default for Eccvm<P, H>
 {
     fn default() -> Self {
         Self::new()
@@ -55,7 +61,11 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 }
 
 // This happens when we construct the eccvm prover from the eccopqueue
-impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> Eccvm<P, H> {
+impl<
+    P: HonkCurve<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, P>,
+> Eccvm<P, H>
+{
     pub fn new() -> Self {
         Self {
             decider: Decider::new(Default::default(), ZeroKnowledge::Yes),
@@ -68,7 +78,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         polynomial: &mut Polynomial<P::ScalarField>,
         label: &str,
         crs: &ProverCrs<P>,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
     ) -> HonkProofResult<()> {
         polynomial.mask(&mut self.decider.rng);
 
@@ -82,7 +92,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
     pub fn construct_proof(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
         mut proving_key: ProvingKey<P, ECCVMFlavour>,
     ) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
         let circuit_size = proving_key.circuit_size;
@@ -116,7 +126,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
     fn execute_wire_commitments_round(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
         proving_key: &mut ProvingKey<P, ECCVMFlavour>,
     ) -> HonkProofResult<()> {
         let non_shifted = proving_key.polynomials.witness.non_shifted_mut();
@@ -370,7 +380,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
     fn execute_log_derivative_commitments_round(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
         proving_key: &ProvingKey<P, ECCVMFlavour>,
         unmasked_witness_size: usize,
     ) -> HonkProofResult<()> {
@@ -858,7 +868,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
     fn execute_grand_product_computation_round(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
         proving_key: &ProvingKey<P, ECCVMFlavour>,
         unmasked_witness_size: usize,
     ) -> HonkProofResult<()> {
@@ -874,7 +884,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     #[expect(clippy::type_complexity)]
     fn execute_relation_check_rounds(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
         crs: &ProverCrs<P>,
         circuit_size: u32,
     ) -> HonkProofResult<(
@@ -914,10 +924,10 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         &mut self,
         sumcheck_output: SumcheckOutput<P::ScalarField, ECCVMFlavour>,
         zk_sumcheck_data: ZKSumcheckData<P>,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
         crs: &ProverCrs<P>,
         circuit_size: u32,
-    ) -> HonkProofResult<Transcript<TranscriptFieldType, H>> {
+    ) -> HonkProofResult<Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>> {
         let mut small_subgroup_ipa_prover = SmallSubgroupIPAProver::<_>::new::<H>(
             zk_sumcheck_data,
             sumcheck_output
@@ -955,14 +965,15 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
         // Compute the opening proof for the batched opening claim with the univariate PCS
 
-        let mut ipa_transcript = Transcript::<TranscriptFieldType, H>::new();
+        let mut ipa_transcript =
+            Transcript::<TranscriptFieldType, H, PlainUltraHonkDriver, P>::new();
         compute_ipa_opening_proof(&mut ipa_transcript, batch_opening_claim, crs)?;
         Ok(ipa_transcript)
     }
 
     fn compute_translation_opening_claims(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
         crs: &ProverCrs<P>,
         circuit_size: u32,
     ) -> HonkProofResult<()> {

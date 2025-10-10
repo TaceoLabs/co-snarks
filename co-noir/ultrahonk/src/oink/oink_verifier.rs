@@ -8,12 +8,13 @@ use co_builder::prelude::VerifyingKey;
 use co_builder::{
     polynomials::polynomial_flavours::WitnessEntitiesFlavour, prover_flavour::Flavour,
 };
+use co_noir_common::mpc::plain::PlainUltraHonkDriver;
 use co_noir_common::transcript::{Transcript, TranscriptHasher};
 use co_noir_common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType};
 
 pub(crate) struct OinkVerifier<
     P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, P>,
     L: PlainProverFlavour,
 > {
     memory: VerifierMemory<P, L>,
@@ -23,7 +24,7 @@ pub(crate) struct OinkVerifier<
 
 impl<
     P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, P>,
     L: PlainProverFlavour,
 > Default for OinkVerifier<P, H, L>
 {
@@ -34,7 +35,7 @@ impl<
 
 impl<
     C: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, C>,
     L: PlainProverFlavour,
 > OinkVerifier<C, H, L>
 {
@@ -49,7 +50,7 @@ impl<
     fn execute_preamble_round<P: Pairing<G1 = C>>(
         &mut self,
         verifying_key: &VerifyingKey<P, L>,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, C>,
     ) -> HonkVerifyResult<()> {
         tracing::trace!("executing (verifying) preamble round");
 
@@ -74,7 +75,7 @@ impl<
 
     fn execute_wire_commitments_round(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, C>,
     ) -> HonkVerifyResult<()> {
         tracing::trace!("executing (verifying) wire commitments round");
 
@@ -127,7 +128,7 @@ impl<
 
     fn execute_sorted_list_accumulator_round(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, C>,
     ) -> HonkVerifyResult<()> {
         tracing::trace!("executing (verifying) sorted list accumulator round");
 
@@ -154,7 +155,7 @@ impl<
 
     fn execute_log_derivative_inverse_round(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, C>,
     ) -> HonkVerifyResult<()> {
         tracing::trace!("executing (verifying) log derivative inverse round");
 
@@ -183,7 +184,7 @@ impl<
     fn execute_grand_product_computation_round<P: Pairing<G1 = C>>(
         &mut self,
         verifying_key: &VerifyingKey<P, L>,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, C>,
     ) -> HonkVerifyResult<()> {
         tracing::trace!("executing (verifying) grand product computation round");
         self.memory.public_input_delta = Oink::<C, H, L>::compute_public_input_delta(
@@ -201,7 +202,7 @@ impl<
     pub(crate) fn verify<P: Pairing<G1 = C>>(
         mut self,
         verifying_key: &VerifyingKey<P, L>,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, C>,
     ) -> HonkVerifyResult<VerifierMemory<C, L>> {
         tracing::trace!("Oink verify");
         self.execute_preamble_round(verifying_key, transcript)?;

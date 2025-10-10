@@ -54,7 +54,8 @@ use co_builder::prover_flavour::ProverFlavour;
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::{HonkProofResult, TranscriptFieldType};
 use co_noir_common::mpc::NoirUltraHonkProver;
-use co_noir_common::transcript::{Transcript, TranscriptHasher};
+use co_noir_common::transcript::TranscriptHasher;
+use co_noir_common::transcript_mpc::TranscriptRef;
 use mpc_net::Network;
 use std::array;
 use ultrahonk::prelude::Univariate;
@@ -827,13 +828,28 @@ impl MPCProverFlavour for MegaFlavour {
         Ok(())
     }
 
-    fn get_alpha_challenges<F: PrimeField, H: TranscriptHasher<F>, P: HonkCurve<F>>(
-        transcript: &mut Transcript<F, H>,
+    fn get_alpha_challenges<
+        T: NoirUltraHonkProver<P>,
+        H: TranscriptHasher<TranscriptFieldType, T, P>,
+        P: HonkCurve<TranscriptFieldType>,
+        N: Network,
+    >(
+        transcript: &mut TranscriptRef<TranscriptFieldType, T, P, H>,
         alphas: &mut Vec<P::ScalarField>,
-    ) {
+        net: &N,
+        state: &mut T::State,
+    ) -> eyre::Result<()> {
         let args: [String; Self::NUM_ALPHAS] = array::from_fn(|i| format!("alpha_{i}"));
         alphas.resize(Self::NUM_ALPHAS, P::ScalarField::ZERO);
-        alphas.copy_from_slice(&transcript.get_challenges::<P>(&args));
+        match transcript {
+            TranscriptRef::Plain(transcript) => {
+                alphas.copy_from_slice(&transcript.get_challenges::<P>(&args))
+            }
+            TranscriptRef::Rep3(transcript_rep3) => {
+                alphas.copy_from_slice(&transcript_rep3.get_challenges(&args, net, state)?)
+            }
+        };
+        Ok(())
     }
 
     fn reshare<T: NoirUltraHonkProver<P>, P: CurveGroup, N: Network>(

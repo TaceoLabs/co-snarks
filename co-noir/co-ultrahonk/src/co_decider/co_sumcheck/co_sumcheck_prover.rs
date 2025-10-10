@@ -1,4 +1,5 @@
 use super::{SumcheckOutput, zk_data::SharedZKSumcheckData};
+use crate::co_decider::types::ClaimedEvaluationsNonOpened;
 use crate::mpc_prover_flavour::MPCProverFlavour;
 use crate::mpc_prover_flavour::SharedUnivariateTrait;
 use crate::{
@@ -20,6 +21,7 @@ use co_noir_common::mpc::NoirUltraHonkProver;
 use co_noir_common::polynomials::polynomial::RowDisablingPolynomial;
 use co_noir_common::polynomials::shared_polynomial::SharedPolynomial;
 use co_noir_common::transcript::{Transcript, TranscriptHasher};
+use co_noir_common::transcript_mpc::TranscriptRef;
 use mpc_core::MpcState;
 use mpc_net::Network;
 use ultrahonk::Utils;
@@ -30,7 +32,7 @@ use ultrahonk::prelude::GateSeparatorPolynomial;
 impl<
     T: NoirUltraHonkProver<P>,
     P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, T, P>,
     N: Network,
     L: MPCProverFlavour,
 > CoDecider<'_, T, P, H, N, L>
@@ -115,7 +117,7 @@ impl<
     }
 
     fn add_evals_to_transcript(
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, T, P>,
         evaluations: &ClaimedEvaluations<P::ScalarField, L>,
     ) {
         tracing::trace!("Add Evals to Transcript");
@@ -157,11 +159,38 @@ impl<
         Ok(multivariate_evaluations)
     }
 
+    fn extract_claimed_evaluations_non_opened(
+        partially_evaluated_polynomials: PartiallyEvaluatePolys<T, P, L>,
+    ) -> HonkProofResult<ClaimedEvaluationsNonOpened<T, P, L>> {
+        let mut multivariate_evaluations = ClaimedEvaluationsNonOpened::<T, P, L>::default();
+
+        for (src, des) in partially_evaluated_polynomials
+            .public_iter()
+            .zip(multivariate_evaluations.public_iter_mut())
+        {
+            *des = src[0];
+        }
+
+        let shared = partially_evaluated_polynomials
+            .into_shared_iter()
+            .map(|x| x[0])
+            .collect::<Vec<_>>();
+
+        for (src, des) in shared
+            .into_iter()
+            .zip(multivariate_evaluations.shared_iter_mut())
+        {
+            *des = src;
+        }
+
+        Ok(multivariate_evaluations)
+    }
+
     pub(crate) fn sumcheck_prove(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut TranscriptRef<TranscriptFieldType, T, P, H>,
         circuit_size: u32,
-    ) -> HonkProofResult<SumcheckOutput<T, P, L>> {
+    ) -> HonkProofResult<SumcheckOutput<T, P>> {
         tracing::trace!("Sumcheck prove");
 
         let multivariate_n = circuit_size;
@@ -191,15 +220,28 @@ impl<
             &gate_separators,
             &self.memory.polys,
         )?;
-        let round_univariate =
-            T::open_many(round_univariate.evaluations_as_ref(), self.net, self.state)?;
 
-        // Place the evaluations of the round univariate into transcript.
-        transcript.send_fr_iter_to_verifier::<P, _>(
-            "Sumcheck:univariate_0".to_string(),
-            &round_univariate,
-        );
-        let round_challenge = transcript.get_challenge::<P>("Sumcheck:u_0".to_string());
+        let round_challenge = match transcript {
+            TranscriptRef::Plain(transcript) => {
+                let round_univariate =
+                    T::open_many(round_univariate.evaluations_as_ref(), self.net, self.state)?;
+
+                // Place the evaluations of the round univariate into transcript.
+                transcript.send_fr_iter_to_verifier::<P, _>(
+                    "Sumcheck:univariate_0".to_string(),
+                    &round_univariate,
+                );
+                transcript.get_challenge::<P>("Sumcheck:u_0".to_string())
+            }
+            TranscriptRef::Rep3(transcript_rep3) => {
+                // Place the evaluations of the round univariate into transcript.
+                transcript_rep3.send_fr_iter_to_verifier_shared(
+                    "Sumcheck:univariate_0".to_string(),
+                    round_univariate.evaluations_as_ref(),
+                );
+                transcript_rep3.get_challenge("Sumcheck:u_0".to_string(), self.net, self.state)?
+            }
+        };
         multivariate_challenge.push(round_challenge);
 
         // Prepare sumcheck book-keeping table for the next round
@@ -232,15 +274,30 @@ impl<
                 &partially_evaluated_polys,
             )?;
 
-            let round_univariate =
-                T::open_many(round_univariate.evaluations_as_ref(), self.net, self.state)?;
-
             // Place the evaluations of the round univariate into transcript.
-            transcript.send_fr_iter_to_verifier::<P, _>(
-                format!("Sumcheck:univariate_{round_idx}"),
-                &round_univariate,
-            );
-            let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{round_idx}"));
+            let round_challenge = match transcript {
+                TranscriptRef::Plain(transcript) => {
+                    let round_univariate =
+                        T::open_many(round_univariate.evaluations_as_ref(), self.net, self.state)?;
+                    transcript.send_fr_iter_to_verifier::<P, _>(
+                        format!("Sumcheck:univariate_{round_idx}"),
+                        &round_univariate,
+                    );
+
+                    transcript.get_challenge::<P>(format!("Sumcheck:u_{round_idx}"))
+                }
+                TranscriptRef::Rep3(transcript_rep3) => {
+                    transcript_rep3.send_fr_iter_to_verifier_shared(
+                        format!("Sumcheck:univariate_{round_idx}"),
+                        round_univariate.evaluations_as_ref(),
+                    );
+                    transcript_rep3.get_challenge(
+                        format!("Sumcheck:u_{round_idx}"),
+                        self.net,
+                        self.state,
+                    )?
+                }
+            };
             multivariate_challenge.push(round_challenge);
 
             // Prepare sumcheck book-keeping table for the next round
@@ -256,22 +313,63 @@ impl<
         // Zero univariates are used to pad the proof to the fixed size CONST_PROOF_SIZE_LOG_N.
         let zero_univariate = L::SumcheckRoundOutputPublic::default();
         for idx in multivariate_d as usize..CONST_PROOF_SIZE_LOG_N {
-            transcript.send_fr_iter_to_verifier::<P, _>(
-                format!("Sumcheck:univariate_{idx}"),
-                zero_univariate.evaluations_as_ref(),
-            );
-            let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{idx}"));
-            multivariate_challenge.push(round_challenge);
+            match transcript {
+                TranscriptRef::Plain(transcript) => {
+                    transcript.send_fr_iter_to_verifier::<P, _>(
+                        format!("Sumcheck:univariate_{idx}"),
+                        zero_univariate.evaluations_as_ref(),
+                    );
+                    let round_challenge =
+                        transcript.get_challenge::<P>(format!("Sumcheck:u_{idx}"));
+                    multivariate_challenge.push(round_challenge);
+                }
+                TranscriptRef::Rep3(transcript_rep3) => {
+                    transcript_rep3.send_fr_iter_to_verifier(
+                        format!("Sumcheck:univariate_{idx}"),
+                        zero_univariate.evaluations_as_ref(),
+                    );
+                    let round_challenge = transcript_rep3.get_challenge(
+                        format!("Sumcheck:u_{idx}"),
+                        self.net,
+                        self.state,
+                    )?;
+                    multivariate_challenge.push(round_challenge);
+                }
+            }
         }
 
         // Claimed evaluations of Prover polynomials are extracted and added to the transcript. When Flavor has ZK, the
         // evaluations of all witnesses are masked.
-        let multivariate_evaluations =
-            Self::extract_claimed_evaluations(self.net, self.state, partially_evaluated_polys)?;
-        Self::add_evals_to_transcript(transcript, &multivariate_evaluations);
+
+        match transcript {
+            TranscriptRef::Plain(transcript) => {
+                let multivariate_evaluations = Self::extract_claimed_evaluations(
+                    self.net,
+                    self.state,
+                    partially_evaluated_polys,
+                )?;
+                Self::add_evals_to_transcript(transcript, &multivariate_evaluations);
+            }
+            TranscriptRef::Rep3(transcript_rep3) => {
+                let multivariate_evaluations =
+                    Self::extract_claimed_evaluations_non_opened(partially_evaluated_polys)?;
+                let public_evals = multivariate_evaluations.public_iter();
+                let shared_evals = multivariate_evaluations.shared_iter();
+                let promoted_public_evals =
+                    public_evals.map(|x| T::promote_to_trivial_share(self.state.id(), *x));
+
+                transcript_rep3.send_fr_iter_to_verifier_shared(
+                    "Sumcheck:evaluations".to_string(),
+                    promoted_public_evals
+                        .chain(shared_evals.cloned())
+                        .collect::<Vec<_>>()
+                        .as_ref(),
+                );
+            }
+        }
 
         let res = SumcheckOutput {
-            claimed_evaluations: multivariate_evaluations,
+            // claimed_evaluations: multivariate_evaluations,
             challenges: multivariate_challenge,
             claimed_libra_evaluation: None,
             round_univariates: None,
@@ -282,11 +380,11 @@ impl<
 
     pub fn sumcheck_prove_zk<const VIRTUAL_LOG_N: usize>(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, T, P>,
         circuit_size: u32,
         zk_sumcheck_data: &mut SharedZKSumcheckData<T, P>,
         crs: &ProverCrs<P>,
-    ) -> HonkProofResult<SumcheckOutput<T, P, L>> {
+    ) -> HonkProofResult<SumcheckOutput<T, P>> {
         tracing::trace!("Sumcheck prove");
 
         let mut eval_domain = Vec::new();
@@ -478,7 +576,7 @@ impl<
 
         if L::IS_GRUMPKIN_FLAVOUR {
             Ok(SumcheckOutput {
-                claimed_evaluations: multivariate_evaluations,
+                // claimed_evaluations: multivariate_evaluations,
                 challenges: multivariate_challenge,
                 claimed_libra_evaluation: Some(libra_evaluation),
                 round_univariates: Some(round_univariates),
@@ -486,7 +584,7 @@ impl<
             })
         } else {
             Ok(SumcheckOutput {
-                claimed_evaluations: multivariate_evaluations,
+                // claimed_evaluations: multivariate_evaluations,
                 challenges: multivariate_challenge,
                 claimed_libra_evaluation: Some(libra_evaluation),
                 round_univariates: None,
@@ -502,7 +600,7 @@ impl<
         round_idx: usize,
         round_univariate: &L::SumcheckRoundOutputZK<T, P>,
         eval_domain: &[P::ScalarField],
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, T, P>,
         crs: &ProverCrs<P>,
         round_univariates: &mut Vec<SharedPolynomial<T, P>>,
         round_univariate_evaluations: &mut Vec<[T::ArithmeticShare; 3]>,

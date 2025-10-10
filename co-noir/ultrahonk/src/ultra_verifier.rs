@@ -6,17 +6,17 @@ use crate::{
 };
 use ark_ec::pairing::Pairing;
 use co_builder::prelude::VerifyingKey;
-use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::TranscriptFieldType;
 use co_noir_common::transcript::{Transcript, TranscriptHasher};
 use co_noir_common::types::ZeroKnowledge;
+use co_noir_common::{honk_curve::HonkCurve, mpc::plain::PlainUltraHonkDriver};
 use noir_types::HonkProof;
 
 pub(crate) type HonkVerifyResult<T> = std::result::Result<T, eyre::Report>;
 
 impl<
     C: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, C>,
     L: PlainProverFlavour,
 > UltraHonk<C, H, L>
 {
@@ -29,7 +29,8 @@ impl<
         tracing::trace!("UltraHonk verification");
         let honk_proof = honk_proof.insert_public_inputs(public_inputs.to_vec());
 
-        let mut transcript = Transcript::<TranscriptFieldType, H>::new_verifier(honk_proof);
+        let mut transcript =
+            Transcript::<TranscriptFieldType, H, PlainUltraHonkDriver, C>::new_verifier(honk_proof);
 
         let oink_verifier = OinkVerifier::<C, H, _>::default();
         let oink_result = oink_verifier.verify(verifying_key, &mut transcript)?;

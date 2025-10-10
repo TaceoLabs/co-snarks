@@ -5,7 +5,7 @@ use ark_ec::AdditiveGroup;
 use ark_ff::fields::Field;
 
 use co_builder::{flavours::mega_flavour::MegaFlavour, prelude::ProvingKey};
-
+use co_noir_common::mpc::plain::PlainUltraHonkDriver;
 use co_noir_common::{
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
@@ -44,16 +44,16 @@ pub type ExtendedRelationParameters<F> = RelationParameters<Univariate<F, BATCHE
 pub struct ProtogalaxyProver<C, H>
 where
     C: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, C>,
 {
-    transcript: Transcript<TranscriptFieldType, H>,
+    transcript: Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, C>,
     phantom_data: PhantomData<C>,
 }
 
 impl<C, H> ProtogalaxyProver<C, H>
 where
     C: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, C>,
 {
     pub fn new() -> Self {
         Self {

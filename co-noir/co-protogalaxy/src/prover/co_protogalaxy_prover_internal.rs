@@ -90,7 +90,8 @@ pub fn compute_and_extend_alphas<T: NoirUltraHonkProver<C>, C: HonkCurve<Transcr
 pub fn compute_combiner_quotient<T: NoirUltraHonkProver<C>, C: HonkCurve<TranscriptFieldType>>(
     state: &T::State,
     combiner: &SharedUnivariate<T, C, BATCHED_EXTENDED_LENGTH>,
-    perturbator_evaluation: C::ScalarField,
+    perturbator_evaluation_open: Option<C::ScalarField>,
+    perturbator_evaluation_shared: Option<T::ArithmeticShare>,
 ) -> SharedUnivariate<T, C, { BATCHED_EXTENDED_LENGTH - NUM_KEYS }> {
     let mut combiner_quotient_evals =
         vec![T::ArithmeticShare::default(); BATCHED_EXTENDED_LENGTH - NUM_KEYS];
@@ -100,11 +101,16 @@ pub fn compute_combiner_quotient<T: NoirUltraHonkProver<C>, C: HonkCurve<Transcr
         let lagrange_0 = C::ScalarField::ONE - point_as_fr;
         let vanishing_polynomial = point_as_fr * (point_as_fr - C::ScalarField::ONE);
 
-        let tmp = T::add_with_public(
-            -perturbator_evaluation * lagrange_0,
-            combiner.evaluations[point],
-            state.id(),
-        );
+        let tmp = match (&perturbator_evaluation_open, &perturbator_evaluation_shared) {
+            (Some(p), None) => {
+                T::add_with_public(-*p * lagrange_0, combiner.evaluations[point], state.id())
+            }
+            (None, Some(p)) => T::add(
+                combiner.evaluations[point],
+                T::mul_with_public(-lagrange_0, *p),
+            ),
+            _ => panic!("One of the perturbator evaluations must be provided"),
+        };
 
         combiner_quotient_evals[idx] = T::mul_with_public(
             vanishing_polynomial

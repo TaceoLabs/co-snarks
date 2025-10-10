@@ -4,7 +4,6 @@ use super::{
     types::ProverMemory,
 };
 use crate::{CONST_PROOF_SIZE_LOG_N, mpc_prover_flavour::MPCProverFlavour};
-use co_noir_common::transcript::{Transcript, TranscriptHasher};
 use co_noir_common::{
     crs::ProverCrs,
     honk_curve::HonkCurve,
@@ -13,6 +12,10 @@ use co_noir_common::{
     types::ZeroKnowledge,
     utils::Utils,
 };
+use co_noir_common::{
+    transcript::{Transcript, TranscriptHasher},
+    transcript_mpc::TranscriptRef,
+};
 use mpc_net::Network;
 use noir_types::HonkProof;
 use std::marker::PhantomData;
@@ -20,7 +23,7 @@ pub struct CoDecider<
     'a,
     T: NoirUltraHonkProver<P>,
     P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, T, P>,
     N: Network,
     L: MPCProverFlavour,
 > {
@@ -35,7 +38,7 @@ impl<
     'a,
     T: NoirUltraHonkProver<P>,
     P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, T, P>,
     N: Network,
     L: MPCProverFlavour,
 > CoDecider<'a, T, P, H, N, L>
@@ -63,31 +66,37 @@ impl<
     #[expect(clippy::type_complexity)]
     fn execute_relation_check_rounds(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut TranscriptRef<TranscriptFieldType, T, P, H>,
         crs: &ProverCrs<P>,
         circuit_size: u32,
-    ) -> HonkProofResult<(SumcheckOutput<T, P, L>, Option<SharedZKSumcheckData<T, P>>)> {
+    ) -> HonkProofResult<(SumcheckOutput<T, P>, Option<SharedZKSumcheckData<T, P>>)> {
         if self.has_zk == ZeroKnowledge::Yes {
             let log_subgroup_size = Utils::get_msb64(P::SUBGROUP_SIZE as u64);
             let commitment_key = &crs.monomials[..1 << (log_subgroup_size + 1)];
-            let mut zk_sumcheck_data: SharedZKSumcheckData<T, P> =
-                SharedZKSumcheckData::<T, P>::new(
-                    Utils::get_msb64(circuit_size as u64) as usize,
-                    transcript,
-                    commitment_key,
-                    self.net,
-                    self.state,
-                )?;
-
-            Ok((
-                self.sumcheck_prove_zk::<CONST_PROOF_SIZE_LOG_N>(
-                    transcript,
-                    circuit_size,
-                    &mut zk_sumcheck_data,
-                    crs,
-                )?,
-                Some(zk_sumcheck_data),
-            ))
+            match transcript {
+                TranscriptRef::Plain(transcript) => {
+                    let mut zk_sumcheck_data: SharedZKSumcheckData<T, P> =
+                        SharedZKSumcheckData::<T, P>::new(
+                            Utils::get_msb64(circuit_size as u64) as usize,
+                            transcript,
+                            commitment_key,
+                            self.net,
+                            self.state,
+                        )?;
+                    Ok((
+                        self.sumcheck_prove_zk::<CONST_PROOF_SIZE_LOG_N>(
+                            transcript,
+                            circuit_size,
+                            &mut zk_sumcheck_data,
+                            crs,
+                        )?,
+                        Some(zk_sumcheck_data),
+                    ))
+                }
+                TranscriptRef::Rep3(_) => {
+                    panic!("ZK Flavours are not supposed to be called with REP3 transcripts")
+                }
+            }
         } else {
             // This is just Sumcheck.prove without ZK
             Ok((self.sumcheck_prove(transcript, circuit_size)?, None))
@@ -102,10 +111,10 @@ impl<
      * */
     fn execute_pcs_rounds(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut TranscriptRef<TranscriptFieldType, T, P, H>,
         circuit_size: u32,
         crs: &ProverCrs<P>,
-        sumcheck_output: SumcheckOutput<T, P, L>,
+        sumcheck_output: SumcheckOutput<T, P>,
         zk_sumcheck_data: Option<SharedZKSumcheckData<T, P>>,
     ) -> HonkProofResult<()> {
         if self.has_zk == ZeroKnowledge::No {
@@ -127,7 +136,16 @@ impl<
                 "Libra:".to_string(),
                 &sumcheck_output.challenges,
             )?;
-            small_subgroup_ipa_prover.prove::<H, N>(self.net, self.state, transcript, crs)?;
+
+            match transcript {
+                TranscriptRef::Plain(transcript) => {
+                    small_subgroup_ipa_prover
+                        .prove::<H, N>(self.net, self.state, transcript, crs)?;
+                }
+                TranscriptRef::Rep3(_) => {
+                    panic!("ZK Flavours are not supposed to be called with REP3 transcripts")
+                }
+            }
             let witness_polynomials = small_subgroup_ipa_prover.into_witness_polynomials();
             let prover_opening_claim = self.shplemini_prove(
                 transcript,
@@ -146,12 +164,16 @@ impl<
         }
     }
 
-    pub(crate) fn prove(
+    #[expect(clippy::type_complexity)]
+    pub(crate) fn prove_inner(
         mut self,
         circuit_size: u32,
         crs: &ProverCrs<P>,
-        mut transcript: Transcript<TranscriptFieldType, H>,
-    ) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
+        mut transcript: TranscriptRef<TranscriptFieldType, T, P, H>,
+    ) -> HonkProofResult<(
+        Option<HonkProof<TranscriptFieldType>>,
+        Option<Vec<T::ArithmeticShare>>,
+    )> {
         tracing::trace!("Decider prove");
 
         // Run sumcheck subprotocol.
@@ -171,5 +193,21 @@ impl<
         )?;
 
         Ok(transcript.get_proof())
+    }
+
+    pub(crate) fn prove(
+        self,
+        circuit_size: u32,
+        crs: &ProverCrs<P>,
+        mut transcript: Transcript<TranscriptFieldType, H, T, P>,
+    ) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
+        tracing::trace!("Decider prove");
+
+        let transcript_ref = TranscriptRef::Plain(&mut transcript);
+        let res = self.prove_inner(circuit_size, crs, transcript_ref);
+        match res {
+            Ok((Some(proof), None)) => Ok(proof),
+            _ => panic!("Unexpected transcript result"),
+        }
     }
 }

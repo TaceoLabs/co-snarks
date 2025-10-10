@@ -224,7 +224,7 @@ fn test_compute_combiner_quotient() {
             let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
 
             let combiner_quotient =
-                compute_combiner_quotient(&state, &combiner, perturbator_evaluation);
+                compute_combiner_quotient(&state, &combiner, Some(perturbator_evaluation), None);
 
             <Driver as NoirUltraHonkProver<C>>::open_many(
                 &combiner_quotient.evaluations,
@@ -806,7 +806,7 @@ fn test_protogalaxy_prover() {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
 
                 // Compute the first Oink proof
-                let mut transcript = Transcript::<F, Poseidon2Sponge>::new();
+                let mut transcript = Transcript::<F, Poseidon2Sponge, Driver, C>::new();
                 let oink = CoOink::<Driver, C, Poseidon2Sponge, LocalNetwork, MegaFlavour>::new(
                     &net,
                     &mut state,
@@ -830,7 +830,7 @@ fn test_protogalaxy_prover() {
                     &prover_crs,
                 );
                 let (proof, target_sum) = prover
-                    .prove(
+                    .prove_plain_transcript(
                         &mut accumulator,
                         &mut accumulator_prover_memory,
                         vec![folded_key],

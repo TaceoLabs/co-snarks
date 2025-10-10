@@ -41,6 +41,7 @@ use co_builder::flavours::translator_flavour::TranslatorFlavour;
 use co_builder::prover_flavour::ProverFlavour;
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::{HonkProofResult, TranscriptFieldType};
+use co_noir_common::mpc::plain::PlainUltraHonkDriver;
 
 #[derive(Default)]
 pub struct AllRelationAccTranslator<F: PrimeField> {
@@ -265,10 +266,10 @@ impl PlainProverFlavour for TranslatorFlavour {
 
     fn receive_round_univariate_from_prover<
         F: PrimeField,
-        H: TranscriptHasher<F>,
+        H: TranscriptHasher<F, PlainUltraHonkDriver, P>,
         P: HonkCurve<F>,
     >(
-        _transcript: &mut Transcript<F, H>,
+        _transcript: &mut Transcript<F, H, PlainUltraHonkDriver, P>,
         _label: String,
     ) -> HonkProofResult<Self::SumcheckRoundOutput<P::ScalarField>> {
         todo!("Implement Sumcheck Verifier for TranslatorFlavour");
@@ -276,17 +277,21 @@ impl PlainProverFlavour for TranslatorFlavour {
 
     fn receive_round_univariate_from_prover_zk<
         F: PrimeField,
-        H: TranscriptHasher<F>,
+        H: TranscriptHasher<F, PlainUltraHonkDriver, P>,
         P: HonkCurve<F>,
     >(
-        _transcript: &mut Transcript<F, H>,
+        _transcript: &mut Transcript<F, H, PlainUltraHonkDriver, P>,
         _label: String,
     ) -> HonkProofResult<Self::SumcheckRoundOutputZK<P::ScalarField>> {
         todo!("Implement Sumcheck Verifier for TranslatorFlavour");
     }
 
-    fn get_alpha_challenges<F: PrimeField, H: TranscriptHasher<F>, P: HonkCurve<F>>(
-        _transcript: &mut Transcript<F, H>,
+    fn get_alpha_challenges<
+        F: PrimeField,
+        H: TranscriptHasher<F, PlainUltraHonkDriver, P>,
+        P: HonkCurve<F>,
+    >(
+        _transcript: &mut Transcript<F, H, PlainUltraHonkDriver, P>,
         _alphas: &mut Vec<P::ScalarField>,
     ) {
         todo!("Implement Sumcheck Verifier for TranslatorFlavour");

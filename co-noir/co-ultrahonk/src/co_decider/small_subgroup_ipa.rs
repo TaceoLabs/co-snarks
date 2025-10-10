@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use super::co_sumcheck::zk_data::SharedZKSumcheckData;
 use super::univariates::SharedUnivariate;
 use crate::CONST_PROOF_SIZE_LOG_N;
@@ -8,20 +6,21 @@ use ark_ec::CurveGroup;
 use ark_ff::One;
 use ark_ff::Zero;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
+use co_noir_common::CoUtils;
+use co_noir_common::crs::ProverCrs;
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::HonkProofResult;
 use co_noir_common::honk_proof::TranscriptFieldType;
-
-use co_noir_common::CoUtils;
-use co_noir_common::crs::ProverCrs;
 use co_noir_common::mpc::NoirUltraHonkProver;
 use co_noir_common::polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK;
 use co_noir_common::polynomials::polynomial::NUM_TRANSLATION_EVALUATIONS;
 use co_noir_common::polynomials::polynomial::Polynomial;
 use co_noir_common::polynomials::shared_polynomial::SharedPolynomial;
-use co_noir_common::transcript::{Transcript, TranscriptHasher};
+use co_noir_common::transcript::TranscriptHasher;
 use mpc_core::MpcState;
 use mpc_net::Network;
+use std::marker::PhantomData;
+use ultrahonk::prelude::Transcript;
 
 pub struct SharedSmallSubgroupIPAProver<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub interpolation_domain: Vec<P::ScalarField>,
@@ -84,11 +83,11 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
         Ok(prover)
     }
 
-    pub fn prove<H: TranscriptHasher<TranscriptFieldType>, N: Network>(
+    pub fn prove<H: TranscriptHasher<TranscriptFieldType, T, P>, N: Network>(
         &mut self,
         net: &N,
         state: &mut T::State,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, T, P>,
         commitment_key: &ProverCrs<P>,
     ) -> HonkProofResult<()> {
         let domain = GeneralEvaluationDomain::<P::ScalarField>::new(Self::SUBGROUP_SIZE);

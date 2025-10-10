@@ -38,8 +38,10 @@ use ark_ff::PrimeField;
 use co_builder::{flavours::translator_flavour::TranslatorFlavour, prover_flavour::ProverFlavour};
 use co_noir_common::honk_proof::HonkProofResult;
 use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::transcript_mpc::TranscriptRef;
 use co_noir_common::{honk_curve::HonkCurve, mpc::NoirUltraHonkProver};
-use ultrahonk::prelude::Univariate;
+use mpc_net::Network;
+use ultrahonk::prelude::{TranscriptHasher, Univariate};
 
 pub struct AllRelationAccTranslator<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) r_translator_perm: TranslatorPermutationRelationAcc<T, P>,
@@ -329,15 +331,19 @@ impl MPCProverFlavour for TranslatorFlavour {
     }
 
     fn get_alpha_challenges<
-        F: ark_ff::PrimeField,
-        H: ultrahonk::prelude::TranscriptHasher<F>,
-        P: HonkCurve<F>,
+        T: NoirUltraHonkProver<P>,
+        H: TranscriptHasher<TranscriptFieldType, T, P>,
+        P: HonkCurve<TranscriptFieldType>,
+        N: Network,
     >(
-        _transcript: &mut ultrahonk::prelude::Transcript<F, H>,
+        _transcript: &mut TranscriptRef<TranscriptFieldType, T, P, H>,
         _alphas: &mut Vec<P::ScalarField>,
-    ) {
-        //Let's not implement this for now, as we will remove alphas later
-        todo!()
+        _net: &N,
+        _state: &mut T::State,
+    ) -> eyre::Result<()> {
+        panic!(
+            "This is used in the Oink Prover and thus should not be called with the Translator flavour"
+        );
     }
 
     fn reshare<T: NoirUltraHonkProver<P>, P: ark_ec::CurveGroup, N: mpc_net::Network>(

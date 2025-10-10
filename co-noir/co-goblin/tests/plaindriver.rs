@@ -457,7 +457,12 @@ mod tests {
                     co_builder::prelude::PublicComponentKey::default(),
                 );
                 proving_key.polynomials = polys;
-                let transcript = Transcript::<TranscriptFieldType, Poseidon2Sponge>::new();
+                let transcript = Transcript::<
+                    TranscriptFieldType,
+                    Poseidon2Sponge,
+                    Rep3UltraHonkDriver,
+                    short_weierstrass::Projective<GrumpkinConfig>,
+                >::new();
                 let mut state = Rep3State::new(net0b, A2BType::default()).unwrap();
                 let mut prover = Eccvm::<
                     short_weierstrass::Projective<GrumpkinConfig>,
@@ -532,7 +537,12 @@ mod tests {
         );
         proving_key.polynomials = polys;
 
-        let transcript = Transcript::<TranscriptFieldType, Poseidon2Sponge>::new();
+        let transcript = Transcript::<
+            TranscriptFieldType,
+            Poseidon2Sponge,
+            PlainUltraHonkDriver,
+            short_weierstrass::Projective<GrumpkinConfig>,
+        >::new();
 
         let mut binding = ();
         let mut prover = Eccvm::<
@@ -573,8 +583,12 @@ mod tests {
         );
 
         let transcript = std::io::BufReader::new(std::fs::File::open(transcript_path).unwrap());
-        let transcript: Transcript<TranscriptFieldType, Poseidon2Sponge> =
-            bincode::deserialize_from(transcript).unwrap();
+        let transcript: Transcript<
+            TranscriptFieldType,
+            Poseidon2Sponge,
+            Rep3UltraHonkDriver,
+            ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>,
+        > = bincode::deserialize_from(transcript).unwrap();
 
         let translation_batching_challenge_v =
             ark_bn254::Fq::from_str("333310174131141305725676434666258450925").unwrap();
@@ -703,8 +717,12 @@ mod tests {
         );
 
         let transcript = std::io::BufReader::new(std::fs::File::open(transcript_path).unwrap());
-        let transcript: Transcript<TranscriptFieldType, Poseidon2Sponge> =
-            bincode::deserialize_from(transcript).unwrap();
+        let transcript: Transcript<
+            TranscriptFieldType,
+            Poseidon2Sponge,
+            PlainUltraHonkDriver,
+            ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>,
+        > = bincode::deserialize_from(transcript).unwrap();
 
         let translation_batching_challenge_v =
             ark_bn254::Fq::from_str("333310174131141305725676434666258450925").unwrap();
