@@ -1,16 +1,16 @@
 use ark_ec::AffineRepr;
 use ark_ff::One;
 use ark_ff::{Field, Zero};
-use co_builder::{
-    HonkProofResult, TranscriptFieldType,
-    prelude::{HonkCurve, ProverCrs},
-};
-use common::CONST_ECCVM_LOG_N;
-use common::shplemini::ShpleminiOpeningClaim;
-use common::transcript::{Transcript, TranscriptHasher};
-use ultrahonk::Utils as UltraHonkUtils;
+use co_noir_common::crs::ProverCrs;
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::{HonkProofResult, TranscriptFieldType};
+use co_noir_common::shplemini::ShpleminiOpeningClaim;
+use co_noir_common::transcript::{Transcript, TranscriptHasher};
+use co_noir_common::utils::Utils as UltraHonkUtils;
 
-pub(crate) fn compute_ipa_opening_proof<
+use crate::eccvm::CONST_ECCVM_LOG_N;
+
+pub fn compute_ipa_opening_proof<
     P: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
 >(

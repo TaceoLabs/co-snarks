@@ -11,15 +11,14 @@ use ark_ec::CurveGroup;
 use ark_ff::Field;
 use ark_ff::One;
 use ark_ff::Zero;
+use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
+use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
-use co_builder::prelude::HonkCurve;
-use co_builder::{
-    HonkProofResult, polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour,
+use co_noir_common::{
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProofResult, TranscriptFieldType},
+    mpc::NoirUltraHonkProver,
 };
-use co_builder::{
-    TranscriptFieldType, polynomials::polynomial_flavours::PrecomputedEntitiesFlavour,
-};
-use common::mpc::NoirUltraHonkProver;
 use itertools::Itertools as _;
 use mpc_core::MpcState as _;
 use mpc_net::Network;
@@ -729,7 +728,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         relation_parameters: &RelationParameters<Univariate<P::ScalarField, SIZE>>,
         scaling_factor: &P::ScalarField,
     ) -> HonkProofResult<()> {
-        // TODO TACEO: Reconcile skip check and `can_skip`
+        // TACEO TODO: Reconcile skip check and `can_skip`
         if input.precomputed.q_aux().iter().all(|x| x.is_zero()) {
             return Ok(());
         }

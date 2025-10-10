@@ -12,10 +12,11 @@ use crate::{
 };
 use ark_ec::CurveGroup;
 use ark_ff::One;
-use co_builder::HonkProofResult;
-use co_builder::TranscriptFieldType;
-use co_builder::prelude::{HonkCurve, RowDisablingPolynomial};
-use common::mpc::NoirUltraHonkProver;
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::HonkProofResult;
+use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::mpc::NoirUltraHonkProver;
+use co_noir_common::polynomials::polynomial::RowDisablingPolynomial;
 use mpc_net::Network;
 use ultrahonk::plain_prover_flavour::UnivariateTrait;
 use ultrahonk::prelude::GateSeparatorPolynomial;

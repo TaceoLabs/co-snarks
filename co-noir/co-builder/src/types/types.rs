@@ -1,8 +1,9 @@
 use super::big_field::BigGroup;
 use super::field_ct::{CycleGroupCT, FieldCT};
+use crate::flavours::mega_flavour::MegaFlavour;
 use crate::flavours::ultra_flavour::UltraFlavour;
+use crate::generic_builder::GenericBuilder;
 use crate::keys::proving_key::ProvingKey;
-use crate::polynomials::polynomial::Polynomial;
 use crate::polynomials::polynomial_flavours::{
     PrecomputedEntitiesFlavour, ProverWitnessEntitiesFlavour,
 };
@@ -12,28 +13,13 @@ use crate::ultra_builder::UltraCircuitBuilder;
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use co_noir_common::polynomials::polynomial::Polynomial;
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 use std::array;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum ZeroKnowledge {
-    No,
-    Yes,
-}
-
-impl From<bool> for ZeroKnowledge {
-    fn from(value: bool) -> Self {
-        if value {
-            ZeroKnowledge::Yes
-        } else {
-            ZeroKnowledge::No
-        }
-    }
-}
 
 #[derive(Default, PartialEq, Eq)]
 pub(crate) struct PolyTriple<F: PrimeField> {
@@ -222,9 +208,44 @@ impl<T: Default> UltraTraceBlocks<T> {
     }
 }
 
+#[derive(Default)]
+pub struct MegaTraceBlocks<T: Default> {
+    pub(crate) ecc_op: T,
+    pub(crate) busread: T,
+    pub(crate) pub_inputs: T,
+    pub(crate) lookup: T,
+    pub(crate) arithmetic: T,
+    pub(crate) delta_range: T,
+    pub(crate) elliptic: T,
+    pub(crate) aux: T,
+    pub(crate) poseidon2_external: T,
+    pub(crate) poseidon2_internal: T,
+    pub(crate) overflow: T,
+}
+
+impl<T: Default> MegaTraceBlocks<T> {
+    pub fn get(&self) -> [&T; 11] {
+        [
+            &self.ecc_op,
+            &self.busread,
+            &self.pub_inputs,
+            &self.lookup,
+            &self.arithmetic,
+            &self.delta_range,
+            &self.elliptic,
+            &self.aux,
+            &self.poseidon2_external,
+            &self.poseidon2_internal,
+            &self.overflow,
+        ]
+    }
+}
+
 pub const NUM_WIRES: usize = 4;
-pub const NUM_SELECTORS: usize = 13;
-pub type UltraTraceBlock<F> = ExecutionTraceBlock<F, NUM_WIRES, NUM_SELECTORS>;
+pub const NUM_SELECTORS_ULTRA: usize = 13;
+pub const NUM_SELECTORS_MEGA: usize = 14;
+pub type UltraTraceBlock<F> = ExecutionTraceBlock<F, NUM_WIRES, NUM_SELECTORS_ULTRA>;
+pub type MegaTraceBlock<F> = ExecutionTraceBlock<F, NUM_WIRES, NUM_SELECTORS_MEGA>;
 
 pub struct ExecutionTraceBlock<F: PrimeField, const NUM_WIRES: usize, const NUM_SELECTORS: usize> {
     pub wires: [Vec<u32>; NUM_WIRES], // vectors of indices into a witness variables array
@@ -349,6 +370,118 @@ impl<F: PrimeField> UltraTraceBlock<F> {
 
     pub(crate) fn q_4(&mut self) -> &mut Vec<F> {
         &mut self.selectors[Self::Q_4]
+    }
+
+    pub(crate) fn q_arith(&mut self) -> &mut Vec<F> {
+        &mut self.selectors[Self::Q_ARITH]
+    }
+
+    pub(crate) fn q_delta_range(&mut self) -> &mut Vec<F> {
+        &mut self.selectors[Self::Q_DELTA_RANGE]
+    }
+
+    pub(crate) fn q_elliptic(&mut self) -> &mut Vec<F> {
+        &mut self.selectors[Self::Q_ELLIPTIC]
+    }
+
+    pub(crate) fn q_aux(&mut self) -> &mut Vec<F> {
+        &mut self.selectors[Self::Q_AUX]
+    }
+
+    pub(crate) fn q_lookup_type(&mut self) -> &mut Vec<F> {
+        &mut self.selectors[Self::Q_LOOKUP_TYPE]
+    }
+
+    pub(crate) fn q_poseidon2_external(&mut self) -> &mut Vec<F> {
+        &mut self.selectors[Self::Q_POSEIDON2_EXTERNAL]
+    }
+
+    pub(crate) fn q_poseidon2_internal(&mut self) -> &mut Vec<F> {
+        &mut self.selectors[Self::Q_POSEIDON2_INTERNAL]
+    }
+
+    pub(crate) fn populate_wires(&mut self, idx1: u32, idx2: u32, idx3: u32, idx4: u32) {
+        self.w_l().push(idx1);
+        self.w_r().push(idx2);
+        self.w_o().push(idx3);
+        self.w_4().push(idx4);
+    }
+
+    pub fn get_fixed_size(&self, is_structured: bool) -> u32 {
+        if is_structured {
+            self.fixed_size
+        } else {
+            self.len() as u32
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.wires[Self::W_L].len()
+    }
+}
+
+impl<F: PrimeField> MegaTraceBlock<F> {
+    const W_L: usize = MegaFlavour::W_L;
+    const W_R: usize = MegaFlavour::W_R;
+    const W_O: usize = MegaFlavour::W_O;
+    const W_4: usize = MegaFlavour::W_4;
+    const Q_M: usize = MegaFlavour::Q_M;
+    const Q_C: usize = MegaFlavour::Q_C;
+    const Q_1: usize = MegaFlavour::Q_L;
+    const Q_2: usize = MegaFlavour::Q_R;
+    const Q_3: usize = MegaFlavour::Q_O;
+    const Q_4: usize = MegaFlavour::Q_4;
+    const Q_BUSREAD: usize = MegaFlavour::Q_BUSREAD;
+    const Q_ARITH: usize = MegaFlavour::Q_ARITH;
+    const Q_DELTA_RANGE: usize = MegaFlavour::Q_DELTA_RANGE;
+    const Q_ELLIPTIC: usize = MegaFlavour::Q_ELLIPTIC;
+    const Q_AUX: usize = MegaFlavour::Q_AUX;
+    const Q_LOOKUP_TYPE: usize = MegaFlavour::Q_LOOKUP;
+    const Q_POSEIDON2_EXTERNAL: usize = MegaFlavour::Q_POSEIDON2_EXTERNAL;
+    const Q_POSEIDON2_INTERNAL: usize = MegaFlavour::Q_POSEIDON2_INTERNAL;
+
+    pub(crate) fn w_l(&mut self) -> &mut Vec<u32> {
+        &mut self.wires[Self::W_L]
+    }
+
+    pub(crate) fn w_r(&mut self) -> &mut Vec<u32> {
+        &mut self.wires[Self::W_R]
+    }
+
+    pub(crate) fn w_o(&mut self) -> &mut Vec<u32> {
+        &mut self.wires[Self::W_O]
+    }
+
+    pub(crate) fn w_4(&mut self) -> &mut Vec<u32> {
+        &mut self.wires[Self::W_4]
+    }
+
+    pub(crate) fn q_m(&mut self) -> &mut Vec<F> {
+        &mut self.selectors[Self::Q_M]
+    }
+
+    pub(crate) fn q_c(&mut self) -> &mut Vec<F> {
+        &mut self.selectors[Self::Q_C]
+    }
+
+    pub(crate) fn q_1(&mut self) -> &mut Vec<F> {
+        &mut self.selectors[Self::Q_1]
+    }
+
+    pub(crate) fn q_2(&mut self) -> &mut Vec<F> {
+        &mut self.selectors[Self::Q_2]
+    }
+
+    pub(crate) fn q_3(&mut self) -> &mut Vec<F> {
+        &mut self.selectors[Self::Q_3]
+    }
+
+    pub(crate) fn q_4(&mut self) -> &mut Vec<F> {
+        &mut self.selectors[Self::Q_4]
+    }
+
+    pub(crate) fn q_busread(&mut self) -> &mut Vec<F> {
+        &mut self.selectors[Self::Q_BUSREAD]
     }
 
     pub(crate) fn q_arith(&mut self) -> &mut Vec<F> {
@@ -659,7 +792,7 @@ pub type CyclicPermutation = Vec<CycleNode>;
 
 pub(crate) struct TraceData<'a, P: CurveGroup> {
     pub(crate) wires: &'a mut [Polynomial<P::ScalarField>; NUM_WIRES],
-    pub(crate) selectors: &'a mut [Polynomial<P::ScalarField>; NUM_SELECTORS],
+    pub(crate) selectors: &'a mut [Polynomial<P::ScalarField>; NUM_SELECTORS_ULTRA],
     pub(crate) copy_cycles: Vec<CyclicPermutation>,
     pub(crate) ram_rom_offset: u32,
     pub(crate) pub_inputs_offset: u32,

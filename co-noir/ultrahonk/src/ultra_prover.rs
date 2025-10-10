@@ -5,11 +5,14 @@ use crate::{
     plain_prover_flavour::PlainProverFlavour,
 };
 use co_builder::{
-    HonkProofResult,
-    prelude::{HonkCurve, PAIRING_POINT_ACCUMULATOR_SIZE, ProvingKey, ZeroKnowledge},
+    prelude::{PAIRING_POINT_ACCUMULATOR_SIZE, ProvingKey},
     prover_flavour::Flavour,
 };
-use common::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::HonkProofResult;
+use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::transcript::{Transcript, TranscriptHasher};
+use co_noir_common::types::ZeroKnowledge;
 use noir_types::HonkProof;
 use std::marker::PhantomData;
 

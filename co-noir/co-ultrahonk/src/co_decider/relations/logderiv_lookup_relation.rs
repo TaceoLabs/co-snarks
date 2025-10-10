@@ -5,17 +5,15 @@ use crate::{
     mpc_prover_flavour::MPCProverFlavour,
     types::AllEntities,
 };
-use common::mpc::NoirUltraHonkProver;
+use co_noir_common::mpc::NoirUltraHonkProver;
 
 use ark_ec::CurveGroup;
 use ark_ff::Field;
+use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
-use co_builder::prelude::HonkCurve;
-use co_builder::{
-    HonkProofResult, TranscriptFieldType,
-    polynomials::polynomial_flavours::PrecomputedEntitiesFlavour,
-};
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::{HonkProofResult, TranscriptFieldType};
 use itertools::{Itertools as _, izip};
 use mpc_core::MpcState;
 use mpc_net::Network;

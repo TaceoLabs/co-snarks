@@ -1,4 +1,8 @@
 use crate::co_decider::co_sumcheck::co_sumcheck_round::SumcheckRound;
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::{HonkProofResult, TranscriptFieldType};
+use co_noir_common::transcript::TranscriptHasher;
+
 use crate::co_decider::relations::Relation;
 use crate::{
     co_decider::{
@@ -18,10 +22,9 @@ use crate::{
 };
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
-use co_builder::{
-    flavours::eccvm_flavour::ECCVMFlavour, prelude::HonkCurve, prover_flavour::ProverFlavour,
-};
-use common::{mpc::NoirUltraHonkProver, transcript::TranscriptFieldType};
+use co_builder::{flavours::eccvm_flavour::ECCVMFlavour, prover_flavour::ProverFlavour};
+use co_noir_common::mpc::NoirUltraHonkProver;
+use mpc_net::Network;
 use ultrahonk::prelude::Univariate;
 
 pub struct AllRelationAccECCVM<T: NoirUltraHonkProver<P>, P: CurveGroup> {
@@ -111,12 +114,14 @@ fn extend_and_batch_univariates_template<
 }
 
 impl MPCProverFlavour for ECCVMFlavour {
-    type AllRelationAcc<T: common::mpc::NoirUltraHonkProver<P>, P: ark_ec::CurveGroup> =
+    type AllRelationAcc<T: co_noir_common::mpc::NoirUltraHonkProver<P>, P: ark_ec::CurveGroup> =
         AllRelationAccECCVM<T, P>;
     type AllRelationEvaluations<T: NoirUltraHonkProver<P>, P: CurveGroup> = (); // No evaluations needed
 
-    type AllRelationAccHalfShared<T: common::mpc::NoirUltraHonkProver<P>, P: ark_ec::CurveGroup> =
-        AllRelationAccECCVM<T, P>;
+    type AllRelationAccHalfShared<
+        T: co_noir_common::mpc::NoirUltraHonkProver<P>,
+        P: ark_ec::CurveGroup,
+    > = AllRelationAccECCVM<T, P>;
 
     type SumcheckRoundOutput<T: NoirUltraHonkProver<P>, P: CurveGroup> =
         SharedUnivariate<T, P, { ECCVMFlavour::BATCHED_RELATION_PARTIAL_LENGTH }>;
@@ -155,7 +160,7 @@ impl MPCProverFlavour for ECCVMFlavour {
         + EccLookupRelation::CRAND_PAIRS_FACTOR
         + EccBoolsRelation::CRAND_PAIRS_FACTOR;
 
-    fn scale<T: common::mpc::NoirUltraHonkProver<P>, P: ark_ec::CurveGroup>(
+    fn scale<T: co_noir_common::mpc::NoirUltraHonkProver<P>, P: ark_ec::CurveGroup>(
         acc: &mut Self::AllRelationAcc<T, P>,
         first_scalar: P::ScalarField,
         elements: &[P::ScalarField],
@@ -174,7 +179,7 @@ impl MPCProverFlavour for ECCVMFlavour {
     }
 
     fn extend_and_batch_univariates<
-        T: common::mpc::NoirUltraHonkProver<P>,
+        T: co_noir_common::mpc::NoirUltraHonkProver<P>,
         P: ark_ec::CurveGroup,
     >(
         acc: &Self::AllRelationAcc<T, P>,
@@ -190,10 +195,7 @@ impl MPCProverFlavour for ECCVMFlavour {
         )
     }
 
-    fn extend_and_batch_univariates_zk<
-        T: common::mpc::NoirUltraHonkProver<P>,
-        P: ark_ec::CurveGroup,
-    >(
+    fn extend_and_batch_univariates_zk<T: NoirUltraHonkProver<P>, P: CurveGroup>(
         acc: &Self::AllRelationAcc<T, P>,
         result: &mut Self::SumcheckRoundOutputZK<T, P>,
         extended_random_poly: &Self::SumcheckRoundOutputZKPublic<P::ScalarField>,
@@ -208,16 +210,16 @@ impl MPCProverFlavour for ECCVMFlavour {
     }
 
     fn accumulate_relation_univariates_batch<
-        P: co_builder::prelude::HonkCurve<co_builder::TranscriptFieldType>,
-        T: common::mpc::NoirUltraHonkProver<P>,
-        N: mpc_net::Network,
+        P: HonkCurve<TranscriptFieldType>,
+        T: NoirUltraHonkProver<P>,
+        N: Network,
     >(
         net: &N,
         state: &mut T::State,
         univariate_accumulators: &mut Self::AllRelationAccHalfShared<T, P>,
         sum_check_data: &Self::AllEntitiesBatchRelations<T, P>,
         relation_parameters: &crate::co_decider::types::RelationParameters<P::ScalarField>,
-    ) -> co_builder::HonkProofResult<()> {
+    ) -> HonkProofResult<()> {
         tracing::trace!("Accumulate relations");
         SumcheckRound::accumulate_one_relation_univariates_batch::<
             _,
@@ -325,12 +327,8 @@ impl MPCProverFlavour for ECCVMFlavour {
         Ok(())
     }
 
-    fn get_alpha_challenges<
-        F: ark_ff::PrimeField,
-        H: common::transcript::TranscriptHasher<F>,
-        P: co_builder::prelude::HonkCurve<F>,
-    >(
-        _transcript: &mut common::transcript::Transcript<F, H>,
+    fn get_alpha_challenges<F: PrimeField, H: TranscriptHasher<F>, P: HonkCurve<F>>(
+        _transcript: &mut co_noir_common::transcript::Transcript<F, H>,
         _alphas: &mut Vec<P::ScalarField>,
     ) {
         panic!(
@@ -338,15 +336,11 @@ impl MPCProverFlavour for ECCVMFlavour {
         );
     }
 
-    fn reshare<
-        T: common::mpc::NoirUltraHonkProver<P>,
-        P: ark_ec::CurveGroup,
-        N: mpc_net::Network,
-    >(
+    fn reshare<T: NoirUltraHonkProver<P>, P: CurveGroup, N: Network>(
         acc: Self::AllRelationAccHalfShared<T, P>,
         _net: &N,
         _state: &mut T::State,
-    ) -> co_builder::HonkProofResult<Self::AllRelationAcc<T, P>> {
+    ) -> HonkProofResult<Self::AllRelationAcc<T, P>> {
         Ok(AllRelationAccECCVM {
             r_ecc_transcript: acc.r_ecc_transcript,
             r_ecc_point_table: acc.r_ecc_point_table,

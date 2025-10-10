@@ -22,16 +22,20 @@ use crate::{
     Utils, decider::relations::databus_lookup_relation::BusData,
     plain_prover_flavour::PlainProverFlavour,
 };
-use common::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
+use co_noir_common::transcript::{Transcript, TranscriptHasher};
 
 use ark_ff::{One, Zero};
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
-use co_builder::{HonkProofError, HonkProofResult};
-use co_builder::{
-    prelude::{HonkCurve, Polynomial, ProverCrs, ProvingKey, ZeroKnowledge},
-    prover_flavour::Flavour,
+use co_noir_common::{
+    crs::ProverCrs,
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
+    polynomials::polynomial::Polynomial,
+    types::ZeroKnowledge,
 };
+
+use co_builder::{prelude::ProvingKey, prover_flavour::Flavour};
 use itertools::izip;
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;

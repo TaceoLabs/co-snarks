@@ -4,19 +4,18 @@ use crate::co_decider::types::ProverUnivariatesBatch;
 use crate::co_decider::types::RelationParameters;
 use crate::co_decider::univariates::SharedUnivariate;
 use crate::types::AllEntities;
-use common::mpc::NoirUltraHonkProver;
+use co_noir_common::mpc::NoirUltraHonkProver;
 use itertools::Either;
 
 use crate::mpc_prover_flavour::MPCProverFlavour;
 use ark_ec::CurveGroup;
 use ark_ff::AdditiveGroup;
 use ark_ff::Field;
-use co_builder::HonkProofResult;
-use co_builder::TranscriptFieldType;
 use co_builder::polynomials::polynomial_flavours::{
     PrecomputedEntitiesFlavour, WitnessEntitiesFlavour,
 };
-use co_builder::prelude::HonkCurve;
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::{HonkProofResult, TranscriptFieldType};
 use itertools::Itertools;
 use mpc_core::MpcState;
 use mpc_net::Network;

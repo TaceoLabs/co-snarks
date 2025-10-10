@@ -2,9 +2,11 @@ use crate::decider::types::RelationParameters;
 use crate::decider::types::{ClaimedEvaluations, ProverUnivariates, ProverUnivariatesSized};
 use crate::prelude::Univariate;
 use ark_ff::PrimeField;
-use co_builder::HonkProofResult;
-use co_builder::{prelude::HonkCurve, prover_flavour::ProverFlavour};
-use common::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
+use co_builder::prover_flavour::ProverFlavour;
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::HonkProofResult;
+use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::transcript::{Transcript, TranscriptHasher};
 use rand::{CryptoRng, Rng};
 use std::fmt::Debug;
 

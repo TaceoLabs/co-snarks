@@ -1,3 +1,5 @@
+use co_noir_common::polynomials::polynomial::Polynomial;
+
 use crate::polynomials::polynomial_flavours::{PolyGFlavour, ShiftedWitnessEntitiesFlavour};
 use crate::prelude::WitnessEntities;
 use crate::prover_flavour::{Flavour, ProverFlavour};
@@ -325,15 +327,15 @@ impl ProverFlavour for ECCVMFlavour {
     const WITNESS_RETURN_DATA_READ_TAGS: usize = usize::MAX;
     const WITNESS_RETURN_DATA_INVERSES: usize = usize::MAX;
     fn prover_witness_entity_from_vec<T: Default + Sync + Clone>(
-        vec: Vec<crate::prelude::Polynomial<T>>,
-    ) -> Self::ProverWitnessEntities<crate::prelude::Polynomial<T>> {
+        vec: Vec<Polynomial<T>>,
+    ) -> Self::ProverWitnessEntities<Polynomial<T>> {
         ECCVMProverWitnessEntities {
             elements: std::array::from_fn(|i| vec[i].clone()),
         }
     }
     fn precomputed_entity_from_vec<T: Default + Debug + Clone + Sync>(
-        vec: Vec<crate::prelude::Polynomial<T>>,
-    ) -> Self::PrecomputedEntities<crate::prelude::Polynomial<T>> {
+        vec: Vec<Polynomial<T>>,
+    ) -> Self::PrecomputedEntities<Polynomial<T>> {
         ECCVMPrecomputedEntities {
             elements: std::array::from_fn(|i| vec[i].clone()),
         }

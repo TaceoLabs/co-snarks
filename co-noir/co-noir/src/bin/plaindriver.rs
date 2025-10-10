@@ -4,17 +4,19 @@ use ark_ff::PrimeField;
 use clap::{Parser, ValueEnum};
 use co_acvm::{PlainAcvmSolver, solver::PlainCoSolver};
 use co_builder::flavours::ultra_flavour::UltraFlavour;
-use co_noir::{Bn254G1, HonkRecursion, SerializeF};
+use co_noir::{Bn254G1, HonkRecursion};
+use co_noir_common::{crs::parse::CrsParser, types::ZeroKnowledge};
+use co_noir_common::{mpc::plain::PlainUltraHonkDriver, transcript::Poseidon2Sponge};
 use co_ultrahonk::{
     PlainCoBuilder,
-    prelude::{CoUltraHonk, CrsParser, ProvingKey, UltraHonk, VerifyingKey, ZeroKnowledge},
+    prelude::{CoUltraHonk, ProvingKey, UltraHonk, VerifyingKey},
 };
 use color_eyre::eyre::Context;
-use common::{mpc::plain::PlainUltraHonkDriver, transcript::Poseidon2Sponge};
 use figment::{
     Figment,
     providers::{Env, Format, Serialized, Toml},
 };
+use noir_types::SerializeF;
 use serde::{Deserialize, Serialize};
 use sha3::Keccak256;
 use std::{

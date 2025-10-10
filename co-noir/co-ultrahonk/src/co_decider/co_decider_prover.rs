@@ -4,16 +4,18 @@ use super::{
     types::ProverMemory,
 };
 use crate::{CONST_PROOF_SIZE_LOG_N, mpc_prover_flavour::MPCProverFlavour};
-use co_builder::{
-    HonkProofResult, TranscriptFieldType,
-    prelude::{HonkCurve, ProverCrs, Utils},
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::mpc::NoirUltraHonkProver;
+use co_noir_common::transcript::{Transcript, TranscriptHasher};
+use co_noir_common::{
+    crs::ProverCrs,
+    honk_proof::{HonkProofResult, TranscriptFieldType},
+    types::ZeroKnowledge,
+    utils::Utils,
 };
-use common::mpc::NoirUltraHonkProver;
-use common::transcript::{Transcript, TranscriptHasher};
 use mpc_net::Network;
 use noir_types::HonkProof;
 use std::marker::PhantomData;
-use ultrahonk::prelude::ZeroKnowledge;
 pub struct CoDecider<
     'a,
     T: NoirUltraHonkProver<P>,
@@ -109,7 +111,7 @@ impl<
         if self.has_zk == ZeroKnowledge::No {
             let prover_opening_claim =
                 self.shplemini_prove(transcript, circuit_size, crs, sumcheck_output, None)?;
-            common::compute_co_opening_proof(
+            co_noir_common::compute_co_opening_proof(
                 self.net,
                 self.state,
                 prover_opening_claim,
@@ -134,7 +136,7 @@ impl<
                 sumcheck_output,
                 Some(witness_polynomials),
             )?;
-            common::compute_co_opening_proof(
+            co_noir_common::compute_co_opening_proof(
                 self.net,
                 self.state,
                 prover_opening_claim,

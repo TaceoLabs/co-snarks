@@ -5,8 +5,8 @@ mod field_share {
     use ark_ff::PrimeField;
     use ark_std::{UniformRand, Zero};
     use blake2::{Blake2s256, Digest};
-    use co_builder::prelude::Utils;
     use co_builder::prelude::AES128_SBOX;
+    use co_noir_common::utils::Utils;
     use itertools::izip;
     use itertools::Itertools;
     use libaes::Cipher;

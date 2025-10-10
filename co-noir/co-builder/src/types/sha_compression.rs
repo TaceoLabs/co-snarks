@@ -1,10 +1,8 @@
-use crate::{
-    TranscriptFieldType, prelude::HonkCurve, ultra_builder::GenericUltraCircuitBuilder,
-    utils::Utils,
-};
+use crate::ultra_builder::GenericUltraCircuitBuilder;
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use co_noir_common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType, utils::Utils};
 use num_bigint::BigUint;
 use std::{array, marker::PhantomData};
 

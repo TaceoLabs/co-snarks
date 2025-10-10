@@ -1,6 +1,6 @@
 use ark_ec::CurveGroup;
 
-use crate::{mpc::NoirUltraHonkProver, shared_polynomial::SharedPolynomial};
+use crate::{mpc::NoirUltraHonkProver, polynomials::shared_polynomial::SharedPolynomial};
 
 #[derive(Clone)]
 pub struct ShpleminiOpeningClaim<T: NoirUltraHonkProver<P>, P: CurveGroup> {

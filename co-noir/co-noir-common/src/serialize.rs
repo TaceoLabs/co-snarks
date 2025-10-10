@@ -1,4 +1,5 @@
-use crate::{TranscriptFieldType, prelude::HonkCurve};
+use crate::honk_curve::HonkCurve;
+use crate::honk_proof::TranscriptFieldType;
 use ark_ec::{AffineRepr, CurveConfig, CurveGroup};
 use ark_ff::{Field, PrimeField};
 use noir_types::SerializeF;

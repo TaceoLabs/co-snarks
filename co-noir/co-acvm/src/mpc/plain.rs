@@ -6,6 +6,7 @@ use ark_ff::{BigInteger, MontConfig, One, PrimeField};
 use blake2::{Blake2s256, Digest};
 use co_brillig::mpc::{PlainBrilligDriver, PlainBrilligType};
 use core::panic;
+use itertools::Itertools;
 use libaes::Cipher;
 use mpc_core::lut::PlainCurveLookupTableProvider;
 use mpc_core::{
@@ -348,6 +349,13 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     }
 
     fn open_many(&mut self, a: &[Self::ArithmeticShare]) -> eyre::Result<Vec<F>> {
+        Ok(a.to_vec())
+    }
+
+    fn open_many_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[Self::OtherArithmeticShare<C>],
+    ) -> eyre::Result<Vec<C::BaseField>> {
         Ok(a.to_vec())
     }
 
@@ -1187,14 +1195,6 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Ok(a.iter().zip(b.iter()).map(|(p, s)| *p * s).sum())
     }
 
-    fn scale_point_by_scalar_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
-        &mut self,
-        point: Self::NativeAcvmPoint<C>,
-        scalar: Self::AcvmType,
-    ) -> eyre::Result<Self::NativeAcvmPoint<C>> {
-        Ok(point * scalar)
-    }
-
     fn convert_fields<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         a: &[Self::OtherAcvmType<C>],
@@ -1463,5 +1463,113 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         a: &Self::NativeAcvmPoint<C>,
     ) -> Option<C> {
         Some(*a)
+    }
+
+    // Scales a point by a scalar. Both can either be public or shared
+    fn scale_native_point<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        point: Self::NativeAcvmPoint<C>,
+        scalar: Self::AcvmType,
+    ) -> eyre::Result<Self::NativeAcvmPoint<C>> {
+        Ok(point * scalar)
+    }
+
+    // checks if lhs <= rhs. Returns 1 if true, 0 otherwise.
+    fn le(&mut self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> eyre::Result<Self::AcvmType> {
+        Ok(F::from(lhs <= rhs))
+    }
+
+    /// Given a pointshare, decomposes it into its x and y coordinates and the is_infinity flag, all as base field shares
+    fn native_point_to_other_acvm_types<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        point: Self::NativeAcvmPoint<C>,
+    ) -> eyre::Result<(
+        Self::OtherAcvmType<C>,
+        Self::OtherAcvmType<C>,
+        Self::OtherAcvmType<C>,
+    )> {
+        let (x, y, point_at_infinity) = match point.into_affine().xy() {
+            Some((x, y)) => (x, y, C::BaseField::zero()),
+            None => (
+                C::BaseField::zero(),
+                C::BaseField::zero(),
+                C::BaseField::one(),
+            ),
+        };
+        Ok((x, y, point_at_infinity))
+    }
+
+    // Given a field element in the base field of the curve, decomposes it into CHUNK_SIZE bit chunks and returns these as field shares
+    fn other_field_shares_to_field_shares<
+        const CHUNK_SIZE: usize,
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
+        &mut self,
+        _input: Self::OtherAcvmType<C>,
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
+        unimplemented!("Only implemented for MPC backends");
+    }
+
+    // Similar to decompose_arithmetic, but works on the full AcvmType, which can either be public or shared
+    fn decompose_acvm_type(
+        &mut self,
+        input: Self::AcvmType,
+        total_bit_size_per_field: usize,
+        decompose_bit_size: usize,
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
+        self.decompose_arithmetic(input, total_bit_size_per_field, decompose_bit_size)
+    }
+
+    // For each value in a, checks whether the value is zero. The result is a vector of ACVM-types that are 1 if the value is zero and 0 otherwise.
+    fn is_zero_many(&mut self, a: &[Self::AcvmType]) -> eyre::Result<Vec<Self::AcvmType>> {
+        a.iter()
+            .map(|x| self.is_zero(x))
+            .collect::<eyre::Result<Vec<Self::AcvmType>>>()
+    }
+
+    // For each point in a, checks whether the point is the point at infinity. The result is a vector of ACVM-types that are 1 if the point is at infinity and 0 otherwise.
+    fn is_native_point_at_infinity_many<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[Self::NativeAcvmPoint<C>],
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
+        Ok(a.iter().map(|x| F::from(x.is_zero())).collect_vec())
+    }
+
+    // Given two points, adds them together. Both can either be public or shared
+    fn add_native_points<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &self,
+        lhs: Self::NativeAcvmPoint<C>,
+        rhs: Self::NativeAcvmPoint<C>,
+    ) -> Self::NativeAcvmPoint<C> {
+        lhs + rhs
+    }
+
+    fn msm_public_native_points<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        points: &[C::Affine],
+        scalars: &[Self::ArithmeticShare],
+    ) -> Self::NativeAcvmPoint<C> {
+        points
+            .iter()
+            .zip(scalars.iter())
+            .map(|(p, s)| *p * *s)
+            .sum()
+    }
+
+    fn open_many_native_points<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[Self::NativeAcvmPoint<C>],
+    ) -> eyre::Result<Vec<C::Affine>> {
+        Ok(a.iter().map(|x| x.into_affine()).collect())
+    }
+
+    fn acvm_type_to_other_acvm_type_many<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        value: &[Self::AcvmType],
+    ) -> eyre::Result<Vec<Self::OtherAcvmType<C>>> {
+        Ok(value
+            .iter()
+            .map(|v| C::BaseField::from(v.into_bigint().as_ref()[0]))
+            .collect())
     }
 }

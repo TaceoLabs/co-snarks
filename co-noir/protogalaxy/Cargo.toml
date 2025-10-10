@@ -16,7 +16,7 @@ ark-ff.workspace = true
 mpc-core = { version = "0.9.0", path = "../../mpc-core" }
 co-builder = { version = "0.4.0", path = "../co-builder" }
 ultrahonk = { version = "0.5.0", path = "../ultrahonk" }
-common = { version = "0.1.0", path = "../common" }
+co-noir-common = { version = "0.1.0", path = "../co-noir-common" }
 itertools.workspace = true
 serde.workspace = true
 serde_json.workspace = true

@@ -1,7 +1,9 @@
 use crate::CONST_PROOF_SIZE_LOG_N;
 use crate::Utils;
 use crate::plain_prover_flavour::UnivariateTrait;
-use common::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
+use co_noir_common::polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK;
+use co_noir_common::polynomials::polynomial::NUM_TRANSLATION_EVALUATIONS;
+use co_noir_common::transcript::{Transcript, TranscriptHasher};
 
 use crate::prelude::Univariate;
 
@@ -9,10 +11,13 @@ use ark_ec::CurveGroup;
 use ark_ff::One;
 use ark_ff::Zero;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
-use co_builder::HonkProofResult;
-use co_builder::prelude::NUM_DISABLED_ROWS_IN_SUMCHECK;
-use co_builder::prelude::NUM_TRANSLATION_EVALUATIONS;
-use co_builder::prelude::{HonkCurve, Polynomial, ProverCrs};
+use co_noir_common::{
+    crs::ProverCrs,
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProofResult, TranscriptFieldType},
+    polynomials::polynomial::Polynomial,
+};
+
 use rand::{CryptoRng, Rng};
 
 use super::sumcheck::zk_data::ZKSumcheckData;

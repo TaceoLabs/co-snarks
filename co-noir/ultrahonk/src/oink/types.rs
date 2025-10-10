@@ -1,7 +1,7 @@
 use crate::plain_prover_flavour::PlainProverFlavour;
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
-use co_builder::prelude::Polynomial;
+use co_noir_common::polynomials::polynomial::Polynomial;
 
 pub struct ProverMemory<P: CurveGroup> {
     /// column 3

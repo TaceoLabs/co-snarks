@@ -24,7 +24,7 @@ co-ultrahonk = { version = "0.5.0", path = "../co-ultrahonk" }
 co-builder = { version = "0.4.0", path = "../co-builder" }
 co-noir-types = { version = "0.1.0", path = "../co-noir-types" }
 noir-types = { version = "0.1.0", path = "../noir-types" }
-common = { version = "0.1.0", path = "../common" }
+co-noir-common = { version = "0.1.0", path = "../co-noir-common" }
 color-eyre.workspace = true
 figment.workspace = true
 mpc-core = { version = "0.9.0", path = "../../mpc-core" }

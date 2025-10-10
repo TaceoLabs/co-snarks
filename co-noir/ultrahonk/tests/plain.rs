@@ -1,13 +1,13 @@
 use std::fs::File;
 
 use ark_bn254::Bn254;
-use co_builder::TranscriptFieldType;
 use co_builder::flavours::ultra_flavour::UltraFlavour;
-use co_builder::prelude::CrsParser;
 use co_builder::prelude::HonkRecursion;
-use co_builder::prelude::ZeroKnowledge;
 use co_builder::prelude::constraint_system_from_reader;
-use common::transcript::{Poseidon2Sponge, TranscriptHasher};
+use co_noir_common::crs::parse::CrsParser;
+use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::transcript::{Poseidon2Sponge, TranscriptHasher};
+use co_noir_common::types::ZeroKnowledge;
 use noir_types::HonkProof;
 use sha3::Keccak256;
 use ultrahonk::prelude::{PlainAcvmSolver, UltraCircuitBuilder, UltraHonk};
@@ -18,8 +18,8 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(
     witness_file: &str,
     has_zk: ZeroKnowledge,
 ) {
-    const CRS_PATH_G1: &str = "../co-builder/src/crs/bn254_g1.dat";
-    const CRS_PATH_G2: &str = "../co-builder/src/crs/bn254_g2.dat";
+    const CRS_PATH_G1: &str = "../co-noir-common/src/crs/bn254_g1.dat";
+    const CRS_PATH_G2: &str = "../co-noir-common/src/crs/bn254_g2.dat";
 
     let constraint_system =
         constraint_system_from_reader(File::open(circuit_file).unwrap(), true).unwrap();

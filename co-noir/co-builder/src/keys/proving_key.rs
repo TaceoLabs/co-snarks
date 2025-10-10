@@ -1,14 +1,11 @@
 use super::verification_key::PublicComponentKey;
 use crate::flavours::ultra_flavour::UltraFlavour;
-use crate::polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK;
 use crate::polynomials::polynomial_flavours::{
     PrecomputedEntitiesFlavour, ProverWitnessEntitiesFlavour,
 };
 use crate::prover_flavour::ProverFlavour;
 use crate::{
-    HonkProofResult,
-    crs::ProverCrs,
-    polynomials::{polynomial::Polynomial, polynomial_types::Polynomials},
+    polynomials::polynomial_types::Polynomials,
     types::types::{
         ActiveRegionData, CyclicPermutation, Mapping, NUM_WIRES, PermutationMapping, TraceData,
     },
@@ -17,6 +14,11 @@ use crate::{
 use ark_ec::CurveGroup;
 use ark_ff::One;
 use co_acvm::{PlainAcvmSolver, mpc::NoirWitnessExtensionProtocol};
+use co_noir_common::{
+    crs::ProverCrs,
+    honk_proof::HonkProofResult,
+    polynomials::polynomial::{NUM_DISABLED_ROWS_IN_SUMCHECK, Polynomial},
+};
 use num_bigint::BigUint;
 use std::sync::Arc;
 

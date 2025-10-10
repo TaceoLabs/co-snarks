@@ -1,5 +1,6 @@
 #![expect(unused)]
-use crate::prelude::HonkCurve;
+use crate::generic_builder::GenericBuilder;
+use crate::mega_builder::MegaCircuitBuilder;
 use crate::types::field_ct::CycleScalarCT;
 use crate::types::field_ct::FieldCT;
 use crate::types::goblin_types::GoblinElement;
@@ -10,18 +11,21 @@ use crate::{prelude::GenericUltraCircuitBuilder, types::poseidon2::FieldSpongeCT
 use ark_ec::AffineRepr;
 use ark_ec::CurveGroup;
 use ark_ff::Zero;
+use ark_poly::domain::general::GeneralElements;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::HonkProofError;
+use co_noir_common::honk_proof::HonkProofResult;
 use std::{collections::BTreeMap, ops::Index};
-use {crate::HonkProofError, crate::HonkProofResult};
 
 pub type TranscriptFieldType = ark_bn254::Fr;
-pub type Poseidon2Sponge =
+pub(crate) type Poseidon2Sponge =
     FieldSpongeCT<TranscriptFieldType, 4, 3, Poseidon2CT<TranscriptFieldType, 4, 5>>;
 
 pub trait TranscriptHasherCT<P: CurveGroup> {
     fn hash<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
         buffer: Vec<FieldCT<P::ScalarField>>,
-        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        builder: &mut impl GenericBuilder<P, WT>,
         driver: &mut WT,
     ) -> eyre::Result<FieldCT<P::ScalarField>>;
 }
@@ -31,7 +35,7 @@ impl<P: CurveGroup, const T: usize, const R: usize, H: FieldHashCT<P, T> + Defau
 {
     fn hash<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
         buffer: Vec<FieldCT<P::ScalarField>>,
-        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        builder: &mut impl GenericBuilder<P, WT>,
         driver: &mut WT,
     ) -> eyre::Result<FieldCT<P::ScalarField>> {
         Ok(Self::hash_fixed_length::<1, WT>(&buffer, builder, driver)?[0].clone())
@@ -154,7 +158,7 @@ where
         Ok(elements)
     }
 
-    pub(super) fn receive_fr_from_prover(
+    pub fn receive_fr_from_prover(
         &mut self,
         label: String,
     ) -> HonkProofResult<FieldCT<P::ScalarField>> {
@@ -164,10 +168,10 @@ where
         Ok(elements[0].clone())
     }
 
-    pub(super) fn receive_point_from_prover<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
+    pub fn receive_point_from_prover<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
         &mut self,
         label: String,
-        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        builder: &mut impl GenericBuilder<P, WT>,
         driver: &mut WT,
     ) -> HonkProofResult<GoblinElement<P, WT>> {
         let elements = self.receive_n_from_prover(label, P::NUM_BASEFIELD_ELEMENTS * 2)?;
@@ -200,7 +204,7 @@ where
 
     fn split_challenge<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
         challenge: &FieldCT<P::ScalarField>,
-        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        builder: &mut impl GenericBuilder<P, WT>,
         driver: &mut WT,
     ) -> eyre::Result<[FieldCT<P::ScalarField>; 2]> {
         // use existing field-splitting code in cycle_scalar
@@ -221,7 +225,7 @@ where
     fn get_next_duplex_challenge_buffer<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
         &mut self,
         num_challenges: usize,
-        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        builder: &mut impl GenericBuilder<P, WT>,
         driver: &mut WT,
     ) -> eyre::Result<[FieldCT<P::ScalarField>; 2]> {
         // challenges need at least 110 bits in them to match the presumed security parameter of the BN254 curve.
@@ -261,7 +265,7 @@ where
     pub fn get_challenge<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
         &mut self,
         label: String,
-        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        builder: &mut impl GenericBuilder<P, WT>,
         driver: &mut WT,
     ) -> eyre::Result<FieldCT<P::ScalarField>> {
         self.manifest.add_challenge(self.round_number, &[label]);
@@ -303,7 +307,7 @@ pub(crate) struct RoundData {
 impl RoundData {
     pub(crate) fn print(&self) {
         for label in self.challenge_label.iter() {
-            println!("\tchallenge: {}", label);
+            println!("\tchallenge: {label}");
         }
         for entry in self.entries.iter() {
             println!("\telement ({}): {}", entry.1, entry.0);

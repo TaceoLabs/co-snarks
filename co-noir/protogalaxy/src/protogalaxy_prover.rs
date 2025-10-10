@@ -4,19 +4,21 @@ use ark_ec::AdditiveGroup;
 
 use ark_ff::fields::Field;
 
-use co_builder::{
-    HonkProofResult, TranscriptFieldType,
-    flavours::mega_flavour::MegaFlavour,
-    prelude::{HonkCurve, Polynomial, ProvingKey},
-};
+use co_builder::{flavours::mega_flavour::MegaFlavour, prelude::ProvingKey};
 
+use co_noir_common::{
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProofResult, TranscriptFieldType},
+    polynomials::polynomial::Polynomial,
+    types::ZeroKnowledge,
+};
 use itertools::{Itertools, izip};
 
 use ultrahonk::{decider::types::RelationParameters, prelude::HonkProof};
 use ultrahonk::{
     oink::oink_prover::Oink,
     plain_prover_flavour::UnivariateTrait,
-    prelude::{GateSeparatorPolynomial, Transcript, TranscriptHasher, Univariate, ZeroKnowledge},
+    prelude::{GateSeparatorPolynomial, Transcript, TranscriptHasher, Univariate},
 };
 
 use crate::protogalaxy_prover_internal::{
@@ -94,7 +96,7 @@ where
             .collect::<Vec<_>>();
 
         // An honest prover with valid initial key computes that the perturbator is 0 in the first round
-        // TODO TACEO: Fix once ClientIVC::accumulate is implemented
+        // TACEO TODO: Fix once ClientIVC::accumulate is implemented
         let perturbator = if true {
             compute_perturbator(accumulator, deltas.as_slice(), accumulator_prover_memory)
         } else {

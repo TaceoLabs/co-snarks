@@ -1,3 +1,4 @@
+use crate::generic_builder::GenericBuilder;
 use crate::types::field_ct::WitnessCT;
 use crate::{
     types::{
@@ -14,15 +15,6 @@ use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use mpc_core::gadgets::poseidon2::{Poseidon2, Poseidon2Params};
 use num_bigint::BigUint;
 use std::{any::TypeId, array};
-
-// This workaround is required due to mutability issues
-macro_rules! create_dummy_gate {
-    ($builder:expr, $block:expr, $ixd:expr) => {
-        GenericUltraCircuitBuilder::<P, WT>::create_dummy_gate($block, $ixd[0].witness_index, $ixd[1].witness_index, $ixd[2].witness_index, $ixd[3].witness_index);
-        $builder.check_selector_length_consistency();
-        $builder.num_gates += 1; // necessary because create dummy gate cannot increment num_gates itself
-    };
-}
 
 /// A struct representing the Poseidon2 permutation.
 pub(crate) struct Poseidon2CT<F: PrimeField, const T: usize, const D: u64> {
@@ -43,7 +35,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
         WT: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         state: &mut [FieldCT<F>; T],
-        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        builder: &mut impl GenericBuilder<P, WT>,
         driver: &mut WT,
     ) {
         let s0 = state[0].get_value(builder, driver);
@@ -126,7 +118,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
                 a: v2.witness_index,
                 b: tmp1.witness_index,
                 c: v1.witness_index,
-                d: builder.zero_idx,
+                d: builder.zero_idx(),
                 a_scaling: F::one(),
                 b_scaling: F::one(),
                 c_scaling: -F::one(),
@@ -166,7 +158,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
                 a: v4.witness_index,
                 b: tmp2.witness_index,
                 c: v3.witness_index,
-                d: builder.zero_idx,
+                d: builder.zero_idx(),
                 a_scaling: F::one(),
                 b_scaling: F::one(),
                 c_scaling: -F::one(),
@@ -187,7 +179,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
         WT: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         state: &[FieldCT<F>; T],
-        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        builder: &mut impl GenericBuilder<P, WT>,
         round: usize,
     ) {
         let inp = Poseidon2ExternalGate {
@@ -205,7 +197,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
         WT: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         state: &[FieldCT<F>; T],
-        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        builder: &mut impl GenericBuilder<P, WT>,
         round: usize,
     ) {
         let inp = Poseidon2InternalGate {
@@ -221,11 +213,12 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
     fn permutation_in_place_plain<
         P: CurveGroup<ScalarField = F>,
         WT: NoirWitnessExtensionProtocol<P::ScalarField>,
+        B: GenericBuilder<P, WT>,
     >(
         &self,
         state: &mut [FieldCT<F>; T],
         native_state: &mut [F; T],
-        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        builder: &mut B,
         driver: &mut WT,
     ) {
         // Linear layer at beginning
@@ -244,7 +237,13 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
 
         // Aztec TODO(https://github.com/AztecProtocol/barretenberg/issues/879): dummy gate required since the last external gate
         // from above otherwise expects to read into the first internal gate which is sorted out of sequence
-        create_dummy_gate!(builder, &mut builder.blocks.poseidon2_external, state);
+        B::create_dummy_gate(
+            builder.get_poseidon2_external_mut(),
+            state[0].witness_index,
+            state[1].witness_index,
+            state[2].witness_index,
+            state[3].witness_index,
+        );
 
         // Internal rounds
         for r in 0..self.poseidon2.params.rounds_p {
@@ -258,7 +257,13 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
 
         // Aztec TODO(https://github.com/AztecProtocol/barretenberg/issues/879): dummy gate required since the last internal gate
         // otherwise expects to read into the next external gate which is sorted out of sequence
-        create_dummy_gate!(builder, &mut builder.blocks.poseidon2_internal, state);
+        B::create_dummy_gate(
+            builder.get_poseidon2_internal_mut(),
+            state[0].witness_index,
+            state[1].witness_index,
+            state[2].witness_index,
+            state[3].witness_index,
+        );
 
         // Remaining external rounds
         for r in self.poseidon2.params.rounds_f_beginning
@@ -276,17 +281,24 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
         // applying a round of Poseidon2 is stored in the next row (the shifted row). As a result, we need this end row to
         // compare with the result from the 64th round of Poseidon2. Note that it does not activate any selectors since it
         // only serves as a comparison through the shifted wires.
-        create_dummy_gate!(builder, &mut builder.blocks.poseidon2_external, state);
+        B::create_dummy_gate(
+            builder.get_poseidon2_external_mut(),
+            state[0].witness_index,
+            state[1].witness_index,
+            state[2].witness_index,
+            state[3].witness_index,
+        );
     }
 
     fn permutation_in_place_shared<
         P: CurveGroup<ScalarField = F>,
         WT: NoirWitnessExtensionProtocol<P::ScalarField>,
+        B: GenericBuilder<P, WT>,
     >(
         &self,
         state: &mut [FieldCT<F>; T],
         native_state: &mut [WT::ArithmeticShare; T],
-        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        builder: &mut B,
         driver: &mut WT,
     ) -> eyre::Result<()> {
         let mut precomps = driver.poseidon2_preprocess_permutation(1, &self.poseidon2)?;
@@ -312,7 +324,13 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
 
         // Aztec TODO(https://github.com/AztecProtocol/barretenberg/issues/879): dummy gate required since the last external gate
         // from above otherwise expects to read into the first internal gate which is sorted out of sequence
-        create_dummy_gate!(builder, &mut builder.blocks.poseidon2_external, state);
+        B::create_dummy_gate(
+            builder.get_poseidon2_external_mut(),
+            state[0].witness_index,
+            state[1].witness_index,
+            state[2].witness_index,
+            state[3].witness_index,
+        );
 
         // Internal rounds
         for r in 0..self.poseidon2.params.rounds_p {
@@ -331,7 +349,13 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
 
         // Aztec TODO(https://github.com/AztecProtocol/barretenberg/issues/879): dummy gate required since the last internal gate
         // otherwise expects to read into the next external gate which is sorted out of sequence
-        create_dummy_gate!(builder, &mut builder.blocks.poseidon2_internal, state);
+        B::create_dummy_gate(
+            builder.get_poseidon2_internal_mut(),
+            state[0].witness_index,
+            state[1].witness_index,
+            state[2].witness_index,
+            state[3].witness_index,
+        );
 
         // Remaining external rounds
         for r in self.poseidon2.params.rounds_f_beginning
@@ -354,7 +378,13 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
         // applying a round of Poseidon2 is stored in the next row (the shifted row). As a result, we need this end row to
         // compare with the result from the 64th round of Poseidon2. Note that it does not activate any selectors since it
         // only serves as a comparison through the shifted wires.
-        create_dummy_gate!(builder, &mut builder.blocks.poseidon2_external, state);
+        B::create_dummy_gate(
+            builder.get_poseidon2_external_mut(),
+            state[0].witness_index,
+            state[1].witness_index,
+            state[2].witness_index,
+            state[3].witness_index,
+        );
         Ok(())
     }
 
@@ -365,7 +395,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
     >(
         &self,
         state: &mut [FieldCT<F>; T],
-        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        builder: &mut impl GenericBuilder<P, WT>,
         driver: &mut WT,
     ) -> eyre::Result<()> {
         let native_state: [_; T] = array::from_fn(|i| state[i].get_value(builder, driver));
@@ -432,7 +462,7 @@ pub trait FieldHashCT<P: CurveGroup, const T: usize> {
     fn permutation_in_place<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
         &self,
         input: &mut [FieldCT<P::ScalarField>; T],
-        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        builder: &mut impl GenericBuilder<P, WT>,
         driver: &mut WT,
     ) -> eyre::Result<()>;
 }
@@ -441,7 +471,7 @@ impl<P: CurveGroup, const T: usize> FieldHashCT<P, T> for Poseidon2CT<P::ScalarF
     fn permutation_in_place<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
         &self,
         input: &mut [FieldCT<P::ScalarField>; T],
-        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        builder: &mut impl GenericBuilder<P, WT>,
         driver: &mut WT,
     ) -> eyre::Result<()> {
         self.permutation_in_place(input, builder, driver)?;
@@ -469,7 +499,7 @@ where
 {
     pub(crate) fn new<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
         iv: FieldCT<P::ScalarField>,
-        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        builder: &mut impl GenericBuilder<P, WT>,
         driver: &mut WT,
     ) -> Self {
         let mut state: [FieldCT<P::ScalarField>; T] =
@@ -500,7 +530,7 @@ where
 
     fn perform_duplex<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
         &mut self,
-        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        builder: &mut impl GenericBuilder<P, WT>,
         driver: &mut WT,
     ) -> eyre::Result<[FieldCT<P::ScalarField>; R]> {
         // zero-pad the cache
@@ -536,7 +566,7 @@ where
     fn absorb<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
         &mut self,
         input: FieldCT<P::ScalarField>,
-        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        builder: &mut impl GenericBuilder<P, WT>,
         driver: &mut WT,
     ) -> eyre::Result<()> {
         if self.mode == SpongeMode::Absorb && self.cache_size == R {
@@ -560,7 +590,7 @@ where
 
     fn squeeze<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
         &mut self,
-        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        builder: &mut impl GenericBuilder<P, WT>,
         driver: &mut WT,
     ) -> eyre::Result<FieldCT<P::ScalarField>> {
         if self.mode == SpongeMode::Squeeze && self.cache_size == 0 {
@@ -602,7 +632,7 @@ where
         WT: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         input: &[FieldCT<P::ScalarField>],
-        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        builder: &mut impl GenericBuilder<P, WT>,
         driver: &mut WT,
     ) -> eyre::Result<[FieldCT<P::ScalarField>; OUT_LEN]> {
         let in_len = input.len();
@@ -641,7 +671,7 @@ where
         WT: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         input: &[FieldCT<P::ScalarField>],
-        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        builder: &mut impl GenericBuilder<P, WT>,
         driver: &mut WT,
     ) -> eyre::Result<[FieldCT<P::ScalarField>; OUT_LEN]> {
         Self::hash_internal::<OUT_LEN, WT>(input, builder, driver)

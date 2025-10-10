@@ -7,12 +7,12 @@ use crate::{
 use ark_ec::CurveGroup;
 use ark_ff::Field;
 use ark_ff::Zero;
-use co_builder::HonkProofResult;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
-use co_builder::{TranscriptFieldType, prelude::HonkCurve};
-use common::mpc::NoirUltraHonkProver;
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::{HonkProofResult, TranscriptFieldType};
+use co_noir_common::mpc::NoirUltraHonkProver;
 use itertools::izip;
 use mpc_core::MpcState;
 use mpc_net::Network;
@@ -502,7 +502,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         _relation_parameters: &RelationParameters<Univariate<P::ScalarField, SIZE>>,
         scaling_factor: &P::ScalarField,
     ) -> HonkProofResult<()> {
-        // TODO TACEO: Reconcile skip check and `can_skip`
+        // TACEO TODO: Reconcile skip check and `can_skip`
         if input.precomputed.q_arith().iter().all(|x| x.is_zero()) {
             return Ok(());
         }

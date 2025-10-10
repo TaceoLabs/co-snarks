@@ -6,7 +6,7 @@
   "co-circom/co-circom": "0.9.0",
   "co-circom/co-groth16": "0.9.0",
   "co-circom/co-plonk": "0.6.1",
-  "co-noir/common": "0.1.0",
+  "co-noir/co-noir-common": "0.1.0",
   "co-noir/co-acvm": "0.6.0",
   "co-noir/co-builder": "0.4.0",
   "co-noir/co-brillig": "0.3.0",

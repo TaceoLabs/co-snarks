@@ -17,7 +17,7 @@ members = [
     "co-noir/co-noir-types",
     "co-noir/noir-types",
     "co-noir/co-goblin",
-    "co-noir/common",
+    "co-noir/co-noir-common",
     "co-noir/goblin",
     "co-noir/protogalaxy",
     "mpc-core",

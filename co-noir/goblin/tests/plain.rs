@@ -1,29 +1,31 @@
 use ark_ec::AffineRepr;
 use ark_ec::short_weierstrass;
 use ark_grumpkin::GrumpkinConfig;
-use co_builder::TranscriptFieldType;
+use co_builder::eccvm::ecc_op_queue::ECCOpQueue;
+use co_builder::eccvm::ecc_op_queue::EccOpCode;
+use co_builder::eccvm::ecc_op_queue::EccvmOpsTable;
+use co_builder::eccvm::ecc_op_queue::EccvmRowTracker;
+use co_builder::eccvm::ecc_op_queue::UltraEccOpsTable;
+use co_builder::eccvm::ecc_op_queue::UltraOp;
+use co_builder::eccvm::ecc_op_queue::VMOperation;
 use co_builder::flavours::eccvm_flavour::ECCVMFlavour;
 use co_builder::flavours::translator_flavour::TranslatorFlavour;
-use co_builder::prelude::HonkCurve;
-use co_builder::prelude::{CrsParser, SerializeF, SerializeP};
-use common::transcript::Poseidon2Sponge;
-use common::transcript::Transcript;
-use goblin::prelude::ECCOpQueue;
-use goblin::prelude::EccOpCode;
-use goblin::prelude::Eccvm;
-use goblin::prelude::EccvmOpsTable;
-use goblin::prelude::EccvmRowTracker;
+use co_noir_common::crs::parse::CrsParser;
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::serialize::SerializeP;
+use co_noir_common::transcript::Poseidon2Sponge;
+use co_noir_common::transcript::Transcript;
+use co_noir_common::types::ZeroKnowledge;
+use goblin::eccvm::eccvm_prover::Eccvm;
+use goblin::eccvm::eccvm_types::construct_from_builder;
 use goblin::prelude::Translator;
 use goblin::prelude::TranslatorBuilder;
-use goblin::prelude::UltraEccOpsTable;
-use goblin::prelude::UltraOp;
-use goblin::prelude::VMOperation;
-use goblin::prelude::construct_from_builder;
 use goblin::prelude::construct_pk_from_builder;
+use noir_types::SerializeF;
 use std::str::FromStr;
 use std::{path::PathBuf, sync::Arc};
 use ultrahonk::prelude::ProvingKey;
-use ultrahonk::prelude::ZeroKnowledge;
 
 // The input for this is extracted from barretenberg into bytes (see test_vectors/noir/eccvm for a text file on how the ecc_op_queue was serialized in bb)
 fn deserialize_ecc_op_queue<P: HonkCurve<TranscriptFieldType>>(path: PathBuf) -> ECCOpQueue<P> {

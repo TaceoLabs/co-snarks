@@ -4,7 +4,7 @@ use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 
-pub(crate) struct GoblinElement<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
+pub struct GoblinElement<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
     pub(crate) x: GoblinField<P::ScalarField>,
     pub(crate) y: GoblinField<P::ScalarField>,
     is_infinity: BoolCT<P, T>,
@@ -24,7 +24,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> GoblinEleme
     }
 }
 
-pub(crate) struct GoblinField<F: PrimeField> {
+pub struct GoblinField<F: PrimeField> {
     pub(crate) limbs: [FieldCT<F>; 2],
 }
 impl<F: PrimeField> GoblinField<F> {

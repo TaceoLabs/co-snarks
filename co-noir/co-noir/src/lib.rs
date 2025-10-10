@@ -5,12 +5,15 @@ use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::pss_store::PssStore;
 use co_acvm::{PlainAcvmSolver, Rep3AcvmSolver, ShamirAcvmSolver, solver::Rep3CoSolver};
+use co_builder::flavours::ultra_flavour::UltraFlavour;
 use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
 use co_builder::prover_flavour::ProverFlavour;
-use co_builder::{TranscriptFieldType, flavours::ultra_flavour::UltraFlavour};
+use co_noir_common::crs::ProverCrs;
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::polynomials::polynomial::Polynomial;
 use co_noir_types::{Rep3SharedInput, Rep3SharedWitness, ShamirType};
 use co_noir_types::{Rep3Type, ShamirSharedWitness};
-use co_ultrahonk::prelude::{HonkCurve, ProverCrs};
 use color_eyre::eyre::{self, Context, Result};
 use mpc_core::protocols::{
     rep3::{self, conversion::A2BType, id::PartyID},
@@ -26,6 +29,7 @@ pub use ark_ec::pairing::Pairing;
 pub use co_acvm::{Rep3AcvmType, ShamirAcvmType};
 pub use co_builder::prelude::constraint_system_from_reader;
 pub use co_builder::prelude::get_constraint_system_from_artifact;
+pub use co_noir_common::transcript::{Poseidon2Sponge, TranscriptHasher};
 pub use co_noir_types::merge_input_shares;
 pub use co_noir_types::split_input_rep3;
 pub use co_noir_types::split_witness_rep3;
@@ -33,12 +37,11 @@ pub use co_noir_types::split_witness_shamir;
 pub use co_ultrahonk::{
     Rep3CoBuilder, ShamirCoBuilder,
     prelude::{
-        AcirFormat, CrsParser, HonkRecursion, PlainProvingKey, Polynomial, Polynomials,
-        Rep3CoUltraHonk, Rep3ProvingKey, ShamirCoUltraHonk, ShamirProvingKey, UltraCircuitBuilder,
-        UltraHonk, VerifyingKey, VerifyingKeyBarretenberg,
+        AcirFormat, HonkRecursion, PlainProvingKey, Polynomials, Rep3CoUltraHonk, Rep3ProvingKey,
+        ShamirCoUltraHonk, ShamirProvingKey, UltraCircuitBuilder, UltraHonk, VerifyingKey,
+        VerifyingKeyBarretenberg,
     },
 };
-pub use common::transcript::{Poseidon2Sponge, TranscriptHasher};
 pub use noir_types::HonkProof;
 pub use noir_types::SerializeF;
 pub use noir_types::program_artifact_from_reader;

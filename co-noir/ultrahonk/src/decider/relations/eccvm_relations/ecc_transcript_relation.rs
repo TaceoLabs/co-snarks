@@ -6,10 +6,9 @@ use ark_ff::PrimeField;
 use co_builder::prelude::offset_generator_scaled;
 use co_builder::{
     flavours::eccvm_flavour::ECCVMFlavour,
-    polynomials::polynomial_flavours::PrecomputedEntitiesFlavour, prelude::HonkCurve,
+    polynomials::polynomial_flavours::PrecomputedEntitiesFlavour,
 };
-use common::transcript::TranscriptFieldType;
-
+use co_noir_common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType};
 #[derive(Clone, Debug, Default)]
 pub(crate) struct EccTranscriptRelationAcc<F: PrimeField> {
     pub(crate) r0: Univariate<F, 8>,

@@ -273,6 +273,7 @@ impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for Rep3UltraH
     ) -> Vec<Self::ArithmeticShare> {
         domain.ifft(data)
     }
+
     fn is_zero_many<N: Network>(
         a: &[Self::ArithmeticShare],
         net: &N,

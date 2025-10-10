@@ -2,8 +2,8 @@
 
 use super::{Crs, ProverCrs};
 use crate::TranscriptFieldType;
-use crate::prelude::HonkCurve;
-use crate::types::types::ZeroKnowledge;
+use crate::honk_curve::HonkCurve;
+use crate::types::ZeroKnowledge;
 use ark_ec::{AffineRepr, CurveGroup, pairing::Pairing};
 use ark_serialize::CanonicalDeserialize;
 use eyre::{Result, anyhow};

@@ -56,7 +56,7 @@
       "draft": false,
       "prerelease": false
     },
-    "co-noir/common": {
+    "co-noir/co-noir-common": {
       "changelog-path": "CHANGELOG.md",
       "release-type": "rust",
       "bump-minor-pre-major": true,

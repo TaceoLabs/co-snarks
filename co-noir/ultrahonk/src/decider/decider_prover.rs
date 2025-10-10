@@ -7,11 +7,14 @@ use crate::{
     CONST_PROOF_SIZE_LOG_N, Utils, decider::small_subgroup_ipa::SmallSubgroupIPAProver,
     plain_prover_flavour::PlainProverFlavour,
 };
-use co_builder::{
-    HonkProofResult,
-    prelude::{HonkCurve, ProverCrs, ZeroKnowledge},
+use co_noir_common::{
+    crs::ProverCrs,
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProofResult, TranscriptFieldType},
+    types::ZeroKnowledge,
 };
-use common::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
+
+use co_noir_common::transcript::{Transcript, TranscriptHasher};
 use noir_types::HonkProof;
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
@@ -101,7 +104,7 @@ impl<
                 sumcheck_output,
                 None, // We don't have Libra polynomials in non-ZK mode
             )?;
-            common::compute_opening_proof(prover_opening_claim, transcript, crs)
+            co_noir_common::compute_opening_proof(prover_opening_claim, transcript, crs)
         } else {
             let mut small_subgroup_ipa_prover = SmallSubgroupIPAProver::<_>::new::<H>(
                 zk_sumcheck_data.expect("We have ZK"),
@@ -120,7 +123,7 @@ impl<
                 sumcheck_output,
                 Some(witness_polynomials),
             )?;
-            common::compute_opening_proof(prover_opening_claim, transcript, crs)
+            co_noir_common::compute_opening_proof(prover_opening_claim, transcript, crs)
         }
     }
 

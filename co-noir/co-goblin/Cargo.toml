@@ -17,7 +17,7 @@ mpc-core = { version = "0.9.0", path = "../../mpc-core" }
 ultrahonk = { version = "0.5.0", path = "../ultrahonk" }
 goblin = { version = "0.1.0", path = "../goblin" }
 mpc-net = { version = "0.4.0", path = "../../mpc-net" }
-common = { version = "0.1.0", path = "../common" }
+co-noir-common = { version = "0.1.0", path = "../co-noir-common" }
 ark-ec.workspace = true
 ark-ff.workspace = true
 ark-bn254.workspace = true
