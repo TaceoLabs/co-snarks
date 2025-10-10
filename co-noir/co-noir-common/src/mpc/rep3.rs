@@ -1,8 +1,13 @@
 use super::NoirUltraHonkProver;
+use crate::HonkCurve;
+use crate::honk_curve::NUM_LIMB_BITS;
 use ark_ec::CurveGroup;
+use ark_ff::One;
 use ark_ff::PrimeField;
 use ark_ff::{Field, Zero};
 use itertools::izip;
+use mpc_core::protocols::rep3::Rep3BigUintShare;
+use mpc_core::protocols::rep3::conversion;
 use mpc_core::{
     MpcState,
     protocols::rep3::{
@@ -10,7 +15,9 @@ use mpc_core::{
     },
 };
 use mpc_net::Network;
+use num_bigint::BigUint;
 use rayon::prelude::*;
+use std::any::TypeId;
 #[derive(Debug)]
 pub struct Rep3UltraHonkDriver;
 
@@ -296,5 +303,59 @@ impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for Rep3UltraH
 
     fn scalar_mul_public_point(a: &P, b: Self::ArithmeticShare) -> Self::PointShare {
         pointshare::scalar_mul_public_point(a, b)
+    }
+
+    fn poseidon_permutation_in_place<const T: usize, const D: u64, N: Network>(
+        poseidon: &mpc_core::gadgets::poseidon2::Poseidon2<<P>::ScalarField, T, D>,
+        state: &mut [Self::ArithmeticShare; T],
+        net: &N,
+        mpc_state: &mut Self::State,
+    ) -> eyre::Result<()> {
+        poseidon.rep3_permutation_in_place(state, net, mpc_state)
+    }
+
+    fn pointshare_to_field_shares_many<F: PrimeField, N: Network>(
+        points: &[Self::PointShare],
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>>
+    where
+        P: HonkCurve<F>,
+    {
+        if TypeId::of::<P>()
+            != TypeId::of::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>()
+            || TypeId::of::<F>() != TypeId::of::<ark_bn254::Fr>()
+        {
+            panic!("Only BN254 is supported with TranscriptFieldType = Fr");
+        }
+
+        const LOWER_BITS: usize = 2 * NUM_LIMB_BITS as usize;
+        let (x_shares, y_shares, infinity_shares) =
+            conversion::point_share_to_fieldshares_many(points, net, state)?;
+        let mul = infinity_shares
+            .iter()
+            .map(|i| arithmetic::sub_public_by_shared(P::BaseField::one(), *i, state.id()))
+            .collect::<Vec<_>>();
+        let mut lhs = Vec::with_capacity(x_shares.len() * 2);
+        lhs.extend_from_slice(&x_shares);
+        lhs.extend_from_slice(&y_shares);
+        let mut rhs = Vec::with_capacity(mul.len() * 2);
+        rhs.extend_from_slice(&mul);
+        rhs.extend_from_slice(&mul);
+        let res = arithmetic::mul_vec(&lhs, &rhs, net, state)?;
+        let res = conversion::a2b_many(&res, net, state)?;
+        let lower_mask = (BigUint::one() << LOWER_BITS) - BigUint::one();
+        let res: Vec<_> = res
+            .iter()
+            .flat_map(|x| {
+                let res0 = x & &lower_mask;
+                let res1 = x >> LOWER_BITS;
+                [
+                    Rep3BigUintShare::<P::ScalarField>::new(res0.a, res0.b),
+                    Rep3BigUintShare::<P::ScalarField>::new(res1.a, res1.b),
+                ]
+            })
+            .collect();
+        conversion::b2a_many(&res, net, state)
     }
 }

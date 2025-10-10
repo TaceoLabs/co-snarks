@@ -26,7 +26,9 @@ pub mod polynomials;
 pub mod serialize;
 pub mod shplemini;
 pub mod sponge_hasher;
+pub mod sponge_hasher_mpc;
 pub mod transcript;
+pub mod transcript_mpc;
 pub mod types;
 pub mod utils;
 
