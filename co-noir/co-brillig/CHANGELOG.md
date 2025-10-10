@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.4.0](https://github.com/TaceoLabs/co-snarks/compare/co-brillig-v0.3.0...co-brillig-v0.4.0) (2025-10-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* unify MPC networks, split protocol state and networking to allow fork of state without network, replace io::Error with eyre, merge mpc-core and mpc-types with feature gated mpc-net
+
+### Features
+
+* add CoNoir solver which allows some precomputed witnesses ([6d7d85e](https://github.com/TaceoLabs/co-snarks/commit/6d7d85eea200a33507d4e6c22c7055d776cb6dae))
+* bump to Noir-1.0.0-beta.4 ([9403dae](https://github.com/TaceoLabs/co-snarks/commit/9403daeaf977120a581d9265bea9ed5df8203f3a))
+* update rust edition to 2024 ([6ea0ba9](https://github.com/TaceoLabs/co-snarks/commit/6ea0ba9f9f34063e8ab859c1d4ae41d05629a1c0))
+
+
+### Code Refactoring
+
+* unify MPC networks, split protocol state and networking to allow fork of state without network, replace io::Error with eyre, merge mpc-core and mpc-types with feature gated mpc-net ([16dbf54](https://github.com/TaceoLabs/co-snarks/commit/16dbf546d8f2d80ad4fa9f5053da19edc7270d3c))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * mpc-core bumped from 0.9.0 to 0.10.0
+    * mpc-net bumped from 0.4.0 to 0.5.0
+
 ## [0.3.0](https://github.com/TaceoLabs/co-snarks/compare/co-brillig-v0.2.0...co-brillig-v0.3.0) (2025-04-03)
 
 

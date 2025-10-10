@@ -1,6 +1,6 @@
 [package]
 name = "ultrahonk"
-version = "0.5.0"
+version = "0.6.0"
 publish.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -13,10 +13,10 @@ rust-version.workspace = true
 ark-bn254.workspace = true
 ark-ec.workspace = true
 ark-ff.workspace = true
-co-noir-common = { version = "0.1.0", path = "../co-noir-common" }
-co-builder = { version = "0.4.0", path = "../co-builder" }
-noir-types = { version = "0.1.0", path = "../noir-types" }
-mpc-core = { version = "0.9.0", path = "../../mpc-core" }
+co-noir-common = { version = "0.2.0", path = "../co-noir-common" }
+co-builder = { version = "0.5.0", path = "../co-builder" }
+noir-types = { version = "0.1.1", path = "../noir-types" }
+mpc-core = { version = "0.10.0", path = "../../mpc-core" }
 ark-poly.workspace = true
 eyre.workspace = true
 itertools.workspace = true
