@@ -13,6 +13,12 @@ rust-version.workspace = true
 
 [features]
 default = ["ark-bls12-381"]
+bin = ["dep:tracing-subscriber", "dep:clap", "dep:eyre"]
+
+[[bin]]
+name = "convert-zkey-to-ark"
+path = "src/bin/convert-zkey-to-ark.rs"
+required-features = ["bin"]
 
 [dependencies]
 ark-bls12-377 = { workspace = true, optional = true }
@@ -26,12 +32,15 @@ ark-serialize = { workspace = true }
 ark-groth16 = { workspace = true }
 ark-std = { workspace = true }
 byteorder = { workspace = true }
+clap = { workspace = true, features = ["env"], optional = true }
+eyre = { workspace = true, optional = true }
 num-traits = { workspace = true }
 rayon = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"], optional = true }
 
 [dev-dependencies]
 num-bigint = { workspace = true }
