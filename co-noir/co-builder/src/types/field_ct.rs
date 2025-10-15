@@ -410,7 +410,7 @@ impl<F: PrimeField> FieldCT<F> {
         Ok(result)
     }
 
-    pub(crate) fn mul_assign<
+    pub fn mul_assign<
         P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
