@@ -1,4 +1,4 @@
-use crate::co_protogalaxy_prover::{BATCHED_EXTENDED_LENGTH, NUM_KEYS};
+use crate::prover::co_protogalaxy_prover::{BATCHED_EXTENDED_LENGTH, NUM_KEYS};
 use ark_ec::AdditiveGroup;
 use ark_ff::Field;
 use co_builder::flavours::mega_flavour::MegaFlavour;
@@ -18,7 +18,7 @@ use rayon::prelude::*;
 use ultrahonk::plain_prover_flavour::UnivariateTrait;
 use ultrahonk::prelude::{GateSeparatorPolynomial, Univariate};
 
-use crate::co_protogalaxy_prover::{
+use crate::prover::co_protogalaxy_prover::{
     CONST_PG_LOG_N, DeciderProverMemory, ExtendedRelationParameters,
 };
 
@@ -30,7 +30,7 @@ const LENGTH_SHARED: usize =
  * @brief For each parameter, collect the value in each decider proving key in a univariate and extend for use in the
  * combiner compute.
  */
-pub(crate) fn compute_extended_relation_parameters<
+pub fn compute_extended_relation_parameters<
     T: NoirUltraHonkProver<C>,
     C: HonkCurve<TranscriptFieldType>,
 >(
@@ -61,10 +61,7 @@ pub(crate) fn compute_extended_relation_parameters<
  * @brief Combine the relation batching parameters (alphas) from each decider proving key into a univariate for
  * using in the combiner computation.
  */
-pub(crate) fn compute_and_extend_alphas<
-    T: NoirUltraHonkProver<C>,
-    C: HonkCurve<TranscriptFieldType>,
->(
+pub fn compute_and_extend_alphas<T: NoirUltraHonkProver<C>, C: HonkCurve<TranscriptFieldType>>(
     prover_memory: &Vec<&mut DeciderProverMemory<T, C>>,
 ) -> Vec<Univariate<C::ScalarField, BATCHED_EXTENDED_LENGTH>> {
     (0..MegaFlavour::NUM_SUBRELATIONS - 1)
@@ -90,10 +87,7 @@ pub(crate) fn compute_and_extend_alphas<
  * @brief Compute the combiner quotient defined as $K$ polynomial in the paper.
  *  This is a simplified version of the one in Barretenberg, which only works with 2 keys.
  */
-pub(crate) fn compute_combiner_quotient<
-    T: NoirUltraHonkProver<C>,
-    C: HonkCurve<TranscriptFieldType>,
->(
+pub fn compute_combiner_quotient<T: NoirUltraHonkProver<C>, C: HonkCurve<TranscriptFieldType>>(
     state: &T::State,
     combiner: &SharedUnivariate<T, C, BATCHED_EXTENDED_LENGTH>,
     perturbator_evaluation: C::ScalarField,
@@ -137,7 +131,7 @@ pub(crate) fn compute_combiner_quotient<
  * representing the sum f_0(ω) + α_j*g(ω) where f_0 represents the full honk evaluation at row 0, g(ω) is the
  * linearly dependent subrelation and α_j is its corresponding batching challenge.
  */
-pub(crate) fn compute_row_evaluations<
+pub fn compute_row_evaluations<
     T: NoirUltraHonkProver<C>,
     C: HonkCurve<TranscriptFieldType>,
     N: Network,
@@ -249,10 +243,10 @@ pub(crate) fn construct_coefficients_tree<
  * the tree, label the branch connecting the left node n_l to its parent by 1 and for the right node n_r by β_i +
  * δ_i X. The value of the parent node n will be constructed as n = n_l + n_r * (β_i + δ_i X). Recurse over each
  * layer until the root is reached which will correspond to the perturbator polynomial F(X).
- * TODO(https://github.com/AztecProtocol/barretenberg/issues/745): make computation of perturbator more memory
+ * TODO(<https://github.com/AztecProtocol/barretenberg/issues/745>): make computation of perturbator more memory
  * efficient, operate in-place and use std::resize; add multithreading
  */
-pub(crate) fn construct_perturbator_coefficients<
+pub fn construct_perturbator_coefficients<
     T: NoirUltraHonkProver<C>,
     C: HonkCurve<TranscriptFieldType>,
 >(
@@ -284,7 +278,7 @@ pub(crate) fn construct_perturbator_coefficients<
 /**
  * @brief Construct the power perturbator polynomial F(X) in coefficient form from the accumulator
  */
-pub(crate) fn compute_perturbator<
+pub fn compute_perturbator<
     T: NoirUltraHonkProver<C>,
     C: HonkCurve<TranscriptFieldType>,
     N: Network,
@@ -379,7 +373,7 @@ pub(crate) fn extend_univariates<T: NoirUltraHonkProver<C>, C: HonkCurve<Transcr
  * @brief Compute the combiner polynomial $G$ in the Protogalaxy paper
  * @details We have implemented an optimization that (eg in the case where we fold one instance-witness pair at a
  * time) assumes the value G(1) is 0, which is true in the case where the witness to be folded is valid.
- * @todo (https://github.com/AztecProtocol/barretenberg/issues/968) Make combiner tests better
+ * @todo (<https://github.com/AztecProtocol/barretenberg/issues/968>) Make combiner tests better
  *
  * @param prover_memory
  * @param gate_separators
@@ -387,7 +381,7 @@ pub(crate) fn extend_univariates<T: NoirUltraHonkProver<C>, C: HonkCurve<Transcr
  * @param alphas
  * @return Univariate<C::ScalarField, BATCHED_EXTENDED_LENGTH>
  */
-pub(crate) fn compute_combiner<
+pub fn compute_combiner<
     T: NoirUltraHonkProver<C>,
     C: HonkCurve<TranscriptFieldType>,
     N: Network,

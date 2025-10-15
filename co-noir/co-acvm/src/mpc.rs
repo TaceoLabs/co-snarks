@@ -897,6 +897,46 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         Self::OtherAcvmType<C>,
     )>;
 
+    #[expect(clippy::type_complexity)]
+    fn native_point_to_other_acvm_types_many<
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
+        &mut self,
+        points: &[Self::NativeAcvmPoint<C>],
+    ) -> eyre::Result<
+        Vec<(
+            Self::OtherAcvmType<C>,
+            Self::OtherAcvmType<C>,
+            Self::OtherAcvmType<C>,
+        )>,
+    >;
+
+    #[expect(clippy::type_complexity)]
+    fn native_point_to_acvm_types<const LIMB_BITS: usize, C: HonkCurve<F, ScalarField = F>>(
+        &mut self,
+        point: Self::NativeAcvmPoint<C>,
+    ) -> eyre::Result<(
+        Self::AcvmType,
+        Self::AcvmType,
+        Self::AcvmType,
+        Self::AcvmType,
+        Self::AcvmType,
+    )>;
+
+    #[expect(clippy::type_complexity)]
+    fn native_point_to_acvm_types_many<const LIMB_BITS: usize, C: HonkCurve<F, ScalarField = F>>(
+        &mut self,
+        points: &[Self::NativeAcvmPoint<C>],
+    ) -> eyre::Result<
+        Vec<(
+            Self::AcvmType,
+            Self::AcvmType,
+            Self::AcvmType,
+            Self::AcvmType,
+            Self::AcvmType,
+        )>,
+    >;
+
     // TACEO TODO: Currently only supports LIMB_BITS = 136, i.e. two Bn254::Fr elements per Bn254::Fq element
     /// Converts a base field share into a vector of field shares, where the field shares
     /// represent the limbs of the base field element. Each limb has at most LIMB_BITS bits.
@@ -907,6 +947,17 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         &mut self,
         input: Self::OtherAcvmType<C>,
     ) -> eyre::Result<Vec<Self::AcvmType>>;
+
+    // TACEO TODO: Currently only supports LIMB_BITS = 136, i.e. two Bn254::Fr elements per Bn254::Fq element
+    /// Converts a base field share into a vector of field shares, where the field shares
+    /// represent the limbs of the base field element. Each limb has at most LIMB_BITS bits.
+    fn other_field_shares_to_field_shares_many<
+        const LIMB_BITS: usize,
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
+        &mut self,
+        input: &[Self::OtherAcvmType<C>],
+    ) -> eyre::Result<Vec<Vec<Self::AcvmType>>>;
 
     // Similar to decompose_arithmetic, but works on the full AcvmType, which can either be public or shared
     fn decompose_acvm_type(
@@ -1062,6 +1113,18 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         y1: Self::AcvmType,
         is_infinity: Self::AcvmType,
     ) -> eyre::Result<Self::NativeAcvmPoint<C>>;
+
+    #[expect(clippy::type_complexity)]
+    fn acvm_types_to_native_point_many<const LIMB_BITS: usize, C: HonkCurve<F, ScalarField = F>>(
+        &mut self,
+        limbs: &[(
+            Self::AcvmType,
+            Self::AcvmType,
+            Self::AcvmType,
+            Self::AcvmType,
+            Self::AcvmType,
+        )],
+    ) -> eyre::Result<Vec<Self::NativeAcvmPoint<C>>>;
 
     /// Negates the given point, i.e., computes -P for a point P.
     fn negate_native_point<C: HonkCurve<F, ScalarField = F>>(

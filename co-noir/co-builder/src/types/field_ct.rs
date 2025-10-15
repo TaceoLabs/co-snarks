@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use super::types::{AddQuad, EccDblGate, MulQuad};
 
 use crate::generic_builder::GenericBuilder;
@@ -10,7 +12,7 @@ use ark_ff::PrimeField;
 use ark_ff::{One, Zero};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_noir_common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType, utils::Utils};
-use itertools::izip;
+use itertools::{Itertools, izip};
 use num_bigint::BigUint;
 
 #[derive(Clone, Debug)]
@@ -310,6 +312,104 @@ impl<F: PrimeField> FieldCT<F> {
         Ok(result)
     }
 
+    pub fn multiply_many<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        lhs: &[Self],
+        rhs: &[Self],
+        builder: &mut impl GenericBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<Vec<Self>> {
+        let (constant_operand, variable_operands): (Vec<_>, Vec<_>) = lhs
+            .iter()
+            .zip(rhs.iter())
+            .enumerate()
+            .partition(|(_, (l, r))| l.is_constant() || r.is_constant());
+
+        let constant_operand = constant_operand
+            .into_iter()
+            .map(|(i, (l, r))| l.multiply(r, builder, driver).map(|res| (i, res)))
+            .collect::<eyre::Result<Vec<_>>>()?;
+
+        // Both inputs map to circuit varaibles: create a `*` constraint.
+
+        // /**
+        //  * Value of this   = a.v * a.mul + a.add;
+        //  * Value of other  = b.v * b.mul + b.add;
+        //  * Value of result = a * b
+        //  *            = [a.v * b.v] * [a.mul * b.mul] + a.v * [a.mul * b.add] + b.v * [a.add * b.mul] + [a.ac * b.add]
+        //  *            = [a.v * b.v] * [     q_m     ] + a.v * [     q_l     ] + b.v * [     q_r     ] + [    q_c     ]
+        //  *            ^               ^Notice the add/mul_constants form selectors when a gate is created.
+        //  *            |                Only the witnesses (pointed-to by the witness_indexes) form the wires in/out of
+        //  *            |                the gate.
+        //  *            ^This entire value is pushed to ctx->variables as a new witness. The
+        //  *             implied additive & multiplicative constants of the new witness are 0 & 1 resp.
+        //  * Left wire value: a.v
+        //  * Right wire value: b.v
+        //  * Output wire value: result.v (with q_o = -1)
+        //  */
+        let variables = variable_operands
+            .iter()
+            .map(|(_, (l, r))| {
+                (
+                    builder.get_variable(l.witness_index as usize),
+                    builder.get_variable(r.witness_index as usize),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        let (left_vals, right_vals) = variables
+            .clone()
+            .into_iter()
+            .unzip::<_, _, Vec<_>, Vec<_>>();
+
+        let point_wise_products = driver.mul_many(&left_vals, &right_vals)?;
+
+        let variable_operands = izip!(variable_operands, variables, point_wise_products)
+            .map(|((i, (l, r)), (l_var, r_var), p)| {
+                let mut result = FieldCT::default();
+
+                let q_c = l.additive_constant * r.additive_constant;
+                let q_r = l.additive_constant * r.multiplicative_constant;
+                let q_l = l.multiplicative_constant * r.additive_constant;
+                let q_m = l.multiplicative_constant * r.multiplicative_constant;
+
+                let mut out = driver.mul_with_public(q_m, p);
+
+                let t0 = driver.mul_with_public(q_l, l_var);
+                driver.add_assign(&mut out, t0);
+
+                let t0 = driver.mul_with_public(q_r, r_var);
+                driver.add_assign(&mut out, t0);
+                driver.add_assign_with_public(q_c, &mut out);
+
+                result.witness_index = builder.add_variable(out);
+                builder.create_poly_gate(&PolyTriple {
+                    a: l.witness_index,
+                    b: r.witness_index,
+                    c: result.witness_index,
+                    q_m,
+                    q_l,
+                    q_r,
+                    q_o: -P::ScalarField::one(),
+                    q_c,
+                });
+
+                (i, result)
+            })
+            .collect::<Vec<(usize, FieldCT<F>)>>();
+
+        let result = constant_operand
+            .into_iter()
+            .chain(variable_operands)
+            .sorted_by_key(|(i, _)| *i)
+            .map(|(_, res)| res)
+            .collect::<Vec<_>>();
+
+        Ok(result)
+    }
+
     pub(crate) fn mul_assign<
         P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
@@ -323,14 +423,13 @@ impl<F: PrimeField> FieldCT<F> {
         Ok(())
     }
 
-    #[expect(dead_code)]
-    pub(crate) fn divide<
+    pub fn divide<
         P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &self,
         other: &Self,
-        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        builder: &mut impl GenericBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Self> {
         other.assert_is_not_zero(builder, driver)?;
@@ -343,7 +442,7 @@ impl<F: PrimeField> FieldCT<F> {
     >(
         &self,
         other: &Self,
-        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        builder: &mut impl GenericBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Self> {
         let mut result = Self::default();
@@ -590,10 +689,7 @@ impl<F: PrimeField> FieldCT<F> {
     }
 
     // this * to_mul + to_add
-    pub(crate) fn madd<
-        P: CurveGroup<ScalarField = F>,
-        T: NoirWitnessExtensionProtocol<P::ScalarField>,
-    >(
+    pub fn madd<P: CurveGroup<ScalarField = F>, T: NoirWitnessExtensionProtocol<P::ScalarField>>(
         &self,
         to_mul: &Self,
         to_add: &Self,
@@ -867,7 +963,7 @@ impl<F: PrimeField> FieldCT<F> {
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &self,
-        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        builder: &mut impl GenericBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<()> {
         if self.is_constant() {
@@ -897,7 +993,7 @@ impl<F: PrimeField> FieldCT<F> {
         builder.create_poly_gate(&PolyTriple {
             a: self.witness_index,             // input value
             b: inverse.witness_index,          // inverse
-            c: builder.zero_idx,               // no output
+            c: builder.zero_idx(),             // no output
             q_m: self.multiplicative_constant, // a * b * mul_const
             q_l: P::ScalarField::zero(),       // a * 0
             q_r: self.additive_constant,       // b * mul_const
@@ -1296,7 +1392,7 @@ impl<F: PrimeField> Default for FieldCT<F> {
     }
 }
 
-pub(crate) struct WitnessCT<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
+pub struct WitnessCT<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
     pub(crate) witness: T::AcvmType,
     pub(crate) witness_index: u32,
 }
@@ -1305,10 +1401,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> WitnessCT<P
     #[expect(dead_code)]
     const IS_CONSTANT: u32 = FieldCT::<P::ScalarField>::IS_CONSTANT;
 
-    pub(crate) fn from_acvm_type(
-        value: T::AcvmType,
-        builder: &mut impl GenericBuilder<P, T>,
-    ) -> Self {
+    pub fn from_acvm_type(value: T::AcvmType, builder: &mut impl GenericBuilder<P, T>) -> Self {
         let witness_index = builder.add_variable(value.to_owned());
         Self {
             witness: value,
@@ -1325,11 +1418,20 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> WitnessCT<P
     }
 }
 
-#[derive(Debug)]
 pub struct BoolCT<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
     pub(crate) witness_bool: T::AcvmType,
     pub(crate) witness_inverted: bool,
     pub(crate) witness_index: u32,
+}
+
+impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> Debug for BoolCT<P, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BoolCT")
+            .field("witness_bool", &self.witness_bool)
+            .field("witness_inverted", &self.witness_inverted)
+            .field("witness_index", &self.witness_index)
+            .finish()
+    }
 }
 
 impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> Default for BoolCT<P, T> {
@@ -1368,7 +1470,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T
     }
 
     // It is assumed here that the value of the WitnessCT is boolean (secret-shared)
-    pub(crate) fn from_witness_ct(
+    pub fn from_witness_ct(
         witness: WitnessCT<P, T>,
         builder: &mut impl GenericBuilder<P, T>,
     ) -> Self {
@@ -3093,7 +3195,7 @@ impl<F: PrimeField> CycleScalarCT<F> {
         let value = inp.get_value(builder, driver);
         let msb = Self::NUM_BITS as u8;
         let lsb = Self::LO_BITS as u8;
-        let total_bitsize = 256usize;
+        let total_bitsize = F::MODULUS_BIT_SIZE as usize;
         let shift: BigUint = BigUint::one() << Self::LO_BITS;
         let shift_ct = FieldCT::from(F::from(shift.clone()));
         let (hi_v, lo_v) = if T::is_shared(&value) {
