@@ -381,7 +381,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         // If lagrange_ecc_op is the indicator for ecc_op_gates, this is the indicator for the complement
 
         let lagrange_by_scaling = lagrange_ecc_op * *scaling_factor;
-        let complement_ecc_op_by_scaling = lagrange_by_scaling - *scaling_factor;
+        let complement_ecc_op_by_scaling = *scaling_factor - lagrange_by_scaling;
 
         // Contribution (1)
         let mut tmp = T::sub(op_wire_1, w_1_shift);

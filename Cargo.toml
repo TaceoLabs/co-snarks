@@ -18,6 +18,7 @@ members = [
     "co-noir/noir-types",
     "co-noir/co-goblin",
     "co-noir/co-noir-common",
+    "co-noir/honk-verifier",
     "co-noir/goblin",
     "co-noir/protogalaxy",
     "mpc-core",
