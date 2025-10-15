@@ -66,7 +66,7 @@ pub struct RelationParameters<T> {
     pub eccvm_set_permutation_delta: T,
 }
 
-impl<T: PartialEq> RelationParameters<T> {
+impl<T> RelationParameters<T> {
     pub fn get_params_as_mut(&mut self) -> Vec<&mut T> {
         vec![
             &mut self.eta_1,

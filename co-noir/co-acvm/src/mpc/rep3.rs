@@ -7,7 +7,7 @@ use blake2::{Blake2s256, Digest};
 use co_brillig::mpc::{Rep3BrilligDriver, Rep3BrilligType};
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_types::Rep3Type;
-use itertools::{Either, Itertools, izip};
+use itertools::{Either, Itertools, interleave, izip};
 use libaes::Cipher;
 use mpc_core::MpcState as _;
 use mpc_core::gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations};
@@ -3474,6 +3474,71 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
     }
 
+    fn native_point_to_other_acvm_types_many<
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
+        &mut self,
+        points: &[Self::NativeAcvmPoint<C>],
+    ) -> eyre::Result<
+        Vec<(
+            Self::OtherAcvmType<C>,
+            Self::OtherAcvmType<C>,
+            Self::OtherAcvmType<C>,
+        )>,
+    > {
+        let (public, shared): (Vec<_>, Vec<_>) =
+            points
+                .iter()
+                .enumerate()
+                .partition_map(|(i, val)| match val {
+                    Rep3AcvmPoint::Public(public) => Either::Left((i, *public)),
+                    Rep3AcvmPoint::Shared(shared) => Either::Right((i, *shared)),
+                });
+
+        let public = public
+            .into_iter()
+            .map(|(i, x)| {
+                if let Some((x, y)) = x.into_affine().xy() {
+                    (i, (x.into(), y.into(), C::BaseField::zero().into()))
+                } else {
+                    (
+                        i,
+                        (
+                            C::BaseField::zero().into(),
+                            C::BaseField::zero().into(),
+                            C::BaseField::one().into(),
+                        ),
+                    )
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let (indices, shares): (Vec<_>, Vec<_>) = shared.into_iter().unzip();
+
+        let (a, b, c) =
+            conversion::point_share_to_fieldshares_many(&shares, self.net0, &mut self.state0)?;
+
+        let shared = izip!(indices, a, b, c)
+            .map(|(i, a, b, c)| {
+                (
+                    i,
+                    (
+                        Rep3AcvmType::Shared(a),
+                        Rep3AcvmType::Shared(b),
+                        Rep3AcvmType::Shared(c),
+                    ),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        Ok(public
+            .into_iter()
+            .chain(shared)
+            .sorted_by_key(|(i, _)| *i)
+            .map(|(_, val)| val)
+            .collect::<Vec<_>>())
+    }
+
     // TACEO TODO: Currently only supports LIMB_BITS = 136, i.e. two Bn254::Fr elements per Bn254::Fq element
     /// Converts a base field share into a vector of field shares, where the field shares
     /// represent the limbs of the base field element. Each limb has at most LIMB_BITS bits.
@@ -3522,6 +3587,141 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 })
             }
         }
+    }
+
+    // TACEO TODO: Currently only supports LIMB_BITS = 136, i.e. two Bn254::Fr elements per Bn254::Fq element
+    /// Converts a base field share into a vector of field shares, where the field shares
+    /// represent the limbs of the base field element. Each limb has at most LIMB_BITS bits.
+    fn other_field_shares_to_field_shares_many<
+        const LIMB_BITS: usize,
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
+        &mut self,
+        input: &[Self::OtherAcvmType<C>],
+    ) -> eyre::Result<Vec<Vec<Self::AcvmType>>> {
+        assert_eq!(
+            LIMB_BITS, 136,
+            "Only LIMB_BITS = 136 is supported, i.e. two Bn254::Fr elements per Bn254::Fq element"
+        );
+
+        let (public, shared): (Vec<_>, Vec<_>) =
+            input.iter().enumerate().partition_map(|(i, x)| match x {
+                Rep3AcvmType::Public(x) => Either::Left((i, *x)),
+                Rep3AcvmType::Shared(x) => Either::Right((i, *x)),
+            });
+
+        let public_limbs = public
+            .iter()
+            .map(|(i, x)| {
+                self.other_field_shares_to_field_shares::<LIMB_BITS, C>(Rep3AcvmType::Public(*x))
+                    .map(|v| (*i, v))
+            })
+            .collect::<eyre::Result<Vec<_>>>()?;
+
+        let (indices, shares): (Vec<usize>, Vec<Self::OtherArithmeticShare<C>>) =
+            shared.into_iter().unzip();
+        let shared_limbs = conversion::a2b_many(&shares, self.net0, &mut self.state0)?;
+
+        let low_shares: Vec<_> = shared_limbs
+            .iter()
+            .map(|x| x.clone() & ((BigUint::from(1u8) << LIMB_BITS) - BigUint::from(1u8)))
+            .collect::<Vec<_>>();
+        let high_shares: Vec<_> = shared_limbs
+            .iter()
+            .map(|x| x >> LIMB_BITS)
+            .collect::<Vec<_>>();
+
+        let low_high_shares = interleave(high_shares, low_shares)
+            .map(|x| Rep3BigUintShare::new(x.a, x.b))
+            .collect_vec();
+
+        let low_high_field_shares: Vec<Vec<_>> =
+            conversion::b2a_many(&low_high_shares, self.net0, &mut self.state0)?
+                .into_iter()
+                .map(Rep3AcvmType::Shared)
+                .collect_vec()
+                .chunks(2)
+                .map(|v| v.to_vec())
+                .collect::<Vec<_>>();
+
+        let shared_limbs = indices
+            .into_iter()
+            .zip(low_high_field_shares)
+            .collect::<Vec<_>>();
+
+        // Merge sort by index
+        Ok(public_limbs
+            .into_iter()
+            .chain(shared_limbs)
+            .sorted_by_key(|(i, _)| *i)
+            .map(|(_, val)| val)
+            .collect::<Vec<Vec<Self::AcvmType>>>())
+    }
+
+    fn native_point_to_acvm_types<const LIMB_BITS: usize, C: HonkCurve<F, ScalarField = F>>(
+        &mut self,
+        point: Self::NativeAcvmPoint<C>,
+    ) -> eyre::Result<(
+        Self::AcvmType,
+        Self::AcvmType,
+        Self::AcvmType,
+        Self::AcvmType,
+        Self::AcvmType,
+    )> {
+        assert_eq!(
+            LIMB_BITS, 136,
+            "Only LIMB_BITS = 136 is supported, i.e. two Bn254::Fr elements per Bn254::Fq element"
+        );
+
+        let (x, y, _) = self.native_point_to_other_acvm_types(point)?;
+        let inf = self
+            .is_native_point_at_infinity_many(&[point])?
+            .pop()
+            .unwrap();
+
+        let mut limbs = self.other_field_shares_to_field_shares_many::<LIMB_BITS, C>(&[x, y])?;
+        Ok((
+            limbs[0].pop().unwrap(),
+            limbs[0].pop().unwrap(),
+            limbs[1].pop().unwrap(),
+            limbs[1].pop().unwrap(),
+            inf,
+        ))
+    }
+
+    fn native_point_to_acvm_types_many<const LIMB_BITS: usize, C: HonkCurve<F, ScalarField = F>>(
+        &mut self,
+        points: &[Self::NativeAcvmPoint<C>],
+    ) -> eyre::Result<
+        Vec<(
+            Self::AcvmType,
+            Self::AcvmType,
+            Self::AcvmType,
+            Self::AcvmType,
+            Self::AcvmType,
+        )>,
+    > {
+        let limbs = self.native_point_to_other_acvm_types_many::<C>(points)?;
+
+        let (x_limbs, y_limbs, _): (Vec<_>, Vec<_>, Vec<_>) = limbs.into_iter().multiunzip();
+
+        let mut x_y = self.other_field_shares_to_field_shares_many::<LIMB_BITS, C>(
+            &[x_limbs, y_limbs].concat(),
+        )?;
+        let (x, y) = x_y.split_at_mut(points.len());
+        let inf = self.is_native_point_at_infinity_many::<C>(points)?;
+
+        Ok(izip!(x, y, inf)
+            .map(|(x, y, inf)| {
+                (
+                    x.pop().unwrap(),
+                    x.pop().unwrap(),
+                    y.pop().unwrap(),
+                    y.pop().unwrap(),
+                    inf,
+                )
+            })
+            .collect::<Vec<_>>())
     }
 
     // Similar to decompose_arithmetic, but works on the full AcvmType, which can either be public or shared
@@ -3898,6 +4098,122 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             }
             _ => eyre::bail!("All inputs must either be public or shared"),
         }
+    }
+
+    fn acvm_types_to_native_point_many<const LIMB_BITS: usize, C: HonkCurve<F, ScalarField = F>>(
+        &mut self,
+        limbs: &[(
+            Self::AcvmType,
+            Self::AcvmType,
+            Self::AcvmType,
+            Self::AcvmType,
+            Self::AcvmType,
+        )],
+    ) -> eyre::Result<Vec<Self::NativeAcvmPoint<C>>> {
+        let (public, shared): (Vec<(usize, _)>, Vec<(usize, _)>) = limbs
+            .iter()
+            .enumerate()
+            .partition_map(|(i, val)| match *val {
+                (
+                    Rep3AcvmType::Public(x0),
+                    Rep3AcvmType::Public(x1),
+                    Rep3AcvmType::Public(y0),
+                    Rep3AcvmType::Public(y1),
+                    Rep3AcvmType::Public(is_infinity),
+                ) => Either::Left((i, (x0, x1, y0, y1, is_infinity))),
+                (
+                    Rep3AcvmType::Shared(x0),
+                    Rep3AcvmType::Shared(x1),
+                    Rep3AcvmType::Shared(y0),
+                    Rep3AcvmType::Shared(y1),
+                    Rep3AcvmType::Shared(is_infinity),
+                ) => Either::Right((i, (x0, x1, y0, y1, is_infinity))),
+                _ => panic!("All inputs must either be public or shared"),
+            });
+
+        // Process public points
+        let (indices, public): (Vec<_>, Vec<_>) = public.into_iter().unzip();
+        let points =
+            PlainAcvmSolver::new().acvm_types_to_native_point_many::<LIMB_BITS, C>(&public)?;
+
+        if shared.is_empty() {
+            return Ok(points.into_iter().map(Rep3AcvmPoint::Public).collect());
+        }
+
+        let public = indices
+            .into_iter()
+            .zip(points)
+            .map(|(i, point)| (i, Rep3AcvmPoint::Public(point)))
+            .collect::<Vec<_>>();
+
+        // Process shared points
+        let (indices, shares): (Vec<_>, Vec<_>) = shared.into_iter().unzip();
+
+        let (x0, x1, y0, y1, is_infinity): (Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>) =
+            shares.into_iter().multiunzip();
+
+        let bigint_limbs = conversion::a2b_many(
+            &[x0, x1, y0, y1, is_infinity].concat(),
+            self.net0,
+            &mut self.state0,
+        )?;
+
+        let [x0, x1, y0, y1, is_infinity]: [Vec<_>; 5] = bigint_limbs
+            .chunks(indices.len())
+            .map(|x| x.to_vec())
+            .collect::<Vec<_>>()
+            .try_into()
+            .expect("We provided the right number of elements");
+
+        let x = izip!(x0, x1)
+            .map(|(x0, x1)| x0 ^ (x1 << LIMB_BITS))
+            .collect::<Vec<_>>();
+        let y = izip!(y0, y1)
+            .map(|(y0, y1)| y0 ^ (y1 << LIMB_BITS))
+            .collect::<Vec<_>>();
+
+        let x = x
+            .into_iter()
+            .map(|x| Rep3BigUintShare::new(x.a, x.b))
+            .collect::<Vec<_>>();
+        let y = y
+            .into_iter()
+            .map(|y| Rep3BigUintShare::new(y.a, y.b))
+            .collect::<Vec<_>>();
+        let is_infinity = is_infinity
+            .into_iter()
+            .map(|is_infinity| Rep3BigUintShare::new(is_infinity.a, is_infinity.b))
+            .collect::<Vec<_>>();
+
+        let [x, y, is_infinity] =
+            conversion::b2a_many(&[x, y, is_infinity].concat(), self.net0, &mut self.state0)?
+                .chunks(indices.len())
+                .map(|x| x.to_vec())
+                .collect::<Vec<_>>()
+                .try_into()
+                .expect("We provided the right number of elements");
+
+        let pointshares = conversion::fieldshares_to_pointshare_many::<C, _>(
+            &x,
+            &y,
+            &is_infinity,
+            self.net0,
+            &mut self.state0,
+        )?;
+
+        let pointshares = indices
+            .into_iter()
+            .zip(pointshares)
+            .map(|(i, pointshare)| (i, Rep3AcvmPoint::Shared(pointshare)))
+            .collect::<Vec<_>>();
+
+        // Merge sort by index
+        Ok(pointshares
+            .into_iter()
+            .chain(public)
+            .sorted_by_key(|(i, _)| *i)
+            .map(|(_, val)| val)
+            .collect::<Vec<_>>())
     }
 
     fn negate_native_point<C: HonkCurve<F, ScalarField = F>>(

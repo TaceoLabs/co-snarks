@@ -1425,6 +1425,55 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
         panic!("functionality other_pointshare_to_other_field_shares not feasible for Shamir")
     }
 
+    fn native_point_to_other_acvm_types_many<
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
+        &mut self,
+        _points: &[Self::NativeAcvmPoint<C>],
+    ) -> eyre::Result<
+        Vec<(
+            Self::OtherAcvmType<C>,
+            Self::OtherAcvmType<C>,
+            Self::OtherAcvmType<C>,
+        )>,
+    > {
+        panic!("functionality native_point_to_other_acvm_types_many not feasible for Shamir")
+    }
+
+    fn native_point_to_acvm_types<
+        const LIMB_BITS: usize,
+        C: co_noir_common::honk_curve::HonkCurve<F, ScalarField = F>,
+    >(
+        &mut self,
+        _point: Self::NativeAcvmPoint<C>,
+    ) -> eyre::Result<(
+        Self::AcvmType,
+        Self::AcvmType,
+        Self::AcvmType,
+        Self::AcvmType,
+        Self::AcvmType,
+    )> {
+        panic!("functionality native_point_to_acvm_types not feasible for Shamir")
+    }
+
+    fn native_point_to_acvm_types_many<
+        const LIMB_BITS: usize,
+        C: co_noir_common::honk_curve::HonkCurve<F, ScalarField = F>,
+    >(
+        &mut self,
+        _points: &[Self::NativeAcvmPoint<C>],
+    ) -> eyre::Result<
+        Vec<(
+            Self::AcvmType,
+            Self::AcvmType,
+            Self::AcvmType,
+            Self::AcvmType,
+            Self::AcvmType,
+        )>,
+    > {
+        panic!("functionality native_point_to_acvm_types_many not feasible for Shamir")
+    }
+
     // TACEO TODO: Currently only supports LIMB_BITS = 136, i.e. two Bn254::Fr elements per Bn254::Fq element
     /// Converts a base field share into a vector of field shares, where the field shares
     /// represent the limbs of the base field element. Each limb has at most LIMB_BITS bits.
@@ -1436,6 +1485,16 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
         _input: Self::OtherAcvmType<C>,
     ) -> eyre::Result<Vec<Self::AcvmType>> {
         panic!("functionality other_field_shares_to_field_shares not feasible for Shamir")
+    }
+
+    fn other_field_shares_to_field_shares_many<
+        const LIMB_BITS: usize,
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
+        &mut self,
+        _input: &[Self::OtherAcvmType<C>],
+    ) -> eyre::Result<Vec<Vec<Self::AcvmType>>> {
+        panic!("functionality other_field_shares_to_field_shares_many not feasible for Shamir")
     }
 
     // Similar to decompose_arithmetic, but works on the full AcvmType, which can either be public or shared
@@ -1608,6 +1667,22 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
         _is_infinity: Self::AcvmType,
     ) -> eyre::Result<Self::NativeAcvmPoint<C>> {
         panic!("functionality acvm_types_to_native_point not feasible for Shamir")
+    }
+
+    fn acvm_types_to_native_point_many<
+        const LIMB_BITS: usize,
+        C: co_noir_common::honk_curve::HonkCurve<F, ScalarField = F>,
+    >(
+        &mut self,
+        _limbs: &[(
+            Self::AcvmType,
+            Self::AcvmType,
+            Self::AcvmType,
+            Self::AcvmType,
+            Self::AcvmType,
+        )],
+    ) -> eyre::Result<Vec<Self::NativeAcvmPoint<C>>> {
+        panic!("functionality acvm_types_to_native_point_many not feasible for Shamir")
     }
 
     fn negate_native_point<C: co_noir_common::honk_curve::HonkCurve<F, ScalarField = F>>(

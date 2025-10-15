@@ -537,12 +537,16 @@ fn test_recursive_merge_verifier_plaindriver() {
         .unwrap();
     assert_eq!(
         (
-            result.0.get_value(&mut builder, &mut driver),
-            result.1.get_value(&mut builder, &mut driver)
+            result.0.get_value(&mut builder, &mut driver).unwrap(),
+            result.1.get_value(&mut builder, &mut driver).unwrap()
         ),
         (
-            pairing_point_0.get_value(&mut builder, &mut driver),
-            pairing_point_1.get_value(&mut builder, &mut driver)
+            pairing_point_0
+                .get_value(&mut builder, &mut driver)
+                .unwrap(),
+            pairing_point_1
+                .get_value(&mut builder, &mut driver)
+                .unwrap()
         )
     );
 }

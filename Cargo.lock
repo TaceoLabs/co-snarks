@@ -1424,6 +1424,7 @@ dependencies = [
  "ark-bn254",
  "ark-ec",
  "ark-ff 0.5.0",
+ "co-acvm",
  "co-builder",
  "co-noir-common",
  "co-ultrahonk",
