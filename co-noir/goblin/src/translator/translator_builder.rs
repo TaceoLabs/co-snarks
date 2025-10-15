@@ -1,5 +1,3 @@
-use crate::{MICRO_LIMB_BITS, NUM_LAST_LIMB_BITS, NUM_QUOTIENT_BITS, NUM_Z_BITS};
-use crate::{NUM_BINARY_LIMBS, NUM_MICRO_LIMBS, NUM_RELATION_WIDE_LIMBS, NUM_Z_LIMBS};
 use ark_ec::CurveGroup;
 use ark_ff::Field;
 use ark_ff::One;
@@ -14,6 +12,10 @@ use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::TranscriptFieldType;
 use co_noir_common::polynomials::polynomial::Polynomial;
 use co_noir_common::utils::Utils;
+use co_noir_common::{
+    MICRO_LIMB_BITS, NUM_BINARY_LIMBS, NUM_LAST_LIMB_BITS, NUM_MICRO_LIMBS, NUM_QUOTIENT_BITS,
+    NUM_RELATION_WIDE_LIMBS, NUM_Z_BITS, NUM_Z_LIMBS,
+};
 use num_bigint::BigUint;
 use std::str::FromStr;
 
@@ -399,13 +401,7 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
 
         // Construct Fq for op, P.x, P.y, z_1, z_2 for use in witness computation
         let base_op = P::BaseField::from(op_code);
-        let base_p_x = {
-            // reconstruct as base field
-            // x_lo + (x_hi << (2*NUM_LIMB_BITS))
-            // Convert back assuming into fits
-            // (Simplified assumption: direct BigUint -> BaseField via try_from implemented elsewhere)
-            P::BaseField::from(uint_p_x.clone())
-        };
+        let base_p_x = P::BaseField::from(uint_p_x.clone());
         let base_p_y = P::BaseField::from(uint_p_y.clone());
         let base_z_1 = P::BaseField::from(uint_z1.clone());
         let base_z_2 = P::BaseField::from(uint_z2.clone());
@@ -434,10 +430,7 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
             + base_op;
 
         // We also need to compute the quotient
-        let modulus_big: BigUint = {
-            // Assuming existence of modulus retrieval
-            P::BaseField::MODULUS.into()
-        };
+        let modulus_big: BigUint = P::BaseField::MODULUS.into();
 
         let uint_remainder: BigUint = remainder.into();
 
@@ -607,7 +600,7 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
         );
 
         // Start filling the witness container
-        let mut input = AccumulationInput::new(ultra_op.clone(), P::ScalarField::from(0u64));
+        let mut input = AccumulationInput::new(ultra_op.clone());
         input.p_x_limbs = p_x_limbs;
         input.p_x_microlimbs = p_x_microlimbs;
         input.p_y_limbs = p_y_limbs;
@@ -856,7 +849,6 @@ impl<P: HonkCurve<TranscriptFieldType>> TranslatorBuilder<P> {
 
 #[allow(non_camel_case_types)]
 #[repr(usize)]
-#[expect(dead_code)]
 #[derive(Clone, Copy, Debug)]
 pub enum WireIds {
     OP, // The first 4 wires contain the standard values from the EccQueue wire
@@ -983,7 +975,8 @@ struct AccumulationInput<P: HonkCurve<TranscriptFieldType>> {
 }
 
 impl<P: HonkCurve<TranscriptFieldType>> AccumulationInput<P> {
-    fn new(ultra_op: UltraOp<P>, zero: P::ScalarField) -> Self {
+    fn new(ultra_op: UltraOp<P>) -> Self {
+        let zero = P::ScalarField::zero();
         Self {
             ultra_op,
             p_x_limbs: [zero; NUM_BINARY_LIMBS],
@@ -1196,7 +1189,6 @@ pub fn construct_pk_from_builder<C: HonkCurve<TranscriptFieldType>>(
             for (i, elem) in sorted_elements.iter_mut().enumerate().skip(1) {
                 *elem = (sorted_elements_count - 1 - i) * sort_step;
             }
-            // let to_be_interleaved_groups = polys.witness.get_groups_to_be_interleaved().clone();
 
             let mut extra_denominator_uint = vec![0usize; real_circuit_size];
 
@@ -1267,7 +1259,6 @@ pub fn construct_pk_from_builder<C: HonkCurve<TranscriptFieldType>>(
             }
 
             // Construct the first 4 polynomials
-            // parallel_for(num_interleaved_wires, ordering_function);
 
             // Advance the iterator into the extra range constraint past the last written element
             let extra_offset = num_interleaved_wires * sorted_elements_count;
@@ -1283,6 +1274,7 @@ pub fn construct_pk_from_builder<C: HonkCurve<TranscriptFieldType>>(
 
             debug_assert!(extra_denominator_uint.len() == real_circuit_size);
             // Sort it
+
             extra_denominator_uint.sort_unstable();
             debug_assert!(extra_denominator_uint.len() == real_circuit_size);
 

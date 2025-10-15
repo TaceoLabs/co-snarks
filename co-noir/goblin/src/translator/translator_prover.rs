@@ -1,4 +1,3 @@
-use crate::CONST_TRANSLATOR_LOG_N;
 use ark_ec::CurveGroup;
 use ark_ff::Zero;
 use co_builder::flavours::translator_flavour::TranslatorFlavour;
@@ -6,6 +5,7 @@ use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
 use co_builder::prelude::Polynomials;
+use co_noir_common::CONST_TRANSLATOR_LOG_N;
 use co_noir_common::compute_opening_proof;
 use co_noir_common::crs::ProverCrs;
 use co_noir_common::honk_curve::HonkCurve;

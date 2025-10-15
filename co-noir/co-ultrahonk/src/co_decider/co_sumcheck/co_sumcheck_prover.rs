@@ -49,8 +49,14 @@ impl<
             .public_iter()
             .zip(partially_evaluated_poly.public_iter_mut())
         {
-            for i in (0..round_size).step_by(2) {
-                poly_des[i >> 1] = poly_src[i] + (poly_src[i + 1] - poly_src[i]) * round_challenge;
+            let min_size = round_size.min(poly_src.len()); // We need to do this due to some different sizes in the Translator polys
+            for i in (0..min_size).step_by(2) {
+                let final_value = if i + 1 >= min_size {
+                    P::ScalarField::zero()
+                } else {
+                    poly_src[i + 1]
+                };
+                poly_des[i >> 1] = poly_src[i] + (final_value - poly_src[i]) * round_challenge;
             }
         }
 
@@ -58,8 +64,14 @@ impl<
             .shared_iter()
             .zip(partially_evaluated_poly.shared_iter_mut())
         {
-            for i in (0..round_size).step_by(2) {
-                let tmp = T::sub(poly_src[i + 1], poly_src[i]);
+            let min_size = round_size.min(poly_src.len());
+            for i in (0..min_size).step_by(2) {
+                let final_value = if i + 1 >= min_size {
+                    T::ArithmeticShare::default()
+                } else {
+                    poly_src[i + 1]
+                };
+                let tmp = T::sub(final_value, poly_src[i]);
                 let tmp = T::mul_with_public(*round_challenge, tmp);
                 poly_des[i >> 1] = T::add(poly_src[i], tmp);
             }
@@ -76,14 +88,26 @@ impl<
         // Barretenberg uses multithreading here
 
         for poly in partially_evaluated_poly.public_iter_mut() {
-            for i in (0..round_size).step_by(2) {
-                poly[i >> 1] = poly[i] + (poly[i + 1] - poly[i]) * round_challenge;
+            let min_size = round_size.min(poly.len());
+            for i in (0..min_size).step_by(2) {
+                let final_value = if i + 1 >= min_size {
+                    P::ScalarField::zero()
+                } else {
+                    poly[i + 1]
+                };
+                poly[i >> 1] = poly[i] + (final_value - poly[i]) * round_challenge;
             }
         }
 
         for poly in partially_evaluated_poly.shared_iter_mut() {
-            for i in (0..round_size).step_by(2) {
-                let tmp = T::sub(poly[i + 1], poly[i]);
+            let min_size = round_size.min(poly.len());
+            for i in (0..min_size).step_by(2) {
+                let final_value = if i + 1 >= min_size {
+                    T::ArithmeticShare::default()
+                } else {
+                    poly[i + 1]
+                };
+                let tmp = T::sub(final_value, poly[i]);
                 let tmp = T::mul_with_public(*round_challenge, tmp);
                 poly[i >> 1] = T::add(poly[i], tmp);
             }

@@ -23,6 +23,7 @@ enum SpongeMode {
     Squeeze,
 }
 
+#[derive(Clone)]
 pub struct FieldSponge<F: PrimeField, const T: usize, const R: usize, H: FieldHash<F, T>> {
     state: [F; T],
     cache: [F; R],

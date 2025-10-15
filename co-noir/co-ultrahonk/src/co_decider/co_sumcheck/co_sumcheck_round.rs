@@ -12,6 +12,7 @@ use crate::{
 };
 use ark_ec::CurveGroup;
 use ark_ff::One;
+use ark_ff::Zero;
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::HonkProofResult;
 use co_noir_common::honk_proof::TranscriptFieldType;
@@ -48,14 +49,42 @@ impl SumcheckRound {
             .public_iter()
             .zip(extended_edges.public_iter_mut())
         {
-            des.extend_from(&src[edge_index..edge_index + 2]);
+            if src.len() < edge_index {
+                *des = L::ProverUnivariatePublic::<P>::default();
+            } else {
+                let first_value = if edge_index >= src.len() {
+                    P::ScalarField::zero()
+                } else {
+                    src[edge_index]
+                };
+                let second_value = if edge_index + 1 >= src.len() {
+                    P::ScalarField::zero()
+                } else {
+                    src[edge_index + 1]
+                };
+                des.extend_from(&[first_value, second_value]);
+            }
         }
 
         for (src, des) in multivariates
             .shared_iter()
             .zip(extended_edges.shared_iter_mut())
         {
-            des.extend_from(&src[edge_index..edge_index + 2]);
+            if src.len() < edge_index {
+                *des = L::ProverUnivariateShared::<T, P>::default();
+            } else {
+                let first_value = if edge_index >= src.len() {
+                    T::ArithmeticShare::default()
+                } else {
+                    src[edge_index]
+                };
+                let second_value = if edge_index + 1 >= src.len() {
+                    T::ArithmeticShare::default()
+                } else {
+                    src[edge_index + 1]
+                };
+                des.extend_from(&[first_value, second_value]);
+            }
         }
     }
 

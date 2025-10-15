@@ -621,6 +621,24 @@ pub fn decompose_arithmetic<F: PrimeField, N: Network>(
     )
 }
 
+/// Decomposes a shared field element into chunks, which are also represented as shared field elements. Per field element, the total bit size of the shared chunks is given by total_bit_size_per_field, whereas each chunk has at most (i.e, the last chunk can be smaller) decompose_bit_size bits.
+/// The result is then composed into a different field K.
+pub fn decompose_arithmetic_to_other_field<F: PrimeField, K: PrimeField, N: Network>(
+    input: Rep3PrimeFieldShare<F>,
+    net: &N,
+    state: &mut Rep3State,
+    total_bit_size_per_field: usize,
+    decompose_bit_size: usize,
+) -> eyre::Result<Vec<Rep3PrimeFieldShare<K>>> {
+    decompose_arithmetic_to_other_field_many::<F, K, N>(
+        &[input],
+        net,
+        state,
+        total_bit_size_per_field,
+        decompose_bit_size,
+    )
+}
+
 /// Slices a shared field element at given indices (msb, lsb), both included in the slice.
 /// Only considers bitsize bits.
 /// Result  is thus [lo, slice, hi], where slice has all bits from lsb to msb, lo all bits smaller than lsb, and hi all bits greater msb up to bitsize.
@@ -913,6 +931,98 @@ macro_rules! decompose_circuit_compose_blueprint {
 }
 pub(crate) use decompose_circuit_compose_blueprint;
 
+macro_rules! decompose_circuit_compose_blueprint_to_other_field {
+    ($inputs:expr, $net:expr, $state:expr, $output_size:expr, $circuit:expr, ($( $args:expr ),*)) => {{
+        use itertools::izip;
+        use $crate::protocols::rep3::yao;
+        use $crate::protocols::rep3::Rep3PrimeFieldShare;
+        use $crate::protocols::rep3::{PartyID};
+
+        let delta = $state.rngs
+            .generate_random_garbler_delta($state.id);
+
+        let [x01, x2] = yao::joint_input_arithmetic_added_many($inputs, delta, $net, $state)?;
+
+        let mut res = vec![Rep3PrimeFieldShare::<K>::zero_share(); $output_size];
+
+        match $state.id {
+            PartyID::ID0 => {
+                for res in res.iter_mut() {
+                    let k3 = $state.rngs.bitcomp2.random_fes_3keys::<K>();
+                    res.b = (k3.0 + k3.1 + k3.2).neg();
+                }
+
+                // TODO this can be parallelized with joint_input_arithmetic_added_many
+                let x23 = yao::input_field_id2_many::<F, _>(None, None, $output_size, $net, $state)?;
+
+                let mut evaluator = yao::evaluator::Rep3Evaluator::new($net);
+                evaluator.receive_circuit()?;
+
+                let x1 = $circuit(&mut evaluator, &x01, &x2, &x23, $($args),*);
+                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let x1 = evaluator.output_to_id0_and_id1(x1.wires())?;
+
+                // Compose the bits
+                for (res, x1) in izip!(res.iter_mut(), x1.chunks(F::MODULUS_BIT_SIZE as usize)) {
+                    res.a = yao::GCUtils::bits_to_field(x1)?;
+                }
+            }
+            PartyID::ID1 => {
+                for res in res.iter_mut() {
+                    let k2 = $state.rngs.bitcomp1.random_fes_3keys::<K>();
+                    res.a = (k2.0 + k2.1 + k2.2).neg();
+                }
+
+                // TODO this can be parallelized with joint_input_arithmetic_added_many
+                let x23 = yao::input_field_id2_many::<F, _>(None, None, $output_size, $net, $state)?;
+
+                let mut garbler =
+                    yao::garbler::Rep3Garbler::new_with_delta($net, $state, delta.expect("Delta not provided"));
+
+                let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*);
+                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
+                let x1 = x1.ok_or(eyre::eyre!("No output received"))?;
+
+                // Compose the bits
+                for (res, x1) in izip!(res.iter_mut(), x1.chunks(F::MODULUS_BIT_SIZE as usize)) {
+                    res.b = yao::GCUtils::bits_to_field(x1)?;
+                }
+            }
+            PartyID::ID2 => {
+                let mut x23 = Vec::with_capacity($output_size);
+                for res in res.iter_mut() {
+                    let k2 = $state.rngs.bitcomp1.random_fes_3keys::<K>();
+                    let k3 = $state.rngs.bitcomp2.random_fes_3keys::<K>();
+                    let k2_comp = k2.0 + k2.1 + k2.2;
+                    let k3_comp = k3.0 + k3.1 + k3.2;
+                    x23.push(k2_comp + k3_comp);
+                    res.a = k3_comp.neg();
+                    res.b = k2_comp.neg();
+                }
+
+                // TODO this can be parallelized with joint_input_arithmetic_added_many
+                let x23 = yao::input_field_id2_many(Some(x23), delta, $output_size, $net, $state)?;
+
+                let mut garbler =
+                   yao::garbler::Rep3Garbler::new_with_delta($net, $state, delta.expect("Delta not provided"));
+
+                let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*);
+                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
+                if x1.is_some() {
+                    eyre::bail!(
+                        "Unexpected output received",
+                    );
+                }
+            }
+        }
+
+        Ok(res)
+    }};
+}
+pub(crate) use decompose_circuit_compose_blueprint_to_other_field;
+
 // Returns the output as binary share
 #[expect(unused_macros)]
 macro_rules! decompose_circuit_compose_blueprint_to_binary {
@@ -1008,6 +1118,29 @@ pub fn decompose_arithmetic_many<F: PrimeField, N: Network>(
         state,
         total_output_elements,
         GarbledCircuits::decompose_field_element_many::<_, F>,
+        (decompose_bit_size, total_bit_size_per_field)
+    )
+}
+
+/// Decomposes a vector of shared field element into chunks, which are also represented as shared field elements. Per field element, the total bit size of the shared chunks is given by total_bit_size_per_field, whereas each chunk has at most (i.e, the last chunk can be smaller) decompose_bit_size bits.
+/// The result is then composed into a different field K.
+pub fn decompose_arithmetic_to_other_field_many<F: PrimeField, K: PrimeField, N: Network>(
+    inputs: &[Rep3PrimeFieldShare<F>],
+    net: &N,
+    state: &mut Rep3State,
+    total_bit_size_per_field: usize,
+    decompose_bit_size: usize,
+) -> eyre::Result<Vec<Rep3PrimeFieldShare<K>>> {
+    let num_inputs = inputs.len();
+    let num_decomps_per_field = total_bit_size_per_field.div_ceil(decompose_bit_size);
+    let total_output_elements = num_decomps_per_field * num_inputs;
+
+    decompose_circuit_compose_blueprint_to_other_field!(
+        inputs,
+        net,
+        state,
+        total_output_elements,
+        GarbledCircuits::decompose_field_element_to_other_field_many::<_, F, K>,
         (decompose_bit_size, total_bit_size_per_field)
     )
 }

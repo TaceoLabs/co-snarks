@@ -64,6 +64,9 @@ pub struct RelationParameters<T> {
     pub beta_sqr: T,
     pub beta_cube: T,
     pub eccvm_set_permutation_delta: T,
+    pub accumulated_result: [T; 4],
+    pub evaluation_input_x: [T; 5],
+    pub batching_challenge_v: [T; 20],
 }
 
 impl<T> RelationParameters<T> {

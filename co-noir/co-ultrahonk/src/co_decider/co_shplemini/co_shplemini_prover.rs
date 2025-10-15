@@ -1,4 +1,3 @@
-use super::types::PolyF;
 use crate::mpc_prover_flavour::MPCProverFlavour;
 use crate::{
     co_decider::{co_decider_prover::CoDecider, co_sumcheck::SumcheckOutput},
@@ -32,21 +31,13 @@ impl<
     L: MPCProverFlavour,
 > CoDecider<'_, T, P, H, N, L>
 {
-    fn get_f_polynomials(
-        polys: &'_ AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>, L>,
-    ) -> PolyF<'_, Vec<T::ArithmeticShare>, Vec<P::ScalarField>, L> {
-        PolyF {
-            precomputed: &polys.precomputed,
-            witness: &polys.witness,
-        }
-    }
-
     fn get_g_polynomials<'a>(
         polys: &'a AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>, L>,
     ) -> L::PolyG<'a, Vec<T::ArithmeticShare>> {
         L::PolyG::from_slice(polys.witness.to_be_shifted())
     }
 
+    #[expect(clippy::type_complexity)]
     fn compute_batched_polys(
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
@@ -54,9 +45,18 @@ impl<
         log_n: usize,
         commitment_key: &ProverCrs<P>,
         has_zk: ZeroKnowledge,
-    ) -> HonkProofResult<(SharedPolynomial<T, P>, SharedPolynomial<T, P>)> {
-        let f_polynomials = Self::get_f_polynomials(&self.memory.polys);
+    ) -> HonkProofResult<(
+        SharedPolynomial<T, P>,
+        SharedPolynomial<T, P>,
+        Option<SharedPolynomial<T, P>>,
+        Option<Vec<SharedPolynomial<T, P>>>,
+    )> {
+        let f_polynomials_precomputed = self.memory.polys.precomputed.iter();
+        let f_polynomials_witness_unshifted = self.memory.polys.witness.get_unshifted();
         let g_polynomials = Self::get_g_polynomials(&self.memory.polys);
+        let interleaved_polynomials = self.memory.polys.witness.get_interleaved();
+        let groups_to_be_interleaved = self.memory.polys.witness.get_groups_to_be_interleaved();
+
         let n = 1 << log_n;
         let mut batched_unshifted = SharedPolynomial::new_zero(n); // batched unshifted polynomials
 
@@ -105,7 +105,7 @@ impl<
 
         if has_zk == ZeroKnowledge::Yes {
             // Precomputed part of batched_unshifted
-            for f_poly in f_polynomials.precomputed.iter() {
+            for f_poly in f_polynomials_precomputed {
                 batched_unshifted.add_scaled_slice_public(self.state.id(), f_poly, &running_scalar);
                 running_scalar *= rho;
             }
@@ -113,7 +113,7 @@ impl<
             let mut batched_unshifted_plain = Polynomial::new_zero(n); // batched unshifted polynomials
 
             // Precomputed part of batched_unshifted
-            for f_poly in f_polynomials.precomputed.iter() {
+            for f_poly in f_polynomials_precomputed {
                 batched_unshifted_plain.add_scaled_slice(f_poly, &running_scalar);
                 running_scalar *= rho;
             }
@@ -122,7 +122,7 @@ impl<
             batched_unshifted =
                 SharedPolynomial::<T, P>::promote_poly(self.state.id(), batched_unshifted_plain);
         }
-        for f_poly in f_polynomials.witness.iter() {
+        for f_poly in f_polynomials_witness_unshifted {
             batched_unshifted.add_scaled_slice(f_poly, &running_scalar);
             running_scalar *= rho;
         }
@@ -135,7 +135,34 @@ impl<
             running_scalar *= rho;
         }
 
-        Ok((batched_unshifted, batched_to_be_shifted))
+        if let Some(interleaved) = interleaved_polynomials
+            && let Some(groups) = groups_to_be_interleaved
+        {
+            let mut batched_interleaved = SharedPolynomial::new_zero(n); // batched interleaved polynomials
+
+            let mut batched_group: Vec<SharedPolynomial<T, P>> =
+                Vec::with_capacity(groups[0].len());
+            for _ in 0..groups[0].len() {
+                batched_group.push(SharedPolynomial::new_zero(n));
+            }
+
+            for (inter_poly, group_polys) in interleaved.iter().zip(groups.iter()) {
+                batched_interleaved.add_scaled_slice(inter_poly, &running_scalar);
+                for (j, grp_poly) in group_polys.iter().enumerate() {
+                    batched_group[j].add_scaled_slice(grp_poly, &running_scalar);
+                }
+                running_scalar *= rho;
+            }
+
+            Ok((
+                batched_unshifted,
+                batched_to_be_shifted,
+                Some(batched_interleaved),
+                Some(batched_group),
+            ))
+        } else {
+            Ok((batched_unshifted, batched_to_be_shifted, None, None))
+        }
     }
 
     // /**
@@ -186,19 +213,23 @@ impl<
         // To achieve fixed proof size in Ultra and Mega, the multilinear opening challenge is be padded to a fixed size.
         let virtual_log_n: usize = multilinear_challenge.len();
         // Compute batched polynomials
-        let (batched_unshifted, batched_to_be_shifted) = self.compute_batched_polys(
-            transcript,
-            multilinear_challenge,
-            log_n,
-            commitment_key,
-            has_zk,
-        )?;
+        let (batched_unshifted, batched_to_be_shifted, interleaved, groups) = self
+            .compute_batched_polys(
+                transcript,
+                multilinear_challenge,
+                log_n,
+                commitment_key,
+                has_zk,
+            )?;
 
         // We do not have any concatenated polynomials in UltraHonk
 
         // Construct the batched polynomial A₀(X) = F(X) + G↺(X) = F(X) + G(X)/X
         let mut a_0 = batched_unshifted.to_owned();
         a_0.add_assign_slice(batched_to_be_shifted.shifted());
+        if let Some(interleaved) = interleaved {
+            a_0.add_assign_slice(interleaved.as_ref());
+        }
 
         // Construct the d-1 Gemini foldings of A₀(X)
         let fold_polynomials = self.compute_fold_polynomials(log_n, multilinear_challenge, a_0);
@@ -231,13 +262,15 @@ impl<
             return Err(HonkProofError::GeminiSmallSubgroup);
         }
 
+        // Compute polynomials A₀₊(X) = F(X) + G(X)/r and A₀₋(X) = F(X) - G(X)/r
         let (a_0_pos, a_0_neg) = self.compute_partially_evaluated_batch_polynomials(
             batched_unshifted,
             batched_to_be_shifted,
             r_challenge,
         );
 
-        let claims = self.construct_univariate_opening_claims(
+        // Construct claims for the d + 1 univariate evaluations A₀₊(r), A₀₋(-r), and Foldₗ(−r^{2ˡ}), l = 1, ..., d-1
+        let mut claims = self.construct_univariate_opening_claims(
             log_n,
             a_0_pos,
             a_0_neg,
@@ -245,18 +278,71 @@ impl<
             r_challenge,
         );
 
-        let claim_eval = claims
-            .iter()
-            .skip(1)
-            .take(log_n)
-            .map(|claim| claim.opening_pair.evaluation)
-            .collect::<Vec<_>>();
-        let claim_eval = T::open_many(&claim_eval, self.net, self.state)?;
-        for (l, claim) in claim_eval.into_iter().enumerate() {
-            transcript.send_fr_to_verifier::<P>(format!("Gemini:a_{}", l + 1), claim);
-        }
-        for l in log_n + 1..=virtual_log_n {
-            transcript.send_fr_to_verifier::<P>(format!("Gemini:a_{l}"), P::ScalarField::zero());
+        if let Some(groups) = groups {
+            let mut claim_eval = claims
+                .iter()
+                .skip(1)
+                .take(log_n)
+                .map(|claim| claim.opening_pair.evaluation)
+                .collect::<Vec<_>>();
+            let num_claims = claims.len();
+            debug_assert!(num_claims == log_n);
+
+            let (p_pos, p_neg) =
+                Self::compute_partially_evaluated_interleaved_polynomial(&groups, r_challenge);
+            let groups_size = groups.len();
+            let r_pow = r_challenge.pow([groups_size as u64]);
+            let p_pos_eval = T::eval_poly(p_pos.as_ref(), r_pow);
+            let p_neg_eval = T::eval_poly(p_neg.as_ref(), r_pow);
+            claims.push(ShpleminiOpeningClaim {
+                polynomial: p_pos,
+                opening_pair: OpeningPair {
+                    challenge: r_pow,
+                    evaluation: p_pos_eval,
+                },
+                gemini_fold: false,
+            });
+            claims.push(ShpleminiOpeningClaim {
+                polynomial: p_neg,
+                opening_pair: OpeningPair {
+                    challenge: r_pow,
+                    evaluation: p_neg_eval,
+                },
+                gemini_fold: false,
+            });
+            claim_eval.push(p_pos_eval);
+            claim_eval.push(p_neg_eval);
+            let mut claim_evals = T::open_many(&claim_eval, self.net, self.state)?;
+            let p_neg_eval = claim_evals
+                .pop()
+                .expect("claim_evals has at least 2 elements");
+            let p_pos_eval = claim_evals
+                .pop()
+                .expect("claim_evals has at least 2 elements");
+            for (l, claim) in claim_evals.iter().enumerate() {
+                transcript.send_fr_to_verifier::<P>(format!("Gemini:a_{}", l + 1), *claim);
+            }
+            for l in log_n + 1..=virtual_log_n {
+                transcript
+                    .send_fr_to_verifier::<P>(format!("Gemini:a_{l}"), P::ScalarField::zero());
+            }
+            transcript.send_fr_to_verifier::<P>("Gemini:P_pos".to_string(), p_pos_eval);
+            transcript.send_fr_to_verifier::<P>("Gemini:P_neg".to_string(), p_neg_eval);
+        } else {
+            let claim_eval = claims
+                .iter()
+                .skip(1)
+                .take(log_n)
+                .map(|claim| claim.opening_pair.evaluation)
+                .collect::<Vec<_>>();
+            let claim_eval = T::open_many(&claim_eval, self.net, self.state)?;
+            for (l, claim) in claim_eval.into_iter().enumerate() {
+                transcript.send_fr_to_verifier::<P>(format!("Gemini:a_{}", l + 1), claim);
+            }
+            for l in log_n + 1..=virtual_log_n {
+                transcript
+                    .send_fr_to_verifier::<P>(format!("Gemini:a_{l}"), P::ScalarField::zero());
+            }
         }
 
         Ok(claims)
@@ -327,6 +413,35 @@ impl<
         a_0_neg.sub_assign_slice(batched_g.as_ref()); // A₀₋ = F - G/r
 
         (a_0_pos, a_0_neg)
+    }
+
+    /**
+     * @brief Compute the partially evaluated polynomials P₊(X, r) and P₋(X, -r)
+     *
+     * @details If the interleaved polynomials are set, the full partially evaluated identites A₀(r) and  A₀(-r)
+     * contain the contributions of P₊(r^s) and  P₋(r^s) respectively where s is the size of the interleaved group
+     * assumed even. This function computes P₊(X) = ∑ r^i Pᵢ(X) and P₋(X) = ∑ (-r)^i Pᵢ(X) where Pᵢ(X) is the i-th
+     * polynomial in the batched group.
+     * @param r_challenge partial evaluation challenge
+     * @return std::pair<Polynomial, Polynomial> {P₊, P₋}
+     */
+    fn compute_partially_evaluated_interleaved_polynomial(
+        batched_group: &[SharedPolynomial<T, P>],
+        r_challenge: P::ScalarField,
+    ) -> (SharedPolynomial<T, P>, SharedPolynomial<T, P>) {
+        let mut p_pos = batched_group[0].clone();
+        let mut p_neg = batched_group[0].clone();
+
+        let mut current_r_shift_pos = r_challenge;
+        let mut current_r_shift_neg = -r_challenge;
+        for poly in batched_group.iter().skip(1) {
+            p_pos.add_scaled(poly, &current_r_shift_pos);
+            p_neg.add_scaled(poly, &current_r_shift_neg);
+            current_r_shift_pos *= r_challenge;
+            current_r_shift_neg *= -r_challenge;
+        }
+
+        (p_pos, p_neg)
     }
 
     fn powers_of_evaluation_challenge(
@@ -719,6 +834,7 @@ impl<
 
         // The polynomials in Libra opening claims are generally not dyadic,
         // so we round up to the next power of 2.
+        max_poly_size = max_poly_size.next_power_of_two();
 
         // Q(X) = ∑ⱼ νʲ ⋅ ( fⱼ(X) − vⱼ) / ( X − xⱼ )
         let mut q = SharedPolynomial::<T, P>::new_zero(max_poly_size);

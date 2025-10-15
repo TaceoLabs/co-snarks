@@ -15,20 +15,21 @@ co-acvm = { version = "0.6.0", path = "../co-acvm" }
 co-builder = { version = "0.4.0", path = "../co-builder" }
 mpc-core = { version = "0.9.0", path = "../../mpc-core" }
 ultrahonk = { version = "0.5.0", path = "../ultrahonk" }
+co-ultrahonk = { version = "0.5.0", path = "../co-ultrahonk" }
 goblin = { version = "0.1.0", path = "../goblin" }
 mpc-net = { version = "0.4.0", path = "../../mpc-net" }
 co-noir-common = { version = "0.1.0", path = "../co-noir-common" }
 ark-ec.workspace = true
 ark-ff.workspace = true
 ark-bn254.workspace = true
-tracing.workspace = true
 eyre.workspace = true
-itertools.workspace = true
-num-bigint.workspace = true
-rand.workspace = true
 ark-grumpkin.workspace = true
+itertools.workspace = true
+tracing.workspace = true
+bincode.workspace = true
+num-bigint.workspace = true
 ark-std.workspace = true
-co-ultrahonk = { version = "0.5.0", path = "../co-ultrahonk" }
+rand.workspace = true
 
 [dev-dependencies]
 mpc-net = { version = "0.4.0", path = "../../mpc-net" , features = ["local"] }
