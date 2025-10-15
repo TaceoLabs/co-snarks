@@ -30,6 +30,7 @@ use co_builder::prover_flavour::ProverFlavour;
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::HonkProofResult;
 use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::mpc::plain::PlainUltraHonkDriver;
 use co_noir_common::transcript::{Transcript, TranscriptHasher};
 #[derive(Default)]
 pub struct AllRelationAccECCVM<F: PrimeField> {
@@ -248,10 +249,10 @@ impl PlainProverFlavour for ECCVMFlavour {
 
     fn receive_round_univariate_from_prover<
         F: ark_ff::PrimeField,
-        H: TranscriptHasher<F>,
+        H: TranscriptHasher<F, PlainUltraHonkDriver, P>,
         P: HonkCurve<F>,
     >(
-        _transcript: &mut Transcript<F, H>,
+        _transcript: &mut Transcript<F, H, PlainUltraHonkDriver, P>,
         _label: String,
     ) -> HonkProofResult<Self::SumcheckRoundOutput<P::ScalarField>> {
         todo!("Implement Sumcheck Verifier for ECCVMFlavour");
@@ -259,17 +260,21 @@ impl PlainProverFlavour for ECCVMFlavour {
 
     fn receive_round_univariate_from_prover_zk<
         F: ark_ff::PrimeField,
-        H: TranscriptHasher<F>,
+        H: TranscriptHasher<F, PlainUltraHonkDriver, P>,
         P: HonkCurve<F>,
     >(
-        _transcript: &mut Transcript<F, H>,
+        _transcript: &mut Transcript<F, H, PlainUltraHonkDriver, P>,
         _label: String,
     ) -> HonkProofResult<Self::SumcheckRoundOutputZK<P::ScalarField>> {
         todo!("Implement Sumcheck Verifier for ECCVMFlavour");
     }
 
-    fn get_alpha_challenges<F: ark_ff::PrimeField, H: TranscriptHasher<F>, P: HonkCurve<F>>(
-        _transcript: &mut Transcript<F, H>,
+    fn get_alpha_challenges<
+        F: ark_ff::PrimeField,
+        H: TranscriptHasher<F, PlainUltraHonkDriver, P>,
+        P: HonkCurve<F>,
+    >(
+        _transcript: &mut Transcript<F, H, PlainUltraHonkDriver, P>,
         _alphas: &mut Vec<P::ScalarField>,
     ) {
         todo!("Implement Sumcheck Verifier for ECCVMFlavour");

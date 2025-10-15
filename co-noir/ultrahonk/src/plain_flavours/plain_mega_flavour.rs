@@ -39,6 +39,7 @@ use co_builder::prover_flavour::ProverFlavour;
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::HonkProofResult;
 use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::mpc::plain::PlainUltraHonkDriver;
 use co_noir_common::transcript::{Transcript, TranscriptHasher};
 use std::array;
 
@@ -658,10 +659,10 @@ impl PlainProverFlavour for MegaFlavour {
 
     fn receive_round_univariate_from_prover<
         F: PrimeField,
-        H: TranscriptHasher<F>,
+        H: TranscriptHasher<F, PlainUltraHonkDriver, P>,
         P: HonkCurve<F>,
     >(
-        transcript: &mut Transcript<F, H>,
+        transcript: &mut Transcript<F, H, PlainUltraHonkDriver, P>,
         label: String,
     ) -> HonkProofResult<Self::SumcheckRoundOutput<P::ScalarField>> {
         let array = transcript
@@ -671,10 +672,10 @@ impl PlainProverFlavour for MegaFlavour {
 
     fn receive_round_univariate_from_prover_zk<
         F: PrimeField,
-        H: TranscriptHasher<F>,
+        H: TranscriptHasher<F, PlainUltraHonkDriver, P>,
         P: HonkCurve<F>,
     >(
-        transcript: &mut Transcript<F, H>,
+        transcript: &mut Transcript<F, H, PlainUltraHonkDriver, P>,
         label: String,
     ) -> HonkProofResult<Self::SumcheckRoundOutputZK<P::ScalarField>> {
         let array = transcript
@@ -684,8 +685,12 @@ impl PlainProverFlavour for MegaFlavour {
         Ok(Self::SumcheckRoundOutputZK::<P::ScalarField> { evaluations: array })
     }
 
-    fn get_alpha_challenges<F: PrimeField, H: TranscriptHasher<F>, P: HonkCurve<F>>(
-        transcript: &mut Transcript<F, H>,
+    fn get_alpha_challenges<
+        F: PrimeField,
+        H: TranscriptHasher<F, PlainUltraHonkDriver, P>,
+        P: HonkCurve<F>,
+    >(
+        transcript: &mut Transcript<F, H, PlainUltraHonkDriver, P>,
         alphas: &mut Vec<P::ScalarField>,
     ) {
         let args: [String; Self::NUM_ALPHAS] = array::from_fn(|i| format!("alpha_{i}"));

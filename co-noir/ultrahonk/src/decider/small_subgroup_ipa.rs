@@ -1,6 +1,7 @@
 use crate::CONST_PROOF_SIZE_LOG_N;
 use crate::Utils;
 use crate::plain_prover_flavour::UnivariateTrait;
+use co_noir_common::mpc::plain::PlainUltraHonkDriver;
 use co_noir_common::polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK;
 use co_noir_common::polynomials::polynomial::NUM_TRANSLATION_EVALUATIONS;
 use co_noir_common::transcript::{Transcript, TranscriptHasher};
@@ -52,7 +53,7 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
     pub const GRAND_SUM_IDENTITY_LENGTH: usize =
         Self::MASKED_CONCATENATED_WITNESS_LENGTH + Self::SUBGROUP_SIZE;
 
-    pub fn new<H: TranscriptHasher<TranscriptFieldType>>(
+    pub fn new<H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, P>>(
         zk_sumcheck_data: ZKSumcheckData<P>,
         claimed_inner_product: P::ScalarField,
         prefix_label: String,
@@ -77,9 +78,12 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
         Ok(prover)
     }
 
-    pub fn prove<H: TranscriptHasher<TranscriptFieldType>, R: Rng + CryptoRng>(
+    pub fn prove<
+        H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, P>,
+        R: Rng + CryptoRng,
+    >(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
         commitment_key: &ProverCrs<P>,
         rng: &mut R,
     ) -> HonkProofResult<()> {

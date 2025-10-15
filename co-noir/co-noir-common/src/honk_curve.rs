@@ -211,7 +211,7 @@ impl HonkCurve<ark_bn254::Fr> for short_weierstrass::Projective<GrumpkinConfig> 
     }
 }
 
-const NUM_LIMB_BITS: u32 = 68;
+pub(crate) const NUM_LIMB_BITS: u32 = 68;
 const TOTAL_BITS: u32 = 254;
 
 /**

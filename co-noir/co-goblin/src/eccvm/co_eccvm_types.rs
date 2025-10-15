@@ -21,20 +21,19 @@ use co_noir_common::CoUtils;
 use co_noir_common::crs::ProverCrs;
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::HonkProofResult;
+use co_noir_common::honk_proof::TranscriptFieldType;
 use co_noir_common::polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK;
 use co_noir_common::polynomials::polynomial::NUM_TRANSLATION_EVALUATIONS;
 use co_noir_common::polynomials::polynomial::Polynomial;
 use co_noir_common::polynomials::shared_polynomial::SharedPolynomial;
-use co_ultrahonk::prelude::Polynomials;
-use co_ultrahonk::prelude::SharedSmallSubgroupIPAProver;
-use co_ultrahonk::prelude::SharedUnivariate;
-use co_ultrahonk::prelude::SharedUnivariateTrait;
-
-use co_noir_common::honk_proof::TranscriptFieldType;
 use co_noir_common::{
     mpc::NoirUltraHonkProver,
     transcript::{Transcript, TranscriptHasher},
 };
+use co_ultrahonk::prelude::Polynomials;
+use co_ultrahonk::prelude::SharedSmallSubgroupIPAProver;
+use co_ultrahonk::prelude::SharedUnivariate;
+use co_ultrahonk::prelude::SharedUnivariateTrait;
 use mpc_net::Network;
 use std::marker::PhantomData;
 
@@ -58,11 +57,11 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> SharedTransla
         }
     }
     pub(crate) fn construct_translation_data<
-        H: TranscriptHasher<TranscriptFieldType>,
+        H: TranscriptHasher<TranscriptFieldType, T, P>,
         N: Network,
     >(
         transcript_polynomials: &[&Vec<<T as NoirUltraHonkProver<P>>::ArithmeticShare>],
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, T, P>,
         crs: &ProverCrs<P>,
         net: &N,
         state: &mut T::State,
@@ -94,11 +93,11 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> SharedTransla
         Ok(translation_data)
     }
 
-    pub fn compute_small_ipa_prover<H: TranscriptHasher<TranscriptFieldType>, N: Network>(
+    pub fn compute_small_ipa_prover<H: TranscriptHasher<TranscriptFieldType, T, P>, N: Network>(
         &mut self,
         evaluation_challenge_x: P::ScalarField,
         batching_challenge_v: P::ScalarField,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, T, P>,
         net: &N,
         state: &mut T::State,
     ) -> HonkProofResult<SharedSmallSubgroupIPAProver<T, P>> {

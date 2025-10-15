@@ -8,7 +8,8 @@ use co_builder::prover_flavour::ProverFlavour;
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::{HonkProofResult, TranscriptFieldType};
 use co_noir_common::mpc::NoirUltraHonkProver;
-use co_noir_common::transcript::{Transcript, TranscriptHasher};
+use co_noir_common::transcript::TranscriptHasher;
+use co_noir_common::transcript_mpc::TranscriptRef;
 use core::panic;
 use mpc_net::Network;
 use std::fmt::Debug;
@@ -139,10 +140,18 @@ pub trait MPCProverFlavour: Default + ProverFlavour {
         );
     }
 
-    fn get_alpha_challenges<F: PrimeField, H: TranscriptHasher<F>, P: HonkCurve<F>>(
-        transcript: &mut Transcript<F, H>,
+    fn get_alpha_challenges<
+        T: NoirUltraHonkProver<P>,
+        H: TranscriptHasher<TranscriptFieldType, T, P>,
+        P: HonkCurve<TranscriptFieldType>,
+        N: Network,
+    >(
+        transcript: &mut TranscriptRef<TranscriptFieldType, T, P, H>,
         alphas: &mut Vec<P::ScalarField>,
-    );
+        net: &N,
+        state: &mut T::State,
+    ) -> eyre::Result<()>;
+
     fn reshare<T: NoirUltraHonkProver<P>, P: CurveGroup, N: Network>(
         acc: Self::AllRelationAccHalfShared<T, P>,
         net: &N,

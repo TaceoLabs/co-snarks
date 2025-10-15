@@ -6,13 +6,20 @@ use co_builder::prelude::HonkRecursion;
 use co_builder::prelude::constraint_system_from_reader;
 use co_noir_common::crs::parse::CrsParser;
 use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::mpc::plain::PlainUltraHonkDriver;
 use co_noir_common::transcript::{Poseidon2Sponge, TranscriptHasher};
 use co_noir_common::types::ZeroKnowledge;
 use noir_types::HonkProof;
 use sha3::Keccak256;
 use ultrahonk::prelude::{PlainAcvmSolver, UltraCircuitBuilder, UltraHonk};
 
-fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(
+fn plain_test<
+    H: TranscriptHasher<
+            TranscriptFieldType,
+            PlainUltraHonkDriver,
+            <ark_ec::models::bn::Bn<ark_bn254::Config> as ark_ec::pairing::Pairing>::G1,
+        >,
+>(
     proof_file: &str,
     circuit_file: &str,
     witness_file: &str,

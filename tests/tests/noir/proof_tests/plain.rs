@@ -42,7 +42,10 @@ fn convert_witness_plain<F: PrimeField>(mut witness_stack: WitnessStack<F>) -> V
     witness_map_to_witness_vector(witness_map)
 }
 
-fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str, has_zk: ZeroKnowledge) {
+fn proof_test<H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, Bn254G1>>(
+    name: &str,
+    has_zk: ZeroKnowledge,
+) {
     let circuit_file = format!("../test_vectors/noir/{name}/kat/{name}.json");
     let witness_file = format!("../test_vectors/noir/{name}/kat/{name}.gz");
 
@@ -91,7 +94,9 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str, has_zk: Zero
     assert!(is_valid);
 }
 
-fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(
+fn witness_and_proof_test<
+    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, Bn254G1>,
+>(
     name: &str,
     has_zk: ZeroKnowledge,
 ) {

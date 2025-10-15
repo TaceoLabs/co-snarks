@@ -30,6 +30,7 @@ use co_builder::{prelude::ActiveRegionData, prover_flavour::Flavour};
 use co_noir_common::CoUtils;
 use co_noir_common::mpc::NoirUltraHonkProver;
 use co_noir_common::transcript::{Transcript, TranscriptHasher};
+use co_noir_common::transcript_mpc::TranscriptRef;
 use co_noir_common::{
     crs::ProverCrs,
     honk_curve::HonkCurve,
@@ -45,7 +46,7 @@ pub struct CoOink<
     'a,
     T: NoirUltraHonkProver<P>,
     P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, T, P>,
     N: Network,
     L: MPCProverFlavour,
 > {
@@ -60,7 +61,7 @@ impl<
     'a,
     T: NoirUltraHonkProver<P>,
     P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, T, P>,
     N: Network,
     L: MPCProverFlavour,
 > CoOink<'a, T, P, H, N, L>
@@ -762,47 +763,88 @@ impl<
     }
 
     // Generate relation separators alphas for sumcheck/combiner computation
-    fn generate_alphas_round(&mut self, transcript: &mut Transcript<TranscriptFieldType, H>) {
+    fn generate_alphas_round(
+        &mut self,
+        transcript: &mut TranscriptRef<TranscriptFieldType, T, P, H>,
+    ) -> HonkProofResult<()> {
         tracing::trace!("generate alpha round");
 
-        L::get_alpha_challenges::<_, _, P>(transcript, &mut self.memory.challenges.alphas);
+        L::get_alpha_challenges::<_, _, P, _>(
+            transcript,
+            &mut self.memory.challenges.alphas,
+            self.net,
+            self.state,
+        )?;
+        Ok(())
     }
 
     // Add circuit size public input size and public inputs to transcript
     fn execute_preamble_round(
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut TranscriptRef<TranscriptFieldType, T, P, H>,
         proving_key: &ProvingKey<T, P, L>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing preamble round");
 
-        transcript
-            .add_u64_to_hash_buffer("CIRCUIT_SIZE".to_string(), proving_key.circuit_size as u64);
-        transcript.add_u64_to_hash_buffer(
-            "PUBLIC_INPUT_SIZE".to_string(),
-            proving_key.num_public_inputs as u64,
-        );
-        transcript.add_u64_to_hash_buffer(
-            "PUB_INPUTS_OFFSET".to_string(),
-            proving_key.pub_inputs_offset as u64,
-        );
+        match transcript {
+            TranscriptRef::Plain(transcript) => {
+                transcript.add_u64_to_hash_buffer(
+                    "CIRCUIT_SIZE".to_string(),
+                    proving_key.circuit_size as u64,
+                );
+                transcript.add_u64_to_hash_buffer(
+                    "PUBLIC_INPUT_SIZE".to_string(),
+                    proving_key.num_public_inputs as u64,
+                );
+                transcript.add_u64_to_hash_buffer(
+                    "PUB_INPUTS_OFFSET".to_string(),
+                    proving_key.pub_inputs_offset as u64,
+                );
 
-        if proving_key.num_public_inputs as usize != proving_key.public_inputs.len() {
-            return Err(HonkProofError::CorruptedWitness(
-                proving_key.public_inputs.len(),
-            ));
+                if proving_key.num_public_inputs as usize != proving_key.public_inputs.len() {
+                    return Err(HonkProofError::CorruptedWitness(
+                        proving_key.public_inputs.len(),
+                    ));
+                }
+
+                for (i, public_input) in proving_key.public_inputs.iter().enumerate() {
+                    // transcript.add_scalar(*public_input);
+                    transcript.send_fr_to_verifier::<P>(format!("PUBLIC_INPUT_{i}"), *public_input);
+                }
+            }
+            TranscriptRef::Rep3(transcript_rep3) => {
+                transcript_rep3.add_u64_to_hash_buffer(
+                    "CIRCUIT_SIZE".to_string(),
+                    proving_key.circuit_size as u64,
+                );
+                transcript_rep3.add_u64_to_hash_buffer(
+                    "PUBLIC_INPUT_SIZE".to_string(),
+                    proving_key.num_public_inputs as u64,
+                );
+                transcript_rep3.add_u64_to_hash_buffer(
+                    "PUB_INPUTS_OFFSET".to_string(),
+                    proving_key.pub_inputs_offset as u64,
+                );
+
+                if proving_key.num_public_inputs as usize != proving_key.public_inputs.len() {
+                    return Err(HonkProofError::CorruptedWitness(
+                        proving_key.public_inputs.len(),
+                    ));
+                }
+
+                for (i, public_input) in proving_key.public_inputs.iter().enumerate() {
+                    // transcript.add_scalar(*public_input);
+                    transcript_rep3.send_fr_to_verifier(format!("PUBLIC_INPUT_{i}"), *public_input);
+                }
+            }
         }
 
-        for (i, public_input) in proving_key.public_inputs.iter().enumerate() {
-            // transcript.add_scalar(*public_input);
-            transcript.send_fr_to_verifier::<P>(format!("PUBLIC_INPUT_{i}"), *public_input);
-        }
         Ok(())
     }
 
     // Compute first three wire commitments
     fn execute_wire_commitments_round(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut TranscriptRef<TranscriptFieldType, T, P, H>,
         proving_key: &mut ProvingKey<T, P, L>,
         crs: &ProverCrs<P>,
     ) -> HonkProofResult<()> {
@@ -891,11 +933,20 @@ impl<
         let w_o = CoUtils::commit::<T, P>(proving_key.polynomials.witness.w_o().as_ref(), crs);
 
         if L::FLAVOUR == Flavour::Ultra {
-            let open = T::open_point_many(&[w_l, w_r, w_o], self.net, self.state)?;
+            match transcript {
+                TranscriptRef::Plain(transcript) => {
+                    let open = T::open_point_many(&[w_l, w_r, w_o], self.net, self.state)?;
 
-            transcript.send_point_to_verifier::<P>("W_L".to_string(), open[0].into());
-            transcript.send_point_to_verifier::<P>("W_R".to_string(), open[1].into());
-            transcript.send_point_to_verifier::<P>("W_O".to_string(), open[2].into());
+                    transcript.send_point_to_verifier::<P>("W_L".to_string(), open[0].into());
+                    transcript.send_point_to_verifier::<P>("W_R".to_string(), open[1].into());
+                    transcript.send_point_to_verifier::<P>("W_O".to_string(), open[2].into());
+                }
+                TranscriptRef::Rep3(transcript_rep3) => {
+                    transcript_rep3.send_point_to_verifier_shared("W_L".to_string(), w_l);
+                    transcript_rep3.send_point_to_verifier_shared("W_R".to_string(), w_r);
+                    transcript_rep3.send_point_to_verifier_shared("W_O".to_string(), w_o);
+                }
+            }
         } else if L::FLAVOUR == Flavour::Mega {
             // Commit to Goblin ECC op wires.
             // To avoid possible issues with the current work on the merge protocol, they are not
@@ -979,58 +1030,119 @@ impl<
                 crs,
             );
 
-            let open = T::open_point_many(
-                &[
-                    w_l,
-                    w_r,
-                    w_o,
-                    ecc_op_wire_1,
-                    ecc_op_wire_2,
-                    ecc_op_wire_3,
-                    ecc_op_wire_4,
-                    calldata,
-                    calldata_read_counts,
-                    calldata_read_tags,
-                    secondary_calldata,
-                    secondary_calldata_read_counts,
-                    secondary_calldata_read_tags,
-                    return_data,
-                    return_data_read_counts,
-                    return_data_read_tags,
-                ],
-                self.net,
-                self.state,
-            )?;
+            match transcript {
+                TranscriptRef::Plain(transcript) => {
+                    let open = T::open_point_many(
+                        &[
+                            w_l,
+                            w_r,
+                            w_o,
+                            ecc_op_wire_1,
+                            ecc_op_wire_2,
+                            ecc_op_wire_3,
+                            ecc_op_wire_4,
+                            calldata,
+                            calldata_read_counts,
+                            calldata_read_tags,
+                            secondary_calldata,
+                            secondary_calldata_read_counts,
+                            secondary_calldata_read_tags,
+                            return_data,
+                            return_data_read_counts,
+                            return_data_read_tags,
+                        ],
+                        self.net,
+                        self.state,
+                    )?;
 
-            transcript.send_point_to_verifier::<P>("W_L".to_string(), open[0].into());
-            transcript.send_point_to_verifier::<P>("W_R".to_string(), open[1].into());
-            transcript.send_point_to_verifier::<P>("W_O".to_string(), open[2].into());
-            transcript.send_point_to_verifier::<P>("ECC_OP_WIRE_1".to_string(), open[3].into());
-            transcript.send_point_to_verifier::<P>("ECC_OP_WIRE_2".to_string(), open[4].into());
-            transcript.send_point_to_verifier::<P>("ECC_OP_WIRE_3".to_string(), open[5].into());
-            transcript.send_point_to_verifier::<P>("ECC_OP_WIRE_4".to_string(), open[6].into());
-            transcript.send_point_to_verifier::<P>("CALLDATA".to_string(), open[7].into());
-            transcript
-                .send_point_to_verifier::<P>("CALLDATA_READ_COUNTS".to_string(), open[8].into());
-            transcript
-                .send_point_to_verifier::<P>("CALLDATA_READ_TAGS".to_string(), open[9].into());
-            transcript
-                .send_point_to_verifier::<P>("SECONDARY_CALLDATA".to_string(), open[10].into());
-            transcript.send_point_to_verifier::<P>(
-                "SECONDARY_CALLDATA_READ_COUNTS".to_string(),
-                open[11].into(),
-            );
-            transcript.send_point_to_verifier::<P>(
-                "SECONDARY_CALLDATA_READ_TAGS".to_string(),
-                open[12].into(),
-            );
-            transcript.send_point_to_verifier::<P>("RETURN_DATA".to_string(), open[13].into());
-            transcript.send_point_to_verifier::<P>(
-                "RETURN_DATA_READ_COUNTS".to_string(),
-                open[14].into(),
-            );
-            transcript
-                .send_point_to_verifier::<P>("RETURN_DATA_READ_TAGS".to_string(), open[15].into());
+                    transcript.send_point_to_verifier::<P>("W_L".to_string(), open[0].into());
+                    transcript.send_point_to_verifier::<P>("W_R".to_string(), open[1].into());
+                    transcript.send_point_to_verifier::<P>("W_O".to_string(), open[2].into());
+                    transcript
+                        .send_point_to_verifier::<P>("ECC_OP_WIRE_1".to_string(), open[3].into());
+                    transcript
+                        .send_point_to_verifier::<P>("ECC_OP_WIRE_2".to_string(), open[4].into());
+                    transcript
+                        .send_point_to_verifier::<P>("ECC_OP_WIRE_3".to_string(), open[5].into());
+                    transcript
+                        .send_point_to_verifier::<P>("ECC_OP_WIRE_4".to_string(), open[6].into());
+                    transcript.send_point_to_verifier::<P>("CALLDATA".to_string(), open[7].into());
+                    transcript.send_point_to_verifier::<P>(
+                        "CALLDATA_READ_COUNTS".to_string(),
+                        open[8].into(),
+                    );
+                    transcript.send_point_to_verifier::<P>(
+                        "CALLDATA_READ_TAGS".to_string(),
+                        open[9].into(),
+                    );
+                    transcript.send_point_to_verifier::<P>(
+                        "SECONDARY_CALLDATA".to_string(),
+                        open[10].into(),
+                    );
+                    transcript.send_point_to_verifier::<P>(
+                        "SECONDARY_CALLDATA_READ_COUNTS".to_string(),
+                        open[11].into(),
+                    );
+                    transcript.send_point_to_verifier::<P>(
+                        "SECONDARY_CALLDATA_READ_TAGS".to_string(),
+                        open[12].into(),
+                    );
+                    transcript
+                        .send_point_to_verifier::<P>("RETURN_DATA".to_string(), open[13].into());
+                    transcript.send_point_to_verifier::<P>(
+                        "RETURN_DATA_READ_COUNTS".to_string(),
+                        open[14].into(),
+                    );
+                    transcript.send_point_to_verifier::<P>(
+                        "RETURN_DATA_READ_TAGS".to_string(),
+                        open[15].into(),
+                    );
+                }
+                TranscriptRef::Rep3(transcript_rep3) => {
+                    transcript_rep3.send_point_to_verifier_shared("W_L".to_string(), w_l);
+                    transcript_rep3.send_point_to_verifier_shared("W_R".to_string(), w_r);
+                    transcript_rep3.send_point_to_verifier_shared("W_O".to_string(), w_o);
+                    transcript_rep3
+                        .send_point_to_verifier_shared("ECC_OP_WIRE_1".to_string(), ecc_op_wire_1);
+                    transcript_rep3
+                        .send_point_to_verifier_shared("ECC_OP_WIRE_2".to_string(), ecc_op_wire_2);
+                    transcript_rep3
+                        .send_point_to_verifier_shared("ECC_OP_WIRE_3".to_string(), ecc_op_wire_3);
+                    transcript_rep3
+                        .send_point_to_verifier_shared("ECC_OP_WIRE_4".to_string(), ecc_op_wire_4);
+                    transcript_rep3.send_point_to_verifier_shared("CALLDATA".to_string(), calldata);
+                    transcript_rep3.send_point_to_verifier_shared(
+                        "CALLDATA_READ_COUNTS".to_string(),
+                        calldata_read_counts,
+                    );
+                    transcript_rep3.send_point_to_verifier_shared(
+                        "CALLDATA_READ_TAGS".to_string(),
+                        calldata_read_tags,
+                    );
+                    transcript_rep3.send_point_to_verifier_shared(
+                        "SECONDARY_CALLDATA".to_string(),
+                        secondary_calldata,
+                    );
+                    transcript_rep3.send_point_to_verifier_shared(
+                        "SECONDARY_CALLDATA_READ_COUNTS".to_string(),
+                        secondary_calldata_read_counts,
+                    );
+                    transcript_rep3.send_point_to_verifier_shared(
+                        "SECONDARY_CALLDATA_READ_TAGS".to_string(),
+                        secondary_calldata_read_tags,
+                    );
+                    transcript_rep3
+                        .send_point_to_verifier_shared("RETURN_DATA".to_string(), return_data);
+                    transcript_rep3.send_point_to_verifier_shared(
+                        "RETURN_DATA_READ_COUNTS".to_string(),
+                        return_data_read_counts,
+                    );
+                    transcript_rep3.send_point_to_verifier_shared(
+                        "RETURN_DATA_READ_TAGS".to_string(),
+                        return_data_read_tags,
+                    );
+                }
+            }
         }
 
         Ok(())
@@ -1039,17 +1151,28 @@ impl<
     // Compute sorted list accumulator and commitment
     fn execute_sorted_list_accumulator_round(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut TranscriptRef<TranscriptFieldType, T, P, H>,
         proving_key: &mut ProvingKey<T, P, L>,
         crs: &ProverCrs<P>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing sorted list accumulator round");
 
-        let challs = transcript.get_challenges::<P>(&[
-            "eta".to_string(),
-            "eta_two".to_string(),
-            "eta_three".to_string(),
-        ]);
+        let challs = match transcript {
+            TranscriptRef::Plain(transcript) => transcript.get_challenges::<P>(&[
+                "eta".to_string(),
+                "eta_two".to_string(),
+                "eta_three".to_string(),
+            ]),
+            TranscriptRef::Rep3(transcript_rep3) => transcript_rep3.get_challenges(
+                &[
+                    "eta".to_string(),
+                    "eta_two".to_string(),
+                    "eta_three".to_string(),
+                ],
+                self.net,
+                self.state,
+            )?,
+        };
         self.memory.challenges.eta_1 = challs[0];
         self.memory.challenges.eta_2 = challs[1];
         self.memory.challenges.eta_3 = challs[2];
@@ -1087,15 +1210,34 @@ impl<
             crs,
         );
         let w_4 = CoUtils::commit::<T, P>(self.memory.w_4.as_ref(), crs);
-        let opened = T::open_point_many(
-            &[lookup_read_counts, lookup_read_tags, w_4],
-            self.net,
-            self.state,
-        )?;
+        match transcript {
+            TranscriptRef::Plain(transcript) => {
+                let opened = T::open_point_many(
+                    &[lookup_read_counts, lookup_read_tags, w_4],
+                    self.net,
+                    self.state,
+                )?;
 
-        transcript.send_point_to_verifier::<P>("LOOKUP_READ_COUNTS".to_string(), opened[0].into());
-        transcript.send_point_to_verifier::<P>("LOOKUP_READ_TAGS".to_string(), opened[1].into());
-        transcript.send_point_to_verifier::<P>("W_4".to_string(), opened[2].into());
+                transcript.send_point_to_verifier::<P>(
+                    "LOOKUP_READ_COUNTS".to_string(),
+                    opened[0].into(),
+                );
+                transcript
+                    .send_point_to_verifier::<P>("LOOKUP_READ_TAGS".to_string(), opened[1].into());
+                transcript.send_point_to_verifier::<P>("W_4".to_string(), opened[2].into());
+            }
+            TranscriptRef::Rep3(transcript_rep3) => {
+                transcript_rep3.send_point_to_verifier_shared(
+                    "LOOKUP_READ_COUNTS".to_string(),
+                    lookup_read_counts,
+                );
+                transcript_rep3.send_point_to_verifier_shared(
+                    "LOOKUP_READ_TAGS".to_string(),
+                    lookup_read_tags,
+                );
+                transcript_rep3.send_point_to_verifier_shared("W_4".to_string(), w_4);
+            }
+        }
 
         Ok(())
     }
@@ -1103,12 +1245,21 @@ impl<
     // Fiat-Shamir: beta & gamma
     fn execute_log_derivative_inverse_round(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut TranscriptRef<TranscriptFieldType, T, P, H>,
         proving_key: &ProvingKey<T, P, L>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing log derivative inverse round");
 
-        let challs = transcript.get_challenges::<P>(&["beta".to_string(), "gamma".to_string()]);
+        let challs = match transcript {
+            TranscriptRef::Plain(transcript) => {
+                transcript.get_challenges::<P>(&["beta".to_string(), "gamma".to_string()])
+            }
+            TranscriptRef::Rep3(transcript_rep3) => transcript_rep3.get_challenges(
+                &["beta".to_string(), "gamma".to_string()],
+                self.net,
+                self.state,
+            )?,
+        };
         self.memory.challenges.beta = challs[0];
         self.memory.challenges.gamma = challs[1];
 
@@ -1123,7 +1274,7 @@ impl<
     // Compute grand product(s) and commitments.
     fn execute_grand_product_computation_round(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut TranscriptRef<TranscriptFieldType, T, P, H>,
         proving_key: &ProvingKey<T, P, L>,
         crs: &ProverCrs<P>,
     ) -> HonkProofResult<()> {
@@ -1149,10 +1300,22 @@ impl<
         let z_perm = CoUtils::commit::<T, P>(self.memory.z_perm.as_ref(), crs);
 
         if L::FLAVOUR == Flavour::Ultra {
-            let open = T::open_point_many(&[lookup_inverses, z_perm], self.net, self.state)?;
-
-            transcript.send_point_to_verifier::<P>("LOOKUP_INVERSES".to_string(), open[0].into());
-            transcript.send_point_to_verifier::<P>("Z_PERM".to_string(), open[1].into());
+            match transcript {
+                TranscriptRef::Plain(transcript) => {
+                    let open =
+                        T::open_point_many(&[lookup_inverses, z_perm], self.net, self.state)?;
+                    transcript
+                        .send_point_to_verifier::<P>("LOOKUP_INVERSES".to_string(), open[0].into());
+                    transcript.send_point_to_verifier::<P>("Z_PERM".to_string(), open[1].into());
+                }
+                TranscriptRef::Rep3(transcript_rep3) => {
+                    transcript_rep3.send_point_to_verifier_shared(
+                        "LOOKUP_INVERSES".to_string(),
+                        lookup_inverses,
+                    );
+                    transcript_rep3.send_point_to_verifier_shared("Z_PERM".to_string(), z_perm);
+                }
+            }
         } else if L::FLAVOUR == Flavour::Mega {
             if self.has_zk == ZeroKnowledge::Yes {
                 let mut calldata_inverses_mut = std::mem::take(&mut self.memory.calldata_inverses);
@@ -1194,35 +1357,64 @@ impl<
                 CoUtils::commit::<T, P>(self.memory.secondary_calldata_inverses.as_ref(), crs);
             let return_data_inverses =
                 CoUtils::commit::<T, P>(self.memory.return_data_inverses.as_ref(), crs);
-            let open = T::open_point_many(
-                &[
-                    lookup_inverses,
-                    z_perm,
-                    calldata_inverses,
-                    secondary_calldata_inverses,
-                    return_data_inverses,
-                ],
-                self.net,
-                self.state,
-            )?;
-            transcript.send_point_to_verifier::<P>("LOOKUP_INVERSES".to_string(), open[0].into());
-            transcript.send_point_to_verifier::<P>("CALLDATA_INVERSES".to_string(), open[2].into());
-            transcript.send_point_to_verifier::<P>(
-                "SECONDARY_CALLDATA_INVERSES".to_string(),
-                open[3].into(),
-            );
-            transcript
-                .send_point_to_verifier::<P>("RETURN_DATA_INVERSES".to_string(), open[4].into());
-            transcript.send_point_to_verifier::<P>("Z_PERM".to_string(), open[1].into());
+            match transcript {
+                TranscriptRef::Plain(transcript) => {
+                    let open = T::open_point_many(
+                        &[
+                            lookup_inverses,
+                            z_perm,
+                            calldata_inverses,
+                            secondary_calldata_inverses,
+                            return_data_inverses,
+                        ],
+                        self.net,
+                        self.state,
+                    )?;
+                    transcript
+                        .send_point_to_verifier::<P>("LOOKUP_INVERSES".to_string(), open[0].into());
+                    transcript.send_point_to_verifier::<P>(
+                        "CALLDATA_INVERSES".to_string(),
+                        open[2].into(),
+                    );
+                    transcript.send_point_to_verifier::<P>(
+                        "SECONDARY_CALLDATA_INVERSES".to_string(),
+                        open[3].into(),
+                    );
+                    transcript.send_point_to_verifier::<P>(
+                        "RETURN_DATA_INVERSES".to_string(),
+                        open[4].into(),
+                    );
+                    transcript.send_point_to_verifier::<P>("Z_PERM".to_string(), open[1].into());
+                }
+                TranscriptRef::Rep3(transcript_rep3) => {
+                    transcript_rep3.send_point_to_verifier_shared(
+                        "LOOKUP_INVERSES".to_string(),
+                        lookup_inverses,
+                    );
+                    transcript_rep3.send_point_to_verifier_shared(
+                        "CALLDATA_INVERSES".to_string(),
+                        calldata_inverses,
+                    );
+                    transcript_rep3.send_point_to_verifier_shared(
+                        "SECONDARY_CALLDATA_INVERSES".to_string(),
+                        secondary_calldata_inverses,
+                    );
+                    transcript_rep3.send_point_to_verifier_shared(
+                        "RETURN_DATA_INVERSES".to_string(),
+                        return_data_inverses,
+                    );
+                    transcript_rep3.send_point_to_verifier_shared("Z_PERM".to_string(), z_perm);
+                }
+            }
         }
 
         Ok(())
     }
 
-    pub fn prove(
+    pub fn prove_inner(
         mut self,
         proving_key: &mut ProvingKey<T, P, L>,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut TranscriptRef<TranscriptFieldType, T, P, H>,
         crs: &ProverCrs<P>,
     ) -> HonkProofResult<ProverMemory<T, P>> {
         tracing::trace!("Oink prove");
@@ -1240,8 +1432,22 @@ impl<
         self.execute_grand_product_computation_round(transcript, proving_key, crs)?;
 
         // Generate relation separators alphas for sumcheck/combiner computation
-        self.generate_alphas_round(transcript);
+        self.generate_alphas_round(transcript)?;
 
         Ok(self.memory)
+    }
+
+    pub fn prove(
+        self,
+        proving_key: &mut ProvingKey<T, P, L>,
+        transcript: &mut Transcript<TranscriptFieldType, H, T, P>,
+        crs: &ProverCrs<P>,
+    ) -> HonkProofResult<ProverMemory<T, P>> {
+        tracing::trace!("Oink prove");
+
+        let mut transcript_rep3 = TranscriptRef::Plain(transcript);
+        let memory = self.prove_inner(proving_key, &mut transcript_rep3, crs)?;
+
+        Ok(memory)
     }
 }

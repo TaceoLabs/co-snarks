@@ -5,6 +5,7 @@ use crate::{Utils, plain_prover_flavour::PlainProverFlavour, ultra_verifier::Hon
 use ark_ec::AffineRepr;
 use ark_ec::pairing::Pairing;
 use ark_ff::{One, Zero};
+use co_noir_common::mpc::plain::PlainUltraHonkDriver;
 use co_noir_common::{
     honk_curve::HonkCurve, honk_proof::TranscriptFieldType, types::ZeroKnowledge,
 };
@@ -15,7 +16,7 @@ use std::marker::PhantomData;
 
 pub(crate) struct DeciderVerifier<
     P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, P>,
     L: PlainProverFlavour,
 > {
     pub(super) memory: VerifierMemory<P, L>,
@@ -24,7 +25,7 @@ pub(crate) struct DeciderVerifier<
 
 impl<
     C: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, C>,
     L: PlainProverFlavour,
 > DeciderVerifier<C, H, L>
 {
@@ -37,7 +38,7 @@ impl<
 
     pub(crate) fn reduce_verify_shplemini(
         opening_pair: &mut ShpleminiVerifierOpeningClaim<C>,
-        mut transcript: Transcript<TranscriptFieldType, H>,
+        mut transcript: Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, C>,
     ) -> HonkVerifyResult<(C::Affine, C::Affine)> {
         tracing::trace!("Reduce and verify opening pair");
 
@@ -66,7 +67,7 @@ impl<
         mut self,
         circuit_size: u32,
         crs: &P::G2Affine,
-        mut transcript: Transcript<TranscriptFieldType, H>,
+        mut transcript: Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, C>,
         has_zk: ZeroKnowledge,
     ) -> HonkVerifyResult<bool> {
         tracing::trace!("Decider verification");

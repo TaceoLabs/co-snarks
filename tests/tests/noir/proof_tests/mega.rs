@@ -56,7 +56,10 @@ pub fn split_plain_proving_key_rep3<
     Ok([share0, share1, share2])
 }
 
-fn proof_test_rep3<H: TranscriptHasher<TranscriptFieldType>>(
+fn proof_test_rep3<
+    H1: TranscriptHasher<TranscriptFieldType, Rep3UltraHonkDriver, Bn254G1>,
+    H2: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, Bn254G1>,
+>(
     proving_key_file: &str,
     has_zk: ZeroKnowledge,
 ) {
@@ -114,7 +117,7 @@ fn proof_test_rep3<H: TranscriptHasher<TranscriptFieldType>>(
             // generate proving key and vk
 
             let (proof, public_input) =
-                Rep3CoUltraHonk::<_, H, MegaFlavour>::prove(&net0, pk_, &prover_crs, has_zk)
+                Rep3CoUltraHonk::<_, H1, MegaFlavour>::prove(&net0, pk_, &prover_crs, has_zk)
                     .unwrap();
             (proof, public_input)
         }));
@@ -141,7 +144,7 @@ fn proof_test_rep3<H: TranscriptHasher<TranscriptFieldType>>(
     }
 
     let is_valid =
-        UltraHonk::<_, H, MegaFlavour>::verify(proof, &public_input, &verifying_key, has_zk)
+        UltraHonk::<_, H2, MegaFlavour>::verify(proof, &public_input, &verifying_key, has_zk)
             .unwrap();
     assert!(is_valid);
 }
@@ -150,12 +153,12 @@ fn proof_test_rep3<H: TranscriptHasher<TranscriptFieldType>>(
 #[ignore] // This test is ignored because it requires a proving key file from lfs
 fn mega_proof_test() {
     const PROVING_KEY: &str = "../test_vectors/noir/mega/serialized_proving_key";
-    proof_test_rep3::<Poseidon2Sponge>(PROVING_KEY, ZeroKnowledge::No);
-    proof_test_rep3::<Poseidon2Sponge>(PROVING_KEY, ZeroKnowledge::Yes);
+    proof_test_rep3::<Poseidon2Sponge, Poseidon2Sponge>(PROVING_KEY, ZeroKnowledge::No);
+    proof_test_rep3::<Poseidon2Sponge, Poseidon2Sponge>(PROVING_KEY, ZeroKnowledge::Yes);
 }
 
 // This is not the PlainDriver (in co-ultrahonk), but the plain implementation (in ultrahonk).
-fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(
+fn plain_test<H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, Bn254G1>>(
     proving_key_file: &str,
     proof_file: &str,
     has_zk: ZeroKnowledge,

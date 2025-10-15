@@ -1,5 +1,6 @@
 use ark_ec::AdditiveGroup;
 use ark_ff::Field;
+use co_noir_common::mpc::plain::PlainUltraHonkDriver;
 use co_noir_common::shplemini::OpeningPair;
 use co_noir_common::shplemini::ShpleminiOpeningClaim;
 use co_noir_common::transcript::Transcript;
@@ -20,16 +21,16 @@ const NUM_WIRES: usize = 4;
 pub struct MergeProver<C, H>
 where
     C: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, C>,
 {
     ecc_op_queue: ECCOpQueue<C>,
-    transcript: Transcript<TranscriptFieldType, H>,
+    transcript: Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, C>,
 }
 
 impl<C, H> MergeProver<C, H>
 where
     C: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, C>,
 {
     pub fn new(ecc_op_queue: ECCOpQueue<C>) -> Self {
         Self {
@@ -140,7 +141,7 @@ where
     // TACEO TODO: Avoid duplicate code in co-noir/ultrahonk/src/decider/decider_prover.rs#48
     fn compute_opening_proof(
         opening_claim: ShpleminiOpeningClaim<C::ScalarField>,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, C>,
         crs: &ProverCrs<C>,
     ) -> eyre::Result<()> {
         let mut quotient = opening_claim.polynomial;

@@ -1,4 +1,5 @@
 use super::NoirUltraHonkProver;
+use crate::HonkCurve;
 use ark_ec::CurveGroup;
 use ark_ff::Field;
 use ark_ff::PrimeField;
@@ -296,5 +297,25 @@ impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for ShamirUltr
 
     fn scalar_mul_public_point(a: &P, b: Self::ArithmeticShare) -> Self::PointShare {
         pointshare::scalar_mul_public_point(b, a)
+    }
+
+    fn poseidon_permutation_in_place<const T: usize, const D: u64, N: Network>(
+        _poseidon: &mpc_core::gadgets::poseidon2::Poseidon2<<P>::ScalarField, T, D>,
+        _state: &mut [Self::ArithmeticShare; T],
+        _net: &N,
+        _mpc_state: &mut Self::State,
+    ) -> eyre::Result<()> {
+        panic!("ShamirUltraHonkDriver does not support poseidon_permutation_in_place");
+    }
+
+    fn pointshare_to_field_shares_many<F: PrimeField, N: Network>(
+        _points: &[Self::PointShare],
+        _net: &N,
+        _state: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>>
+    where
+        P: HonkCurve<F>,
+    {
+        panic!("ShamirUltraHonkDriver does not support pointshare_to_field_shares_many");
     }
 }

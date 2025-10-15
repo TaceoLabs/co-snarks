@@ -6,6 +6,7 @@ use crate::plain_prover_flavour::{PlainProverFlavour, UnivariateTrait};
 use crate::types::AllEntities;
 use crate::{CONST_PROOF_SIZE_LOG_N, Utils};
 use ark_ff::Zero;
+use co_noir_common::mpc::plain::PlainUltraHonkDriver;
 use co_noir_common::polynomials::polynomial::RowDisablingPolynomial;
 use co_noir_common::{
     crs::ProverCrs,
@@ -21,7 +22,7 @@ use super::zk_data::ZKSumcheckData;
 // Keep in mind, the UltraHonk protocol (UltraFlavor) does not per default have ZK
 impl<
     P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, P>,
     L: PlainProverFlavour,
 > Decider<P, H, L>
 {
@@ -70,7 +71,7 @@ impl<
     }
 
     fn add_evals_to_transcript(
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
         evaluations: &ClaimedEvaluations<P::ScalarField, L>,
     ) {
         tracing::trace!("Add Evals to Transcript");
@@ -98,7 +99,7 @@ impl<
 
     pub(crate) fn sumcheck_prove(
         &self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
         circuit_size: u32,
     ) -> SumcheckOutput<P::ScalarField, L> {
         tracing::trace!("Sumcheck prove");
@@ -206,7 +207,7 @@ impl<
 
     pub fn sumcheck_prove_zk<const VIRTUAL_LOG_N: usize>(
         &self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
         circuit_size: u32,
         zk_sumcheck_data: &mut ZKSumcheckData<P>,
         crs: &ProverCrs<P>,
@@ -407,7 +408,7 @@ impl<
         round_idx: usize,
         round_univariate: &L::SumcheckRoundOutputZK<P::ScalarField>,
         eval_domain: &[P::ScalarField],
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
         crs: &ProverCrs<P>,
         round_univariates: &mut Vec<Polynomial<P::ScalarField>>,
         round_univariate_evaluations: &mut Vec<[P::ScalarField; 3]>,

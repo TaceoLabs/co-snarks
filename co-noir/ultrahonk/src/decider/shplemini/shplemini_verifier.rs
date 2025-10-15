@@ -13,6 +13,7 @@ use ark_ec::AffineRepr;
 use ark_ff::{Field, One, Zero};
 use co_builder::polynomials::polynomial_flavours::PolyGFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
+use co_noir_common::mpc::plain::PlainUltraHonkDriver;
 use co_noir_common::{
     honk_curve::HonkCurve, honk_proof::TranscriptFieldType, types::ZeroKnowledge,
 };
@@ -22,7 +23,7 @@ use co_noir_common::transcript::{Transcript, TranscriptHasher};
 
 impl<
     P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, P>,
     L: PlainProverFlavour,
 > DeciderVerifier<P, H, L>
 {
@@ -59,7 +60,7 @@ impl<
 
     pub fn get_fold_commitments(
         virtual_log_n: u32,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
     ) -> HonkVerifyResult<Vec<P::Affine>> {
         let fold_commitments: Vec<_> = (0..virtual_log_n - 1)
             .map(|i| transcript.receive_point_from_prover::<P>(format!("Gemini:FOLD_{}", i + 1)))
@@ -69,7 +70,7 @@ impl<
 
     pub fn get_gemini_evaluations(
         virtual_log_n: u32,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
     ) -> HonkVerifyResult<Vec<P::ScalarField>> {
         let gemini_evaluations: Vec<_> = (1..=virtual_log_n)
             .map(|i| transcript.receive_fr_from_prover::<P>(format!("Gemini:a_{}", i + 1)))
@@ -112,7 +113,7 @@ impl<
     pub fn compute_batch_opening_claim(
         &self,
         multivariate_challenge: Vec<P::ScalarField>,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
         libra_commitments: Option<Vec<P::Affine>>,
         libra_univariate_evaluation: Option<P::ScalarField>,
         consistency_checked: &mut bool,

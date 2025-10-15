@@ -9,6 +9,7 @@ use ark_ff::{Field, One, Zero};
 use co_builder::polynomials::polynomial_flavours::PolyGFlavour;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
+use co_noir_common::mpc::plain::PlainUltraHonkDriver;
 use co_noir_common::shplemini::OpeningPair;
 use co_noir_common::shplemini::ShpleminiOpeningClaim;
 use co_noir_common::transcript::{Transcript, TranscriptHasher};
@@ -23,7 +24,7 @@ use itertools::izip;
 
 impl<
     P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, P>,
     L: PlainProverFlavour,
 > Decider<P, H, L>
 {
@@ -36,7 +37,7 @@ impl<
     #[expect(clippy::type_complexity)]
     fn compute_batched_polys(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
         multilinear_challenge: &[P::ScalarField],
         log_n: usize,
         commitment_key: &ProverCrs<P>,
@@ -178,7 +179,7 @@ impl<
         log_n: usize,
         commitment_key: &ProverCrs<P>,
         has_zk: ZeroKnowledge,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
     ) -> HonkProofResult<Vec<ShpleminiOpeningClaim<P::ScalarField>>> {
         tracing::trace!("Gemini prove");
         // To achieve fixed proof size in Ultra and Mega, the multilinear opening challenge is be padded to a fixed size.
@@ -472,7 +473,7 @@ impl<
         &self,
         opening_claims: Vec<ShpleminiOpeningClaim<P::ScalarField>>,
         commitment_key: &ProverCrs<P>,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
         libra_opening_claims: Option<Vec<ShpleminiOpeningClaim<P::ScalarField>>>,
         sumcheck_round_claims: Option<Vec<ShpleminiOpeningClaim<P::ScalarField>>>,
         virtual_log_n: usize,
@@ -514,7 +515,7 @@ impl<
     /// Computes a Shplemini proof which is a combination of Gemini and Shplonk (Shplonk reduces multiple openings into one).
     pub fn shplemini_prove(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
         circuit_size: u32,
         crs: &ProverCrs<P>,
         sumcheck_output: SumcheckOutput<P::ScalarField, L>,
@@ -807,7 +808,7 @@ impl<
     fn compute_libra_opening_claims(
         gemini_r: P::ScalarField,
         libra_polynomials: [Polynomial<P::ScalarField>; NUM_SMALL_IPA_EVALUATIONS],
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
     ) -> Vec<ShpleminiOpeningClaim<P::ScalarField>> {
         tracing::trace!("Compute libra opening claims");
         let mut libra_opening_claims = Vec::with_capacity(NUM_SMALL_IPA_EVALUATIONS);

@@ -13,6 +13,7 @@ use co_builder::flavours::translator_flavour::TranslatorFlavour;
 use co_noir_common::crs::parse::CrsParser;
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::mpc::plain::PlainUltraHonkDriver;
 use co_noir_common::serialize::SerializeP;
 use co_noir_common::transcript::Poseidon2Sponge;
 use co_noir_common::transcript::Transcript;
@@ -162,7 +163,12 @@ fn test_ecc_vm_prover() {
         );
     proving_key.polynomials = polys;
 
-    let mut transcript = Transcript::<TranscriptFieldType, Poseidon2Sponge>::new();
+    let mut transcript = Transcript::<
+        TranscriptFieldType,
+        Poseidon2Sponge,
+        PlainUltraHonkDriver,
+        short_weierstrass::Projective<GrumpkinConfig>,
+    >::new();
 
     let mut prover =
         Eccvm::<short_weierstrass::Projective<GrumpkinConfig>, Poseidon2Sponge>::default();
@@ -196,8 +202,12 @@ fn test_translator_prover() {
     let _ = construct_from_builder::<short_weierstrass::Projective<GrumpkinConfig>>(&mut queue);
 
     let transcript = std::io::BufReader::new(std::fs::File::open(transcript_path).unwrap());
-    let transcript: Transcript<TranscriptFieldType, Poseidon2Sponge> =
-        bincode::deserialize_from(transcript).unwrap();
+    let transcript: Transcript<
+        TranscriptFieldType,
+        Poseidon2Sponge,
+        PlainUltraHonkDriver,
+        ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>,
+    > = bincode::deserialize_from(transcript).unwrap();
 
     let translation_batching_challenge_v =
         ark_bn254::Fq::from_str("333310174131141305725676434666258450925").unwrap();

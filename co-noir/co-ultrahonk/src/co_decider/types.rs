@@ -51,6 +51,8 @@ pub(crate) type PartiallyEvaluatePolys<T, P, L> = AllEntities<
     L,
 >;
 pub(crate) type ClaimedEvaluations<F, L> = AllEntities<F, F, L>;
+pub(crate) type ClaimedEvaluationsNonOpened<T, P, L> =
+    AllEntities<<T as NoirUltraHonkProver<P>>::ArithmeticShare, <P as PrimeGroup>::ScalarField, L>;
 
 #[derive(Clone, Debug, Default)]
 pub struct RelationParameters<T> {

@@ -9,6 +9,7 @@ use crate::{
     ultra_verifier::HonkVerifyResult,
 };
 use ark_ff::{One, Zero};
+use co_noir_common::mpc::plain::PlainUltraHonkDriver;
 use co_noir_common::polynomials::polynomial::RowDisablingPolynomial;
 use co_noir_common::{
     honk_curve::HonkCurve, honk_proof::TranscriptFieldType, types::ZeroKnowledge,
@@ -19,13 +20,13 @@ use co_noir_common::transcript::{Transcript, TranscriptHasher};
 // Keep in mind, the UltraHonk protocol (UltraFlavor) does not per default have ZK
 impl<
     P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, P>,
     L: PlainProverFlavour,
 > DeciderVerifier<P, H, L>
 {
     pub(crate) fn sumcheck_verify(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
         has_zk: ZeroKnowledge,
         padding_indicator_array: &[P::ScalarField; CONST_PROOF_SIZE_LOG_N],
     ) -> HonkVerifyResult<SumcheckVerifierOutput<P::ScalarField>> {

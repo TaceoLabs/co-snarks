@@ -2,8 +2,10 @@ use crate::barycentric::Barycentric;
 use crate::crs::ProverCrs;
 use crate::honk_curve::HonkCurve;
 use crate::honk_proof::HonkProofResult;
+use crate::mpc::plain::PlainUltraHonkDriver;
 use crate::polynomials::polynomial::NUM_MASKED_ROWS;
 use crate::polynomials::polynomial::Polynomial;
+use crate::transcript_mpc::TranscriptRef;
 use crate::utils::Utils;
 use crate::{
     honk_proof::TranscriptFieldType,
@@ -26,7 +28,9 @@ pub mod polynomials;
 pub mod serialize;
 pub mod shplemini;
 pub mod sponge_hasher;
+pub mod sponge_hasher_mpc;
 pub mod transcript;
+pub mod transcript_mpc;
 pub mod types;
 pub mod utils;
 
@@ -43,10 +47,10 @@ pub const MICRO_LIMB_BITS: usize = 14;
 
 pub fn compute_opening_proof<
     P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, P>,
 >(
     opening_claim: shplemini::ShpleminiOpeningClaim<P::ScalarField>,
-    transcript: &mut Transcript<TranscriptFieldType, H>,
+    transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
     crs: &ProverCrs<P>,
 ) -> HonkProofResult<()> {
     let mut quotient = opening_claim.polynomial;
@@ -65,13 +69,13 @@ pub fn compute_opening_proof<
 pub fn compute_co_opening_proof<
     T: NoirUltraHonkProver<P>,
     P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, T, P>,
     N: Network,
 >(
     net: &N,
     state: &mut T::State,
     opening_claim: co_shplemini::ShpleminiOpeningClaim<T, P>,
-    transcript: &mut Transcript<TranscriptFieldType, H>,
+    transcript: &mut TranscriptRef<TranscriptFieldType, T, P, H>,
     crs: &ProverCrs<P>,
 ) -> HonkProofResult<()> {
     let mut quotient = opening_claim.polynomial;
@@ -84,8 +88,15 @@ pub fn compute_co_opening_proof<
     // AZTEC TODO(#479): for now we compute the KZG commitment directly to unify the KZG and IPA interfaces but in the
     // future we might need to adjust this to use the incoming alternative to work queue (i.e. variation of
     // pthreads) or even the work queue itself
-    let quotient_commitment = T::open_point(quotient_commitment, net, state)?;
-    transcript.send_point_to_verifier::<P>("KZG:W".to_string(), quotient_commitment.into());
+    match transcript {
+        TranscriptRef::Plain(transcript) => {
+            let quotient_commitment = T::open_point(quotient_commitment, net, state)?;
+            transcript.send_point_to_verifier::<P>("KZG:W".to_string(), quotient_commitment.into());
+        }
+        TranscriptRef::Rep3(transcript_rep3) => {
+            transcript_rep3.send_point_to_verifier_shared("KZG:W".to_string(), quotient_commitment);
+        }
+    }
     Ok(())
 }
 

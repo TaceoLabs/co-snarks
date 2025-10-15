@@ -1,4 +1,6 @@
+use crate::HonkCurve;
 use ark_ec::CurveGroup;
+use ark_ff::PrimeField;
 use ark_poly::EvaluationDomain;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use mpc_core::MpcState;
@@ -388,4 +390,19 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized + std::fmt::Debug {
 
     /// Multiplies a shared point by a public scalar: \[C\] = a * \[B\].
     fn scalar_mul_public_point(a: &P, b: Self::ArithmeticShare) -> Self::PointShare;
+
+    fn poseidon_permutation_in_place<const T: usize, const D: u64, N: Network>(
+        poseidon: &mpc_core::gadgets::poseidon2::Poseidon2<P::ScalarField, T, D>,
+        state: &mut [Self::ArithmeticShare; T],
+        net: &N,
+        mpc_state: &mut Self::State,
+    ) -> eyre::Result<()>;
+
+    fn pointshare_to_field_shares_many<F: PrimeField, N: Network>(
+        points: &[Self::PointShare],
+        net: &N,
+        state: &mut Self::State,
+    ) -> eyre::Result<Vec<Self::ArithmeticShare>>
+    where
+        P: HonkCurve<F>;
 }

@@ -11,6 +11,7 @@ use co_noir_common::{
     crs::ProverCrs,
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
+    mpc::plain::PlainUltraHonkDriver,
     types::ZeroKnowledge,
 };
 
@@ -22,7 +23,7 @@ use std::marker::PhantomData;
 
 pub struct Decider<
     P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, P>,
     L: PlainProverFlavour,
 > {
     pub memory: ProverMemory<P, L>,
@@ -33,7 +34,7 @@ pub struct Decider<
 
 impl<
     P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, P>,
     L: PlainProverFlavour,
 > Decider<P, H, L>
 {
@@ -54,7 +55,7 @@ impl<
     #[expect(clippy::type_complexity)]
     fn execute_relation_check_rounds(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
         crs: &ProverCrs<P>,
         circuit_size: u32,
     ) -> HonkProofResult<(SumcheckOutput<P::ScalarField, L>, Option<ZKSumcheckData<P>>)> {
@@ -90,7 +91,7 @@ impl<
      * */
     fn execute_pcs_rounds(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
         circuit_size: u32,
         crs: &ProverCrs<P>,
         sumcheck_output: SumcheckOutput<P::ScalarField, L>,
@@ -131,7 +132,7 @@ impl<
         mut self,
         circuit_size: u32,
         crs: &ProverCrs<P>,
-        mut transcript: Transcript<TranscriptFieldType, H>,
+        mut transcript: Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
     ) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
         tracing::trace!("Decider prove");
 

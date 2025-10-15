@@ -18,7 +18,7 @@ impl<F: PrimeField, const T: usize, const D: u64> FieldHash<F, T> for Poseidon2<
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-enum SpongeMode {
+pub(crate) enum SpongeMode {
     Absorb,
     Squeeze,
 }

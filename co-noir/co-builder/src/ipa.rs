@@ -4,6 +4,7 @@ use ark_ff::{Field, Zero};
 use co_noir_common::crs::ProverCrs;
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::{HonkProofResult, TranscriptFieldType};
+use co_noir_common::mpc::plain::PlainUltraHonkDriver;
 use co_noir_common::shplemini::ShpleminiOpeningClaim;
 use co_noir_common::transcript::{Transcript, TranscriptHasher};
 use co_noir_common::utils::Utils as UltraHonkUtils;
@@ -12,9 +13,9 @@ use crate::eccvm::CONST_ECCVM_LOG_N;
 
 pub fn compute_ipa_opening_proof<
     P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, P>,
 >(
-    transcript: &mut Transcript<TranscriptFieldType, H>,
+    transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
     opening_claim: ShpleminiOpeningClaim<P::ScalarField>,
     commitment_key: &ProverCrs<P>,
 ) -> HonkProofResult<()> {

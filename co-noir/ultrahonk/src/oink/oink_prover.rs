@@ -22,6 +22,7 @@ use crate::{
     Utils, decider::relations::databus_lookup_relation::BusData,
     plain_prover_flavour::PlainProverFlavour,
 };
+use co_noir_common::mpc::plain::PlainUltraHonkDriver;
 use co_noir_common::transcript::{Transcript, TranscriptHasher};
 
 use ark_ff::{One, Zero};
@@ -43,7 +44,7 @@ use std::marker::PhantomData;
 
 pub struct Oink<
     P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, P>,
     L: PlainProverFlavour,
 > {
     memory: ProverMemory<P>,
@@ -54,7 +55,7 @@ pub struct Oink<
 
 impl<
     P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, P>,
     L: PlainProverFlavour,
 > Default for Oink<P, H, L>
 {
@@ -65,7 +66,7 @@ impl<
 
 impl<
     P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, P>,
     L: PlainProverFlavour,
 > Oink<P, H, L>
 {
@@ -84,7 +85,7 @@ impl<
         polynomial: &mut Polynomial<P::ScalarField>,
         label: &str,
         crs: &ProverCrs<P>,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
     ) -> HonkProofResult<()> {
         // // Mask the polynomial when proving in zero-knowledge
         if self.has_zk == ZeroKnowledge::Yes {
@@ -524,7 +525,7 @@ impl<
     /// Generate relation separators alphas for sumcheck/combiner computation
     pub(crate) fn generate_alphas_round(
         alphas: &mut Vec<P::ScalarField>,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
     ) {
         tracing::trace!("generate alpha round");
         L::get_alpha_challenges::<_, _, P>(transcript, alphas);
@@ -532,7 +533,7 @@ impl<
 
     /// Add circuit size public input size and public inputs to transcript
     fn execute_preamble_round(
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
         proving_key: &ProvingKey<P, L>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing preamble round");
@@ -564,7 +565,7 @@ impl<
     /// Compute first three wire commitments
     fn execute_wire_commitments_round(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
         proving_key: &mut ProvingKey<P, L>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing wire commitments round");
@@ -697,7 +698,7 @@ impl<
     /// Compute sorted list accumulator and commitment
     fn execute_sorted_list_accumulator_round(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
         proving_key: &mut ProvingKey<P, L>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing sorted list accumulator round");
@@ -737,7 +738,7 @@ impl<
     /// Fiat-Shamir: beta & gamma
     fn execute_log_derivative_inverse_round(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
         proving_key: &mut ProvingKey<P, L>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing log derivative inverse round");
@@ -809,7 +810,7 @@ impl<
     /// Compute grand product(s) and commitments.
     fn execute_grand_product_computation_round(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
         proving_key: &mut ProvingKey<P, L>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing grand product computation round");
@@ -832,7 +833,7 @@ impl<
     pub fn prove(
         mut self,
         proving_key: &mut ProvingKey<P, L>,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
     ) -> HonkProofResult<ProverMemory<P>> {
         tracing::trace!("Oink prove");
 

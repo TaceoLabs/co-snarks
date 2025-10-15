@@ -5,9 +5,12 @@ use ark_ff::Field;
 use ark_ff::{One, Zero};
 use co_builder::eccvm::CONST_ECCVM_LOG_N;
 use co_builder::eccvm::NUM_OPENING_CLAIMS;
+use co_builder::flavours::eccvm_flavour::ECCVMFlavour;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
+use co_noir_common::CoUtils;
+use co_noir_common::co_shplemini::OpeningPair;
 use co_noir_common::crs::ProverCrs;
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::HonkProofResult;
@@ -15,11 +18,8 @@ use co_noir_common::honk_proof::TranscriptFieldType;
 use co_noir_common::polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK;
 use co_noir_common::polynomials::polynomial::Polynomial;
 use co_noir_common::polynomials::shared_polynomial::SharedPolynomial;
+use co_noir_common::transcript_mpc::TranscriptRef;
 use co_noir_common::types::ZeroKnowledge;
-
-use co_builder::flavours::eccvm_flavour::ECCVMFlavour;
-use co_noir_common::CoUtils;
-use co_noir_common::co_shplemini::OpeningPair;
 use co_noir_common::{
     co_shplemini::ShpleminiOpeningClaim,
     mpc::NoirUltraHonkProver,
@@ -57,7 +57,7 @@ pub struct Eccvm<'a, P, H, T, N>
 where
     T: NoirUltraHonkProver<P>,
     P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, T, P>,
     N: Network,
 {
     decider: CoDecider<'a, T, P, H, N, ECCVMFlavour>, // We need the decider struct here for being able to use sumcheck, shplemini, shplonk
@@ -66,7 +66,7 @@ where
 
 impl<'a, T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, H, N> Eccvm<'a, P, H, T, N>
 where
-    H: TranscriptHasher<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, T, P>,
     N: Network,
 {
     pub fn new(net: &'a N, state: &'a mut T::State) -> Self {
@@ -78,7 +78,7 @@ where
 
     pub fn construct_proof(
         &mut self,
-        mut transcript: Transcript<TranscriptFieldType, H>,
+        mut transcript: Transcript<TranscriptFieldType, H, T, P>,
         mut proving_key: ProvingKey<T, P, ECCVMFlavour>,
         crs: &ProverCrs<P>,
     ) -> HonkProofResult<(
@@ -114,7 +114,7 @@ where
     }
     fn execute_wire_commitments_round(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, T, P>,
         proving_key: &mut ProvingKey<T, P, ECCVMFlavour>,
         crs: &ProverCrs<P>,
     ) -> HonkProofResult<()> {
@@ -441,7 +441,7 @@ where
 
     fn execute_log_derivative_commitments_round(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, T, P>,
         proving_key: &ProvingKey<T, P, ECCVMFlavour>,
         unmasked_witness_size: usize,
     ) -> HonkProofResult<()> {
@@ -1261,7 +1261,7 @@ where
 
     fn execute_grand_product_computation_round(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, T, P>,
         proving_key: &ProvingKey<T, P, ECCVMFlavour>,
         unmasked_witness_size: usize,
         crs: &ProverCrs<P>,
@@ -1292,16 +1292,12 @@ where
         Ok(())
     }
 
-    #[expect(clippy::type_complexity)]
     fn execute_relation_check_rounds(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, T, P>,
         crs: &ProverCrs<P>,
         circuit_size: u32,
-    ) -> HonkProofResult<(
-        SumcheckOutput<T, P, ECCVMFlavour>,
-        SharedZKSumcheckData<T, P>,
-    )> {
+    ) -> HonkProofResult<(SumcheckOutput<T, P>, SharedZKSumcheckData<T, P>)> {
         self.decider.memory.alphas =
             vec![transcript.get_challenge::<P>("Sumcheck:alpha".to_string())];
         let mut gate_challenges: Vec<P::ScalarField> = Vec::with_capacity(CONST_ECCVM_LOG_N);
@@ -1335,12 +1331,12 @@ where
 
     fn execute_pcs_rounds(
         &mut self,
-        sumcheck_output: SumcheckOutput<T, P, ECCVMFlavour>,
+        sumcheck_output: SumcheckOutput<T, P>,
         zk_sumcheck_data: SharedZKSumcheckData<T, P>,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, T, P>,
         crs: &ProverCrs<P>,
         circuit_size: u32,
-    ) -> HonkProofResult<Transcript<TranscriptFieldType, H>> {
+    ) -> HonkProofResult<Transcript<TranscriptFieldType, H, T, P>> {
         let mut small_subgroup_ipa_prover = SharedSmallSubgroupIPAProver::<_, _>::new(
             zk_sumcheck_data,
             sumcheck_output
@@ -1355,35 +1351,40 @@ where
             transcript,
             crs,
         )?;
-
+        let mut transcript_plain = TranscriptRef::Plain(transcript);
         let witness_polynomials = small_subgroup_ipa_prover.into_witness_polynomials();
         let multivariate_to_univariate_opening_claim = self.decider.shplemini_prove(
-            transcript,
+            &mut transcript_plain,
             circuit_size,
             crs,
             sumcheck_output,
             Some(witness_polynomials),
         )?;
+        let batch_opening_claim = match transcript_plain {
+            TranscriptRef::Plain(t) => {
+                {
+                    self.compute_translation_opening_claims(t, crs, circuit_size)?;
+                    self.memory.opening_claims[NUM_OPENING_CLAIMS - 1] =
+                        multivariate_to_univariate_opening_claim;
 
-        self.compute_translation_opening_claims(transcript, crs, circuit_size)?;
-
-        self.memory.opening_claims[NUM_OPENING_CLAIMS - 1] =
-            multivariate_to_univariate_opening_claim;
-
-        let virtual_log_n = 0; // This is 0 per default
-        // Reduce the opening claims to a single opening claim via Shplonk
-        let batch_opening_claim = self.decider.shplonk_prove(
-            &self.memory.opening_claims,
-            crs,
-            transcript,
-            None,
-            None,
-            virtual_log_n,
-        )?;
+                    let virtual_log_n = 0; // This is 0 per default
+                    // Reduce the opening claims to a single opening claim via Shplonk
+                    self.decider.shplonk_prove(
+                        &self.memory.opening_claims,
+                        crs,
+                        &mut TranscriptRef::Plain(transcript),
+                        None,
+                        None,
+                        virtual_log_n,
+                    )?
+                }
+            }
+            _ => panic!("ZK flavours are not supposed to be called with REP3 transcripts"),
+        };
 
         // Compute the opening proof for the batched opening claim with the univariate PCS
 
-        let mut ipa_transcript = Transcript::<TranscriptFieldType, H>::new();
+        let mut ipa_transcript = Transcript::<TranscriptFieldType, H, T, P>::new();
         compute_ipa_opening_proof(
             self.decider.net,
             self.decider.state,
@@ -1396,7 +1397,7 @@ where
 
     fn compute_translation_opening_claims(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, T, P>,
         crs: &ProverCrs<P>,
         circuit_size: u32,
     ) -> HonkProofResult<()> {

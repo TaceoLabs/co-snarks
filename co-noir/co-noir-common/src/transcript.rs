@@ -1,11 +1,13 @@
 use crate::{
     honk_curve::HonkCurve,
     honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
+    mpc::NoirUltraHonkProver,
     sponge_hasher::{FieldHash, FieldSponge},
 };
 use ark_ec::AffineRepr;
 use ark_ff::{One, PrimeField, Zero};
 use mpc_core::gadgets::poseidon2::Poseidon2;
+use mpc_net::Network;
 use noir_types::HonkProof;
 use num_bigint::BigUint;
 use serde::Deserialize;
@@ -15,24 +17,50 @@ use std::{collections::BTreeMap, ops::Index};
 pub type Poseidon2Sponge =
     FieldSponge<TranscriptFieldType, 4, 3, Poseidon2<TranscriptFieldType, 4, 5>>;
 
-pub trait TranscriptHasher<F: PrimeField> {
+pub trait TranscriptHasher<F: PrimeField, U: NoirUltraHonkProver<C>, C: HonkCurve<F>> {
     fn hash(buffer: Vec<F>) -> F;
+    fn hash_rep3<N: Network>(
+        buffer: Vec<U::ArithmeticShare>,
+        net: &N,
+        mpc_state: &mut U::State,
+    ) -> eyre::Result<U::ArithmeticShare>;
 }
 
-impl<F: PrimeField, const T: usize, const R: usize, H: FieldHash<F, T> + Default>
-    TranscriptHasher<F> for FieldSponge<F, T, R, H>
+impl<
+    F: PrimeField,
+    const T: usize,
+    const R: usize,
+    H: FieldHash<F, T> + Default,
+    U: NoirUltraHonkProver<C>,
+    C: HonkCurve<F>,
+> TranscriptHasher<F, U, C> for FieldSponge<F, T, R, H>
 {
     fn hash(buffer: Vec<F>) -> F {
         Self::hash_fixed_length::<1>(&buffer)[0]
     }
+    fn hash_rep3<N: Network>(
+        _buffer: Vec<U::ArithmeticShare>,
+        _net: &N,
+        _mpc_state: &mut U::State,
+    ) -> eyre::Result<U::ArithmeticShare> {
+        Err(eyre::eyre!(
+            "FieldSponge<F: {}, T: {}, R: {}, H: {}> does not support hashing in MPC",
+            std::any::type_name::<F>(),
+            T,
+            R,
+            std::any::type_name::<H>(),
+        ))
+    }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(bound = "")]
-pub struct Transcript<F, H>
+pub struct Transcript<F, H, U, C>
 where
     F: PrimeField,
-    H: TranscriptHasher<F>,
+    H: TranscriptHasher<F, U, C>,
+    U: NoirUltraHonkProver<C>,
+    C: HonkCurve<F>,
 {
     #[serde(
         serialize_with = "mpc_core::serde_compat::ark_se",
@@ -54,23 +82,49 @@ where
         deserialize_with = "mpc_core::serde_compat::ark_de"
     )]
     previous_challenge: F,
-    phantom_data: std::marker::PhantomData<H>,
+    phantom_data: std::marker::PhantomData<(H, U, C)>,
 }
 
-impl<F, H> Default for Transcript<F, H>
+impl<F, H, U, C> Default for Transcript<F, H, U, C>
 where
     F: PrimeField,
-    H: TranscriptHasher<F>,
+    H: TranscriptHasher<F, U, C>,
+    U: NoirUltraHonkProver<C>,
+    C: HonkCurve<F>,
 {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<F, H> Transcript<F, H>
+impl<F, H, U, C> Clone for Transcript<F, H, U, C>
 where
     F: PrimeField,
-    H: TranscriptHasher<F>,
+    H: TranscriptHasher<F, U, C>,
+    U: NoirUltraHonkProver<C>,
+    C: HonkCurve<F>,
+{
+    fn clone(&self) -> Self {
+        Self {
+            proof_data: self.proof_data.clone(),
+            manifest: self.manifest.clone(),
+            num_frs_written: self.num_frs_written,
+            num_frs_read: self.num_frs_read,
+            round_number: self.round_number,
+            is_first_challenge: self.is_first_challenge,
+            current_round_data: self.current_round_data.clone(),
+            previous_challenge: self.previous_challenge,
+            phantom_data: Default::default(),
+        }
+    }
+}
+
+impl<F, H, U, C> Transcript<F, H, U, C>
+where
+    F: PrimeField,
+    H: TranscriptHasher<F, U, C>,
+    U: NoirUltraHonkProver<C>,
+    C: HonkCurve<F>,
 {
     pub fn new() -> Self {
         Self {
@@ -102,6 +156,11 @@ where
 
     pub fn get_proof(self) -> HonkProof<F> {
         HonkProof::new(self.proof_data)
+    }
+
+    // TACEO TODO: Avoid clone
+    pub fn get_proof_ref(&self) -> HonkProof<F> {
+        HonkProof::new(self.proof_data.clone())
     }
 
     #[expect(dead_code)]

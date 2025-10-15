@@ -11,6 +11,7 @@ use co_noir_common::crs::ProverCrs;
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::HonkProofResult;
 use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::mpc::plain::PlainUltraHonkDriver;
 use co_noir_common::polynomials::polynomial::Polynomial;
 use co_noir_common::transcript::Transcript;
 use co_noir_common::types::ZeroKnowledge;
@@ -29,14 +30,21 @@ pub(crate) struct ProverMemory<P: CurveGroup> {
     pub(crate) z_perm: Polynomial<P::ScalarField>,
 }
 
-pub struct Translator<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> {
+pub struct Translator<
+    P: HonkCurve<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, P>,
+> {
     decider: Decider<P, H, TranslatorFlavour>,
     batching_challenge_v: P::BaseField,
     evaluation_input_x: P::BaseField,
     memory: ProverMemory<P>, //This is somewhat equivalent to the Oink Memory (i.e stores the lookup_inverses and z_perm)
 }
 
-impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> Translator<P, H> {
+impl<
+    P: HonkCurve<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, P>,
+> Translator<P, H>
+{
     pub fn new(batching_challenge_v: P::BaseField, evaluation_input_x: P::BaseField) -> Self {
         Self {
             decider: Decider::new(Default::default(), ZeroKnowledge::Yes),
@@ -51,7 +59,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         polynomial: &mut Polynomial<P::ScalarField>,
         label: &str,
         crs: &ProverCrs<P>,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
     ) -> HonkProofResult<()> {
         // polynomial.mask(&mut self.decider.rng); // THERE IS NO MASKING IN TRANSLATOR (YET?)
 
@@ -65,7 +73,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
     pub fn construct_proof(
         &mut self,
-        mut transcript: Transcript<TranscriptFieldType, H>,
+        mut transcript: Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
         mut proving_key: ProvingKey<P, TranslatorFlavour>,
     ) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
         tracing::trace!("TranslatorProver::construct_proof");
@@ -105,7 +113,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
     fn execute_preamble_round(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
         proving_key: &mut ProvingKey<P, TranslatorFlavour>,
     ) -> HonkProofResult<()> {
         const NUM_LIMB_BITS: usize = TranslatorFlavour::NUM_LIMB_BITS;
@@ -165,7 +173,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
     fn execute_wire_and_sorted_constraints_commitments_round(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
         proving_key: &mut ProvingKey<P, TranslatorFlavour>,
     ) -> HonkProofResult<()> {
         let non_shifted_label = TranslatorFlavour::wire_non_shifted_labels();
@@ -202,7 +210,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     }
     fn execute_grand_product_computation_round(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
         proving_key: &ProvingKey<P, TranslatorFlavour>,
     ) -> HonkProofResult<()> {
         let beta = transcript.get_challenge::<P>("BETA".to_string());
@@ -280,7 +288,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     #[expect(clippy::type_complexity)]
     fn execute_relation_check_rounds(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
         crs: &ProverCrs<P>,
         circuit_size: u32,
     ) -> HonkProofResult<(
@@ -320,7 +328,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         &mut self,
         sumcheck_output: SumcheckOutput<P::ScalarField, TranslatorFlavour>,
         zk_sumcheck_data: ZKSumcheckData<P>,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
         crs: &ProverCrs<P>,
         circuit_size: u32,
     ) -> HonkProofResult<()> {

@@ -14,6 +14,7 @@ use co_noir_common::mpc::NoirUltraHonkProver;
 use co_noir_common::polynomials::polynomial::Polynomial;
 use co_noir_common::transcript::Transcript;
 use co_noir_common::transcript::TranscriptHasher;
+use co_noir_common::transcript_mpc::TranscriptRef;
 use co_noir_common::types::ZeroKnowledge;
 use co_noir_common::utils::Utils;
 use co_ultrahonk::prelude::AllEntities;
@@ -46,7 +47,7 @@ pub struct Translator<'a, P, H, T, N>
 where
     T: NoirUltraHonkProver<P>,
     P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, T, P>,
     N: Network,
 {
     decider: CoDecider<'a, T, P, H, N, TranslatorFlavour>, // We need the decider struct here for being able to use sumcheck, shplemini, shplonk
@@ -58,7 +59,7 @@ where
 impl<'a, T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, H, N>
     Translator<'a, P, H, T, N>
 where
-    H: TranscriptHasher<TranscriptFieldType>,
+    H: TranscriptHasher<TranscriptFieldType, T, P>,
     N: Network,
 {
     pub fn new(
@@ -77,7 +78,7 @@ where
 
     pub fn construct_proof(
         &mut self,
-        mut transcript: Transcript<TranscriptFieldType, H>,
+        mut transcript: Transcript<TranscriptFieldType, H, T, P>,
         mut proving_key: ProvingKey<T, P, TranslatorFlavour>,
         crs: &ProverCrs<P>,
     ) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
@@ -119,7 +120,7 @@ where
 
     fn execute_preamble_and_wire_and_sorted_constraints_commitments_round(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, T, P>,
         proving_key: &mut ProvingKey<T, P, TranslatorFlavour>,
         crs: &ProverCrs<P>,
     ) -> HonkProofResult<()> {
@@ -204,7 +205,7 @@ where
     }
     fn execute_grand_product_computation_round(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, T, P>,
         proving_key: &ProvingKey<T, P, TranslatorFlavour>,
         crs: &ProverCrs<P>,
     ) -> HonkProofResult<()> {
@@ -283,16 +284,13 @@ where
 
         Ok(())
     }
-    #[expect(clippy::type_complexity)]
+
     fn execute_relation_check_rounds(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, T, P>,
         crs: &ProverCrs<P>,
         circuit_size: u32,
-    ) -> HonkProofResult<(
-        SumcheckOutput<T, P, TranslatorFlavour>,
-        SharedZKSumcheckData<T, P>,
-    )> {
+    ) -> HonkProofResult<(SumcheckOutput<T, P>, SharedZKSumcheckData<T, P>)> {
         self.decider.memory.alphas =
             vec![transcript.get_challenge::<P>("Sumcheck:alpha".to_string())];
         let mut gate_challenges: Vec<P::ScalarField> =
@@ -327,9 +325,9 @@ where
     }
     fn execute_pcs_rounds(
         &mut self,
-        sumcheck_output: SumcheckOutput<T, P, TranslatorFlavour>,
+        sumcheck_output: SumcheckOutput<T, P>,
         zk_sumcheck_data: SharedZKSumcheckData<T, P>,
-        transcript: &mut Transcript<TranscriptFieldType, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H, T, P>,
         crs: &ProverCrs<P>,
         circuit_size: u32,
     ) -> HonkProofResult<()> {
@@ -349,9 +347,9 @@ where
         )?;
 
         let witness_polynomials = small_subgroup_ipa_prover.into_witness_polynomials();
-
+        let mut transcript_plain = TranscriptRef::Plain(transcript);
         let prover_opening_claim = self.decider.shplemini_prove(
-            transcript,
+            &mut transcript_plain,
             circuit_size,
             crs,
             sumcheck_output,
@@ -362,7 +360,7 @@ where
             self.decider.net,
             self.decider.state,
             prover_opening_claim,
-            transcript,
+            &mut transcript_plain,
             crs,
         )
     }
