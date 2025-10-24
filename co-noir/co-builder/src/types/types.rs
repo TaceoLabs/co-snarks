@@ -1,12 +1,7 @@
 use super::big_field::BigGroup;
 use super::field_ct::{CycleGroupCT, FieldCT};
-use crate::flavours::ultra_flavour::UltraFlavour;
 use crate::keys::proving_key::ProvingKey;
-use crate::polynomials::polynomial_flavours::{
-    PrecomputedEntitiesFlavour, ProverWitnessEntitiesFlavour,
-};
-use crate::prelude::GenericUltraCircuitBuilder;
-use crate::prover_flavour::ProverFlavour;
+use crate::prelude::{GenericUltraCircuitBuilder, PrecomputedEntities, ProverWitnessEntities};
 use crate::ultra_builder::UltraCircuitBuilder;
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
@@ -293,23 +288,23 @@ impl<F: PrimeField> UltraTraceBlocks<UltraTraceBlock<F>> {
 }
 
 impl<F: PrimeField> UltraTraceBlock<F> {
-    const W_L: usize = UltraFlavour::W_L;
-    const W_R: usize = UltraFlavour::W_R;
-    const W_O: usize = UltraFlavour::W_O;
-    const W_4: usize = UltraFlavour::W_4;
-    const Q_M: usize = UltraFlavour::Q_M;
-    const Q_C: usize = UltraFlavour::Q_C;
-    const Q_1: usize = UltraFlavour::Q_L;
-    const Q_2: usize = UltraFlavour::Q_R;
-    const Q_3: usize = UltraFlavour::Q_O;
-    const Q_4: usize = UltraFlavour::Q_4;
-    const Q_ARITH: usize = UltraFlavour::Q_ARITH;
-    const Q_DELTA_RANGE: usize = UltraFlavour::Q_DELTA_RANGE;
-    const Q_ELLIPTIC: usize = UltraFlavour::Q_ELLIPTIC;
-    const Q_AUX: usize = UltraFlavour::Q_AUX;
-    const Q_LOOKUP_TYPE: usize = UltraFlavour::Q_LOOKUP;
-    const Q_POSEIDON2_EXTERNAL: usize = UltraFlavour::Q_POSEIDON2_EXTERNAL;
-    const Q_POSEIDON2_INTERNAL: usize = UltraFlavour::Q_POSEIDON2_INTERNAL;
+    const W_L: usize = ProverWitnessEntities::<F>::W_L;
+    const W_R: usize = ProverWitnessEntities::<F>::W_R;
+    const W_O: usize = ProverWitnessEntities::<F>::W_O;
+    const W_4: usize = ProverWitnessEntities::<F>::W_4;
+    const Q_M: usize = PrecomputedEntities::<F>::Q_M;
+    const Q_C: usize = PrecomputedEntities::<F>::Q_C;
+    const Q_1: usize = PrecomputedEntities::<F>::Q_L;
+    const Q_2: usize = PrecomputedEntities::<F>::Q_R;
+    const Q_3: usize = PrecomputedEntities::<F>::Q_O;
+    const Q_4: usize = PrecomputedEntities::<F>::Q_4;
+    const Q_ARITH: usize = PrecomputedEntities::<F>::Q_ARITH;
+    const Q_DELTA_RANGE: usize = PrecomputedEntities::<F>::Q_DELTA_RANGE;
+    const Q_ELLIPTIC: usize = PrecomputedEntities::<F>::Q_ELLIPTIC;
+    const Q_AUX: usize = PrecomputedEntities::<F>::Q_AUX;
+    const Q_LOOKUP_TYPE: usize = PrecomputedEntities::<F>::Q_LOOKUP;
+    const Q_POSEIDON2_EXTERNAL: usize = PrecomputedEntities::<F>::Q_POSEIDON2_EXTERNAL;
+    const Q_POSEIDON2_INTERNAL: usize = PrecomputedEntities::<F>::Q_POSEIDON2_INTERNAL;
 
     pub(crate) fn w_l(&mut self) -> &mut Vec<u32> {
         &mut self.wires[Self::W_L]
@@ -668,7 +663,7 @@ pub(crate) struct TraceData<'a, P: CurveGroup> {
 impl<'a, P: CurveGroup> TraceData<'a, P> {
     pub(crate) fn new(
         builder: &UltraCircuitBuilder<P>,
-        proving_key: &'a mut ProvingKey<P, UltraFlavour>,
+        proving_key: &'a mut ProvingKey<P>,
     ) -> Self {
         let copy_cycles = vec![vec![]; builder.variables.len()];
 

@@ -1408,6 +1408,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> WitnessCT<P
             witness_index,
         }
     }
+
     pub(crate) fn create_constant_witness(
         value: P::ScalarField,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
@@ -3184,6 +3185,7 @@ impl<F: PrimeField> CycleScalarCT<F> {
         Self { lo, hi }
     }
 
+    #[expect(unused)] // This will be used in the fieldct transcript
     pub(crate) fn from_field_ct<
         P: HonkCurve<TranscriptFieldType, ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,

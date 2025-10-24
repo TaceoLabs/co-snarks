@@ -5,11 +5,9 @@ use noir_types::ProgramArtifact;
 use crate::prelude::AcirFormat;
 
 pub(crate) mod acir_format;
-pub mod flavours;
 pub(crate) mod keys;
 pub mod polynomials;
 pub mod prelude;
-pub mod prover_flavour;
 pub mod types;
 pub(crate) mod ultra_builder;
 

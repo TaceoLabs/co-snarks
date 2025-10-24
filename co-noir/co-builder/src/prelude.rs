@@ -6,8 +6,8 @@ pub use crate::keys::verification_key::{
     PublicComponentKey, VerifyingKey, VerifyingKeyBarretenberg,
 };
 pub use crate::polynomials::polynomial_types::{
-    Polynomials, PrecomputedEntities, ProverWitnessEntities, ShiftedWitnessEntities,
-    WitnessEntities,
+    PRECOMPUTED_ENTITIES_SIZE, PROVER_WITNESS_ENTITIES_SIZE, PrecomputedEntities,
+    ProverWitnessEntities,
 };
 pub use crate::types::aes128::AES128_SBOX;
 pub use crate::types::generators::{derive_generators, offset_generator, offset_generator_scaled};

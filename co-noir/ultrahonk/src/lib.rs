@@ -1,8 +1,6 @@
 #![warn(clippy::iter_over_hash_type)]
 pub mod decider;
 pub mod oink;
-pub(crate) mod plain_flavours;
-pub mod plain_prover_flavour;
 pub mod prelude;
 pub(crate) mod types;
 pub(crate) mod ultra_prover;

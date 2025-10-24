@@ -1,8 +1,6 @@
 use crate::acir_format::{HonkRecursion, ProgramMetadata};
-use crate::flavours::ultra_flavour::UltraFlavour;
 use crate::keys::verification_key::PublicComponentKey;
-use crate::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
-use crate::prover_flavour::ProverFlavour;
+use crate::prelude::PrecomputedEntities;
 use crate::types::aes128;
 use crate::types::big_field::{BigField, BigGroup};
 use crate::types::blake2s::Blake2s;
@@ -62,12 +60,11 @@ impl<C: CurveGroup> UltraCircuitBuilder<C> {
         self,
         crs: Arc<ProverCrs<C>>,
         driver: &mut PlainAcvmSolver<C::ScalarField>,
-    ) -> HonkProofResult<VerifyingKeyBarretenberg<C, UltraFlavour>> {
+    ) -> HonkProofResult<VerifyingKeyBarretenberg<C>> {
         let pk = ProvingKey::create::<PlainAcvmSolver<_>>(self, crs, driver)?;
         let circuit_size = pk.circuit_size;
 
-        let mut commitments =
-            <UltraFlavour as ProverFlavour>::PrecomputedEntities::<C::Affine>::default();
+        let mut commitments = PrecomputedEntities::default();
         for (des, src) in commitments
             .iter_mut()
             .zip(pk.polynomials.precomputed.iter())
@@ -93,13 +90,11 @@ impl<C: CurveGroup> UltraCircuitBuilder<C> {
         prover_crs: Arc<ProverCrs<C>>,
         verifier_crs: P::G2Affine,
         driver: &mut PlainAcvmSolver<C::ScalarField>,
-    ) -> HonkProofResult<(ProvingKey<C, UltraFlavour>, VerifyingKey<P, UltraFlavour>)> {
+    ) -> HonkProofResult<(ProvingKey<C>, VerifyingKey<P>)> {
         let pk = ProvingKey::create::<PlainAcvmSolver<_>>(self, prover_crs, driver)?;
         let circuit_size = pk.circuit_size;
 
-        let mut commitments =
-            <UltraFlavour as ProverFlavour>::PrecomputedEntities::<P::G1Affine>::default();
-
+        let mut commitments = PrecomputedEntities::default();
         for (des, src) in commitments
             .iter_mut()
             .zip(pk.polynomials.precomputed.iter())
@@ -125,15 +120,11 @@ impl<C: CurveGroup> UltraCircuitBuilder<C> {
         self,
         crs: Arc<ProverCrs<C>>,
         driver: &mut PlainAcvmSolver<C::ScalarField>,
-    ) -> HonkProofResult<(
-        ProvingKey<C, UltraFlavour>,
-        VerifyingKeyBarretenberg<C, UltraFlavour>,
-    )> {
+    ) -> HonkProofResult<(ProvingKey<C>, VerifyingKeyBarretenberg<C>)> {
         let pk = ProvingKey::create::<PlainAcvmSolver<_>>(self, crs, driver)?;
         let circuit_size = pk.circuit_size;
 
-        let mut commitments =
-            <UltraFlavour as ProverFlavour>::PrecomputedEntities::<C::Affine>::default();
+        let mut commitments = PrecomputedEntities::default();
         for (des, src) in commitments
             .iter_mut()
             .zip(pk.polynomials.precomputed.iter())
