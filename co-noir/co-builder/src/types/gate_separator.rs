@@ -3,7 +3,7 @@ use ark_ff::Field;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use eyre::Ok;
 
-use crate::{generic_builder::GenericBuilder, types::field_ct::FieldCT};
+use crate::{prelude::GenericUltraCircuitBuilder, types::field_ct::FieldCT};
 
 pub struct GateSeparatorPolynomial<P: CurveGroup> {
     pub betas: Vec<FieldCT<P::ScalarField>>,
@@ -17,7 +17,7 @@ impl<P: CurveGroup> GateSeparatorPolynomial<P> {
     pub fn new<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
         betas: Vec<FieldCT<P::ScalarField>>,
         log_num_mononmials: usize,
-        builder: &mut impl GenericBuilder<P, T>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Self> {
         let pow_size = 1 << log_num_mononmials;
@@ -46,7 +46,7 @@ impl<P: CurveGroup> GateSeparatorPolynomial<P> {
 
     pub fn new_without_products<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
         betas: Vec<FieldCT<P::ScalarField>>,
-        builder: &mut impl GenericBuilder<P, T>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
     ) -> Self {
         let current_element_idx = 0;
         let periodicity = 2;
@@ -68,7 +68,7 @@ impl<P: CurveGroup> GateSeparatorPolynomial<P> {
     pub fn partially_evaluate<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
         &mut self,
         round_challenge: &FieldCT<P::ScalarField>,
-        builder: &mut impl GenericBuilder<P, T>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<()> {
         let one = FieldCT::from_witness(P::ScalarField::ONE.into(), builder);
@@ -91,7 +91,7 @@ impl<P: CurveGroup> GateSeparatorPolynomial<P> {
         &mut self,
         round_challenge: &FieldCT<P::ScalarField>,
         indicator: &FieldCT<P::ScalarField>,
-        builder: &mut impl GenericBuilder<P, T>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<()> {
         let one = FieldCT::from_witness(P::ScalarField::ONE.into(), builder);

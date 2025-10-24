@@ -11,7 +11,6 @@ use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_builder::flavours::ultra_flavour::UltraFlavour;
-use co_builder::generic_builder::GenericBuilder;
 use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
 use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
 use co_builder::prelude::ActiveRegionData;

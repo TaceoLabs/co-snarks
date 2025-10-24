@@ -2,13 +2,11 @@ pub(crate) mod auxiliary_relation;
 pub(crate) mod databus_lookup_relation;
 pub(crate) mod delta_range_constraint_relation;
 pub(crate) mod ecc_op_queue_relation;
-pub(crate) mod eccvm_relations;
 pub(crate) mod elliptic_relation;
 pub(crate) mod logderiv_lookup_relation;
 pub(crate) mod permutation_relation;
 pub(crate) mod poseidon2_external_relation;
 pub(crate) mod poseidon2_internal_relation;
-pub(crate) mod translator_relations;
 pub(crate) mod ultra_arithmetic_relation;
 
 use super::types::{ProverUnivariates, ProverUnivariatesBatch, RelationParameters};

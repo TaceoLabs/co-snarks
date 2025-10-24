@@ -11,6 +11,6 @@ pub(crate) mod sha_compression;
 
 pub mod field_ct;
 pub mod gate_separator;
-pub mod goblin_types;
+
 #[expect(clippy::module_inception)]
 pub(crate) mod types;

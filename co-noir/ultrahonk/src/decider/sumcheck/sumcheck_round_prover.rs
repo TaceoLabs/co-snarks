@@ -3,15 +3,7 @@ use super::{
     zk_data::ZKSumcheckData,
 };
 use crate::{
-    decider::{
-        relations::eccvm_relations::{
-            ecc_msm_relation::{EccMsmRelation, EccMsmRelationAcc},
-            ecc_set_relation::{EccSetRelation, EccSetRelationAcc},
-            ecc_transcript_relation::{EccTranscriptRelation, EccTranscriptRelationAcc},
-        },
-        types::ProverUnivariates,
-    },
-    plain_prover_flavour::PlainProverFlavour,
+    decider::types::ProverUnivariates, plain_prover_flavour::PlainProverFlavour,
     prelude::Univariate,
 };
 use crate::{
@@ -27,7 +19,6 @@ use crate::{
 };
 
 use ark_ff::PrimeField;
-use co_builder::flavours::eccvm_flavour::ECCVMFlavour;
 use co_noir_common::{
     honk_curve::HonkCurve, honk_proof::TranscriptFieldType,
     polynomials::polynomial::RowDisablingPolynomial,
@@ -238,69 +229,6 @@ impl<F: PrimeField, L: PlainProverFlavour> SumcheckProverRound<F, L> {
         }
 
         EllipticRelation::accumulate_with_extended_parameters::<P, L, SIZE>(
-            univariate_accumulator,
-            extended_edges,
-            relation_parameters,
-            scaling_factor,
-        );
-    }
-    pub(crate) fn accumulate_ecc_msm_relation<
-        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
-        const SIZE: usize,
-    >(
-        univariate_accumulator: &mut EccMsmRelationAcc<F>,
-        extended_edges: &ProverUnivariatesSized<F, ECCVMFlavour, SIZE>,
-        relation_parameters: &RelationParameters<F>,
-        scaling_factor: &F,
-    ) {
-        if EccMsmRelation::SKIPPABLE && EccMsmRelation::skip::<F, SIZE>(extended_edges) {
-            return;
-        }
-
-        EccMsmRelation::accumulate::<P, SIZE>(
-            univariate_accumulator,
-            extended_edges,
-            relation_parameters,
-            scaling_factor,
-        );
-    }
-
-    pub(crate) fn accumulate_ecc_set_relation<
-        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
-        const SIZE: usize,
-    >(
-        univariate_accumulator: &mut EccSetRelationAcc<F>,
-        extended_edges: &ProverUnivariatesSized<F, ECCVMFlavour, SIZE>,
-        relation_parameters: &RelationParameters<F>,
-        scaling_factor: &F,
-    ) {
-        if EccSetRelation::SKIPPABLE && EccSetRelation::skip::<F, SIZE>(extended_edges) {
-            return;
-        }
-
-        EccSetRelation::accumulate::<P, SIZE>(
-            univariate_accumulator,
-            extended_edges,
-            relation_parameters,
-            scaling_factor,
-        );
-    }
-    pub(crate) fn accumulate_ecc_transcript_relation<
-        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
-        const SIZE: usize,
-    >(
-        univariate_accumulator: &mut EccTranscriptRelationAcc<F>,
-        extended_edges: &ProverUnivariatesSized<F, ECCVMFlavour, SIZE>,
-        relation_parameters: &RelationParameters<F>,
-        scaling_factor: &F,
-    ) {
-        if EccTranscriptRelation::SKIPPABLE
-            && EccTranscriptRelation::skip::<F, SIZE>(extended_edges)
-        {
-            return;
-        }
-
-        EccTranscriptRelation::accumulate::<P, SIZE>(
             univariate_accumulator,
             extended_edges,
             relation_parameters,

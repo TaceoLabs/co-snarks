@@ -1,5 +1,4 @@
 use super::field_ct::FieldCT;
-use crate::generic_builder::GenericBuilder;
 use crate::ultra_builder::GenericUltraCircuitBuilder;
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
