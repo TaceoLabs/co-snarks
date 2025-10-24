@@ -1,25 +1,18 @@
 use std::fs::File;
 
 use ark_bn254::Bn254;
-use co_builder::flavours::ultra_flavour::UltraFlavour;
 use co_builder::prelude::HonkRecursion;
 use co_builder::prelude::constraint_system_from_reader;
 use co_noir_common::crs::parse::CrsParser;
 use co_noir_common::honk_proof::TranscriptFieldType;
-use co_noir_common::mpc::plain::PlainUltraHonkDriver;
 use co_noir_common::transcript::{Poseidon2Sponge, TranscriptHasher};
 use co_noir_common::types::ZeroKnowledge;
 use noir_types::HonkProof;
 use sha3::Keccak256;
-use ultrahonk::prelude::{PlainAcvmSolver, UltraCircuitBuilder, UltraHonk};
+use ultrahonk::prelude::UltraHonk;
+use ultrahonk::prelude::{PlainAcvmSolver, UltraCircuitBuilder};
 
-fn plain_test<
-    H: TranscriptHasher<
-            TranscriptFieldType,
-            PlainUltraHonkDriver,
-            <ark_ec::models::bn::Bn<ark_bn254::Config> as ark_ec::pairing::Pairing>::G1,
-        >,
->(
+fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(
     proof_file: &str,
     circuit_file: &str,
     witness_file: &str,
@@ -58,8 +51,7 @@ fn plain_test<
         .create_keys::<Bn254>(prover_crs.into(), verifier_crs, &mut driver)
         .unwrap();
 
-    let (proof, public_inputs) =
-        UltraHonk::<_, H, UltraFlavour>::prove(proving_key, has_zk).unwrap();
+    let (proof, public_inputs) = UltraHonk::<_, H>::prove(proving_key, has_zk).unwrap();
     if has_zk == ZeroKnowledge::No {
         let proof_u8 = proof.to_buffer();
         let read_proof_u8 = std::fs::read(proof_file).unwrap();
@@ -70,8 +62,7 @@ fn plain_test<
     }
 
     let is_valid =
-        UltraHonk::<_, H, UltraFlavour>::verify(proof, &public_inputs, &verifying_key, has_zk)
-            .unwrap();
+        UltraHonk::<_, H>::verify(proof, &public_inputs, &verifying_key, has_zk).unwrap();
     assert!(is_valid);
 }
 
