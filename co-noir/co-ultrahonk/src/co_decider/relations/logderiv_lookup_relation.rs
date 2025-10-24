@@ -1,50 +1,26 @@
 use super::{ProverUnivariatesBatch, Relation, fold_accumulator};
-use crate::{
-    co_decider::{types::RelationParameters, univariates::SharedUnivariate},
-    fold_type_accumulator, impl_relation_acc_type_methods,
-    mpc_prover_flavour::MPCProverFlavour,
-    types::AllEntities,
+use crate::co_decider::{
+    types::{MAX_PARTIAL_RELATION_LENGTH, RelationParameters},
+    univariates::SharedUnivariate,
 };
-use co_noir_common::mpc::NoirUltraHonkProver;
-
 use ark_ec::CurveGroup;
-use ark_ff::Field;
-use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
-use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
-use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
-use co_noir_common::honk_curve::HonkCurve;
-use co_noir_common::honk_proof::{HonkProofResult, TranscriptFieldType};
+use co_noir_common::{
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProofResult, TranscriptFieldType},
+    mpc::NoirUltraHonkProver,
+};
 use itertools::{Itertools as _, izip};
 use mpc_core::MpcState;
 use mpc_net::Network;
 use ultrahonk::prelude::Univariate;
 
-pub enum LogDerivLookupRelationAccType<T: NoirUltraHonkProver<P>, P: CurveGroup> {
-    Partial(LogDerivLookupRelationAcc<T, P, 5>),
-    Total(LogDerivLookupRelationAcc<T, P, 7>),
-}
-
-impl_relation_acc_type_methods!(LogDerivLookupRelationAccType);
-
 #[derive(Clone, Debug)]
-pub(crate) struct LogDerivLookupRelationAcc<
-    T: NoirUltraHonkProver<P>,
-    P: CurveGroup,
-    const LENGTH: usize,
-> {
-    pub(crate) r0: SharedUnivariate<T, P, LENGTH>,
-    pub(crate) r1: SharedUnivariate<T, P, LENGTH>,
+pub(crate) struct LogDerivLookupRelationAcc<T: NoirUltraHonkProver<P>, P: CurveGroup> {
+    pub(crate) r0: SharedUnivariate<T, P, 5>,
+    pub(crate) r1: SharedUnivariate<T, P, 5>,
 }
 
-#[derive(Clone, Debug)]
-pub(crate) struct LogDerivLookupRelationEvals<T: NoirUltraHonkProver<P>, P: CurveGroup> {
-    pub(crate) r0: T::ArithmeticShare,
-    pub(crate) r1: T::ArithmeticShare,
-}
-
-impl<T: NoirUltraHonkProver<P>, P: CurveGroup, const LENGTH: usize> Default
-    for LogDerivLookupRelationAcc<T, P, LENGTH>
-{
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for LogDerivLookupRelationAcc<T, P> {
     fn default() -> Self {
         Self {
             r0: Default::default(),
@@ -53,38 +29,7 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup, const LENGTH: usize> Default
     }
 }
 
-impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for LogDerivLookupRelationEvals<T, P> {
-    fn default() -> Self {
-        Self {
-            r0: Default::default(),
-            r1: Default::default(),
-        }
-    }
-}
-
-impl<T: NoirUltraHonkProver<P>, P: CurveGroup> LogDerivLookupRelationEvals<T, P> {
-    pub(crate) fn scale_by_challenge_and_accumulate(
-        &self,
-        linearly_independent_contribution: &mut T::ArithmeticShare,
-        linearly_dependent_contribution: &mut T::ArithmeticShare,
-        running_challenge: &[P::ScalarField],
-    ) {
-        assert!(running_challenge.len() == LogDerivLookupRelation::NUM_RELATIONS);
-
-        T::add_assign(
-            linearly_independent_contribution,
-            T::mul_with_public(running_challenge[0], self.r0),
-        );
-        T::add_assign(
-            linearly_dependent_contribution,
-            T::mul_with_public(running_challenge[1], self.r1),
-        );
-    }
-}
-
-impl<T: NoirUltraHonkProver<P>, P: CurveGroup, const LENGTH: usize>
-    LogDerivLookupRelationAcc<T, P, LENGTH>
-{
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> LogDerivLookupRelationAcc<T, P> {
     pub(crate) fn scale(&mut self, elements: &[P::ScalarField]) {
         assert!(elements.len() == LogDerivLookupRelation::NUM_RELATIONS);
         self.r0.scale_inplace(elements[0]);
@@ -111,26 +56,6 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup, const LENGTH: usize>
             false,
         );
     }
-
-    pub(crate) fn extend_and_batch_univariates_with_distinct_challenges<const SIZE: usize>(
-        &self,
-        result: &mut SharedUnivariate<T, P, SIZE>,
-        running_challenge: &[Univariate<P::ScalarField, SIZE>],
-    ) {
-        self.r0.extend_and_batch_univariates(
-            result,
-            &running_challenge[0],
-            &P::ScalarField::ONE,
-            true,
-        );
-
-        self.r1.extend_and_batch_univariates(
-            result,
-            &running_challenge[1],
-            &P::ScalarField::ONE,
-            true,
-        );
-    }
 }
 
 pub(crate) struct LogDerivLookupRelation {}
@@ -141,9 +66,9 @@ impl LogDerivLookupRelation {
 }
 
 impl LogDerivLookupRelation {
-    fn compute_inverse_exists<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCProverFlavour>(
+    fn compute_inverse_exists<T: NoirUltraHonkProver<P>, P: CurveGroup>(
         id: <T::State as MpcState>::PartyID,
-        input: &ProverUnivariatesBatch<T, P, L>,
+        input: &ProverUnivariatesBatch<T, P>,
         // ) -> Univariate<P::ScalarField, MAX_PARTIAL_RELATION_LENGTH> {
     ) -> Vec<T::ArithmeticShare> {
         let row_has_write = input.witness.lookup_read_tags();
@@ -156,27 +81,9 @@ impl LogDerivLookupRelation {
         res
     }
 
-    fn compute_inverse_exists_verifier<
-        T: NoirUltraHonkProver<P>,
-        P: CurveGroup,
-        L: MPCProverFlavour,
-    >(
+    fn compute_read_term<T: NoirUltraHonkProver<P>, P: CurveGroup>(
         id: <T::State as MpcState>::PartyID,
-        input: &AllEntities<T::ArithmeticShare, P::ScalarField, L>,
-    ) -> T::ArithmeticShare {
-        let row_has_write = input.witness.lookup_read_tags().to_owned();
-        let row_has_read = input.precomputed.q_lookup().to_owned();
-
-        let mut res = T::mul_with_public(row_has_read, row_has_write);
-        T::neg_assign(&mut res);
-        T::add_assign(&mut res, row_has_write);
-        T::add_assign_public(&mut res, row_has_read, id);
-        res
-    }
-
-    fn compute_read_term<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCProverFlavour>(
-        id: <T::State as MpcState>::PartyID,
-        input: &ProverUnivariatesBatch<T, P, L>,
+        input: &ProverUnivariatesBatch<T, P>,
         relation_parameters: &RelationParameters<P::ScalarField>,
     ) -> Vec<T::ArithmeticShare> {
         let gamma = &relation_parameters.gamma;
@@ -223,113 +130,9 @@ impl LogDerivLookupRelation {
         derived_table_entry_1
     }
 
-    fn compute_read_term_with_extended_parameters<
-        T: NoirUltraHonkProver<P>,
-        P: CurveGroup,
-        L: MPCProverFlavour,
-        const SIZE: usize,
-    >(
-        id: <T::State as MpcState>::PartyID,
-        input: &ProverUnivariatesBatch<T, P, L>,
-        relation_parameters: &RelationParameters<Univariate<P::ScalarField, SIZE>>,
-    ) -> Vec<T::ArithmeticShare> {
-        let gamma = &relation_parameters.gamma;
-        let eta_1 = &relation_parameters.eta_1;
-        let eta_2 = &relation_parameters.eta_2;
-        let eta_3 = &relation_parameters.eta_3;
-        let w_1 = input.witness.w_l();
-        let w_2 = input.witness.w_r();
-        let w_3 = input.witness.w_o();
-        let w_1_shift = input.shifted_witness.w_l();
-        let w_2_shift = input.shifted_witness.w_r();
-        let w_3_shift = input.shifted_witness.w_o();
-        let table_index = input.precomputed.q_o();
-        let negative_column_1_step_size = input.precomputed.q_r();
-        let negative_column_2_step_size = input.precomputed.q_m();
-        let negative_column_3_step_size = input.precomputed.q_c();
-
-        // The wire values for lookup gates are accumulators structured in such a way that the differences w_i -
-        // step_size*w_i_shift result in values present in column i of a corresponding table. See the documentation in
-        // method get_lookup_accumulators() in  for a detailed explanation.
-        let mut derived_table_entry_1 =
-            T::mul_with_public_many(negative_column_1_step_size, w_1_shift);
-        T::add_assign_many(&mut derived_table_entry_1, w_1);
-        T::add_assign_public_many(&mut derived_table_entry_1, &gamma.evaluations, id);
-
-        let mut derived_table_entry_2 =
-            T::mul_with_public_many(negative_column_2_step_size, w_2_shift);
-        T::add_assign_many(&mut derived_table_entry_2, w_2);
-
-        let mut derived_table_entry_3 =
-            T::mul_with_public_many(negative_column_3_step_size, w_3_shift);
-        T::add_assign_many(&mut derived_table_entry_3, w_3);
-
-        // (w_1 + \gamma q_2*w_1_shift) + η(w_2 + q_m*w_2_shift) + η₂(w_3 + q_c*w_3_shift) + η₃q_index.
-        // deg 2 or 3
-        T::mul_assign_with_public_many(&mut derived_table_entry_2, &eta_1.evaluations);
-        T::mul_assign_with_public_many(&mut derived_table_entry_3, &eta_2.evaluations);
-
-        T::add_assign_many(&mut derived_table_entry_1, &derived_table_entry_2);
-        T::add_assign_many(&mut derived_table_entry_1, &derived_table_entry_3);
-        // 0xThemis TODO we dont need to collect this
-        let table_index = table_index
-            .iter()
-            .zip(&eta_3.evaluations)
-            .map(|(x, y)| *x * *y)
-            .collect_vec();
-        T::add_assign_public_many(&mut derived_table_entry_1, &table_index, id);
-        derived_table_entry_1
-    }
-
-    fn compute_read_term_verifier<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCProverFlavour>(
-        id: <T::State as MpcState>::PartyID,
-        input: &AllEntities<T::ArithmeticShare, P::ScalarField, L>,
-        relation_parameters: &RelationParameters<P::ScalarField>,
-    ) -> T::ArithmeticShare {
-        let gamma = &relation_parameters.gamma;
-        let eta_1 = &relation_parameters.eta_1;
-        let eta_2 = &relation_parameters.eta_2;
-        let eta_3 = &relation_parameters.eta_3;
-        let w_1 = input.witness.w_l().to_owned();
-        let w_2 = input.witness.w_r().to_owned();
-        let w_3 = input.witness.w_o().to_owned();
-        let w_1_shift = input.shifted_witness.w_l().to_owned();
-        let w_2_shift = input.shifted_witness.w_r().to_owned();
-        let w_3_shift = input.shifted_witness.w_o().to_owned();
-        let table_index = input.precomputed.q_o().to_owned();
-        let negative_column_1_step_size = input.precomputed.q_r().to_owned();
-        let negative_column_2_step_size = input.precomputed.q_m().to_owned();
-        let negative_column_3_step_size = input.precomputed.q_c().to_owned();
-
-        // The wire values for lookup gates are accumulators structured in such a way that the differences w_i -
-        // step_size*w_i_shift result in values present in column i of a corresponding table. See the documentation in
-        // method get_lookup_accumulators() in  for a detailed explanation.
-        let mut derived_table_entry_1 = T::mul_with_public(negative_column_1_step_size, w_1_shift);
-        T::add_assign(&mut derived_table_entry_1, w_1);
-        T::add_assign_public(&mut derived_table_entry_1, *gamma, id);
-
-        let mut derived_table_entry_2 = T::mul_with_public(negative_column_2_step_size, w_2_shift);
-        T::add_assign(&mut derived_table_entry_2, w_2);
-
-        let mut derived_table_entry_3 = T::mul_with_public(negative_column_3_step_size, w_3_shift);
-        T::add_assign(&mut derived_table_entry_3, w_3);
-
-        // (w_1 + \gamma q_2*w_1_shift) + η(w_2 + q_m*w_2_shift) + η₂(w_3 + q_c*w_3_shift) + η₃q_index.
-        // deg 2 or 3
-        T::mul_assign_with_public(&mut derived_table_entry_2, *eta_1);
-        T::mul_assign_with_public(&mut derived_table_entry_3, *eta_2);
-
-        T::add_assign(&mut derived_table_entry_1, derived_table_entry_2);
-        T::add_assign(&mut derived_table_entry_1, derived_table_entry_3);
-        // 0xThemis TODO we dont need to collect this
-        let table_index = table_index * *eta_3;
-        T::add_assign_public(&mut derived_table_entry_1, table_index, id);
-        derived_table_entry_1
-    }
-
     // Compute table_1 + gamma + table_2 * eta + table_3 * eta_2 + table_4 * eta_3
-    fn compute_write_term<T: NoirUltraHonkProver<P>, P: CurveGroup, L: MPCProverFlavour>(
-        input: &ProverUnivariatesBatch<T, P, L>,
+    fn compute_write_term<T: NoirUltraHonkProver<P>, P: CurveGroup>(
+        input: &ProverUnivariatesBatch<T, P>,
         relation_parameters: &RelationParameters<P::ScalarField>,
     ) -> Vec<P::ScalarField> {
         let gamma = &relation_parameters.gamma;
@@ -355,74 +158,20 @@ impl LogDerivLookupRelation {
 
         result
     }
-
-    fn compute_write_term_with_extended_parameters<
-        T: NoirUltraHonkProver<P>,
-        P: CurveGroup,
-        L: MPCProverFlavour,
-        const SIZE: usize,
-    >(
-        input: &ProverUnivariatesBatch<T, P, L>,
-        relation_parameters: &RelationParameters<Univariate<P::ScalarField, SIZE>>,
-    ) -> Vec<P::ScalarField> {
-        let gamma = &relation_parameters.gamma;
-        let eta_1 = &relation_parameters.eta_1;
-        let eta_2 = &relation_parameters.eta_2;
-        let eta_3 = &relation_parameters.eta_3;
-
-        let table_1 = Univariate::from(input.precomputed.table_1().to_owned());
-        let table_2 = Univariate::from(input.precomputed.table_2().to_owned());
-        let table_3 = Univariate::from(input.precomputed.table_3().to_owned());
-        let table_4 = Univariate::from(input.precomputed.table_4().to_owned());
-
-        (table_1.to_owned()
-            + gamma
-            + table_2.to_owned() * eta_1
-            + table_3.to_owned() * eta_2
-            + table_4.to_owned() * eta_3)
-            .evaluations
-            .to_vec()
-    }
-
-    fn compute_write_term_verifier<
-        T: NoirUltraHonkProver<P>,
-        P: CurveGroup,
-        L: MPCProverFlavour,
-    >(
-        input: &AllEntities<T::ArithmeticShare, P::ScalarField, L>,
-        relation_parameters: &RelationParameters<P::ScalarField>,
-    ) -> P::ScalarField {
-        let gamma = &relation_parameters.gamma;
-        let eta_1 = &relation_parameters.eta_1;
-        let eta_2 = &relation_parameters.eta_2;
-        let eta_3 = &relation_parameters.eta_3;
-
-        let table_1 = input.precomputed.table_1();
-        let table_2 = input.precomputed.table_2();
-        let table_3 = input.precomputed.table_3();
-        let table_4 = input.precomputed.table_4();
-
-        table_1.to_owned()
-            + gamma
-            + table_2.to_owned() * eta_1
-            + table_3.to_owned() * eta_2
-            + table_4.to_owned() * eta_3
-    }
 }
 
-impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverFlavour>
-    Relation<T, P, L> for LogDerivLookupRelation
+impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P>
+    for LogDerivLookupRelation
 {
-    type Acc = LogDerivLookupRelationAccType<T, P>;
-    type VerifyAcc = LogDerivLookupRelationEvals<T, P>;
+    type Acc = LogDerivLookupRelationAcc<T, P>;
 
-    fn can_skip(_: &super::ProverUnivariates<T, P, L>) -> bool {
+    fn can_skip(_: &super::ProverUnivariates<T, P>) -> bool {
         false
     }
 
-    fn add_entities(
-        entity: &super::ProverUnivariates<T, P, L>,
-        batch: &mut ProverUnivariatesBatch<T, P, L>,
+    fn add_entites(
+        entity: &super::ProverUnivariates<T, P>,
+        batch: &mut ProverUnivariatesBatch<T, P>,
     ) {
         batch.add_w_l(entity);
         batch.add_w_r(entity);
@@ -484,13 +233,13 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
      * @note This relation utilizes functionality in the log-derivative library to compute the polynomial of inverses
      *
      */
-    fn accumulate<N: Network, const SIZE: usize>(
+    fn accumulate<N: Network>(
         net: &N,
         state: &mut T::State,
         univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariatesBatch<T, P, L>,
-        relation_parameters: &RelationParameters<P::ScalarField>,
-        scaling_factors: &[P::ScalarField],
+        input: &ProverUnivariatesBatch<T, P>,
+        relation_parameters: &RelationParameters<<P>::ScalarField>,
+        scaling_factors: &[<P>::ScalarField],
     ) -> HonkProofResult<()> {
         let inverses = input.witness.lookup_inverses(); // Degree 1
         let read_counts = input.witness.lookup_read_counts(); // Degree 1
@@ -509,13 +258,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         T::sub_assign_many(&mut tmp, &inverse_exists);
         T::mul_assign_with_public_many(&mut tmp, scaling_factors);
 
-        fold_type_accumulator!(
-            LogDerivLookupRelationAccType,
-            univariate_accumulator,
-            r0,
-            tmp,
-            SIZE
-        );
+        fold_accumulator!(univariate_accumulator.r0, tmp);
 
         ///////////////////////////////////////////////////////////////////////
 
@@ -527,115 +270,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         let mut tmp = T::mul_with_public_many(read_selector, &read_inverse);
         T::sub_assign_many(&mut tmp, &mul);
 
-        fold_type_accumulator!(
-            LogDerivLookupRelationAccType,
-            univariate_accumulator,
-            r1,
-            tmp,
-            SIZE
-        );
-
-        Ok(())
-    }
-
-    fn accumulate_with_extended_parameters<N: Network, const SIZE: usize>(
-        net: &N,
-        state: &mut T::State,
-        univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariatesBatch<T, P, L>,
-        relation_parameters: &RelationParameters<Univariate<P::ScalarField, SIZE>>,
-        scaling_factor: &P::ScalarField,
-    ) -> HonkProofResult<()> {
-        let inverses = input.witness.lookup_inverses(); // Degree 1
-        let read_counts = input.witness.lookup_read_counts(); // Degree 1
-        let read_selector = input.precomputed.q_lookup(); // Degree 1
-
-        let inverse_exists = Self::compute_inverse_exists(state.id(), input); // Degree 2
-        let read_term = Self::compute_read_term_with_extended_parameters(
-            state.id(),
-            input,
-            relation_parameters,
-        ); // Degree 2 (3)
-        let write_term =
-            Self::compute_write_term_with_extended_parameters(input, relation_parameters); // Degree 1 (2)
-        let write_inverse = T::mul_many(&read_term, inverses, net, state)?;
-        let read_inverse = T::mul_with_public_many(&write_term, inverses);
-
-        // Establish the correctness of the polynomial of inverses I. Note: inverses is computed so that the value is 0
-        // if !inverse_exists.
-        // Degrees:                     2 (3)       1 (2)        1              1
-        let mut tmp = T::mul_with_public_many(&write_term, &write_inverse);
-        T::sub_assign_many(&mut tmp, &inverse_exists);
-        T::scale_many_in_place(&mut tmp, *scaling_factor);
-
-        fold_type_accumulator!(
-            LogDerivLookupRelationAccType,
-            univariate_accumulator,
-            r0,
-            tmp,
-            SIZE
-        );
-
-        ///////////////////////////////////////////////////////////////////////
-
-        // Establish validity of the read. Note: no scaling factor here since this constraint is 'linearly dependent,
-        // i.e. enforced across the entire trace, not on a per-row basis.
-        // Degrees:                       1            2 (3)            1            3 (4)
-        //
-        let mul = T::mul_many(&write_inverse, read_counts, net, state)?;
-        let mut tmp = T::mul_with_public_many(read_selector, &read_inverse);
-        T::sub_assign_many(&mut tmp, &mul);
-
-        fold_type_accumulator!(
-            LogDerivLookupRelationAccType,
-            univariate_accumulator,
-            r1,
-            tmp,
-            SIZE
-        );
-
-        Ok(())
-    }
-
-    fn accumulate_evaluations<N: Network>(
-        net: &N,
-        state: &mut T::State,
-        accumulator: &mut Self::VerifyAcc,
-        input: &AllEntities<T::ArithmeticShare, P::ScalarField, L>,
-        relation_parameters: &RelationParameters<P::ScalarField>,
-        scaling_factor: &P::ScalarField,
-    ) -> HonkProofResult<()> {
-        let inverses = input.witness.lookup_inverses().to_owned();
-        let read_counts = input.witness.lookup_read_counts().to_owned();
-        let read_selector = input.precomputed.q_lookup().to_owned();
-
-        let inverse_exists = Self::compute_inverse_exists_verifier::<T, P, L>(state.id(), input);
-        let read_term =
-            Self::compute_read_term_verifier::<T, P, L>(state.id(), input, relation_parameters);
-        let write_term = Self::compute_write_term_verifier::<T, P, L>(input, relation_parameters);
-        let write_inverse = T::mul(read_term, inverses, net, state)?;
-        let read_inverse = T::mul_with_public(write_term, inverses);
-
-        // Establish the correctness of the polynomial of inverses I. Note: inverses is computed so that the value is 0
-        // if !inverse_exists.
-        // Degrees:                     2 (3)       1 (2)        1              1
-        let mut tmp = T::mul_with_public(write_term, write_inverse);
-        T::sub_assign(&mut tmp, inverse_exists);
-        T::mul_assign_with_public(&mut tmp, *scaling_factor);
-
-        T::add_assign(&mut accumulator.r0, tmp);
-
-        ///////////////////////////////////////////////////////////////////////
-
-        // Establish validity of the read. Note: no scaling factor here since this constraint is 'linearly dependent,
-        // i.e. enforced across the entire trace, not on a per-row basis.
-        // Degrees:                       1            2 (3)            1            3 (4)
-        //
-        let mul = T::mul(write_inverse, read_counts, net, state)?;
-        let mut tmp = T::mul_with_public(read_selector, read_inverse);
-        T::sub_assign(&mut tmp, mul);
-
-        T::add_assign(&mut accumulator.r1, tmp);
+        fold_accumulator!(univariate_accumulator.r1, tmp);
 
         Ok(())
     }

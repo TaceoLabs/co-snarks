@@ -1,17 +1,9 @@
 use super::Relation;
-use crate::decider::types::ProverUnivariatesSized;
-use crate::plain_prover_flavour::UnivariateTrait;
-use crate::{
-    decider::{
-        types::{ClaimedEvaluations, RelationParameters},
-        univariate::Univariate,
-    },
-    plain_prover_flavour::PlainProverFlavour,
+use crate::decider::{
+    types::{ClaimedEvaluations, ProverUnivariates, RelationParameters},
+    univariate::Univariate,
 };
 use ark_ff::{PrimeField, Zero};
-use co_builder::polynomials::polynomial_flavours::{
-    PrecomputedEntitiesFlavour, ShiftedWitnessEntitiesFlavour, WitnessEntitiesFlavour,
-};
 use mpc_core::gadgets::poseidon2::POSEIDON2_BN254_T4_PARAMS;
 use num_bigint::BigUint;
 
@@ -66,24 +58,6 @@ impl<F: PrimeField> Poseidon2InternalRelationAcc<F> {
             true,
         );
     }
-
-    pub(crate) fn extend_and_batch_univariates_with_distinct_challenges<const SIZE: usize>(
-        &self,
-        result: &mut Univariate<F, SIZE>,
-        running_challenge: &[Univariate<F, SIZE>],
-    ) {
-        self.r0
-            .extend_and_batch_univariates(result, &running_challenge[0], &F::ONE, true);
-
-        self.r1
-            .extend_and_batch_univariates(result, &running_challenge[1], &F::ONE, true);
-
-        self.r2
-            .extend_and_batch_univariates(result, &running_challenge[2], &F::ONE, true);
-
-        self.r3
-            .extend_and_batch_univariates(result, &running_challenge[3], &F::ONE, true);
-    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -103,20 +77,6 @@ impl<F: PrimeField> Poseidon2InternalRelationEvals<F> {
         *result += self.r2 * running_challenge[2];
         *result += self.r3 * running_challenge[3];
     }
-
-    pub(crate) fn scale_by_challenge_and_accumulate(
-        &self,
-        linearly_independent_contribution: &mut F,
-        _linearly_dependent_contribution: &mut F,
-        running_challenge: &[F],
-    ) {
-        assert!(running_challenge.len() == Poseidon2InternalRelation::NUM_RELATIONS);
-
-        *linearly_independent_contribution += self.r0 * running_challenge[0]
-            + self.r1 * running_challenge[1]
-            + self.r2 * running_challenge[2]
-            + self.r3 * running_challenge[3];
-    }
 }
 
 pub(crate) struct Poseidon2InternalRelation {}
@@ -125,14 +85,14 @@ impl Poseidon2InternalRelation {
     pub(crate) const NUM_RELATIONS: usize = 4;
 }
 
-impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for Poseidon2InternalRelation {
+impl<F: PrimeField> Relation<F> for Poseidon2InternalRelation {
     type Acc = Poseidon2InternalRelationAcc<F>;
     type VerifyAcc = Poseidon2InternalRelationEvals<F>;
 
     const SKIPPABLE: bool = true;
 
-    fn skip<const SIZE: usize>(input: &ProverUnivariatesSized<F, L, SIZE>) -> bool {
-        <Self as Relation<F, L>>::check_skippable();
+    fn skip(input: &ProverUnivariates<F>) -> bool {
+        <Self as Relation<F>>::check_skippable();
         input.precomputed.q_poseidon2_internal().is_zero()
     }
 
@@ -155,9 +115,9 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for Poseidon2InternalR
      * @param parameters contains beta, gamma, and public_input_delta, ....
      * @param scaling_factor optional term to scale the evaluation before adding to evals.
      */
-    fn accumulate<const SIZE: usize>(
+    fn accumulate(
         univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariatesSized<F, L, SIZE>,
+        input: &ProverUnivariates<F>,
         _relation_parameters: &RelationParameters<F>,
         scaling_factor: &F,
     ) {
@@ -239,23 +199,9 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for Poseidon2InternalR
         }
     }
 
-    fn accumulate_with_extended_parameters<const SIZE: usize>(
-        univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariatesSized<F, L, SIZE>,
-        _relation_parameters: &RelationParameters<Univariate<F, SIZE>>,
-        scaling_factor: &F,
-    ) {
-        Self::accumulate::<SIZE>(
-            univariate_accumulator,
-            input,
-            &RelationParameters::default(),
-            scaling_factor,
-        );
-    }
-
     fn verify_accumulate(
         univariate_accumulator: &mut Self::VerifyAcc,
-        input: &ClaimedEvaluations<F, L>,
+        input: &ClaimedEvaluations<F>,
         _relation_parameters: &RelationParameters<F>,
         scaling_factor: &F,
     ) {

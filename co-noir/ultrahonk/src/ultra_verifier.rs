@@ -1,38 +1,34 @@
+use ark_ec::pairing::Pairing;
+use co_builder::prelude::VerifyingKey;
+use co_noir_common::{
+    honk_curve::HonkCurve,
+    honk_proof::TranscriptFieldType,
+    transcript::{Transcript, TranscriptHasher},
+    types::ZeroKnowledge,
+};
+use noir_types::HonkProof;
+
 use crate::{
     decider::{decider_verifier::DeciderVerifier, types::VerifierMemory},
     oink::oink_verifier::OinkVerifier,
-    plain_prover_flavour::PlainProverFlavour,
     ultra_prover::UltraHonk,
 };
-use ark_ec::pairing::Pairing;
-use co_builder::prelude::VerifyingKey;
-use co_noir_common::honk_proof::TranscriptFieldType;
-use co_noir_common::transcript::{Transcript, TranscriptHasher};
-use co_noir_common::types::ZeroKnowledge;
-use co_noir_common::{honk_curve::HonkCurve, mpc::plain::PlainUltraHonkDriver};
-use noir_types::HonkProof;
 
 pub(crate) type HonkVerifyResult<T> = std::result::Result<T, eyre::Report>;
 
-impl<
-    C: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, C>,
-    L: PlainProverFlavour,
-> UltraHonk<C, H, L>
-{
+impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> UltraHonk<C, H> {
     pub fn verify<P: Pairing<G1 = C, G1Affine = C::Affine>>(
         honk_proof: HonkProof<TranscriptFieldType>,
         public_inputs: &[TranscriptFieldType],
-        verifying_key: &VerifyingKey<P, L>,
+        verifying_key: &VerifyingKey<P>,
         has_zk: ZeroKnowledge,
     ) -> HonkVerifyResult<bool> {
         tracing::trace!("UltraHonk verification");
         let honk_proof = honk_proof.insert_public_inputs(public_inputs.to_vec());
 
-        let mut transcript =
-            Transcript::<TranscriptFieldType, H, PlainUltraHonkDriver, C>::new_verifier(honk_proof);
+        let mut transcript = Transcript::<TranscriptFieldType, H>::new_verifier(honk_proof);
 
-        let oink_verifier = OinkVerifier::<C, H, _>::default();
+        let oink_verifier = OinkVerifier::default();
         let oink_result = oink_verifier.verify(verifying_key, &mut transcript)?;
 
         let circuit_size = verifying_key.circuit_size;

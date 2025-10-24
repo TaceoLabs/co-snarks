@@ -1,37 +1,24 @@
-use crate::{
-    CONST_PROOF_SIZE_LOG_N,
-    decider::{decider_prover::Decider, types::ProverMemory},
-    oink::oink_prover::Oink,
-    plain_prover_flavour::PlainProverFlavour,
+use co_builder::prelude::{PAIRING_POINT_ACCUMULATOR_SIZE, ProvingKey};
+use co_noir_common::{
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProofResult, TranscriptFieldType},
+    transcript::{Transcript, TranscriptHasher},
+    types::ZeroKnowledge,
 };
-use co_builder::{
-    prelude::{PAIRING_POINT_ACCUMULATOR_SIZE, ProvingKey},
-    prover_flavour::Flavour,
-};
-use co_noir_common::honk_proof::HonkProofResult;
-use co_noir_common::honk_proof::TranscriptFieldType;
-use co_noir_common::transcript::{Transcript, TranscriptHasher};
-use co_noir_common::types::ZeroKnowledge;
-use co_noir_common::{honk_curve::HonkCurve, mpc::plain::PlainUltraHonkDriver};
 use noir_types::HonkProof;
 use std::marker::PhantomData;
 
-pub struct UltraHonk<
-    P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, P>,
-    L: PlainProverFlavour,
-> {
-    phantom_data: PhantomData<(P, H, L)>,
+use crate::decider::decider_prover::Decider;
+use crate::{CONST_PROOF_SIZE_LOG_N, decider::types::ProverMemory, oink::oink_prover::Oink};
+
+pub struct UltraHonk<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> {
+    phantom_data: PhantomData<P>,
+    phantom_hasher: PhantomData<H>,
 }
 
-impl<
-    P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, P>,
-    L: PlainProverFlavour,
-> UltraHonk<P, H, L>
-{
+impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> UltraHonk<P, H> {
     pub(crate) fn generate_gate_challenges(
-        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
     ) -> Vec<P::ScalarField> {
         tracing::trace!("generate gate challenges");
 
@@ -45,12 +32,12 @@ impl<
     }
 
     pub fn prove(
-        mut proving_key: ProvingKey<P, L>,
+        mut proving_key: ProvingKey<P>,
         has_zk: ZeroKnowledge,
     ) -> HonkProofResult<(HonkProof<TranscriptFieldType>, Vec<TranscriptFieldType>)> {
         tracing::trace!("UltraHonk prove");
 
-        let mut transcript = Transcript::<TranscriptFieldType, H, PlainUltraHonkDriver, P>::new();
+        let mut transcript = Transcript::<TranscriptFieldType, H>::new();
 
         let oink = Oink::new(has_zk);
         let oink_result = oink.prove(&mut proving_key, &mut transcript)?;
@@ -62,11 +49,7 @@ impl<
             ProverMemory::from_memory_and_polynomials(oink_result, proving_key.polynomials);
         memory.gate_challenges = Self::generate_gate_challenges(&mut transcript);
 
-        let num_public_inputs = if L::FLAVOUR == Flavour::Ultra {
-            proving_key.num_public_inputs - PAIRING_POINT_ACCUMULATOR_SIZE
-        } else {
-            proving_key.num_public_inputs
-        };
+        let num_public_inputs = proving_key.num_public_inputs - PAIRING_POINT_ACCUMULATOR_SIZE;
         let decider = Decider::new(memory, has_zk);
         let proof = decider.prove(cicruit_size, &crs, transcript)?;
         Ok(proof.separate_proof_and_public_inputs(num_public_inputs as usize))

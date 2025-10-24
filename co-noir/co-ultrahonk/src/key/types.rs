@@ -1,23 +1,16 @@
 use crate::key::proving_key::ProvingKey;
 use ark_ec::CurveGroup;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use co_builder::generic_builder::GenericBuilder;
-use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
-use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
-use co_builder::prelude::NUM_SELECTORS_ULTRA;
-use co_builder::{
-    flavours::ultra_flavour::UltraFlavour,
-    prelude::{
-        ActiveRegionData, CycleNode, CyclicPermutation, GenericUltraCircuitBuilder, NUM_WIRES,
-    },
+use co_builder::prelude::{
+    ActiveRegionData, CycleNode, CyclicPermutation, GenericUltraCircuitBuilder, NUM_SELECTORS,
+    NUM_WIRES,
 };
-use co_noir_common::mpc::NoirUltraHonkProver;
-use co_noir_common::polynomials::polynomial::Polynomial;
+use co_noir_common::{mpc::NoirUltraHonkProver, polynomials::polynomial::Polynomial};
 use mpc_core::MpcState;
 
 pub(crate) struct TraceData<'a, T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) wires: [&'a mut Polynomial<T::ArithmeticShare>; NUM_WIRES],
-    pub(crate) selectors: [&'a mut Polynomial<P::ScalarField>; NUM_SELECTORS_ULTRA],
+    pub(crate) selectors: [&'a mut Polynomial<P::ScalarField>; NUM_SELECTORS],
     pub(crate) copy_cycles: Vec<CyclicPermutation>,
     pub(crate) ram_rom_offset: u32,
     pub(crate) pub_inputs_offset: u32,
@@ -28,7 +21,7 @@ impl<'a, T: NoirUltraHonkProver<P>, P: CurveGroup> TraceData<'a, T, P> {
         U: NoirWitnessExtensionProtocol<P::ScalarField, ArithmeticShare = T::ArithmeticShare>,
     >(
         builder: &GenericUltraCircuitBuilder<P, U>,
-        proving_key: &'a mut ProvingKey<T, P, UltraFlavour>,
+        proving_key: &'a mut ProvingKey<T, P>,
     ) -> Self {
         let mut iter = proving_key.polynomials.witness.get_wires_mut().iter_mut();
         let wires = [

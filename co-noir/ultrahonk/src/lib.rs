@@ -1,8 +1,7 @@
 #![warn(clippy::iter_over_hash_type)]
-pub mod decider;
-pub mod oink;
-pub(crate) mod plain_flavours;
-pub mod plain_prover_flavour;
+
+pub(crate) mod decider;
+pub(crate) mod oink;
 pub mod prelude;
 pub(crate) mod types;
 pub(crate) mod ultra_prover;
@@ -10,9 +9,9 @@ pub(crate) mod ultra_verifier;
 
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
-use co_noir_common::crs::ProverCrs;
-use co_noir_common::honk_proof::HonkProofResult;
+use co_noir_common::{crs::ProverCrs, honk_proof::HonkProofResult};
 
+pub const NUM_ALPHAS: usize = decider::relations::NUM_SUBRELATIONS - 1;
 /// The log of the max circuit size assumed in order to achieve constant sized Honk proofs
 /// AZTEC TODO(<https://github.com/AztecProtocol/barretenberg/issues/1046>): Remove the need for const sized proofs
 pub const CONST_PROOF_SIZE_LOG_N: usize = 28;
@@ -43,7 +42,7 @@ impl Utils {
         co_noir_common::utils::Utils::get_msb64(inp)
     }
 
-    pub fn batch_invert<F: PrimeField>(coeffs: &mut [F]) {
+    fn batch_invert<F: PrimeField>(coeffs: &mut [F]) {
         co_noir_common::utils::Utils::batch_invert(coeffs);
     }
 

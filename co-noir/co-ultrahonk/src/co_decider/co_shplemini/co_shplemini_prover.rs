@@ -1,24 +1,24 @@
-use crate::mpc_prover_flavour::MPCProverFlavour;
 use crate::{
-    co_decider::{co_decider_prover::CoDecider, co_sumcheck::SumcheckOutput},
+    co_decider::{
+        co_decider_prover::CoDecider,
+        co_shplemini::types::{PolyF, PolyG},
+        co_sumcheck::SumcheckOutput,
+    },
     types::AllEntities,
 };
 use ark_ec::AffineRepr;
 use ark_ff::{Field, One, Zero};
-use co_builder::polynomials::polynomial_flavours::PolyGFlavour;
-use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
-use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
-use co_noir_common::CoUtils;
-use co_noir_common::co_shplemini::{OpeningPair, ShpleminiOpeningClaim};
-use co_noir_common::crs::ProverCrs;
-use co_noir_common::honk_curve::HonkCurve;
-use co_noir_common::honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType};
-use co_noir_common::mpc::NoirUltraHonkProver;
-use co_noir_common::polynomials::polynomial::Polynomial;
-use co_noir_common::polynomials::shared_polynomial::SharedPolynomial;
-use co_noir_common::transcript::TranscriptHasher;
-use co_noir_common::transcript_mpc::TranscriptRef;
-use co_noir_common::types::ZeroKnowledge;
+use co_noir_common::{
+    CoUtils,
+    co_shplemini::{OpeningPair, ShpleminiOpeningClaim},
+    crs::ProverCrs,
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
+    mpc::NoirUltraHonkProver,
+    polynomials::{polynomial::Polynomial, shared_polynomial::SharedPolynomial},
+    transcript::{Transcript, TranscriptHasher},
+    types::ZeroKnowledge,
+};
 use itertools::izip;
 use mpc_core::MpcState as _;
 use mpc_net::Network;
@@ -27,37 +27,37 @@ use ultrahonk::{NUM_INTERLEAVING_CLAIMS, NUM_SMALL_IPA_EVALUATIONS, Utils};
 impl<
     T: NoirUltraHonkProver<P>,
     P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType, T, P>,
+    H: TranscriptHasher<TranscriptFieldType>,
     N: Network,
-    L: MPCProverFlavour,
-> CoDecider<'_, T, P, H, N, L>
+> CoDecider<'_, T, P, H, N>
 {
-    fn get_g_polynomials<'a>(
-        polys: &'a AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>, L>,
-    ) -> L::PolyG<'a, Vec<T::ArithmeticShare>> {
-        L::PolyG::from_slice(polys.witness.to_be_shifted())
+    fn get_f_polynomials(
+        polys: &'_ AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>>,
+    ) -> PolyF<'_, Vec<T::ArithmeticShare>, Vec<P::ScalarField>> {
+        PolyF {
+            precomputed: &polys.precomputed,
+            witness: &polys.witness,
+        }
     }
 
-    #[expect(clippy::type_complexity)]
+    fn get_g_polynomials(
+        polys: &'_ AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>>,
+    ) -> PolyG<'_, Vec<T::ArithmeticShare>> {
+        PolyG {
+            wires: polys.witness.to_be_shifted().try_into().unwrap(),
+        }
+    }
+
     fn compute_batched_polys(
         &mut self,
-        transcript: &mut TranscriptRef<TranscriptFieldType, T, P, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
         multilinear_challenge: &[P::ScalarField],
         log_n: usize,
         commitment_key: &ProverCrs<P>,
         has_zk: ZeroKnowledge,
-    ) -> HonkProofResult<(
-        SharedPolynomial<T, P>,
-        SharedPolynomial<T, P>,
-        Option<SharedPolynomial<T, P>>,
-        Option<Vec<SharedPolynomial<T, P>>>,
-    )> {
-        let f_polynomials_precomputed = self.memory.polys.precomputed.iter();
-        let f_polynomials_witness_unshifted = self.memory.polys.witness.get_unshifted();
+    ) -> HonkProofResult<(SharedPolynomial<T, P>, SharedPolynomial<T, P>)> {
+        let f_polynomials = Self::get_f_polynomials(&self.memory.polys);
         let g_polynomials = Self::get_g_polynomials(&self.memory.polys);
-        let interleaved_polynomials = self.memory.polys.witness.get_interleaved();
-        let groups_to_be_interleaved = self.memory.polys.witness.get_groups_to_be_interleaved();
-
         let n = 1 << log_n;
         let mut batched_unshifted = SharedPolynomial::new_zero(n); // batched unshifted polynomials
 
@@ -71,44 +71,24 @@ impl<
             // hiding polynomial as multilinear in log_n variables
             let masking_poly_eval_shared =
                 batched_unshifted.evaluate_mle(&multilinear_challenge[0..log_n]);
-
-            match transcript {
-                TranscriptRef::Plain(transcript) => {
-                    let (masking_poly_comm, masking_poly_eval) = T::open_point_and_field(
-                        masking_poly_comm_shared,
-                        masking_poly_eval_shared,
-                        self.net,
-                        self.state,
-                    )?;
-                    transcript.send_point_to_verifier::<P>(
-                        "Gemini:masking_poly_comm".to_string(),
-                        masking_poly_comm.into(),
-                    );
-                    transcript.send_fr_to_verifier::<P>(
-                        "Gemini:masking_poly_eval".to_string(),
-                        masking_poly_eval,
-                    );
-                }
-                TranscriptRef::Rep3(transcript_rep3) => {
-                    transcript_rep3.send_point_to_verifier_shared(
-                        "Gemini:masking_poly_comm".to_string(),
-                        masking_poly_comm_shared,
-                    );
-                    transcript_rep3.send_fr_to_verifier_shared(
-                        "Gemini:masking_poly_eval".to_string(),
-                        masking_poly_eval_shared,
-                    );
-                }
-            }
+            let (masking_poly_comm, masking_poly_eval) = T::open_point_and_field(
+                masking_poly_comm_shared,
+                masking_poly_eval_shared,
+                self.net,
+                self.state,
+            )?;
+            transcript.send_point_to_verifier::<P>(
+                "Gemini:masking_poly_comm".to_string(),
+                masking_poly_comm.into(),
+            );
+            transcript.send_fr_to_verifier::<P>(
+                "Gemini:masking_poly_eval".to_string(),
+                masking_poly_eval,
+            );
         }
 
         // Generate batching challenge \rho and powers 1,...,\rho^{m-1}
-        let rho = match transcript {
-            TranscriptRef::Plain(transcript) => transcript.get_challenge::<P>("rho".to_string()),
-            TranscriptRef::Rep3(transcript_rep3) => {
-                transcript_rep3.get_challenge("rho".to_string(), self.net, self.state)?
-            }
-        };
+        let rho = transcript.get_challenge::<P>("rho".to_string());
 
         // Compute batching of unshifted polynomials f_i and to-be-shifted polynomials g_i:
         // f_batched = sum_{i=0}^{m-1}\rho^i*f_i and g_batched = sum_{i=0}^{l-1}\rho^{m+i}*g_i,
@@ -126,7 +106,7 @@ impl<
 
         if has_zk == ZeroKnowledge::Yes {
             // Precomputed part of batched_unshifted
-            for f_poly in f_polynomials_precomputed {
+            for f_poly in f_polynomials.precomputed.iter() {
                 batched_unshifted.add_scaled_slice_public(self.state.id(), f_poly, &running_scalar);
                 running_scalar *= rho;
             }
@@ -134,7 +114,7 @@ impl<
             let mut batched_unshifted_plain = Polynomial::new_zero(n); // batched unshifted polynomials
 
             // Precomputed part of batched_unshifted
-            for f_poly in f_polynomials_precomputed {
+            for f_poly in f_polynomials.precomputed.iter() {
                 batched_unshifted_plain.add_scaled_slice(f_poly, &running_scalar);
                 running_scalar *= rho;
             }
@@ -143,7 +123,7 @@ impl<
             batched_unshifted =
                 SharedPolynomial::<T, P>::promote_poly(self.state.id(), batched_unshifted_plain);
         }
-        for f_poly in f_polynomials_witness_unshifted {
+        for f_poly in f_polynomials.witness.iter() {
             batched_unshifted.add_scaled_slice(f_poly, &running_scalar);
             running_scalar *= rho;
         }
@@ -156,34 +136,7 @@ impl<
             running_scalar *= rho;
         }
 
-        if let Some(interleaved) = interleaved_polynomials
-            && let Some(groups) = groups_to_be_interleaved
-        {
-            let mut batched_interleaved = SharedPolynomial::new_zero(n); // batched interleaved polynomials
-
-            let mut batched_group: Vec<SharedPolynomial<T, P>> =
-                Vec::with_capacity(groups[0].len());
-            for _ in 0..groups[0].len() {
-                batched_group.push(SharedPolynomial::new_zero(n));
-            }
-
-            for (inter_poly, group_polys) in interleaved.iter().zip(groups.iter()) {
-                batched_interleaved.add_scaled_slice(inter_poly, &running_scalar);
-                for (j, grp_poly) in group_polys.iter().enumerate() {
-                    batched_group[j].add_scaled_slice(grp_poly, &running_scalar);
-                }
-                running_scalar *= rho;
-            }
-
-            Ok((
-                batched_unshifted,
-                batched_to_be_shifted,
-                Some(batched_interleaved),
-                Some(batched_group),
-            ))
-        } else {
-            Ok((batched_unshifted, batched_to_be_shifted, None, None))
-        }
+        Ok((batched_unshifted, batched_to_be_shifted))
     }
 
     // /**
@@ -228,74 +181,46 @@ impl<
         log_n: usize,
         commitment_key: &ProverCrs<P>,
         has_zk: ZeroKnowledge,
-        transcript: &mut TranscriptRef<TranscriptFieldType, T, P, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
     ) -> HonkProofResult<Vec<ShpleminiOpeningClaim<T, P>>> {
         tracing::trace!("Gemini prove");
         // To achieve fixed proof size in Ultra and Mega, the multilinear opening challenge is be padded to a fixed size.
         let virtual_log_n: usize = multilinear_challenge.len();
         // Compute batched polynomials
-        let (batched_unshifted, batched_to_be_shifted, interleaved, groups) = self
-            .compute_batched_polys(
-                transcript,
-                multilinear_challenge,
-                log_n,
-                commitment_key,
-                has_zk,
-            )?;
+        let (batched_unshifted, batched_to_be_shifted) = self.compute_batched_polys(
+            transcript,
+            multilinear_challenge,
+            log_n,
+            commitment_key,
+            has_zk,
+        )?;
 
         // We do not have any concatenated polynomials in UltraHonk
 
         // Construct the batched polynomial A₀(X) = F(X) + G↺(X) = F(X) + G(X)/X
         let mut a_0 = batched_unshifted.to_owned();
         a_0.add_assign_slice(batched_to_be_shifted.shifted());
-        if let Some(interleaved) = interleaved {
-            a_0.add_assign_slice(interleaved.as_ref());
-        }
 
         // Construct the d-1 Gemini foldings of A₀(X)
         let fold_polynomials = self.compute_fold_polynomials(log_n, multilinear_challenge, a_0);
 
-        let r_challenge = match transcript {
-            TranscriptRef::Plain(transcript) => {
-                let mut commitments = Vec::with_capacity(fold_polynomials.len());
-                for f_poly in fold_polynomials.iter().take(log_n) {
-                    commitments.push(CoUtils::commit::<T, P>(
-                        &f_poly.coefficients,
-                        commitment_key,
-                    ));
-                }
-                let commitments = T::open_point_many(&commitments, self.net, self.state)?;
-                for (l, res) in commitments.into_iter().enumerate() {
-                    transcript
-                        .send_point_to_verifier::<P>(format!("Gemini:FOLD_{}", l + 1), res.into());
-                }
-                let res = P::Affine::generator();
-                for l in log_n - 1..virtual_log_n - 1 {
-                    transcript.send_point_to_verifier::<P>(format!("Gemini:FOLD_{}", l + 1), res);
-                }
+        let mut commitments = Vec::with_capacity(fold_polynomials.len());
+        for f_poly in fold_polynomials.iter().take(log_n) {
+            commitments.push(CoUtils::commit::<T, P>(
+                &f_poly.coefficients,
+                commitment_key,
+            ));
+        }
+        let commitments = T::open_point_many(&commitments, self.net, self.state)?;
+        for (l, res) in commitments.into_iter().enumerate() {
+            transcript.send_point_to_verifier::<P>(format!("Gemini:FOLD_{}", l + 1), res.into());
+        }
+        let res = P::Affine::generator();
+        for l in log_n - 1..virtual_log_n - 1 {
+            transcript.send_point_to_verifier::<P>(format!("Gemini:FOLD_{}", l + 1), res);
+        }
 
-                transcript.get_challenge::<P>("Gemini:r".to_string())
-            }
-            TranscriptRef::Rep3(transcript_rep3) => {
-                let mut commitments = Vec::with_capacity(fold_polynomials.len());
-                for f_poly in fold_polynomials.iter().take(log_n) {
-                    commitments.push(CoUtils::commit::<T, P>(
-                        &f_poly.coefficients,
-                        commitment_key,
-                    ));
-                }
-                for (l, res) in commitments.into_iter().enumerate() {
-                    transcript_rep3
-                        .send_point_to_verifier_shared(format!("Gemini:FOLD_{}", l + 1), res);
-                }
-                let res = P::Affine::generator();
-                for l in log_n - 1..virtual_log_n - 1 {
-                    transcript_rep3.send_point_to_verifier(format!("Gemini:FOLD_{}", l + 1), res);
-                }
-
-                transcript_rep3.get_challenge("Gemini:r".to_string(), self.net, self.state)?
-            }
-        };
+        let r_challenge = transcript.get_challenge::<P>("Gemini:r".to_string());
 
         let gemini_challenge_in_small_subgroup: bool = (has_zk == ZeroKnowledge::Yes)
             && (r_challenge.pow([P::SUBGROUP_SIZE as u64]) == P::ScalarField::one());
@@ -307,15 +232,13 @@ impl<
             return Err(HonkProofError::GeminiSmallSubgroup);
         }
 
-        // Compute polynomials A₀₊(X) = F(X) + G(X)/r and A₀₋(X) = F(X) - G(X)/r
         let (a_0_pos, a_0_neg) = self.compute_partially_evaluated_batch_polynomials(
             batched_unshifted,
             batched_to_be_shifted,
             r_challenge,
         );
 
-        // Construct claims for the d + 1 univariate evaluations A₀₊(r), A₀₋(-r), and Foldₗ(−r^{2ˡ}), l = 1, ..., d-1
-        let mut claims = self.construct_univariate_opening_claims(
+        let claims = self.construct_univariate_opening_claims(
             log_n,
             a_0_pos,
             a_0_neg,
@@ -323,107 +246,18 @@ impl<
             r_challenge,
         );
 
-        if let Some(groups) = groups {
-            let mut claim_eval = claims
-                .iter()
-                .skip(1)
-                .take(log_n)
-                .map(|claim| claim.opening_pair.evaluation)
-                .collect::<Vec<_>>();
-            let num_claims = claims.len();
-            debug_assert!(num_claims == log_n);
-
-            let (p_pos, p_neg) =
-                Self::compute_partially_evaluated_interleaved_polynomial(&groups, r_challenge);
-            let groups_size = groups.len();
-            let r_pow = r_challenge.pow([groups_size as u64]);
-            let p_pos_eval = T::eval_poly(p_pos.as_ref(), r_pow);
-            let p_neg_eval = T::eval_poly(p_neg.as_ref(), r_pow);
-            claims.push(ShpleminiOpeningClaim {
-                polynomial: p_pos,
-                opening_pair: OpeningPair {
-                    challenge: r_pow,
-                    evaluation: p_pos_eval,
-                },
-                gemini_fold: false,
-            });
-            claims.push(ShpleminiOpeningClaim {
-                polynomial: p_neg,
-                opening_pair: OpeningPair {
-                    challenge: r_pow,
-                    evaluation: p_neg_eval,
-                },
-                gemini_fold: false,
-            });
-            match transcript {
-                TranscriptRef::Plain(transcript) => {
-                    claim_eval.push(p_pos_eval);
-                    claim_eval.push(p_neg_eval);
-                    let mut claim_evals = T::open_many(&claim_eval, self.net, self.state)?;
-                    let p_neg_eval = claim_evals
-                        .pop()
-                        .expect("claim_evals has at least 2 elements");
-                    let p_pos_eval = claim_evals
-                        .pop()
-                        .expect("claim_evals has at least 2 elements");
-                    for (l, claim) in claim_evals.iter().enumerate() {
-                        transcript.send_fr_to_verifier::<P>(format!("Gemini:a_{}", l + 1), *claim);
-                    }
-                    for l in log_n + 1..=virtual_log_n {
-                        transcript.send_fr_to_verifier::<P>(
-                            format!("Gemini:a_{l}"),
-                            P::ScalarField::zero(),
-                        );
-                    }
-                    transcript.send_fr_to_verifier::<P>("Gemini:P_pos".to_string(), p_pos_eval);
-                    transcript.send_fr_to_verifier::<P>("Gemini:P_neg".to_string(), p_neg_eval);
-                }
-                TranscriptRef::Rep3(transcript_rep3) => {
-                    for (l, claim) in claim_eval.iter().enumerate() {
-                        transcript_rep3
-                            .send_fr_to_verifier_shared(format!("Gemini:a_{}", l + 1), *claim);
-                    }
-                    for l in log_n + 1..=virtual_log_n {
-                        transcript_rep3
-                            .send_fr_to_verifier(format!("Gemini:a_{l}"), P::ScalarField::zero());
-                    }
-                    transcript_rep3
-                        .send_fr_to_verifier_shared("Gemini:P_pos".to_string(), p_pos_eval);
-                    transcript_rep3
-                        .send_fr_to_verifier_shared("Gemini:P_neg".to_string(), p_neg_eval);
-                }
-            }
-        } else {
-            let claim_eval = claims
-                .iter()
-                .skip(1)
-                .take(log_n)
-                .map(|claim| claim.opening_pair.evaluation)
-                .collect::<Vec<_>>();
-            match transcript {
-                TranscriptRef::Plain(transcript) => {
-                    let claim_eval = T::open_many(&claim_eval, self.net, self.state)?;
-                    for (l, claim) in claim_eval.into_iter().enumerate() {
-                        transcript.send_fr_to_verifier::<P>(format!("Gemini:a_{}", l + 1), claim);
-                    }
-                    for l in log_n + 1..=virtual_log_n {
-                        transcript.send_fr_to_verifier::<P>(
-                            format!("Gemini:a_{l}"),
-                            P::ScalarField::zero(),
-                        );
-                    }
-                }
-                TranscriptRef::Rep3(transcript_rep3) => {
-                    for (l, claim) in claim_eval.into_iter().enumerate() {
-                        transcript_rep3
-                            .send_fr_to_verifier_shared(format!("Gemini:a_{}", l + 1), claim);
-                    }
-                    for l in log_n + 1..=virtual_log_n {
-                        transcript_rep3
-                            .send_fr_to_verifier(format!("Gemini:a_{l}"), P::ScalarField::zero());
-                    }
-                }
-            }
+        let claim_eval = claims
+            .iter()
+            .skip(1)
+            .take(log_n)
+            .map(|claim| claim.opening_pair.evaluation)
+            .collect::<Vec<_>>();
+        let claim_eval = T::open_many(&claim_eval, self.net, self.state)?;
+        for (l, claim) in claim_eval.into_iter().enumerate() {
+            transcript.send_fr_to_verifier::<P>(format!("Gemini:a_{}", l + 1), claim);
+        }
+        for l in log_n + 1..=virtual_log_n {
+            transcript.send_fr_to_verifier::<P>(format!("Gemini:a_{l}"), P::ScalarField::zero());
         }
 
         Ok(claims)
@@ -494,35 +328,6 @@ impl<
         a_0_neg.sub_assign_slice(batched_g.as_ref()); // A₀₋ = F - G/r
 
         (a_0_pos, a_0_neg)
-    }
-
-    /**
-     * @brief Compute the partially evaluated polynomials P₊(X, r) and P₋(X, -r)
-     *
-     * @details If the interleaved polynomials are set, the full partially evaluated identites A₀(r) and  A₀(-r)
-     * contain the contributions of P₊(r^s) and  P₋(r^s) respectively where s is the size of the interleaved group
-     * assumed even. This function computes P₊(X) = ∑ r^i Pᵢ(X) and P₋(X) = ∑ (-r)^i Pᵢ(X) where Pᵢ(X) is the i-th
-     * polynomial in the batched group.
-     * @param r_challenge partial evaluation challenge
-     * @return std::pair<Polynomial, Polynomial> {P₊, P₋}
-     */
-    fn compute_partially_evaluated_interleaved_polynomial(
-        batched_group: &[SharedPolynomial<T, P>],
-        r_challenge: P::ScalarField,
-    ) -> (SharedPolynomial<T, P>, SharedPolynomial<T, P>) {
-        let mut p_pos = batched_group[0].clone();
-        let mut p_neg = batched_group[0].clone();
-
-        let mut current_r_shift_pos = r_challenge;
-        let mut current_r_shift_neg = -r_challenge;
-        for poly in batched_group.iter().skip(1) {
-            p_pos.add_scaled(poly, &current_r_shift_pos);
-            p_neg.add_scaled(poly, &current_r_shift_neg);
-            current_r_shift_pos *= r_challenge;
-            current_r_shift_neg *= -r_challenge;
-        }
-
-        (p_pos, p_neg)
     }
 
     fn powers_of_evaluation_challenge(
@@ -644,63 +449,38 @@ impl<
      * @param commitment_key
      * @param opening_claims
      * @param transcript
-     * @return `ProverOpeningClaim<Curve>`
+     * @return ProverOpeningClaim<Curve>
      */
-    pub fn shplonk_prove(
+    pub(crate) fn shplonk_prove(
         &mut self,
-        opening_claims: &[ShpleminiOpeningClaim<T, P>],
+        opening_claims: Vec<ShpleminiOpeningClaim<T, P>>,
         commitment_key: &ProverCrs<P>,
-        transcript: &mut TranscriptRef<TranscriptFieldType, T, P, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
         libra_opening_claims: Option<Vec<ShpleminiOpeningClaim<T, P>>>,
-        sumcheck_round_claims: Option<Vec<ShpleminiOpeningClaim<T, P>>>,
         virtual_log_n: usize,
     ) -> HonkProofResult<ShpleminiOpeningClaim<T, P>> {
         tracing::trace!("Shplonk prove");
-        let nu = match transcript {
-            TranscriptRef::Plain(transcript) => {
-                transcript.get_challenge::<P>("Shplonk:nu".to_string())
-            }
-            TranscriptRef::Rep3(transcript_rep3) => {
-                transcript_rep3.get_challenge("Shplonk:nu".to_string(), self.net, self.state)?
-            }
-        };
+        let nu = transcript.get_challenge::<P>("Shplonk:nu".to_string());
         // Compute the evaluations Fold_i(r^{2^i}) for i>0.
-        let gemini_fold_pos_evaluations = Self::compute_gemini_fold_pos_evaluations(opening_claims);
+        let gemini_fold_pos_evaluations =
+            Self::compute_gemini_fold_pos_evaluations(&opening_claims);
         let batched_quotient = Self::compute_batched_quotient(
             virtual_log_n,
-            opening_claims,
+            &opening_claims,
             nu,
             &gemini_fold_pos_evaluations,
             &libra_opening_claims,
-            &sumcheck_round_claims,
         );
         let batched_quotient_commitment =
             CoUtils::commit::<T, P>(batched_quotient.as_ref(), commitment_key);
-        match transcript {
-            TranscriptRef::Plain(transcript) => {
-                let batched_quotient_commitment =
-                    T::open_point(batched_quotient_commitment, self.net, self.state)?;
-                transcript.send_point_to_verifier::<P>(
-                    "Shplonk:Q".to_string(),
-                    batched_quotient_commitment.into(),
-                );
-            }
-            TranscriptRef::Rep3(transcript_rep3) => {
-                transcript_rep3.send_point_to_verifier_shared(
-                    "Shplonk:Q".to_string(),
-                    batched_quotient_commitment,
-                );
-            }
-        }
+        let batched_quotient_commitment =
+            T::open_point(batched_quotient_commitment, self.net, self.state)?;
+        transcript.send_point_to_verifier::<P>(
+            "Shplonk:Q".to_string(),
+            batched_quotient_commitment.into(),
+        );
 
-        let z = match transcript {
-            TranscriptRef::Plain(transcript) => {
-                transcript.get_challenge::<P>("Shplonk:z".to_string())
-            }
-            TranscriptRef::Rep3(transcript_rep3) => {
-                transcript_rep3.get_challenge("Shplonk:z".to_string(), self.net, self.state)?
-            }
-        };
+        let z = transcript.get_challenge::<P>("Shplonk:z".to_string());
 
         Ok(self.compute_partially_evaluated_batched_quotient(
             virtual_log_n,
@@ -710,16 +490,15 @@ impl<
             z,
             &gemini_fold_pos_evaluations,
             libra_opening_claims,
-            sumcheck_round_claims,
         ))
     }
 
-    pub fn shplemini_prove(
+    pub(crate) fn shplemini_prove(
         &mut self,
-        transcript: &mut TranscriptRef<TranscriptFieldType, T, P, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
         circuit_size: u32,
         crs: &ProverCrs<P>,
-        sumcheck_output: SumcheckOutput<T, P>,
+        sumcheck_output: SumcheckOutput<P::ScalarField>,
         libra_polynomials: Option<[SharedPolynomial<T, P>; NUM_SMALL_IPA_EVALUATIONS]>,
     ) -> HonkProofResult<ShpleminiOpeningClaim<T, P>> {
         let has_zk = ZeroKnowledge::from(libra_polynomials.is_some());
@@ -751,26 +530,11 @@ impl<
             None
         };
 
-        let sumcheck_round_claims = if let (Some(univariates), Some(evaluations)) = (
-            sumcheck_output.round_univariates.as_ref(),
-            sumcheck_output.round_univariate_evaluations.as_ref(),
-        ) {
-            Some(Self::compute_sumcheck_round_claims(
-                circuit_size,
-                &sumcheck_output.challenges,
-                univariates,
-                evaluations,
-            ))
-        } else {
-            None
-        };
-
         let batched_claim = self.shplonk_prove(
-            &opening_claims,
+            opening_claims,
             crs,
             transcript,
             libra_opening_claims,
-            sumcheck_round_claims,
             virtual_log_n,
         )?;
         Ok(batched_claim)
@@ -789,13 +553,12 @@ impl<
     pub(crate) fn compute_partially_evaluated_batched_quotient(
         &mut self,
         virtual_log_n: usize,
-        opening_claims: &[ShpleminiOpeningClaim<T, P>],
+        opening_claims: Vec<ShpleminiOpeningClaim<T, P>>,
         batched_quotient_q: SharedPolynomial<T, P>,
         nu_challenge: P::ScalarField,
         z_challenge: P::ScalarField,
         gemini_fold_pos_evaluations: &[T::ArithmeticShare],
         libra_opening_claims: Option<Vec<ShpleminiOpeningClaim<T, P>>>,
-        sumcheck_round_claims: Option<Vec<ShpleminiOpeningClaim<T, P>>>,
     ) -> ShpleminiOpeningClaim<T, P> {
         tracing::trace!("Compute partially evaluated batched quotient");
         let has_zk = ZeroKnowledge::from(libra_opening_claims.is_some());
@@ -807,7 +570,7 @@ impl<
                 .map_or(0, |claims| claims.len());
         let mut inverse_vanishing_evals: Vec<P::ScalarField> =
             Vec::with_capacity(num_opening_claims);
-        for claim in opening_claims {
+        for claim in &opening_claims {
             if claim.gemini_fold {
                 inverse_vanishing_evals.push(z_challenge + claim.opening_pair.challenge);
             }
@@ -821,12 +584,6 @@ impl<
             }
         }
 
-        if let Some(sumcheck_round_claims) = &sumcheck_round_claims {
-            for claim in sumcheck_round_claims.iter() {
-                inverse_vanishing_evals.push(z_challenge - claim.opening_pair.challenge);
-            }
-        }
-
         inverse_vanishing_evals.iter_mut().for_each(|x| {
             x.inverse_in_place();
         });
@@ -834,7 +591,7 @@ impl<
         let mut current_nu = P::ScalarField::one();
         let mut idx = 0;
         let mut fold_idx = 0;
-        for claim in opening_claims.iter() {
+        for claim in opening_claims.into_iter() {
             if claim.gemini_fold {
                 let mut tmp = claim.polynomial.clone();
                 let sub = T::sub(tmp[0], gemini_fold_pos_evaluations[fold_idx]);
@@ -847,7 +604,7 @@ impl<
                 idx += 1;
                 fold_idx += 1;
             }
-            let mut tmp = claim.polynomial.to_owned();
+            let mut tmp = claim.polynomial;
             let claim_neg = T::neg(claim.opening_pair.evaluation);
             tmp[0] = T::add(tmp[0], claim_neg);
             let scaling_factor = current_nu * inverse_vanishing_evals[idx];
@@ -866,20 +623,6 @@ impl<
 
         if has_zk == ZeroKnowledge::Yes {
             for claim in libra_opening_claims.expect("Has ZK").into_iter() {
-                // Compute individual claim quotient tmp = ( fⱼ(X) − vⱼ) / ( X − xⱼ )
-                let mut tmp = claim.polynomial;
-                tmp[0] = T::sub(tmp[0], claim.opening_pair.evaluation);
-                let scaling_factor = current_nu * inverse_vanishing_evals[idx]; // = νʲ / (z − xⱼ )
-
-                // Add the claim quotient to the batched quotient polynomial
-                g.add_scaled(&tmp, &-scaling_factor);
-                current_nu *= nu_challenge;
-                idx += 1;
-            }
-        }
-
-        if let Some(sumcheck_round_claims) = sumcheck_round_claims {
-            for claim in sumcheck_round_claims.into_iter() {
                 // Compute individual claim quotient tmp = ( fⱼ(X) − vⱼ) / ( X − xⱼ )
                 let mut tmp = claim.polynomial;
                 tmp[0] = T::sub(tmp[0], claim.opening_pair.evaluation);
@@ -911,11 +654,10 @@ impl<
      */
     pub(crate) fn compute_batched_quotient(
         virtual_log_n: usize,
-        opening_claims: &[ShpleminiOpeningClaim<T, P>],
+        opening_claims: &Vec<ShpleminiOpeningClaim<T, P>>,
         nu_challenge: P::ScalarField,
         gemini_fold_pos_evaluations: &[T::ArithmeticShare],
         libra_opening_claims: &Option<Vec<ShpleminiOpeningClaim<T, P>>>,
-        sumcheck_round_claims: &Option<Vec<ShpleminiOpeningClaim<T, P>>>,
     ) -> SharedPolynomial<T, P> {
         tracing::trace!("Compute batched quotient");
         let has_zk = ZeroKnowledge::from(libra_opening_claims.is_some());
@@ -931,15 +673,9 @@ impl<
                 max_poly_size = max_poly_size.max(claim.polynomial.len());
             }
         }
-        if let Some(sumcheck_claims) = sumcheck_round_claims {
-            for claim in sumcheck_claims.iter() {
-                max_poly_size = max_poly_size.max(claim.polynomial.len());
-            }
-        }
 
         // The polynomials in Libra opening claims are generally not dyadic,
         // so we round up to the next power of 2.
-        max_poly_size = max_poly_size.next_power_of_two();
 
         // Q(X) = ∑ⱼ νʲ ⋅ ( fⱼ(X) − vⱼ) / ( X − xⱼ )
         let mut q = SharedPolynomial::<T, P>::new_zero(max_poly_size);
@@ -990,18 +726,6 @@ impl<
                 current_nu *= nu_challenge;
             }
         }
-        if let Some(sumcheck_claim) = sumcheck_round_claims {
-            for claim in sumcheck_claim.iter() {
-                // Compute individual claim quotient tmp = ( fⱼ(X) − vⱼ) / ( X − xⱼ )
-                let mut tmp = claim.polynomial.clone();
-                tmp[0] = T::sub(tmp[0], claim.opening_pair.evaluation);
-                tmp.factor_roots(&claim.opening_pair.challenge);
-
-                // Add the claim quotient to the batched quotient polynomial
-                q.add_scaled(&tmp, &current_nu);
-                current_nu *= nu_challenge;
-            }
-        }
 
         // Return batched quotient polynomial Q(X)
         q
@@ -1014,7 +738,7 @@ impl<
     fn compute_libra_opening_claims(
         gemini_r: P::ScalarField,
         libra_polynomials: [SharedPolynomial<T, P>; NUM_SMALL_IPA_EVALUATIONS],
-        transcript: &mut TranscriptRef<TranscriptFieldType, T, P, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
         net: &N,
         state: &mut T::State,
     ) -> HonkProofResult<Vec<ShpleminiOpeningClaim<T, P>>> {
@@ -1046,53 +770,11 @@ impl<
             to_open.push(new_claim.opening_pair.evaluation);
             libra_opening_claims.push(new_claim);
         }
-
-        match transcript {
-            TranscriptRef::Plain(transcript) => {
-                let opened = T::open_many(&to_open, net, state)?;
-                for (val, label) in izip!(opened, libra_eval_labels) {
-                    transcript.send_fr_to_verifier::<P>(label.to_string(), val);
-                }
-            }
-            TranscriptRef::Rep3(transcript_rep3) => {
-                for (val, label) in izip!(to_open, libra_eval_labels) {
-                    transcript_rep3.send_fr_to_verifier_shared(label.to_string(), val);
-                }
-            }
+        let opened = T::open_many(&to_open, net, state)?;
+        for (val, label) in izip!(opened, libra_eval_labels) {
+            transcript.send_fr_to_verifier::<P>(label.to_string(), val);
         }
 
         Ok(libra_opening_claims)
-    }
-    // Create a vector of 3*log_n opening claims for the evaluations of Sumcheck Round Univariates at
-    //  0, 1, and a round challenge.
-    fn compute_sumcheck_round_claims(
-        circuit_size: u32,
-        multilinear_challenge: &[P::ScalarField],
-        sumcheck_round_univariates: &[SharedPolynomial<T, P>],
-        sumcheck_round_evaluations: &[[T::ArithmeticShare; 3]],
-    ) -> Vec<ShpleminiOpeningClaim<T, P>> {
-        let log_n = Utils::get_msb32(circuit_size) as usize;
-        let mut sumcheck_round_claims = Vec::with_capacity(2 * log_n);
-        for (idx, univariate) in sumcheck_round_univariates.iter().enumerate().take(log_n) {
-            let evaluation_points = [
-                P::ScalarField::zero(),
-                P::ScalarField::one(),
-                multilinear_challenge[idx],
-            ];
-
-            for (eval_idx, eval_point) in evaluation_points.iter().enumerate() {
-                let new_claim = ShpleminiOpeningClaim {
-                    polynomial: univariate.clone(),
-                    opening_pair: OpeningPair {
-                        challenge: *eval_point,
-                        evaluation: sumcheck_round_evaluations[idx][eval_idx],
-                    },
-                    gemini_fold: false,
-                };
-                sumcheck_round_claims.push(new_claim);
-            }
-        }
-
-        sumcheck_round_claims
     }
 }
