@@ -517,7 +517,7 @@ where
         self.hasher
             .permutation_in_place(&mut self.state, builder, driver)?;
 
-        // TACEO TODO: We will only call this with Mega I guess? I don't we actually need this for Ultra
+        // TACEO TODO: I don't think we actually need this for Ultra (for now?)
         // // variables with indices from rate to size of state - 1 won't be used anymore
         // // after permutation. But they aren't dangerous and needed to put in used witnesses
         // if constexpr (IsUltraBuilder<Builder>) {
@@ -624,7 +624,7 @@ where
             *r = sponge.squeeze(builder, driver)?;
         }
 
-        // TACEO TODO: We will only call this with Mega I guess? I don't we actually need this for Ultra
+        // TACEO TODO: I don't think we actually need this for Ultra (for now?)
         // // variables with indices won't be used in the circuit.
         // // but they aren't dangerous and needed to put in used witnesses
         // if constexpr (IsUltraBuilder<Builder>) {
