@@ -3,50 +3,48 @@ use super::{
     small_subgroup_ipa::SharedSmallSubgroupIPAProver,
     types::ProverMemory,
 };
-use crate::{CONST_PROOF_SIZE_LOG_N, mpc_prover_flavour::MPCProverFlavour};
 use co_noir_common::{
+    CoUtils,
+    co_shplemini::ShpleminiOpeningClaim,
     crs::ProverCrs,
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
     mpc::NoirUltraHonkProver,
+    transcript::{Transcript, TranscriptHasher},
     types::ZeroKnowledge,
     utils::Utils,
-};
-use co_noir_common::{
-    transcript::{Transcript, TranscriptHasher},
-    transcript_mpc::TranscriptRef,
 };
 use mpc_net::Network;
 use noir_types::HonkProof;
 use std::marker::PhantomData;
-pub struct CoDecider<
+
+pub(crate) struct CoDecider<
     'a,
     T: NoirUltraHonkProver<P>,
     P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType, T, P>,
+    H: TranscriptHasher<TranscriptFieldType>,
     N: Network,
-    L: MPCProverFlavour,
 > {
-    pub net: &'a N,
-    pub state: &'a mut T::State,
-    pub memory: ProverMemory<T, P, L>,
-    pub has_zk: ZeroKnowledge,
-    phantom_data: PhantomData<(P, H)>,
+    pub(crate) net: &'a N,
+    pub(crate) state: &'a mut T::State,
+    pub(super) memory: ProverMemory<T, P>,
+    pub(crate) has_zk: ZeroKnowledge,
+    phantom_data: PhantomData<P>,
+    phantom_hasher: PhantomData<H>,
 }
 
 impl<
     'a,
     T: NoirUltraHonkProver<P>,
     P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType, T, P>,
+    H: TranscriptHasher<TranscriptFieldType>,
     N: Network,
-    L: MPCProverFlavour,
-> CoDecider<'a, T, P, H, N, L>
+> CoDecider<'a, T, P, H, N>
 {
     pub fn new(
         net: &'a N,
         state: &'a mut T::State,
-        memory: ProverMemory<T, P, L>,
+        memory: ProverMemory<T, P>,
         has_zk: ZeroKnowledge,
     ) -> Self {
         Self {
@@ -55,7 +53,30 @@ impl<
             memory,
             has_zk,
             phantom_data: PhantomData,
+            phantom_hasher: PhantomData,
         }
+    }
+
+    fn compute_opening_proof(
+        net: &N,
+        state: &mut T::State,
+        opening_claim: ShpleminiOpeningClaim<T, P>,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
+        crs: &ProverCrs<P>,
+    ) -> HonkProofResult<()> {
+        let mut quotient = opening_claim.polynomial;
+        let pair = opening_claim.opening_pair;
+
+        quotient[0] = T::sub(quotient[0], pair.evaluation);
+        // Computes the coefficients for the quotient polynomial q(X) = (p(X) - v) / (X - r) through an FFT
+        quotient.factor_roots(&pair.challenge);
+        let quotient_commitment = CoUtils::commit::<T, P>(&quotient.coefficients, crs);
+        // AZTEC TODO(#479): for now we compute the KZG commitment directly to unify the KZG and IPA interfaces but in the
+        // future we might need to adjust this to use the incoming alternative to work queue (i.e. variation of
+        // pthreads) or even the work queue itself
+        let quotient_commitment = T::open_point(quotient_commitment, net, state)?;
+        transcript.send_point_to_verifier::<P>("KZG:W".to_string(), quotient_commitment.into());
+        Ok(())
     }
 
     /**
@@ -66,37 +87,29 @@ impl<
     #[expect(clippy::type_complexity)]
     fn execute_relation_check_rounds(
         &mut self,
-        transcript: &mut TranscriptRef<TranscriptFieldType, T, P, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
         crs: &ProverCrs<P>,
         circuit_size: u32,
-    ) -> HonkProofResult<(SumcheckOutput<T, P>, Option<SharedZKSumcheckData<T, P>>)> {
+    ) -> HonkProofResult<(
+        SumcheckOutput<P::ScalarField>,
+        Option<SharedZKSumcheckData<T, P>>,
+    )> {
         if self.has_zk == ZeroKnowledge::Yes {
             let log_subgroup_size = Utils::get_msb64(P::SUBGROUP_SIZE as u64);
             let commitment_key = &crs.monomials[..1 << (log_subgroup_size + 1)];
-            match transcript {
-                TranscriptRef::Plain(transcript) => {
-                    let mut zk_sumcheck_data: SharedZKSumcheckData<T, P> =
-                        SharedZKSumcheckData::<T, P>::new(
-                            Utils::get_msb64(circuit_size as u64) as usize,
-                            transcript,
-                            commitment_key,
-                            self.net,
-                            self.state,
-                        )?;
-                    Ok((
-                        self.sumcheck_prove_zk::<CONST_PROOF_SIZE_LOG_N>(
-                            transcript,
-                            circuit_size,
-                            &mut zk_sumcheck_data,
-                            crs,
-                        )?,
-                        Some(zk_sumcheck_data),
-                    ))
-                }
-                TranscriptRef::Rep3(_) => {
-                    panic!("ZK Flavours are not supposed to be called with REP3 transcripts")
-                }
-            }
+            let mut zk_sumcheck_data: SharedZKSumcheckData<T, P> =
+                SharedZKSumcheckData::<T, P>::new(
+                    Utils::get_msb64(circuit_size as u64) as usize,
+                    transcript,
+                    commitment_key,
+                    self.net,
+                    self.state,
+                )?;
+
+            Ok((
+                self.sumcheck_prove_zk(transcript, circuit_size, &mut zk_sumcheck_data)?,
+                Some(zk_sumcheck_data),
+            ))
         } else {
             // This is just Sumcheck.prove without ZK
             Ok((self.sumcheck_prove(transcript, circuit_size)?, None))
@@ -111,41 +124,28 @@ impl<
      * */
     fn execute_pcs_rounds(
         &mut self,
-        transcript: &mut TranscriptRef<TranscriptFieldType, T, P, H>,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
         circuit_size: u32,
         crs: &ProverCrs<P>,
-        sumcheck_output: SumcheckOutput<T, P>,
+        sumcheck_output: SumcheckOutput<P::ScalarField>,
         zk_sumcheck_data: Option<SharedZKSumcheckData<T, P>>,
     ) -> HonkProofResult<()> {
         if self.has_zk == ZeroKnowledge::No {
             let prover_opening_claim =
                 self.shplemini_prove(transcript, circuit_size, crs, sumcheck_output, None)?;
-            co_noir_common::compute_co_opening_proof(
+            Self::compute_opening_proof(self.net, self.state, prover_opening_claim, transcript, crs)
+        } else {
+            let small_subgroup_ipa_prover = SharedSmallSubgroupIPAProver::<T, P>::new(
                 self.net,
                 self.state,
-                prover_opening_claim,
-                transcript,
-                crs,
-            )
-        } else {
-            let mut small_subgroup_ipa_prover = SharedSmallSubgroupIPAProver::<T, P>::new(
                 zk_sumcheck_data.expect("We have ZK"),
+                &sumcheck_output.challenges,
                 sumcheck_output
                     .claimed_libra_evaluation
                     .expect("We have ZK"),
-                "Libra:".to_string(),
-                &sumcheck_output.challenges,
+                transcript,
+                crs,
             )?;
-
-            match transcript {
-                TranscriptRef::Plain(transcript) => {
-                    small_subgroup_ipa_prover
-                        .prove::<H, N>(self.net, self.state, transcript, crs)?;
-                }
-                TranscriptRef::Rep3(_) => {
-                    panic!("ZK Flavours are not supposed to be called with REP3 transcripts")
-                }
-            }
             let witness_polynomials = small_subgroup_ipa_prover.into_witness_polynomials();
             let prover_opening_claim = self.shplemini_prove(
                 transcript,
@@ -154,36 +154,24 @@ impl<
                 sumcheck_output,
                 Some(witness_polynomials),
             )?;
-            co_noir_common::compute_co_opening_proof(
-                self.net,
-                self.state,
-                prover_opening_claim,
-                transcript,
-                crs,
-            )
+            Self::compute_opening_proof(self.net, self.state, prover_opening_claim, transcript, crs)
         }
     }
 
-    #[expect(clippy::type_complexity)]
-    pub(crate) fn prove_inner(
+    pub(crate) fn prove(
         mut self,
         circuit_size: u32,
         crs: &ProverCrs<P>,
-        mut transcript: TranscriptRef<TranscriptFieldType, T, P, H>,
-    ) -> HonkProofResult<(
-        Option<HonkProof<TranscriptFieldType>>,
-        Option<Vec<T::ArithmeticShare>>,
-    )> {
+        mut transcript: Transcript<TranscriptFieldType, H>,
+    ) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
         tracing::trace!("Decider prove");
 
         // Run sumcheck subprotocol.
-
         let (sumcheck_output, zk_sumcheck_data) =
             self.execute_relation_check_rounds(&mut transcript, crs, circuit_size)?;
 
         // Fiat-Shamir: rho, y, x, z
         // Execute Zeromorph multilinear PCS
-
         self.execute_pcs_rounds(
             &mut transcript,
             circuit_size,
@@ -193,21 +181,5 @@ impl<
         )?;
 
         Ok(transcript.get_proof())
-    }
-
-    pub(crate) fn prove(
-        self,
-        circuit_size: u32,
-        crs: &ProverCrs<P>,
-        mut transcript: Transcript<TranscriptFieldType, H, T, P>,
-    ) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
-        tracing::trace!("Decider prove");
-
-        let transcript_ref = TranscriptRef::Plain(&mut transcript);
-        let res = self.prove_inner(circuit_size, crs, transcript_ref);
-        match res {
-            Ok((Some(proof), None)) => Ok(proof),
-            _ => panic!("Unexpected transcript result"),
-        }
     }
 }

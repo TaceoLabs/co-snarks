@@ -5,7 +5,6 @@ use acir::native_types::{WitnessMap, WitnessStack};
 use ark_bn254::Bn254;
 use ark_ff::PrimeField;
 use co_acvm::{solver::PlainCoSolver, PlainAcvmSolver};
-use co_builder::flavours::ultra_flavour::UltraFlavour;
 use co_noir::{Bn254G1, HonkRecursion};
 use co_noir_common::{
     crs::parse::CrsParser,
@@ -42,10 +41,7 @@ fn convert_witness_plain<F: PrimeField>(mut witness_stack: WitnessStack<F>) -> V
     witness_map_to_witness_vector(witness_map)
 }
 
-fn proof_test<H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, Bn254G1>>(
-    name: &str,
-    has_zk: ZeroKnowledge,
-) {
+fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str, has_zk: ZeroKnowledge) {
     let circuit_file = format!("../test_vectors/noir/{name}/kat/{name}.json");
     let witness_file = format!("../test_vectors/noir/{name}/kat/{name}.gz");
 
@@ -77,26 +73,15 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, Bn2
     let (proving_key, verifying_key) =
         ProvingKey::create_keys(0, builder, &prover_crs, verifier_crs, &mut driver).unwrap();
 
-    let (proof, public_input) = CoUltraHonk::<PlainUltraHonkDriver, _, H, UltraFlavour>::prove(
-        proving_key,
-        &prover_crs,
-        has_zk,
-    )
-    .unwrap();
+    let (proof, public_input) =
+        CoUltraHonk::<PlainUltraHonkDriver, _, H>::prove(proving_key, &prover_crs, has_zk).unwrap();
 
-    let is_valid = UltraHonk::<_, H, UltraFlavour>::verify::<Bn254>(
-        proof,
-        &public_input,
-        &verifying_key,
-        has_zk,
-    )
-    .unwrap();
+    let is_valid =
+        UltraHonk::<_, H>::verify::<Bn254>(proof, &public_input, &verifying_key, has_zk).unwrap();
     assert!(is_valid);
 }
 
-fn witness_and_proof_test<
-    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, Bn254G1>,
->(
+fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     name: &str,
     has_zk: ZeroKnowledge,
 ) {
@@ -134,20 +119,11 @@ fn witness_and_proof_test<
     let (proving_key, verifying_key) =
         ProvingKey::create_keys(0, builder, &prover_crs, verifier_crs, &mut driver).unwrap();
 
-    let (proof, public_input) = CoUltraHonk::<PlainUltraHonkDriver, _, H, UltraFlavour>::prove(
-        proving_key,
-        &prover_crs,
-        has_zk,
-    )
-    .unwrap();
+    let (proof, public_input) =
+        CoUltraHonk::<PlainUltraHonkDriver, _, H>::prove(proving_key, &prover_crs, has_zk).unwrap();
 
-    let is_valid = UltraHonk::<_, H, UltraFlavour>::verify::<Bn254>(
-        proof,
-        &public_input,
-        &verifying_key,
-        has_zk,
-    )
-    .unwrap();
+    let is_valid =
+        UltraHonk::<_, H>::verify::<Bn254>(proof, &public_input, &verifying_key, has_zk).unwrap();
     assert!(is_valid);
 }
 

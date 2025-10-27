@@ -3,7 +3,6 @@ use std::fs::File;
 use ark_bn254::Bn254;
 use ark_ff::PrimeField;
 use co_acvm::{PlainAcvmSolver, mpc::NoirWitnessExtensionProtocol};
-use co_builder::flavours::ultra_flavour::UltraFlavour;
 use co_builder::prelude::HonkRecursion;
 use co_builder::prelude::constraint_system_from_reader;
 use co_noir_common::crs::parse::CrsParser;
@@ -22,9 +21,7 @@ fn promote_public_witness_vector<F: PrimeField, T: NoirWitnessExtensionProtocol<
     witness.into_iter().map(|w| T::AcvmType::from(w)).collect()
 }
 
-fn plaindriver_test<
-    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, ark_bn254::G1Projective>,
->(
+fn plaindriver_test<H: TranscriptHasher<TranscriptFieldType>>(
     proof_file: &str,
     circuit_file: &str,
     witness_file: &str,
@@ -61,13 +58,13 @@ fn plaindriver_test<
     let (proving_key, verifying_key) =
         ProvingKey::create_keys(0, builder, &prover_crs, verifier_crs, &mut driver).unwrap();
 
-    let (proof, public_inputs) = CoUltraHonk::<
-        PlainUltraHonkDriver,
-        ark_bn254::G1Projective,
-        H,
-        UltraFlavour,
-    >::prove(proving_key, &prover_crs, has_zk)
-    .unwrap();
+    let (proof, public_inputs) =
+        CoUltraHonk::<PlainUltraHonkDriver, ark_bn254::G1Projective, H>::prove(
+            proving_key,
+            &prover_crs,
+            has_zk,
+        )
+        .unwrap();
 
     if has_zk == ZeroKnowledge::No {
         let proof_u8 = proof.to_buffer();
@@ -78,13 +75,8 @@ fn plaindriver_test<
         assert_eq!(proof, read_proof);
     }
 
-    let is_valid = UltraHonk::<_, H, UltraFlavour>::verify::<Bn254>(
-        proof,
-        &public_inputs,
-        &verifying_key,
-        has_zk,
-    )
-    .unwrap();
+    let is_valid =
+        UltraHonk::<_, H>::verify::<Bn254>(proof, &public_inputs, &verifying_key, has_zk).unwrap();
     assert!(is_valid);
 }
 

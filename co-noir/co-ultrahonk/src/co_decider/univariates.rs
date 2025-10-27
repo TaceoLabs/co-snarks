@@ -1,19 +1,16 @@
 use ark_ec::CurveGroup;
-use ark_ff::{Field, One, Zero};
-use co_noir_common::barycentric::Barycentric;
+use ark_ff::Field;
+use co_noir_common::{barycentric::Barycentric, mpc::NoirUltraHonkProver};
 use mpc_net::Network;
 use std::array;
 use ultrahonk::prelude::Univariate;
 
-use crate::mpc_prover_flavour::SharedUnivariateTrait;
-use co_noir_common::mpc::NoirUltraHonkProver;
-
-pub struct SharedUnivariate<T: NoirUltraHonkProver<P>, P: CurveGroup, const SIZE: usize> {
-    pub evaluations: [T::ArithmeticShare; SIZE],
+pub(crate) struct SharedUnivariate<T: NoirUltraHonkProver<P>, P: CurveGroup, const SIZE: usize> {
+    pub(crate) evaluations: [T::ArithmeticShare; SIZE],
 }
 
 impl<T: NoirUltraHonkProver<P>, P: CurveGroup, const SIZE: usize> SharedUnivariate<T, P, SIZE> {
-    pub fn from_vec(evaluations: Vec<T::ArithmeticShare>) -> Self {
+    pub(crate) fn from_vec(evaluations: Vec<T::ArithmeticShare>) -> Self {
         Self {
             evaluations: evaluations
                 .try_into()
@@ -21,6 +18,21 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup, const SIZE: usize> SharedUnivaria
         }
     }
 
+    pub(crate) fn add(&self, rhs: &Self) -> Self {
+        let mut result = Self::default();
+        for i in 0..SIZE {
+            result.evaluations[i] = T::add(self.evaluations[i], rhs.evaluations[i]);
+        }
+        result
+    }
+
+    pub(crate) fn sub(&self, rhs: &Self) -> Self {
+        let mut result = Self::default();
+        for i in 0..SIZE {
+            result.evaluations[i] = T::sub(self.evaluations[i], rhs.evaluations[i]);
+        }
+        result
+    }
     pub(crate) fn scale_inplace(&mut self, rhs: P::ScalarField) {
         for i in 0..SIZE {
             self.evaluations[i] = T::mul_with_public(rhs, self.evaluations[i]);
@@ -31,6 +43,14 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup, const SIZE: usize> SharedUnivaria
         for i in 0..SIZE {
             self.evaluations[i] = T::add(self.evaluations[i], rhs.evaluations[i]);
         }
+    }
+
+    pub(crate) fn mul_public(&self, rhs: &Univariate<P::ScalarField, SIZE>) -> Self {
+        let mut result = Self::default();
+        for i in 0..SIZE {
+            result.evaluations[i] = T::mul_with_public(rhs.evaluations[i], self.evaluations[i]);
+        }
+        result
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE2: usize>(
@@ -52,47 +72,14 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup, const SIZE: usize> SharedUnivaria
         }
     }
 
-    pub fn evaluate_with_domain_start(
-        &self,
-        u: P::ScalarField,
-        domain_start: usize,
-    ) -> T::ArithmeticShare {
-        let mut full_numerator_value = P::ScalarField::one();
-        for i in domain_start..SIZE + domain_start {
-            full_numerator_value *= u - P::ScalarField::from(i as u64);
+    pub fn get_random<N: Network>(net: &N, state: &mut T::State) -> eyre::Result<Self> {
+        let mut evaluations = [T::ArithmeticShare::default(); SIZE];
+        for eval in evaluations.iter_mut() {
+            *eval = T::rand(net, state)?;
         }
-
-        let big_domain = (domain_start..domain_start + SIZE)
-            .map(|i| P::ScalarField::from(i as u64))
-            .collect::<Vec<_>>();
-        let lagrange_denominators = Barycentric::construct_lagrange_denominators(SIZE, &big_domain);
-
-        let mut denominator_inverses = [P::ScalarField::zero(); SIZE];
-        for i in 0..SIZE {
-            let mut inv = lagrange_denominators[i];
-
-            inv *= u - big_domain[i];
-            inv = P::ScalarField::one() / inv;
-            denominator_inverses[i] = inv;
-        }
-
-        let mut result = T::ArithmeticShare::default();
-        // Compute each term v_j / (d_j*(x-x_j)) of the sum
-        for (i, &inverse) in denominator_inverses.iter().enumerate() {
-            let mut term = self.evaluations[i];
-            T::mul_assign_with_public(&mut term, inverse);
-            T::add_assign(&mut result, term);
-        }
-
-        // Scale the sum by the value of B(x)
-        T::mul_assign_with_public(&mut result, full_numerator_value);
-        result
+        Ok(Self { evaluations })
     }
-}
 
-impl<T: NoirUltraHonkProver<P>, P: CurveGroup, const SIZE: usize> SharedUnivariateTrait<T, P>
-    for SharedUnivariate<T, P, SIZE>
-{
     /**
      * @brief Given a univariate f represented by {f(domain_start), ..., f(domain_end - 1)}, compute the
      * evaluations {f(domain_end),..., f(extended_domain_end -1)} and return the Univariate represented by
@@ -111,7 +98,7 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup, const SIZE: usize> SharedUnivaria
      * = f(2) + Δ...
      *
      */
-    fn extend_from(&mut self, poly: &[T::ArithmeticShare]) {
+    pub fn extend_from(&mut self, poly: &[T::ArithmeticShare]) {
         let length = poly.len();
         let extended_length = SIZE;
 
@@ -264,50 +251,6 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup, const SIZE: usize> SharedUnivaria
                     T::mul_with_public(full_numerator_values[k], self.evaluations[k]);
             }
         }
-    }
-
-    fn get_random<N: Network>(net: &N, state: &mut T::State) -> eyre::Result<Self> {
-        let mut evaluations = [T::ArithmeticShare::default(); SIZE];
-        for eval in evaluations.iter_mut() {
-            *eval = T::rand(net, state)?;
-        }
-        Ok(Self { evaluations })
-    }
-
-    fn evaluations(&mut self) -> &mut [T::ArithmeticShare] {
-        &mut self.evaluations
-    }
-
-    fn evaluations_as_ref(&self) -> &[T::ArithmeticShare] {
-        &self.evaluations
-    }
-
-    fn mul_public<K>(&self, other: &K) -> Self
-    where
-        K: ultrahonk::plain_prover_flavour::UnivariateTrait<P::ScalarField>,
-    {
-        let mut result = Self::default();
-        for i in 0..SIZE {
-            result.evaluations[i] =
-                T::mul_with_public(other.evaluations_as_ref()[i], self.evaluations[i]);
-        }
-        result
-    }
-
-    fn sub(&self, rhs: &Self) -> Self {
-        let mut result = Self::default();
-        for i in 0..SIZE {
-            result.evaluations[i] = T::sub(self.evaluations[i], rhs.evaluations[i]);
-        }
-        result
-    }
-
-    fn add(&self, rhs: &Self) -> Self {
-        let mut result = Self::default();
-        for i in 0..SIZE {
-            result.evaluations[i] = T::add(self.evaluations[i], rhs.evaluations[i]);
-        }
-        result
     }
 }
 

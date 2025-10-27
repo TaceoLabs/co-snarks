@@ -1,10 +1,7 @@
 use crate::proof_tests::{CRS_PATH_G1, CRS_PATH_G2};
 use ark_bn254::Bn254;
 use co_acvm::solver::Rep3CoSolver;
-use co_builder::flavours::ultra_flavour::UltraFlavour;
 use co_noir::Bn254G1;
-use co_noir_common::mpc::plain::PlainUltraHonkDriver;
-use co_noir_common::mpc::rep3::Rep3UltraHonkDriver;
 use co_noir_common::{
     crs::parse::CrsParser,
     honk_proof::TranscriptFieldType,
@@ -17,13 +14,7 @@ use mpc_net::local::LocalNetwork;
 use sha3::Keccak256;
 use std::{fs::File, sync::Arc};
 
-fn proof_test<
-    H1: TranscriptHasher<TranscriptFieldType, Rep3UltraHonkDriver, Bn254G1>,
-    H2: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, Bn254G1>,
->(
-    name: &str,
-    has_zk: ZeroKnowledge,
-) {
+fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str, has_zk: ZeroKnowledge) {
     let circuit_file = format!("../test_vectors/noir/{name}/kat/{name}.json");
     let witness_file = format!("../test_vectors/noir/{name}/kat/{name}.gz");
 
@@ -65,8 +56,7 @@ fn proof_test<
             )
             .unwrap();
             let (proof, public_input) =
-                Rep3CoUltraHonk::<_, H1, UltraFlavour>::prove(&net0, pk, &prover_crs, has_zk)
-                    .unwrap();
+                Rep3CoUltraHonk::<_, H>::prove(&net0, pk, &prover_crs, has_zk).unwrap();
             (proof, public_input)
         }));
     }
@@ -100,15 +90,11 @@ fn proof_test<
     let vk =
         co_noir::generate_vk::<Bn254>(&constraint_system, prover_crs, verifier_crs, false).unwrap();
 
-    let is_valid =
-        UltraHonk::<_, H2, UltraFlavour>::verify(proof, &public_input, &vk, has_zk).unwrap();
+    let is_valid = UltraHonk::<_, H>::verify(proof, &public_input, &vk, has_zk).unwrap();
     assert!(is_valid);
 }
 
-fn witness_and_proof_test<
-    H1: TranscriptHasher<TranscriptFieldType, Rep3UltraHonkDriver, Bn254G1>,
-    H2: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, Bn254G1>,
->(
+fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     name: &str,
     has_zk: ZeroKnowledge,
 ) {
@@ -152,8 +138,7 @@ fn witness_and_proof_test<
             )
             .unwrap();
             let (proof, public_input) =
-                Rep3CoUltraHonk::<_, H1, UltraFlavour>::prove(&net0, pk, &prover_crs, has_zk)
-                    .unwrap();
+                Rep3CoUltraHonk::<_, H>::prove(&net0, pk, &prover_crs, has_zk).unwrap();
             (proof, public_input)
         }));
     }
@@ -187,31 +172,30 @@ fn witness_and_proof_test<
     let vk =
         co_noir::generate_vk::<Bn254>(&constraint_system, prover_crs, verifier_crs, false).unwrap();
 
-    let is_valid =
-        UltraHonk::<_, H2, UltraFlavour>::verify(proof, &public_input, &vk, has_zk).unwrap();
+    let is_valid = UltraHonk::<_, H>::verify(proof, &public_input, &vk, has_zk).unwrap();
     assert!(is_valid);
 }
 
 #[test]
 fn poseidon_witness_and_proof_test_poseidon2sponge() {
-    witness_and_proof_test::<Poseidon2Sponge, Poseidon2Sponge>("poseidon", ZeroKnowledge::No);
-    witness_and_proof_test::<Poseidon2Sponge, Poseidon2Sponge>("poseidon", ZeroKnowledge::Yes);
+    witness_and_proof_test::<Poseidon2Sponge>("poseidon", ZeroKnowledge::No);
+    witness_and_proof_test::<Poseidon2Sponge>("poseidon", ZeroKnowledge::Yes);
 }
 
 #[test]
 fn poseidon_proof_test_poseidon2sponge() {
-    proof_test::<Poseidon2Sponge, Poseidon2Sponge>("poseidon", ZeroKnowledge::No);
-    proof_test::<Poseidon2Sponge, Poseidon2Sponge>("poseidon", ZeroKnowledge::Yes);
+    proof_test::<Poseidon2Sponge>("poseidon", ZeroKnowledge::No);
+    proof_test::<Poseidon2Sponge>("poseidon", ZeroKnowledge::Yes);
 }
 
 #[test]
 fn poseidon_witness_and_proof_test_keccak256() {
-    witness_and_proof_test::<Keccak256, Keccak256>("poseidon", ZeroKnowledge::No);
-    witness_and_proof_test::<Keccak256, Keccak256>("poseidon", ZeroKnowledge::Yes);
+    witness_and_proof_test::<Keccak256>("poseidon", ZeroKnowledge::No);
+    witness_and_proof_test::<Keccak256>("poseidon", ZeroKnowledge::Yes);
 }
 
 #[test]
 fn poseidon_proof_test_keccak256() {
-    proof_test::<Keccak256, Keccak256>("poseidon", ZeroKnowledge::No);
-    proof_test::<Keccak256, Keccak256>("poseidon", ZeroKnowledge::Yes);
+    proof_test::<Keccak256>("poseidon", ZeroKnowledge::No);
+    proof_test::<Keccak256>("poseidon", ZeroKnowledge::Yes);
 }
