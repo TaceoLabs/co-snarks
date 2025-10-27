@@ -1202,7 +1202,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             .iter()
             .skip(min_wit_index as usize)
             .take((max_wit_index - min_wit_index + 1) as usize)
-            .map(|x| self.variables[*x as usize])
+            .map(|x| self.variables[*x as usize].clone())
             .collect();
         let lut = T::init_lut_by_acvm_type(driver, direct_variables);
         let corrected_index = driver.sub(index, P::ScalarField::from(min_wit_index as u64).into());
@@ -1593,7 +1593,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             assert!(
                 T::get_public(&T::read_lut_by_acvm_type(
                     driver,
-                    index,
+                    index.clone(),
                     &self.ram_arrays[ram_id].state
                 )?)
                 .expect("Already checked it is public")
@@ -1619,7 +1619,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             .max()
             .unwrap_or(0);
 
-        let index_ram = T::read_lut_by_acvm_type(driver, index, lut)?;
+        let index_ram = T::read_lut_by_acvm_type(driver, index.clone(), lut)?;
         let value = self.get_variable_shared(index_ram, driver, min_witness, max_witness)?;
         let value_witness = self.add_variable(value);
 
@@ -1666,7 +1666,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             assert!(
                 T::get_public(&T::read_lut_by_acvm_type(
                     driver,
-                    index,
+                    index.clone(),
                     &self.ram_arrays[ram_id].state
                 )?)
                 .expect("Already checked it is public")
@@ -1680,7 +1680,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
                 self.ram_arrays[ram_id].access_count as u64,
             )),
             value_witness,
-            index,
+            index: index.clone(),
             timestamp: self.ram_arrays[ram_id].access_count as u32,
             access_type: RamAccessType::Write,
             record_witness: 0,
@@ -2006,7 +2006,10 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         driver: &mut T,
     ) -> eyre::Result<()> {
         let records = &self.rom_arrays[rom_id].records;
-        let key: Vec<_> = records.iter().map(|y| y.index).collect();
+        let key: Vec<_> = records
+            .iter()
+            .map(|y| y.index.clone().clone().clone())
+            .collect();
         let to_sort1: Vec<_> = records
             .iter()
             .map(|y| driver.get_as_shared(&y.index))
@@ -2819,7 +2822,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             }
         };
         for (i, sublimb) in sublimbs.iter().enumerate() {
-            let limb_idx = self.add_variable(*sublimb);
+            let limb_idx = self.add_variable(sublimb.clone());
 
             sublimb_indices.push(limb_idx);
             if i == sublimbs.len() - 1 && has_remainder_bits {
@@ -2844,17 +2847,17 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
 
             let round_sublimbs = [
                 if real_limbs[0] {
-                    sublimbs[3 * i as usize]
+                    sublimbs[3 * i as usize].clone()
                 } else {
                     T::public_zero()
                 },
                 if real_limbs[1] {
-                    sublimbs[(3 * i + 1) as usize]
+                    sublimbs[(3 * i + 1) as usize].clone()
                 } else {
                     T::public_zero()
                 },
                 if real_limbs[2] {
-                    sublimbs[(3 * i + 2) as usize]
+                    sublimbs[(3 * i + 2) as usize].clone()
                 } else {
                     T::public_zero()
                 },
@@ -2888,9 +2891,9 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             let shift1 = P::ScalarField::from((BigUint::one() << shifts[1]) & &shiftmask);
             let shift2 = P::ScalarField::from((BigUint::one() << shifts[2]) & shiftmask);
 
-            let mut subtrahend = T::mul_with_public(driver, shift0, round_sublimbs[0]);
-            let term0 = T::mul_with_public(driver, shift1, round_sublimbs[1]);
-            let term1 = T::mul_with_public(driver, shift2, round_sublimbs[2]);
+            let mut subtrahend = T::mul_with_public(driver, shift0, round_sublimbs[0].clone());
+            let term0 = T::mul_with_public(driver, shift1, round_sublimbs[1].clone());
+            let term1 = T::mul_with_public(driver, shift2, round_sublimbs[2].clone());
             T::add_assign(driver, &mut subtrahend, term0);
             T::add_assign(driver, &mut subtrahend, term1);
 
@@ -2910,7 +2913,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
                 },
                 i != num_limb_triples - 1,
             );
-            accumulator_idx = self.add_variable(new_accumulator);
+            accumulator_idx = self.add_variable(new_accumulator.clone());
             accumulator = new_accumulator;
         }
 
@@ -3824,15 +3827,15 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             let first_idx = if i == 0 {
                 key_a_index
             } else {
-                self.add_variable(read_values[ColumnIdx::C1][i])
+                self.add_variable(read_values[ColumnIdx::C1][i].clone())
             };
             #[expect(clippy::unnecessary_unwrap)]
             let second_idx = if i == 0 && (key_b_index.is_some()) {
                 key_b_index.unwrap()
             } else {
-                self.add_variable(read_values[ColumnIdx::C2][i])
+                self.add_variable(read_values[ColumnIdx::C2][i].clone())
             };
-            let third_idx = self.add_variable(read_values[ColumnIdx::C3][i]);
+            let third_idx = self.add_variable(read_values[ColumnIdx::C3][i].clone());
             read_data[ColumnIdx::C1].push(first_idx);
             read_data[ColumnIdx::C2].push(second_idx);
             read_data[ColumnIdx::C3].push(third_idx);

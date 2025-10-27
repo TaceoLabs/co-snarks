@@ -1706,7 +1706,7 @@ impl<F: PrimeField> Plookup<F> {
 
             let output = driver.read_from_public_luts(key.to_owned(), &[lut1, lut2])?;
             debug_assert_eq!(output.len(), 2);
-            results.push((output[0], output[1]));
+            results.push((output[0].clone(), output[1].clone()));
         }
         Ok(())
     }
@@ -1740,22 +1740,22 @@ impl<F: PrimeField> Plookup<F> {
         for i in 0..num_lookups {
             // compute the value(s) corresponding to the key(s) using the i-th basic table query function
 
-            column_1_raw_values.push(key_a_slices[i]);
+            column_1_raw_values.push(key_a_slices[i].clone());
             column_2_raw_values.push(if is_2_to_1_lookup {
-                key_b_slices[i]
+                key_b_slices[i].clone()
             } else {
-                values_sliced[i].0
+                values_sliced[i].0.clone()
             });
             column_3_raw_values.push(if is_2_to_1_lookup {
-                values_sliced[i].0
+                values_sliced[i].0.clone()
             } else {
-                values_sliced[i].1
+                values_sliced[i].1.clone()
             });
 
             // Store the lookup entries for use in constructing the sorted table/lookup polynomials later on
             let lookup_entry = LookupEntry::<T::AcvmType> {
-                key: [key_a_slices[i], key_b_slices[i]],
-                value: values_sliced[i].into(),
+                key: [key_a_slices[i].clone(), key_b_slices[i].clone()],
+                value: values_sliced[i].clone().into(),
             };
             lookup.lookup_entries.push(lookup_entry);
         }
@@ -1803,31 +1803,34 @@ impl<F: PrimeField> Plookup<F> {
         //  * https://app.gitbook.com/o/-LgCgJ8TCO7eGlBr34fj/s/-MEwtqp3H6YhHUTQ_pVJ/plookup-gates-for-ultraplonk/lookup-table-structures
         //  *
         //  */
-        lookup[ColumnIdx::C1][num_lookups - 1] = column_1_raw_values[num_lookups - 1];
-        lookup[ColumnIdx::C2][num_lookups - 1] = column_2_raw_values[num_lookups - 1];
-        lookup[ColumnIdx::C3][num_lookups - 1] = column_3_raw_values[num_lookups - 1];
+        lookup[ColumnIdx::C1][num_lookups - 1] = column_1_raw_values[num_lookups - 1].clone();
+        lookup[ColumnIdx::C2][num_lookups - 1] = column_2_raw_values[num_lookups - 1].clone();
+        lookup[ColumnIdx::C3][num_lookups - 1] = column_3_raw_values[num_lookups - 1].clone();
 
         for i in (1..num_lookups).rev() {
             let tmp_mul = T::mul_with_public(
                 driver,
                 multi_table.column_1_step_sizes[i],
-                lookup[ColumnIdx::C1][i],
+                lookup[ColumnIdx::C1][i].clone(),
             );
-            lookup[ColumnIdx::C1][i - 1] = T::add(driver, column_1_raw_values[i - 1], tmp_mul);
+            lookup[ColumnIdx::C1][i - 1] =
+                T::add(driver, column_1_raw_values[i - 1].clone(), tmp_mul);
 
             let tmp_mul = T::mul_with_public(
                 driver,
                 multi_table.column_2_step_sizes[i],
-                lookup[ColumnIdx::C2][i],
+                lookup[ColumnIdx::C2][i].clone(),
             );
-            lookup[ColumnIdx::C2][i - 1] = T::add(driver, column_2_raw_values[i - 1], tmp_mul);
+            lookup[ColumnIdx::C2][i - 1] =
+                T::add(driver, column_2_raw_values[i - 1].clone(), tmp_mul);
 
             let tmp_mul = T::mul_with_public(
                 driver,
                 multi_table.column_3_step_sizes[i],
-                lookup[ColumnIdx::C3][i],
+                lookup[ColumnIdx::C3][i].clone(),
             );
-            lookup[ColumnIdx::C3][i - 1] = T::add(driver, column_3_raw_values[i - 1], tmp_mul);
+            lookup[ColumnIdx::C3][i - 1] =
+                T::add(driver, column_3_raw_values[i - 1].clone(), tmp_mul);
         }
 
         Ok(lookup)

@@ -45,7 +45,7 @@ where
                 let masking_zeros = driver.shared_zeros(result.len())?;
                 let mut masked_result = Vec::with_capacity(result.len());
                 for (correct, mask) in izip!(result, masking_zeros) {
-                    masked_result.push(driver.cmux(cond, correct, mask)?);
+                    masked_result.push(driver.cmux(cond.clone(), correct, mask)?);
                 }
                 Ok(masked_result)
             }
@@ -125,13 +125,13 @@ where
             match output {
                 BrilligOutputs::Simple(witness) => {
                     self.witness()
-                        .insert(*witness, brillig_result[current_ret_data_idx]);
+                        .insert(*witness, brillig_result[current_ret_data_idx].clone());
                     current_ret_data_idx += 1;
                 }
                 BrilligOutputs::Array(witness_arr) => {
                     for witness in witness_arr.iter() {
                         self.witness()
-                            .insert(*witness, brillig_result[current_ret_data_idx]);
+                            .insert(*witness, brillig_result[current_ret_data_idx].clone());
                         current_ret_data_idx += 1;
                     }
                 }
