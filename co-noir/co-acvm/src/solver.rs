@@ -344,11 +344,7 @@ where
                     init,
                     block_type: _, // apparently not used
                 } => self.solve_memory_init_block(*block_id, init)?,
-                Opcode::MemoryOp {
-                    block_id,
-                    op,
-                    predicate,
-                } => self.solve_memory_op(*block_id, op, predicate.to_owned())?,
+                Opcode::MemoryOp { block_id, op } => self.solve_memory_op(*block_id, op)?,
                 Opcode::BlackBoxFuncCall(bb_func) => self.solve_blackbox(bb_func)?,
                 Opcode::BrilligCall {
                     id,

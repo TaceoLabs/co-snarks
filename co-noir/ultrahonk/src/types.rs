@@ -2,7 +2,7 @@ use co_builder::prelude::{PRECOMPUTED_ENTITIES_SIZE, PrecomputedEntities};
 
 pub(crate) const NUM_ALL_ENTITIES: usize =
     WITNESS_ENTITIES_SIZE + PRECOMPUTED_ENTITIES_SIZE + SHIFTED_WITNESS_ENTITIES_SIZE;
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub(crate) struct AllEntities<T: Default> {
     pub(crate) witness: WitnessEntities<T>,
     pub(crate) precomputed: PrecomputedEntities<T>,
@@ -38,13 +38,13 @@ impl<T: Default + Clone> AllEntities<Vec<T>> {
 }
 
 const WITNESS_ENTITIES_SIZE: usize = 8;
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 pub struct WitnessEntities<T: Default> {
     pub(crate) elements: [T; WITNESS_ENTITIES_SIZE],
 }
 
 const SHIFTED_WITNESS_ENTITIES_SIZE: usize = 5;
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 pub struct ShiftedWitnessEntities<T: Default> {
     pub(crate) elements: [T; SHIFTED_WITNESS_ENTITIES_SIZE],
 }

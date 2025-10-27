@@ -155,7 +155,7 @@ impl<C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> Relat
 
         ///////////////////////////////////////////////////////////////////////
         // Contribution (4) point doubling, y-coordinate check
-        // (y1 + y1) (2y1) - (3 * x1 * x1)(x1 - x3) = 0
+        // (y1 + y3) (2y1) - (3 * x1 * x1)(x1 - x3) = 0
         let y_double_identity = mul2[3].sub(&mul2[4], builder, driver);
         let tmp = q_elliptic_q_double_scaling.multiply(&y_double_identity, builder, driver)?;
         tmp_2 = tmp_2.add(&tmp, builder, driver);

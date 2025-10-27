@@ -46,9 +46,19 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
         )
         .unwrap(),
     );
+    // Get vk
+    let verifier_crs =
+        CrsParser::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>::get_crs_g2::<
+            Bn254,
+        >(CRS_PATH_G2)
+        .unwrap();
+    let vk =
+        co_noir::generate_vk::<Bn254>(&constraint_system, prover_crs.clone(), verifier_crs, false)
+            .unwrap();
     for net in nets {
         let witness = witness.clone();
         let prover_crs = prover_crs.clone();
+        let vk = vk.clone();
         let constraint_system =
             co_noir::get_constraint_system_from_artifact(&program_artifact, true);
         threads.push(std::thread::spawn(move || {
@@ -69,6 +79,7 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
                 pk,
                 &prover_crs,
                 has_zk,
+                &vk.inner_vk,
             )
             .unwrap();
             (proof, public_inputs)
@@ -94,15 +105,6 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     for p in public_inputs {
         assert_eq!(public_input, p);
     }
-
-    // Get vk
-    let verifier_crs =
-        CrsParser::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>::get_crs_g2::<
-            Bn254,
-        >(CRS_PATH_G2)
-        .unwrap();
-    let vk =
-        co_noir::generate_vk::<Bn254>(&constraint_system, prover_crs, verifier_crs, false).unwrap();
 
     let is_valid = UltraHonk::<_, H>::verify(proof, &public_input, &vk, has_zk).unwrap();
     assert!(is_valid);

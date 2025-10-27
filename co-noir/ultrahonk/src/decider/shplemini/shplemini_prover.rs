@@ -8,7 +8,6 @@ use crate::{
     },
     types::AllEntities,
 };
-use ark_ec::AffineRepr;
 use ark_ff::{Field, One, Zero};
 use co_noir_common::{
     crs::ProverCrs,
@@ -159,15 +158,14 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         let mut a_0 = batched_unshifted.to_owned();
         a_0 += batched_to_be_shifted.shifted().as_ref();
         // Construct the d-1 Gemini foldings of A₀(X)
-        let fold_polynomials = Self::compute_fold_polynomials(log_n, multilinear_challenge, a_0);
+        let fold_polynomials =
+            Self::compute_fold_polynomials(log_n, multilinear_challenge, a_0, has_zk);
 
-        for (l, f_poly) in fold_polynomials.iter().take(log_n).enumerate() {
+        // If virtual_log_n >= log_n, pad the fold commitments with dummy group elements [1]_1.
+        for (l, f_poly) in fold_polynomials.iter().take(virtual_log_n - 1).enumerate() {
             let res = Utils::commit(&f_poly.coefficients, commitment_key)?;
+            // When has_zk is true, we are sending commitments to 0. Seems to work, but maybe brittle.
             transcript.send_point_to_verifier::<P>(format!("Gemini:FOLD_{}", l + 1), res.into());
-        }
-        let res = P::Affine::generator();
-        for l in log_n - 1..virtual_log_n - 1 {
-            transcript.send_point_to_verifier::<P>(format!("Gemini:FOLD_{}", l + 1), res);
         }
 
         let r_challenge = transcript.get_challenge::<P>("Gemini:r".to_string());
@@ -189,21 +187,18 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         );
 
         let claims = Self::construct_univariate_opening_claims(
-            log_n,
+            virtual_log_n,
             a_0_pos,
             a_0_neg,
             fold_polynomials,
             r_challenge,
         );
 
-        for (l, claim) in claims.iter().skip(1).take(log_n).enumerate() {
+        for (l, claim) in claims.iter().skip(1).take(virtual_log_n).enumerate() {
             transcript.send_fr_to_verifier::<P>(
                 format!("Gemini:a_{}", l + 1),
                 claim.opening_pair.evaluation,
             );
-        }
-        for l in log_n + 1..=virtual_log_n {
-            transcript.send_fr_to_verifier::<P>(format!("Gemini:a_{l}"), P::ScalarField::zero());
         }
 
         Ok(claims)
@@ -213,10 +208,13 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         log_n: usize,
         multilinear_challenge: &[P::ScalarField],
         a_0: Polynomial<P::ScalarField>,
+        has_zk: ZeroKnowledge,
     ) -> Vec<Polynomial<P::ScalarField>> {
         tracing::trace!("Compute fold polynomials");
         // Note: bb uses multithreading here
         let mut fold_polynomials = Vec::with_capacity(log_n - 1);
+
+        let virtual_log_n = multilinear_challenge.len();
 
         // A_l = Aₗ(X) is the polynomial being folded
         // in the first iteration, we take the batched polynomial
@@ -241,6 +239,35 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             // Set Aₗ₊₁ = Aₗ for the next iteration
             fold_polynomials.push(a_l_fold.clone());
             a_l = a_l_fold.coefficients;
+        }
+
+        // Perform virtual rounds.
+        // After the first `log_n - 1` rounds, the prover's `fold` univariates stabilize. With ZK, the verifier multiplies
+        // the evaluations by 0, otherwise, when `virtual_log_n > log_n`, the prover honestly computes and sends the
+        // constant folds.
+        let last = &fold_polynomials[fold_polynomials.len() - 1];
+        let u_last = multilinear_challenge[log_n - 1];
+        let final_eval = last[0] + u_last * (last[1] - last[0]);
+        let mut const_fold = Polynomial::new_zero(1);
+        // Temporary fix: when we're running a zk proof, the verifier uses a `padding_indicator_array`. So the evals in
+        // rounds past `log_n - 1` will be ignored. Hence the prover also needs to ignore them, otherwise Shplonk will fail.
+        const_fold[0] =
+            final_eval * P::ScalarField::from(if has_zk == ZeroKnowledge::Yes { 0 } else { 1 });
+        fold_polynomials.push(const_fold);
+
+        // FOLD_{log_n+1}, ..., FOLD_{d_v-1}
+        let mut tail = P::ScalarField::one();
+        for challenge in multilinear_challenge
+            .iter()
+            .take(virtual_log_n - 1)
+            .skip(log_n)
+        {
+            tail *= P::ScalarField::one() - challenge; // multiply by (1 - u_k)
+            let mut next_const = Polynomial::new_zero(1);
+            next_const[0] = final_eval
+                * tail
+                * P::ScalarField::from(if has_zk == ZeroKnowledge::Yes { 0 } else { 1 });
+            fold_polynomials.push(next_const);
         }
 
         fold_polynomials

@@ -1,4 +1,4 @@
-use co_builder::prelude::{PAIRING_POINT_ACCUMULATOR_SIZE, ProvingKey};
+use co_builder::prelude::{PAIRING_POINT_ACCUMULATOR_SIZE, ProvingKey, VerifyingKeyBarretenberg};
 use co_noir_common::{
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
@@ -16,42 +16,48 @@ pub struct UltraHonk<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<Tran
     phantom_hasher: PhantomData<H>,
 }
 
-impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> UltraHonk<P, H> {
+impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> UltraHonk<C, H> {
     pub(crate) fn generate_gate_challenges(
         transcript: &mut Transcript<TranscriptFieldType, H>,
-    ) -> Vec<P::ScalarField> {
+        virtual_log_n: usize,
+    ) -> Vec<C::ScalarField> {
         tracing::trace!("generate gate challenges");
 
-        let mut gate_challenges: Vec<P::ScalarField> = Vec::with_capacity(CONST_PROOF_SIZE_LOG_N);
-
-        for idx in 0..CONST_PROOF_SIZE_LOG_N {
-            let chall = transcript.get_challenge::<P>(format!("Sumcheck:gate_challenge_{idx}"));
-            gate_challenges.push(chall);
-        }
-        gate_challenges
+        transcript
+            .get_powers_of_challenge::<C>("Sumcheck:gate_challenge".to_string(), virtual_log_n)
     }
 
+    #[expect(clippy::type_complexity)]
     pub fn prove(
-        mut proving_key: ProvingKey<P>,
+        mut proving_key: ProvingKey<C>,
         has_zk: ZeroKnowledge,
-    ) -> HonkProofResult<(HonkProof<TranscriptFieldType>, Vec<TranscriptFieldType>)> {
+        verifying_key: &VerifyingKeyBarretenberg<C>,
+    ) -> HonkProofResult<(HonkProof<H::DataType>, Vec<H::DataType>)> {
         tracing::trace!("UltraHonk prove");
 
         let mut transcript = Transcript::<TranscriptFieldType, H>::new();
 
         let oink = Oink::new(has_zk);
-        let oink_result = oink.prove(&mut proving_key, &mut transcript)?;
+        let oink_result = oink.prove(&mut proving_key, &mut transcript, verifying_key)?;
 
         let crs = proving_key.crs;
         let cicruit_size = proving_key.circuit_size;
 
         let mut memory =
             ProverMemory::from_memory_and_polynomials(oink_result, proving_key.polynomials);
-        memory.gate_challenges = Self::generate_gate_challenges(&mut transcript);
+        let log_dyadic_circuit_size = proving_key.circuit_size.next_power_of_two().ilog2() as usize;
+
+        let virtual_log_n = if H::USE_PADDING {
+            CONST_PROOF_SIZE_LOG_N
+        } else {
+            log_dyadic_circuit_size
+        };
+
+        memory.gate_challenges = Self::generate_gate_challenges(&mut transcript, virtual_log_n);
 
         let num_public_inputs = proving_key.num_public_inputs - PAIRING_POINT_ACCUMULATOR_SIZE;
         let decider = Decider::new(memory, has_zk);
-        let proof = decider.prove(cicruit_size, &crs, transcript)?;
+        let proof = decider.prove(cicruit_size, &crs, transcript, virtual_log_n)?;
         Ok(proof.separate_proof_and_public_inputs(num_public_inputs as usize))
     }
 }

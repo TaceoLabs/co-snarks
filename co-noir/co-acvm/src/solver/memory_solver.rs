@@ -2,7 +2,7 @@ use crate::mpc::NoirWitnessExtensionProtocol;
 use acir::{
     acir_field::GenericFieldElement,
     circuit::opcodes::{BlockId, MemOp},
-    native_types::{Expression, Witness},
+    native_types::Witness,
 };
 use ark_ff::PrimeField;
 
@@ -47,17 +47,12 @@ where
         &mut self,
         block_id: BlockId,
         op: &MemOp<GenericFieldElement<F>>,
-        predicate: Option<Expression<GenericFieldElement<F>>>,
     ) -> CoAcvmResult<()> {
         tracing::trace!("solving memory op {:?}", op);
         let index = self.evaluate_expression(&op.index)?;
         tracing::trace!("index is {}", index);
         let value = self.simplify_expression(&op.value)?;
         tracing::trace!("value is {}", solver_utils::expr_to_string(&value));
-        let predicate = predicate.map(|expr| {
-            tracing::trace!("evaluating predicate!");
-            self.evaluate_expression(&expr)
-        });
         let read_write = op.operation.q_c.into_repr();
         if read_write.is_zero() {
             // read the value from the LUT
@@ -88,21 +83,8 @@ where
                     block_id.0
                 ))?;
             let value = self.driver.read_lut_by_acvm_type(index, lut)?;
-            if let Some(predicate) = predicate {
-                let predicate = predicate?;
-                if T::is_public_zero(&predicate) {
-                    tracing::trace!("predicate is false - we read zero!");
-                    self.witness().insert(witness, T::public_zero());
-                } else if T::is_public_one(&predicate) {
-                    self.witness().insert(witness, value);
-                } else {
-                    Err(eyre::eyre!(
-                        "predicate must be public and either zero or one"
-                    ))?
-                }
-            } else {
-                self.witness().insert(witness, value);
-            }
+
+            self.witness().insert(witness, value);
         } else if read_write.is_one() {
             // write value to LUT
             tracing::trace!("writing value to LUT");
@@ -113,20 +95,8 @@ where
                     "tried to access block {} but not present",
                     block_id.0
                 ))?;
-            if let Some(predicate) = predicate {
-                let predicate = predicate?;
-                if T::is_public_zero(&predicate) {
-                    tracing::trace!("predicate is false - we skip!");
-                } else if T::is_public_one(&predicate) {
-                    self.driver.write_lut_by_acvm_type(index, value.q_c, lut)?;
-                } else {
-                    Err(eyre::eyre!(
-                        "predicate must be public and either zero or one"
-                    ))?
-                }
-            } else {
-                self.driver.write_lut_by_acvm_type(index, value.q_c, lut)?;
-            }
+
+            self.driver.write_lut_by_acvm_type(index, value.q_c, lut)?;
         } else {
             Err(eyre::eyre!(
                 "Got unknown operation {} for mem op - this is a bug",

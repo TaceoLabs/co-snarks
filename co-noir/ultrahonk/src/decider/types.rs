@@ -108,6 +108,14 @@ impl<F: PrimeField> GateSeparatorPolynomial<F> {
         self.current_element_idx += 1;
         self.periodicity *= 2;
     }
+
+    pub fn construct_virtual_separator(betas: &[F], round_challenges: &[F]) -> Self {
+        let mut separator = Self::new_without_products(betas.to_vec());
+        for u_k in round_challenges {
+            separator.partially_evaluate(*u_k);
+        }
+        separator
+    }
 }
 
 impl<P: CurveGroup> ProverMemory<P> {
@@ -189,7 +197,7 @@ impl<C: CurveGroup> VerifierMemory<C> {
 
         let mut memory = AllEntities::<C::Affine>::default();
         memory.witness = verifier_memory.witness_commitments;
-        memory.precomputed = vk.commitments.clone();
+        memory.precomputed = vk.inner_vk.commitments.clone();
 
         // These copies are not required
         // for (des, src) in izip!(

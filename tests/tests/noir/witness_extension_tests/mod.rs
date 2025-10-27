@@ -20,7 +20,7 @@ macro_rules! add_plain_acvm_test {
                     let should_witness =
                         std::fs::read(format!("../test_vectors/noir/{}/kat/{}.gz", $name, $name)).unwrap();
                     let should_witness =
-                        WitnessStack::<FieldElement>::try_from(should_witness.as_slice()).unwrap();
+                      WitnessStack::deserialize(should_witness.as_slice()).unwrap();
                     let prover_toml = format!("../test_vectors/noir/{}/Prover.toml", $name);
                     let solver =
                         PlainCoSolver::init_plain_driver(program_artifact, prover_toml).unwrap();
@@ -50,7 +50,7 @@ macro_rules! add_rep3_acvm_test {
                     std::fs::read(format!("{root}/../test_vectors/noir/{}/kat/{}.gz", $name, $name)).unwrap();
 
                 let should_witness =
-                    WitnessStack::<FieldElement>::try_from(should_witness.as_slice()).unwrap();
+                   WitnessStack::deserialize(should_witness.as_slice()).unwrap();
                 let input = PathBuf::from(format!(
                     "{root}/../test_vectors/noir/{}/Prover.toml",
                     $name

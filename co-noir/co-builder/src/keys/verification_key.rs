@@ -1,17 +1,15 @@
+use ark_ec::{AffineRepr, CurveGroup, pairing::Pairing};
+use ark_ff::{PrimeField, Zero};
+use co_acvm::PlainAcvmSolver;
 use co_noir_common::{
     crs::ProverCrs,
     honk_curve::HonkCurve,
     honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
-    serialize::SerializeP,
-    utils::Utils,
+    transcript::{Transcript, TranscriptHasher},
 };
-use noir_types::SerializeF;
-use serde::{Deserialize, Serialize as SerdeSerialize};
+use noir_types::{SerializeF, U256};
+use num_bigint::BigUint;
 use std::sync::Arc;
-
-use ark_ec::{AffineRepr, CurveGroup, pairing::Pairing};
-use ark_ff::Zero;
-use co_acvm::PlainAcvmSolver;
 
 use crate::{
     polynomials::polynomial_types::PRECOMPUTED_ENTITIES_SIZE,
@@ -21,11 +19,7 @@ use crate::{
 #[derive(Clone)]
 pub struct VerifyingKey<P: Pairing> {
     pub crs: P::G2Affine,
-    pub circuit_size: u32,
-    pub num_public_inputs: u32,
-    pub pub_inputs_offset: u32,
-    pub pairing_inputs_public_input_key: PublicComponentKey,
-    pub commitments: PrecomputedEntities<P::G1Affine>,
+    pub inner_vk: VerifyingKeyBarretenberg<P::G1>,
 }
 
 impl<P: Pairing> VerifyingKey<P> {
@@ -45,85 +39,85 @@ impl<P: Pairing> VerifyingKey<P> {
     ) -> Self {
         Self {
             crs,
-            circuit_size: barretenberg_vk.circuit_size as u32,
-            num_public_inputs: barretenberg_vk.num_public_inputs as u32,
-            pub_inputs_offset: barretenberg_vk.pub_inputs_offset as u32,
-            commitments: barretenberg_vk.commitments,
-            pairing_inputs_public_input_key: barretenberg_vk.pairing_inputs_public_input_key,
+            inner_vk: barretenberg_vk.clone(),
         }
     }
 
     pub fn to_barretenberg(self) -> VerifyingKeyBarretenberg<P::G1> {
         VerifyingKeyBarretenberg {
-            circuit_size: self.circuit_size as u64,
-            log_circuit_size: Utils::get_msb64(self.circuit_size as u64) as u64,
-            num_public_inputs: self.num_public_inputs as u64,
-            pub_inputs_offset: self.pub_inputs_offset as u64,
-            commitments: self.commitments,
-            pairing_inputs_public_input_key: self.pairing_inputs_public_input_key,
+            log_circuit_size: self.inner_vk.log_circuit_size,
+            num_public_inputs: self.inner_vk.num_public_inputs,
+            pub_inputs_offset: self.inner_vk.pub_inputs_offset,
+            commitments: self.inner_vk.commitments,
         }
+    }
+
+    pub fn hash_through_transcript<H, C>(
+        &self,
+        domain_separator: &str,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
+    ) -> C::ScalarField
+    where
+        H: TranscriptHasher<TranscriptFieldType>,
+        C: HonkCurve<TranscriptFieldType, Affine = P::G1Affine>,
+        P: Pairing<G1 = C>,
+    {
+        transcript.add_u64_to_independent_hash_buffer(
+            domain_separator.to_string() + "vk_log_circuit_size",
+            self.inner_vk.log_circuit_size,
+        );
+        transcript.add_u64_to_independent_hash_buffer(
+            domain_separator.to_string() + "vk_num_public_inputs",
+            self.inner_vk.num_public_inputs,
+        );
+        transcript.add_u64_to_independent_hash_buffer(
+            domain_separator.to_string() + "vk_pub_inputs_offset",
+            self.inner_vk.pub_inputs_offset,
+        );
+
+        for commitment in self.inner_vk.commitments.iter() {
+            transcript.add_point_to_independent_hash_buffer::<C>(
+                domain_separator.to_string() + "vk_commitment",
+                *commitment,
+            );
+        }
+
+        transcript.hash_independent_buffer::<C>()
     }
 }
 
+#[derive(Clone)]
 pub struct VerifyingKeyBarretenberg<P: CurveGroup> {
-    pub circuit_size: u64,
     pub log_circuit_size: u64,
     pub num_public_inputs: u64,
     pub pub_inputs_offset: u64,
-    pub pairing_inputs_public_input_key: PublicComponentKey,
     pub commitments: PrecomputedEntities<P::Affine>,
 }
 
-#[derive(Clone, Copy, Debug, SerdeSerialize, Deserialize)]
-pub struct PublicComponentKey {
-    start_idx: u32,
-}
-
-impl Default for PublicComponentKey {
-    fn default() -> Self {
-        Self {
-            start_idx: u32::MAX,
-        }
-    }
-}
-impl PublicComponentKey {
-    pub fn new(start_idx: u32) -> Self {
-        Self { start_idx }
-    }
-    pub fn set(&mut self, start_idx: u32) {
-        self.start_idx = start_idx;
-    }
-    pub fn is_set(&self) -> bool {
-        self.start_idx != u32::MAX
-    }
-}
-
-impl<P: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<P> {
-    const FIELDSIZE_BYTES: u32 = SerializeP::<P>::FIELDSIZE_BYTES;
-    const SER_FULL_SIZE: usize =
-        4 * 8 + 4 + PRECOMPUTED_ENTITIES_SIZE * 2 * Self::FIELDSIZE_BYTES as usize;
-    const SER_COMPRESSED_SIZE: usize = Self::SER_FULL_SIZE - 4;
+impl<C: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<C> {
+    const NUM_64_LIMBS: u32 = TranscriptFieldType::MODULUS_BIT_SIZE.div_ceil(64);
+    const FIELDSIZE_BYTES: u32 = Self::NUM_64_LIMBS * 8;
+    const SER_FULL_SIZE: usize = 3 * Self::FIELDSIZE_BYTES as usize
+        + PRECOMPUTED_ENTITIES_SIZE * 2 * 2 * Self::FIELDSIZE_BYTES as usize; // all elements are serialized as ScalarField elements
+    const SER_FULL_SIZE_KECCAK: usize = 3 * 32 + PRECOMPUTED_ENTITIES_SIZE * 2 * 32; // all elements are serialized as U256 elements
 
     pub fn to_field_elements(&self) -> Vec<TranscriptFieldType> {
-        let len = 5 + self.commitments.elements.len() * 2 * P::NUM_BASEFIELD_ELEMENTS;
+        let len = 3 + self.commitments.elements.len() * 2 * C::NUM_BASEFIELD_ELEMENTS;
         let mut field_elements = Vec::with_capacity(len);
 
-        field_elements.push(TranscriptFieldType::from(self.circuit_size));
         field_elements.push(TranscriptFieldType::from(self.log_circuit_size));
         field_elements.push(TranscriptFieldType::from(self.num_public_inputs));
         field_elements.push(TranscriptFieldType::from(self.pub_inputs_offset));
-        field_elements.push(TranscriptFieldType::from(
-            self.pairing_inputs_public_input_key.start_idx,
-        ));
+
         for el in self.commitments.iter() {
             if el.is_zero() {
-                let convert = P::convert_basefield_into(&P::BaseField::zero());
+                let convert = C::convert_basefield_into(&C::BaseField::zero());
                 field_elements.extend_from_slice(&convert);
                 field_elements.extend(convert);
             } else {
-                let (x, y) = P::g1_affine_to_xy(el);
-                field_elements.extend(P::convert_basefield_into(&x));
-                field_elements.extend(P::convert_basefield_into(&y));
+                let (x, y) = C::g1_affine_to_xy(el);
+                field_elements.extend(C::convert_basefield_into(&x));
+                field_elements.extend(C::convert_basefield_into(&y));
             }
         }
 
@@ -134,74 +128,177 @@ impl<P: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<P> {
     pub fn to_buffer(&self) -> Vec<u8> {
         let mut buffer = Vec::with_capacity(Self::SER_FULL_SIZE);
 
-        SerializeF::<P::ScalarField>::write_u64(&mut buffer, self.circuit_size);
-        SerializeF::<P::ScalarField>::write_u64(&mut buffer, self.log_circuit_size);
-        SerializeF::<P::ScalarField>::write_u64(&mut buffer, self.num_public_inputs);
-        SerializeF::<P::ScalarField>::write_u64(&mut buffer, self.pub_inputs_offset);
-        SerializeF::<P::ScalarField>::write_u32(
+        SerializeF::<C::ScalarField>::write_field_element(
             &mut buffer,
-            self.pairing_inputs_public_input_key.start_idx,
+            C::ScalarField::from(self.log_circuit_size),
         );
+        SerializeF::<C::ScalarField>::write_field_element(
+            &mut buffer,
+            C::ScalarField::from(self.num_public_inputs),
+        );
+        SerializeF::<C::ScalarField>::write_field_element(
+            &mut buffer,
+            C::ScalarField::from(self.pub_inputs_offset),
+        );
+
         for el in self.commitments.iter() {
-            SerializeP::<P>::write_g1_element(&mut buffer, el, true);
+            if el.is_zero() {
+                let convert = C::convert_basefield_into(&C::BaseField::zero());
+                SerializeF::<TranscriptFieldType>::write_field_element(&mut buffer, convert[0]);
+                SerializeF::<TranscriptFieldType>::write_field_element(&mut buffer, convert[1]);
+                SerializeF::<TranscriptFieldType>::write_field_element(&mut buffer, convert[0]);
+                SerializeF::<TranscriptFieldType>::write_field_element(&mut buffer, convert[1]);
+            } else {
+                let (x, y) = C::g1_affine_to_xy(el);
+                let x_base = C::convert_basefield_into(&x);
+                SerializeF::<TranscriptFieldType>::write_field_element(&mut buffer, x_base[0]);
+                SerializeF::<TranscriptFieldType>::write_field_element(&mut buffer, x_base[1]);
+                let y_base = C::convert_basefield_into(&y);
+                SerializeF::<TranscriptFieldType>::write_field_element(&mut buffer, y_base[0]);
+                SerializeF::<TranscriptFieldType>::write_field_element(&mut buffer, y_base[1]);
+            }
         }
 
         debug_assert_eq!(buffer.len(), Self::SER_FULL_SIZE);
         buffer
     }
 
-    // BB for Keccak doesn't use the pairing_inputs_public_input_key in the vk
     pub fn to_buffer_keccak(&self) -> Vec<u8> {
-        let mut buffer = Vec::with_capacity(Self::SER_COMPRESSED_SIZE);
+        let mut buffer = Vec::with_capacity(Self::SER_FULL_SIZE_KECCAK);
 
-        SerializeF::<P::ScalarField>::write_u64(&mut buffer, self.circuit_size);
-        SerializeF::<P::ScalarField>::write_u64(&mut buffer, self.log_circuit_size);
-        SerializeF::<P::ScalarField>::write_u64(&mut buffer, self.num_public_inputs);
-        SerializeF::<P::ScalarField>::write_u64(&mut buffer, self.pub_inputs_offset);
+        buffer.extend(U256::to_buffer(&[U256::from(self.log_circuit_size)]));
+        buffer.extend(U256::to_buffer(&[U256::from(self.num_public_inputs)]));
+        buffer.extend(U256::to_buffer(&[U256::from(self.pub_inputs_offset)]));
 
         for el in self.commitments.iter() {
-            SerializeP::<P>::write_g1_element(&mut buffer, el, true);
+            if el.is_zero() {
+                buffer.extend(U256::to_buffer(&[U256::convert_field_into(
+                    &C::BaseField::zero(),
+                )]));
+                buffer.extend(U256::to_buffer(&[U256::convert_field_into(
+                    &C::BaseField::zero(),
+                )]));
+            } else {
+                let (x, y) = C::g1_affine_to_xy(el);
+                buffer.extend(U256::to_buffer(&[U256::convert_field_into(&x)]));
+                buffer.extend(U256::to_buffer(&[U256::convert_field_into(&y)]));
+            }
         }
 
-        debug_assert_eq!(buffer.len(), Self::SER_COMPRESSED_SIZE);
+        debug_assert_eq!(buffer.len(), Self::SER_FULL_SIZE_KECCAK);
         buffer
     }
 
     pub fn from_buffer(buf: &[u8]) -> HonkProofResult<Self> {
         let size = buf.len();
         let mut offset = 0;
-        if size != Self::SER_FULL_SIZE && size != Self::SER_COMPRESSED_SIZE {
+        if size != Self::SER_FULL_SIZE {
             return Err(HonkProofError::InvalidKeyLength);
         }
 
         // Read data
-        let circuit_size = SerializeF::<P::ScalarField>::read_u64(buf, &mut offset);
-        let log_circuit_size = SerializeF::<P::ScalarField>::read_u64(buf, &mut offset);
-        let num_public_inputs = SerializeF::<P::ScalarField>::read_u64(buf, &mut offset);
-        let pub_inputs_offset = SerializeF::<P::ScalarField>::read_u64(buf, &mut offset);
-        let pairing_inputs_public_input_key = if size == Self::SER_FULL_SIZE {
-            PublicComponentKey {
-                start_idx: SerializeF::<P::ScalarField>::read_u32(buf, &mut offset),
-            }
-        } else {
-            Default::default()
+        let log_circuit_size: BigUint = {
+            let fe = SerializeF::<TranscriptFieldType>::read_field_element(buf, &mut offset);
+            fe.into()
         };
+        let log_circuit_size: u64 = log_circuit_size.to_u64_digits()[0];
+        let num_public_inputs: BigUint = {
+            let fe = SerializeF::<TranscriptFieldType>::read_field_element(buf, &mut offset);
+            fe.into()
+        };
+        let num_public_inputs: u64 = num_public_inputs.to_u64_digits()[0];
+        let pub_inputs_offset: BigUint = {
+            let fe = SerializeF::<TranscriptFieldType>::read_field_element(buf, &mut offset);
+            fe.into()
+        };
+        let pub_inputs_offset: u64 = pub_inputs_offset.to_u64_digits()[0];
 
         let mut commitments = PrecomputedEntities::default();
 
         for el in commitments.iter_mut() {
-            *el = SerializeP::<P>::read_g1_element(buf, &mut offset, true);
+            let x0 = SerializeF::<TranscriptFieldType>::read_field_element(buf, &mut offset);
+            let x1 = SerializeF::<TranscriptFieldType>::read_field_element(buf, &mut offset);
+            let y0 = SerializeF::<TranscriptFieldType>::read_field_element(buf, &mut offset);
+            let y1 = SerializeF::<TranscriptFieldType>::read_field_element(buf, &mut offset);
+            let x = C::convert_basefield_back(&[x0, x1]);
+            let y = C::convert_basefield_back(&[y0, y1]);
+            *el = C::g1_affine_from_xy(x, y);
         }
 
-        debug_assert!(offset == Self::SER_FULL_SIZE || offset == Self::SER_COMPRESSED_SIZE);
+        debug_assert!(offset == Self::SER_FULL_SIZE);
 
         Ok(Self {
-            circuit_size,
             log_circuit_size,
             num_public_inputs,
             pub_inputs_offset,
             commitments,
-            pairing_inputs_public_input_key,
         })
+    }
+
+    pub fn from_buffer_keccak(buf: &[u8]) -> HonkProofResult<Self> {
+        let size = buf.len();
+        let mut offset = 0;
+        if size != Self::SER_FULL_SIZE_KECCAK {
+            return Err(HonkProofError::InvalidKeyLength);
+        }
+
+        let log_circuit_size: u64 = U256::from_buffer(&buf[offset..offset + 32])[0].0.as_limbs()[0];
+        offset += 32;
+        let num_public_inputs: u64 =
+            U256::from_buffer(&buf[offset..offset + 32])[0].0.as_limbs()[0];
+        offset += 32;
+        let pub_inputs_offset: u64 =
+            U256::from_buffer(&buf[offset..offset + 32])[0].0.as_limbs()[0];
+        offset += 32;
+
+        let mut commitments = PrecomputedEntities::default();
+
+        for el in commitments.iter_mut() {
+            let x = C::BaseField::from_be_bytes_mod_order(&buf[offset..offset + 32]);
+            offset += 32;
+            let y = C::BaseField::from_be_bytes_mod_order(&buf[offset..offset + 32]);
+            offset += 32;
+            *el = C::g1_affine_from_xy(x, y);
+        }
+
+        debug_assert!(offset == Self::SER_FULL_SIZE_KECCAK);
+
+        Ok(Self {
+            log_circuit_size,
+            num_public_inputs,
+            pub_inputs_offset,
+            commitments,
+        })
+    }
+
+    pub fn hash_through_transcript<H>(
+        &self,
+        domain_separator: &str,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
+    ) -> C::ScalarField
+    where
+        H: TranscriptHasher<TranscriptFieldType>,
+    {
+        transcript.add_u64_to_independent_hash_buffer(
+            domain_separator.to_string() + "vk_log_circuit_size",
+            self.log_circuit_size,
+        );
+        transcript.add_u64_to_independent_hash_buffer(
+            domain_separator.to_string() + "vk_num_public_inputs",
+            self.num_public_inputs,
+        );
+        transcript.add_u64_to_independent_hash_buffer(
+            domain_separator.to_string() + "vk_pub_inputs_offset",
+            self.pub_inputs_offset,
+        );
+
+        for commitment in self.commitments.iter() {
+            transcript.add_point_to_independent_hash_buffer::<C>(
+                domain_separator.to_string() + "vk_commitment",
+                *commitment,
+            );
+        }
+
+        transcript.hash_independent_buffer::<C>()
     }
 }

@@ -876,7 +876,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
     fn blake2s_hash(
         &mut self,
         _message_input: Vec<Self::AcvmType>,
-        _num_bits: &[usize],
+        _num_bits: usize,
     ) -> eyre::Result<Vec<Self::AcvmType>> {
         panic!("functionality blake2s_hash not feasible for Shamir")
     }
@@ -884,7 +884,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
     fn blake3_hash(
         &mut self,
         _message_input: Vec<Self::AcvmType>,
-        _num_bits: &[usize],
+        _num_bits: usize,
     ) -> eyre::Result<Vec<Self::AcvmType>> {
         panic!("functionality blake2s_hash not feasible for Shamir")
     }

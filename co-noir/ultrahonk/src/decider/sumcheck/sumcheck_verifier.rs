@@ -12,7 +12,7 @@ use crate::{
     types::NUM_ALL_ENTITIES,
     ultra_verifier::HonkVerifyResult,
 };
-use ark_ff::{One, Zero};
+use ark_ff::One;
 use co_noir_common::{
     honk_curve::HonkCurve,
     honk_proof::TranscriptFieldType,
@@ -29,14 +29,11 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         has_zk: ZeroKnowledge,
-        padding_indicator_array: &[P::ScalarField; CONST_PROOF_SIZE_LOG_N],
+        padding_indicator_array: &[P::ScalarField],
     ) -> HonkVerifyResult<SumcheckVerifierOutput<P::ScalarField>> {
         tracing::trace!("Sumcheck verify");
 
         let mut verified: bool = true;
-
-        // Pad gate challenges for Protogalaxy DeciderVerifier and AVM
-        self.pad_gate_challenges();
 
         let mut gate_separators =
             GateSeparatorPolynomial::new_without_products(self.memory.gate_challenges.to_owned());
@@ -131,14 +128,5 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             verified,
             claimed_libra_evaluation,
         })
-    }
-
-    fn pad_gate_challenges(&mut self) {
-        if self.memory.gate_challenges.len() < CONST_PROOF_SIZE_LOG_N {
-            let zero = P::ScalarField::zero();
-            for _ in self.memory.gate_challenges.len()..CONST_PROOF_SIZE_LOG_N {
-                self.memory.gate_challenges.push(zero);
-            }
-        }
     }
 }

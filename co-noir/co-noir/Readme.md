@@ -31,7 +31,7 @@ First, one needs to create the circuit file from a Noir source code. Your Noir p
 - `Nargo.toml`: Similar to Cargo.toml, just for Noir projects.
 - `Prover.toml`: The inputs for the main function in `src/main.nr` used in proof generation.
 
-To create the circuit file used in Co-Noir, one needs to install Nargo following the instructions in [https://noir-lang.org/docs/getting_started/noir_installation/](https://noir-lang.org/docs/getting_started/noir_installation/). Our prover is compatible with Nargo version v1.0.0-beta.6.
+To create the circuit file used in Co-Noir, one needs to install Nargo following the instructions in [https://noir-lang.org/docs/getting_started/noir_installation/](https://noir-lang.org/docs/getting_started/noir_installation/). Our prover is compatible with Nargo version v1.0.0-beta.14.
 Then you can just execute the following command:
 
 ```bash

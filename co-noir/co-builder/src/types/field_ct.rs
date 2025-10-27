@@ -7,7 +7,7 @@ use ark_ec::{AffineRepr, CurveConfig, CurveGroup, PrimeGroup};
 use ark_ff::PrimeField;
 use ark_ff::{One, Zero};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use co_noir_common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType, utils::Utils};
+use co_noir_common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType};
 use itertools::{Itertools, izip};
 use num_bigint::BigUint;
 use std::fmt::Debug;
@@ -86,7 +86,8 @@ impl<F: PrimeField> FieldCT<F> {
             let right = T::get_public(&other.get_value(builder, driver))
                 .expect("Constant should be public");
             builder.assert_if_has_witness(left == right);
-        } else if self.is_constant() {
+        }
+        if self.is_constant() {
             let right = other.normalize(builder, driver);
             let left =
                 T::get_public(&self.get_value(builder, driver)).expect("Constant should be public");
@@ -96,10 +97,22 @@ impl<F: PrimeField> FieldCT<F> {
             let right = T::get_public(&other.get_value(builder, driver))
                 .expect("Constant should be public");
             builder.assert_equal_constant(left.witness_index as usize, right);
-        } else {
+        } else if self.is_normalized() || other.is_normalized() {
             let left = self.normalize(builder, driver);
             let right = other.normalize(builder, driver);
             builder.assert_equal(left.witness_index as usize, right.witness_index as usize);
+        } else {
+            // Instead of creating 2 gates for normalizing both witnesses and applying a copy constraint, we use a
+            // single `add` gate constraining a - b = 0
+            builder.create_add_gate(&AddTriple {
+                a: self.witness_index,
+                b: other.witness_index,
+                c: builder.zero_idx,
+                a_scaling: self.multiplicative_constant,
+                b_scaling: -other.multiplicative_constant,
+                c_scaling: P::ScalarField::zero(),
+                const_scaling: self.additive_constant - other.additive_constant,
+            });
         }
     }
 
@@ -115,6 +128,10 @@ impl<F: PrimeField> FieldCT<F> {
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> BoolCT<P, T> {
+        // If `this` is a constant field_t element, the resulting bool is also constant.
+        // In this case, `additive_constant` uniquely determines the value of `this`.
+        // After ensuring that `additive_constant` \in {0, 1}, we set the `.witness_bool` field of `result` to match the
+        // value of `additive_constant`.
         if self.is_constant() {
             return BoolCT {
                 witness_bool: self.additive_constant.into(), // == F::one(),
@@ -127,30 +144,31 @@ impl<F: PrimeField> FieldCT<F> {
         let mul_constant_check = self.multiplicative_constant == F::one();
         let inverted_check =
             (self.additive_constant == F::one()) && (self.multiplicative_constant == -F::one());
-
-        if (!add_constant_check || !mul_constant_check) && !inverted_check {
-            let normalized_element = self.normalize(builder, driver);
-            let witness = builder.get_variable(normalized_element.get_witness_index() as usize);
-            if let Some(witness) = T::get_public(&witness) {
-                assert!(witness == F::zero() || witness == F::one());
-            }
-            builder.create_bool_gate(normalized_element.get_witness_index());
-            return BoolCT {
-                witness_bool: witness, // == F::one(),
-                witness_inverted: false,
-                witness_index: normalized_element.get_witness_index(),
-            };
+        let mut result_inverted = false;
+        // Process the elements of the form
+        //      a = a.v * 1 + 0 and a = a.v * (-1) + 1
+        // They do not need to be normalized if `a.v` is constrained to be boolean. In the first case, we have
+        //      a == a.v,
+        // and in the second case
+        //      a == ¬(a.v).
+        // The distinction between the cases is tracked by the .witness_inverted field of bool_t.
+        let mut witness_idx = self.witness_index;
+        if (add_constant_check && mul_constant_check) || inverted_check {
+            result_inverted = inverted_check;
+        } else {
+            // In general, the witness has to be normalized.
+            witness_idx = self.get_normalized_witness_index(builder, driver);
         }
-
-        let witness = builder.get_variable(self.witness_index as usize);
+        // Get the normalized value of the witness
+        let witness = builder.get_variable(witness_idx as usize);
         if let Some(witness) = T::get_public(&witness) {
             assert!(witness == F::zero() || witness == F::one());
         }
-        builder.create_bool_gate(self.witness_index);
+        builder.create_bool_gate(witness_idx);
         BoolCT {
             witness_bool: witness, // == F::one(),
-            witness_inverted: false,
-            witness_index: self.witness_index,
+            witness_inverted: result_inverted,
+            witness_index: witness_idx,
         }
     }
 
@@ -162,9 +180,7 @@ impl<F: PrimeField> FieldCT<F> {
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> Self {
-        if self.is_constant()
-            || ((self.multiplicative_constant == F::one()) && (self.additive_constant == F::zero()))
-        {
+        if self.is_normalized() {
             return self.to_owned();
         }
 
@@ -187,7 +203,7 @@ impl<F: PrimeField> FieldCT<F> {
 
         builder.create_add_gate(&AddTriple {
             a: self.witness_index,
-            b: self.witness_index,
+            b: builder.zero_idx,
             c: result.witness_index,
             a_scaling: self.multiplicative_constant,
             b_scaling: P::ScalarField::zero(),
@@ -782,82 +798,91 @@ impl<F: PrimeField> FieldCT<F> {
         Ok(result)
     }
 
-    // Slices a `field_ct` at given indices (msb, lsb) both included in the slice,
-    // returns three parts: [low, slice, high].
-    pub(crate) fn slice<
+    /**
+     * @brief Splits the field element into (lo, hi), where:
+     * - lo contains bits [0, lsb_index)
+     * - hi contains bits [lsb_index, num_bits)
+     */
+    pub(crate) fn split_at<
         P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &self,
-        msb: u8,
-        lsb: u8,
-        total_bitsize: usize,
+        lsb_index: u8,
+        num_bits: Option<u8>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> eyre::Result<[Self; 3]> {
-        const GRUMPKIN_MAX_NO_WRAP_INTEGER_BIT_LENGTH: usize = 252;
+    ) -> eyre::Result<[Self; 2]> {
+        const GRUMPKIN_MAX_NO_WRAP_INTEGER_BIT_LENGTH: u8 = 252;
+        let num_bits = num_bits.unwrap_or(GRUMPKIN_MAX_NO_WRAP_INTEGER_BIT_LENGTH);
 
-        assert!(msb >= lsb);
-        assert!((msb as usize) < GRUMPKIN_MAX_NO_WRAP_INTEGER_BIT_LENGTH);
+        assert!(lsb_index < num_bits);
+        assert!(num_bits <= GRUMPKIN_MAX_NO_WRAP_INTEGER_BIT_LENGTH);
 
-        let msb_plus_one = msb as u32 + 1;
+        assert!(lsb_index < num_bits);
+        assert!(num_bits <= GRUMPKIN_MAX_NO_WRAP_INTEGER_BIT_LENGTH);
 
         let value = self.get_value(builder, driver);
-        let (hi, lo, slice) = if T::is_shared(&value) {
+
+        // Handle edge case when lsb_index == 0
+        if lsb_index == 0 {
+            if self.is_constant() {
+                let hi_val = T::get_public(&value).expect("Constants are public");
+                return Ok([FieldCT::default(), FieldCT::from(hi_val)]);
+            } else {
+                self.create_range_constraint(num_bits as usize, builder, driver)?;
+                return Ok([FieldCT::default(), self.clone()]);
+            }
+        }
+
+        let (hi, lo) = if T::is_shared(&value) {
             let value = T::get_shared(&value).expect("Already checked it is shared");
-            let [lo, slice, hi] = driver.slice(value, msb, lsb, total_bitsize)?;
-            (
-                T::AcvmType::from(hi),
-                T::AcvmType::from(lo),
-                T::AcvmType::from(slice),
-            )
+            // TACEO TODO: We are returning one more value than needed here
+            let [lo, hi, _] =
+                driver.slice(value, num_bits, lsb_index, F::MODULUS_BIT_SIZE as usize)?;
+            (T::AcvmType::from(hi), T::AcvmType::from(lo))
         } else {
             let value: BigUint = T::get_public(&value)
                 .expect("Already checked it is public")
                 .into();
 
-            let hi_mask = (BigUint::one() << (total_bitsize - msb as usize)) - BigUint::one();
-            let hi = (&value >> msb_plus_one) & hi_mask;
-
-            let lo_mask = (BigUint::one() << lsb) - BigUint::one();
+            let lo_mask = (BigUint::one() << lsb_index) - BigUint::one();
             let lo = &value & lo_mask;
-
-            let slice_mask = (BigUint::one() << ((msb - lsb) as u32 + 1)) - BigUint::one();
-            let slice = (value >> lsb) & slice_mask;
+            let hi = &value >> lsb_index;
 
             let hi_ = T::AcvmType::from(F::from(hi));
             let lo_ = T::AcvmType::from(F::from(lo));
-            let slice_ = T::AcvmType::from(F::from(slice));
-            (hi_, lo_, slice_)
+            (hi_, lo_)
         };
 
-        let hi_wit = Self::from_witness(hi, builder);
+        if self.is_constant() {
+            // If `*this` is constant, we can return the split values directly
+            let lo_val = T::get_public(&lo).expect("Constants are public");
+            let hi_val = T::get_public(&hi).expect("Constants are public");
+
+            let reconstructed = lo_val + (hi_val * F::from(BigUint::one() << lsb_index));
+            let original = T::get_public(&value).expect("Constants are public");
+            assert_eq!(reconstructed, original);
+
+            return Ok([FieldCT::from(lo_val), FieldCT::from(hi_val)]);
+        }
+
         let lo_wit = Self::from_witness(lo, builder);
-        let slice_wit = Self::from_witness(slice, builder);
+        let hi_wit = Self::from_witness(hi, builder);
 
-        hi_wit.create_range_constraint(
-            GRUMPKIN_MAX_NO_WRAP_INTEGER_BIT_LENGTH - msb as usize,
-            builder,
-            driver,
-        )?;
-        lo_wit.create_range_constraint(lsb as usize, builder, driver)?;
-        slice_wit.create_range_constraint(msb_plus_one as usize - lsb as usize, builder, driver)?;
+        // Ensure that `lo_wit` is in the range [0, 2^lsb_index - 1]
+        lo_wit.create_range_constraint(lsb_index as usize, builder, driver)?;
 
-        let tmp_hi = hi_wit.multiply(
-            &FieldCT::from(F::from(BigUint::one() << msb_plus_one)),
-            builder,
-            driver,
-        )?;
-        let mut other = tmp_hi.add(&lo_wit, builder, driver);
-        let tmp_slice = slice_wit.multiply(
-            &FieldCT::from(F::from(BigUint::one() << lsb)),
-            builder,
-            driver,
-        )?;
-        other.add_assign(&tmp_slice, builder, driver);
-        self.assert_equal(&other, builder, driver);
+        // Ensure that `hi_wit` is in the range [0, 2^(num_bits - lsb_index) - 1]
+        hi_wit.create_range_constraint(num_bits as usize - lsb_index as usize, builder, driver)?;
 
-        Ok([lo_wit, slice_wit, hi_wit])
+        // Check that *this = lo_wit + hi_wit * 2^{lsb_index}
+        let shift_factor = FieldCT::from(F::from(BigUint::one() << lsb_index));
+        let hi_shifted = hi_wit.multiply(&shift_factor, builder, driver)?;
+        let reconstructed = lo_wit.add(&hi_shifted, builder, driver);
+        self.assert_equal(&reconstructed, builder, driver);
+
+        Ok([lo_wit, hi_wit])
     }
 
     pub(crate) fn create_range_constraint<
@@ -1157,43 +1182,8 @@ impl<F: PrimeField> FieldCT<F> {
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<BoolCT<P, T>> {
-        let fa = self.get_value(builder, driver);
-        let fb = other.get_value(builder, driver);
-
-        if self.is_constant() && other.is_constant() {
-            let val1 = T::get_public(&fa).expect("Constants are public");
-            let val2 = T::get_public(&fb).expect("Constants are public");
-            return Ok(BoolCT::from(val1 == val2));
-        }
-
-        let is_equal = driver.equal(&fa, &fb)?;
-        let fd = driver.sub(fa, fb);
-        let to_invert = driver.cmux(is_equal.to_owned(), F::one().into(), fd)?;
-        let fc = driver.invert(to_invert)?;
-
-        let result_witness = builder.add_variable(is_equal.to_owned());
-        let result = BoolCT {
-            witness_bool: is_equal,
-            witness_inverted: false,
-            witness_index: result_witness,
-        };
-
-        let x = FieldCT::from_witness(fc, builder);
-        let diff = self.sub(other, builder, driver);
-        // these constraints ensure that result is a boolean
-        let result_ct = result.to_field_ct(driver);
-        let zero_ct = FieldCT::from(F::zero());
-        Self::evaluate_polynomial_identity(
-            &diff,
-            &x,
-            &result_ct,
-            &FieldCT::from(F::one()).neg(),
-            builder,
-            driver,
-        );
-        Self::evaluate_polynomial_identity(&diff, &result_ct, &zero_ct, &zero_ct, builder, driver);
-
-        Ok(result)
+        let sub = self.sub(other, builder, driver);
+        sub.is_zero(builder, driver)
     }
 
     pub fn add_two<
@@ -1206,17 +1196,32 @@ impl<F: PrimeField> FieldCT<F> {
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> Self {
-        if add_a.is_constant() && add_b.is_constant() && self.is_constant() {
-            return self
-                .add(add_a, builder, driver)
-                .add(add_b, builder, driver)
-                .normalize(builder, driver);
+        let has_const_summand = self.is_constant() || add_a.is_constant() || add_b.is_constant();
+
+        if has_const_summand {
+            // If at least one of the summands is constant, the summation is efficiently handled by `+` operator
+            return self.add(add_a, builder, driver).add(add_b, builder, driver);
         }
 
-        let q_1 = self.multiplicative_constant;
-        let q_2 = add_a.multiplicative_constant;
-        let q_3 = add_b.multiplicative_constant;
-        let q_c = self.additive_constant + add_a.additive_constant + add_b.additive_constant;
+        // Let  d := a + (b+c), where
+        //      a := *this;
+        //      b := add_b;
+        //      c := add_c;
+        // define selector values by
+        //      mul_scaling   :=  0
+        //      a_scaling     :=  a_mul;
+        //      b_scaling     :=  b_mul;
+        //      c_scaling     :=  c_mul;
+        //      d_scaling     :=  -1;
+        //      const_scaling := a_add + b_add + c_add;
+        // Create a `big_mul_gate` to constrain
+        //  	a * b * mul_scaling + a * a_scaling + b * b_scaling + c * c_scaling + d * d_scaling + const_scaling = 0
+
+        let a_scaling = self.multiplicative_constant;
+        let b_scaling = add_a.multiplicative_constant;
+        let c_scaling = add_b.multiplicative_constant;
+        let const_scaling =
+            self.additive_constant + add_a.additive_constant + add_b.additive_constant;
 
         let a = if self.is_constant() {
             T::public_zero()
@@ -1234,12 +1239,12 @@ impl<F: PrimeField> FieldCT<F> {
             builder.get_variable(add_b.witness_index as usize)
         };
 
-        let mut out = driver.mul_with_public(q_1, a);
-        let t0 = driver.mul_with_public(q_2, b);
-        let t1 = driver.mul_with_public(q_3, c);
+        let mut out = driver.mul_with_public(a_scaling, a);
+        let t0 = driver.mul_with_public(b_scaling, b);
+        let t1 = driver.mul_with_public(c_scaling, c);
         driver.add_assign(&mut out, t0);
         driver.add_assign(&mut out, t1);
-        driver.add_assign_with_public(q_c, &mut out);
+        driver.add_assign_with_public(const_scaling, &mut out);
 
         let index = builder.add_variable(out);
         let result = Self::from_witness_index(index);
@@ -1262,16 +1267,42 @@ impl<F: PrimeField> FieldCT<F> {
             },
             d: result.witness_index,
             mul_scaling: F::zero(),
-            a_scaling: q_1,
-            b_scaling: q_2,
-            c_scaling: q_3,
+            a_scaling,
+            b_scaling,
+            c_scaling,
             d_scaling: -F::one(),
-            const_scaling: q_c,
+            const_scaling,
         });
 
         result
     }
 
+    /*
+     * @brief Validate whether a field_t element is zero.
+     *
+     * @details
+     * Let     a   := (*this).normalize()
+     *         is_zero := (a == 0)
+     *
+     * To check whether `a = 0`, we use the fact that, if `a != 0`, it has a modular inverse `I`, such that
+     *         a * I =  1.
+     *
+     * We reduce the check to the following algebraic constraints
+     * 1)      a * I - 1 + is_zero   = 0
+     * 2)      -is_zero * I + is_zero = 0
+     *
+     * If the value of `is_zero` is `false`, the first equation reduces to
+     *         a * I = 1
+     * then `I` must be the modular inverse of `a`, therefore `a != 0`. This explains the first constraint.
+     *
+     * If `is_zero = true`, then either `a` or `I` is zero (or both). To ensure that
+     *         a = 0 && I != 0
+     * we use the second constraint, it validates that
+     *         (is_zero.v = true) ==>  (I = 1)
+     * This way, if `a * I = 0`, we know that a = 0.
+     *
+     * @warning  If you want to ENFORCE that a field_t object is zero, use `assert_is_zero`
+     */
     pub fn is_zero<
         P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
@@ -1286,74 +1317,241 @@ impl<F: PrimeField> FieldCT<F> {
             return Ok(BoolCT::from(is_zero));
         }
 
-        // To check whether a field element, k, is zero, we use the fact that, if k > 0,
-        // there exists a modular inverse k', such that k * k' = 1
+        let native_value = self.get_value(builder, driver);
 
-        // To verify whether k = 0, we must do 2 checks
-        // First is that (k * k') - 1 + is_zero = 0
-
-        // If is_zero = false, then k' must be the modular inverse of k, therefore k is not 0
-
-        // If is_zero = true, then either k or k' is zero (or both)
-        // To ensure that it is k that is zero, and not k', we must apply
-        // an additional check: that if is_zero = true, k' = 1
-        // This way, if (k * k') = 0, we know that k = 0.
-        // The second check is: (is_zero * k') - is_zero = 0
-        let k = self.normalize(builder, driver);
-
-        let k_val = k.get_value(builder, driver);
-
-        let (is_zero, k_inverse) = if T::is_shared(&k_val) {
-            let (k_inverse_val, is_zero) =
-                Self::one_or_inverse_and_is_zero::<P, T>(k_val.to_owned(), driver)?;
+        // This can be done out of circuit, as `is_zero = true` implies `I = 1`.
+        let (is_zero, inverse) = if T::is_shared(&native_value) {
+            let (inverse_val, is_zero) =
+                Self::one_or_inverse_and_is_zero::<P, T>(native_value.to_owned(), driver)?;
             let is_zero_witness = WitnessCT::from_acvm_type(is_zero.to_owned(), builder);
             (
                 BoolCT::from_witness_ct(is_zero_witness, builder),
-                k_inverse_val,
+                inverse_val,
             )
         } else {
-            let k_val = T::get_public(&k_val).expect("Constants are public");
-            let is_zero = k_val.is_zero();
-            let k_inverse_val = if is_zero {
+            let val = T::get_public(&native_value).expect("Constants are public");
+            let is_zero = val.is_zero();
+            let inverse_val = if is_zero {
                 F::one().into()
             } else {
-                k_val.inverse().expect("non-zero").into()
+                val.inverse().expect("non-zero").into()
             };
             let is_zero_witness =
                 WitnessCT::from_acvm_type(F::from(is_zero as u64).into(), builder);
             (
                 BoolCT::from_witness_ct(is_zero_witness, builder),
-                k_inverse_val,
+                inverse_val,
             )
         };
-        let k_inverse =
-            FieldCT::<F>::from(WitnessCT::from_acvm_type(k_inverse.to_owned(), builder));
+        let inverse = FieldCT::<F>::from(WitnessCT::from_acvm_type(inverse.to_owned(), builder));
 
-        // k * k_inverse + is_zero - 1 = 0
-        builder.create_poly_gate(&PolyTriple {
-            a: k.witness_index,
-            b: k_inverse.witness_index,
-            c: is_zero.witness_index,
-            q_m: F::one(),
-            q_l: F::zero(),
-            q_r: F::zero(),
-            q_o: F::one(),
-            q_c: -F::one(),
-        });
+        // Note that `evaluate_polynomial_identity(a, b, c, d)` checks that `a * b + c + d = 0`, so we are using it for the
+        // constraints 1) and 2) above.
+        // More precisely, to check that `a * I - 1 + is_zero   = 0`, it creates a `big_mul_gate` given by the equation:
+        //      a.v * I.v * mul_scaling + a.v * a_scaling + I.v * b_scaling + is_zero.v * c_scaling + (-1) * d_scaling +
+        //      const_scaling = 0
+        // where
+        //      muk_scaling := a.mul * I.mul;
+        //      a_scaling := a.mul * I.add;
+        //      b_scaling := I.mul * a.add;
+        //      c_scaling := 1;
+        //      d_scaling := 0;
+        //      const_scaling := a.add * I.add + is_zero.add - 1;
+        Self::evaluate_polynomial_identity(
+            self,
+            &inverse,
+            &is_zero.to_field_ct(driver),
+            &FieldCT::from(-F::one()),
+            builder,
+            driver,
+        );
 
-        // is_zero * k_inverse - is_zero = 0
-        builder.create_poly_gate(&PolyTriple {
-            a: is_zero.witness_index,
-            b: k_inverse.witness_index,
-            c: is_zero.witness_index,
-            q_m: F::one(),
-            q_l: F::zero(),
-            q_r: F::zero(),
-            q_o: -F::one(),
-            q_c: F::zero(),
-        });
+        // To check that `-is_zero * I + is_zero = 0`, create a `big_mul_gate` given by the equation:
+        //      is_zero.v * (-I).v * mul_scaling + is_zero.v * a_scaling + (-I).v * b_scaling + is_zero.v * c_scaling + 0 *
+        //      d_scaling + const_scaling = 0
+        // where
+        //      mul_scaling := is_zero.mul * (-I).mul;
+        //      a_scaling := is_zero.mul * (-I).add;
+        //      b_scaling := (-I).mul * is_zero.add;
+        //      c_scaling := is_zero.mul;
+        //      d_scaling := 0;
+        //      const_scaling := is_zero.add * (-I).add + is_zero.add;
+        Self::evaluate_polynomial_identity(
+            &is_zero.to_field_ct(driver),
+            &inverse.neg(),
+            &is_zero.to_field_ct(driver),
+            &FieldCT::default(),
+            builder,
+            driver,
+        );
 
         Ok(is_zero)
+    }
+
+    /**
+     * Create a witness from a constant. This way the value of the witness is fixed and public (public, because the
+     * value becomes hard-coded as an element of the q_c selector vector).
+     */
+    pub fn convert_constant_to_fixed_witness<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        &mut self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) {
+        assert!(self.is_constant());
+        let value = self.get_value(builder, driver);
+        let witness = WitnessCT::from_acvm_type(value, builder);
+        *self = FieldCT::from(witness);
+        builder.fix_witness(
+            self.witness_index,
+            T::get_public(&self.get_value(builder, driver))
+                .expect("Fixed witness should be public"),
+        );
+    }
+
+    pub(crate) fn is_normalized(&self) -> bool {
+        self.is_constant()
+            || ((self.multiplicative_constant.is_one()) && (self.additive_constant.is_zero()))
+    }
+
+    /**
+     * @brief Efficiently compute the sum of vector entries. Using `big_add_gate` we reduce the number of gates needed
+     * to compute from `input.size()` to `input_size.size() / 3`.
+     *
+     * Note that if the size of the input vector is not a multiple of 3, the final gate will be padded with zero_idx wires
+     */
+    pub fn accumulate<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        input: &[FieldCT<F>],
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<FieldCT<F>> {
+        if input.is_empty() {
+            return Ok(FieldCT::from(F::zero()));
+        }
+
+        if input.len() == 1 {
+            return Ok(input[0].normalize(builder, driver));
+        }
+
+        let mut accumulator = Vec::new();
+        let mut constant_term = FieldCT::from(F::zero());
+
+        // Remove constant terms from input field elements
+        for element in input {
+            if element.is_constant() {
+                constant_term = constant_term.add(element, builder, driver);
+            } else {
+                accumulator.push(element.clone());
+            }
+        }
+        if accumulator.is_empty() {
+            return Ok(constant_term);
+        }
+        // Add the accumulated constant term to the first witness. It does not create any gates - only the additive
+        // constant of `accumulator[0]` is updated.
+        accumulator[0] = accumulator[0].add(&constant_term, builder, driver);
+
+        // Step 2: compute output value
+        let num_elements = accumulator.len();
+        let mut output = T::AcvmType::default();
+        for acc in &accumulator {
+            let val = acc.get_value(builder, driver);
+            driver.add_assign(&mut output, val);
+        }
+
+        // Pad the accumulator with zeroes so that its size is a multiple of 3.
+        let num_padding_wires = if (num_elements % 3) == 0 {
+            0
+        } else {
+            3 - (num_elements % 3)
+        };
+        for _ in 0..num_padding_wires {
+            accumulator.push(FieldCT::from_witness_index(builder.zero_idx));
+        }
+        let num_elements = accumulator.len();
+        let num_gates = num_elements / 3;
+        // Last gate is handled separetely
+        let last_gate_idx = num_gates - 1;
+
+        let total = FieldCT::from_witness(output, builder);
+        let mut accumulating_total = total.clone();
+
+        // Let
+        //      a_i := accumulator[3*i];
+        //      b_i := accumulator[3*i+1];
+        //      c_i := accumulator[3*i+2];
+        //      d_0 := total;
+        //      d_i := total - \sum_(j <  3*i) accumulator[j];
+        // which leads us to equations
+        //      d_{i+1} = d_{i} - a_i - b_i - c_i for i = 0, ..., last_idx - 1;
+        //      0       = d_{i} - a_i - b_i - c_i for i = last_gate_idx,
+        // that are turned into constraints below.
+
+        for i in 0..last_gate_idx {
+            // For i < last_gate_idx, we create a `big_add_gate` constraint
+            //      a_i.v * a_scaling + b_i.v * b_scaling + c_i.v * c_scaling + d_i.v * d_scaling + const_scaling +
+            //      w_4_omega = 0
+            // where
+            //      a_scaling       :=  a_i.mul
+            //      b_scaling       :=  b_i.mul
+            //      c_scaling       :=  c_i.mul
+            //      d_scaling       := -1
+            //      const_scaling   :=  a_i.add + b_i.add + c_i.add
+            //      w_4_omega :=  d_{i+1}
+            builder.create_big_add_gate(
+                &AddQuad {
+                    a: accumulator[3 * i].witness_index,
+                    b: accumulator[3 * i + 1].witness_index,
+                    c: accumulator[3 * i + 2].witness_index,
+                    d: accumulating_total.witness_index,
+                    a_scaling: accumulator[3 * i].multiplicative_constant,
+                    b_scaling: accumulator[3 * i + 1].multiplicative_constant,
+                    c_scaling: accumulator[3 * i + 2].multiplicative_constant,
+                    d_scaling: -F::one(),
+                    const_scaling: accumulator[3 * i].additive_constant
+                        + accumulator[3 * i + 1].additive_constant
+                        + accumulator[3 * i + 2].additive_constant,
+                },
+                true, // use_next_gate_w_4 = true
+            );
+
+            let new_total_val = {
+                let acc_total = accumulating_total.get_value(builder, driver);
+                let a_val = accumulator[3 * i].get_value(builder, driver);
+                let b_val = accumulator[3 * i + 1].get_value(builder, driver);
+                let c_val = accumulator[3 * i + 2].get_value(builder, driver);
+
+                let mut new_total = driver.sub(acc_total, a_val);
+                new_total = driver.sub(new_total, b_val);
+                driver.sub(new_total, c_val)
+            };
+            accumulating_total = FieldCT::from_witness(new_total_val, builder);
+        }
+
+        // For i = last_gate_idx, we create a `big_add_gate` constraining
+        //      a_i.v * a_scaling + b_i.v * b_scaling + c_i.v * c_scaling + d_i.v * d_scaling + const_scaling = 0
+        builder.create_big_add_gate(
+            &AddQuad {
+                a: accumulator[3 * last_gate_idx].witness_index,
+                b: accumulator[3 * last_gate_idx + 1].witness_index,
+                c: accumulator[3 * last_gate_idx + 2].witness_index,
+                d: accumulating_total.witness_index,
+                a_scaling: accumulator[3 * last_gate_idx].multiplicative_constant,
+                b_scaling: accumulator[3 * last_gate_idx + 1].multiplicative_constant,
+                c_scaling: accumulator[3 * last_gate_idx + 2].multiplicative_constant,
+                d_scaling: -F::one(),
+                const_scaling: accumulator[3 * last_gate_idx].additive_constant
+                    + accumulator[3 * last_gate_idx + 1].additive_constant
+                    + accumulator[3 * last_gate_idx + 2].additive_constant,
+            },
+            false, // use_next_gate_w_4 = false
+        );
+        Ok(total.normalize(builder, driver))
     }
 }
 
@@ -1407,15 +1605,6 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> WitnessCT<P
             witness: value,
             witness_index,
         }
-    }
-
-    pub(crate) fn create_constant_witness(
-        value: P::ScalarField,
-        builder: &mut GenericUltraCircuitBuilder<P, T>,
-    ) -> Self {
-        let out = Self::from_acvm_type(value.into(), builder);
-        builder.assert_equal_constant(out.witness_index as usize, value);
-        out
     }
 }
 
@@ -1609,6 +1798,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T
             let value = driver.mul(left, right)?;
             result.witness_bool = value.to_owned();
             result.witness_index = builder.add_variable(value);
+
             // result.witness_inverted = false;
 
             //      /**
@@ -1722,75 +1912,61 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T
 
         if !self.is_constant() && !other.is_constant() {
             result.witness_index = builder.add_variable(value);
-            // result = A + B - AB, where A,B are the "real" values of the variables. But according to whether
-            // witness_inverted flag is true, we need to invert the input. Hence, we look at four cases, and compute the
-            // relevent coefficients of the selector q_1,q_2,q_m,q_c in each case
-            let multiplicative_coefficient;
-            let left_coefficient;
-            let right_coefficient;
-            let constant_coefficient;
-            // a inverted: (1-a) + b - (1-a)b = 1-a+ab
-            // ==> q_1=-1,q_2=0,q_m=1,q_c=1
-            if self.witness_inverted && !other.witness_inverted {
-                multiplicative_coefficient = P::ScalarField::one();
-                left_coefficient = -P::ScalarField::one();
-                right_coefficient = P::ScalarField::zero();
-                constant_coefficient = P::ScalarField::one();
-            }
-            // b inverted: a + (1-b) - a(1-b) = 1-b+ab
-            // ==> q_1=0,q_2=-1,q_m=1,q_c=1
-            else if !self.witness_inverted && other.witness_inverted {
-                multiplicative_coefficient = P::ScalarField::one();
-                left_coefficient = P::ScalarField::zero();
-                right_coefficient = -P::ScalarField::one();
-                constant_coefficient = P::ScalarField::one();
-            }
-            // Both inverted: (1 - a) + (1 - b) - (1 - a)(1 - b) = 2 - a - b - (1 -a -b +ab) = 1 - ab
-            // ==> q_m=-1,q_1=0,q_2=0,q_c=1
-            else if self.witness_inverted && other.witness_inverted {
-                multiplicative_coefficient = -P::ScalarField::one();
-                left_coefficient = P::ScalarField::zero();
-                right_coefficient = P::ScalarField::zero();
-                constant_coefficient = P::ScalarField::one();
-            }
-            // No inversions: a + b - ab ==> q_m=-1,q_1=1,q_2=1,q_c=0
-            else {
-                multiplicative_coefficient = -P::ScalarField::one();
-                left_coefficient = P::ScalarField::one();
-                right_coefficient = P::ScalarField::one();
-                constant_coefficient = P::ScalarField::zero();
-            }
+            // Let
+            //      a := lhs = *this;
+            //      b := rhs = other;
+            // The result is given by
+            //      a + b - a * b =  [-(1 - 2*i_a) * (1 - 2*i_b)] * w_a w_b +
+            //                        [(1 - 2 * i_a) * (1 - i_b)] * w_a
+            //                        [(1 - 2 * i_b) * (1 - i_a)] * w_b
+            //                            [i_a + i_b - i_a * i_b] * 1
+            let rhs_inverted = other.witness_inverted as i32;
+            let lhs_inverted = self.witness_inverted as i32;
+
+            let q_m = P::ScalarField::from(-(1 - 2 * rhs_inverted) * (1 - 2 * lhs_inverted));
+            let q_l = P::ScalarField::from((1 - 2 * lhs_inverted) * (1 - rhs_inverted));
+            let q_r = P::ScalarField::from((1 - lhs_inverted) * (1 - 2 * rhs_inverted));
+            let q_o = -P::ScalarField::one();
+            let q_c =
+                P::ScalarField::from(rhs_inverted + lhs_inverted - rhs_inverted * lhs_inverted);
+
+            // Let r := a | b;
+            // Constrain
+            //      q_m * w_a * w_b + q_l * w_a + q_r * w_b + q_o * r + q_c = 0
             builder.create_poly_gate(&PolyTriple {
                 a: self.witness_index,
                 b: other.witness_index,
                 c: result.witness_index,
-                q_m: multiplicative_coefficient,
-                q_l: left_coefficient,
-                q_r: right_coefficient,
-                q_o: -P::ScalarField::one(),
-                q_c: constant_coefficient,
+                q_m,
+                q_l,
+                q_r,
+                q_o,
+                q_c,
             });
         } else if !self.is_constant() && other.is_constant() {
-            let right = T::get_public(&right).expect("Constants are public");
-            if right.is_zero() {
-                result = self.to_owned();
+            assert!(!other.witness_inverted);
+            // If we are computing a | b and b is a constant `true`, the result is a constant `true` that does not
+            // depend on `a`.
+            result = if T::get_public(&other.witness_bool)
+                .expect("Constants are public")
+                .is_zero()
+            {
+                self.to_owned()
             } else {
-                result.witness_bool = P::ScalarField::one().into();
-                // result.witness_inverted = false;
-                // result.witness_index = IS_CONSTANT;
-            }
+                other.to_owned()
+            };
         } else if self.is_constant() && !other.is_constant() {
-            let left = T::get_public(&left).expect("Constants are public");
-            if left.is_zero() {
-                result = other.to_owned();
+            assert!(!self.witness_inverted);
+            // If we are computing a | b and `a` is a constant `true`, the result is a constant `true` that does not
+            // depend on `b`.
+            result = if T::get_public(&self.witness_bool)
+                .expect("Constants are public")
+                .is_zero()
+            {
+                other.to_owned()
             } else {
-                result.witness_bool = P::ScalarField::one().into();
-                // result.witness_inverted = false;
-                // result.witness_index = IS_CONSTANT;
-            }
-        } else {
-            // result.witness_index = IS_CONSTANT;
-            // result.witness_inverted = false;
+                self.to_owned()
+            };
         }
 
         Ok(result)
@@ -1887,6 +2063,10 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T
             return self.to_owned();
         }
 
+        if !self.witness_inverted {
+            return self.to_owned();
+        }
+
         let value = self.get_value(driver);
         let new_witness = builder.add_variable(value.to_owned());
         let new_value = value;
@@ -1915,6 +2095,14 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T
             witness_inverted: false,
             witness_index: new_witness,
         }
+    }
+
+    pub(crate) fn get_normalized_witness_index(
+        &self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> u32 {
+        self.normalize(builder, driver).witness_index
     }
 }
 
@@ -2014,8 +2202,10 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupC
 
         self.is_standard = true;
         let zero = FieldCT::default();
-        self.x = FieldCT::conditional_assign(&self.is_infinity, &zero, &self.x, builder, driver)?;
-        self.y = FieldCT::conditional_assign(&self.is_infinity, &zero, &self.y, builder, driver)?;
+        self.x = FieldCT::conditional_assign(&self.is_infinity, &zero, &self.x, builder, driver)?
+            .normalize(builder, driver);
+        self.y = FieldCT::conditional_assign(&self.is_infinity, &zero, &self.y, builder, driver)?
+            .normalize(builder, driver);
 
         Ok(())
     }
@@ -2098,8 +2288,10 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupC
         }
 
         let zero = FieldCT::default();
-        self.x = FieldCT::conditional_assign(&is_infinity, &zero, &self.x, builder, driver)?;
-        self.y = FieldCT::conditional_assign(&is_infinity, &zero, &self.y, builder, driver)?;
+        self.x = FieldCT::conditional_assign(&is_infinity, &zero, &self.x, builder, driver)?
+            .normalize(builder, driver);
+        self.y = FieldCT::conditional_assign(&is_infinity, &zero, &self.y, builder, driver)?
+            .normalize(builder, driver);
 
         // We won't bump into the case where we end up with non constant coordinates
         assert!(!self.x.is_constant() && !self.y.is_constant());
@@ -2474,17 +2666,29 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
     ) -> eyre::Result<(CycleGroupCT<P, T>, P::CycleGroup)> {
         debug_assert_eq!(scalars.len(), base_points.len());
 
-        let mut num_bits = 0;
-        for scalar in scalars.iter() {
-            num_bits = std::cmp::max(num_bits, scalar.num_bits());
+        let num_bits = scalars[0].num_bits();
+        for s in scalars.iter() {
+            assert_eq!(
+                s.num_bits(),
+                num_bits,
+                "Scalars of different bit-lengths not supported!"
+            );
         }
 
         let num_rounds = num_bits.div_ceil(Self::TABLE_BITS);
         let num_points = scalars.len();
         let table_size = (1 << Self::TABLE_BITS) as usize;
 
-        let mut scalar_slices = Vec::with_capacity(2 * num_points);
+        let mut scalar_slices = Vec::with_capacity(num_points);
 
+        for scalar in scalars.iter() {
+            scalar_slices.push(StrausScalarSlice::new(
+                scalar,
+                Self::TABLE_BITS,
+                builder,
+                driver,
+            )?);
+        }
         // /**
         //  * Compute the witness values of the batch_mul algorithm natively, as Element types with a Z-coordinate.
         //  * We then batch-convert to AffineElement types, and feed these points as "hints" into the cycle_group methods.
@@ -2493,41 +2697,23 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         //  */
         let mut operation_transcript =
             Vec::with_capacity(Self::TABLE_BITS + num_rounds * num_points);
-        let mut native_straus_tables = Vec::with_capacity(num_points);
         let mut offset_generator_accumulator: P::CycleGroup =
             offset_generators[0].to_owned().into();
 
-        for (point, offset_generator) in base_points.iter().zip(offset_generators.iter().skip(1)) {
-            let mut native_straus_table = Vec::with_capacity(table_size);
-            native_straus_table.push(T::AcvmPoint::from(offset_generator.to_owned().into()));
-            for j in 1..table_size {
-                let val = point.get_value(builder, driver)?;
-                let val = driver.add_points(val, native_straus_table[j - 1].to_owned());
-                native_straus_table.push(val);
-            }
-            native_straus_tables.push(native_straus_table);
-        }
-        for (scalar, point, offset_generator) in izip!(
-            scalars.iter(),
-            base_points.iter(),
-            offset_generators.iter().skip(1)
-        ) {
-            scalar_slices.push(StrausScalarSlice::new(
-                scalar,
-                Self::TABLE_BITS,
-                builder,
-                driver,
-            )?);
-
+        // Construct native straus lookup table for each point
+        let mut native_straus_tables = Vec::with_capacity(num_points);
+        for i in 0..num_points {
             let table_transcript = StrausLookupTable::<P, T>::compute_straus_lookup_table_hints(
-                point.get_value(builder, driver)?,
-                offset_generator.to_owned(),
+                base_points[i].get_value(builder, driver)?,
+                offset_generators[i + 1].to_owned(),
                 Self::TABLE_BITS,
                 driver,
             )?;
-            for hint in table_transcript.into_iter().skip(1) {
-                operation_transcript.push(hint);
+            // Skip the first element (offset generator), push the rest into operation_transcript
+            for hint in table_transcript.iter().skip(1) {
+                operation_transcript.push(hint.to_owned());
             }
+            native_straus_tables.push(table_transcript);
         }
 
         // We translate the Point LUTs to field luts
@@ -2550,6 +2736,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             native_straus_tables_i.push(driver.init_lut_by_acvm_type(i_table));
         }
 
+        // Perform the Straus algorithm natively to generate the witness values (hints) for all intermediate points
         let accumulator: P::CycleGroup = offset_generators[0].to_owned().into();
         let mut accumulator = T::AcvmPoint::from(accumulator);
         for i in 0..num_rounds {
@@ -2593,26 +2780,21 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 
         let mut point_tables = Vec::with_capacity(num_points);
         let hints_per_table = table_size - 1;
-        for (scalar_, point, offset_generator) in izip!(
-            scalars.iter(),
-            base_points.iter(),
-            offset_generators.iter().skip(1)
-        ) {
-            // TACEO TODO: In our opinion these add variables/gates but are not needed since they are never read
-            scalar_slices.push(StrausScalarSlice::new(
-                scalar_,
-                Self::TABLE_BITS,
-                builder,
-                driver,
-            )?);
-            point_tables.push(StrausLookupTable::<P, T>::new(
+        for (i, (point, offset_generator)) in
+            izip!(base_points.iter(), offset_generators.iter().skip(1)).enumerate()
+        {
+            // Get the slice of hints for this table
+            let table_hints =
+                operation_hints[i * hints_per_table..(i + 1) * hints_per_table].to_vec();
+            let lookup_table = StrausLookupTable::new(
                 point,
                 CycleGroupCT::from_group_element(offset_generator.to_owned().into()),
                 Self::TABLE_BITS,
-                None,
+                Some(table_hints),
                 builder,
                 driver,
-            )?);
+            )?;
+            point_tables.push(lookup_table);
         }
 
         // let hint_ptr = &operation_hints[num_points * hints_per_table];
@@ -2794,11 +2976,9 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             );
         }
 
-        let y = modified_y.normalize(builder, driver);
-
         builder.create_ecc_dbl_gate(&EccDblGate {
             x1: self.x.get_witness_index(),
-            y1: y.get_witness_index(),
+            y1: modified_y.get_witness_index(),
             x3: result.x.get_witness_index(),
             y3: result.y.get_witness_index(),
         });
@@ -2977,8 +3157,10 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         result_y = FieldCT::conditional_assign(lhs_infinity, &other.y, &result_y, builder, driver)?;
 
         // if rhs infinity, return lhs
-        result_x = FieldCT::conditional_assign(rhs_infinity, &self.x, &result_x, builder, driver)?;
-        result_y = FieldCT::conditional_assign(rhs_infinity, &self.y, &result_y, builder, driver)?;
+        result_x = FieldCT::conditional_assign(rhs_infinity, &self.x, &result_x, builder, driver)?
+            .normalize(builder, driver);
+        result_y = FieldCT::conditional_assign(rhs_infinity, &self.y, &result_y, builder, driver)?
+            .normalize(builder, driver);
 
         // is result point at infinity?
         // yes = infinity_predicate && !lhs_infinity && !rhs_infinity
@@ -3038,7 +3220,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             builder,
             driver,
         );
-
         // Computes lambda = (-y2-y1)/x_diff, using the fact that x_diff is never 0
 
         let lambda = if (y1.is_constant() && y2.is_constant()) || x_diff.is_constant() {
@@ -3091,8 +3272,10 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         )?;
 
         // if rhs infinity, return lhs
-        result_x = FieldCT::conditional_assign(rhs_infinity, &self.x, &result_x, builder, driver)?;
-        result_y = FieldCT::conditional_assign(rhs_infinity, &self.y, &result_y, builder, driver)?;
+        result_x = FieldCT::conditional_assign(rhs_infinity, &self.x, &result_x, builder, driver)?
+            .normalize(builder, driver);
+        result_y = FieldCT::conditional_assign(rhs_infinity, &self.y, &result_y, builder, driver)?
+            .normalize(builder, driver);
 
         // is result point at infinity?
         // yes = infinity_predicate && !lhs_infinity && !rhs_infinity
@@ -3129,8 +3312,10 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Self> {
-        let mut x = FieldCT::conditional_assign(predicate, &lhs.x, &rhs.x, builder, driver)?;
-        let y = FieldCT::conditional_assign(predicate, &lhs.y, &rhs.y, builder, driver)?;
+        let mut x = FieldCT::conditional_assign(predicate, &lhs.x, &rhs.x, builder, driver)?
+            .normalize(builder, driver);
+        let y = FieldCT::conditional_assign(predicate, &lhs.y, &rhs.y, builder, driver)?
+            .normalize(builder, driver);
         let is_infinity = BoolCT::conditional_assign(
             predicate,
             lhs.is_point_at_infinity(),
@@ -3458,7 +3643,6 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> StrausScala
             result.push(FieldCT::from_witness_index(slice));
             result_native.push(builder.get_variable(slice as usize));
         }
-
         Ok((result, result_native))
     }
 
@@ -3707,102 +3891,138 @@ impl<F: PrimeField> ByteArray<F> {
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Self> {
-        assert!(num_bytes <= 32);
-        let value = input.get_value(builder, driver);
-        let mut values = Vec::with_capacity(num_bytes);
-        if input.is_constant() {
-            for i in 0..num_bytes {
-                let byte_val = Utils::slice_u256(
-                    &T::get_public(&value)
-                        .expect("Already checked it is public")
-                        .into(),
-                    (num_bytes - i - 1) as u64 * 8,
-                    (num_bytes - i) as u64 * 8,
-                );
-                values.push(FieldCT::from(F::from(byte_val)));
-            }
-        } else {
-            let is_shared = T::is_shared(&value);
-            let decomposed = if is_shared {
-                let value = T::get_shared(&value).expect("Already checked it is shared");
+        let max_num_bytes = 32;
+        let midpoint = max_num_bytes / 2;
+        let one = BigUint::one();
 
-                driver
-                    .decompose_arithmetic(value, num_bytes * 8, 8)?
-                    .into_iter()
-                    .rev()
-                    .map(T::AcvmType::from)
-                    .collect::<Vec<_>>()
+        assert!(num_bytes < max_num_bytes);
+        let mut values = Vec::with_capacity(num_bytes);
+        let value = input.get_value(builder, driver);
+
+        let is_shared = T::is_shared(&value);
+        let decomposed = if is_shared {
+            let value = T::get_shared(&value).expect("Already checked it is shared");
+
+            driver
+                .decompose_arithmetic(value, num_bytes * 8, 8)?
+                .into_iter()
+                .rev()
+                .map(T::AcvmType::from)
+                .collect::<Vec<_>>()
+        } else {
+            let value: BigUint = T::get_public(&value)
+                .expect("Already checked it is public")
+                .into();
+            let mut bytes = value.to_bytes_be();
+            bytes.resize(num_bytes, 0);
+            bytes
+                .into_iter()
+                .map(|byte| F::from(byte).into())
+                .collect::<Vec<_>>()
+        };
+
+        // To optimize the computation of the reconstructed_hi  and reconstructed_lo, we use the `field_t::accumulate`
+        // method.
+        let mut accumulator_lo = Vec::with_capacity(midpoint);
+        let mut accumulator_hi = Vec::with_capacity(midpoint);
+
+        for (i, byte_val) in decomposed.iter().enumerate() {
+            let bit_start = (num_bytes - i - 1) * 8;
+            let scaling_factor = FieldCT::from(F::from(one.clone() << bit_start));
+
+            // Ensure that current `byte_array` element is a witness iff input is a witness and that it is range
+            // constrained.
+            let byte = if input.is_constant() {
+                let byte = FieldCT::from(T::get_public(byte_val).expect("Constants are public"));
+                byte.create_range_constraint(8, builder, driver)?;
+                byte
             } else {
-                let value: BigUint = T::get_public(&value)
+                let byte_witness = FieldCT::from_witness(byte_val.clone(), builder);
+                byte_witness.create_range_constraint(8, builder, driver)?;
+                byte_witness
+            };
+            values.push(byte.clone());
+
+            if i < midpoint {
+                accumulator_hi.push(scaling_factor.multiply(&byte, builder, driver)?);
+            } else {
+                accumulator_lo.push(scaling_factor.multiply(&byte, builder, driver)?);
+            }
+        }
+
+        // Reconstruct the high and low limbs of input from the byte decomposition
+        let reconstructed_lo = FieldCT::accumulate(&accumulator_lo, builder, driver)?;
+        let reconstructed_hi = FieldCT::accumulate(&accumulator_hi, builder, driver)?;
+        let reconstructed = reconstructed_hi.add(&reconstructed_lo, builder, driver);
+
+        // Ensure that the reconstruction succeeded
+        input.assert_equal(&reconstructed, builder, driver);
+
+        // Handle the case when the decomposition is not unique
+        if num_bytes == 32 {
+            // For a modulus `r`, split `r - 1` into limbs
+            let modulus_minus_one: BigUint = F::MODULUS.into() - BigUint::one();
+            let s_lo: BigUint = &modulus_minus_one & ((BigUint::one() << 128) - BigUint::one());
+            let s_hi = FieldCT::from(F::from(&modulus_minus_one >> 128));
+            let shift: BigUint = BigUint::one() << 128;
+
+            // Ensure that `(r - 1).lo + 2 ^ 128 - reconstructed_lo` is a 129 bit integer by slicing it into a 128- and 1-
+            // bit chunks.
+            let diff_lo = reconstructed_lo
+                .neg()
+                .add(&FieldCT::from(F::from(s_lo.clone())), builder, driver)
+                .add(&FieldCT::from(F::from(shift.clone())), builder, driver);
+            let diff_lo_value = diff_lo.get_value(builder, driver);
+
+            // Extract the "borrow" bit
+            let [diff_lo_lo_value, diff_lo_hi_value] = if T::is_shared(&diff_lo_value) {
+                let slice_result = driver.slice(
+                    T::get_shared(&diff_lo_value).expect("we checked it is shared"),
+                    127,
+                    0,
+                    F::MODULUS_BIT_SIZE as usize,
+                )?;
+                [
+                    T::AcvmType::from(slice_result[0].clone()),
+                    T::AcvmType::from(slice_result[1].clone()),
+                ]
+            } else {
+                let diff_lo_value: BigUint = T::get_public(&diff_lo_value)
                     .expect("Already checked it is public")
                     .into();
-                let mut bytes = value.to_bytes_be();
-                bytes.resize(num_bytes, 0);
-                bytes
-                    .into_iter()
-                    .map(|byte| F::from(byte).into())
-                    .collect::<Vec<_>>()
+                let lo = T::AcvmType::from(F::from(&diff_lo_value & (&shift - BigUint::one())));
+                let hi = T::AcvmType::from(F::from(&diff_lo_value >> 128));
+                [lo, hi]
             };
-            assert_eq!(decomposed.len(), num_bytes);
+            let diff_lo_hi = if input.is_constant() {
+                FieldCT::from(T::get_public(&diff_lo_hi_value).expect("Constants are public"))
+            } else {
+                FieldCT::from_witness(diff_lo_hi_value, builder)
+            };
+            diff_lo_hi.create_range_constraint(1, builder, driver)?;
 
-            let byte_shift = F::from(256u64);
-            let mut validator = FieldCT::default();
-            let mut shifted_high_limb = FieldCT::default(); // will be set to 2^128v_hi if `i` reaches 15.
-            for (i, byte_val) in decomposed.into_iter().enumerate() {
-                let byte = FieldCT::from_witness(byte_val, builder);
-                byte.create_range_constraint(8, builder, driver)?;
-                let scaling_factor_value = byte_shift.pow([(num_bytes - 1 - i) as u64]);
-                let scaling_factor = FieldCT::from(scaling_factor_value);
-                // AZTEC TODO: Addition could be optimized
-                let mul = scaling_factor.multiply(&byte, builder, driver)?;
-                validator = validator.add(&mul, builder, driver);
-                values.push(byte);
-                if i == 15 {
-                    shifted_high_limb = validator.clone();
-                }
-            }
-            validator.assert_equal(input, builder, driver);
+            // // Extract first 128 bits of `diff_lo`
+            let diff_lo_lo = if input.is_constant() {
+                FieldCT::from(T::get_public(&diff_lo_lo_value).expect("Constants are public"))
+            } else {
+                FieldCT::from_witness(diff_lo_lo_value, builder)
+            };
+            diff_lo_lo.create_range_constraint(128, builder, driver)?;
 
-            // constrain validator to be < r
-            if num_bytes == 32 {
-                let modulus_minus_one: BigUint = (-F::one()).into(); //fr::modulus - 1;
-                let s_lo: F = Utils::slice_u256(&modulus_minus_one.clone(), 0, 128).into();
-                let s_hi: F = Utils::slice_u256(&modulus_minus_one, 128, 256).into();
-                let shift = F::from(BigUint::one() << 128);
-                validator.neg_inplace();
-                let y_lo = validator.add(&FieldCT::from(s_lo + shift), builder, driver);
+            // Both chunks were computed out-of-circuit - need to constrain. The range constraints above ensure that
+            // they are not overlapping.
+            let shift_ct = FieldCT::from(F::from(shift));
+            let mul = diff_lo_hi.multiply(&shift_ct, builder, driver)?;
+            let add = diff_lo_lo.add(&mul, builder, driver);
+            diff_lo.assert_equal(&add, builder, driver);
 
-                // we have plookup
-                // carve out the 2 high bits from (y_lo + shifted_high_limb) and instantiate as y_overlap
-                let y_lo_value = y_lo.get_value(builder, driver);
-                let shifted_high_limb_val = shifted_high_limb.get_value(builder, driver);
-                let y_lo_value = T::add(driver, y_lo_value, shifted_high_limb_val);
-                let y_overlap_value = T::right_shift(driver, y_lo_value, 128)?;
-                let mut y_overlap = FieldCT::from_witness(y_overlap_value, builder);
-                y_overlap.create_range_constraint(2, builder, driver)?;
-                let y_overlap_mul = y_overlap.multiply(
-                    &FieldCT::from(F::from(BigUint::one() << 128)),
-                    builder,
-                    driver,
-                )?;
-                let y_remainder =
-                    y_lo.add_two(&shifted_high_limb, &y_overlap_mul.neg(), builder, driver);
-                y_remainder.create_range_constraint(128, builder, driver)?;
-                let y_overlap_neg = y_overlap.neg();
-                y_overlap = y_overlap_neg.add(&FieldCT::from(F::one()), builder, driver);
-
-                // define input_hi = shifted_high_limb/shift. We know input_hi is max 128 bits, and we're checking
-                // s_hi - (input_hi + borrow) is non-negative
-
-                let mul = shifted_high_limb.multiply(
-                    &FieldCT::from(shift.inverse().expect("non-zero")),
-                    builder,
-                    driver,
-                )?;
-                let mut y_hi = mul.add(&FieldCT::from(s_hi), builder, driver);
-                y_hi = y_hi.sub(&y_overlap, builder, driver);
-                y_hi.create_range_constraint(128, builder, driver)?;
-            }
+            let overlap = diff_lo_hi
+                .neg()
+                .add(&FieldCT::from(F::from(1u64)), builder, driver);
+            // Ensure that (r - 1).hi  - reconstructed_hi/shift - overlap is positive.
+            let div = reconstructed_hi.neg().divide(&shift_ct, builder, driver)?;
+            let diff_hi = div.add_two(&s_hi, &overlap.neg(), builder, driver);
+            diff_hi.create_range_constraint(128, builder, driver)?;
         }
         Ok(Self { values })
     }
@@ -3844,15 +4064,17 @@ impl<F: PrimeField> ByteArray<F> {
         driver: &mut T,
     ) -> eyre::Result<FieldCT<F>> {
         let bytes = self.values.len();
-        let shift = F::from(256u64);
-        let mut result = FieldCT::default();
+        assert!(bytes < 32);
+
+        let mut scaled_values = Vec::with_capacity(bytes);
+
         for (i, value) in self.values.iter().enumerate() {
-            let scaling_factor_value = shift.pow([(bytes - 1 - i) as u64]);
-            let scaling_factor = FieldCT::from(scaling_factor_value);
-            let mul = scaling_factor.multiply(value, builder, driver)?;
-            result = result.add(&mul, builder, driver);
+            let shift_amount = 8 * (bytes - i - 1);
+            let scaling_factor = FieldCT::from(F::from(BigUint::one() << shift_amount));
+            scaled_values.push(value.multiply(&scaling_factor, builder, driver)?);
         }
-        Ok(result.normalize(builder, driver))
+
+        FieldCT::accumulate(&scaled_values, builder, driver)
     }
 
     /// Reverse the bytes in the byte array

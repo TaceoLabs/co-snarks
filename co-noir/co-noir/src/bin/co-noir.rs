@@ -1,7 +1,7 @@
 use ark_bn254::Bn254;
 use ark_ff::Zero;
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use co_noir::{Bn254G1, SerializeF};
+use co_noir::Bn254G1;
 use co_noir_common::types::ZeroKnowledge;
 use co_noir_common::{
     crs::parse::CrsParser,
@@ -19,7 +19,7 @@ use figment::{
     providers::{Env, Format, Serialized, Toml},
 };
 use mpc_net::tcp::{NetworkConfig, TcpNetwork};
-use noir_types::HonkProof;
+use noir_types::HonkProofType;
 use serde::{Deserialize, Serialize};
 use sha3::Keccak256;
 use std::{
@@ -27,7 +27,6 @@ use std::{
     io::{BufReader, BufWriter, Write},
     path::PathBuf,
     process::ExitCode,
-    str::FromStr,
     time::Instant,
 };
 use tracing::instrument;
@@ -472,6 +471,10 @@ pub struct GenerateProofCli {
     /// Write the outputs as fields to json. If not passed, they will only be written as bytes to a file consistent with Barretenberg (if 'out'/'public_input' is specified).
     #[arg(long)]
     pub fields_as_json: bool,
+    /// The path to the verification key file
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub vk: Option<PathBuf>,
 }
 
 /// Config for `generate_proof`
@@ -499,6 +502,8 @@ pub struct GenerateProofConfig {
     pub zk: bool,
     /// Write the outputs as fields to json. If not passed, they will only be written as bytes to a file consistent with Barretenberg (if 'out'/'public_input' is specified).
     pub fields_as_json: bool,
+    /// The path to the verification key file
+    pub vk: PathBuf,
 }
 
 /// Cli arguments for `build_and_generate_proof`
@@ -548,6 +553,10 @@ pub struct BuildAndGenerateProofCli {
     /// Write the outputs as fields to json. If not passed, they will only be written as bytes to a file consistent with Barretenberg (if 'out'/'public_input' is specified).
     #[arg(long)]
     pub fields_as_json: bool,
+    /// The path to the verification key file
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub vk: Option<PathBuf>,
 }
 
 /// Config for `build_and_generate_proof`
@@ -577,6 +586,8 @@ pub struct BuildAndGenerateProofConfig {
     pub zk: bool,
     /// Write the outputs as fields to json. If not passed, they will only be written as bytes to a file consistent with Barretenberg (if 'out'/'public_input' is specified).
     pub fields_as_json: bool,
+    /// The path to the verification key file
+    pub vk: PathBuf,
 }
 
 /// Cli arguments for `creating_vk`
@@ -1362,6 +1373,7 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
 #[instrument(level = "debug", skip(config))]
 fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCode> {
     let proving_key = config.proving_key;
+    let vk_path = config.vk;
     let protocol = config.protocol;
     let hasher = config.hasher;
     let out = config.out;
@@ -1379,8 +1391,17 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
     let proving_key_file =
         BufReader::new(File::open(proving_key).context("trying to open proving_key file")?);
 
+    // parse verification key file
+    let vk_u8 = std::fs::read(&vk_path).context("while reading vk file")?;
+    let vk = match hasher {
+        TranscriptHash::POSEIDON2 => VerifyingKeyBarretenberg::<Bn254G1>::from_buffer(&vk_u8)
+            .context("while deserializing verification key")?,
+        TranscriptHash::KECCAK => VerifyingKeyBarretenberg::<Bn254G1>::from_buffer_keccak(&vk_u8)
+            .context("while deserializing verification key")?,
+    };
+
     tracing::info!("Starting proof generation...");
-    let (proof, public_input) = match protocol {
+    let result = match protocol {
         MPCProtocol::REP3 => {
             if t != 1 {
                 eyre::bail!("REP3 only allows the threshold to be 1");
@@ -1404,10 +1425,11 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
                         proving_key,
                         &prover_crs,
                         has_zk,
+                        &vk,
                     )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
-                    (proof, public_inputs)
+                    HonkProofType::FieldElements(proof, public_inputs)
                 }
                 TranscriptHash::KECCAK => {
                     // execute prover in MPC
@@ -1417,10 +1439,11 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
                         proving_key,
                         &prover_crs,
                         has_zk,
+                        &vk,
                     )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
-                    (proof, public_inputs)
+                    HonkProofType::U256Values(proof, public_inputs)
                 }
             }
         }
@@ -1439,31 +1462,33 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             match hasher {
                 TranscriptHash::POSEIDON2 => {
                     let start = Instant::now();
-                    let (proof, public_input) = ShamirCoUltraHonk::<_, Poseidon2Sponge>::prove(
+                    let (proof, public_inputs) = ShamirCoUltraHonk::<_, Poseidon2Sponge>::prove(
                         &net,
                         n,
                         t,
                         proving_key,
                         &prover_crs,
                         has_zk,
+                        &vk,
                     )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
-                    (proof, public_input)
+                    HonkProofType::FieldElements(proof, public_inputs)
                 }
                 TranscriptHash::KECCAK => {
                     let start = Instant::now();
-                    let (proof, public_input) = ShamirCoUltraHonk::<_, Keccak256>::prove(
+                    let (proof, public_inputs) = ShamirCoUltraHonk::<_, Keccak256>::prove(
                         &net,
                         n,
                         t,
                         proving_key,
                         &prover_crs,
                         has_zk,
+                        &vk,
                     )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
-                    (proof, public_input)
+                    HonkProofType::U256Values(proof, public_inputs)
                 }
             }
         }
@@ -1474,7 +1499,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
         let mut out_file =
             BufWriter::new(std::fs::File::create(out).context("while creating output file")?);
 
-        let proof_u8 = proof.to_buffer();
+        let proof_u8 = result.proof_to_buffer();
         out_file
             .write(proof_u8.as_slice())
             .context("while writing proof to file")?;
@@ -1487,7 +1512,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             std::fs::File::create(public_input_filename).context("while creating output file")?,
         );
 
-        let public_inputs_u8 = SerializeF::to_buffer(&public_input, false);
+        let public_inputs_u8 = result.public_inputs_to_buffer();
         out_file
             .write(public_inputs_u8.as_slice())
             .context("while writing proof to file")?;
@@ -1510,17 +1535,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             PathBuf::from("public_input.json")
         };
 
-        let proof_as_strings = proof
-            .inner()
-            .iter()
-            .map(|f| {
-                if f.is_zero() {
-                    "0".to_string()
-                } else {
-                    f.to_string()
-                }
-            })
-            .collect::<Vec<String>>();
+        let proof_as_strings = result.proof_to_strings();
         let proof_json_file = BufWriter::new(
             std::fs::File::create(&proof_path).context("while creating proof json file")?,
         );
@@ -1528,16 +1543,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
             .context("while writing out proof to JSON file")?;
         tracing::info!("Wrote proof to file {}", proof_path.display());
 
-        let public_inputs_as_strings = public_input
-            .iter()
-            .map(|f| {
-                if f.is_zero() {
-                    "0".to_string()
-                } else {
-                    f.to_string()
-                }
-            })
-            .collect::<Vec<String>>();
+        let public_inputs_as_strings = result.public_inputs_to_strings();
         let public_input_json_file = BufWriter::new(
             std::fs::File::create(&public_inputs_path)
                 .context("while creating public input json file")?,
@@ -1560,6 +1566,7 @@ fn run_build_and_generate_proof(
 ) -> color_eyre::Result<ExitCode> {
     let witness = config.witness;
     let circuit_path = config.circuit;
+    let vk_path = config.vk;
     let crs_path = config.crs;
     let protocol = config.protocol;
     let hasher = config.hasher;
@@ -1596,8 +1603,17 @@ fn run_build_and_generate_proof(
             has_zk,
         )?;
 
+    // parse verification key file
+    let vk_u8 = std::fs::read(&vk_path).context("while reading vk file")?;
+    let vk = match hasher {
+        TranscriptHash::POSEIDON2 => VerifyingKeyBarretenberg::<Bn254G1>::from_buffer(&vk_u8)
+            .context("while deserializing verification key")?,
+        TranscriptHash::KECCAK => VerifyingKeyBarretenberg::<Bn254G1>::from_buffer_keccak(&vk_u8)
+            .context("while deserializing verification key")?,
+    };
+
     tracing::info!("Starting proving key generation...");
-    let (proof, public_input) = match protocol {
+    let result = match protocol {
         MPCProtocol::REP3 => {
             if t != 1 {
                 eyre::bail!("REP3 only allows the threshold to be 1");
@@ -1613,38 +1629,38 @@ fn run_build_and_generate_proof(
                 &net0,
                 &net1,
             )?;
-
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!("Build proving key took {duration_ms} ms");
 
             tracing::info!("Starting proof generation...");
-            let (proof, public_input) = match hasher {
+            match hasher {
                 TranscriptHash::POSEIDON2 => {
                     let start = Instant::now();
-                    let (proof, public_input) = Rep3CoUltraHonk::<_, Poseidon2Sponge>::prove(
+                    let (proof, public_inputs) = Rep3CoUltraHonk::<_, Poseidon2Sponge>::prove(
                         &net0,
                         proving_key,
                         &prover_crs,
                         has_zk,
+                        &vk,
                     )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
-                    (proof, public_input)
+                    HonkProofType::FieldElements(proof, public_inputs)
                 }
                 TranscriptHash::KECCAK => {
                     let start = Instant::now();
-                    let (proof, public_input) = Rep3CoUltraHonk::<_, Keccak256>::prove(
+                    let (proof, public_inputs) = Rep3CoUltraHonk::<_, Keccak256>::prove(
                         &net0,
                         proving_key,
                         &prover_crs,
                         has_zk,
+                        &vk,
                     )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
-                    (proof, public_input)
+                    HonkProofType::U256Values(proof, public_inputs)
                 }
-            };
-            (proof, public_input)
+            }
         }
         MPCProtocol::SHAMIR => {
             let witness_share = bincode::deserialize_from(witness_file)
@@ -1663,38 +1679,39 @@ fn run_build_and_generate_proof(
             tracing::info!("Build proving key took {duration_ms} ms");
 
             tracing::info!("Starting proof generation...");
-            let (proof, public_input) = match hasher {
+            match hasher {
                 TranscriptHash::POSEIDON2 => {
                     let start = Instant::now();
-                    let (proof, public_input) = ShamirCoUltraHonk::<_, Poseidon2Sponge>::prove(
+                    let (proof, public_inputs) = ShamirCoUltraHonk::<_, Poseidon2Sponge>::prove(
                         &net0,
                         n,
                         t,
                         proving_key,
                         &prover_crs,
                         has_zk,
+                        &vk,
                     )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
-                    (proof, public_input)
+                    HonkProofType::FieldElements(proof, public_inputs)
                 }
                 TranscriptHash::KECCAK => {
                     // execute prover in MPC
                     let start = Instant::now();
-                    let (proof, public_input) = ShamirCoUltraHonk::<_, Keccak256>::prove(
+                    let (proof, public_inputs) = ShamirCoUltraHonk::<_, Keccak256>::prove(
                         &net0,
                         n,
                         t,
                         proving_key,
                         &prover_crs,
                         has_zk,
+                        &vk,
                     )?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
-                    (proof, public_input)
+                    HonkProofType::U256Values(proof, public_inputs)
                 }
-            };
-            (proof, public_input)
+            }
         }
     };
 
@@ -1703,7 +1720,7 @@ fn run_build_and_generate_proof(
         let mut out_file =
             BufWriter::new(std::fs::File::create(out).context("while creating output file")?);
 
-        let proof_u8 = proof.to_buffer();
+        let proof_u8 = result.proof_to_buffer();
         out_file
             .write(proof_u8.as_slice())
             .context("while writing proof to file")?;
@@ -1716,7 +1733,7 @@ fn run_build_and_generate_proof(
             std::fs::File::create(public_input_filename).context("while creating output file")?,
         );
 
-        let public_inputs_u8 = SerializeF::to_buffer(&public_input, false);
+        let public_inputs_u8 = result.public_inputs_to_buffer();
         out_file
             .write(public_inputs_u8.as_slice())
             .context("while writing public input to file")?;
@@ -1739,17 +1756,7 @@ fn run_build_and_generate_proof(
             PathBuf::from("public_input.json")
         };
 
-        let proof_as_strings = proof
-            .inner()
-            .iter()
-            .map(|f| {
-                if f.is_zero() {
-                    "0".to_string()
-                } else {
-                    f.to_string()
-                }
-            })
-            .collect::<Vec<String>>();
+        let proof_as_strings = result.proof_to_strings();
         let proof_json_file = BufWriter::new(
             std::fs::File::create(&proof_path).context("while creating proof json file")?,
         );
@@ -1757,16 +1764,7 @@ fn run_build_and_generate_proof(
             .context("while writing out proof to JSON file")?;
         tracing::info!("Wrote proof to file {}", proof_path.display());
 
-        let public_inputs_as_strings = public_input
-            .iter()
-            .map(|f| {
-                if f.is_zero() {
-                    "0".to_string()
-                } else {
-                    f.to_string()
-                }
-            })
-            .collect::<Vec<String>>();
+        let public_inputs_as_strings = result.public_inputs_to_strings();
         let public_input_json_file = BufWriter::new(
             std::fs::File::create(&public_inputs_path)
                 .context("while creating public input json file")?,
@@ -1868,31 +1866,47 @@ fn run_verify(config: VerifyConfig) -> color_eyre::Result<ExitCode> {
 
     // parse proof file
     let proof_u8 = std::fs::read(&proof).context("while reading proof file")?;
-    let proof = if proof.extension().is_some_and(|ext| ext == "json") {
-        let proof_as_strings = serde_json::from_slice::<Vec<String>>(&proof_u8)
-            .context("while deserializing proof")?;
-        let inner = proof_as_strings
-            .into_iter()
-            .map(|e| ark_bn254::Fr::new(ark_ff::BigInt::from_str(&e).expect("valid field")))
-            .collect();
-        HonkProof::new(inner)
-    } else {
-        HonkProof::from_buffer(&proof_u8).context("while deserializing proof")?
-    };
-
     // parse public_inputs file
     let public_inputs_u8 =
         std::fs::read(&public_inputs).context("while reading public_inputs file")?;
-    let public_inputs = if public_inputs.extension().is_some_and(|ext| ext == "json") {
-        let public_inputs_as_strings = serde_json::from_slice::<Vec<String>>(&public_inputs_u8)
-            .context("while deserializing public_inputs")?;
-        public_inputs_as_strings
-            .into_iter()
-            .map(|e| ark_bn254::Fr::new(ark_ff::BigInt::from_str(&e).expect("valid field")))
-            .collect()
-    } else {
-        SerializeF::from_buffer(&public_inputs_u8, false)
-            .context("while deserializing public_inputs")?
+    let proof_result = match (
+        proof.extension().map(|ext| ext == "json"),
+        public_inputs.extension().map(|ext| ext == "json"),
+    ) {
+        // Case 1: Both files are JSON
+        (Some(true), Some(true)) => {
+            let proof_as_strings = serde_json::from_slice::<Vec<String>>(&proof_u8)
+                .context("while deserializing proof")?;
+            let public_inputs_as_strings = serde_json::from_slice::<Vec<String>>(&public_inputs_u8)
+                .context("while deserializing public_inputs")?;
+            match hasher {
+                TranscriptHash::POSEIDON2 => {
+                    HonkProofType::proof_and_public_inputs_from_string_field(
+                        proof_as_strings,
+                        public_inputs_as_strings,
+                    )
+                }
+                TranscriptHash::KECCAK => HonkProofType::proof_and_public_inputs_from_string_u256(
+                    proof_as_strings,
+                    public_inputs_as_strings,
+                ),
+            }
+        }
+        // Case 2: Neither file is JSON (both are binary)
+        (None, None) | (Some(false), None) => match hasher {
+            TranscriptHash::POSEIDON2 => HonkProofType::proof_and_public_inputs_from_buffer_field(
+                &proof_u8,
+                &public_inputs_u8,
+            ),
+            TranscriptHash::KECCAK => HonkProofType::proof_and_public_inputs_from_buffer_u256(
+                &proof_u8,
+                &public_inputs_u8,
+            ),
+        },
+        // Case 3: Mixed formats not implemented
+        _ => eyre::bail!(
+            "Proof and public inputs must both be in the same format (either both JSON or both binary)"
+        ),
     };
 
     // parse the crs
@@ -1903,23 +1917,26 @@ fn run_verify(config: VerifyConfig) -> color_eyre::Result<ExitCode> {
 
     // parse verification key file
     let vk_u8 = std::fs::read(&vk_path).context("while reading vk file")?;
-    let vk = VerifyingKeyBarretenberg::<Bn254G1>::from_buffer(&vk_u8)
-        .context("while deserializing verification key")?;
+    let vk = match hasher {
+        TranscriptHash::POSEIDON2 => VerifyingKeyBarretenberg::<Bn254G1>::from_buffer(&vk_u8)
+            .context("while deserializing verification key")?,
+        TranscriptHash::KECCAK => VerifyingKeyBarretenberg::<Bn254G1>::from_buffer_keccak(&vk_u8)
+            .context("while deserializing verification key")?,
+    };
 
     let vk = VerifyingKey::<Bn254>::from_barretenberg_and_crs(vk, verifier_crs);
     // The actual verifier
     tracing::info!("Starting proof verification...");
     let start = Instant::now();
-    let res = match hasher {
-        TranscriptHash::POSEIDON2 => {
+    let res = match proof_result {
+        Ok(HonkProofType::FieldElements(proof, public_inputs)) => {
             UltraHonk::<_, Poseidon2Sponge>::verify(proof, &public_inputs, &vk, has_zk)
-                .context("while verifying proof")?
         }
-        TranscriptHash::KECCAK => {
+        Ok(HonkProofType::U256Values(proof, public_inputs)) => {
             UltraHonk::<_, Keccak256>::verify(proof, &public_inputs, &vk, has_zk)
-                .context("while verifying proof")?
         }
-    };
+        Err(e) => Err(e),
+    }?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Verify took {} ms", duration_ms);
 

@@ -3333,17 +3333,16 @@ impl GarbledCircuits {
         wires_b: &BinaryBundle<G::Item>,
         wires_c: &BinaryBundle<G::Item>,
         num_inputs: usize,
-        num_bits: &[usize],
+        num_bits: usize,
     ) -> Result<BinaryBundle<G::Item>, G::Error> {
         let input_bitlen = F::MODULUS_BIT_SIZE as usize;
         let mut input = Vec::new();
         let mut rands = wires_c.wires().chunks(input_bitlen);
-        for (chunk_x1, chunk_x2, bits) in izip!(
+        let bits = num_bits.div_ceil(8) * 8; // We need to round to the next byte
+        for (chunk_x1, chunk_x2) in izip!(
             wires_a.wires().chunks(input_bitlen),
             wires_b.wires().chunks(input_bitlen),
-            num_bits
         ) {
-            let bits = bits.div_ceil(8) * 8; // We need to round to the next byte
             let tmp = Self::adder_mod_p_with_output_size::<_, F>(g, chunk_x1, chunk_x2, bits)?;
             for chunk in tmp.chunks(8) {
                 input.push(chunk.to_owned())
@@ -3607,17 +3606,16 @@ impl GarbledCircuits {
         wires_b: &BinaryBundle<G::Item>,
         wires_c: &BinaryBundle<G::Item>,
         num_inputs: usize,
-        num_bits: &[usize],
+        num_bits: usize,
     ) -> Result<BinaryBundle<G::Item>, G::Error> {
         let input_bitlen = F::MODULUS_BIT_SIZE as usize;
         let mut input = Vec::new();
         let mut rands = wires_c.wires().chunks(input_bitlen);
-        for (chunk_x1, chunk_x2, bits) in izip!(
+        let bits = num_bits.div_ceil(8) * 8; // We need to round to the next byte
+        for (chunk_x1, chunk_x2) in izip!(
             wires_a.wires().chunks(input_bitlen),
             wires_b.wires().chunks(input_bitlen),
-            num_bits
         ) {
-            let bits = bits.div_ceil(8) * 8; // We need to round to the next byte
             let tmp = Self::adder_mod_p_with_output_size::<_, F>(g, chunk_x1, chunk_x2, bits)?;
             for chunk in tmp.chunks(8) {
                 input.push(chunk.to_owned())

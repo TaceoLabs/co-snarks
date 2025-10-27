@@ -2,7 +2,7 @@
 
 script_dir="$(dirname "$(realpath "$0")")"
 
-NARGO_VERSION=1.0.0-beta.6 ##specify the desired nargo version here
+NARGO_VERSION=1.0.0-beta.14 ##specify the desired nargo version here
 
 ## install noirup: curl -L https://raw.githubusercontent.com/noir-lang/noirup/main/install | bash
 r=$(bash -c "nargo --version")

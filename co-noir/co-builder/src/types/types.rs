@@ -164,33 +164,36 @@ pub struct UltraTraceBlocks<T: Default> {
     pub(crate) arithmetic: T,
     pub(crate) delta_range: T,
     pub(crate) elliptic: T,
-    pub(crate) aux: T,
+    pub(crate) memory: T,
+    pub(crate) nnf: T,
     pub(crate) poseidon2_external: T,
     pub(crate) poseidon2_internal: T,
 }
 
 impl<T: Default> UltraTraceBlocks<T> {
-    pub fn get(&self) -> [&T; 8] {
+    pub fn get(&self) -> [&T; 9] {
         [
             &self.pub_inputs,
             &self.lookup,
             &self.arithmetic,
             &self.delta_range,
             &self.elliptic,
-            &self.aux,
+            &self.memory,
+            &self.nnf,
             &self.poseidon2_external,
             &self.poseidon2_internal,
         ]
     }
 
-    pub fn get_mut(&mut self) -> [&mut T; 8] {
+    pub fn get_mut(&mut self) -> [&mut T; 9] {
         [
             &mut self.pub_inputs,
             &mut self.lookup,
             &mut self.arithmetic,
             &mut self.delta_range,
             &mut self.elliptic,
-            &mut self.aux,
+            &mut self.memory,
+            &mut self.nnf,
             &mut self.poseidon2_external,
             &mut self.poseidon2_internal,
         ]
@@ -202,7 +205,7 @@ impl<T: Default> UltraTraceBlocks<T> {
 }
 
 pub const NUM_WIRES: usize = 4;
-pub const NUM_SELECTORS: usize = 13;
+pub const NUM_SELECTORS: usize = 14;
 pub type UltraTraceBlock<F> = ExecutionTraceBlock<F, NUM_WIRES, NUM_SELECTORS>;
 
 pub struct ExecutionTraceBlock<F: PrimeField, const NUM_WIRES: usize, const NUM_SELECTORS: usize> {
@@ -236,14 +239,14 @@ impl<F: PrimeField> Default for UltraTraceBlocks<UltraTraceBlock<F>> {
             arithmetic: Default::default(),
             delta_range: Default::default(),
             elliptic: Default::default(),
-            aux: Default::default(),
+            memory: Default::default(),
+            nnf: Default::default(),
             lookup: Default::default(),
             poseidon2_external: Default::default(),
             poseidon2_internal: Default::default(),
         };
-
         res.pub_inputs.is_pub_inputs = true;
-        res.aux.has_ram_rom = true;
+        res.memory.has_ram_rom = true;
         res
     }
 }
@@ -285,7 +288,8 @@ impl<F: PrimeField> UltraTraceBlock<F> {
     const Q_ARITH: usize = PrecomputedEntities::<F>::Q_ARITH;
     const Q_DELTA_RANGE: usize = PrecomputedEntities::<F>::Q_DELTA_RANGE;
     const Q_ELLIPTIC: usize = PrecomputedEntities::<F>::Q_ELLIPTIC;
-    const Q_AUX: usize = PrecomputedEntities::<F>::Q_AUX;
+    const Q_MEMORY: usize = PrecomputedEntities::<F>::Q_MEMORY;
+    const Q_NNF: usize = PrecomputedEntities::<F>::Q_NNF;
     const Q_LOOKUP_TYPE: usize = PrecomputedEntities::<F>::Q_LOOKUP;
     const Q_POSEIDON2_EXTERNAL: usize = PrecomputedEntities::<F>::Q_POSEIDON2_EXTERNAL;
     const Q_POSEIDON2_INTERNAL: usize = PrecomputedEntities::<F>::Q_POSEIDON2_INTERNAL;
@@ -342,8 +346,12 @@ impl<F: PrimeField> UltraTraceBlock<F> {
         &mut self.selectors[Self::Q_ELLIPTIC]
     }
 
-    pub(crate) fn q_aux(&mut self) -> &mut Vec<F> {
-        &mut self.selectors[Self::Q_AUX]
+    pub(crate) fn q_memory(&mut self) -> &mut Vec<F> {
+        &mut self.selectors[Self::Q_MEMORY]
+    }
+
+    pub(crate) fn q_nnf(&mut self) -> &mut Vec<F> {
+        &mut self.selectors[Self::Q_NNF]
     }
 
     pub(crate) fn q_lookup_type(&mut self) -> &mut Vec<F> {
@@ -386,7 +394,6 @@ pub(crate) struct RangeConstraint {
 pub(crate) struct Poseidon2Constraint<F: PrimeField> {
     pub(crate) state: Vec<WitnessOrConstant<F>>,
     pub(crate) result: Vec<u32>,
-    pub(crate) len: u32,
 }
 
 pub(crate) struct MultiScalarMul<F: PrimeField> {
@@ -498,13 +505,21 @@ pub(crate) struct Blake3Constraint<F: PrimeField> {
     pub(crate) result: [u32; 32],
 }
 
-pub(crate) struct AggregationState<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
+#[derive(Default)]
+#[expect(dead_code)]
+pub(crate) struct PairingPoints<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
     p0: BigGroup<P, T>,
     p1: BigGroup<P, T>,
+    has_data: bool,
 }
-impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> AggregationState<P, T> {
+#[expect(dead_code)]
+impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> PairingPoints<P, T> {
     pub(crate) fn new(p0: BigGroup<P, T>, p1: BigGroup<P, T>) -> Self {
-        Self { p0, p1 }
+        Self {
+            p0,
+            p1,
+            has_data: true,
+        }
     }
 }
 
@@ -513,7 +528,8 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> Aggregation
 // Four limbs are used when simulating a non-native field using the bigfield class, so 16 total field elements.
 pub const PAIRING_POINT_ACCUMULATOR_SIZE: u32 = 16;
 
-impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> AggregationState<P, T> {
+impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> PairingPoints<P, T> {
+    #[expect(dead_code)]
     pub fn set_public(
         &mut self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
@@ -521,9 +537,6 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> Aggregation
     ) -> usize {
         let start_idx = self.p0.set_public(driver, builder);
         self.p1.set_public(driver, builder);
-        builder
-            .pairing_inputs_public_input_key
-            .set(start_idx as u32);
 
         start_idx
     }
@@ -531,21 +544,26 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> Aggregation
 
 pub const AGGREGATION_OBJECT_SIZE: usize = 16;
 
-#[expect(dead_code)]
 #[derive(PartialEq, Eq, Debug)]
-pub(crate) enum AuxSelectors {
-    None,
-    LimbAccumulate1,
-    LimbAccumulate2,
-    NonNativeField1,
-    NonNativeField2,
-    NonNativeField3,
+pub(crate) enum MemorySelectors {
+    MemNone,
     RamConsistencyCheck,
     RomConsistencyCheck,
     RamTimestampCheck,
     RomRead,
     RamRead,
     RamWrite,
+}
+
+#[expect(dead_code)]
+#[derive(PartialEq, Eq, Debug)]
+pub(crate) enum NnfSelectors {
+    NnfNone,
+    LimbAccumulate1,
+    LimbAccumulate2,
+    NonNativeField1,
+    NonNativeField2,
+    NonNativeField3,
 }
 
 #[derive(Clone, Debug)]
@@ -719,7 +737,7 @@ impl<'a, P: CurveGroup> TraceData<'a, P> {
                 }
             }
 
-            // Store the offset of the block containing RAM/ROM read/write gates for use in updating memory records
+            // // Store the offset of the block containing RAM/ROM read/write gates for use in updating memory records
             if block.has_ram_rom {
                 self.ram_rom_offset = offset as u32;
             }
@@ -833,17 +851,17 @@ impl<F: PrimeField> WitnessOrConstant<F> {
         // else default values would give a point which is not on the curve and this will fail verification
         if !has_valid_witness_assignments {
             if !input_infinity.is_constant {
-                builder.variables[input_infinity.index as usize] = F::one().into();
+                builder.set_variable(input_infinity.index, F::one().into());
             } else if input_infinity.value.is_zero()
                 && !(input_x.is_constant || input_y.is_constant)
             {
                 // else, if is_infinite is false, but the coordinates (x, y) are witness (and not constant)
                 // then we set their value to an arbitrary valid curve point (in our case G1).
-                builder.variables[input_x.index as usize] = F::one().into();
+                builder.set_variable(input_x.index, F::one().into());
                 let g1_y = F::from(BigUint::new(vec![
                     2185176876, 2201994381, 4044886676, 757534021, 111435107, 3474153077, 2,
                 ]));
-                builder.variables[input_y.index as usize] = g1_y.into();
+                builder.set_variable(input_y.index, g1_y.into());
             }
         }
         CycleGroupCT::new(point_x, point_y, infinity, builder, driver)

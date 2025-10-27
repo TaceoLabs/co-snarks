@@ -111,7 +111,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         libra_commitments: Option<Vec<P::Affine>>,
         libra_univariate_evaluation: Option<P::ScalarField>,
         consistency_checked: &mut bool,
-        padding_indicator_array: &[P::ScalarField; CONST_PROOF_SIZE_LOG_N],
+        padding_indicator_array: &[P::ScalarField],
         // const std::vector<RefVector<Commitment>>& concatenation_group_commitments = {},
         // RefSpan<P::ScalarField> concatenated_evaluations = {}
     ) -> HonkVerifyResult<ShpleminiVerifierOpeningClaim<P>> {
@@ -426,7 +426,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
      */
     #[expect(clippy::too_many_arguments)]
     fn batch_gemini_claims_received_from_prover(
-        padding_indicator_array: &[P::ScalarField; CONST_PROOF_SIZE_LOG_N],
+        padding_indicator_array: &[P::ScalarField],
         fold_commitments: &[P::Affine],
         gemini_neg_evaluations: &[P::ScalarField],
         gemini_pos_evaluations: &[P::ScalarField],
@@ -490,7 +490,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
      * @return Evaluation \f$ A_0(r) \f$.
      */
     pub fn compute_fold_pos_evaluations(
-        padding_indicator_array: &[P::ScalarField; CONST_PROOF_SIZE_LOG_N],
+        padding_indicator_array: &[P::ScalarField],
         batched_evaluation: &P::ScalarField,
         evaluation_point: &[P::ScalarField], // CONST_PROOF_SIZE
         challenge_powers: &[P::ScalarField], // r_squares CONST_PROOF_SIZE_LOG_N

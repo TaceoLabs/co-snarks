@@ -1,4 +1,3 @@
-use crate::CONST_PROOF_SIZE_LOG_N;
 use crate::Utils;
 use crate::prelude::Univariate;
 use ark_ec::CurveGroup;
@@ -121,11 +120,7 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
         let mut coeffs_lagrange_basis = vec![P::ScalarField::zero(); Self::SUBGROUP_SIZE];
         coeffs_lagrange_basis[0] = P::ScalarField::one();
 
-        for (challenge_idx, &challenge) in multivariate_challenge
-            .iter()
-            .enumerate()
-            .take(CONST_PROOF_SIZE_LOG_N)
-        {
+        for (challenge_idx, &challenge) in multivariate_challenge.iter().enumerate() {
             // We concatenate 1 with CONST_PROOF_SIZE_LOG_N Libra Univariates of length LIBRA_UNIVARIATES_LENGTH
             let poly_to_concatenate_start = 1 + P::LIBRA_UNIVARIATES_LENGTH * challenge_idx;
             coeffs_lagrange_basis[poly_to_concatenate_start] = P::ScalarField::one();

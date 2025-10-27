@@ -73,8 +73,13 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(name: &str, has_zk: Zero
     let (proving_key, verifying_key) =
         ProvingKey::create_keys(0, builder, &prover_crs, verifier_crs, &mut driver).unwrap();
 
-    let (proof, public_input) =
-        CoUltraHonk::<PlainUltraHonkDriver, _, H>::prove(proving_key, &prover_crs, has_zk).unwrap();
+    let (proof, public_input) = CoUltraHonk::<PlainUltraHonkDriver, _, H>::prove(
+        proving_key,
+        &prover_crs,
+        has_zk,
+        &verifying_key.inner_vk,
+    )
+    .unwrap();
 
     let is_valid =
         UltraHonk::<_, H>::verify::<Bn254>(proof, &public_input, &verifying_key, has_zk).unwrap();
@@ -119,8 +124,13 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     let (proving_key, verifying_key) =
         ProvingKey::create_keys(0, builder, &prover_crs, verifier_crs, &mut driver).unwrap();
 
-    let (proof, public_input) =
-        CoUltraHonk::<PlainUltraHonkDriver, _, H>::prove(proving_key, &prover_crs, has_zk).unwrap();
+    let (proof, public_input) = CoUltraHonk::<PlainUltraHonkDriver, _, H>::prove(
+        proving_key,
+        &prover_crs,
+        has_zk,
+        &verifying_key.inner_vk,
+    )
+    .unwrap();
 
     let is_valid =
         UltraHonk::<_, H>::verify::<Bn254>(proof, &public_input, &verifying_key, has_zk).unwrap();

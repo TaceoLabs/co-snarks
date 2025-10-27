@@ -2,7 +2,6 @@ use std::marker::PhantomData;
 
 use super::co_sumcheck::zk_data::SharedZKSumcheckData;
 use super::univariates::SharedUnivariate;
-use crate::CONST_PROOF_SIZE_LOG_N;
 use ark_ec::CurveGroup;
 use ark_ff::One;
 use ark_ff::Zero;
@@ -138,11 +137,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
         let mut coeffs_lagrange_basis = vec![P::ScalarField::zero(); Self::SUBGROUP_SIZE];
         coeffs_lagrange_basis[0] = P::ScalarField::one();
 
-        for (challenge_idx, &challenge) in multivariate_challenge
-            .iter()
-            .enumerate()
-            .take(CONST_PROOF_SIZE_LOG_N)
-        {
+        for (challenge_idx, &challenge) in multivariate_challenge.iter().enumerate() {
             // We concatenate 1 with CONST_PROOF_SIZE_LOG_N Libra Univariates of length LIBRA_UNIVARIATES_LENGTH
             let poly_to_concatenate_start = 1 + P::LIBRA_UNIVARIATES_LENGTH * challenge_idx;
             coeffs_lagrange_basis[poly_to_concatenate_start] = P::ScalarField::one();

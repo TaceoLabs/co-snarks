@@ -1784,7 +1784,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     fn blake2s_hash(
         &mut self,
         message_input: Vec<Self::AcvmType>,
-        num_bits: &[usize],
+        num_bits: usize,
     ) -> eyre::Result<Vec<Self::AcvmType>> {
         if message_input.iter().any(|v| Self::is_shared(v)) {
             let message_input: Vec<_> = message_input
@@ -1803,9 +1803,9 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 .collect::<Result<Vec<_>, _>>()
         } else {
             let mut real_input = Vec::new();
-            for (inp, num_bits) in message_input.into_iter().zip(num_bits.iter()) {
-                let inp = Self::get_public(&inp).expect("Already checked it is public");
-                let num_elements = num_bits.div_ceil(8); // We need to round to the next byte
+            let num_elements = num_bits.div_ceil(8); // We need to round to the next byte
+            for inp in message_input.iter() {
+                let inp = Self::get_public(inp).expect("Already checked it is public");
                 let bytes = inp.into_bigint().to_bytes_le();
                 real_input.extend_from_slice(&bytes[..num_elements])
             }
@@ -1821,7 +1821,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     fn blake3_hash(
         &mut self,
         message_input: Vec<Self::AcvmType>,
-        num_bits: &[usize],
+        num_bits: usize,
     ) -> eyre::Result<Vec<Self::AcvmType>> {
         if message_input.iter().any(|v| Self::is_shared(v)) {
             let message_input: Vec<_> = message_input
@@ -1840,9 +1840,9 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 .collect::<Result<Vec<_>, _>>()
         } else {
             let mut real_input = Vec::new();
-            for (inp, num_bits) in message_input.into_iter().zip(num_bits.iter()) {
-                let inp = Self::get_public(&inp).expect("Already checked it is public");
-                let num_elements = num_bits.div_ceil(8); // We need to round to the next byte
+            let num_elements = num_bits.div_ceil(8); // We need to round to the next byte
+            for inp in message_input.iter() {
+                let inp = Self::get_public(inp).expect("Already checked it is public");
                 let bytes = inp.into_bigint().to_bytes_le();
                 real_input.extend_from_slice(&bytes[..num_elements])
             }

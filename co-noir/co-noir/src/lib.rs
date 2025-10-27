@@ -174,7 +174,6 @@ pub fn translate_proving_key<P: CurveGroup<BaseField: PrimeField>, N: Network>(
         final_active_wire_idx: proving_key.final_active_wire_idx,
         phantom: std::marker::PhantomData,
         active_region_data: proving_key.active_region_data,
-        pairing_inputs_public_input_key: proving_key.pairing_inputs_public_input_key,
     };
 
     Ok(result)

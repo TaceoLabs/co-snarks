@@ -1,7 +1,9 @@
-pub(crate) mod auxiliary_relation;
 pub(crate) mod delta_range_constraint_relation;
 pub(crate) mod elliptic_relation;
 pub(crate) mod logderiv_lookup_relation;
+use crate::co_decider::relations::non_native_field_relation::NonNativeFieldRelationAcc;
+pub(crate) mod memory_relation;
+pub(crate) mod non_native_field_relation;
 pub(crate) mod permutation_relation;
 pub(crate) mod poseidon2_external_relation;
 pub(crate) mod poseidon2_internal_relation;
@@ -13,9 +15,14 @@ use super::{
     },
     univariates::SharedUnivariate,
 };
-use crate::types_batch::SumCheckDataForRelation;
+use crate::{
+    co_decider::relations::{
+        memory_relation::{MemoryRelation, MemoryRelationAcc},
+        non_native_field_relation::NonNativeFieldRelation,
+    },
+    types_batch::SumCheckDataForRelation,
+};
 use ark_ec::CurveGroup;
-use auxiliary_relation::{AuxiliaryRelation, AuxiliaryRelationAcc};
 use co_noir_common::{
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
@@ -90,11 +97,13 @@ pub(crate) const NUM_SUBRELATIONS: usize = UltraArithmeticRelation::NUM_RELATION
     + LogDerivLookupRelation::NUM_RELATIONS
     + DeltaRangeConstraintRelation::NUM_RELATIONS
     + EllipticRelation::NUM_RELATIONS
-    + AuxiliaryRelation::NUM_RELATIONS
+    + MemoryRelation::NUM_RELATIONS
+    + NonNativeFieldRelation::NUM_RELATIONS
     + Poseidon2ExternalRelation::NUM_RELATIONS
     + Poseidon2InternalRelation::NUM_RELATIONS;
 
-pub const CRAND_PAIRS_FACTOR: usize = AuxiliaryRelation::CRAND_PAIRS_FACTOR
+pub const CRAND_PAIRS_FACTOR: usize = MemoryRelation::CRAND_PAIRS_FACTOR
+    + NonNativeFieldRelation::CRAND_PAIRS_FACTOR
     + DeltaRangeConstraintRelation::CRAND_PAIRS_FACTOR
     + EllipticRelation::CRAND_PAIRS_FACTOR
     + LogDerivLookupRelation::CRAND_PAIRS_FACTOR
@@ -109,7 +118,8 @@ pub(crate) struct AllRelationAcc<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) r_lookup: LogDerivLookupRelationAcc<T, P>,
     pub(crate) r_delta: DeltaRangeConstraintRelationAcc<T, P>,
     pub(crate) r_elliptic: EllipticRelationAcc<T, P>,
-    pub(crate) r_aux: AuxiliaryRelationAcc<T, P>,
+    pub(crate) r_memory: MemoryRelationAcc<T, P>,
+    pub(crate) r_nnf: NonNativeFieldRelationAcc<T, P>,
     pub(crate) r_pos_ext: Poseidon2ExternalRelationAcc<T, P>,
     pub(crate) r_pos_int: Poseidon2InternalRelationAcc<T, P>,
 }
@@ -120,7 +130,8 @@ pub(crate) struct AllRelationAccHalfShared<T: NoirUltraHonkProver<P>, P: CurveGr
     pub(crate) r_lookup: LogDerivLookupRelationAcc<T, P>,
     pub(crate) r_delta: DeltaRangeConstraintRelationAcc<T, P>,
     pub(crate) r_elliptic: EllipticRelationAcc<T, P>,
-    pub(crate) r_aux: AuxiliaryRelationAcc<T, P>,
+    pub(crate) r_memory: MemoryRelationAcc<T, P>,
+    pub(crate) r_nnf: NonNativeFieldRelationAcc<T, P>,
     pub(crate) r_pos_ext: Poseidon2ExternalRelationAcc<T, P>,
     pub(crate) r_pos_int: Poseidon2InternalRelationAcc<T, P>,
 }
@@ -141,7 +152,8 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup> AllRelationAccHalfShared<T, P> {
             r_lookup: self.r_lookup,
             r_delta: self.r_delta,
             r_elliptic: self.r_elliptic,
-            r_aux: self.r_aux,
+            r_memory: self.r_memory,
+            r_nnf: self.r_nnf,
             r_pos_ext: self.r_pos_ext,
             r_pos_int: self.r_pos_int,
         })
@@ -156,7 +168,8 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for AllRelationAcc<T, P> 
             r_lookup: Default::default(),
             r_delta: Default::default(),
             r_elliptic: Default::default(),
-            r_aux: Default::default(),
+            r_memory: Default::default(),
+            r_nnf: Default::default(),
             r_pos_ext: Default::default(),
             r_pos_int: Default::default(),
         }
@@ -171,7 +184,8 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for AllRelationAccHalfSha
             r_lookup: Default::default(),
             r_delta: Default::default(),
             r_elliptic: Default::default(),
-            r_aux: Default::default(),
+            r_memory: Default::default(),
+            r_nnf: Default::default(),
             r_pos_ext: Default::default(),
             r_pos_int: Default::default(),
         }
@@ -183,12 +197,13 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup> AllRelationAcc<T, P> {
         assert!(elements.len() == NUM_SUBRELATIONS - 1);
         self.r_arith.scale(&[first_scalar, elements[0]]);
         self.r_perm.scale(&elements[1..3]);
-        self.r_lookup.scale(&elements[3..5]);
-        self.r_delta.scale(&elements[5..9]);
-        self.r_elliptic.scale(&elements[9..11]);
-        self.r_aux.scale(&elements[11..17]);
-        self.r_pos_ext.scale(&elements[17..21]);
-        self.r_pos_int.scale(&elements[21..]);
+        self.r_lookup.scale(&elements[3..6]);
+        self.r_delta.scale(&elements[6..10]);
+        self.r_elliptic.scale(&elements[10..12]);
+        self.r_memory.scale(&elements[12..18]);
+        self.r_nnf.scale(&elements[18..19]);
+        self.r_pos_ext.scale(&elements[19..23]);
+        self.r_pos_int.scale(&elements[23..]);
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(
@@ -222,7 +237,12 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup> AllRelationAcc<T, P> {
             extended_random_poly,
             partial_evaluation_result,
         );
-        self.r_aux.extend_and_batch_univariates(
+        self.r_memory.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+        );
+        self.r_nnf.extend_and_batch_univariates(
             result,
             extended_random_poly,
             partial_evaluation_result,

@@ -473,14 +473,14 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     fn blake2s_hash(
         &mut self,
         message_input: Vec<Self::AcvmType>,
-        num_bits: &[usize],
+        num_bits: usize,
     ) -> eyre::Result<Vec<Self::AcvmType>>;
 
     /// Computes the BLAKE3 hash of 'num_inputs' inputs, each of 'num_bits' bits (rounded to next multiple of 8). The output is then composed into size 32 Vec of field elements.
     fn blake3_hash(
         &mut self,
         message_input: Vec<Self::AcvmType>,
-        num_bits: &[usize],
+        num_bits: usize,
     ) -> eyre::Result<Vec<Self::AcvmType>>;
 
     /// Computes the addition of two EC points, where the points are represented by their x and y coordinates (and a is_infinity indicator). Outputs are also in their coordinate representation.

@@ -10,6 +10,7 @@ use num_bigint::BigUint;
 use std::sync::Arc;
 
 use crate::{
+    PERMUTATION_ARGUMENT_VALUE_SEPARATOR,
     polynomials::polynomial_types::Polynomials,
     prelude::{
         ActiveRegionData, CyclicPermutation, GenericUltraCircuitBuilder, NUM_WIRES,
@@ -18,15 +19,12 @@ use crate::{
     types::types::{Mapping, PermutationMapping, TraceData},
 };
 
-use super::verification_key::PublicComponentKey;
-
 pub struct ProvingKey<P: CurveGroup> {
     pub crs: Arc<ProverCrs<P>>,
     pub circuit_size: u32,
     pub public_inputs: Vec<P::ScalarField>,
     pub num_public_inputs: u32,
     pub pub_inputs_offset: u32,
-    pub pairing_inputs_public_input_key: PublicComponentKey,
     pub polynomials: Polynomials<P::ScalarField>,
     pub memory_read_records: Vec<u32>,
     pub memory_write_records: Vec<u32>,
@@ -108,8 +106,6 @@ impl<P: CurveGroup> ProvingKey<P> {
         {
             proving_key.public_inputs.push(*input);
         }
-        // Set the pairing point accumulator indices
-        proving_key.pairing_inputs_public_input_key = circuit.pairing_inputs_public_input_key;
 
         Ok(proving_key)
     }
@@ -134,7 +130,6 @@ impl<P: CurveGroup> ProvingKey<P> {
             memory_write_records: Vec::new(),
             final_active_wire_idx,
             active_region_data: ActiveRegionData::new(),
-            pairing_inputs_public_input_key: Default::default(),
         }
     }
 
@@ -209,13 +204,11 @@ impl<P: CurveGroup> ProvingKey<P> {
         Self::compute_honk_style_permutation_lagrange_polynomials_from_mapping(
             polys.get_sigmas_mut(),
             mapping.sigmas,
-            circuit_size,
             active_region_data,
         );
         Self::compute_honk_style_permutation_lagrange_polynomials_from_mapping(
             polys.get_ids_mut(),
             mapping.ids,
-            circuit_size,
             active_region_data,
         );
     }
@@ -292,10 +285,11 @@ impl<P: CurveGroup> ProvingKey<P> {
     fn compute_honk_style_permutation_lagrange_polynomials_from_mapping(
         permutation_polynomials: &mut [Polynomial<P::ScalarField>],
         permutation_mappings: Mapping,
-        circuit_size: usize,
         active_region_data: &ActiveRegionData,
     ) {
-        let num_gates = circuit_size;
+        // SEPARATOR ensures that the evaluations of `id_i` (`sigma_i`) and `id_j`(`sigma_j`) polynomials on the boolean
+        // hypercube do not intersect for i != j.
+        assert!(permutation_polynomials[0].len() < PERMUTATION_ARGUMENT_VALUE_SEPARATOR as usize);
 
         let domain_size = active_region_data.size();
         // TACEO TODO Barrettenberg uses multithreading here
@@ -320,17 +314,21 @@ impl<P: CurveGroup> ProvingKey<P> {
                     // the running product to be equal to the "public input delta" that is computed
                     // in <honk/utils/grand_product_delta.hpp>
                     current_permutation_poly[poly_idx] = -P::ScalarField::from(
-                        current_row_idx + 1 + num_gates as u32 * current_col_idx,
+                        current_row_idx
+                            + 1
+                            + PERMUTATION_ARGUMENT_VALUE_SEPARATOR * current_col_idx,
                     );
                 } else if current_is_tag {
                     // Set evaluations to (arbitrary) values disjoint from non-tag values
-                    current_permutation_poly[poly_idx] =
-                        P::ScalarField::from(num_gates as u32 * NUM_WIRES as u32 + current_row_idx);
+                    current_permutation_poly[poly_idx] = P::ScalarField::from(
+                        PERMUTATION_ARGUMENT_VALUE_SEPARATOR * NUM_WIRES as u32 + current_row_idx,
+                    );
                 } else {
                     // For the regular permutation we simply point to the next location by setting the
                     // evaluation to its idx
-                    current_permutation_poly[poly_idx] =
-                        P::ScalarField::from(current_row_idx + num_gates as u32 * current_col_idx);
+                    current_permutation_poly[poly_idx] = P::ScalarField::from(
+                        current_row_idx + PERMUTATION_ARGUMENT_VALUE_SEPARATOR * current_col_idx,
+                    );
                 }
             }
         }

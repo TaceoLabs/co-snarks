@@ -31,8 +31,8 @@ pub struct ProverWitnessEntities<T: Default> {
     pub elements: [T; PROVER_WITNESS_ENTITIES_SIZE],
 }
 
-pub const PRECOMPUTED_ENTITIES_SIZE: usize = 27;
-#[derive(Default, Clone, Serialize, Deserialize)]
+pub const PRECOMPUTED_ENTITIES_SIZE: usize = 28;
+#[derive(Default, Clone, Serialize, Deserialize, Debug)]
 pub struct PrecomputedEntities<T: Default> {
     pub elements: [T; PRECOMPUTED_ENTITIES_SIZE],
 }
@@ -183,39 +183,41 @@ impl<T: Default> PrecomputedEntities<T> {
     /// column 9
     pub(crate) const Q_ELLIPTIC: usize = 9;
     /// column 10
-    pub(crate) const Q_AUX: usize = 10;
+    pub(crate) const Q_MEMORY: usize = 10;
     /// column 11
-    pub(crate) const Q_POSEIDON2_EXTERNAL: usize = 11;
+    pub(crate) const Q_NNF: usize = 11;
     /// column 12
-    pub(crate) const Q_POSEIDON2_INTERNAL: usize = 12;
+    pub(crate) const Q_POSEIDON2_EXTERNAL: usize = 12;
     /// column 13
-    const SIGMA_1: usize = 13;
+    pub(crate) const Q_POSEIDON2_INTERNAL: usize = 13;
     /// column 14
-    const SIGMA_2: usize = 14;
+    const SIGMA_1: usize = 14;
     /// column 15
-    const SIGMA_3: usize = 15;
+    const SIGMA_2: usize = 15;
     /// column 16
-    const SIGMA_4: usize = 16;
+    const SIGMA_3: usize = 16;
     /// column 17
-    const ID_1: usize = 17;
+    const SIGMA_4: usize = 17;
     /// column 18
-    const ID_2: usize = 18;
+    const ID_1: usize = 18;
     /// column 19
-    const ID_3: usize = 19;
+    const ID_2: usize = 19;
     /// column 20
-    const ID_4: usize = 20;
+    const ID_3: usize = 20;
     /// column 21
-    const TABLE_1: usize = 21;
+    const ID_4: usize = 21;
     /// column 22
-    const TABLE_2: usize = 22;
+    const TABLE_1: usize = 22;
     /// column 23
-    const TABLE_3: usize = 23;
+    const TABLE_2: usize = 23;
     /// column 24
-    const TABLE_4: usize = 24;
+    const TABLE_3: usize = 24;
     /// column 25
-    const LAGRANGE_FIRST: usize = 25;
+    const TABLE_4: usize = 25;
     /// column 26
-    const LAGRANGE_LAST: usize = 26;
+    const LAGRANGE_FIRST: usize = 26;
+    /// column 27
+    const LAGRANGE_LAST: usize = 27;
 
     pub fn iter(&self) -> impl Iterator<Item = &T> {
         self.elements.iter()
@@ -281,8 +283,12 @@ impl<T: Default> PrecomputedEntities<T> {
         &self.elements[Self::Q_ELLIPTIC]
     }
 
-    pub fn q_aux(&self) -> &T {
-        &self.elements[Self::Q_AUX]
+    pub fn q_memory(&self) -> &T {
+        &self.elements[Self::Q_MEMORY]
+    }
+
+    pub fn q_nnf(&self) -> &T {
+        &self.elements[Self::Q_NNF]
     }
 
     pub fn q_lookup(&self) -> &T {
@@ -397,8 +403,12 @@ impl<T: Default> PrecomputedEntities<T> {
         &mut self.elements[Self::Q_ELLIPTIC]
     }
 
-    pub fn q_aux_mut(&mut self) -> &mut T {
-        &mut self.elements[Self::Q_AUX]
+    pub fn q_memory_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::Q_MEMORY]
+    }
+
+    pub fn q_nnf_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::Q_NNF]
     }
 
     pub fn q_lookup_mut(&mut self) -> &mut T {

@@ -2,10 +2,11 @@ use crate::{
     decider::{
         relations::{
             AllRelationEvaluations, Relation,
-            auxiliary_relation::AuxiliaryRelation,
             delta_range_constraint_relation::DeltaRangeConstraintRelation,
             elliptic_relation::{EllipticRelation, EllipticRelationEvals},
             logderiv_lookup_relation::LogDerivLookupRelation,
+            memory_relation::MemoryRelation,
+            non_native_field_relation::NonNativeFieldRelation,
             permutation_relation::UltraPermutationRelation,
             poseidon2_external_relation::Poseidon2ExternalRelation,
             poseidon2_internal_relation::Poseidon2InternalRelation,
@@ -123,8 +124,14 @@ impl<P: HonkCurve<TranscriptFieldType>> SumcheckVerifierRound<P> {
             relation_parameters,
             scaling_factor,
         );
-        Self::accumulate_one_relation_evaluations::<AuxiliaryRelation>(
-            &mut univariate_accumulators.r_aux,
+        Self::accumulate_one_relation_evaluations::<MemoryRelation>(
+            &mut univariate_accumulators.r_memory,
+            extended_edges,
+            relation_parameters,
+            scaling_factor,
+        );
+        Self::accumulate_one_relation_evaluations::<NonNativeFieldRelation>(
+            &mut univariate_accumulators.r_nnf,
             extended_edges,
             relation_parameters,
             scaling_factor,

@@ -112,10 +112,6 @@ where
                     source,
                     bit_size,
                 } => self.handle_cast(*destination, *source, *bit_size)?,
-                BrilligOpcode::JumpIfNot {
-                    condition: _,
-                    location: _,
-                } => todo!(),
                 BrilligOpcode::JumpIf {
                     condition,
                     location,

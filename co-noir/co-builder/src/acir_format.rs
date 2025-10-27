@@ -3,7 +3,7 @@ use acir::{
     acir_field::GenericFieldElement,
     circuit::{
         Circuit,
-        opcodes::{BlackBoxFuncCall, FunctionInput, MemOp},
+        opcodes::{BlackBoxFuncCall, FunctionInput, MemOp as AcirMemOp},
     },
     native_types::{Expression, Witness, WitnessMap},
 };
@@ -15,8 +15,8 @@ use std::{
 
 use crate::types::types::{
     AES128Constraint, AcirFormatOriginalOpcodeIndices, Blake2sConstraint, Blake2sInput,
-    Blake3Constraint, Blake3Input, BlockConstraint, BlockType, EcAdd, LogicConstraint, MulQuad,
-    MultiScalarMul, PolyTriple, Poseidon2Constraint, RangeConstraint, RecursionConstraint,
+    Blake3Constraint, Blake3Input, BlockConstraint, BlockType, EcAdd, LogicConstraint, MemOp,
+    MulQuad, MultiScalarMul, PolyTriple, Poseidon2Constraint, RangeConstraint, RecursionConstraint,
     Sha256Compression, WitnessOrConstant,
 };
 #[expect(dead_code)]
@@ -63,18 +63,13 @@ pub struct AcirFormat<F: PrimeField> {
     pub(crate) blake3_constraints: Vec<Blake3Constraint<F>>,
     //  std::vector<KeccakConstraint> keccak_constraints;
     //  std::vector<Keccakf1600> keccak_permutations;
-    //  std::vector<PedersenConstraint> pedersen_constraints;
-    //  std::vector<PedersenHashConstraint> pedersen_hash_constraints;
     pub(crate) poseidon2_constraints: Vec<Poseidon2Constraint<F>>,
     pub(crate) multi_scalar_mul_constraints: Vec<MultiScalarMul<F>>,
     pub(crate) ec_add_constraints: Vec<EcAdd<F>>,
-    pub(crate) recursion_constraints: Vec<RecursionConstraint>,
     pub(crate) honk_recursion_constraints: Vec<RecursionConstraint>,
     pub(crate) avm_recursion_constraints: Vec<RecursionConstraint>,
-    //  std::vector<RecursionConstraint> ivc_recursion_constraints;
-    //  std::vector<BigIntFromLeBytes> bigint_from_le_bytes_constraints;
-    //  std::vector<BigIntToLeBytes> bigint_to_le_bytes_constraints;
-    //  std::vector<BigIntOperation> bigint_operations;
+    pub(crate) pg_recursion_constraints: Vec<RecursionConstraint>,
+    pub(crate) civc_recursion_constraints: Vec<RecursionConstraint>,
     pub(crate) assert_equalities: Vec<PolyTriple<F>>,
 
     /// A standard plonk arithmetic constraint, as defined in the poly_triple struct, consists of selector values
@@ -147,17 +142,13 @@ impl<F: PrimeField> AcirFormat<F> {
                 acir::circuit::Opcode::BlackBoxFuncCall(black_box_func_call) => {
                     Self::handle_blackbox_func_call(black_box_func_call, &mut af, honk_recursion, i)
                 }
-                acir::circuit::Opcode::MemoryOp {
-                    block_id,
-                    op,
-                    predicate: _,
-                } => {
+                acir::circuit::Opcode::MemoryOp { block_id, op } => {
                     let block = block_id_to_block_constraint.get_mut(&block_id.0);
                     if block.is_none() {
                         panic!("unitialized MemoryOp");
                     }
                     let block = block.unwrap();
-                    Self::handle_memory_op(op, &mut block.0);
+                    Self::handle_memory_op(op, &mut af, &mut block.0);
                     block.1.push(i);
                 }
                 acir::circuit::Opcode::MemoryInit {
@@ -591,13 +582,30 @@ impl<F: PrimeField> AcirFormat<F> {
         block
     }
 
-    fn is_rom(mem_op: &MemOp<GenericFieldElement<F>>) -> bool {
+    fn is_rom(mem_op: &AcirMemOp<GenericFieldElement<F>>) -> bool {
         mem_op.operation.mul_terms.is_empty()
             && mem_op.operation.linear_combinations.is_empty()
             && mem_op.operation.q_c.is_zero()
     }
 
-    fn handle_memory_op(mem_op: MemOp<GenericFieldElement<F>>, block: &mut BlockConstraint<F>) {
+    fn poly_to_witness(poly: &PolyTriple<F>) -> u32 {
+        if poly.q_m.is_zero()
+            && poly.q_r.is_zero()
+            && poly.q_o.is_zero()
+            && poly.q_l.is_one()
+            && poly.q_c.is_zero()
+        {
+            poly.a
+        } else {
+            0
+        }
+    }
+
+    fn handle_memory_op(
+        mem_op: AcirMemOp<GenericFieldElement<F>>,
+        af: &mut AcirFormat<F>,
+        block: &mut BlockConstraint<F>,
+    ) {
         let access_type = if Self::is_rom(&mem_op) { 0 } else { 1 };
         if access_type == 1 {
             // We are not allowed to write on the databus
@@ -605,23 +613,37 @@ impl<F: PrimeField> AcirFormat<F> {
             block.type_ = BlockType::RAM;
         }
 
-        let acir_mem_op = super::types::types::MemOp {
+        // Update the ranges of the index using the array length
+        let index = Self::serialize_arithmetic_gate(&mem_op.index);
+        let bit_range = block.init.len().ilog2();
+        let index_witness = Self::poly_to_witness(&index);
+
+        if index_witness != 0 && bit_range > 0 {
+            // Updates both af.minimal_range and af.index_range with u_bit_range when it is lower.
+            // By doing so, we keep these invariants:
+            // - minimal_range contains the smallest possible range for a witness
+            // - index_range constains the smallest range for a witness implied by any array operation
+            if af.minimal_range.contains_key(&index_witness) {
+                if af.minimal_range[&index_witness] > bit_range {
+                    af.minimal_range.insert(index_witness, bit_range);
+                }
+            } else {
+                af.minimal_range.insert(index_witness, bit_range);
+            }
+        }
+
+        let acir_mem_op = MemOp {
             access_type,
-            index: Self::serialize_arithmetic_gate(&mem_op.index),
+            index,
             value: Self::serialize_arithmetic_gate(&mem_op.value),
         };
-
         block.trace.push(acir_mem_op);
     }
 
     fn parse_input(input: FunctionInput<GenericFieldElement<F>>) -> WitnessOrConstant<F> {
-        match input.input() {
-            acir::circuit::opcodes::ConstantOrWitnessEnum::Witness(witness) => {
-                WitnessOrConstant::from_index(witness.0)
-            }
-            acir::circuit::opcodes::ConstantOrWitnessEnum::Constant(constant) => {
-                WitnessOrConstant::from_constant(constant.into_repr())
-            }
+        match input {
+            FunctionInput::Witness(witness) => WitnessOrConstant::from_index(witness.0),
+            FunctionInput::Constant(value) => WitnessOrConstant::from_constant(value.into_repr()),
         }
     }
 
@@ -652,50 +674,54 @@ impl<F: PrimeField> AcirFormat<F> {
                     .aes128_constraints
                     .push(opcode_index);
             }
-            BlackBoxFuncCall::AND { lhs, rhs, output } => {
+            BlackBoxFuncCall::AND {
+                lhs,
+                rhs,
+                output,
+                num_bits,
+            } => {
                 let lhs_input = Self::parse_input(lhs);
                 let rhs_input = Self::parse_input(rhs);
                 af.logic_constraints.push(LogicConstraint::and_gate(
-                    lhs_input,
-                    rhs_input,
-                    output.0,
-                    lhs.num_bits(),
+                    lhs_input, rhs_input, output.0, num_bits,
                 ));
                 af.constrained_witness.insert(output.0);
                 af.original_opcode_indices
                     .logic_constraints
                     .push(opcode_index);
             }
-            BlackBoxFuncCall::XOR { lhs, rhs, output } => {
+            BlackBoxFuncCall::XOR {
+                lhs,
+                rhs,
+                output,
+                num_bits,
+            } => {
                 let lhs_input = Self::parse_input(lhs);
                 let rhs_input = Self::parse_input(rhs);
                 af.logic_constraints.push(LogicConstraint::xor_gate(
-                    lhs_input,
-                    rhs_input,
-                    output.0,
-                    lhs.num_bits(),
+                    lhs_input, rhs_input, output.0, num_bits,
                 ));
                 af.constrained_witness.insert(output.0);
                 af.original_opcode_indices
                     .logic_constraints
                     .push(opcode_index);
             }
-            BlackBoxFuncCall::RANGE { input } => {
+            BlackBoxFuncCall::RANGE { input, num_bits } => {
                 let witness_input = input.to_witness().witness_index();
                 af.range_constraints.push(RangeConstraint {
                     witness: witness_input,
-                    num_bits: input.num_bits(),
+                    num_bits,
                 });
                 af.original_opcode_indices
                     .range_constraints
                     .push(opcode_index);
 
                 if af.minimal_range.contains_key(&witness_input) {
-                    if af.minimal_range[&witness_input] > input.num_bits() {
-                        af.minimal_range.insert(witness_input, input.num_bits());
+                    if af.minimal_range[&witness_input] > num_bits {
+                        af.minimal_range.insert(witness_input, num_bits);
                     }
                 } else {
-                    af.minimal_range.insert(witness_input, input.num_bits());
+                    af.minimal_range.insert(witness_input, num_bits);
                 }
             }
             BlackBoxFuncCall::Blake2s { inputs, outputs } => {
@@ -704,7 +730,7 @@ impl<F: PrimeField> AcirFormat<F> {
                         .into_iter()
                         .map(|e| Blake2sInput {
                             blackbox_input: Self::parse_input(e),
-                            num_bits: e.num_bits(),
+                            num_bits: 8, // This is now hardcoded to 8 in Barretenberg
                         })
                         .collect(),
                     result: { array::from_fn(|i| outputs[i].0) },
@@ -723,7 +749,7 @@ impl<F: PrimeField> AcirFormat<F> {
                         .into_iter()
                         .map(|e| Blake3Input {
                             blackbox_input: Self::parse_input(e),
-                            num_bits: e.num_bits(),
+                            num_bits: 8, // This is now hardcoded to 8 in Barretenberg
                         })
                         .collect(),
                     result: { array::from_fn(|i| outputs[i].0) },
@@ -742,6 +768,7 @@ impl<F: PrimeField> AcirFormat<F> {
                 signature: _,
                 hashed_message: _,
                 output: _,
+                predicate: _,
             } => todo!("BlackBoxFuncCall::EcdsaSecp256k1"),
             BlackBoxFuncCall::EcdsaSecp256r1 {
                 public_key_x: _,
@@ -749,11 +776,13 @@ impl<F: PrimeField> AcirFormat<F> {
                 signature: _,
                 hashed_message: _,
                 output: _,
+                ..
             } => todo!("BlackBoxFuncCall::EcdsaSecp256r1"),
             BlackBoxFuncCall::MultiScalarMul {
                 points,
                 scalars,
                 outputs,
+                ..
             } => {
                 af.multi_scalar_mul_constraints.push(MultiScalarMul {
                     points: points.into_iter().map(|e| Self::parse_input(e)).collect(),
@@ -773,6 +802,7 @@ impl<F: PrimeField> AcirFormat<F> {
                 input1,
                 input2,
                 outputs,
+                ..
             } => {
                 let input1_x = Self::parse_input(input1[0]);
                 let input1_y = Self::parse_input(input1[1]);
@@ -804,52 +834,10 @@ impl<F: PrimeField> AcirFormat<F> {
             } => {
                 todo!("BlackBoxFuncCall::Keccakf1600")
             }
-            BlackBoxFuncCall::BigIntAdd {
-                lhs: _,
-                rhs: _,
-                output: _,
-            } => {
-                todo!("BlackBoxFuncCall::BigIntAdd")
-            }
-            BlackBoxFuncCall::BigIntSub {
-                lhs: _,
-                rhs: _,
-                output: _,
-            } => {
-                todo!("BlackBoxFuncCall::BigIntSub")
-            }
-            BlackBoxFuncCall::BigIntMul {
-                lhs: _,
-                rhs: _,
-                output: _,
-            } => {
-                todo!("BlackBoxFuncCall::BigIntMul")
-            }
-            BlackBoxFuncCall::BigIntDiv {
-                lhs: _,
-                rhs: _,
-                output: _,
-            } => {
-                todo!("BlackBoxFuncCall::BigIntDiv")
-            }
-            BlackBoxFuncCall::BigIntFromLeBytes {
-                inputs: _,
-                modulus: _,
-                output: _,
-            } => todo!("BlackBoxFuncCall::BigIntFromLeBytes"),
-            BlackBoxFuncCall::BigIntToLeBytes {
-                input: _,
-                outputs: _,
-            } => todo!("BlackBoxFuncCall::BigIntToLeBytes"),
-            BlackBoxFuncCall::Poseidon2Permutation {
-                inputs,
-                outputs,
-                len,
-            } => {
+            BlackBoxFuncCall::Poseidon2Permutation { inputs, outputs } => {
                 let constraint = Poseidon2Constraint {
                     state: inputs.into_iter().map(|e| Self::parse_input(e)).collect(),
                     result: outputs.into_iter().map(|e| e.0).collect(),
-                    len,
                 };
                 for output in constraint.result.iter() {
                     af.constrained_witness.insert(*output);
@@ -887,6 +875,7 @@ impl<F: PrimeField> AcirFormat<F> {
                 public_inputs: _,
                 key_hash: _,
                 proof_type: _,
+                predicate: _,
             } => todo!("BlackBoxFuncCall::RecursiveAggregation"),
         }
     }

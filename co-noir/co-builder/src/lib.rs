@@ -11,6 +11,10 @@ pub mod prelude;
 pub mod types;
 pub(crate) mod ultra_builder;
 
+// Arbitrarily large constant (> size of the BN254 srs) used to ensure that the evaluations on the hypercube of the
+// permutation argument polynomials (sigmas, ids) are unique, e.g. id[i][j] == id[m][n] iff (i == m && j == n)
+pub const PERMUTATION_ARGUMENT_VALUE_SEPARATOR: u32 = 1 << 28;
+
 pub fn get_constraint_system_from_artifact(
     program_artifact: &ProgramArtifact,
     honk_recusion: bool,
