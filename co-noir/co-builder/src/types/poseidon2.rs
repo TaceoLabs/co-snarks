@@ -597,7 +597,7 @@ where
      * @param input
      * @return std::array<FF, out_len>
      */
-    #[expect(unused)] // This will be used in the fieldct transcript
+    // This will be used in the fieldct transcript
     pub(crate) fn hash_internal<
         const OUT_LEN: usize,
         WT: NoirWitnessExtensionProtocol<P::ScalarField>,
