@@ -34,7 +34,6 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             rng: ChaCha12Rng::from_entropy(),
             has_zk,
             phantom_data: PhantomData,
-            phantom_hasher: PhantomData,
         }
     }
 
