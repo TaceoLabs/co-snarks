@@ -397,7 +397,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     ) {
         tracing::trace!("generate alpha round");
 
-        let args: [String; NUM_ALPHAS] = array::from_fn(|i| format!("alpha_{i}"));
+        let args: [String; NUM_ALPHAS] = array::from_fn(|i| format!("ALPHA_{i}"));
         alphas.copy_from_slice(&transcript.get_challenges::<P>(&args));
     }
 
@@ -409,13 +409,13 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         tracing::trace!("executing preamble round");
 
         transcript
-            .add_u64_to_hash_buffer("circuit_size".to_string(), proving_key.circuit_size as u64);
+            .add_u64_to_hash_buffer("CIRCUIT_SIZE".to_string(), proving_key.circuit_size as u64);
         transcript.add_u64_to_hash_buffer(
-            "public_input_size".to_string(),
+            "PUBLIC_INPUT_SIZE".to_string(),
             proving_key.num_public_inputs as u64,
         );
         transcript.add_u64_to_hash_buffer(
-            "pub_inputs_offset".to_string(),
+            "PUB_INPUTS_OFFSET".to_string(),
             proving_key.pub_inputs_offset as u64,
         );
 
@@ -427,7 +427,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
         for (i, public_input) in proving_key.public_inputs.iter().enumerate() {
             // transcript.add_scalar(*public_input);
-            transcript.send_fr_to_verifier::<P>(format!("public_input_{i}"), *public_input);
+            transcript.send_fr_to_verifier::<P>(format!("PUBLIC_INPUT_{i}"), *public_input);
         }
         Ok(())
     }
@@ -479,9 +479,9 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         tracing::trace!("executing sorted list accumulator round");
 
         let challs = transcript.get_challenges::<P>(&[
-            "eta".to_string(),
-            "eta_two".to_string(),
-            "eta_three".to_string(),
+            "ETA".to_string(),
+            "ETA_TWO".to_string(),
+            "ETA_THREE".to_string(),
         ]);
         self.memory.challenges.eta_1 = challs[0];
         self.memory.challenges.eta_2 = challs[1];
@@ -518,7 +518,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     ) -> HonkProofResult<()> {
         tracing::trace!("executing log derivative inverse round");
 
-        let challs = transcript.get_challenges::<P>(&["beta".to_string(), "gamma".to_string()]);
+        let challs = transcript.get_challenges::<P>(&["BETA".to_string(), "GAMMA".to_string()]);
         self.memory.challenges.beta = challs[0];
         self.memory.challenges.gamma = challs[1];
 
