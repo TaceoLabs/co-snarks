@@ -38,8 +38,7 @@ use std::{array, marker::PhantomData};
 pub(crate) struct Oink<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
 {
     memory: ProverMemory<P>,
-    phantom_data: PhantomData<P>,
-    phantom_hasher: PhantomData<H>,
+    phantom_data: PhantomData<(P, H)>,
     has_zk: ZeroKnowledge,
     rng: ChaCha12Rng,
 }
