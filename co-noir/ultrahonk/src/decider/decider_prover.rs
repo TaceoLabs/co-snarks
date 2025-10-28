@@ -24,8 +24,7 @@ pub(crate) struct Decider<
     pub(super) memory: ProverMemory<P>,
     pub(super) rng: ChaCha12Rng,
     pub(crate) has_zk: ZeroKnowledge,
-    phantom_data: PhantomData<P>,
-    phantom_hasher: PhantomData<H>,
+    phantom_data: PhantomData<(P, H)>,
 }
 
 impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> Decider<P, H> {
