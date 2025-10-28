@@ -273,7 +273,7 @@ fn main() -> color_eyre::Result<ExitCode> {
 
     // Get the verifying key
     let verifying_key =
-        VerifyingKey::<Bn254>::from_barrettenberg_and_crs(vk_barretenberg, verifier_crs);
+        VerifyingKey::<Bn254>::from_barretenberg_and_crs(vk_barretenberg, verifier_crs);
 
     // Verify the proof
     let is_valid = match hasher {
