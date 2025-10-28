@@ -19,7 +19,6 @@ use crate::{
 };
 
 #[derive(Clone)]
-
 pub struct VerifyingKey<P: Pairing> {
     pub crs: P::G2Affine,
     pub circuit_size: u32,
