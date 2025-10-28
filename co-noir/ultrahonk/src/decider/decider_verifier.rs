@@ -21,8 +21,7 @@ pub(crate) struct DeciderVerifier<
     H: TranscriptHasher<TranscriptFieldType>,
 > {
     pub(super) memory: VerifierMemory<P>,
-    phantom_data: PhantomData<P>,
-    phantom_hasher: PhantomData<H>,
+    phantom_data: PhantomData<(P, H)>,
 }
 
 impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
