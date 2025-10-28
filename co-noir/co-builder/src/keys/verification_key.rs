@@ -1,8 +1,3 @@
-use crate::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
-use crate::{
-    flavours::ultra_flavour::UltraFlavour, prover_flavour::ProverFlavour,
-    ultra_builder::UltraCircuitBuilder,
-};
 use co_noir_common::{
     crs::ProverCrs,
     honk_curve::HonkCurve,
@@ -10,26 +5,30 @@ use co_noir_common::{
     serialize::SerializeP,
     utils::Utils,
 };
-
-use ark_ec::CurveGroup;
-use ark_ec::{AffineRepr, pairing::Pairing};
-use ark_ff::Zero;
-use co_acvm::PlainAcvmSolver;
 use noir_types::SerializeF;
 use serde::{Deserialize, Serialize as SerdeSerialize};
 use std::sync::Arc;
 
-#[derive(Debug, Clone)]
-pub struct VerifyingKey<P: Pairing, L: ProverFlavour> {
+use ark_ec::{AffineRepr, CurveGroup, pairing::Pairing};
+use ark_ff::Zero;
+use co_acvm::PlainAcvmSolver;
+
+use crate::{
+    polynomials::polynomial_types::PRECOMPUTED_ENTITIES_SIZE,
+    prelude::{PrecomputedEntities, UltraCircuitBuilder},
+};
+
+#[derive(Clone)]
+pub struct VerifyingKey<P: Pairing> {
     pub crs: P::G2Affine,
     pub circuit_size: u32,
     pub num_public_inputs: u32,
     pub pub_inputs_offset: u32,
     pub pairing_inputs_public_input_key: PublicComponentKey,
-    pub commitments: L::PrecomputedEntities<P::G1Affine>,
+    pub commitments: PrecomputedEntities<P::G1Affine>,
 }
 
-impl<P: Pairing> VerifyingKey<P, UltraFlavour> {
+impl<P: Pairing> VerifyingKey<P> {
     pub fn create(
         circuit: UltraCircuitBuilder<P::G1>,
         prover_crs: Arc<ProverCrs<P::G1>>,
@@ -40,8 +39,8 @@ impl<P: Pairing> VerifyingKey<P, UltraFlavour> {
         Ok(vk)
     }
 
-    pub fn from_barrettenberg_and_crs(
-        barretenberg_vk: VerifyingKeyBarretenberg<P::G1, UltraFlavour>,
+    pub fn from_barretenberg_and_crs(
+        barretenberg_vk: VerifyingKeyBarretenberg<P::G1>,
         crs: P::G2Affine,
     ) -> Self {
         Self {
@@ -54,7 +53,7 @@ impl<P: Pairing> VerifyingKey<P, UltraFlavour> {
         }
     }
 
-    pub fn to_barrettenberg(self) -> VerifyingKeyBarretenberg<P::G1, UltraFlavour> {
+    pub fn to_barretenberg(self) -> VerifyingKeyBarretenberg<P::G1> {
         VerifyingKeyBarretenberg {
             circuit_size: self.circuit_size as u64,
             log_circuit_size: Utils::get_msb64(self.circuit_size as u64) as u64,
@@ -66,18 +65,18 @@ impl<P: Pairing> VerifyingKey<P, UltraFlavour> {
     }
 }
 
-pub struct VerifyingKeyBarretenberg<P: CurveGroup, L: ProverFlavour> {
+pub struct VerifyingKeyBarretenberg<P: CurveGroup> {
     pub circuit_size: u64,
     pub log_circuit_size: u64,
     pub num_public_inputs: u64,
     pub pub_inputs_offset: u64,
     pub pairing_inputs_public_input_key: PublicComponentKey,
-    pub commitments: L::PrecomputedEntities<P::Affine>,
+    pub commitments: PrecomputedEntities<P::Affine>,
 }
 
-#[derive(Clone, Copy, Debug, SerdeSerialize, Deserialize, PartialEq)]
+#[derive(Clone, Copy, Debug, SerdeSerialize, Deserialize)]
 pub struct PublicComponentKey {
-    pub start_idx: u32,
+    start_idx: u32,
 }
 
 impl Default for PublicComponentKey {
@@ -99,10 +98,10 @@ impl PublicComponentKey {
     }
 }
 
-impl<P: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<P, UltraFlavour> {
+impl<P: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<P> {
     const FIELDSIZE_BYTES: u32 = SerializeP::<P>::FIELDSIZE_BYTES;
     const SER_FULL_SIZE: usize =
-        4 * 8 + 4 + UltraFlavour::PRECOMPUTED_ENTITIES_SIZE * 2 * Self::FIELDSIZE_BYTES as usize;
+        4 * 8 + 4 + PRECOMPUTED_ENTITIES_SIZE * 2 * Self::FIELDSIZE_BYTES as usize;
     const SER_COMPRESSED_SIZE: usize = Self::SER_FULL_SIZE - 4;
 
     pub fn to_field_elements(&self) -> Vec<TranscriptFieldType> {
@@ -188,8 +187,7 @@ impl<P: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<P, UltraFlavour
             Default::default()
         };
 
-        let mut commitments =
-            <UltraFlavour as ProverFlavour>::PrecomputedEntities::<P::Affine>::default();
+        let mut commitments = PrecomputedEntities::default();
 
         for el in commitments.iter_mut() {
             *el = SerializeP::<P>::read_g1_element(buf, &mut offset, true);

@@ -1,18 +1,15 @@
 use super::{ProverUnivariatesBatch, Relation, fold_accumulator};
-use crate::{
-    co_decider::{types::RelationParameters, univariates::SharedUnivariate},
-    mpc_prover_flavour::MPCProverFlavour,
-    types::AllEntities,
+use crate::co_decider::{
+    types::{MAX_PARTIAL_RELATION_LENGTH, RelationParameters},
+    univariates::SharedUnivariate,
 };
 use ark_ec::CurveGroup;
-use ark_ff::Field;
 use ark_ff::Zero;
-use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
-use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
-use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
-use co_noir_common::honk_curve::HonkCurve;
-use co_noir_common::honk_proof::{HonkProofResult, TranscriptFieldType};
-use co_noir_common::mpc::NoirUltraHonkProver;
+use co_noir_common::{
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProofResult, TranscriptFieldType},
+    mpc::NoirUltraHonkProver,
+};
 use itertools::Itertools as _;
 use mpc_core::{MpcState as _, gadgets::poseidon2::POSEIDON2_BN254_T4_PARAMS};
 use mpc_net::Network;
@@ -27,14 +24,6 @@ pub(crate) struct Poseidon2InternalRelationAcc<T: NoirUltraHonkProver<P>, P: Cur
     pub(crate) r3: SharedUnivariate<T, P, 7>,
 }
 
-#[derive(Clone, Debug)]
-pub(crate) struct Poseidon2InternalRelationEvals<T: NoirUltraHonkProver<P>, P: CurveGroup> {
-    pub(crate) r0: T::ArithmeticShare,
-    pub(crate) r1: T::ArithmeticShare,
-    pub(crate) r2: T::ArithmeticShare,
-    pub(crate) r3: T::ArithmeticShare,
-}
-
 impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for Poseidon2InternalRelationAcc<T, P> {
     fn default() -> Self {
         Self {
@@ -43,34 +32,6 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for Poseidon2InternalRela
             r2: Default::default(),
             r3: Default::default(),
         }
-    }
-}
-
-impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for Poseidon2InternalRelationEvals<T, P> {
-    fn default() -> Self {
-        Self {
-            r0: Default::default(),
-            r1: Default::default(),
-            r2: Default::default(),
-            r3: Default::default(),
-        }
-    }
-}
-
-impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Poseidon2InternalRelationEvals<T, P> {
-    pub(crate) fn scale_by_challenge_and_accumulate(
-        &self,
-        linearly_independent_contribution: &mut T::ArithmeticShare,
-        running_challenge: &[P::ScalarField],
-    ) {
-        assert!(running_challenge.len() == Poseidon2InternalRelation::NUM_RELATIONS);
-
-        let tmp = T::mul_with_public_many(running_challenge, &[self.r0, self.r1, self.r2, self.r3])
-            .into_iter()
-            .reduce(T::add)
-            .expect("Failed to accumulate poseidon2 internal relation evaluations");
-
-        T::add_assign(linearly_independent_contribution, tmp);
     }
 }
 
@@ -117,40 +78,6 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Poseidon2InternalRelationAcc<T, P
             true,
         );
     }
-
-    pub(crate) fn extend_and_batch_univariates_with_distinct_challenges<const SIZE: usize>(
-        &self,
-        result: &mut SharedUnivariate<T, P, SIZE>,
-        running_challenge: &[Univariate<P::ScalarField, SIZE>],
-    ) {
-        self.r0.extend_and_batch_univariates(
-            result,
-            &running_challenge[0],
-            &P::ScalarField::ONE,
-            true,
-        );
-
-        self.r1.extend_and_batch_univariates(
-            result,
-            &running_challenge[1],
-            &P::ScalarField::ONE,
-            true,
-        );
-
-        self.r2.extend_and_batch_univariates(
-            result,
-            &running_challenge[2],
-            &P::ScalarField::ONE,
-            true,
-        );
-
-        self.r3.extend_and_batch_univariates(
-            result,
-            &running_challenge[3],
-            &P::ScalarField::ONE,
-            true,
-        );
-    }
 }
 
 pub(crate) struct Poseidon2InternalRelation {}
@@ -160,19 +87,18 @@ impl Poseidon2InternalRelation {
     pub(crate) const CRAND_PAIRS_FACTOR: usize = 3;
 }
 
-impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverFlavour>
-    Relation<T, P, L> for Poseidon2InternalRelation
+impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P>
+    for Poseidon2InternalRelation
 {
     type Acc = Poseidon2InternalRelationAcc<T, P>;
-    type VerifyAcc = Poseidon2InternalRelationEvals<T, P>;
 
-    fn can_skip(entity: &super::ProverUnivariates<T, P, L>) -> bool {
+    fn can_skip(entity: &super::ProverUnivariates<T, P>) -> bool {
         entity.precomputed.q_poseidon2_internal().is_zero()
     }
 
-    fn add_entities(
-        entity: &super::ProverUnivariates<T, P, L>,
-        batch: &mut ProverUnivariatesBatch<T, P, L>,
+    fn add_entites(
+        entity: &super::ProverUnivariates<T, P>,
+        batch: &mut ProverUnivariatesBatch<T, P>,
     ) {
         batch.add_w_l(entity);
         batch.add_w_r(entity);
@@ -208,12 +134,12 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
      * @param parameters contains beta, gamma, and public_input_delta, ....
      * @param scaling_factor optional term to scale the evaluation before adding to evals.
      */
-    fn accumulate<N: Network, const SIZE: usize>(
+    fn accumulate<N: Network>(
         net: &N,
         state: &mut T::State,
         univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariatesBatch<T, P, L>,
-        _relation_parameters: &RelationParameters<P::ScalarField>,
+        input: &ProverUnivariatesBatch<T, P>,
+        _relation_parameters: &RelationParameters<<P>::ScalarField>,
         scaling_factors: &[P::ScalarField],
     ) -> HonkProofResult<()> {
         let w_l = input.witness.w_l();
@@ -270,7 +196,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         T::sub_assign_many(&mut u1, w_l_shift);
         T::mul_assign_with_public_many(&mut u1, &q_pos_by_scaling);
 
-        fold_accumulator!(univariate_accumulator.r0, u1, SIZE);
+        fold_accumulator!(univariate_accumulator.r0, u1);
 
         ///////////////////////////////////////////////////////////////////////
         T::scale_many_in_place(&mut u2, internal_matrix_diag_1);
@@ -278,7 +204,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         T::sub_assign_many(&mut u2, w_r_shift);
         T::mul_assign_with_public_many(&mut u2, &q_pos_by_scaling);
 
-        fold_accumulator!(univariate_accumulator.r1, u2, SIZE);
+        fold_accumulator!(univariate_accumulator.r1, u2);
 
         ///////////////////////////////////////////////////////////////////////
 
@@ -287,7 +213,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         T::sub_assign_many(&mut u3, w_o_shift);
         T::mul_assign_with_public_many(&mut u3, &q_pos_by_scaling);
 
-        fold_accumulator!(univariate_accumulator.r2, u3, SIZE);
+        fold_accumulator!(univariate_accumulator.r2, u3);
 
         ///////////////////////////////////////////////////////////////////////
 
@@ -296,124 +222,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         T::sub_assign_many(&mut u4, w_4_shift);
         T::mul_assign_with_public_many(&mut u4, &q_pos_by_scaling);
 
-        fold_accumulator!(univariate_accumulator.r3, u4, SIZE);
-
-        ///////////////////////////////////////////////////////////////////////
-        Ok(())
-    }
-
-    fn accumulate_with_extended_parameters<N: Network, const SIZE: usize>(
-        net: &N,
-        state: &mut T::State,
-        univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariatesBatch<T, P, L>,
-        _relation_parameters: &RelationParameters<Univariate<P::ScalarField, SIZE>>,
-        scaling_factor: &P::ScalarField,
-    ) -> HonkProofResult<()> {
-        // TACEO TODO: Reconcile skip check and `can_skip`
-        if input
-            .precomputed
-            .q_poseidon2_internal()
-            .iter()
-            .all(|x| x.is_zero())
-        {
-            return Ok(());
-        }
-        Self::accumulate::<N, SIZE>(
-            net,
-            state,
-            univariate_accumulator,
-            input,
-            &RelationParameters::default(),
-            &vec![*scaling_factor; input.precomputed.q_poseidon2_internal().len()],
-        )
-    }
-
-    fn accumulate_evaluations<N: Network>(
-        net: &N,
-        state: &mut T::State,
-        accumulator: &mut Self::VerifyAcc,
-        input: &AllEntities<T::ArithmeticShare, P::ScalarField, L>,
-        _relation_parameters: &RelationParameters<P::ScalarField>,
-        scaling_factor: &P::ScalarField,
-    ) -> HonkProofResult<()> {
-        let w_l = input.witness.w_l().to_owned();
-        let w_r = input.witness.w_r().to_owned();
-        let w_o = input.witness.w_o().to_owned();
-        let w_4 = input.witness.w_4().to_owned();
-        let w_l_shift = input.shifted_witness.w_l().to_owned();
-        let w_r_shift = input.shifted_witness.w_r().to_owned();
-        let w_o_shift = input.shifted_witness.w_o().to_owned();
-        let w_4_shift = input.shifted_witness.w_4().to_owned();
-        let q_l = input.precomputed.q_l().to_owned();
-        let q_poseidon2_internal = input.precomputed.q_poseidon2_internal().to_owned();
-
-        // add round constants
-        let s1 = T::add_with_public(q_l, w_l, state.id());
-
-        // apply s-box round
-        // 0xThemis TODO again can we do something better for x^5?
-        let u1 = T::mul(s1, s1, net, state)?;
-        let u1 = T::mul(u1, u1, net, state)?;
-        let mut u1 = T::mul(u1, s1, net, state)?;
-
-        let mut u2 = w_r.to_owned();
-        let mut u3 = w_o.to_owned();
-        let mut u4 = w_4.to_owned();
-
-        // matrix mul with v = M_I * u 4 muls and 7 additions
-        let mut sum = T::add(u1, u2);
-        T::add_assign(&mut sum, u3);
-        T::add_assign(&mut sum, u4);
-
-        let q_pos_by_scaling = q_poseidon2_internal * scaling_factor;
-
-        // TACEO TODO this poseidon instance is very hardcoded to the bn254 curve
-        let internal_matrix_diag_0 = P::ScalarField::from(BigUint::from(
-            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[0],
-        ));
-        let internal_matrix_diag_1 = P::ScalarField::from(BigUint::from(
-            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[1],
-        ));
-        let internal_matrix_diag_2 = P::ScalarField::from(BigUint::from(
-            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[2],
-        ));
-        let internal_matrix_diag_3 = P::ScalarField::from(BigUint::from(
-            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[3],
-        ));
-
-        T::mul_assign_with_public(&mut u1, internal_matrix_diag_0);
-        T::add_assign(&mut u1, sum);
-        T::sub_assign(&mut u1, w_l_shift);
-        T::mul_assign_with_public(&mut u1, q_pos_by_scaling);
-
-        T::add_assign(&mut accumulator.r0, u1);
-
-        ///////////////////////////////////////////////////////////////////////
-        T::mul_assign_with_public(&mut u2, internal_matrix_diag_1);
-        T::add_assign(&mut u2, sum);
-        T::sub_assign(&mut u2, w_r_shift);
-        T::mul_assign_with_public(&mut u2, q_pos_by_scaling);
-
-        T::add_assign(&mut accumulator.r1, u2);
-
-        ///////////////////////////////////////////////////////////////////////
-
-        T::mul_assign_with_public(&mut u3, internal_matrix_diag_2);
-        T::add_assign(&mut u3, sum);
-        T::sub_assign(&mut u3, w_o_shift);
-        T::mul_assign_with_public(&mut u3, q_pos_by_scaling);
-
-        T::add_assign(&mut accumulator.r2, u3);
-
-        ///////////////////////////////////////////////////////////////////////
-
-        T::mul_assign_with_public(&mut u4, internal_matrix_diag_3);
-        T::add_assign(&mut u4, sum);
-        T::sub_assign(&mut u4, w_4_shift);
-        T::mul_assign_with_public(&mut u4, q_pos_by_scaling);
-
-        T::add_assign(&mut accumulator.r3, u4);
+        fold_accumulator!(univariate_accumulator.r3, u4);
 
         ///////////////////////////////////////////////////////////////////////
         Ok(())

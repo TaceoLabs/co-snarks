@@ -1277,32 +1277,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "co-goblin"
-version = "0.1.0"
-dependencies = [
- "ark-bn254",
- "ark-ec",
- "ark-ff 0.5.0",
- "ark-grumpkin",
- "ark-std 0.5.0",
- "bincode",
- "co-acvm",
- "co-builder",
- "co-noir-common",
- "co-ultrahonk",
- "eyre",
- "goblin",
- "itertools 0.14.0",
- "mpc-core",
- "mpc-net",
- "num-bigint 0.4.6",
- "rand 0.8.5",
- "serde_json",
- "tracing",
- "ultrahonk",
-]
-
-[[package]]
 name = "co-groth16"
 version = "0.9.0"
 dependencies = [
@@ -1419,28 +1393,6 @@ dependencies = [
  "sha3",
  "thiserror 2.0.14",
  "tracing",
-]
-
-[[package]]
-name = "co-protogalaxy"
-version = "0.1.0"
-dependencies = [
- "ark-bn254",
- "ark-ec",
- "ark-ff 0.5.0",
- "co-acvm",
- "co-builder",
- "co-noir-common",
- "co-ultrahonk",
- "flate2",
- "itertools 0.14.0",
- "mpc-core",
- "mpc-net",
- "rand 0.8.5",
- "rayon",
- "serde",
- "serde_json",
- "ultrahonk",
 ]
 
 [[package]]
@@ -2440,33 +2392,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0cc23270f6e1808e30a928bdc84dea0b9b4136a8bc82338574f23baf47bbd280"
 
 [[package]]
-name = "goblin"
-version = "0.1.0"
-dependencies = [
- "ark-bn254",
- "ark-ec",
- "ark-ff 0.5.0",
- "ark-grumpkin",
- "ark-poly",
- "ark-serialize 0.5.0",
- "bincode",
- "co-builder",
- "co-noir-common",
- "eyre",
- "itertools 0.14.0",
- "mpc-core",
- "noir-types",
- "num-bigint 0.4.6",
- "num-traits",
- "rand 0.8.5",
- "rand_chacha 0.3.1",
- "rayon",
- "serde",
- "tracing",
- "ultrahonk",
-]
-
-[[package]]
 name = "group"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2568,7 +2493,6 @@ dependencies = [
  "co-acvm",
  "co-builder",
  "co-noir-common",
- "co-protogalaxy",
  "co-ultrahonk",
  "flate2",
  "itertools 0.14.0",
@@ -4043,23 +3967,6 @@ checksum = "4d85d4641fe3b8c6e853dfd09fe35379bc6b6e66bd692ac29ed4f7087de69ed5"
 dependencies = [
  "ureq",
  "zip",
-]
-
-[[package]]
-name = "protogalaxy"
-version = "0.1.0"
-dependencies = [
- "ark-bn254",
- "ark-ec",
- "ark-ff 0.5.0",
- "co-builder",
- "co-noir-common",
- "flate2",
- "itertools 0.14.0",
- "mpc-core",
- "serde",
- "serde_json",
- "ultrahonk",
 ]
 
 [[package]]

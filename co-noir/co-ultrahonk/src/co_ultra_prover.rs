@@ -1,13 +1,8 @@
 use crate::{
-    CONST_PROOF_SIZE_LOG_N,
-    co_decider::{co_decider_prover::CoDecider, types::ProverMemory},
-    co_oink::co_oink_prover::CoOink,
-    key::proving_key::ProvingKey,
-    mpc_prover_flavour::MPCProverFlavour,
+    CONST_PROOF_SIZE_LOG_N, co_decider::co_decider_prover::CoDecider,
+    co_decider::types::ProverMemory, co_oink::co_oink_prover::CoOink, key::proving_key::ProvingKey,
 };
-use co_builder::flavours::ultra_flavour::UltraFlavour;
-use co_builder::{prelude::PAIRING_POINT_ACCUMULATOR_SIZE, prover_flavour::Flavour};
-use co_noir_common::transcript::{Transcript, TranscriptHasher};
+use co_builder::prelude::PAIRING_POINT_ACCUMULATOR_SIZE;
 use co_noir_common::{
     crs::ProverCrs,
     honk_curve::HonkCurve,
@@ -16,6 +11,7 @@ use co_noir_common::{
         NoirUltraHonkProver, plain::PlainUltraHonkDriver, rep3::Rep3UltraHonkDriver,
         shamir::ShamirUltraHonkDriver,
     },
+    transcript::{Transcript, TranscriptHasher},
     types::ZeroKnowledge,
 };
 use mpc_core::protocols::{
@@ -26,27 +22,25 @@ use mpc_net::Network;
 use noir_types::HonkProof;
 use std::marker::PhantomData;
 
-pub type Rep3CoUltraHonk<P, H, L> = CoUltraHonk<Rep3UltraHonkDriver, P, H, L>;
-pub type ShamirCoUltraHonk<P, H, L> = CoUltraHonk<ShamirUltraHonkDriver, P, H, L>;
+pub type Rep3CoUltraHonk<P, H> = CoUltraHonk<Rep3UltraHonkDriver, P, H>;
+pub type ShamirCoUltraHonk<P, H> = CoUltraHonk<ShamirUltraHonkDriver, P, H>;
 
 pub struct CoUltraHonk<
     T: NoirUltraHonkProver<P>,
     P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType, T, P>,
-    L: MPCProverFlavour,
+    H: TranscriptHasher<TranscriptFieldType>,
 > {
-    phantom_data: PhantomData<(P, H, T, L)>,
+    phantom_data: PhantomData<(P, H, T)>,
 }
 
 impl<
     T: NoirUltraHonkProver<P>,
     P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType, T, P>,
-    L: MPCProverFlavour,
-> CoUltraHonk<T, P, H, L>
+    H: TranscriptHasher<TranscriptFieldType>,
+> CoUltraHonk<T, P, H>
 {
     fn generate_gate_challenges(
-        transcript: &mut Transcript<TranscriptFieldType, H, T, P>,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
     ) -> Vec<P::ScalarField> {
         tracing::trace!("generate gate challenges");
 
@@ -62,15 +56,15 @@ impl<
     pub fn prove_inner<N: Network>(
         net: &N,
         state: &mut T::State,
-        mut proving_key: ProvingKey<T, P, L>,
+        mut proving_key: ProvingKey<T, P>,
         crs: &ProverCrs<P>,
         has_zk: ZeroKnowledge,
     ) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
         tracing::trace!("CoUltraHonk prove");
 
-        let mut transcript = Transcript::<TranscriptFieldType, H, T, P>::new();
+        let mut transcript = Transcript::<TranscriptFieldType, H>::new();
 
-        let oink = CoOink::<T, P, H, N, L>::new(net, state, has_zk);
+        let oink = CoOink::new(net, state, has_zk);
         let oink_result = oink.prove(&mut proving_key, &mut transcript, crs)?;
 
         let circuit_size = proving_key.circuit_size;
@@ -84,15 +78,12 @@ impl<
     }
 }
 
-impl<
-    P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType, Rep3UltraHonkDriver, P>,
-    L: MPCProverFlavour,
-> Rep3CoUltraHonk<P, H, L>
+impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
+    Rep3CoUltraHonk<P, H>
 {
     pub fn prove<N: Network>(
         net: &N,
-        proving_key: ProvingKey<Rep3UltraHonkDriver, P, L>,
+        proving_key: ProvingKey<Rep3UltraHonkDriver, P>,
         crs: &ProverCrs<P>,
         has_zk: ZeroKnowledge,
     ) -> eyre::Result<(HonkProof<TranscriptFieldType>, Vec<TranscriptFieldType>)> {
@@ -105,17 +96,14 @@ impl<
     }
 }
 
-// In the OinkProver, we use an is_zero check on shared elements, hence it is not possible to use the Shamir Prover for the Mega flavour.
-impl<
-    P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType, ShamirUltraHonkDriver, P>,
-> ShamirCoUltraHonk<P, H, UltraFlavour>
+impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
+    ShamirCoUltraHonk<P, H>
 {
     pub fn prove<N: Network>(
         net: &N,
         num_parties: usize,
         threshold: usize,
-        proving_key: ProvingKey<ShamirUltraHonkDriver, P, UltraFlavour>,
+        proving_key: ProvingKey<ShamirUltraHonkDriver, P>,
         crs: &ProverCrs<P>,
         has_zk: ZeroKnowledge,
     ) -> eyre::Result<(HonkProof<TranscriptFieldType>, Vec<TranscriptFieldType>)> {
@@ -135,22 +123,15 @@ impl<
     }
 }
 
-impl<
-    P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, P>,
-    L: MPCProverFlavour,
-> CoUltraHonk<PlainUltraHonkDriver, P, H, L>
+impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
+    CoUltraHonk<PlainUltraHonkDriver, P, H>
 {
     pub fn prove(
-        proving_key: ProvingKey<PlainUltraHonkDriver, P, L>,
+        proving_key: ProvingKey<PlainUltraHonkDriver, P>,
         crs: &ProverCrs<P>,
         has_zk: ZeroKnowledge,
     ) -> eyre::Result<(HonkProof<TranscriptFieldType>, Vec<TranscriptFieldType>)> {
-        let num_public_inputs = if L::FLAVOUR == Flavour::Ultra {
-            proving_key.num_public_inputs - PAIRING_POINT_ACCUMULATOR_SIZE
-        } else {
-            proving_key.num_public_inputs
-        };
+        let num_public_inputs = proving_key.num_public_inputs - PAIRING_POINT_ACCUMULATOR_SIZE;
         let proof = Self::prove_inner(&(), &mut (), proving_key, crs, has_zk)?;
         Ok(proof.separate_proof_and_public_inputs(num_public_inputs as usize))
     }

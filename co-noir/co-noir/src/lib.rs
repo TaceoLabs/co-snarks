@@ -5,9 +5,7 @@ use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::pss_store::PssStore;
 use co_acvm::{PlainAcvmSolver, Rep3AcvmSolver, ShamirAcvmSolver, solver::Rep3CoSolver};
-use co_builder::flavours::ultra_flavour::UltraFlavour;
-use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
-use co_builder::prover_flavour::ProverFlavour;
+use co_builder::prelude::{PROVER_WITNESS_ENTITIES_SIZE, ProverWitnessEntities};
 use co_noir_common::crs::ProverCrs;
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::TranscriptFieldType;
@@ -17,7 +15,7 @@ use co_noir_types::{Rep3Type, ShamirSharedWitness};
 use color_eyre::eyre::{self, Context, Result};
 use mpc_core::protocols::{
     rep3::{self, conversion::A2BType, id::PartyID},
-    shamir::{self, ShamirPreprocessing, ShamirPrimeFieldShare, ShamirState},
+    shamir::{self, ShamirPreprocessing, ShamirState},
 };
 use mpc_net::Network;
 use noirc_abi::Abi;
@@ -125,15 +123,12 @@ pub fn translate_witness<F: PrimeField, N: Network>(
     Ok(result)
 }
 
-type ShamirProverWitnessEntities<T> =
-    <UltraFlavour as ProverFlavour>::ProverWitnessEntities<Polynomial<ShamirPrimeFieldShare<T>>>;
-
 /// Translate a REP3 shared proving key to a shamir shared proving key
 #[allow(clippy::complexity)]
 pub fn translate_proving_key<P: CurveGroup<BaseField: PrimeField>, N: Network>(
-    proving_key: Rep3ProvingKey<P, UltraFlavour>,
+    proving_key: Rep3ProvingKey<P>,
     net: &N,
-) -> Result<ShamirProvingKey<P, UltraFlavour>> {
+) -> Result<ShamirProvingKey<P>> {
     // extract shares
     let shares = proving_key
         .polynomials
@@ -152,9 +147,7 @@ pub fn translate_proving_key<P: CurveGroup<BaseField: PrimeField>, N: Network>(
     // Translate witness to shamir shares
     let translated_shares = state.translate_primefield_repshare_vec(shares, net)?;
 
-    if translated_shares.len()
-        != UltraFlavour::PROVER_WITNESS_ENTITIES_SIZE * proving_key.circuit_size as usize
-    {
+    if translated_shares.len() != PROVER_WITNESS_ENTITIES_SIZE * proving_key.circuit_size as usize {
         eyre::bail!("Invalid number of shares translated");
     };
 
@@ -164,7 +157,7 @@ pub fn translate_proving_key<P: CurveGroup<BaseField: PrimeField>, N: Network>(
     });
 
     let polynomials = Polynomials {
-        witness: ShamirProverWitnessEntities::<_> {
+        witness: ProverWitnessEntities {
             elements: translated_shares,
         },
         precomputed: proving_key.polynomials.precomputed,
@@ -208,7 +201,7 @@ pub fn generate_proving_key_rep3<N: Network>(
     recursive: bool,
     net0: &N,
     net1: &N,
-) -> Result<Rep3ProvingKey<Bn254G1, UltraFlavour>> {
+) -> Result<Rep3ProvingKey<Bn254G1>> {
     let id = PartyID::try_from(net0.id())?;
     let mut driver = Rep3AcvmSolver::new(net0, net1, A2BType::default())?;
     let witness_share = witness_share.into_iter().map(Rep3AcvmType::from).collect();
@@ -233,7 +226,7 @@ pub fn generate_proving_key_shamir<N: Network>(
     witness_share: ShamirSharedWitness<ark_bn254::Fr>,
     recursive: bool,
     net: &N,
-) -> Result<ShamirProvingKey<Bn254G1, UltraFlavour>> {
+) -> Result<ShamirProvingKey<Bn254G1>> {
     let id = net.id();
     // We have to handle precomputation on the fly, so amount is 0 initially
     let preprocessing = ShamirPreprocessing::new(num_parties, threshold, 0, net)?;
@@ -262,7 +255,7 @@ pub fn generate_proving_key_plain<P: HonkCurve<TranscriptFieldType>>(
     witness: Vec<P::ScalarField>,
     prover_crs: Arc<ProverCrs<P>>,
     recursive: bool,
-) -> Result<PlainProvingKey<P, UltraFlavour>> {
+) -> Result<PlainProvingKey<P>> {
     let mut driver = PlainAcvmSolver::new();
     let builder = UltraCircuitBuilder::create_circuit(
         constraint_system,
@@ -285,7 +278,7 @@ pub fn generate_vk<P: Pairing>(
     prover_crs: Arc<ProverCrs<P::G1>>,
     verifier_crs: P::G2Affine,
     recursive: bool,
-) -> Result<VerifyingKey<P, UltraFlavour>>
+) -> Result<VerifyingKey<P>>
 where
     P::G1: HonkCurve<TranscriptFieldType>,
 {
@@ -312,7 +305,7 @@ pub fn generate_vk_barretenberg<P: HonkCurve<TranscriptFieldType>>(
     constraint_system: &AcirFormat<P::ScalarField>,
     prover_crs: Arc<ProverCrs<P>>,
     recursive: bool,
-) -> Result<VerifyingKeyBarretenberg<P, UltraFlavour>> {
+) -> Result<VerifyingKeyBarretenberg<P>> {
     let mut driver = PlainAcvmSolver::new();
     let circuit = UltraCircuitBuilder::create_circuit(
         constraint_system,
@@ -327,8 +320,8 @@ pub fn generate_vk_barretenberg<P: HonkCurve<TranscriptFieldType>>(
 
 /// Split a proving key into RPE3 shares
 pub fn split_proving_key_rep3<P: CurveGroup<BaseField: PrimeField>>(
-    proving_key: PlainProvingKey<P, UltraFlavour>,
-) -> Result<[Rep3ProvingKey<P, UltraFlavour>; 3]> {
+    proving_key: PlainProvingKey<P>,
+) -> Result<[Rep3ProvingKey<P>; 3]> {
     let mut rng = rand::thread_rng();
     let witness_entities = proving_key
         .polynomials
@@ -354,10 +347,10 @@ pub fn split_proving_key_rep3<P: CurveGroup<BaseField: PrimeField>>(
 
 /// Split a proving key into shamir shares
 pub fn split_proving_key_shamir<P: CurveGroup<BaseField: PrimeField>>(
-    proving_key: PlainProvingKey<P, UltraFlavour>,
+    proving_key: PlainProvingKey<P>,
     degree: usize,
     num_parties: usize,
-) -> Result<Vec<ShamirProvingKey<P, UltraFlavour>>> {
+) -> Result<Vec<ShamirProvingKey<P>>> {
     let mut rng = rand::thread_rng();
     let witness_entities = proving_key
         .polynomials
@@ -378,14 +371,14 @@ pub fn split_proving_key_shamir<P: CurveGroup<BaseField: PrimeField>>(
 pub fn parse_barretenberg_vk<P>(
     vk: &[u8],
     verifier_crs: P::G2Affine,
-) -> eyre::Result<VerifyingKey<P, UltraFlavour>>
+) -> eyre::Result<VerifyingKey<P>>
 where
     P: Pairing,
     P::G1: HonkCurve<TranscriptFieldType>,
 {
     let vk = VerifyingKeyBarretenberg::from_buffer(vk)
         .context("while deserializing verification key")?;
-    Ok(VerifyingKey::from_barrettenberg_and_crs(vk, verifier_crs))
+    Ok(VerifyingKey::from_barretenberg_and_crs(vk, verifier_crs))
 }
 
 pub fn witness_map_from_string_map<I, O>(

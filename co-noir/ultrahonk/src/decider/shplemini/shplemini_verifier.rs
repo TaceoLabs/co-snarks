@@ -1,5 +1,4 @@
-use super::types::{PolyF, PolyGShift};
-use crate::plain_prover_flavour::PlainProverFlavour;
+use super::types::{PolyF, PolyG, PolyGShift};
 use crate::{
     CONST_PROOF_SIZE_LOG_N, NUM_INTERLEAVING_CLAIMS, NUM_LIBRA_COMMITMENTS,
     NUM_SMALL_IPA_EVALUATIONS,
@@ -11,47 +10,42 @@ use crate::{
 };
 use ark_ec::AffineRepr;
 use ark_ff::{Field, One, Zero};
-use co_builder::polynomials::polynomial_flavours::PolyGFlavour;
-use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
-use co_noir_common::mpc::plain::PlainUltraHonkDriver;
 use co_noir_common::{
-    honk_curve::HonkCurve, honk_proof::TranscriptFieldType, types::ZeroKnowledge,
+    honk_curve::HonkCurve,
+    honk_proof::TranscriptFieldType,
+    shplemini::ShpleminiVerifierOpeningClaim,
+    transcript::{Transcript, TranscriptHasher},
+    types::ZeroKnowledge,
 };
 
-use co_noir_common::shplemini::ShpleminiVerifierOpeningClaim;
-use co_noir_common::transcript::{Transcript, TranscriptHasher};
-
-impl<
-    P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, P>,
-    L: PlainProverFlavour,
-> DeciderVerifier<P, H, L>
+impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
+    DeciderVerifier<P, H>
 {
     pub fn get_g_shift_evaluations(
-        evaluations: &'_ ClaimedEvaluations<P::ScalarField, L>,
-    ) -> PolyGShift<'_, P::ScalarField, L> {
+        evaluations: &'_ ClaimedEvaluations<P::ScalarField>,
+    ) -> PolyGShift<'_, P::ScalarField> {
         PolyGShift {
             wires: &evaluations.shifted_witness,
         }
     }
 
     pub fn get_g_shift_comms(
-        evaluations: &VerifierCommitments<P::Affine, L>,
-    ) -> L::PolyG<'_, P::Affine> {
-        L::PolyG::from_slice(evaluations.witness.to_be_shifted())
+        evaluations: &'_ VerifierCommitments<P::Affine>,
+    ) -> PolyG<'_, P::Affine> {
+        PolyG {
+            wires: evaluations.witness.to_be_shifted().try_into().unwrap(),
+        }
     }
 
     pub fn get_f_evaluations(
-        evaluations: &'_ ClaimedEvaluations<P::ScalarField, L>,
-    ) -> PolyF<'_, P::ScalarField, L> {
+        evaluations: &'_ ClaimedEvaluations<P::ScalarField>,
+    ) -> PolyF<'_, P::ScalarField> {
         PolyF {
             precomputed: &evaluations.precomputed,
             witness: &evaluations.witness,
         }
     }
-    pub fn get_f_comms(
-        evaluations: &'_ ClaimedEvaluations<P::Affine, L>,
-    ) -> PolyF<'_, P::Affine, L> {
+    pub fn get_f_comms(evaluations: &'_ ClaimedEvaluations<P::Affine>) -> PolyF<'_, P::Affine> {
         PolyF {
             precomputed: &evaluations.precomputed,
             witness: &evaluations.witness,
@@ -60,7 +54,7 @@ impl<
 
     pub fn get_fold_commitments(
         virtual_log_n: u32,
-        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
     ) -> HonkVerifyResult<Vec<P::Affine>> {
         let fold_commitments: Vec<_> = (0..virtual_log_n - 1)
             .map(|i| transcript.receive_point_from_prover::<P>(format!("Gemini:FOLD_{}", i + 1)))
@@ -70,7 +64,7 @@ impl<
 
     pub fn get_gemini_evaluations(
         virtual_log_n: u32,
-        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
     ) -> HonkVerifyResult<Vec<P::ScalarField>> {
         let gemini_evaluations: Vec<_> = (1..=virtual_log_n)
             .map(|i| transcript.receive_fr_from_prover::<P>(format!("Gemini:a_{}", i + 1)))
@@ -113,7 +107,7 @@ impl<
     pub fn compute_batch_opening_claim(
         &self,
         multivariate_challenge: Vec<P::ScalarField>,
-        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
         libra_commitments: Option<Vec<P::Affine>>,
         libra_univariate_evaluation: Option<P::ScalarField>,
         consistency_checked: &mut bool,

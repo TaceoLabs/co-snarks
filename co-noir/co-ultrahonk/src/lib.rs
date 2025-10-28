@@ -4,8 +4,6 @@ pub mod co_decider;
 pub mod co_oink;
 pub(crate) mod co_ultra_prover;
 pub mod key;
-pub mod mpc_flavours;
-pub mod mpc_prover_flavour;
 pub mod prelude;
 pub mod types;
 pub mod types_batch;

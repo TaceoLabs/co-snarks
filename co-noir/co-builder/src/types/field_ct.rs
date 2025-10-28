@@ -1,8 +1,4 @@
-use std::fmt::Debug;
-
 use super::types::{AddQuad, EccDblGate, MulQuad};
-
-use crate::generic_builder::GenericBuilder;
 use crate::types::generators;
 use crate::types::plookup::{ColumnIdx, Plookup};
 use crate::types::types::{AddTriple, EccAddGate, PolyTriple};
@@ -14,6 +10,7 @@ use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_noir_common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType, utils::Utils};
 use itertools::{Itertools, izip};
 use num_bigint::BigUint;
+use std::fmt::Debug;
 
 #[derive(Clone, Debug)]
 pub struct FieldCT<F: PrimeField> {
@@ -38,7 +35,7 @@ impl<F: PrimeField> FieldCT<F> {
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         input: T::AcvmType,
-        builder: &mut impl GenericBuilder<P, T>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
     ) -> Self {
         let witness = WitnessCT::from_acvm_type(input, builder);
         Self::from(witness)
@@ -49,7 +46,7 @@ impl<F: PrimeField> FieldCT<F> {
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &self,
-        builder: &impl GenericBuilder<P, T>,
+        builder: &GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> T::AcvmType {
         if !self.is_constant() {
@@ -80,7 +77,7 @@ impl<F: PrimeField> FieldCT<F> {
     >(
         &self,
         other: &Self,
-        builder: &mut impl GenericBuilder<P, T>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) {
         if self.is_constant() && other.is_constant() {
@@ -162,7 +159,7 @@ impl<F: PrimeField> FieldCT<F> {
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &self,
-        builder: &mut impl GenericBuilder<P, T>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> Self {
         if self.is_constant()
@@ -217,7 +214,7 @@ impl<F: PrimeField> FieldCT<F> {
     >(
         &self,
         other: &Self,
-        builder: &mut impl GenericBuilder<P, T>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Self> {
         let mut result = Self::default();
@@ -318,7 +315,7 @@ impl<F: PrimeField> FieldCT<F> {
     >(
         lhs: &[Self],
         rhs: &[Self],
-        builder: &mut impl GenericBuilder<P, T>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Vec<Self>> {
         let (constant_operand, variable_operands): (Vec<_>, Vec<_>) = lhs
@@ -416,7 +413,7 @@ impl<F: PrimeField> FieldCT<F> {
     >(
         &mut self,
         other: &Self,
-        builder: &mut impl GenericBuilder<P, T>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<()> {
         *self = self.multiply(other, builder, driver)?;
@@ -429,7 +426,7 @@ impl<F: PrimeField> FieldCT<F> {
     >(
         &self,
         other: &Self,
-        builder: &mut impl GenericBuilder<P, T>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Self> {
         other.assert_is_not_zero(builder, driver)?;
@@ -442,7 +439,7 @@ impl<F: PrimeField> FieldCT<F> {
     >(
         &self,
         other: &Self,
-        builder: &mut impl GenericBuilder<P, T>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Self> {
         let mut result = Self::default();
@@ -554,7 +551,7 @@ impl<F: PrimeField> FieldCT<F> {
     pub fn pow<P: CurveGroup<ScalarField = F>, T: NoirWitnessExtensionProtocol<P::ScalarField>>(
         &self,
         exponent: &FieldCT<P::ScalarField>,
-        builder: &mut impl GenericBuilder<P, T>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Self> {
         let mut exponent_value = exponent.get_value(builder, driver);
@@ -565,7 +562,7 @@ impl<F: PrimeField> FieldCT<F> {
         let mut exponent_bits = vec![BoolCT::default(); 32];
         for i in 0..32 {
             let value_bit = driver
-                .integer_bitwise_and(exponent_value, P::ScalarField::ONE.into(), 32)
+                .integer_bitwise_and(exponent_value.clone(), P::ScalarField::ONE.into(), 32)
                 .unwrap();
             let bit =
                 BoolCT::from_witness_ct(WitnessCT::from_acvm_type(value_bit, builder), builder);
@@ -602,7 +599,7 @@ impl<F: PrimeField> FieldCT<F> {
     pub fn add<P: CurveGroup<ScalarField = F>, T: NoirWitnessExtensionProtocol<P::ScalarField>>(
         &self,
         other: &Self,
-        builder: &mut impl GenericBuilder<P, T>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> Self {
         let mut result = Self::default();
@@ -653,7 +650,7 @@ impl<F: PrimeField> FieldCT<F> {
     >(
         &mut self,
         other: &Self,
-        builder: &mut impl GenericBuilder<P, T>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) {
         *self = self.add(other, builder, driver);
@@ -675,7 +672,7 @@ impl<F: PrimeField> FieldCT<F> {
     pub fn sub<P: CurveGroup<ScalarField = F>, T: NoirWitnessExtensionProtocol<P::ScalarField>>(
         &self,
         other: &Self,
-        builder: &mut impl GenericBuilder<P, T>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> Self {
         let mut rhs = other.to_owned();
@@ -693,7 +690,7 @@ impl<F: PrimeField> FieldCT<F> {
         &self,
         to_mul: &Self,
         to_add: &Self,
-        builder: &mut impl GenericBuilder<P, T>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Self> {
         if to_mul.is_constant() && to_add.is_constant() && self.is_constant() {
@@ -759,17 +756,17 @@ impl<F: PrimeField> FieldCT<F> {
 
         builder.create_big_mul_gate(&MulQuad {
             a: if self.is_constant() {
-                builder.zero_idx()
+                builder.zero_idx
             } else {
                 self.witness_index
             },
             b: if to_mul.is_constant() {
-                builder.zero_idx()
+                builder.zero_idx
             } else {
                 to_mul.witness_index
             },
             c: if to_add.is_constant() {
-                builder.zero_idx()
+                builder.zero_idx
             } else {
                 to_add.witness_index
             },
@@ -869,7 +866,7 @@ impl<F: PrimeField> FieldCT<F> {
     >(
         &self,
         num_bits: usize,
-        builder: &mut impl GenericBuilder<P, T>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<()> {
         if num_bits == 0 {
@@ -898,7 +895,7 @@ impl<F: PrimeField> FieldCT<F> {
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &self,
-        builder: &mut impl GenericBuilder<P, T>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
     ) {
         if self.is_constant() {
             builder.assert_if_has_witness(self.additive_constant.is_zero());
@@ -920,8 +917,8 @@ impl<F: PrimeField> FieldCT<F> {
 
         builder.create_poly_gate(&PolyTriple {
             a: self.witness_index,
-            b: builder.zero_idx(),
-            c: builder.zero_idx(),
+            b: builder.zero_idx,
+            c: builder.zero_idx,
             q_m: P::ScalarField::zero(),
             q_l: self.multiplicative_constant,
             q_r: P::ScalarField::zero(),
@@ -963,7 +960,7 @@ impl<F: PrimeField> FieldCT<F> {
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &self,
-        builder: &mut impl GenericBuilder<P, T>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<()> {
         if self.is_constant() {
@@ -993,7 +990,7 @@ impl<F: PrimeField> FieldCT<F> {
         builder.create_poly_gate(&PolyTriple {
             a: self.witness_index,             // input value
             b: inverse.witness_index,          // inverse
-            c: builder.zero_idx(),             // no output
+            c: builder.zero_idx,               // no output
             q_m: self.multiplicative_constant, // a * b * mul_const
             q_l: P::ScalarField::zero(),       // a * 0
             q_r: self.additive_constant,       // b * mul_const
@@ -1206,7 +1203,7 @@ impl<F: PrimeField> FieldCT<F> {
         &self,
         add_a: &Self,
         add_b: &Self,
-        builder: &mut impl GenericBuilder<P, T>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> Self {
         if add_a.is_constant() && add_b.is_constant() && self.is_constant() {
@@ -1249,17 +1246,17 @@ impl<F: PrimeField> FieldCT<F> {
 
         builder.create_big_mul_gate(&MulQuad {
             a: if self.is_constant() {
-                builder.zero_idx()
+                builder.zero_idx
             } else {
                 self.witness_index
             },
             b: if add_a.is_constant() {
-                builder.zero_idx()
+                builder.zero_idx
             } else {
                 add_a.witness_index
             },
             c: if add_b.is_constant() {
-                builder.zero_idx()
+                builder.zero_idx
             } else {
                 add_b.witness_index
             },
@@ -1280,7 +1277,7 @@ impl<F: PrimeField> FieldCT<F> {
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &self,
-        builder: &mut impl GenericBuilder<P, T>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<BoolCT<P, T>> {
         if self.is_constant() {
@@ -1401,16 +1398,20 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> WitnessCT<P
     #[expect(dead_code)]
     const IS_CONSTANT: u32 = FieldCT::<P::ScalarField>::IS_CONSTANT;
 
-    pub fn from_acvm_type(value: T::AcvmType, builder: &mut impl GenericBuilder<P, T>) -> Self {
+    pub fn from_acvm_type(
+        value: T::AcvmType,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+    ) -> Self {
         let witness_index = builder.add_variable(value.to_owned());
         Self {
             witness: value,
             witness_index,
         }
     }
+
     pub(crate) fn create_constant_witness(
         value: P::ScalarField,
-        builder: &mut impl GenericBuilder<P, T>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
     ) -> Self {
         let out = Self::from_acvm_type(value.into(), builder);
         builder.assert_equal_constant(out.witness_index as usize, value);
@@ -1472,7 +1473,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T
     // It is assumed here that the value of the WitnessCT is boolean (secret-shared)
     pub fn from_witness_ct(
         witness: WitnessCT<P, T>,
-        builder: &mut impl GenericBuilder<P, T>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
     ) -> Self {
         builder.create_bool_gate(witness.witness_index);
         Self {
@@ -1878,7 +1879,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T
 
     pub(crate) fn normalize(
         &self,
-        builder: &mut impl GenericBuilder<P, T>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> Self {
         if self.is_constant() {
@@ -2190,7 +2191,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         &self,
         builder: &GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> eyre::Result<T::CycleGroupAcvmPoint<P::CycleGroup>> {
+    ) -> eyre::Result<T::AcvmPoint<P::CycleGroup>> {
         let x = self.x.get_value(builder, driver);
         let y = self.y.get_value(builder, driver);
         let is_infinity = self.is_infinity.get_value(driver);
@@ -2498,9 +2499,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 
         for (point, offset_generator) in base_points.iter().zip(offset_generators.iter().skip(1)) {
             let mut native_straus_table = Vec::with_capacity(table_size);
-            native_straus_table.push(T::CycleGroupAcvmPoint::from(
-                offset_generator.to_owned().into(),
-            ));
+            native_straus_table.push(T::AcvmPoint::from(offset_generator.to_owned().into()));
             for j in 1..table_size {
                 let val = point.get_value(builder, driver)?;
                 let val = driver.add_points(val, native_straus_table[j - 1].to_owned());
@@ -2552,7 +2551,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         }
 
         let accumulator: P::CycleGroup = offset_generators[0].to_owned().into();
-        let mut accumulator = T::CycleGroupAcvmPoint::from(accumulator);
+        let mut accumulator = T::AcvmPoint::from(accumulator);
         for i in 0..num_rounds {
             if i != 0 {
                 for _ in 0..Self::TABLE_BITS {
@@ -2700,7 +2699,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
     // Evaluates a doubling. Uses Ultra double gate
     fn dbl(
         &self,
-        hint: Option<T::CycleGroupAcvmPoint<P::CycleGroup>>,
+        hint: Option<T::AcvmPoint<P::CycleGroup>>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Self> {
@@ -2810,7 +2809,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
     fn checked_unconditional_add(
         &self,
         other: &Self,
-        hint: Option<T::CycleGroupAcvmPoint<P::CycleGroup>>,
+        hint: Option<T::AcvmPoint<P::CycleGroup>>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Self> {
@@ -2830,7 +2829,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
     fn unconditional_add(
         &self,
         other: &Self,
-        hint: Option<T::CycleGroupAcvmPoint<P::CycleGroup>>,
+        hint: Option<T::AcvmPoint<P::CycleGroup>>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Self> {
@@ -3184,12 +3183,13 @@ impl<F: PrimeField> CycleScalarCT<F> {
         Self { lo, hi }
     }
 
+    #[expect(unused)] // This will be used in the fieldct transcript
     pub(crate) fn from_field_ct<
         P: HonkCurve<TranscriptFieldType, ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         inp: &FieldCT<F>,
-        builder: &mut impl GenericBuilder<P, T>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Self> {
         let value = inp.get_value(builder, driver);
@@ -3290,7 +3290,7 @@ impl<F: PrimeField> CycleScalarCT<F> {
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &self,
-        builder: &mut impl GenericBuilder<P, T>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<()> {
         if self.is_constant() || self.skip_primality_test() {
@@ -3485,7 +3485,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         base_point: &CycleGroupCT<P, T>,
         offset_generator: CycleGroupCT<P, T>,
         table_bits: usize,
-        hints: Option<Vec<T::CycleGroupAcvmPoint<P::CycleGroup>>>,
+        hints: Option<Vec<T::AcvmPoint<P::CycleGroup>>>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Self> {
@@ -3613,21 +3613,21 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
     }
 
     fn compute_straus_lookup_table_hints(
-        base_point: T::CycleGroupAcvmPoint<P::CycleGroup>,
+        base_point: T::AcvmPoint<P::CycleGroup>,
         offset_generator: <P::CycleGroup as CurveGroup>::Affine,
         table_bits: usize,
         driver: &mut T,
-    ) -> eyre::Result<Vec<T::CycleGroupAcvmPoint<P::CycleGroup>>> {
+    ) -> eyre::Result<Vec<T::AcvmPoint<P::CycleGroup>>> {
         let tables_size = (1 << table_bits) as usize;
 
         // let base_point = if base_point == 0 {::CycleGroup::generator() else base_point;
         let base_point = driver.set_point_to_value_if_zero(
             base_point,
-            T::CycleGroupAcvmPoint::from(P::CycleGroup::generator()),
+            T::AcvmPoint::from(P::CycleGroup::generator()),
         )?;
 
         let mut hints = Vec::with_capacity(tables_size);
-        hints.push(T::CycleGroupAcvmPoint::from(offset_generator.into()));
+        hints.push(T::AcvmPoint::from(offset_generator.into()));
         for i in 1..tables_size {
             hints.push(driver.add_points(hints[i - 1].to_owned(), base_point.to_owned()));
         }

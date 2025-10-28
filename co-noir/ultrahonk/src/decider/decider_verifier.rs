@@ -1,35 +1,33 @@
-use super::types::VerifierMemory;
-use crate::CONST_PROOF_SIZE_LOG_N;
-use crate::NUM_LIBRA_COMMITMENTS;
-use crate::{Utils, plain_prover_flavour::PlainProverFlavour, ultra_verifier::HonkVerifyResult};
-use ark_ec::AffineRepr;
-use ark_ec::pairing::Pairing;
-use ark_ff::{One, Zero};
-use co_noir_common::mpc::plain::PlainUltraHonkDriver;
-use co_noir_common::{
-    honk_curve::HonkCurve, honk_proof::TranscriptFieldType, types::ZeroKnowledge,
+use crate::{
+    CONST_PROOF_SIZE_LOG_N, NUM_LIBRA_COMMITMENTS, Utils,
+    decider::types::{
+        BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK, VerifierMemory,
+    },
+    ultra_verifier::HonkVerifyResult,
 };
-
-use co_noir_common::shplemini::ShpleminiVerifierOpeningClaim;
-use co_noir_common::transcript::{Transcript, TranscriptHasher};
+use ark_ec::{AffineRepr, pairing::Pairing};
+use ark_ff::{One, Zero};
+use co_noir_common::{
+    honk_curve::HonkCurve,
+    honk_proof::TranscriptFieldType,
+    shplemini::ShpleminiVerifierOpeningClaim,
+    transcript::{Transcript, TranscriptHasher},
+    types::ZeroKnowledge,
+};
 use std::marker::PhantomData;
 
 pub(crate) struct DeciderVerifier<
     P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, P>,
-    L: PlainProverFlavour,
+    H: TranscriptHasher<TranscriptFieldType>,
 > {
-    pub(super) memory: VerifierMemory<P, L>,
-    phantom_data: PhantomData<(P, H, L)>,
+    pub(super) memory: VerifierMemory<P>,
+    phantom_data: PhantomData<(P, H)>,
 }
 
-impl<
-    C: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, C>,
-    L: PlainProverFlavour,
-> DeciderVerifier<C, H, L>
+impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
+    DeciderVerifier<C, H>
 {
-    pub(crate) fn new(memory: VerifierMemory<C, L>) -> Self {
+    pub(crate) fn new(memory: VerifierMemory<C>) -> Self {
         Self {
             memory,
             phantom_data: PhantomData,
@@ -38,7 +36,7 @@ impl<
 
     pub(crate) fn reduce_verify_shplemini(
         opening_pair: &mut ShpleminiVerifierOpeningClaim<C>,
-        mut transcript: Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, C>,
+        mut transcript: Transcript<TranscriptFieldType, H>,
     ) -> HonkVerifyResult<(C::Affine, C::Affine)> {
         tracing::trace!("Reduce and verify opening pair");
 
@@ -51,9 +49,9 @@ impl<
         Ok((p_0.into(), p_1.into()))
     }
 
-    pub fn pairing_check<P: Pairing<G1 = C>>(
-        p0: P::G1Affine,
-        p1: P::G1Affine,
+    pub fn pairing_check<P: Pairing<G1 = C, G1Affine = C::Affine>>(
+        p0: C::Affine,
+        p1: C::Affine,
         g2_x: P::G2Affine,
         g2_gen: P::G2Affine,
     ) -> bool {
@@ -67,7 +65,7 @@ impl<
         mut self,
         circuit_size: u32,
         crs: &P::G2Affine,
-        mut transcript: Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, C>,
+        mut transcript: Transcript<TranscriptFieldType, H>,
         has_zk: ZeroKnowledge,
     ) -> HonkVerifyResult<bool> {
         tracing::trace!("Decider verification");
@@ -90,8 +88,11 @@ impl<
                     "Libra:concatenation_commitment".to_string(),
                 )?);
 
-            let sumcheck_output =
-                self.sumcheck_verify(&mut transcript, has_zk, &padding_indicator_array)?;
+            let sumcheck_output = self.sumcheck_verify::<BATCHED_RELATION_PARTIAL_LENGTH_ZK>(
+                &mut transcript,
+                has_zk,
+                &padding_indicator_array,
+            )?;
             if !sumcheck_output.verified {
                 tracing::trace!("Sumcheck failed");
                 return Ok(false);
@@ -108,8 +109,11 @@ impl<
 
             (sumcheck_output, Some(libra_commitments))
         } else {
-            let sumcheck_output =
-                self.sumcheck_verify(&mut transcript, has_zk, &padding_indicator_array)?;
+            let sumcheck_output = self.sumcheck_verify::<BATCHED_RELATION_PARTIAL_LENGTH>(
+                &mut transcript,
+                has_zk,
+                &padding_indicator_array,
+            )?;
             if !sumcheck_output.verified {
                 tracing::trace!("Sumcheck failed");
                 return Ok(false);

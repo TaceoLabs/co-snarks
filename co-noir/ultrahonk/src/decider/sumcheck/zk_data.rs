@@ -1,8 +1,4 @@
 use crate::Utils;
-use crate::plain_prover_flavour::UnivariateTrait;
-use co_noir_common::mpc::plain::PlainUltraHonkDriver;
-use co_noir_common::transcript::{Transcript, TranscriptHasher};
-
 use crate::prelude::Univariate;
 use ark_ec::CurveGroup;
 use ark_ff::Field;
@@ -10,16 +6,17 @@ use ark_ff::One;
 use ark_ff::UniformRand;
 use ark_ff::Zero;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
-use co_noir_common::{
-    honk_curve::HonkCurve,
-    honk_proof::{HonkProofResult, TranscriptFieldType},
-    polynomials::polynomial::Polynomial,
-};
-
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::HonkProofError;
+use co_noir_common::honk_proof::HonkProofResult;
+use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::polynomials::polynomial::Polynomial;
+use co_noir_common::transcript::Transcript;
+use co_noir_common::transcript::TranscriptHasher;
 use rand::CryptoRng;
 use rand::Rng;
 
-pub struct ZKSumcheckData<P: CurveGroup> {
+pub(crate) struct ZKSumcheckData<P: CurveGroup> {
     pub(crate) constant_term: P::ScalarField,
     pub(crate) interpolation_domain: Vec<P::ScalarField>,
     pub(crate) libra_concatenated_lagrange_form: Polynomial<P::ScalarField>,
@@ -34,12 +31,9 @@ pub struct ZKSumcheckData<P: CurveGroup> {
 }
 
 impl<P: HonkCurve<TranscriptFieldType>> ZKSumcheckData<P> {
-    pub fn new<
-        H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, P>,
-        R: Rng + CryptoRng,
-    >(
+    pub(crate) fn new<H: TranscriptHasher<TranscriptFieldType>, R: Rng + CryptoRng>(
         multivariate_d: usize,
-        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
         commitment_key: &[P::Affine],
         rng: &mut R,
     ) -> HonkProofResult<Self> {
@@ -196,17 +190,14 @@ impl<P: HonkCurve<TranscriptFieldType>> ZKSumcheckData<P> {
 
         let masking_scalars = Univariate::<P::ScalarField, 2>::get_random(rng);
 
-        let libra_concatenated_monomial_form_unmasked =
-            match GeneralEvaluationDomain::<P::ScalarField>::new(P::SUBGROUP_SIZE) {
-                Some(domain) => Polynomial::<P::ScalarField> {
-                    coefficients: domain.ifft(&self.libra_concatenated_lagrange_form.coefficients),
-                },
-                None => Polynomial::<P::ScalarField>::interpolate_from_evals(
-                    &self.interpolation_domain,
-                    &self.libra_concatenated_lagrange_form.coefficients,
-                    P::SUBGROUP_SIZE,
-                ),
-            };
+        let domain = GeneralEvaluationDomain::<P::ScalarField>::new(P::SUBGROUP_SIZE)
+            .ok_or(HonkProofError::LargeSubgroup)?;
+
+        let coeffs_lagrange_subgroup_ifft =
+            domain.ifft(&self.libra_concatenated_lagrange_form.coefficients);
+        let libra_concatenated_monomial_form_unmasked = Polynomial::<P::ScalarField> {
+            coefficients: coeffs_lagrange_subgroup_ifft,
+        };
 
         for idx in 0..P::SUBGROUP_SIZE {
             self.libra_concatenated_monomial_form.coefficients[idx] =

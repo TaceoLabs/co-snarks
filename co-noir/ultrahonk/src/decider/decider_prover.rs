@@ -3,48 +3,56 @@ use super::{
     types::ProverMemory,
 };
 
-use crate::{
-    CONST_PROOF_SIZE_LOG_N, Utils, decider::small_subgroup_ipa::SmallSubgroupIPAProver,
-    plain_prover_flavour::PlainProverFlavour,
-};
+use crate::{Utils, decider::small_subgroup_ipa::SmallSubgroupIPAProver};
 use co_noir_common::{
     crs::ProverCrs,
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
-    mpc::plain::PlainUltraHonkDriver,
+    shplemini::ShpleminiOpeningClaim,
+    transcript::{Transcript, TranscriptHasher},
     types::ZeroKnowledge,
 };
-
-use co_noir_common::transcript::{Transcript, TranscriptHasher};
 use noir_types::HonkProof;
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
 use std::marker::PhantomData;
 
-pub struct Decider<
+pub(crate) struct Decider<
     P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, P>,
-    L: PlainProverFlavour,
+    H: TranscriptHasher<TranscriptFieldType>,
 > {
-    pub memory: ProverMemory<P, L>,
-    pub rng: ChaCha12Rng,
+    pub(super) memory: ProverMemory<P>,
+    pub(super) rng: ChaCha12Rng,
     pub(crate) has_zk: ZeroKnowledge,
     phantom_data: PhantomData<(P, H)>,
 }
 
-impl<
-    P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, P>,
-    L: PlainProverFlavour,
-> Decider<P, H, L>
-{
-    pub fn new(memory: ProverMemory<P, L>, has_zk: ZeroKnowledge) -> Self {
+impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> Decider<P, H> {
+    pub(crate) fn new(memory: ProverMemory<P>, has_zk: ZeroKnowledge) -> Self {
         Self {
             memory,
             rng: ChaCha12Rng::from_entropy(),
             has_zk,
             phantom_data: PhantomData,
         }
+    }
+
+    fn compute_opening_proof(
+        opening_claim: ShpleminiOpeningClaim<P::ScalarField>,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
+        crs: &ProverCrs<P>,
+    ) -> HonkProofResult<()> {
+        let mut quotient = opening_claim.polynomial;
+        let pair = opening_claim.opening_pair;
+        quotient[0] -= pair.evaluation;
+        // Computes the coefficients for the quotient polynomial q(X) = (p(X) - v) / (X - r) through an FFT
+        quotient.factor_roots(&pair.challenge);
+        let quotient_commitment = Utils::commit(&quotient.coefficients, crs)?;
+        // AZTEC TODO(#479): compute_opening_proof
+        // future we might need to adjust this to use the incoming alternative to work queue (i.e. variation of
+        // pthreads) or even the work queue itself
+        transcript.send_point_to_verifier::<P>("KZG:W".to_string(), quotient_commitment.into());
+        Ok(())
     }
 
     /**
@@ -55,10 +63,10 @@ impl<
     #[expect(clippy::type_complexity)]
     fn execute_relation_check_rounds(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
         crs: &ProverCrs<P>,
         circuit_size: u32,
-    ) -> HonkProofResult<(SumcheckOutput<P::ScalarField, L>, Option<ZKSumcheckData<P>>)> {
+    ) -> HonkProofResult<(SumcheckOutput<P::ScalarField>, Option<ZKSumcheckData<P>>)> {
         if self.has_zk == ZeroKnowledge::Yes {
             let log_subgroup_size = Utils::get_msb64(P::SUBGROUP_SIZE as u64);
             let commitment_key = &crs.monomials[..1 << (log_subgroup_size + 1)];
@@ -69,12 +77,7 @@ impl<
                 &mut self.rng,
             )?;
             Ok((
-                self.sumcheck_prove_zk::<CONST_PROOF_SIZE_LOG_N>(
-                    transcript,
-                    circuit_size,
-                    &mut zk_sumcheck_data,
-                    crs,
-                )?,
+                self.sumcheck_prove_zk(transcript, circuit_size, &mut zk_sumcheck_data),
                 Some(zk_sumcheck_data),
             ))
         } else {
@@ -84,38 +87,34 @@ impl<
     }
 
     /**
-     * @brief Execute the ZeroMorph protocol to produce an opening claim for the multilinear evaluations produced by
-     * Sumcheck and then produce an opening proof with a univariate PCS.
-     * @details See https://hackmd.io/dlf9xEwhTQyE3hiGbq4FsA?view for a complete description of the unrolled protocol.
+     * @brief Produce a univariate opening claim for the sumcheck multivariate evalutions and a batched univariate claim
+     * for the transcript polynomials (for the Translator consistency check). Reduce the two opening claims to a single one
+     * via Shplonk and produce an opening proof with the univariate PCS of choice (IPA when operating on Grumpkin).
      *
-     * */
+     */
     fn execute_pcs_rounds(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
         circuit_size: u32,
         crs: &ProverCrs<P>,
-        sumcheck_output: SumcheckOutput<P::ScalarField, L>,
+        sumcheck_output: SumcheckOutput<P::ScalarField>,
         zk_sumcheck_data: Option<ZKSumcheckData<P>>,
     ) -> HonkProofResult<()> {
         if self.has_zk == ZeroKnowledge::No {
-            let prover_opening_claim = self.shplemini_prove(
-                transcript,
-                circuit_size,
-                crs,
-                sumcheck_output,
-                None, // We don't have Libra polynomials in non-ZK mode
-            )?;
-            co_noir_common::compute_opening_proof(prover_opening_claim, transcript, crs)
+            let prover_opening_claim =
+                self.shplemini_prove(transcript, circuit_size, crs, sumcheck_output, None)?;
+            Self::compute_opening_proof(prover_opening_claim, transcript, crs)
         } else {
-            let mut small_subgroup_ipa_prover = SmallSubgroupIPAProver::<_>::new::<H>(
+            let small_subgroup_ipa_prover = SmallSubgroupIPAProver::<_>::new::<H, _>(
                 zk_sumcheck_data.expect("We have ZK"),
+                &sumcheck_output.challenges,
                 sumcheck_output
                     .claimed_libra_evaluation
                     .expect("We have ZK"),
-                "Libra:".to_string(),
-                &sumcheck_output.challenges,
+                transcript,
+                crs,
+                &mut self.rng,
             )?;
-            small_subgroup_ipa_prover.prove(transcript, crs, &mut self.rng)?;
             let witness_polynomials = small_subgroup_ipa_prover.into_witness_polynomials();
             let prover_opening_claim = self.shplemini_prove(
                 transcript,
@@ -124,7 +123,7 @@ impl<
                 sumcheck_output,
                 Some(witness_polynomials),
             )?;
-            co_noir_common::compute_opening_proof(prover_opening_claim, transcript, crs)
+            Self::compute_opening_proof(prover_opening_claim, transcript, crs)
         }
     }
 
@@ -132,7 +131,7 @@ impl<
         mut self,
         circuit_size: u32,
         crs: &ProverCrs<P>,
-        mut transcript: Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
+        mut transcript: Transcript<TranscriptFieldType, H>,
     ) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
         tracing::trace!("Decider prove");
 

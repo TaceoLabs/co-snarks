@@ -18,59 +18,41 @@
 // clang-format on
 
 use super::types::ProverMemory;
-use crate::{
-    Utils, decider::relations::databus_lookup_relation::BusData,
-    plain_prover_flavour::PlainProverFlavour,
-};
-use co_noir_common::mpc::plain::PlainUltraHonkDriver;
-use co_noir_common::transcript::{Transcript, TranscriptHasher};
-
+use crate::{NUM_ALPHAS, Utils};
 use ark_ff::{One, Zero};
-use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
-use co_builder::polynomials::polynomial_flavours::ProverWitnessEntitiesFlavour;
+
+use co_builder::prelude::ProvingKey;
 use co_noir_common::{
     crs::ProverCrs,
     honk_curve::HonkCurve,
     honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
     polynomials::polynomial::Polynomial,
+    transcript::{Transcript, TranscriptHasher},
     types::ZeroKnowledge,
 };
-
-use co_builder::{prelude::ProvingKey, prover_flavour::Flavour};
 use itertools::izip;
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
-use std::marker::PhantomData;
+use std::{array, marker::PhantomData};
 
-pub struct Oink<
-    P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, P>,
-    L: PlainProverFlavour,
-> {
+pub(crate) struct Oink<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
+{
     memory: ProverMemory<P>,
-    phantom_data: PhantomData<(P, H, L)>,
+    phantom_data: PhantomData<(P, H)>,
     has_zk: ZeroKnowledge,
     rng: ChaCha12Rng,
 }
 
-impl<
-    P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, P>,
-    L: PlainProverFlavour,
-> Default for Oink<P, H, L>
+impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> Default
+    for Oink<P, H>
 {
     fn default() -> Self {
         Self::new(ZeroKnowledge::No)
     }
 }
 
-impl<
-    P: HonkCurve<TranscriptFieldType>,
-    H: TranscriptHasher<TranscriptFieldType, PlainUltraHonkDriver, P>,
-    L: PlainProverFlavour,
-> Oink<P, H, L>
-{
-    pub fn new(has_zk: ZeroKnowledge) -> Self {
+impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> Oink<P, H> {
+    pub(crate) fn new(has_zk: ZeroKnowledge) -> Self {
         Self {
             memory: ProverMemory::default(),
             phantom_data: PhantomData,
@@ -85,21 +67,23 @@ impl<
         polynomial: &mut Polynomial<P::ScalarField>,
         label: &str,
         crs: &ProverCrs<P>,
-        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
     ) -> HonkProofResult<()> {
         // // Mask the polynomial when proving in zero-knowledge
         if self.has_zk == ZeroKnowledge::Yes {
             polynomial.mask(&mut self.rng)
         };
+
         // Commit to the polynomial
         let commitment = Utils::commit(polynomial.as_ref(), crs)?;
+
         // Send the commitment to the verifier
         transcript.send_point_to_verifier::<P>(label.to_string(), commitment.into());
 
         Ok(())
     }
 
-    fn compute_w4(&mut self, proving_key: &ProvingKey<P, L>) {
+    fn compute_w4(&mut self, proving_key: &ProvingKey<P>) {
         tracing::trace!("compute w4");
         // The memory record values are computed at the indicated indices as
         // w4 = w3 * eta^3 + w2 * eta^2 + w1 * eta + read_write_flag;
@@ -140,7 +124,7 @@ impl<
         }
     }
 
-    fn compute_read_term(&self, proving_key: &ProvingKey<P, L>, i: usize) -> P::ScalarField {
+    fn compute_read_term(&self, proving_key: &ProvingKey<P>, i: usize) -> P::ScalarField {
         tracing::trace!("compute read term");
 
         let gamma = &self.memory.challenges.gamma;
@@ -157,6 +141,7 @@ impl<
         let negative_column_1_step_size = &proving_key.polynomials.precomputed.q_r()[i];
         let negative_column_2_step_size = &proving_key.polynomials.precomputed.q_m()[i];
         let negative_column_3_step_size = &proving_key.polynomials.precomputed.q_c()[i];
+
         // The wire values for lookup gates are accumulators structured in such a way that the differences w_i -
         // step_size*w_i_shift result in values present in column i of a corresponding table. See the documentation in
         // method get_lookup_accumulators() in  for a detailed explanation.
@@ -173,7 +158,7 @@ impl<
     }
 
     /// Compute table_1 + gamma + table_2 * eta + table_3 * eta_2 + table_4 * eta_3
-    fn compute_write_term(&self, proving_key: &ProvingKey<P, L>, i: usize) -> P::ScalarField {
+    fn compute_write_term(&self, proving_key: &ProvingKey<P>, i: usize) -> P::ScalarField {
         tracing::trace!("compute write term");
 
         let gamma = &self.memory.challenges.gamma;
@@ -188,45 +173,7 @@ impl<
         *table_1 + gamma + *table_2 * eta_1 + *table_3 * eta_2 + *table_4 * eta_3
     }
 
-    fn compute_read_term_databus(
-        &self,
-        proving_key: &ProvingKey<P, L>,
-        i: usize,
-    ) -> P::ScalarField {
-        tracing::trace!("compute read term databus");
-
-        // Bus value stored in w_1, index into bus column stored in w_2
-        let w_1 = &proving_key.polynomials.witness.w_l()[i];
-        let w_2 = &proving_key.polynomials.witness.w_r()[i];
-        let gamma = &self.memory.challenges.gamma;
-        let beta = &self.memory.challenges.beta;
-
-        // Construct value + index*\beta + \gamma
-        (*w_2 * beta) + w_1 + gamma
-    }
-
-    /// Compute table_1 + gamma + table_2 * eta + table_3 * eta_2 + table_4 * eta_3
-    fn compute_write_term_databus(
-        &self,
-        proving_key: &ProvingKey<P, L>,
-        i: usize,
-        bus_idx: BusData,
-    ) -> P::ScalarField {
-        tracing::trace!("compute write term databus");
-
-        let value = match bus_idx {
-            BusData::BusIdx0 => &proving_key.polynomials.witness.calldata()[i],
-            BusData::BusIdx1 => &proving_key.polynomials.witness.secondary_calldata()[i],
-            BusData::BusIdx2 => &proving_key.polynomials.witness.return_data()[i],
-        };
-        let id = &proving_key.polynomials.precomputed.databus_id()[i];
-        let gamma = &self.memory.challenges.gamma;
-        let beta = &self.memory.challenges.beta;
-        // Construct value_i + idx_i*\beta + \gamma
-        *id * beta + value + gamma // degree 1
-    }
-
-    fn compute_logderivative_inverses(&mut self, proving_key: &ProvingKey<P, L>) {
+    fn compute_logderivative_inverses(&mut self, proving_key: &ProvingKey<P>) {
         tracing::trace!("compute logderivative inverse");
 
         debug_assert_eq!(
@@ -265,79 +212,6 @@ impl<
         // Compute inverse polynomial I in place by inverting the product at each row
         // Note: zeroes are ignored as they are not used anyway
         Utils::batch_invert(self.memory.lookup_inverses.as_mut());
-    }
-
-    fn compute_logderivative_inverses_databus(
-        &mut self,
-        proving_key: &ProvingKey<P, L>,
-        bus_idx: BusData,
-    ) {
-        tracing::trace!("compute logderivative inverse for Databus");
-
-        match bus_idx {
-            BusData::BusIdx0 => self
-                .memory
-                .calldata_inverses
-                .resize(proving_key.circuit_size as usize, P::ScalarField::zero()),
-            BusData::BusIdx1 => self
-                .memory
-                .secondary_calldata_inverses
-                .resize(proving_key.circuit_size as usize, P::ScalarField::zero()),
-            BusData::BusIdx2 => self
-                .memory
-                .return_data_inverses
-                .resize(proving_key.circuit_size as usize, P::ScalarField::zero()),
-        };
-        let wire = match bus_idx {
-            BusData::BusIdx0 => &proving_key.polynomials.precomputed.q_l(),
-            BusData::BusIdx1 => &proving_key.polynomials.precomputed.q_r(),
-            BusData::BusIdx2 => &proving_key.polynomials.precomputed.q_o(),
-        };
-        let read_count = match bus_idx {
-            BusData::BusIdx0 => &proving_key.polynomials.witness.calldata_read_counts(),
-            BusData::BusIdx1 => &proving_key
-                .polynomials
-                .witness
-                .secondary_calldata_read_counts(),
-            BusData::BusIdx2 => &proving_key.polynomials.witness.return_data_read_counts(),
-        };
-
-        debug_assert_eq!(wire.len(), proving_key.circuit_size as usize);
-        debug_assert_eq!(read_count.len(), proving_key.circuit_size as usize);
-
-        for (i, (w, read)) in izip!(wire.iter(), read_count.iter(),).enumerate() {
-            // Determine if the present row contains a databus operation
-            let q_busread = &proving_key.polynomials.precomputed.q_busread()[i];
-            let is_read = *q_busread == P::ScalarField::one() && *w == P::ScalarField::one();
-            let nonzero_read_count = *read != P::ScalarField::zero();
-
-            // We only compute the inverse if this row contains a read gate or data that has been read
-
-            if is_read || nonzero_read_count {
-                let read_term = self.compute_read_term_databus(proving_key, i);
-                let write_term = self.compute_write_term_databus(proving_key, i, bus_idx);
-
-                match bus_idx {
-                    BusData::BusIdx0 => self.memory.calldata_inverses[i] = read_term * write_term,
-                    BusData::BusIdx1 => {
-                        self.memory.secondary_calldata_inverses[i] = read_term * write_term
-                    }
-                    BusData::BusIdx2 => {
-                        self.memory.return_data_inverses[i] = read_term * write_term
-                    }
-                };
-            }
-        }
-
-        // Compute inverse polynomial I in place by inverting the product at each row
-        // Note: zeroes are ignored as they are not used anyway
-        match bus_idx {
-            BusData::BusIdx0 => Utils::batch_invert(self.memory.calldata_inverses.as_mut()),
-            BusData::BusIdx1 => {
-                Utils::batch_invert(self.memory.secondary_calldata_inverses.as_mut())
-            }
-            BusData::BusIdx2 => Utils::batch_invert(self.memory.return_data_inverses.as_mut()),
-        };
     }
 
     pub(crate) fn compute_public_input_delta(
@@ -389,7 +263,7 @@ impl<
 
     fn compute_grand_product_numerator(
         &self,
-        proving_key: &ProvingKey<P, L>,
+        proving_key: &ProvingKey<P>,
         i: usize,
     ) -> P::ScalarField {
         tracing::trace!("compute grand product numerator");
@@ -412,11 +286,7 @@ impl<
             * (*w_4 + *id_4 * beta + gamma)
     }
 
-    fn grand_product_denominator(
-        &self,
-        proving_key: &ProvingKey<P, L>,
-        i: usize,
-    ) -> P::ScalarField {
+    fn grand_product_denominator(&self, proving_key: &ProvingKey<P>, i: usize) -> P::ScalarField {
         tracing::trace!("compute grand product denominator");
 
         let w_1 = &proving_key.polynomials.witness.w_l()[i];
@@ -437,7 +307,7 @@ impl<
             * (*w_4 + *sigma_4 * beta + gamma)
     }
 
-    fn compute_grand_product(&mut self, proving_key: &ProvingKey<P, L>) {
+    fn compute_grand_product(&mut self, proving_key: &ProvingKey<P>) {
         tracing::trace!("compute grand product");
 
         let has_active_ranges = proving_key.active_region_data.size() > 0;
@@ -489,9 +359,7 @@ impl<
             .resize(proving_key.circuit_size as usize, P::ScalarField::zero());
 
         // For Ultra/Mega, the first row is an inactive zero row thus the grand prod takes value 1 at both i = 0 and i = 1
-        if L::FLAVOUR == Flavour::Ultra || L::FLAVOUR == Flavour::Mega {
-            self.memory.z_perm[1] = P::ScalarField::one();
-        }
+        self.memory.z_perm[1] = P::ScalarField::one();
 
         // Compute grand product values corresponding only to the active regions of the trace
         for i in 0..active_domain_size - 1 {
@@ -524,17 +392,19 @@ impl<
 
     /// Generate relation separators alphas for sumcheck/combiner computation
     pub(crate) fn generate_alphas_round(
-        alphas: &mut Vec<P::ScalarField>,
-        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
+        alphas: &mut [P::ScalarField; NUM_ALPHAS],
+        transcript: &mut Transcript<TranscriptFieldType, H>,
     ) {
         tracing::trace!("generate alpha round");
-        L::get_alpha_challenges::<_, _, P>(transcript, alphas);
+
+        let args: [String; NUM_ALPHAS] = array::from_fn(|i| format!("ALPHA_{i}"));
+        alphas.copy_from_slice(&transcript.get_challenges::<P>(&args));
     }
 
     /// Add circuit size public input size and public inputs to transcript
     fn execute_preamble_round(
-        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
-        proving_key: &ProvingKey<P, L>,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
+        proving_key: &ProvingKey<P>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing preamble round");
 
@@ -565,8 +435,8 @@ impl<
     /// Compute first three wire commitments
     fn execute_wire_commitments_round(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
-        proving_key: &mut ProvingKey<P, L>,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
+        proving_key: &mut ProvingKey<P>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing wire commitments round");
 
@@ -595,111 +465,16 @@ impl<
             &proving_key.crs,
             transcript,
         )?;
-        if L::FLAVOUR == Flavour::Mega {
-            let has_zk = self.has_zk;
-            self.has_zk = ZeroKnowledge::No; // MegaZKFlavor does not mask the wires, so we set has_zk to No
-            // Commit to Goblin ECC op wires.
-            // To avoid possible issues with the current work on the merge protocol, they (the ecc_op_wires) are not
-            // masked in MegaZKFlavor
-            self.commit_to_witness_polynomial(
-                proving_key.polynomials.witness.ecc_op_wire_1_mut(),
-                "ECC_OP_WIRE_1",
-                &proving_key.crs,
-                transcript,
-            )?;
-            self.commit_to_witness_polynomial(
-                proving_key.polynomials.witness.ecc_op_wire_2_mut(),
-                "ECC_OP_WIRE_2",
-                &proving_key.crs,
-                transcript,
-            )?;
-            self.commit_to_witness_polynomial(
-                proving_key.polynomials.witness.ecc_op_wire_3_mut(),
-                "ECC_OP_WIRE_3",
-                &proving_key.crs,
-                transcript,
-            )?;
-            self.commit_to_witness_polynomial(
-                proving_key.polynomials.witness.ecc_op_wire_4_mut(),
-                "ECC_OP_WIRE_4",
-                &proving_key.crs,
-                transcript,
-            )?;
-            // These polynomials get masked in ZKFlavour
-            self.has_zk = has_zk;
-            self.commit_to_witness_polynomial(
-                proving_key.polynomials.witness.calldata_mut(),
-                "CALLDATA",
-                &proving_key.crs,
-                transcript,
-            )?;
-            self.commit_to_witness_polynomial(
-                proving_key.polynomials.witness.calldata_read_counts_mut(),
-                "CALLDATA_READ_COUNTS",
-                &proving_key.crs,
-                transcript,
-            )?;
-            self.commit_to_witness_polynomial(
-                proving_key.polynomials.witness.calldata_read_tags_mut(),
-                "CALLDATA_READ_TAGS",
-                &proving_key.crs,
-                transcript,
-            )?;
-            self.commit_to_witness_polynomial(
-                proving_key.polynomials.witness.secondary_calldata_mut(),
-                "SECONDARY_CALLDATA",
-                &proving_key.crs,
-                transcript,
-            )?;
-            self.commit_to_witness_polynomial(
-                proving_key
-                    .polynomials
-                    .witness
-                    .secondary_calldata_read_counts_mut(),
-                "SECONDARY_CALLDATA_READ_COUNTS",
-                &proving_key.crs,
-                transcript,
-            )?;
-            self.commit_to_witness_polynomial(
-                proving_key
-                    .polynomials
-                    .witness
-                    .secondary_calldata_read_tags_mut(),
-                "SECONDARY_CALLDATA_READ_TAGS",
-                &proving_key.crs,
-                transcript,
-            )?;
-            self.commit_to_witness_polynomial(
-                proving_key.polynomials.witness.return_data_mut(),
-                "RETURN_DATA",
-                &proving_key.crs,
-                transcript,
-            )?;
-            self.commit_to_witness_polynomial(
-                proving_key
-                    .polynomials
-                    .witness
-                    .return_data_read_counts_mut(),
-                "RETURN_DATA_READ_COUNTS",
-                &proving_key.crs,
-                transcript,
-            )?;
-            self.commit_to_witness_polynomial(
-                proving_key.polynomials.witness.return_data_read_tags_mut(),
-                "RETURN_DATA_READ_TAGS",
-                &proving_key.crs,
-                transcript,
-            )?;
-        }
 
+        // Round is done since ultra_honk is no goblin flavor
         Ok(())
     }
 
     /// Compute sorted list accumulator and commitment
     fn execute_sorted_list_accumulator_round(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
-        proving_key: &mut ProvingKey<P, L>,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
+        proving_key: &mut ProvingKey<P>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing sorted list accumulator round");
 
@@ -738,12 +513,12 @@ impl<
     /// Fiat-Shamir: beta & gamma
     fn execute_log_derivative_inverse_round(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
-        proving_key: &mut ProvingKey<P, L>,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
+        proving_key: &mut ProvingKey<P>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing log derivative inverse round");
 
-        let challs = transcript.get_challenges::<P>(&["beta".to_string(), "gamma".to_string()]);
+        let challs = transcript.get_challenges::<P>(&["BETA".to_string(), "GAMMA".to_string()]);
         self.memory.challenges.beta = challs[0];
         self.memory.challenges.gamma = challs[1];
 
@@ -759,59 +534,15 @@ impl<
             transcript,
         )?;
         std::mem::swap(&mut self.memory.lookup_inverses, &mut lookup_inverses_tmp);
-        // If Mega, commit to the databus inverse polynomials and send
-        if L::FLAVOUR == Flavour::Mega {
-            self.compute_logderivative_inverses_databus(proving_key, BusData::BusIdx0);
-            self.compute_logderivative_inverses_databus(proving_key, BusData::BusIdx1);
-            self.compute_logderivative_inverses_databus(proving_key, BusData::BusIdx2);
-
-            // we do std::mem::take here to avoid borrowing issues with self
-            let mut calldata_inverses_tmp = std::mem::take(&mut self.memory.calldata_inverses);
-            self.commit_to_witness_polynomial(
-                &mut calldata_inverses_tmp,
-                "CALLDATA_INVERSES",
-                &proving_key.crs,
-                transcript,
-            )?;
-            std::mem::swap(
-                &mut self.memory.calldata_inverses,
-                &mut calldata_inverses_tmp,
-            );
-            let mut secondary_calldata_inverses_tmp =
-                std::mem::take(&mut self.memory.secondary_calldata_inverses);
-
-            self.commit_to_witness_polynomial(
-                &mut secondary_calldata_inverses_tmp,
-                "SECONDARY_CALLDATA_INVERSES",
-                &proving_key.crs,
-                transcript,
-            )?;
-            std::mem::swap(
-                &mut self.memory.secondary_calldata_inverses,
-                &mut secondary_calldata_inverses_tmp,
-            );
-            let mut return_data_inverses_tmp =
-                std::mem::take(&mut self.memory.return_data_inverses);
-            self.commit_to_witness_polynomial(
-                &mut return_data_inverses_tmp,
-                "RETURN_DATA_INVERSES",
-                &proving_key.crs,
-                transcript,
-            )?;
-            std::mem::swap(
-                &mut self.memory.return_data_inverses,
-                &mut return_data_inverses_tmp,
-            );
-        }
-
+        // Round is done since ultra_honk is no goblin flavor
         Ok(())
     }
 
     /// Compute grand product(s) and commitments.
     fn execute_grand_product_computation_round(
         &mut self,
-        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
-        proving_key: &mut ProvingKey<P, L>,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
+        proving_key: &mut ProvingKey<P>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing grand product computation round");
 
@@ -830,10 +561,10 @@ impl<
         Ok(())
     }
 
-    pub fn prove(
+    pub(crate) fn prove(
         mut self,
-        proving_key: &mut ProvingKey<P, L>,
-        transcript: &mut Transcript<TranscriptFieldType, H, PlainUltraHonkDriver, P>,
+        proving_key: &mut ProvingKey<P>,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
     ) -> HonkProofResult<ProverMemory<P>> {
         tracing::trace!("Oink prove");
 
