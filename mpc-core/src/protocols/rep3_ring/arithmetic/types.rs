@@ -2,11 +2,23 @@ use crate::protocols::{
     rep3::id::PartyID,
     rep3_ring::ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
 };
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use num_traits::Zero;
 use serde::{Deserialize, Serialize};
 
 /// This type represents a replicated shared value. Since a replicated share of a ring element contains additive shares of two parties, this type contains two ring elements.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    CanonicalSerialize,
+    CanonicalDeserialize,
+)]
 #[serde(bound = "")]
 pub struct Rep3RingShare<T: IntRing2k> {
     /// Share of this party
