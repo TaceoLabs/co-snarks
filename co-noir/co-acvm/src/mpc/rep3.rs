@@ -1304,7 +1304,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         a: &[Self::AcvmType],
         b: &[Self::AcvmType],
     ) -> eyre::Result<Vec<Self::AcvmType>> {
-        // TODO: we probably want to compare public values directly if there happen to be any in the same index
+        // TACEO TODO: we probably want to compare public values directly if there happen to be any in the same index
         let bool_a = a.iter().any(|v| Self::is_shared(v));
         let bool_b = b.iter().any(|v| Self::is_shared(v));
         if !bool_a && !bool_b {
