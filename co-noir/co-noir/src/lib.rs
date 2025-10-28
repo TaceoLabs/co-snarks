@@ -378,7 +378,7 @@ where
 {
     let vk = VerifyingKeyBarretenberg::from_buffer(vk)
         .context("while deserializing verification key")?;
-    Ok(VerifyingKey::from_barrettenberg_and_crs(vk, verifier_crs))
+    Ok(VerifyingKey::from_barretenberg_and_crs(vk, verifier_crs))
 }
 
 pub fn witness_map_from_string_map<I, O>(

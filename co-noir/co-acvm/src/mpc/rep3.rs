@@ -978,7 +978,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 Ok(Rep3AcvmType::Shared(result))
             }
             (Rep3AcvmType::Shared(lhs), Rep3AcvmType::Shared(rhs)) => {
-                let (lhs, rhs) = rayon::join(
+                let (lhs, rhs) = mpc_net::join(
                     || conversion::a2b_selector(lhs, self.net0, &mut self.state0),
                     || conversion::a2b_selector(rhs, self.net1, &mut self.state1),
                 );
@@ -1014,7 +1014,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 Ok(Rep3AcvmType::Shared(result))
             }
             (Rep3AcvmType::Shared(lhs), Rep3AcvmType::Shared(rhs)) => {
-                let (lhs, rhs) = rayon::join(
+                let (lhs, rhs) = mpc_net::join(
                     || conversion::a2b_selector(lhs, self.net0, &mut self.state0),
                     || conversion::a2b_selector(rhs, self.net1, &mut self.state1),
                 );
@@ -1415,7 +1415,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
 
         // TODO parallelize all points?
         for i in (0..points.len()).step_by(3) {
-            let (point, grumpkin_integer) = rayon::join(
+            let (point, grumpkin_integer) = mpc_net::join(
                 || {
                     Self::create_grumpkin_point(
                         &points[i],
@@ -1460,7 +1460,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                     &mut self.state0,
                 )?;
                 // Set x,y to 0 if infinity is one.
-                // TODO is this even necesary?
+                // Note: If we don't need the coordinates to be zero in the infinity case, we could add an option to skip this
                 let mul = arithmetic::sub_public_by_shared(ark_bn254::Fr::one(), i, self.id);
                 let res = arithmetic::mul_vec(&[x, y], &[mul, mul], self.net0, &mut self.state0)?;
 
@@ -1521,7 +1521,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 let (x, y, i) =
                     conversion::point_share_to_fieldshares(point, self.net0, &mut self.state0)?;
                 // Set x,y to 0 of infinity is one.
-                // TODO is this even necesary?
+                // Note: If we don't need the coordinates to be zero in the infinity case, we could add an option to skip this
                 let mul = arithmetic::sub_public_by_shared(F::one(), i, self.id);
                 let res = arithmetic::mul_vec(&[x, y], &[mul, mul], self.net0, &mut self.state0)?;
 
@@ -1927,7 +1927,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         let i = *downcast(&i).expect("We checked types");
 
         // Set x,y to 0 of infinity is one.
-        // TODO is this even necesary?
+        // Note: If we don't need the coordinates to be zero in the infinity case, we could add an option to skip this
         let mul = arithmetic::sub_public_by_shared(F::one(), i, self.id);
         let res = arithmetic::mul_vec(&[x, y], &[mul, mul], self.net0, &mut self.state0)?;
 

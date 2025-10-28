@@ -31,7 +31,6 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         Self {
             memory,
             phantom_data: PhantomData,
-            phantom_hasher: PhantomData,
         }
     }
 

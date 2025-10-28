@@ -278,7 +278,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
         }
     }
 
-    fn sub(&mut self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType {
+    fn sub(&self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType {
         match (share_1, share_2) {
             (ShamirAcvmType::Public(share_1), ShamirAcvmType::Public(share_2)) => {
                 ShamirAcvmType::Public(share_1 - share_2)

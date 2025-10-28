@@ -1906,7 +1906,7 @@ fn run_verify(config: VerifyConfig) -> color_eyre::Result<ExitCode> {
     let vk = VerifyingKeyBarretenberg::<Bn254G1>::from_buffer(&vk_u8)
         .context("while deserializing verification key")?;
 
-    let vk = VerifyingKey::<Bn254>::from_barrettenberg_and_crs(vk, verifier_crs);
+    let vk = VerifyingKey::<Bn254>::from_barretenberg_and_crs(vk, verifier_crs);
     // The actual verifier
     tracing::info!("Starting proof verification...");
     let start = Instant::now();

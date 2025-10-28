@@ -39,7 +39,7 @@ impl<P: Pairing> VerifyingKey<P> {
         Ok(vk)
     }
 
-    pub fn from_barrettenberg_and_crs(
+    pub fn from_barretenberg_and_crs(
         barretenberg_vk: VerifyingKeyBarretenberg<P::G1>,
         crs: P::G2Affine,
     ) -> Self {
@@ -53,7 +53,7 @@ impl<P: Pairing> VerifyingKey<P> {
         }
     }
 
-    pub fn to_barrettenberg(self) -> VerifyingKeyBarretenberg<P::G1> {
+    pub fn to_barretenberg(self) -> VerifyingKeyBarretenberg<P::G1> {
         VerifyingKeyBarretenberg {
             circuit_size: self.circuit_size as u64,
             log_circuit_size: Utils::get_msb64(self.circuit_size as u64) as u64,
