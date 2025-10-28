@@ -50,7 +50,6 @@ impl<
             memory,
             has_zk,
             phantom_data: PhantomData,
-            phantom_hasher: PhantomData,
         }
     }
 
