@@ -1459,7 +1459,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                     self.net0,
                     &mut self.state0,
                 )?;
-                // Set x,y to 0 of infinity is one.
+                // Set x,y to 0 if infinity is one.
                 // TODO is this even necesary?
                 let mul = arithmetic::sub_public_by_shared(ark_bn254::Fr::one(), i, self.id);
                 let res = arithmetic::mul_vec(&[x, y], &[mul, mul], self.net0, &mut self.state0)?;
