@@ -983,7 +983,7 @@ impl<F: PrimeField> FieldCT<F> {
         Ok((inverse, is_zero))
     }
 
-    fn assert_is_not_zero<
+    pub(crate) fn assert_is_not_zero<
         P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(

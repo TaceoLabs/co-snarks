@@ -51,6 +51,12 @@ impl<T: Default> PrecomputedEntities<Vec<T>> {
     }
 }
 
+impl<T: Default> From<[T; PRECOMPUTED_ENTITIES_SIZE]> for PrecomputedEntities<T> {
+    fn from(elements: [T; PRECOMPUTED_ENTITIES_SIZE]) -> Self {
+        Self { elements }
+    }
+}
+
 impl<T: Default> IntoIterator for PrecomputedEntities<T> {
     type Item = T;
     type IntoIter = std::array::IntoIter<T, PRECOMPUTED_ENTITIES_SIZE>;

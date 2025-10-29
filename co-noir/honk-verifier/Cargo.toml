@@ -19,6 +19,7 @@ co-acvm = { version = "0.7.0", path = "../co-acvm" }
 ultrahonk = { version = "0.6.0", path = "../ultrahonk" }
 co-ultrahonk = { version = "0.6.0", path = "../co-ultrahonk" }
 co-noir-common = { version = "0.2.0", path = "../co-noir-common" }
+noir-types = { version = "0.1.0", path = "../noir-types" }
 mpc-core = { version = "0.10.0", path = "../../mpc-core" }
 mpc-net = { version = "0.5.0", path = "../../mpc-net", features = ["local"] }
 itertools.workspace = true

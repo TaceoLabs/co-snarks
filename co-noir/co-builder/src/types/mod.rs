@@ -1,5 +1,6 @@
 pub(crate) mod aes128;
-pub(crate) mod big_field;
+pub mod big_field;
+pub mod big_group;
 pub(crate) mod blake2s;
 pub(crate) mod blake3;
 pub(crate) mod blake_util;
@@ -13,4 +14,4 @@ pub mod field_ct;
 pub mod gate_separator;
 
 #[expect(clippy::module_inception)]
-pub(crate) mod types;
+pub mod types;

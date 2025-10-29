@@ -551,6 +551,15 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> PairingPoin
 
         start_idx
     }
+
+    pub fn aggregate(
+        &mut self,
+        other: &AggregationState<P, T>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<()> {
+        todo!()
+    }
 }
 
 pub const AGGREGATION_OBJECT_SIZE: usize = 16;

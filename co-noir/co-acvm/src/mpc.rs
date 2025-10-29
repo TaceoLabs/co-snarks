@@ -21,6 +21,7 @@ fn downcast<A: 'static, B: 'static>(a: &A) -> Option<&B> {
 pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     type Lookup: LookupTableProvider<F>;
     type ArithmeticShare: Clone;
+    type OtherArithmeticShare<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>: Clone;
     /// A type representing the values encountered during Noir compilation. It should at least contain public field elements and shared values.
     type AcvmType: Clone
         + Default
@@ -30,6 +31,16 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         + From<F>
         + PartialEq
         + Into<<Self::BrilligDriver as BrilligDriver<F>>::BrilligType>;
+
+    type OtherAcvmType<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>: Clone
+        + Default
+        + Copy
+        + fmt::Debug
+        + fmt::Display
+        + From<Self::OtherArithmeticShare<C>>
+        + From<C::BaseField>
+        + PartialEq;
+
     type AcvmPoint<C: CurveGroup<BaseField = F>>: Clone + fmt::Debug + fmt::Display + From<C>;
 
     type BrilligDriver: BrilligDriver<F>;
@@ -513,4 +524,72 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
 
     /// Returns a an ACVM-type as shared no matter if it is public or already shared.
     fn get_as_shared(&mut self, value: &Self::AcvmType) -> Self::ArithmeticShare;
+
+    fn compute_naf_entries(
+        &mut self,
+        scalar: &Self::AcvmType,
+        max_num_bits: usize,
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
+        todo!()
+    }
+
+    fn acvm_type_limbs_to_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        limbs: &[Self::AcvmType; 4],
+    ) -> eyre::Result<Vec<Self::OtherAcvmType<C>>> {
+        todo!()
+    }
+
+    fn neg_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: Self::OtherAcvmType<C>,
+    ) -> Self::OtherAcvmType<C> {
+        todo!()
+    }
+
+    fn add_other_acvm_types<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        lhs: Self::OtherAcvmType<C>,
+        rhs: Self::OtherAcvmType<C>,
+    ) -> Self::OtherAcvmType<C> {
+        todo!()
+    }
+
+    fn sub_other_acvm_types<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        lhs: Self::OtherAcvmType<C>,
+        rhs: Self::OtherAcvmType<C>,
+    ) -> Self::OtherAcvmType<C> {
+        todo!()
+    }
+
+    fn inverse_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: Self::OtherAcvmType<C>,
+    ) -> eyre::Result<Self::OtherAcvmType<C>> {
+        todo!()
+    }
+
+    fn div_unchecked_other_acvm_types<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        lhs: Self::OtherAcvmType<C>,
+        rhs: Self::OtherAcvmType<C>,
+    ) -> eyre::Result<Self::OtherAcvmType<C>> {
+        todo!()
+    }
+
+    fn mul_other_acvm_types<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        lhs: Self::OtherAcvmType<C>,
+        rhs: Self::OtherAcvmType<C>,
+    ) -> eyre::Result<Self::OtherAcvmType<C>> {
+        todo!()
+    }
+
+    fn div_mod_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: Self::OtherAcvmType<C>,
+    ) -> eyre::Result<(Self::OtherAcvmType<C>, Self::OtherAcvmType<C>)> {
+        todo!()
+    }
 }

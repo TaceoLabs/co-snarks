@@ -1,7 +1,10 @@
-use co_builder::prelude::{PrecomputedEntities, ProverWitnessEntities};
+use co_builder::prelude::{PRECOMPUTED_ENTITIES_SIZE, PrecomputedEntities, ProverWitnessEntities};
 use co_noir_common::polynomials::polynomial::Polynomial;
 use serde::{Deserialize, Serialize};
-use ultrahonk::prelude::{ShiftedWitnessEntities, WitnessEntities};
+use std::fmt::Debug;
+use ultrahonk::prelude::{
+    SHIFTED_WITNESS_ENTITIES_SIZE, ShiftedWitnessEntities, WITNESS_ENTITIES_SIZE, WitnessEntities,
+};
 
 // This is what we get from the proving key, we shift at a later point
 #[derive(Default, Serialize, Deserialize)]
@@ -36,10 +39,30 @@ where
 }
 
 #[derive(Default, Clone)]
-pub(crate) struct AllEntities<Shared: Default, Public: Default> {
-    pub(crate) witness: WitnessEntities<Shared>,
-    pub(crate) precomputed: PrecomputedEntities<Public>,
-    pub(crate) shifted_witness: ShiftedWitnessEntities<Shared>,
+pub struct AllEntities<Shared: Default, Public: Default> {
+    pub witness: WitnessEntities<Shared>,
+    pub precomputed: PrecomputedEntities<Public>,
+    pub shifted_witness: ShiftedWitnessEntities<Shared>,
+}
+
+impl<Shared: Default + Debug, Public: Default + Debug> AllEntities<Shared, Public> {
+    pub fn from_elements(mut shared_elements: Vec<Shared>, public_elements: Vec<Public>) -> Self {
+        let precomputed: [Public; PRECOMPUTED_ENTITIES_SIZE] = public_elements
+            .try_into()
+            .expect("Incorrect number of public elements provided to AllEntities::from_elements");
+        let shifted_witness: [Shared; SHIFTED_WITNESS_ENTITIES_SIZE] = shared_elements
+            .split_off(WITNESS_ENTITIES_SIZE)
+            .try_into()
+            .expect("Incorrect number of shared elements provided to AllEntities::from_elements");
+        let witness: [Shared; WITNESS_ENTITIES_SIZE] = shared_elements
+            .try_into()
+            .expect("Incorrect number of shared elements provided to AllEntities::from_elements");
+        Self {
+            witness: witness.into(),
+            precomputed: precomputed.into(),
+            shifted_witness: shifted_witness.into(),
+        }
+    }
 }
 
 impl<Shared: Default, Public: Default> AllEntities<Shared, Public> {

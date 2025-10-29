@@ -1,6 +1,9 @@
 pub use crate::decider::types::GateSeparatorPolynomial;
 pub use crate::decider::univariate::Univariate;
-pub use crate::types::{ShiftedWitnessEntities, WitnessEntities};
+pub use crate::types::{
+    NUM_ALL_ENTITIES, SHIFTED_WITNESS_ENTITIES_SIZE, ShiftedWitnessEntities, WITNESS_ENTITIES_SIZE,
+    WitnessEntities,
+};
 pub use crate::ultra_prover::UltraHonk;
 pub use co_builder::prelude::PlainAcvmSolver;
 pub use co_builder::prelude::VerifyingKeyBarretenberg;

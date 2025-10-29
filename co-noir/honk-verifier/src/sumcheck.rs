@@ -4,27 +4,27 @@ use ark_ff::AdditiveGroup;
 use ark_ff::Field;
 use ark_ff::Zero;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use co_builder::prelude::GenericUltraCircuitBuilder;
+use co_builder::prelude::PRECOMPUTED_ENTITIES_SIZE;
+use co_builder::transcript_ct::TranscriptCT;
+use co_builder::transcript_ct::TranscriptHasherCT;
+use co_builder::types::field_ct::FieldCT;
 use co_builder::types::gate_separator::GateSeparatorPolynomial;
-use co_builder::{
-    flavours::mega_flavour::MegaFlavour,
-    mega_builder::MegaCircuitBuilder,
-    prover_flavour::ProverFlavour,
-    transcript::{TranscriptCT, TranscriptHasherCT},
-    types::field_ct::FieldCT,
-};
 use co_noir_common::barycentric::Barycentric;
 use co_noir_common::{
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
 };
+use co_ultrahonk::co_decider::types::BATCHED_RELATION_PARTIAL_LENGTH;
 use co_ultrahonk::co_decider::types::RelationParameters;
 use co_ultrahonk::types::AllEntities;
 use ultrahonk::CONST_PROOF_SIZE_LOG_N;
+use ultrahonk::NUM_ALPHAS;
+use ultrahonk::prelude::NUM_ALL_ENTITIES;
 
-pub struct SumcheckOutput<C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> {
+pub struct SumcheckOutput<C: HonkCurve<TranscriptFieldType>> {
     pub challenges: Vec<FieldCT<C::ScalarField>>,
-    pub claimed_evaluations:
-        AllEntities<FieldCT<C::ScalarField>, FieldCT<C::ScalarField>, MegaFlavour>,
+    pub claimed_evaluations: AllEntities<FieldCT<C::ScalarField>, FieldCT<C::ScalarField>>,
 }
 
 pub struct SumcheckVerifier;
@@ -32,17 +32,17 @@ pub struct SumcheckVerifier;
 impl SumcheckVerifier {
     #[expect(clippy::too_many_arguments)]
     pub fn verify<
-        C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
+        C: HonkCurve<TranscriptFieldType>,
         T: NoirWitnessExtensionProtocol<C::ScalarField>,
         H: TranscriptHasherCT<C>,
     >(
         transcript: &mut TranscriptCT<C, H>,
         target_sum: &mut FieldCT<C::ScalarField>,
         relation_parameters: &RelationParameters<FieldCT<C::ScalarField>>,
-        alphas: &Vec<FieldCT<C::ScalarField>>,
+        alphas: &[FieldCT<C::ScalarField>; NUM_ALPHAS],
         gate_challenges: &mut Vec<FieldCT<C::ScalarField>>,
         padding_indicator_array: &Vec<FieldCT<C::ScalarField>>,
-        builder: &mut MegaCircuitBuilder<C, T>,
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<SumcheckOutput<C>> {
         let one = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
@@ -57,7 +57,7 @@ impl SumcheckVerifier {
         for (round_idx, padding_indicator) in padding_indicator_array.iter().enumerate() {
             let round_univariate = transcript.receive_n_from_prover(
                 format!("Sumcheck:univariate_{round_idx}"),
-                MegaFlavour::BATCHED_RELATION_PARTIAL_LENGTH,
+                BATCHED_RELATION_PARTIAL_LENGTH,
             )?;
 
             let round_challenge =
@@ -77,11 +77,7 @@ impl SumcheckVerifier {
             let lhs = one
                 .sub(padding_indicator, builder, driver)
                 .multiply(target_sum, builder, driver)?;
-            let rhs = evaluate_with_domain_start::<
-                { MegaFlavour::BATCHED_RELATION_PARTIAL_LENGTH },
-                _,
-                _,
-            >(
+            let rhs = evaluate_with_domain_start::<{ BATCHED_RELATION_PARTIAL_LENGTH }, _, _>(
                 &round_univariate.try_into().unwrap(),
                 &round_challenge,
                 0,
@@ -100,16 +96,13 @@ impl SumcheckVerifier {
             )?;
         }
 
-        let transcript_evaluations = transcript.receive_n_from_prover(
-            "Sumcheck:evaluations".to_owned(),
-            MegaFlavour::NUM_ALL_ENTITIES,
-        )?;
+        let transcript_evaluations = transcript
+            .receive_n_from_prover("Sumcheck:evaluations".to_owned(), NUM_ALL_ENTITIES)?;
 
         // For ZK Flavors: the evaluation of the Row Disabling Polynomial at the sumcheck challenge
         // Evaluate the Honk relation at the point (u_0, ..., u_{d-1}) using claimed evaluations of prover polynomials.
         // In ZK Flavors, the evaluation is corrected by full_libra_purported_value
-        let (precomputed, witness) =
-            transcript_evaluations.split_at(MegaFlavour::PRECOMPUTED_ENTITIES_SIZE);
+        let (precomputed, witness) = transcript_evaluations.split_at(PRECOMPUTED_ENTITIES_SIZE);
         let claimed_evaluations =
             AllEntities::from_elements(witness.to_vec(), precomputed.to_vec());
 
@@ -141,13 +134,13 @@ impl SumcheckVerifier {
      *
      */
     fn check_sum<
-        C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
+        C: HonkCurve<TranscriptFieldType>,
         T: NoirWitnessExtensionProtocol<C::ScalarField>,
     >(
         univariate: &[FieldCT<C::ScalarField>],
         target_sum: &FieldCT<C::ScalarField>,
         indicator: &FieldCT<C::ScalarField>,
-        builder: &mut MegaCircuitBuilder<C, T>,
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<()> {
         let one = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
@@ -168,11 +161,11 @@ impl SumcheckVerifier {
     }
 
     fn pad_gate_challenges<
-        C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
+        C: HonkCurve<TranscriptFieldType>,
         T: NoirWitnessExtensionProtocol<C::ScalarField>,
     >(
         gate_challenges: &mut Vec<FieldCT<C::ScalarField>>,
-        builder: &mut MegaCircuitBuilder<C, T>,
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
     ) {
         if gate_challenges.len() < CONST_PROOF_SIZE_LOG_N {
             let zero = FieldCT::from_witness(C::ScalarField::ZERO.into(), builder);
@@ -185,13 +178,13 @@ impl SumcheckVerifier {
 
 pub fn evaluate_with_domain_start<
     const SIZE: usize,
-    C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
-    T: NoirWitnessExtensionProtocol<TranscriptFieldType>,
+    C: HonkCurve<TranscriptFieldType>,
+    T: NoirWitnessExtensionProtocol<C::ScalarField>,
 >(
     evals: &[FieldCT<C::ScalarField>; SIZE],
     u: &FieldCT<C::ScalarField>,
     domain_start: usize,
-    builder: &mut MegaCircuitBuilder<C, T>,
+    builder: &mut GenericUltraCircuitBuilder<C, T>,
     driver: &mut T,
 ) -> HonkProofResult<FieldCT<C::ScalarField>> {
     let one = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);

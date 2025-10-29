@@ -1,12 +1,10 @@
 // This will be used again but with not yet existing data types
 
 #![expect(unused)]
-use crate::generic_builder::GenericBuilder;
-use crate::mega_builder::MegaCircuitBuilder;
+use crate::types::big_field::BigField;
+use crate::types::big_field::BigGroup;
 use crate::types::field_ct::CycleScalarCT;
 use crate::types::field_ct::FieldCT;
-use crate::types::goblin_types::GoblinElement;
-use crate::types::goblin_types::GoblinField;
 use crate::types::poseidon2::FieldHashCT;
 use crate::types::poseidon2::Poseidon2CT;
 use crate::{prelude::GenericUltraCircuitBuilder, types::poseidon2::FieldSpongeCT};
@@ -29,7 +27,7 @@ pub type Poseidon2SpongeCT = FieldSpongeCT<Bn254G1, 4, 3, Poseidon2CT<Transcript
 pub trait TranscriptHasherCT<P: CurveGroup> {
     fn hash<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
         buffer: Vec<FieldCT<P::ScalarField>>,
-        builder: &mut impl GenericBuilder<P, WT>,
+        builder: &mut GenericUltraCircuitBuilder<P, WT>,
         driver: &mut WT,
     ) -> eyre::Result<FieldCT<P::ScalarField>>;
 }
@@ -39,7 +37,7 @@ impl<P: CurveGroup, const T: usize, const R: usize, H: FieldHashCT<P, T> + Defau
 {
     fn hash<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
         buffer: Vec<FieldCT<P::ScalarField>>,
-        builder: &mut impl GenericBuilder<P, WT>,
+        builder: &mut GenericUltraCircuitBuilder<P, WT>,
         driver: &mut WT,
     ) -> eyre::Result<FieldCT<P::ScalarField>> {
         Ok(Self::hash_fixed_length::<1, WT>(&buffer, builder, driver)?[0].clone())
@@ -132,20 +130,20 @@ where
         self.num_frs_written += len;
     }
 
-    pub fn add_point_to_hash_buffer<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
-        &mut self,
-        label: String,
-        point: &GoblinElement<P, WT>,
-    ) {
-        let mut elements = Vec::with_capacity(P::NUM_BASEFIELD_ELEMENTS * 2);
-        for limb in point.x.limbs.iter() {
-            elements.push(limb.clone());
-        }
-        for limb in point.y.limbs.iter() {
-            elements.push(limb.clone());
-        }
-        self.add_element_frs_to_hash_buffer(label, &elements);
-    }
+    // pub fn add_point_to_hash_buffer<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
+    //     &mut self,
+    //     label: String,
+    //     point: &GoblinElement<P, WT>,
+    // ) {
+    //     let mut elements = Vec::with_capacity(P::NUM_BASEFIELD_ELEMENTS * 2);
+    //     for limb in point.x.limbs.iter() {
+    //         elements.push(limb.clone());
+    //     }
+    //     for limb in point.y.limbs.iter() {
+    //         elements.push(limb.clone());
+    //     }
+    //     self.add_element_frs_to_hash_buffer(label, &elements);
+    // }
 
     pub fn receive_n_from_prover(
         &mut self,
@@ -175,44 +173,44 @@ where
     pub fn receive_point_from_prover<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
         &mut self,
         label: String,
-        builder: &mut impl GenericBuilder<P, WT>,
+        builder: &mut GenericUltraCircuitBuilder<P, WT>,
         driver: &mut WT,
-    ) -> HonkProofResult<GoblinElement<P, WT>> {
-        let elements = self.receive_n_from_prover(label, P::NUM_BASEFIELD_ELEMENTS * 2)?;
+    ) -> HonkProofResult<BigGroup<P, WT>> {
+        let mut elements = self.receive_n_from_prover(label, P::NUM_BASEFIELD_ELEMENTS * 2)?;
         debug_assert!(elements.len() == P::NUM_BASEFIELD_ELEMENTS * 2);
 
-        let coords = elements
-            .chunks_exact(P::NUM_BASEFIELD_ELEMENTS)
-            .collect::<Vec<_>>();
-
-        let x = coords[0];
-        let y = coords[1];
+        let y = elements.split_off(P::NUM_BASEFIELD_ELEMENTS);
+        let x = elements;
 
         debug_assert!(
             x.len() == 2 && y.len() == 2,
             "Expected 2 field elements per coordinate"
         );
-        let x_goblin = GoblinField::new([x[0].clone(), x[1].clone()]);
-        let y_goblin = GoblinField::new([y[0].clone(), y[1].clone()]);
 
-        let mut result = GoblinElement::new(x_goblin, y_goblin);
+        let [x_lo, x_hi] = x.try_into().unwrap();
+        let [y_lo, y_hi] = y.try_into().unwrap();
 
-        let mut sum: FieldCT<P::ScalarField> = FieldCT::default();
-        for i in 0..2 {
-            sum = sum.add_two(&elements[2 * i], &elements[2 * i + 1], builder, driver);
-        }
+        let sum = FieldCT::default()
+            .add_two(&x_lo, &x_hi, builder, driver)
+            .add_two(&y_lo, &y_hi, builder, driver);
+
+        let x = BigField::from_slices(x_lo, x_hi, driver, builder)?;
+        let y = BigField::from_slices(y_lo, y_hi, driver, builder)?;
+
+        let mut result = BigGroup::new(x, y);
+
         let is_zero = sum.is_zero(builder, driver)?;
-        result.set_point_at_infinity(is_zero);
+        result.set_is_infinity(is_zero);
         Ok(result)
     }
 
-    pub fn send_point_to_verifier<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
-        &mut self,
-        label: String,
-        element: &GoblinElement<P, WT>,
-    ) {
-        self.send_to_verifier(label, &element.to_vec());
-    }
+    // pub fn send_point_to_verifier<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
+    //     &mut self,
+    //     label: String,
+    //     element: &GoblinElement<P, WT>,
+    // ) {
+    //     self.send_to_verifier(label, &element.to_vec());
+    // }
 
     fn send_to_verifier(&mut self, label: String, elements: &[FieldCT<P::ScalarField>]) {
         self.proof_data.extend_from_slice(elements);
@@ -221,7 +219,7 @@ where
 
     fn split_challenge<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
         challenge: &FieldCT<P::ScalarField>,
-        builder: &mut impl GenericBuilder<P, WT>,
+        builder: &mut GenericUltraCircuitBuilder<P, WT>,
         driver: &mut WT,
     ) -> eyre::Result<[FieldCT<P::ScalarField>; 2]> {
         // use existing field-splitting code in cycle_scalar
@@ -242,7 +240,7 @@ where
     fn get_next_duplex_challenge_buffer<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
         &mut self,
         num_challenges: usize,
-        builder: &mut impl GenericBuilder<P, WT>,
+        builder: &mut GenericUltraCircuitBuilder<P, WT>,
         driver: &mut WT,
     ) -> eyre::Result<[FieldCT<P::ScalarField>; 2]> {
         // challenges need at least 110 bits in them to match the presumed security parameter of the BN254 curve.
@@ -282,7 +280,7 @@ where
     pub fn get_challenge<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
         &mut self,
         label: String,
-        builder: &mut impl GenericBuilder<P, WT>,
+        builder: &mut GenericUltraCircuitBuilder<P, WT>,
         driver: &mut WT,
     ) -> eyre::Result<FieldCT<P::ScalarField>> {
         self.manifest.add_challenge(self.round_number, &[label]);
@@ -293,7 +291,7 @@ where
     pub fn get_challenges<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
         &mut self,
         labels: &[String],
-        builder: &mut impl GenericBuilder<P, WT>,
+        builder: &mut GenericUltraCircuitBuilder<P, WT>,
         driver: &mut WT,
     ) -> eyre::Result<Vec<FieldCT<P::ScalarField>>> {
         let num_challenges = labels.len();

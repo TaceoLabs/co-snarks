@@ -445,3 +445,31 @@ impl<U: Clone + Default, F: PrimeField, L: LookupTableProvider<F>> RamTranscript
         }
     }
 }
+
+pub(crate) struct TwinRomTable<F: PrimeField> {
+    pub(crate) raw_entries: Vec<[FieldCT<F>; 2]>,
+    pub(crate) entries: Vec<[FieldCT<F>; 2]>,
+    pub(crate) length: usize,
+    pub(crate) rom_id: usize, // Builder identifier for this ROM table
+    pub(crate) initialized: bool,
+}
+
+impl<F: PrimeField> TwinRomTable<F> {
+    pub(crate) fn new(table_entries: Vec<[FieldCT<F>; 2]>) -> Self {
+        let raw_entries = table_entries;
+        let length = raw_entries.len();
+
+        // do not initialize the table yet. The input entries might all be constant,
+        // if this is the case we might not have a valid pointer to a Builder
+        // We get around this, by initializing the table when `operator[]` is called
+        // with a non-const field element.
+
+        Self {
+            raw_entries,
+            entries: Vec::new(),
+            length,
+            rom_id: 0,
+            initialized: false,
+        }
+    }
+}

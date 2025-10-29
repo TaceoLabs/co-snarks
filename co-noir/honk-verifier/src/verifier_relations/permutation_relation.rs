@@ -1,19 +1,17 @@
+use crate::impl_relation_evals;
+use crate::verifier_relations::VerifyAccGetter;
+
 use super::Relation;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use co_builder::prelude::GenericUltraCircuitBuilder;
+use co_builder::types::field_ct::FieldCT;
+use co_noir_common::{
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProofResult, TranscriptFieldType},
+};
 use co_ultrahonk::co_decider::types::RelationParameters;
 use co_ultrahonk::types::AllEntities;
-
-use crate::impl_relation_evals;
-use crate::verifier_relations::VerifyAccGetter;
-use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
-use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
-use co_builder::{
-    flavours::mega_flavour::MegaFlavour, mega_builder::MegaCircuitBuilder,
-    polynomials::polynomial_flavours::PrecomputedEntitiesFlavour, types::field_ct::FieldCT,
-};
-use co_noir_common::honk_curve::HonkCurve;
-use co_noir_common::honk_proof::{HonkProofResult, TranscriptFieldType};
 
 #[derive(Clone, Debug)]
 pub(crate) struct UltraPermutationRelationEvals<F: PrimeField> {
@@ -24,17 +22,15 @@ pub(crate) struct UltraPermutationRelationEvals<F: PrimeField> {
 impl_relation_evals!(UltraPermutationRelationEvals, r0, r1);
 pub(crate) struct UltraPermutationRelation;
 
-impl<C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> Relation<C>
-    for UltraPermutationRelation
-{
+impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for UltraPermutationRelation {
     type VerifyAcc = UltraPermutationRelationEvals<C::ScalarField>;
 
     fn accumulate_evaluations<T: NoirWitnessExtensionProtocol<C::ScalarField>>(
         accumulator: &mut Self::VerifyAcc,
-        input: &AllEntities<FieldCT<C::ScalarField>, FieldCT<C::ScalarField>, MegaFlavour>,
+        input: &AllEntities<FieldCT<C::ScalarField>, FieldCT<C::ScalarField>>,
         relation_parameters: &RelationParameters<FieldCT<C::ScalarField>>,
         scaling_factor: &FieldCT<C::ScalarField>,
-        builder: &mut MegaCircuitBuilder<C, T>,
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<()> {
         let w_1 = input.witness.w_l();

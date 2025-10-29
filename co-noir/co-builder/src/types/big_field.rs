@@ -1,6 +1,15 @@
+use core::num;
+use std::cmp::max;
+
+use crate::prelude::{derive_generators, offset_generator};
+use crate::types::field_ct::WitnessCT;
+use crate::types::rom_ram::TwinRomTable;
 use crate::{types::field_ct::FieldCT, ultra_builder::GenericUltraCircuitBuilder};
+use ark_bn254::Fq;
 use ark_ec::CurveGroup;
-use ark_ff::{One, PrimeField};
+use ark_ff::AdditiveGroup;
+use ark_ff::Field;
+use ark_ff::{One, PrimeField, Zero};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_noir_common::utils::Utils;
 use num_bigint::BigUint;
@@ -9,14 +18,13 @@ use super::field_ct::BoolCT;
 
 pub(crate) const NUM_LIMBS: usize = 4;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub(crate) struct BigField<F: PrimeField> {
     pub(crate) binary_basis_limbs: [Limb<F>; NUM_LIMBS],
     pub(crate) prime_basis_limb: FieldCT<F>,
 }
 
 #[derive(Clone, Debug, Default)]
-#[expect(dead_code)]
 pub(crate) struct Limb<F: PrimeField> {
     pub(crate) element: FieldCT<F>,
     pub(crate) maximum_value: BigUint,
@@ -104,6 +112,10 @@ impl<F: PrimeField> BigField<F> {
     }
 
     #[expect(dead_code)]
+    pub(crate) fn is_constant(&self) -> bool {
+        self.prime_basis_limb.is_constant()
+    }
+
     pub(crate) fn from_witness<
         P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
@@ -140,6 +152,17 @@ impl<F: PrimeField> BigField<F> {
         let low = FieldCT::from_witness(lo, builder);
         let high = FieldCT::from_witness(hi, builder);
         Self::from_slices(low, high, driver, builder)
+    }
+
+    pub(crate) fn from_witness_other_acvm_type<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        input: &T::OtherAcvmType<P>,
+        driver: &mut T,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+    ) -> eyre::Result<Self> {
+        todo!();
     }
 
     pub(crate) fn from_slices<
@@ -308,17 +331,527 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BigGroup<P,
         }
     }
 
-    /// Set the witness indices for the x and y coordinates to public
-    ///
-    /// Returns the index at which the representation is stored in the public inputs.
-    pub(crate) fn set_public(
+    pub(crate) fn get_value<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
         &self,
         driver: &mut T,
-        builder: &mut GenericUltraCircuitBuilder<P, T>,
-    ) -> usize {
-        let start_idx = self.x.set_public(driver, builder);
-        self.y.set_public(driver, builder);
+    ) -> eyre::Result<T::OtherAcvmType<P>> {
+        let limb_values: Vec<T::AcvmType> = self
+            .binary_basis_limbs
+            .iter()
+            .map(|limb| limb.element.get_value(builder, driver))
+            .collect();
+        driver.acvm_type_limbs_to_other_acvm_type::<P>(
+            &limb_values
+                .try_into()
+                .expect("We provided NUM_LIMBS elements"),
+        )
+    }
 
-        start_idx
+    pub(crate) fn get_maximum_value(&self) -> BigUint {
+        let mut result = BigUint::zero();
+        let mut shift = BigUint::one();
+        for i in 0..NUM_LIMBS {
+            result += &self.binary_basis_limbs[i].maximum_value * &shift;
+            shift <<= Self::NUM_LIMB_BITS;
+        }
+        result
+    }
+
+    // construct a proof that points are different mod p, when they are different mod r
+    // WARNING: This method doesn't have perfect completeness - for points equal mod r (or with certain difference kp
+    // mod r) but different mod p, you can't construct a proof. The chances of an honest prover running afoul of this
+    // condition are extremely small (TODO: compute probability) Note also that the number of constraints depends on how
+    // much the values have overflown beyond p e.g. due to an addition chain The function is based on the following.
+    // Suppose a-b = 0 mod p. Then a-b = k*p for k in a range [-R,L] such that L*p>= a, R*p>=b. And also a-b = k*p mod r
+    // for such k. Thus we can verify a-b is non-zero mod p by taking the product of such values (a-b-kp) and showing
+    // it's non-zero mod r
+    pub(crate) fn assert_is_not_equal<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        &self,
+        other: &BigField<F>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<()> {
+        // Why would we use this for 2 constants? Turns out, in biggroup
+        // Helper function to count how many times modulus fits into maximum_value
+        fn get_overload_count(maximum_value: &BigUint) -> usize {
+            // TODO CESAR: Hardcoded for BN254 Fq
+            let target_modulus: BigUint = Fq::MODULUS.into();
+            let mut target = target_modulus.clone();
+            let mut overload_count = 0;
+            while &target <= maximum_value {
+                overload_count += 1;
+                target += target_modulus.clone();
+            }
+            overload_count
+        }
+
+        let lhs_overload_count = get_overload_count(&self.get_maximum_value());
+        let rhs_overload_count = get_overload_count(&other.get_maximum_value());
+
+        // if (a == b) then (a == b mod n)
+        // to save gates, we only check that (a == b mod n)
+
+        // if numeric val of a = a' + p.q
+        // we want to check (a' + p.q == b mod n)
+        let base_diff = FieldCT::sub(
+            &self.prime_basis_limb,
+            &other.prime_basis_limb,
+            builder,
+            driver,
+        );
+        let mut diff = base_diff.clone();
+
+        // TODO CESAR: Is this even correct?
+        let prime_basis =
+            FieldCT::from_witness(P::ScalarField::from(Fq::MODULUS.into()).into(), builder);
+        let mut prime_basis_accumulator = prime_basis.clone();
+
+        // Each loop iteration adds 1 gate
+        // (prime_basis and prime_basis accumulator are constant so only the * operator adds a gate)
+        for _ in 0..lhs_overload_count {
+            diff = diff.multiply(
+                &base_diff.sub(&prime_basis_accumulator, builder, driver),
+                builder,
+                driver,
+            )?;
+            prime_basis_accumulator = prime_basis_accumulator.add(&prime_basis, builder, driver);
+        }
+        prime_basis_accumulator = prime_basis.clone();
+        for _ in 0..rhs_overload_count {
+            diff = diff.multiply(
+                &base_diff.add(&prime_basis_accumulator, builder, driver),
+                builder,
+                driver,
+            )?;
+            prime_basis_accumulator = prime_basis_accumulator.add(&prime_basis, builder, driver);
+        }
+        diff.assert_is_not_zero(builder, driver)
+    }
+
+    pub(crate) fn sub<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        &self,
+        other: &BigField<F>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<BigField<F>> {
+        todo!();
+    }
+
+    pub(crate) fn add<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        &self,
+        other: &BigField<F>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<BigField<F>> {
+        todo!();
+    }
+
+    pub(crate) fn neg<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        &self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<BigField<F>> {
+        todo!();
+    }
+
+    pub(crate) fn div_without_denominator_check<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        numerators: &[BigField<F>],
+        denominator: &BigField<F>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<BigField<F>> {
+        Self::internal_div(numerators, denominator, false, builder, driver)
+    }
+
+    // TODO CESAR: This is likely much slower than the bb version. Which works on integer types
+    pub(crate) fn internal_div<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        numerators: &[BigField<F>],
+        denominator: &BigField<F>,
+        check_for_zero: bool,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<BigField<F>> {
+        if numerators.is_empty() {
+            return Ok(BigField::default());
+        }
+        // TODO CESAR: Do we even need a reduction check?
+        // denominator.reduction_check(builder, driver)?;
+
+        let numerator_values = numerators
+            .iter()
+            .map(|n| n.get_value(driver))
+            .collect::<eyre::Result<Vec<_>>>()?;
+        let numerator_constant = numerators.iter().all(|n| n.is_constant());
+        let numerator_sum = numerator_values
+            .into_iter()
+            .reduce(|a, b| driver.add_other_acvm_types::<P>(a, b))
+            .expect("We checked numerators is not empty");
+
+        // a / b = c
+        // TODO CESAR: Handle zero case
+        let denominator_value = denominator.get_value(driver)?;
+        let inverse_value = driver.inverse_other_acvm_type::<P>(denominator_value);
+        let result_value = driver.mul(numerator_sum, inverse_value);
+
+        if numerator_constant && denominator.is_constant() {
+            // TODO CESAR: Wrong
+            return Ok(BigField::from_witness_other_acvm_type(
+                result_value,
+                driver,
+                builder,
+            ));
+        }
+
+        // TODO CESAR: WTF happens here
+
+        // We do this after the quotient check, since this creates gates and we don't want to do this twice
+        if (check_for_zero) {
+            denominator.assert_is_not_equal(zero());
+        }
+
+        let quotient = BigField::from_witness_other_acvm_type(result_value, driver, builder)?;
+        let inverse = BigField::from_witness_other_acvm_type(inverse_value, driver, builder)?;
+        unsafe_evaluate_multiple_add(
+            &denominator,
+            &inverse,
+            &BigField::default(), // TODO CESAR: Is this equivalent to unreduced_zero()?
+            &quotient,
+            &numerators,
+            builder,
+            driver,
+        );
+        return Ok(inverse);
+    }
+
+    pub(crate) fn unsafe_evaluate_multiple_add<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        input_left: &BigField<F>,
+        input_to_mul: &BigField<F>,
+        to_add: &[BigField<F>],
+        input_quotient: &BigField<F>,
+        input_remainders: &[BigField<F>],
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<BigField<F>> {
+        todo!();
+    }
+
+    pub(crate) fn unsafe_evaluate_square_add<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        left: &BigField<F>,
+        to_add: &[BigField<F>],
+        quotient: &BigField<F>,
+        remainders: &BigField<F>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<BigField<F>> {
+        todo!();
+    }
+
+    /**
+     * Compute a * a + ...to_add = b mod p
+     *
+     * We can chain multiple additions to a square/multiply with a single quotient/remainder.
+     *
+     * Chaining the additions here is cheaper than calling operator+ because we can combine some gates in
+     *`evaluate_multiply_add`
+     **/
+    pub(crate) fn sqradd<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        &self,
+        to_add: &[BigField<F>],
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<BigField<F>> {
+        // TODO CESAR: ASSERT(to_add.size() <= MAXIMUM_SUMMAND_COUNT);
+        // TODO CESAR: reduction_check()?
+
+        // TODO CESAR: reduction_check()?
+        let add_values = to_add
+            .iter()
+            .map(|a| a.get_value(driver))
+            .collect::<eyre::Result<Vec<_>>>()?;
+        let add_sum = add_values
+            .into_iter()
+            .reduce(|a, b| driver.add_other_acvm_types::<P>(a, b))
+            .expect("At least one element in to_add");
+        let add_constant = to_add.iter().all(|a| a.is_constant());
+
+        let self_value = self.get_value(driver)?;
+        let mut left = self_value.clone();
+        let mut right = self_value.clone();
+        let mut add_right = add_sum;
+
+        if self.is_constant() {
+            if add_constant {
+                let tmp = driver.mul_other_acvm_types::<P>(left, right);
+                let tmp = driver.add_other_acvm_types::<P>(tmp, add_right);
+
+                let (quotient, remainder) = driver.div_mod_other_acvm_type::<P>(tmp);
+
+                // TODO CESAR: Wrong
+                return Ok(BigField::from_witness_other_acvm_type(
+                    remainder, driver, builder,
+                ));
+            } else {
+                // left and right are constant
+                let tmp = driver.mul_other_acvm_types::<P>(left, right);
+
+                let (quotient, remainder) = driver.div_mod_other_acvm_type::<P>(tmp);
+
+                let mut new_to_add = to_add.to_vec();
+                new_to_add.push(BigField::from_witness_other_acvm_type(
+                    remainder, driver, builder,
+                )?);
+
+                return Self::sum(&new_to_add, builder, driver);
+            }
+        }
+        // TODO CESAR: Check the quotient fits the range proof
+        // TODO CESAR: self_reduce()?
+        let tmp = driver.mul_other_acvm_types::<P>(left, right);
+        let tmp = driver.add_other_acvm_types::<P>(tmp, add_right);
+
+        let (quotient, remainder) = driver.div_mod_other_acvm_type::<P>(tmp);
+
+        // TODO CESAR: can_overflow?
+        let quotient = BigField::from_witness_other_acvm_type(quotient, driver, builder)?;
+        let remainder = BigField::from_witness_other_acvm_type(remainder, driver, builder)?;
+
+        Self::unsafe_evaluate_square_add(self, &to_add, &quotient, &remainder, builder, driver)?;
+
+        Ok(remainder)
+    }
+
+    /**
+     * @brief Create constraints for summing these terms
+     *
+     * @tparam Builder
+     * @tparam T
+     * @param terms
+     * @return The sum of terms
+     */
+    pub(crate) fn sum<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        terms: &[BigField<F>],
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<BigField<F>> {
+        todo!();
+    }
+
+    pub(crate) fn madd<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        &self,
+        to_mul: &BigField<F>,
+        to_add: &[BigField<F>],
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<BigField<F>> {
+        todo!();
+    }
+
+    /**
+     * multiply, subtract, divide.
+     * This method computes:
+     *
+     * result = -(\sum{mul_left[i] * mul_right[i]} + ...to_add) / divisor
+     *
+     * Algorithm is constructed in this way to ensure that all computed terms are positive
+     *
+     * i.e. we evaluate:
+     * result * divisor + (\sum{mul_left[i] * mul_right[i]) + ...to_add) = 0
+     *
+     * It is critical that ALL the terms on the LHS are positive to eliminate the possiblity of underflows
+     * when calling `evaluate_multiple_multiply_add`
+     *
+     * only requires one quotient and remainder + overflow limbs
+     *
+     * We proxy this to mult_madd, so it only requires one quotient and remainder + overflow limbs
+     **/
+    pub(crate) fn msub_div<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        mul_left: &[BigField<F>],
+        mul_right: &[BigField<F>],
+        divisor: &BigField<F>,
+        to_sub: &[BigField<F>],
+        enable_divisor_nz_check: bool,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<BigField<F>> {
+        // Check the basics
+        assert_eq!(mul_left.len(), mul_right.len());
+        // ASSERT(divisor.get_value() != 0);
+
+        let modulus: BigUint = Fq::MODULUS.into();
+        let num_multiplications = mul_left.len();
+        let mut product_native = T::OtherAcvmType::<P>::default();
+        let mut products_constant = true;
+
+        // This check is optional, because it is heavy and often we don't need it at all
+        if enable_divisor_nz_check {
+            divisor.assert_is_not_equal(&BigField::default::<P, T>(), builder, driver)?;
+        }
+
+        // Compute the sum of products
+        for i in 0..num_multiplications {
+            // Get the native values modulo the field modulus
+            let mul_left_native = mul_left[i].get_value(driver)?.into();
+            let mul_right_native = mul_right[i].get_value(driver)?.into();
+
+            let tmp = driver.neg_other_acvm_type(mul_right_native);
+            let tmp = driver.multiply_other_acvm_types::<P>(mul_left_native, tmp);
+            product_native = driver.add_other_acvm_types::<P>(product_native, tmp);
+
+            products_constant &= mul_left[i].is_constant() && mul_right[i].is_constant();
+        }
+
+        // Compute the sum of to_sub
+        let mut sub_native = T::OtherAcvmType::<P>::default();
+        let mut sub_constant = true;
+        for sub in to_sub {
+            let sub_value = sub.get_value(driver)?;
+            sub_native = driver.add_other_acvm_types::<P>(sub_native, sub_value);
+            sub_constant &= sub.is_constant();
+        }
+
+        let divisor_native = divisor.get_value(driver)?;
+
+        // Compute the result
+        let numerator_native = driver.sub_other_acvm_types(product_native, sub_native);
+        let result_value = driver.div_other_acvm_types::<P>(numerator_native, divisor_native);
+
+        // If everything is constant, then we just return the constant result
+        if products_constant && sub_constant && divisor.is_constant() {
+            // TODO CESAR: Wrong
+            return Ok(BigField::from_witness_other_acvm_type(
+                result_value,
+                driver,
+                builder,
+            ));
+        }
+
+        // Create the result witness
+        let result = BigField::from_witness_other_acvm_type(result_value, driver, builder)?;
+
+        let eval_left = vec![result.clone()];
+        let eval_right = vec![divisor.clone()];
+        for e in mul_left {
+            eval_left.push(e.clone());
+        }
+        for e in mul_right {
+            eval_right.push(e.clone());
+        }
+
+        BigField::mult_madd(&eval_left, &eval_right, to_sub, true, builder, driver)?;
+        Ok(result)
+    }
+
+    pub(crate) fn mult_madd<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        mul_left: &[BigField<F>],
+        mul_right: &[BigField<F>],
+        to_add: &[BigField<F>],
+        fix_remainder_to_zero: bool,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<BigField<F>> {
+        todo!();
+    }
+
+    // TODO CESAR: Batch FieldCT ops
+    pub fn conditional_assign<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        predicate: &BoolCT<P, T>,
+        lhs: &BigField<F>,
+        rhs: &BigField<F>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<BigField<F>> {
+        if predicate.is_constant() && rhs.is_constant() && lhs.is_constant() {
+            if predicate.get_value(driver) == P::ScalarField::ONE.into() {
+                return Ok(lhs.clone());
+            } else {
+                return Ok(rhs.clone());
+            }
+        }
+
+        let binary_limbs = (0..NUM_LIMBS)
+            .map(|i| {
+                predicate.to_field_ct(driver).madd(
+                    &rhs.binary_basis_limbs[i].element.sub(
+                        &lhs.binary_basis_limbs[i].element,
+                        builder,
+                        driver,
+                    ),
+                    &lhs.binary_basis_limbs[i].element,
+                    builder,
+                    driver,
+                )
+            })
+            .collect::<eyre::Result<Vec<_>>>()?;
+        let prime_basis_limb = predicate.to_field_ct(driver).madd(
+            &rhs.prime_basis_limb
+                .sub(&lhs.prime_basis_limb, builder, driver),
+            &lhs.prime_basis_limb,
+            builder,
+            driver,
+        )?;
+
+        let binary_basis_limbs = (0..NUM_LIMBS)
+            .map(|i| {
+                Limb::new(
+                    binary_limbs[i].clone(),
+                    max(
+                        lhs.binary_basis_limbs[i].maximum_value.clone(),
+                        rhs.binary_basis_limbs[i].maximum_value.clone(),
+                    ),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        Ok(BigField {
+            binary_basis_limbs: binary_basis_limbs
+                .try_into()
+                .expect("We provided NUM_LIMBS elements"),
+            prime_basis_limb: prime_basis_limb,
+        })
     }
 }

@@ -1,9 +1,9 @@
 use crate::shplemini::BatchOpeningClaim;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use co_builder::types::goblin_types::GoblinElement;
 use co_builder::{
-    mega_builder::MegaCircuitBuilder,
-    transcript::{TranscriptCT, TranscriptHasherCT},
+    prelude::GenericUltraCircuitBuilder,
+    transcript_ct::{TranscriptCT, TranscriptHasherCT},
+    types::{big_field::BigGroup, types::AggregationState},
 };
 use co_noir_common::{
     honk_curve::HonkCurve,
@@ -32,15 +32,15 @@ impl KZG {
      *         - \f$ P_1 = - [W(x)]_1 \f$
      */
     pub(crate) fn reduce_verify_batch_opening_claim<
-        C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
+        C: HonkCurve<TranscriptFieldType>,
         T: NoirWitnessExtensionProtocol<C::ScalarField>,
         H: TranscriptHasherCT<C>,
     >(
         batch_opening_claim: &mut BatchOpeningClaim<C, T>,
         transcript: &mut TranscriptCT<C, H>,
-        builder: &mut MegaCircuitBuilder<C, T>,
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
-    ) -> HonkProofResult<(GoblinElement<C, T>, GoblinElement<C, T>)> {
+    ) -> HonkProofResult<AggregationState<C, T>> {
         let quotient_commitment =
             transcript.receive_point_from_prover("KZG:W".to_owned(), builder, driver)?;
 
@@ -56,15 +56,15 @@ impl KZG {
             .scalars
             .push(batch_opening_claim.evaluation_point.clone());
         // Compute C + [W]₁ ⋅ z
-        let p_0 = GoblinElement::batch_mul(
+        let p0 = BigGroup::batch_mul(
             &batch_opening_claim.commitments,
             &batch_opening_claim.scalars,
             builder,
             driver,
         )?;
 
-        let p_1 = quotient_commitment.neg(builder, driver)?;
+        let p1 = quotient_commitment.neg(builder, driver)?;
 
-        Ok((p_0, p_1))
+        Ok(AggregationState::new(p0, p1))
     }
 }

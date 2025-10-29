@@ -1,6 +1,6 @@
 use co_builder::prelude::{PRECOMPUTED_ENTITIES_SIZE, PrecomputedEntities};
 
-pub(crate) const NUM_ALL_ENTITIES: usize =
+pub const NUM_ALL_ENTITIES: usize =
     WITNESS_ENTITIES_SIZE + PRECOMPUTED_ENTITIES_SIZE + SHIFTED_WITNESS_ENTITIES_SIZE;
 #[derive(Default, Debug)]
 pub(crate) struct AllEntities<T: Default> {
@@ -40,13 +40,13 @@ impl<T: Default + Clone> AllEntities<Vec<T>> {
 const WITNESS_ENTITIES_SIZE: usize = 8;
 #[derive(Default, Clone, Debug)]
 pub struct WitnessEntities<T: Default> {
-    pub(crate) elements: [T; WITNESS_ENTITIES_SIZE],
+    pub elements: [T; WITNESS_ENTITIES_SIZE],
 }
 
 const SHIFTED_WITNESS_ENTITIES_SIZE: usize = 5;
 #[derive(Default, Clone, Debug)]
 pub struct ShiftedWitnessEntities<T: Default> {
-    pub(crate) elements: [T; SHIFTED_WITNESS_ENTITIES_SIZE],
+    pub elements: [T; SHIFTED_WITNESS_ENTITIES_SIZE],
 }
 
 impl<T: Default> IntoIterator for WitnessEntities<T> {
@@ -55,6 +55,12 @@ impl<T: Default> IntoIterator for WitnessEntities<T> {
 
     fn into_iter(self) -> Self::IntoIter {
         self.elements.into_iter()
+    }
+}
+
+impl<T: Default> From<[T; WITNESS_ENTITIES_SIZE]> for WitnessEntities<T> {
+    fn from(elements: [T; WITNESS_ENTITIES_SIZE]) -> Self {
+        Self { elements }
     }
 }
 
@@ -92,6 +98,12 @@ impl<T: Default> ShiftedWitnessEntities<Vec<T>> {
         for (src, dst) in shifted_witness_entities.into_iter().zip(self.iter_mut()) {
             dst.push(src);
         }
+    }
+}
+
+impl<T: Default> From<[T; SHIFTED_WITNESS_ENTITIES_SIZE]> for ShiftedWitnessEntities<T> {
+    fn from(elements: [T; SHIFTED_WITNESS_ENTITIES_SIZE]) -> Self {
+        Self { elements }
     }
 }
 
