@@ -1,22 +1,19 @@
-use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use co_ultrahonk::types::AllEntities;
+use crate::impl_relation_evals;
+use crate::verifier_relations::VerifyAccGetter;
 
+use super::Relation;
 use ark_ff::One;
 use ark_ff::PrimeField;
-use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
-use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
-use co_builder::{
-    flavours::mega_flavour::MegaFlavour, mega_builder::MegaCircuitBuilder,
-    polynomials::polynomial_flavours::PrecomputedEntitiesFlavour, types::field_ct::FieldCT,
+use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use co_builder::prelude::GenericUltraCircuitBuilder;
+use co_builder::types::field_ct::FieldCT;
+use co_noir_common::{
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProofResult, TranscriptFieldType},
 };
-use co_noir_common::honk_curve::HonkCurve;
-use co_noir_common::honk_proof::{HonkProofResult, TranscriptFieldType};
 use co_ultrahonk::co_decider::types::RelationParameters;
-use itertools::Itertools as _;
-
-use crate::impl_relation_evals;
-use crate::verifier_relations::Relation;
-use crate::verifier_relations::VerifyAccGetter;
+use co_ultrahonk::types::AllEntities;
+use itertools::Itertools;
 
 #[derive(Clone, Debug)]
 pub(crate) struct DeltaRangeConstraintRelationEvals<F: PrimeField> {
@@ -30,17 +27,15 @@ impl_relation_evals!(DeltaRangeConstraintRelationEvals, r0, r1, r2, r3);
 
 pub(crate) struct DeltaRangeConstraintRelation;
 
-impl<C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> Relation<C>
-    for DeltaRangeConstraintRelation
-{
+impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for DeltaRangeConstraintRelation {
     type VerifyAcc = DeltaRangeConstraintRelationEvals<C::ScalarField>;
 
     fn accumulate_evaluations<T: NoirWitnessExtensionProtocol<C::ScalarField>>(
         accumulator: &mut Self::VerifyAcc,
-        input: &AllEntities<FieldCT<C::ScalarField>, FieldCT<C::ScalarField>, MegaFlavour>,
+        input: &AllEntities<FieldCT<C::ScalarField>, FieldCT<C::ScalarField>>,
         _relation_parameters: &RelationParameters<FieldCT<C::ScalarField>>,
         scaling_factor: &FieldCT<C::ScalarField>,
-        builder: &mut MegaCircuitBuilder<C, T>,
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<()> {
         let w_1 = input.witness.w_l().to_owned();

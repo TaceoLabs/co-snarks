@@ -1,19 +1,17 @@
+use crate::impl_relation_evals;
+use crate::verifier_relations::VerifyAccGetter;
+
 use super::Relation;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use co_builder::prelude::GenericUltraCircuitBuilder;
+use co_builder::types::field_ct::FieldCT;
+use co_noir_common::{
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProofResult, TranscriptFieldType},
+};
 use co_ultrahonk::co_decider::types::RelationParameters;
 use co_ultrahonk::types::AllEntities;
-
-use crate::impl_relation_evals;
-use crate::verifier_relations::VerifyAccGetter;
-use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
-use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
-use co_builder::{
-    flavours::mega_flavour::MegaFlavour, mega_builder::MegaCircuitBuilder,
-    polynomials::polynomial_flavours::PrecomputedEntitiesFlavour, types::field_ct::FieldCT,
-};
-use co_noir_common::honk_curve::HonkCurve;
-use co_noir_common::honk_proof::{HonkProofResult, TranscriptFieldType};
 
 #[derive(Clone, Debug)]
 pub(crate) struct LogDerivLookupRelationEvals<F: PrimeField> {
@@ -26,11 +24,11 @@ pub(crate) struct LogDerivLookupRelation;
 
 impl LogDerivLookupRelation {
     fn compute_inverse_exists_verifier<
-        C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
+        C: HonkCurve<TranscriptFieldType>,
         T: NoirWitnessExtensionProtocol<C::ScalarField>,
     >(
-        input: &AllEntities<FieldCT<C::ScalarField>, FieldCT<C::ScalarField>, MegaFlavour>,
-        builder: &mut MegaCircuitBuilder<C, T>,
+        input: &AllEntities<FieldCT<C::ScalarField>, FieldCT<C::ScalarField>>,
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<FieldCT<C::ScalarField>> {
         let row_has_write = input.witness.lookup_read_tags().to_owned();
@@ -44,12 +42,12 @@ impl LogDerivLookupRelation {
     }
 
     fn compute_read_term_verifier<
-        C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
+        C: HonkCurve<TranscriptFieldType>,
         T: NoirWitnessExtensionProtocol<C::ScalarField>,
     >(
-        input: &AllEntities<FieldCT<C::ScalarField>, FieldCT<C::ScalarField>, MegaFlavour>,
+        input: &AllEntities<FieldCT<C::ScalarField>, FieldCT<C::ScalarField>>,
         relation_parameters: &RelationParameters<FieldCT<C::ScalarField>>,
-        builder: &mut MegaCircuitBuilder<C, T>,
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<FieldCT<C::ScalarField>> {
         let gamma = &relation_parameters.gamma;
@@ -94,12 +92,12 @@ impl LogDerivLookupRelation {
     }
 
     fn compute_write_term_verifier<
-        C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
+        C: HonkCurve<TranscriptFieldType>,
         T: NoirWitnessExtensionProtocol<C::ScalarField>,
     >(
-        input: &AllEntities<FieldCT<C::ScalarField>, FieldCT<C::ScalarField>, MegaFlavour>,
+        input: &AllEntities<FieldCT<C::ScalarField>, FieldCT<C::ScalarField>>,
         relation_parameters: &RelationParameters<FieldCT<C::ScalarField>>,
-        builder: &mut MegaCircuitBuilder<C, T>,
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<FieldCT<C::ScalarField>> {
         let gamma = &relation_parameters.gamma;
@@ -133,17 +131,15 @@ impl LogDerivLookupRelation {
     }
 }
 
-impl<C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> Relation<C>
-    for LogDerivLookupRelation
-{
+impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for LogDerivLookupRelation {
     type VerifyAcc = LogDerivLookupRelationEvals<C::ScalarField>;
 
     fn accumulate_evaluations<T: NoirWitnessExtensionProtocol<C::ScalarField>>(
         accumulator: &mut Self::VerifyAcc,
-        input: &AllEntities<FieldCT<C::ScalarField>, FieldCT<C::ScalarField>, MegaFlavour>,
+        input: &AllEntities<FieldCT<C::ScalarField>, FieldCT<C::ScalarField>>,
         relation_parameters: &RelationParameters<FieldCT<C::ScalarField>>,
         scaling_factor: &FieldCT<C::ScalarField>,
-        builder: &mut MegaCircuitBuilder<C, T>,
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<()> {
         let inverses = input.witness.lookup_inverses().to_owned();

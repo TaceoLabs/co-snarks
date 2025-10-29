@@ -955,7 +955,7 @@ impl<F: PrimeField> FieldCT<F> {
         Ok((inverse, is_zero))
     }
 
-    fn assert_is_not_zero<
+    pub(crate) fn assert_is_not_zero<
         P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
@@ -1001,7 +1001,7 @@ impl<F: PrimeField> FieldCT<F> {
     }
 
     // if predicate == true then return lhs, else return rhs
-    fn conditional_assign<
+    pub fn conditional_assign<
         P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(

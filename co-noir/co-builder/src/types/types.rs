@@ -498,12 +498,12 @@ pub(crate) struct Blake3Constraint<F: PrimeField> {
     pub(crate) result: [u32; 32],
 }
 
-pub(crate) struct AggregationState<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
+pub struct AggregationState<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
     p0: BigGroup<P, T>,
     p1: BigGroup<P, T>,
 }
 impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> AggregationState<P, T> {
-    pub(crate) fn new(p0: BigGroup<P, T>, p1: BigGroup<P, T>) -> Self {
+    pub fn new(p0: BigGroup<P, T>, p1: BigGroup<P, T>) -> Self {
         Self { p0, p1 }
     }
 }
@@ -526,6 +526,15 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> Aggregation
             .set(start_idx as u32);
 
         start_idx
+    }
+
+    pub fn aggregate(
+        &mut self,
+        other: &AggregationState<P, T>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<()> {
+        todo!()
     }
 }
 

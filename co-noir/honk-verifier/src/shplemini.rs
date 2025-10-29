@@ -1,15 +1,15 @@
 use ark_ff::Field;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use co_builder::types::goblin_types::GoblinElement;
 use co_builder::{
-    flavours::mega_flavour::MegaFlavour,
-    mega_builder::MegaCircuitBuilder,
-    prover_flavour::ProverFlavour,
-    transcript::{TranscriptCT, TranscriptHasherCT},
-    types::field_ct::FieldCT,
+    prelude::{GenericUltraCircuitBuilder, PRECOMPUTED_ENTITIES_SIZE},
+    transcript_ct::{TranscriptCT, TranscriptHasherCT},
+    types::{big_field::BigGroup, field_ct::FieldCT},
 };
 use itertools::{interleave, izip};
-use ultrahonk::NUM_INTERLEAVING_CLAIMS;
+use ultrahonk::{
+    NUM_INTERLEAVING_CLAIMS,
+    prelude::{SHIFTED_WITNESS_ENTITIES_SIZE, WITNESS_ENTITIES_SIZE},
+};
 
 use crate::claim_batcher::ClaimBatcher;
 use ark_ff::AdditiveGroup;
@@ -18,10 +18,10 @@ use co_noir_common::{
     honk_proof::{HonkProofResult, TranscriptFieldType},
 };
 pub struct BatchOpeningClaim<
-    C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
+    C: HonkCurve<TranscriptFieldType>,
     T: NoirWitnessExtensionProtocol<C::ScalarField>,
 > {
-    pub(crate) commitments: Vec<GoblinElement<C, T>>,
+    pub(crate) commitments: Vec<BigGroup<C, T>>,
     pub(crate) scalars: Vec<FieldCT<C::ScalarField>>,
     pub(crate) evaluation_point: FieldCT<C::ScalarField>,
 }
@@ -30,16 +30,16 @@ pub struct ShpleminiVerifier;
 
 impl ShpleminiVerifier {
     pub fn compute_batch_opening_claim<
-        C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
+        C: HonkCurve<TranscriptFieldType>,
         T: NoirWitnessExtensionProtocol<C::ScalarField>,
         H: TranscriptHasherCT<C>,
     >(
         padding_indicator_array: &[FieldCT<C::ScalarField>],
         claim_batcher: &mut ClaimBatcher<C, T>,
         multivariate_challenge: &[FieldCT<C::ScalarField>],
-        g1_identity: &GoblinElement<C, T>,
+        g1_identity: &BigGroup<C, T>,
         transcript: &mut TranscriptCT<C, H>,
-        builder: &mut MegaCircuitBuilder<C, T>,
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<BatchOpeningClaim<C, T>> {
         let virtual_log_n = multivariate_challenge.len();
@@ -60,7 +60,7 @@ impl ShpleminiVerifier {
                     driver,
                 )
             })
-            .collect::<HonkProofResult<Vec<GoblinElement<C, T>>>>()?;
+            .collect::<HonkProofResult<Vec<_>>>()?;
 
         // - Get Gemini evaluation challenge for Aᵢ, i = 0, … , d−1
         let gemini_evaluation_challenge =
@@ -233,12 +233,12 @@ impl ShpleminiVerifier {
     }
 
     fn compute_inverted_gemini_denominators<
-        C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
+        C: HonkCurve<TranscriptFieldType>,
         T: NoirWitnessExtensionProtocol<C::ScalarField>,
     >(
         shplonk_evaluation_challenge: &FieldCT<C::ScalarField>,
         gemini_eval_challenge_powers: &[FieldCT<C::ScalarField>],
-        builder: &mut MegaCircuitBuilder<C, T>,
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<Vec<FieldCT<C::ScalarField>>> {
         let virtual_log_n = gemini_eval_challenge_powers.len();
@@ -304,7 +304,7 @@ impl ShpleminiVerifier {
      * @return \f A_{i}}(r^{2^{i}})\f$ \f$ i = 0, \ldots, \text{virtual_log_n} - 1 \f$.
      */
     fn compute_fold_pos_evaluations<
-        C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
+        C: HonkCurve<TranscriptFieldType>,
         T: NoirWitnessExtensionProtocol<C::ScalarField>,
     >(
         padding_indicator_array: &[FieldCT<C::ScalarField>],
@@ -312,7 +312,7 @@ impl ShpleminiVerifier {
         evaluation_point: &[FieldCT<C::ScalarField>],
         challenge_powers: &[FieldCT<C::ScalarField>],
         fold_neg_evals: &[FieldCT<C::ScalarField>],
-        builder: &mut MegaCircuitBuilder<C, T>,
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<Vec<FieldCT<C::ScalarField>>> {
         let virtual_log_n = evaluation_point.len();
@@ -437,19 +437,19 @@ impl ShpleminiVerifier {
      */
     #[expect(clippy::too_many_arguments)]
     fn batch_gemini_claims_received_from_prover<
-        C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
+        C: HonkCurve<TranscriptFieldType>,
         T: NoirWitnessExtensionProtocol<C::ScalarField>,
     >(
         padding_indicator_array: &[FieldCT<C::ScalarField>],
-        fold_commitments: &[GoblinElement<C, T>],
+        fold_commitments: &[BigGroup<C, T>],
         gemini_neg_evaluations: &[FieldCT<C::ScalarField>],
         gemini_pos_evaluations: &[FieldCT<C::ScalarField>],
         inverse_vanishing_evals: &[FieldCT<C::ScalarField>],
         shplonk_batching_challenge_powers: &[FieldCT<C::ScalarField>],
-        commitments: &mut Vec<GoblinElement<C, T>>,
+        commitments: &mut Vec<BigGroup<C, T>>,
         scalars: &mut Vec<FieldCT<C::ScalarField>>,
         constant_term_accumulator: &mut FieldCT<C::ScalarField>,
-        builder: &mut MegaCircuitBuilder<C, T>,
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<()> {
         let virtual_log_n = gemini_neg_evaluations.len();
@@ -530,12 +530,12 @@ impl ShpleminiVerifier {
      */
     // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1151) Avoid erasing vector elements.
     fn remove_repeated_commitments<
-        C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
+        C: HonkCurve<TranscriptFieldType>,
         T: NoirWitnessExtensionProtocol<C::ScalarField>,
     >(
-        commitments: &mut Vec<GoblinElement<C, T>>,
+        commitments: &mut Vec<BigGroup<C, T>>,
         scalars: &mut Vec<FieldCT<C::ScalarField>>,
-        builder: &mut MegaCircuitBuilder<C, T>,
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) {
         // We started populating commitments and scalars by adding Shplonk:Q commitmment and the corresponding scalar
@@ -545,10 +545,9 @@ impl ShpleminiVerifier {
         let offset = 1;
 
         // Extract the indices from the container, which is normally created in a given Flavor
-        let first_range_to_be_shifted_start = MegaFlavour::PRECOMPUTED_ENTITIES_SIZE + offset;
-        let first_range_shifted_start =
-            MegaFlavour::PRECOMPUTED_ENTITIES_SIZE + MegaFlavour::WITNESS_ENTITIES_SIZE + offset;
-        let first_range_size = MegaFlavour::SHIFTED_WITNESS_ENTITIES_SIZE;
+        let first_range_to_be_shifted_start = PRECOMPUTED_ENTITIES_SIZE + offset;
+        let first_range_shifted_start = PRECOMPUTED_ENTITIES_SIZE + WITNESS_ENTITIES_SIZE + offset;
+        let first_range_size = SHIFTED_WITNESS_ENTITIES_SIZE;
 
         let second_range_to_be_shifted_start = offset;
         let second_range_shifted_start = offset;

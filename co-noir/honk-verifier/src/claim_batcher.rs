@@ -1,34 +1,32 @@
 use ark_ff::Field;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use co_builder::types::goblin_types::GoblinElement;
-use co_builder::{mega_builder::MegaCircuitBuilder, types::field_ct::FieldCT};
+use co_builder::{
+    prelude::GenericUltraCircuitBuilder,
+    types::{big_field::BigGroup, field_ct::FieldCT},
+};
 use co_noir_common::{
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
 };
 use itertools::{interleave, izip};
 
-pub struct Batch<
-    C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
-    T: NoirWitnessExtensionProtocol<C::ScalarField>,
-> {
-    pub(crate) commitments: Vec<GoblinElement<C, T>>,
+pub struct Batch<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::ScalarField>>
+{
+    pub(crate) commitments: Vec<BigGroup<C, T>>,
     pub(crate) evaluations: Vec<FieldCT<C::ScalarField>>,
     pub(crate) scalar: FieldCT<C::ScalarField>,
 }
 
 pub struct ClaimBatcher<
-    C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
+    C: HonkCurve<TranscriptFieldType>,
     T: NoirWitnessExtensionProtocol<C::ScalarField>,
 > {
     pub(crate) unshifted: Batch<C, T>,
     pub(crate) shifted: Batch<C, T>,
 }
 
-impl<
-    C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
-    T: NoirWitnessExtensionProtocol<C::ScalarField>,
-> ClaimBatcher<C, T>
+impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::ScalarField>>
+    ClaimBatcher<C, T>
 {
     /*
      * @brief Compute scalars used to batch each set of claims, excluding contribution from batching challenge \rho
@@ -60,7 +58,7 @@ impl<
         inverted_vanishing_evals: &[FieldCT<C::ScalarField>],
         nu_challenge: &FieldCT<C::ScalarField>,
         r_challenge: &FieldCT<C::ScalarField>,
-        builder: &mut MegaCircuitBuilder<C, T>,
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<()> {
         let one = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
@@ -97,12 +95,12 @@ impl<
     #[expect(clippy::too_many_arguments)]
     pub(crate) fn update_batch_mul_inputs_and_batched_evaluation(
         &mut self,
-        commitments: &mut Vec<GoblinElement<C, T>>,
+        commitments: &mut Vec<BigGroup<C, T>>,
         scalars: &mut Vec<FieldCT<C::ScalarField>>,
         batched_evaluation: &mut FieldCT<C::ScalarField>,
         rho: &FieldCT<C::ScalarField>,
         rho_power: &mut FieldCT<C::ScalarField>,
-        builder: &mut MegaCircuitBuilder<C, T>,
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<()> {
         // Append the commitments/scalars from a given batch to the corresponding containers; update the batched

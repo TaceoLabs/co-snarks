@@ -355,8 +355,7 @@ pub fn offset_generator_scaled<C: CurveGroup>() -> C::Affine {
     let offset_generator = derive_generators::<C>(&domain_bytes, 1, 0)[0];
     (offset_generator * C::ScalarField::from(BigUint::one() << 124)).into()
 }
-pub fn offset_generator<C: CurveGroup>() -> C::Affine {
-    let domain_separator = "ECCVM_OFFSET_GENERATOR";
+pub fn offset_generator<C: CurveGroup>(domain_separator: &str) -> C::Affine {
     let mut domain_bytes = Vec::with_capacity(domain_separator.len());
     for i in domain_separator.chars() {
         domain_bytes.push(i as u8);

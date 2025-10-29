@@ -1,10 +1,11 @@
 use super::plain::PlainAcvmSolver;
 use super::{NoirWitnessExtensionProtocol, downcast};
-use ark_ec::{AffineRepr, CurveGroup};
+use ark_ec::{AffineRepr, CurveGroup, scalar_mul};
 use ark_ff::{BigInteger, MontConfig, One, PrimeField, Zero};
 use blake2::{Blake2s256, Digest};
 use co_brillig::mpc::{Rep3BrilligDriver, Rep3BrilligType};
 use co_noir_types::Rep3Type;
+use core::num;
 use itertools::{Itertools, izip};
 use libaes::Cipher;
 use mpc_core::MpcState as _;
@@ -23,7 +24,7 @@ use mpc_core::{
 };
 use mpc_net::Network;
 use num_bigint::BigUint;
-use rayon::prelude::*;
+use rayon::{prelude::*, vec};
 use serde::{Deserialize, Serialize};
 use std::any::TypeId;
 use std::array;
@@ -2278,5 +2279,60 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 Self::get_public(value).expect("Already checked it is public"),
             )
         }
+    }
+
+    fn compute_naf_entries(
+        &mut self,
+        scalar: &Self::AcvmType,
+        max_num_bits: usize,
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
+        // TODO CESAR: Handle public case
+
+        // Case 1: Scalar is not zero
+        let scalar = self.get_as_shared(scalar);
+
+        // NAF can't handle 0
+        let scalar_is_zero =
+            arithmetic::eq_public(scalar.clone(), F::ZERO, self.net0, &mut self.state0)?;
+        let modulus_decomposition = ((F::MODULUS.into() as BigUint) + BigUint::one())
+            .to_bytes_be()
+            .into_iter()
+            .map(F::from)
+            .map(|x| arithmetic::promote_to_trivial_share(self.id, x))
+            .collect::<Vec<_>>();
+
+        let num_rounds = if max_num_bits == 0 {
+            (F::MODULUS_BIT_SIZE + 1) as usize
+        } else {
+            max_num_bits
+        };
+
+        let scalar_bits = yao::decompose_arithmetic(
+            scalar,
+            self.net0,
+            &mut self.state0,
+            F::MODULUS_BIT_SIZE as usize,
+            1,
+        )?;
+
+        let mut naf_entries = vec![Rep3PrimeFieldShare::<F>::default(); num_rounds + 1];
+
+        // if boolean is false => do NOT flip y
+        // if boolean is true => DO flip y
+        // first entry is skew. i.e. do we subtract one from the final result or not
+        for i in 0..num_rounds - 1 {
+            naf_entries[num_rounds - i] =
+                arithmetic::sub_public_by_shared(F::ONE, scalar_bits[i].clone(), self.id);
+        }
+
+        naf_entries = arithmetic::cmux_vec(
+            scalar_is_zero,
+            &modulus_decomposition,
+            &naf_entries,
+            self.net0,
+            &mut self.state0,
+        )?;
+
+        Ok(naf_entries.into_iter().map(Rep3AcvmType::Shared).collect())
     }
 }

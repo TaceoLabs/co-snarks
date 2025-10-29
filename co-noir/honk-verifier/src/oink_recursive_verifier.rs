@@ -1,34 +1,32 @@
-use ark_ff::{Field, PrimeField};
+use ark_ff::{BigInteger, Field, PrimeField};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_builder::{
-    flavours::mega_flavour::MegaFlavour,
-    mega_builder::MegaCircuitBuilder,
-    polynomials::polynomial_flavours::WitnessEntitiesFlavour,
-    prover_flavour::ProverFlavour,
-    transcript::{TranscriptCT, TranscriptHasherCT},
-    types::{field_ct::FieldCT, goblin_types::GoblinElement},
+    prelude::GenericUltraCircuitBuilder,
+    transcript_ct::{TranscriptCT, TranscriptHasherCT},
+    types::field_ct::FieldCT,
 };
 use co_noir_common::{
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
 };
-use co_ultrahonk::{co_decider::types::RelationParameters, prelude::MPCProverFlavour};
+use co_ultrahonk::co_decider::types::RelationParameters;
+use ultrahonk::NUM_ALPHAS;
 
-use crate::recursive_verifier::{
-    WitnessCommitments, recursive_decider_verification_key::RecursiveDeciderVerificationKey,
+use crate::recursive_decider_verification_key::{
+    RecursiveDeciderVerificationKey, WitnessCommitments,
 };
 
 pub(crate) struct OinkRecursiveVerifier;
 
 impl OinkRecursiveVerifier {
     pub fn verify<
-        C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
+        C: HonkCurve<TranscriptFieldType>,
         T: NoirWitnessExtensionProtocol<C::ScalarField>,
         H: TranscriptHasherCT<C>,
     >(
         verification_key: &mut RecursiveDeciderVerificationKey<C, T>,
         transcript: &mut TranscriptCT<C, H>,
-        builder: &mut MegaCircuitBuilder<C, T>,
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<()> {
         let circuit_size = verification_key.verification_key.circuit_size.clone();
@@ -54,20 +52,15 @@ impl OinkRecursiveVerifier {
 
         // Ensure that only the first limb is used
         assert!(
-            public_input_size_bigint.0[1..].iter().all(|&x| x == 0),
+            public_input_size_bigint.num_bits() < 64,
             "public_input_size should fit within a single limb"
         );
-        let public_input_size_int = public_input_size_bigint.0[0] as usize;
-
+        let public_input_size_int = public_input_size_bigint.as_ref()[0] as usize;
         let public_inputs = (0..public_input_size_int)
             .map(|i| transcript.receive_fr_from_prover(format!("public_input_{i}")))
             .collect::<HonkProofResult<Vec<FieldCT<C::ScalarField>>>>()?;
 
-        let mut commitments = WitnessCommitments::<C, T>::from_elements(
-            (0..MegaFlavour::WITNESS_ENTITIES_SIZE)
-                .map(|_| GoblinElement::point_at_infinity(builder))
-                .collect::<Vec<_>>(),
-        );
+        let mut commitments = WitnessCommitments::<C, T>::default();
 
         // TACEO TODO: batch `is_zero` calls on `receive_point_from_prover`
         // Get commitments to first three wire polynomials
@@ -77,59 +70,6 @@ impl OinkRecursiveVerifier {
             transcript.receive_point_from_prover("W_R".to_owned(), builder, driver)?;
         *commitments.w_o_mut() =
             transcript.receive_point_from_prover("W_O".to_owned(), builder, driver)?;
-
-        // Since we are in the Mega Flavor case, get commitments to ECC op wire polynomials and DataBus columns
-        *commitments.ecc_op_wire_1_mut() =
-            transcript.receive_point_from_prover("ECC_OP_WIRE_1".to_owned(), builder, driver)?;
-        *commitments.ecc_op_wire_2_mut() =
-            transcript.receive_point_from_prover("ECC_OP_WIRE_2".to_owned(), builder, driver)?;
-        *commitments.ecc_op_wire_3_mut() =
-            transcript.receive_point_from_prover("ECC_OP_WIRE_3".to_owned(), builder, driver)?;
-        *commitments.ecc_op_wire_4_mut() =
-            transcript.receive_point_from_prover("ECC_OP_WIRE_4".to_owned(), builder, driver)?;
-
-        // Receive DataBus related polynomial commitments
-        *commitments.calldata_mut() =
-            transcript.receive_point_from_prover("CALLDATA".to_owned(), builder, driver)?;
-        *commitments.calldata_read_counts_mut() = transcript.receive_point_from_prover(
-            "CALLDATA_READ_COUNTS".to_owned(),
-            builder,
-            driver,
-        )?;
-        *commitments.calldata_read_tags_mut() = transcript.receive_point_from_prover(
-            "CALLDATA_READ_TAGS".to_owned(),
-            builder,
-            driver,
-        )?;
-
-        *commitments.secondary_calldata_mut() = transcript.receive_point_from_prover(
-            "SECONDARY_CALLDATA".to_owned(),
-            builder,
-            driver,
-        )?;
-        *commitments.secondary_calldata_read_counts_mut() = transcript.receive_point_from_prover(
-            "SECONDARY_CALLDATA_READ_COUNTS".to_owned(),
-            builder,
-            driver,
-        )?;
-        *commitments.secondary_calldata_read_tags_mut() = transcript.receive_point_from_prover(
-            "SECONDARY_CALLDATA_READ_TAGS".to_owned(),
-            builder,
-            driver,
-        )?;
-
-        *commitments.return_data_mut() =
-            transcript.receive_point_from_prover("RETURN_DATA".to_owned(), builder, driver)?;
-        *commitments.return_data_read_counts_mut() = transcript.receive_point_from_prover(
-            "RETURN_DATA_READ_COUNTS".to_owned(),
-            builder,
-            driver,
-        )?;
-        *commitments.return_data_read_tags_mut() = transcript.receive_point_from_prover(
-            "RETURN_DATA_READ_TAGS".to_owned(),
-            builder,
-            driver,
-        )?;
 
         // Get eta challenges: used in RAM/ROM memory records and log derivative lookup argument
         let [eta_1, eta_2, eta_3] = transcript
@@ -161,23 +101,6 @@ impl OinkRecursiveVerifier {
         *commitments.lookup_inverses_mut() =
             transcript.receive_point_from_prover("LOOKUP_INVERSES".to_owned(), builder, driver)?;
 
-        // Since we are in the Mega Flavor case, receive commitments to log-deriv inverses polynomials
-        *commitments.calldata_inverses_mut() = transcript.receive_point_from_prover(
-            "CALLDATA_INVERSES".to_owned(),
-            builder,
-            driver,
-        )?;
-        *commitments.secondary_calldata_inverses_mut() = transcript.receive_point_from_prover(
-            "SECONDARY_CALLDATA_INVERSES".to_owned(),
-            builder,
-            driver,
-        )?;
-        *commitments.return_data_inverses_mut() = transcript.receive_point_from_prover(
-            "RETURN_DATA_INVERSES".to_owned(),
-            builder,
-            driver,
-        )?;
-
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1283): Suspicious get_value().
         let public_input_delta = Self::compute_public_input_delta(
             &public_inputs,
@@ -193,7 +116,7 @@ impl OinkRecursiveVerifier {
         *commitments.z_perm_mut() =
             transcript.receive_point_from_prover("Z_PERM".to_owned(), builder, driver)?;
 
-        let labels = (0..MegaFlavour::NUM_ALPHAS)
+        let labels = (0..NUM_ALPHAS)
             .map(|i| format!("alpha_{i}"))
             .collect::<Vec<_>>();
         let alphas = transcript.get_challenges(&labels, builder, driver)?;
@@ -205,11 +128,11 @@ impl OinkRecursiveVerifier {
             eta_2,
             eta_3,
             public_input_delta,
-            ..Default::default()
+            alphas: alphas.try_into().expect("length checked above"),
+            gate_challenges: Default::default(),
         };
         verification_key.witness_commitments = commitments;
         verification_key.public_inputs = public_inputs;
-        verification_key.alphas = alphas;
         Ok(())
     }
 
@@ -226,7 +149,7 @@ impl OinkRecursiveVerifier {
      * @return Field Public input Δ
      */
     fn compute_public_input_delta<
-        C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>,
+        C: HonkCurve<TranscriptFieldType>,
         T: NoirWitnessExtensionProtocol<C::ScalarField>,
     >(
         public_inputs: &[FieldCT<C::ScalarField>],
@@ -234,7 +157,7 @@ impl OinkRecursiveVerifier {
         gamma: &FieldCT<C::ScalarField>,
         domain_size: &FieldCT<C::ScalarField>,
         offset: &FieldCT<C::ScalarField>,
-        builder: &mut MegaCircuitBuilder<C, T>,
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<FieldCT<C::ScalarField>> {
         let one = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
