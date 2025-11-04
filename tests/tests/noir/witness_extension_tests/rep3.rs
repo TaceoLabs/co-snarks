@@ -29,3 +29,4 @@ add_rep3_acvm_test!("unconstrained_fn_field");
 add_rep3_acvm_test!("write_access");
 add_rep3_acvm_test!("bb_sha256_compression");
 add_rep3_acvm_test!("aes128");
+add_rep3_acvm_test!("unconstrained_fn_not");
