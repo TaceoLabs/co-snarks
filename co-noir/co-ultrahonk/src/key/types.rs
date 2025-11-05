@@ -50,6 +50,7 @@ impl<'a, T: NoirUltraHonkProver<P>, P: CurveGroup> TraceData<'a, T, P> {
             iter.next().unwrap(),
             iter.next().unwrap(),
             iter.next().unwrap(),
+            iter.next().unwrap(),
         ];
         let copy_cycles = vec![vec![]; builder.variables.len()];
 

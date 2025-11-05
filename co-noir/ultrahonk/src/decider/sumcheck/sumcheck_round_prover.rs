@@ -5,12 +5,16 @@ use super::{
     },
     zk_data::ZKSumcheckData,
 };
-use crate::decider::types::{BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK};
+use crate::decider::{
+    relations::{
+        memory_relation::MemoryRelation, non_native_field_relation::NonNativeFieldRelation,
+    },
+    types::{BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK},
+};
 use crate::{
     decider::{
         relations::{
             AllRelationAcc, Relation,
-            auxiliary_relation::AuxiliaryRelation,
             delta_range_constraint_relation::DeltaRangeConstraintRelation,
             elliptic_relation::{EllipticRelation, EllipticRelationAcc},
             logderiv_lookup_relation::LogDerivLookupRelation,
@@ -23,6 +27,7 @@ use crate::{
     },
     types::AllEntities,
 };
+use ark_ff::One;
 use ark_ff::PrimeField;
 use co_noir_common::{
     honk_curve::HonkCurve, honk_proof::TranscriptFieldType,
@@ -183,8 +188,14 @@ impl SumcheckProverRound {
             relation_parameters,
             scaling_factor,
         );
-        Self::accumulate_one_relation_univariates::<_, AuxiliaryRelation>(
-            &mut univariate_accumulators.r_aux,
+        Self::accumulate_one_relation_univariates::<_, MemoryRelation>(
+            &mut univariate_accumulators.r_memory,
+            extended_edges,
+            relation_parameters,
+            scaling_factor,
+        );
+        Self::accumulate_one_relation_univariates::<_, NonNativeFieldRelation>(
+            &mut univariate_accumulators.r_nnf,
             extended_edges,
             relation_parameters,
             scaling_factor,
@@ -371,5 +382,40 @@ impl SumcheckProverRound {
         result *= row_disabling_factor;
 
         result
+    }
+
+    pub(crate) fn compute_virtual_contribution<P: HonkCurve<TranscriptFieldType>>(
+        polynomials: &AllEntities<Vec<P::ScalarField>>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
+        gate_separators: &GateSeparatorPolynomial<P::ScalarField>,
+        alphas: &[P::ScalarField; crate::NUM_ALPHAS],
+    ) -> SumcheckRoundOutput<P::ScalarField, BATCHED_RELATION_PARTIAL_LENGTH> {
+        // Initialize univariate accumulator
+        let mut univariate_accumulators = AllRelationAcc::<P::ScalarField>::default();
+        let mut extended_edges = ProverUnivariates::<P::ScalarField>::default();
+
+        // For a given prover polynomial P_i(X_0, ..., X_{d-1}) extended by zero, i.e. multiplied by
+        //      \tau(X_d, ..., X_{virtual_log_n - 1}) =  \prod (1 - X_k)
+        // for k = d, ..., virtual_log_n - 1, the computation of the virtual sumcheck round univariate reduces to the
+        // edge (0, ...,0).
+        let virtual_contribution_edge_idx = 0;
+
+        // Perform the usual sumcheck accumulation, but for a single edge.
+        Self::extend_edges(
+            &mut extended_edges,
+            polynomials,
+            virtual_contribution_edge_idx,
+        );
+
+        // The tail of G(X) = \prod_{k} (1 + X_k(\beta_k - 1) ) evaluated at the edge (0, ..., 0).
+        let gate_separator_tail = P::ScalarField::one();
+        Self::accumulate_relation_univariates::<P>(
+            &mut univariate_accumulators,
+            &extended_edges,
+            relation_parameters,
+            &gate_separator_tail,
+        );
+
+        Self::batch_over_relations_univariates(univariate_accumulators, alphas, gate_separators)
     }
 }

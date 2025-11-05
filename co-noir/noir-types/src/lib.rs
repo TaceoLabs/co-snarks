@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, io};
 
 use acir::FieldElement;
 use acir::native_types::{WitnessMap, WitnessStack};
-use ark_ff::{Field, PrimeField, Zero};
+use ark_ff::{BigInteger, Field, PrimeField, Zero};
 use co_noir_types::PubPrivate;
 use noirc_abi::errors::InputParserError;
 use noirc_abi::input_parser::json::JsonTypes;
@@ -12,13 +12,136 @@ pub use noirc_abi::Abi;
 use noirc_abi::MAIN_RETURN_NAME;
 pub use noirc_artifacts::program::ProgramArtifact;
 use num_bigint::BigUint;
+use ruint::Uint;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct HonkProof<F: PrimeField> {
+pub struct HonkProof<F: Default> {
     proof: Vec<F>,
 }
 
-impl<F: PrimeField> HonkProof<F> {
+pub enum HonkProofType {
+    FieldElements(HonkProof<ark_bn254::Fr>, Vec<ark_bn254::Fr>),
+    U256Values(HonkProof<U256>, Vec<U256>),
+}
+
+impl HonkProofType {
+    pub fn public_inputs_to_buffer(&self) -> Vec<u8> {
+        match self {
+            HonkProofType::FieldElements(_, public_inputs) => {
+                SerializeF::to_buffer(public_inputs, false)
+            }
+            HonkProofType::U256Values(_, public_inputs) => U256::to_buffer(public_inputs),
+        }
+    }
+    pub fn proof_to_buffer(&self) -> Vec<u8> {
+        match self {
+            HonkProofType::FieldElements(proof, _) => proof.to_buffer(),
+            HonkProofType::U256Values(proof, _) => proof.to_buffer(),
+        }
+    }
+    pub fn proof_and_public_inputs_from_buffer_field(
+        buf_proof: &[u8],
+        buf_public_inputs: &[u8],
+    ) -> eyre::Result<HonkProofType> {
+        let proof = HonkProof::<ark_bn254::Fr>::from_buffer(buf_proof)?;
+        let public_inputs = SerializeF::from_buffer(buf_public_inputs, false)?;
+        Ok(HonkProofType::FieldElements(proof, public_inputs))
+    }
+
+    pub fn proof_and_public_inputs_from_buffer_u256(
+        buf_proof: &[u8],
+        buf_public_inputs: &[u8],
+    ) -> eyre::Result<HonkProofType> {
+        let proof = HonkProof::<U256>::from_buffer(buf_proof)?;
+        let public_inputs = U256::from_buffer(buf_public_inputs);
+        Ok(HonkProofType::U256Values(proof, public_inputs))
+    }
+
+    pub fn proof_to_strings(&self) -> Vec<String> {
+        match self {
+            HonkProofType::FieldElements(proof, _) => proof
+                .proof
+                .iter()
+                .map(|el| {
+                    if el.is_zero() {
+                        "0".to_string()
+                    } else {
+                        el.to_string()
+                    }
+                })
+                .collect(),
+            HonkProofType::U256Values(proof, _) => proof
+                .proof
+                .iter()
+                .map(|el| {
+                    if el.0.is_zero() {
+                        "0".to_string()
+                    } else {
+                        el.0.to_string()
+                    }
+                })
+                .collect(),
+        }
+    }
+    pub fn public_inputs_to_strings(&self) -> Vec<String> {
+        match self {
+            HonkProofType::FieldElements(_, public_inputs) => public_inputs
+                .iter()
+                .map(|el| {
+                    if el.is_zero() {
+                        "0".to_string()
+                    } else {
+                        el.to_string()
+                    }
+                })
+                .collect(),
+            HonkProofType::U256Values(_, public_inputs) => public_inputs
+                .iter()
+                .map(|el| {
+                    if el.0.is_zero() {
+                        "0".to_string()
+                    } else {
+                        el.0.to_string()
+                    }
+                })
+                .collect(),
+        }
+    }
+    pub fn proof_and_public_inputs_from_string_field(
+        str_proof: Vec<String>,
+        str_public_inputs: Vec<String>,
+    ) -> eyre::Result<HonkProofType> {
+        let proof = HonkProof::<ark_bn254::Fr>::new(
+            str_proof
+                .into_iter()
+                .map(|s| s.parse::<ark_bn254::Fr>().unwrap())
+                .collect(),
+        );
+        let public_inputs = str_public_inputs
+            .into_iter()
+            .map(|s| s.parse::<ark_bn254::Fr>().unwrap())
+            .collect();
+        Ok(HonkProofType::FieldElements(proof, public_inputs))
+    }
+    pub fn proof_and_public_inputs_from_string_u256(
+        str_proof: Vec<String>,
+        str_public_inputs: Vec<String>,
+    ) -> eyre::Result<HonkProofType> {
+        let proof = HonkProof::<U256>::new(
+            str_proof
+                .into_iter()
+                .map(|s| U256(Uint::<256, 4>::from(s.parse::<u128>().unwrap())))
+                .collect(),
+        );
+        let public_inputs = str_public_inputs
+            .into_iter()
+            .map(|s| U256(Uint::<256, 4>::from(s.parse::<u128>().unwrap())))
+            .collect();
+        Ok(HonkProofType::U256Values(proof, public_inputs))
+    }
+}
+
+impl<F: Default + Clone> HonkProof<F> {
     pub fn new(proof: Vec<F>) -> Self {
         Self { proof }
     }
@@ -27,6 +150,22 @@ impl<F: PrimeField> HonkProof<F> {
         self.proof
     }
 
+    pub fn inner_as_ref(&self) -> &Vec<F> {
+        &self.proof
+    }
+
+    pub fn insert_public_inputs(self, public_inputs: Vec<F>) -> Self {
+        let mut proof = public_inputs;
+        proof.extend(self.proof);
+        Self::new(proof)
+    }
+    pub fn separate_proof_and_public_inputs(self, num_public_inputs: usize) -> (Self, Vec<F>) {
+        let (public_inputs, proof) = self.proof.split_at(num_public_inputs);
+        (Self::new(proof.to_vec()), public_inputs.to_vec())
+    }
+}
+
+impl<F: PrimeField> HonkProof<F> {
     pub fn to_buffer(&self) -> Vec<u8> {
         SerializeF::to_buffer(&self.proof, false)
     }
@@ -35,16 +174,26 @@ impl<F: PrimeField> HonkProof<F> {
         let res = SerializeF::from_buffer(buf, false)?;
         Ok(Self::new(res))
     }
+}
 
-    pub fn separate_proof_and_public_inputs(self, num_public_inputs: usize) -> (Self, Vec<F>) {
-        let (public_inputs, proof) = self.proof.split_at(num_public_inputs);
-        (Self::new(proof.to_vec()), public_inputs.to_vec())
+impl HonkProof<U256> {
+    pub fn to_buffer(&self) -> Vec<u8> {
+        self.proof
+            .iter()
+            .flat_map(|el| el.0.to_be_bytes::<32>().to_vec())
+            .collect::<Vec<u8>>()
     }
 
-    pub fn insert_public_inputs(self, public_inputs: Vec<F>) -> Self {
-        let mut proof = public_inputs;
-        proof.extend(self.proof.to_owned());
-        Self::new(proof)
+    pub fn from_buffer(buf: &[u8]) -> eyre::Result<Self> {
+        let res = buf
+            .chunks(32)
+            .map(|chunk| {
+                U256(Uint::<256, 4>::from_be_bytes::<32>(
+                    chunk.try_into().expect("Chunk should be 32 bytes"),
+                ))
+            })
+            .collect::<Vec<U256>>();
+        Ok(Self::new(res))
     }
 }
 
@@ -377,7 +526,7 @@ pub fn read_abi_bn254_fieldelement(
 fn witness_stack_from_reader(mut reader: impl io::Read) -> io::Result<WitnessStack<FieldElement>> {
     let mut witness_stack = Vec::new();
     reader.read_to_end(&mut witness_stack)?;
-    WitnessStack::try_from(witness_stack.as_slice())
+    WitnessStack::deserialize(witness_stack.as_slice())
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
 }
 
@@ -410,4 +559,55 @@ pub fn witness_from_reader(reader: impl io::Read) -> io::Result<Vec<ark_bn254::F
 
 pub fn program_artifact_from_reader(reader: impl io::Read) -> io::Result<ProgramArtifact> {
     Ok(serde_json::from_reader::<_, ProgramArtifact>(reader)?)
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
+#[repr(transparent)]
+pub struct U256(pub Uint<256, 4>);
+
+impl From<u32> for U256 {
+    fn from(v: u32) -> Self {
+        U256(Uint::<256, 4>::from(v))
+    }
+}
+impl From<u64> for U256 {
+    fn from(v: u64) -> Self {
+        U256(Uint::<256, 4>::from(v))
+    }
+}
+
+impl U256 {
+    pub fn convert_field_into<F: PrimeField>(element: &F) -> Self {
+        let bytes = element.into_bigint().to_bytes_be();
+        let mut padded_bytes = [0u8; 32];
+        let start = 32 - bytes.len();
+        padded_bytes[start..].copy_from_slice(&bytes);
+        U256(Uint::<256, 4>::from_be_bytes(padded_bytes))
+    }
+
+    pub fn slice(&self, start: u64, end: u64) -> Self {
+        let range = end - start;
+        let mask = if range == 256 {
+            Uint::<256, 4>::MAX
+        } else {
+            (Uint::<256, 4>::from(1u8) << range) - Uint::<256, 4>::from(1u8)
+        };
+        U256((self.0 >> start) & mask)
+    }
+
+    pub fn to_buffer(inp: &[Self]) -> Vec<u8> {
+        inp.iter()
+            .flat_map(|el| el.0.to_be_bytes::<32>().to_vec())
+            .collect::<Vec<u8>>()
+    }
+    pub fn from_buffer(buffer: &[u8]) -> Vec<Self> {
+        buffer
+            .chunks(32)
+            .map(|chunk| {
+                U256(Uint::<256, 4>::from_be_bytes::<32>(
+                    chunk.try_into().expect("Chunk should be 32 bytes"),
+                ))
+            })
+            .collect::<Vec<U256>>()
+    }
 }

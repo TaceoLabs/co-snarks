@@ -12,9 +12,9 @@ pub(crate) type ShiftedWitnessEntitiesBatch<T> = ShiftedWitnessEntities<Vec<T>>;
 use crate::{
     co_decider::{
         relations::{
-            Relation as _, auxiliary_relation::AuxiliaryRelation,
-            delta_range_constraint_relation::DeltaRangeConstraintRelation,
+            Relation as _, delta_range_constraint_relation::DeltaRangeConstraintRelation,
             elliptic_relation::EllipticRelation, logderiv_lookup_relation::LogDerivLookupRelation,
+            memory_relation::MemoryRelation, non_native_field_relation::NonNativeFieldRelation,
             permutation_relation::UltraPermutationRelation,
             poseidon2_external_relation::Poseidon2ExternalRelation,
             poseidon2_internal_relation::Poseidon2InternalRelation,
@@ -61,7 +61,8 @@ where
     pub(crate) ultra_perm: SumCheckDataForRelation<T, P>,
     pub(crate) delta_range: SumCheckDataForRelation<T, P>,
     pub(crate) elliptic: SumCheckDataForRelation<T, P>,
-    pub(crate) auxiliary: SumCheckDataForRelation<T, P>,
+    pub(crate) memory: SumCheckDataForRelation<T, P>,
+    pub(crate) nnf: SumCheckDataForRelation<T, P>,
     pub(crate) log_lookup: SumCheckDataForRelation<T, P>,
     pub(crate) poseidon_ext: SumCheckDataForRelation<T, P>,
     pub(crate) poseidon_int: SumCheckDataForRelation<T, P>,
@@ -93,7 +94,8 @@ where
             delta_range: SumCheckDataForRelation::new(),
             log_lookup: SumCheckDataForRelation::new(),
             elliptic: SumCheckDataForRelation::new(),
-            auxiliary: SumCheckDataForRelation::new(),
+            memory: SumCheckDataForRelation::new(),
+            nnf: SumCheckDataForRelation::new(),
             poseidon_ext: SumCheckDataForRelation::new(),
             poseidon_int: SumCheckDataForRelation::new(),
         }
@@ -118,7 +120,8 @@ where
         DeltaRangeConstraintRelation::add_edge(&entity, scaling_factor, &mut self.delta_range);
 
         EllipticRelation::add_edge(&entity, scaling_factor, &mut self.elliptic);
-        AuxiliaryRelation::add_edge(&entity, scaling_factor, &mut self.auxiliary);
+        MemoryRelation::add_edge(&entity, scaling_factor, &mut self.memory);
+        NonNativeFieldRelation::add_edge(&entity, scaling_factor, &mut self.nnf);
         LogDerivLookupRelation::add_edge(&entity, scaling_factor, &mut self.log_lookup);
 
         Poseidon2ExternalRelation::add_edge(&entity, scaling_factor, &mut self.poseidon_ext);
@@ -298,10 +301,16 @@ where
             .extend(entity.precomputed.q_arith().evaluations)
     }
 
-    pub fn add_q_aux(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+    pub fn add_q_memory(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
         self.precomputed
-            .q_aux_mut()
-            .extend(entity.precomputed.q_aux().evaluations)
+            .q_memory_mut()
+            .extend(entity.precomputed.q_memory().evaluations)
+    }
+
+    pub fn add_q_nnf(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {
+        self.precomputed
+            .q_nnf_mut()
+            .extend(entity.precomputed.q_nnf().evaluations)
     }
 
     pub fn add_q_delta_range(&mut self, entity: &AllEntities<Shared<T, P>, Public<P>>) {

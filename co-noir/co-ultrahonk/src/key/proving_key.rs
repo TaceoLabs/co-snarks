@@ -10,11 +10,11 @@ use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_builder::prelude::ActiveRegionData;
+use co_builder::prelude::GenericUltraCircuitBuilder;
 use co_builder::prelude::PrecomputedEntities;
 use co_builder::prelude::ProverWitnessEntities;
 use co_builder::prelude::ProvingKey as PlainProvingKey;
 use co_builder::prelude::VerifyingKey;
-use co_builder::prelude::{GenericUltraCircuitBuilder, PublicComponentKey};
 use co_noir_common::crs::ProverCrs;
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType};
@@ -53,7 +53,6 @@ pub struct ProvingKey<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub memory_records_shared: BTreeMap<u32, T::ArithmeticShare>,
     pub final_active_wire_idx: usize,
     pub active_region_data: ActiveRegionData,
-    pub pairing_inputs_public_input_key: PublicComponentKey,
     pub phantom: PhantomData<T>,
 }
 
@@ -97,7 +96,6 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> ProvingKey<T, C> {
             dyadic_circuit_size,
             circuit.public_inputs.len(),
             final_active_wire_idx,
-            circuit.pairing_inputs_public_input_key,
         );
         // Construct and add to proving key the wire, selector and copy constraint polynomials
         proving_key.populate_trace(id, &mut circuit, driver, false);
@@ -129,7 +127,6 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> ProvingKey<T, C> {
 
         // Construct the public inputs array
         let block = circuit.blocks.get_pub_inputs();
-        assert!(block.is_pub_inputs);
         for var_idx in block.wires[Self::PUBLIC_INPUT_WIRE_INDEX]
             .iter()
             .take(proving_key.num_public_inputs as usize)
@@ -139,8 +136,6 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> ProvingKey<T, C> {
                 .ok_or(HonkProofError::ExpectedPublicWitness)?;
             proving_key.public_inputs.push(var);
         }
-        // Set the pairing point accumulator indices
-        proving_key.pairing_inputs_public_input_key = circuit.pairing_inputs_public_input_key;
 
         Ok(proving_key)
     }
@@ -170,11 +165,12 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> ProvingKey<T, C> {
         // Create and return the VerifyingKey instance
         let vk = VerifyingKey {
             crs: verifier_crs,
-            circuit_size,
-            num_public_inputs: pk.num_public_inputs,
-            pub_inputs_offset: pk.pub_inputs_offset,
-            commitments,
-            pairing_inputs_public_input_key: pk.pairing_inputs_public_input_key,
+            inner_vk: VerifyingKeyBarretenberg {
+                log_circuit_size: Utils::get_msb64(circuit_size as u64) as u64,
+                num_public_inputs: pk.num_public_inputs as u64,
+                pub_inputs_offset: pk.pub_inputs_offset as u64,
+                commitments,
+            },
         };
 
         Ok((pk, vk))
@@ -202,12 +198,10 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> ProvingKey<T, C> {
 
         // Create and return the VerifyingKey instance
         let vk = VerifyingKeyBarretenberg {
-            circuit_size: circuit_size as u64,
             log_circuit_size: Utils::get_msb64(circuit_size as u64) as u64,
             num_public_inputs: pk.num_public_inputs as u64,
             pub_inputs_offset: pk.pub_inputs_offset as u64,
             commitments,
-            pairing_inputs_public_input_key: pk.pairing_inputs_public_input_key,
         };
         Ok((pk, vk))
     }
@@ -216,12 +210,7 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> ProvingKey<T, C> {
         self.public_inputs.clone()
     }
 
-    fn new(
-        circuit_size: usize,
-        num_public_inputs: usize,
-        final_active_wire_idx: usize,
-        pairing_inputs_public_input_key: PublicComponentKey,
-    ) -> Self {
+    fn new(circuit_size: usize, num_public_inputs: usize, final_active_wire_idx: usize) -> Self {
         tracing::trace!("ProvingKey new");
         let polynomials = Polynomials::new(circuit_size);
 
@@ -237,7 +226,6 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> ProvingKey<T, C> {
             phantom: PhantomData,
             memory_records_shared: BTreeMap::new(),
             active_region_data: ActiveRegionData::new(),
-            pairing_inputs_public_input_key,
         }
     }
 
@@ -303,7 +291,6 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> ProvingKey<T, C> {
         let memory_write_records = plain_key.memory_write_records.to_owned();
         let final_active_wire_idx = plain_key.final_active_wire_idx;
         let active_region_data = plain_key.active_region_data.to_owned();
-        let pairing_inputs_public_input_key = plain_key.pairing_inputs_public_input_key.to_owned();
 
         if shares.len() != circuit_size as usize * 6 {
             eyre::bail!("Share length is not 6 times circuit size");
@@ -337,7 +324,6 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> ProvingKey<T, C> {
             phantom: PhantomData,
             memory_records_shared: BTreeMap::new(),
             active_region_data,
-            pairing_inputs_public_input_key,
         })
     }
 
@@ -396,11 +382,12 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> ProvingKey<T, C> {
         }
         Ok(VerifyingKey {
             crs: verifier_crs,
-            circuit_size: self.circuit_size,
-            num_public_inputs: self.num_public_inputs,
-            pub_inputs_offset: self.pub_inputs_offset,
-            commitments,
-            pairing_inputs_public_input_key: self.pairing_inputs_public_input_key,
+            inner_vk: VerifyingKeyBarretenberg {
+                log_circuit_size: Utils::get_msb64(self.circuit_size as u64) as u64,
+                num_public_inputs: self.num_public_inputs as u64,
+                pub_inputs_offset: self.pub_inputs_offset as u64,
+                commitments,
+            },
         })
     }
 }

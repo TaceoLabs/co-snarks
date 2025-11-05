@@ -1,6 +1,6 @@
 use std::{fs::File, path::PathBuf, thread};
 
-use acir::{native_types::WitnessStack, FieldElement};
+use acir::native_types::WitnessStack;
 
 use co_acvm::solver::{PlainCoSolver, Rep3CoSolver};
 use mpc_net::local::LocalNetwork;
@@ -43,7 +43,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     ))
     .unwrap();
 
-    let should_witness = WitnessStack::<FieldElement>::try_from(should_witness.as_slice()).unwrap();
+    let should_witness = WitnessStack::deserialize(should_witness.as_slice()).unwrap();
     let input = PathBuf::from(format!(
         "{root}/../test_vectors/noir/{test_case}/Prover.toml",
     ));

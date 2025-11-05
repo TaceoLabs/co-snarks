@@ -736,11 +736,11 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     fn blake2s_hash(
         &mut self,
         message_input: Vec<Self::AcvmType>,
-        num_bits: &[usize],
+        num_bits: usize,
     ) -> eyre::Result<Vec<Self::AcvmType>> {
         let mut real_input = Vec::new();
-        for (inp, num_bits) in message_input.iter().zip(num_bits.iter()) {
-            let num_elements = num_bits.div_ceil(8); // We need to round to the next byte
+        let num_elements = num_bits.div_ceil(8); // We need to round to the next byte
+        for inp in message_input.iter() {
             let bytes = inp.into_bigint().to_bytes_le();
             real_input.extend_from_slice(&bytes[..num_elements])
         }
@@ -752,11 +752,11 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     fn blake3_hash(
         &mut self,
         message_input: Vec<Self::AcvmType>,
-        num_bits: &[usize],
+        num_bits: usize,
     ) -> eyre::Result<Vec<Self::AcvmType>> {
         let mut real_input = Vec::new();
-        for (inp, num_bits) in message_input.iter().zip(num_bits.iter()) {
-            let num_elements = num_bits.div_ceil(8); // We need to round to the next byte
+        let num_elements = num_bits.div_ceil(8); // We need to round to the next byte
+        for inp in message_input.iter() {
             let bytes = inp.into_bigint().to_bytes_le();
             real_input.extend_from_slice(&bytes[..num_elements])
         }

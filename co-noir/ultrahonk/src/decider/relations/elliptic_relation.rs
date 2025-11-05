@@ -143,7 +143,7 @@ impl EllipticRelation {
 
         ///////////////////////////////////////////////////////////////////////
         // Contribution (4) point doubling, y-coordinate check
-        // (y1 + y1) (2y1) - (3 * x1 * x1)(x1 - x3) = 0
+        // (y1 + y3) (2y1) - (3 * x1 * x1)(x1 - x3) = 0
         let x1_sqr_mul_3 = x1_mul_3 * x_1;
         let y_double_identity =
             x1_sqr_mul_3 * (x_1.to_owned() - x_3) - (y_1.to_owned() + y_1) * y1_plus_y3;
@@ -227,7 +227,7 @@ impl EllipticRelation {
 
         ///////////////////////////////////////////////////////////////////////
         // Contribution (4) point doubling, y-coordinate check
-        // (y1 + y1) (2y1) - (3 * x1 * x1)(x1 - x3) = 0
+        // (y1 + y3) (2y1) - (3 * x1 * x1)(x1 - x3) = 0
         let x1_sqr_mul_3 = x1_mul_3 * x_1;
         let y_double_identity =
             x1_sqr_mul_3 * (x_1.to_owned() - x_3) - (y_1.to_owned() + y_1) * y1_plus_y3;

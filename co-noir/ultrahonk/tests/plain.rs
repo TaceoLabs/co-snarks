@@ -51,13 +51,14 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(
         .create_keys::<Bn254>(prover_crs.into(), verifier_crs, &mut driver)
         .unwrap();
 
-    let (proof, public_inputs) = UltraHonk::<_, H>::prove(proving_key, has_zk).unwrap();
+    let (proof, public_inputs) =
+        UltraHonk::<_, H>::prove(proving_key, has_zk, &verifying_key.inner_vk).unwrap();
     if has_zk == ZeroKnowledge::No {
-        let proof_u8 = proof.to_buffer();
+        let proof_u8 = H::to_buffer(proof.inner_as_ref());
         let read_proof_u8 = std::fs::read(proof_file).unwrap();
         assert_eq!(proof_u8, read_proof_u8);
 
-        let read_proof = HonkProof::from_buffer(&read_proof_u8).unwrap();
+        let read_proof = HonkProof::new(H::from_buffer(&read_proof_u8));
         assert_eq!(proof, read_proof);
     }
 

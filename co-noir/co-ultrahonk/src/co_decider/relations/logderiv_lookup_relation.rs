@@ -18,6 +18,7 @@ use ultrahonk::prelude::Univariate;
 pub(crate) struct LogDerivLookupRelationAcc<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) r0: SharedUnivariate<T, P, 5>,
     pub(crate) r1: SharedUnivariate<T, P, 5>,
+    pub(crate) r2: SharedUnivariate<T, P, 3>,
 }
 
 impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for LogDerivLookupRelationAcc<T, P> {
@@ -25,6 +26,7 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for LogDerivLookupRelatio
         Self {
             r0: Default::default(),
             r1: Default::default(),
+            r2: Default::default(),
         }
     }
 }
@@ -34,6 +36,7 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup> LogDerivLookupRelationAcc<T, P> {
         assert!(elements.len() == LogDerivLookupRelation::NUM_RELATIONS);
         self.r0.scale_inplace(elements[0]);
         self.r1.scale_inplace(elements[1]);
+        self.r2.scale_inplace(elements[2]);
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(
@@ -55,13 +58,20 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup> LogDerivLookupRelationAcc<T, P> {
             partial_evaluation_result,
             false,
         );
+
+        self.r2.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            true,
+        );
     }
 }
 
 pub(crate) struct LogDerivLookupRelation {}
 
 impl LogDerivLookupRelation {
-    pub(crate) const NUM_RELATIONS: usize = 2;
+    pub(crate) const NUM_RELATIONS: usize = 3;
     pub(crate) const CRAND_PAIRS_FACTOR: usize = 2;
 }
 
@@ -230,6 +240,17 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
      *
      * and read_tags is a polynomial taking boolean values indicating whether the table entry at the corresponding row
      * has been read or not.
+     * the last (third) subrelation consists of checking that the read_tag is a boolean value
+     * we argue that this is enough for the soundness of the relation.
+     * note that read_tags is not constrained to be related to the readcounts values.
+     * however, if the read_tags are assured to be 0 or 1, the only thing a cheating prover could do is to skip over
+     * an inversion when are not supposed to skip over it.
+     * we argue that this does not give the prover any advantage, as it would only mean an element from the lookup table
+     * is removed. this means that if a proof verifies, we still have that the provers set is a subset of the lookup
+     * table, as the only freedome the prover has is to make the lookup table smaller.
+     * the boolean check is still necessary, as otherwise has_inverse, is a leanier function of read_tags, and the
+     * the prover can set it to zero (by picking a non-binary value for read_tags) even when we have a read gate in the
+     * row.
      * @note This relation utilizes functionality in the log-derivative library to compute the polynomial of inverses
      *
      */
@@ -244,6 +265,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let inverses = input.witness.lookup_inverses(); // Degree 1
         let read_counts = input.witness.lookup_read_counts(); // Degree 1
         let read_selector = input.precomputed.q_lookup(); // Degree 1
+        let read_tag = input.witness.lookup_read_tags();
 
         let inverse_exists = Self::compute_inverse_exists(state.id(), input); // Degree 2
         let read_term = Self::compute_read_term(state.id(), input, relation_parameters); // Degree 2 (3)
@@ -266,11 +288,27 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         // i.e. enforced across the entire trace, not on a per-row basis.
         // Degrees:                       1            2 (3)            1            3 (4)
         //
-        let mul = T::mul_many(&write_inverse, read_counts, net, state)?;
+        let capacity = write_inverse.len() + read_tag.len();
+        let mut lhs = Vec::with_capacity(capacity);
+        let mut rhs = Vec::with_capacity(capacity);
+        lhs.extend_from_slice(&write_inverse);
+        lhs.extend_from_slice(read_tag);
+        rhs.extend_from_slice(read_counts);
+        rhs.extend_from_slice(read_tag);
+        let mul = T::mul_many(&lhs, &rhs, net, state)?;
+        let mul = mul.chunks_exact(mul.len() / 2).collect_vec();
+        debug_assert_eq!(mul.len(), 2);
         let mut tmp = T::mul_with_public_many(read_selector, &read_inverse);
-        T::sub_assign_many(&mut tmp, &mul);
+        T::sub_assign_many(&mut tmp, mul[0]);
 
         fold_accumulator!(univariate_accumulator.r1, tmp);
+
+        // we should make sure that the read_tag is a boolean value
+        // degree                          1         1                       0(1) =  2(3)
+        let mut tmp = mul[1].to_owned(); //(read_tag.to_owned() * read_tag - read_tag) * scaling_factor;
+        T::sub_assign_many(&mut tmp, read_tag);
+        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
+        fold_accumulator!(univariate_accumulator.r2, tmp);
 
         Ok(())
     }

@@ -246,7 +246,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
 
         ///////////////////////////////////////////////////////////////////////
         // Contribution (4) point doubling, y-coordinate check
-        // (y1 + y1) (2y1) - (3 * x1 * x1)(x1 - x3) = 0
+        // (y1 + y3) (2y1) - (3 * x1 * x1)(x1 - x3) = 0
         let y_double_identity = T::sub_many(chunks2[3], chunks2[4]);
         let tmp = T::mul_with_public_many(&q_elliptic_q_double_scaling, &y_double_identity);
         T::add_assign_many(&mut tmp_2, &tmp);

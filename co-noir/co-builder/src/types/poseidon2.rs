@@ -1,15 +1,12 @@
-use crate::types::field_ct::WitnessCT;
 use crate::{
     types::{
         field_ct::FieldCT,
-        types::{AddQuad, Poseidon2ExternalGate, Poseidon2InternalGate},
+        types::{Poseidon2ExternalGate, Poseidon2InternalGate},
     },
     ultra_builder::GenericUltraCircuitBuilder,
 };
 use ark_ec::CurveGroup;
-use ark_ff::One;
 use ark_ff::PrimeField;
-use ark_ff::Zero;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use mpc_core::gadgets::poseidon2::{Poseidon2, Poseidon2Params};
 use num_bigint::BigUint;
@@ -45,141 +42,43 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
         state: &mut [FieldCT<F>; T],
         builder: &mut GenericUltraCircuitBuilder<P, WT>,
         driver: &mut WT,
-    ) {
-        let s0 = state[0].get_value(builder, driver);
-        let s1 = state[1].get_value(builder, driver);
-        let s2 = state[2].get_value(builder, driver);
-        let s3 = state[3].get_value(builder, driver);
+    ) -> eyre::Result<()> {
+        let two = FieldCT::from(F::from(2u64));
+        let four = FieldCT::from(F::from(4u64));
 
         // create the 6 gates for the initial matrix multiplication
         // gate 1: Compute tmp1 = state[0] + state[1] + 2 * state[3]
-        let mut tmp1 = driver.mul_with_public(F::from(2u64), s3.to_owned());
-        driver.add_assign(&mut tmp1, s0.to_owned());
-        driver.add_assign(&mut tmp1, s1.to_owned());
-        let tmp1 = FieldCT::from_witness(tmp1, builder);
-
-        builder.create_big_add_gate(
-            &AddQuad {
-                a: state[0].witness_index,
-                b: state[1].witness_index,
-                c: state[3].witness_index,
-                d: tmp1.witness_index,
-                a_scaling: F::one(),
-                b_scaling: F::one(),
-                c_scaling: F::from(2u64),
-                d_scaling: -F::one(),
-                const_scaling: F::zero(),
-            },
-            false,
-        );
-        let tmp1_val = tmp1.get_value(builder, driver);
+        let tmp = state[3].multiply(&two, builder, driver)?;
+        let tmp1 = state[0].add_two(&state[1], &tmp, builder, driver);
 
         // gate 2: Compute tmp2 = 2 * state[1] + state[2] + state[3]
-        let mut tmp2 = driver.mul_with_public(F::from(2u64), s1.to_owned());
-        driver.add_assign(&mut tmp2, s2.to_owned());
-        driver.add_assign(&mut tmp2, s3.to_owned());
-        let tmp2 = FieldCT::from_witness(tmp2, builder);
-
-        builder.create_big_add_gate(
-            &AddQuad {
-                a: state[1].witness_index,
-                b: state[2].witness_index,
-                c: state[3].witness_index,
-                d: tmp2.witness_index,
-                a_scaling: F::from(2u64),
-                b_scaling: F::one(),
-                c_scaling: F::one(),
-                d_scaling: -F::one(),
-                const_scaling: F::zero(),
-            },
-            false,
-        );
-        let tmp2_val = tmp2.get_value(builder, driver);
+        let tmp = state[1].multiply(&two, builder, driver)?;
+        let tmp2 = state[2].add_two(&tmp, &state[3], builder, driver);
 
         // gate 3: Compute v2 = 4 * state[0] + 4 * state[1] + tmp2
-        let mut v2 = driver.mul_with_public(F::from(4u64), s0);
-        let tmp = driver.mul_with_public(F::from(4u64), s1);
-        driver.add_assign(&mut v2, tmp);
-        driver.add_assign(&mut v2, tmp2_val.to_owned());
-        let v2 = FieldCT::from_witness(v2, builder);
-        builder.create_big_add_gate(
-            &AddQuad {
-                a: state[0].witness_index,
-                b: state[1].witness_index,
-                c: tmp2.witness_index,
-                d: v2.witness_index,
-                a_scaling: F::from(4u64),
-                b_scaling: F::from(4u64),
-                c_scaling: F::one(),
-                d_scaling: -F::one(),
-                const_scaling: F::zero(),
-            },
-            false,
-        );
-        let v2_val = v2.get_value(builder, driver);
+        let tmp = state[0].multiply(&four, builder, driver)?;
+        let tmp_ = state[1].multiply(&four, builder, driver)?;
+        state[1] = tmp2.add_two(&tmp, &tmp_, builder, driver);
 
         // gate 4: Compute v1 = v2 + tmp1
-        let v1 = driver.add(v2_val, tmp1_val.to_owned());
-        let v1 = FieldCT::from_witness(v1, builder);
-        builder.create_big_add_gate(
-            &AddQuad {
-                a: v2.witness_index,
-                b: tmp1.witness_index,
-                c: v1.witness_index,
-                d: builder.zero_idx,
-                a_scaling: F::one(),
-                b_scaling: F::one(),
-                c_scaling: -F::one(),
-                d_scaling: F::zero(),
-                const_scaling: F::zero(),
-            },
-            false,
-        );
+        state[0] = state[1].add(&tmp1, builder, driver);
 
         // gate 5: Compute v4 = tmp1 + 4 * state[2] + 4 * state[3]
-        let mut v4 = driver.mul_with_public(F::from(4u64), s2);
-        let tmp = driver.mul_with_public(F::from(4u64), s3);
-        driver.add_assign(&mut v4, tmp);
-        driver.add_assign(&mut v4, tmp1_val);
-        let v4 = FieldCT::from_witness(v4, builder);
-        builder.create_big_add_gate(
-            &AddQuad {
-                a: tmp1.witness_index,
-                b: state[2].witness_index,
-                c: state[3].witness_index,
-                d: v4.witness_index,
-                a_scaling: F::one(),
-                b_scaling: F::from(4u64),
-                c_scaling: F::from(4u64),
-                d_scaling: -F::one(),
-                const_scaling: F::zero(),
-            },
-            false,
-        );
-        let v4_val = v4.get_value(builder, driver);
+        let tmp = state[2].multiply(&four, builder, driver)?;
+        let tmp_ = state[3].multiply(&four, builder, driver)?;
+        state[3] = tmp1.add_two(&tmp, &tmp_, builder, driver);
 
         // gate 6: Compute v3 = v4 + tmp2
-        let v3 = driver.add(v4_val, tmp2_val);
-        let v3 = FieldCT::from_witness(v3, builder);
-        builder.create_big_add_gate(
-            &AddQuad {
-                a: v4.witness_index,
-                b: tmp2.witness_index,
-                c: v3.witness_index,
-                d: builder.zero_idx,
-                a_scaling: F::one(),
-                b_scaling: F::one(),
-                c_scaling: -F::one(),
-                d_scaling: F::zero(),
-                const_scaling: F::zero(),
-            },
-            false,
-        );
+        state[2] = state[3].add(&tmp2, builder, driver);
 
-        state[0] = v1;
-        state[1] = v2;
-        state[2] = v3;
-        state[3] = v4;
+        // This can only happen if the input contained constant `field_t` elements.
+        assert!(
+            state[0].is_normalized()
+                && state[1].is_normalized()
+                && state[2].is_normalized()
+                && state[3].is_normalized(),
+        );
+        Ok(())
     }
 
     fn create_external_gate<
@@ -227,10 +126,10 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
         native_state: &mut [F; T],
         builder: &mut GenericUltraCircuitBuilder<P, WT>,
         driver: &mut WT,
-    ) {
+    ) -> eyre::Result<()> {
         // Linear layer at beginning
         Poseidon2::<F, T, D>::matmul_external(native_state);
-        Self::matrix_multiplication_external(state, builder, driver);
+        Self::matrix_multiplication_external(state, builder, driver)?;
 
         // First set of external rounds
         for r in 0..self.poseidon2.params.rounds_f_beginning {
@@ -277,6 +176,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
         // compare with the result from the 64th round of Poseidon2. Note that it does not activate any selectors since it
         // only serves as a comparison through the shifted wires.
         create_dummy_gate!(builder, &mut builder.blocks.poseidon2_external, state);
+        Ok(())
     }
 
     fn permutation_in_place_shared<
@@ -293,7 +193,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
 
         // Linear layer at beginning
         driver.poseidon2_matmul_external_inplace::<T, D>(native_state);
-        Self::matrix_multiplication_external(state, builder, driver);
+        Self::matrix_multiplication_external(state, builder, driver)?;
 
         // First set of external rounds
         for r in 0..self.poseidon2.params.rounds_f_beginning {
@@ -377,7 +277,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2CT<F, T, D> {
             let mut plain_state = array::from_fn(|i| {
                 WT::get_public(&native_state[i]).expect("All values are public")
             });
-            self.permutation_in_place_plain(state, &mut plain_state, builder, driver);
+            self.permutation_in_place_plain(state, &mut plain_state, builder, driver)?;
         }
 
         Ok(())
@@ -449,17 +349,10 @@ impl<P: CurveGroup, const T: usize> FieldHashCT<P, T> for Poseidon2CT<P::ScalarF
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-enum SpongeMode {
-    Absorb,
-    Squeeze,
-}
-
 pub struct FieldSpongeCT<P: CurveGroup, const T: usize, const R: usize, H: FieldHashCT<P, T>> {
     state: [FieldCT<P::ScalarField>; T],
     cache: [FieldCT<P::ScalarField>; R],
     cache_size: usize,
-    mode: SpongeMode,
     hasher: H,
 }
 
@@ -468,32 +361,22 @@ where
     H: Default,
 {
     pub(crate) fn new<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
-        iv: FieldCT<P::ScalarField>,
         builder: &mut GenericUltraCircuitBuilder<P, WT>,
         driver: &mut WT,
+        in_len: usize,
     ) -> Self {
-        let mut state: [FieldCT<P::ScalarField>; T] =
-            array::from_fn(|_| FieldCT::<P::ScalarField>::default());
-
-        for state in state.iter_mut().take(R) {
-            *state = FieldCT::from(WitnessCT::create_constant_witness(
-                P::ScalarField::zero(),
-                builder,
-            ));
-        }
-        state[R] = FieldCT::from(WitnessCT::create_constant_witness(
-            WT::get_public(&iv.get_value(builder, driver)).expect("IV should be public"),
-            builder,
-        ));
-
-        let cache: [FieldCT<P::ScalarField>; R] =
-            array::from_fn(|_| FieldCT::<P::ScalarField>::default());
+        // Add the domain separation to the initial state.
+        let iv = BigUint::from(in_len) << 64;
+        let mut iv = FieldCT::from(P::ScalarField::from(iv));
+        iv.convert_constant_to_fixed_witness(builder, driver);
+        let mut state: [FieldCT<P::ScalarField>; T] = array::from_fn(|_| FieldCT::default());
+        let cache: [FieldCT<P::ScalarField>; R] = array::from_fn(|_| FieldCT::default());
+        state[R] = iv;
 
         Self {
             state,
             cache,
             cache_size: 0,
-            mode: SpongeMode::Absorb,
             hasher: H::default(),
         }
     }
@@ -502,14 +385,7 @@ where
         &mut self,
         builder: &mut GenericUltraCircuitBuilder<P, WT>,
         driver: &mut WT,
-    ) -> eyre::Result<[FieldCT<P::ScalarField>; R]> {
-        // zero-pad the cache
-        for i in self.cache_size..R {
-            self.cache[i] = FieldCT::from(WitnessCT::create_constant_witness(
-                P::ScalarField::zero(),
-                builder,
-            ));
-        }
+    ) -> eyre::Result<()> {
         // add the cache into sponge state
         for i in 0..R {
             self.state[i].add_assign(&self.cache[i], builder, driver);
@@ -517,20 +393,11 @@ where
         self.hasher
             .permutation_in_place(&mut self.state, builder, driver)?;
 
-        // TACEO TODO: I don't think we actually need this for Ultra (for now?)
-        // // variables with indices from rate to size of state - 1 won't be used anymore
-        // // after permutation. But they aren't dangerous and needed to put in used witnesses
-        // if constexpr (IsUltraBuilder<Builder>) {
-        //     for (size_t i = rate; i < t; i++) {
-        //         builder->update_used_witnesses(state[i].witness_index);
-        //     }
-        // }
+        // Reset the cache
+        self.cache = array::from_fn(|_| FieldCT::default());
 
         // return `rate` number of field elements from the sponge state.
-        Ok(self.state[..R]
-            .to_owned()
-            .try_into()
-            .expect("State slice should be of length R"))
+        Ok(())
     }
 
     fn absorb<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
@@ -539,21 +406,15 @@ where
         builder: &mut GenericUltraCircuitBuilder<P, WT>,
         driver: &mut WT,
     ) -> eyre::Result<()> {
-        if self.mode == SpongeMode::Absorb && self.cache_size == R {
+        if self.cache_size == R {
             // If we're absorbing, and the cache is full, apply the sponge permutation to compress the cache
             self.perform_duplex(builder, driver)?;
             self.cache[0] = input;
             self.cache_size = 1;
-        } else if self.mode == SpongeMode::Absorb && self.cache_size < R {
+        } else {
             // If we're absorbing, and the cache is not full, add the input into the cache
             self.cache[self.cache_size] = input;
             self.cache_size += 1;
-        } else if self.mode == SpongeMode::Squeeze {
-            // If we're in squeeze mode, switch to absorb mode and add the input into the cache.
-            // N.B. I don't think this code path can be reached?!
-            self.cache[0] = input;
-            self.cache_size = 1;
-            self.mode = SpongeMode::Absorb;
         }
         Ok(())
     }
@@ -563,41 +424,19 @@ where
         builder: &mut GenericUltraCircuitBuilder<P, WT>,
         driver: &mut WT,
     ) -> eyre::Result<FieldCT<P::ScalarField>> {
-        if self.mode == SpongeMode::Squeeze && self.cache_size == 0 {
-            // If we're in squeze mode and the cache is empty, there is nothing left to squeeze out of the sponge!
-            // Switch to absorb mode.
-            self.mode = SpongeMode::Absorb;
-            self.cache_size = 0;
-        }
-        if self.mode == SpongeMode::Absorb {
-            // If we're in absorb mode, apply sponge permutation to compress the cache, populate cache with compressed
-            // state and switch to squeeze mode. Note: this code block will execute if the previous `if` condition was
-            // matched
-            self.cache = self.perform_duplex(builder, driver)?;
-            self.cache_size = R;
-        }
-        // By this point, we should have a non-empty cache. Pop one item off the top of the cache and return it.
-        let result = self.cache[0].clone();
-        for i in 1..self.cache_size {
-            self.cache[i - 1] = self.cache[i].clone();
-        }
-        self.cache_size -= 1;
-        self.cache[self.cache_size] = FieldCT::from(WitnessCT::create_constant_witness(
-            P::ScalarField::zero(),
-            builder,
-        ));
-        Ok(result)
+        self.perform_duplex(builder, driver)?;
+
+        Ok(self.state[0].clone())
     }
 
     /**
-     * @brief Use the sponge to hash an input string
+     * @brief Use the sponge to hash an input vector.
      *
-     * @tparam out_len
-     * @tparam is_variable_length. Distinguishes between hashes where the preimage length is constant/not constant
-     * @param input
-     * @return std::array<FF, out_len>
+     * @param input Circuit witnesses (a_0, ..., a_{N-1})
+     * @return Hash of the input, a single witness field element.
      */
     // This will be used in the fieldct transcript
+    #[expect(unused)]
     pub(crate) fn hash_internal<
         const OUT_LEN: usize,
         WT: NoirWitnessExtensionProtocol<P::ScalarField>,
@@ -605,47 +444,19 @@ where
         input: &[FieldCT<P::ScalarField>],
         builder: &mut GenericUltraCircuitBuilder<P, WT>,
         driver: &mut WT,
-    ) -> eyre::Result<[FieldCT<P::ScalarField>; OUT_LEN]> {
+    ) -> eyre::Result<FieldCT<P::ScalarField>> {
         let in_len = input.len();
-        let iv: BigUint = (BigUint::from(in_len) << 64) + OUT_LEN - BigUint::one();
 
-        let mut sponge = Self::new(
-            FieldCT::<P::ScalarField>::from(P::ScalarField::from(iv)),
-            builder,
-            driver,
-        );
+        let mut sponge = Self::new(builder, driver, in_len);
+        // Absorb inputs in blocks of size r = 3. Make sure that all inputs are witneesses.
         for input in input.iter() {
+            assert!(
+                !input.is_constant(),
+                "Sponge inputs should not be stdlib constants."
+            );
             sponge.absorb(input.clone(), builder, driver)?;
         }
 
-        let mut output: [FieldCT<P::ScalarField>; OUT_LEN] =
-            array::from_fn(|_| FieldCT::<P::ScalarField>::default());
-        for r in output.iter_mut() {
-            *r = sponge.squeeze(builder, driver)?;
-        }
-
-        // TACEO TODO: I don't think we actually need this for Ultra (for now?)
-        // // variables with indices won't be used in the circuit.
-        // // but they aren't dangerous and needed to put in used witnesses
-        // if constexpr (IsUltraBuilder<Builder>) {
-        //     for (const auto& elem : sponge.cache) {
-        //         if (elem.witness_index != IS_CONSTANT) {
-        //             builder.update_used_witnesses(elem.witness_index);
-        //         }
-        //     }
-        // }
-        Ok(output)
-    }
-
-    #[expect(unused)] // This will be used in the fieldct transcript
-    pub(crate) fn hash_fixed_length<
-        const OUT_LEN: usize,
-        WT: NoirWitnessExtensionProtocol<P::ScalarField>,
-    >(
-        input: &[FieldCT<P::ScalarField>],
-        builder: &mut GenericUltraCircuitBuilder<P, WT>,
-        driver: &mut WT,
-    ) -> eyre::Result<[FieldCT<P::ScalarField>; OUT_LEN]> {
-        Self::hash_internal::<OUT_LEN, WT>(input, builder, driver)
+        sponge.squeeze(builder, driver)
     }
 }

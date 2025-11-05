@@ -66,6 +66,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         transcript: &mut Transcript<TranscriptFieldType, H>,
         crs: &ProverCrs<P>,
         circuit_size: u32,
+        virtual_log_n: usize,
     ) -> HonkProofResult<(SumcheckOutput<P::ScalarField>, Option<ZKSumcheckData<P>>)> {
         if self.has_zk == ZeroKnowledge::Yes {
             let log_subgroup_size = Utils::get_msb64(P::SUBGROUP_SIZE as u64);
@@ -77,12 +78,20 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
                 &mut self.rng,
             )?;
             Ok((
-                self.sumcheck_prove_zk(transcript, circuit_size, &mut zk_sumcheck_data),
+                self.sumcheck_prove_zk(
+                    transcript,
+                    circuit_size,
+                    &mut zk_sumcheck_data,
+                    virtual_log_n,
+                ),
                 Some(zk_sumcheck_data),
             ))
         } else {
             // This is just Sumcheck.prove without ZK
-            Ok((self.sumcheck_prove(transcript, circuit_size), None))
+            Ok((
+                self.sumcheck_prove(transcript, circuit_size, virtual_log_n),
+                None,
+            ))
         }
     }
 
@@ -132,12 +141,13 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         circuit_size: u32,
         crs: &ProverCrs<P>,
         mut transcript: Transcript<TranscriptFieldType, H>,
-    ) -> HonkProofResult<HonkProof<TranscriptFieldType>> {
+        virtual_log_n: usize,
+    ) -> HonkProofResult<HonkProof<H::DataType>> {
         tracing::trace!("Decider prove");
 
         // Run sumcheck subprotocol.
         let (sumcheck_output, zk_sumcheck_data) =
-            self.execute_relation_check_rounds(&mut transcript, crs, circuit_size)?;
+            self.execute_relation_check_rounds(&mut transcript, crs, circuit_size, virtual_log_n)?;
 
         // Fiat-Shamir: rho, y, x, z
         // Execute Zeromorph multilinear PCS

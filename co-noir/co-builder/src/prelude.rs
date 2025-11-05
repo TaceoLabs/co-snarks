@@ -1,10 +1,9 @@
+pub use crate::PERMUTATION_ARGUMENT_VALUE_SEPARATOR;
 pub use crate::acir_format::{AcirFormat, HonkRecursion};
 pub use crate::constraint_system_from_reader;
 pub use crate::get_constraint_system_from_artifact;
 pub use crate::keys::proving_key::ProvingKey;
-pub use crate::keys::verification_key::{
-    PublicComponentKey, VerifyingKey, VerifyingKeyBarretenberg,
-};
+pub use crate::keys::verification_key::{VerifyingKey, VerifyingKeyBarretenberg};
 pub use crate::polynomials::polynomial_types::{
     PRECOMPUTED_ENTITIES_SIZE, PROVER_WITNESS_ENTITIES_SIZE, Polynomials, PrecomputedEntities,
     ProverWitnessEntities,

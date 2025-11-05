@@ -20,7 +20,7 @@
 use super::types::ProverMemory;
 use crate::key::proving_key::ProvingKey;
 use ark_ff::{One, Zero};
-use co_builder::prelude::ActiveRegionData;
+use co_builder::{PERMUTATION_ARGUMENT_VALUE_SEPARATOR, prelude::ActiveRegionData};
 use co_noir_common::{
     CoUtils,
     crs::ProverCrs,
@@ -35,30 +35,30 @@ use itertools::izip;
 use mpc_core::MpcState as _;
 use mpc_net::Network;
 use std::{array, marker::PhantomData};
-use ultrahonk::NUM_ALPHAS;
+use ultrahonk::{NUM_ALPHAS, prelude::VerifyingKeyBarretenberg};
 
 pub(crate) struct CoOink<
     'a,
-    T: NoirUltraHonkProver<P>,
-    P: HonkCurve<TranscriptFieldType>,
+    T: NoirUltraHonkProver<C>,
+    C: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
     N: Network,
 > {
     net: &'a N,
     state: &'a mut T::State,
-    memory: ProverMemory<T, P>,
-    phantom_data: PhantomData<P>,
+    memory: ProverMemory<T, C>,
+    phantom_data: PhantomData<C>,
     phantom_hasher: PhantomData<H>,
     has_zk: ZeroKnowledge,
 }
 
 impl<
     'a,
-    T: NoirUltraHonkProver<P>,
-    P: HonkCurve<TranscriptFieldType>,
+    T: NoirUltraHonkProver<C>,
+    C: HonkCurve<TranscriptFieldType>,
     H: TranscriptHasher<TranscriptFieldType>,
     N: Network,
-> CoOink<'a, T, P, H, N>
+> CoOink<'a, T, C, H, N>
 {
     pub(crate) fn new(net: &'a N, state: &'a mut T::State, has_zk: ZeroKnowledge) -> Self {
         Self {
@@ -89,7 +89,7 @@ impl<
         Ok(())
     }
 
-    fn compute_w4_inner(&mut self, proving_key: &ProvingKey<T, P>, gate_idx: usize) {
+    fn compute_w4_inner(&mut self, proving_key: &ProvingKey<T, C>, gate_idx: usize) {
         let target = &mut self.memory.w_4[gate_idx];
 
         let mul1 = T::mul_with_public(
@@ -110,7 +110,7 @@ impl<
         *target = T::add(*target, mul3);
     }
 
-    fn compute_w4(&mut self, proving_key: &ProvingKey<T, P>) {
+    fn compute_w4(&mut self, proving_key: &ProvingKey<T, C>) {
         tracing::trace!("compute w4");
         // The memory record values are computed at the indicated indices as
         // w4 = w3 * eta^3 + w2 * eta^2 + w1 * eta + read_write_flag;
@@ -140,7 +140,7 @@ impl<
             let gate_idx = *gate_idx as usize;
             self.compute_w4_inner(proving_key, gate_idx);
             let target = &mut self.memory.w_4[gate_idx];
-            *target = T::add_with_public(P::ScalarField::one(), *target, self.state.id());
+            *target = T::add_with_public(C::ScalarField::one(), *target, self.state.id());
         }
 
         // This computes the values for cases where the type (r/w) of the record is a secret share of 0/1 and adds this share
@@ -154,7 +154,7 @@ impl<
 
     fn compute_read_term(
         &mut self,
-        proving_key: &ProvingKey<T, P>,
+        proving_key: &ProvingKey<T, C>,
         i: usize,
     ) -> T::ArithmeticShare {
         tracing::trace!("compute read term");
@@ -200,7 +200,7 @@ impl<
     }
 
     // Compute table_1 + gamma + table_2 * eta + table_3 * eta_2 + table_4 * eta_3
-    fn compute_write_term(&self, proving_key: &ProvingKey<T, P>, i: usize) -> P::ScalarField {
+    fn compute_write_term(&self, proving_key: &ProvingKey<T, C>, i: usize) -> C::ScalarField {
         tracing::trace!("compute write term");
 
         let gamma = &self.memory.challenges.gamma;
@@ -217,7 +217,7 @@ impl<
 
     fn compute_logderivative_inverses(
         &mut self,
-        proving_key: &ProvingKey<T, P>,
+        proving_key: &ProvingKey<T, C>,
     ) -> HonkProofResult<()> {
         tracing::trace!("compute logderivative inverse");
 
@@ -251,7 +251,7 @@ impl<
             // }
             debug_assert!(q_lookup.is_one() || q_lookup.is_zero());
             let mul =
-                T::mul_with_public(P::ScalarField::one() - q_lookup, lookup_read_tag.to_owned());
+                T::mul_with_public(C::ScalarField::one() - q_lookup, lookup_read_tag.to_owned());
             q_lookup_mul_read_tag.push(T::add_with_public(
                 q_lookup.to_owned(),
                 mul,
@@ -272,7 +272,7 @@ impl<
 
         // Compute inverse polynomial I in place by inverting the product at each row
         // Note: zeroes are ignored as they are not used anyway
-        CoUtils::batch_invert_leaking_zeros::<T, P, N>(
+        CoUtils::batch_invert_leaking_zeros::<T, C, N>(
             self.memory.lookup_inverses.as_mut(),
             self.net,
             self.state,
@@ -280,7 +280,7 @@ impl<
         Ok(())
     }
 
-    fn compute_public_input_delta(&self, proving_key: &ProvingKey<T, P>) -> P::ScalarField {
+    fn compute_public_input_delta(&self, proving_key: &ProvingKey<T, C>) -> C::ScalarField {
         tracing::trace!("compute public input delta");
 
         // Let m be the number of public inputs x₀,…, xₘ₋₁.
@@ -306,16 +306,15 @@ impl<
         // initial zero row or Goblin-stlye ECC op gates. Accordingly, the indices i in the above formulas are given by i =
         // [0, m-1] + offset, i.e. i = offset, 1 + offset, …, m - 1 + offset.
 
-        let mut num = P::ScalarField::one();
-        let mut denom = P::ScalarField::one();
+        let mut num = C::ScalarField::one();
+        let mut denom = C::ScalarField::one();
+        let separator = PERMUTATION_ARGUMENT_VALUE_SEPARATOR;
         let mut num_acc = self.memory.challenges.gamma
             + self.memory.challenges.beta
-                * P::ScalarField::from(
-                    (proving_key.circuit_size + proving_key.pub_inputs_offset) as u64,
-                );
+                * C::ScalarField::from((separator + proving_key.pub_inputs_offset) as u64);
         let mut denom_acc = self.memory.challenges.gamma
             - self.memory.challenges.beta
-                * P::ScalarField::from((1 + proving_key.pub_inputs_offset) as u64);
+                * C::ScalarField::from((1 + proving_key.pub_inputs_offset) as u64);
 
         for x_i in proving_key.public_inputs.iter() {
             num *= num_acc + x_i;
@@ -332,10 +331,10 @@ impl<
         state: &mut T::State,
         shared1: &Polynomial<T::ArithmeticShare>,
         shared2: &Polynomial<T::ArithmeticShare>,
-        pub1: &Polynomial<P::ScalarField>,
-        pub2: &Polynomial<P::ScalarField>,
-        beta: &P::ScalarField,
-        gamma: &P::ScalarField,
+        pub1: &Polynomial<C::ScalarField>,
+        pub2: &Polynomial<C::ScalarField>,
+        beta: &C::ScalarField,
+        gamma: &C::ScalarField,
         output_len: usize,
         active_region_data: &ActiveRegionData,
     ) -> HonkProofResult<Vec<T::ArithmeticShare>> {
@@ -365,7 +364,7 @@ impl<
         Ok(T::mul_many(&mul1, &mul2, net, state)?)
     }
 
-    fn compute_grand_product(&mut self, proving_key: &ProvingKey<T, P>) -> HonkProofResult<()> {
+    fn compute_grand_product(&mut self, proving_key: &ProvingKey<T, C>) -> HonkProofResult<()> {
         tracing::trace!("compute grand product");
 
         let has_active_ranges = proving_key.active_region_data.size() > 0;
@@ -445,12 +444,12 @@ impl<
 
         // TACEO TODO could batch here as well
         // Do the multiplications of num[i] * num[i-1] and den[i] * den[i-1] in constant rounds
-        let numerator = CoUtils::array_prod_mul::<T, P, N>(self.net, self.state, &numerator)?;
+        let numerator = CoUtils::array_prod_mul::<T, C, N>(self.net, self.state, &numerator)?;
         let mut denominator =
-            CoUtils::array_prod_mul::<T, P, N>(self.net, self.state, &denominator)?;
+            CoUtils::array_prod_mul::<T, C, N>(self.net, self.state, &denominator)?;
 
         // invert denominator
-        CoUtils::batch_invert::<T, P, N>(&mut denominator, self.net, self.state)?;
+        CoUtils::batch_invert::<T, C, N>(&mut denominator, self.net, self.state)?;
 
         // Step (3) Compute z_perm[i] = numerator[i] / denominator[i]
         let mul = T::mul_many(&numerator, &denominator, self.net, self.state)?;
@@ -459,7 +458,7 @@ impl<
             proving_key.circuit_size as usize,
             T::ArithmeticShare::default(),
         );
-        self.memory.z_perm[1] = T::promote_to_trivial_share(self.state.id(), P::ScalarField::one());
+        self.memory.z_perm[1] = T::promote_to_trivial_share(self.state.id(), C::ScalarField::one());
 
         // Compute grand product values corresponding only to the active regions of the trace
         for (i, mul) in mul.into_iter().enumerate() {
@@ -500,26 +499,19 @@ impl<
         self.memory
             .challenges
             .alphas
-            .copy_from_slice(&transcript.get_challenges::<P>(&args));
+            .copy_from_slice(&transcript.get_challenges::<C>(&args));
     }
 
     // Add circuit size public input size and public inputs to transcript
     fn execute_preamble_round(
         transcript: &mut Transcript<TranscriptFieldType, H>,
-        proving_key: &ProvingKey<T, P>,
+        proving_key: &ProvingKey<T, C>,
+        verifying_key: &VerifyingKeyBarretenberg<C>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing preamble round");
 
-        transcript
-            .add_u64_to_hash_buffer("CIRCUIT_SIZE".to_string(), proving_key.circuit_size as u64);
-        transcript.add_u64_to_hash_buffer(
-            "PUBLIC_INPUT_SIZE".to_string(),
-            proving_key.num_public_inputs as u64,
-        );
-        transcript.add_u64_to_hash_buffer(
-            "PUB_INPUTS_OFFSET".to_string(),
-            proving_key.pub_inputs_offset as u64,
-        );
+        let vk_hash = verifying_key.hash_through_transcript::<H>("", transcript);
+        transcript.add_fr_to_hash_buffer::<C>("VK_HASH".to_string(), vk_hash);
 
         if proving_key.num_public_inputs as usize != proving_key.public_inputs.len() {
             return Err(HonkProofError::CorruptedWitness(
@@ -529,7 +521,7 @@ impl<
 
         for (i, public_input) in proving_key.public_inputs.iter().enumerate() {
             // transcript.add_scalar(*public_input);
-            transcript.send_fr_to_verifier::<P>(format!("PUBLIC_INPUT_{i}"), *public_input);
+            transcript.send_fr_to_verifier::<C>(format!("PUBLIC_INPUT_{i}"), *public_input);
         }
         Ok(())
     }
@@ -538,8 +530,8 @@ impl<
     fn execute_wire_commitments_round(
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
-        proving_key: &mut ProvingKey<T, P>,
-        crs: &ProverCrs<P>,
+        proving_key: &mut ProvingKey<T, C>,
+        crs: &ProverCrs<C>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing wire commitments round");
 
@@ -553,15 +545,15 @@ impl<
             self.mask_polynomial(proving_key.polynomials.witness.w_o_mut())?;
         };
 
-        let w_l = CoUtils::commit::<T, P>(proving_key.polynomials.witness.w_l().as_ref(), crs);
-        let w_r = CoUtils::commit::<T, P>(proving_key.polynomials.witness.w_r().as_ref(), crs);
-        let w_o = CoUtils::commit::<T, P>(proving_key.polynomials.witness.w_o().as_ref(), crs);
+        let w_l = CoUtils::commit::<T, C>(proving_key.polynomials.witness.w_l().as_ref(), crs);
+        let w_r = CoUtils::commit::<T, C>(proving_key.polynomials.witness.w_r().as_ref(), crs);
+        let w_o = CoUtils::commit::<T, C>(proving_key.polynomials.witness.w_o().as_ref(), crs);
 
         let open = T::open_point_many(&[w_l, w_r, w_o], self.net, self.state)?;
 
-        transcript.send_point_to_verifier::<P>("W_L".to_string(), open[0].into());
-        transcript.send_point_to_verifier::<P>("W_R".to_string(), open[1].into());
-        transcript.send_point_to_verifier::<P>("W_O".to_string(), open[2].into());
+        transcript.send_point_to_verifier::<C>("W_L".to_string(), open[0].into());
+        transcript.send_point_to_verifier::<C>("W_R".to_string(), open[1].into());
+        transcript.send_point_to_verifier::<C>("W_O".to_string(), open[2].into());
 
         // Round is done since ultra_honk is no goblin flavor
         Ok(())
@@ -571,12 +563,12 @@ impl<
     fn execute_sorted_list_accumulator_round(
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
-        proving_key: &mut ProvingKey<T, P>,
-        crs: &ProverCrs<P>,
+        proving_key: &mut ProvingKey<T, C>,
+        crs: &ProverCrs<C>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing sorted list accumulator round");
 
-        let challs = transcript.get_challenges::<P>(&[
+        let challs = transcript.get_challenges::<C>(&[
             "ETA".to_string(),
             "ETA_TWO".to_string(),
             "ETA_THREE".to_string(),
@@ -597,7 +589,7 @@ impl<
         };
 
         // Commit to lookup argument polynomials and the finalized (i.e. with memory records) fourth wire polynomial
-        let lookup_read_counts = CoUtils::commit::<T, P>(
+        let lookup_read_counts = CoUtils::commit::<T, C>(
             proving_key
                 .polynomials
                 .witness
@@ -605,20 +597,20 @@ impl<
                 .as_ref(),
             crs,
         );
-        let lookup_read_tags = CoUtils::commit::<T, P>(
+        let lookup_read_tags = CoUtils::commit::<T, C>(
             proving_key.polynomials.witness.lookup_read_tags().as_ref(),
             crs,
         );
-        let w_4 = CoUtils::commit::<T, P>(self.memory.w_4.as_ref(), crs);
+        let w_4 = CoUtils::commit::<T, C>(self.memory.w_4.as_ref(), crs);
         let opened = T::open_point_many(
             &[lookup_read_counts, lookup_read_tags, w_4],
             self.net,
             self.state,
         )?;
 
-        transcript.send_point_to_verifier::<P>("LOOKUP_READ_COUNTS".to_string(), opened[0].into());
-        transcript.send_point_to_verifier::<P>("LOOKUP_READ_TAGS".to_string(), opened[1].into());
-        transcript.send_point_to_verifier::<P>("W_4".to_string(), opened[2].into());
+        transcript.send_point_to_verifier::<C>("LOOKUP_READ_COUNTS".to_string(), opened[0].into());
+        transcript.send_point_to_verifier::<C>("LOOKUP_READ_TAGS".to_string(), opened[1].into());
+        transcript.send_point_to_verifier::<C>("W_4".to_string(), opened[2].into());
 
         Ok(())
     }
@@ -627,11 +619,11 @@ impl<
     fn execute_log_derivative_inverse_round(
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
-        proving_key: &ProvingKey<T, P>,
+        proving_key: &ProvingKey<T, C>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing log derivative inverse round");
 
-        let challs = transcript.get_challenges::<P>(&["BETA".to_string(), "GAMMA".to_string()]);
+        let challs = transcript.get_challenges::<C>(&["BETA".to_string(), "GAMMA".to_string()]);
         self.memory.challenges.beta = challs[0];
         self.memory.challenges.gamma = challs[1];
 
@@ -647,8 +639,8 @@ impl<
     fn execute_grand_product_computation_round(
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
-        proving_key: &ProvingKey<T, P>,
-        crs: &ProverCrs<P>,
+        proving_key: &ProvingKey<T, C>,
+        crs: &ProverCrs<C>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing grand product computation round");
 
@@ -667,27 +659,28 @@ impl<
         };
 
         // This is from the previous round, but we open it here with z_perm
-        let lookup_inverses = CoUtils::commit::<T, P>(self.memory.lookup_inverses.as_ref(), crs);
+        let lookup_inverses = CoUtils::commit::<T, C>(self.memory.lookup_inverses.as_ref(), crs);
 
-        let z_perm = CoUtils::commit::<T, P>(self.memory.z_perm.as_ref(), crs);
+        let z_perm = CoUtils::commit::<T, C>(self.memory.z_perm.as_ref(), crs);
 
         let open = T::open_point_many(&[lookup_inverses, z_perm], self.net, self.state)?;
 
-        transcript.send_point_to_verifier::<P>("LOOKUP_INVERSES".to_string(), open[0].into());
-        transcript.send_point_to_verifier::<P>("Z_PERM".to_string(), open[1].into());
+        transcript.send_point_to_verifier::<C>("LOOKUP_INVERSES".to_string(), open[0].into());
+        transcript.send_point_to_verifier::<C>("Z_PERM".to_string(), open[1].into());
         Ok(())
     }
 
     pub(crate) fn prove(
         mut self,
-        proving_key: &mut ProvingKey<T, P>,
+        proving_key: &mut ProvingKey<T, C>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
-        crs: &ProverCrs<P>,
-    ) -> HonkProofResult<ProverMemory<T, P>> {
+        crs: &ProverCrs<C>,
+        verifying_key: &VerifyingKeyBarretenberg<C>,
+    ) -> HonkProofResult<ProverMemory<T, C>> {
         tracing::trace!("Oink prove");
 
         // Add circuit size public input size and public inputs to transcript
-        Self::execute_preamble_round(transcript, proving_key)?;
+        Self::execute_preamble_round(transcript, proving_key, verifying_key)?;
         // Compute first three wire commitments
         self.execute_wire_commitments_round(transcript, proving_key, crs)?;
         // Compute sorted list accumulator and commitment

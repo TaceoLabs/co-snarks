@@ -11,6 +11,7 @@ use ark_ff::{PrimeField, Zero};
 pub(crate) struct LogDerivLookupRelationAcc<F: PrimeField> {
     pub(crate) r0: Univariate<F, 5>,
     pub(crate) r1: Univariate<F, 5>,
+    pub(crate) r2: Univariate<F, 3>,
 }
 
 impl<F: PrimeField> LogDerivLookupRelationAcc<F> {
@@ -18,6 +19,7 @@ impl<F: PrimeField> LogDerivLookupRelationAcc<F> {
         assert!(elements.len() == LogDerivLookupRelation::NUM_RELATIONS);
         self.r0 *= elements[0];
         self.r1 *= elements[1];
+        self.r2 *= elements[2];
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(
@@ -39,6 +41,12 @@ impl<F: PrimeField> LogDerivLookupRelationAcc<F> {
             partial_evaluation_result,
             false,
         );
+        self.r2.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            true,
+        );
     }
 }
 
@@ -46,6 +54,7 @@ impl<F: PrimeField> LogDerivLookupRelationAcc<F> {
 pub(crate) struct LogDerivLookupRelationEvals<F: PrimeField> {
     pub(crate) r0: F,
     pub(crate) r1: F,
+    pub(crate) r2: F,
 }
 
 impl<F: PrimeField> LogDerivLookupRelationEvals<F> {
@@ -54,13 +63,14 @@ impl<F: PrimeField> LogDerivLookupRelationEvals<F> {
 
         *result += self.r0 * running_challenge[0];
         *result += self.r1 * running_challenge[1];
+        *result += self.r2 * running_challenge[2];
     }
 }
 
 pub(crate) struct LogDerivLookupRelation {}
 
 impl LogDerivLookupRelation {
-    pub(crate) const NUM_RELATIONS: usize = 2;
+    pub(crate) const NUM_RELATIONS: usize = 3;
 }
 
 impl LogDerivLookupRelation {
@@ -240,6 +250,17 @@ impl<F: PrimeField> Relation<F> for LogDerivLookupRelation {
      *
      * and read_tags is a polynomial taking boolean values indicating whether the table entry at the corresponding row
      * has been read or not.
+     * the last (third) subrelation consists of checking that the read_tag is a boolean value
+     * we argue that this is enough for the soundness of the relation.
+     * note that read_tags is not constrained to be related to the readcounts values.
+     * however, if the read_tags are assured to be 0 or 1, the only thing a cheating prover could do is to skip over
+     * an inversion when are not supposed to skip over it.
+     * we argue that this does not give the prover any advantage, as it would only mean an element from the lookup table
+     * is removed. this means that if a proof verifies, we still have that the provers set is a subset of the lookup
+     * table, as the only freedome the prover has is to make the lookup table smaller.
+     * the boolean check is still necessary, as otherwise has_inverse, is a leanier function of read_tags, and the
+     * the prover can set it to zero (by picking a non-binary value for read_tags) even when we have a read gate in the
+     * row.
      * @note This relation utilizes functionality in the log-derivative library to compute the polynomial of inverses
      *
      */
@@ -278,6 +299,14 @@ impl<F: PrimeField> Relation<F> for LogDerivLookupRelation {
         for i in 0..univariate_accumulator.r1.evaluations.len() {
             univariate_accumulator.r1.evaluations[i] += tmp.evaluations[i];
         }
+
+        // we should make sure that the read_tag is a boolean value
+        let read_tag = input.witness.lookup_read_tags();
+        // degree                          1         1                       0(1) =  2(3)
+        let tmp = (read_tag.to_owned() * read_tag - read_tag) * scaling_factor;
+        for i in 0..univariate_accumulator.r2.evaluations.len() {
+            univariate_accumulator.r2.evaluations[i] += tmp.evaluations[i];
+        }
     }
 
     fn verify_accumulate(
@@ -311,5 +340,11 @@ impl<F: PrimeField> Relation<F> for LogDerivLookupRelation {
         // Degrees:                       1            2 (3)            1            3 (4)
         let tmp = read_inverse * read_selector - write_inverse * read_counts; // Deg 4 (5)
         univariate_accumulator.r1 += tmp;
+
+        // we should make sure that the read_tag is a boolean value
+        let read_tag = input.witness.lookup_read_tags();
+        // degree                          1         1                       0(1) =  2(3)
+        let tmp = (read_tag.to_owned() * read_tag - read_tag) * scaling_factor;
+        univariate_accumulator.r2 += tmp;
     }
 }

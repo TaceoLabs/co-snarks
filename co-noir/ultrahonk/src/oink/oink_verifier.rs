@@ -15,41 +15,41 @@ pub(crate) struct OinkVerifier<
     memory: VerifierMemory<P>,
     pub public_inputs: Vec<P::ScalarField>,
     phantom_hasher: std::marker::PhantomData<H>,
+    domain_separator: String,
 }
 
 impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>> Default
     for OinkVerifier<P, H>
 {
     fn default() -> Self {
-        Self::new()
+        Self::new("".to_string())
     }
 }
 
 impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
     OinkVerifier<C, H>
 {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(domain_separator: String) -> Self {
         Self {
             memory: VerifierMemory::default(),
             public_inputs: Default::default(),
             phantom_hasher: Default::default(),
+            domain_separator,
         }
     }
 
-    fn execute_preamble_round<P: Pairing<G1 = C>>(
+    fn execute_preamble_round<P: Pairing<G1 = C, G1Affine = C::Affine>>(
         &mut self,
         verifying_key: &VerifyingKey<P>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
     ) -> HonkVerifyResult<()> {
         tracing::trace!("executing (verifying) preamble round");
 
-        let circuit_size = verifying_key.circuit_size as u64;
-        let public_input_size = verifying_key.num_public_inputs as u64;
-        let pub_inputs_offset = verifying_key.pub_inputs_offset as u64;
+        let public_input_size = verifying_key.inner_vk.num_public_inputs;
 
-        transcript.add_u64_to_hash_buffer("circuit_size".to_string(), circuit_size);
-        transcript.add_u64_to_hash_buffer("public_input_size".to_string(), public_input_size);
-        transcript.add_u64_to_hash_buffer("pub_inputs_offset".to_string(), pub_inputs_offset);
+        let vk_hash =
+            verifying_key.hash_through_transcript::<H, C>(&self.domain_separator, transcript);
+        transcript.add_fr_to_hash_buffer::<C>(self.domain_separator.clone() + "vk_hash", vk_hash);
 
         self.public_inputs = Vec::with_capacity(public_input_size as usize);
 
@@ -133,15 +133,14 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             &self.memory.challenges.beta,
             &self.memory.challenges.gamma,
             &self.public_inputs,
-            verifying_key.circuit_size,
-            verifying_key.pub_inputs_offset,
+            verifying_key.inner_vk.pub_inputs_offset,
         );
         *self.memory.witness_commitments.z_perm_mut() =
             transcript.receive_point_from_prover::<C>("z_perm".to_string())?;
         Ok(())
     }
 
-    pub(crate) fn verify<P: Pairing<G1 = C>>(
+    pub(crate) fn verify<P: Pairing<G1 = C, G1Affine = C::Affine>>(
         mut self,
         verifying_key: &VerifyingKey<P>,
         transcript: &mut Transcript<TranscriptFieldType, H>,

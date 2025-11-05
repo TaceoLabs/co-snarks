@@ -3451,15 +3451,15 @@ mod field_share {
         let mut rng = thread_rng();
         const INPUT_SIZE: usize = 64;
         let input: Vec<u8> = (0..INPUT_SIZE).map(|_| rng.gen()).collect();
-        let num_bits = vec![8; INPUT_SIZE];
+        let num_bits = 8usize;
 
         let x = input.iter().map(|&x| ark_bn254::Fr::from(x)).collect_vec();
 
         let x_shares = rep3::share_field_elements(&x, &mut rng);
 
         let mut real_input = Vec::new();
-        for (inp, num_bits) in x.into_iter().zip(num_bits.iter()) {
-            let num_elements = (*num_bits as u32).div_ceil(8);
+        let num_elements = (num_bits as u32).div_ceil(8);
+        for inp in x.into_iter() {
             let bytes = inp.into_bigint().to_bytes_le();
             real_input.extend(bytes[0..num_elements as usize].to_vec());
         }
@@ -3475,7 +3475,7 @@ mod field_share {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
 
-                let res = rep3::yao::blake2s(&x, &net, &mut state, &num_bits).unwrap();
+                let res = rep3::yao::blake2s(&x, &net, &mut state, num_bits).unwrap();
                 tx.send(res)
             });
         }
@@ -3494,15 +3494,15 @@ mod field_share {
         let mut rng = thread_rng();
         const INPUT_SIZE: usize = 64;
         let input: Vec<u8> = (0..INPUT_SIZE).map(|_| rng.gen()).collect();
-        let num_bits = vec![8; INPUT_SIZE];
+        let num_bits = 8usize;
 
         let x = input.iter().map(|&x| ark_bn254::Fr::from(x)).collect_vec();
 
         let x_shares = rep3::share_field_elements(&x, &mut rng);
 
         let mut real_input = Vec::new();
-        for (inp, num_bits) in x.into_iter().zip(num_bits.iter()) {
-            let num_elements = (*num_bits as u32).div_ceil(8);
+        let num_elements = (num_bits as u32).div_ceil(8);
+        for inp in x.into_iter() {
             let bytes = inp.into_bigint().to_bytes_le();
             real_input.extend(bytes[0..num_elements as usize].to_vec());
         }
@@ -3518,7 +3518,7 @@ mod field_share {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
 
-                let res = rep3::yao::blake3(&x, &net, &mut state, &num_bits).unwrap();
+                let res = rep3::yao::blake3(&x, &net, &mut state, num_bits).unwrap();
                 tx.send(res)
             });
         }

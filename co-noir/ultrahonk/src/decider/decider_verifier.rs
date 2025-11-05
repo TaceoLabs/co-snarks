@@ -1,5 +1,5 @@
 use crate::{
-    CONST_PROOF_SIZE_LOG_N, NUM_LIBRA_COMMITMENTS, Utils,
+    NUM_LIBRA_COMMITMENTS, Utils,
     decider::types::{
         BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK, VerifierMemory,
     },
@@ -63,22 +63,24 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
     pub(crate) fn verify<P: Pairing<G1 = C, G1Affine = C::Affine>>(
         mut self,
-        circuit_size: u32,
+        log_circuit_size: u32,
         crs: &P::G2Affine,
         mut transcript: Transcript<TranscriptFieldType, H>,
         has_zk: ZeroKnowledge,
+        virtual_log_n: usize,
     ) -> HonkVerifyResult<bool> {
         tracing::trace!("Decider verification");
-        let log_circuit_size = Utils::get_msb32(circuit_size);
 
-        let mut padding_indicator_array = [C::ScalarField::zero(); CONST_PROOF_SIZE_LOG_N];
+        let mut padding_indicator_array = vec![C::ScalarField::one(); virtual_log_n];
 
-        for (idx, value) in padding_indicator_array.iter_mut().enumerate() {
-            *value = if idx < log_circuit_size as usize {
-                C::ScalarField::one()
-            } else {
-                C::ScalarField::zero()
-            };
+        if has_zk == ZeroKnowledge::Yes {
+            for (idx, value) in padding_indicator_array.iter_mut().enumerate() {
+                *value = if idx < log_circuit_size as usize {
+                    C::ScalarField::one()
+                } else {
+                    C::ScalarField::zero()
+                };
+            }
         }
         let (sumcheck_output, libra_commitments) = if has_zk == ZeroKnowledge::Yes {
             let mut libra_commitments = Vec::with_capacity(NUM_LIBRA_COMMITMENTS);

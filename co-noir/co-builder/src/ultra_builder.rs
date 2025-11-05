@@ -1,15 +1,14 @@
 use crate::acir_format::{HonkRecursion, ProgramMetadata};
-use crate::keys::verification_key::PublicComponentKey;
 use crate::prelude::PrecomputedEntities;
 use crate::types::aes128;
-use crate::types::big_field::{BigField, BigGroup};
+use crate::types::big_field::BigField;
 use crate::types::blake2s::Blake2s;
 use crate::types::blake3::blake3s;
 use crate::types::field_ct::{CycleGroupCT, CycleScalarCT};
 use crate::types::sha_compression::SHA256;
-use crate::types::types::AES128Constraint;
+use crate::types::types::{AES128Constraint, MemorySelectors, NnfSelectors};
 use crate::types::types::{
-    AggregationState, EcAdd, EccAddGate, MultiScalarMul, Sha256Compression, WitnessOrConstant,
+    EcAdd, EccAddGate, MultiScalarMul, Sha256Compression, WitnessOrConstant,
 };
 use crate::{
     acir_format::AcirFormat,
@@ -25,16 +24,16 @@ use crate::{
             RamAccessType, RamRecord, RamTable, RamTranscript, RomRecord, RomTable, RomTranscript,
         },
         types::{
-            AddQuad, AddTriple, AuxSelectors, Blake2sConstraint, Blake3Constraint, BlockConstraint,
-            BlockType, CachedPartialNonNativeFieldMultiplication, EccDblGate, LogicConstraint,
-            MulQuad, NUM_WIRES, PolyTriple, Poseidon2Constraint, Poseidon2ExternalGate,
+            AddQuad, AddTriple, Blake2sConstraint, Blake3Constraint, BlockConstraint, BlockType,
+            CachedPartialNonNativeFieldMultiplication, EccDblGate, LogicConstraint, MulQuad,
+            NUM_WIRES, PolyTriple, Poseidon2Constraint, Poseidon2ExternalGate,
             Poseidon2InternalGate, RangeList, UltraTraceBlock, UltraTraceBlocks,
         },
     },
 };
 use ark_ec::pairing::Pairing;
 use ark_ec::{CurveGroup, PrimeGroup};
-use ark_ff::{One, Zero};
+use ark_ff::{One, PrimeField, Zero};
 use co_acvm::{PlainAcvmSolver, mpc::NoirWitnessExtensionProtocol};
 use co_noir_common::crs::ProverCrs;
 use co_noir_common::honk_curve::HonkCurve;
@@ -74,18 +73,16 @@ impl<C: CurveGroup> UltraCircuitBuilder<C> {
         }
 
         let vk = VerifyingKeyBarretenberg {
-            circuit_size: circuit_size as u64,
             log_circuit_size: Utils::get_msb64(circuit_size as u64) as u64,
             num_public_inputs: pk.num_public_inputs as u64,
             pub_inputs_offset: pk.pub_inputs_offset as u64,
             commitments,
-            pairing_inputs_public_input_key: pk.pairing_inputs_public_input_key,
         };
 
         Ok(vk)
     }
 
-    pub fn create_keys<P: Pairing<G1 = C>>(
+    pub fn create_keys<P: Pairing<G1 = C, G1Affine = C::Affine>>(
         self,
         prover_crs: Arc<ProverCrs<C>>,
         verifier_crs: P::G2Affine,
@@ -106,11 +103,12 @@ impl<C: CurveGroup> UltraCircuitBuilder<C> {
         // Create and return the VerifyingKey instance
         let vk = VerifyingKey {
             crs: verifier_crs,
-            circuit_size,
-            num_public_inputs: pk.num_public_inputs,
-            pub_inputs_offset: pk.pub_inputs_offset,
-            commitments,
-            pairing_inputs_public_input_key: pk.pairing_inputs_public_input_key,
+            inner_vk: VerifyingKeyBarretenberg {
+                log_circuit_size: Utils::get_msb64(circuit_size as u64) as u64,
+                num_public_inputs: pk.num_public_inputs as u64,
+                pub_inputs_offset: pk.pub_inputs_offset as u64,
+                commitments,
+            },
         };
 
         Ok((pk, vk))
@@ -135,12 +133,10 @@ impl<C: CurveGroup> UltraCircuitBuilder<C> {
 
         // Create and return the VerifyingKey instance
         let vk = VerifyingKeyBarretenberg {
-            circuit_size: circuit_size as u64,
             log_circuit_size: Utils::get_msb64(circuit_size as u64) as u64,
             num_public_inputs: pk.num_public_inputs as u64,
             pub_inputs_offset: pk.pub_inputs_offset as u64,
             commitments,
-            pairing_inputs_public_input_key: pk.pairing_inputs_public_input_key,
         };
 
         Ok((pk, vk))
@@ -181,7 +177,6 @@ pub struct GenericUltraCircuitBuilder<
     // Stores gate index where Read/Write type is shared
     pub memory_records_shared: BTreeMap<u32, T::AcvmType>, // order does not matter
     has_dummy_witnesses: bool,
-    pub pairing_inputs_public_input_key: PublicComponentKey,
 }
 
 // This workaround is required due to mutability issues
@@ -225,6 +220,11 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         idx
     }
 
+    pub(crate) fn set_variable(&mut self, index: u32, value: T::AcvmType) {
+        assert!(self.variables.len() > self.real_variable_index[index as usize] as usize);
+        self.variables[self.real_variable_index[index as usize] as usize] = value;
+    }
+
     pub(crate) fn put_constant_variable(&mut self, variable: P::ScalarField) -> u32 {
         if let Some(val) = self.constant_variable_indices.get(&variable) {
             *val
@@ -263,7 +263,11 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             .arithmetic
             .q_elliptic()
             .push(P::ScalarField::zero());
-        self.blocks.arithmetic.q_aux().push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_memory()
+            .push(P::ScalarField::zero());
+        self.blocks.arithmetic.q_nnf().push(P::ScalarField::zero());
         self.blocks
             .arithmetic
             .q_poseidon2_external()
@@ -302,7 +306,11 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             .arithmetic
             .q_elliptic()
             .push(P::ScalarField::zero());
-        self.blocks.arithmetic.q_aux().push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_memory()
+            .push(P::ScalarField::zero());
+        self.blocks.arithmetic.q_nnf().push(P::ScalarField::zero());
         self.blocks
             .arithmetic
             .q_poseidon2_external()
@@ -341,7 +349,11 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             .arithmetic
             .q_elliptic()
             .push(P::ScalarField::zero());
-        self.blocks.arithmetic.q_aux().push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_memory()
+            .push(P::ScalarField::zero());
+        self.blocks.arithmetic.q_nnf().push(P::ScalarField::zero());
         self.blocks
             .arithmetic
             .q_poseidon2_external()
@@ -394,7 +406,11 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             .arithmetic
             .q_elliptic()
             .push(P::ScalarField::zero());
-        self.blocks.arithmetic.q_aux().push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_memory()
+            .push(P::ScalarField::zero());
+        self.blocks.arithmetic.q_nnf().push(P::ScalarField::zero());
         self.blocks
             .arithmetic
             .q_poseidon2_external()
@@ -445,7 +461,11 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             .arithmetic
             .q_elliptic()
             .push(P::ScalarField::zero());
-        self.blocks.arithmetic.q_aux().push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_memory()
+            .push(P::ScalarField::zero());
+        self.blocks.arithmetic.q_nnf().push(P::ScalarField::zero());
         self.blocks
             .arithmetic
             .q_poseidon2_external()
@@ -513,7 +533,11 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             .push(P::ScalarField::zero());
         self.blocks
             .poseidon2_external
-            .q_aux()
+            .q_memory()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_external
+            .q_nnf()
             .push(P::ScalarField::zero());
         self.blocks
             .poseidon2_external
@@ -576,7 +600,11 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             .push(P::ScalarField::zero());
         self.blocks
             .poseidon2_internal
-            .q_aux()
+            .q_memory()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_internal
+            .q_nnf()
             .push(P::ScalarField::zero());
         self.blocks
             .poseidon2_internal
@@ -648,7 +676,8 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
                 .elliptic
                 .q_elliptic()
                 .push(P::ScalarField::one());
-            self.blocks.elliptic.q_aux().push(P::ScalarField::zero());
+            self.blocks.elliptic.q_memory().push(P::ScalarField::zero());
+            self.blocks.elliptic.q_nnf().push(P::ScalarField::zero());
             self.blocks
                 .elliptic
                 .q_poseidon2_external()
@@ -694,8 +723,10 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
                 can_fuse_into_previous_gate && (self.blocks.elliptic.q_arith()[size - 1].is_zero());
             can_fuse_into_previous_gate = can_fuse_into_previous_gate
                 && (self.blocks.elliptic.q_lookup_type()[size - 1].is_zero());
+            can_fuse_into_previous_gate = can_fuse_into_previous_gate
+                && (self.blocks.elliptic.q_memory()[size - 1].is_zero());
             can_fuse_into_previous_gate =
-                can_fuse_into_previous_gate && (self.blocks.elliptic.q_aux()[size - 1].is_zero());
+                can_fuse_into_previous_gate && (self.blocks.elliptic.q_nnf()[size - 1].is_zero());
         }
 
         if can_fuse_into_previous_gate {
@@ -724,7 +755,8 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
                 .elliptic
                 .q_lookup_type()
                 .push(P::ScalarField::zero());
-            self.blocks.elliptic.q_aux().push(P::ScalarField::zero());
+            self.blocks.elliptic.q_memory().push(P::ScalarField::zero());
+            self.blocks.elliptic.q_nnf().push(P::ScalarField::zero());
             self.blocks
                 .elliptic
                 .q_poseidon2_external()
@@ -776,7 +808,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         }
     }
 
-    fn fix_witness(&mut self, witness_index: u32, witness_value: P::ScalarField) {
+    pub(crate) fn fix_witness(&mut self, witness_index: u32, witness_value: P::ScalarField) {
         self.assert_valid_variables(&[witness_index]);
 
         self.blocks.arithmetic.populate_wires(
@@ -804,7 +836,11 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             .arithmetic
             .q_elliptic()
             .push(P::ScalarField::zero());
-        self.blocks.arithmetic.q_aux().push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_memory()
+            .push(P::ScalarField::zero());
+        self.blocks.arithmetic.q_nnf().push(P::ScalarField::zero());
         self.blocks
             .arithmetic
             .q_poseidon2_external()
@@ -893,16 +929,6 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         Ok((bits_locations, decomposed, decompose_indices))
     }
 
-    fn process_plonk_recursion_constraints(
-        &mut self,
-        constraint_system: &AcirFormat<P::ScalarField>,
-        _has_valid_witness_assignments: bool,
-    ) {
-        for _constraint in constraint_system.recursion_constraints.iter() {
-            todo!("Plonk recursion");
-        }
-    }
-
     fn process_honk_recursion_constraints(
         &mut self,
         constraint_system: &AcirFormat<P::ScalarField>,
@@ -922,6 +948,16 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
     ) {
         for _constraint in constraint_system.avm_recursion_constraints.iter() {
             todo!("avm recursion");
+        }
+    }
+
+    fn process_civc_recursion_constraints(
+        &mut self,
+        constraint_system: &AcirFormat<P::ScalarField>,
+        _has_valid_witness_assignments: bool,
+    ) {
+        for _constraint in constraint_system.civc_recursion_constraints.iter() {
+            todo!("civc recursion");
         }
     }
 
@@ -1070,36 +1106,50 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         self.public_inputs.push(witness_index);
     }
 
-    fn construct_default(&mut self, driver: &mut T) -> eyre::Result<AggregationState<P, T>> {
+    fn add_default_to_public_inputs(&mut self, driver: &mut T) -> eyre::Result<()>
+    where
+        P::BaseField: PrimeField,
+    {
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/911): These are pairing points extracted from a valid
         // proof. This is a workaround because we can't represent the point at infinity in biggroup yet.
-        let x0_val = Utils::field_from_hex_string::<P::ScalarField>(
+        let x0_val: BigUint = Utils::field_from_hex_string::<P::BaseField>(
             "0x031e97a575e9d05a107acb64952ecab75c020998797da7842ab5d6d1986846cf",
         )
-        .expect("x0 works");
-        let y0_val = Utils::field_from_hex_string::<P::ScalarField>(
+        .expect("x0 works")
+        .into();
+        let y0_val: BigUint = Utils::field_from_hex_string::<P::BaseField>(
             "0x178cbf4206471d722669117f9758a4c410db10a01750aebb5666547acf8bd5a4",
         )
-        .expect("y0 works");
-        let x1_val = Utils::field_from_hex_string::<P::ScalarField>(
+        .expect("y0 works")
+        .into();
+        let x1_val: BigUint = Utils::field_from_hex_string::<P::BaseField>(
             "0x0f94656a2ca489889939f81e9c74027fd51009034b3357f0e91b8a11e7842c38",
         )
-        .expect("x1 works");
-        let y1_val = Utils::field_from_hex_string::<P::ScalarField>(
+        .expect("x1 works")
+        .into();
+        let y1_val: BigUint = Utils::field_from_hex_string::<P::BaseField>(
             "0x1b52c2020d7464a0c80c0da527a08193fe27776f50224bd6fb128b46c1ddb67f",
         )
-        .expect("y1 works");
+        .expect("y1 works")
+        .into();
 
         // This internally calls functions that assume we are working with public values (i.e. they are only implemented for public values)
-        let x0 = BigField::from_witness(&x0_val.into(), driver, self)?;
-        let y0 = BigField::from_witness(&y0_val.into(), driver, self)?;
-        let x1 = BigField::from_witness(&x1_val.into(), driver, self)?;
-        let y1 = BigField::from_witness(&y1_val.into(), driver, self)?;
+        let mut x0 = BigField::new_from_u256(x0_val);
+        let mut y0 = BigField::new_from_u256(y0_val);
+        let mut x1 = BigField::new_from_u256(x1_val);
+        let mut y1 = BigField::new_from_u256(y1_val);
 
-        let p0 = BigGroup::<P, T>::new(x0, y0);
-        let p1 = BigGroup::<P, T>::new(x1, y1);
+        x0.convert_constant_to_fixed_witness(self, driver);
+        y0.convert_constant_to_fixed_witness(self, driver);
+        x1.convert_constant_to_fixed_witness(self, driver);
+        y1.convert_constant_to_fixed_witness(self, driver);
 
-        Ok(AggregationState::new(p0, p1))
+        x0.set_public(driver, self);
+        y0.set_public(driver, self);
+        x1.set_public(driver, self);
+        y1.set_public(driver, self);
+
+        Ok(())
     }
 
     fn poly_to_field_ct(&self, poly: &PolyTriple<P::ScalarField>) -> FieldCT<P::ScalarField> {
@@ -1132,19 +1182,14 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             // For a ROM table, constant read should be optimized out:
             // The rom_table won't work with a constant read because the table may not be initialized
             assert!(!op.index.q_l.is_zero());
-            // We create a new witness w to avoid issues with non-valid witness assignements:
-            // if witness are not assigned, then w will be zero and table[w] will work
-            let w_value = if has_valid_witness_assignments {
-                // If witness are assigned, we use the correct value for w
-                index.get_value(self, driver)
-            } else {
-                T::public_zero()
-            };
-            let w = FieldCT::from_witness(w_value, self);
 
-            let extract = &table.index_field_ct(&w, self, driver);
-            value.assert_equal(extract, self, driver);
-            w.assert_equal(&index, self, driver);
+            // In case of invalid witness assignment, we set the value of index value to zero to not hit out of bound in
+            // ROM table
+            if !has_valid_witness_assignments {
+                self.set_variable(index.witness_index, T::AcvmType::default());
+            }
+            let val = table.index_field_ct(&index, self, driver);
+            value.assert_equal(&val, self, driver);
         }
     }
 
@@ -1161,17 +1206,11 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             let value = self.poly_to_field_ct(&op.value);
             let index = self.poly_to_field_ct(&op.index);
 
-            // We create a new witness w to avoid issues with non-valid witness assignements.
-            // If witness are not assigned, then index will be zero and table[index] won't hit bounds check.
-            // If witness are assigned, we use the correct value for index
-            let index_value = if has_valid_witness_assignments {
-                index.get_value(self, driver)
-            } else {
-                T::public_zero()
-            };
-            // Create new witness and ensure equal to index.
-            let w = FieldCT::from_witness(index_value, self);
-            w.assert_equal(&index, self, driver);
+            // In case of invalid witness assignment, we set the value of index value to zero to not hit out of bound in
+            // RAM table
+            if !has_valid_witness_assignments {
+                self.set_variable(index.witness_index, T::AcvmType::default());
+            }
 
             if op.access_type == 0 {
                 let read = table.read(&index, self, driver)?;
@@ -1437,8 +1476,8 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
     fn create_rom_gate(&mut self, record: &mut RomRecord<T::AcvmType>) {
         // Record wire value can't yet be computed
         record.record_witness = self.add_variable(T::public_zero());
-        self.apply_aux_selectors(AuxSelectors::RomRead);
-        self.blocks.aux.populate_wires(
+        self.apply_memory_selectors(MemorySelectors::RomRead);
+        self.blocks.memory.populate_wires(
             record.index_witness,
             record.value_column1_witness,
             record.value_column2_witness,
@@ -1446,7 +1485,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         );
 
         // Note: record the index into the block that contains the RAM/ROM gates
-        record.gate_index = self.blocks.aux.len() - 1;
+        record.gate_index = self.blocks.memory.len() - 1;
         self.num_gates += 1;
     }
 
@@ -1456,12 +1495,12 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         // we will be applying copy constraints + set membership constraints.
         // Later on during proof construction we will compute the record wire value + assign it
         record.record_witness = self.add_variable(T::public_zero());
-        self.apply_aux_selectors(if record.access_type == RamAccessType::Read {
-            AuxSelectors::RamRead
+        self.apply_memory_selectors(if record.access_type == RamAccessType::Read {
+            MemorySelectors::RamRead
         } else {
-            AuxSelectors::RamWrite
+            MemorySelectors::RamWrite
         });
-        self.blocks.aux.populate_wires(
+        self.blocks.memory.populate_wires(
             record.index_witness,
             record.timestamp_witness,
             record.value_witness,
@@ -1469,7 +1508,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         );
 
         // Note: record the index into the block that contains the RAM/ROM gates
-        record.gate_index = self.blocks.aux.len() - 1;
+        record.gate_index = self.blocks.memory.len() - 1;
         self.num_gates += 1;
     }
 
@@ -1703,36 +1742,45 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         Ok(())
     }
 
-    fn apply_aux_selectors(&mut self, type_: AuxSelectors) {
-        let block = &mut self.blocks.aux;
-        block.q_aux().push(if type_ == AuxSelectors::None {
+    /**
+     * @brief Enable the memory gate of particular type
+     *
+     * @details If we have several operations being performed do not require parametrization
+     * (if we put each of them into a separate widget they would not require any selectors other than the ones enabling the
+     * operation itself, for example q_special*(w_l-2*w_r)), we can group them all into one widget, by using a special
+     * selector q_memory for all of them and enabling each in particular, depending on the combination of standard selector
+     * values. So you can do:
+     * q_memory * (q_1 * q_2 * statement_1 + q_3 * q_4 * statement_2). q_1=q_2=1 would activate statement_1, while q_3=q_4=1
+     * would activate statement_2
+     *
+     * Multiple selectors are used to 'switch' memory gates on/off according to the following pattern:
+     *
+     * | gate type                    | q_mem | q_1 | q_2 | q_3 | q_4 | q_m | q_c |
+     * | ---------------------------- | ----- | --- | --- | --- | --- | --- | --- |
+     * | RAM/ROM access gate          | 1     | 1   | 0   | 0   | 0   | 1   | --- |
+     * | RAM timestamp check          | 1     | 1   | 0   | 0   | 1   | 0   | --- |
+     * | ROM consistency check        | 1     | 1   | 1   | 0   | 0   | 0   | --- |
+     * | RAM consistency check        | 1     | 0   | 0   | 1   | 0   | 0   | 0   |
+     *
+     * @param type
+     */
+    fn apply_memory_selectors(&mut self, type_: MemorySelectors) {
+        let block = &mut self.blocks.memory;
+        block.q_memory().push(if type_ == MemorySelectors::MemNone {
             P::ScalarField::zero()
         } else {
             P::ScalarField::one()
         });
         // Set to zero the selectors that are not enabled for this gate
+        block.q_arith().push(P::ScalarField::zero());
         block.q_delta_range().push(P::ScalarField::zero());
         block.q_lookup_type().push(P::ScalarField::zero());
         block.q_elliptic().push(P::ScalarField::zero());
+        block.q_nnf().push(P::ScalarField::zero());
         block.q_poseidon2_external().push(P::ScalarField::zero());
         block.q_poseidon2_internal().push(P::ScalarField::zero());
-
         match type_ {
-            AuxSelectors::RomRead => {
-                // Memory read gate for reading memory cells.
-                // Validates record witness computation (r = read_write_flag + index * \eta + timestamp * \eta^2 + value *
-                // \eta^3)
-                block.q_1().push(P::ScalarField::one());
-                block.q_2().push(P::ScalarField::zero());
-                block.q_3().push(P::ScalarField::zero());
-                block.q_4().push(P::ScalarField::zero());
-                block.q_m().push(P::ScalarField::one()); // validate record witness is correctly computed
-                block.q_c().push(P::ScalarField::zero()); // read/write flag stored in q_c
-                block.q_arith().push(P::ScalarField::zero());
-
-                self.check_selector_length_consistency();
-            }
-            AuxSelectors::RomConsistencyCheck => {
+            MemorySelectors::RomConsistencyCheck => {
                 // Memory read gate used with the sorted list of memory reads.
                 // Apply sorted memory read checks with the following additional check:
                 // 1. Assert that if index field across two gates does not change, the value field does not change.
@@ -1743,10 +1791,9 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
                 block.q_4().push(P::ScalarField::zero());
                 block.q_m().push(P::ScalarField::zero());
                 block.q_c().push(P::ScalarField::zero());
-                block.q_arith().push(P::ScalarField::zero());
                 self.check_selector_length_consistency();
             }
-            AuxSelectors::RamConsistencyCheck => {
+            MemorySelectors::RamConsistencyCheck => {
                 // Memory read gate used with the sorted list of memory reads.
                 // 1. Validate adjacent index values across 2 gates increases by 0 or 1
                 // 2. Validate record computation (r = read_write_flag + index * \eta + \timestamp * \eta^2 + value * \eta^3)
@@ -1754,14 +1801,13 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
                 // 'read', validate adjacent values do not change Used for ROM reads and RAM reads across read/write boundaries
                 block.q_1().push(P::ScalarField::zero());
                 block.q_2().push(P::ScalarField::zero());
-                block.q_3().push(P::ScalarField::zero());
+                block.q_3().push(P::ScalarField::one());
                 block.q_4().push(P::ScalarField::zero());
                 block.q_m().push(P::ScalarField::zero());
                 block.q_c().push(P::ScalarField::zero());
-                block.q_arith().push(P::ScalarField::one());
                 self.check_selector_length_consistency();
             }
-            AuxSelectors::RamTimestampCheck => {
+            MemorySelectors::RamTimestampCheck => {
                 // For two adjacent RAM entries that share the same index, validate the timestamp value is monotonically
                 // increasing
                 block.q_1().push(P::ScalarField::one());
@@ -1770,10 +1816,9 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
                 block.q_4().push(P::ScalarField::one());
                 block.q_m().push(P::ScalarField::zero());
                 block.q_c().push(P::ScalarField::zero());
-                block.q_arith().push(P::ScalarField::zero());
                 self.check_selector_length_consistency();
             }
-            AuxSelectors::RamRead => {
+            MemorySelectors::RomRead => {
                 // Memory read gate for reading memory cells.
                 // Validates record witness computation (r = read_write_flag + index * \eta + timestamp * \eta^2 + value *
                 // \eta^3)
@@ -1783,10 +1828,21 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
                 block.q_4().push(P::ScalarField::zero());
                 block.q_m().push(P::ScalarField::one()); // validate record witness is correctly computed
                 block.q_c().push(P::ScalarField::zero()); // read/write flag stored in q_c
-                block.q_arith().push(P::ScalarField::zero());
                 self.check_selector_length_consistency();
             }
-            AuxSelectors::RamWrite => {
+            MemorySelectors::RamRead => {
+                // Memory read gate for reading memory cells.
+                // Validates record witness computation (r = read_write_flag + index * \eta + timestamp * \eta^2 + value *
+                // \eta^3)
+                block.q_1().push(P::ScalarField::one());
+                block.q_2().push(P::ScalarField::zero());
+                block.q_3().push(P::ScalarField::zero());
+                block.q_4().push(P::ScalarField::zero());
+                block.q_m().push(P::ScalarField::one()); // validate record witness is correctly computed
+                block.q_c().push(P::ScalarField::zero()); // read/write flag stored in q_c
+                self.check_selector_length_consistency();
+            }
+            MemorySelectors::RamWrite => {
                 // Memory read gate for writing memory cells.
                 // Validates record witness computation (r = read_write_flag + index * \eta + timestamp * \eta^2 + value *
                 // \eta^3)
@@ -1796,40 +1852,113 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
                 block.q_4().push(P::ScalarField::zero());
                 block.q_m().push(P::ScalarField::one()); // validate record witness is correctly computed
                 block.q_c().push(P::ScalarField::one()); // read/write flag stored in q_c
-                block.q_arith().push(P::ScalarField::zero());
                 self.check_selector_length_consistency();
             }
-            AuxSelectors::LimbAccumulate1 => {
-                block.q_1().push(P::ScalarField::zero());
-                block.q_2().push(P::ScalarField::zero());
-                block.q_3().push(P::ScalarField::one());
-                block.q_4().push(P::ScalarField::one());
-                block.q_m().push(P::ScalarField::zero());
-                block.q_c().push(P::ScalarField::zero());
-                block.q_arith().push(P::ScalarField::zero());
-                self.check_selector_length_consistency();
-            }
-            AuxSelectors::LimbAccumulate2 => {
-                block.q_1().push(P::ScalarField::zero());
-                block.q_2().push(P::ScalarField::zero());
-                block.q_3().push(P::ScalarField::one());
-                block.q_4().push(P::ScalarField::zero());
-                block.q_m().push(P::ScalarField::one());
-                block.q_c().push(P::ScalarField::zero());
-                block.q_arith().push(P::ScalarField::zero());
-                self.check_selector_length_consistency();
-            }
-            AuxSelectors::None => {
+            _ => {
                 block.q_1().push(P::ScalarField::zero());
                 block.q_2().push(P::ScalarField::zero());
                 block.q_3().push(P::ScalarField::zero());
                 block.q_4().push(P::ScalarField::zero());
                 block.q_m().push(P::ScalarField::zero());
                 block.q_c().push(P::ScalarField::zero());
-                block.q_arith().push(P::ScalarField::zero());
                 self.check_selector_length_consistency();
             }
-            _ => todo!("Aux selector {:?} not implemented", type_),
+        }
+    }
+
+    /**
+     * @brief Enable the nnf gate of particular type
+     *
+     * @details If we have several operations being performed do not require parametrization
+     * (if we put each of them into a separate widget they would not require any selectors other than the ones enabling the
+     * operation itself, for example q_special*(w_l-2*w_r)), we can group them all into one widget, by using a special
+     * selector q_nnf for all of them and enabling each in particular, depending on the combination of standard selector
+     * values. So you can do:
+     * q_nnf * (q_1 * q_2 * statement_1 + q_3 * q_4 * statement_2). q_1=q_2=1 would activate statement_1, while q_3=q_4=1
+     * would activate statement_2
+     *
+     * Multiple selectors are used to 'switch' nnf gates on/off according to the following pattern:
+     *
+     * | gate type                    | q_nnf | q_1 | q_2 | q_3 | q_4 | q_m |
+     * | ---------------------------- | ----- | --- | --- | --- | --- | --- |
+     * | Bigfield Limb Accumulation 1 | 1     | 0   | 0   | 1   | 1   | 0   |
+     * | Bigfield Limb Accumulation 2 | 1     | 0   | 0   | 1   | 0   | 1   |
+     * | Bigfield Product 1           | 1     | 0   | 1   | 1   | 0   | 0   |
+     * | Bigfield Product 2           | 1     | 0   | 1   | 0   | 1   | 0   |
+     * | Bigfield Product 3           | 1     | 0   | 1   | 0   | 0   | 1   |
+     *
+     * @param type
+     */
+    fn apply_nnf_selectors(&mut self, type_: NnfSelectors) {
+        let block = &mut self.blocks.nnf;
+        block.q_nnf().push(if type_ == NnfSelectors::NnfNone {
+            P::ScalarField::zero()
+        } else {
+            P::ScalarField::one()
+        });
+        // Set to zero the selectors that are not enabled for this gate
+        block.q_arith().push(P::ScalarField::zero());
+        block.q_delta_range().push(P::ScalarField::zero());
+        block.q_lookup_type().push(P::ScalarField::zero());
+        block.q_elliptic().push(P::ScalarField::zero());
+        block.q_memory().push(P::ScalarField::zero());
+        block.q_poseidon2_external().push(P::ScalarField::zero());
+        block.q_poseidon2_internal().push(P::ScalarField::zero());
+        match type_ {
+            NnfSelectors::LimbAccumulate1 => {
+                block.q_1().push(P::ScalarField::zero());
+                block.q_2().push(P::ScalarField::zero());
+                block.q_3().push(P::ScalarField::one());
+                block.q_4().push(P::ScalarField::one());
+                block.q_m().push(P::ScalarField::zero());
+                block.q_c().push(P::ScalarField::zero());
+                self.check_selector_length_consistency();
+            }
+            NnfSelectors::LimbAccumulate2 => {
+                block.q_1().push(P::ScalarField::zero());
+                block.q_2().push(P::ScalarField::zero());
+                block.q_3().push(P::ScalarField::one());
+                block.q_4().push(P::ScalarField::zero());
+                block.q_m().push(P::ScalarField::one());
+                block.q_c().push(P::ScalarField::zero());
+                self.check_selector_length_consistency();
+            }
+            NnfSelectors::NonNativeField1 => {
+                block.q_1().push(P::ScalarField::zero());
+                block.q_2().push(P::ScalarField::one());
+                block.q_3().push(P::ScalarField::one());
+                block.q_4().push(P::ScalarField::zero());
+                block.q_m().push(P::ScalarField::zero());
+                block.q_c().push(P::ScalarField::zero());
+                self.check_selector_length_consistency();
+            }
+            NnfSelectors::NonNativeField2 => {
+                block.q_1().push(P::ScalarField::zero());
+                block.q_2().push(P::ScalarField::one());
+                block.q_3().push(P::ScalarField::zero());
+                block.q_4().push(P::ScalarField::one());
+                block.q_m().push(P::ScalarField::zero());
+                block.q_c().push(P::ScalarField::zero());
+                self.check_selector_length_consistency();
+            }
+            NnfSelectors::NonNativeField3 => {
+                block.q_1().push(P::ScalarField::zero());
+                block.q_2().push(P::ScalarField::one());
+                block.q_3().push(P::ScalarField::zero());
+                block.q_4().push(P::ScalarField::zero());
+                block.q_m().push(P::ScalarField::one());
+                block.q_c().push(P::ScalarField::zero());
+                self.check_selector_length_consistency();
+            }
+            _ => {
+                block.q_1().push(P::ScalarField::zero());
+                block.q_2().push(P::ScalarField::zero());
+                block.q_3().push(P::ScalarField::zero());
+                block.q_4().push(P::ScalarField::zero());
+                block.q_m().push(P::ScalarField::zero());
+                block.q_c().push(P::ScalarField::zero());
+                self.check_selector_length_consistency();
+            }
         }
     }
 
@@ -1852,7 +1981,8 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         block.q_delta_range().push(P::ScalarField::zero());
         block.q_elliptic().push(P::ScalarField::zero());
         block.q_lookup_type().push(P::ScalarField::zero());
-        block.q_aux().push(P::ScalarField::zero());
+        block.q_memory().push(P::ScalarField::zero());
+        block.q_nnf().push(P::ScalarField::zero());
         block.q_poseidon2_external().push(P::ScalarField::zero());
         block.q_poseidon2_internal().push(P::ScalarField::zero());
 
@@ -1884,9 +2014,9 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         const STATE_T: usize = 4;
         const D: u64 = 5;
 
-        assert_eq!(constraint.state.len(), constraint.len as usize);
-        assert_eq!(constraint.result.len(), constraint.len as usize);
-        assert_eq!(constraint.len as usize, STATE_T);
+        assert_eq!(constraint.state.len(), STATE_T);
+        assert_eq!(constraint.result.len(), STATE_T);
+
         // Get the witness assignment for each witness index
         // Write the witness assignment to the byte_array state
         let mut state = array::from_fn(|i| constraint.state[i].to_field_ct());
@@ -1895,17 +2025,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         poseidon2.permutation_in_place(&mut state, self, driver)?;
 
         for (out, res) in state.into_iter().zip(constraint.result.iter()) {
-            let assert_equal = PolyTriple {
-                a: out.normalize(self, driver).witness_index,
-                b: *res,
-                c: 0,
-                q_m: P::ScalarField::zero(),
-                q_l: P::ScalarField::one(),
-                q_r: -P::ScalarField::one(),
-                q_o: P::ScalarField::zero(),
-                q_c: P::ScalarField::zero(),
-            };
-            self.create_poly_gate(&assert_equal);
+            out.assert_equal(&FieldCT::from_witness_index(*res), self, driver);
         }
         Ok(())
     }
@@ -2084,7 +2204,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         // arithmetic gate to occur out of sequence.
         create_dummy_gate!(
             self,
-            &mut self.blocks.aux,
+            &mut self.blocks.memory,
             max_index,
             self.zero_idx,
             self.zero_idx,
@@ -2209,8 +2329,8 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
 
             let timestamp_delta_witness = self.add_variable(T::AcvmType::from(timestamp_delta));
 
-            self.apply_aux_selectors(AuxSelectors::RamTimestampCheck);
-            self.blocks.aux.populate_wires(
+            self.apply_memory_selectors(MemorySelectors::RamTimestampCheck);
+            self.blocks.memory.populate_wires(
                 current.index_witness,
                 current.timestamp_witness,
                 timestamp_delta_witness,
@@ -2352,8 +2472,8 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
 
             let timestamp_delta_witness = self.add_variable(timestamp_delta);
 
-            self.apply_aux_selectors(AuxSelectors::RamTimestampCheck);
-            self.blocks.aux.populate_wires(
+            self.apply_memory_selectors(MemorySelectors::RamTimestampCheck);
+            self.blocks.memory.populate_wires(
                 current.index_witness,
                 current.timestamp_witness,
                 timestamp_delta_witness,
@@ -2409,7 +2529,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         // (the previous gate will access the wires on this gate and requires them to be those of the last record)
         create_dummy_gate!(
             self,
-            &mut self.blocks.aux,
+            &mut self.blocks.memory,
             last_index_witness,
             last_timestamp_witness,
             self.zero_idx,
@@ -2426,8 +2546,8 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
 
     fn create_sorted_rom_gate(&mut self, record: &mut RomRecord<T::AcvmType>) {
         record.record_witness = self.add_variable(T::public_zero());
-        self.apply_aux_selectors(AuxSelectors::RomConsistencyCheck);
-        self.blocks.aux.populate_wires(
+        self.apply_memory_selectors(MemorySelectors::RomConsistencyCheck);
+        self.blocks.memory.populate_wires(
             record.index_witness,
             record.value_column1_witness,
             record.value_column2_witness,
@@ -2435,14 +2555,14 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         );
 
         // Note: record the index into the block that contains the RAM/ROM gates
-        record.gate_index = self.blocks.aux.len() - 1;
+        record.gate_index = self.blocks.memory.len() - 1;
         self.num_gates += 1;
     }
 
     fn create_sorted_ram_gate(&mut self, record: &mut RamRecord<T::AcvmType>) {
         record.record_witness = self.add_variable(T::public_zero());
-        self.apply_aux_selectors(AuxSelectors::RamConsistencyCheck);
-        self.blocks.aux.populate_wires(
+        self.apply_memory_selectors(MemorySelectors::RamConsistencyCheck);
+        self.blocks.memory.populate_wires(
             record.index_witness,
             record.timestamp_witness,
             record.value_witness,
@@ -2450,7 +2570,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         );
 
         // Note: record the index into the block that contains the RAM/ROM gates
-        record.gate_index = self.blocks.aux.len() - 1;
+        record.gate_index = self.blocks.memory.len() - 1;
         self.num_gates += 1;
     }
 
@@ -2461,7 +2581,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
     ) {
         record.record_witness = self.add_variable(T::public_zero());
         // Note: record the index into the block that contains the RAM/ROM gates
-        record.gate_index = self.blocks.aux.len(); // no -1 since we havent added the gate yet
+        record.gate_index = self.blocks.memory.len(); // no -1 since we havent added the gate yet
 
         // Aztec TODO(https://github.com/AztecProtocol/barretenberg/issues/879): This method used to add a single arithmetic gate
         // with two purposes: (1) to provide wire values to the previous RAM gate via shifts, and (2) to perform a
@@ -2472,7 +2592,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         // Create a final gate with all selectors zero; wire values are accessed by the previous RAM gate via shifted wires
         create_dummy_gate!(
             self,
-            &mut self.blocks.aux,
+            &mut self.blocks.memory,
             record.index_witness,
             record.timestamp_witness,
             record.value_witness,
@@ -2576,33 +2696,33 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             let input_lo_0: u32 = input_lo_0.try_into().expect("Invalid index");
 
             self.blocks
-                .aux
+                .nnf
                 .populate_wires(input.a[1], input.b[1], self.zero_idx, input_lo_0);
-            self.apply_aux_selectors(AuxSelectors::NonNativeField1);
+            self.apply_nnf_selectors(NnfSelectors::NonNativeField1);
             self.num_gates += 1;
 
             self.blocks
-                .aux
+                .nnf
                 .populate_wires(input.a[0], input.b[0], input.a[3], input.b[3]);
-            self.apply_aux_selectors(AuxSelectors::NonNativeField2);
+            self.apply_nnf_selectors(NnfSelectors::NonNativeField2);
             self.num_gates += 1;
 
             let input_hi_0: BigUint = input.hi_0.into();
             let input_hi_0: u32 = input_hi_0.try_into().expect("Invalid index");
 
             self.blocks
-                .aux
+                .nnf
                 .populate_wires(input.a[2], input.b[2], self.zero_idx, input_hi_0);
-            self.apply_aux_selectors(AuxSelectors::NonNativeField2);
+            self.apply_nnf_selectors(NnfSelectors::NonNativeField2);
             self.num_gates += 1;
 
             let input_hi_1: BigUint = input.hi_1.into();
             let input_hi_1: u32 = input_hi_1.try_into().expect("Invalid index");
 
             self.blocks
-                .aux
+                .nnf
                 .populate_wires(input.a[1], input.b[1], self.zero_idx, input_hi_1);
-            self.apply_aux_selectors(AuxSelectors::None);
+            self.apply_nnf_selectors(NnfSelectors::NnfNone);
             self.num_gates += 1;
         }
         std::mem::swap(
@@ -3066,21 +3186,21 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         let hi_sublimbs = get_sublimbs(hi_idx, hi_masks);
 
         self.blocks
-            .aux
+            .nnf
             .populate_wires(lo_sublimbs[0], lo_sublimbs[1], lo_sublimbs[2], lo_idx);
-        self.blocks.aux.populate_wires(
+        self.blocks.nnf.populate_wires(
             lo_sublimbs[3],
             lo_sublimbs[4],
             hi_sublimbs[0],
             hi_sublimbs[1],
         );
         self.blocks
-            .aux
+            .nnf
             .populate_wires(hi_sublimbs[2], hi_sublimbs[3], hi_sublimbs[4], hi_idx);
 
-        self.apply_aux_selectors(AuxSelectors::LimbAccumulate1);
-        self.apply_aux_selectors(AuxSelectors::LimbAccumulate2);
-        self.apply_aux_selectors(AuxSelectors::None);
+        self.apply_nnf_selectors(NnfSelectors::LimbAccumulate1);
+        self.apply_nnf_selectors(NnfSelectors::LimbAccumulate2);
+        self.apply_nnf_selectors(NnfSelectors::NnfNone);
         self.num_gates += 3;
 
         for i in 0..5 {
@@ -3237,7 +3357,11 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
                 .delta_range
                 .q_lookup_type()
                 .push(P::ScalarField::zero());
-            self.blocks.delta_range.q_aux().push(P::ScalarField::zero());
+            self.blocks
+                .delta_range
+                .q_memory()
+                .push(P::ScalarField::zero());
+            self.blocks.delta_range.q_nnf().push(P::ScalarField::zero());
             self.blocks
                 .delta_range
                 .q_poseidon2_external()
@@ -3281,7 +3405,11 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
                 .delta_range
                 .q_lookup_type()
                 .push(P::ScalarField::zero());
-            self.blocks.delta_range.q_aux().push(P::ScalarField::zero());
+            self.blocks
+                .delta_range
+                .q_memory()
+                .push(P::ScalarField::zero());
+            self.blocks.delta_range.q_nnf().push(P::ScalarField::zero());
             self.blocks
                 .delta_range
                 .q_poseidon2_external()
@@ -3350,7 +3478,11 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             .arithmetic
             .q_elliptic()
             .push(P::ScalarField::zero());
-        self.blocks.arithmetic.q_aux().push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_memory()
+            .push(P::ScalarField::zero());
+        self.blocks.arithmetic.q_nnf().push(P::ScalarField::zero());
         self.blocks
             .arithmetic
             .q_poseidon2_external()
@@ -3465,7 +3597,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             memory_records_shared: BTreeMap::new(),
             current_tag: 0,
             has_dummy_witnesses: true,
-            pairing_inputs_public_input_key: PublicComponentKey::default(),
         }
     }
 
@@ -3738,19 +3869,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             self.create_block_constraints(constraint, has_valid_witness_assignments, driver)?;
         }
 
-        // Add big_int constraints
-        // for (i, constraint) in constraint_system.bigint_from_le_bytes_constraints.iter().enumerate() {
-        //     todo!("bigint from le bytes gates");
-        // }
-
-        // for (i, constraint) in constraint_system.bigint_operations.iter().enumerate() {
-        //     todo!("bigint operations gates");
-        // }
-
-        // for (i, constraint) in constraint_system.bigint_to_le_bytes_constraints.iter().enumerate() {
-        //     todo!("bigint to le bytes gates");
-        // }
-
         // assert equals
         for constraint in constraint_system.assert_equalities.iter() {
             self.assert_equal(
@@ -3760,22 +3878,88 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         }
 
         // RecursionConstraints
-        self.process_plonk_recursion_constraints(constraint_system, has_valid_witness_assignments);
-        let mut current_aggregation_object = self.construct_default(driver)?;
-        self.process_honk_recursion_constraints(constraint_system, has_valid_witness_assignments);
+        let has_honk_recursion_constraints =
+            !constraint_system.honk_recursion_constraints.is_empty();
+        let has_avm_recursion_constraints = !constraint_system.avm_recursion_constraints.is_empty();
+        let has_pg_recursion_constraints = !constraint_system.pg_recursion_constraints.is_empty();
+        let has_civc_recursion_constraints =
+            !constraint_system.civc_recursion_constraints.is_empty();
+
         self.process_avm_recursion_constraints(constraint_system, has_valid_witness_assignments);
-        // If the circuit has either honk or avm recursion constraints, add the aggregation object. Otherwise, add a
-        // default one if the circuit is recursive and honk_recursion is true.
-        if !constraint_system.honk_recursion_constraints.is_empty()
-            || !constraint_system.avm_recursion_constraints.is_empty()
-        {
-            // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1336): Delete this if statement
-            //    if constexpr (!IsMegaBuilder<Builder>) {
-            assert!(metadata.honk_recursion != HonkRecursion::NotHonk);
-            current_aggregation_object.set_public(self, driver);
+        let is_recursive_circuit = metadata.honk_recursion != HonkRecursion::NotHonk;
+        let _has_pairing_points = has_honk_recursion_constraints
+            || has_civc_recursion_constraints
+            || has_avm_recursion_constraints;
+
+        // TODO(https://github.com/AztecProtocol/barretenberg/issues/1523): Only handle either HONK or CIVC + AVM and
+        // fail fast otherwise
+        assert!(
+            !has_pg_recursion_constraints,
+            "Invalid circuit: pg recursion constraints are present with UltraBuilder."
+        );
+        assert!(
+            !(has_honk_recursion_constraints && has_civc_recursion_constraints),
+            "Invalid circuit: both honk and civc recursion constraints are present."
+        );
+        assert!(
+            !(has_honk_recursion_constraints
+                || has_civc_recursion_constraints
+                || has_avm_recursion_constraints)
+                || is_recursive_circuit,
+            "Invalid circuit: honk, civc, or avm recursion constraints present but the circuit is not recursive."
+        );
+
+        // Container for data to be propagated
+        // HonkRecursionConstraintsOutput<Builder> honk_output;
+
+        if has_honk_recursion_constraints {
+            self.process_honk_recursion_constraints(
+                constraint_system,
+                has_valid_witness_assignments,
+            );
+        }
+
+        if has_civc_recursion_constraints {
+            self.process_civc_recursion_constraints(
+                constraint_system,
+                has_valid_witness_assignments,
+            );
+        }
+
+        if metadata.honk_recursion == HonkRecursion::UltraRollup {
+            todo!("Implement UltraRollupFlavor recursion handling");
+            // Proving with UltraRollupFlavor
+
+            // // Propagate pairing points
+            // if (has_pairing_points) {
+            //     honk_output.points_accumulator.set_public();
+            // } else {
+            //     PairingPoints::add_default_to_public_inputs(builder);
             // }
-        } else if metadata.honk_recursion != HonkRecursion::NotHonk {
-            current_aggregation_object.set_public(self, driver);
+
+            // // Handle IPA
+            // auto [ipa_claim, ipa_proof] =
+            //     handle_IPA_accumulation(builder, honk_output.nested_ipa_claims, honk_output.nested_ipa_proofs);
+
+            // // Set proof
+            // builder.ipa_proof = ipa_proof;
+
+            // // Propagate IPA claim
+            // ipa_claim.set_public();
+        } else {
+            // // If it is a recursive circuit, propagate pairing points
+            // if metadata.honk_recursion == HonkRecursion::UltraHonk {
+            //     using IO = bb::stdlib::recursion::honk::DefaultIO<Builder>;
+
+            //     if (has_pairing_points) {
+            //         IO inputs;
+            //         inputs.pairing_inputs = honk_output.points_accumulator;
+            //         inputs.set_public();
+            //     } else {
+
+            self.add_default_to_public_inputs(driver)?;
+            //     }
+            // }
         }
 
         Ok(())
@@ -3875,7 +4059,8 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                 .q_delta_range()
                 .push(P::ScalarField::zero());
             self.blocks.lookup.q_elliptic().push(P::ScalarField::zero());
-            self.blocks.lookup.q_aux().push(P::ScalarField::zero());
+            self.blocks.lookup.q_memory().push(P::ScalarField::zero());
+            self.blocks.lookup.q_nnf().push(P::ScalarField::zero());
             self.blocks
                 .lookup
                 .q_poseidon2_external()
@@ -3974,7 +4159,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             points.push(input_point);
             scalars.push(scalar);
         }
-
+        // Call batch_mul to multiply the points and scalars and sum the results
         let output_point = CycleGroupCT::batch_mul(points, scalars, self, driver)?
             .get_standard_form(self, driver)?;
 
@@ -3986,8 +4171,12 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                 T::get_public(&value).expect("Constants should be public"),
             );
         } else {
+            let normalized_witness_index = output_point
+                .is_point_at_infinity()
+                .get_normalized_witness_index(self, driver)
+                as usize;
             self.assert_equal(
-                output_point.is_point_at_infinity().witness_index as usize,
+                normalized_witness_index,
                 constraint.out_point_is_infinity as usize,
             );
         }
@@ -4088,10 +4277,8 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                 T::get_public(&value).expect("Constants should be public"),
             );
         } else {
-            self.assert_equal(
-                infinite.witness_index as usize,
-                constraint.result_infinite as usize,
-            );
+            let index = infinite.get_normalized_witness_index(self, driver) as usize;
+            self.assert_equal(index, constraint.result_infinite as usize);
         }
         Ok(())
     }
@@ -4264,7 +4451,11 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             return self.create_logic_constraint_inner(driver, a, b_witness, num_bits, is_xor_gate);
         }
 
-        // We have Plookup!
+        // We slice the input values into 32-bit chunks, and then use a multi-table lookup to compute the AND or XOR
+        // of each chunk. Since we perform the lookup from 32-bit multi-tables, the lookup operation implicitly enforces a
+        // 32-bit range constraint on each chunk. However, if `num_bits` is not a multiple of 32, the last chunk will be
+        // smaller than 32 bits. Therefore, the last chunk needs to be explicitly range-constrained to ensure it is in the
+        // correct range. The result is then reconstructed from the chunks, and checked against the original value.
         let num_chunks = (num_bits / 32) + if num_bits % 32 == 0 { 0 } else { 1 };
         let left = a.get_value(self, driver);
         let right = b.get_value(self, driver);
@@ -4373,6 +4564,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             );
             if chunk_size != 32 {
                 // TACEO TODO can the decompose in here be batched as well?
+                // If the chunk is smaller than 32 bits, we need to explicitly range constrain it.
                 self.create_range_constraint(driver, a_chunk.witness_index, chunk_size as u32)?;
                 self.create_range_constraint(driver, b_chunk.witness_index, chunk_size as u32)?;
             }
@@ -4384,8 +4576,8 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             );
         }
 
-        let a_slice = &a.slice((num_bits - 1) as u8, 0, num_bits, self, driver)?[1];
-        let b_slice = &b.slice((num_bits - 1) as u8, 0, num_bits, self, driver)?[1];
+        let a_slice = &a.split_at(num_bits as u8, None, self, driver)?[0];
+        let b_slice = &b.split_at(num_bits as u8, None, self, driver)?[0];
         a_slice.assert_equal(&a_accumulator, self, driver);
         b_slice.assert_equal(&b_accumulator, self, driver);
 
@@ -4422,7 +4614,11 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             .arithmetic
             .q_elliptic()
             .push(P::ScalarField::zero());
-        self.blocks.arithmetic.q_aux().push(P::ScalarField::zero());
+        self.blocks
+            .arithmetic
+            .q_memory()
+            .push(P::ScalarField::zero());
+        self.blocks.arithmetic.q_nnf().push(P::ScalarField::zero());
         self.blocks
             .arithmetic
             .q_poseidon2_external()
@@ -4464,7 +4660,11 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             .delta_range
             .q_elliptic()
             .push(P::ScalarField::zero());
-        self.blocks.delta_range.q_aux().push(P::ScalarField::zero());
+        self.blocks
+            .delta_range
+            .q_memory()
+            .push(P::ScalarField::zero());
+        self.blocks.delta_range.q_nnf().push(P::ScalarField::zero());
         self.blocks
             .delta_range
             .q_poseidon2_external()
@@ -4512,7 +4712,8 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             .elliptic
             .q_elliptic()
             .push(P::ScalarField::one());
-        self.blocks.elliptic.q_aux().push(P::ScalarField::zero());
+        self.blocks.elliptic.q_memory().push(P::ScalarField::zero());
+        self.blocks.elliptic.q_nnf().push(P::ScalarField::zero());
         self.blocks
             .elliptic
             .q_poseidon2_external()
@@ -4534,27 +4735,37 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             self.zero_idx
         );
 
-        // q_aux
+        // q_memory
+        self.blocks.memory.populate_wires(
+            self.zero_idx,
+            self.zero_idx,
+            self.zero_idx,
+            self.zero_idx,
+        );
+        self.blocks.memory.q_m().push(P::ScalarField::zero());
+        self.blocks.memory.q_1().push(P::ScalarField::zero());
+        self.blocks.memory.q_2().push(P::ScalarField::zero());
+        self.blocks.memory.q_3().push(P::ScalarField::zero());
+        self.blocks.memory.q_4().push(P::ScalarField::zero());
+        self.blocks.memory.q_c().push(P::ScalarField::zero());
         self.blocks
-            .aux
-            .populate_wires(self.zero_idx, self.zero_idx, self.zero_idx, self.zero_idx);
-        self.blocks.aux.q_m().push(P::ScalarField::zero());
-        self.blocks.aux.q_1().push(P::ScalarField::zero());
-        self.blocks.aux.q_2().push(P::ScalarField::zero());
-        self.blocks.aux.q_3().push(P::ScalarField::zero());
-        self.blocks.aux.q_4().push(P::ScalarField::zero());
-        self.blocks.aux.q_c().push(P::ScalarField::zero());
-        self.blocks.aux.q_delta_range().push(P::ScalarField::zero());
-        self.blocks.aux.q_arith().push(P::ScalarField::zero());
-        self.blocks.aux.q_lookup_type().push(P::ScalarField::zero());
-        self.blocks.aux.q_elliptic().push(P::ScalarField::zero());
-        self.blocks.aux.q_aux().push(P::ScalarField::one());
+            .memory
+            .q_delta_range()
+            .push(P::ScalarField::zero());
+        self.blocks.memory.q_arith().push(P::ScalarField::zero());
         self.blocks
-            .aux
+            .memory
+            .q_lookup_type()
+            .push(P::ScalarField::zero());
+        self.blocks.memory.q_elliptic().push(P::ScalarField::zero());
+        self.blocks.memory.q_memory().push(P::ScalarField::one());
+        self.blocks.memory.q_nnf().push(P::ScalarField::zero());
+        self.blocks
+            .memory
             .q_poseidon2_external()
             .push(P::ScalarField::zero());
         self.blocks
-            .aux
+            .memory
             .q_poseidon2_internal()
             .push(P::ScalarField::zero());
 
@@ -4563,7 +4774,44 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 
         create_dummy_gate!(
             self,
-            &mut self.blocks.aux,
+            &mut self.blocks.memory,
+            self.zero_idx,
+            self.zero_idx,
+            self.zero_idx,
+            self.zero_idx
+        );
+
+        // q_nnf
+        self.blocks
+            .nnf
+            .populate_wires(self.zero_idx, self.zero_idx, self.zero_idx, self.zero_idx);
+        self.blocks.nnf.q_m().push(P::ScalarField::zero());
+        self.blocks.nnf.q_1().push(P::ScalarField::zero());
+        self.blocks.nnf.q_2().push(P::ScalarField::zero());
+        self.blocks.nnf.q_3().push(P::ScalarField::zero());
+        self.blocks.nnf.q_4().push(P::ScalarField::zero());
+        self.blocks.nnf.q_c().push(P::ScalarField::zero());
+        self.blocks.nnf.q_delta_range().push(P::ScalarField::zero());
+        self.blocks.nnf.q_arith().push(P::ScalarField::zero());
+        self.blocks.nnf.q_lookup_type().push(P::ScalarField::zero());
+        self.blocks.nnf.q_elliptic().push(P::ScalarField::zero());
+        self.blocks.nnf.q_memory().push(P::ScalarField::zero());
+        self.blocks.nnf.q_nnf().push(P::ScalarField::one());
+        self.blocks
+            .nnf
+            .q_poseidon2_external()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .nnf
+            .q_poseidon2_internal()
+            .push(P::ScalarField::zero());
+
+        self.check_selector_length_consistency();
+        self.num_gates += 1;
+
+        create_dummy_gate!(
+            self,
+            &mut self.blocks.nnf,
             self.zero_idx,
             self.zero_idx,
             self.zero_idx,
@@ -4667,7 +4915,11 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             .push(P::ScalarField::zero());
         self.blocks
             .poseidon2_external
-            .q_aux()
+            .q_memory()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_external
+            .q_nnf()
             .push(P::ScalarField::zero());
         self.blocks
             .poseidon2_external
@@ -4740,7 +4992,11 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             .push(P::ScalarField::zero());
         self.blocks
             .poseidon2_internal
-            .q_aux()
+            .q_memory()
+            .push(P::ScalarField::zero());
+        self.blocks
+            .poseidon2_internal
+            .q_nnf()
             .push(P::ScalarField::zero());
         self.blocks
             .poseidon2_internal

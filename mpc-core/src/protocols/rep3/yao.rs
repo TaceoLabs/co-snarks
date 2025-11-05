@@ -1439,7 +1439,7 @@ pub fn blake2s<F: PrimeField, N: Network>(
     input1: &[Rep3PrimeFieldShare<F>],
     net: &N,
     state: &mut Rep3State,
-    num_bits: &[usize],
+    num_bits: usize,
 ) -> eyre::Result<Vec<Rep3PrimeFieldShare<F>>> {
     let total_output_elements = 32;
     let num_inputs = input1.len();
@@ -1459,7 +1459,7 @@ pub fn blake3<F: PrimeField, N: Network>(
     input1: &[Rep3PrimeFieldShare<F>],
     net: &N,
     state: &mut Rep3State,
-    num_bits: &[usize],
+    num_bits: usize,
 ) -> eyre::Result<Vec<Rep3PrimeFieldShare<F>>> {
     let total_output_elements = 32;
     let num_inputs = input1.len();

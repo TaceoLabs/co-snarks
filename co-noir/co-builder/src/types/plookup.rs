@@ -40,8 +40,10 @@ pub(crate) enum BasicTableId {
     Sha256Base16Rotate8,
     UintXorSlice6Rotate0,
     UintXorSlice2Rotate0,
+    UintXorSlice4Rotate0,
     UintAndSlice6Rotate0,
     UintAndSlice2Rotate0,
+    UintAndSlice4Rotate0,
     Bn254XloBasic,
     Bn254XhiBasic,
     Bn254YloBasic,
@@ -458,8 +460,14 @@ pub(crate) enum MultiTableId {
     FixedBaseLeftHi,
     FixedBaseRightLo,
     FixedBaseRightHi,
+    Uint8Xor,
+    Uint16Xor,
     Uint32Xor,
+    Uint64Xor,
+    Uint8And,
+    Uint16And,
     Uint32And,
+    Uint64And,
     Bn254Xlo,
     Bn254Xhi,
     Bn254Ylo,
@@ -534,10 +542,15 @@ impl<F: PrimeField> Plookup<F> {
         table
     }
 
-    fn get_uint32_xor_table() -> PlookupMultiTable<F> {
-        let id = MultiTableId::Uint32Xor;
+    fn get_uint_xor_table<const UINT_SIZE: usize>(id: MultiTableId) -> PlookupMultiTable<F> {
+        // uint_size must be one of 8, 16, 32, or 64.
+        assert!(
+            UINT_SIZE == 8 || UINT_SIZE == 16 || UINT_SIZE == 32 || UINT_SIZE == 64,
+            "unsupported uint size for XOR table generation",
+        );
+
         const TABLE_BIT_SIZE: usize = 6;
-        let num_entries = 32 / TABLE_BIT_SIZE;
+        let num_entries = UINT_SIZE / TABLE_BIT_SIZE;
         let base = 1 << TABLE_BIT_SIZE;
         let mut table =
             PlookupMultiTable::<F>::new(id, base.into(), base.into(), base.into(), num_entries);
@@ -552,24 +565,39 @@ impl<F: PrimeField> Plookup<F> {
                 .push(BasicTableId::get_xor_rotate_values_from_key::<F, 0>);
         }
 
-        // 32 = 5 * 6 + 2
         // all remaining bits
-        let last_table_bit_size: usize = 32 - TABLE_BIT_SIZE * num_entries;
+        let last_table_bit_size: usize = UINT_SIZE - TABLE_BIT_SIZE * num_entries;
         let last_slice_size: usize = 1 << last_table_bit_size;
         table.slice_sizes.push(last_slice_size as u64);
-        table
-            .basic_table_ids
-            .push(BasicTableId::UintXorSlice2Rotate0);
-        table
-            .get_table_values
-            .push(BasicTableId::get_xor_rotate_values_from_key::<F, 0>);
+        if UINT_SIZE == 8 || UINT_SIZE == 32 {
+            // uint8 and uint32 have 2 bits left because: 8 % 6 = 2 and 32 % 6 = 2
+            table
+                .basic_table_ids
+                .push(BasicTableId::UintXorSlice2Rotate0);
+            table
+                .get_table_values
+                .push(BasicTableId::get_xor_rotate_values_from_key::<F, 0>);
+        } else {
+            // uint16 and uint64 have 4 bits left because: 16 % 6 = 4 and 64 % 6 = 4
+            table
+                .basic_table_ids
+                .push(BasicTableId::UintXorSlice4Rotate0);
+            table
+                .get_table_values
+                .push(BasicTableId::get_xor_rotate_values_from_key::<F, 0>);
+        }
         table
     }
 
-    fn get_uint32_and_table() -> PlookupMultiTable<F> {
-        let id = MultiTableId::Uint32And;
+    fn get_uint_and_table<const UINT_SIZE: usize>(id: MultiTableId) -> PlookupMultiTable<F> {
+        // uint_size must be one of 8, 16, 32, or 64.
+        assert!(
+            UINT_SIZE == 8 || UINT_SIZE == 16 || UINT_SIZE == 32 || UINT_SIZE == 64,
+            "unsupported uint size for AND table generation",
+        );
+
         const TABLE_BIT_SIZE: usize = 6;
-        let num_entries = 32 / TABLE_BIT_SIZE;
+        let num_entries = UINT_SIZE / TABLE_BIT_SIZE;
         let base = 1 << TABLE_BIT_SIZE;
         let mut table =
             PlookupMultiTable::<F>::new(id, base.into(), base.into(), base.into(), num_entries);
@@ -586,15 +614,26 @@ impl<F: PrimeField> Plookup<F> {
 
         // 32 = 5 * 6 + 2
         // all remaining bits
-        let last_table_bit_size: usize = 32 - TABLE_BIT_SIZE * num_entries;
+        let last_table_bit_size: usize = UINT_SIZE - TABLE_BIT_SIZE * num_entries;
         let last_slice_size: usize = 1 << last_table_bit_size;
         table.slice_sizes.push(last_slice_size as u64);
-        table
-            .basic_table_ids
-            .push(BasicTableId::UintAndSlice2Rotate0);
-        table
-            .get_table_values
-            .push(BasicTableId::get_and_rotate_values_from_key::<F, 0>);
+        if UINT_SIZE == 8 || UINT_SIZE == 32 {
+            // uint8 and uint32 have 2 bits left because: 8 % 6 = 2 and 32 % 6 = 2
+            table
+                .basic_table_ids
+                .push(BasicTableId::UintAndSlice2Rotate0);
+            table
+                .get_table_values
+                .push(BasicTableId::get_and_rotate_values_from_key::<F, 0>);
+        } else {
+            // uint16 and uint64 have 4 bits left because: 16 % 6 = 4 and 64 % 6 = 4
+            table
+                .basic_table_ids
+                .push(BasicTableId::UintAndSlice4Rotate0);
+            table
+                .get_table_values
+                .push(BasicTableId::get_and_rotate_values_from_key::<F, 0>);
+        }
         table
     }
 
@@ -1177,9 +1216,22 @@ impl<F: PrimeField> Plookup<F> {
 
         let mut multi_tables = from_fn(|_| PlookupMultiTable::default());
         multi_tables[usize::from(MultiTableId::HonkDummyMulti)] = Self::get_honk_dummy_multitable();
-        multi_tables[usize::from(MultiTableId::Uint32And)] = Self::get_uint32_and_table();
-        multi_tables[usize::from(MultiTableId::Uint32Xor)] = Self::get_uint32_xor_table();
-
+        multi_tables[usize::from(MultiTableId::Uint8Xor)] =
+            Self::get_uint_xor_table::<8>(MultiTableId::Uint8Xor);
+        multi_tables[usize::from(MultiTableId::Uint16Xor)] =
+            Self::get_uint_xor_table::<16>(MultiTableId::Uint16Xor);
+        multi_tables[usize::from(MultiTableId::Uint32Xor)] =
+            Self::get_uint_xor_table::<32>(MultiTableId::Uint32Xor);
+        multi_tables[usize::from(MultiTableId::Uint64Xor)] =
+            Self::get_uint_xor_table::<64>(MultiTableId::Uint64Xor);
+        multi_tables[usize::from(MultiTableId::Uint8And)] =
+            Self::get_uint_and_table::<8>(MultiTableId::Uint8And);
+        multi_tables[usize::from(MultiTableId::Uint16And)] =
+            Self::get_uint_and_table::<16>(MultiTableId::Uint16And);
+        multi_tables[usize::from(MultiTableId::Uint32And)] =
+            Self::get_uint_and_table::<32>(MultiTableId::Uint32And);
+        multi_tables[usize::from(MultiTableId::Uint64And)] =
+            Self::get_uint_and_table::<64>(MultiTableId::Uint64And);
         multi_tables[usize::from(MultiTableId::FixedBaseLeftLo)] =
             Self::get_fixed_base_table::<P, 0, 128>(MultiTableId::FixedBaseLeftLo);
         multi_tables[usize::from(MultiTableId::FixedBaseLeftHi)] =
@@ -2516,23 +2568,24 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             BasicTableId::UintXorSlice6Rotate0 => {
                 Self::generate_xor_rotate_table::<6, 0>(id, index)
             }
-
+            BasicTableId::UintXorSlice4Rotate0 => {
+                Self::generate_xor_rotate_table::<4, 0>(id, index)
+            }
+            BasicTableId::UintAndSlice4Rotate0 => {
+                Self::generate_and_rotate_table::<4, 0>(id, index)
+            }
             BasicTableId::Sha256Base16Rotate2 => {
                 Self::generate_sparse_table_with_rotation::<16, 11, 2>(id, index)
             }
-
             BasicTableId::Sha256Base28 => {
                 Self::generate_sparse_table_with_rotation::<28, 11, 0>(id, index)
             }
-
             BasicTableId::Sha256Base28Rotate6 => {
                 Self::generate_sparse_table_with_rotation::<28, 11, 6>(id, index)
             }
-
             BasicTableId::Sha256Base28Rotate3 => {
                 Self::generate_sparse_table_with_rotation::<28, 11, 3>(id, index)
             }
-
             BasicTableId::Sha256Base16 => {
                 Self::generate_sparse_table_with_rotation::<16, 11, 0>(id, index)
             }
