@@ -737,7 +737,7 @@ impl<'a, P: CurveGroup> TraceData<'a, P> {
                 }
             }
 
-            // // Store the offset of the block containing RAM/ROM read/write gates for use in updating memory records
+            // Store the offset of the block containing RAM/ROM read/write gates for use in updating memory records
             if block.has_ram_rom {
                 self.ram_rom_offset = offset as u32;
             }

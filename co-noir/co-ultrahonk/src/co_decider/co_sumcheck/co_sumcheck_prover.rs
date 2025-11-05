@@ -65,7 +65,6 @@ impl<
 
     pub(crate) fn partially_evaluate_inplace(
         partially_evaluated_poly: &mut PartiallyEvaluatePolys<T, P>,
-        _round_size: usize,
         round_challenge: &P::ScalarField,
     ) {
         tracing::trace!("Partially_evaluate inplace");
@@ -229,11 +228,7 @@ impl<
             multivariate_challenge.push(round_challenge);
 
             // Prepare sumcheck book-keeping table for the next round
-            Self::partially_evaluate_inplace(
-                &mut partially_evaluated_polys,
-                sum_check_round.round_size,
-                &round_challenge,
-            );
+            Self::partially_evaluate_inplace(&mut partially_evaluated_polys, &round_challenge);
             gate_separators.partially_evaluate(round_challenge);
             sum_check_round.round_size >>= 1;
         }
@@ -394,11 +389,7 @@ impl<
             let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{round_idx}"));
             multivariate_challenge.push(round_challenge);
             // Prepare sumcheck book-keeping table for the next round
-            Self::partially_evaluate_inplace(
-                &mut partially_evaluated_polys,
-                sum_check_round.round_size,
-                &round_challenge,
-            );
+            Self::partially_evaluate_inplace(&mut partially_evaluated_polys, &round_challenge);
             // Prepare evaluation masking and libra structures for the next round (for ZK Flavors)
             zk_sumcheck_data.update_zk_sumcheck_data(round_challenge, round_idx);
             row_disabling_polynomial.update_evaluations(round_challenge, round_idx);

@@ -1,4 +1,3 @@
-// pub(crate) mod auxiliary_relation;
 pub(crate) mod delta_range_constraint_relation;
 pub(crate) mod elliptic_relation;
 pub(crate) mod logderiv_lookup_relation;
@@ -10,6 +9,7 @@ pub(crate) mod poseidon2_internal_relation;
 pub(crate) mod ultra_arithmetic_relation;
 
 use super::types::{ClaimedEvaluations, ProverUnivariates, RelationParameters};
+use crate::decider::relations::non_native_field_relation::NonNativeFieldRelationAcc;
 use crate::{
     decider::relations::{
         memory_relation::{MemoryRelation, MemoryRelationAcc, MemoryRelationEvals},
@@ -18,8 +18,6 @@ use crate::{
     prelude::Univariate,
 };
 use ark_ff::PrimeField;
-// use auxiliary_relation::{AuxiliaryRelation, AuxiliaryRelationAcc, AuxiliaryRelationEvals};
-use crate::decider::relations::non_native_field_relation::NonNativeFieldRelationAcc;
 use delta_range_constraint_relation::{
     DeltaRangeConstraintRelation, DeltaRangeConstraintRelationAcc,
     DeltaRangeConstraintRelationEvals,

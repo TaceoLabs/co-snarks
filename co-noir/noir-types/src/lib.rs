@@ -149,6 +149,11 @@ impl<F: Default + Clone> HonkProof<F> {
     pub fn inner(self) -> Vec<F> {
         self.proof
     }
+
+    pub fn inner_as_ref(&self) -> &Vec<F> {
+        &self.proof
+    }
+
     pub fn insert_public_inputs(self, public_inputs: Vec<F>) -> Self {
         let mut proof = public_inputs;
         proof.extend(self.proof);

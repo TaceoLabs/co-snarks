@@ -68,7 +68,7 @@ fn plaindriver_test<H: TranscriptHasher<TranscriptFieldType>>(
         .unwrap();
 
     if has_zk == ZeroKnowledge::No {
-        let proof_u8 = H::to_buffer(&proof.clone().inner());
+        let proof_u8 = H::to_buffer(proof.inner_as_ref());
         let read_proof_u8 = std::fs::read(proof_file).unwrap();
         assert_eq!(proof_u8, read_proof_u8);
 
